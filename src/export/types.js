@@ -1,4 +1,4 @@
-export function createScene({ width, height, layers, layout, map, container, project }) {
+export function createScene({ width, height, layers, layout, map, container, project, template }) {
   return {
     width,
     height,
@@ -7,5 +7,6 @@ export function createScene({ width, height, layers, layout, map, container, pro
     map,
     container,
     project,
+    template,
   };
 }

@@ -21,7 +21,15 @@ const BASEMAPS = {
   },
 };
 
-export default function MapCanvas({ onReady, project }) {
+function detectGeomType(geojson) {
+  const features = geojson?.features || [];
+  const type = features.find((f) => f?.geometry?.type)?.geometry?.type || "Polygon";
+  if (type.includes("Point")) return "points";
+  if (type.includes("Line")) return "line";
+  return "polygon";
+}
+
+export default function MapCanvas({ onReady, project, template }) {
   const mapRef = useRef(null);
   const mapElRef = useRef(null);
   const baseLayerRef = useRef(null);
@@ -34,6 +42,7 @@ export default function MapCanvas({ onReady, project }) {
       center: [56, -123],
       zoom: 5,
       zoomControl: true,
+      preferCanvas: false,
     });
 
     overlayGroupRef.current = L.layerGroup().addTo(map);
@@ -56,6 +65,8 @@ export default function MapCanvas({ onReady, project }) {
       attribution: cfg.attribution,
       maxZoom: 20,
       crossOrigin: true,
+      updateWhenIdle: true,
+      keepBuffer: 4,
     }).addTo(map);
   }, [project?.layout?.basemap]);
 
@@ -69,28 +80,31 @@ export default function MapCanvas({ onReady, project }) {
     (project?.layers || []).forEach((layer) => {
       if (layer.visible === false || !layer.geojson) return;
 
-      const style = layer.style || {};
+      const baseStyle = template?.roleStyles?.[layer.role] || template?.roleStyles?.other || {};
+      const style = { ...baseStyle, ...(layer.style || {}) };
+      const geomType = detectGeomType(layer.geojson);
+
       const geoLayer = L.geoJSON(layer.geojson, {
         style: () => ({
           color: style.stroke || "#54a6ff",
           weight: style.strokeWidth ?? 2,
           fillColor: style.fill || "#54a6ff",
-          fillOpacity: style.fillOpacity ?? 0.22,
+          fillOpacity: geomType === "line" ? 0 : style.fillOpacity ?? 0.22,
           dashArray: style.dashArray || "",
         }),
         pointToLayer: (_feature, latlng) =>
           L.circleMarker(latlng, {
-            radius: style.markerSize ?? 10,
+            radius: (style.markerSize ?? 10) / 2,
             color: style.markerColor || "#111111",
-            fillColor: style.markerFill || style.markerColor || "#111111",
+            fillColor: style.markerFill || style.markerColor || "#ffffff",
             fillOpacity: 1,
-            weight: 1,
+            weight: style.strokeWidth ?? 1.5,
           }),
       });
 
       geoLayer.addTo(group);
     });
-  }, [project]);
+  }, [project, template]);
 
   return <div ref={mapElRef} style={{ width: "100%", height: "100%" }} />;
 }

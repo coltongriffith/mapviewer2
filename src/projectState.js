@@ -1,30 +1,26 @@
+export const ROLE_LABELS = {
+  claims: "Claims",
+  highlight_zone: "Highlight Zone",
+  anomaly: "Anomaly",
+  geophysics: "Geophysics",
+  drill_traces: "Drill Traces",
+  drillholes: "Drillholes",
+  other: "Other",
+};
+
 export function createInitialProjectState() {
   return {
     layers: [],
     layout: {
       title: "Project Map",
-      subtitle: "Editable composition",
+      subtitle: "Technical results template",
       basemap: "light",
+      templateId: "technical_results_v1",
       logo: null,
       legendItems: [],
       exportSettings: {
         pixelRatio: 2,
         filename: "mapviewer-export",
-      },
-      legendStyle: {
-        background: "#ffffff",
-        border: "#d9d9d9",
-        text: "#1f1f1f",
-        borderRadius: 10,
-        padding: 12,
-        width: 220,
-      },
-      overlays: {
-        title: { visible: true, x: 24, y: 20 },
-        legend: { visible: true, x: 24, y: 96 },
-        northArrow: { visible: true, x: 24, y: 340 },
-        scaleBar: { visible: true, x: 24, y: 410 },
-        logo: { visible: true, x: 24, y: 470, width: 140 },
       },
     },
   };

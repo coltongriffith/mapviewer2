@@ -7,8 +7,10 @@ import { loadGeoJSON } from "./utils/importers";
 import { buildScene } from "./export/buildScene";
 import { exportPNG } from "./export/exportPNG";
 import { exportSVG } from "./export/exportSVG";
-import { createInitialProjectState } from "./projectState";
+import { createInitialProjectState, ROLE_LABELS } from "./projectState";
 import { applyPresetToLayer, LAYER_PRESETS } from "./mapPresets";
+import { getTemplate } from "./templates";
+import { buildLegendItems } from "./templates/technicalResultsTemplate";
 
 function detectLayerKind(geojson) {
   if (!geojson) return "geojson";
@@ -25,10 +27,6 @@ function detectLayerKind(geojson) {
 
   if (type === "Point" || type === "MultiPoint") return "points";
   return "geojson";
-}
-
-function clamp(value, min, max) {
-  return Math.max(min, Math.min(max, value));
 }
 
 function mergeDeep(base, patch) {
@@ -50,224 +48,63 @@ function readFileAsDataURL(file) {
   });
 }
 
-function getDefaultLayoutPatch() {
+function zoneStyle(zone) {
+  if (!zone) return {};
   return {
-    basemap: "light",
-    exportSettings: {
-      pixelRatio: 2,
-      filename: "mapviewer-export",
-    },
-    legendStyle: {
-      background: "#ffffff",
-      border: "#d9d9d9",
-      text: "#1f1f1f",
-      borderRadius: 10,
-      padding: 12,
-      width: 220,
-    },
-    overlays: {
-      title: {
-        visible: true,
-        x: 24,
-        y: 20,
-      },
-      legend: {
-        visible: true,
-        x: 24,
-        y: 96,
-      },
-      northArrow: {
-        visible: true,
-        x: 24,
-        y: 340,
-      },
-      scaleBar: {
-        visible: true,
-        x: 24,
-        y: 410,
-      },
-      logo: {
-        visible: true,
-        x: 24,
-        y: 470,
-        width: 140,
-      },
-    },
-    logo: null,
+    position: "absolute",
+    top: zone.top,
+    left: zone.left,
+    width: zone.width,
+    height: zone.height,
+    zIndex: 500,
   };
-}
-
-function OverlayHandle({
-  label,
-  position,
-  onChange,
-  children,
-  hidden = false,
-  boundsRef,
-}) {
-  const dragRef = useRef({
-    active: false,
-    startX: 0,
-    startY: 0,
-    originX: 0,
-    originY: 0,
-  });
-
-  if (hidden) return null;
-
-  const onPointerDown = (e) => {
-    if (e.target.closest("input, button, select, textarea")) return;
-    e.preventDefault();
-    e.stopPropagation();
-
-    dragRef.current = {
-      active: true,
-      startX: e.clientX,
-      startY: e.clientY,
-      originX: position.x || 0,
-      originY: position.y || 0,
-    };
-
-    window.addEventListener("pointermove", onPointerMove);
-    window.addEventListener("pointerup", onPointerUp);
-  };
-
-  const onPointerMove = (e) => {
-    if (!dragRef.current.active) return;
-
-    const bounds = boundsRef.current?.getBoundingClientRect();
-    const dx = e.clientX - dragRef.current.startX;
-    const dy = e.clientY - dragRef.current.startY;
-
-    let nextX = dragRef.current.originX + dx;
-    let nextY = dragRef.current.originY + dy;
-
-    if (bounds) {
-      nextX = clamp(nextX, 0, Math.max(0, bounds.width - 50));
-      nextY = clamp(nextY, 0, Math.max(0, bounds.height - 30));
-    }
-
-    onChange({ x: Math.round(nextX), y: Math.round(nextY) });
-  };
-
-  const onPointerUp = () => {
-    dragRef.current.active = false;
-    window.removeEventListener("pointermove", onPointerMove);
-    window.removeEventListener("pointerup", onPointerUp);
-  };
-
-  return (
-    <div
-      onPointerDown={onPointerDown}
-      style={{
-        position: "absolute",
-        left: position.x || 0,
-        top: position.y || 0,
-        cursor: "grab",
-        zIndex: 500,
-        userSelect: "none",
-      }}
-      title={`Drag ${label}`}
-    >
-      {children}
-    </div>
-  );
 }
 
 function NorthArrow() {
   return (
-    <div
-      style={{
-        width: 46,
-        textAlign: "center",
-        fontWeight: 700,
-        color: "#111",
-        background: "rgba(255,255,255,0.92)",
-        border: "1px solid #d9d9d9",
-        borderRadius: 10,
-        padding: "8px 6px",
-        boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
-      }}
-    >
-      <div style={{ fontSize: 12, marginBottom: 2 }}>N</div>
-      <div style={{ fontSize: 24, lineHeight: 1 }}>↑</div>
+    <div className="template-card north-arrow-card">
+      <div className="north-arrow-label">N</div>
+      <div className="north-arrow-icon">▲</div>
+      <div className="north-arrow-stem" />
     </div>
   );
 }
 
 function ScaleBar({ map }) {
-  const [label, setLabel] = useState("1 km");
-  const [barWidth, setBarWidth] = useState(120);
+  const [state, setState] = useState({ label: "1 km", width: 130 });
 
   useEffect(() => {
     if (!map) return;
 
-    const updateScale = () => {
+    const update = () => {
       try {
         const size = map.getSize();
-        const y = size.y / 2;
-        const x1 = 20;
-        const x2 = 140;
-
-        const latlng1 = map.containerPointToLatLng([x1, y]);
-        const latlng2 = map.containerPointToLatLng([x2, y]);
-
+        const latlng1 = map.containerPointToLatLng([20, size.y - 40]);
+        const latlng2 = map.containerPointToLatLng([150, size.y - 40]);
         const meters = latlng1.distanceTo(latlng2);
-        if (!Number.isFinite(meters) || meters <= 0) return;
-
-        const candidates = [
-          50, 100, 200, 250, 500,
-          1000, 2000, 2500, 5000,
-          10000, 20000, 25000, 50000,
-          100000,
-        ];
-
-        const target = meters;
-        const nice = candidates.reduce((best, n) =>
-          Math.abs(n - target) < Math.abs(best - target) ? n : best,
-          candidates[0]
-        );
-
-        const ratio = nice / meters;
-        const width = clamp(Math.round((x2 - x1) * ratio), 50, 180);
-
-        setBarWidth(width);
-        setLabel(nice >= 1000 ? `${nice / 1000} km` : `${nice} m`);
+        const steps = [50, 100, 200, 250, 500, 1000, 2000, 2500, 5000, 10000, 20000, 25000, 50000, 100000];
+        const nice = steps.reduce((best, n) => (Math.abs(n - meters) < Math.abs(best - meters) ? n : best), steps[0]);
+        setState({
+          label: nice >= 1000 ? `${nice / 1000} km` : `${nice} m`,
+          width: Math.max(70, Math.min(180, Math.round((130 * nice) / meters))),
+        });
       } catch {
         // ignore transient map state
       }
     };
 
-    updateScale();
-    map.on("zoomend moveend resize", updateScale);
-
-    return () => {
-      map.off("zoomend moveend resize", updateScale);
-    };
+    update();
+    map.on("moveend zoomend resize", update);
+    return () => map.off("moveend zoomend resize", update);
   }, [map]);
 
   return (
-    <div
-      style={{
-        background: "rgba(255,255,255,0.92)",
-        border: "1px solid #d9d9d9",
-        borderRadius: 10,
-        padding: "10px 12px",
-        boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
-        color: "#111",
-        minWidth: 120,
-      }}
-    >
-      <div
-        style={{
-          width: barWidth,
-          height: 10,
-          border: "1px solid #111",
-          background:
-            "linear-gradient(to right, #111 0 50%, #fff 50% 100%)",
-        }}
-      />
-      <div style={{ fontSize: 12, marginTop: 6 }}>{label}</div>
+    <div className="template-card scale-card">
+      <div className="scale-bar-track" style={{ width: state.width }}>
+        <div className="scale-bar-fill" />
+        <div className="scale-bar-fill light" />
+      </div>
+      <div className="scale-bar-label">{state.label}</div>
     </div>
   );
 }
@@ -284,18 +121,39 @@ export default function App() {
       ...base,
       layout: {
         ...base.layout,
-        ...getDefaultLayoutPatch(),
+        title: "Project Map",
+        subtitle: "Technical results template",
+        templateId: "technical_results_v1",
+        basemap: "light",
+        exportSettings: {
+          pixelRatio: 2,
+          filename: "mapviewer-export",
+        },
       },
     };
   });
-
   const [selectedLayerId, setSelectedLayerId] = useState(null);
   const [exporting, setExporting] = useState(false);
 
+  const template = useMemo(
+    () => getTemplate(project.layout?.templateId || "technical_results_v1"),
+    [project.layout?.templateId]
+  );
+
   const selectedLayer = useMemo(
-    () => project.layers.find((l) => l.id === selectedLayerId) || null,
+    () => project.layers.find((layer) => layer.id === selectedLayerId) || null,
     [project.layers, selectedLayerId]
   );
+
+  useEffect(() => {
+    setProject((prev) => ({
+      ...prev,
+      layout: {
+        ...prev.layout,
+        legendItems: buildLegendItems(template, prev.layers),
+      },
+    }));
+  }, [project.layers, template]);
 
   const updateLayout = (patch) => {
     setProject((prev) => ({
@@ -306,23 +164,6 @@ export default function App() {
         exportSettings: patch.exportSettings
           ? { ...(prev.layout?.exportSettings || {}), ...patch.exportSettings }
           : prev.layout?.exportSettings,
-        legendStyle: patch.legendStyle
-          ? { ...(prev.layout?.legendStyle || {}), ...patch.legendStyle }
-          : prev.layout?.legendStyle,
-        overlays: patch.overlays
-          ? {
-              ...(prev.layout?.overlays || {}),
-              ...Object.fromEntries(
-                Object.entries(patch.overlays).map(([key, value]) => [
-                  key,
-                  {
-                    ...(prev.layout?.overlays?.[key] || {}),
-                    ...(value || {}),
-                  },
-                ])
-              ),
-            }
-          : prev.layout?.overlays,
       },
     }));
   };
@@ -330,9 +171,7 @@ export default function App() {
   const updateLayer = (layerId, patch) => {
     setProject((prev) => ({
       ...prev,
-      layers: prev.layers.map((layer) =>
-        layer.id === layerId ? mergeDeep(layer, patch) : layer
-      ),
+      layers: prev.layers.map((layer) => (layer.id === layerId ? mergeDeep(layer, patch) : layer)),
     }));
   };
 
@@ -358,70 +197,55 @@ export default function App() {
       const tmp = L.geoJSON(geojson);
       const bounds = tmp.getBounds?.();
       if (bounds && bounds.isValid && bounds.isValid()) {
-        map.fitBounds(bounds, { padding: [20, 20] });
+        map.fitBounds(bounds, { padding: [24, 24] });
       }
     } catch {
-      // no-op
+      // ignore bad bounds
     }
-  };
-
-  const fitSelectedLayer = () => {
-    if (!selectedLayer?.geojson) return;
-    fitLayerBounds(selectedLayer.geojson);
   };
 
   const addGeoJSONLayer = async (file) => {
-    try {
-      const geojson = await loadGeoJSON(file);
-      const id = crypto.randomUUID();
-      const baseName = file.name.replace(/\.(zip|geojson|json)$/i, "") || "Layer";
-      const kind = detectLayerKind(geojson);
-      const presetKey = kind === "points" ? "drillhole" : "claim";
+    const geojson = await loadGeoJSON(file);
+    const id = crypto.randomUUID();
+    const baseName = file.name.replace(/\.(zip|geojson|json)$/i, "") || "Layer";
+    const kind = detectLayerKind(geojson);
+    const presetKey = kind === "points" ? "drillhole" : "claim";
+    const preset = LAYER_PRESETS[presetKey];
 
-      const rawLayer = {
-        id,
-        name: baseName,
-        type: kind,
-        visible: true,
-        geojson,
-        style: {
-          stroke: "#54a6ff",
-          fill: "#54a6ff",
-          fillOpacity: 0.22,
-          strokeWidth: 2,
-          markerColor: "#111111",
-          markerSize: 10,
-          dashArray: "",
-        },
-        legend: {
-          enabled: true,
-          label: baseName,
-        },
-      };
+    const rawLayer = {
+      id,
+      name: baseName,
+      type: kind,
+      visible: true,
+      role: kind === "points" ? "drillholes" : "claims",
+      geojson,
+      style: { ...(preset?.style || {}) },
+      legend: {
+        enabled: true,
+        label: baseName,
+      },
+    };
 
-      const nextLayer = applyPresetToLayer(rawLayer, presetKey);
-
-      setProject((prev) => ({
-        ...prev,
-        layers: [...prev.layers, nextLayer],
-      }));
-
-      setSelectedLayerId(id);
-
-      setTimeout(() => {
-        fitLayerBounds(geojson);
-      }, 50);
-    } catch (err) {
-      console.error(err);
-      alert(`Import failed: ${err.message}`);
-    }
+    const nextLayer = applyPresetToLayer(rawLayer, presetKey);
+    setProject((prev) => ({
+      ...prev,
+      layers: [...prev.layers, nextLayer],
+    }));
+    setSelectedLayerId(id);
+    fitLayerBounds(geojson);
   };
 
   const handleFileChange = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    await addGeoJSONLayer(file);
-    e.target.value = "";
+
+    try {
+      await addGeoJSONLayer(file);
+    } catch (err) {
+      alert(`Import failed: ${err.message}`);
+    } finally {
+      e.target.value = "";
+    }
   };
 
   const handleLogoChange = async (e) => {
@@ -432,65 +256,35 @@ export default function App() {
       const dataUrl = await readFileAsDataURL(file);
       updateLayout({ logo: dataUrl });
     } catch (err) {
-      console.error(err);
       alert(`Logo import failed: ${err.message}`);
     } finally {
       e.target.value = "";
     }
   };
 
-  const handleBuildLegend = () => {
-    const legendItems = project.layers
-      .filter((layer) => layer.visible !== false)
-      .filter((layer) => layer.legend?.enabled !== false)
-      .map((layer) => ({
-        id: layer.id,
-        label: layer.legend?.label || layer.name,
-        type: layer.type,
-        style: layer.style,
-      }));
-
-    updateLayout({ legendItems });
-  };
-
-  const handleApplyPreset = (presetKey) => {
-    if (!selectedLayer) return;
-    const next = applyPresetToLayer(selectedLayer, presetKey);
-    updateLayer(selectedLayer.id, next);
-  };
-
-  const handleExportPNG = async () => {
+  const handleExport = async (kind) => {
     if (!mapContainerRef.current) return;
 
     setExporting(true);
     try {
       const scene = buildScene(mapContainerRef.current, project, leafletMapRef.current);
-      await exportPNG(scene, project.layout?.exportSettings || {});
+      if (kind === "png") {
+        await exportPNG(scene, project.layout?.exportSettings || {});
+      } else {
+        await exportSVG(scene, project.layout?.exportSettings || {});
+      }
     } catch (err) {
-      console.error(err);
-      alert(`PNG export failed: ${err.message}`);
+      alert(`${kind.toUpperCase()} export failed: ${err.message}`);
     } finally {
       setExporting(false);
     }
   };
 
-  const handleExportSVG = async () => {
-    if (!mapContainerRef.current) return;
-
-    setExporting(true);
-    try {
-      const scene = buildScene(mapContainerRef.current, project, leafletMapRef.current);
-      exportSVG(scene, project.layout?.exportSettings || {});
-    } catch (err) {
-      console.error(err);
-      alert(`SVG export failed: ${err.message}`);
-    } finally {
-      setExporting(false);
-    }
-  };
-
-  const overlays = project.layout?.overlays || {};
-  const legendStyle = project.layout?.legendStyle || {};
+  const resolvedScene = mapContainerRef.current
+    ? buildScene(mapContainerRef.current, project, leafletMapRef.current)
+    : { template };
+  const zones = resolvedScene.template?.zones || template.zones;
+  const legendItems = project.layout?.legendItems || [];
   const exportSettings = project.layout?.exportSettings || {};
 
   return (
@@ -498,7 +292,7 @@ export default function App() {
       <Sidebar>
         <div className="sidebar-section">
           <div className="sidebar-title">Mapviewer</div>
-          <div className="sidebar-subtitle">Map composition + export</div>
+          <div className="sidebar-subtitle">Template-driven geology map builder</div>
         </div>
 
         <div className="sidebar-section">
@@ -513,6 +307,11 @@ export default function App() {
             style={{ display: "none" }}
             onChange={handleFileChange}
           />
+        </div>
+
+        <div className="sidebar-section">
+          <label className="field-label">Template</label>
+          <div className="template-note">Technical Results v1 is locked. Layout elements export exactly where they appear on screen.</div>
         </div>
 
         <div className="sidebar-section">
@@ -531,28 +330,14 @@ export default function App() {
 
         <div className="sidebar-section">
           <label className="field-label">Title</label>
-          <input
-            className="text-input"
-            value={project.layout.title}
-            onChange={(e) => updateLayout({ title: e.target.value })}
-          />
+          <input className="text-input" value={project.layout.title} onChange={(e) => updateLayout({ title: e.target.value })} />
 
           <label className="field-label">Subtitle</label>
-          <input
-            className="text-input"
-            value={project.layout.subtitle}
-            onChange={(e) => updateLayout({ subtitle: e.target.value })}
-          />
+          <input className="text-input" value={project.layout.subtitle} onChange={(e) => updateLayout({ subtitle: e.target.value })} />
         </div>
 
         <div className="sidebar-section">
-          <div className="row-between">
-            <span className="field-label">Layers</span>
-            <button className="btn btn-small" onClick={handleBuildLegend}>
-              Build Legend
-            </button>
-          </div>
-
+          <div className="field-label">Layers</div>
           <LayerList
             layers={project.layers}
             selectedLayerId={selectedLayerId}
@@ -566,13 +351,10 @@ export default function App() {
 
           {selectedLayer && (
             <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
-              <button className="btn btn-small" onClick={fitSelectedLayer}>
+              <button className="btn btn-small" onClick={() => fitLayerBounds(selectedLayer.geojson)}>
                 Zoom to Selected
               </button>
-              <button
-                className="btn btn-small"
-                onClick={() => removeLayer(selectedLayer.id)}
-              >
+              <button className="btn btn-small" onClick={() => removeLayer(selectedLayer.id)}>
                 Remove Selected
               </button>
             </div>
@@ -583,120 +365,29 @@ export default function App() {
           <div className="sidebar-section">
             <div className="field-label">Selected Layer</div>
 
-            <label className="field-label">Name</label>
-            <input
-              className="text-input"
-              value={selectedLayer.name}
-              onChange={(e) => updateLayer(selectedLayer.id, { name: e.target.value })}
-            />
-
-            <label className="field-label">Preset</label>
+            <label className="field-label">Layer Role</label>
             <select
               className="text-input"
-              defaultValue=""
-              onChange={(e) => e.target.value && handleApplyPreset(e.target.value)}
+              value={selectedLayer.role || "other"}
+              onChange={(e) => updateLayer(selectedLayer.id, { role: e.target.value })}
             >
-              <option value="">Choose preset</option>
-              {Object.keys(LAYER_PRESETS).map((key) => (
-                <option key={key} value={key}>
-                  {LAYER_PRESETS[key].label}
-                </option>
-              ))}
+              <option value="claims">Claims</option>
+              <option value="highlight_zone">Highlight Zone</option>
+              <option value="anomaly">Anomaly</option>
+              <option value="geophysics">Geophysics</option>
+              <option value="drill_traces">Drill Traces</option>
+              <option value="drillholes">Drillholes</option>
+              <option value="other">Other</option>
             </select>
-
-            {selectedLayer.type !== "points" && (
-              <>
-                <label className="field-label">Stroke</label>
-                <input
-                  className="color-input"
-                  type="color"
-                  value={selectedLayer.style?.stroke || "#54a6ff"}
-                  onChange={(e) =>
-                    updateLayer(selectedLayer.id, {
-                      style: { stroke: e.target.value },
-                    })
-                  }
-                />
-
-                <label className="field-label">Fill</label>
-                <input
-                  className="color-input"
-                  type="color"
-                  value={selectedLayer.style?.fill || "#54a6ff"}
-                  onChange={(e) =>
-                    updateLayer(selectedLayer.id, {
-                      style: { fill: e.target.value },
-                    })
-                  }
-                />
-
-                <label className="field-label">Fill Opacity</label>
-                <input
-                  type="range"
-                  min="0"
-                  max="1"
-                  step="0.05"
-                  value={selectedLayer.style?.fillOpacity ?? 0.22}
-                  onChange={(e) =>
-                    updateLayer(selectedLayer.id, {
-                      style: { fillOpacity: Number(e.target.value) },
-                    })
-                  }
-                />
-
-                <label className="field-label">Stroke Width</label>
-                <input
-                  type="range"
-                  min="1"
-                  max="8"
-                  step="1"
-                  value={selectedLayer.style?.strokeWidth ?? 2}
-                  onChange={(e) =>
-                    updateLayer(selectedLayer.id, {
-                      style: { strokeWidth: Number(e.target.value) },
-                    })
-                  }
-                />
-              </>
-            )}
-
-            {selectedLayer.type === "points" && (
-              <>
-                <label className="field-label">Marker Color</label>
-                <input
-                  className="color-input"
-                  type="color"
-                  value={selectedLayer.style?.markerColor || "#111111"}
-                  onChange={(e) =>
-                    updateLayer(selectedLayer.id, {
-                      style: { markerColor: e.target.value },
-                    })
-                  }
-                />
-
-                <label className="field-label">Marker Size</label>
-                <input
-                  type="range"
-                  min="6"
-                  max="24"
-                  step="1"
-                  value={selectedLayer.style?.markerSize ?? 10}
-                  onChange={(e) =>
-                    updateLayer(selectedLayer.id, {
-                      style: { markerSize: Number(e.target.value) },
-                    })
-                  }
-                />
-              </>
-            )}
 
             <label className="field-label">Legend Label</label>
             <input
               className="text-input"
-              value={selectedLayer.legend?.label || ""}
+              value={selectedLayer.legend?.label || selectedLayer.name || ""}
               onChange={(e) =>
                 updateLayer(selectedLayer.id, {
                   legend: {
+                    ...(selectedLayer.legend || {}),
                     enabled: true,
                     label: e.target.value,
                   },
@@ -704,7 +395,7 @@ export default function App() {
               }
             />
 
-            <label className="field-label">Legend Enabled</label>
+            <label className="field-label">Legend Entry</label>
             <select
               className="text-input"
               value={selectedLayer.legend?.enabled === false ? "no" : "yes"}
@@ -713,99 +404,16 @@ export default function App() {
                   legend: {
                     ...(selectedLayer.legend || {}),
                     enabled: e.target.value === "yes",
+                    label: selectedLayer.legend?.label || selectedLayer.name || ROLE_LABELS[selectedLayer.role] || "Layer",
                   },
                 })
               }
             >
-              <option value="yes">Yes</option>
-              <option value="no">No</option>
+              <option value="yes">Include</option>
+              <option value="no">Hide</option>
             </select>
           </div>
         )}
-
-        <div className="sidebar-section">
-          <div className="field-label">Layout Elements</div>
-
-          <label className="field-label">Title Visible</label>
-          <select
-            className="text-input"
-            value={overlays.title?.visible === false ? "no" : "yes"}
-            onChange={(e) =>
-              updateLayout({
-                overlays: {
-                  title: { visible: e.target.value === "yes" },
-                },
-              })
-            }
-          >
-            <option value="yes">Yes</option>
-            <option value="no">No</option>
-          </select>
-
-          <label className="field-label">Legend Visible</label>
-          <select
-            className="text-input"
-            value={overlays.legend?.visible === false ? "no" : "yes"}
-            onChange={(e) =>
-              updateLayout({
-                overlays: {
-                  legend: { visible: e.target.value === "yes" },
-                },
-              })
-            }
-          >
-            <option value="yes">Yes</option>
-            <option value="no">No</option>
-          </select>
-
-          <label className="field-label">North Arrow Visible</label>
-          <select
-            className="text-input"
-            value={overlays.northArrow?.visible === false ? "no" : "yes"}
-            onChange={(e) =>
-              updateLayout({
-                overlays: {
-                  northArrow: { visible: e.target.value === "yes" },
-                },
-              })
-            }
-          >
-            <option value="yes">Yes</option>
-            <option value="no">No</option>
-          </select>
-
-          <label className="field-label">Scale Bar Visible</label>
-          <select
-            className="text-input"
-            value={overlays.scaleBar?.visible === false ? "no" : "yes"}
-            onChange={(e) =>
-              updateLayout({
-                overlays: {
-                  scaleBar: { visible: e.target.value === "yes" },
-                },
-              })
-            }
-          >
-            <option value="yes">Yes</option>
-            <option value="no">No</option>
-          </select>
-
-          <label className="field-label">Logo Visible</label>
-          <select
-            className="text-input"
-            value={overlays.logo?.visible === false ? "no" : "yes"}
-            onChange={(e) =>
-              updateLayout({
-                overlays: {
-                  logo: { visible: e.target.value === "yes" },
-                },
-              })
-            }
-          >
-            <option value="yes">Yes</option>
-            <option value="no">No</option>
-          </select>
-        </div>
 
         <div className="sidebar-section">
           <div className="row-between">
@@ -814,90 +422,12 @@ export default function App() {
               Upload
             </button>
           </div>
-
-          <input
-            ref={logoInputRef}
-            type="file"
-            accept="image/*"
-            style={{ display: "none" }}
-            onChange={handleLogoChange}
-          />
-
-          <label className="field-label">Logo Width</label>
-          <input
-            type="range"
-            min="40"
-            max="260"
-            step="5"
-            value={overlays.logo?.width ?? 140}
-            onChange={(e) =>
-              updateLayout({
-                overlays: {
-                  logo: { width: Number(e.target.value) },
-                },
-              })
-            }
-          />
-
+          <input ref={logoInputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleLogoChange} />
           {project.layout?.logo && (
-            <button className="btn btn-small" onClick={() => updateLayout({ logo: null })}>
+            <button className="btn btn-small" style={{ marginTop: 8 }} onClick={() => updateLayout({ logo: null })}>
               Remove Logo
             </button>
           )}
-        </div>
-
-        <div className="sidebar-section">
-          <div className="field-label">Legend Style</div>
-
-          <label className="field-label">Background</label>
-          <input
-            className="color-input"
-            type="color"
-            value={legendStyle.background || "#ffffff"}
-            onChange={(e) =>
-              updateLayout({
-                legendStyle: { background: e.target.value },
-              })
-            }
-          />
-
-          <label className="field-label">Border</label>
-          <input
-            className="color-input"
-            type="color"
-            value={legendStyle.border || "#d9d9d9"}
-            onChange={(e) =>
-              updateLayout({
-                legendStyle: { border: e.target.value },
-              })
-            }
-          />
-
-          <label className="field-label">Text</label>
-          <input
-            className="color-input"
-            type="color"
-            value={legendStyle.text || "#1f1f1f"}
-            onChange={(e) =>
-              updateLayout({
-                legendStyle: { text: e.target.value },
-              })
-            }
-          />
-
-          <label className="field-label">Width</label>
-          <input
-            type="range"
-            min="160"
-            max="340"
-            step="10"
-            value={legendStyle.width ?? 220}
-            onChange={(e) =>
-              updateLayout({
-                legendStyle: { width: Number(e.target.value) },
-              })
-            }
-          />
         </div>
 
         <div className="sidebar-section">
@@ -907,22 +437,14 @@ export default function App() {
           <input
             className="text-input"
             value={exportSettings.filename || "mapviewer-export"}
-            onChange={(e) =>
-              updateLayout({
-                exportSettings: { filename: e.target.value },
-              })
-            }
+            onChange={(e) => updateLayout({ exportSettings: { filename: e.target.value } })}
           />
 
           <label className="field-label">Pixel Ratio</label>
           <select
             className="text-input"
             value={String(exportSettings.pixelRatio || 2)}
-            onChange={(e) =>
-              updateLayout({
-                exportSettings: { pixelRatio: Number(e.target.value) },
-              })
-            }
+            onChange={(e) => updateLayout({ exportSettings: { pixelRatio: Number(e.target.value) } })}
           >
             <option value="1">1x</option>
             <option value="2">2x</option>
@@ -931,10 +453,10 @@ export default function App() {
           </select>
 
           <div className="export-buttons">
-            <button className="btn" disabled={exporting} onClick={handleExportPNG}>
+            <button className="btn" disabled={exporting} onClick={() => handleExport("png")}>
               {exporting ? "Working..." : "Export PNG"}
             </button>
-            <button className="btn" disabled={exporting} onClick={handleExportSVG}>
+            <button className="btn" disabled={exporting} onClick={() => handleExport("svg")}>
               {exporting ? "Working..." : "Export SVG"}
             </button>
           </div>
@@ -942,179 +464,51 @@ export default function App() {
       </Sidebar>
 
       <div className="map-stage">
-        <div className="map-container" ref={mapContainerRef} style={{ position: "relative" }}>
-          <MapCanvas onReady={onMapReady} project={project} />
+        <div className="map-container geology-template-stage" ref={mapContainerRef}>
+          <MapCanvas onReady={onMapReady} project={project} template={template} />
 
-          <OverlayHandle
-            label="title"
-            position={overlays.title || { x: 24, y: 20 }}
-            onChange={(patch) =>
-              updateLayout({
-                overlays: {
-                  title: patch,
-                },
-              })
-            }
-            hidden={overlays.title?.visible === false}
-            boundsRef={mapContainerRef}
-          >
-            <div
-              className="map-title-block"
-              style={{
-                background: "rgba(255,255,255,0.88)",
-                border: "1px solid rgba(0,0,0,0.08)",
-                borderRadius: 10,
-                padding: "12px 14px",
-                boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
-                maxWidth: 420,
-              }}
-            >
+          <div style={zoneStyle(zones.title)} className="template-title-shell">
+            <div className="map-title-block template-card title-card">
               <div className="map-title">{project.layout.title}</div>
               <div className="map-subtitle">{project.layout.subtitle}</div>
             </div>
-          </OverlayHandle>
+          </div>
 
-          {project.layout.legendItems?.length > 0 && (
-            <OverlayHandle
-              label="legend"
-              position={overlays.legend || { x: 24, y: 96 }}
-              onChange={(patch) =>
-                updateLayout({
-                  overlays: {
-                    legend: patch,
-                  },
-                })
-              }
-              hidden={overlays.legend?.visible === false}
-              boundsRef={mapContainerRef}
-            >
-              <div
-                className="legend-box"
-                style={{
-                  width: legendStyle.width || 220,
-                  background: legendStyle.background || "#ffffff",
-                  border: `1px solid ${legendStyle.border || "#d9d9d9"}`,
-                  color: legendStyle.text || "#1f1f1f",
-                  borderRadius: legendStyle.borderRadius ?? 10,
-                  padding: legendStyle.padding ?? 12,
-                  boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
-                }}
-              >
-                <div
-                  className="legend-title"
-                  style={{ marginBottom: 8, fontWeight: 700, fontSize: 14 }}
-                >
-                  Legend
-                </div>
-
-                {project.layout.legendItems.map((item) => (
-                  <div
-                    key={item.id}
-                    className="legend-row"
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 10,
-                      marginBottom: 8,
-                    }}
-                  >
+          {legendItems.length > 0 && (
+            <div style={zoneStyle(zones.legend)}>
+              <div className="legend-box template-card legend-card">
+                <div className="legend-title">Legend</div>
+                {legendItems.map((item) => (
+                  <div key={item.id} className="legend-row">
                     <span
-                      className="legend-swatch"
+                      className={`legend-swatch ${item.type === "points" ? "point" : "area"}`}
                       style={{
-                        width: item.type === "points" ? 12 : 18,
-                        height: item.type === "points" ? 12 : 12,
-                        display: "inline-block",
-                        background:
-                          item.type === "points"
-                            ? item.style?.markerColor || "#111111"
-                            : item.style?.fill || "#54a6ff",
-                        border: `2px solid ${
-                          item.type === "points"
-                            ? item.style?.markerColor || "#111111"
-                            : item.style?.stroke || "#54a6ff"
-                        }`,
-                        borderRadius: item.type === "points" ? "999px" : "2px",
-                        opacity:
-                          item.type === "points"
-                            ? 1
-                            : item.style?.fillOpacity ?? 1,
-                        flex: "0 0 auto",
+                        background: item.type === "points" ? item.style?.markerFill || item.style?.markerColor || "#111111" : item.style?.fill || "#74a0f6",
+                        borderColor: item.type === "points" ? item.style?.markerColor || "#111111" : item.style?.stroke || "#305ea8",
+                        opacity: item.type === "points" ? 1 : item.style?.fillOpacity ?? 1,
                       }}
                     />
-                    <span style={{ fontSize: 13 }}>{item.label}</span>
+                    <span>{item.label}</span>
                   </div>
                 ))}
               </div>
-            </OverlayHandle>
+            </div>
           )}
 
-          <OverlayHandle
-            label="north arrow"
-            position={overlays.northArrow || { x: 24, y: 340 }}
-            onChange={(patch) =>
-              updateLayout({
-                overlays: {
-                  northArrow: patch,
-                },
-              })
-            }
-            hidden={overlays.northArrow?.visible === false}
-            boundsRef={mapContainerRef}
-          >
+          <div style={zoneStyle(zones.northArrow)}>
             <NorthArrow />
-          </OverlayHandle>
+          </div>
 
-          <OverlayHandle
-            label="scale bar"
-            position={overlays.scaleBar || { x: 24, y: 410 }}
-            onChange={(patch) =>
-              updateLayout({
-                overlays: {
-                  scaleBar: patch,
-                },
-              })
-            }
-            hidden={overlays.scaleBar?.visible === false}
-            boundsRef={mapContainerRef}
-          >
+          <div style={zoneStyle(zones.scaleBar)}>
             <ScaleBar map={leafletMapRef.current} />
-          </OverlayHandle>
+          </div>
 
           {project.layout?.logo && (
-            <OverlayHandle
-              label="logo"
-              position={overlays.logo || { x: 24, y: 470, width: 140 }}
-              onChange={(patch) =>
-                updateLayout({
-                  overlays: {
-                    logo: patch,
-                  },
-                })
-              }
-              hidden={overlays.logo?.visible === false}
-              boundsRef={mapContainerRef}
-            >
-              <div
-                style={{
-                  background: "rgba(255,255,255,0.9)",
-                  border: "1px solid #d9d9d9",
-                  borderRadius: 10,
-                  padding: 8,
-                  boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
-                }}
-              >
-                <img
-                  src={project.layout.logo}
-                  alt="Logo"
-                  style={{
-                    display: "block",
-                    width: overlays.logo?.width ?? 140,
-                    height: "auto",
-                    maxWidth: "none",
-                  }}
-                />
+            <div style={zoneStyle(zones.logo)}>
+              <div className="template-card logo-card">
+                <img src={project.layout.logo} alt="Logo" className="logo-image" />
               </div>
-            </OverlayHandle>
+            </div>
           )}
         </div>
       </div>

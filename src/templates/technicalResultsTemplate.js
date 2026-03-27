@@ -3,14 +3,16 @@ import { ROLE_LABELS } from "../projectState";
 export const technicalResultsTemplate = {
   id: "technical_results_v1",
   label: "Technical Results v1",
+  frame: {
+    margin: 18,
+    panelRadius: 10,
+  },
   zones: {
-    title: { top: 18, left: 18, width: 440 },
-    northArrow: { top: 128, left: 18 },
-    inset: { top: 18, right: 18, width: 230, height: 180 },
-    legend: { bottom: 18, left: 18, width: 280 },
-    scaleBar: { bottom: 18, left: "50%", transform: "translateX(-50%)" },
-    logo: { bottom: 18, right: 18, width: 180, height: 84 },
-    calloutBounds: { top: 80, right: 20, bottom: 120, left: 20 },
+    title: { top: 18, left: 18, width: 460, height: 88 },
+    legend: { top: 122, left: 18, width: 280, height: 220 },
+    northArrow: { top: 18, right: 18, left: null, width: 72, height: 104 },
+    scaleBar: { bottom: 18, left: 18, top: null, width: 220, height: 64 },
+    logo: { bottom: 18, right: 18, left: null, top: null, width: 170, height: 80 },
   },
   roleOrder: [
     "claims",
@@ -23,64 +25,58 @@ export const technicalResultsTemplate = {
   ],
   roleStyles: {
     claims: {
-      stroke: "#222",
-      fill: "#c7c7c7",
-      fillOpacity: 0.02,
-      strokeWidth: 2,
+      stroke: "#111827",
+      fill: "#cfd6e4",
+      fillOpacity: 0.08,
+      strokeWidth: 2.2,
       dashArray: "",
     },
     anomaly: {
-      stroke: "#0f5772",
-      fill: "#2fabc8",
+      stroke: "#0f5a79",
+      fill: "#2fa6c3",
       fillOpacity: 0.28,
       strokeWidth: 2,
       dashArray: "",
     },
     drillholes: {
-      markerColor: "#111111",
-      markerFill: "#f5f5f5",
-      markerSize: 6,
-      strokeWidth: 1.5,
+      markerColor: "#111827",
+      markerFill: "#ffffff",
+      markerSize: 10,
+      strokeWidth: 1.8,
     },
     drill_traces: {
-      stroke: "#2d2d2d",
-      fill: "#2d2d2d",
+      stroke: "#2d3748",
+      fill: "#2d3748",
       fillOpacity: 0,
-      strokeWidth: 1.5,
-      dashArray: "4 3",
+      strokeWidth: 1.6,
+      dashArray: "5 4",
     },
     geophysics: {
-      stroke: "#4d677f",
-      fill: "#98b1c9",
-      fillOpacity: 0.24,
-      strokeWidth: 1.2,
+      stroke: "#61758a",
+      fill: "#9ab1c4",
+      fillOpacity: 0.22,
+      strokeWidth: 1.4,
       dashArray: "",
     },
     highlight_zone: {
-      stroke: "#4e237a",
-      fill: "#8652bf",
+      stroke: "#5b2b8a",
+      fill: "#8a57c5",
       fillOpacity: 0.24,
       strokeWidth: 2,
       dashArray: "",
     },
     other: {
-      stroke: "#3957aa",
-      fill: "#72a0ff",
+      stroke: "#305ea8",
+      fill: "#74a0f6",
       fillOpacity: 0.2,
       strokeWidth: 2,
       dashArray: "",
     },
   },
-  calloutStyle: {
-    background: "rgba(255,255,255,0.95)",
-    border: "1px solid #1f1f1f",
-    text: "#111111",
-    accent: "#145f97",
-  },
 };
 
 export function buildLegendItems(template, layers) {
-  const visible = layers.filter((layer) => layer.visible !== false && layer.legendEnabled !== false);
+  const visible = layers.filter((layer) => layer.visible !== false && layer.legend?.enabled !== false);
   const byRole = new Map((template.roleOrder || []).map((role, idx) => [role, idx]));
 
   return visible
@@ -89,8 +85,11 @@ export function buildLegendItems(template, layers) {
     .map((layer) => ({
       id: layer.id,
       role: layer.role,
-      label: layer.legendLabel || layer.name || ROLE_LABELS[layer.role] || "Layer",
+      label: layer.legend?.label || layer.name || ROLE_LABELS[layer.role] || "Layer",
       type: layer.type,
-      style: layer.style,
+      style: {
+        ...(template.roleStyles?.[layer.role] || template.roleStyles?.other || {}),
+        ...(layer.style || {}),
+      },
     }));
 }
