@@ -10,6 +10,17 @@ const BASE_ZONES = {
   logo: { bottom: 18, right: 18, width: 180, height: 84 },
 };
 
+const ROLE_GROUPS = {
+  claims: 'Property',
+  target_areas: 'Targets',
+  anomalies: 'Targets',
+  drillholes: 'Drilling',
+  faults_structures: 'Reference',
+  roads_access: 'Infrastructure',
+  rivers_water: 'Infrastructure',
+  labels: 'Reference',
+};
+
 export const technicalResultsTemplate = {
   id: 'technical_results_v2',
   label: 'Technical Results v2',
@@ -28,6 +39,7 @@ export const technicalResultsTemplate = {
     'drillholes',
     'labels',
   ],
+  roleGroups: ROLE_GROUPS,
   roleStyles: {
     claims: { stroke: '#60a5fa', fill: '#93c5fd', fillOpacity: 0.22, strokeWidth: 2 },
     drillholes: { markerColor: '#1f2937', markerFill: '#ffffff', markerSize: 12, strokeWidth: 1.8 },
@@ -45,47 +57,71 @@ export const technicalResultsTemplate = {
       insetMode: 'province_state',
       framing: 'balanced',
       visibleRoles: ['claims', 'drillholes', 'target_areas', 'anomalies', 'roads_access', 'rivers_water'],
+      referenceOverlays: { context: false, labels: false, rail: false },
     },
     regional_claims: {
       basemap: 'light',
       insetMode: 'country',
       framing: 'regional',
       visibleRoles: ['claims', 'roads_access', 'rivers_water', 'labels'],
+      referenceOverlays: { context: false, labels: true, rail: false },
     },
     drill_plan: {
       basemap: 'light',
       insetMode: 'secondary_zoom',
       framing: 'tight',
       visibleRoles: ['claims', 'drillholes', 'target_areas', 'roads_access'],
+      referenceOverlays: { context: false, labels: true, rail: false },
     },
     target_anomaly: {
       basemap: 'satellite',
       insetMode: 'regional_district',
       framing: 'tight',
       visibleRoles: ['claims', 'target_areas', 'anomalies', 'faults_structures', 'drillholes'],
+      referenceOverlays: { context: false, labels: false, rail: false },
     },
     access_location: {
       basemap: 'topo',
       insetMode: 'country',
-      framing: 'regional',
+      framing: 'access',
       visibleRoles: ['claims', 'roads_access', 'rivers_water', 'labels'],
+      referenceOverlays: { context: false, labels: true, rail: true },
     },
   },
 };
+
+function legendHeightFor(layout, itemCount) {
+  const mode = layout?.legendMode || 'auto';
+  const compact = mode === 'compact' || (mode === 'auto' && itemCount <= 2);
+  if (!itemCount) return 0;
+  if (compact) return Math.max(84, Math.min(160, 44 + itemCount * 26));
+  return Math.max(110, Math.min(280, 54 + itemCount * 30));
+}
 
 export function resolveTemplateZones(template, layout, mapSize) {
   const width = mapSize?.width || 1600;
   const height = mapSize?.height || 1000;
   const legendCount = Math.max(0, layout?.legendItems?.length || 0);
-  const legendHeight = Math.max(84, Math.min(260, 50 + legendCount * 26));
+  const legendHeight = legendHeightFor(layout, legendCount);
   const logoScale = Number(layout?.logoScale || 1);
   const logoWidth = Math.round(BASE_ZONES.logo.width * logoScale);
   const logoHeight = Math.round(BASE_ZONES.logo.height * logoScale);
+  const insetSize = layout?.insetSize || 'medium';
+  const insetEnabled = layout?.insetEnabled !== false;
+  const insetScale = insetSize === 'small' ? 0.82 : insetSize === 'large' ? 1.22 : 1;
+  const titleWidth = layout?.titleWidth === 'wide' ? 620 : 480;
+
+  const insetWidth = Math.round(BASE_ZONES.inset.width * insetScale);
+  const insetHeight = Math.round(BASE_ZONES.inset.height * insetScale);
 
   const zones = {
     ...BASE_ZONES,
+    title: { ...BASE_ZONES.title, width: titleWidth },
     legend: { ...BASE_ZONES.legend, height: legendHeight },
-    inset: { ...BASE_ZONES.inset, top: Math.max(136, BASE_ZONES.legend.top + legendHeight + 18) },
+    inset: insetEnabled
+      ? { ...BASE_ZONES.inset, width: insetWidth, height: insetHeight, top: Math.max(138, BASE_ZONES.legend.top + legendHeight + 18) }
+      : { ...BASE_ZONES.inset, width: 0, height: 0 },
+    footer: layout?.footerEnabled === false ? { ...BASE_ZONES.footer, width: 0, height: 0 } : { ...BASE_ZONES.footer },
     logo: { ...BASE_ZONES.logo, width: logoWidth, height: logoHeight },
   };
 
@@ -99,16 +135,42 @@ export function resolveTemplateZones(template, layout, mapSize) {
   );
 }
 
-export function buildLegendItems(template, layers) {
+function buildOverlayLegendItems(layout) {
+  const items = [];
+  if (layout?.referenceOverlays?.rail) {
+    items.push({
+      id: 'overlay-rail',
+      role: 'roads_access',
+      group: 'Infrastructure',
+      label: 'Railway Network',
+      type: 'line',
+      style: { stroke: '#7b1fa2', fill: '#7b1fa2', fillOpacity: 0, strokeWidth: 2 },
+    });
+  }
+  if (layout?.referenceOverlays?.labels) {
+    items.push({
+      id: 'overlay-labels',
+      role: 'labels',
+      group: 'Reference',
+      label: 'Reference Labels',
+      type: 'line',
+      style: { stroke: '#64748b', fill: '#64748b', fillOpacity: 0, strokeWidth: 1.4 },
+    });
+  }
+  return items;
+}
+
+export function buildLegendItems(template, layers, layout = {}) {
   const visible = layers.filter((layer) => layer.visible !== false && layer.legend?.enabled !== false);
   const byRole = new Map((template.roleOrder || []).map((role, idx) => [role, idx]));
 
-  return visible
+  const layerItems = visible
     .slice()
     .sort((a, b) => (byRole.get(a.role) ?? 999) - (byRole.get(b.role) ?? 999))
     .map((layer) => ({
       id: layer.id,
       role: layer.role,
+      group: template.roleGroups?.[layer.role] || 'Map Data',
       label: layer.displayName || layer.legend?.label || layer.name || ROLE_LABELS[layer.role] || 'Layer',
       type: layer.type,
       style: {
@@ -116,4 +178,6 @@ export function buildLegendItems(template, layers) {
         ...(layer.style || {}),
       },
     }));
+
+  return [...layerItems, ...buildOverlayLegendItems(layout)];
 }

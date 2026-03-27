@@ -23,16 +23,17 @@ export function fitProjectToTemplate(project, map, template, mode = 'balanced') 
   if (!bounds) return;
 
   const zones = template?.zones || {};
-  const leftSafe = Math.max((zones.title?.left || 18) + (zones.legend?.width || 290) + 46, 240);
-  const rightSafe = Math.max((zones.inset?.width || 220) + 42, 160);
-  const topSafe = Math.max((zones.title?.height || 88) + 52, 120);
-  const bottomSafe = Math.max((zones.scaleBar?.height || 64) + 44, 110);
+  const leftSafe = Math.max((zones.legend?.width || 0) + 54, (zones.title?.width || 0) * 0.48, 180);
+  const rightSafe = Math.max((zones.inset?.width || 0) + 42, (zones.northArrow?.width || 0) + 22, 90);
+  const topSafe = Math.max((zones.title?.height || 0) + 50, 90);
+  const bottomSafe = Math.max((zones.scaleBar?.height || 0) + 42, (zones.logo?.height || 0) * 0.45, 90);
 
   const padVariants = {
-    tight: { paddingTopLeft: [leftSafe - 70, topSafe - 30], paddingBottomRight: [rightSafe - 40, bottomSafe - 28] },
+    tight: { paddingTopLeft: [Math.max(120, leftSafe - 80), Math.max(60, topSafe - 26)], paddingBottomRight: [Math.max(80, rightSafe - 26), Math.max(60, bottomSafe - 24)] },
     balanced: { paddingTopLeft: [leftSafe, topSafe], paddingBottomRight: [rightSafe, bottomSafe] },
-    regional: { paddingTopLeft: [leftSafe + 40, topSafe + 24], paddingBottomRight: [rightSafe + 24, bottomSafe + 18] },
+    regional: { paddingTopLeft: [leftSafe + 44, topSafe + 24], paddingBottomRight: [rightSafe + 26, bottomSafe + 20] },
+    access: { paddingTopLeft: [leftSafe + 68, topSafe + 24], paddingBottomRight: [rightSafe + 60, bottomSafe + 24] },
   };
 
-  map.fitBounds(bounds, padVariants[mode] || padVariants.balanced, { animate: false });
+  map.fitBounds(bounds, { ...(padVariants[mode] || padVariants.balanced), animate: false });
 }

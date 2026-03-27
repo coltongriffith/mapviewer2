@@ -17,6 +17,13 @@ export const TEMPLATE_MODES = {
   access_location: 'Access / Location',
 };
 
+export const COMPOSITION_PRESETS = {
+  tight: 'Tight',
+  balanced: 'Balanced',
+  regional: 'Regional',
+  access: 'Access',
+};
+
 export const INSET_MODES = {
   province_state: 'Province / State',
   country: 'Country',
@@ -40,14 +47,26 @@ export function createInitialProjectState() {
       basemap: 'light',
       templateId: 'technical_results_v2',
       mode: 'project_overview',
+      compositionPreset: 'balanced',
       insetMode: 'province_state',
+      insetEnabled: true,
+      insetSize: 'medium',
       primaryLayerId: null,
       frameVersion: 0,
       logo: null,
       logoScale: 1,
       insetImage: null,
       legendItems: [],
+      legendMode: 'auto',
+      titleWidth: 'standard',
       footerText: '',
+      footerEnabled: true,
+      referenceOverlays: {
+        context: false,
+        labels: false,
+        rail: false,
+      },
+      referenceOpacity: 0.65,
       exportSettings: {
         pixelRatio: 2,
         filename: 'mapviewer-export',

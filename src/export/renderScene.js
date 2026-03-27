@@ -99,24 +99,42 @@ function drawTitleBlockCanvas(ctx, scene, scale) {
   ctx.fillStyle = 'rgba(255,255,255,0.86)'; ctx.font = `${14 * scale}px Arial`; ctx.fillText(scene.project.layout?.subtitle || 'Technical results template', x + 18 * scale, y + 52 * scale);
 }
 
+function groupLegendItems(items, layout) {
+  const mode = layout?.legendMode || 'auto';
+  const compact = mode === 'compact' || (mode === 'auto' && items.length <= 2);
+  if (compact) return [{ heading: null, items }];
+  const groups = [];
+  for (const item of items) {
+    const heading = item.group || 'Map Data';
+    let bucket = groups.find((g) => g.heading === heading);
+    if (!bucket) { bucket = { heading, items: [] }; groups.push(bucket); }
+    bucket.items.push(item);
+  }
+  return groups;
+}
+
 function legendSwatchSvg(item, x, y, scale) {
   const style = item.style || {};
   if (item.type === 'points') return `<circle cx="${(x + 8 * scale).toFixed(2)}" cy="${(y + 8 * scale).toFixed(2)}" r="${(5 * scale).toFixed(2)}" fill="${style.markerFill || style.markerColor || '#ffffff'}" stroke="${style.markerColor || '#111111'}" stroke-width="${Math.max(1, scale).toFixed(2)}" />`;
   return `<rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${(18 * scale).toFixed(2)}" height="${(12 * scale).toFixed(2)}" fill="${style.fill || '#72a0ff'}" fill-opacity="${style.fillOpacity ?? 0.22}" stroke="${style.stroke || '#3b82f6'}" stroke-width="${Math.max(1, scale).toFixed(2)}" />`;
 }
 function drawLegendCanvas(ctx, scene, scale) {
-  const { legend } = getOverlayMetrics(scene); const items = scene.project.layout?.legendItems || []; if (!items.length) return;
+  const { legend } = getOverlayMetrics(scene); const items = scene.project.layout?.legendItems || []; if (!items.length || !legend?.width || !legend?.height) return;
   const x = legend.left * scale, y = legend.top * scale, w = legend.width * scale, h = legend.height * scale;
   drawRoundedRect(ctx, x, y, w, h, 10 * scale); ctx.fillStyle = 'rgba(255,255,255,0.96)'; ctx.fill(); ctx.strokeStyle = 'rgba(18,30,48,0.18)'; ctx.lineWidth = 1 * scale; ctx.stroke();
   ctx.fillStyle = '#132033'; ctx.font = `700 ${15 * scale}px Arial`; ctx.textBaseline = 'top'; ctx.fillText('Legend', x + 16 * scale, y + 12 * scale);
-  items.forEach((item, index) => {
-    const rowY = y + (40 + index * 24) * scale;
-    if (item.type === 'points') {
-      ctx.beginPath(); ctx.arc(x + 24 * scale, rowY + 9 * scale, 5 * scale, 0, Math.PI * 2); ctx.fillStyle = item.style.markerFill || item.style.markerColor || '#ffffff'; ctx.fill(); ctx.strokeStyle = item.style.markerColor || '#111111'; ctx.lineWidth = Math.max(1, scale); ctx.stroke();
-    } else {
-      ctx.fillStyle = rgba(item.style.fill || '#93c5fd', item.style.fillOpacity ?? 0.22); ctx.fillRect(x + 16 * scale, rowY + 2 * scale, 18 * scale, 12 * scale); ctx.strokeStyle = item.style.stroke || '#3b82f6'; ctx.lineWidth = Math.max(1, scale); ctx.strokeRect(x + 16 * scale, rowY + 2 * scale, 18 * scale, 12 * scale);
-    }
-    ctx.fillStyle = '#1d2b3d'; ctx.font = `${13 * scale}px Arial`; ctx.textBaseline = 'middle'; ctx.fillText(item.label || 'Layer', x + 46 * scale, rowY + 9 * scale);
+  const groups = groupLegendItems(items, scene.project.layout || {}); let rowY = y + 40 * scale;
+  groups.forEach((group) => {
+    if (group.heading) { ctx.fillStyle = '#6c7b90'; ctx.font = `700 ${11 * scale}px Arial`; ctx.fillText(group.heading.toUpperCase(), x + 16 * scale, rowY); rowY += 16 * scale; }
+    group.items.forEach((item) => {
+      if (item.type === 'points') {
+        ctx.beginPath(); ctx.arc(x + 24 * scale, rowY + 9 * scale, 5 * scale, 0, Math.PI * 2); ctx.fillStyle = item.style.markerFill || item.style.markerColor || '#ffffff'; ctx.fill(); ctx.strokeStyle = item.style.markerColor || '#111111'; ctx.lineWidth = Math.max(1, scale); ctx.stroke();
+      } else {
+        ctx.fillStyle = rgba(item.style.fill || '#93c5fd', item.style.fillOpacity ?? 0.22); ctx.fillRect(x + 16 * scale, rowY + 2 * scale, 18 * scale, 12 * scale); ctx.strokeStyle = item.style.stroke || '#3b82f6'; ctx.lineWidth = Math.max(1, scale); ctx.strokeRect(x + 16 * scale, rowY + 2 * scale, 18 * scale, 12 * scale);
+      }
+      ctx.fillStyle = '#1d2b3d'; ctx.font = `${13 * scale}px Arial`; ctx.textBaseline = 'middle'; ctx.fillText(item.label || 'Layer', x + 46 * scale, rowY + 9 * scale); rowY += 24 * scale;
+    });
+    rowY += 6 * scale;
   });
 }
 
@@ -180,7 +198,7 @@ function drawInsetBackdropCanvas(ctx, x, y, w, h, scale) {
   ctx.strokeStyle = '#b5d8f7'; ctx.lineWidth = 1.8 * scale; ctx.beginPath(); [[8,44],[18,36],[28,42],[38,36],[58,26],[70,36],[88,62],[95,56]].forEach((pt, i) => { const [px, py] = mapPoint(pt[0], pt[1]); if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py); }); ctx.stroke();
 }
 async function drawInsetCanvas(ctx, scene, scale) {
-  const zone = getOverlayMetrics(scene).inset; if (!zone) return; const x = zone.left * scale, y = zone.top * scale, w = zone.width * scale, h = zone.height * scale;
+  const zone = getOverlayMetrics(scene).inset; if (!zone || !zone.width || !zone.height) return; const x = zone.left * scale, y = zone.top * scale, w = zone.width * scale, h = zone.height * scale;
   drawRoundedRect(ctx, x, y, w, h, 10 * scale); ctx.fillStyle = 'rgba(255,255,255,0.95)'; ctx.fill(); ctx.strokeStyle = 'rgba(18,30,48,0.18)'; ctx.stroke();
   ctx.fillStyle = '#132033'; ctx.font = `700 ${12 * scale}px Arial`; ctx.textBaseline = 'top'; ctx.fillText('Project Locator', x + 12 * scale, y + 10 * scale);
   const innerX = x + 10 * scale, innerY = y + 30 * scale, innerW = w - 20 * scale, innerH = h - 56 * scale;
@@ -272,7 +290,7 @@ function insetBackdropSvg(innerX, innerY, innerW, innerH, scale) {
   return `<defs><linearGradient id="locatorBg" x1="0" x2="1" y1="0" y2="1"><stop offset="0%" stop-color="#f8fafc" /><stop offset="100%" stop-color="#eef3f8" /></linearGradient></defs><rect x="${innerX}" y="${innerY}" width="${innerW}" height="${innerH}" fill="url(#locatorBg)" stroke="#d3dce8" rx="${8 * scale}" /><path d="${path1}" fill="#eef3f8" stroke="#c9d4df" stroke-width="${0.8 * scale}" /><path d="${path2}" fill="#f4f7fa" stroke="#c9d4df" stroke-width="${0.8 * scale}" />${roads}${river}`;
 }
 function renderInsetSvg(scene, scale) {
-  const zone = getOverlayMetrics(scene).inset; if (!zone) return '';
+  const zone = getOverlayMetrics(scene).inset; if (!zone || !zone.width || !zone.height) return ''; 
   const x = zone.left * scale, y = zone.top * scale, w = zone.width * scale, h = zone.height * scale, innerX = x + 10 * scale, innerY = y + 30 * scale, innerW = w - 20 * scale, innerH = h - 56 * scale;
   const customInset = scene.project.layout?.insetMode === 'custom_image' && scene.project.layout?.insetImage;
   if (customInset) {
@@ -282,7 +300,7 @@ function renderInsetSvg(scene, scale) {
   const markerSvg = marker ? `<rect x="${Math.max(innerX + 8 * scale, innerX + (marker.x / 100) * innerW)}" y="${Math.max(innerY + 8 * scale, innerY + (marker.y / 100) * innerH)}" width="${Math.max(8 * scale, Math.max(10 * scale, (marker.w / 100) * innerW))}" height="${Math.max(8 * scale, Math.max(10 * scale, (marker.h / 100) * innerH))}" fill="rgba(96,165,250,0.16)" stroke="#2563eb" stroke-width="${1.5 * scale}" rx="${2 * scale}" /><circle cx="${Math.min(innerX + innerW - 8 * scale, Math.max(innerX + 8 * scale, innerX + (marker.x / 100) * innerW + Math.max(10 * scale, (marker.w / 100) * innerW) / 2))}" cy="${Math.min(innerY + innerH - 8 * scale, Math.max(innerY + 8 * scale, innerY + (marker.y / 100) * innerH + Math.max(10 * scale, (marker.h / 100) * innerH) / 2))}" r="${3.2 * scale}" fill="#0f2c56" stroke="#ffffff" stroke-width="${1.2 * scale}" />` : '';
   return `<g><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${10 * scale}" fill="rgba(255,255,255,0.95)" stroke="rgba(18,30,48,0.18)" /><text x="${x + 12 * scale}" y="${y + 16 * scale}" fill="#132033" font-family="Arial" font-size="${12 * scale}" font-weight="700">Project Locator</text>${insetBackdropSvg(innerX, innerY, innerW, innerH, scale)}${markerSvg}<text x="${x + 12 * scale}" y="${y + h - 10 * scale}" fill="#526172" font-family="Arial" font-size="${11 * scale}">${escapeXml(ref.label)}</text></g>`;
 }
-function renderLogoSvg(scene, scale) { const logo = scene.project.layout?.logo; if (!logo) return ''; const zone = getOverlayMetrics(scene).logo; const x = zone.left * scale, y = zone.top * scale, w = zone.width * scale, h = zone.height * scale, padding = 10 * scale; return `<g><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${10 * scale}" fill="rgba(255,255,255,0.95)" stroke="rgba(18,30,48,0.18)" /><image href="${escapeXml(logo)}" x="${x + padding}" y="${y + padding}" width="${w - padding * 2}" height="${h - padding * 2}" preserveAspectRatio="xMidYMid meet" /></g>`; }
+function renderLogoSvg(scene, scale) { const logo = scene.project.layout?.logo; if (!logo) return ''; const zone = getOverlayMetrics(scene).logo; if (!zone?.width || !zone?.height) return '';  const x = zone.left * scale, y = zone.top * scale, w = zone.width * scale, h = zone.height * scale, padding = 10 * scale; return `<g><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${10 * scale}" fill="rgba(255,255,255,0.95)" stroke="rgba(18,30,48,0.18)" /><image href="${escapeXml(logo)}" x="${x + padding}" y="${y + padding}" width="${w - padding * 2}" height="${h - padding * 2}" preserveAspectRatio="xMidYMid meet" /></g>`; }
 function renderCalloutsSvg(scene, scale) { return placeCallouts(scene, scale).map((c) => { const line = c.type === 'leader' || c.type === 'boxed' ? `<line x1="${c.anchorPx.x}" y1="${c.anchorPx.y}" x2="${c.left + 10 * scale}" y2="${c.top + c.height / 2}" stroke="#102640" stroke-width="${1.4 * scale}" ${c.type === 'leader' ? `stroke-dasharray="${5 * scale} ${3 * scale}"` : ''} />` : ''; const box = c.type !== 'plain' ? `<rect x="${c.left}" y="${c.top}" width="${c.width}" height="${c.height}" rx="${6 * scale}" fill="rgba(255,255,255,0.97)" stroke="#17304f" />` : ''; return `<g>${line}${box}<text x="${c.left + (c.type === 'plain' ? 0 : 10 * scale)}" y="${c.top + (c.type === 'plain' ? 10 * scale : c.height / 2)}" dominant-baseline="middle" fill="#102640" font-family="Arial" font-size="${12 * scale}" font-weight="700">${escapeXml(c.text || '')}</text></g>`; }).join('\n'); }
 
 export function renderSceneToSvg(scene, options = {}) {
