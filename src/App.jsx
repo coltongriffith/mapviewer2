@@ -1,16 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import React, { useMemo, useRef, useState } from "react";
 import L from "leaflet";
 import MapCanvas from "./components/MapCanvas";
 import Sidebar from "./components/Sidebar";
 import LayerList from "./components/LayerList";
-import LayerRoleEditor from "./components/LayerRoleEditor";
-import MapCanvas from "./components/MapCanvas";
-import TemplateRenderer from "./components/TemplateRenderer";
 import { loadGeoJSON } from "./utils/importers";
-import { createInitialProjectState } from "./projectState";
-import { getTemplate, templates } from "./templates";
-import { buildLegendItems } from "./templates/technicalResultsTemplate";
 import { buildScene } from "./export/buildScene";
 import { exportPNG } from "./export/exportPNG";
 import { exportSVG } from "./export/exportSVG";
@@ -54,10 +47,6 @@ function readFileAsDataURL(file) {
     reader.onload = () => resolve(String(reader.result || ""));
     reader.onerror = () => reject(new Error("Failed to read image file"));
     reader.readAsDataURL(file);
-    const r = new FileReader();
-    r.onload = () => resolve(String(r.result || ""));
-    r.onerror = () => reject(new Error("Failed to read file"));
-    r.readAsDataURL(file);
   });
 }
 
@@ -183,12 +172,6 @@ function OverlayHandle({
       {children}
     </div>
   );
-function detectLayerType(geojson) {
-  const feature = (geojson?.features || []).find((f) => f?.geometry?.type);
-  const t = feature?.geometry?.type || "";
-  if (t.includes("Point")) return "points";
-  if (t.includes("Line")) return "line";
-  return "polygon";
 }
 
 function NorthArrow() {
@@ -210,15 +193,6 @@ function NorthArrow() {
       <div style={{ fontSize: 24, lineHeight: 1 }}>↑</div>
     </div>
   );
-function inferRole(type, name) {
-  const n = name.toLowerCase();
-  if (n.includes("drill") && type === "points") return "drillholes";
-  if ((n.includes("trace") || n.includes("line")) && type === "line") return "drill_traces";
-  if (n.includes("claim")) return "claims";
-  if (n.includes("anom")) return "anomaly";
-  if (n.includes("geo") || n.includes("mag") || n.includes("ip")) return "geophysics";
-  if (n.includes("highlight") || n.includes("zone")) return "highlight_zone";
-  return "other";
 }
 
 function ScaleBar({ map }) {
@@ -250,8 +224,9 @@ function ScaleBar({ map }) {
 
         const target = meters;
         const nice = candidates.reduce((best, n) =>
-          Math.abs(n - target) < Math.abs(best - target) ? n : best
-        , candidates[0]);
+          Math.abs(n - target) < Math.abs(best - target) ? n : best,
+          candidates[0]
+        );
 
         const ratio = nice / meters;
         const width = clamp(Math.round((x2 - x1) * ratio), 50, 180);
@@ -295,8 +270,6 @@ function ScaleBar({ map }) {
       <div style={{ fontSize: 12, marginTop: 6 }}>{label}</div>
     </div>
   );
-function clamp(v, min, max) {
-  return Math.max(min, Math.min(max, v));
 }
 
 export default function App() {
@@ -304,8 +277,6 @@ export default function App() {
   const leafletMapRef = useRef(null);
   const fileInputRef = useRef(null);
   const logoInputRef = useRef(null);
-  const stageRef = useRef(null);
-  const mapRef = useRef(null);
 
   const [project, setProject] = useState(() => {
     const base = createInitialProjectState();
@@ -318,19 +289,13 @@ export default function App() {
     };
   });
 
-  const [project, setProject] = useState(createInitialProjectState);
   const [selectedLayerId, setSelectedLayerId] = useState(null);
-  const [selectedCalloutId, setSelectedCalloutId] = useState(null);
   const [exporting, setExporting] = useState(false);
 
   const selectedLayer = useMemo(
     () => project.layers.find((l) => l.id === selectedLayerId) || null,
     [project.layers, selectedLayerId]
   );
-  const template = useMemo(() => getTemplate(project.template), [project.template]);
-  const selectedLayer = useMemo(() => project.layers.find((l) => l.id === selectedLayerId), [project.layers, selectedLayerId]);
-  const selectedCallout = useMemo(() => project.annotations.callouts.find((c) => c.id === selectedCalloutId), [project.annotations.callouts, selectedCalloutId]);
-  const legendItems = useMemo(() => buildLegendItems(template, project.layers), [template, project.layers]);
 
   const updateLayout = (patch) => {
     setProject((prev) => ({
@@ -361,8 +326,6 @@ export default function App() {
       },
     }));
   };
-  const updateProject = (patch) => setProject((prev) => ({ ...prev, ...patch }));
-  const updateLayout = (patch) => setProject((prev) => ({ ...prev, layout: { ...prev.layout, ...patch } }));
 
   const updateLayer = (layerId, patch) => {
     setProject((prev) => ({
@@ -370,36 +333,13 @@ export default function App() {
       layers: prev.layers.map((layer) =>
         layer.id === layerId ? mergeDeep(layer, patch) : layer
       ),
-      layers: prev.layers.map((layer) => {
-        if (layer.id !== layerId) return layer;
-        const role = patch.role || layer.role;
-        return {
-          ...layer,
-          ...patch,
-          style: role !== layer.role ? { ...(template.roleStyles[role] || template.roleStyles.other), ...(patch.style || {}) } : { ...layer.style, ...(patch.style || {}) },
-        };
-      }),
     }));
   };
 
   const removeLayer = (layerId) => {
-  const nudgeCallout = (calloutId, dx, dy) => {
     setProject((prev) => ({
       ...prev,
       layers: prev.layers.filter((layer) => layer.id !== layerId),
-      annotations: {
-        ...prev.annotations,
-        callouts: prev.annotations.callouts.map((c) => {
-          if (c.id !== calloutId) return c;
-          return {
-            ...c,
-            offset: {
-              x: clamp((c.offset?.x || 0) + dx, -120, 120),
-              y: clamp((c.offset?.y || 0) + dy, -120, 120),
-            },
-          };
-        }),
-      },
     }));
     if (selectedLayerId === layerId) {
       setSelectedLayerId(null);
@@ -408,13 +348,10 @@ export default function App() {
 
   const onMapReady = (map) => {
     leafletMapRef.current = map;
-    mapRef.current = map;
   };
 
   const fitLayerBounds = (geojson) => {
     const map = leafletMapRef.current;
-  const fitGeojson = (geojson) => {
-    const map = mapRef.current;
     if (!map || !geojson) return;
 
     try {
@@ -431,8 +368,6 @@ export default function App() {
   const fitSelectedLayer = () => {
     if (!selectedLayer?.geojson) return;
     fitLayerBounds(selectedLayer.geojson);
-    const bounds = L.geoJSON(geojson).getBounds();
-    if (bounds?.isValid?.()) map.fitBounds(bounds, { padding: [20, 20] });
   };
 
   const addGeoJSONLayer = async (file) => {
@@ -481,51 +416,26 @@ export default function App() {
       alert(`Import failed: ${err.message}`);
     }
   };
-  const addLayer = async (file) => {
-    const geojson = await loadGeoJSON(file);
-    const name = file.name.replace(/\.(zip|geojson|json)$/i, "") || "Layer";
-    const type = detectLayerType(geojson);
-    const role = inferRole(type, name);
-
-    const layer = {
-      id: crypto.randomUUID(),
-      name,
-      type,
-      role,
-      visible: true,
-      geojson,
-      style: { ...(template.roleStyles[role] || template.roleStyles.other) },
-      legendLabel: name,
-      legendEnabled: true,
-    };
 
   const handleFileChange = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     await addGeoJSONLayer(file);
     e.target.value = "";
-    setProject((prev) => ({ ...prev, layers: [...prev.layers, layer] }));
-    setSelectedLayerId(layer.id);
-    setTimeout(() => fitGeojson(geojson), 50);
   };
 
   const handleLogoChange = async (e) => {
     const file = e.target.files?.[0];
-  const handleFileChange = async (event) => {
-    const file = event.target.files?.[0];
     if (!file) return;
 
     try {
       const dataUrl = await readFileAsDataURL(file);
       updateLayout({ logo: dataUrl });
-      await addLayer(file);
     } catch (err) {
       console.error(err);
       alert(`Logo import failed: ${err.message}`);
-      alert(`Import failed: ${err.message}`);
     } finally {
       e.target.value = "";
-      event.target.value = "";
     }
   };
 
@@ -539,38 +449,14 @@ export default function App() {
         type: layer.type,
         style: layer.style,
       }));
-  const onDrillholeClick = ({ feature, anchor }) => {
-    const idCandidate = feature?.properties?.hole_id || feature?.properties?.id || feature?.properties?.name || `DH-${project.annotations.callouts.length + 1}`;
-    const id = crypto.randomUUID();
-    const newCallout = {
-      id,
-      anchor,
-      offset: { x: 48, y: -40 },
-      text: `${idCandidate}\n36 m at 0.59% Nb2O5\nincl. 10 m at 1.08% Nb2O5`,
-      hero: false,
-    };
 
     updateLayout({ legendItems });
-    setProject((prev) => ({
-      ...prev,
-      annotations: {
-        ...prev.annotations,
-        callouts: [...prev.annotations.callouts, newCallout],
-      },
-    }));
-    setSelectedCalloutId(id);
   };
 
   const handleApplyPreset = (presetKey) => {
     if (!selectedLayer) return;
     const next = applyPresetToLayer(selectedLayer, presetKey);
     updateLayer(selectedLayer.id, next);
-  const handleLogo = async (event) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    const logo = await readFileAsDataURL(file);
-    updateLayout({ logo });
-    event.target.value = "";
   };
 
   const handleExportPNG = async () => {
@@ -580,8 +466,6 @@ export default function App() {
     try {
       const scene = buildScene(mapContainerRef.current, project, leafletMapRef.current);
       await exportPNG(scene, project.layout?.exportSettings || {});
-      const scene = buildScene(stageRef.current, project, mapRef.current);
-      await exportPNG(scene, project.exportSettings);
     } catch (err) {
       console.error(err);
       alert(`PNG export failed: ${err.message}`);
@@ -597,8 +481,6 @@ export default function App() {
     try {
       const scene = buildScene(mapContainerRef.current, project, leafletMapRef.current);
       exportSVG(scene, project.layout?.exportSettings || {});
-      const scene = buildScene(stageRef.current, project, mapRef.current);
-      await exportSVG(scene, project.exportSettings);
     } catch (err) {
       console.error(err);
       alert(`SVG export failed: ${err.message}`);
@@ -617,8 +499,6 @@ export default function App() {
         <div className="sidebar-section">
           <div className="sidebar-title">Mapviewer</div>
           <div className="sidebar-subtitle">Map composition + export</div>
-          <div className="sidebar-title">Mapviewer2</div>
-          <div className="sidebar-subtitle">Template geology figure builder</div>
         </div>
 
         <div className="sidebar-section">
@@ -663,9 +543,6 @@ export default function App() {
             value={project.layout.subtitle}
             onChange={(e) => updateLayout({ subtitle: e.target.value })}
           />
-          <label className="field-label">1) Upload Data</label>
-          <button className="btn" onClick={() => fileInputRef.current?.click()}>Upload .zip / .geojson / .json</button>
-          <input ref={fileInputRef} type="file" accept=".zip,.geojson,.json,application/json" style={{ display: "none" }} onChange={handleFileChange} />
         </div>
 
         <div className="sidebar-section">
@@ -676,7 +553,6 @@ export default function App() {
             </button>
           </div>
 
-          <label className="field-label">2) Assign Layer Roles</label>
           <LayerList
             layers={project.layers}
             selectedLayerId={selectedLayerId}
@@ -686,7 +562,6 @@ export default function App() {
               if (!layer) return;
               updateLayer(layerId, { visible: !layer.visible });
             }}
-            onToggleVisible={(id) => updateLayer(id, { visible: !project.layers.find((l) => l.id === id)?.visible })}
           />
 
           {selectedLayer && (
@@ -702,7 +577,6 @@ export default function App() {
               </button>
             </div>
           )}
-          <LayerRoleEditor layer={selectedLayer} onChange={(patch) => updateLayer(selectedLayer.id, patch)} />
         </div>
 
         {selectedLayer && (
@@ -882,9 +756,6 @@ export default function App() {
           >
             <option value="yes">Yes</option>
             <option value="no">No</option>
-          <label className="field-label">3) Choose Template</label>
-          <select className="text-input" value={project.template} onChange={(e) => updateProject({ template: e.target.value })}>
-            {Object.values(templates).map((tpl) => <option value={tpl.id} key={tpl.id}>{tpl.label}</option>)}
           </select>
 
           <label className="field-label">North Arrow Visible</label>
@@ -917,12 +788,6 @@ export default function App() {
           >
             <option value="yes">Yes</option>
             <option value="no">No</option>
-          <label className="field-label">Basemap</label>
-          <select className="text-input" value={project.layout.basemap} onChange={(e) => updateLayout({ basemap: e.target.value })}>
-            <option value="light">Light</option>
-            <option value="topo">Topo</option>
-            <option value="satellite">Satellite</option>
-            <option value="dark">Dark</option>
           </select>
 
           <label className="field-label">Logo Visible</label>
@@ -939,10 +804,6 @@ export default function App() {
           >
             <option value="yes">Yes</option>
             <option value="no">No</option>
-          <label className="field-label">Inset Map</label>
-          <select className="text-input" value={project.layout.insetEnabled ? "yes" : "no"} onChange={(e) => updateLayout({ insetEnabled: e.target.value === "yes" })}>
-            <option value="yes">Enabled</option>
-            <option value="no">Disabled</option>
           </select>
         </div>
 
@@ -983,11 +844,6 @@ export default function App() {
               Remove Logo
             </button>
           )}
-          <label className="field-label">4) Title + Branding</label>
-          <input className="text-input" value={project.layout.title} onChange={(e) => updateLayout({ title: e.target.value })} placeholder="Project Title" />
-          <input className="text-input" value={project.layout.subtitle} onChange={(e) => updateLayout({ subtitle: e.target.value })} placeholder="Subtitle" />
-          <button className="btn btn-small" onClick={() => logoInputRef.current?.click()}>Upload Logo</button>
-          <input ref={logoInputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleLogo} />
         </div>
 
         <div className="sidebar-section">
@@ -1042,26 +898,6 @@ export default function App() {
               })
             }
           />
-          <label className="field-label">6) Callouts</label>
-          <div className="sidebar-subtitle">Click a drillhole point to add a callout.</div>
-          {selectedCallout && (
-            <>
-              <textarea className="text-input" rows={4} value={selectedCallout.text} onChange={(e) => setProject((prev) => ({
-                ...prev,
-                annotations: {
-                  ...prev.annotations,
-                  callouts: prev.annotations.callouts.map((c) => c.id === selectedCallout.id ? { ...c, text: e.target.value } : c),
-                },
-              }))} />
-              <button className="btn btn-small" onClick={() => setProject((prev) => ({
-                ...prev,
-                annotations: {
-                  ...prev.annotations,
-                  callouts: prev.annotations.callouts.filter((c) => c.id !== selectedCallout.id),
-                },
-              }))}>Delete Callout</button>
-            </>
-          )}
         </div>
 
         <div className="sidebar-section">
@@ -1092,10 +928,6 @@ export default function App() {
             <option value="2">2x</option>
             <option value="3">3x</option>
             <option value="4">4x</option>
-          <label className="field-label">7) Export</label>
-          <input className="text-input" value={project.exportSettings.filename} onChange={(e) => setProject((prev) => ({ ...prev, exportSettings: { ...prev.exportSettings, filename: e.target.value } }))} />
-          <select className="text-input" value={String(project.exportSettings.pixelRatio)} onChange={(e) => setProject((prev) => ({ ...prev, exportSettings: { ...prev.exportSettings, pixelRatio: Number(e.target.value) } }))}>
-            <option value="1">1x</option><option value="2">2x</option><option value="3">3x</option><option value="4">4x</option>
           </select>
 
           <div className="export-buttons">
@@ -1105,8 +937,6 @@ export default function App() {
             <button className="btn" disabled={exporting} onClick={handleExportSVG}>
               {exporting ? "Working..." : "Export SVG"}
             </button>
-            <button className="btn" onClick={handleExportPNG} disabled={exporting}>{exporting ? "Working..." : "Export PNG"}</button>
-            <button className="btn" onClick={handleExportSVG} disabled={exporting}>{exporting ? "Working..." : "Export SVG"}</button>
           </div>
         </div>
       </Sidebar>
@@ -1286,18 +1116,8 @@ export default function App() {
               </div>
             </OverlayHandle>
           )}
-        <div className="map-container" ref={stageRef}>
-          <MapCanvas project={project} template={template} onReady={onMapReady} onDrillholeClick={onDrillholeClick} />
-          <TemplateRenderer
-            project={{ ...project, layout: { ...project.layout, legendItems } }}
-            template={template}
-            map={mapRef.current}
-            legendItems={legendItems}
-            onNudgeCallout={nudgeCallout}
-          />
         </div>
       </div>
     </div>
   );
-}
 }
