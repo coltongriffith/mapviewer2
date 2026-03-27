@@ -1,5 +1,6 @@
 import { escapeXml, downloadBlob } from '../utils/svg';
 import { geojsonBounds, unionBounds } from '../utils/geometry';
+import { resolveTemplateZones } from '../templates/technicalResultsTemplate';
 
 function clonePoint(point, scale = 1) {
   return { x: point.x * scale, y: point.y * scale };
@@ -87,8 +88,7 @@ function geometryToSvg(map, feature, style, scale) {
   return '';
 }
 function getOverlayMetrics(scene) {
-  const t = scene.template;
-  return { title: t.zones.title, legend: t.zones.legend, northArrow: t.zones.northArrow, inset: t.zones.inset, scaleBar: t.zones.scaleBar, footer: t.zones.footer, logo: t.zones.logo };
+  return resolveTemplateZones(scene.template, scene.project.layout || {}, { width: scene.width, height: scene.height });
 }
 function drawRoundedRect(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
 
@@ -109,14 +109,8 @@ function drawLegendCanvas(ctx, scene, scale) {
   const x = legend.left * scale, y = legend.top * scale, w = legend.width * scale, h = legend.height * scale;
   drawRoundedRect(ctx, x, y, w, h, 10 * scale); ctx.fillStyle = 'rgba(255,255,255,0.96)'; ctx.fill(); ctx.strokeStyle = 'rgba(18,30,48,0.18)'; ctx.lineWidth = 1 * scale; ctx.stroke();
   ctx.fillStyle = '#132033'; ctx.font = `700 ${15 * scale}px Arial`; ctx.textBaseline = 'top'; ctx.fillText('Legend', x + 16 * scale, y + 12 * scale);
-  const chipText = String(scene.project.layout?.mode || '').replaceAll('_', ' ');
-  if (chipText) {
-    const chipW = 92 * scale; const chipH = 18 * scale; const chipX = x + w - 108 * scale; const chipY = y + 10 * scale;
-    drawRoundedRect(ctx, chipX, chipY, chipW, chipH, 9 * scale); ctx.fillStyle = 'rgba(15,37,66,0.08)'; ctx.fill();
-    ctx.fillStyle = '#27466d'; ctx.font = `700 ${10 * scale}px Arial`; ctx.textBaseline = 'middle'; ctx.textAlign = 'center'; ctx.fillText(chipText, chipX + chipW / 2, chipY + chipH / 2 + 0.5 * scale); ctx.textAlign = 'left';
-  }
   items.forEach((item, index) => {
-    const rowY = y + (48 + index * 24) * scale;
+    const rowY = y + (40 + index * 24) * scale;
     if (item.type === 'points') {
       ctx.beginPath(); ctx.arc(x + 24 * scale, rowY + 9 * scale, 5 * scale, 0, Math.PI * 2); ctx.fillStyle = item.style.markerFill || item.style.markerColor || '#ffffff'; ctx.fill(); ctx.strokeStyle = item.style.markerColor || '#111111'; ctx.lineWidth = Math.max(1, scale); ctx.stroke();
     } else {
@@ -185,16 +179,21 @@ function drawInsetBackdropCanvas(ctx, x, y, w, h, scale) {
   ctx.strokeStyle = '#cfd8e3'; ctx.lineWidth = 1.4 * scale; roads.forEach((line) => { ctx.beginPath(); line.forEach((pt, i) => { const [px, py] = mapPoint(pt[0], pt[1]); if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py); }); ctx.stroke(); });
   ctx.strokeStyle = '#b5d8f7'; ctx.lineWidth = 1.8 * scale; ctx.beginPath(); [[8,44],[18,36],[28,42],[38,36],[58,26],[70,36],[88,62],[95,56]].forEach((pt, i) => { const [px, py] = mapPoint(pt[0], pt[1]); if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py); }); ctx.stroke();
 }
-function drawInsetCanvas(ctx, scene, scale) {
+async function drawInsetCanvas(ctx, scene, scale) {
   const zone = getOverlayMetrics(scene).inset; if (!zone) return; const x = zone.left * scale, y = zone.top * scale, w = zone.width * scale, h = zone.height * scale;
   drawRoundedRect(ctx, x, y, w, h, 10 * scale); ctx.fillStyle = 'rgba(255,255,255,0.95)'; ctx.fill(); ctx.strokeStyle = 'rgba(18,30,48,0.18)'; ctx.stroke();
-  ctx.fillStyle = '#132033'; ctx.font = `700 ${12 * scale}px Arial`; ctx.textBaseline = 'top'; ctx.fillText('Locator', x + 12 * scale, y + 10 * scale);
-  const chipX = x + w - 98 * scale, chipY = y + 8 * scale, chipW = 86 * scale, chipH = 18 * scale;
-  drawRoundedRect(ctx, chipX, chipY, chipW, chipH, 9 * scale); ctx.fillStyle = 'rgba(15,37,66,0.08)'; ctx.fill();
+  ctx.fillStyle = '#132033'; ctx.font = `700 ${12 * scale}px Arial`; ctx.textBaseline = 'top'; ctx.fillText('Project Locator', x + 12 * scale, y + 10 * scale);
+  const innerX = x + 10 * scale, innerY = y + 30 * scale, innerW = w - 20 * scale, innerH = h - 56 * scale;
+  const customInset = scene.project.layout?.insetMode === 'custom_image' && scene.project.layout?.insetImage;
+  if (customInset) {
+    const img = await new Promise((resolve, reject) => { const el = new Image(); el.onload = () => resolve(el); el.onerror = reject; el.src = scene.project.layout.insetImage; }).catch(() => null);
+    if (img) { ctx.save(); drawRoundedRect(ctx, innerX, innerY, innerW, innerH, 8 * scale); ctx.clip(); ctx.drawImage(img, innerX, innerY, innerW, innerH); ctx.restore(); }
+    ctx.fillStyle = '#526172'; ctx.font = `${11 * scale}px Arial`; ctx.textBaseline = 'alphabetic'; ctx.fillText('Uploaded Inset', x + 12 * scale, y + h - 10 * scale);
+    return;
+  }
   const visible = (scene.project.layers || []).filter((layer) => layer.visible !== false && layer.geojson); const bounds = unionBounds(visible.map((layer) => geojsonBounds(layer.geojson)).filter(Boolean)); const ref = resolveReferenceBounds(bounds, scene.project.layout?.insetMode); const marker = normalizeInset(bounds, ref);
-  ctx.fillStyle = '#27466d'; ctx.font = `700 ${10 * scale}px Arial`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(ref.label, chipX + chipW / 2, chipY + chipH / 2 + 0.5 * scale); ctx.textAlign = 'left';
-  const innerX = x + 10 * scale, innerY = y + 30 * scale, innerW = w - 20 * scale, innerH = h - 56 * scale; drawInsetBackdropCanvas(ctx, innerX, innerY, innerW, innerH, scale);
-  if (marker) { const mx = Math.max(innerX + 8 * scale, innerX + (marker.x / 100) * innerW), my = Math.max(innerY + 8 * scale, innerY + (marker.y / 100) * innerH), mw = Math.max(6 * scale, Math.max(8 * scale, (marker.w / 100) * innerW)), mh = Math.max(6 * scale, Math.max(8 * scale, (marker.h / 100) * innerH)); ctx.fillStyle = 'rgba(96,165,250,0.16)'; drawRoundedRect(ctx, mx, my, mw, mh, 2 * scale); ctx.fill(); ctx.strokeStyle = '#2563eb'; ctx.lineWidth = 1.5 * scale; ctx.stroke(); ctx.beginPath(); ctx.arc(Math.min(innerX + innerW - 8 * scale, Math.max(innerX + 8 * scale, mx + mw / 2)), Math.min(innerY + innerH - 8 * scale, Math.max(innerY + 8 * scale, my + mh / 2)), 2.6 * scale, 0, Math.PI * 2); ctx.fillStyle = '#0f2c56'; ctx.fill(); }
+  drawInsetBackdropCanvas(ctx, innerX, innerY, innerW, innerH, scale);
+  if (marker) { const mx = Math.max(innerX + 8 * scale, innerX + (marker.x / 100) * innerW), my = Math.max(innerY + 8 * scale, innerY + (marker.y / 100) * innerH), mw = Math.max(8 * scale, Math.max(10 * scale, (marker.w / 100) * innerW)), mh = Math.max(8 * scale, Math.max(10 * scale, (marker.h / 100) * innerH)); ctx.fillStyle = 'rgba(96,165,250,0.16)'; drawRoundedRect(ctx, mx, my, mw, mh, 2 * scale); ctx.fill(); ctx.strokeStyle = '#2563eb'; ctx.lineWidth = 1.5 * scale; ctx.stroke(); ctx.beginPath(); ctx.arc(Math.min(innerX + innerW - 8 * scale, Math.max(innerX + 8 * scale, mx + mw / 2)), Math.min(innerY + innerH - 8 * scale, Math.max(innerY + 8 * scale, my + mh / 2)), 3.2 * scale, 0, Math.PI * 2); ctx.fillStyle = '#0f2c56'; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.2 * scale; ctx.fill(); ctx.stroke(); }
   ctx.fillStyle = '#526172'; ctx.font = `${11 * scale}px Arial`; ctx.textBaseline = 'alphabetic'; ctx.fillText(ref.label, x + 12 * scale, y + h - 10 * scale);
 }
 function drawFooterCanvas(ctx, scene, scale) {
@@ -229,7 +228,7 @@ export async function renderSceneToCanvas(scene, options = {}) {
   const scale = Number(options.pixelRatio || scene.project.layout?.exportSettings?.pixelRatio || 2);
   const canvas = document.createElement('canvas'); canvas.width = Math.round(scene.width * scale); canvas.height = Math.round(scene.height * scale); const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#f3f5f7'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-  await drawTilesCanvas(ctx, scene, scale); drawVectorsCanvas(ctx, scene, scale); drawCalloutsCanvas(ctx, scene, scale); drawTitleBlockCanvas(ctx, scene, scale); drawLegendCanvas(ctx, scene, scale); drawNorthArrowCanvas(ctx, scene, scale); drawInsetCanvas(ctx, scene, scale); drawScaleBarCanvas(ctx, scene, scale); drawFooterCanvas(ctx, scene, scale); await drawLogoCanvas(ctx, scene, scale);
+  await drawTilesCanvas(ctx, scene, scale); drawVectorsCanvas(ctx, scene, scale); drawCalloutsCanvas(ctx, scene, scale); drawTitleBlockCanvas(ctx, scene, scale); drawLegendCanvas(ctx, scene, scale); drawNorthArrowCanvas(ctx, scene, scale); await drawInsetCanvas(ctx, scene, scale); drawScaleBarCanvas(ctx, scene, scale); drawFooterCanvas(ctx, scene, scale); await drawLogoCanvas(ctx, scene, scale);
   return canvas;
 }
 
@@ -258,9 +257,8 @@ function renderTitleSvg(scene, scale) { const { title } = getOverlayMetrics(scen
 function renderLegendSvg(scene, scale) {
   const { legend } = getOverlayMetrics(scene); const items = scene.project.layout?.legendItems || []; if (!items.length) return '';
   const x = legend.left * scale, y = legend.top * scale, w = legend.width * scale, h = legend.height * scale;
-  const rows = items.map((item, index) => { const rowY = y + (48 + index * 24) * scale; return `${legendSwatchSvg(item, x + 16 * scale, rowY + 1 * scale, scale)}<text x="${x + 46 * scale}" y="${rowY + 12 * scale}" fill="#1d2b3d" font-family="Arial" font-size="${13 * scale}">${escapeXml(item.label || 'Layer')}</text>`; }).join('\n');
-  const chipText = String(scene.project.layout?.mode || '').replaceAll('_', ' ');
-  return `<g><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${10 * scale}" fill="rgba(255,255,255,0.96)" stroke="rgba(18,30,48,0.18)" /><text x="${x + 16 * scale}" y="${y + 24 * scale}" fill="#132033" font-family="Arial" font-size="${15 * scale}" font-weight="700">Legend</text><rect x="${x + w - 108 * scale}" y="${y + 10 * scale}" width="${92 * scale}" height="${18 * scale}" rx="${9 * scale}" fill="rgba(15,37,66,0.08)" /><text x="${x + w - 62 * scale}" y="${y + 23 * scale}" text-anchor="middle" fill="#27466d" font-family="Arial" font-size="${10 * scale}" font-weight="700">${escapeXml(chipText)}</text>${rows}</g>`;
+  const rows = items.map((item, index) => { const rowY = y + (40 + index * 24) * scale; return `${legendSwatchSvg(item, x + 16 * scale, rowY + 1 * scale, scale)}<text x="${x + 46 * scale}" y="${rowY + 12 * scale}" fill="#1d2b3d" font-family="Arial" font-size="${13 * scale}">${escapeXml(item.label || 'Layer')}</text>`; }).join('\n');
+  return `<g><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${10 * scale}" fill="rgba(255,255,255,0.96)" stroke="rgba(18,30,48,0.18)" /><text x="${x + 16 * scale}" y="${y + 24 * scale}" fill="#132033" font-family="Arial" font-size="${15 * scale}" font-weight="700">Legend</text>${rows}</g>`;
 }
 function renderNorthArrowSvg(scene, scale) { const { northArrow } = getOverlayMetrics(scene); const x = northArrow.left * scale, y = northArrow.top * scale, w = northArrow.width * scale, h = northArrow.height * scale, cx = x + w / 2; return `<g><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${10 * scale}" fill="rgba(255,255,255,0.95)" stroke="rgba(18,30,48,0.18)" /><text x="${cx}" y="${y + 24 * scale}" text-anchor="middle" fill="#122033" font-family="Arial" font-size="${14 * scale}" font-weight="700">N</text><path d="M ${cx} ${y + 28 * scale} L ${cx - 12 * scale} ${y + 62 * scale} L ${cx - 3 * scale} ${y + 62 * scale} L ${cx - 3 * scale} ${y + 88 * scale} L ${cx + 3 * scale} ${y + 88 * scale} L ${cx + 3 * scale} ${y + 62 * scale} L ${cx + 12 * scale} ${y + 62 * scale} Z" fill="#122033" /></g>`; }
 function renderScaleBarSvg(scene, scale) { const { scaleBar } = getOverlayMetrics(scene); const x = scaleBar.left * scale, y = scaleBar.top * scale, w = scaleBar.width * scale, h = scaleBar.height * scale, scaleState = pickScaleLabel(scene.map), barWidth = scaleState.widthPx * scale; return `<g><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${10 * scale}" fill="rgba(255,255,255,0.95)" stroke="rgba(18,30,48,0.18)" /><rect x="${x + 16 * scale}" y="${y + 18 * scale}" width="${barWidth / 2}" height="${10 * scale}" fill="#122033" /><rect x="${x + 16 * scale + barWidth / 2}" y="${y + 18 * scale}" width="${barWidth / 2}" height="${10 * scale}" fill="#ffffff" stroke="#122033" stroke-width="${Math.max(1, scale)}" /><rect x="${x + 16 * scale}" y="${y + 18 * scale}" width="${barWidth}" height="${10 * scale}" fill="none" stroke="#122033" stroke-width="${Math.max(1, scale)}" /><text x="${x + 16 * scale}" y="${y + 48 * scale}" fill="#1d2b3d" font-family="Arial" font-size="${12 * scale}">${escapeXml(scaleState.label)}</text></g>`; }
@@ -274,10 +272,15 @@ function insetBackdropSvg(innerX, innerY, innerW, innerH, scale) {
   return `<defs><linearGradient id="locatorBg" x1="0" x2="1" y1="0" y2="1"><stop offset="0%" stop-color="#f8fafc" /><stop offset="100%" stop-color="#eef3f8" /></linearGradient></defs><rect x="${innerX}" y="${innerY}" width="${innerW}" height="${innerH}" fill="url(#locatorBg)" stroke="#d3dce8" rx="${8 * scale}" /><path d="${path1}" fill="#eef3f8" stroke="#c9d4df" stroke-width="${0.8 * scale}" /><path d="${path2}" fill="#f4f7fa" stroke="#c9d4df" stroke-width="${0.8 * scale}" />${roads}${river}`;
 }
 function renderInsetSvg(scene, scale) {
-  const zone = getOverlayMetrics(scene).inset; if (!zone) return ''; const x = zone.left * scale, y = zone.top * scale, w = zone.width * scale, h = zone.height * scale, innerX = x + 10 * scale, innerY = y + 30 * scale, innerW = w - 20 * scale, innerH = h - 56 * scale;
+  const zone = getOverlayMetrics(scene).inset; if (!zone) return '';
+  const x = zone.left * scale, y = zone.top * scale, w = zone.width * scale, h = zone.height * scale, innerX = x + 10 * scale, innerY = y + 30 * scale, innerW = w - 20 * scale, innerH = h - 56 * scale;
+  const customInset = scene.project.layout?.insetMode === 'custom_image' && scene.project.layout?.insetImage;
+  if (customInset) {
+    return `<g><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${10 * scale}" fill="rgba(255,255,255,0.95)" stroke="rgba(18,30,48,0.18)" /><text x="${x + 12 * scale}" y="${y + 16 * scale}" fill="#132033" font-family="Arial" font-size="${12 * scale}" font-weight="700">Project Locator</text><image href="${escapeXml(scene.project.layout.insetImage)}" x="${innerX}" y="${innerY}" width="${innerW}" height="${innerH}" preserveAspectRatio="xMidYMid slice" /><text x="${x + 12 * scale}" y="${y + h - 10 * scale}" fill="#526172" font-family="Arial" font-size="${11 * scale}">Uploaded Inset</text></g>`;
+  }
   const visible = (scene.project.layers || []).filter((layer) => layer.visible !== false && layer.geojson); const bounds = unionBounds(visible.map((layer) => geojsonBounds(layer.geojson)).filter(Boolean)); const ref = resolveReferenceBounds(bounds, scene.project.layout?.insetMode); const marker = normalizeInset(bounds, ref);
-  const markerSvg = marker ? `<rect x="${Math.max(innerX + 8 * scale, innerX + (marker.x / 100) * innerW)}" y="${Math.max(innerY + 8 * scale, innerY + (marker.y / 100) * innerH)}" width="${Math.max(6 * scale, Math.max(8 * scale, (marker.w / 100) * innerW))}" height="${Math.max(6 * scale, Math.max(8 * scale, (marker.h / 100) * innerH))}" fill="rgba(96,165,250,0.16)" stroke="#2563eb" stroke-width="${1.5 * scale}" rx="${2 * scale}" /><circle cx="${Math.min(innerX + innerW - 8 * scale, Math.max(innerX + 8 * scale, innerX + (marker.x / 100) * innerW + Math.max(8 * scale, (marker.w / 100) * innerW) / 2))}" cy="${Math.min(innerY + innerH - 8 * scale, Math.max(innerY + 8 * scale, innerY + (marker.y / 100) * innerH + Math.max(8 * scale, (marker.h / 100) * innerH) / 2))}" r="${2.6 * scale}" fill="#0f2c56" />` : '';
-  return `<g><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${10 * scale}" fill="rgba(255,255,255,0.95)" stroke="rgba(18,30,48,0.18)" /><text x="${x + 12 * scale}" y="${y + 16 * scale}" fill="#132033" font-family="Arial" font-size="${12 * scale}" font-weight="700">Locator</text><rect x="${x + w - 98 * scale}" y="${y + 8 * scale}" width="${86 * scale}" height="${18 * scale}" rx="${9 * scale}" fill="rgba(15,37,66,0.08)" /><text x="${x + w - 55 * scale}" y="${y + 21 * scale}" text-anchor="middle" fill="#27466d" font-family="Arial" font-size="${10 * scale}" font-weight="700">${escapeXml(ref.label)}</text>${insetBackdropSvg(innerX, innerY, innerW, innerH, scale)}${markerSvg}<text x="${x + 12 * scale}" y="${y + h - 10 * scale}" fill="#526172" font-family="Arial" font-size="${11 * scale}">${escapeXml(ref.label)}</text></g>`;
+  const markerSvg = marker ? `<rect x="${Math.max(innerX + 8 * scale, innerX + (marker.x / 100) * innerW)}" y="${Math.max(innerY + 8 * scale, innerY + (marker.y / 100) * innerH)}" width="${Math.max(8 * scale, Math.max(10 * scale, (marker.w / 100) * innerW))}" height="${Math.max(8 * scale, Math.max(10 * scale, (marker.h / 100) * innerH))}" fill="rgba(96,165,250,0.16)" stroke="#2563eb" stroke-width="${1.5 * scale}" rx="${2 * scale}" /><circle cx="${Math.min(innerX + innerW - 8 * scale, Math.max(innerX + 8 * scale, innerX + (marker.x / 100) * innerW + Math.max(10 * scale, (marker.w / 100) * innerW) / 2))}" cy="${Math.min(innerY + innerH - 8 * scale, Math.max(innerY + 8 * scale, innerY + (marker.y / 100) * innerH + Math.max(10 * scale, (marker.h / 100) * innerH) / 2))}" r="${3.2 * scale}" fill="#0f2c56" stroke="#ffffff" stroke-width="${1.2 * scale}" />` : '';
+  return `<g><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${10 * scale}" fill="rgba(255,255,255,0.95)" stroke="rgba(18,30,48,0.18)" /><text x="${x + 12 * scale}" y="${y + 16 * scale}" fill="#132033" font-family="Arial" font-size="${12 * scale}" font-weight="700">Project Locator</text>${insetBackdropSvg(innerX, innerY, innerW, innerH, scale)}${markerSvg}<text x="${x + 12 * scale}" y="${y + h - 10 * scale}" fill="#526172" font-family="Arial" font-size="${11 * scale}">${escapeXml(ref.label)}</text></g>`;
 }
 function renderLogoSvg(scene, scale) { const logo = scene.project.layout?.logo; if (!logo) return ''; const zone = getOverlayMetrics(scene).logo; const x = zone.left * scale, y = zone.top * scale, w = zone.width * scale, h = zone.height * scale, padding = 10 * scale; return `<g><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${10 * scale}" fill="rgba(255,255,255,0.95)" stroke="rgba(18,30,48,0.18)" /><image href="${escapeXml(logo)}" x="${x + padding}" y="${y + padding}" width="${w - padding * 2}" height="${h - padding * 2}" preserveAspectRatio="xMidYMid meet" /></g>`; }
 function renderCalloutsSvg(scene, scale) { return placeCallouts(scene, scale).map((c) => { const line = c.type === 'leader' || c.type === 'boxed' ? `<line x1="${c.anchorPx.x}" y1="${c.anchorPx.y}" x2="${c.left + 10 * scale}" y2="${c.top + c.height / 2}" stroke="#102640" stroke-width="${1.4 * scale}" ${c.type === 'leader' ? `stroke-dasharray="${5 * scale} ${3 * scale}"` : ''} />` : ''; const box = c.type !== 'plain' ? `<rect x="${c.left}" y="${c.top}" width="${c.width}" height="${c.height}" rx="${6 * scale}" fill="rgba(255,255,255,0.97)" stroke="#17304f" />` : ''; return `<g>${line}${box}<text x="${c.left + (c.type === 'plain' ? 0 : 10 * scale)}" y="${c.top + (c.type === 'plain' ? 10 * scale : c.height / 2)}" dominant-baseline="middle" fill="#102640" font-family="Arial" font-size="${12 * scale}" font-weight="700">${escapeXml(c.text || '')}</text></g>`; }).join('\n'); }

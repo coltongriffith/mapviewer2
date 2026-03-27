@@ -1,5 +1,15 @@
 import { ROLE_LABELS } from '../projectState';
 
+const BASE_ZONES = {
+  title: { top: 18, left: 18, width: 480, height: 86 },
+  legend: { top: 122, left: 18, width: 292, height: 120 },
+  northArrow: { top: 18, right: 18, width: 76, height: 104 },
+  inset: { top: 138, right: 18, width: 244, height: 190 },
+  scaleBar: { bottom: 18, left: 18, width: 230, height: 64 },
+  footer: { bottom: 18, left: 268, width: 460, height: 42 },
+  logo: { bottom: 18, right: 18, width: 180, height: 84 },
+};
+
 export const technicalResultsTemplate = {
   id: 'technical_results_v2',
   label: 'Technical Results v2',
@@ -7,15 +17,7 @@ export const technicalResultsTemplate = {
     margin: 18,
     panelRadius: 12,
   },
-  zones: {
-    title: { top: 18, left: 18, width: 470, height: 88 },
-    legend: { top: 122, left: 18, width: 292, height: 236 },
-    northArrow: { top: 18, right: 18, width: 76, height: 104 },
-    inset: { top: 142, right: 18, width: 228, height: 184 },
-    scaleBar: { bottom: 18, left: 18, width: 230, height: 64 },
-    footer: { bottom: 18, left: 268, width: 420, height: 42 },
-    logo: { bottom: 18, right: 18, width: 170, height: 80 },
-  },
+  zones: BASE_ZONES,
   roleOrder: [
     'claims',
     'target_areas',
@@ -70,6 +72,32 @@ export const technicalResultsTemplate = {
     },
   },
 };
+
+export function resolveTemplateZones(template, layout, mapSize) {
+  const width = mapSize?.width || 1600;
+  const height = mapSize?.height || 1000;
+  const legendCount = Math.max(0, layout?.legendItems?.length || 0);
+  const legendHeight = Math.max(84, Math.min(260, 50 + legendCount * 26));
+  const logoScale = Number(layout?.logoScale || 1);
+  const logoWidth = Math.round(BASE_ZONES.logo.width * logoScale);
+  const logoHeight = Math.round(BASE_ZONES.logo.height * logoScale);
+
+  const zones = {
+    ...BASE_ZONES,
+    legend: { ...BASE_ZONES.legend, height: legendHeight },
+    inset: { ...BASE_ZONES.inset, top: Math.max(136, BASE_ZONES.legend.top + legendHeight + 18) },
+    logo: { ...BASE_ZONES.logo, width: logoWidth, height: logoHeight },
+  };
+
+  return Object.fromEntries(
+    Object.entries(zones).map(([key, zone]) => {
+      const next = { ...zone };
+      if (next.right != null && next.left == null && next.width != null) next.left = width - next.right - next.width;
+      if (next.bottom != null && next.top == null && next.height != null) next.top = height - next.bottom - next.height;
+      return [key, next];
+    })
+  );
+}
 
 export function buildLegendItems(template, layers) {
   const visible = layers.filter((layer) => layer.visible !== false && layer.legend?.enabled !== false);

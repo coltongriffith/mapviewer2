@@ -3,10 +3,11 @@ import { geojsonBounds, unionBounds } from '../utils/geometry';
 import { INSET_MODES } from '../projectState';
 
 const REFERENCE_PRESETS = {
-  province_state: { label: INSET_MODES.province_state, expand: 3.6 },
-  country: { label: INSET_MODES.country, expand: 7.2 },
-  regional_district: { label: INSET_MODES.regional_district, expand: 2.15 },
-  secondary_zoom: { label: INSET_MODES.secondary_zoom, expand: 1.45 },
+  province_state: { label: 'Project in State', expand: 3.8 },
+  country: { label: 'Project in Country', expand: 7.2 },
+  regional_district: { label: 'Regional Context', expand: 2.15 },
+  secondary_zoom: { label: 'Secondary Zoom', expand: 1.45 },
+  custom_image: { label: 'Uploaded Inset', expand: 3.6 },
 };
 
 function expandBounds(bounds, factor) {
@@ -21,7 +22,7 @@ function normalize(visibleBounds, referenceBounds) {
   if (!visibleBounds || !referenceBounds) return null;
   const width = referenceBounds.maxLng - referenceBounds.minLng || 1;
   const height = referenceBounds.maxLat - referenceBounds.minLat || 1;
-  const pad = 10;
+  const pad = 12;
   return {
     x: pad + ((visibleBounds.minLng - referenceBounds.minLng) / width) * (100 - pad * 2),
     y: pad + ((referenceBounds.maxLat - visibleBounds.maxLat) / height) * (100 - pad * 2),
@@ -30,25 +31,18 @@ function normalize(visibleBounds, referenceBounds) {
   };
 }
 
-function buildBackdrop(mode) {
-  const lineTone = mode === 'project_overview' ? '#cfd8e3' : '#d9e2ec';
-  const fillTone = mode === 'project_overview' ? '#edf2f7' : '#f4f7fa';
+function buildBackdrop() {
   return {
-    fillTone,
-    lineTone,
-    paths: [
-      'M12,20 C20,12 35,10 45,16 C55,22 60,30 72,32 C82,34 88,40 88,52 C88,68 76,78 62,82 C50,86 36,88 22,82 C12,78 8,68 10,54 C12,42 8,30 12,20 Z',
-      'M20,26 C28,20 38,20 45,24 C52,28 57,32 65,34 C70,36 76,39 78,46 C80,52 76,58 68,62 C58,68 46,72 32,70 C24,69 18,64 16,56 C14,48 14,34 20,26 Z',
+    stateShape: 'M10,54 C12,34 26,14 46,12 C64,10 80,18 88,34 C92,42 92,56 88,66 C80,84 56,92 34,88 C18,84 8,72 10,54 Z',
+    countyLines: [
+      'M18 28 L78 28', 'M16 44 L84 44', 'M18 60 L82 60', 'M26 20 L26 82', 'M44 18 L44 84', 'M60 18 L60 82', 'M76 22 L76 76',
     ],
-    roads: [
-      'M14 62 C28 55, 45 56, 60 48 S82 36, 92 28',
-      'M22 15 C30 30, 33 48, 28 84',
-    ],
-    river: 'M8 44 C18 36, 28 42, 38 36 S58 26, 70 36 S88 62, 95 56',
+    highways: ['M16 68 C34 62, 52 62, 82 58', 'M58 18 C54 34, 54 48, 56 84'],
+    river: 'M10 40 C22 38, 28 48, 40 46 S64 28, 76 34 S88 58, 94 52',
   };
 }
 
-export default function LocatorInset({ layers, insetMode, mode, zone }) {
+export default function LocatorInset({ layers, insetMode, mode, insetImage, zone }) {
   const { visibleBounds, referenceBounds } = useMemo(() => {
     const visible = (layers || []).filter((layer) => layer.visible !== false);
     const visibleBounds = unionBounds(visible.map((layer) => geojsonBounds(layer.geojson)).filter(Boolean));
@@ -59,50 +53,59 @@ export default function LocatorInset({ layers, insetMode, mode, zone }) {
 
   const marker = normalize(visibleBounds, referenceBounds);
   const backdrop = buildBackdrop(mode);
+  const showCustom = insetMode === 'custom_image' && insetImage;
 
   return (
     <div className="template-card inset-card polished" style={zone}>
       <div className="inset-header-row">
-        <div className="inset-header">Locator</div>
-        <div className="inset-mini-tag">{referenceBounds?.label || 'Context'}</div>
+        <div className="inset-header">Project Locator</div>
       </div>
-      <svg viewBox="0 0 100 100" className="inset-svg" preserveAspectRatio="none">
-        <defs>
-          <linearGradient id="locatorBg" x1="0" x2="1" y1="0" y2="1">
-            <stop offset="0%" stopColor="#f8fafc" />
-            <stop offset="100%" stopColor="#eef3f8" />
-          </linearGradient>
-        </defs>
-        <rect x="0" y="0" width="100" height="100" rx="8" fill="url(#locatorBg)" stroke="#d3dce8" />
-        {backdrop.paths.map((path, index) => (
-          <path key={index} d={path} fill={backdrop.fillTone} stroke="#c9d4df" strokeWidth="0.8" />
-        ))}
-        {backdrop.roads.map((path, index) => (
-          <path key={index} d={path} fill="none" stroke={backdrop.lineTone} strokeWidth="1.4" strokeLinecap="round" />
-        ))}
-        <path d={backdrop.river} fill="none" stroke="#b5d8f7" strokeWidth="1.8" strokeLinecap="round" />
-        {marker ? (
-          <>
-            <rect
-              x={Math.max(8, marker.x)}
-              y={Math.max(8, marker.y)}
-              width={Math.max(6, marker.w)}
-              height={Math.max(6, marker.h)}
-              fill="rgba(96,165,250,0.16)"
-              stroke="#2563eb"
-              strokeWidth="1.5"
-              rx="2"
-            />
-            <circle
-              cx={Math.min(92, Math.max(8, marker.x + marker.w / 2))}
-              cy={Math.min(92, Math.max(8, marker.y + marker.h / 2))}
-              r="2.6"
-              fill="#0f2c56"
-            />
-          </>
-        ) : null}
-      </svg>
-      <div className="inset-mode-label">{referenceBounds?.label || 'Province / State'}</div>
+      {showCustom ? (
+        <div className="inset-image-wrap">
+          <img src={insetImage} alt="Inset map" className="inset-image" />
+        </div>
+      ) : (
+        <svg viewBox="0 0 100 100" className="inset-svg" preserveAspectRatio="none">
+          <defs>
+            <linearGradient id="locatorBg" x1="0" x2="1" y1="0" y2="1">
+              <stop offset="0%" stopColor="#f8fafc" />
+              <stop offset="100%" stopColor="#eef3f8" />
+            </linearGradient>
+          </defs>
+          <rect x="0" y="0" width="100" height="100" rx="8" fill="url(#locatorBg)" stroke="#d3dce8" />
+          <path d={backdrop.stateShape} fill="#eef3f8" stroke="#c9d4df" strokeWidth="1" />
+          {backdrop.countyLines.map((path, index) => (
+            <path key={index} d={path} fill="none" stroke="#d4dce6" strokeWidth="0.9" />
+          ))}
+          {backdrop.highways.map((path, index) => (
+            <path key={index} d={path} fill="none" stroke="#cad5e2" strokeWidth="1.5" strokeLinecap="round" />
+          ))}
+          <path d={backdrop.river} fill="none" stroke="#b5d8f7" strokeWidth="1.8" strokeLinecap="round" />
+          {marker ? (
+            <>
+              <rect
+                x={Math.max(10, marker.x)}
+                y={Math.max(10, marker.y)}
+                width={Math.max(8, marker.w)}
+                height={Math.max(8, marker.h)}
+                fill="rgba(96,165,250,0.15)"
+                stroke="#2563eb"
+                strokeWidth="1.4"
+                rx="2"
+              />
+              <circle
+                cx={Math.min(92, Math.max(8, marker.x + marker.w / 2))}
+                cy={Math.min(92, Math.max(8, marker.y + marker.h / 2))}
+                r="3.2"
+                fill="#0f2c56"
+                stroke="#ffffff"
+                strokeWidth="1.2"
+              />
+            </>
+          ) : null}
+        </svg>
+      )}
+      <div className="inset-mode-label">{showCustom ? INSET_MODES.custom_image : referenceBounds?.label || 'Project in State'}</div>
     </div>
   );
 }

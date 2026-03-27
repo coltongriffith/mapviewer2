@@ -17,7 +17,7 @@ import {
 } from './projectState';
 import { applyRoleToLayer, inferRoleFromLayer } from './mapPresets';
 import { getTemplate } from './templates';
-import { buildLegendItems } from './templates/technicalResultsTemplate';
+import { buildLegendItems, resolveTemplateZones } from './templates/technicalResultsTemplate';
 import { geojsonCenter } from './utils/geometry';
 import { cleanLayerName } from './utils/cleanLayerName';
 import { fitProjectToTemplate } from './utils/frameMapForTemplate';
@@ -141,6 +141,7 @@ export default function App() {
   const leafletMapRef = useRef(null);
   const fileInputRef = useRef(null);
   const logoInputRef = useRef(null);
+  const insetInputRef = useRef(null);
 
   const [project, setProject] = useState(() => {
     const base = createInitialProjectState();
@@ -161,8 +162,8 @@ export default function App() {
   const selectedLayer = useMemo(() => project.layers.find((layer) => layer.id === selectedLayerId) || null, [project.layers, selectedLayerId]);
 
   const resolvedZones = useMemo(
-    () => Object.fromEntries(Object.entries(template.zones || {}).map(([key, zone]) => [key, resolveZone(zone, mapSize.width, mapSize.height)])),
-    [template, mapSize]
+    () => resolveTemplateZones(template, project.layout, mapSize),
+    [template, project.layout, mapSize]
   );
 
   useEffect(() => {
@@ -289,6 +290,20 @@ export default function App() {
       updateLayout({ logo: dataUrl });
     } catch (err) {
       alert(`Logo import failed: ${err.message}`);
+    } finally {
+      e.target.value = '';
+    }
+  };
+
+
+  const handleInsetImageChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const dataUrl = await readFileAsDataURL(file);
+      updateLayout({ insetImage: dataUrl, insetMode: 'custom_image' });
+    } catch (err) {
+      alert(`Inset import failed: ${err.message}`);
     } finally {
       e.target.value = '';
     }
@@ -455,13 +470,22 @@ export default function App() {
                 </select>
               </div>
             </div>
+            <div className="control-row inline-2">
+              <div>
+                <label>Logo Size</label>
+                <input type="range" min="0.7" max="1.5" step="0.05" value={project.layout.logoScale || 1} onChange={(e) => updateLayout({ logoScale: Number(e.target.value) })} />
+              </div>
+              <div className="small-note range-value">{Math.round((project.layout.logoScale || 1) * 100)}%</div>
+            </div>
             <div className="control-row"><label>Footer / Source Note</label><input value={project.layout.footerText || ''} onChange={(e) => updateLayout({ footerText: e.target.value })} /></div>
-            <div className="button-row">
+            <div className="button-row three">
               <button className="btn primary" type="button" onClick={() => fileInputRef.current?.click()}>Import Layer</button>
               <button className="btn" type="button" onClick={() => logoInputRef.current?.click()}>Upload Logo</button>
+              <button className="btn" type="button" onClick={() => insetInputRef.current?.click()}>Upload Inset</button>
             </div>
             <input ref={fileInputRef} type="file" accept=".zip,.geojson,.json" onChange={handleFileChange} hidden />
             <input ref={logoInputRef} type="file" accept="image/*" onChange={handleLogoChange} hidden />
+            <input ref={insetInputRef} type="file" accept="image/*" onChange={handleInsetImageChange} hidden />
           </div>
         </section>
 
@@ -577,7 +601,6 @@ export default function App() {
           <div className="template-card legend-card">
             <div className="legend-header">
               <h3>Legend</h3>
-              <span className="legend-mode-chip">{TEMPLATE_MODES[project.layout.mode]}</span>
             </div>
             <div className="legend-list">
               {(project.layout.legendItems || []).map((item) => (
@@ -595,7 +618,7 @@ export default function App() {
         </div>
 
         <div className="template-zone" style={zoneStyle(resolvedZones.northArrow)}><NorthArrow /></div>
-        <div className="template-zone" style={zoneStyle(resolvedZones.inset)}><LocatorInset layers={project.layers} insetMode={project.layout.insetMode} mode={project.layout.mode} zone={{ width: '100%', height: '100%' }} /></div>
+        <div className="template-zone" style={zoneStyle(resolvedZones.inset)}><LocatorInset layers={project.layers} insetMode={project.layout.insetMode} insetImage={project.layout.insetImage} mode={project.layout.mode} zone={{ width: '100%', height: '100%' }} /></div>
         <div className="template-zone" style={zoneStyle(resolvedZones.scaleBar)}><ScaleBar map={leafletMapRef.current} /></div>
         {project.layout.footerText ? <div className="template-zone" style={zoneStyle(resolvedZones.footer)}><div className="template-card footer-card">{project.layout.footerText}</div></div> : null}
         {project.layout.logo ? <div className="template-zone" style={zoneStyle(resolvedZones.logo)}><div className="template-card logo-card"><img src={project.layout.logo} alt="Logo" /></div></div> : null}

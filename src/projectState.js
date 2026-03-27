@@ -22,6 +22,7 @@ export const INSET_MODES = {
   country: 'Country',
   regional_district: 'Regional',
   secondary_zoom: 'Secondary Zoom',
+  custom_image: 'Uploaded Inset',
 };
 
 export const CALLOUT_TYPES = {
@@ -43,6 +44,8 @@ export function createInitialProjectState() {
       primaryLayerId: null,
       frameVersion: 0,
       logo: null,
+      logoScale: 1,
+      insetImage: null,
       legendItems: [],
       footerText: '',
       exportSettings: {
