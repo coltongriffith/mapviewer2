@@ -95,8 +95,8 @@ export default function MapCanvas({ onReady, project, template }) {
         pointToLayer: (_feature, latlng) =>
           L.circleMarker(latlng, {
             radius: (style.markerSize ?? 10) / 2,
-            color: style.markerColor || "#111111",
-            fillColor: style.markerFill || style.markerColor || "#ffffff",
+            color: style.markerColor || style.stroke || "#111111",
+            fillColor: style.markerFill || style.fill || style.markerColor || "#ffffff",
             fillOpacity: 1,
             weight: style.strokeWidth ?? 1.5,
           }),
@@ -106,5 +106,5 @@ export default function MapCanvas({ onReady, project, template }) {
     });
   }, [project, template]);
 
-  return <div ref={mapElRef} style={{ width: "100%", height: "100%" }} />;
+  return <div ref={mapElRef} className="leaflet-map-canvas" />;
 }

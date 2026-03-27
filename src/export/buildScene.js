@@ -17,7 +17,7 @@ export function buildScene(mapContainer, project, map) {
   const rect = mapContainer?.getBoundingClientRect?.();
   const width = Math.round(rect?.width || mapContainer?.offsetWidth || 1600);
   const height = Math.round(rect?.height || mapContainer?.offsetHeight || 1000);
-  const template = getTemplate(project?.layout?.templateId || "technical_results_v1");
+  const template = getTemplate(project?.layout?.templateId || "technical_results_v2");
 
   const resolvedTemplate = {
     ...template,
