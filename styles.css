@@ -1,0 +1,298 @@
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  font-family: Inter, Arial, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background: #0f1115;
+}
+
+.app-shell {
+  display: flex;
+  height: 100%;
+  width: 100%;
+  background: #0f1115;
+  color: #ffffff;
+}
+
+.sidebar-section {
+  margin-bottom: 18px;
+}
+
+.sidebar-title {
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.sidebar-subtitle {
+  font-size: 12px;
+  color: #a8b0be;
+}
+
+.field-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  margin: 8px 0 6px;
+  color: #dce2ea;
+}
+
+.text-input,
+select.text-input,
+textarea.text-input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #2e3440;
+  background: #171b22;
+  color: #ffffff;
+  border-radius: 6px;
+  margin-bottom: 6px;
+}
+
+.btn {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid #2f3745;
+  background: #1a2130;
+  color: #ffffff;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.btn:hover {
+  background: #232c3d;
+}
+
+.btn-small {
+  width: auto;
+  font-size: 12px;
+  padding: 7px 10px;
+}
+
+.row-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.export-buttons {
+  display: grid;
+  gap: 8px;
+}
+
+.map-stage {
+  flex: 1;
+  background: #cfd6df;
+  min-width: 0;
+}
+
+.map-container {
+  position: relative;
+  height: calc(100% - 24px);
+  margin: 12px;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 10px 30px rgba(0,0,0,.15);
+  background: #e8edf2;
+}
+
+.template-overlay-root {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 500;
+}
+
+.template-panel {
+  background: rgba(255,255,255,0.94);
+  border: 1px solid rgba(12, 23, 42, 0.12);
+  border-radius: 8px;
+  box-shadow: 0 6px 16px rgba(0,0,0,0.12);
+  pointer-events: auto;
+}
+
+.title-block {
+  background: rgba(8, 30, 92, 0.95);
+  color: #ffffff;
+  padding: 12px 16px;
+}
+
+.map-title {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+}
+
+.map-subtitle {
+  font-size: 12px;
+  opacity: 0.86;
+  margin-top: 3px;
+}
+
+.legend-box {
+  padding: 10px 12px;
+  min-width: 220px;
+}
+
+.legend-title {
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.legend-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  margin-bottom: 6px;
+}
+
+.legend-row:last-child {
+  margin-bottom: 0;
+}
+
+.legend-symbol {
+  display: inline-block;
+  flex: 0 0 auto;
+}
+
+.layer-list {
+  display: grid;
+  gap: 8px;
+}
+
+.layer-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #2b3341;
+  padding: 8px;
+  border-radius: 6px;
+  background: #141922;
+}
+
+.layer-item.active {
+  border-color: #6b92ff;
+  background: #1a2945;
+}
+
+.layer-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.layer-meta {
+  font-size: 11px;
+  opacity: 0.7;
+  margin-top: 2px;
+}
+
+.layer-toggle {
+  width: auto;
+  min-width: 40px;
+  padding: 6px 8px;
+}
+
+.north-arrow {
+  width: 46px;
+  text-align: center;
+  font-weight: 700;
+  color: #111;
+  background: rgba(255,255,255,0.94);
+  border: 1px solid rgba(12,23,42,0.12);
+  border-radius: 8px;
+  padding: 8px 6px;
+  box-shadow: 0 6px 16px rgba(0,0,0,0.12);
+}
+
+.north-arrow-label {
+  font-size: 12px;
+  margin-bottom: 2px;
+}
+
+.north-arrow-arrow {
+  font-size: 24px;
+  line-height: 1;
+}
+
+.scale-bar {
+  background: rgba(255,255,255,0.94);
+  border: 1px solid rgba(12,23,42,0.12);
+  border-radius: 8px;
+  padding: 10px 12px;
+  box-shadow: 0 6px 16px rgba(0,0,0,0.12);
+  color: #111;
+}
+
+.scale-bar-track {
+  height: 10px;
+  border: 1px solid #111;
+  background: linear-gradient(to right, #111 0 50%, #fff 50% 100%);
+}
+
+.scale-bar-label {
+  font-size: 12px;
+  margin-top: 6px;
+}
+
+.logo-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+}
+
+.inset-wrap {
+  overflow: hidden;
+}
+
+.callout {
+  position: absolute;
+  width: 210px;
+  padding: 10px 12px 8px;
+  border-radius: 8px;
+  box-shadow: 0 6px 16px rgba(0,0,0,0.16);
+  pointer-events: auto;
+}
+
+.callout-text {
+  white-space: pre-wrap;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.callout-leader {
+  position: absolute;
+  left: -58px;
+  top: 24px;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.callout-controls {
+  display: flex;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.callout-controls button {
+  border: 1px solid #cfd6df;
+  background: #ffffff;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  padding: 4px 6px;
+}
