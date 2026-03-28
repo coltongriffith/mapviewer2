@@ -1,6 +1,8 @@
 export const ROLE_LABELS = {
   claims: 'Claims',
-  drillholes: 'Drillholes',
+  adjacent_claims: 'Adjacent Claims',
+  drillholes: 'Drillholes (Current)',
+  drillholes_completed: 'Drillholes (Completed)',
   target_areas: 'Target Areas',
   anomalies: 'Anomalies',
   faults_structures: 'Faults / Structures',
@@ -36,6 +38,10 @@ export const CALLOUT_TYPES = {
   plain: 'Plain Label',
   leader: 'Leader Label',
   boxed: 'Boxed Annotation',
+  drill_result: 'Drill Result Badge',
+  phase1_target: 'Phase 1 Target Box',
+  claim_label: 'Claim Name Label',
+  town_label: 'Town Label',
 };
 
 
@@ -43,6 +49,7 @@ export const TEMPLATE_THEMES = {
   modern_rounded: 'Modern Rounded',
   technical_sharp: 'Technical Sharp',
   investor_clean: 'Investor Clean',
+  mining_exploration: 'Mining Exploration',
 };
 
 export function createInitialProjectState() {
@@ -51,6 +58,10 @@ export function createInitialProjectState() {
     layout: {
       title: 'Project Map',
       subtitle: 'Technical Results',
+      companyName: '',
+      tagline: '',
+      tickerSymbol: '',
+      legendNote: '',
       basemap: 'light',
       templateId: 'technical_results_v2',
       themeId: 'modern_rounded',

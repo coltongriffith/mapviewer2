@@ -1,22 +1,42 @@
 const roleStyleMap = {
   claims: {
-    stroke: "#60a5fa",
-    fill: "#93c5fd",
-    fillOpacity: 0.24,
+    stroke: "rgba(28,85,210,0.88)",
+    fill: "rgba(22,65,185)",
+    fillOpacity: 0.52,
     strokeWidth: 2,
-    markerColor: "#2563eb",
+    markerColor: "#1646b9",
     markerFill: "#ffffff",
     markerSize: 12,
     dashArray: "",
   },
+  adjacent_claims: {
+    stroke: "rgba(90,90,90,0.45)",
+    fill: "rgba(180,180,180)",
+    fillOpacity: 0.10,
+    strokeWidth: 1.2,
+    markerColor: "#5a5a5a",
+    markerFill: "#e0e0e0",
+    markerSize: 10,
+    dashArray: "5 4",
+  },
   drillholes: {
-    stroke: "#1f2937",
-    fill: "#ffffff",
+    stroke: "#1B3A6B",
+    fill: "#E03030",
     fillOpacity: 1,
-    strokeWidth: 1.6,
-    markerColor: "#1f2937",
-    markerFill: "#ffffff",
-    markerSize: 12,
+    strokeWidth: 1.5,
+    markerColor: "#1B3A6B",
+    markerFill: "#E03030",
+    markerSize: 10,
+    dashArray: "",
+  },
+  drillholes_completed: {
+    stroke: "#1B3A6B",
+    fill: "#8B5CF6",
+    fillOpacity: 1,
+    strokeWidth: 1.5,
+    markerColor: "#1B3A6B",
+    markerFill: "#8B5CF6",
+    markerSize: 10,
     dashArray: "",
   },
   target_areas: {
@@ -93,7 +113,11 @@ export function inferRoleFromLayer(layer) {
   const type = String(layer?.type || "").toLowerCase();
   const name = String(layer?.name || "").toLowerCase();
 
-  if (type === "points") return "drillholes";
+  if (type === "points") {
+    if (name.includes("complet") || name.includes("historic") || name.includes("old")) return "drillholes_completed";
+    return "drillholes";
+  }
+  if (name.includes("adjacent") || name.includes("neighbor") || name.includes("competitor")) return "adjacent_claims";
   if (name.includes("road") || name.includes("access")) return "roads_access";
   if (name.includes("river") || name.includes("water") || name.includes("creek")) return "rivers_water";
   if (name.includes("fault") || name.includes("structure")) return "faults_structures";

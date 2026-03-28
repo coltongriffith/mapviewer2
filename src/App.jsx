@@ -68,15 +68,22 @@ function zoneStyle(zone) {
 function NorthArrow() {
   return (
     <div className="template-card north-arrow-card">
-      <div className="north-arrow-label">N</div>
-      <div className="north-arrow-icon">▲</div>
-      <div className="north-arrow-stem" />
+      <div className="north-arrow-compass">
+        <svg width="22" height="22" viewBox="0 0 22 22">
+          {/* North (dark navy) */}
+          <polygon points="11,2 14,11 11,9 8,11" fill="#1B3A6B" />
+          {/* South (lighter navy) */}
+          <polygon points="11,20 14,11 11,13 8,11" fill="#7a9abf" />
+          {/* N label */}
+          <text x="11" y="11.5" textAnchor="middle" dominantBaseline="middle" fontSize="4.5" fontWeight="800" fill="#1B3A6B" fontFamily="'Segoe UI',Arial,sans-serif">N</text>
+        </svg>
+      </div>
     </div>
   );
 }
 
 function ScaleBar({ map }) {
-  const [state, setState] = useState({ label: '1 km', width: 130 });
+  const [state, setState] = useState({ label: '2 km', half: '1 km', width: 66 });
 
   useEffect(() => {
     if (!map) return;
@@ -84,13 +91,15 @@ function ScaleBar({ map }) {
       try {
         const size = map.getSize();
         const latlng1 = map.containerPointToLatLng([20, size.y - 40]);
-        const latlng2 = map.containerPointToLatLng([150, size.y - 40]);
+        const latlng2 = map.containerPointToLatLng([86, size.y - 40]);
         const meters = latlng1.distanceTo(latlng2);
         const steps = [50, 100, 200, 250, 500, 1000, 2000, 2500, 5000, 10000, 20000, 25000, 50000, 100000];
         const nice = steps.reduce((best, n) => (Math.abs(n - meters) < Math.abs(best - meters) ? n : best), steps[0]);
+        const fmt = (m) => m >= 1000 ? `${m / 1000} km` : `${m} m`;
         setState({
-          label: nice >= 1000 ? `${nice / 1000} km` : `${nice} m`,
-          width: Math.max(70, Math.min(180, Math.round((130 * nice) / meters))),
+          label: fmt(nice),
+          half: fmt(nice / 2),
+          width: 66,
         });
       } catch {
         // noop
@@ -103,11 +112,15 @@ function ScaleBar({ map }) {
 
   return (
     <div className="template-card scale-card">
-      <div className="scale-bar-track" style={{ width: state.width }}>
+      <div className="scale-bar-track">
         <div className="scale-bar-fill" />
         <div className="scale-bar-fill light" />
       </div>
-      <div className="scale-bar-label">{state.label}</div>
+      <div className="scale-bar-labels">
+        <span className="scale-bar-label">0</span>
+        <span className="scale-bar-label">{state.half}</span>
+        <span className="scale-bar-label">{state.label}</span>
+      </div>
     </div>
   );
 }
@@ -485,6 +498,11 @@ export default function App() {
         <section className="control-section">
           <h2>Map Content</h2>
           <div className="control-grid">
+            <div className="control-row"><label>Company Name</label><input value={project.layout.companyName || ''} onChange={(e) => updateLayout({ companyName: e.target.value })} /></div>
+            <div className="control-row inline-2">
+              <div><label>Tagline</label><input value={project.layout.tagline || ''} onChange={(e) => updateLayout({ tagline: e.target.value })} /></div>
+              <div><label>Ticker</label><input value={project.layout.tickerSymbol || ''} onChange={(e) => updateLayout({ tickerSymbol: e.target.value })} /></div>
+            </div>
             <div className="control-row"><label>Title</label><input value={project.layout.title} onChange={(e) => updateLayout({ title: e.target.value })} /></div>
             <div className="control-row"><label>Subtitle</label><input value={project.layout.subtitle} onChange={(e) => updateLayout({ subtitle: e.target.value })} /></div>
             <div className="control-row inline-2">
@@ -514,6 +532,7 @@ export default function App() {
               <div className="small-note range-value">{Math.round((project.layout.logoScale || 1) * 100)}%</div>
             </div>
             <div className="control-row"><label>Footer / Source Note</label><input value={project.layout.footerText || ''} onChange={(e) => updateLayout({ footerText: e.target.value })} /></div>
+            <div className="control-row"><label>Legend Note</label><input value={project.layout.legendNote || ''} onChange={(e) => updateLayout({ legendNote: e.target.value })} placeholder="e.g. Au equivalent oxide definitions" /></div>
             <div className="button-row three">
               <button className="btn primary" type="button" onClick={() => fileInputRef.current?.click()}>Import Layer</button>
               <button className="btn" type="button" onClick={() => logoInputRef.current?.click()}>Upload Logo</button>
@@ -715,8 +734,21 @@ export default function App() {
 
         <div className="template-zone" style={zoneStyle(resolvedZones.title)}>
           <div className="template-card title-card">
-            <h2>{project.layout.title}</h2>
-            <p>{project.layout.subtitle}</p>
+            {project.layout.companyName ? (
+              <div className="title-logo-unit">
+                <div className="title-company-name">{project.layout.companyName}</div>
+                {project.layout.tagline ? <div className="title-tagline">{project.layout.tagline}</div> : null}
+              </div>
+            ) : null}
+            <div className="title-project-unit">
+              <div className="title-project-name">{project.layout.title}</div>
+              {project.layout.subtitle ? <div className="title-project-sub">{project.layout.subtitle}</div> : null}
+            </div>
+            {project.layout.tickerSymbol ? (
+              <div className="title-ticker-unit">
+                <div className="title-ticker-pill">{project.layout.tickerSymbol}</div>
+              </div>
+            ) : null}
           </div>
         </div>
 
@@ -731,7 +763,7 @@ export default function App() {
                     {group.items.map((item) => (
                       <div key={item.id} className="legend-item">
                         {item.type === 'points' ? (
-                          <span className="legend-point" style={{ borderColor: item.style.markerColor || '#111', background: item.style.markerFill || '#fff' }} />
+                          <span className="legend-point" style={{ borderColor: item.style.markerColor || '#1B3A6B', background: item.style.markerFill || '#E03030' }} />
                         ) : (
                           <span className="legend-swatch" style={{ borderColor: item.style.stroke || '#3b82f6', background: item.style.fill || '#93c5fd', opacity: item.style.fillOpacity ?? 1 }} />
                         )}
@@ -741,6 +773,7 @@ export default function App() {
                   </div>
                 ))}
               </div>
+              {project.layout.legendNote ? <div className="legend-note">{project.layout.legendNote}</div> : null}
             </div>
           </div>
         ) : null}

@@ -2,6 +2,7 @@ export const TEMPLATE_THEMES = {
   modern_rounded: 'Modern Rounded',
   technical_sharp: 'Technical Sharp',
   investor_clean: 'Investor Clean',
+  mining_exploration: 'Mining Exploration',
 };
 
 export const THEME_TOKENS = {
@@ -94,6 +95,39 @@ export const THEME_TOKENS = {
     insetMuted: '#64748b',
     logoFill: 'rgba(255,255,255,0.98)',
     logoBorder: 'rgba(148, 163, 184, 0.32)',
+  },
+};
+
+  mining_exploration: {
+    panelRadius: 5,
+    panelFill: 'rgba(255,255,255,0.96)',
+    panelBorder: '#1B3A6B',
+    panelShadow: '0 4px 16px rgba(15, 30, 70, 0.14)',
+    titleRadius: 0,
+    titleFill: 'rgba(255,255,255,0.96)',
+    titleBorder: '#1B3A6B',
+    titleAccent: null,
+    titleText: '#1B3A6B',
+    subtitleText: '#4a5e7a',
+    panelTitle: '#1B3A6B',
+    bodyText: '#1B3A6B',
+    mutedText: '#4a5e7a',
+    goldAccent: '#C8A84B',
+    footerFill: 'rgba(255,255,255,0.96)',
+    footerText: '#1B3A6B',
+    calloutFill: 'rgba(12,22,50,0.93)',
+    calloutBorder: '#C8A84B',
+    calloutText: '#ffffff',
+    northArrowFill: 'rgba(255,255,255,0.92)',
+    northArrowText: '#1B3A6B',
+    scaleFill: 'rgba(255,255,255,0.92)',
+    scaleStroke: '#1B3A6B',
+    insetFill: 'rgba(255,255,255,0.96)',
+    insetBorder: '#1B3A6B',
+    insetTitle: '#1B3A6B',
+    insetMuted: '#4a5e7a',
+    logoFill: 'rgba(255,255,255,0.96)',
+    logoBorder: '#1B3A6B',
   },
 };
 

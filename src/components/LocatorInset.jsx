@@ -55,11 +55,10 @@ export default function LocatorInset({ layers, insetMode, mode, insetImage, zone
   const backdrop = buildBackdrop(mode);
   const showCustom = insetMode === 'custom_image' && insetImage;
 
+  const footerLabel = showCustom ? INSET_MODES.custom_image : referenceBounds?.label || 'Project in State';
+
   return (
     <div className="template-card inset-card polished" style={zone}>
-      <div className="inset-header-row">
-        <div className="inset-header">Project Locator</div>
-      </div>
       {showCustom ? (
         <div className="inset-image-wrap">
           <img src={insetImage} alt="Inset map" className="inset-image" />
@@ -88,8 +87,8 @@ export default function LocatorInset({ layers, insetMode, mode, insetImage, zone
                 y={Math.max(10, marker.y)}
                 width={Math.max(8, marker.w)}
                 height={Math.max(8, marker.h)}
-                fill="rgba(96,165,250,0.15)"
-                stroke="#2563eb"
+                fill="rgba(22,65,185,0.15)"
+                stroke="rgba(28,85,210,0.88)"
                 strokeWidth="1.4"
                 rx="2"
               />
@@ -97,7 +96,7 @@ export default function LocatorInset({ layers, insetMode, mode, insetImage, zone
                 cx={Math.min(92, Math.max(8, marker.x + marker.w / 2))}
                 cy={Math.min(92, Math.max(8, marker.y + marker.h / 2))}
                 r="3.2"
-                fill="#0f2c56"
+                fill="#1B3A6B"
                 stroke="#ffffff"
                 strokeWidth="1.2"
               />
@@ -105,7 +104,7 @@ export default function LocatorInset({ layers, insetMode, mode, insetImage, zone
           ) : null}
         </svg>
       )}
-      <div className="inset-mode-label">{showCustom ? INSET_MODES.custom_image : referenceBounds?.label || 'Project in State'}</div>
+      <div className="inset-footer-bar">{footerLabel}</div>
     </div>
   );
 }

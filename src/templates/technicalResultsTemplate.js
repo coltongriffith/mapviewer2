@@ -1,20 +1,22 @@
 import { ROLE_LABELS } from '../projectState';
 
 const BASE_ZONES = {
-  title: { top: 18, left: 18, width: 480, height: 86 },
-  legend: { top: 122, left: 18, width: 292, height: 120 },
-  northArrow: { top: 18, right: 18, width: 76, height: 104 },
-  inset: { top: 138, right: 18, width: 244, height: 190 },
-  scaleBar: { bottom: 18, left: 18, width: 230, height: 64 },
-  footer: { bottom: 18, left: 268, width: 460, height: 42 },
-  logo: { bottom: 18, right: 18, width: 180, height: 84 },
+  title: { top: 0, left: 0, width: 480, height: 86 },
+  legend: { bottom: 8, left: 8, width: 292, height: 120 },
+  northArrow: { bottom: 10, right: 10, width: 76, height: 82 },
+  inset: { top: 8, right: 8, width: 244, height: 190 },
+  scaleBar: { bottom: 10, right: 96, width: 200, height: 56 },
+  footer: { bottom: 8, left: 310, width: 460, height: 42 },
+  logo: { bottom: 8, right: 8, width: 180, height: 84 },
 };
 
 const ROLE_GROUPS = {
   claims: 'Property',
+  adjacent_claims: 'Property',
   target_areas: 'Targets',
   anomalies: 'Targets',
   drillholes: 'Drilling',
+  drillholes_completed: 'Drilling',
   faults_structures: 'Reference',
   roads_access: 'Infrastructure',
   rivers_water: 'Infrastructure',
@@ -31,25 +33,29 @@ export const technicalResultsTemplate = {
   zones: BASE_ZONES,
   roleOrder: [
     'claims',
+    'adjacent_claims',
     'target_areas',
     'anomalies',
     'faults_structures',
     'roads_access',
     'rivers_water',
     'drillholes',
+    'drillholes_completed',
     'labels',
   ],
   roleGroups: ROLE_GROUPS,
   roleStyles: {
-    claims: { stroke: '#60a5fa', fill: '#93c5fd', fillOpacity: 0.22, strokeWidth: 2 },
-    drillholes: { markerColor: '#1f2937', markerFill: '#ffffff', markerSize: 12, strokeWidth: 1.8 },
+    claims: { stroke: 'rgba(28,85,210,0.88)', fill: 'rgba(22,65,185)', fillOpacity: 0.52, strokeWidth: 2 },
+    adjacent_claims: { stroke: 'rgba(90,90,90,0.45)', fill: 'rgba(180,180,180)', fillOpacity: 0.10, strokeWidth: 1.2, dashArray: '5 4' },
+    drillholes: { markerColor: '#1B3A6B', markerFill: '#E03030', markerSize: 10, strokeWidth: 1.5 },
+    drillholes_completed: { markerColor: '#1B3A6B', markerFill: '#8B5CF6', markerSize: 10, strokeWidth: 1.5 },
     target_areas: { stroke: '#f59e0b', fill: '#fbbf24', fillOpacity: 0.16, strokeWidth: 2.2, dashArray: '8 5' },
     anomalies: { stroke: '#a21caf', fill: '#d946ef', fillOpacity: 0.18, strokeWidth: 2.1 },
     faults_structures: { stroke: '#374151', fill: '#374151', fillOpacity: 0, strokeWidth: 1.8, dashArray: '6 4' },
-    roads_access: { stroke: '#7c5e43', fill: '#7c5e43', fillOpacity: 0, strokeWidth: 1.8 },
+    roads_access: { stroke: 'rgba(155,125,45,0.6)', fill: 'rgba(155,125,45)', fillOpacity: 0, strokeWidth: 2.5 },
     rivers_water: { stroke: '#0ea5e9', fill: '#7dd3fc', fillOpacity: 0.16, strokeWidth: 1.8 },
     labels: { stroke: '#0f172a', fill: '#0f172a', fillOpacity: 0, strokeWidth: 1 },
-    other: { stroke: '#2563eb', fill: '#93c5fd', fillOpacity: 0.2, strokeWidth: 1.8 },
+    other: { stroke: 'rgba(28,85,210,0.88)', fill: 'rgba(22,65,185)', fillOpacity: 0.2, strokeWidth: 1.8 },
   },
   modePresets: {
     project_overview: {
@@ -108,7 +114,7 @@ export function resolveTemplateZones(template, layout, mapSize) {
   const logoHeight = Math.round(BASE_ZONES.logo.height * logoScale);
   const insetSize = layout?.insetSize || 'medium';
   const insetEnabled = layout?.insetEnabled !== false;
-  const insetScale = insetSize === 'small' ? 0.82 : insetSize === 'large' ? 1.22 : 1;
+  const insetScale = insetSize === 'small' ? 0.525 : insetSize === 'large' ? 1.22 : 1;
   const titleWidth = layout?.titleWidth === 'wide' ? 620 : 480;
 
   const insetWidth = Math.round(BASE_ZONES.inset.width * insetScale);
