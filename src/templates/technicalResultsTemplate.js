@@ -1,13 +1,13 @@
 import { ROLE_LABELS } from '../projectState';
 
 const BASE_ZONES = {
-  title: { top: 0, left: 0, width: 480, height: 86 },
-  legend: { bottom: 8, left: 8, width: 292, height: 120 },
-  northArrow: { bottom: 10, right: 10, width: 76, height: 82 },
-  inset: { top: 8, right: 8, width: 244, height: 190 },
-  scaleBar: { bottom: 10, right: 96, width: 200, height: 56 },
-  footer: { bottom: 8, left: 310, width: 460, height: 42 },
-  logo: { bottom: 8, right: 8, width: 180, height: 84 },
+  title:      { top: 0,    left: 0,    width: 480, height: 86 },
+  inset:      { top: 8,    right: 8,   width: 200, height: 150 },
+  legend:     { bottom: 8, left: 8,    width: 220, height: 120 },
+  northArrow: { bottom: 60, right: 30,  width: 50,  height: 48 },
+  scaleBar:   { bottom: 10, right: 10,  width: 90,  height: 44 },
+  footer:     { bottom: 8,  left: 240,  width: 460, height: 36 },
+  logo:       { bottom: 8,  right: 116, width: 140, height: 72 },
 };
 
 const ROLE_GROUPS = {
@@ -114,18 +114,21 @@ export function resolveTemplateZones(template, layout, mapSize) {
   const logoHeight = Math.round(BASE_ZONES.logo.height * logoScale);
   const insetSize = layout?.insetSize || 'medium';
   const insetEnabled = layout?.insetEnabled !== false;
-  const insetScale = insetSize === 'small' ? 0.525 : insetSize === 'large' ? 1.22 : 1;
   const titleWidth = layout?.titleWidth === 'wide' ? 620 : 480;
 
-  const insetWidth = Math.round(BASE_ZONES.inset.width * insetScale);
-  const insetHeight = Math.round(BASE_ZONES.inset.height * insetScale);
+  const INSET_SIZES = {
+    small:  { width: 128, height: 90 },
+    medium: { width: 200, height: 150 },
+    large:  { width: 244, height: 190 },
+  };
+  const { width: insetWidth, height: insetHeight } = INSET_SIZES[insetSize] || INSET_SIZES.medium;
 
   const zones = {
     ...BASE_ZONES,
     title: { ...BASE_ZONES.title, width: titleWidth },
     legend: { ...BASE_ZONES.legend, height: legendHeight },
     inset: insetEnabled
-      ? { ...BASE_ZONES.inset, width: insetWidth, height: insetHeight, top: Math.max(138, BASE_ZONES.legend.top + legendHeight + 18) }
+      ? { ...BASE_ZONES.inset, width: insetWidth, height: insetHeight }
       : { ...BASE_ZONES.inset, width: 0, height: 0 },
     footer: layout?.footerEnabled === false ? { ...BASE_ZONES.footer, width: 0, height: 0 } : { ...BASE_ZONES.footer },
     logo: { ...BASE_ZONES.logo, width: logoWidth, height: logoHeight },

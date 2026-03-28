@@ -765,7 +765,7 @@ export default function App() {
                         {item.type === 'points' ? (
                           <span className="legend-point" style={{ borderColor: item.style.markerColor || '#1B3A6B', background: item.style.markerFill || '#E03030' }} />
                         ) : (
-                          <span className="legend-swatch" style={{ borderColor: item.style.stroke || '#3b82f6', background: item.style.fill || '#93c5fd', opacity: item.style.fillOpacity ?? 1 }} />
+                          <span className="legend-swatch" style={{ borderColor: item.style.stroke || '#3b82f6', borderStyle: item.style.dashArray ? 'dashed' : 'solid', background: item.style.fill || '#93c5fd', opacity: item.style.fillOpacity ?? 1 }} />
                         )}
                         <span>{item.label}</span>
                       </div>

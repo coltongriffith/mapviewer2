@@ -155,9 +155,9 @@ button, input, select, textarea { font: inherit; }
   background: var(--title-bg, rgba(10,31,66,0.96));
   color: var(--title-fg, #fff);
   border-color: var(--title-border, rgba(255,255,255,0.15));
-  border-radius: var(--title-radius, var(--template-radius, 12px));
+  border-radius: 0 0 var(--title-radius, var(--template-radius, 12px)) var(--title-radius, var(--template-radius, 12px));
   padding: 0;
-  overflow: visible;
+  overflow: hidden;
 }
 .title-card::before {
   content: '';
@@ -240,28 +240,29 @@ button, input, select, textarea { font: inherit; }
 .legend-group { display: grid; gap: 5px; }
 .legend-group-title { font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted-text, #4a5e7a); font-weight: 700; margin-top: 4px; }
 .legend-item { display: flex; align-items: center; gap: 7px; color: var(--body-text, #1d2b3d); font-size: 9.5px; }
-.legend-swatch { width: 18px; height: 11px; border-radius: 2px; border: 1px solid #3b82f6; flex: 0 0 auto; }
+.legend-swatch { width: 18px; height: 11px; border-radius: 2px; border: 1px solid currentColor; flex: 0 0 auto; }
 .legend-point { width: 10px; height: 10px; border-radius: 999px; border: 1.5px solid #111; background: #fff; flex: 0 0 auto; }
 .legend-note { font-size: 8px; font-style: italic; color: var(--muted-text, #6c7b90); border-top: 1px solid var(--panel-border, rgba(15,23,42,0.15)); margin-top: 6px; padding-top: 5px; line-height: 1.4; }
 .north-arrow-card {
-  display: flex; align-items: center; justify-content: center; flex-direction: column;
+  display: flex; align-items: center; justify-content: center;
   background: var(--north-fill, rgba(255,255,255,0.95));
+  padding: 0;
 }
 .north-arrow-compass {
-  width: 32px; height: 32px;
+  width: 34px; height: 34px;
   border-radius: 50%;
-  background: var(--north-fill, rgba(255,255,255,0.92));
+  background: transparent;
   border: 1.5px solid var(--north-fg, #1B3A6B);
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
 }
-.north-arrow-compass svg { display: block; overflow: visible; }
-.scale-card { padding: 4px 8px; background: var(--scale-bg, rgba(255,255,255,0.92)); }
-.scale-bar-track { display: flex; height: 8px; border: 1px solid var(--scale-stroke, #1B3A6B); width: 66px; }
+.north-arrow-compass svg { display: block; }
+.scale-card { padding: 5px 8px 6px; background: var(--scale-bg, rgba(255,255,255,0.92)); display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.scale-bar-track { display: flex; height: 7px; border: 1px solid var(--scale-stroke, #1B3A6B); width: 66px; flex-shrink: 0; }
 .scale-bar-fill { background: var(--scale-stroke, #1B3A6B); width: 50%; }
 .scale-bar-fill.light { background: #fff; }
 .scale-bar-labels { display: flex; justify-content: space-between; width: 66px; margin-top: 3px; }
-.scale-bar-label { color: var(--body-text, #1d2b3d); font-size: 7.5px; font-weight: 600; }
+.scale-bar-label { color: var(--body-text, #1d2b3d); font-size: 7px; font-weight: 600; }
 .logo-card {
   display: flex; align-items: center; justify-content: center; padding: 10px; background: var(--logo-bg, var(--panel-bg, rgba(255,255,255,0.95))); border-color: var(--logo-border, var(--panel-border, rgba(18,30,48,0.18)));
 }
@@ -390,7 +391,6 @@ button, input, select, textarea { font: inherit; }
   border-bottom: 3px solid #1B3A6B;
   border-right: 3px solid #1B3A6B;
   border-radius: 0 0 7px 0;
-  padding-top: 0;
 }
 .map-stage[data-theme="mining_exploration"] .title-card::before { display: none; }
 .map-stage[data-theme="mining_exploration"] .legend-card h3 { color: #1B3A6B; }
