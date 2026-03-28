@@ -1,4 +1,8 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from 'react';
+
+function intersects(a, b, padding = 10) {
+  return !(a.left + a.width + padding < b.left || b.left + b.width + padding < a.left || a.top + a.height + padding < b.top || b.top + b.height + padding < a.top);
+}
 
 function resolveCalloutBoxes(callouts, map) {
   if (!map) return [];
@@ -11,27 +15,23 @@ function resolveCalloutBoxes(callouts, map) {
       const anchor = callout.anchor;
       if (!anchor) return;
       const pt = map.latLngToContainerPoint([anchor.lat, anchor.lng]);
+      const width = callout.type === 'boxed' ? 188 : callout.type === 'leader' ? 146 : 136;
+      const height = callout.type === 'boxed' ? 42 : 24;
       let left = pt.x + (callout.offset?.x || 0);
       let top = pt.y + (callout.offset?.y || 0);
-      const width = callout.type === "boxed" ? 180 : 132;
-      const height = callout.type === "boxed" ? 54 : 28;
+      let candidate = { ...callout, width, height, left, top, anchorPx: pt };
 
-      for (const other of placed) {
-        const overlapX = left < other.left + other.width + 8 && left + width + 8 > other.left;
-        const overlapY = top < other.top + other.height + 8 && top + height + 8 > other.top;
-        if (overlapX && overlapY) {
-          top = other.top + other.height + 10;
-        }
+      let attempts = 0;
+      while (placed.some((other) => intersects(candidate, other)) && attempts < 8) {
+        top += 18;
+        left += attempts % 2 === 0 ? 8 : -6;
+        candidate = { ...candidate, top, left };
+        attempts += 1;
       }
 
-      placed.push({
-        ...callout,
-        width,
-        height,
-        left,
-        top,
-        anchorPx: pt,
-      });
+      if (!placed.some((other) => intersects(candidate, other, 2))) {
+        placed.push(candidate);
+      }
     });
 
   return placed;
@@ -42,9 +42,9 @@ export default function CalloutsOverlay({ map, callouts }) {
 
   useEffect(() => {
     if (!map) return undefined;
-    const rerender = () => setTick((v) => v + 1);
-    map.on("move zoom zoomend moveend resize", rerender);
-    return () => map.off("move zoom zoomend moveend resize", rerender);
+    const rerender = () => setTick((value) => value + 1);
+    map.on('move zoom zoomend moveend resize', rerender);
+    return () => map.off('move zoom zoomend moveend resize', rerender);
   }, [map]);
 
   const placed = useMemo(() => resolveCalloutBoxes(callouts, map), [callouts, map, tick]);
@@ -53,24 +53,21 @@ export default function CalloutsOverlay({ map, callouts }) {
     <div className="callouts-overlay">
       {placed.map((callout) => (
         <React.Fragment key={callout.id}>
-          {callout.type === "leader" || callout.type === "boxed" ? (
+          {callout.type === 'leader' || callout.type === 'boxed' ? (
             <svg className="callout-leader-svg">
               <line
                 x1={callout.anchorPx.x}
                 y1={callout.anchorPx.y}
                 x2={callout.left + 10}
                 y2={callout.top + callout.height / 2}
-                stroke="#0f172a"
-                strokeWidth="1.5"
-                strokeDasharray={callout.type === "leader" ? "4 3" : ""}
+                stroke="#102640"
+                strokeWidth="1.4"
+                strokeDasharray={callout.type === 'leader' ? '5 3' : ''}
               />
             </svg>
           ) : null}
-          <div
-            className={`map-callout ${callout.type}`}
-            style={{ left: callout.left, top: callout.top, width: callout.width, minHeight: callout.height }}
-          >
-            {callout.text}
+          <div className={`map-callout ${callout.type}`} style={{ left: callout.left, top: callout.top, width: callout.width, minHeight: callout.height }}>
+            <span>{callout.text}</span>
           </div>
         </React.Fragment>
       ))}
