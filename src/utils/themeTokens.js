@@ -96,8 +96,6 @@ export const THEME_TOKENS = {
     logoFill: 'rgba(255,255,255,0.98)',
     logoBorder: 'rgba(148, 163, 184, 0.32)',
   },
-};
-
   mining_exploration: {
     panelRadius: 5,
     panelFill: 'rgba(255,255,255,0.96)',
