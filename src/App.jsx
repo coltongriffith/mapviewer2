@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import MapCanvas from './components/MapCanvas';
 import Sidebar from './components/Sidebar';
 import LayerList from './components/LayerList';
@@ -444,7 +445,8 @@ export default function App() {
   return (
     <div className="app-shell">
       <Sidebar>
-        <h1>Mapviewer</h1>
+        <Link to="/" className="back-home-link">← Home</Link>
+        <h1>MapViewer</h1>
         <p className="sidebar-subtitle">Template-driven geology figure generator</p>
 
         <section className="control-section">
@@ -720,6 +722,16 @@ export default function App() {
       >
         <MapCanvas onReady={onMapReady} project={project} template={template} />
         <CalloutsOverlay map={leafletMapRef.current} callouts={project.callouts} />
+
+        {project.layers.length === 0 && (
+          <div className="empty-state">
+            <div className="empty-state-card">
+              <div className="empty-icon">◈</div>
+              <p className="empty-title">Import a layer to get started</p>
+              <p className="empty-sub">Use the file buttons in the sidebar to import a GeoJSON or Shapefile (.zip).</p>
+            </div>
+          </div>
+        )}
 
         <div className="template-zone" style={zoneStyle(resolvedZones.title)}>
           <div className="template-card title-card">

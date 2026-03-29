@@ -1,0 +1,195 @@
+.landing {
+  background: #f4f7fb;
+  min-height: 100vh;
+  color: #0f172a;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Nav */
+.landing-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 48px;
+  background: #ffffff;
+  border-bottom: 1px solid rgba(0,0,0,0.06);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+.landing-wordmark {
+  font-size: 18px;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.01em;
+}
+.landing-wordmark span { color: #2563eb; }
+.nav-cta {
+  background: #1e3a8a;
+  color: #ffffff;
+  border: none;
+  padding: 10px 22px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-block;
+}
+.nav-cta:hover { background: #1e40af; }
+
+/* Hero */
+.landing-hero {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 56px;
+  align-items: center;
+  padding: 88px 48px 72px;
+  max-width: 1160px;
+  margin: 0 auto;
+}
+.hero-text { display: grid; gap: 24px; }
+.hero-eyebrow {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #2563eb;
+  margin: 0;
+}
+.hero-title {
+  font-size: clamp(32px, 4vw, 50px);
+  font-weight: 800;
+  line-height: 1.1;
+  color: #0f172a;
+  margin: 0;
+  letter-spacing: -0.02em;
+}
+.hero-title span { color: #2563eb; }
+.hero-sub {
+  font-size: 18px;
+  color: #475569;
+  line-height: 1.65;
+  margin: 0;
+  max-width: 460px;
+}
+.hero-actions { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-top: 4px; }
+.hero-cta {
+  background: #1e3a8a;
+  color: #ffffff;
+  border: none;
+  padding: 14px 32px;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-block;
+  transition: background 0.15s;
+}
+.hero-cta:hover { background: #1e40af; }
+.hero-hint { font-size: 13px; color: #94a3b8; }
+
+/* Map preview illustration */
+.hero-preview-wrap {
+  position: relative;
+}
+.hero-preview {
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06);
+  border: 1px solid rgba(0,0,0,0.08);
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* Feature section */
+.feature-section {
+  padding: 0 48px 80px;
+  max-width: 1160px;
+  margin: 0 auto;
+}
+.feature-section-title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #94a3b8;
+  margin-bottom: 20px;
+}
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+.feature-card {
+  background: #ffffff;
+  border: 1px solid rgba(0,0,0,0.07);
+  border-radius: 12px;
+  padding: 22px;
+  transition: box-shadow 0.15s, border-color 0.15s;
+}
+.feature-card:hover {
+  box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+  border-color: rgba(37,99,235,0.2);
+}
+.feature-icon {
+  color: #2563eb;
+  margin-bottom: 14px;
+  display: block;
+}
+.feature-title {
+  font-size: 15px;
+  font-weight: 700;
+  margin: 0 0 6px;
+  color: #0f172a;
+}
+.feature-desc {
+  font-size: 13px;
+  color: #64748b;
+  line-height: 1.55;
+  margin: 0;
+}
+
+/* Footer */
+.landing-footer {
+  padding: 24px 48px;
+  background: #f1f5f9;
+  border-top: 1px solid rgba(0,0,0,0.06);
+  color: #94a3b8;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.footer-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(37,99,235,0.08);
+  color: #2563eb;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+
+/* Responsive */
+@media (max-width: 960px) {
+  .landing-hero { grid-template-columns: 1fr; gap: 40px; padding: 60px 32px 48px; }
+  .hero-preview-wrap { display: none; }
+  .feature-grid { grid-template-columns: 1fr 1fr; }
+  .feature-section { padding: 0 32px 60px; }
+  .landing-nav { padding: 14px 32px; }
+  .landing-footer { padding: 20px 32px; }
+}
+@media (max-width: 600px) {
+  .feature-grid { grid-template-columns: 1fr; }
+  .landing-hero { padding: 48px 20px 40px; }
+  .landing-nav { padding: 14px 20px; }
+  .feature-section { padding: 0 20px 48px; }
+  .landing-footer { padding: 18px 20px; flex-direction: column; gap: 8px; align-items: flex-start; }
+}
