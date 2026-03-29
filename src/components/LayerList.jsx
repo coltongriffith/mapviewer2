@@ -12,7 +12,18 @@ export default function LayerList({ layers, selectedLayerId, onSelect, onToggleV
           onClick={() => onSelect?.(layer.id)}
         >
           <div className="layer-item-main">
-            <div className="layer-name">{layer.displayName || layer.name || 'Layer'}</div>
+            <div className="layer-name">
+              <span
+                className="layer-color-dot"
+                style={{
+                  background: layer.style?.fill && layer.style.fill !== 'none'
+                    ? layer.style.fill
+                    : (layer.style?.stroke || layer.style?.markerColor || '#60a5fa'),
+                  opacity: layer.type === 'points' ? 1 : Math.max(0.5, layer.style?.fillOpacity ?? 0.5),
+                }}
+              />
+              {layer.displayName || layer.name || 'Layer'}
+            </div>
             <div className="layer-role">{ROLE_LABELS[layer.role] || 'Layer'}</div>
             {layer.sourceName ? <div className="layer-source">{layer.sourceName}</div> : null}
           </div>

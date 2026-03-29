@@ -17,7 +17,8 @@ import {
   TEMPLATE_MODES,
   TEMPLATE_THEMES,
 } from './projectState';
-import { applyRoleToLayer, inferRoleFromLayer } from './mapPresets';
+import { applyRoleToLayer, getRoleDefaultStyle, inferRoleFromLayer } from './mapPresets';
+import LayerStyleEditor from './components/LayerStyleEditor';
 import { getTemplate } from './templates';
 import { buildLegendItems, resolveTemplateZones } from './templates/technicalResultsTemplate';
 import { geojsonCenter } from './utils/geometry';
@@ -533,7 +534,10 @@ export default function App() {
             <label className="toggle-row"><input type="checkbox" checked={referenceOverlays.rail} onChange={(e) => updateLayout({ referenceOverlays: { rail: e.target.checked } })} /> <span>Railways</span></label>
           </div>
           <div className="control-row" style={{ marginTop: 10 }}>
-            <label>Reference Opacity</label>
+            <div className="slider-label-row">
+              <label>Reference Opacity</label>
+              <span className="range-value">{Math.round((project.layout.referenceOpacity || 0.65) * 100)}%</span>
+            </div>
             <input type="range" min="0.25" max="1" step="0.05" value={project.layout.referenceOpacity || 0.65} onChange={(e) => updateLayout({ referenceOpacity: Number(e.target.value) })} />
           </div>
         </section>
@@ -593,6 +597,10 @@ export default function App() {
                   {Object.entries(ROLE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                 </select>
               </div>
+              <LayerStyleEditor
+                layer={selectedLayer}
+                onChange={(stylePatch) => updateLayer(selectedLayer.id, { style: stylePatch })}
+              />
               <div className="button-row three">
                 <button className="secondary-btn" type="button" onClick={() => moveLayer(selectedLayer.id, 'down')}>Move Down</button>
                 <button className={`secondary-btn ${project.layout.primaryLayerId === selectedLayer.id ? 'active-toggle' : ''}`} type="button" onClick={() => setFramingLayer(selectedLayer.id)}>
@@ -650,7 +658,7 @@ export default function App() {
           </div>
         </section>
 
-        <section className="control-section">
+        <section className="control-section export-section">
           <h2>Export</h2>
           <div className="control-grid">
             <div className="control-row inline-2">
