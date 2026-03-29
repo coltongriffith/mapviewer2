@@ -166,27 +166,45 @@ function renderLegendGroups(items, layout) {
   return groups;
 }
 
+function loadSavedProject() {
+  try {
+    const raw = localStorage.getItem('mapviewer2_autosave');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed?.layers && parsed?.layout) return parsed;
+    }
+  } catch {
+    // ignore corrupt saves
+  }
+  const base = createInitialProjectState();
+  return {
+    ...base,
+    layout: { ...base.layout, title: 'Rift Rare Earth Project', subtitle: 'SE Nebraska, USA' },
+  };
+}
+
 export default function App() {
   const mapContainerRef = useRef(null);
   const leafletMapRef = useRef(null);
   const fileInputRef = useRef(null);
   const logoInputRef = useRef(null);
   const insetInputRef = useRef(null);
+  const importProjectInputRef = useRef(null);
 
-  const [project, setProject] = useState(() => {
-    const base = createInitialProjectState();
-    return {
-      ...base,
-      layout: {
-        ...base.layout,
-        title: 'Rift Rare Earth Project',
-        subtitle: 'SE Nebraska, USA',
-      },
-    };
-  });
+  const [project, setProject] = useState(() => loadSavedProject());
   const [selectedLayerId, setSelectedLayerId] = useState(null);
   const [exporting, setExporting] = useState(false);
   const [mapSize, setMapSize] = useState({ width: 1600, height: 1000 });
+  const [statusMsg, setStatusMsg] = useState(null);
+  const [collapsed, setCollapsed] = useState({
+    template: false,
+    content: false,
+    overlays: true,
+    layout: true,
+    layers: false,
+    callouts: true,
+    export: false,
+  });
 
   const template = useMemo(() => getTemplate(project.layout?.templateId || 'technical_results_v2'), [project.layout?.templateId]);
   const selectedLayer = useMemo(() => project.layers.find((layer) => layer.id === selectedLayerId) || null, [project.layers, selectedLayerId]);
@@ -215,6 +233,15 @@ export default function App() {
     }));
   }, [project.layers, project.layout.referenceOverlays, project.layout.legendMode, template]);
 
+  // Auto-save to localStorage whenever project changes
+  useEffect(() => {
+    try {
+      localStorage.setItem('mapviewer2_autosave', JSON.stringify(project));
+    } catch {
+      // silently ignore (quota exceeded for large GeoJSON)
+    }
+  }, [project]);
+
   useEffect(() => {
     const map = leafletMapRef.current;
     if (!map) return;
@@ -225,6 +252,13 @@ export default function App() {
       project.layout.compositionPreset || template.modePresets?.[project.layout.mode]?.framing || 'balanced'
     );
   }, [project, template, resolvedZones]);
+
+  const showStatus = (type, text) => {
+    setStatusMsg({ type, text });
+    setTimeout(() => setStatusMsg(null), 4000);
+  };
+
+  const toggleSection = (key) => setCollapsed((prev) => ({ ...prev, [key]: !prev[key] }));
 
   const updateLayout = (patch) => {
     setProject((prev) => ({
@@ -255,6 +289,21 @@ export default function App() {
       [next[idx], next[swap]] = [next[swap], next[idx]];
       return { ...prev, layers: next };
     });
+  };
+
+  const removeLayer = (layerId) => {
+    setProject((prev) => {
+      const next = prev.layers.filter((l) => l.id !== layerId);
+      return {
+        ...prev,
+        layers: next,
+        layout: {
+          ...prev.layout,
+          primaryLayerId: prev.layout.primaryLayerId === layerId ? (next[0]?.id || null) : prev.layout.primaryLayerId,
+        },
+      };
+    });
+    setSelectedLayerId((prev) => (prev === layerId ? null : prev));
   };
 
   const onMapReady = (map) => {
@@ -308,7 +357,7 @@ export default function App() {
     try {
       await addGeoJSONLayer(file);
     } catch (err) {
-      alert(`Import failed: ${err.message}`);
+      showStatus('error', `Import failed: ${err.message}`);
     } finally {
       e.target.value = '';
     }
@@ -321,7 +370,7 @@ export default function App() {
       const dataUrl = await readFileAsDataURL(file);
       updateLayout({ logo: dataUrl });
     } catch (err) {
-      alert(`Logo import failed: ${err.message}`);
+      showStatus('error', `Logo import failed: ${err.message}`);
     } finally {
       e.target.value = '';
     }
@@ -334,7 +383,7 @@ export default function App() {
       const dataUrl = await readFileAsDataURL(file);
       updateLayout({ insetImage: dataUrl, insetMode: 'custom_image', insetEnabled: true });
     } catch (err) {
-      alert(`Inset import failed: ${err.message}`);
+      showStatus('error', `Inset import failed: ${err.message}`);
     } finally {
       e.target.value = '';
     }
@@ -444,11 +493,52 @@ export default function App() {
       } else {
         await exportSVG(scene, project.layout?.exportSettings || {});
       }
+      showStatus('success', `Exported as ${project.layout?.exportSettings?.filename || 'map'}.${format}`);
     } catch (err) {
-      alert(`Export failed: ${err.message}`);
+      showStatus('error', `Export failed: ${err.message}`);
     } finally {
       setExporting(false);
     }
+  };
+
+  const handleExportProject = () => {
+    try {
+      const json = JSON.stringify(project, null, 2);
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${project.layout?.exportSettings?.filename || 'project'}.mapviewer.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showStatus('success', 'Project saved.');
+    } catch (err) {
+      showStatus('error', `Save failed: ${err.message}`);
+    }
+  };
+
+  const handleImportProject = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      if (!parsed?.layers || !parsed?.layout) throw new Error('Not a valid .mapviewer.json file');
+      setProject(parsed);
+      setSelectedLayerId(null);
+      showStatus('success', 'Project loaded.');
+    } catch (err) {
+      showStatus('error', `Load failed: ${err.message}`);
+    } finally {
+      e.target.value = '';
+    }
+  };
+
+  const handleNewProject = () => {
+    const base = createInitialProjectState();
+    setProject({ ...base, layout: { ...base.layout, title: 'New Project', subtitle: '' } });
+    setSelectedLayerId(null);
+    try { localStorage.removeItem('mapviewer2_autosave'); } catch { /* noop */ }
   };
 
   const referenceOverlays = project.layout.referenceOverlays || {};
@@ -460,235 +550,324 @@ export default function App() {
         <p className="sidebar-subtitle">Template-driven geology figure generator</p>
 
         <section className="control-section">
-          <h2>Template</h2>
-          <div className="control-grid">
-            <div className="control-row">
-              <label>Template</label>
-              <select value={project.layout.templateId} onChange={(e) => updateLayout({ templateId: e.target.value })}>
-                <option value="technical_results_v2">technical_results_v2</option>
-              </select>
-            </div>
-            <div className="control-row">
-              <label>Mode</label>
-              <select value={project.layout.mode} onChange={(e) => applyMode(e.target.value)}>
-                {Object.entries(TEMPLATE_MODES).map(([value, label]) => (
-                  <option key={value} value={value}>{label}</option>
-                ))}
-              </select>
-            </div>
-            <div className="control-row">
-              <label>Design Theme</label>
-              <select value={project.layout.themeId || 'modern_rounded'} onChange={(e) => updateLayout({ themeId: e.target.value })}>
-                {Object.entries(TEMPLATE_THEMES).map(([value, label]) => (
-                  <option key={value} value={value}>{label}</option>
-                ))}
-              </select>
-            </div>
-            <div className="control-row">
-              <label>Composition</label>
-              <select value={project.layout.compositionPreset} onChange={(e) => updateLayout({ compositionPreset: e.target.value, frameVersion: (project.layout.frameVersion || 0) + 1 })}>
-                {Object.entries(COMPOSITION_PRESETS).map(([value, label]) => (
-                  <option key={value} value={value}>{label}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-        </section>
-
-        <section className="control-section">
-          <h2>Map Content</h2>
-          <div className="control-grid">
-            <div className="control-row"><label>Company Name</label><input value={project.layout.companyName || ''} onChange={(e) => updateLayout({ companyName: e.target.value })} /></div>
-            <div className="control-row inline-2">
-              <div><label>Tagline</label><input value={project.layout.tagline || ''} onChange={(e) => updateLayout({ tagline: e.target.value })} /></div>
-              <div><label>Ticker</label><input value={project.layout.tickerSymbol || ''} onChange={(e) => updateLayout({ tickerSymbol: e.target.value })} /></div>
-            </div>
-            <div className="control-row"><label>Title</label><input value={project.layout.title} onChange={(e) => updateLayout({ title: e.target.value })} /></div>
-            <div className="control-row"><label>Subtitle</label><input value={project.layout.subtitle} onChange={(e) => updateLayout({ subtitle: e.target.value })} /></div>
-            <div className="control-row inline-2">
-              <div>
-                <label>Basemap</label>
-                <select value={project.layout.basemap} onChange={(e) => updateLayout({ basemap: e.target.value })}>
-                  <option value="light">Light</option>
-                  <option value="satellite">Satellite</option>
-                  <option value="topo">Topo</option>
-                  <option value="dark">Dark</option>
+          <h2 className="section-header" onClick={() => toggleSection('template')}>
+            Template <span className={`section-chevron ${collapsed.template ? 'collapsed' : ''}`}>▾</span>
+          </h2>
+          <div className={`section-body ${collapsed.template ? 'hidden' : ''}`}>
+            <div className="control-grid">
+              <div className="control-row">
+                <label>Template</label>
+                <select value={project.layout.templateId} onChange={(e) => updateLayout({ templateId: e.target.value })}>
+                  <option value="technical_results_v2">technical_results_v2</option>
                 </select>
               </div>
-              <div>
-                <label>Inset Mode</label>
-                <select value={project.layout.insetMode} onChange={(e) => updateLayout({ insetMode: e.target.value, insetEnabled: true })}>
-                  {Object.entries(INSET_MODES).map(([value, label]) => (
+              <div className="control-row">
+                <label>Mode</label>
+                <select value={project.layout.mode} onChange={(e) => applyMode(e.target.value)}>
+                  {Object.entries(TEMPLATE_MODES).map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="control-row">
+                <label>Design Theme</label>
+                <select value={project.layout.themeId || 'modern_rounded'} onChange={(e) => updateLayout({ themeId: e.target.value })}>
+                  {Object.entries(TEMPLATE_THEMES).map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="control-row">
+                <label>Composition</label>
+                <select value={project.layout.compositionPreset} onChange={(e) => updateLayout({ compositionPreset: e.target.value, frameVersion: (project.layout.frameVersion || 0) + 1 })}>
+                  {Object.entries(COMPOSITION_PRESETS).map(([value, label]) => (
                     <option key={value} value={value}>{label}</option>
                   ))}
                 </select>
               </div>
             </div>
-            <div className="control-row inline-2">
-              <div>
-                <label>Logo Size</label>
-                <input type="range" min="0.7" max="1.5" step="0.05" value={project.layout.logoScale || 1} onChange={(e) => updateLayout({ logoScale: Number(e.target.value) })} />
-              </div>
-              <div className="small-note range-value">{Math.round((project.layout.logoScale || 1) * 100)}%</div>
-            </div>
-            <div className="control-row"><label>Footer / Source Note</label><input value={project.layout.footerText || ''} onChange={(e) => updateLayout({ footerText: e.target.value })} /></div>
-            <div className="control-row"><label>Legend Note</label><input value={project.layout.legendNote || ''} onChange={(e) => updateLayout({ legendNote: e.target.value })} placeholder="e.g. Au equivalent oxide definitions" /></div>
-            <div className="button-row three">
-              <button className="btn primary" type="button" onClick={() => fileInputRef.current?.click()}>Import Layer</button>
-              <button className="btn" type="button" onClick={() => logoInputRef.current?.click()}>Upload Logo</button>
-              <button className="btn" type="button" onClick={() => insetInputRef.current?.click()}>Upload Inset</button>
-            </div>
-            <input ref={fileInputRef} type="file" accept=".zip,.geojson,.json" onChange={handleFileChange} hidden />
-            <input ref={logoInputRef} type="file" accept="image/*" onChange={handleLogoChange} hidden />
-            <input ref={insetInputRef} type="file" accept="image/*" onChange={handleInsetImageChange} hidden />
           </div>
         </section>
 
         <section className="control-section">
-          <h2>Reference Overlays</h2>
-          <div className="toggle-grid">
-            <label className="toggle-row"><input type="checkbox" checked={referenceOverlays.context} onChange={(e) => updateLayout({ referenceOverlays: { context: e.target.checked } })} /> <span>Roads / Water / Towns</span></label>
-            <label className="toggle-row"><input type="checkbox" checked={referenceOverlays.labels} onChange={(e) => updateLayout({ referenceOverlays: { labels: e.target.checked } })} /> <span>Reference Labels</span></label>
-            <label className="toggle-row"><input type="checkbox" checked={referenceOverlays.rail} onChange={(e) => updateLayout({ referenceOverlays: { rail: e.target.checked } })} /> <span>Railways</span></label>
-          </div>
-          <div className="control-row" style={{ marginTop: 10 }}>
-            <label>Reference Opacity</label>
-            <input type="range" min="0.25" max="1" step="0.05" value={project.layout.referenceOpacity || 0.65} onChange={(e) => updateLayout({ referenceOpacity: Number(e.target.value) })} />
-          </div>
-        </section>
-
-        <section className="control-section">
-          <h2>Template Layout</h2>
-          <div className="control-grid">
-            <div className="control-row inline-2">
-              <div>
-                <label>Legend</label>
-                <select value={project.layout.legendMode} onChange={(e) => updateLayout({ legendMode: e.target.value })}>
-                  <option value="auto">Auto</option>
-                  <option value="compact">Compact</option>
-                  <option value="full">Full</option>
-                </select>
+          <h2 className="section-header" onClick={() => toggleSection('content')}>
+            Map Content <span className={`section-chevron ${collapsed.content ? 'collapsed' : ''}`}>▾</span>
+          </h2>
+          <div className={`section-body ${collapsed.content ? 'hidden' : ''}`}>
+            <div className="control-grid">
+              <div className="control-row"><label>Company Name</label><input value={project.layout.companyName || ''} onChange={(e) => updateLayout({ companyName: e.target.value })} /></div>
+              <div className="control-row inline-2">
+                <div><label>Tagline</label><input value={project.layout.tagline || ''} onChange={(e) => updateLayout({ tagline: e.target.value })} /></div>
+                <div><label>Ticker</label><input value={project.layout.tickerSymbol || ''} onChange={(e) => updateLayout({ tickerSymbol: e.target.value })} /></div>
               </div>
-              <div>
-                <label>Title Width</label>
-                <select value={project.layout.titleWidth} onChange={(e) => updateLayout({ titleWidth: e.target.value, frameVersion: (project.layout.frameVersion || 0) + 1 })}>
-                  <option value="standard">Standard</option>
-                  <option value="wide">Wide</option>
-                </select>
-              </div>
-            </div>
-            <div className="control-row inline-2">
-              <div>
-                <label>Inset Size</label>
-                <select value={project.layout.insetSize} onChange={(e) => updateLayout({ insetSize: e.target.value, insetEnabled: true, frameVersion: (project.layout.frameVersion || 0) + 1 })}>
-                  <option value="small">Small</option>
-                  <option value="medium">Medium</option>
-                  <option value="large">Large</option>
-                </select>
-              </div>
-              <div>
-                <label>Panels</label>
-                <div className="toggle-stack">
-                  <label className="toggle-row"><input type="checkbox" checked={project.layout.insetEnabled !== false} onChange={(e) => updateLayout({ insetEnabled: e.target.checked, frameVersion: (project.layout.frameVersion || 0) + 1 })} /> <span>Show Inset</span></label>
-                  <label className="toggle-row"><input type="checkbox" checked={project.layout.footerEnabled !== false} onChange={(e) => updateLayout({ footerEnabled: e.target.checked, frameVersion: (project.layout.frameVersion || 0) + 1 })} /> <span>Show Footer</span></label>
+              <div className="control-row"><label>Title</label><input value={project.layout.title} onChange={(e) => updateLayout({ title: e.target.value })} /></div>
+              <div className="control-row"><label>Subtitle</label><input value={project.layout.subtitle} onChange={(e) => updateLayout({ subtitle: e.target.value })} /></div>
+              <div className="control-row inline-2">
+                <div>
+                  <label>Basemap</label>
+                  <select value={project.layout.basemap} onChange={(e) => updateLayout({ basemap: e.target.value })}>
+                    <option value="light">Light</option>
+                    <option value="satellite">Satellite</option>
+                    <option value="topo">Topo</option>
+                    <option value="dark">Dark</option>
+                  </select>
+                </div>
+                <div>
+                  <label>Inset Mode</label>
+                  <select value={project.layout.insetMode} onChange={(e) => updateLayout({ insetMode: e.target.value, insetEnabled: true })}>
+                    {Object.entries(INSET_MODES).map(([value, label]) => (
+                      <option key={value} value={value}>{label}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
-            </div>
-          </div>
-        </section>
-
-        <section className="control-section">
-          <h2>Layers</h2>
-          <LayerList layers={project.layers} selectedLayerId={selectedLayerId} onSelect={setSelectedLayerId} onToggleVisible={toggleLayerVisible} />
-          {selectedLayer ? (
-            <div className="control-grid" style={{ marginTop: 10 }}>
-              <div className="control-row">
-                <label>Display Label</label>
-                <input value={selectedLayer.displayName || selectedLayer.legend?.label || ''} onChange={(e) => setDisplayLabel(selectedLayer.id, e.target.value)} />
+              <div className="control-row inline-2">
+                <div>
+                  <label>Logo Size</label>
+                  <input type="range" min="0.7" max="1.5" step="0.05" value={project.layout.logoScale || 1} onChange={(e) => updateLayout({ logoScale: Number(e.target.value) })} />
+                </div>
+                <div className="small-note range-value">{Math.round((project.layout.logoScale || 1) * 100)}%</div>
               </div>
-              <div className="control-row">
-                <label>Layer Role</label>
-                <select value={selectedLayer.role} onChange={(e) => changeLayerRole(selectedLayer.id, e.target.value)}>
-                  {Object.entries(ROLE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                </select>
-              </div>
+              <div className="control-row"><label>Footer / Source Note</label><input value={project.layout.footerText || ''} onChange={(e) => updateLayout({ footerText: e.target.value })} /></div>
+              <div className="control-row"><label>Legend Note</label><input value={project.layout.legendNote || ''} onChange={(e) => updateLayout({ legendNote: e.target.value })} placeholder="e.g. Au equivalent oxide definitions" /></div>
               <div className="button-row three">
-                <button className="secondary-btn" type="button" onClick={() => moveLayer(selectedLayer.id, 'down')}>Move Down</button>
-                <button className={`secondary-btn ${project.layout.primaryLayerId === selectedLayer.id ? 'active-toggle' : ''}`} type="button" onClick={() => setFramingLayer(selectedLayer.id)}>
-                  {project.layout.primaryLayerId === selectedLayer.id ? 'Framing Layer' : 'Use for Framing'}
-                </button>
-                <button className="secondary-btn" type="button" onClick={() => moveLayer(selectedLayer.id, 'up')}>Move Up</button>
+                <button className="btn primary" type="button" onClick={() => fileInputRef.current?.click()}>Import Layer</button>
+                <button className="btn" type="button" onClick={() => logoInputRef.current?.click()}>Upload Logo</button>
+                <button className="btn" type="button" onClick={() => insetInputRef.current?.click()}>Upload Inset</button>
               </div>
+              <input ref={fileInputRef} type="file" accept=".zip,.geojson,.json" onChange={handleFileChange} hidden />
+              <input ref={logoInputRef} type="file" accept="image/*" onChange={handleLogoChange} hidden />
+              <input ref={insetInputRef} type="file" accept="image/*" onChange={handleInsetImageChange} hidden />
             </div>
-          ) : <p className="small-note">Select a layer to edit its display label, role, and order.</p>}
-        </section>
-
-        <section className="control-section">
-          <h2>Callouts</h2>
-          <div className="button-row" style={{ marginBottom: 10 }}>
-            <button className="btn primary" type="button" onClick={addCalloutFromSelectedLayer} disabled={!selectedLayer}>Add From Selected Layer</button>
-            <button className="btn" type="button" onClick={autoFrameAll}>Auto Frame All</button>
-          </div>
-          <div className="callout-list">
-            {project.callouts.map((callout, index) => (
-              <div key={callout.id} className="callout-card">
-                <div className="callout-card-header">
-                  <span>Callout {index + 1}</span>
-                  <button className="secondary-btn" type="button" onClick={() => removeCallout(callout.id)}>Remove</button>
-                </div>
-                <div className="control-grid">
-                  <div className="control-row"><label>Text</label><input value={callout.text} onChange={(e) => updateCallout(callout.id, { text: e.target.value })} /></div>
-                  <div className="control-row inline-2">
-                    <div>
-                      <label>Type</label>
-                      <select value={callout.type} onChange={(e) => updateCallout(callout.id, { type: e.target.value })}>
-                        {Object.entries(CALLOUT_TYPES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label>Priority</label>
-                      <select value={callout.priority} onChange={(e) => updateCallout(callout.id, { priority: Number(e.target.value) })}>
-                        <option value={1}>High</option>
-                        <option value={2}>Medium</option>
-                        <option value={3}>Low</option>
-                      </select>
-                    </div>
-                  </div>
-                  <div className="control-label">Nudge</div>
-                  <div className="nudge-grid">
-                    <span />
-                    <button className="secondary-btn" type="button" onClick={() => nudgeCallout(callout.id, 0, -8)}>↑</button>
-                    <span />
-                    <button className="secondary-btn" type="button" onClick={() => nudgeCallout(callout.id, -8, 0)}>←</button>
-                    <button className="secondary-btn" type="button" onClick={() => nudgeCallout(callout.id, 0, 8)}>↓</button>
-                    <button className="secondary-btn" type="button" onClick={() => nudgeCallout(callout.id, 8, 0)}>→</button>
-                  </div>
-                </div>
-              </div>
-            ))}
           </div>
         </section>
 
         <section className="control-section">
-          <h2>Export</h2>
-          <div className="control-grid">
-            <div className="control-row inline-2">
-              <div>
-                <label>Filename</label>
-                <input value={project.layout.exportSettings.filename} onChange={(e) => updateLayout({ exportSettings: { filename: e.target.value } })} />
+          <h2 className="section-header" onClick={() => toggleSection('overlays')}>
+            Reference Overlays <span className={`section-chevron ${collapsed.overlays ? 'collapsed' : ''}`}>▾</span>
+          </h2>
+          <div className={`section-body ${collapsed.overlays ? 'hidden' : ''}`}>
+            <div className="toggle-grid">
+              <label className="toggle-row"><input type="checkbox" checked={referenceOverlays.context} onChange={(e) => updateLayout({ referenceOverlays: { context: e.target.checked } })} /> <span>Roads / Water / Towns</span></label>
+              <label className="toggle-row"><input type="checkbox" checked={referenceOverlays.labels} onChange={(e) => updateLayout({ referenceOverlays: { labels: e.target.checked } })} /> <span>Reference Labels</span></label>
+              <label className="toggle-row"><input type="checkbox" checked={referenceOverlays.rail} onChange={(e) => updateLayout({ referenceOverlays: { rail: e.target.checked } })} /> <span>Railways</span></label>
+            </div>
+            <div className="control-row" style={{ marginTop: 10 }}>
+              <label>Reference Opacity</label>
+              <input type="range" min="0.25" max="1" step="0.05" value={project.layout.referenceOpacity || 0.65} onChange={(e) => updateLayout({ referenceOpacity: Number(e.target.value) })} />
+            </div>
+          </div>
+        </section>
+
+        <section className="control-section">
+          <h2 className="section-header" onClick={() => toggleSection('layout')}>
+            Template Layout <span className={`section-chevron ${collapsed.layout ? 'collapsed' : ''}`}>▾</span>
+          </h2>
+          <div className={`section-body ${collapsed.layout ? 'hidden' : ''}`}>
+            <div className="control-grid">
+              <div className="control-row inline-2">
+                <div>
+                  <label>Legend</label>
+                  <select value={project.layout.legendMode} onChange={(e) => updateLayout({ legendMode: e.target.value })}>
+                    <option value="auto">Auto</option>
+                    <option value="compact">Compact</option>
+                    <option value="full">Full</option>
+                  </select>
+                </div>
+                <div>
+                  <label>Title Width</label>
+                  <select value={project.layout.titleWidth} onChange={(e) => updateLayout({ titleWidth: e.target.value, frameVersion: (project.layout.frameVersion || 0) + 1 })}>
+                    <option value="standard">Standard</option>
+                    <option value="wide">Wide</option>
+                  </select>
+                </div>
               </div>
-              <div>
-                <label>Scale</label>
-                <select value={project.layout.exportSettings.pixelRatio} onChange={(e) => updateLayout({ exportSettings: { pixelRatio: Number(e.target.value) } })}>
-                  <option value={1}>1x</option>
-                  <option value={2}>2x</option>
-                  <option value={3}>3x</option>
-                </select>
+              <div className="control-row inline-2">
+                <div>
+                  <label>Inset Size</label>
+                  <select value={project.layout.insetSize} onChange={(e) => updateLayout({ insetSize: e.target.value, insetEnabled: true, frameVersion: (project.layout.frameVersion || 0) + 1 })}>
+                    <option value="small">Small</option>
+                    <option value="medium">Medium</option>
+                    <option value="large">Large</option>
+                  </select>
+                </div>
+                <div>
+                  <label>Panels</label>
+                  <div className="toggle-stack">
+                    <label className="toggle-row"><input type="checkbox" checked={project.layout.insetEnabled !== false} onChange={(e) => updateLayout({ insetEnabled: e.target.checked, frameVersion: (project.layout.frameVersion || 0) + 1 })} /> <span>Show Inset</span></label>
+                    <label className="toggle-row"><input type="checkbox" checked={project.layout.footerEnabled !== false} onChange={(e) => updateLayout({ footerEnabled: e.target.checked, frameVersion: (project.layout.frameVersion || 0) + 1 })} /> <span>Show Footer</span></label>
+                  </div>
+                </div>
               </div>
             </div>
-            <div className="button-row">
-              <button className="btn primary" type="button" onClick={() => handleExport('png')} disabled={exporting}>Export PNG</button>
-              <button className="btn" type="button" onClick={() => handleExport('svg')} disabled={exporting}>Export SVG</button>
+          </div>
+        </section>
+
+        <section className="control-section">
+          <h2 className="section-header" onClick={() => toggleSection('layers')}>
+            Layers <span className={`section-chevron ${collapsed.layers ? 'collapsed' : ''}`}>▾</span>
+          </h2>
+          <div className={`section-body ${collapsed.layers ? 'hidden' : ''}`}>
+            <LayerList layers={project.layers} selectedLayerId={selectedLayerId} onSelect={setSelectedLayerId} onToggleVisible={toggleLayerVisible} onRemove={removeLayer} />
+            {selectedLayer ? (
+              <div className="control-grid" style={{ marginTop: 10 }}>
+                <div className="control-row">
+                  <label>Display Label</label>
+                  <input value={selectedLayer.displayName || selectedLayer.legend?.label || ''} onChange={(e) => setDisplayLabel(selectedLayer.id, e.target.value)} />
+                </div>
+                <div className="control-row">
+                  <label>Layer Role</label>
+                  <select value={selectedLayer.role} onChange={(e) => changeLayerRole(selectedLayer.id, e.target.value)}>
+                    {Object.entries(ROLE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                  </select>
+                </div>
+
+                {/* Style overrides */}
+                {selectedLayer.type === 'points' ? (
+                  <div className="style-panel">
+                    <div className="style-panel-title">Marker Style</div>
+                    <div className="control-row inline-2">
+                      <div>
+                        <label>Fill</label>
+                        <input type="color" value={selectedLayer.style?.markerFill || '#E03030'} onChange={(e) => updateLayer(selectedLayer.id, { style: { markerFill: e.target.value } })} />
+                      </div>
+                      <div>
+                        <label>Border</label>
+                        <input type="color" value={selectedLayer.style?.markerColor || '#1B3A6B'} onChange={(e) => updateLayer(selectedLayer.id, { style: { markerColor: e.target.value } })} />
+                      </div>
+                    </div>
+                    <div className="control-row inline-2">
+                      <div>
+                        <label>Size</label>
+                        <input type="range" min="3" max="16" step="1" value={selectedLayer.style?.markerSize || 6} onChange={(e) => updateLayer(selectedLayer.id, { style: { markerSize: Number(e.target.value) } })} />
+                      </div>
+                      <div className="small-note range-value">{selectedLayer.style?.markerSize || 6}px</div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="style-panel">
+                    <div className="style-panel-title">Fill &amp; Stroke</div>
+                    <div className="control-row inline-2">
+                      <div>
+                        <label>Fill</label>
+                        <input type="color" value={selectedLayer.style?.fill || '#3b82f6'} onChange={(e) => updateLayer(selectedLayer.id, { style: { fill: e.target.value } })} />
+                      </div>
+                      <div>
+                        <label>Stroke</label>
+                        <input type="color" value={selectedLayer.style?.stroke || '#1e40af'} onChange={(e) => updateLayer(selectedLayer.id, { style: { stroke: e.target.value } })} />
+                      </div>
+                    </div>
+                    <div className="control-row inline-2">
+                      <div>
+                        <label>Opacity</label>
+                        <input type="range" min="0" max="1" step="0.05" value={selectedLayer.style?.fillOpacity ?? 0.5} onChange={(e) => updateLayer(selectedLayer.id, { style: { fillOpacity: Number(e.target.value) } })} />
+                      </div>
+                      <div className="small-note range-value">{Math.round((selectedLayer.style?.fillOpacity ?? 0.5) * 100)}%</div>
+                    </div>
+                    <div className="control-row inline-2">
+                      <div>
+                        <label>Stroke Width</label>
+                        <input type="range" min="0.5" max="5" step="0.5" value={selectedLayer.style?.strokeWidth || 1.5} onChange={(e) => updateLayer(selectedLayer.id, { style: { strokeWidth: Number(e.target.value) } })} />
+                      </div>
+                      <div className="small-note range-value">{selectedLayer.style?.strokeWidth || 1.5}px</div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="button-row three">
+                  <button className="secondary-btn" type="button" onClick={() => moveLayer(selectedLayer.id, 'down')}>Move Down</button>
+                  <button className={`secondary-btn ${project.layout.primaryLayerId === selectedLayer.id ? 'active-toggle' : ''}`} type="button" onClick={() => setFramingLayer(selectedLayer.id)}>
+                    {project.layout.primaryLayerId === selectedLayer.id ? 'Framing Layer' : 'Use for Framing'}
+                  </button>
+                  <button className="secondary-btn" type="button" onClick={() => moveLayer(selectedLayer.id, 'up')}>Move Up</button>
+                </div>
+              </div>
+            ) : <p className="small-note">Select a layer to edit its display label, role, and style.</p>}
+          </div>
+        </section>
+
+        <section className="control-section">
+          <h2 className="section-header" onClick={() => toggleSection('callouts')}>
+            Callouts <span className={`section-chevron ${collapsed.callouts ? 'collapsed' : ''}`}>▾</span>
+          </h2>
+          <div className={`section-body ${collapsed.callouts ? 'hidden' : ''}`}>
+            <div className="button-row" style={{ marginBottom: 10 }}>
+              <button className="btn primary" type="button" onClick={addCalloutFromSelectedLayer} disabled={!selectedLayer}>Add From Selected Layer</button>
+              <button className="btn" type="button" onClick={autoFrameAll}>Auto Frame All</button>
+            </div>
+            <div className="callout-list">
+              {project.callouts.map((callout, index) => (
+                <div key={callout.id} className="callout-card">
+                  <div className="callout-card-header">
+                    <span>Callout {index + 1}</span>
+                    <button className="secondary-btn" type="button" onClick={() => removeCallout(callout.id)}>Remove</button>
+                  </div>
+                  <div className="control-grid">
+                    <div className="control-row"><label>Text</label><input value={callout.text} onChange={(e) => updateCallout(callout.id, { text: e.target.value })} /></div>
+                    <div className="control-row inline-2">
+                      <div>
+                        <label>Type</label>
+                        <select value={callout.type} onChange={(e) => updateCallout(callout.id, { type: e.target.value })}>
+                          {Object.entries(CALLOUT_TYPES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label>Priority</label>
+                        <select value={callout.priority} onChange={(e) => updateCallout(callout.id, { priority: Number(e.target.value) })}>
+                          <option value={1}>High</option>
+                          <option value={2}>Medium</option>
+                          <option value={3}>Low</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div className="control-label">Nudge</div>
+                    <div className="nudge-grid">
+                      <span />
+                      <button className="secondary-btn" type="button" onClick={() => nudgeCallout(callout.id, 0, -8)}>↑</button>
+                      <span />
+                      <button className="secondary-btn" type="button" onClick={() => nudgeCallout(callout.id, -8, 0)}>←</button>
+                      <button className="secondary-btn" type="button" onClick={() => nudgeCallout(callout.id, 0, 8)}>↓</button>
+                      <button className="secondary-btn" type="button" onClick={() => nudgeCallout(callout.id, 8, 0)}>→</button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="control-section">
+          <h2 className="section-header" onClick={() => toggleSection('export')}>
+            Export <span className={`section-chevron ${collapsed.export ? 'collapsed' : ''}`}>▾</span>
+          </h2>
+          <div className={`section-body ${collapsed.export ? 'hidden' : ''}`}>
+            <div className="control-grid">
+              <div className="control-row inline-2">
+                <div>
+                  <label>Filename</label>
+                  <input value={project.layout.exportSettings.filename} onChange={(e) => updateLayout({ exportSettings: { filename: e.target.value } })} />
+                </div>
+                <div>
+                  <label>Scale</label>
+                  <select value={project.layout.exportSettings.pixelRatio} onChange={(e) => updateLayout({ exportSettings: { pixelRatio: Number(e.target.value) } })}>
+                    <option value={1}>1x</option>
+                    <option value={2}>2x</option>
+                    <option value={3}>3x</option>
+                  </select>
+                </div>
+              </div>
+              <div className="button-row">
+                <button className="btn primary" type="button" onClick={() => handleExport('png')} disabled={exporting}>{exporting ? 'Exporting…' : 'Export PNG'}</button>
+                <button className="btn" type="button" onClick={() => handleExport('svg')} disabled={exporting}>Export SVG</button>
+              </div>
+              <div className="section-divider" />
+              <div className="button-row three">
+                <button className="btn" type="button" onClick={handleNewProject}>New Project</button>
+                <button className="btn" type="button" onClick={handleExportProject}>Save Project</button>
+                <button className="btn" type="button" onClick={() => importProjectInputRef.current?.click()}>Load Project</button>
+              </div>
+              <input ref={importProjectInputRef} type="file" accept=".json" onChange={handleImportProject} hidden />
+              {statusMsg ? <div className={`status-msg ${statusMsg.type}`}>{statusMsg.text}</div> : null}
             </div>
           </div>
         </section>

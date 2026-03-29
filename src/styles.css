@@ -44,6 +44,8 @@ button, input, select, textarea { font: inherit; }
   margin: 0 0 10px;
   font-size: 14px;
 }
+.control-section h2.section-header { margin: 0; }
+.section-body { margin-top: 10px; }
 .control-grid { display: grid; gap: 10px; }
 .control-row { display: grid; gap: 6px; }
 .control-row.inline-2 { grid-template-columns: 1fr 1fr; gap: 8px; align-items: start; }
@@ -113,6 +115,37 @@ button, input, select, textarea { font: inherit; }
 }
 .layer-visibility.on { background: rgba(34,197,94,0.16); color: #96e4aa; }
 .layer-visibility.off { background: rgba(248,113,113,0.18); color: #ffb1b1; }
+.layer-color-swatch {
+  width: 12px; height: 12px; border-radius: 3px; border: 1.5px solid; flex-shrink: 0;
+}
+.layer-delete {
+  font-size: 16px; line-height: 1; color: #7f92ad; padding: 2px 6px; border-radius: 6px;
+  cursor: pointer; flex-shrink: 0; transition: color 0.15s, background 0.15s;
+}
+.layer-delete:hover { color: #f87171; background: rgba(248,113,113,0.12); }
+
+/* Collapsible sidebar sections */
+.section-header {
+  cursor: pointer; display: flex; justify-content: space-between; align-items: center;
+  user-select: none;
+}
+.section-chevron { font-size: 14px; transition: transform 0.18s; display: inline-block; }
+.section-chevron.collapsed { transform: rotate(-90deg); }
+.section-body.hidden { display: none; }
+.section-divider { border: none; border-top: 1px solid rgba(255,255,255,0.08); margin: 4px 0; }
+
+/* Layer style panel */
+.style-panel {
+  background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 8px; padding: 10px; display: grid; gap: 8px;
+}
+.style-panel-title { font-size: 11px; font-weight: 700; color: #9fb0c8; text-transform: uppercase; letter-spacing: 0.08em; }
+.style-panel input[type="color"] { width: 36px; height: 28px; padding: 2px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.15); cursor: pointer; background: none; }
+
+/* Status toast */
+.status-msg { padding: 8px 12px; border-radius: 8px; font-size: 12px; margin-top: 6px; }
+.status-msg.success { background: rgba(34,197,94,0.14); color: #4ade80; }
+.status-msg.error { background: rgba(248,113,113,0.14); color: #f87171; }
 
 .callout-list { display: grid; gap: 8px; }
 .callout-card {
