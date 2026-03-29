@@ -16,6 +16,7 @@ import {
 } from './projectState';
 import { applyRoleToLayer, inferRoleFromLayer } from './mapPresets';
 import { getTemplate, TEMPLATE_PRESETS } from './templates';
+import LandingPage from './components/LandingPage';
 import { buildLegendItems, resolveTemplateZones } from './templates/technicalResultsTemplate';
 import { geojsonCenter } from './utils/geometry';
 import { cleanLayerName } from './utils/cleanLayerName';
@@ -166,6 +167,11 @@ export default function App() {
   const [activePreset, setActivePreset] = useState('investor');
   const [isLoading, setIsLoading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
+  const [view, setView] = useState(() => {
+    const saved = loadSavedState();
+    return saved?.layers?.length > 0 ? 'editor' : 'landing';
+  });
+  const [editorEntering, setEditorEntering] = useState(false);
 
   const template = useMemo(() => getTemplate(project.layout?.templateId || 'technical_results_v2'), [project.layout?.templateId]);
   const selectedLayer = useMemo(() => project.layers.find((layer) => layer.id === selectedLayerId) || null, [project.layers, selectedLayerId]);
@@ -489,6 +495,28 @@ export default function App() {
     }
   };
 
+  const handleLandingFileDrop = async (file) => {
+    if (!file) return;
+    try {
+      await addGeoJSONLayer(file);
+      setEditorEntering(true);
+      setView('editor');
+    } catch (err) {
+      alert(`Import failed: ${err.message}`);
+    }
+  };
+
+  const handleLandingTemplateSelect = (presetId) => {
+    applyTemplatePreset(presetId);
+    setEditorEntering(true);
+    setView('editor');
+  };
+
+  const handleLandingContinue = () => {
+    setEditorEntering(true);
+    setView('editor');
+  };
+
   const clearAndReset = () => {
     if (!window.confirm('Clear all layers and start over?')) return;
     localStorage.removeItem('explorationmaps_state');
@@ -506,12 +534,31 @@ export default function App() {
     });
     setSelectedLayerId(null);
     setActivePreset('investor');
+    setView('landing');
+    setEditorEntering(false);
   };
 
   const referenceOverlays = project.layout.referenceOverlays || {};
 
+  if (view === 'landing') {
+    return (
+      <LandingPage
+        onFileDrop={handleLandingFileDrop}
+        onFileChange={handleFileChange}
+        onTemplateSelect={handleLandingTemplateSelect}
+        onContinue={handleLandingContinue}
+        hasSavedLayers={project.layers.length > 0}
+        isLoading={isLoading}
+        fileInputRef={fileInputRef}
+      />
+    );
+  }
+
   return (
-    <div className="app-shell">
+    <div
+      className={`app-shell${editorEntering ? ' entering' : ''}`}
+      onAnimationEnd={() => setEditorEntering(false)}
+    >
       {/* ── Top bar ── */}
       <div className="top-bar">
         <div className="top-bar-brand">

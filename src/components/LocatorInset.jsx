@@ -34,9 +34,6 @@ function normalize(visibleBounds, referenceBounds) {
 function buildBackdrop() {
   return {
     stateShape: 'M10,54 C12,34 26,14 46,12 C64,10 80,18 88,34 C92,42 92,56 88,66 C80,84 56,92 34,88 C18,84 8,72 10,54 Z',
-    countyLines: [
-      'M18 28 L78 28', 'M16 44 L84 44', 'M18 60 L82 60', 'M26 20 L26 82', 'M44 18 L44 84', 'M60 18 L60 82', 'M76 22 L76 76',
-    ],
     highways: ['M16 68 C34 62, 52 62, 82 58', 'M58 18 C54 34, 54 48, 56 84'],
     river: 'M10 40 C22 38, 28 48, 40 46 S64 28, 76 34 S88 58, 94 52',
   };
@@ -73,36 +70,23 @@ export default function LocatorInset({ layers, insetMode, mode, insetImage, zone
             </linearGradient>
           </defs>
           <rect x="0" y="0" width="100" height="100" rx="8" fill="url(#locatorBg)" stroke="#d3dce8" />
-          <path d={backdrop.stateShape} fill="#eef3f8" stroke="#c9d4df" strokeWidth="1" />
-          {backdrop.countyLines.map((path, index) => (
-            <path key={index} d={path} fill="none" stroke="#d4dce6" strokeWidth="0.9" />
-          ))}
+          <path d={backdrop.stateShape} fill="#e8f0f8" stroke="#b8cce0" strokeWidth="1.2" />
           {backdrop.highways.map((path, index) => (
-            <path key={index} d={path} fill="none" stroke="#cad5e2" strokeWidth="1.5" strokeLinecap="round" />
+            <path key={index} d={path} fill="none" stroke="#c8d8e8" strokeWidth="1.2" strokeLinecap="round" />
           ))}
-          <path d={backdrop.river} fill="none" stroke="#b5d8f7" strokeWidth="1.8" strokeLinecap="round" />
-          {marker ? (
-            <>
-              <rect
-                x={Math.max(10, marker.x)}
-                y={Math.max(10, marker.y)}
-                width={Math.max(8, marker.w)}
-                height={Math.max(8, marker.h)}
-                fill="rgba(96,165,250,0.15)"
-                stroke="#2563eb"
-                strokeWidth="1.4"
-                rx="2"
-              />
-              <circle
-                cx={Math.min(92, Math.max(8, marker.x + marker.w / 2))}
-                cy={Math.min(92, Math.max(8, marker.y + marker.h / 2))}
-                r="3.2"
-                fill="#0f2c56"
-                stroke="#ffffff"
-                strokeWidth="1.2"
-              />
-            </>
-          ) : null}
+          <path d={backdrop.river} fill="none" stroke="#a8d0f0" strokeWidth="1.5" strokeLinecap="round" />
+          {marker ? (() => {
+            const cx = Math.min(90, Math.max(10, marker.x + marker.w / 2));
+            const cy = Math.min(90, Math.max(10, marker.y + marker.h / 2));
+            return (
+              <>
+                {/* Halo ring */}
+                <circle cx={cx} cy={cy} r="7" fill="rgba(37,99,235,0.12)" stroke="rgba(37,99,235,0.3)" strokeWidth="1" />
+                {/* Dot */}
+                <circle cx={cx} cy={cy} r="3.8" fill="#1a5276" stroke="#ffffff" strokeWidth="1.5" />
+              </>
+            );
+          })() : null}
         </svg>
       )}
       <div className="inset-mode-label">{showCustom ? INSET_MODES.custom_image : referenceBounds?.label || 'Project in State'}</div>
