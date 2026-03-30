@@ -22,6 +22,7 @@ import { geojsonCenter } from './utils/geometry';
 import { cleanLayerName } from './utils/cleanLayerName';
 import { fitProjectToTemplate } from './utils/frameMapForTemplate';
 import { getThemeTokens } from './utils/themeTokens';
+import { DEMO_LAYERS } from './demoData';
 
 function detectLayerKind(geojson) {
   if (!geojson) return 'geojson';
@@ -172,6 +173,9 @@ export default function App() {
     return saved?.layers?.length > 0 ? 'editor' : 'landing';
   });
   const [editorEntering, setEditorEntering] = useState(false);
+  const [activeTab, setActiveTab] = useState('layers');
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const exportMenuRef = useRef(null);
 
   const template = useMemo(() => getTemplate(project.layout?.templateId || 'technical_results_v2'), [project.layout?.templateId]);
   const selectedLayer = useMemo(() => project.layers.find((layer) => layer.id === selectedLayerId) || null, [project.layers, selectedLayerId]);
@@ -495,6 +499,61 @@ export default function App() {
     }
   };
 
+  // Close export dropdown on outside click
+  useEffect(() => {
+    if (!showExportMenu) return undefined;
+    const handler = (e) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target)) {
+        setShowExportMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showExportMenu]);
+
+  const handleDemoLoad = () => {
+    const layers = DEMO_LAYERS.map((spec) => {
+      const id = crypto.randomUUID();
+      const kind = detectLayerKind(spec.geojson);
+      const displayName = cleanLayerName(spec.name, spec.role);
+      return applyRoleToLayer(
+        {
+          id,
+          name: spec.name,
+          sourceName: 'demo',
+          displayName,
+          type: kind,
+          visible: true,
+          role: spec.role,
+          geojson: spec.geojson,
+          legend: { enabled: true, label: displayName },
+        },
+        spec.role
+      );
+    });
+    const firstId = layers[0]?.id || null;
+    const preset = TEMPLATE_PRESETS['investor'];
+    setActivePreset('investor');
+    setProject((prev) => ({
+      ...prev,
+      layers,
+      layout: {
+        ...prev.layout,
+        title: 'Lightning Creek Property',
+        subtitle: 'British Columbia, Canada',
+        themeId: preset?.themeId || 'investor_clean',
+        basemap: preset?.basemap || 'light',
+        mode: preset?.mode || 'regional_claims',
+        referenceOverlays: preset?.referenceOverlays || { context: true, labels: true, rail: false },
+        referenceOpacity: preset?.referenceOpacity || 0.35,
+        primaryLayerId: firstId,
+        frameVersion: (prev.layout.frameVersion || 0) + 1,
+      },
+    }));
+    setEditorEntering(true);
+    setView('editor');
+  };
+
   const handleLandingFileDrop = async (file) => {
     if (!file) return;
     try {
@@ -547,6 +606,7 @@ export default function App() {
         onFileChange={handleFileChange}
         onTemplateSelect={handleLandingTemplateSelect}
         onContinue={handleLandingContinue}
+        onDemoLoad={handleDemoLoad}
         hasSavedLayers={project.layers.length > 0}
         isLoading={isLoading}
         fileInputRef={fileInputRef}
@@ -580,226 +640,370 @@ export default function App() {
         </div>
 
         <div className="top-bar-actions">
-          <button className="improve-btn" type="button" onClick={handleImproveMap}>
-            Improve Map
+          <button
+            className="secondary-action-btn"
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+          >
+            + Upload Layer
           </button>
-          <button className="export-btn" type="button" onClick={() => handleExport('png')} disabled={exporting}>
-            {exporting ? 'Exporting…' : 'Export PNG'}
-          </button>
-          <button className="export-btn secondary" type="button" onClick={() => handleExport('svg')} disabled={exporting}>
-            SVG
-          </button>
+          <div className="export-dropdown-wrap" ref={exportMenuRef}>
+            <div className="export-split-btn">
+              <button
+                className="export-btn-primary"
+                type="button"
+                onClick={() => handleExport('png')}
+                disabled={exporting}
+              >
+                {exporting ? 'Exporting…' : 'Export PNG'}
+              </button>
+              <button
+                className="export-btn-chevron"
+                type="button"
+                onClick={() => setShowExportMenu((v) => !v)}
+              >
+                ▾
+              </button>
+            </div>
+            {showExportMenu && (
+              <div className="export-menu">
+                <button
+                  type="button"
+                  onClick={() => { handleExport('png'); setShowExportMenu(false); }}
+                >
+                  PNG — Screen / Web (2×)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { handleExport('svg'); setShowExportMenu(false); }}
+                >
+                  SVG — Print quality
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
       {/* ── Sidebar ── */}
       <Sidebar>
-        <section className="control-section">
-          <h2>Map Details</h2>
-          <div className="control-grid">
-            <div className="control-row">
-              <label>Title</label>
-              <input value={project.layout.title} onChange={(e) => updateLayout({ title: e.target.value })} />
-            </div>
-            <div className="control-row">
-              <label>Subtitle / Location</label>
-              <input value={project.layout.subtitle} onChange={(e) => updateLayout({ subtitle: e.target.value })} />
-            </div>
-            <div className="button-row three">
-              <button className="btn primary" type="button" onClick={() => fileInputRef.current?.click()}>Import Layer</button>
-              <button className="btn" type="button" onClick={() => logoInputRef.current?.click()}>Logo</button>
-              <button className="btn" type="button" onClick={() => insetInputRef.current?.click()}>Inset</button>
-            </div>
-            <input ref={fileInputRef} type="file" accept=".zip,.geojson,.json" onChange={handleFileChange} hidden />
-            <input ref={logoInputRef} type="file" accept="image/*" onChange={handleLogoChange} hidden />
-            <input ref={insetInputRef} type="file" accept="image/*" onChange={handleInsetImageChange} hidden />
-            <p className="small-note drop-hint">Or drag &amp; drop a .zip shapefile onto the map</p>
-          </div>
-        </section>
+        {/* Hidden file inputs */}
+        <input ref={fileInputRef} type="file" accept=".zip,.geojson,.json" onChange={handleFileChange} hidden />
+        <input ref={logoInputRef} type="file" accept="image/*" onChange={handleLogoChange} hidden />
+        <input ref={insetInputRef} type="file" accept="image/*" onChange={handleInsetImageChange} hidden />
 
-        <section className="control-section">
-          <h2>Overlays</h2>
-          <div className="toggle-grid">
-            <label className="toggle-row">
-              <input type="checkbox" checked={!!referenceOverlays.context} onChange={(e) => updateLayout({ referenceOverlays: { context: e.target.checked } })} />
-              <span>Roads &amp; Context</span>
-            </label>
-            <label className="toggle-row">
-              <input type="checkbox" checked={!!referenceOverlays.labels} onChange={(e) => updateLayout({ referenceOverlays: { labels: e.target.checked } })} />
-              <span>Towns &amp; Labels</span>
-            </label>
-            <label className="toggle-row">
-              <input type="checkbox" checked={!!referenceOverlays.rail} onChange={(e) => updateLayout({ referenceOverlays: { rail: e.target.checked } })} />
-              <span>Rail Lines</span>
-            </label>
-          </div>
-        </section>
-
-        <section className="control-section">
-          <h2>Layers</h2>
-          <LayerList
-            layers={project.layers}
-            selectedLayerId={selectedLayerId}
-            onSelect={setSelectedLayerId}
-            onToggleVisible={toggleLayerVisible}
-          />
-          {selectedLayer ? (
-            <div className="control-grid" style={{ marginTop: 8 }}>
-              <div className="control-row">
-                <label>Display Label</label>
-                <input
-                  value={selectedLayer.displayName || selectedLayer.legend?.label || ''}
-                  onChange={(e) => setDisplayLabel(selectedLayer.id, e.target.value)}
-                />
-              </div>
-              <div className="control-row">
-                <label>Layer Type</label>
-                <select value={selectedLayer.role} onChange={(e) => changeLayerRole(selectedLayer.id, e.target.value)}>
-                  {Object.entries(ROLE_LABELS).map(([value, label]) => (
-                    <option key={value} value={value}>{label}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="button-row three">
-                <button className="secondary-btn" type="button" onClick={() => moveLayer(selectedLayer.id, 'down')}>Move Down</button>
-                <button
-                  className={`secondary-btn${project.layout.primaryLayerId === selectedLayer.id ? ' active-toggle' : ''}`}
-                  type="button"
-                  onClick={() => setFramingLayer(selectedLayer.id)}
-                >
-                  {project.layout.primaryLayerId === selectedLayer.id ? 'Framing ✓' : 'Set Frame'}
-                </button>
-                <button className="secondary-btn" type="button" onClick={() => moveLayer(selectedLayer.id, 'up')}>Move Up</button>
-              </div>
-            </div>
-          ) : (
-            <p className="small-note" style={{ marginTop: 6 }}>
-              {project.layers.length === 0 ? 'Import a shapefile to get started.' : 'Select a layer to edit it.'}
-            </p>
-          )}
-        </section>
-
-        <section className="control-section">
-          <h2>Annotations</h2>
-          <div className="button-row" style={{ marginBottom: 8 }}>
-            <button className="btn primary" type="button" onClick={addCalloutFromSelectedLayer} disabled={!selectedLayer}>
-              Add Label
+        {/* Tab bar */}
+        <div className="sidebar-tabs">
+          {['Layers', 'Style', 'Elements'].map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              className={`sidebar-tab${activeTab === tab.toLowerCase() ? ' active' : ''}`}
+              onClick={() => setActiveTab(tab.toLowerCase())}
+            >
+              {tab}
             </button>
-            <button className="btn" type="button" onClick={autoFrameAll}>Auto Frame</button>
-          </div>
-          <div className="callout-list">
-            {project.callouts.map((callout, index) => (
-              <div key={callout.id} className="callout-card">
-                <div className="callout-card-header">
-                  <span>Label {index + 1}</span>
-                  <button className="secondary-btn" type="button" onClick={() => removeCallout(callout.id)}>Remove</button>
+          ))}
+        </div>
+
+        <div className="sidebar-tab-content">
+
+          {/* ── Layers tab ── */}
+          {activeTab === 'layers' && (
+            <>
+              <section className="control-section">
+                <h2>Import</h2>
+                <div className="control-grid">
+                  <button className="btn primary" type="button" onClick={() => fileInputRef.current?.click()}>
+                    + Upload Layer
+                  </button>
+                  <p className="small-note drop-hint">Or drag & drop a .zip shapefile onto the map</p>
                 </div>
+              </section>
+
+              <section className="control-section">
+                <h2>Layers</h2>
+                <LayerList
+                  layers={project.layers}
+                  selectedLayerId={selectedLayerId}
+                  onSelect={setSelectedLayerId}
+                  onToggleVisible={toggleLayerVisible}
+                />
+                {selectedLayer ? (
+                  <div className="control-grid" style={{ marginTop: 8 }}>
+                    <div className="control-row">
+                      <label>Display Label</label>
+                      <input
+                        value={selectedLayer.displayName || selectedLayer.legend?.label || ''}
+                        onChange={(e) => setDisplayLabel(selectedLayer.id, e.target.value)}
+                      />
+                    </div>
+                    <div className="control-row">
+                      <label>Layer Type</label>
+                      <select value={selectedLayer.role} onChange={(e) => changeLayerRole(selectedLayer.id, e.target.value)}>
+                        {Object.entries(ROLE_LABELS).map(([value, label]) => (
+                          <option key={value} value={value}>{label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="button-row three">
+                      <button className="secondary-btn" type="button" onClick={() => moveLayer(selectedLayer.id, 'down')}>↓ Down</button>
+                      <button
+                        className={`secondary-btn${project.layout.primaryLayerId === selectedLayer.id ? ' active-toggle' : ''}`}
+                        type="button"
+                        onClick={() => setFramingLayer(selectedLayer.id)}
+                      >
+                        {project.layout.primaryLayerId === selectedLayer.id ? 'Frame ✓' : 'Set Frame'}
+                      </button>
+                      <button className="secondary-btn" type="button" onClick={() => moveLayer(selectedLayer.id, 'up')}>↑ Up</button>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="small-note" style={{ marginTop: 6 }}>
+                    {project.layers.length === 0 ? 'Upload a shapefile to get started.' : 'Select a layer to edit it.'}
+                  </p>
+                )}
+              </section>
+
+              <section className="control-section">
+                <h2>Background Overlays</h2>
+                <div className="toggle-grid">
+                  <label className="toggle-row">
+                    <input type="checkbox" checked={!!referenceOverlays.context} onChange={(e) => updateLayout({ referenceOverlays: { context: e.target.checked } })} />
+                    <span>Roads & Context</span>
+                  </label>
+                  <label className="toggle-row">
+                    <input type="checkbox" checked={!!referenceOverlays.labels} onChange={(e) => updateLayout({ referenceOverlays: { labels: e.target.checked } })} />
+                    <span>Towns & Labels</span>
+                  </label>
+                  <label className="toggle-row">
+                    <input type="checkbox" checked={!!referenceOverlays.rail} onChange={(e) => updateLayout({ referenceOverlays: { rail: e.target.checked } })} />
+                    <span>Rail Lines</span>
+                  </label>
+                </div>
+                <div className="control-row" style={{ marginTop: 8 }}>
+                  <label>Overlay Opacity</label>
+                  <input
+                    type="range"
+                    min="0.1"
+                    max="0.9"
+                    step="0.05"
+                    value={project.layout.referenceOpacity || 0.35}
+                    onChange={(e) => updateLayout({ referenceOpacity: Number(e.target.value) })}
+                  />
+                </div>
+              </section>
+
+              <section className="control-section">
+                <h2>Annotations</h2>
+                <div className="button-row" style={{ marginBottom: 8 }}>
+                  <button className="btn primary" type="button" onClick={addCalloutFromSelectedLayer} disabled={!selectedLayer}>
+                    Add Label
+                  </button>
+                  <button className="btn" type="button" onClick={autoFrameAll}>Auto Frame</button>
+                </div>
+                <div className="callout-list">
+                  {project.callouts.map((callout, index) => (
+                    <div key={callout.id} className="callout-card">
+                      <div className="callout-card-header">
+                        <span>Label {index + 1}</span>
+                        <button className="secondary-btn" type="button" onClick={() => removeCallout(callout.id)}>Remove</button>
+                      </div>
+                      <div className="control-grid">
+                        <div className="control-row">
+                          <label>Text</label>
+                          <input value={callout.text} onChange={(e) => updateCallout(callout.id, { text: e.target.value })} />
+                        </div>
+                        <div className="control-row">
+                          <label>Style</label>
+                          <select value={callout.type} onChange={(e) => updateCallout(callout.id, { type: e.target.value })}>
+                            {Object.entries(CALLOUT_TYPES).map(([value, label]) => (
+                              <option key={value} value={value}>{label}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="nudge-grid">
+                          <span />
+                          <button className="secondary-btn" type="button" onClick={() => nudgeCallout(callout.id, 0, -8)}>↑</button>
+                          <span />
+                          <button className="secondary-btn" type="button" onClick={() => nudgeCallout(callout.id, -8, 0)}>←</button>
+                          <button className="secondary-btn" type="button" onClick={() => nudgeCallout(callout.id, 0, 8)}>↓</button>
+                          <button className="secondary-btn" type="button" onClick={() => nudgeCallout(callout.id, 8, 0)}>→</button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            </>
+          )}
+
+          {/* ── Style tab ── */}
+          {activeTab === 'style' && (
+            <>
+              <section className="control-section">
+                <h2>Map Preset</h2>
+                <div className="preset-buttons">
+                  {Object.values(TEMPLATE_PRESETS).map((preset) => (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      className={`preset-btn${activePreset === preset.id ? ' active' : ''}`}
+                      onClick={() => applyTemplatePreset(preset.id)}
+                    >
+                      <span
+                        className="preset-btn-dot"
+                        style={{
+                          background: preset.id === 'investor' ? '#1d4ed8'
+                            : preset.id === 'technical' ? '#374151'
+                            : '#1e293b',
+                        }}
+                      />
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+              </section>
+
+              <section className="control-section">
+                <h2>Legend</h2>
+                <div className="control-row">
+                  <label>Display Mode</label>
+                  <select value={project.layout.legendMode || 'auto'} onChange={(e) => updateLayout({ legendMode: e.target.value })}>
+                    <option value="auto">Auto</option>
+                    <option value="compact">Compact</option>
+                    <option value="full">Full</option>
+                  </select>
+                </div>
+              </section>
+
+              <section className="control-section">
+                <h2>Locator Inset</h2>
+                <div className="control-row">
+                  <label>Inset Type</label>
+                  <select value={project.layout.insetMode || 'province_state'} onChange={(e) => updateLayout({ insetMode: e.target.value, insetEnabled: true })}>
+                    {Object.entries(INSET_MODES).map(([value, label]) => (
+                      <option key={value} value={value}>{label}</option>
+                    ))}
+                  </select>
+                </div>
+              </section>
+            </>
+          )}
+
+          {/* ── Elements tab ── */}
+          {activeTab === 'elements' && (
+            <>
+              <section className="control-section">
+                <h2>Map Title</h2>
                 <div className="control-grid">
                   <div className="control-row">
-                    <label>Text</label>
-                    <input value={callout.text} onChange={(e) => updateCallout(callout.id, { text: e.target.value })} />
+                    <label>Title</label>
+                    <input value={project.layout.title} onChange={(e) => updateLayout({ title: e.target.value })} />
                   </div>
                   <div className="control-row">
-                    <label>Style</label>
-                    <select value={callout.type} onChange={(e) => updateCallout(callout.id, { type: e.target.value })}>
-                      {Object.entries(CALLOUT_TYPES).map(([value, label]) => (
-                        <option key={value} value={value}>{label}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="nudge-grid">
-                    <span />
-                    <button className="secondary-btn" type="button" onClick={() => nudgeCallout(callout.id, 0, -8)}>↑</button>
-                    <span />
-                    <button className="secondary-btn" type="button" onClick={() => nudgeCallout(callout.id, -8, 0)}>←</button>
-                    <button className="secondary-btn" type="button" onClick={() => nudgeCallout(callout.id, 0, 8)}>↓</button>
-                    <button className="secondary-btn" type="button" onClick={() => nudgeCallout(callout.id, 8, 0)}>→</button>
+                    <label>Subtitle / Location</label>
+                    <input value={project.layout.subtitle} onChange={(e) => updateLayout({ subtitle: e.target.value })} />
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        </section>
+              </section>
 
-        <section className="control-section">
-          <h2>Map Options</h2>
-          <div className="control-grid">
-            <div className="control-row inline-2">
-              <div>
-                <label>Locator Inset</label>
-                <select value={project.layout.insetMode} onChange={(e) => updateLayout({ insetMode: e.target.value, insetEnabled: true })}>
-                  {Object.entries(INSET_MODES).map(([value, label]) => (
-                    <option key={value} value={value}>{label}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label>Legend</label>
-                <select value={project.layout.legendMode} onChange={(e) => updateLayout({ legendMode: e.target.value })}>
-                  <option value="auto">Auto</option>
-                  <option value="compact">Compact</option>
-                  <option value="full">Full</option>
-                </select>
-              </div>
-            </div>
-            <div className="control-row">
-              <label>Footer / Source Note</label>
-              <input value={project.layout.footerText || ''} onChange={(e) => updateLayout({ footerText: e.target.value })} />
-            </div>
-            <div className="toggle-grid" style={{ marginTop: 2 }}>
-              <label className="toggle-row">
-                <input type="checkbox" checked={project.layout.insetEnabled !== false} onChange={(e) => updateLayout({ insetEnabled: e.target.checked })} />
-                <span>Show Locator Inset</span>
-              </label>
-              <label className="toggle-row">
-                <input type="checkbox" checked={project.layout.footerEnabled !== false} onChange={(e) => updateLayout({ footerEnabled: e.target.checked })} />
-                <span>Show Footer</span>
-              </label>
-            </div>
-          </div>
-        </section>
+              <section className="control-section">
+                <h2>Show / Hide</h2>
+                <div className="toggle-grid">
+                  <label className="toggle-row">
+                    <input type="checkbox" checked={project.layout.insetEnabled !== false} onChange={(e) => updateLayout({ insetEnabled: e.target.checked })} />
+                    <span>Locator Inset</span>
+                  </label>
+                  <label className="toggle-row">
+                    <input type="checkbox" checked={project.layout.footerEnabled !== false} onChange={(e) => updateLayout({ footerEnabled: e.target.checked })} />
+                    <span>Footer Bar</span>
+                  </label>
+                </div>
+              </section>
 
-        <section className="control-section">
-          <h2>Export</h2>
-          <div className="control-grid">
-            <div className="control-row inline-2">
-              <div>
-                <label>Filename</label>
-                <input
-                  value={project.layout.exportSettings.filename}
-                  onChange={(e) => updateLayout({ exportSettings: { filename: e.target.value } })}
-                />
-              </div>
-              <div>
-                <label>Quality</label>
-                <select
-                  value={project.layout.exportSettings.pixelRatio}
-                  onChange={(e) => updateLayout({ exportSettings: { pixelRatio: Number(e.target.value) } })}
-                >
-                  <option value={1}>1x Draft</option>
-                  <option value={2}>2x Print</option>
-                  <option value={3}>3x Hi-Res</option>
-                </select>
-              </div>
-            </div>
-            <div className="button-row">
-              <button className="btn primary" type="button" onClick={() => handleExport('png')} disabled={exporting}>
-                Export PNG
-              </button>
-              <button className="btn" type="button" onClick={() => handleExport('svg')} disabled={exporting}>
-                Export SVG
-              </button>
-            </div>
-            <p className="small-note" style={{ textAlign: 'center', marginTop: 2 }}>Free exports include watermark</p>
-          </div>
-        </section>
+              <section className="control-section">
+                <h2>Footer Text</h2>
+                <div className="control-row">
+                  <input
+                    value={project.layout.footerText || ''}
+                    placeholder="Source note, project reference…"
+                    onChange={(e) => updateLayout({ footerText: e.target.value })}
+                  />
+                </div>
+              </section>
 
-        <div style={{ padding: '2px 0 12px' }}>
+              <section className="control-section">
+                <h2>Logo & Inset Image</h2>
+                <div className="button-row">
+                  <button className="btn" type="button" onClick={() => logoInputRef.current?.click()}>
+                    {project.layout.logo ? 'Replace Logo' : 'Upload Logo'}
+                  </button>
+                  <button className="btn" type="button" onClick={() => insetInputRef.current?.click()}>
+                    Custom Inset
+                  </button>
+                </div>
+                {project.layout.logo && (
+                  <div className="control-row" style={{ marginTop: 8 }}>
+                    <label>Logo Scale</label>
+                    <input
+                      type="range"
+                      min="0.5"
+                      max="2"
+                      step="0.1"
+                      value={project.layout.logoScale || 1}
+                      onChange={(e) => updateLayout({ logoScale: Number(e.target.value) })}
+                    />
+                  </div>
+                )}
+              </section>
+
+              <section className="control-section">
+                <h2>Export</h2>
+                <div className="control-grid">
+                  <div className="control-row inline-2">
+                    <div>
+                      <label>Filename</label>
+                      <input
+                        value={project.layout.exportSettings?.filename || 'mapviewer-export'}
+                        onChange={(e) => updateLayout({ exportSettings: { filename: e.target.value } })}
+                      />
+                    </div>
+                    <div>
+                      <label>Quality</label>
+                      <select
+                        value={project.layout.exportSettings?.pixelRatio || 2}
+                        onChange={(e) => updateLayout({ exportSettings: { pixelRatio: Number(e.target.value) } })}
+                      >
+                        <option value={1}>1× Draft</option>
+                        <option value={2}>2× Print</option>
+                        <option value={3}>3× Hi-Res</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="button-row">
+                    <button className="btn primary" type="button" onClick={() => handleExport('png')} disabled={exporting}>
+                      Export PNG
+                    </button>
+                    <button className="btn" type="button" onClick={() => handleExport('svg')} disabled={exporting}>
+                      Export SVG
+                    </button>
+                  </div>
+                  <p className="small-note" style={{ textAlign: 'center' }}>Free exports include watermark</p>
+                </div>
+              </section>
+            </>
+          )}
+
+        </div>
+
+        {/* Footer — always visible */}
+        <div className="sidebar-footer">
           <button
             className="secondary-btn"
             type="button"
             onClick={clearAndReset}
-            style={{ fontSize: 11, opacity: 0.55 }}
+            style={{ fontSize: 11, color: '#94a3b8' }}
           >
             Clear &amp; Start Over
           </button>
