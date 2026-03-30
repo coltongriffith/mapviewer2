@@ -171,6 +171,10 @@ function getFeatureLabel(feature, layer) {
   );
 }
 
+function isPointStyledLayer(layer) {
+  return layer?.type === 'points' || layer?.role === 'drillholes';
+}
+
 export default function App() {
   const mapContainerRef = useRef(null);
   const leafletMapRef = useRef(null);
@@ -628,8 +632,57 @@ export default function App() {
                 </button>
                 <button className="secondary-btn" type="button" onClick={() => moveLayer(selectedLayer.id, 'up')}>Move Up</button>
               </div>
+              <div className="control-row inline-2">
+                <div>
+                  <label>{isPointStyledLayer(selectedLayer) ? 'Point Border' : 'Outline Color'}</label>
+                  <input
+                    type="color"
+                    value={selectedLayer.style?.stroke || selectedLayer.style?.markerColor || '#2563eb'}
+                    onChange={(e) => updateLayer(selectedLayer.id, { style: { stroke: e.target.value, markerColor: e.target.value } })}
+                  />
+                </div>
+                <div>
+                  <label>{isPointStyledLayer(selectedLayer) ? 'Point Fill' : 'Fill Color'}</label>
+                  <input
+                    type="color"
+                    value={selectedLayer.style?.fill || selectedLayer.style?.markerFill || '#93c5fd'}
+                    onChange={(e) => updateLayer(selectedLayer.id, { style: { fill: e.target.value, markerFill: e.target.value } })}
+                  />
+                </div>
+              </div>
+              {isPointStyledLayer(selectedLayer) ? (
+                <div className="control-row inline-2">
+                  <div>
+                    <label>Point Size</label>
+                    <input
+                      type="range"
+                      min="6"
+                      max="24"
+                      step="1"
+                      value={selectedLayer.style?.markerSize ?? 12}
+                      onChange={(e) => updateLayer(selectedLayer.id, { style: { markerSize: Number(e.target.value) } })}
+                    />
+                  </div>
+                  <div className="range-value">{selectedLayer.style?.markerSize ?? 12}px</div>
+                </div>
+              ) : (
+                <div className="control-row inline-2">
+                  <div>
+                    <label>Fill Opacity</label>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.05"
+                      value={selectedLayer.style?.fillOpacity ?? 0.22}
+                      onChange={(e) => updateLayer(selectedLayer.id, { style: { fillOpacity: Number(e.target.value) } })}
+                    />
+                  </div>
+                  <div className="range-value">{Math.round((selectedLayer.style?.fillOpacity ?? 0.22) * 100)}%</div>
+                </div>
+              )}
             </div>
-          ) : <p className="small-note">Select a layer to edit its display label, role, and order.</p>}
+          ) : <p className="small-note">Select a layer to edit its display label, role, order, and colors.</p>}
         </section>
 
         <section className="control-section">

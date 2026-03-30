@@ -19,7 +19,15 @@ export default function UploadPanel({ onUploadFile, inputRef, status, layers }) 
 
   return (
     <section className="control-section">
-      <h2>Upload</h2>
+      <div className="upload-header-row">
+        <h2>Upload</h2>
+        <div className="hover-help">
+          <button className="hover-help-trigger" type="button" aria-label="What is a shapefile?">i</button>
+          <div className="hover-help-tooltip">
+            A shapefile usually comes as multiple files used together. Upload one <code>.zip</code> that contains the main parts like <code>.shp</code>, <code>.shx</code>, <code>.dbf</code>, and often <code>.prj</code>. You can also upload <code>.geojson</code> or <code>.json</code> directly.
+          </div>
+        </div>
+      </div>
       <div
         className={`upload-dropzone ${dragging ? 'dragging' : ''}`}
         onDragEnter={(event) => {
@@ -60,16 +68,6 @@ export default function UploadPanel({ onUploadFile, inputRef, status, layers }) 
           event.target.value = '';
         }}
       />
-
-      <div className="info-note">
-        <strong>What is a shapefile?</strong>
-        <p>
-          A shapefile is usually a set of files that work together. For this app, zip the shapefile parts into one
-          <code>.zip</code> before uploading. A typical shapefile zip includes <code>.shp</code>, <code>.shx</code>,
-          <code>.dbf</code>, and often <code>.prj</code>.
-        </p>
-        <p>GeoJSON files can be uploaded directly as <code>.geojson</code> or <code>.json</code>.</p>
-      </div>
 
       {status?.message ? (
         <div className={`upload-status ${status.type || 'info'}`}>
