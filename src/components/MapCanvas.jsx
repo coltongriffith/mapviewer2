@@ -50,7 +50,7 @@ function detectGeomType(geojson) {
   return 'polygon';
 }
 
-export default function MapCanvas({ onReady, project, template }) {
+export default function MapCanvas({ onReady, project, template, onFeatureClick }) {
   const mapRef = useRef(null);
   const mapElRef = useRef(null);
   const baseLayerRef = useRef(null);
@@ -142,6 +142,7 @@ export default function MapCanvas({ onReady, project, template }) {
       const baseStyle = template?.roleStyles?.[layer.role] || template?.roleStyles?.other || {};
       const style = { ...baseStyle, ...(layer.style || {}) };
       const geomType = detectGeomType(layer.geojson);
+      const isDrillholes = layer.role === 'drillholes';
 
       const geoLayer = L.geoJSON(layer.geojson, {
         style: () => ({
@@ -151,19 +152,32 @@ export default function MapCanvas({ onReady, project, template }) {
           fillOpacity: geomType === 'line' ? 0 : style.fillOpacity ?? 0.22,
           dashArray: style.dashArray || '',
         }),
-        pointToLayer: (_feature, latlng) =>
-          L.circleMarker(latlng, {
+        pointToLayer: (feature, latlng) => {
+          const marker = L.circleMarker(latlng, {
             radius: (style.markerSize ?? 10) / 2,
             color: style.markerColor || style.stroke || '#111111',
             fillColor: style.markerFill || style.fill || style.markerColor || '#ffffff',
             fillOpacity: 1,
             weight: style.strokeWidth ?? 1.5,
-          }),
+          });
+
+          if (isDrillholes) {
+            marker.on('click', () => onFeatureClick?.({ layerId: layer.id, feature, latlng }));
+            marker.bindTooltip('Click to label', { direction: 'top', offset: [0, -10], opacity: 0.9, sticky: true });
+          }
+
+          return marker;
+        },
+        onEachFeature: (feature, featureLayer) => {
+          if (isDrillholes && typeof featureLayer.getLatLng === 'function') {
+            featureLayer.on('click', () => onFeatureClick?.({ layerId: layer.id, feature, latlng: featureLayer.getLatLng() }));
+          }
+        },
       });
 
       geoLayer.addTo(group);
     });
-  }, [project, template]);
+  }, [project?.layers, template, onFeatureClick]);
 
   return <div ref={mapElRef} className="leaflet-map-canvas" />;
 }

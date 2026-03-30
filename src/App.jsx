@@ -4,6 +4,8 @@ import Sidebar from './components/Sidebar';
 import LayerList from './components/LayerList';
 import LocatorInset from './components/LocatorInset';
 import CalloutsOverlay from './components/CalloutsOverlay';
+import LandingPage from './components/LandingPage';
+import UploadPanel from './components/UploadPanel';
 import { loadGeoJSON } from './utils/importers';
 import { buildScene } from './export/buildScene';
 import { exportPNG } from './export/exportPNG';
@@ -48,7 +50,7 @@ function readFileAsDataURL(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result || ''));
-    reader.onerror = () => reject(new Error('Failed to read image file'));
+    reader.onerror = () => reject(new Error('Failed to read image file.'));
     reader.readAsDataURL(file);
   });
 }
@@ -90,7 +92,7 @@ function ScaleBar({ map }) {
         const nice = steps.reduce((best, n) => (Math.abs(n - meters) < Math.abs(best - meters) ? n : best), steps[0]);
         setState({
           label: nice >= 1000 ? `${nice / 1000} km` : `${nice} m`,
-          width: Math.max(70, Math.min(180, Math.round((130 * nice) / meters))),
+          width: Math.max(70, Math.min(180, Math.round((130 * nice) / Math.max(meters, 1)))),
         });
       } catch {
         // noop
@@ -153,13 +155,30 @@ function renderLegendGroups(items, layout) {
   return groups;
 }
 
+function getFeatureLabel(feature, layer) {
+  const props = feature?.properties || {};
+  return (
+    props.label ||
+    props.name ||
+    props.hole ||
+    props.hole_id ||
+    props.holeid ||
+    props.id ||
+    layer?.displayName ||
+    layer?.legend?.label ||
+    layer?.name ||
+    'Drillhole'
+  );
+}
+
 export default function App() {
   const mapContainerRef = useRef(null);
   const leafletMapRef = useRef(null);
-  const fileInputRef = useRef(null);
   const logoInputRef = useRef(null);
   const insetInputRef = useRef(null);
+  const uploadInputRef = useRef(null);
 
+  const [screen, setScreen] = useState('landing');
   const [project, setProject] = useState(() => {
     const base = createInitialProjectState();
     return {
@@ -172,14 +191,18 @@ export default function App() {
     };
   });
   const [selectedLayerId, setSelectedLayerId] = useState(null);
+  const [selectedCalloutId, setSelectedCalloutId] = useState(null);
+  const [selectedFeature, setSelectedFeature] = useState(null);
+  const [uploadStatus, setUploadStatus] = useState({ type: 'info', message: 'Open the editor, then upload your first file from the left panel.' });
   const [exporting, setExporting] = useState(false);
   const [mapSize, setMapSize] = useState({ width: 1600, height: 1000 });
 
   const template = useMemo(() => getTemplate(project.layout?.templateId || 'technical_results_v2'), [project.layout?.templateId]);
   const selectedLayer = useMemo(() => project.layers.find((layer) => layer.id === selectedLayerId) || null, [project.layers, selectedLayerId]);
-
+  const selectedCallout = useMemo(() => project.callouts.find((callout) => callout.id === selectedCalloutId) || null, [project.callouts, selectedCalloutId]);
   const resolvedZones = useMemo(() => resolveTemplateZones(template, project.layout, mapSize), [template, project.layout, mapSize]);
-  const legendGroups = useMemo(() => renderLegendGroups(project.layout.legendItems || [], project.layout), [project.layout.legendItems, project.layout.legendMode]);
+  const legendItems = useMemo(() => buildLegendItems(template, project.layers, project.layout), [template, project.layers, project.layout]);
+  const legendGroups = useMemo(() => renderLegendGroups(legendItems, project.layout), [legendItems, project.layout]);
   const themeTokens = useMemo(() => getThemeTokens(project.layout?.themeId || 'modern_rounded'), [project.layout?.themeId]);
 
   useEffect(() => {
@@ -190,28 +213,18 @@ export default function App() {
     const ro = new ResizeObserver(update);
     ro.observe(container);
     return () => ro.disconnect();
-  }, []);
-
-  useEffect(() => {
-    setProject((prev) => ({
-      ...prev,
-      layout: {
-        ...prev.layout,
-        legendItems: buildLegendItems(template, prev.layers, prev.layout),
-      },
-    }));
-  }, [project.layers, project.layout.referenceOverlays, project.layout.legendMode, template]);
+  }, [screen]);
 
   useEffect(() => {
     const map = leafletMapRef.current;
-    if (!map) return;
+    if (!map || project.layers.length === 0) return;
     fitProjectToTemplate(
       project,
       map,
       { ...template, zones: resolvedZones },
       project.layout.compositionPreset || template.modePresets?.[project.layout.mode]?.framing || 'balanced'
     );
-  }, [project, template, resolvedZones]);
+  }, [template, resolvedZones, project.layout.frameVersion, project.layout.primaryLayerId, project.layout.compositionPreset, project.layers]);
 
   const updateLayout = (patch) => {
     setProject((prev) => ({
@@ -219,6 +232,7 @@ export default function App() {
       layout: {
         ...prev.layout,
         ...patch,
+        legendItems,
         referenceOverlays: patch.referenceOverlays ? { ...(prev.layout.referenceOverlays || {}), ...patch.referenceOverlays } : prev.layout.referenceOverlays,
         exportSettings: patch.exportSettings ? { ...(prev.layout?.exportSettings || {}), ...patch.exportSettings } : prev.layout?.exportSettings,
       },
@@ -287,17 +301,15 @@ export default function App() {
       return applyModeToProject(next, template, prev.layout.mode);
     });
     setSelectedLayerId(id);
+    setUploadStatus({ type: 'success', message: `Imported ${file.name}. ${kind === 'points' ? 'This was detected as a drillhole layer.' : 'Layer added successfully.'}` });
   };
 
-  const handleFileChange = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const handleUploadFile = async (file) => {
     try {
       await addGeoJSONLayer(file);
+      if (screen !== 'editor') setScreen('editor');
     } catch (err) {
-      alert(`Import failed: ${err.message}`);
-    } finally {
-      e.target.value = '';
+      setUploadStatus({ type: 'error', message: `Import failed: ${err.message}` });
     }
   };
 
@@ -307,8 +319,9 @@ export default function App() {
     try {
       const dataUrl = await readFileAsDataURL(file);
       updateLayout({ logo: dataUrl });
+      setUploadStatus({ type: 'success', message: `Loaded logo: ${file.name}` });
     } catch (err) {
-      alert(`Logo import failed: ${err.message}`);
+      setUploadStatus({ type: 'error', message: `Logo import failed: ${err.message}` });
     } finally {
       e.target.value = '';
     }
@@ -320,8 +333,9 @@ export default function App() {
     try {
       const dataUrl = await readFileAsDataURL(file);
       updateLayout({ insetImage: dataUrl, insetMode: 'custom_image', insetEnabled: true });
+      setUploadStatus({ type: 'success', message: `Loaded inset image: ${file.name}` });
     } catch (err) {
-      alert(`Inset import failed: ${err.message}`);
+      setUploadStatus({ type: 'error', message: `Inset import failed: ${err.message}` });
     } finally {
       e.target.value = '';
     }
@@ -378,25 +392,37 @@ export default function App() {
     }));
   };
 
-  const addCalloutFromSelectedLayer = () => {
-    if (!selectedLayer?.geojson) return;
-    const center = geojsonCenter(selectedLayer.geojson);
-    if (!center) return;
-
+  const addCalloutAtAnchor = ({ text, type = 'leader', anchor, featureId, layerId }) => {
+    const calloutId = crypto.randomUUID();
     setProject((prev) => ({
       ...prev,
       callouts: [
         ...prev.callouts,
         {
-          id: crypto.randomUUID(),
-          text: selectedLayer.displayName || selectedLayer.legend?.label || selectedLayer.name,
-          type: selectedLayer.role === 'drillholes' ? 'leader' : 'boxed',
+          id: calloutId,
+          text,
+          type,
           priority: 2,
-          anchor: { lat: center.lat, lng: center.lng },
-          offset: { x: 22, y: -20 },
+          anchor,
+          offset: { x: 20, y: -18 },
+          featureId: featureId || null,
+          layerId: layerId || null,
         },
       ],
     }));
+    setSelectedCalloutId(calloutId);
+  };
+
+  const addCalloutFromSelectedLayer = () => {
+    if (!selectedLayer?.geojson) return;
+    const center = geojsonCenter(selectedLayer.geojson);
+    if (!center) return;
+    addCalloutAtAnchor({
+      text: selectedLayer.displayName || selectedLayer.legend?.label || selectedLayer.name,
+      type: selectedLayer.role === 'drillholes' ? 'leader' : 'boxed',
+      anchor: { lat: center.lat, lng: center.lng },
+      layerId: selectedLayer.id,
+    });
   };
 
   const updateCallout = (calloutId, patch) => {
@@ -419,20 +445,48 @@ export default function App() {
 
   const removeCallout = (calloutId) => {
     setProject((prev) => ({ ...prev, callouts: prev.callouts.filter((callout) => callout.id !== calloutId) }));
+    if (selectedCalloutId === calloutId) setSelectedCalloutId(null);
+  };
+
+  const handleFeatureClick = ({ layerId, feature, latlng }) => {
+    const layer = project.layers.find((item) => item.id === layerId) || null;
+    if (!layer) return;
+    setSelectedLayerId(layerId);
+    const nextSelectedFeature = {
+      layerId,
+      layerName: layer.displayName || layer.name,
+      role: layer.role,
+      feature,
+      latlng: { lat: latlng.lat, lng: latlng.lng },
+      featureId: feature?.id || feature?.properties?.id || `${layerId}:${latlng.lat.toFixed(6)}:${latlng.lng.toFixed(6)}`,
+      suggestedLabel: getFeatureLabel(feature, layer),
+    };
+    setSelectedFeature(nextSelectedFeature);
+  };
+
+  const addCalloutFromSelectedFeature = () => {
+    if (!selectedFeature?.latlng) return;
+    addCalloutAtAnchor({
+      text: selectedFeature.suggestedLabel,
+      type: 'leader',
+      anchor: selectedFeature.latlng,
+      featureId: selectedFeature.featureId,
+      layerId: selectedFeature.layerId,
+    });
   };
 
   const handleExport = async (format) => {
     if (!leafletMapRef.current || !mapContainerRef.current || exporting) return;
     setExporting(true);
     try {
-      const scene = buildScene(mapContainerRef.current, project, leafletMapRef.current);
+      const scene = buildScene(mapContainerRef.current, { ...project, layout: { ...project.layout, legendItems } }, leafletMapRef.current);
       if (format === 'png') {
         await exportPNG(scene, project.layout?.exportSettings || {});
       } else {
         await exportSVG(scene, project.layout?.exportSettings || {});
       }
     } catch (err) {
-      alert(`Export failed: ${err.message}`);
+      setUploadStatus({ type: 'error', message: `Export failed: ${err.message}` });
     } finally {
       setExporting(false);
     }
@@ -440,11 +494,24 @@ export default function App() {
 
   const referenceOverlays = project.layout.referenceOverlays || {};
 
+  if (screen === 'landing') {
+    return <LandingPage onOpenEditor={() => setScreen('editor')} />;
+  }
+
   return (
     <div className="app-shell">
       <Sidebar>
-        <h1>Mapviewer</h1>
-        <p className="sidebar-subtitle">Template-driven geology figure generator</p>
+        <div className="sidebar-header-row">
+          <div>
+            <h1>Mapviewer</h1>
+            <p className="sidebar-subtitle">Upload on the left, design in the center, export when ready.</p>
+          </div>
+          <button className="secondary-btn compact" type="button" onClick={() => setScreen('landing')}>
+            Home
+          </button>
+        </div>
+
+        <UploadPanel onUploadFile={handleUploadFile} inputRef={uploadInputRef} status={uploadStatus} layers={project.layers} />
 
         <section className="control-section">
           <h2>Template</h2>
@@ -506,22 +573,27 @@ export default function App() {
                 </select>
               </div>
             </div>
-            <div className="control-row inline-2">
-              <div>
-                <label>Logo Size</label>
-                <input type="range" min="0.7" max="1.5" step="0.05" value={project.layout.logoScale || 1} onChange={(e) => updateLayout({ logoScale: Number(e.target.value) })} />
-              </div>
-              <div className="small-note range-value">{Math.round((project.layout.logoScale || 1) * 100)}%</div>
-            </div>
             <div className="control-row"><label>Footer / Source Note</label><input value={project.layout.footerText || ''} onChange={(e) => updateLayout({ footerText: e.target.value })} /></div>
             <div className="button-row three">
-              <button className="btn primary" type="button" onClick={() => fileInputRef.current?.click()}>Import Layer</button>
               <button className="btn" type="button" onClick={() => logoInputRef.current?.click()}>Upload Logo</button>
               <button className="btn" type="button" onClick={() => insetInputRef.current?.click()}>Upload Inset</button>
+              <button className="btn" type="button" onClick={autoFrameAll}>Refit Map</button>
             </div>
-            <input ref={fileInputRef} type="file" accept=".zip,.geojson,.json" onChange={handleFileChange} hidden />
             <input ref={logoInputRef} type="file" accept="image/*" onChange={handleLogoChange} hidden />
             <input ref={insetInputRef} type="file" accept="image/*" onChange={handleInsetImageChange} hidden />
+            {project.layout.insetMode === 'custom_image' ? (
+              <div className="inset-status-card">
+                {project.layout.insetImage ? (
+                  <>
+                    <div className="inset-preview"><img src={project.layout.insetImage} alt="Inset preview" /></div>
+                    <div className="small-note">Custom inset is active.</div>
+                    <button className="secondary-btn" type="button" onClick={() => updateLayout({ insetImage: null })}>Remove Inset Image</button>
+                  </>
+                ) : (
+                  <div className="small-note">Custom inset mode is selected, but no image is loaded yet.</div>
+                )}
+              </div>
+            ) : null}
           </div>
         </section>
 
@@ -531,50 +603,6 @@ export default function App() {
             <label className="toggle-row"><input type="checkbox" checked={referenceOverlays.context} onChange={(e) => updateLayout({ referenceOverlays: { context: e.target.checked } })} /> <span>Roads / Water / Towns</span></label>
             <label className="toggle-row"><input type="checkbox" checked={referenceOverlays.labels} onChange={(e) => updateLayout({ referenceOverlays: { labels: e.target.checked } })} /> <span>Reference Labels</span></label>
             <label className="toggle-row"><input type="checkbox" checked={referenceOverlays.rail} onChange={(e) => updateLayout({ referenceOverlays: { rail: e.target.checked } })} /> <span>Railways</span></label>
-          </div>
-          <div className="control-row" style={{ marginTop: 10 }}>
-            <label>Reference Opacity</label>
-            <input type="range" min="0.25" max="1" step="0.05" value={project.layout.referenceOpacity || 0.65} onChange={(e) => updateLayout({ referenceOpacity: Number(e.target.value) })} />
-          </div>
-        </section>
-
-        <section className="control-section">
-          <h2>Template Layout</h2>
-          <div className="control-grid">
-            <div className="control-row inline-2">
-              <div>
-                <label>Legend</label>
-                <select value={project.layout.legendMode} onChange={(e) => updateLayout({ legendMode: e.target.value })}>
-                  <option value="auto">Auto</option>
-                  <option value="compact">Compact</option>
-                  <option value="full">Full</option>
-                </select>
-              </div>
-              <div>
-                <label>Title Width</label>
-                <select value={project.layout.titleWidth} onChange={(e) => updateLayout({ titleWidth: e.target.value, frameVersion: (project.layout.frameVersion || 0) + 1 })}>
-                  <option value="standard">Standard</option>
-                  <option value="wide">Wide</option>
-                </select>
-              </div>
-            </div>
-            <div className="control-row inline-2">
-              <div>
-                <label>Inset Size</label>
-                <select value={project.layout.insetSize} onChange={(e) => updateLayout({ insetSize: e.target.value, insetEnabled: true, frameVersion: (project.layout.frameVersion || 0) + 1 })}>
-                  <option value="small">Small</option>
-                  <option value="medium">Medium</option>
-                  <option value="large">Large</option>
-                </select>
-              </div>
-              <div>
-                <label>Panels</label>
-                <div className="toggle-stack">
-                  <label className="toggle-row"><input type="checkbox" checked={project.layout.insetEnabled !== false} onChange={(e) => updateLayout({ insetEnabled: e.target.checked, frameVersion: (project.layout.frameVersion || 0) + 1 })} /> <span>Show Inset</span></label>
-                  <label className="toggle-row"><input type="checkbox" checked={project.layout.footerEnabled !== false} onChange={(e) => updateLayout({ footerEnabled: e.target.checked, frameVersion: (project.layout.frameVersion || 0) + 1 })} /> <span>Show Footer</span></label>
-                </div>
-              </div>
-            </div>
           </div>
         </section>
 
@@ -605,17 +633,40 @@ export default function App() {
         </section>
 
         <section className="control-section">
+          <h2>Drillhole Label Tool</h2>
+          {selectedFeature ? (
+            <div className="control-grid">
+              <div className="feature-chip">Selected: {selectedFeature.layerName}</div>
+              <div className="control-row">
+                <label>Label Text</label>
+                <input value={selectedFeature.suggestedLabel} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, suggestedLabel: e.target.value }))} />
+              </div>
+              <div className="small-note">Click a drillhole on the map, edit the label text here, then add the callout.</div>
+              <button className="btn primary" type="button" onClick={addCalloutFromSelectedFeature}>Add Callout From Clicked Drillhole</button>
+            </div>
+          ) : (
+            <div className="small-note">Click a drillhole point on the map to prepare a callout.</div>
+          )}
+        </section>
+
+        <section className="control-section">
           <h2>Callouts</h2>
           <div className="button-row" style={{ marginBottom: 10 }}>
             <button className="btn primary" type="button" onClick={addCalloutFromSelectedLayer} disabled={!selectedLayer}>Add From Selected Layer</button>
             <button className="btn" type="button" onClick={autoFrameAll}>Auto Frame All</button>
           </div>
+          {selectedCallout ? (
+            <div className="selected-note">Selected callout: {selectedCallout.text}</div>
+          ) : null}
           <div className="callout-list">
             {project.callouts.map((callout, index) => (
-              <div key={callout.id} className="callout-card">
+              <div key={callout.id} className={`callout-card ${selectedCalloutId === callout.id ? 'active' : ''}`}>
                 <div className="callout-card-header">
                   <span>Callout {index + 1}</span>
-                  <button className="secondary-btn" type="button" onClick={() => removeCallout(callout.id)}>Remove</button>
+                  <div className="callout-card-actions">
+                    <button className="secondary-btn" type="button" onClick={() => setSelectedCalloutId(callout.id)}>Select</button>
+                    <button className="secondary-btn" type="button" onClick={() => removeCallout(callout.id)}>Remove</button>
+                  </div>
                 </div>
                 <div className="control-grid">
                   <div className="control-row"><label>Text</label><input value={callout.text} onChange={(e) => updateCallout(callout.id, { text: e.target.value })} /></div>
@@ -710,8 +761,14 @@ export default function App() {
           '--logo-border': themeTokens.logoBorder,
         }}
       >
-        <MapCanvas onReady={onMapReady} project={project} template={template} />
-        <CalloutsOverlay map={leafletMapRef.current} callouts={project.callouts} />
+        <MapCanvas onReady={onMapReady} project={project} template={template} onFeatureClick={handleFeatureClick} />
+        <CalloutsOverlay
+          map={leafletMapRef.current}
+          callouts={project.callouts}
+          selectedCalloutId={selectedCalloutId}
+          onSelect={setSelectedCalloutId}
+          onMove={(id, offset) => updateCallout(id, { offset: { x: offset.x, y: offset.y }, isManualPosition: true })}
+        />
 
         <div className="template-zone" style={zoneStyle(resolvedZones.title)}>
           <div className="template-card title-card">
@@ -720,7 +777,7 @@ export default function App() {
           </div>
         </div>
 
-        {(project.layout.legendItems || []).length ? (
+        {legendItems.length ? (
           <div className="template-zone" style={zoneStyle(resolvedZones.legend)}>
             <div className="template-card legend-card">
               <div className="legend-header"><h3>Legend</h3></div>
@@ -747,7 +804,15 @@ export default function App() {
 
         <div className="template-zone" style={zoneStyle(resolvedZones.northArrow)}><NorthArrow /></div>
         {project.layout.insetEnabled !== false && resolvedZones.inset?.width ? (
-          <div className="template-zone" style={zoneStyle(resolvedZones.inset)}><LocatorInset layers={project.layers} insetMode={project.layout.insetMode} insetImage={project.layout.insetImage} mode={project.layout.mode} zone={{ width: '100%', height: '100%' }} /></div>
+          <div className="template-zone" style={zoneStyle(resolvedZones.inset)}>
+            <LocatorInset
+              layers={project.layers}
+              insetMode={project.layout.insetMode}
+              insetImage={project.layout.insetImage}
+              mode={project.layout.mode}
+              zone={{ width: '100%', height: '100%' }}
+            />
+          </div>
         ) : null}
         <div className="template-zone" style={zoneStyle(resolvedZones.scaleBar)}><ScaleBar map={leafletMapRef.current} /></div>
         {project.layout.footerText && project.layout.footerEnabled !== false ? <div className="template-zone" style={zoneStyle(resolvedZones.footer)}><div className="template-card footer-card">{project.layout.footerText}</div></div> : null}

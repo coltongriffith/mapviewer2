@@ -53,7 +53,8 @@ export default function LocatorInset({ layers, insetMode, mode, insetImage, zone
 
   const marker = normalize(visibleBounds, referenceBounds);
   const backdrop = buildBackdrop(mode);
-  const showCustom = insetMode === 'custom_image' && insetImage;
+  const wantsCustom = insetMode === 'custom_image';
+  const showCustom = wantsCustom && insetImage;
 
   return (
     <div className="template-card inset-card polished" style={zone}>
@@ -64,6 +65,8 @@ export default function LocatorInset({ layers, insetMode, mode, insetImage, zone
         <div className="inset-image-wrap">
           <img src={insetImage} alt="Inset map" className="inset-image" />
         </div>
+      ) : wantsCustom ? (
+        <div className="inset-empty-state">No custom inset image loaded yet.</div>
       ) : (
         <svg viewBox="0 0 100 100" className="inset-svg" preserveAspectRatio="none">
           <defs>
