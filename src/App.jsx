@@ -587,7 +587,7 @@ export default function App() {
     }
   };
 
-  const mapZoomPercent = Math.max(10, Math.min(400, Number(project.layout.zoomPercent || 100)));
+  const mapZoomPercent = Math.max(1, Math.min(100, Number(project.layout.zoomPercent || 100)));
   const featureEditorPoint = useMemo(() => {
     if (!leafletMapRef.current || !selectedFeature?.latlng) return null;
     const pt = leafletMapRef.current.latLngToContainerPoint([selectedFeature.latlng.lat, selectedFeature.latlng.lng]);
@@ -721,7 +721,7 @@ export default function App() {
                 </select>
               </div>
             </div>
-            <div className="small-note">Zoom is controlled directly on the map toolbar (10% to 400%) for fine framing control.</div>
+            <div className="small-note">Zoom is now controlled directly on the map canvas for faster editing.</div>
             <div className="control-row inline-2">
               <div>
                 <label>Title Font</label>
@@ -1103,8 +1103,8 @@ export default function App() {
               <input
                 id="map-zoom-control"
                 type="range"
-                min="10"
-                max="400"
+                min="1"
+                max="100"
                 step="1"
                 value={mapZoomPercent}
                 onChange={(e) => updateLayout({ zoomPercent: Number(e.target.value), frameVersion: (project.layout.frameVersion || 0) + 1 })}
