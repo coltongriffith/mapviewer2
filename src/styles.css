@@ -314,6 +314,53 @@ button, input, select, textarea { font: inherit; }
 .map-zoom-inline { display: grid; gap: 3px; min-width: 180px; padding: 0 6px; }
 .map-zoom-inline label { font-size: 11px; color: #314155; font-weight: 700; }
 .map-zoom-inline input { width: 100%; }
+.autosave-badge {
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 6px 10px;
+  border: 1px solid #cdd8e6;
+  background: #f8fbff;
+  color: #2b4d74;
+}
+.autosave-badge.clean { background: #edf9f0; border-color: #bfe4c8; color: #1f6a35; }
+.autosave-badge.dirty { background: #fff8eb; border-color: #f0d8a9; color: #8a5b08; }
+
+.recent-projects-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1800;
+  display: grid;
+  place-items: center;
+  background: rgba(2, 6, 23, 0.4);
+}
+.recent-projects-card {
+  width: min(560px, 92vw);
+  max-height: 78vh;
+  overflow: auto;
+  background: #ffffff;
+  border-radius: 14px;
+  border: 1px solid #dbe4ee;
+  box-shadow: 0 24px 50px rgba(15, 23, 42, 0.25);
+  padding: 14px;
+  display: grid;
+  gap: 10px;
+}
+.recent-projects-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.recent-projects-header h3 { margin: 0; color: #16324f; }
+.recent-projects-list { display: grid; gap: 8px; }
+.recent-project-row {
+  text-align: left;
+  display: grid;
+  gap: 4px;
+  border: 1px solid #dbe4ee;
+  border-radius: 10px;
+  background: #f8fbff;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+.recent-project-row strong { color: #14365f; }
+.recent-project-row span { color: #6b7f96; font-size: 12px; }
 
 .floating-north-arrow { position: absolute; right: 14px; bottom: 18px; width: 64px; height: 112px; z-index: 540; }
 .floating-north-arrow .north-arrow-card { border-radius: 10px; }

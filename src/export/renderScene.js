@@ -269,11 +269,129 @@ function drawCalloutsCanvas(ctx, scene, scale) {
   });
 }
 
+function annotationLabelFont(scene, scale) {
+  return `700 ${12 * scale}px ${scene.project.layout?.fonts?.label || 'Inter'}, Arial, sans-serif`;
+}
+
+function markerGlyph(type) {
+  if (type === 'pickaxe') return '⛏';
+  if (type === 'shovel') return '⚒';
+  return null;
+}
+
+function markerIsShape(type) {
+  return ['circle', 'square', 'triangle'].includes(type);
+}
+
+function drawMarkerLabelCanvas(ctx, scene, marker, point, scale) {
+  if (!marker.label) return;
+  const labelX = point.x + (marker.size || 18) * scale * 0.5 + 8 * scale;
+  const labelY = point.y;
+  ctx.save();
+  ctx.font = annotationLabelFont(scene, scale);
+  ctx.textBaseline = 'middle';
+  const metrics = ctx.measureText(marker.label);
+  const labelWidth = metrics.width + 16 * scale;
+  const labelHeight = 22 * scale;
+  drawRoundedRect(ctx, labelX, labelY - labelHeight / 2, labelWidth, labelHeight, 11 * scale);
+  ctx.fillStyle = 'rgba(255,255,255,0.96)';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(15,23,42,0.12)';
+  ctx.lineWidth = Math.max(1, scale * 0.8);
+  ctx.stroke();
+  ctx.fillStyle = '#0f172a';
+  ctx.fillText(marker.label, labelX + 8 * scale, labelY);
+  ctx.restore();
+}
+
+function drawMarkersCanvas(ctx, scene, scale) {
+  (scene.project.markers || []).forEach((marker) => {
+    const point = clonePoint(scene.map.latLngToContainerPoint([marker.lat, marker.lng]), scale);
+    const size = (marker.size || 18) * scale;
+    ctx.save();
+    ctx.translate(point.x, point.y);
+    ctx.strokeStyle = marker.color || '#d97706';
+    ctx.fillStyle = marker.color || '#d97706';
+    ctx.lineWidth = 2 * scale;
+
+    if (marker.type === 'triangle') {
+      ctx.beginPath();
+      ctx.moveTo(0, -size * 0.55);
+      ctx.lineTo(-size * 0.5, size * 0.45);
+      ctx.lineTo(size * 0.5, size * 0.45);
+      ctx.closePath();
+      ctx.fill();
+    } else if (markerIsShape(marker.type)) {
+      if (marker.type === 'circle') {
+        ctx.beginPath();
+        ctx.arc(0, 0, size / 2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      } else {
+        ctx.beginPath();
+        ctx.rect(-size / 2, -size / 2, size, size);
+        ctx.fill();
+        ctx.stroke();
+      }
+    } else {
+      const glyph = markerGlyph(marker.type) || '•';
+      ctx.font = `${Math.max(18 * scale, size)}px "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(glyph, 0, 1 * scale);
+    }
+    ctx.restore();
+    drawMarkerLabelCanvas(ctx, scene, marker, point, scale);
+  });
+}
+
+function drawEllipseLabelCanvas(ctx, scene, ellipse, center, topY, scale) {
+  if (!ellipse.label) return;
+  ctx.save();
+  ctx.font = annotationLabelFont(scene, scale);
+  ctx.textBaseline = 'middle';
+  const textWidth = ctx.measureText(ellipse.label).width;
+  const labelWidth = textWidth + 16 * scale;
+  const labelHeight = 20 * scale;
+  const x = center.x - labelWidth / 2;
+  const y = topY - 24 * scale - labelHeight / 2;
+  drawRoundedRect(ctx, x, y, labelWidth, labelHeight, 10 * scale);
+  ctx.fillStyle = 'rgba(255,255,255,0.95)';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(15,23,42,0.12)';
+  ctx.lineWidth = Math.max(1, scale * 0.8);
+  ctx.stroke();
+  ctx.fillStyle = '#0f172a';
+  ctx.fillText(ellipse.label, x + 8 * scale, y + labelHeight / 2);
+  ctx.restore();
+}
+
+function drawEllipsesCanvas(ctx, scene, scale) {
+  (scene.project.ellipses || []).forEach((ellipse) => {
+    const center = clonePoint(scene.map.latLngToContainerPoint([ellipse.lat, ellipse.lng]), scale);
+    const width = (ellipse.width || 90) * scale;
+    const height = (ellipse.height || 56) * scale;
+    const rotation = ((ellipse.rotation || 0) * Math.PI) / 180;
+
+    ctx.save();
+    ctx.translate(center.x, center.y);
+    ctx.rotate(rotation);
+    ctx.beginPath();
+    ctx.ellipse(0, 0, width / 2, height / 2, 0, 0, Math.PI * 2);
+    ctx.strokeStyle = ellipse.color || '#dc2626';
+    ctx.lineWidth = 2 * scale;
+    ctx.setLineDash(ellipse.dashed === false ? [] : [6 * scale, 4 * scale]);
+    ctx.stroke();
+    ctx.restore();
+    drawEllipseLabelCanvas(ctx, scene, ellipse, center, center.y - height / 2, scale);
+  });
+}
+
 export async function renderSceneToCanvas(scene, options = {}) {
   const scale = Number(options.pixelRatio || scene.project.layout?.exportSettings?.pixelRatio || 2);
   const canvas = document.createElement('canvas'); canvas.width = Math.round(scene.width * scale); canvas.height = Math.round(scene.height * scale); const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#f3f5f7'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-  await drawTilesCanvas(ctx, scene, scale); drawVectorsCanvas(ctx, scene, scale); drawCalloutsCanvas(ctx, scene, scale); drawTitleBlockCanvas(ctx, scene, scale); drawLegendCanvas(ctx, scene, scale); drawNorthArrowCanvas(ctx, scene, scale); await drawInsetCanvas(ctx, scene, scale); drawScaleBarCanvas(ctx, scene, scale); drawFooterCanvas(ctx, scene, scale); await drawLogoCanvas(ctx, scene, scale);
+  await drawTilesCanvas(ctx, scene, scale); drawVectorsCanvas(ctx, scene, scale); drawEllipsesCanvas(ctx, scene, scale); drawMarkersCanvas(ctx, scene, scale); drawCalloutsCanvas(ctx, scene, scale); drawTitleBlockCanvas(ctx, scene, scale); drawLegendCanvas(ctx, scene, scale); drawNorthArrowCanvas(ctx, scene, scale); await drawInsetCanvas(ctx, scene, scale); drawScaleBarCanvas(ctx, scene, scale); drawFooterCanvas(ctx, scene, scale); await drawLogoCanvas(ctx, scene, scale);
   return canvas;
 }
 
@@ -299,6 +417,47 @@ async function drawLogoCanvas(ctx, scene, scale) {
 
 function renderTileImagesSvg(scene, scale) { return getTileImages(scene.container).map((tile) => `<image href="${escapeXml(tile.href)}" x="${(tile.x * scale).toFixed(2)}" y="${(tile.y * scale).toFixed(2)}" width="${(tile.width * scale).toFixed(2)}" height="${(tile.height * scale).toFixed(2)}" opacity="${tile.opacity}" preserveAspectRatio="none" />`).join('\n'); }
 function renderVectorsSvg(scene, scale) { return (scene.project.layers || []).filter((layer) => layer.visible !== false && layer.geojson).map((layer) => featureCollectionFeatures(layer.geojson).map((feature) => geometryToSvg(scene.map, feature, getTemplateStyle(scene.template, layer), scale)).join('\n')).join('\n'); }
+function renderMarkerLabelSvg(scene, marker, point, scale) {
+  if (!marker.label) return '';
+  const labelX = point.x + (marker.size || 18) * scale * 0.5 + 8 * scale;
+  const fontSize = 12 * scale;
+  const estimatedWidth = marker.label.length * fontSize * 0.62 + 16 * scale;
+  const labelHeight = 22 * scale;
+  return `<g><rect x="${labelX}" y="${point.y - labelHeight / 2}" width="${estimatedWidth}" height="${labelHeight}" rx="${11 * scale}" fill="rgba(255,255,255,0.96)" stroke="rgba(15,23,42,0.12)" stroke-width="${Math.max(1, scale * 0.8)}" /><text x="${labelX + 8 * scale}" y="${point.y}" dominant-baseline="middle" fill="#0f172a" font-family="${escapeXml(scene.project.layout?.fonts?.label || 'Inter')}, Arial, sans-serif" font-size="${fontSize}" font-weight="700">${escapeXml(marker.label)}</text></g>`;
+}
+function renderMarkersSvg(scene, scale) {
+  return (scene.project.markers || []).map((marker) => {
+    const point = clonePoint(scene.map.latLngToContainerPoint([marker.lat, marker.lng]), scale);
+    const size = (marker.size || 18) * scale;
+    const color = marker.color || '#d97706';
+    let symbol = '';
+    if (marker.type === 'triangle') {
+      symbol = `<path d="M ${point.x} ${point.y - size * 0.55} L ${point.x - size * 0.5} ${point.y + size * 0.45} L ${point.x + size * 0.5} ${point.y + size * 0.45} Z" fill="${color}" />`;
+    } else if (marker.type === 'circle') {
+      symbol = `<circle cx="${point.x}" cy="${point.y}" r="${size / 2}" fill="${color}" stroke="${color}" stroke-width="${2 * scale}" />`;
+    } else if (marker.type === 'square') {
+      symbol = `<rect x="${point.x - size / 2}" y="${point.y - size / 2}" width="${size}" height="${size}" fill="${color}" stroke="${color}" stroke-width="${2 * scale}" />`;
+    } else {
+      const glyph = markerGlyph(marker.type) || '•';
+      symbol = `<text x="${point.x}" y="${point.y + 1 * scale}" text-anchor="middle" dominant-baseline="middle" fill="${color}" font-family="'Segoe UI Emoji','Apple Color Emoji','Noto Color Emoji',sans-serif" font-size="${Math.max(18 * scale, size)}">${escapeXml(glyph)}</text>`;
+    }
+    return `<g>${symbol}${renderMarkerLabelSvg(scene, marker, point, scale)}</g>`;
+  }).join('\n');
+}
+function renderEllipsesSvg(scene, scale) {
+  return (scene.project.ellipses || []).map((ellipse) => {
+    const center = clonePoint(scene.map.latLngToContainerPoint([ellipse.lat, ellipse.lng]), scale);
+    const width = (ellipse.width || 90) * scale;
+    const height = (ellipse.height || 56) * scale;
+    const rotation = ellipse.rotation || 0;
+    const dash = ellipse.dashed === false ? '' : ` stroke-dasharray="${6 * scale} ${4 * scale}"`;
+    const color = ellipse.color || '#dc2626';
+    const label = ellipse.label
+      ? `<g><rect x="${center.x - (ellipse.label.length * 12 * scale * 0.62 + 16 * scale) / 2}" y="${center.y - height / 2 - 24 * scale - 10 * scale}" width="${ellipse.label.length * 12 * scale * 0.62 + 16 * scale}" height="${20 * scale}" rx="${10 * scale}" fill="rgba(255,255,255,0.95)" stroke="rgba(15,23,42,0.12)" stroke-width="${Math.max(1, scale * 0.8)}" /><text x="${center.x}" y="${center.y - height / 2 - 24 * scale}" text-anchor="middle" dominant-baseline="middle" fill="#0f172a" font-family="${escapeXml(scene.project.layout?.fonts?.label || 'Inter')}, Arial, sans-serif" font-size="${12 * scale}" font-weight="700">${escapeXml(ellipse.label)}</text></g>`
+      : '';
+    return `<g transform="rotate(${rotation} ${center.x} ${center.y})"><ellipse cx="${center.x}" cy="${center.y}" rx="${width / 2}" ry="${height / 2}" fill="none" stroke="${color}" stroke-width="${2 * scale}"${dash} />${label}</g>`;
+  }).join('\n');
+}
 function renderTitleSvg(scene, scale) { const theme = getTheme(scene); const { title } = getOverlayMetrics(scene); const x = title.left * scale, y = title.top * scale, w = title.width * scale, h = title.height * scale; const accent = theme.titleAccent ? `<rect x="${x}" y="${y}" width="${w}" height="${5 * scale}" fill="${theme.titleAccent}" />` : ''; return `<g>${svgRect(x, y, w, h, (theme.titleRadius || theme.panelRadius || 10) * scale, theme.titleFill, theme.titleBorder, scale)}${accent}<text x="${x + 18 * scale}" y="${y + (theme.titleAccent ? 46 : 42) * scale}" fill="${theme.titleText}" font-family="Arial" font-size="${26 * scale}" font-weight="700">${escapeXml(scene.project.layout?.title || 'Project Map')}</text><text x="${x + 18 * scale}" y="${y + (theme.titleAccent ? 70 : 66) * scale}" fill="${theme.subtitleText}" font-family="Arial" font-size="${14 * scale}">${escapeXml(scene.project.layout?.subtitle || 'Technical results template')}</text></g>`; }
 function renderLegendSvg(scene, scale) {
   const { legend } = getOverlayMetrics(scene); const items = scene.project.layout?.legendItems || []; if (!items.length) return '';
@@ -333,7 +492,7 @@ function renderCalloutsSvg(scene, scale) { return placeCallouts(scene, scale).ma
 
 export function renderSceneToSvg(scene, options = {}) {
   const scale = Number(options.pixelRatio || scene.project.layout?.exportSettings?.pixelRatio || 2); const width = Math.round(scene.width * scale), height = Math.round(scene.height * scale);
-  return `<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="100%" height="100%" fill="#f3f5f7" />${renderTileImagesSvg(scene, scale)}${renderVectorsSvg(scene, scale)}${renderCalloutsSvg(scene, scale)}${renderTitleSvg(scene, scale)}${renderLegendSvg(scene, scale)}${renderNorthArrowSvg(scene, scale)}${renderInsetSvg(scene, scale)}${renderScaleBarSvg(scene, scale)}${renderFooterSvg(scene, scale)}${renderLogoSvg(scene, scale)}</svg>`;
+  return `<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="100%" height="100%" fill="#f3f5f7" />${renderTileImagesSvg(scene, scale)}${renderVectorsSvg(scene, scale)}${renderEllipsesSvg(scene, scale)}${renderMarkersSvg(scene, scale)}${renderCalloutsSvg(scene, scale)}${renderTitleSvg(scene, scale)}${renderLegendSvg(scene, scale)}${renderNorthArrowSvg(scene, scale)}${renderInsetSvg(scene, scale)}${renderScaleBarSvg(scene, scale)}${renderFooterSvg(scene, scale)}${renderLogoSvg(scene, scale)}</svg>`;
 }
 export function downloadCanvas(filename, canvas) { const link = document.createElement('a'); link.download = filename; link.href = canvas.toDataURL('image/png', 1.0); link.click(); }
 export function downloadSvg(filename, svgText) { downloadBlob(filename, new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' })); }
