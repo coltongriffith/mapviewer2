@@ -50,12 +50,17 @@ function detectGeomType(geojson) {
   return 'polygon';
 }
 
-export default function MapCanvas({ onReady, project, template, onFeatureClick }) {
+export default function MapCanvas({ onReady, project, template, onFeatureClick, onMapClick }) {
   const mapRef = useRef(null);
+  const onMapClickRef = useRef(onMapClick);
   const mapElRef = useRef(null);
   const baseLayerRef = useRef(null);
   const overlayGroupRef = useRef(null);
   const referenceRefs = useRef({});
+
+  useEffect(() => {
+    onMapClickRef.current = onMapClick;
+  }, [onMapClick]);
 
   useEffect(() => {
     if (mapRef.current || !mapElRef.current) return;
@@ -65,7 +70,11 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick }
       zoom: 5,
       zoomControl: true,
       preferCanvas: false,
+      zoomSnap: 0.01,
+      zoomDelta: 0.25,
     });
+
+    map.on('click', (event) => onMapClickRef.current?.(event.latlng));
 
     overlayGroupRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
@@ -142,23 +151,26 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick }
       const baseStyle = template?.roleStyles?.[layer.role] || template?.roleStyles?.other || {};
       const style = { ...baseStyle, ...(layer.style || {}) };
       const geomType = detectGeomType(layer.geojson);
-      const isDrillholes = layer.role === 'drillholes';
+      const isDrillholes = layer.role === 'drillholes' || layer.type === 'points';
 
       const geoLayer = L.geoJSON(layer.geojson, {
+        pane: 'overlayPane',
         style: () => ({
           color: style.stroke || '#54a6ff',
           weight: style.strokeWidth ?? 2,
           fillColor: style.fill || '#54a6ff',
           fillOpacity: geomType === 'line' ? 0 : style.fillOpacity ?? 0.22,
           dashArray: style.dashArray || '',
+          opacity: style.opacity ?? 1,
         }),
         pointToLayer: (feature, latlng) => {
           const marker = L.circleMarker(latlng, {
-            radius: (style.markerSize ?? 10) / 2,
+            radius: Math.max(4, (style.markerSize ?? 10) / 2),
             color: style.markerColor || style.stroke || '#111111',
             fillColor: style.markerFill || style.fill || style.markerColor || '#ffffff',
             fillOpacity: 1,
             weight: style.strokeWidth ?? 1.5,
+            opacity: 1,
           });
 
           if (isDrillholes) {
@@ -176,6 +188,9 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick }
       });
 
       geoLayer.addTo(group);
+      if (isDrillholes && typeof geoLayer.bringToFront === 'function') {
+        geoLayer.bringToFront();
+      }
     });
   }, [project?.layers, template, onFeatureClick]);
 

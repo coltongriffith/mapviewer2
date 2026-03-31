@@ -40,7 +40,7 @@ function resolveCalloutBoxes(callouts, map) {
   return placed;
 }
 
-export default function CalloutsOverlay({ map, callouts, selectedCalloutId, onSelect, onMove }) {
+export default function CalloutsOverlay({ map, callouts, selectedCalloutId, onSelect, onMove, fontFamily }) {
   const [tick, setTick] = useState(0);
   const dragRef = useRef(null);
 
@@ -78,8 +78,8 @@ export default function CalloutsOverlay({ map, callouts, selectedCalloutId, onSe
     <div className="callouts-overlay">
       {placed.map((callout) => (
         <React.Fragment key={callout.id}>
-          {callout.type === 'leader' || callout.type === 'boxed' ? (
-            <svg className="callout-leader-svg">
+          <svg className="callout-leader-svg">
+            {(callout.type === 'leader' || callout.type === 'boxed') ? (
               <line
                 x1={callout.anchorPx.x}
                 y1={callout.anchorPx.y}
@@ -89,11 +89,12 @@ export default function CalloutsOverlay({ map, callouts, selectedCalloutId, onSe
                 strokeWidth="1.4"
                 strokeDasharray={callout.type === 'leader' ? '5 3' : ''}
               />
-            </svg>
-          ) : null}
+            ) : null}
+            <circle cx={callout.anchorPx.x} cy={callout.anchorPx.y} r="4" fill="#102640" />
+          </svg>
           <div
             className={`map-callout ${callout.type} ${selectedCalloutId === callout.id ? 'selected' : ''}`}
-            style={{ left: callout.left, top: callout.top, width: callout.width, minHeight: callout.height }}
+            style={{ left: callout.left, top: callout.top, width: callout.width, minHeight: callout.height, fontFamily: fontFamily || 'Inter, sans-serif' }}
             onClick={() => onSelect?.(callout.id)}
             onMouseDown={(event) => {
               event.preventDefault();

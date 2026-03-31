@@ -3,8 +3,8 @@ import { ROLE_LABELS } from '../projectState';
 const BASE_ZONES = {
   title: { top: 18, left: 18, width: 480, height: 86 },
   legend: { top: 122, left: 18, width: 292, height: 120 },
-  northArrow: { top: 18, right: 18, width: 76, height: 104 },
-  inset: { top: 138, right: 18, width: 244, height: 190 },
+  inset: { top: 18, right: 18, width: 244, height: 190 },
+  northArrow: { top: 220, right: 18, width: 76, height: 104 },
   scaleBar: { bottom: 18, left: 18, width: 230, height: 64 },
   footer: { bottom: 18, left: 268, width: 460, height: 42 },
   logo: { bottom: 18, right: 18, width: 180, height: 84 },
@@ -119,7 +119,7 @@ export function resolveTemplateZones(template, layout, mapSize) {
     title: { ...BASE_ZONES.title, width: titleWidth },
     legend: { ...BASE_ZONES.legend, height: legendHeight },
     inset: insetEnabled
-      ? { ...BASE_ZONES.inset, width: insetWidth, height: insetHeight, top: Math.max(138, BASE_ZONES.legend.top + legendHeight + 18) }
+      ? { ...BASE_ZONES.inset, width: insetWidth, height: insetHeight }
       : { ...BASE_ZONES.inset, width: 0, height: 0 },
     footer: layout?.footerEnabled === false ? { ...BASE_ZONES.footer, width: 0, height: 0 } : { ...BASE_ZONES.footer },
     logo: { ...BASE_ZONES.logo, width: logoWidth, height: logoHeight },

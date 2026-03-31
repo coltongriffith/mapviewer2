@@ -45,6 +45,14 @@ export const TEMPLATE_THEMES = {
   investor_clean: 'Investor Clean',
 };
 
+export const FONT_OPTIONS = {
+  Inter: 'Inter',
+  Roboto: 'Roboto',
+  'Open Sans': 'Open Sans',
+  Montserrat: 'Montserrat',
+  Lato: 'Lato',
+};
+
 export function createInitialProjectState() {
   return {
     layers: [],
@@ -75,11 +83,21 @@ export function createInitialProjectState() {
         rail: false,
       },
       referenceOpacity: 0.65,
+      zoomPercent: 100,
+      fonts: {
+        title: 'Inter',
+        legend: 'Inter',
+        callout: 'Inter',
+        label: 'Inter',
+        footer: 'Inter',
+      },
       exportSettings: {
         pixelRatio: 2,
         filename: 'mapviewer-export',
       },
     },
     callouts: [],
+    markers: [],
+    ellipses: [],
   };
 }
