@@ -1,3 +1,4 @@
+import { OUTPUT_PRESETS } from './outputPresets';
 export const ROLE_LABELS = {
   claims: 'Claims',
   drillholes: 'Drillholes',
@@ -39,6 +40,8 @@ export const CALLOUT_TYPES = {
 };
 
 
+export { OUTPUT_PRESETS };
+
 export const TEMPLATE_THEMES = {
   modern_rounded: 'Modern Rounded',
   technical_sharp: 'Technical Sharp',
@@ -63,6 +66,7 @@ export function createInitialProjectState() {
       templateId: 'technical_results_v2',
       themeId: 'modern_rounded',
       mode: 'project_overview',
+      outputPreset: 'press_release_map',
       compositionPreset: 'balanced',
       insetMode: 'province_state',
       insetEnabled: true,
@@ -84,6 +88,17 @@ export function createInitialProjectState() {
       },
       referenceOpacity: 0.65,
       zoomPercent: 100,
+      safeMargins: { top: 18, right: 18, bottom: 18, left: 18 },
+      markerDefaults: { type: 'circle', color: '#d97706', size: 18, label: '' },
+      zoneDefaults: { width: 90, height: 56, rotation: -18, color: '#dc2626', dashed: true, label: '' },
+      zoneOverrides: {
+        title: { width: 540, height: 94, top: 18, left: 18 },
+        legend: { anchor: 'bottom-left', width: 300, height: 176, bottom: 92, left: 18 },
+        inset: { top: 18, right: 18 },
+        logo: { anchor: 'top-left', top: 116, left: 18, width: 180, height: 84 },
+        northArrow: { anchor: 'bottom-right', bottom: 18, right: 18, width: 76, height: 104 },
+        scaleBar: { bottom: 18, left: 18 },
+      },
       fonts: {
         title: 'Inter',
         legend: 'Inter',

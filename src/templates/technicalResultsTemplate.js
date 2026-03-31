@@ -1,13 +1,13 @@
 import { ROLE_LABELS } from '../projectState';
 
 const BASE_ZONES = {
-  title: { top: 18, left: 18, width: 480, height: 86 },
-  legend: { top: 122, left: 18, width: 292, height: 120 },
+  title: { top: 18, left: 18, width: 540, height: 94 },
+  legend: { bottom: 92, left: 18, width: 300, height: 176 },
   inset: { top: 18, right: 18, width: 244, height: 190 },
-  northArrow: { top: 220, right: 18, width: 76, height: 104 },
+  northArrow: { bottom: 18, right: 18, width: 76, height: 104 },
   scaleBar: { bottom: 18, left: 18, width: 230, height: 64 },
   footer: { bottom: 18, left: 268, width: 460, height: 42 },
-  logo: { bottom: 18, right: 18, width: 180, height: 84 },
+  logo: { top: 116, left: 18, width: 180, height: 84 },
 };
 
 const ROLE_GROUPS = {
@@ -98,6 +98,36 @@ function legendHeightFor(layout, itemCount) {
   return Math.max(110, Math.min(280, 54 + itemCount * 30));
 }
 
+function resolveAnchorPosition(zone, anchor, safeMargins, width, height) {
+  const next = { ...zone };
+  if (anchor === 'bottom-left') {
+    next.left = next.left ?? safeMargins.left;
+    next.bottom = next.bottom ?? safeMargins.bottom;
+    delete next.top;
+    delete next.right;
+  } else if (anchor === 'bottom-right') {
+    next.right = next.right ?? safeMargins.right;
+    next.bottom = next.bottom ?? safeMargins.bottom;
+    delete next.top;
+    delete next.left;
+  } else if (anchor === 'top-right') {
+    next.right = next.right ?? safeMargins.right;
+    next.top = next.top ?? safeMargins.top;
+    delete next.bottom;
+    delete next.left;
+  } else {
+    next.left = next.left ?? safeMargins.left;
+    next.top = next.top ?? safeMargins.top;
+    delete next.bottom;
+    delete next.right;
+  }
+  if (next.right != null && next.left == null && next.width != null) next.left = width - next.right - next.width;
+  if (next.bottom != null && next.top == null && next.height != null) next.top = height - next.bottom - next.height;
+  next.left = Math.max(safeMargins.left, Math.min(width - safeMargins.right - (next.width || 0), next.left || 0));
+  next.top = Math.max(safeMargins.top, Math.min(height - safeMargins.bottom - (next.height || 0), next.top || 0));
+  return next;
+}
+
 export function resolveTemplateZones(template, layout, mapSize) {
   const width = mapSize?.width || 1600;
   const height = mapSize?.height || 1000;
@@ -110,29 +140,31 @@ export function resolveTemplateZones(template, layout, mapSize) {
   const insetEnabled = layout?.insetEnabled !== false;
   const insetScaleBase = insetSize === 'small' ? 0.82 : insetSize === 'large' ? 1.22 : 1;
   const insetScale = insetScaleBase * Number(layout?.insetScale || 1);
-  const titleWidth = layout?.titleWidth === 'wide' ? 620 : 480;
+  const titleWidth = Number(layout?.zoneOverrides?.title?.width || (layout?.titleWidth === 'wide' ? 620 : BASE_ZONES.title.width));
 
   const insetWidth = Math.round(BASE_ZONES.inset.width * insetScale);
   const insetHeight = Math.round(BASE_ZONES.inset.height * insetScale);
 
+  const safeMargins = { top: 18, right: 18, bottom: 18, left: 18, ...(layout?.safeMargins || {}) };
   const zones = {
     ...BASE_ZONES,
-    title: { ...BASE_ZONES.title, width: titleWidth },
-    legend: { ...BASE_ZONES.legend, height: legendHeight },
+    ...(layout?.zoneOverrides || {}),
+    title: { ...BASE_ZONES.title, ...(layout?.zoneOverrides?.title || {}), width: titleWidth },
+    legend: { ...BASE_ZONES.legend, ...(layout?.zoneOverrides?.legend || {}), height: layout?.zoneOverrides?.legend?.height || legendHeight },
     inset: insetEnabled
-      ? { ...BASE_ZONES.inset, width: insetWidth, height: insetHeight }
-      : { ...BASE_ZONES.inset, width: 0, height: 0 },
-    footer: layout?.footerEnabled === false ? { ...BASE_ZONES.footer, width: 0, height: 0 } : { ...BASE_ZONES.footer },
-    logo: { ...BASE_ZONES.logo, width: logoWidth, height: logoHeight },
+      ? { ...BASE_ZONES.inset, ...(layout?.zoneOverrides?.inset || {}), width: insetWidth, height: insetHeight }
+      : { ...BASE_ZONES.inset, ...(layout?.zoneOverrides?.inset || {}), width: 0, height: 0 },
+    footer: layout?.footerEnabled === false ? { ...BASE_ZONES.footer, width: 0, height: 0 } : { ...BASE_ZONES.footer, ...(layout?.zoneOverrides?.footer || {}) },
+    logo: { ...BASE_ZONES.logo, ...(layout?.zoneOverrides?.logo || {}), width: logoWidth, height: logoHeight },
+    northArrow: { ...BASE_ZONES.northArrow, ...(layout?.zoneOverrides?.northArrow || {}) },
+    scaleBar: { ...BASE_ZONES.scaleBar, ...(layout?.zoneOverrides?.scaleBar || {}) },
   };
 
   return Object.fromEntries(
-    Object.entries(zones).map(([key, zone]) => {
-      const next = { ...zone };
-      if (next.right != null && next.left == null && next.width != null) next.left = width - next.right - next.width;
-      if (next.bottom != null && next.top == null && next.height != null) next.top = height - next.bottom - next.height;
-      return [key, next];
-    })
+    Object.entries(zones).map(([key, zone]) => [
+      key,
+      resolveAnchorPosition(zone, layout?.zoneOverrides?.[key]?.anchor, safeMargins, width, height),
+    ])
   );
 }
 

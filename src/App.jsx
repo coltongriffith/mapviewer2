@@ -18,6 +18,7 @@ import {
   FONT_OPTIONS,
   INSET_MODES,
   ROLE_LABELS,
+  OUTPUT_PRESETS,
   TEMPLATE_MODES,
   TEMPLATE_THEMES,
 } from './projectState';
@@ -25,6 +26,7 @@ import { applyRoleToLayer, inferRoleFromLayer } from './mapPresets';
 import { getTemplate } from './templates';
 import { buildLegendItems, resolveTemplateZones } from './templates/technicalResultsTemplate';
 import { geojsonCenter } from './utils/geometry';
+import { getOutputPresetConfig } from './outputPresets';
 import { cleanLayerName } from './utils/cleanLayerName';
 import { fitProjectToTemplate } from './utils/frameMapForTemplate';
 import { getThemeTokens } from './utils/themeTokens';
@@ -156,6 +158,36 @@ function applyModeToProject(project, template, mode) {
   };
 }
 
+
+
+function applyOutputPresetToProject(project, presetId) {
+  const preset = getOutputPresetConfig(presetId);
+  return {
+    ...project,
+    layout: {
+      ...project.layout,
+      outputPreset: presetId,
+      insetMode: project.layout.insetMode === 'custom_image' ? project.layout.insetMode : preset.insetDefaults.insetMode,
+      insetEnabled: preset.insetDefaults.insetEnabled,
+      insetSize: preset.insetDefaults.insetSize,
+      compositionPreset: preset.exportFraming.compositionPreset,
+      zoomPercent: preset.exportFraming.zoomPercent,
+      safeMargins: { ...preset.safeMargins },
+      markerDefaults: { ...preset.markerDefaults },
+      zoneDefaults: { ...preset.zoneDefaults },
+      fonts: { ...project.layout.fonts, ...preset.fontHierarchy },
+      zoneOverrides: {
+        title: { ...preset.titleBlockSizing, top: preset.safeMargins.top, left: preset.safeMargins.left },
+        legend: { ...preset.legendPlacement },
+        inset: { top: preset.safeMargins.top, right: preset.safeMargins.right },
+        logo: { ...preset.logoPlacement },
+        northArrow: { ...preset.northArrowPlacement },
+        scaleBar: { bottom: preset.safeMargins.bottom, left: preset.safeMargins.left },
+      },
+      frameVersion: (project.layout.frameVersion || 0) + 1,
+    },
+  };
+}
 function renderLegendGroups(items, layout) {
   const mode = layout?.legendMode || 'auto';
   const compact = mode === 'compact' || (mode === 'auto' && items.length <= 2);
@@ -427,6 +459,11 @@ export default function App() {
     setProject((prev) => applyModeToProject(prev, template, mode));
   };
 
+  const applyOutputPreset = (presetId) => {
+    setProject((prev) => applyOutputPresetToProject(prev, presetId));
+    setUploadStatus({ type: 'success', message: 'Applied output preset layout defaults.' });
+  };
+
   const setDisplayLabel = (layerId, value) => {
     updateLayer(layerId, { displayName: value, legend: { label: value } });
   };
@@ -592,7 +629,12 @@ export default function App() {
       ...prev,
       markers: [
         ...(prev.markers || []),
-        { id, lat: latlng.lat, lng: latlng.lng, type: 'circle', color: '#d97706', size: 18, label: '' },
+        {
+          id,
+          lat: latlng.lat,
+          lng: latlng.lng,
+          ...(prev.layout?.markerDefaults || { type: 'circle', color: '#d97706', size: 18, label: '' }),
+        },
       ],
     }));
     setSelectedMarkerId(id);
@@ -606,7 +648,12 @@ export default function App() {
       ...prev,
       ellipses: [
         ...(prev.ellipses || []),
-        { id, lat: latlng.lat, lng: latlng.lng, width: 90, height: 56, rotation: -18, color: '#dc2626', dashed: true, label: '' },
+        {
+          id,
+          lat: latlng.lat,
+          lng: latlng.lng,
+          ...(prev.layout?.zoneDefaults || { width: 90, height: 56, rotation: -18, color: '#dc2626', dashed: true, label: '' }),
+        },
       ],
     }));
     setSelectedEllipseId(id);
@@ -762,6 +809,14 @@ export default function App() {
               <label>Mode</label>
               <select value={project.layout.mode} onChange={(e) => applyMode(e.target.value)}>
                 {Object.entries(TEMPLATE_MODES).map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
+            </div>
+            <div className="control-row">
+              <label>Output Preset</label>
+              <select value={project.layout.outputPreset || 'press_release_map'} onChange={(e) => applyOutputPreset(e.target.value)}>
+                {Object.entries(OUTPUT_PRESETS).map(([value, label]) => (
                   <option key={value} value={value}>{label}</option>
                 ))}
               </select>
@@ -1288,7 +1343,7 @@ export default function App() {
           </div>
         ) : null}
 
-        <div className="floating-north-arrow"><NorthArrow /></div>
+        <div className="template-zone" style={zoneStyle(resolvedZones.northArrow)}><NorthArrow /></div>
         {project.layout.insetEnabled !== false && resolvedZones.inset?.width ? (
           <div className="template-zone" style={zoneStyle(resolvedZones.inset)}>
             <LocatorInset layers={project.layers} insetMode={project.layout.insetMode} insetImage={project.layout.insetImage} mode={project.layout.mode} zone={{ width: '100%', height: '100%' }} />
