@@ -1183,48 +1183,8 @@ export default function App() {
         </section>
       </Sidebar>
 
-      <div
-        ref={mapContainerRef}
-        className="map-stage"
-        data-theme={project.layout.themeId || 'modern_rounded'}
-        data-annotation-tool={annotationTool || ''}
-        style={{
-          '--template-radius': `${themeTokens.panelRadius}px`,
-          '--title-radius': `${themeTokens.titleRadius}px`,
-          '--panel-bg': themeTokens.panelFill,
-          '--panel-border': themeTokens.panelBorder,
-          '--panel-shadow': themeTokens.panelShadow,
-          '--title-bg': themeTokens.titleFill,
-          '--title-border': themeTokens.titleBorder,
-          '--title-accent': themeTokens.titleAccent || 'transparent',
-          '--title-fg': themeTokens.titleText,
-          '--subtitle-fg': themeTokens.subtitleText,
-          '--panel-title': themeTokens.panelTitle,
-          '--body-text': themeTokens.bodyText,
-          '--muted-text': themeTokens.mutedText,
-          '--footer-bg': themeTokens.footerFill,
-          '--footer-fg': themeTokens.footerText,
-          '--callout-bg': themeTokens.calloutFill,
-          '--callout-border': themeTokens.calloutBorder,
-          '--callout-fg': themeTokens.calloutText,
-          '--north-fill': themeTokens.northArrowFill,
-          '--north-fg': themeTokens.northArrowText,
-          '--scale-bg': themeTokens.scaleFill,
-          '--scale-stroke': themeTokens.scaleStroke,
-          '--inset-bg': themeTokens.insetFill,
-          '--inset-border': themeTokens.insetBorder,
-          '--inset-title': themeTokens.insetTitle,
-          '--inset-muted': themeTokens.insetMuted,
-          '--logo-bg': themeTokens.logoFill,
-          '--logo-border': themeTokens.logoBorder,
-          '--font-title': `${project.layout.fonts?.title || 'Inter'}, sans-serif`,
-          '--font-legend': `${project.layout.fonts?.legend || 'Inter'}, sans-serif`,
-          '--font-label': `${project.layout.fonts?.label || 'Inter'}, sans-serif`,
-          '--font-callout': `${project.layout.fonts?.callout || 'Inter'}, sans-serif`,
-          '--font-footer': `${project.layout.fonts?.footer || 'Inter'}, sans-serif`,
-        }}
-      >
-        <div className="map-topbar"> 
+      <div className="editor-main">
+        <div className="map-topbar editor-toolbar">
           <div className="map-topbar-left">
             <div className="map-topbar-title">{project.layout.title || 'Project Map'}</div>
             <div className="map-topbar-sub">{annotationTool ? `Mode: ${annotationTool === 'marker' ? 'Add Marker' : 'Add Zone'} (click map to place)` : 'Pan map, add markers/zones, and export.'}</div>
@@ -1273,6 +1233,48 @@ export default function App() {
             <button className="btn primary" type="button" onClick={() => handleExport('png')} disabled={exporting}>Export PNG</button>
           </div>
         </div>
+        <div className="map-viewport">
+          <div
+            ref={mapContainerRef}
+            className="map-stage"
+            data-theme={project.layout.themeId || 'modern_rounded'}
+            data-annotation-tool={annotationTool || ''}
+            style={{
+              '--template-radius': `${themeTokens.panelRadius}px`,
+              '--title-radius': `${themeTokens.titleRadius}px`,
+              '--panel-bg': themeTokens.panelFill,
+              '--panel-border': themeTokens.panelBorder,
+              '--panel-shadow': themeTokens.panelShadow,
+              '--title-bg': themeTokens.titleFill,
+              '--title-border': themeTokens.titleBorder,
+              '--title-accent': themeTokens.titleAccent || 'transparent',
+              '--title-fg': themeTokens.titleText,
+              '--subtitle-fg': themeTokens.subtitleText,
+              '--panel-title': themeTokens.panelTitle,
+              '--body-text': themeTokens.bodyText,
+              '--muted-text': themeTokens.mutedText,
+              '--footer-bg': themeTokens.footerFill,
+              '--footer-fg': themeTokens.footerText,
+              '--callout-bg': themeTokens.calloutFill,
+              '--callout-border': themeTokens.calloutBorder,
+              '--callout-fg': themeTokens.calloutText,
+              '--north-fill': themeTokens.northArrowFill,
+              '--north-fg': themeTokens.northArrowText,
+              '--scale-bg': themeTokens.scaleFill,
+              '--scale-stroke': themeTokens.scaleStroke,
+              '--inset-bg': themeTokens.insetFill,
+              '--inset-border': themeTokens.insetBorder,
+              '--inset-title': themeTokens.insetTitle,
+              '--inset-muted': themeTokens.insetMuted,
+              '--logo-bg': themeTokens.logoFill,
+              '--logo-border': themeTokens.logoBorder,
+              '--font-title': `${project.layout.fonts?.title || 'Inter'}, sans-serif`,
+              '--font-legend': `${project.layout.fonts?.legend || 'Inter'}, sans-serif`,
+              '--font-label': `${project.layout.fonts?.label || 'Inter'}, sans-serif`,
+              '--font-callout': `${project.layout.fonts?.callout || 'Inter'}, sans-serif`,
+              '--font-footer': `${project.layout.fonts?.footer || 'Inter'}, sans-serif`,
+            }}
+          >
         <MapCanvas onReady={onMapReady} project={project} template={template} onFeatureClick={handleFeatureClick} onMapClick={handleMapClick} />
         <AnnotationOverlay
           map={leafletMapRef.current}
@@ -1355,6 +1357,8 @@ export default function App() {
             </div>
           </div>
         ) : null}
+          </div>
+        </div>
       </div>
       {showRecentProjects ? (
         <div className="recent-projects-modal" role="dialog" aria-modal="true">
