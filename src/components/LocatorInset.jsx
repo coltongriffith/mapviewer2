@@ -42,7 +42,7 @@ function buildBackdrop() {
   };
 }
 
-export default function LocatorInset({ layers, insetMode, mode, insetImage, zone }) {
+export default function LocatorInset({ layers, insetMode, mode, insetImage, insetImageAspect, zone }) {
   const { visibleBounds, referenceBounds } = useMemo(() => {
     const visible = (layers || []).filter((layer) => layer.visible !== false);
     const visibleBounds = unionBounds(visible.map((layer) => geojsonBounds(layer.geojson)).filter(Boolean));
@@ -62,7 +62,7 @@ export default function LocatorInset({ layers, insetMode, mode, insetImage, zone
         <div className="inset-header">Project Locator</div>
       </div>
       {showCustom ? (
-        <div className="inset-image-wrap">
+        <div className="inset-image-wrap" style={Number(insetImageAspect) > 0 ? { aspectRatio: String(insetImageAspect), height: 'auto', minHeight: 80 } : undefined}>
           <img src={insetImage} alt="Inset map" className="inset-image" />
         </div>
       ) : wantsCustom ? (
