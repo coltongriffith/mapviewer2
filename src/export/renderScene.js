@@ -24,6 +24,17 @@ function projectRing(map, ring, scale) { return ring.map((coord) => projectCoord
 function projectLine(map, coords, scale) { return coords.map((coord) => projectCoordinate(map, coord, scale)).filter(isFinitePoint); }
 function getTileImages(container) {
   const rootRect = container.getBoundingClientRect();
+  const resolveEffectiveOpacity = (node) => {
+    let opacity = 1;
+    let current = node;
+    while (current && current !== container) {
+      const value = Number.parseFloat(getComputedStyle(current).opacity || '1');
+      opacity *= Number.isFinite(value) ? value : 1;
+      current = current.parentElement;
+    }
+    return Math.max(0, Math.min(1, opacity));
+  };
+
   return Array.from(container.querySelectorAll('.leaflet-tile-pane img.leaflet-tile'))
     .map((img) => {
       const rect = img.getBoundingClientRect();
@@ -33,7 +44,7 @@ function getTileImages(container) {
         y: rect.top - rootRect.top,
         width: rect.width,
         height: rect.height,
-        opacity: Number.parseFloat(getComputedStyle(img).opacity || '1') || 1,
+        opacity: resolveEffectiveOpacity(img),
       };
     })
     .filter((tile) => tile.href && tile.width > 0 && tile.height > 0);
