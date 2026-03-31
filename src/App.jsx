@@ -206,6 +206,8 @@ export default function App() {
   const [uploadStatus, setUploadStatus] = useState({ type: 'info', message: 'Open the editor, then upload your first file from the left panel.' });
   const [exporting, setExporting] = useState(false);
   const [mapSize, setMapSize] = useState({ width: 1600, height: 1000 });
+  const [featureEditorTick, setFeatureEditorTick] = useState(0);
+  const [mapReady, setMapReady] = useState(false);
 
   const template = useMemo(() => getTemplate(project.layout?.templateId || 'technical_results_v2'), [project.layout?.templateId]);
   const selectedLayer = useMemo(() => project.layers.find((layer) => layer.id === selectedLayerId) || null, [project.layers, selectedLayerId]);
@@ -240,6 +242,14 @@ export default function App() {
     const delta = Math.log2(Math.max(1, zoomPct) / 100);
     map.setZoom(map.getZoom() + delta, { animate: false });
   }, [template, resolvedZones, project.layout.frameVersion, project.layout.primaryLayerId, project.layout.compositionPreset, project.layout.zoomPercent, project.layers]);
+
+  useEffect(() => {
+    const map = leafletMapRef.current;
+    if (!map) return undefined;
+    const rerender = () => setFeatureEditorTick((value) => value + 1);
+    map.on('move zoom zoomend moveend resize', rerender);
+    return () => map.off('move zoom zoomend moveend resize', rerender);
+  }, [mapReady]);
 
   const updateLayout = (patch) => {
     setProject((prev) => ({
@@ -276,6 +286,7 @@ export default function App() {
 
   const onMapReady = (map) => {
     leafletMapRef.current = map;
+    setMapReady(true);
   };
 
   const addGeoJSONLayer = async (file) => {
@@ -498,6 +509,7 @@ export default function App() {
     const layer = project.layers.find((item) => item.id === layerId) || null;
     if (!layer) return;
     setSelectedLayerId(layerId);
+    setAnnotationTool(null);
     setSelectedMarkerId(null);
     setSelectedEllipseId(null);
     setSelectedFeature({
@@ -574,6 +586,18 @@ export default function App() {
       setAnnotationTool(null);
     }
   };
+
+  const mapZoomPercent = Math.max(10, Math.min(400, Number(project.layout.zoomPercent || 100)));
+  const featureEditorPoint = useMemo(() => {
+    if (!leafletMapRef.current || !selectedFeature?.latlng) return null;
+    const pt = leafletMapRef.current.latLngToContainerPoint([selectedFeature.latlng.lat, selectedFeature.latlng.lng]);
+    const maxLeft = Math.max(12, mapSize.width - 280);
+    const maxTop = Math.max(12, mapSize.height - 210);
+    return {
+      left: Math.min(maxLeft, Math.max(12, pt.x + 14)),
+      top: Math.min(maxTop, Math.max(70, pt.y - 24)),
+    };
+  }, [selectedFeature, mapSize, featureEditorTick]);
 
   const updateMarker = (markerId, patch) => {
     setProject((prev) => ({
@@ -697,16 +721,7 @@ export default function App() {
                 </select>
               </div>
             </div>
-            <div className="control-row inline-2">
-              <div>
-                <label>Zoom</label>
-                <input type="range" min="50" max="200" step="1" value={project.layout.zoomPercent || 100} onChange={(e) => updateLayout({ zoomPercent: Number(e.target.value), frameVersion: (project.layout.frameVersion || 0) + 1 })} />
-              </div>
-              <div>
-                <label>Zoom %</label>
-                <input type="number" min="50" max="200" step="1" value={project.layout.zoomPercent || 100} onChange={(e) => updateLayout({ zoomPercent: Number(e.target.value || 100), frameVersion: (project.layout.frameVersion || 0) + 1 })} />
-              </div>
-            </div>
+            <div className="small-note">Zoom is controlled directly on the map toolbar (10% to 400%) for fine framing control.</div>
             <div className="control-row inline-2">
               <div>
                 <label>Title Font</label>
@@ -839,8 +854,8 @@ export default function App() {
         <section className="control-section">
           <h2>Markers & Highlight Areas</h2>
           <div className="button-row">
-            <button className={`secondary-btn ${annotationTool === 'marker' ? 'active-toggle' : ''}`} type="button" onClick={() => setAnnotationTool(annotationTool === 'marker' ? null : 'marker')}>Place Marker</button>
-            <button className={`secondary-btn ${annotationTool === 'ellipse' ? 'active-toggle' : ''}`} type="button" onClick={() => setAnnotationTool(annotationTool === 'ellipse' ? null : 'ellipse')}>Draw Dashed Area</button>
+            <button className={`secondary-btn ${annotationTool === 'marker' ? 'active-toggle' : ''}`} type="button" onClick={() => { setAnnotationTool(annotationTool === 'marker' ? null : 'marker'); setSelectedFeature(null); }}>Place Marker</button>
+            <button className={`secondary-btn ${annotationTool === 'ellipse' ? 'active-toggle' : ''}`} type="button" onClick={() => { setAnnotationTool(annotationTool === 'ellipse' ? null : 'ellipse'); setSelectedFeature(null); }}>Draw Dashed Area</button>
           </div>
           <div className="small-note" style={{ marginTop: 8 }}>{annotationTool ? 'Click anywhere on the map to place the selected annotation.' : 'Add highlight markers or dashed ellipses anywhere on the map.'}</div>
 
@@ -1040,6 +1055,7 @@ export default function App() {
         ref={mapContainerRef}
         className="map-stage"
         data-theme={project.layout.themeId || 'modern_rounded'}
+        data-annotation-tool={annotationTool || ''}
         style={{
           '--template-radius': `${themeTokens.panelRadius}px`,
           '--title-radius': `${themeTokens.titleRadius}px`,
@@ -1079,11 +1095,42 @@ export default function App() {
         <div className="map-topbar"> 
           <div className="map-topbar-left">
             <div className="map-topbar-title">{project.layout.title || 'Project Map'}</div>
-            <div className="map-topbar-sub">Pan, zoom, improve spacing, then export.</div>
+            <div className="map-topbar-sub">{annotationTool ? `Mode: ${annotationTool === 'marker' ? 'Add Marker' : 'Add Zone'} (click map to place)` : 'Pan map, add markers/zones, and export.'}</div>
           </div>
           <div className="map-topbar-right">
+            <div className="map-zoom-inline">
+              <label htmlFor="map-zoom-control">Zoom {mapZoomPercent}%</label>
+              <input
+                id="map-zoom-control"
+                type="range"
+                min="10"
+                max="400"
+                step="1"
+                value={mapZoomPercent}
+                onChange={(e) => updateLayout({ zoomPercent: Number(e.target.value), frameVersion: (project.layout.frameVersion || 0) + 1 })}
+              />
+            </div>
+            <button
+              className={`btn ${annotationTool === 'marker' ? 'primary' : ''}`}
+              type="button"
+              onClick={() => {
+                setAnnotationTool(annotationTool === 'marker' ? null : 'marker');
+                setSelectedFeature(null);
+              }}
+            >
+              Add Marker
+            </button>
+            <button
+              className={`btn ${annotationTool === 'ellipse' ? 'primary' : ''}`}
+              type="button"
+              onClick={() => {
+                setAnnotationTool(annotationTool === 'ellipse' ? null : 'ellipse');
+                setSelectedFeature(null);
+              }}
+            >
+              Add Zone
+            </button>
             <button className="btn" type="button" onClick={autoFrameAll}>Refit</button>
-            <button className="btn primary" type="button" onClick={improveMap}>Improve Map</button>
             <button className="btn" type="button" onClick={() => handleExport('svg')} disabled={exporting}>Export SVG</button>
             <button className="btn primary" type="button" onClick={() => handleExport('png')} disabled={exporting}>Export PNG</button>
           </div>
@@ -1095,8 +1142,8 @@ export default function App() {
           ellipses={project.ellipses || []}
           selectedMarkerId={selectedMarkerId}
           selectedEllipseId={selectedEllipseId}
-          onSelectMarker={(id) => { setSelectedMarkerId(id); setSelectedEllipseId(null); }}
-          onSelectEllipse={(id) => { setSelectedEllipseId(id); setSelectedMarkerId(null); }}
+          onSelectMarker={(id) => { setSelectedMarkerId(id); setSelectedEllipseId(null); setSelectedFeature(null); }}
+          onSelectEllipse={(id) => { setSelectedEllipseId(id); setSelectedMarkerId(null); setSelectedFeature(null); }}
           onMoveMarker={updateMarker}
           onMoveEllipse={updateEllipse}
           labelFont={project.layout.fonts?.label}
@@ -1142,7 +1189,7 @@ export default function App() {
           </div>
         ) : null}
 
-        <div className="template-zone" style={zoneStyle(resolvedZones.northArrow)}><NorthArrow /></div>
+        <div className="floating-north-arrow"><NorthArrow /></div>
         {project.layout.insetEnabled !== false && resolvedZones.inset?.width ? (
           <div className="template-zone" style={zoneStyle(resolvedZones.inset)}>
             <LocatorInset layers={project.layers} insetMode={project.layout.insetMode} insetImage={project.layout.insetImage} mode={project.layout.mode} zone={{ width: '100%', height: '100%' }} />
@@ -1151,6 +1198,25 @@ export default function App() {
         <div className="template-zone" style={zoneStyle(resolvedZones.scaleBar)}><ScaleBar map={leafletMapRef.current} /></div>
         {project.layout.footerText && project.layout.footerEnabled !== false ? <div className="template-zone" style={zoneStyle(resolvedZones.footer)}><div className="template-card footer-card">{project.layout.footerText}</div></div> : null}
         {project.layout.logo ? <div className="template-zone" style={zoneStyle(resolvedZones.logo)}><div className="template-card logo-card"><img src={project.layout.logo} alt="Logo" /></div></div> : null}
+        {selectedFeature && featureEditorPoint ? (
+          <div className="drillhole-inline-editor" style={{ left: featureEditorPoint.left, top: featureEditorPoint.top }}>
+            <div className="drillhole-inline-title">Edit drillhole callout</div>
+            <input
+              value={selectedFeature.suggestedLabel}
+              onChange={(e) => setSelectedFeature((prev) => ({ ...prev, suggestedLabel: e.target.value }))}
+              placeholder="Title"
+            />
+            <input
+              value={selectedFeature.suggestedSubtext || ''}
+              onChange={(e) => setSelectedFeature((prev) => ({ ...prev, suggestedSubtext: e.target.value }))}
+              placeholder="Subtext"
+            />
+            <div className="drillhole-inline-actions">
+              <button className="btn primary" type="button" onClick={addCalloutFromSelectedFeature}>Save Callout</button>
+              <button className="btn" type="button" onClick={() => setSelectedFeature(null)}>Close</button>
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );
