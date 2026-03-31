@@ -28,6 +28,14 @@ import { geojsonCenter } from './utils/geometry';
 import { cleanLayerName } from './utils/cleanLayerName';
 import { fitProjectToTemplate } from './utils/frameMapForTemplate';
 import { getThemeTokens } from './utils/themeTokens';
+import {
+  duplicateProjectRecord,
+  listProjects,
+  resolveInitialWorkspace,
+  saveDraft,
+  saveProjectRecord,
+  touchLastOpenedProject,
+} from './utils/projectStorage';
 
 const MARKER_TYPES = {
   circle: 'Circle',
@@ -178,6 +186,19 @@ function selectValue(options, value, fallback = 'Inter') {
   return options[value] ? value : fallback;
 }
 
+function initialWorkspaceState() {
+  const base = createInitialProjectState();
+  const fallback = {
+    ...base,
+    layout: {
+      ...base.layout,
+      title: 'Project Map',
+      subtitle: 'Claims, drillholes, and targets',
+    },
+  };
+  return resolveInitialWorkspace(fallback);
+}
+
 export default function App() {
   const mapContainerRef = useRef(null);
   const leafletMapRef = useRef(null);
@@ -186,17 +207,13 @@ export default function App() {
   const uploadInputRef = useRef(null);
 
   const [screen, setScreen] = useState('landing');
-  const [project, setProject] = useState(() => {
-    const base = createInitialProjectState();
-    return {
-      ...base,
-      layout: {
-        ...base.layout,
-        title: 'Project Map',
-        subtitle: 'Claims, drillholes, and targets',
-      },
-    };
-  });
+  const initialWorkspace = useMemo(() => initialWorkspaceState(), []);
+  const [project, setProject] = useState(initialWorkspace.project);
+  const [projectId, setProjectId] = useState(initialWorkspace.projectId);
+  const [projectName, setProjectName] = useState(initialWorkspace.projectName);
+  const [recentProjects, setRecentProjects] = useState(() => listProjects());
+  const [showRecentProjects, setShowRecentProjects] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
   const [selectedLayerId, setSelectedLayerId] = useState(null);
   const [selectedCalloutId, setSelectedCalloutId] = useState(null);
   const [selectedFeature, setSelectedFeature] = useState(null);
@@ -208,6 +225,8 @@ export default function App() {
   const [mapSize, setMapSize] = useState({ width: 1600, height: 1000 });
   const [featureEditorTick, setFeatureEditorTick] = useState(0);
   const [mapReady, setMapReady] = useState(false);
+  const bootstrappedRef = useRef(false);
+  const lastSavedSnapshotRef = useRef(JSON.stringify(project));
 
   const template = useMemo(() => getTemplate(project.layout?.templateId || 'technical_results_v2'), [project.layout?.templateId]);
   const selectedLayer = useMemo(() => project.layers.find((layer) => layer.id === selectedLayerId) || null, [project.layers, selectedLayerId]);
@@ -218,6 +237,24 @@ export default function App() {
   const legendItems = useMemo(() => buildLegendItems(template, project.layers, project.layout), [template, project.layers, project.layout]);
   const legendGroups = useMemo(() => renderLegendGroups(legendItems, project.layout), [legendItems, project.layout]);
   const themeTokens = useMemo(() => getThemeTokens(project.layout?.themeId || 'modern_rounded'), [project.layout?.themeId]);
+
+  useEffect(() => {
+    if (!bootstrappedRef.current) {
+      bootstrappedRef.current = true;
+      touchLastOpenedProject(projectId);
+      return;
+    }
+    const serialized = JSON.stringify(project);
+    setIsDirty(serialized !== lastSavedSnapshotRef.current);
+    const timer = window.setTimeout(() => {
+      saveDraft({ payload: project, projectId, projectName });
+    }, 500);
+    return () => window.clearTimeout(timer);
+  }, [project, projectId, projectName]);
+
+  useEffect(() => {
+    setRecentProjects(listProjects());
+  }, [projectId, isDirty]);
 
   useEffect(() => {
     const container = mapContainerRef.current;
@@ -638,6 +675,63 @@ export default function App() {
     } finally {
       setExporting(false);
     }
+  };
+
+  const saveCurrentProject = (nextName = null) => {
+    const nameToSave = (nextName || projectName || project.layout?.title || 'Untitled map').trim();
+    const idToSave = projectId || crypto.randomUUID();
+    const saved = saveProjectRecord({ id: idToSave, name: nameToSave, payload: project });
+    setProjectId(saved.id);
+    setProjectName(saved.name);
+    setRecentProjects(listProjects());
+    lastSavedSnapshotRef.current = JSON.stringify(project);
+    setIsDirty(false);
+    saveDraft({ payload: project, projectId: saved.id, projectName: saved.name });
+    setUploadStatus({ type: 'success', message: `Saved project: ${saved.name}` });
+  };
+
+  const saveAsProject = () => {
+    const defaultName = projectName || project.layout?.title || 'Untitled map';
+    const nextName = window.prompt('Save project as', defaultName);
+    if (!nextName) return;
+    const saved = saveProjectRecord({ id: crypto.randomUUID(), name: nextName.trim(), payload: project });
+    setProjectId(saved.id);
+    setProjectName(saved.name);
+    setRecentProjects(listProjects());
+    lastSavedSnapshotRef.current = JSON.stringify(project);
+    setIsDirty(false);
+    saveDraft({ payload: project, projectId: saved.id, projectName: saved.name });
+    setUploadStatus({ type: 'success', message: `Saved as new project: ${saved.name}` });
+  };
+
+  const openProjectFromRecent = (entry) => {
+    setProject(entry.payload);
+    setProjectId(entry.id);
+    setProjectName(entry.name);
+    setSelectedLayerId(null);
+    setSelectedCalloutId(null);
+    setSelectedFeature(null);
+    setSelectedMarkerId(null);
+    setSelectedEllipseId(null);
+    setAnnotationTool(null);
+    setShowRecentProjects(false);
+    touchLastOpenedProject(entry.id);
+    saveDraft({ payload: entry.payload, projectId: entry.id, projectName: entry.name });
+    lastSavedSnapshotRef.current = JSON.stringify(entry.payload);
+    setIsDirty(false);
+    setUploadStatus({ type: 'success', message: `Opened project: ${entry.name}` });
+  };
+
+  const duplicateCurrentProject = () => {
+    const name = `${projectName || project.layout?.title || 'Untitled map'} Copy`;
+    const saved = duplicateProjectRecord({ sourcePayload: project, name });
+    setProjectId(saved.id);
+    setProjectName(saved.name);
+    setRecentProjects(listProjects());
+    lastSavedSnapshotRef.current = JSON.stringify(project);
+    setIsDirty(false);
+    saveDraft({ payload: project, projectId: saved.id, projectName: saved.name });
+    setUploadStatus({ type: 'success', message: `Duplicated project as: ${saved.name}` });
   };
 
   const referenceOverlays = project.layout.referenceOverlays || {};
@@ -1098,6 +1192,11 @@ export default function App() {
             <div className="map-topbar-sub">{annotationTool ? `Mode: ${annotationTool === 'marker' ? 'Add Marker' : 'Add Zone'} (click map to place)` : 'Pan map, add markers/zones, and export.'}</div>
           </div>
           <div className="map-topbar-right">
+            <div className={`autosave-badge ${isDirty ? 'dirty' : 'clean'}`}>{isDirty ? 'Unsaved' : 'Saved'}</div>
+            <button className="btn" type="button" onClick={() => saveCurrentProject()}>Save</button>
+            <button className="btn" type="button" onClick={saveAsProject}>Save As</button>
+            <button className="btn" type="button" onClick={() => setShowRecentProjects(true)}>Open</button>
+            <button className="btn" type="button" onClick={duplicateCurrentProject}>Duplicate</button>
             <div className="map-zoom-inline">
               <label htmlFor="map-zoom-control">Zoom {mapZoomPercent}%</label>
               <input
@@ -1218,6 +1317,24 @@ export default function App() {
           </div>
         ) : null}
       </div>
+      {showRecentProjects ? (
+        <div className="recent-projects-modal" role="dialog" aria-modal="true">
+          <div className="recent-projects-card">
+            <div className="recent-projects-header">
+              <h3>Recent Projects</h3>
+              <button className="secondary-btn" type="button" onClick={() => setShowRecentProjects(false)}>Close</button>
+            </div>
+            <div className="recent-projects-list">
+              {recentProjects.length ? recentProjects.map((entry) => (
+                <button key={entry.id} type="button" className="recent-project-row" onClick={() => openProjectFromRecent(entry)}>
+                  <strong>{entry.name}</strong>
+                  <span>{new Date(entry.updatedAt).toLocaleString()}</span>
+                </button>
+              )) : <div className="small-note">No saved local projects yet.</div>}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
