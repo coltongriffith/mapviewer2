@@ -23,7 +23,9 @@ function estimateBox(callout) {
 
 function resolveCalloutBoxes(callouts, map) {
   if (!map) return [];
+  const size = map.getSize();
   const placed = [];
+  const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 
   callouts
     .slice()
@@ -35,6 +37,8 @@ function resolveCalloutBoxes(callouts, map) {
       const box = estimateBox(callout);
       let left = pt.x + (callout.offset?.x || 0);
       let top = pt.y + (callout.offset?.y || 0);
+      left = clamp(left, 6, Math.max(6, size.x - box.width - 6));
+      top = clamp(top, 6, Math.max(6, size.y - box.height - 6));
       let candidate = { ...callout, width: box.width, height: box.height, left, top, anchorPx: pt };
 
       if (callout.isManualPosition) {
@@ -46,6 +50,8 @@ function resolveCalloutBoxes(callouts, map) {
       while (placed.some((other) => intersects(candidate, other)) && attempts < 8) {
         top += 18;
         left += attempts % 2 === 0 ? 8 : -6;
+        left = clamp(left, 6, Math.max(6, size.x - box.width - 6));
+        top = clamp(top, 6, Math.max(6, size.y - box.height - 6));
         candidate = { ...candidate, top, left };
         attempts += 1;
       }
@@ -70,21 +76,25 @@ export default function CalloutsOverlay({ map, callouts, selectedCalloutId, onSe
   useEffect(() => {
     const handleMove = (event) => {
       if (!dragRef.current) return;
-      const { startX, startY, startOffset, id } = dragRef.current;
+      const { startX, startY, startOffset, id, pointerId } = dragRef.current;
+      if (pointerId != null && event.pointerId !== pointerId) return;
       const dx = event.clientX - startX;
       const dy = event.clientY - startY;
       onMove?.(id, { x: startOffset.x + dx, y: startOffset.y + dy, isManualPosition: true });
     };
 
-    const handleUp = () => {
+    const handleUp = (event) => {
+      if (dragRef.current?.pointerId != null && event.pointerId !== dragRef.current.pointerId) return;
       dragRef.current = null;
     };
 
-    window.addEventListener('mousemove', handleMove);
-    window.addEventListener('mouseup', handleUp);
+    window.addEventListener('pointermove', handleMove);
+    window.addEventListener('pointerup', handleUp);
+    window.addEventListener('pointercancel', handleUp);
     return () => {
-      window.removeEventListener('mousemove', handleMove);
-      window.removeEventListener('mouseup', handleUp);
+      window.removeEventListener('pointermove', handleMove);
+      window.removeEventListener('pointerup', handleUp);
+      window.removeEventListener('pointercancel', handleUp);
     };
   }, [onMove]);
 
@@ -92,11 +102,11 @@ export default function CalloutsOverlay({ map, callouts, selectedCalloutId, onSe
 
   return (
     <div className="callouts-overlay">
-      {placed.map((callout) => {
-        const style = callout.style || {};
-        return (
-          <React.Fragment key={callout.id}>
-            <svg className="callout-leader-svg">
+      <svg className="callout-leader-svg">
+        {placed.map((callout) => {
+          const style = callout.style || {};
+          return (
+            <React.Fragment key={`${callout.id}-leader`}>
               {(callout.type === 'leader' || callout.type === 'boxed') ? (
                 <line
                   x1={callout.anchorPx.x}
@@ -109,38 +119,45 @@ export default function CalloutsOverlay({ map, callouts, selectedCalloutId, onSe
                 />
               ) : null}
               <circle cx={callout.anchorPx.x} cy={callout.anchorPx.y} r="4" fill={style.border || '#102640'} />
-            </svg>
-            <div
-              className={`map-callout ${callout.type} ${selectedCalloutId === callout.id ? 'selected' : ''}`}
-              style={{
-                left: callout.left,
-                top: callout.top,
-                width: callout.width,
-                minHeight: callout.height,
-                fontFamily: fontFamily || 'Inter, sans-serif',
-                background: callout.type === 'plain' ? 'transparent' : (style.background || '#ffffff'),
-                borderColor: style.border || '#102640',
-                color: style.textColor || '#0f172a',
-                fontSize: style.fontSize || 12,
-                padding: `${style.paddingY || 8}px ${style.paddingX || 10}px`,
-              }}
-              onClick={() => onSelect?.(callout.id)}
-              onMouseDown={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                onSelect?.(callout.id);
-                dragRef.current = {
-                  id: callout.id,
-                  startX: event.clientX,
-                  startY: event.clientY,
-                  startOffset: callout.offset || { x: 0, y: 0 },
-                };
-              }}
-            >
-              <div className="map-callout-title">{callout.text}</div>
-              {callout.subtext ? <div className="map-callout-subtext" style={{ color: style.subtextColor || '#475569' }}>{callout.subtext}</div> : null}
-            </div>
-          </React.Fragment>
+            </React.Fragment>
+          );
+        })}
+      </svg>
+      {placed.map((callout) => {
+        const style = callout.style || {};
+        return (
+          <div
+            key={callout.id}
+            className={`map-callout ${callout.type} ${selectedCalloutId === callout.id ? 'selected' : ''}`}
+            style={{
+              left: callout.left,
+              top: callout.top,
+              width: callout.width,
+              minHeight: callout.height,
+              fontFamily: fontFamily || 'Inter, sans-serif',
+              background: callout.type === 'plain' ? 'transparent' : (style.background || '#ffffff'),
+              borderColor: style.border || '#102640',
+              color: style.textColor || '#0f172a',
+              fontSize: style.fontSize || 12,
+              padding: `${style.paddingY || 8}px ${style.paddingX || 10}px`,
+            }}
+            onClick={() => onSelect?.(callout.id)}
+            onPointerDown={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              onSelect?.(callout.id);
+              dragRef.current = {
+                id: callout.id,
+                startX: event.clientX,
+                startY: event.clientY,
+                startOffset: callout.offset || { x: 0, y: 0 },
+                pointerId: event.pointerId,
+              };
+            }}
+          >
+            <div className="map-callout-title">{callout.text}</div>
+            {callout.subtext ? <div className="map-callout-subtext" style={{ color: style.subtextColor || '#475569' }}>{callout.subtext}</div> : null}
+          </div>
         );
       })}
     </div>

@@ -84,7 +84,7 @@ button, input, select, textarea { font: inherit; }
 .layer-name { font-weight: 700; font-size: 13px; }
 .layer-role { color: #667085; font-size: 11px; margin-top: 3px; }
 .layer-source { color: #74839a; font-size: 11px; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px; }
-.layer-visibility { font-size: 11px; text-transform: uppercase; font-weight: 700; padding: 4px 8px; border-radius: 999px; }
+.layer-visibility { font-size: 11px; text-transform: uppercase; font-weight: 700; padding: 4px 8px; border-radius: 999px; border: none; cursor: pointer; }
 .layer-visibility.on { background: rgba(34,197,94,0.16); color: #127734; }
 .layer-visibility.off { background: rgba(248,113,113,0.18); color: #a13939; }
 
@@ -164,6 +164,7 @@ button, input, select, textarea { font: inherit; }
   pointer-events: auto;
   cursor: move;
   user-select: none;
+  touch-action: none;
   font-family: var(--font-callout);
 }
 .map-callout.plain { background: transparent; border: none; box-shadow: none; text-shadow: 0 0 4px rgba(255,255,255,0.95); color: var(--callout-fg, #0f172a); }
@@ -173,7 +174,7 @@ button, input, select, textarea { font: inherit; }
 
 .annotation-overlay { position: absolute; inset: 0; z-index: 510; pointer-events: none; }
 .free-marker, .ellipse-annotation { position: absolute; pointer-events: auto; }
-.free-marker { transform: translate(-50%, -50%); display: flex; align-items: center; gap: 8px; cursor: move; }
+.free-marker { transform: translate(-50%, -50%); display: flex; align-items: center; gap: 8px; cursor: move; touch-action: none; }
 .free-marker.selected .free-marker-symbol { box-shadow: 0 0 0 2px rgba(37,99,235,0.35); }
 .free-marker-symbol {
   display: inline-flex; align-items: center; justify-content: center; border: 2px solid currentColor; color: #c2410c; background: currentColor;
@@ -190,6 +191,7 @@ button, input, select, textarea { font: inherit; }
 }
 .ellipse-annotation {
   border-width: 2px; border-style: dashed; border-radius: 999px; cursor: move; background: transparent;
+  touch-action: none;
 }
 .ellipse-annotation.selected { box-shadow: 0 0 0 2px rgba(37,99,235,0.2); }
 .ellipse-annotation-label {
