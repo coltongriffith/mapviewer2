@@ -156,6 +156,8 @@ function applyModeToProject(project, template, mode) {
   };
 }
 
+
+
 function renderLegendGroups(items, layout) {
   const mode = layout?.legendMode || 'auto';
   const compact = mode === 'compact' || (mode === 'auto' && items.length <= 2);
@@ -427,6 +429,7 @@ export default function App() {
     setProject((prev) => applyModeToProject(prev, template, mode));
   };
 
+
   const setDisplayLabel = (layerId, value) => {
     updateLayer(layerId, { displayName: value, legend: { label: value } });
   };
@@ -459,9 +462,14 @@ export default function App() {
       layout: {
         ...prev.layout,
         legendMode: prev.layers.length > 4 ? 'full' : 'auto',
-        titleWidth: prev.layout.title?.length > 26 ? 'wide' : 'standard',
+        titleWidth: prev.layout.title?.length > 30 ? 'wide' : 'standard',
         referenceOpacity: 0.72,
         insetEnabled: true,
+        insetSize: 'medium',
+        safeMargins: { top: 22, right: 22, bottom: 22, left: 22 },
+        compositionPreset: 'balanced',
+        logoScale: Math.max(0.85, Math.min(1.15, Number(prev.layout.logoScale || 1))),
+        insetScale: Math.max(0.9, Math.min(1.1, Number(prev.layout.insetScale || 1))),
         zoomPercent: 100,
         frameVersion: (prev.layout.frameVersion || 0) + 1,
       },
@@ -471,7 +479,7 @@ export default function App() {
         offset: callout.offset || { x: 20, y: -18 },
       })),
     }));
-    setUploadStatus({ type: 'success', message: 'Applied cleaner spacing and layout defaults.' });
+    setUploadStatus({ type: 'success', message: 'Applied polished default template spacing and alignment.' });
   };
 
   const addCalloutAtAnchor = ({ text, subtext = '', type = 'leader', anchor, featureId, layerId, style = {}, boxWidth = 188 }) => {
@@ -592,7 +600,12 @@ export default function App() {
       ...prev,
       markers: [
         ...(prev.markers || []),
-        { id, lat: latlng.lat, lng: latlng.lng, type: 'circle', color: '#d97706', size: 18, label: '' },
+        {
+          id,
+          lat: latlng.lat,
+          lng: latlng.lng,
+          ...(prev.layout?.markerDefaults || { type: 'circle', color: '#d97706', size: 18, label: '' }),
+        },
       ],
     }));
     setSelectedMarkerId(id);
@@ -606,7 +619,12 @@ export default function App() {
       ...prev,
       ellipses: [
         ...(prev.ellipses || []),
-        { id, lat: latlng.lat, lng: latlng.lng, width: 90, height: 56, rotation: -18, color: '#dc2626', dashed: true, label: '' },
+        {
+          id,
+          lat: latlng.lat,
+          lng: latlng.lng,
+          ...(prev.layout?.zoneDefaults || { width: 90, height: 56, rotation: -18, color: '#dc2626', dashed: true, label: '' }),
+        },
       ],
     }));
     setSelectedEllipseId(id);
@@ -1288,7 +1306,7 @@ export default function App() {
           </div>
         ) : null}
 
-        <div className="floating-north-arrow"><NorthArrow /></div>
+        <div className="template-zone" style={zoneStyle(resolvedZones.northArrow)}><NorthArrow /></div>
         {project.layout.insetEnabled !== false && resolvedZones.inset?.width ? (
           <div className="template-zone" style={zoneStyle(resolvedZones.inset)}>
             <LocatorInset layers={project.layers} insetMode={project.layout.insetMode} insetImage={project.layout.insetImage} mode={project.layout.mode} zone={{ width: '100%', height: '100%' }} />

@@ -1,13 +1,13 @@
 import { ROLE_LABELS } from '../projectState';
 
 const BASE_ZONES = {
-  title: { top: 18, left: 18, width: 480, height: 86 },
-  legend: { top: 122, left: 18, width: 292, height: 120 },
-  inset: { top: 18, right: 18, width: 244, height: 190 },
-  northArrow: { top: 220, right: 18, width: 76, height: 104 },
-  scaleBar: { bottom: 18, left: 18, width: 230, height: 64 },
-  footer: { bottom: 18, left: 268, width: 460, height: 42 },
-  logo: { bottom: 18, right: 18, width: 180, height: 84 },
+  title: { top: 22, left: 22, width: 520, height: 92 },
+  logo: { top: 126, left: 22, width: 168, height: 74 },
+  inset: { top: 22, right: 22, width: 244, height: 190 },
+  legend: { bottom: 102, left: 22, width: 300, height: 168 },
+  scaleBar: { bottom: 22, left: 22, width: 230, height: 64 },
+  northArrow: { bottom: 22, right: 22, width: 74, height: 100 },
+  footer: { bottom: 22, left: 270, width: 440, height: 42 },
 };
 
 const ROLE_GROUPS = {
@@ -94,46 +94,68 @@ function legendHeightFor(layout, itemCount) {
   const mode = layout?.legendMode || 'auto';
   const compact = mode === 'compact' || (mode === 'auto' && itemCount <= 2);
   if (!itemCount) return 0;
-  if (compact) return Math.max(84, Math.min(160, 44 + itemCount * 26));
-  return Math.max(110, Math.min(280, 54 + itemCount * 30));
+  if (compact) return Math.max(84, Math.min(150, 42 + itemCount * 24));
+  return Math.max(110, Math.min(210, 52 + itemCount * 28));
+}
+
+function clampZone(zone, safe, width, height) {
+  const next = { ...zone };
+  if (next.right != null && next.left == null) next.left = width - next.right - next.width;
+  if (next.bottom != null && next.top == null) next.top = height - next.bottom - next.height;
+  next.left = Math.max(safe.left, Math.min(width - safe.right - next.width, next.left));
+  next.top = Math.max(safe.top, Math.min(height - safe.bottom - next.height, next.top));
+  return next;
+}
+
+function intersects(a, b) {
+  return a.left < b.left + b.width && a.left + a.width > b.left && a.top < b.top + b.height && a.top + a.height > b.top;
 }
 
 export function resolveTemplateZones(template, layout, mapSize) {
   const width = mapSize?.width || 1600;
   const height = mapSize?.height || 1000;
+  const safe = { top: 22, right: 22, bottom: 22, left: 22, ...(layout?.safeMargins || {}) };
+  const titleWidth = Math.max(420, Math.min(Math.round(width * 0.42), layout?.titleWidth === 'wide' ? 620 : 560));
+
   const legendCount = Math.max(0, layout?.legendItems?.length || 0);
   const legendHeight = legendHeightFor(layout, legendCount);
-  const logoScale = Number(layout?.logoScale || 1);
-  const logoWidth = Math.round(BASE_ZONES.logo.width * logoScale);
-  const logoHeight = Math.round(BASE_ZONES.logo.height * logoScale);
+  const logoScale = Math.max(0.7, Math.min(1.2, Number(layout?.logoScale || 1)));
+  const insetScale = Math.max(0.8, Math.min(1.2, Number(layout?.insetScale || 1)));
   const insetSize = layout?.insetSize || 'medium';
-  const insetEnabled = layout?.insetEnabled !== false;
-  const insetScaleBase = insetSize === 'small' ? 0.82 : insetSize === 'large' ? 1.22 : 1;
-  const insetScale = insetScaleBase * Number(layout?.insetScale || 1);
-  const titleWidth = layout?.titleWidth === 'wide' ? 620 : 480;
+  const insetScaleBase = insetSize === 'small' ? 0.86 : insetSize === 'large' ? 1.16 : 1;
 
-  const insetWidth = Math.round(BASE_ZONES.inset.width * insetScale);
-  const insetHeight = Math.round(BASE_ZONES.inset.height * insetScale);
+  const insetWidth = Math.round(BASE_ZONES.inset.width * insetScale * insetScaleBase);
+  const insetHeight = Math.round(BASE_ZONES.inset.height * insetScale * insetScaleBase);
 
   const zones = {
-    ...BASE_ZONES,
-    title: { ...BASE_ZONES.title, width: titleWidth },
-    legend: { ...BASE_ZONES.legend, height: legendHeight },
-    inset: insetEnabled
-      ? { ...BASE_ZONES.inset, width: insetWidth, height: insetHeight }
-      : { ...BASE_ZONES.inset, width: 0, height: 0 },
-    footer: layout?.footerEnabled === false ? { ...BASE_ZONES.footer, width: 0, height: 0 } : { ...BASE_ZONES.footer },
-    logo: { ...BASE_ZONES.logo, width: logoWidth, height: logoHeight },
+    title: clampZone({ top: safe.top, left: safe.left, width: titleWidth, height: BASE_ZONES.title.height }, safe, width, height),
+    logo: clampZone({ top: safe.top + BASE_ZONES.title.height + 10, left: safe.left, width: Math.round(BASE_ZONES.logo.width * logoScale), height: Math.round(BASE_ZONES.logo.height * logoScale) }, safe, width, height),
+    inset: layout?.insetEnabled === false
+      ? { top: safe.top, left: width - safe.right, width: 0, height: 0 }
+      : clampZone({ top: safe.top, right: safe.right, width: insetWidth, height: insetHeight }, safe, width, height),
+    scaleBar: clampZone({ bottom: safe.bottom, left: safe.left, width: BASE_ZONES.scaleBar.width, height: BASE_ZONES.scaleBar.height }, safe, width, height),
+    legend: clampZone({ bottom: safe.bottom + BASE_ZONES.scaleBar.height + 10, left: safe.left, width: BASE_ZONES.legend.width, height: legendHeight }, safe, width, height),
+    northArrow: clampZone({ bottom: safe.bottom, right: safe.right, width: BASE_ZONES.northArrow.width, height: BASE_ZONES.northArrow.height }, safe, width, height),
+    footer: clampZone({ bottom: safe.bottom, left: BASE_ZONES.footer.left, width: BASE_ZONES.footer.width, height: BASE_ZONES.footer.height }, safe, width, height),
   };
 
-  return Object.fromEntries(
-    Object.entries(zones).map(([key, zone]) => {
-      const next = { ...zone };
-      if (next.right != null && next.left == null && next.width != null) next.left = width - next.right - next.width;
-      if (next.bottom != null && next.top == null && next.height != null) next.top = height - next.bottom - next.height;
-      return [key, next];
-    })
-  );
+  // Collision protection
+  if (intersects(zones.inset, zones.title) || intersects(zones.inset, zones.logo)) {
+    zones.inset.top = Math.min(height - safe.bottom - zones.inset.height, zones.logo.top + zones.logo.height + 10);
+  }
+
+  const legendTopLimit = zones.title.top + zones.title.height + 20;
+  if (zones.legend.top < legendTopLimit) {
+    zones.legend.height = Math.max(90, zones.legend.height - (legendTopLimit - zones.legend.top));
+    zones.legend.top = legendTopLimit;
+  }
+
+  if (intersects(zones.legend, zones.footer)) {
+    zones.footer.width = 0;
+    zones.footer.height = 0;
+  }
+
+  return zones;
 }
 
 function buildOverlayLegendItems(layout) {
