@@ -108,7 +108,8 @@ export function resolveTemplateZones(template, layout, mapSize) {
   const logoHeight = Math.round(BASE_ZONES.logo.height * logoScale);
   const insetSize = layout?.insetSize || 'medium';
   const insetEnabled = layout?.insetEnabled !== false;
-  const insetScale = insetSize === 'small' ? 0.82 : insetSize === 'large' ? 1.22 : 1;
+  const insetScaleBase = insetSize === 'small' ? 0.82 : insetSize === 'large' ? 1.22 : 1;
+  const insetScale = insetScaleBase * Number(layout?.insetScale || 1);
   const titleWidth = layout?.titleWidth === 'wide' ? 620 : 480;
 
   const insetWidth = Math.round(BASE_ZONES.inset.width * insetScale);

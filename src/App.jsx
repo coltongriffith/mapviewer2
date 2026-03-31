@@ -426,7 +426,7 @@ export default function App() {
     setUploadStatus({ type: 'success', message: 'Applied cleaner spacing and layout defaults.' });
   };
 
-  const addCalloutAtAnchor = ({ text, type = 'leader', anchor, featureId, layerId }) => {
+  const addCalloutAtAnchor = ({ text, subtext = '', type = 'leader', anchor, featureId, layerId, style = {}, boxWidth = 188 }) => {
     const calloutId = crypto.randomUUID();
     setProject((prev) => ({
       ...prev,
@@ -435,12 +435,24 @@ export default function App() {
         {
           id: calloutId,
           text,
+          subtext,
           type,
           priority: 2,
           anchor,
           offset: { x: 20, y: -18 },
           featureId: featureId || null,
           layerId: layerId || null,
+          boxWidth,
+          style: {
+            background: '#ffffff',
+            border: '#102640',
+            textColor: '#0f172a',
+            subtextColor: '#475569',
+            fontSize: 12,
+            paddingX: 10,
+            paddingY: 8,
+            ...style,
+          },
         },
       ],
     }));
@@ -496,6 +508,18 @@ export default function App() {
       latlng: { lat: latlng.lat, lng: latlng.lng },
       featureId: feature?.id || feature?.properties?.id || `${layerId}:${latlng.lat.toFixed(6)}:${latlng.lng.toFixed(6)}`,
       suggestedLabel: getFeatureLabel(feature, layer),
+      suggestedSubtext: feature?.properties?.result || feature?.properties?.interval || feature?.properties?.notes || '',
+      boxWidth: 188,
+      calloutType: 'leader',
+      style: {
+        background: '#ffffff',
+        border: '#102640',
+        textColor: '#0f172a',
+        subtextColor: '#475569',
+        fontSize: 12,
+        paddingX: 10,
+        paddingY: 8,
+      },
     });
   };
 
@@ -503,10 +527,13 @@ export default function App() {
     if (!selectedFeature?.latlng) return;
     addCalloutAtAnchor({
       text: selectedFeature.suggestedLabel,
-      type: 'leader',
+      subtext: selectedFeature.suggestedSubtext || '',
+      type: selectedFeature.calloutType || 'leader',
       anchor: selectedFeature.latlng,
       featureId: selectedFeature.featureId,
       layerId: selectedFeature.layerId,
+      boxWidth: selectedFeature.boxWidth || 188,
+      style: selectedFeature.style || {},
     });
   };
 
@@ -714,6 +741,21 @@ export default function App() {
               <button className="btn" type="button" onClick={() => insetInputRef.current?.click()}>Upload Inset</button>
               <button className="btn" type="button" onClick={() => updateLayout({ insetEnabled: project.layout.insetEnabled === false })}>{project.layout.insetEnabled === false ? 'Show Inset' : 'Hide Inset'}</button>
             </div>
+            <div className="control-row inline-2">
+              <div>
+                <label>Logo Size</label>
+                <input type="range" min="0.6" max="1.8" step="0.05" value={project.layout.logoScale || 1} onChange={(e) => updateLayout({ logoScale: Number(e.target.value) })} />
+              </div>
+              <div className="range-value">{Math.round((project.layout.logoScale || 1) * 100)}%</div>
+            </div>
+            <div className="control-row inline-2">
+              <div>
+                <label>Inset Size</label>
+                <input type="range" min="0.7" max="1.6" step="0.05" value={project.layout.insetScale || 1} onChange={(e) => updateLayout({ insetScale: Number(e.target.value) })} />
+              </div>
+              <div className="range-value">{Math.round((project.layout.insetScale || 1) * 100)}%</div>
+            </div>
+            <div className="small-note">Recommended inset size: roughly 15–25% of the map width. The inset now scales with the uploaded image ratio to reduce cropping.</div>
             <input ref={logoInputRef} type="file" accept="image/*" onChange={handleLogoChange} hidden />
             <input ref={insetInputRef} type="file" accept="image/*" onChange={handleInsetImageChange} hidden />
             {project.layout.insetMode === 'custom_image' ? (
@@ -864,15 +906,58 @@ export default function App() {
           {selectedFeature ? (
             <div className="control-grid">
               <div className="feature-chip">Selected: {selectedFeature.layerName}</div>
+              <div className="small-note">Click a drillhole on the map, then refine the callout here. The selected hole is editable before you add the callout.</div>
               <div className="control-row">
-                <label>Label Text</label>
+                <label>Title</label>
                 <input value={selectedFeature.suggestedLabel} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, suggestedLabel: e.target.value }))} />
               </div>
-              <div className="small-note">Click a drillhole on the map, edit the label, then add the callout. It will appear immediately in the editor and in export.</div>
-              <button className="btn primary" type="button" onClick={addCalloutFromSelectedFeature}>Add Callout From Clicked Drillhole</button>
+              <div className="control-row">
+                <label>Subtext</label>
+                <input value={selectedFeature.suggestedSubtext || ''} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, suggestedSubtext: e.target.value }))} />
+              </div>
+              <div className="control-row inline-2">
+                <div>
+                  <label>Callout Type</label>
+                  <select value={selectedFeature.calloutType || 'leader'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, calloutType: e.target.value }))}>
+                    {Object.entries(CALLOUT_TYPES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label>Box Width</label>
+                  <input type="number" min="140" max="320" step="2" value={selectedFeature.boxWidth || 188} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, boxWidth: Number(e.target.value || 188) }))} />
+                </div>
+              </div>
+              <div className="control-row inline-2">
+                <div>
+                  <label>Background</label>
+                  <input type="color" value={selectedFeature.style?.background || '#ffffff'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, style: { ...(prev.style || {}), background: e.target.value } }))} />
+                </div>
+                <div>
+                  <label>Border</label>
+                  <input type="color" value={selectedFeature.style?.border || '#102640'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, style: { ...(prev.style || {}), border: e.target.value } }))} />
+                </div>
+              </div>
+              <div className="control-row inline-2">
+                <div>
+                  <label>Text</label>
+                  <input type="color" value={selectedFeature.style?.textColor || '#0f172a'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, style: { ...(prev.style || {}), textColor: e.target.value } }))} />
+                </div>
+                <div>
+                  <label>Subtext</label>
+                  <input type="color" value={selectedFeature.style?.subtextColor || '#475569'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, style: { ...(prev.style || {}), subtextColor: e.target.value } }))} />
+                </div>
+              </div>
+              <div className="control-row inline-2">
+                <div>
+                  <label>Font Size</label>
+                  <input type="range" min="11" max="16" step="1" value={selectedFeature.style?.fontSize || 12} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, style: { ...(prev.style || {}), fontSize: Number(e.target.value) } }))} />
+                </div>
+                <div className="range-value">{selectedFeature.style?.fontSize || 12}px</div>
+              </div>
+              <button className="btn primary" type="button" onClick={addCalloutFromSelectedFeature}>Add / Update Callout</button>
             </div>
           ) : (
-            <div className="small-note">Click a drillhole point on the map to prepare a callout.</div>
+            <div className="small-note">Click a drillhole point on the map to open its callout editor.</div>
           )}
         </section>
 
@@ -991,6 +1076,18 @@ export default function App() {
           '--font-footer': `${project.layout.fonts?.footer || 'Inter'}, sans-serif`,
         }}
       >
+        <div className="map-topbar"> 
+          <div className="map-topbar-left">
+            <div className="map-topbar-title">{project.layout.title || 'Project Map'}</div>
+            <div className="map-topbar-sub">Pan, zoom, improve spacing, then export.</div>
+          </div>
+          <div className="map-topbar-right">
+            <button className="btn" type="button" onClick={autoFrameAll}>Refit</button>
+            <button className="btn primary" type="button" onClick={improveMap}>Improve Map</button>
+            <button className="btn" type="button" onClick={() => handleExport('svg')} disabled={exporting}>Export SVG</button>
+            <button className="btn primary" type="button" onClick={() => handleExport('png')} disabled={exporting}>Export PNG</button>
+          </div>
+        </div>
         <MapCanvas onReady={onMapReady} project={project} template={template} onFeatureClick={handleFeatureClick} onMapClick={handleMapClick} />
         <AnnotationOverlay
           map={leafletMapRef.current}

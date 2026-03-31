@@ -4,6 +4,23 @@ function intersects(a, b, padding = 10) {
   return !(a.left + a.width + padding < b.left || b.left + b.width + padding < a.left || a.top + a.height + padding < b.top || b.top + b.height + padding < a.top);
 }
 
+function estimateBox(callout) {
+  const title = callout.text || '';
+  const subtext = callout.subtext || '';
+  const style = callout.style || {};
+  const fontSize = style.fontSize || 12;
+  const paddingX = style.paddingX || 10;
+  const paddingY = style.paddingY || 8;
+  const width = Math.max(136, Math.min(callout.boxWidth || 188, 320));
+  const charsPerLine = Math.max(12, Math.floor((width - paddingX * 2) / Math.max(6, fontSize * 0.55)));
+  const titleLines = Math.max(1, Math.ceil(title.length / charsPerLine));
+  const subtextLines = subtext ? Math.max(1, Math.ceil(subtext.length / charsPerLine)) : 0;
+  const titleHeight = titleLines * (fontSize + 3);
+  const subtextHeight = subtextLines ? subtextLines * Math.max(11, fontSize - 1) + 6 : 0;
+  const height = paddingY * 2 + titleHeight + subtextHeight;
+  return { width, height };
+}
+
 function resolveCalloutBoxes(callouts, map) {
   if (!map) return [];
   const placed = [];
@@ -15,11 +32,10 @@ function resolveCalloutBoxes(callouts, map) {
       const anchor = callout.anchor;
       if (!anchor) return;
       const pt = map.latLngToContainerPoint([anchor.lat, anchor.lng]);
-      const width = callout.type === 'boxed' ? 188 : callout.type === 'leader' ? 146 : 136;
-      const height = callout.type === 'boxed' ? 42 : 24;
+      const box = estimateBox(callout);
       let left = pt.x + (callout.offset?.x || 0);
       let top = pt.y + (callout.offset?.y || 0);
-      let candidate = { ...callout, width, height, left, top, anchorPx: pt };
+      let candidate = { ...callout, width: box.width, height: box.height, left, top, anchorPx: pt };
 
       if (callout.isManualPosition) {
         placed.push(candidate);
@@ -76,42 +92,57 @@ export default function CalloutsOverlay({ map, callouts, selectedCalloutId, onSe
 
   return (
     <div className="callouts-overlay">
-      {placed.map((callout) => (
-        <React.Fragment key={callout.id}>
-          <svg className="callout-leader-svg">
-            {(callout.type === 'leader' || callout.type === 'boxed') ? (
-              <line
-                x1={callout.anchorPx.x}
-                y1={callout.anchorPx.y}
-                x2={callout.left + 10}
-                y2={callout.top + callout.height / 2}
-                stroke="#102640"
-                strokeWidth="1.4"
-                strokeDasharray={callout.type === 'leader' ? '5 3' : ''}
-              />
-            ) : null}
-            <circle cx={callout.anchorPx.x} cy={callout.anchorPx.y} r="4" fill="#102640" />
-          </svg>
-          <div
-            className={`map-callout ${callout.type} ${selectedCalloutId === callout.id ? 'selected' : ''}`}
-            style={{ left: callout.left, top: callout.top, width: callout.width, minHeight: callout.height, fontFamily: fontFamily || 'Inter, sans-serif' }}
-            onClick={() => onSelect?.(callout.id)}
-            onMouseDown={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              onSelect?.(callout.id);
-              dragRef.current = {
-                id: callout.id,
-                startX: event.clientX,
-                startY: event.clientY,
-                startOffset: callout.offset || { x: 0, y: 0 },
-              };
-            }}
-          >
-            <span>{callout.text}</span>
-          </div>
-        </React.Fragment>
-      ))}
+      {placed.map((callout) => {
+        const style = callout.style || {};
+        return (
+          <React.Fragment key={callout.id}>
+            <svg className="callout-leader-svg">
+              {(callout.type === 'leader' || callout.type === 'boxed') ? (
+                <line
+                  x1={callout.anchorPx.x}
+                  y1={callout.anchorPx.y}
+                  x2={callout.left + 10}
+                  y2={callout.top + callout.height / 2}
+                  stroke={style.border || '#102640'}
+                  strokeWidth="1.4"
+                  strokeDasharray={callout.type === 'leader' ? '5 3' : ''}
+                />
+              ) : null}
+              <circle cx={callout.anchorPx.x} cy={callout.anchorPx.y} r="4" fill={style.border || '#102640'} />
+            </svg>
+            <div
+              className={`map-callout ${callout.type} ${selectedCalloutId === callout.id ? 'selected' : ''}`}
+              style={{
+                left: callout.left,
+                top: callout.top,
+                width: callout.width,
+                minHeight: callout.height,
+                fontFamily: fontFamily || 'Inter, sans-serif',
+                background: callout.type === 'plain' ? 'transparent' : (style.background || '#ffffff'),
+                borderColor: style.border || '#102640',
+                color: style.textColor || '#0f172a',
+                fontSize: style.fontSize || 12,
+                padding: `${style.paddingY || 8}px ${style.paddingX || 10}px`,
+              }}
+              onClick={() => onSelect?.(callout.id)}
+              onMouseDown={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                onSelect?.(callout.id);
+                dragRef.current = {
+                  id: callout.id,
+                  startX: event.clientX,
+                  startY: event.clientY,
+                  startOffset: callout.offset || { x: 0, y: 0 },
+                };
+              }}
+            >
+              <div className="map-callout-title">{callout.text}</div>
+              {callout.subtext ? <div className="map-callout-subtext" style={{ color: style.subtextColor || '#475569' }}>{callout.subtext}</div> : null}
+            </div>
+          </React.Fragment>
+        );
+      })}
     </div>
   );
 }

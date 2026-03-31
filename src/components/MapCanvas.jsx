@@ -4,8 +4,8 @@ import 'leaflet/dist/leaflet.css';
 
 const BASEMAPS = {
   light: {
-    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-    attribution: '&copy; OpenStreetMap contributors',
+    url: 'https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png',
+    attribution: '&copy; OpenStreetMap &copy; CARTO',
   },
   dark: {
     url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
@@ -23,9 +23,9 @@ const BASEMAPS = {
 
 const REFERENCE_OVERLAYS = {
   context: {
-    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-    attribution: '&copy; OpenStreetMap contributors',
-    opacityFactor: 1,
+    url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+    attribution: '&copy; OpenStreetMap &copy; CARTO',
+    opacityFactor: 0.95,
     zIndex: 350,
   },
   labels: {
@@ -48,6 +48,11 @@ function detectGeomType(geojson) {
   if (type.includes('Point')) return 'points';
   if (type.includes('Line')) return 'line';
   return 'polygon';
+}
+
+function featureLabel(feature, fallback = 'Selected drillhole') {
+  const props = feature?.properties || {};
+  return props.label || props.name || props.hole || props.hole_id || props.id || fallback;
 }
 
 export default function MapCanvas({ onReady, project, template, onFeatureClick, onMapClick }) {
@@ -73,6 +78,12 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
       zoomSnap: 0.01,
       zoomDelta: 0.25,
     });
+
+    map.dragging.enable();
+    map.scrollWheelZoom.enable();
+    map.doubleClickZoom.enable();
+    map.boxZoom.enable();
+    map.keyboard.enable();
 
     map.on('click', (event) => onMapClickRef.current?.(event.latlng));
 
@@ -174,7 +185,10 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
           });
 
           if (isDrillholes) {
-            marker.on('click', () => onFeatureClick?.({ layerId: layer.id, feature, latlng }));
+            marker.on('click', () => {
+              onFeatureClick?.({ layerId: layer.id, feature, latlng });
+              marker.bindPopup(`<strong>${featureLabel(feature, layer.displayName || layer.name)}</strong><br/>Edit the callout in the left panel.`).openPopup();
+            });
             marker.bindTooltip('Click to label', { direction: 'top', offset: [0, -10], opacity: 0.9, sticky: true });
           }
 
@@ -182,7 +196,10 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
         },
         onEachFeature: (feature, featureLayer) => {
           if (isDrillholes && typeof featureLayer.getLatLng === 'function') {
-            featureLayer.on('click', () => onFeatureClick?.({ layerId: layer.id, feature, latlng: featureLayer.getLatLng() }));
+            featureLayer.on('click', () => {
+              onFeatureClick?.({ layerId: layer.id, feature, latlng: featureLayer.getLatLng() });
+              featureLayer.bindPopup(`<strong>${featureLabel(feature, layer.displayName || layer.name)}</strong><br/>Edit the callout in the left panel.`).openPopup();
+            });
           }
         },
       });
