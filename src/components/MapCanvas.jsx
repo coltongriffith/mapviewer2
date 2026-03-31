@@ -50,11 +50,6 @@ function detectGeomType(geojson) {
   return 'polygon';
 }
 
-function featureLabel(feature, fallback = 'Selected drillhole') {
-  const props = feature?.properties || {};
-  return props.label || props.name || props.hole || props.hole_id || props.id || fallback;
-}
-
 export default function MapCanvas({ onReady, project, template, onFeatureClick, onMapClick }) {
   const mapRef = useRef(null);
   const onMapClickRef = useRef(onMapClick);
@@ -91,6 +86,16 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
     mapRef.current = map;
     onReady?.(map);
   }, [onReady]);
+
+  useEffect(() => () => {
+    if (mapRef.current) {
+      mapRef.current.remove();
+      mapRef.current = null;
+      overlayGroupRef.current = null;
+      baseLayerRef.current = null;
+      referenceRefs.current = {};
+    }
+  }, []);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -187,20 +192,11 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
           if (isDrillholes) {
             marker.on('click', () => {
               onFeatureClick?.({ layerId: layer.id, feature, latlng });
-              marker.bindPopup(`<strong>${featureLabel(feature, layer.displayName || layer.name)}</strong><br/>Edit the callout in the left panel.`).openPopup();
             });
-            marker.bindTooltip('Click to label', { direction: 'top', offset: [0, -10], opacity: 0.9, sticky: true });
+            marker.bindTooltip('Click to edit callout', { direction: 'top', offset: [0, -10], opacity: 0.9, sticky: true });
           }
 
           return marker;
-        },
-        onEachFeature: (feature, featureLayer) => {
-          if (isDrillholes && typeof featureLayer.getLatLng === 'function') {
-            featureLayer.on('click', () => {
-              onFeatureClick?.({ layerId: layer.id, feature, latlng: featureLayer.getLatLng() });
-              featureLayer.bindPopup(`<strong>${featureLabel(feature, layer.displayName || layer.name)}</strong><br/>Edit the callout in the left panel.`).openPopup();
-            });
-          }
         },
       });
 

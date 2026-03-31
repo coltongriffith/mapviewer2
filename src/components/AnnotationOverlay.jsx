@@ -46,7 +46,8 @@ export default function AnnotationOverlay({
   useEffect(() => {
     const handleMove = (event) => {
       if (!dragRef.current || !map) return;
-      const { startX, startY, id, kind, startPoint } = dragRef.current;
+      const { startX, startY, id, kind, startPoint, pointerId } = dragRef.current;
+      if (pointerId != null && event.pointerId !== pointerId) return;
       const dx = event.clientX - startX;
       const dy = event.clientY - startY;
       const nextPoint = { x: startPoint.x + dx, y: startPoint.y + dy };
@@ -54,14 +55,17 @@ export default function AnnotationOverlay({
       if (kind === 'marker') onMoveMarker?.(id, { lat: ll.lat, lng: ll.lng });
       if (kind === 'ellipse') onMoveEllipse?.(id, { lat: ll.lat, lng: ll.lng });
     };
-    const handleUp = () => {
+    const handleUp = (event) => {
+      if (dragRef.current?.pointerId != null && event.pointerId !== dragRef.current.pointerId) return;
       dragRef.current = null;
     };
-    window.addEventListener('mousemove', handleMove);
-    window.addEventListener('mouseup', handleUp);
+    window.addEventListener('pointermove', handleMove);
+    window.addEventListener('pointerup', handleUp);
+    window.addEventListener('pointercancel', handleUp);
     return () => {
-      window.removeEventListener('mousemove', handleMove);
-      window.removeEventListener('mouseup', handleUp);
+      window.removeEventListener('pointermove', handleMove);
+      window.removeEventListener('pointerup', handleUp);
+      window.removeEventListener('pointercancel', handleUp);
     };
   }, [map, onMoveEllipse, onMoveMarker]);
 
@@ -87,11 +91,11 @@ export default function AnnotationOverlay({
             e.stopPropagation();
             onSelectEllipse?.(ellipse.id);
           }}
-          onMouseDown={(e) => {
+          onPointerDown={(e) => {
             e.preventDefault();
             e.stopPropagation();
             onSelectEllipse?.(ellipse.id);
-            dragRef.current = { id: ellipse.id, kind: 'ellipse', startX: e.clientX, startY: e.clientY, startPoint: { x: ellipse.x, y: ellipse.y } };
+            dragRef.current = { id: ellipse.id, kind: 'ellipse', startX: e.clientX, startY: e.clientY, startPoint: { x: ellipse.x, y: ellipse.y }, pointerId: e.pointerId };
           }}
         >
           {ellipse.label ? <div className="ellipse-annotation-label" style={{ fontFamily: labelFont || 'Inter, sans-serif' }}>{ellipse.label}</div> : null}
@@ -109,11 +113,11 @@ export default function AnnotationOverlay({
               e.stopPropagation();
               onSelectMarker?.(marker.id);
             }}
-            onMouseDown={(e) => {
+            onPointerDown={(e) => {
               e.preventDefault();
               e.stopPropagation();
               onSelectMarker?.(marker.id);
-              dragRef.current = { id: marker.id, kind: 'marker', startX: e.clientX, startY: e.clientY, startPoint: { x: marker.x, y: marker.y } };
+              dragRef.current = { id: marker.id, kind: 'marker', startX: e.clientX, startY: e.clientY, startPoint: { x: marker.x, y: marker.y }, pointerId: e.pointerId };
             }}
           >
             <div
