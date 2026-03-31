@@ -605,7 +605,7 @@ export default function App() {
     }
   };
 
-  const mapZoomPercent = Math.max(10, Math.min(400, Number(project.layout.zoomPercent || 100)));
+  const mapZoomPercent = Math.max(1, Math.min(100, Number(project.layout.zoomPercent || 100)));
   const featureEditorPoint = useMemo(() => {
     if (!leafletMapRef.current || !selectedFeature?.latlng) return null;
     const pt = leafletMapRef.current.latLngToContainerPoint([selectedFeature.latlng.lat, selectedFeature.latlng.lng]);
@@ -783,7 +783,7 @@ export default function App() {
                 </select>
               </div>
             </div>
-            <div className="small-note">Zoom is controlled directly on the map toolbar (10% to 400%) for fine framing control.</div>
+            <div className="small-note">Zoom is now controlled directly on the map canvas for faster editing.</div>
             <div className="control-row inline-2">
               <div>
                 <label>Title Font</label>
@@ -1113,13 +1113,12 @@ export default function App() {
         </section>
       </Sidebar>
 
-      <div className="editor-main">
-        <div
-          ref={mapContainerRef}
-          className="map-stage"
-          data-theme={project.layout.themeId || 'modern_rounded'}
-          data-annotation-tool={annotationTool || ''}
-          style={{
+      <div
+        ref={mapContainerRef}
+        className="map-stage"
+        data-theme={project.layout.themeId || 'modern_rounded'}
+        data-annotation-tool={annotationTool || ''}
+        style={{
           '--template-radius': `${themeTokens.panelRadius}px`,
           '--title-radius': `${themeTokens.titleRadius}px`,
           '--panel-bg': themeTokens.panelFill,
@@ -1155,6 +1154,49 @@ export default function App() {
           '--font-footer': `${project.layout.fonts?.footer || 'Inter'}, sans-serif`,
         }}
       >
+        <div className="map-topbar"> 
+          <div className="map-topbar-left">
+            <div className="map-topbar-title">{project.layout.title || 'Project Map'}</div>
+            <div className="map-topbar-sub">{annotationTool ? `Mode: ${annotationTool === 'marker' ? 'Add Marker' : 'Add Zone'} (click map to place)` : 'Pan map, add markers/zones, and export.'}</div>
+          </div>
+          <div className="map-topbar-right">
+            <div className="map-zoom-inline">
+              <label htmlFor="map-zoom-control">Zoom {mapZoomPercent}%</label>
+              <input
+                id="map-zoom-control"
+                type="range"
+                min="1"
+                max="100"
+                step="1"
+                value={mapZoomPercent}
+                onChange={(e) => updateLayout({ zoomPercent: Number(e.target.value), frameVersion: (project.layout.frameVersion || 0) + 1 })}
+              />
+            </div>
+            <button
+              className={`btn ${annotationTool === 'marker' ? 'primary' : ''}`}
+              type="button"
+              onClick={() => {
+                setAnnotationTool(annotationTool === 'marker' ? null : 'marker');
+                setSelectedFeature(null);
+              }}
+            >
+              Add Marker
+            </button>
+            <button
+              className={`btn ${annotationTool === 'ellipse' ? 'primary' : ''}`}
+              type="button"
+              onClick={() => {
+                setAnnotationTool(annotationTool === 'ellipse' ? null : 'ellipse');
+                setSelectedFeature(null);
+              }}
+            >
+              Add Zone
+            </button>
+            <button className="btn" type="button" onClick={autoFrameAll}>Refit</button>
+            <button className="btn" type="button" onClick={() => handleExport('svg')} disabled={exporting}>Export SVG</button>
+            <button className="btn primary" type="button" onClick={() => handleExport('png')} disabled={exporting}>Export PNG</button>
+          </div>
+        </div>
         <MapCanvas onReady={onMapReady} project={project} template={template} onFeatureClick={handleFeatureClick} onMapClick={handleMapClick} />
         <AnnotationOverlay
           map={leafletMapRef.current}
@@ -1238,8 +1280,6 @@ export default function App() {
             </div>
           </div>
         ) : null}
-        </div>
-      </div>
       </div>
     </div>
   );
