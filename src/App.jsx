@@ -29,6 +29,7 @@ import { cleanLayerName } from './utils/cleanLayerName';
 import { fitProjectToTemplate } from './utils/frameMapForTemplate';
 import { getThemeTokens } from './utils/themeTokens';
 import {
+  clearActiveProjectContext,
   duplicateProjectRecord,
   listProjects,
   resolveInitialWorkspace,
@@ -243,7 +244,6 @@ export default function App() {
   useEffect(() => {
     if (!bootstrappedRef.current) {
       bootstrappedRef.current = true;
-      touchLastOpenedProject(projectId);
       return;
     }
     const serialized = JSON.stringify(project);
@@ -752,6 +752,26 @@ export default function App() {
     setUploadStatus({ type: 'success', message: `Duplicated project as: ${saved.name}` });
   };
 
+
+  const startNewProject = () => {
+    const blank = createInitialProjectState();
+    setProject(blank);
+    setProjectId(null);
+    setProjectName('Untitled map');
+    setSelectedLayerId(null);
+    setSelectedCalloutId(null);
+    setSelectedFeature(null);
+    setSelectedMarkerId(null);
+    setSelectedEllipseId(null);
+    setAnnotationTool(null);
+    setShowRecentProjects(false);
+    clearActiveProjectContext();
+    saveDraft({ payload: blank, projectId: null, projectName: 'Untitled map' });
+    lastSavedSnapshotRef.current = JSON.stringify(blank);
+    setIsDirty(false);
+    setUploadStatus({ type: 'success', message: 'Started a new blank project workspace.' });
+  };
+
   const referenceOverlays = project.layout.referenceOverlays || {};
 
   if (screen === 'landing') {
@@ -1213,6 +1233,7 @@ export default function App() {
             <div className={`autosave-badge ${isDirty ? 'dirty' : 'clean'}`}>{isDirty ? 'Unsaved' : 'Saved'}</div>
             <button className="btn" type="button" onClick={() => saveCurrentProject()}>Save</button>
             <button className="btn" type="button" onClick={saveAsProject}>Save As</button>
+            <button className="btn" type="button" onClick={startNewProject}>New / Clear</button>
             <button className="btn" type="button" onClick={() => setShowRecentProjects(true)}>Open</button>
             <button className="btn" type="button" onClick={duplicateCurrentProject}>Duplicate</button>
             <div className="map-zoom-inline">
