@@ -10,6 +10,15 @@ function shapeClass(type) {
   return ['circle', 'square', 'triangle'].includes(type) ? type : 'icon';
 }
 
+
+function ellipseLabelPlacement(ellipse) {
+  const anchorX = ellipse.x + ellipse.width * 0.34;
+  const anchorY = ellipse.y - ellipse.height * 0.24;
+  const labelX = anchorX + 16;
+  const labelY = anchorY - 24;
+  return { anchorX, anchorY, labelX, labelY };
+}
+
 function resolvePositions(items, map, kind) {
   if (!map) return [];
   return items.map((item) => {
@@ -98,9 +107,45 @@ export default function AnnotationOverlay({
             dragRef.current = { id: ellipse.id, kind: 'ellipse', startX: e.clientX, startY: e.clientY, startPoint: { x: ellipse.x, y: ellipse.y }, pointerId: e.pointerId };
           }}
         >
-          {ellipse.label ? <div className="ellipse-annotation-label" style={{ fontFamily: labelFont || 'Inter, sans-serif' }}>{ellipse.label}</div> : null}
+          {null}
         </div>
       ))}
+
+      <svg className="annotation-leader-svg" aria-hidden="true">
+        {placedEllipses.filter((ellipse) => ellipse.label).map((ellipse) => {
+          const pos = ellipseLabelPlacement(ellipse);
+          return (
+            <g key={`ellipse-label-${ellipse.id}`}>
+              <line
+                x1={pos.anchorX}
+                y1={pos.anchorY}
+                x2={pos.labelX}
+                y2={pos.labelY + 10}
+                stroke={ellipse.color || '#dc2626'}
+                strokeWidth={1.5}
+                strokeDasharray="5 3"
+              />
+            </g>
+          );
+        })}
+      </svg>
+
+      {placedEllipses.filter((ellipse) => ellipse.label).map((ellipse) => {
+        const pos = ellipseLabelPlacement(ellipse);
+        return (
+          <div
+            key={`ellipse-tag-${ellipse.id}`}
+            className="ellipse-annotation-label with-leader"
+            style={{ left: pos.labelX, top: pos.labelY, fontFamily: labelFont || 'Inter, sans-serif' }}
+            onClick={(e) => {
+              e.stopPropagation();
+              onSelectEllipse?.(ellipse.id);
+            }}
+          >
+            {ellipse.label}
+          </div>
+        );
+      })}
 
       {placedMarkers.map((marker) => {
         const glyph = markerGlyph(marker.type);

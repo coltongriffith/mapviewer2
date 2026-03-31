@@ -29,6 +29,7 @@ import { cleanLayerName } from './utils/cleanLayerName';
 import { fitProjectToTemplate } from './utils/frameMapForTemplate';
 import { getThemeTokens } from './utils/themeTokens';
 import {
+  clearActiveProjectContext,
   duplicateProjectRecord,
   listProjects,
   resolveInitialWorkspace,
@@ -156,6 +157,8 @@ function applyModeToProject(project, template, mode) {
   };
 }
 
+
+
 function renderLegendGroups(items, layout) {
   const mode = layout?.legendMode || 'auto';
   const compact = mode === 'compact' || (mode === 'auto' && items.length <= 2);
@@ -241,7 +244,6 @@ export default function App() {
   useEffect(() => {
     if (!bootstrappedRef.current) {
       bootstrappedRef.current = true;
-      touchLastOpenedProject(projectId);
       return;
     }
     const serialized = JSON.stringify(project);
@@ -427,6 +429,7 @@ export default function App() {
     setProject((prev) => applyModeToProject(prev, template, mode));
   };
 
+
   const setDisplayLabel = (layerId, value) => {
     updateLayer(layerId, { displayName: value, legend: { label: value } });
   };
@@ -459,9 +462,14 @@ export default function App() {
       layout: {
         ...prev.layout,
         legendMode: prev.layers.length > 4 ? 'full' : 'auto',
-        titleWidth: prev.layout.title?.length > 26 ? 'wide' : 'standard',
+        titleWidth: prev.layout.title?.length > 30 ? 'wide' : 'standard',
         referenceOpacity: 0.72,
         insetEnabled: true,
+        insetSize: 'medium',
+        safeMargins: { top: 22, right: 22, bottom: 22, left: 22 },
+        compositionPreset: 'balanced',
+        logoScale: Math.max(0.85, Math.min(1.15, Number(prev.layout.logoScale || 1))),
+        insetScale: Math.max(0.9, Math.min(1.1, Number(prev.layout.insetScale || 1))),
         zoomPercent: 100,
         frameVersion: (prev.layout.frameVersion || 0) + 1,
       },
@@ -471,7 +479,7 @@ export default function App() {
         offset: callout.offset || { x: 20, y: -18 },
       })),
     }));
-    setUploadStatus({ type: 'success', message: 'Applied cleaner spacing and layout defaults.' });
+    setUploadStatus({ type: 'success', message: 'Applied polished default template spacing and alignment.' });
   };
 
   const addCalloutAtAnchor = ({ text, subtext = '', type = 'leader', anchor, featureId, layerId, style = {}, boxWidth = 188 }) => {
@@ -592,7 +600,12 @@ export default function App() {
       ...prev,
       markers: [
         ...(prev.markers || []),
-        { id, lat: latlng.lat, lng: latlng.lng, type: 'circle', color: '#d97706', size: 18, label: '' },
+        {
+          id,
+          lat: latlng.lat,
+          lng: latlng.lng,
+          ...(prev.layout?.markerDefaults || { type: 'circle', color: '#d97706', size: 18, label: '' }),
+        },
       ],
     }));
     setSelectedMarkerId(id);
@@ -606,7 +619,12 @@ export default function App() {
       ...prev,
       ellipses: [
         ...(prev.ellipses || []),
-        { id, lat: latlng.lat, lng: latlng.lng, width: 90, height: 56, rotation: -18, color: '#dc2626', dashed: true, label: '' },
+        {
+          id,
+          lat: latlng.lat,
+          lng: latlng.lng,
+          ...(prev.layout?.zoneDefaults || { width: 90, height: 56, rotation: -18, color: '#dc2626', dashed: true, label: '' }),
+        },
       ],
     }));
     setSelectedEllipseId(id);
@@ -732,6 +750,26 @@ export default function App() {
     setIsDirty(false);
     saveDraft({ payload: project, projectId: saved.id, projectName: saved.name });
     setUploadStatus({ type: 'success', message: `Duplicated project as: ${saved.name}` });
+  };
+
+
+  const startNewProject = () => {
+    const blank = createInitialProjectState();
+    setProject(blank);
+    setProjectId(null);
+    setProjectName('Untitled map');
+    setSelectedLayerId(null);
+    setSelectedCalloutId(null);
+    setSelectedFeature(null);
+    setSelectedMarkerId(null);
+    setSelectedEllipseId(null);
+    setAnnotationTool(null);
+    setShowRecentProjects(false);
+    clearActiveProjectContext();
+    saveDraft({ payload: blank, projectId: null, projectName: 'Untitled map' });
+    lastSavedSnapshotRef.current = JSON.stringify(blank);
+    setIsDirty(false);
+    setUploadStatus({ type: 'success', message: 'Started a new blank project workspace.' });
   };
 
   const referenceOverlays = project.layout.referenceOverlays || {};
@@ -1145,48 +1183,8 @@ export default function App() {
         </section>
       </Sidebar>
 
-      <div
-        ref={mapContainerRef}
-        className="map-stage"
-        data-theme={project.layout.themeId || 'modern_rounded'}
-        data-annotation-tool={annotationTool || ''}
-        style={{
-          '--template-radius': `${themeTokens.panelRadius}px`,
-          '--title-radius': `${themeTokens.titleRadius}px`,
-          '--panel-bg': themeTokens.panelFill,
-          '--panel-border': themeTokens.panelBorder,
-          '--panel-shadow': themeTokens.panelShadow,
-          '--title-bg': themeTokens.titleFill,
-          '--title-border': themeTokens.titleBorder,
-          '--title-accent': themeTokens.titleAccent || 'transparent',
-          '--title-fg': themeTokens.titleText,
-          '--subtitle-fg': themeTokens.subtitleText,
-          '--panel-title': themeTokens.panelTitle,
-          '--body-text': themeTokens.bodyText,
-          '--muted-text': themeTokens.mutedText,
-          '--footer-bg': themeTokens.footerFill,
-          '--footer-fg': themeTokens.footerText,
-          '--callout-bg': themeTokens.calloutFill,
-          '--callout-border': themeTokens.calloutBorder,
-          '--callout-fg': themeTokens.calloutText,
-          '--north-fill': themeTokens.northArrowFill,
-          '--north-fg': themeTokens.northArrowText,
-          '--scale-bg': themeTokens.scaleFill,
-          '--scale-stroke': themeTokens.scaleStroke,
-          '--inset-bg': themeTokens.insetFill,
-          '--inset-border': themeTokens.insetBorder,
-          '--inset-title': themeTokens.insetTitle,
-          '--inset-muted': themeTokens.insetMuted,
-          '--logo-bg': themeTokens.logoFill,
-          '--logo-border': themeTokens.logoBorder,
-          '--font-title': `${project.layout.fonts?.title || 'Inter'}, sans-serif`,
-          '--font-legend': `${project.layout.fonts?.legend || 'Inter'}, sans-serif`,
-          '--font-label': `${project.layout.fonts?.label || 'Inter'}, sans-serif`,
-          '--font-callout': `${project.layout.fonts?.callout || 'Inter'}, sans-serif`,
-          '--font-footer': `${project.layout.fonts?.footer || 'Inter'}, sans-serif`,
-        }}
-      >
-        <div className="map-topbar"> 
+      <div className="editor-main">
+        <div className="map-topbar editor-toolbar">
           <div className="map-topbar-left">
             <div className="map-topbar-title">{project.layout.title || 'Project Map'}</div>
             <div className="map-topbar-sub">{annotationTool ? `Mode: ${annotationTool === 'marker' ? 'Add Marker' : 'Add Zone'} (click map to place)` : 'Pan map, add markers/zones, and export.'}</div>
@@ -1195,6 +1193,7 @@ export default function App() {
             <div className={`autosave-badge ${isDirty ? 'dirty' : 'clean'}`}>{isDirty ? 'Unsaved' : 'Saved'}</div>
             <button className="btn" type="button" onClick={() => saveCurrentProject()}>Save</button>
             <button className="btn" type="button" onClick={saveAsProject}>Save As</button>
+            <button className="btn" type="button" onClick={startNewProject}>New / Clear</button>
             <button className="btn" type="button" onClick={() => setShowRecentProjects(true)}>Open</button>
             <button className="btn" type="button" onClick={duplicateCurrentProject}>Duplicate</button>
             <div className="map-zoom-inline">
@@ -1234,6 +1233,48 @@ export default function App() {
             <button className="btn primary" type="button" onClick={() => handleExport('png')} disabled={exporting}>Export PNG</button>
           </div>
         </div>
+        <div className="map-viewport">
+          <div
+            ref={mapContainerRef}
+            className="map-stage"
+            data-theme={project.layout.themeId || 'modern_rounded'}
+            data-annotation-tool={annotationTool || ''}
+            style={{
+              '--template-radius': `${themeTokens.panelRadius}px`,
+              '--title-radius': `${themeTokens.titleRadius}px`,
+              '--panel-bg': themeTokens.panelFill,
+              '--panel-border': themeTokens.panelBorder,
+              '--panel-shadow': themeTokens.panelShadow,
+              '--title-bg': themeTokens.titleFill,
+              '--title-border': themeTokens.titleBorder,
+              '--title-accent': themeTokens.titleAccent || 'transparent',
+              '--title-fg': themeTokens.titleText,
+              '--subtitle-fg': themeTokens.subtitleText,
+              '--panel-title': themeTokens.panelTitle,
+              '--body-text': themeTokens.bodyText,
+              '--muted-text': themeTokens.mutedText,
+              '--footer-bg': themeTokens.footerFill,
+              '--footer-fg': themeTokens.footerText,
+              '--callout-bg': themeTokens.calloutFill,
+              '--callout-border': themeTokens.calloutBorder,
+              '--callout-fg': themeTokens.calloutText,
+              '--north-fill': themeTokens.northArrowFill,
+              '--north-fg': themeTokens.northArrowText,
+              '--scale-bg': themeTokens.scaleFill,
+              '--scale-stroke': themeTokens.scaleStroke,
+              '--inset-bg': themeTokens.insetFill,
+              '--inset-border': themeTokens.insetBorder,
+              '--inset-title': themeTokens.insetTitle,
+              '--inset-muted': themeTokens.insetMuted,
+              '--logo-bg': themeTokens.logoFill,
+              '--logo-border': themeTokens.logoBorder,
+              '--font-title': `${project.layout.fonts?.title || 'Inter'}, sans-serif`,
+              '--font-legend': `${project.layout.fonts?.legend || 'Inter'}, sans-serif`,
+              '--font-label': `${project.layout.fonts?.label || 'Inter'}, sans-serif`,
+              '--font-callout': `${project.layout.fonts?.callout || 'Inter'}, sans-serif`,
+              '--font-footer': `${project.layout.fonts?.footer || 'Inter'}, sans-serif`,
+            }}
+          >
         <MapCanvas onReady={onMapReady} project={project} template={template} onFeatureClick={handleFeatureClick} onMapClick={handleMapClick} />
         <AnnotationOverlay
           map={leafletMapRef.current}
@@ -1288,7 +1329,7 @@ export default function App() {
           </div>
         ) : null}
 
-        <div className="floating-north-arrow"><NorthArrow /></div>
+        <div className="template-zone" style={zoneStyle(resolvedZones.northArrow)}><NorthArrow /></div>
         {project.layout.insetEnabled !== false && resolvedZones.inset?.width ? (
           <div className="template-zone" style={zoneStyle(resolvedZones.inset)}>
             <LocatorInset layers={project.layers} insetMode={project.layout.insetMode} insetImage={project.layout.insetImage} mode={project.layout.mode} zone={{ width: '100%', height: '100%' }} />
@@ -1316,6 +1357,8 @@ export default function App() {
             </div>
           </div>
         ) : null}
+          </div>
+        </div>
       </div>
       {showRecentProjects ? (
         <div className="recent-projects-modal" role="dialog" aria-modal="true">

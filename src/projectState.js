@@ -84,6 +84,9 @@ export function createInitialProjectState() {
       },
       referenceOpacity: 0.65,
       zoomPercent: 100,
+      safeMargins: { top: 18, right: 18, bottom: 18, left: 18 },
+      markerDefaults: { type: 'circle', color: '#d97706', size: 18, label: '' },
+      zoneDefaults: { width: 90, height: 56, rotation: -18, color: '#dc2626', dashed: true, label: '' },
       fonts: {
         title: 'Inter',
         legend: 'Inter',
