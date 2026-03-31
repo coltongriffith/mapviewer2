@@ -61,6 +61,7 @@ export function saveDraft({ payload, projectId, projectName }) {
     updatedAt: new Date().toISOString(),
   }));
   if (projectId) localStorage.setItem(LAST_OPENED_PROJECT_KEY, projectId);
+  else localStorage.removeItem(LAST_OPENED_PROJECT_KEY);
 }
 
 export function loadDraft() {
@@ -77,18 +78,6 @@ export function resolveInitialWorkspace(fallbackProject) {
     };
   }
 
-  const lastProjectId = localStorage.getItem(LAST_OPENED_PROJECT_KEY);
-  if (lastProjectId) {
-    const entry = getProjectRecord(lastProjectId);
-    if (entry?.payload) {
-      return {
-        project: entry.payload,
-        projectId: entry.id,
-        projectName: entry.name,
-      };
-    }
-  }
-
   return {
     project: fallbackProject,
     projectId: null,
@@ -96,6 +85,11 @@ export function resolveInitialWorkspace(fallbackProject) {
   };
 }
 
+export function clearActiveProjectContext() {
+  localStorage.removeItem(LAST_OPENED_PROJECT_KEY);
+}
+
 export function touchLastOpenedProject(projectId) {
   if (projectId) localStorage.setItem(LAST_OPENED_PROJECT_KEY, projectId);
+  else localStorage.removeItem(LAST_OPENED_PROJECT_KEY);
 }
