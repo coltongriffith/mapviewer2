@@ -94,8 +94,10 @@ function legendHeightFor(layout, itemCount) {
   const mode = layout?.legendMode || 'auto';
   const compact = mode === 'compact' || (mode === 'auto' && itemCount <= 2);
   if (!itemCount) return 0;
-  if (compact) return Math.max(84, Math.min(160, 44 + itemCount * 26));
-  return Math.max(110, Math.min(280, 54 + itemCount * 30));
+  const labels = layout?.legendItems || [];
+  const longLabelCount = labels.filter((item) => String(item?.label || '').length > 24).length;
+  if (compact) return Math.max(82, Math.min(190, 42 + itemCount * 24 + longLabelCount * 6));
+  return Math.max(110, Math.min(320, 52 + itemCount * 28 + longLabelCount * 8));
 }
 
 export function resolveTemplateZones(template, layout, mapSize) {
@@ -103,6 +105,8 @@ export function resolveTemplateZones(template, layout, mapSize) {
   const height = mapSize?.height || 1000;
   const legendCount = Math.max(0, layout?.legendItems?.length || 0);
   const legendHeight = legendHeightFor(layout, legendCount);
+  const legendMaxLabel = Math.max(0, ...(layout?.legendItems || []).map((item) => String(item?.label || '').length));
+  const legendWidth = Math.round(Math.min(360, Math.max(BASE_ZONES.legend.width, 260 + Math.max(0, legendMaxLabel - 18) * 3.2)));
   const logoScale = Number(layout?.logoScale || 1);
   const logoWidth = Math.round(BASE_ZONES.logo.width * logoScale);
   const logoHeight = Math.round(BASE_ZONES.logo.height * logoScale);
@@ -113,14 +117,20 @@ export function resolveTemplateZones(template, layout, mapSize) {
   const titleWidth = layout?.titleWidth === 'wide' ? 620 : 480;
 
   const insetWidth = Math.round(BASE_ZONES.inset.width * insetScale);
-  const insetHeight = Math.round(BASE_ZONES.inset.height * insetScale);
+  let insetHeight = Math.round(BASE_ZONES.inset.height * insetScale);
+  let adjustedInsetWidth = insetWidth;
+  if (layout?.insetMode === 'custom_image' && Number(layout?.insetImageAspect) > 0) {
+    const ratio = Number(layout.insetImageAspect);
+    adjustedInsetWidth = Math.round(Math.max(170, Math.min(340, insetHeight * ratio)));
+    insetHeight = Math.round(Math.max(120, Math.min(280, adjustedInsetWidth / ratio)));
+  }
 
   const zones = {
     ...BASE_ZONES,
     title: { ...BASE_ZONES.title, width: titleWidth },
-    legend: { ...BASE_ZONES.legend, height: legendHeight },
+    legend: { ...BASE_ZONES.legend, height: legendHeight, width: legendWidth },
     inset: insetEnabled
-      ? { ...BASE_ZONES.inset, width: insetWidth, height: insetHeight }
+      ? { ...BASE_ZONES.inset, width: adjustedInsetWidth, height: insetHeight }
       : { ...BASE_ZONES.inset, width: 0, height: 0 },
     footer: layout?.footerEnabled === false ? { ...BASE_ZONES.footer, width: 0, height: 0 } : { ...BASE_ZONES.footer },
     logo: { ...BASE_ZONES.logo, width: logoWidth, height: logoHeight },
