@@ -50,11 +50,6 @@ function detectGeomType(geojson) {
   return 'polygon';
 }
 
-function featureLabel(feature, fallback = 'Selected drillhole') {
-  const props = feature?.properties || {};
-  return props.label || props.name || props.hole || props.hole_id || props.id || fallback;
-}
-
 export default function MapCanvas({ onReady, project, template, onFeatureClick, onMapClick }) {
   const mapRef = useRef(null);
   const onMapClickRef = useRef(onMapClick);
@@ -197,9 +192,8 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
           if (isDrillholes) {
             marker.on('click', () => {
               onFeatureClick?.({ layerId: layer.id, feature, latlng });
-              marker.bindPopup(`<strong>${featureLabel(feature, layer.displayName || layer.name)}</strong><br/>Edit the callout in the left panel.`).openPopup();
             });
-            marker.bindTooltip('Click to label', { direction: 'top', offset: [0, -10], opacity: 0.9, sticky: true });
+            marker.bindTooltip('Click to edit callout', { direction: 'top', offset: [0, -10], opacity: 0.9, sticky: true });
           }
 
           return marker;
