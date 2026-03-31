@@ -92,6 +92,16 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
     onReady?.(map);
   }, [onReady]);
 
+  useEffect(() => () => {
+    if (mapRef.current) {
+      mapRef.current.remove();
+      mapRef.current = null;
+      overlayGroupRef.current = null;
+      baseLayerRef.current = null;
+      referenceRefs.current = {};
+    }
+  }, []);
+
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -193,14 +203,6 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
           }
 
           return marker;
-        },
-        onEachFeature: (feature, featureLayer) => {
-          if (isDrillholes && typeof featureLayer.getLatLng === 'function') {
-            featureLayer.on('click', () => {
-              onFeatureClick?.({ layerId: layer.id, feature, latlng: featureLayer.getLatLng() });
-              featureLayer.bindPopup(`<strong>${featureLabel(feature, layer.displayName || layer.name)}</strong><br/>Edit the callout in the left panel.`).openPopup();
-            });
-          }
         },
       });
 
