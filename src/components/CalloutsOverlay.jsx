@@ -23,7 +23,9 @@ function estimateBox(callout) {
 
 function resolveCalloutBoxes(callouts, map) {
   if (!map) return [];
+  const size = map.getSize();
   const placed = [];
+  const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 
   callouts
     .slice()
@@ -35,19 +37,20 @@ function resolveCalloutBoxes(callouts, map) {
       const box = estimateBox(callout);
       let left = pt.x + (callout.offset?.x || 0);
       let top = pt.y + (callout.offset?.y || 0);
+      left = clamp(left, 6, Math.max(6, size.x - box.width - 6));
+      top = clamp(top, 6, Math.max(6, size.y - box.height - 6));
       let candidate = { ...callout, width: box.width, height: box.height, left, top, anchorPx: pt };
 
-      if (callout.isManualPosition) {
-        placed.push(candidate);
-        return;
-      }
-
-      let attempts = 0;
-      while (placed.some((other) => intersects(candidate, other)) && attempts < 8) {
-        top += 18;
-        left += attempts % 2 === 0 ? 8 : -6;
-        candidate = { ...candidate, top, left };
-        attempts += 1;
+      if (!callout.isManualPosition) {
+        let attempts = 0;
+        while (placed.some((other) => intersects(candidate, other)) && attempts < 8) {
+          top += 18;
+          left += attempts % 2 === 0 ? 8 : -6;
+          left = clamp(left, 6, Math.max(6, size.x - box.width - 6));
+          top = clamp(top, 6, Math.max(6, size.y - box.height - 6));
+          candidate = { ...candidate, top, left };
+          attempts += 1;
+        }
       }
 
       placed.push(candidate);
@@ -56,7 +59,7 @@ function resolveCalloutBoxes(callouts, map) {
   return placed;
 }
 
-export default function CalloutsOverlay({ map, callouts, selectedCalloutId, onSelect, onMove, fontFamily }) {
+export default function CalloutsOverlay({ map, callouts, selectedCalloutId, onSelect, onMove, onMoveAnchor, fontFamily }) {
   const [tick, setTick] = useState(0);
   const dragRef = useRef(null);
 
@@ -69,34 +72,54 @@ export default function CalloutsOverlay({ map, callouts, selectedCalloutId, onSe
 
   useEffect(() => {
     const handleMove = (event) => {
-      if (!dragRef.current) return;
-      const { startX, startY, startOffset, id } = dragRef.current;
-      const dx = event.clientX - startX;
-      const dy = event.clientY - startY;
-      onMove?.(id, { x: startOffset.x + dx, y: startOffset.y + dy, isManualPosition: true });
+      if (!dragRef.current || !map) return;
+      const payload = dragRef.current;
+      if (payload.pointerId != null && event.pointerId !== payload.pointerId) return;
+      const dx = event.clientX - payload.startX;
+      const dy = event.clientY - payload.startY;
+      const size = map.getSize();
+
+      if (payload.kind === 'anchor') {
+        const nextX = Math.min(size.x - 6, Math.max(6, payload.startAnchor.x + dx));
+        const nextY = Math.min(size.y - 6, Math.max(6, payload.startAnchor.y + dy));
+        const ll = map.containerPointToLatLng([nextX, nextY]);
+        onMoveAnchor?.(payload.id, { lat: ll.lat, lng: ll.lng });
+        return;
+      }
+
+      const minOffsetX = -payload.anchorPx.x + 6;
+      const maxOffsetX = size.x - payload.width - payload.anchorPx.x - 6;
+      const minOffsetY = -payload.anchorPx.y + 6;
+      const maxOffsetY = size.y - payload.height - payload.anchorPx.y - 6;
+      const nextX = Math.min(maxOffsetX, Math.max(minOffsetX, payload.startOffset.x + dx));
+      const nextY = Math.min(maxOffsetY, Math.max(minOffsetY, payload.startOffset.y + dy));
+      onMove?.(payload.id, { x: nextX, y: nextY, isManualPosition: true });
     };
 
-    const handleUp = () => {
+    const handleUp = (event) => {
+      if (dragRef.current?.pointerId != null && event.pointerId !== dragRef.current.pointerId) return;
       dragRef.current = null;
     };
 
-    window.addEventListener('mousemove', handleMove);
-    window.addEventListener('mouseup', handleUp);
+    window.addEventListener('pointermove', handleMove);
+    window.addEventListener('pointerup', handleUp);
+    window.addEventListener('pointercancel', handleUp);
     return () => {
-      window.removeEventListener('mousemove', handleMove);
-      window.removeEventListener('mouseup', handleUp);
+      window.removeEventListener('pointermove', handleMove);
+      window.removeEventListener('pointerup', handleUp);
+      window.removeEventListener('pointercancel', handleUp);
     };
-  }, [onMove]);
+  }, [map, onMove, onMoveAnchor]);
 
   const placed = useMemo(() => resolveCalloutBoxes(callouts, map), [callouts, map, tick]);
 
   return (
     <div className="callouts-overlay">
-      {placed.map((callout) => {
-        const style = callout.style || {};
-        return (
-          <React.Fragment key={callout.id}>
-            <svg className="callout-leader-svg">
+      <svg className="callout-leader-svg">
+        {placed.map((callout) => {
+          const style = callout.style || {};
+          return (
+            <React.Fragment key={`${callout.id}-leader`}>
               {(callout.type === 'leader' || callout.type === 'boxed') ? (
                 <line
                   x1={callout.anchorPx.x}
@@ -109,7 +132,14 @@ export default function CalloutsOverlay({ map, callouts, selectedCalloutId, onSe
                 />
               ) : null}
               <circle cx={callout.anchorPx.x} cy={callout.anchorPx.y} r="4" fill={style.border || '#102640'} />
-            </svg>
+            </React.Fragment>
+          );
+        })}
+      </svg>
+      {placed.map((callout) => {
+        const style = callout.style || {};
+        return (
+          <React.Fragment key={callout.id}>
             <div
               className={`map-callout ${callout.type} ${selectedCalloutId === callout.id ? 'selected' : ''}`}
               style={{
@@ -125,21 +155,46 @@ export default function CalloutsOverlay({ map, callouts, selectedCalloutId, onSe
                 padding: `${style.paddingY || 8}px ${style.paddingX || 10}px`,
               }}
               onClick={() => onSelect?.(callout.id)}
-              onMouseDown={(event) => {
+              onPointerDown={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
                 onSelect?.(callout.id);
                 dragRef.current = {
+                  kind: 'box',
                   id: callout.id,
                   startX: event.clientX,
                   startY: event.clientY,
                   startOffset: callout.offset || { x: 0, y: 0 },
+                  anchorPx: callout.anchorPx,
+                  width: callout.width,
+                  height: callout.height,
+                  pointerId: event.pointerId,
                 };
               }}
             >
               <div className="map-callout-title">{callout.text}</div>
               {callout.subtext ? <div className="map-callout-subtext" style={{ color: style.subtextColor || '#475569' }}>{callout.subtext}</div> : null}
             </div>
+            {selectedCalloutId === callout.id ? (
+              <button
+                type="button"
+                className="callout-anchor-handle"
+                style={{ left: callout.anchorPx.x - 7, top: callout.anchorPx.y - 7 }}
+                onPointerDown={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  dragRef.current = {
+                    kind: 'anchor',
+                    id: callout.id,
+                    startX: event.clientX,
+                    startY: event.clientY,
+                    startAnchor: { x: callout.anchorPx.x, y: callout.anchorPx.y },
+                    pointerId: event.pointerId,
+                  };
+                }}
+                aria-label="Move callout anchor"
+              />
+            ) : null}
           </React.Fragment>
         );
       })}
