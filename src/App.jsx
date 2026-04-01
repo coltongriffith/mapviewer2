@@ -218,7 +218,7 @@ export default function App() {
   const [projectName, setProjectName] = useState(initialWorkspace.projectName);
   const [recentProjects, setRecentProjects] = useState(() => listProjects());
   const [showRecentProjects, setShowRecentProjects] = useState(false);
-  const [showHDExportModal, setShowHDExportModal] = useState(false);
+  const [showSvgExportModal, setShowSvgExportModal] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [selectedLayerId, setSelectedLayerId] = useState(null);
   const [selectedCalloutId, setSelectedCalloutId] = useState(null);
@@ -242,7 +242,17 @@ export default function App() {
   const resolvedZones = useMemo(() => resolveTemplateZones(template, project.layout, mapSize), [template, project.layout, mapSize]);
   const legendItems = useMemo(() => buildLegendItems(template, project.layers, project.layout), [template, project.layers, project.layout]);
   const legendGroups = useMemo(() => renderLegendGroups(legendItems, project.layout), [legendItems, project.layout]);
-  const themeTokens = useMemo(() => getThemeTokens(project.layout?.themeId || 'modern_rounded'), [project.layout?.themeId]);
+  const themeTokens = useMemo(() => {
+    const base = getThemeTokens(project.layout?.themeId || 'modern_rounded');
+    const accent = project.layout?.accentColor;
+    if (!accent) return base;
+    return {
+      ...base,
+      titleAccent: accent,
+      calloutBorder: accent,
+      ...(project.layout?.themeId === 'modern_rounded' || !project.layout?.themeId ? { titleFill: accent + 'dd' } : {}),
+    };
+  }, [project.layout?.themeId, project.layout?.accentColor]);
 
   useEffect(() => {
     if (!bootstrappedRef.current) {
@@ -280,10 +290,9 @@ export default function App() {
       { ...template, zones: resolvedZones },
       project.layout.compositionPreset || template.modePresets?.[project.layout.mode]?.framing || 'balanced'
     );
-    const zoomPct = Number(project.layout.zoomPercent || 100);
-    const delta = Math.log2(Math.max(1, zoomPct) / 100);
+    const delta = Number(project.layout.zoomDelta ?? 0);
     map.setZoom(map.getZoom() + delta, { animate: false });
-  }, [template, resolvedZones, project.layout.frameVersion, project.layout.primaryLayerId, project.layout.compositionPreset, project.layout.zoomPercent, project.layers]);
+  }, [template, resolvedZones, project.layout.frameVersion, project.layout.primaryLayerId, project.layout.compositionPreset, project.layout.zoomDelta, project.layers]);
 
   useEffect(() => {
     const map = leafletMapRef.current;
@@ -402,7 +411,13 @@ export default function App() {
     if (!file) return;
     try {
       const dataUrl = await readFileAsDataURL(file);
-      updateLayout({ insetImage: dataUrl, insetMode: 'custom_image', insetEnabled: true });
+      const aspectRatio = await new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => resolve(img.naturalWidth && img.naturalHeight ? img.naturalWidth / img.naturalHeight : null);
+        img.onerror = () => resolve(null);
+        img.src = dataUrl;
+      });
+      updateLayout({ insetImage: dataUrl, insetMode: 'custom_image', insetEnabled: true, insetAspectRatio: aspectRatio });
       setUploadStatus({ type: 'success', message: `Loaded inset image: ${file.name}` });
     } catch (err) {
       setUploadStatus({ type: 'error', message: `Inset import failed: ${err.message}` });
@@ -645,7 +660,7 @@ export default function App() {
     }
   };
 
-  const mapZoomPercent = Math.max(1, Math.min(100, Number(project.layout.zoomPercent || 100)));
+  const zoomDelta = Math.max(-8, Math.min(8, Number(project.layout.zoomDelta ?? 0)));
   const featureEditorPoint = useMemo(() => {
     if (!leafletMapRef.current || !selectedFeature?.latlng) return null;
     const pt = leafletMapRef.current.latLngToContainerPoint([selectedFeature.latlng.lat, selectedFeature.latlng.lng]);
@@ -698,16 +713,16 @@ export default function App() {
     }
   };
 
-  const handleHDExportConfirm = async (email) => {
-    setShowHDExportModal(false);
+  const handleSvgExportConfirm = async (email) => {
+    setShowSvgExportModal(false);
     if (email) saveLead({ email, projectTitle: project.layout?.title || '' });
     if (!leafletMapRef.current || !mapContainerRef.current || exporting) return;
     setExporting(true);
     try {
       const scene = buildScene(mapContainerRef.current, { ...project, layout: { ...project.layout, legendItems } }, leafletMapRef.current);
-      await exportPNG(scene, { pixelRatio: 3, filename: project.layout?.exportSettings?.filename || 'mapviewer-export' });
+      await exportSVG(scene, project.layout?.exportSettings || {});
     } catch (err) {
-      setUploadStatus({ type: 'error', message: `HD Export failed: ${err.message}` });
+      setUploadStatus({ type: 'error', message: `SVG Export failed: ${err.message}` });
     } finally {
       setExporting(false);
     }
@@ -832,13 +847,28 @@ export default function App() {
                 </select>
               </div>
               <div>
-                <label>Composition</label>
-                <select value={project.layout.compositionPreset} onChange={(e) => updateLayout({ compositionPreset: e.target.value, frameVersion: (project.layout.frameVersion || 0) + 1 })}>
-                  {Object.entries(COMPOSITION_PRESETS).map(([value, label]) => (
-                    <option key={value} value={value}>{label}</option>
-                  ))}
-                </select>
+                <label>Accent color</label>
+                <div className="accent-color-row">
+                  <input
+                    type="color"
+                    className="accent-color-input"
+                    value={project.layout.accentColor || '#2563eb'}
+                    onChange={(e) => updateLayout({ accentColor: e.target.value })}
+                    title="Pick accent color"
+                  />
+                  {project.layout.accentColor && (
+                    <button className="secondary-btn compact" type="button" onClick={() => updateLayout({ accentColor: null })}>Reset</button>
+                  )}
+                </div>
               </div>
+            </div>
+            <div className="control-row">
+              <label>Composition</label>
+              <select value={project.layout.compositionPreset} onChange={(e) => updateLayout({ compositionPreset: e.target.value, frameVersion: (project.layout.frameVersion || 0) + 1 })}>
+                {Object.entries(COMPOSITION_PRESETS).map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
             </div>
             <div className="button-row">
               <button className="btn" type="button" onClick={autoFrameAll}>Refit Map</button>
@@ -1193,10 +1223,9 @@ export default function App() {
                 </select>
               </div>
             </div>
-            <div className="button-row three">
+            <div className="button-row">
               <button className="btn primary" type="button" onClick={() => handleExport('png')} disabled={exporting}>Export PNG</button>
-              <button className="btn" type="button" onClick={() => handleExport('svg')} disabled={exporting}>Export SVG</button>
-              <button className="btn export-hd-trigger" type="button" onClick={() => setShowHDExportModal(true)} disabled={exporting}>Export HD</button>
+              <button className="btn" type="button" onClick={() => setShowSvgExportModal(true)} disabled={exporting}>Export SVG</button>
             </div>
           </div>
         </section>
@@ -1206,7 +1235,6 @@ export default function App() {
         <div className="map-topbar editor-toolbar">
           <div className="map-topbar-left">
             <div className="map-topbar-title">{project.layout.title || 'Project Map'}</div>
-            <div className="map-topbar-sub">{annotationTool ? `Mode: ${annotationTool === 'marker' ? 'Add Marker' : 'Add Zone'} (click map to place)` : 'Pan map, add markers/zones, and export.'}</div>
           </div>
           <div className="map-topbar-right">
             <div className={`autosave-badge ${isDirty ? 'dirty' : 'clean'}`}>{isDirty ? 'Unsaved' : 'Saved'}</div>
@@ -1215,41 +1243,22 @@ export default function App() {
             <button className="btn" type="button" onClick={startNewProject}>New</button>
             <button className="btn" type="button" onClick={() => setShowRecentProjects(true)}>Open</button>
             <button className="btn" type="button" onClick={duplicateCurrentProject}>Duplicate</button>
-            <div className="map-zoom-inline">
-              <label htmlFor="map-zoom-control">Zoom {mapZoomPercent}%</label>
-              <input
-                id="map-zoom-control"
-                type="range"
-                min="1"
-                max="100"
-                step="1"
-                value={mapZoomPercent}
-                onChange={(e) => updateLayout({ zoomPercent: Number(e.target.value), frameVersion: (project.layout.frameVersion || 0) + 1 })}
-              />
+            <div className="map-zoom-btns">
+              <button
+                className="secondary-btn compact"
+                type="button"
+                aria-label="Zoom out"
+                onClick={() => updateLayout({ zoomDelta: zoomDelta - 1, frameVersion: (project.layout.frameVersion || 0) + 1 })}
+              >−</button>
+              <button
+                className="secondary-btn compact"
+                type="button"
+                aria-label="Zoom in"
+                onClick={() => updateLayout({ zoomDelta: zoomDelta + 1, frameVersion: (project.layout.frameVersion || 0) + 1 })}
+              >+</button>
             </div>
-            <button
-              className={`btn ${annotationTool === 'marker' ? 'primary' : ''}`}
-              type="button"
-              onClick={() => {
-                setAnnotationTool(annotationTool === 'marker' ? null : 'marker');
-                setSelectedFeature(null);
-              }}
-            >
-              Add Marker
-            </button>
-            <button
-              className={`btn ${annotationTool === 'ellipse' ? 'primary' : ''}`}
-              type="button"
-              onClick={() => {
-                setAnnotationTool(annotationTool === 'ellipse' ? null : 'ellipse');
-                setSelectedFeature(null);
-              }}
-            >
-              Add Zone
-            </button>
-            <button className="btn" type="button" onClick={autoFrameAll}>Refit</button>
             <button className="btn primary" type="button" onClick={() => handleExport('png')} disabled={exporting}>Export PNG</button>
-            <button className="btn export-hd-trigger" type="button" onClick={() => setShowHDExportModal(true)} disabled={exporting}>Export HD</button>
+            <button className="btn" type="button" onClick={() => setShowSvgExportModal(true)} disabled={exporting}>Export SVG</button>
           </div>
         </div>
         <div className="map-viewport">
@@ -1397,10 +1406,10 @@ export default function App() {
           </div>
         </div>
       ) : null}
-      {showHDExportModal ? (
+      {showSvgExportModal ? (
         <ExportHDModal
-          onConfirm={handleHDExportConfirm}
-          onClose={() => setShowHDExportModal(false)}
+          onConfirm={handleSvgExportConfirm}
+          onClose={() => setShowSvgExportModal(false)}
         />
       ) : null}
     </div>

@@ -41,3 +41,24 @@ export function readLeads() {
     return [];
   }
 }
+
+/**
+ * Developer-only CSV export utility. Not exposed in the UI.
+ * Access via browser DevTools console: __exportLeads()
+ */
+export function exportLeadsCsv() {
+  const leads = readLeads();
+  if (!leads.length) {
+    // eslint-disable-next-line no-console
+    console.log('No leads collected yet.');
+    return;
+  }
+  const rows = leads.map((l) =>
+    [l.email, (l.projectTitle || '').replace(/,/g, ' '), l.capturedAt].join(',')
+  );
+  const csv = ['email,projectTitle,capturedAt', ...rows].join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+  a.download = 'mapviewer-leads.csv';
+  a.click();
+}

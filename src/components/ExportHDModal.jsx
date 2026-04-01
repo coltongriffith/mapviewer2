@@ -4,10 +4,10 @@ import { getLastLeadEmail } from '../utils/leadCapture';
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /**
- * HD Export modal — prompts for an optional email before triggering 3× PNG export.
+ * SVG Export modal — prompts for an optional email before triggering SVG export.
  *
  * Props:
- *   onConfirm(email: string | null) — called when the user clicks "Download HD Export".
+ *   onConfirm(email: string | null) — called when the user clicks "Export SVG".
  *                                     email is null if skipped or left blank.
  *   onClose() — called when the user dismisses without downloading.
  */
@@ -46,9 +46,9 @@ export default function ExportHDModal({ onConfirm, onClose }) {
           </svg>
         </div>
 
-        <h3 id="hd-modal-title" className="export-hd-title">Export High-Resolution Map</h3>
+        <h3 id="hd-modal-title" className="export-hd-title">Export as SVG</h3>
         <p className="export-hd-desc">
-          Download a 3× resolution PNG — sharp enough for reports, presentations, and print.
+          Vector format — scales to any size. Ideal for print, Illustrator, and Inkscape.
         </p>
 
         <div className="export-hd-field">
@@ -72,7 +72,7 @@ export default function ExportHDModal({ onConfirm, onClose }) {
 
         <div className="export-hd-actions">
           <button className="btn primary export-hd-btn-primary" type="button" onClick={handleSubmit}>
-            Download HD Export
+            Download SVG
           </button>
           <button className="export-hd-skip" type="button" onClick={handleSkip}>
             Skip and download
