@@ -5,31 +5,31 @@ export default function LandingPage({ onOpenEditor }) {
     <div className="landing-shell"> 
       <div className="landing-card modern"> 
         <div className="landing-copy"> 
-          <div className="landing-badge">Map production for exploration data</div>
-          <h1>Build presentation-ready project maps from shapefiles in minutes.</h1>
+          <div className="landing-badge">Built for mineral exploration teams</div>
+          <h1>Stop rebuilding maps. Start presenting results.</h1>
           <p>
-            Replace slow GIS cleanup and one-off design work with a focused editor for claims, drillholes, targets,
-            inset maps, and export-ready layouts.
+            Drop in your shapefiles and get a clean, export-ready map — complete with legends, callouts, and inset locators.
+            No GIS cleanup, no Illustrator, no rebuilding from scratch when data changes.
           </p>
 
-          <div className="landing-actions landing-actions-sticky"> 
+          <div className="landing-actions landing-actions-sticky">
             <button className="btn primary large" type="button" onClick={onOpenEditor}>
-              Open Map Editor
+              Upload Your Data and Start
             </button>
           </div>
 
-          <div className="landing-pain-grid"> 
-            <div className="landing-pain-card"> 
-              <strong>Too much cleanup after export</strong>
-              <span>Fix inconsistent legends, labels, spacing, and callouts in one place before the map leaves the editor.</span>
+          <div className="landing-pain-grid">
+            <div className="landing-pain-card">
+              <strong>Export once. Look great every time.</strong>
+              <span>Legends, callout boxes, north arrows, and scale bars stay consistent and correctly placed — what you see in the editor is exactly what exports to PNG or SVG.</span>
             </div>
-            <div className="landing-pain-card"> 
-              <strong>Maps are slow to update</strong>
-              <span>Drop in revised claims or drillholes and keep the visual layout intact instead of rebuilding from scratch.</span>
+            <div className="landing-pain-card">
+              <strong>New data shouldn't mean a new map.</strong>
+              <span>Swap in updated claims, drill results, or target boundaries and your layout, styling, and annotations stay intact. Spend your time on the geology, not the map.</span>
             </div>
-            <div className="landing-pain-card"> 
-              <strong>Hard to make the story obvious</strong>
-              <span>Use callouts, highlight zones, markers, inset maps, and cleaner framing to show what matters quickly.</span>
+            <div className="landing-pain-card">
+              <strong>Make reviewers understand it before you say a word.</strong>
+              <span>Callout boxes, highlight zones, and inset locator maps direct attention to what matters — so the result is obvious the moment the map lands in an inbox.</span>
             </div>
           </div>
         </div>
