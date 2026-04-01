@@ -1193,10 +1193,10 @@ export default function App() {
             <div className={`autosave-badge ${isDirty ? 'dirty' : 'clean'}`}>{isDirty ? 'Unsaved' : 'Saved'}</div>
             <button className="btn" type="button" onClick={() => saveCurrentProject()}>Save</button>
             <button className="btn" type="button" onClick={saveAsProject}>Save As</button>
-            <button className="btn" type="button" onClick={startNewProject}>New / Clear</button>
+            <button className="btn" type="button" onClick={startNewProject}>New</button>
             <button className="btn" type="button" onClick={() => setShowRecentProjects(true)}>Open</button>
             <button className="btn" type="button" onClick={duplicateCurrentProject}>Duplicate</button>
-            <div className="map-zoom-inline">
+            <div className="map-zoom-inline topbar-sep">
               <label htmlFor="map-zoom-control">Zoom {mapZoomPercent}%</label>
               <input
                 id="map-zoom-control"
@@ -1229,7 +1229,7 @@ export default function App() {
               Add Zone
             </button>
             <button className="btn" type="button" onClick={autoFrameAll}>Refit</button>
-            <button className="btn" type="button" onClick={() => handleExport('svg')} disabled={exporting}>Export SVG</button>
+            <button className="btn topbar-sep" type="button" onClick={() => handleExport('svg')} disabled={exporting}>Export SVG</button>
             <button className="btn primary" type="button" onClick={() => handleExport('png')} disabled={exporting}>Export PNG</button>
           </div>
         </div>

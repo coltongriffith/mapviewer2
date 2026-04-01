@@ -310,19 +310,21 @@ button, input, select, textarea { font: inherit; }
 .map-topbar-left { min-width: 170px; max-width: 240px; }
 .map-topbar-title { font-size: 13px; font-weight: 800; color: #10243c; line-height: 1.2; }
 .map-topbar-sub { font-size: 11px; color: #64748b; margin-top: 2px; line-height: 1.25; }
-.map-topbar-right { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
-.map-topbar .btn { width: auto; min-width: 92px; padding: 8px 10px; }
-.map-zoom-inline { display: grid; gap: 3px; min-width: 180px; padding: 0 6px; }
-.map-zoom-inline label { font-size: 11px; color: #314155; font-weight: 700; }
-.map-zoom-inline input { width: 100%; }
+.map-topbar-right { display: flex; align-items: center; gap: 4px; flex-wrap: nowrap; justify-content: flex-end; }
+.map-topbar .btn { width: auto; padding: 5px 10px; font-size: 13px; }
+.map-zoom-inline { display: flex; align-items: center; gap: 6px; min-width: 140px; padding: 0 4px; }
+.map-zoom-inline label { font-size: 11px; color: #314155; font-weight: 700; white-space: nowrap; }
+.map-zoom-inline input { width: 80px; }
+.topbar-sep { border-left: 1px solid #d4deea; padding-left: 8px; margin-left: 2px; }
 .autosave-badge {
   font-size: 11px;
   font-weight: 700;
   border-radius: 999px;
-  padding: 6px 10px;
+  padding: 4px 8px;
   border: 1px solid #cdd8e6;
   background: #f8fbff;
   color: #2b4d74;
+  white-space: nowrap;
 }
 .autosave-badge.clean { background: #edf9f0; border-color: #bfe4c8; color: #1f6a35; }
 .autosave-badge.dirty { background: #fff8eb; border-color: #f0d8a9; color: #8a5b08; }
