@@ -398,6 +398,120 @@ button, input, select, textarea { font: inherit; }
 .mini-color-row span { width: 22px; height: 22px; border-radius: 999px; background: #dbe7f7; border: 1px solid #c7d7ee; }
 .mini-button { width: 100%; height: 34px; border-radius: 10px; background: linear-gradient(90deg, #3b82f6, #2563eb); }
 
+/* ── Export HD button ──────────────────────────────────────────── */
+.btn.export-hd-trigger {
+  background: linear-gradient(135deg, #0f2c56 0%, #1d4ed8 100%);
+  border-color: #1d4ed8;
+  color: #ffffff;
+  font-weight: 700;
+}
+.btn.export-hd-trigger:hover:not(:disabled) {
+  background: linear-gradient(135deg, #162f5c 0%, #2558e8 100%);
+}
+
+/* ── HD Export email capture modal ────────────────────────────── */
+.export-hd-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: grid;
+  place-items: center;
+  background: rgba(2, 6, 23, 0.45);
+  backdrop-filter: blur(2px);
+}
+.export-hd-card {
+  position: relative;
+  width: min(420px, 92vw);
+  background: #ffffff;
+  border-radius: 18px;
+  border: 1px solid #dbe4ee;
+  box-shadow: 0 28px 60px rgba(15, 23, 42, 0.22);
+  padding: 32px 28px 28px;
+  display: grid;
+  gap: 14px;
+}
+.export-hd-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  border: 1px solid #d4deea;
+  background: #f8fbff;
+  color: #64748b;
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  line-height: 1;
+}
+.export-hd-close:hover { background: #eef4ff; color: #1e3a5f; }
+.export-hd-icon-wrap {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #e8f0ff 0%, #dbeafe 100%);
+  border: 1px solid #c7d9f8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #1d4ed8;
+}
+.export-hd-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 800;
+  color: #0f1f38;
+  line-height: 1.2;
+}
+.export-hd-desc {
+  margin: 0;
+  font-size: 14px;
+  color: #475569;
+  line-height: 1.55;
+}
+.export-hd-field { display: grid; gap: 6px; }
+.export-hd-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #667085;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.export-hd-optional { font-weight: 400; text-transform: none; color: #94a3b8; letter-spacing: 0; }
+.export-hd-input {
+  width: 100%;
+  border: 1px solid #d4deea;
+  border-radius: 10px;
+  padding: 11px 13px;
+  font-size: 14px;
+  color: #122033;
+  background: #ffffff;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.export-hd-input:focus { border-color: #4d86d5; box-shadow: 0 0 0 3px rgba(77,134,213,0.14); }
+.export-hd-input.has-error { border-color: #e05353; }
+.export-hd-error { font-size: 12px; color: #b91c1c; }
+.export-hd-small { margin: 0; font-size: 12px; color: #94a3b8; line-height: 1.45; }
+.export-hd-actions { display: grid; gap: 10px; margin-top: 4px; }
+.export-hd-btn-primary { width: 100%; padding: 13px; font-size: 15px; font-weight: 700; border-radius: 12px; }
+.export-hd-skip {
+  background: none;
+  border: none;
+  color: #64748b;
+  font-size: 13px;
+  cursor: pointer;
+  text-align: center;
+  padding: 4px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.export-hd-skip:hover { color: #1e3a5f; }
+
 @media (max-width: 1080px) {
   .landing-card.modern { grid-template-columns: 1fr; }
   .map-topbar { max-width: none; }

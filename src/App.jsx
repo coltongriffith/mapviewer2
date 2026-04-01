@@ -5,6 +5,7 @@ import LayerList from './components/LayerList';
 import LocatorInset from './components/LocatorInset';
 import CalloutsOverlay from './components/CalloutsOverlay';
 import LandingPage from './components/LandingPage';
+import ExportHDModal from './components/ExportHDModal';
 import UploadPanel from './components/UploadPanel';
 import AnnotationOverlay from './components/AnnotationOverlay';
 import { loadGeoJSON } from './utils/importers';
@@ -28,6 +29,7 @@ import { geojsonCenter } from './utils/geometry';
 import { cleanLayerName } from './utils/cleanLayerName';
 import { fitProjectToTemplate } from './utils/frameMapForTemplate';
 import { getThemeTokens } from './utils/themeTokens';
+import { saveLead } from './utils/leadCapture';
 import {
   clearActiveProjectContext,
   duplicateProjectRecord,
@@ -216,6 +218,7 @@ export default function App() {
   const [projectName, setProjectName] = useState(initialWorkspace.projectName);
   const [recentProjects, setRecentProjects] = useState(() => listProjects());
   const [showRecentProjects, setShowRecentProjects] = useState(false);
+  const [showHDExportModal, setShowHDExportModal] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [selectedLayerId, setSelectedLayerId] = useState(null);
   const [selectedCalloutId, setSelectedCalloutId] = useState(null);
@@ -690,6 +693,21 @@ export default function App() {
       }
     } catch (err) {
       setUploadStatus({ type: 'error', message: `Export failed: ${err.message}` });
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleHDExportConfirm = async (email) => {
+    setShowHDExportModal(false);
+    if (email) saveLead({ email, projectTitle: project.layout?.title || '' });
+    if (!leafletMapRef.current || !mapContainerRef.current || exporting) return;
+    setExporting(true);
+    try {
+      const scene = buildScene(mapContainerRef.current, { ...project, layout: { ...project.layout, legendItems } }, leafletMapRef.current);
+      await exportPNG(scene, { pixelRatio: 3, filename: project.layout?.exportSettings?.filename || 'mapviewer-export' });
+    } catch (err) {
+      setUploadStatus({ type: 'error', message: `HD Export failed: ${err.message}` });
     } finally {
       setExporting(false);
     }
@@ -1175,9 +1193,10 @@ export default function App() {
                 </select>
               </div>
             </div>
-            <div className="button-row">
+            <div className="button-row three">
               <button className="btn primary" type="button" onClick={() => handleExport('png')} disabled={exporting}>Export PNG</button>
               <button className="btn" type="button" onClick={() => handleExport('svg')} disabled={exporting}>Export SVG</button>
+              <button className="btn export-hd-trigger" type="button" onClick={() => setShowHDExportModal(true)} disabled={exporting}>Export HD</button>
             </div>
           </div>
         </section>
@@ -1193,7 +1212,7 @@ export default function App() {
             <div className={`autosave-badge ${isDirty ? 'dirty' : 'clean'}`}>{isDirty ? 'Unsaved' : 'Saved'}</div>
             <button className="btn" type="button" onClick={() => saveCurrentProject()}>Save</button>
             <button className="btn" type="button" onClick={saveAsProject}>Save As</button>
-            <button className="btn" type="button" onClick={startNewProject}>New / Clear</button>
+            <button className="btn" type="button" onClick={startNewProject}>New</button>
             <button className="btn" type="button" onClick={() => setShowRecentProjects(true)}>Open</button>
             <button className="btn" type="button" onClick={duplicateCurrentProject}>Duplicate</button>
             <div className="map-zoom-inline">
@@ -1229,8 +1248,8 @@ export default function App() {
               Add Zone
             </button>
             <button className="btn" type="button" onClick={autoFrameAll}>Refit</button>
-            <button className="btn" type="button" onClick={() => handleExport('svg')} disabled={exporting}>Export SVG</button>
             <button className="btn primary" type="button" onClick={() => handleExport('png')} disabled={exporting}>Export PNG</button>
+            <button className="btn export-hd-trigger" type="button" onClick={() => setShowHDExportModal(true)} disabled={exporting}>Export HD</button>
           </div>
         </div>
         <div className="map-viewport">
@@ -1377,6 +1396,12 @@ export default function App() {
             </div>
           </div>
         </div>
+      ) : null}
+      {showHDExportModal ? (
+        <ExportHDModal
+          onConfirm={handleHDExportConfirm}
+          onClose={() => setShowHDExportModal(false)}
+        />
       ) : null}
     </div>
   );
