@@ -30,13 +30,19 @@ import { fitProjectToTemplate } from './utils/frameMapForTemplate';
 import { getThemeTokens } from './utils/themeTokens';
 import {
   clearActiveProjectContext,
+  deleteProjectRecord,
   duplicateProjectRecord,
+  hasMeaningfulDraft,
   listProjects,
+  loadDraft,
+  renameProjectRecord,
   resolveInitialWorkspace,
   saveDraft,
   saveProjectRecord,
   touchLastOpenedProject,
 } from './utils/projectStorage';
+import { track } from './utils/analytics';
+import { serializeProjectFile, parseProjectFile } from './utils/projectFile';
 
 const MARKER_TYPES = {
   circle: 'Circle',
@@ -189,6 +195,17 @@ function selectValue(options, value, fallback = 'Inter') {
   return options[value] ? value : fallback;
 }
 
+function formatRelativeTime(isoString) {
+  if (!isoString) return '';
+  const diff = Date.now() - new Date(isoString).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return new Date(isoString).toLocaleDateString();
+}
+
 function initialWorkspaceState() {
   const base = createInitialProjectState();
   const fallback = {
@@ -199,7 +216,13 @@ function initialWorkspaceState() {
       subtitle: 'Claims, drillholes, and targets',
     },
   };
-  return resolveInitialWorkspace(fallback);
+  const workspace = resolveInitialWorkspace(fallback);
+  const draft = loadDraft();
+  const meaningful = hasMeaningfulDraft();
+  return {
+    ...workspace,
+    draftMeta: meaningful && draft ? { updatedAt: draft.updatedAt, projectName: workspace.projectName } : null,
+  };
 }
 
 export default function App() {
@@ -208,6 +231,7 @@ export default function App() {
   const logoInputRef = useRef(null);
   const insetInputRef = useRef(null);
   const uploadInputRef = useRef(null);
+  const importFileInputRef = useRef(null);
 
   const [screen, setScreen] = useState('landing');
   const initialWorkspace = useMemo(() => initialWorkspaceState(), []);
@@ -216,6 +240,9 @@ export default function App() {
   const [projectName, setProjectName] = useState(initialWorkspace.projectName);
   const [recentProjects, setRecentProjects] = useState(() => listProjects());
   const [showRecentProjects, setShowRecentProjects] = useState(false);
+  const [renamingProjectId, setRenamingProjectId] = useState(null);
+  const [renameInputValue, setRenameInputValue] = useState('');
+  const [draftBanner, setDraftBanner] = useState(initialWorkspace.draftMeta);
   const [isDirty, setIsDirty] = useState(false);
   const [selectedLayerId, setSelectedLayerId] = useState(null);
   const [selectedCalloutId, setSelectedCalloutId] = useState(null);
@@ -257,6 +284,10 @@ export default function App() {
   useEffect(() => {
     setRecentProjects(listProjects());
   }, [projectId, isDirty]);
+
+  useEffect(() => {
+    if (screen === 'editor') track('editor_opened');
+  }, [screen]);
 
   useEffect(() => {
     const container = mapContainerRef.current;
@@ -374,8 +405,10 @@ export default function App() {
   const handleUploadFile = async (file) => {
     try {
       await addGeoJSONLayer(file);
+      track('import_layer_success', { fileName: file.name });
       if (screen !== 'editor') setScreen('editor');
     } catch (err) {
+      track('import_layer_failed', { fileName: file.name, error: err.message });
       setUploadStatus({ type: 'error', message: `Import failed: ${err.message}` });
     }
   };
@@ -685,8 +718,10 @@ export default function App() {
       const scene = buildScene(mapContainerRef.current, { ...project, layout: { ...project.layout, legendItems } }, leafletMapRef.current);
       if (format === 'png') {
         await exportPNG(scene, project.layout?.exportSettings || {});
+        track('export_png');
       } else {
         await exportSVG(scene, project.layout?.exportSettings || {});
+        track('export_svg');
       }
     } catch (err) {
       setUploadStatus({ type: 'error', message: `Export failed: ${err.message}` });
@@ -705,6 +740,7 @@ export default function App() {
     lastSavedSnapshotRef.current = JSON.stringify(project);
     setIsDirty(false);
     saveDraft({ payload: project, projectId: saved.id, projectName: saved.name });
+    track('project_saved', { name: saved.name });
     setUploadStatus({ type: 'success', message: `Saved project: ${saved.name}` });
   };
 
@@ -737,6 +773,8 @@ export default function App() {
     saveDraft({ payload: entry.payload, projectId: entry.id, projectName: entry.name });
     lastSavedSnapshotRef.current = JSON.stringify(entry.payload);
     setIsDirty(false);
+    setDraftBanner(null);
+    track('project_opened', { name: entry.name });
     setUploadStatus({ type: 'success', message: `Opened project: ${entry.name}` });
   };
 
@@ -752,6 +790,71 @@ export default function App() {
     setUploadStatus({ type: 'success', message: `Duplicated project as: ${saved.name}` });
   };
 
+
+  const exportProjectFile = () => {
+    try {
+      const json = serializeProjectFile({ payload: project, name: projectName });
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${(projectName || 'project').replace(/[^a-z0-9_\-]/gi, '_')}.mapviewer.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      track('project_file_exported', { name: projectName });
+    } catch (err) {
+      setUploadStatus({ type: 'error', message: `Export failed: ${err.message}` });
+    }
+  };
+
+  const importProjectFile = async (file) => {
+    try {
+      const text = await file.text();
+      const { name, payload } = parseProjectFile(text);
+      setProject(payload);
+      setProjectId(null);
+      setProjectName(name);
+      setSelectedLayerId(null);
+      setSelectedCalloutId(null);
+      setSelectedFeature(null);
+      setSelectedMarkerId(null);
+      setSelectedEllipseId(null);
+      setAnnotationTool(null);
+      saveDraft({ payload, projectId: null, projectName: name });
+      lastSavedSnapshotRef.current = JSON.stringify(payload);
+      setIsDirty(true);
+      setUploadStatus({ type: 'success', message: `Imported project file: ${name}` });
+      track('project_file_imported', { name });
+    } catch (err) {
+      setUploadStatus({ type: 'error', message: `Import failed: ${err.message}` });
+    } finally {
+      if (importFileInputRef.current) importFileInputRef.current.value = '';
+    }
+  };
+
+  const renameProject = (id, newName) => {
+    if (!newName?.trim()) return;
+    renameProjectRecord(id, newName);
+    if (id === projectId) setProjectName(newName.trim());
+    setRecentProjects(listProjects());
+    track('project_renamed', { name: newName.trim() });
+  };
+
+  const deleteProject = (id) => {
+    if (!window.confirm('Delete this project? This cannot be undone.')) return;
+    deleteProjectRecord(id);
+    if (id === projectId) startNewProject();
+    setRecentProjects(listProjects());
+    track('project_deleted');
+  };
+
+  const handleGoHome = () => {
+    leafletMapRef.current = null;
+    setMapReady(false);
+    setScreen('landing');
+  };
 
   const startNewProject = () => {
     const blank = createInitialProjectState();
@@ -769,13 +872,33 @@ export default function App() {
     saveDraft({ payload: blank, projectId: null, projectName: 'Untitled map' });
     lastSavedSnapshotRef.current = JSON.stringify(blank);
     setIsDirty(false);
+    setDraftBanner(null);
     setUploadStatus({ type: 'success', message: 'Started a new blank project workspace.' });
+  };
+
+  const loadDemoProject = async () => {
+    const { demoProject } = await import('./demo/demoProject');
+    setProject(demoProject);
+    setProjectId(null);
+    setProjectName(demoProject.layout.title);
+    setSelectedLayerId(null);
+    setSelectedCalloutId(null);
+    setSelectedFeature(null);
+    setSelectedMarkerId(null);
+    setSelectedEllipseId(null);
+    setAnnotationTool(null);
+    setDraftBanner(null);
+    saveDraft({ payload: demoProject, projectId: null, projectName: demoProject.layout.title });
+    lastSavedSnapshotRef.current = JSON.stringify(demoProject);
+    setIsDirty(true);
+    setScreen('editor');
+    track('demo_loaded');
   };
 
   const referenceOverlays = project.layout.referenceOverlays || {};
 
   if (screen === 'landing') {
-    return <LandingPage onOpenEditor={() => setScreen('editor')} />;
+    return <LandingPage onOpenEditor={() => setScreen('editor')} onLoadDemo={loadDemoProject} />;
   }
 
   return (
@@ -786,7 +909,7 @@ export default function App() {
             <h1>Mapviewer</h1>
             <p className="sidebar-subtitle">Upload on the left, design in the center, export when ready.</p>
           </div>
-          <button className="secondary-btn compact" type="button" onClick={() => setScreen('landing')}>
+          <button className="secondary-btn compact" type="button" onClick={handleGoHome}>
             Home
           </button>
         </div>
@@ -1196,6 +1319,16 @@ export default function App() {
             <button className="btn" type="button" onClick={startNewProject}>New / Clear</button>
             <button className="btn" type="button" onClick={() => setShowRecentProjects(true)}>Open</button>
             <button className="btn" type="button" onClick={duplicateCurrentProject}>Duplicate</button>
+            <button className="btn" type="button" onClick={exportProjectFile}>Export File</button>
+            <button className="btn" type="button" onClick={() => importFileInputRef.current?.click()}>Import File</button>
+            <button className="btn" type="button" onClick={loadDemoProject}>Load Demo</button>
+            <input
+              ref={importFileInputRef}
+              type="file"
+              accept=".json,.mapviewer.json"
+              style={{ display: 'none' }}
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) importProjectFile(f); }}
+            />
             <div className="map-zoom-inline">
               <label htmlFor="map-zoom-control">Zoom {mapZoomPercent}%</label>
               <input
@@ -1233,6 +1366,30 @@ export default function App() {
             <button className="btn primary" type="button" onClick={() => handleExport('png')} disabled={exporting}>Export PNG</button>
           </div>
         </div>
+        {draftBanner && (
+          <div className="draft-recovery-banner">
+            <span>
+              Draft recovered: <strong>{draftBanner.projectName}</strong>
+              {draftBanner.updatedAt ? ` — saved ${formatRelativeTime(draftBanner.updatedAt)}` : ''}
+            </span>
+            <div className="draft-recovery-actions">
+              <button
+                className="btn primary compact"
+                type="button"
+                onClick={() => { track('draft_recovered'); setDraftBanner(null); }}
+              >
+                Keep Draft
+              </button>
+              <button
+                className="btn compact"
+                type="button"
+                onClick={() => { startNewProject(); }}
+              >
+                Start Fresh
+              </button>
+            </div>
+          </div>
+        )}
         <div className="map-viewport">
           <div
             ref={mapContainerRef}
@@ -1365,14 +1522,61 @@ export default function App() {
           <div className="recent-projects-card">
             <div className="recent-projects-header">
               <h3>Recent Projects</h3>
-              <button className="secondary-btn" type="button" onClick={() => setShowRecentProjects(false)}>Close</button>
+              <button className="secondary-btn" type="button" onClick={() => { setShowRecentProjects(false); setRenamingProjectId(null); }}>Close</button>
             </div>
             <div className="recent-projects-list">
               {recentProjects.length ? recentProjects.map((entry) => (
-                <button key={entry.id} type="button" className="recent-project-row" onClick={() => openProjectFromRecent(entry)}>
-                  <strong>{entry.name}</strong>
-                  <span>{new Date(entry.updatedAt).toLocaleString()}</span>
-                </button>
+                <div key={entry.id} className="recent-project-row">
+                  {renamingProjectId === entry.id ? (
+                    <form
+                      className="recent-project-rename-form"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        if (renameInputValue.trim()) renameProject(entry.id, renameInputValue);
+                        setRenamingProjectId(null);
+                      }}
+                    >
+                      <input
+                        autoFocus
+                        className="recent-project-rename-input"
+                        value={renameInputValue}
+                        onChange={(e) => setRenameInputValue(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Escape') setRenamingProjectId(null); }}
+                      />
+                      <button className="btn" type="submit">Save</button>
+                      <button className="btn" type="button" onClick={() => setRenamingProjectId(null)}>Cancel</button>
+                    </form>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        className="recent-project-open-btn"
+                        onClick={() => openProjectFromRecent(entry)}
+                      >
+                        <strong>{entry.name}</strong>
+                        <span>{new Date(entry.updatedAt).toLocaleString()}</span>
+                      </button>
+                      <div className="recent-project-actions">
+                        <button
+                          className="btn compact"
+                          type="button"
+                          title="Rename"
+                          onClick={() => { setRenamingProjectId(entry.id); setRenameInputValue(entry.name); }}
+                        >
+                          Rename
+                        </button>
+                        <button
+                          className="btn compact danger"
+                          type="button"
+                          title="Delete"
+                          onClick={() => deleteProject(entry.id)}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
               )) : <div className="small-note">No saved local projects yet.</div>}
             </div>
           </div>

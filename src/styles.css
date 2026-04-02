@@ -389,7 +389,7 @@ button, input, select, textarea { font: inherit; }
 .inset-image { object-fit: contain; background: rgba(255,255,255,0.95); }
 .inset-preview img { object-fit: contain; background: rgba(255,255,255,0.95); }
 
-.landing-actions-sticky { margin-top: 18px; margin-bottom: 22px; }
+.landing-actions-sticky { margin-top: 18px; margin-bottom: 22px; display: flex; gap: 12px; flex-wrap: wrap; }
 .landing-card.modern { align-items: start; }
 .landing-copy h1 { font-size: clamp(40px, 5vw, 54px); }
 .landing-copy > p { max-width: 620px; }
@@ -397,6 +397,44 @@ button, input, select, textarea { font: inherit; }
 .mini-color-row { display: flex; gap: 8px; }
 .mini-color-row span { width: 22px; height: 22px; border-radius: 999px; background: #dbe7f7; border: 1px solid #c7d7ee; }
 .mini-button { width: 100%; height: 34px; border-radius: 10px; background: linear-gradient(90deg, #3b82f6, #2563eb); }
+
+/* Draft recovery banner */
+.draft-recovery-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: #fffbeb;
+  border-bottom: 1px solid #f0d080;
+  padding: 8px 16px;
+  font-size: 13px;
+  color: #7c5206;
+  flex-shrink: 0;
+}
+.draft-recovery-banner strong { color: #4e3200; }
+.draft-recovery-actions { display: flex; gap: 8px; flex-shrink: 0; }
+.btn.compact { padding: 6px 10px; font-size: 12px; width: auto; }
+.btn.danger { border-color: #f0a0a0; color: #b91c1c; background: #fff5f5; }
+.btn.danger:hover { background: #fee2e2; }
+
+/* Recent projects modal — updated rows with actions */
+.recent-project-row { display: flex; align-items: center; gap: 8px; padding: 10px 12px; cursor: default; }
+.recent-project-open-btn {
+  flex: 1;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.recent-project-open-btn strong { color: #14365f; font-size: 14px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.recent-project-open-btn span { color: #6b7f96; font-size: 12px; }
+.recent-project-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.recent-project-rename-form { display: flex; gap: 6px; align-items: center; width: 100%; }
+.recent-project-rename-input { flex: 1; border: 1px solid #d4deea; border-radius: 8px; padding: 6px 10px; font-size: 13px; }
 
 @media (max-width: 1080px) {
   .landing-card.modern { grid-template-columns: 1fr; }

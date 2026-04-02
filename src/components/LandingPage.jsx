@@ -1,6 +1,6 @@
 import React from 'react';
 
-export default function LandingPage({ onOpenEditor }) {
+export default function LandingPage({ onOpenEditor, onLoadDemo }) {
   return (
     <div className="landing-shell"> 
       <div className="landing-card modern"> 
@@ -12,10 +12,15 @@ export default function LandingPage({ onOpenEditor }) {
             inset maps, and export-ready layouts.
           </p>
 
-          <div className="landing-actions landing-actions-sticky"> 
+          <div className="landing-actions landing-actions-sticky">
             <button className="btn primary large" type="button" onClick={onOpenEditor}>
               Open Map Editor
             </button>
+            {onLoadDemo && (
+              <button className="btn large" type="button" onClick={onLoadDemo}>
+                Try Demo
+              </button>
+            )}
           </div>
 
           <div className="landing-pain-grid"> 

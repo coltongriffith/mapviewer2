@@ -85,6 +85,35 @@ export function resolveInitialWorkspace(fallbackProject) {
   };
 }
 
+export function renameProjectRecord(id, newName) {
+  const projects = readProjects();
+  const idx = projects.findIndex((item) => item.id === id);
+  if (idx < 0) return null;
+  projects[idx] = { ...projects[idx], name: newName.trim(), updatedAt: new Date().toISOString() };
+  writeProjects(projects);
+  return projects[idx];
+}
+
+export function deleteProjectRecord(id) {
+  const projects = readProjects();
+  writeProjects(projects.filter((item) => item.id !== id));
+  const last = localStorage.getItem(LAST_OPENED_PROJECT_KEY);
+  if (last === id) localStorage.removeItem(LAST_OPENED_PROJECT_KEY);
+}
+
+export function hasMeaningfulDraft() {
+  const draft = loadDraft();
+  if (!draft?.payload) return false;
+  const { layers = [], callouts = [], markers = [], ellipses = [], layout } = draft.payload;
+  return (
+    layers.length > 0 ||
+    callouts.length > 0 ||
+    markers.length > 0 ||
+    ellipses.length > 0 ||
+    (layout?.title && layout.title !== 'Project Map')
+  );
+}
+
 export function clearActiveProjectContext() {
   localStorage.removeItem(LAST_OPENED_PROJECT_KEY);
 }
