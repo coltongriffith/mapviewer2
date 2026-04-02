@@ -39,6 +39,7 @@ function getTileImages(container) {
     .map((img) => {
       const rect = img.getBoundingClientRect();
       return {
+        element: img,
         href: img.currentSrc || img.src,
         x: rect.left - rootRect.left,
         y: rect.top - rootRect.top,
@@ -48,6 +49,16 @@ function getTileImages(container) {
       };
     })
     .filter((tile) => tile.href && tile.width > 0 && tile.height > 0);
+}
+
+function loadImage(src, crossOrigin = null) {
+  return new Promise((resolve, reject) => {
+    const el = new Image();
+    if (crossOrigin) el.crossOrigin = crossOrigin;
+    el.onload = () => resolve(el);
+    el.onerror = reject;
+    el.src = src;
+  });
 }
 function pathFromPoints(points, close = false) {
   if (!points.length) return '';
@@ -432,9 +443,7 @@ export async function renderSceneToCanvas(scene, options = {}) {
 async function drawTilesCanvas(ctx, scene, scale) {
   const tiles = getTileImages(scene.container);
   for (const tile of tiles) {
-    const img = await new Promise((resolve, reject) => {
-      const el = new Image(); el.crossOrigin = 'anonymous'; el.onload = () => resolve(el); el.onerror = reject; el.src = tile.href;
-    }).catch(() => null);
+    const img = await loadImage(tile.href, 'anonymous').catch(() => null);
     if (!img) continue;
     ctx.save(); ctx.globalAlpha = tile.opacity; ctx.drawImage(img, tile.x * scale, tile.y * scale, tile.width * scale, tile.height * scale); ctx.restore();
   }
@@ -449,7 +458,41 @@ async function drawLogoCanvas(ctx, scene, scale) {
   if (img) ctx.drawImage(img, x + padding, y + padding, w - padding * 2, h - padding * 2);
 }
 
-function renderTileImagesSvg(scene, scale) { return getTileImages(scene.container).map((tile) => `<image href="${escapeXml(tile.href)}" x="${(tile.x * scale).toFixed(2)}" y="${(tile.y * scale).toFixed(2)}" width="${(tile.width * scale).toFixed(2)}" height="${(tile.height * scale).toFixed(2)}" opacity="${tile.opacity}" preserveAspectRatio="none" />`).join('\n'); }
+async function renderBasemapImageSvg(scene, scale) {
+  const width = Math.round(scene.width * scale);
+  const height = Math.round(scene.height * scale);
+  const tiles = getTileImages(scene.container);
+  if (!tiles.length) return '';
+
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Unable to prepare canvas for SVG basemap export.');
+
+  for (const tile of tiles) {
+    let image = null;
+    if (tile.element?.complete && tile.element?.naturalWidth > 0) {
+      image = tile.element;
+    } else if (tile.href) {
+      image = await loadImage(tile.href, 'anonymous').catch(() => null);
+    }
+    if (!image) continue;
+    ctx.save();
+    ctx.globalAlpha = tile.opacity;
+    ctx.drawImage(image, tile.x * scale, tile.y * scale, tile.width * scale, tile.height * scale);
+    ctx.restore();
+  }
+
+  let pngDataUrl = null;
+  try {
+    pngDataUrl = canvas.toDataURL('image/png', 1.0);
+  } catch (error) {
+    throw new Error('SVG basemap embedding failed because tile images block canvas export (CORS/tainted canvas). Use PNG export for full basemap fidelity or switch to a CORS-enabled basemap provider.');
+  }
+
+  return `<image href="${escapeXml(pngDataUrl)}" x="0" y="0" width="${width}" height="${height}" preserveAspectRatio="none" />`;
+}
 function renderVectorsSvg(scene, scale) { return (scene.project.layers || []).filter((layer) => layer.visible !== false && layer.geojson).map((layer) => featureCollectionFeatures(layer.geojson).map((feature) => geometryToSvg(scene.map, feature, getTemplateStyle(scene.template, layer), scale)).join('\n')).join('\n'); }
 function renderMarkerLabelSvg(scene, marker, point, scale) {
   if (!marker.label) return '';
@@ -526,9 +569,10 @@ function renderInsetSvg(scene, scale) {
 function renderLogoSvg(scene, scale) { const theme = getTheme(scene); const logo = scene.project.layout?.logo; if (!logo) return ''; const zone = getOverlayMetrics(scene).logo; if (!zone?.width || !zone?.height) return '';  const x = zone.left * scale, y = zone.top * scale, w = zone.width * scale, h = zone.height * scale, padding = 10 * scale; return `<g>${svgRect(x, y, w, h, (theme.panelRadius || 10) * scale, theme.logoFill, theme.logoBorder, scale)}<image href="${escapeXml(logo)}" x="${x + padding}" y="${y + padding}" width="${w - padding * 2}" height="${h - padding * 2}" preserveAspectRatio="xMidYMid meet" /></g>`; }
 function renderCalloutsSvg(scene, scale) { return placeCallouts(scene, scale).map((c) => { const line = c.type === 'leader' || c.type === 'boxed' ? `<line x1="${c.anchorPx.x}" y1="${c.anchorPx.y}" x2="${c.left + 10 * scale}" y2="${c.top + c.height / 2}" stroke="#102640" stroke-width="${1.4 * scale}" ${c.type === 'leader' ? `stroke-dasharray="${5 * scale} ${3 * scale}"` : ''} />` : ''; const box = c.type !== 'plain' ? `<rect x="${c.left}" y="${c.top}" width="${c.width}" height="${c.height}" rx="${6 * scale}" fill="rgba(255,255,255,0.97)" stroke="#17304f" />` : ''; return `<g>${line}${box}<text x="${c.left + (c.type === 'plain' ? 0 : 10 * scale)}" y="${c.top + (c.type === 'plain' ? 10 * scale : c.height / 2)}" dominant-baseline="middle" fill="#102640" font-family="Arial" font-size="${12 * scale}" font-weight="700">${escapeXml(c.text || '')}</text></g>`; }).join('\n'); }
 
-export function renderSceneToSvg(scene, options = {}) {
+export async function renderSceneToSvg(scene, options = {}) {
   const scale = Number(options.pixelRatio || scene.project.layout?.exportSettings?.pixelRatio || 2); const width = Math.round(scene.width * scale), height = Math.round(scene.height * scale);
-  return `<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="100%" height="100%" fill="#f3f5f7" />${renderTileImagesSvg(scene, scale)}${renderVectorsSvg(scene, scale)}${renderEllipsesSvg(scene, scale)}${renderMarkersSvg(scene, scale)}${renderCalloutsSvg(scene, scale)}${renderTitleSvg(scene, scale)}${renderLegendSvg(scene, scale)}${renderNorthArrowSvg(scene, scale)}${renderInsetSvg(scene, scale)}${renderScaleBarSvg(scene, scale)}${renderFooterSvg(scene, scale)}${renderLogoSvg(scene, scale)}</svg>`;
+  const basemapImage = await renderBasemapImageSvg(scene, scale);
+  return `<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="100%" height="100%" fill="#f3f5f7" />${basemapImage}${renderVectorsSvg(scene, scale)}${renderEllipsesSvg(scene, scale)}${renderMarkersSvg(scene, scale)}${renderCalloutsSvg(scene, scale)}${renderTitleSvg(scene, scale)}${renderLegendSvg(scene, scale)}${renderNorthArrowSvg(scene, scale)}${renderInsetSvg(scene, scale)}${renderScaleBarSvg(scene, scale)}${renderFooterSvg(scene, scale)}${renderLogoSvg(scene, scale)}</svg>`;
 }
 export function downloadCanvas(filename, canvas) { const link = document.createElement('a'); link.download = filename; link.href = canvas.toDataURL('image/png', 1.0); link.click(); }
 export function downloadSvg(filename, svgText) { downloadBlob(filename, new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' })); }

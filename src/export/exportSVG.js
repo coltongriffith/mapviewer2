@@ -6,6 +6,6 @@ export async function exportSVG(scene, options = {}) {
   }
 
   const filename = `${options.filename || scene.project.layout?.exportSettings?.filename || "mapviewer-export"}.svg`;
-  const svg = renderSceneToSvg(scene, options);
+  const svg = await renderSceneToSvg(scene, options);
   downloadSvg(filename, svg);
 }
