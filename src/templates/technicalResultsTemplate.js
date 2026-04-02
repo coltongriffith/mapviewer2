@@ -125,7 +125,9 @@ export function resolveTemplateZones(template, layout, mapSize) {
   const insetScaleBase = insetSize === 'small' ? 0.86 : insetSize === 'large' ? 1.16 : 1;
 
   const insetWidth = Math.round(BASE_ZONES.inset.width * insetScale * insetScaleBase);
-  const insetHeight = Math.round(BASE_ZONES.inset.height * insetScale * insetScaleBase);
+  const insetHeight = (layout?.insetMode === 'custom_image' && layout?.insetAspectRatio)
+    ? Math.round(insetWidth / layout.insetAspectRatio)
+    : Math.round(BASE_ZONES.inset.height * insetScale * insetScaleBase);
 
   const zones = {
     title: clampZone({ top: safe.top, left: safe.left, width: titleWidth, height: BASE_ZONES.title.height }, safe, width, height),

@@ -5,11 +5,11 @@ export default function LandingPage({ onOpenEditor }) {
     <div className="landing-shell"> 
       <div className="landing-card modern"> 
         <div className="landing-copy"> 
-          <div className="landing-badge">Map production for exploration data</div>
-          <h1>Build presentation-ready project maps from shapefiles in minutes.</h1>
+          <div className="landing-badge">Mining map production tool</div>
+          <h1>Turn shapefiles into clean, presentation-ready mining maps in minutes</h1>
           <p>
-            Replace slow GIS cleanup and one-off design work with a focused editor for claims, drillholes, targets,
-            inset maps, and export-ready layouts.
+            Upload your claims, drillholes, and target areas and get a polished, export-ready map — without
+            touching QGIS, Illustrator, or spending an afternoon on formatting.
           </p>
 
           <div className="landing-actions landing-actions-sticky"> 
@@ -18,18 +18,18 @@ export default function LandingPage({ onOpenEditor }) {
             </button>
           </div>
 
-          <div className="landing-pain-grid"> 
-            <div className="landing-pain-card"> 
-              <strong>Too much cleanup after export</strong>
-              <span>Fix inconsistent legends, labels, spacing, and callouts in one place before the map leaves the editor.</span>
+          <div className="landing-pain-grid">
+            <div className="landing-pain-card">
+              <strong>Skip the GIS cleanup loop</strong>
+              <span>No more exporting to Illustrator to fix labels and spacing. Legends, callouts, and layout stay clean inside the editor.</span>
             </div>
-            <div className="landing-pain-card"> 
-              <strong>Maps are slow to update</strong>
-              <span>Drop in revised claims or drillholes and keep the visual layout intact instead of rebuilding from scratch.</span>
+            <div className="landing-pain-card">
+              <strong>Update claims in seconds</strong>
+              <span>Drop in a revised shapefile and your map layout — title, inset, north arrow, scale bar — stays intact. No rebuild required.</span>
             </div>
-            <div className="landing-pain-card"> 
-              <strong>Hard to make the story obvious</strong>
-              <span>Use callouts, highlight zones, markers, inset maps, and cleaner framing to show what matters quickly.</span>
+            <div className="landing-pain-card">
+              <strong>Make the target area obvious</strong>
+              <span>Add callouts, highlight zones, and a locator inset so reviewers and investors immediately understand the project area.</span>
             </div>
           </div>
         </div>
