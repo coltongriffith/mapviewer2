@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { MarkerSvgIcon, MARKER_ICON_PATHS } from '../utils/markerIcons';
+import { MarkerSvgIcon, MARKER_ICON_PATHS } from '../utils/markerIcons.jsx';
 
 function shapeClass(type) {
   return ['circle', 'square', 'triangle'].includes(type) ? type : 'icon';
