@@ -186,9 +186,12 @@ button, input, select, textarea { font: inherit; }
   width: 0 !important; height: 0 !important;
   border-left: 11px solid transparent; border-right: 11px solid transparent; border-bottom: 20px solid currentColor; border-top: 0; background: transparent;
 }
-.free-marker-symbol.icon { font-size: 18px; line-height: 1; border: none; background: transparent; width: auto !important; height: auto !important; }
+/* Icon variant uses inline SVG — no fixed font-size, width/height come from marker.size */
+.free-marker-symbol.icon { line-height: 1; border: none; background: transparent; display: flex; align-items: center; justify-content: center; }
 .free-marker-label {
   padding: 4px 8px; border-radius: 999px; background: rgba(255,255,255,0.96); border: 1px solid rgba(15,23,42,0.12); box-shadow: 0 6px 16px rgba(15,23,42,0.08); color: #0f172a; font-size: 12px; font-weight: 700;
+  /* When independently draggable the label is absolutely positioned from the marker center */
+  pointer-events: auto;
 }
 .ellipse-annotation {
   border-width: 2px; border-style: dashed; border-radius: 999px; cursor: move; background: transparent;

@@ -2,6 +2,7 @@ import { escapeXml, downloadBlob } from '../utils/svg';
 import { geojsonBounds, unionBounds } from '../utils/geometry';
 import { resolveTemplateZones } from '../templates/technicalResultsTemplate';
 import { getThemeTokens } from '../utils/themeTokens';
+import { MARKER_ICON_PATHS, markerIconSvgFragment, drawMarkerIconCanvas } from '../utils/markerIcons';
 
 function clonePoint(point, scale = 1) {
   return { x: point.x * scale, y: point.y * scale };
@@ -300,14 +301,12 @@ function annotationLabelFont(scene, scale) {
   return `700 ${12 * scale}px ${scene.project.layout?.fonts?.label || 'Inter'}, Arial, sans-serif`;
 }
 
-function markerGlyph(type) {
-  if (type === 'pickaxe') return '⛏';
-  if (type === 'shovel') return '⚒';
-  return null;
-}
-
 function markerIsShape(type) {
   return ['circle', 'square', 'triangle'].includes(type);
+}
+
+function markerIsVectorIcon(type) {
+  return type in MARKER_ICON_PATHS;
 }
 
 function drawMarkerLabelCanvas(ctx, scene, marker, point, scale) {
@@ -331,45 +330,46 @@ function drawMarkerLabelCanvas(ctx, scene, marker, point, scale) {
   ctx.restore();
 }
 
-function drawMarkersCanvas(ctx, scene, scale) {
-  (scene.project.markers || []).forEach((marker) => {
+async function drawMarkersCanvas(ctx, scene, scale) {
+  for (const marker of (scene.project.markers || [])) {
     const point = clonePoint(scene.map.latLngToContainerPoint([marker.lat, marker.lng]), scale);
     const size = (marker.size || 18) * scale;
-    ctx.save();
-    ctx.translate(point.x, point.y);
-    ctx.strokeStyle = marker.color || '#d97706';
-    ctx.fillStyle = marker.color || '#d97706';
-    ctx.lineWidth = 2 * scale;
+    const color = marker.color || '#d97706';
 
-    if (marker.type === 'triangle') {
-      ctx.beginPath();
-      ctx.moveTo(0, -size * 0.55);
-      ctx.lineTo(-size * 0.5, size * 0.45);
-      ctx.lineTo(size * 0.5, size * 0.45);
-      ctx.closePath();
-      ctx.fill();
-    } else if (markerIsShape(marker.type)) {
-      if (marker.type === 'circle') {
+    if (markerIsVectorIcon(marker.type)) {
+      // Render via SVG-to-image for crisp, consistent icon export
+      await drawMarkerIconCanvas(ctx, marker.type, point.x, point.y, size, color);
+    } else {
+      ctx.save();
+      ctx.translate(point.x, point.y);
+      ctx.strokeStyle = color;
+      ctx.fillStyle = color;
+      ctx.lineWidth = 2 * scale;
+
+      if (marker.type === 'triangle') {
+        ctx.beginPath();
+        ctx.moveTo(0, -size * 0.55);
+        ctx.lineTo(-size * 0.5, size * 0.45);
+        ctx.lineTo(size * 0.5, size * 0.45);
+        ctx.closePath();
+        ctx.fill();
+      } else if (marker.type === 'circle') {
         ctx.beginPath();
         ctx.arc(0, 0, size / 2, 0, Math.PI * 2);
         ctx.fill();
         ctx.stroke();
       } else {
+        // square (default fallback)
         ctx.beginPath();
         ctx.rect(-size / 2, -size / 2, size, size);
         ctx.fill();
         ctx.stroke();
       }
-    } else {
-      const glyph = markerGlyph(marker.type) || '•';
-      ctx.font = `${Math.max(18 * scale, size)}px "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(glyph, 0, 1 * scale);
+      ctx.restore();
     }
-    ctx.restore();
+
     drawMarkerLabelCanvas(ctx, scene, marker, point, scale);
-  });
+  }
 }
 
 
@@ -436,7 +436,7 @@ export async function renderSceneToCanvas(scene, options = {}) {
   const scale = Number(options.pixelRatio || scene.project.layout?.exportSettings?.pixelRatio || 2);
   const canvas = document.createElement('canvas'); canvas.width = Math.round(scene.width * scale); canvas.height = Math.round(scene.height * scale); const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#f3f5f7'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-  await drawTilesCanvas(ctx, scene, scale); drawVectorsCanvas(ctx, scene, scale); drawEllipsesCanvas(ctx, scene, scale); drawMarkersCanvas(ctx, scene, scale); drawCalloutsCanvas(ctx, scene, scale); drawTitleBlockCanvas(ctx, scene, scale); drawLegendCanvas(ctx, scene, scale); drawNorthArrowCanvas(ctx, scene, scale); await drawInsetCanvas(ctx, scene, scale); drawScaleBarCanvas(ctx, scene, scale); drawFooterCanvas(ctx, scene, scale); await drawLogoCanvas(ctx, scene, scale);
+  await drawTilesCanvas(ctx, scene, scale); drawVectorsCanvas(ctx, scene, scale); drawEllipsesCanvas(ctx, scene, scale); await drawMarkersCanvas(ctx, scene, scale); drawCalloutsCanvas(ctx, scene, scale); drawTitleBlockCanvas(ctx, scene, scale); drawLegendCanvas(ctx, scene, scale); drawNorthArrowCanvas(ctx, scene, scale); await drawInsetCanvas(ctx, scene, scale); drawScaleBarCanvas(ctx, scene, scale); drawFooterCanvas(ctx, scene, scale); await drawLogoCanvas(ctx, scene, scale);
   return canvas;
 }
 
@@ -455,7 +455,17 @@ async function drawLogoCanvas(ctx, scene, scale) {
   const theme = getTheme(scene);
   drawPanelRect(ctx, x, y, w, h, (theme.panelRadius || 10) * scale, theme.logoFill, theme.logoBorder, scale);
   const img = await new Promise((resolve, reject) => { const el = new Image(); el.onload = () => resolve(el); el.onerror = reject; el.src = logo; }).catch(() => null);
-  if (img) ctx.drawImage(img, x + padding, y + padding, w - padding * 2, h - padding * 2);
+  if (img) {
+    // Aspect-fit: scale to fill available space preserving ratio, centered (mirrors SVG preserveAspectRatio="xMidYMid meet")
+    const availW = w - padding * 2;
+    const availH = h - padding * 2;
+    const ratio = Math.min(availW / img.naturalWidth, availH / img.naturalHeight);
+    const dw = img.naturalWidth * ratio;
+    const dh = img.naturalHeight * ratio;
+    const dx = x + padding + (availW - dw) / 2;
+    const dy = y + padding + (availH - dh) / 2;
+    ctx.drawImage(img, dx, dy, dw, dh);
+  }
 }
 
 async function renderBasemapImageSvg(scene, scale) {
@@ -508,15 +518,18 @@ function renderMarkersSvg(scene, scale) {
     const size = (marker.size || 18) * scale;
     const color = marker.color || '#d97706';
     let symbol = '';
-    if (marker.type === 'triangle') {
+    if (markerIsVectorIcon(marker.type)) {
+      // Use the shared SVG path data — same source as the editor, guaranteed consistent
+      symbol = markerIconSvgFragment(marker.type, point.x, point.y, size, color);
+    } else if (marker.type === 'triangle') {
       symbol = `<path d="M ${point.x} ${point.y - size * 0.55} L ${point.x - size * 0.5} ${point.y + size * 0.45} L ${point.x + size * 0.5} ${point.y + size * 0.45} Z" fill="${color}" />`;
     } else if (marker.type === 'circle') {
       symbol = `<circle cx="${point.x}" cy="${point.y}" r="${size / 2}" fill="${color}" stroke="${color}" stroke-width="${2 * scale}" />`;
     } else if (marker.type === 'square') {
       symbol = `<rect x="${point.x - size / 2}" y="${point.y - size / 2}" width="${size}" height="${size}" fill="${color}" stroke="${color}" stroke-width="${2 * scale}" />`;
     } else {
-      const glyph = markerGlyph(marker.type) || '•';
-      symbol = `<text x="${point.x}" y="${point.y + 1 * scale}" text-anchor="middle" dominant-baseline="middle" fill="${color}" font-family="'Segoe UI Emoji','Apple Color Emoji','Noto Color Emoji',sans-serif" font-size="${Math.max(18 * scale, size)}">${escapeXml(glyph)}</text>`;
+      // Fallback bullet
+      symbol = `<circle cx="${point.x}" cy="${point.y}" r="${size / 2}" fill="${color}" />`;
     }
     return `<g>${symbol}${renderMarkerLabelSvg(scene, marker, point, scale)}</g>`;
   }).join('\n');

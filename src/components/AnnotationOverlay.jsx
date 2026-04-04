@@ -1,15 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-
-function markerGlyph(type) {
-  if (type === 'pickaxe') return '⛏';
-  if (type === 'shovel') return '⚒';
-  return null;
-}
+import { MarkerSvgIcon, MARKER_ICON_PATHS } from '../utils/markerIcons';
 
 function shapeClass(type) {
   return ['circle', 'square', 'triangle'].includes(type) ? type : 'icon';
 }
 
+function isVectorIcon(type) {
+  return type in MARKER_ICON_PATHS;
+}
 
 function ellipseLabelPlacement(ellipse) {
   const anchorX = ellipse.x + ellipse.width * 0.34;
@@ -40,6 +38,7 @@ export default function AnnotationOverlay({
   onSelectEllipse,
   onMoveMarker,
   onMoveEllipse,
+  onMoveLabelOffset,
   labelFont,
 }) {
   const [tick, setTick] = useState(0);
@@ -59,6 +58,13 @@ export default function AnnotationOverlay({
       if (pointerId != null && event.pointerId !== pointerId) return;
       const dx = event.clientX - startX;
       const dy = event.clientY - startY;
+
+      if (kind === 'label') {
+        // Label drag: update pixel offset directly, no lat/lng conversion needed
+        onMoveLabelOffset?.(id, { x: startPoint.x + dx, y: startPoint.y + dy });
+        return;
+      }
+
       const nextPoint = { x: startPoint.x + dx, y: startPoint.y + dy };
       const ll = map.containerPointToLatLng([nextPoint.x, nextPoint.y]);
       if (kind === 'marker') onMoveMarker?.(id, { lat: ll.lat, lng: ll.lng });
@@ -76,7 +82,7 @@ export default function AnnotationOverlay({
       window.removeEventListener('pointerup', handleUp);
       window.removeEventListener('pointercancel', handleUp);
     };
-  }, [map, onMoveEllipse, onMoveMarker]);
+  }, [map, onMoveEllipse, onMoveMarker, onMoveLabelOffset]);
 
   const placedMarkers = useMemo(() => resolvePositions(markers, map, 'marker'), [markers, map, tick]);
   const placedEllipses = useMemo(() => resolvePositions(ellipses, map, 'ellipse'), [ellipses, map, tick]);
@@ -148,7 +154,12 @@ export default function AnnotationOverlay({
       })}
 
       {placedMarkers.map((marker) => {
-        const glyph = markerGlyph(marker.type);
+        const size = marker.size || 22;
+        const color = marker.color || '#d97706';
+        // Label offset — defaults to 10px right, 0px vertical from center
+        const labelOffsetX = marker.labelOffsetX ?? (size / 2 + 6);
+        const labelOffsetY = marker.labelOffsetY ?? -(size / 2);
+
         return (
           <div
             key={marker.id}
@@ -165,13 +176,51 @@ export default function AnnotationOverlay({
               dragRef.current = { id: marker.id, kind: 'marker', startX: e.clientX, startY: e.clientY, startPoint: { x: marker.x, y: marker.y }, pointerId: e.pointerId };
             }}
           >
-            <div
-              className={`free-marker-symbol ${shapeClass(marker.type)}`}
-              style={{ width: marker.size, height: marker.size, color: marker.color, borderColor: marker.color, background: marker.type === 'circle' || marker.type === 'square' || marker.type === 'triangle' ? marker.color : 'transparent' }}
-            >
-              {glyph}
-            </div>
-            {marker.label ? <div className="free-marker-label" style={{ fontFamily: labelFont || 'Inter, sans-serif' }}>{marker.label}</div> : null}
+            {isVectorIcon(marker.type) ? (
+              // Vector SVG icon — size is fully controlled by marker.size
+              <MarkerSvgIcon type={marker.type} size={size} color={color} />
+            ) : (
+              // Geometric shapes (circle, square, triangle)
+              <div
+                className={`free-marker-symbol ${shapeClass(marker.type)}`}
+                style={{
+                  width: size,
+                  height: size,
+                  color,
+                  borderColor: color,
+                  background: ['circle', 'square', 'triangle'].includes(marker.type) ? color : 'transparent',
+                }}
+              />
+            )}
+
+            {marker.label ? (
+              // Label is independently draggable via its own pointer events
+              <div
+                className="free-marker-label"
+                style={{
+                  fontFamily: labelFont || 'Inter, sans-serif',
+                  position: 'absolute',
+                  left: labelOffsetX,
+                  top: labelOffsetY,
+                  whiteSpace: 'nowrap',
+                  cursor: 'move',
+                }}
+                onPointerDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  dragRef.current = {
+                    id: marker.id,
+                    kind: 'label',
+                    startX: e.clientX,
+                    startY: e.clientY,
+                    startPoint: { x: labelOffsetX, y: labelOffsetY },
+                    pointerId: e.pointerId,
+                  };
+                }}
+              >
+                {marker.label}
+              </div>
+            ) : null}
           </div>
         );
       })}

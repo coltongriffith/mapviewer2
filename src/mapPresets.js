@@ -103,12 +103,28 @@ export function inferRoleFromLayer(layer) {
   return "claims";
 }
 
-export function applyRoleToLayer(layer, role) {
+// Color palette for multiple claims layers — index 0 = primary, 1 = secondary, etc.
+const CLAIMS_PALETTE = [
+  { stroke: '#60a5fa', fill: '#93c5fd', fillOpacity: 0.22 },   // primary blue
+  { stroke: '#f59e0b', fill: '#fcd34d', fillOpacity: 0.20 },   // secondary amber
+  { stroke: '#14b8a6', fill: '#5eead4', fillOpacity: 0.18 },   // tertiary teal
+  { stroke: '#a855f7', fill: '#d8b4fe', fillOpacity: 0.18 },   // quaternary purple
+  { stroke: '#ef4444', fill: '#fca5a5', fillOpacity: 0.18 },   // quinary red
+];
+
+export function applyRoleToLayer(layer, role, existingClaimsCount = 0) {
+  const base = getRoleDefaultStyle(role);
+  // For claims, cycle through the contrast palette based on how many claims layers already exist
+  const roleStyle = (role === 'claims' && existingClaimsCount > 0)
+    ? { ...base, ...CLAIMS_PALETTE[existingClaimsCount % CLAIMS_PALETTE.length] }
+    : base;
   return {
     ...layer,
     role,
+    // claimsIndex stored so user can identify which palette slot this layer uses
+    ...(role === 'claims' ? { claimsIndex: existingClaimsCount } : {}),
     style: {
-      ...getRoleDefaultStyle(role),
+      ...roleStyle,
       ...(layer.style || {}),
     },
   };

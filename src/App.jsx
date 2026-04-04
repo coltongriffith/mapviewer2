@@ -46,6 +46,7 @@ const MARKER_TYPES = {
   triangle: 'Triangle',
   pickaxe: 'Pickaxe',
   shovel: 'Shovel',
+  star: 'Star',
 };
 
 function detectLayerKind(geojson) {
@@ -233,6 +234,11 @@ export default function App() {
   const [mapReady, setMapReady] = useState(false);
   const bootstrappedRef = useRef(false);
   const lastSavedSnapshotRef = useRef(JSON.stringify(project));
+  // Local state for title/subtitle so every keystroke doesn't write to project (stops flicker)
+  const [localTitle, setLocalTitle] = useState(project.layout.title || '');
+  const [localSubtitle, setLocalSubtitle] = useState(project.layout.subtitle || '');
+  const titleDebounceRef = useRef(null);
+  const subtitleDebounceRef = useRef(null);
 
   const template = useMemo(() => getTemplate(project.layout?.templateId || 'technical_results_v2'), [project.layout?.templateId]);
   const selectedLayer = useMemo(() => project.layers.find((layer) => layer.id === selectedLayerId) || null, [project.layers, selectedLayerId]);
@@ -240,6 +246,9 @@ export default function App() {
   const selectedMarker = useMemo(() => project.markers?.find((marker) => marker.id === selectedMarkerId) || null, [project.markers, selectedMarkerId]);
   const selectedEllipse = useMemo(() => project.ellipses?.find((ellipse) => ellipse.id === selectedEllipseId) || null, [project.ellipses, selectedEllipseId]);
   const resolvedZones = useMemo(() => resolveTemplateZones(template, project.layout, mapSize), [template, project.layout, mapSize]);
+  // Keep a ref so the framing effect can read the current zones without them being a reactive trigger
+  const resolvedZonesRef = useRef(resolvedZones);
+  useEffect(() => { resolvedZonesRef.current = resolvedZones; }, [resolvedZones]);
   const legendItems = useMemo(() => buildLegendItems(template, project.layers, project.layout), [template, project.layers, project.layout]);
   const legendGroups = useMemo(() => renderLegendGroups(legendItems, project.layout), [legendItems, project.layout]);
   const themeTokens = useMemo(() => {
@@ -271,6 +280,12 @@ export default function App() {
     setRecentProjects(listProjects());
   }, [projectId, isDirty]);
 
+  // Sync local title/subtitle when project changes from an external action (open, duplicate, new)
+  useEffect(() => {
+    setLocalTitle(project.layout.title || '');
+    setLocalSubtitle(project.layout.subtitle || '');
+  }, [projectId]);
+
   useEffect(() => {
     const container = mapContainerRef.current;
     if (!container) return undefined;
@@ -284,15 +299,16 @@ export default function App() {
   useEffect(() => {
     const map = leafletMapRef.current;
     if (!map || project.layers.length === 0) return;
+    // Use the ref so cosmetic layout changes (title, logo size, opacity…) don't
+    // trigger a map reframe. Only the explicit deps below cause refitting.
     fitProjectToTemplate(
       project,
       map,
-      { ...template, zones: resolvedZones },
+      { ...template, zones: resolvedZonesRef.current },
       project.layout.compositionPreset || template.modePresets?.[project.layout.mode]?.framing || 'balanced'
     );
-    const delta = Number(project.layout.zoomDelta ?? 0);
-    map.setZoom(map.getZoom() + delta, { animate: false });
-  }, [template, resolvedZones, project.layout.frameVersion, project.layout.primaryLayerId, project.layout.compositionPreset, project.layout.zoomDelta, project.layers]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [template, project.layout.frameVersion, project.layout.primaryLayerId, project.layout.compositionPreset, project.layers]);
 
   useEffect(() => {
     const map = leafletMapRef.current;
@@ -301,6 +317,27 @@ export default function App() {
     map.on('move zoom zoomend moveend resize', rerender);
     return () => map.off('move zoom zoomend moveend resize', rerender);
   }, [mapReady]);
+
+  // Keyboard deletion of selected overlay elements
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+      const tag = document.activeElement?.tagName?.toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || document.activeElement?.isContentEditable) return;
+      if (selectedMarkerId) {
+        setProject((prev) => ({ ...prev, markers: (prev.markers || []).filter((m) => m.id !== selectedMarkerId) }));
+        setSelectedMarkerId(null);
+      } else if (selectedCalloutId) {
+        setProject((prev) => ({ ...prev, callouts: prev.callouts.filter((c) => c.id !== selectedCalloutId) }));
+        setSelectedCalloutId(null);
+      } else if (selectedEllipseId) {
+        setProject((prev) => ({ ...prev, ellipses: (prev.ellipses || []).filter((el) => el.id !== selectedEllipseId) }));
+        setSelectedEllipseId(null);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [selectedMarkerId, selectedCalloutId, selectedEllipseId]);
 
   const updateLayout = (patch) => {
     setProject((prev) => ({
@@ -347,6 +384,8 @@ export default function App() {
     const kind = detectLayerKind(geojson);
     const role = inferRoleFromLayer({ name: baseName, type: kind });
     const displayName = cleanLayerName(baseName, role);
+    // Count how many claims layers already exist so the new one gets a contrast color
+    const existingClaimsCount = project.layers.filter((l) => l.role === 'claims').length;
 
     const nextLayer = applyRoleToLayer(
       {
@@ -364,7 +403,8 @@ export default function App() {
           label: displayName,
         },
       },
-      role
+      role,
+      existingClaimsCount
     );
 
     setProject((prev) => {
@@ -880,8 +920,18 @@ export default function App() {
         <section className="control-section">
           <h2>Map Content</h2>
           <div className="control-grid">
-            <div className="control-row"><label>Title</label><input value={project.layout.title} onChange={(e) => updateLayout({ title: e.target.value })} /></div>
-            <div className="control-row"><label>Subtitle</label><input value={project.layout.subtitle} onChange={(e) => updateLayout({ subtitle: e.target.value })} /></div>
+            <div className="control-row"><label>Title</label><input value={localTitle} onChange={(e) => {
+              const val = e.target.value;
+              setLocalTitle(val);
+              clearTimeout(titleDebounceRef.current);
+              titleDebounceRef.current = setTimeout(() => updateLayout({ title: val }), 300);
+            }} /></div>
+            <div className="control-row"><label>Subtitle</label><input value={localSubtitle} onChange={(e) => {
+              const val = e.target.value;
+              setLocalSubtitle(val);
+              clearTimeout(subtitleDebounceRef.current);
+              subtitleDebounceRef.current = setTimeout(() => updateLayout({ subtitle: val }), 300);
+            }} /></div>
             <div className="control-row inline-2">
               <div>
                 <label>Basemap</label>
@@ -1248,13 +1298,13 @@ export default function App() {
                 className="secondary-btn compact"
                 type="button"
                 aria-label="Zoom out"
-                onClick={() => updateLayout({ zoomDelta: zoomDelta - 1, frameVersion: (project.layout.frameVersion || 0) + 1 })}
+                onClick={() => leafletMapRef.current?.zoomOut(1)}
               >−</button>
               <button
                 className="secondary-btn compact"
                 type="button"
                 aria-label="Zoom in"
-                onClick={() => updateLayout({ zoomDelta: zoomDelta + 1, frameVersion: (project.layout.frameVersion || 0) + 1 })}
+                onClick={() => leafletMapRef.current?.zoomIn(1)}
               >+</button>
             </div>
             <button className="btn primary" type="button" onClick={() => handleExport('png')} disabled={exporting}>Export PNG</button>
@@ -1314,6 +1364,7 @@ export default function App() {
           onSelectEllipse={(id) => { setSelectedEllipseId(id); setSelectedMarkerId(null); setSelectedFeature(null); }}
           onMoveMarker={updateMarker}
           onMoveEllipse={updateEllipse}
+          onMoveLabelOffset={(id, offset) => updateMarker(id, { labelOffsetX: offset.x, labelOffsetY: offset.y })}
           labelFont={project.layout.fonts?.label}
         />
         <CalloutsOverlay
