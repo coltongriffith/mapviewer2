@@ -4,7 +4,8 @@ import 'leaflet/dist/leaflet.css';
 
 const BASEMAPS = {
   light: {
-    url: 'https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png',
+    // Voyager variant: blue water, readable roads, no labels — cleaner for mining maps
+    url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png',
     attribution: '&copy; OpenStreetMap &copy; CARTO',
   },
   dark: {
@@ -69,9 +70,10 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
       center: [56, -123],
       zoom: 5,
       zoomControl: false,
-      preferCanvas: false,
-      zoomSnap: 0.01,
-      zoomDelta: 0.25,
+      preferCanvas: true,
+      zoomSnap: 0.5,
+      zoomDelta: 1,
+      wheelPxPerZoomLevel: 80,
     });
 
     map.dragging.enable();
@@ -110,7 +112,7 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
 
     baseLayerRef.current = L.tileLayer(cfg.url, {
       attribution: cfg.attribution,
-      maxZoom: 20,
+      maxZoom: 21,
       crossOrigin: true,
       updateWhenIdle: true,
       keepBuffer: 4,
