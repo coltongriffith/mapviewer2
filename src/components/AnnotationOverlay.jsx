@@ -39,6 +39,7 @@ export default function AnnotationOverlay({
   onMoveMarker,
   onMoveEllipse,
   onMoveLabelOffset,
+  onEditLabel,
   labelFont,
 }) {
   const [tick, setTick] = useState(0);
@@ -194,7 +195,7 @@ export default function AnnotationOverlay({
             )}
 
             {marker.label ? (
-              // Label is independently draggable via its own pointer events
+              // Label: independently draggable, double-click to edit inline
               <div
                 className="free-marker-label"
                 style={{
@@ -206,6 +207,8 @@ export default function AnnotationOverlay({
                   cursor: 'move',
                 }}
                 onPointerDown={(e) => {
+                  // Only start drag on single pointer-down, not on double-click
+                  if (e.detail === 2) return;
                   e.preventDefault();
                   e.stopPropagation();
                   dragRef.current = {
@@ -216,6 +219,11 @@ export default function AnnotationOverlay({
                     startPoint: { x: labelOffsetX, y: labelOffsetY },
                     pointerId: e.pointerId,
                   };
+                }}
+                onDoubleClick={(e) => {
+                  e.stopPropagation();
+                  const next = window.prompt('Edit label', marker.label);
+                  if (next !== null) onEditLabel?.(marker.id, next);
                 }}
               >
                 {marker.label}

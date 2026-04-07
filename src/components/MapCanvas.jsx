@@ -71,9 +71,9 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
       zoom: 5,
       zoomControl: false,
       preferCanvas: true,
-      zoomSnap: 0.5,
-      zoomDelta: 1,
-      wheelPxPerZoomLevel: 80,
+      zoomSnap: 0.1,
+      zoomDelta: 0.25,
+      wheelPxPerZoomLevel: 60,
     });
 
     map.dragging.enable();
@@ -98,6 +98,12 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
       referenceRefs.current = {};
     }
   }, []);
+
+  // Apply background color behind map tiles
+  useEffect(() => {
+    if (!mapElRef.current) return;
+    mapElRef.current.style.background = project?.layout?.backgroundColor || '';
+  }, [project?.layout?.backgroundColor]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -171,15 +177,15 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
       const geomType = detectGeomType(layer.geojson);
       const isDrillholes = layer.role === 'drillholes' || layer.type === 'points';
 
-      const geoLayer = L.geoJSON(layer.geojson, {
+      const geoLayer = L.geoJSON(layer.geojsonSimplified || layer.geojson, {
         pane: 'overlayPane',
         style: () => ({
           color: style.stroke || '#54a6ff',
-          weight: style.strokeWidth ?? 2,
+          weight: style.outlineOnly === true || style.fillOnly !== true ? (style.strokeWidth ?? 2) : 0,
           fillColor: style.fill || '#54a6ff',
-          fillOpacity: geomType === 'line' ? 0 : style.fillOpacity ?? 0.22,
+          fillOpacity: geomType === 'line' ? 0 : (style.outlineOnly ? 0 : (style.fillOpacity ?? 0.22)),
           dashArray: style.dashArray || '',
-          opacity: style.opacity ?? 1,
+          opacity: style.strokeOpacity ?? (style.opacity ?? 1),
         }),
         pointToLayer: (feature, latlng) => {
           const marker = L.circleMarker(latlng, {

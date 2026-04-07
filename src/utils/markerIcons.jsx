@@ -7,14 +7,15 @@
 
 export const MARKER_ICON_PATHS = {
   pickaxe: {
-    // Pickaxe: handle diagonal + two-headed blade
+    // Mining pickaxe: classic cross-pick head with angled handle.
+    // Head runs top-left to bottom-right; spike tip at top-right; hammer face at bottom-left.
     viewBox: '0 0 24 24',
-    path: 'M16.5 3.5 C17.5 2.5 19.5 2.5 20.5 3.5 C21.5 4.5 21.5 6.5 20.5 7.5 L14 14 L13 13 Z M3.5 20.5 L12 12 L12.7 12.7 L4.5 21 Z M10 14 L14 10 L14.7 10.7 L10.7 14.7 Z',
+    path: 'M20.5 3.5 C19 2 16.5 2 15 3.5 L12.8 5.7 L10.5 3.5 C9 2 6.5 2 5 3.5 C3.5 5 3.5 7.5 5 9 L7.2 11.2 L3 21 L5.2 21 L8.5 13.5 L10.8 15.8 L4 20.5 L5.5 22 L12 17 L14.3 19.3 C15.8 20.8 18.3 20.8 19.8 19.3 C21.3 17.8 21.3 15.3 19.8 13.8 L17.5 11.5 L19.7 9.3 C21.2 7.8 21.2 5.2 19.8 3.8 Z M16.5 10 L14 7.5 L15.5 6 L18 8.5 Z',
   },
   shovel: {
-    // Shovel: round blade at bottom, long handle
+    // Mining shovel / geologist spade: flat rectangular blade, straight handle, D-grip at top.
     viewBox: '0 0 24 24',
-    path: 'M12 2 L13.5 3.5 L13.5 13 C15.5 13.5 17 15.2 17 17.2 C17 19.8 14.8 22 12 22 C9.2 22 7 19.8 7 17.2 C7 15.2 8.5 13.5 10.5 13 L10.5 3.5 Z',
+    path: 'M10 2 L14 2 L14 3.5 C15.5 3.5 16.5 4.5 16.5 6 L16.5 7 L7.5 7 L7.5 6 C7.5 4.5 8.5 3.5 10 3.5 Z M8.5 8.5 L15.5 8.5 L15.5 14 L13.5 14 L13.5 20 L15 20 L15 22 L9 22 L9 20 L10.5 20 L10.5 14 L8.5 14 Z',
   },
   star: {
     // 5-pointed star
