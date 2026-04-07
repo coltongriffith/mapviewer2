@@ -25,6 +25,7 @@ import {
 import { applyRoleToLayer, inferRoleFromLayer } from './mapPresets';
 import { getTemplate } from './templates';
 import { buildLegendItems, resolveTemplateZones } from './templates/technicalResultsTemplate';
+import { resolveAnchoredLayout, DEFAULT_LAYOUT_ITEMS, CORNER_LABELS, ITEM_LABELS } from './utils/anchoredLayout';
 import { geojsonCenter } from './utils/geometry';
 import { cleanLayerName } from './utils/cleanLayerName';
 import { fitProjectToTemplate } from './utils/frameMapForTemplate';
@@ -48,6 +49,26 @@ const MARKER_TYPES = {
   shovel: 'Shovel',
   star: 'Star',
 };
+
+const SIMPLIFY_THRESHOLD = 500; // feature count above which to generate a simplified copy
+const SIMPLIFY_PRECISION = 5;    // decimal places (≈1m at equator)
+
+function roundCoord(c) { return c.map((v) => Math.round(v * 10 ** SIMPLIFY_PRECISION) / 10 ** SIMPLIFY_PRECISION); }
+function simplifyCoords(coords) {
+  if (!Array.isArray(coords)) return coords;
+  if (typeof coords[0] === 'number') return roundCoord(coords);
+  return coords.map((c) => simplifyCoords(c));
+}
+function simplifyGeometry(geom) {
+  if (!geom) return geom;
+  return { ...geom, coordinates: simplifyCoords(geom.coordinates) };
+}
+function simplifyGeoJSON(geojson) {
+  if (!geojson) return geojson;
+  if (geojson.type === 'Feature') return { ...geojson, geometry: simplifyGeometry(geojson.geometry) };
+  if (geojson.type === 'FeatureCollection') return { ...geojson, features: geojson.features.map((f) => simplifyGeoJSON(f)) };
+  return geojson;
+}
 
 function detectLayerKind(geojson) {
   if (!geojson) return 'geojson';
@@ -229,6 +250,7 @@ export default function App() {
   const [annotationTool, setAnnotationTool] = useState(null);
   const [uploadStatus, setUploadStatus] = useState({ type: 'info', message: 'Open the editor, then upload your first file from the left panel.' });
   const [exporting, setExporting] = useState(false);
+  const [clipboard, setClipboard] = useState(null); // { kind: 'marker'|'ellipse'|'callout', data: {...} }
   const [mapSize, setMapSize] = useState({ width: 1600, height: 1000 });
   const [featureEditorTick, setFeatureEditorTick] = useState(0);
   const [mapReady, setMapReady] = useState(false);
@@ -249,6 +271,18 @@ export default function App() {
   // Keep a ref so the framing effect can read the current zones without them being a reactive trigger
   const resolvedZonesRef = useRef(resolvedZones);
   useEffect(() => { resolvedZonesRef.current = resolvedZones; }, [resolvedZones]);
+  // Corner-anchor layout: when layoutItems is configured, override resolvedZones
+  const activeLayoutItems = useMemo(() => project.layout.layoutItems || null, [project.layout.layoutItems]);
+  const anchoredZones = useMemo(() => {
+    if (!activeLayoutItems) return null;
+    // Apply legendWidth override to the legend item
+    const items = activeLayoutItems.map((item) =>
+      item.id === 'legend' ? { ...item, width: project.layout.legendWidth || item.width } : item
+    );
+    return resolveAnchoredLayout(items, mapSize, project.layout.safeMargins);
+  }, [activeLayoutItems, mapSize, project.layout.legendWidth, project.layout.safeMargins]);
+  // Use anchored zones if available, otherwise fall back to template zones
+  const effectiveZones = anchoredZones || resolvedZones;
   const legendItems = useMemo(() => buildLegendItems(template, project.layers, project.layout), [template, project.layers, project.layout]);
   const legendGroups = useMemo(() => renderLegendGroups(legendItems, project.layout), [legendItems, project.layout]);
   const themeTokens = useMemo(() => {
@@ -318,26 +352,62 @@ export default function App() {
     return () => map.off('move zoom zoomend moveend resize', rerender);
   }, [mapReady]);
 
-  // Keyboard deletion of selected overlay elements
+  // Keyboard deletion + copy/paste for selected overlay elements
   useEffect(() => {
     const handler = (e) => {
-      if (e.key !== 'Delete' && e.key !== 'Backspace') return;
       const tag = document.activeElement?.tagName?.toLowerCase();
-      if (tag === 'input' || tag === 'textarea' || document.activeElement?.isContentEditable) return;
-      if (selectedMarkerId) {
-        setProject((prev) => ({ ...prev, markers: (prev.markers || []).filter((m) => m.id !== selectedMarkerId) }));
-        setSelectedMarkerId(null);
-      } else if (selectedCalloutId) {
-        setProject((prev) => ({ ...prev, callouts: prev.callouts.filter((c) => c.id !== selectedCalloutId) }));
-        setSelectedCalloutId(null);
-      } else if (selectedEllipseId) {
-        setProject((prev) => ({ ...prev, ellipses: (prev.ellipses || []).filter((el) => el.id !== selectedEllipseId) }));
-        setSelectedEllipseId(null);
+      const inText = tag === 'input' || tag === 'textarea' || document.activeElement?.isContentEditable;
+
+      // Delete / Backspace — remove selected element
+      if ((e.key === 'Delete' || e.key === 'Backspace') && !inText) {
+        if (selectedMarkerId) {
+          setProject((prev) => ({ ...prev, markers: (prev.markers || []).filter((m) => m.id !== selectedMarkerId) }));
+          setSelectedMarkerId(null);
+        } else if (selectedCalloutId) {
+          setProject((prev) => ({ ...prev, callouts: prev.callouts.filter((c) => c.id !== selectedCalloutId) }));
+          setSelectedCalloutId(null);
+        } else if (selectedEllipseId) {
+          setProject((prev) => ({ ...prev, ellipses: (prev.ellipses || []).filter((el) => el.id !== selectedEllipseId) }));
+          setSelectedEllipseId(null);
+        }
+        return;
+      }
+
+      // Ctrl/Cmd+C — copy selected element
+      const mod = /mac/i.test(navigator.platform) ? e.metaKey : e.ctrlKey;
+      if (mod && e.key === 'c' && !inText) {
+        if (selectedMarkerId && selectedMarker) setClipboard({ kind: 'marker', data: { ...selectedMarker } });
+        else if (selectedEllipseId && selectedEllipse) setClipboard({ kind: 'ellipse', data: { ...selectedEllipse } });
+        else if (selectedCalloutId && selectedCallout) setClipboard({ kind: 'callout', data: { ...selectedCallout } });
+      }
+
+      // Ctrl/Cmd+V — paste copied element with slight offset
+      if (mod && e.key === 'v' && !inText && clipboard) {
+        const id = crypto.randomUUID();
+        if (clipboard.kind === 'marker') {
+          const next = { ...clipboard.data, id, lat: clipboard.data.lat + 0.002, lng: clipboard.data.lng + 0.002, labelOffsetX: undefined, labelOffsetY: undefined };
+          setProject((prev) => ({ ...prev, markers: [...(prev.markers || []), next] }));
+          setSelectedMarkerId(id);
+          setSelectedEllipseId(null);
+          setSelectedCalloutId(null);
+        } else if (clipboard.kind === 'ellipse') {
+          const next = { ...clipboard.data, id, lat: clipboard.data.lat + 0.002, lng: clipboard.data.lng + 0.002 };
+          setProject((prev) => ({ ...prev, ellipses: [...(prev.ellipses || []), next] }));
+          setSelectedEllipseId(id);
+          setSelectedMarkerId(null);
+          setSelectedCalloutId(null);
+        } else if (clipboard.kind === 'callout') {
+          const next = { ...clipboard.data, id, offset: { x: (clipboard.data.offset?.x || 0) + 20, y: (clipboard.data.offset?.y || 0) + 20 } };
+          setProject((prev) => ({ ...prev, callouts: [...prev.callouts, next] }));
+          setSelectedCalloutId(id);
+          setSelectedMarkerId(null);
+          setSelectedEllipseId(null);
+        }
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [selectedMarkerId, selectedCalloutId, selectedEllipseId]);
+  }, [selectedMarkerId, selectedCalloutId, selectedEllipseId, selectedMarker, selectedEllipse, selectedCallout, clipboard]);
 
   const updateLayout = (patch) => {
     setProject((prev) => ({
@@ -387,6 +457,9 @@ export default function App() {
     // Count how many claims layers already exist so the new one gets a contrast color
     const existingClaimsCount = project.layers.filter((l) => l.role === 'claims').length;
 
+    const featureCount = geojson?.features?.length || (geojson?.type === 'Feature' ? 1 : 0);
+    const geojsonSimplified = featureCount > SIMPLIFY_THRESHOLD ? simplifyGeoJSON(geojson) : null;
+
     const nextLayer = applyRoleToLayer(
       {
         id,
@@ -397,6 +470,7 @@ export default function App() {
         visible: true,
         role,
         geojson,
+        geojsonSimplified,
         userStyled: false,
         legend: {
           enabled: true,
@@ -918,6 +992,48 @@ export default function App() {
         </section>
 
         <section className="control-section">
+          <h2>Panel Layout</h2>
+          <div className="control-grid">
+            <div className="control-row">
+              <label>Corner Anchors</label>
+              <button
+                className={`secondary-btn compact ${activeLayoutItems ? 'active' : ''}`}
+                type="button"
+                onClick={() => updateLayout({ layoutItems: activeLayoutItems ? null : DEFAULT_LAYOUT_ITEMS.map((item) => ({ ...item })) })}
+              >
+                {activeLayoutItems ? 'Reset to Auto' : 'Enable Custom Layout'}
+              </button>
+            </div>
+            {activeLayoutItems && (
+              <div className="layout-items-grid">
+                {activeLayoutItems.map((item) => (
+                  <div key={item.id} className="layout-item-row">
+                    <input
+                      type="checkbox"
+                      checked={item.enabled !== false}
+                      onChange={(e) => updateLayout({
+                        layoutItems: activeLayoutItems.map((it) => it.id === item.id ? { ...it, enabled: e.target.checked } : it)
+                      })}
+                    />
+                    <span className="layout-item-label">{ITEM_LABELS[item.id]}</span>
+                    <select
+                      value={item.anchorCorner || 'tl'}
+                      onChange={(e) => updateLayout({
+                        layoutItems: activeLayoutItems.map((it) => it.id === item.id ? { ...it, anchorCorner: e.target.value } : it)
+                      })}
+                    >
+                      {Object.entries(CORNER_LABELS).map(([val, lbl]) => (
+                        <option key={val} value={val}>{lbl}</option>
+                      ))}
+                    </select>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className="control-section">
           <h2>Map Content</h2>
           <div className="control-grid">
             <div className="control-row"><label>Title</label><input value={localTitle} onChange={(e) => {
@@ -949,6 +1065,31 @@ export default function App() {
                     <option key={value} value={value}>{label}</option>
                   ))}
                 </select>
+              </div>
+            </div>
+            <div className="control-row">
+              <label>Background Color</label>
+              <div className="accent-color-row">
+                {['#ffffff', '#f5f0e8', '#f0f0f0'].map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    className="secondary-btn compact"
+                    title={preset}
+                    style={{ background: preset, width: 28, height: 28, border: project.layout.backgroundColor === preset ? '2px solid #2563eb' : '1px solid #cdd8e6', borderRadius: 6, padding: 0 }}
+                    onClick={() => updateLayout({ backgroundColor: project.layout.backgroundColor === preset ? null : preset })}
+                  />
+                ))}
+                <input
+                  type="color"
+                  className="accent-color-input"
+                  value={project.layout.backgroundColor || '#ffffff'}
+                  onChange={(e) => updateLayout({ backgroundColor: e.target.value })}
+                  title="Custom background color"
+                />
+                {project.layout.backgroundColor && (
+                  <button className="secondary-btn compact" type="button" onClick={() => updateLayout({ backgroundColor: null })}>None</button>
+                )}
               </div>
             </div>
             <div className="small-note">Zoom is now controlled directly on the map canvas for faster editing.</div>
@@ -1020,6 +1161,44 @@ export default function App() {
         </section>
 
         <section className="control-section">
+          <h2>Legend</h2>
+          <div className="control-grid">
+            <div className="control-row inline-2">
+              <div>
+                <label>Legend Width</label>
+                <input type="range" min="180" max="520" step="10" value={project.layout.legendWidth || 300} onChange={(e) => updateLayout({ legendWidth: Number(e.target.value) })} />
+              </div>
+              <div className="range-value">{project.layout.legendWidth || 300}px</div>
+            </div>
+            {legendItems.length > 0 && (
+              <div className="control-row">
+                <label>Items</label>
+                <div className="legend-item-controls">
+                  {legendItems.map((item) => {
+                    const layer = project.layers.find((l) => l.id === item.id);
+                    if (!layer) return null;
+                    return (
+                      <div key={item.id} className="legend-item-row">
+                        <input
+                          type="checkbox"
+                          checked={layer.legend?.enabled !== false}
+                          onChange={(e) => updateLayer(item.id, { legend: { ...(layer.legend || {}), enabled: e.target.checked } })}
+                        />
+                        <input
+                          className="legend-label-input"
+                          value={layer.legend?.label ?? item.label}
+                          onChange={(e) => updateLayer(item.id, { legend: { ...(layer.legend || {}), label: e.target.value } })}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className="control-section">
           <h2>Reference Overlays</h2>
           <div className="toggle-grid">
             <label className="toggle-row"><input type="checkbox" checked={referenceOverlays.context} onChange={(e) => updateLayout({ referenceOverlays: { context: e.target.checked } })} /> <span>Roads / Water / Towns</span></label>
@@ -1069,13 +1248,30 @@ export default function App() {
                   <div className="range-value">{selectedLayer.style?.markerSize ?? 12}px</div>
                 </div>
               ) : (
-                <div className="control-row inline-2">
-                  <div>
-                    <label>Fill Opacity</label>
-                    <input type="range" min="0" max="1" step="0.05" value={selectedLayer.style?.fillOpacity ?? 0.22} onChange={(e) => updateLayer(selectedLayer.id, { style: { fillOpacity: Number(e.target.value) } })} />
+                <>
+                  <div className="control-row inline-2">
+                    <div>
+                      <label>Fill Opacity</label>
+                      <input type="range" min="0" max="1" step="0.05" value={selectedLayer.style?.fillOpacity ?? 0.22} onChange={(e) => updateLayer(selectedLayer.id, { style: { fillOpacity: Number(e.target.value) } })} />
+                    </div>
+                    <div className="range-value">{Math.round((selectedLayer.style?.fillOpacity ?? 0.22) * 100)}%</div>
                   </div>
-                  <div className="range-value">{Math.round((selectedLayer.style?.fillOpacity ?? 0.22) * 100)}%</div>
-                </div>
+                  <div className="control-row inline-2">
+                    <div>
+                      <label>Outline Opacity</label>
+                      <input type="range" min="0" max="1" step="0.05" value={selectedLayer.style?.strokeOpacity ?? 1} onChange={(e) => updateLayer(selectedLayer.id, { style: { strokeOpacity: Number(e.target.value) } })} />
+                    </div>
+                    <div className="range-value">{Math.round((selectedLayer.style?.strokeOpacity ?? 1) * 100)}%</div>
+                  </div>
+                  <div className="control-row">
+                    <label>Style Mode</label>
+                    <div className="button-row three">
+                      <button type="button" className={`secondary-btn compact ${!selectedLayer.style?.fillOnly && !selectedLayer.style?.outlineOnly ? 'active-toggle' : ''}`} onClick={() => updateLayer(selectedLayer.id, { style: { fillOnly: false, outlineOnly: false } })}>Both</button>
+                      <button type="button" className={`secondary-btn compact ${selectedLayer.style?.fillOnly ? 'active-toggle' : ''}`} onClick={() => updateLayer(selectedLayer.id, { style: { fillOnly: true, outlineOnly: false } })}>Fill Only</button>
+                      <button type="button" className={`secondary-btn compact ${selectedLayer.style?.outlineOnly ? 'active-toggle' : ''}`} onClick={() => updateLayer(selectedLayer.id, { style: { fillOnly: false, outlineOnly: true } })}>Outline Only</button>
+                    </div>
+                  </div>
+                </>
               )}
             </div>
           ) : <p className="small-note">Select a layer to edit its display label, role, order, and colors.</p>}
@@ -1298,13 +1494,16 @@ export default function App() {
                 className="secondary-btn compact"
                 type="button"
                 aria-label="Zoom out"
-                onClick={() => leafletMapRef.current?.zoomOut(1)}
+                onClick={() => leafletMapRef.current?.zoomOut(0.25)}
               >−</button>
+              <span className="zoom-level-display" title="Current zoom level">
+                {leafletMapRef.current ? (Math.round(leafletMapRef.current.getZoom() * 10) / 10).toFixed(1) : '—'}×
+              </span>
               <button
                 className="secondary-btn compact"
                 type="button"
                 aria-label="Zoom in"
-                onClick={() => leafletMapRef.current?.zoomIn(1)}
+                onClick={() => leafletMapRef.current?.zoomIn(0.25)}
               >+</button>
             </div>
             <button className="btn primary" type="button" onClick={() => handleExport('png')} disabled={exporting}>Export PNG</button>
@@ -1365,6 +1564,7 @@ export default function App() {
           onMoveMarker={updateMarker}
           onMoveEllipse={updateEllipse}
           onMoveLabelOffset={(id, offset) => updateMarker(id, { labelOffsetX: offset.x, labelOffsetY: offset.y })}
+          onEditLabel={(id, val) => updateMarker(id, { label: val })}
           labelFont={project.layout.fonts?.label}
         />
         <CalloutsOverlay
@@ -1376,7 +1576,7 @@ export default function App() {
           fontFamily={project.layout.fonts?.callout}
         />
 
-        <div className="template-zone" style={zoneStyle(resolvedZones.title)}>
+        <div className="template-zone" style={zoneStyle(effectiveZones.title)}>
           <div className="template-card title-card">
             <h2>{project.layout.title}</h2>
             <p>{project.layout.subtitle}</p>
@@ -1384,7 +1584,7 @@ export default function App() {
         </div>
 
         {legendItems.length ? (
-          <div className="template-zone" style={zoneStyle(resolvedZones.legend)}>
+          <div className="template-zone" style={zoneStyle(effectiveZones.legend)}>
             <div className="template-card legend-card">
               <div className="legend-header"><h3>Legend</h3></div>
               <div className="legend-list">
@@ -1408,15 +1608,15 @@ export default function App() {
           </div>
         ) : null}
 
-        <div className="template-zone" style={zoneStyle(resolvedZones.northArrow)}><NorthArrow /></div>
-        {project.layout.insetEnabled !== false && resolvedZones.inset?.width ? (
-          <div className="template-zone" style={zoneStyle(resolvedZones.inset)}>
+        <div className="template-zone" style={zoneStyle(effectiveZones.northArrow)}><NorthArrow /></div>
+        {project.layout.insetEnabled !== false && effectiveZones.inset?.width ? (
+          <div className="template-zone" style={zoneStyle(effectiveZones.inset)}>
             <LocatorInset layers={project.layers} insetMode={project.layout.insetMode} insetImage={project.layout.insetImage} mode={project.layout.mode} zone={{ width: '100%', height: '100%' }} />
           </div>
         ) : null}
-        <div className="template-zone" style={zoneStyle(resolvedZones.scaleBar)}><ScaleBar map={leafletMapRef.current} /></div>
-        {project.layout.footerText && project.layout.footerEnabled !== false ? <div className="template-zone" style={zoneStyle(resolvedZones.footer)}><div className="template-card footer-card">{project.layout.footerText}</div></div> : null}
-        {project.layout.logo ? <div className="template-zone" style={zoneStyle(resolvedZones.logo)}><div className="template-card logo-card"><img src={project.layout.logo} alt="Logo" /></div></div> : null}
+        <div className="template-zone" style={zoneStyle(effectiveZones.scaleBar)}><ScaleBar map={leafletMapRef.current} /></div>
+        {project.layout.footerText && project.layout.footerEnabled !== false ? <div className="template-zone" style={zoneStyle(effectiveZones.footer)}><div className="template-card footer-card">{project.layout.footerText}</div></div> : null}
+        {project.layout.logo ? <div className="template-zone" style={zoneStyle(effectiveZones.logo)}><div className="template-card logo-card"><img src={project.layout.logo} alt="Logo" /></div></div> : null}
         {selectedFeature && featureEditorPoint ? (
           <div className="drillhole-inline-editor" style={{ left: featureEditorPoint.left, top: featureEditorPoint.top }}>
             <div className="drillhole-inline-title">Edit drillhole callout</div>

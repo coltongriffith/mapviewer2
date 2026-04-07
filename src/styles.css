@@ -320,8 +320,19 @@ button, input, select, textarea { font: inherit; }
 .map-zoom-inline input { width: 100%; }
 .map-zoom-btns { display: flex; gap: 4px; align-items: center; }
 .map-zoom-btns .secondary-btn { width: 32px; min-width: 0; padding: 6px 0; font-size: 16px; font-weight: 700; text-align: center; line-height: 1; }
+.zoom-level-display { font-size: 11px; font-weight: 700; color: #314155; min-width: 34px; text-align: center; font-variant-numeric: tabular-nums; }
 .accent-color-row { display: flex; align-items: center; gap: 6px; }
 .accent-color-input { width: 40px; height: 36px; border-radius: 8px; border: 1px solid #d4deea; cursor: pointer; padding: 2px; background: transparent; }
+.layout-items-grid { display: grid; gap: 6px; margin-top: 4px; }
+.layout-item-row { display: flex; align-items: center; gap: 8px; }
+.layout-item-row input[type="checkbox"] { width: auto; flex: 0 0 auto; accent-color: #4d86d5; }
+.layout-item-label { font-size: 12px; color: #213547; min-width: 72px; }
+.layout-item-row select { flex: 1; font-size: 12px; min-width: 0; }
+.secondary-btn.active { background: #2563eb; color: #fff; border-color: #2563eb; }
+.legend-item-controls { display: grid; gap: 6px; margin-top: 4px; }
+.legend-item-row { display: flex; align-items: center; gap: 8px; }
+.legend-item-row input[type="checkbox"] { width: auto; flex: 0 0 auto; accent-color: #4d86d5; }
+.legend-label-input { flex: 1; font-size: 12px; padding: 4px 6px; border: 1px solid #d4deea; border-radius: 5px; min-width: 0; }
 .autosave-badge {
   font-size: 11px;
   font-weight: 700;

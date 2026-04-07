@@ -136,7 +136,7 @@ export function resolveTemplateZones(template, layout, mapSize) {
       ? { top: safe.top, left: width - safe.right, width: 0, height: 0 }
       : clampZone({ top: safe.top, right: safe.right, width: insetWidth, height: insetHeight }, safe, width, height),
     scaleBar: clampZone({ bottom: safe.bottom, left: safe.left, width: BASE_ZONES.scaleBar.width, height: BASE_ZONES.scaleBar.height }, safe, width, height),
-    legend: clampZone({ bottom: safe.bottom + BASE_ZONES.scaleBar.height + 10, left: safe.left, width: BASE_ZONES.legend.width, height: legendHeight }, safe, width, height),
+    legend: clampZone({ bottom: safe.bottom + BASE_ZONES.scaleBar.height + 10, left: safe.left, width: Math.max(180, Math.min(520, layout?.legendWidth || BASE_ZONES.legend.width)), height: legendHeight }, safe, width, height),
     northArrow: clampZone({ bottom: safe.bottom, right: safe.right, width: BASE_ZONES.northArrow.width, height: BASE_ZONES.northArrow.height }, safe, width, height),
     footer: clampZone({ bottom: safe.bottom, left: BASE_ZONES.footer.left, width: BASE_ZONES.footer.width, height: BASE_ZONES.footer.height }, safe, width, height),
   };

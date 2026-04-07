@@ -90,12 +90,25 @@ function setCanvasFill(ctx, style) { ctx.fillStyle = rgba(style.fill || style.ma
 function drawCanvasGeometry(ctx, map, feature, style, scale) {
   const type = getLayerGeometryType(feature); const coords = feature?.geometry?.coordinates; if (!coords) return;
   const baseOpacity = Math.max(0, Math.min(1, style.opacity ?? 1));
+  const strokeOpacity = Math.max(0, Math.min(1, style.strokeOpacity ?? 1));
+  const doFill = !style.outlineOnly;
+  const doStroke = !style.fillOnly;
   ctx.save();
   ctx.globalAlpha = baseOpacity;
-  if (type === 'Polygon') { ctx.beginPath(); coords.forEach((ring) => drawCanvasPath(ctx, projectRing(map, ring, scale), true)); setCanvasFill(ctx, style); ctx.fill('evenodd'); setCanvasStroke(ctx, style, scale); ctx.stroke(); ctx.restore(); return; }
-  if (type === 'MultiPolygon') { ctx.beginPath(); coords.forEach((polygon) => polygon.forEach((ring) => drawCanvasPath(ctx, projectRing(map, ring, scale), true))); setCanvasFill(ctx, style); ctx.fill('evenodd'); setCanvasStroke(ctx, style, scale); ctx.stroke(); ctx.restore(); return; }
-  if (type === 'LineString') { ctx.beginPath(); drawCanvasPath(ctx, projectLine(map, coords, scale), false); setCanvasStroke(ctx, style, scale); ctx.stroke(); ctx.restore(); return; }
-  if (type === 'MultiLineString') { ctx.beginPath(); coords.forEach((line) => drawCanvasPath(ctx, projectLine(map, line, scale), false)); setCanvasStroke(ctx, style, scale); ctx.stroke(); ctx.restore(); return; }
+  if (type === 'Polygon') {
+    ctx.beginPath(); coords.forEach((ring) => drawCanvasPath(ctx, projectRing(map, ring, scale), true));
+    if (doFill) { setCanvasFill(ctx, style); ctx.fill('evenodd'); }
+    if (doStroke) { ctx.save(); ctx.globalAlpha = baseOpacity * strokeOpacity; setCanvasStroke(ctx, style, scale); ctx.stroke(); ctx.restore(); }
+    ctx.restore(); return;
+  }
+  if (type === 'MultiPolygon') {
+    ctx.beginPath(); coords.forEach((polygon) => polygon.forEach((ring) => drawCanvasPath(ctx, projectRing(map, ring, scale), true)));
+    if (doFill) { setCanvasFill(ctx, style); ctx.fill('evenodd'); }
+    if (doStroke) { ctx.save(); ctx.globalAlpha = baseOpacity * strokeOpacity; setCanvasStroke(ctx, style, scale); ctx.stroke(); ctx.restore(); }
+    ctx.restore(); return;
+  }
+  if (type === 'LineString') { ctx.beginPath(); drawCanvasPath(ctx, projectLine(map, coords, scale), false); ctx.save(); ctx.globalAlpha = baseOpacity * strokeOpacity; setCanvasStroke(ctx, style, scale); ctx.stroke(); ctx.restore(); ctx.restore(); return; }
+  if (type === 'MultiLineString') { ctx.beginPath(); coords.forEach((line) => drawCanvasPath(ctx, projectLine(map, line, scale), false)); ctx.save(); ctx.globalAlpha = baseOpacity * strokeOpacity; setCanvasStroke(ctx, style, scale); ctx.stroke(); ctx.restore(); ctx.restore(); return; }
   if (type === 'Point') { const pt = projectCoordinate(map, coords, scale); const radius = (style.markerSize ?? 8) * scale * 0.5; ctx.beginPath(); ctx.arc(pt.x, pt.y, radius, 0, Math.PI * 2); ctx.fillStyle = style.markerFill || style.markerColor || '#ffffff'; ctx.fill(); ctx.lineWidth = (style.strokeWidth ?? 1.5) * scale; ctx.strokeStyle = style.markerColor || style.stroke || '#111111'; ctx.stroke(); ctx.restore(); return; }
   if (type === 'MultiPoint') { coords.forEach((coord) => drawCanvasGeometry(ctx, map, { geometry: { type: 'Point', coordinates: coord } }, style, scale)); ctx.restore(); return; }
   ctx.restore();
@@ -107,16 +120,25 @@ function geometryToSvg(map, feature, style, scale) {
   const fillOpacity = (style.fillOpacity ?? 0.2) * (style.opacity ?? 1);
   const strokeWidth = (style.strokeWidth ?? 2) * scale;
   const opacity = Math.max(0, Math.min(1, style.opacity ?? 1));
+  const strokeOpacity = Math.max(0, Math.min(1, style.strokeOpacity ?? 1)) * opacity;
+  const doFill = !style.outlineOnly;
+  const doStroke = !style.fillOnly;
   const dash = style.dashArray ? ` stroke-dasharray="${escapeXml(style.dashArray)}"` : '';
-  if (type === 'Polygon') return `<path d="${coords.map((ring) => pathFromPoints(projectRing(map, ring, scale), true)).filter(Boolean).join(' ')}" fill="${fill}" fill-opacity="${fillOpacity}" stroke="${stroke}" stroke-width="${strokeWidth}"${dash} fill-rule="evenodd" stroke-opacity="${opacity}" />`;
-  if (type === 'MultiPolygon') return `<path d="${coords.flatMap((polygon) => polygon.map((ring) => pathFromPoints(projectRing(map, ring, scale), true))).filter(Boolean).join(' ')}" fill="${fill}" fill-opacity="${fillOpacity}" stroke="${stroke}" stroke-width="${strokeWidth}"${dash} fill-rule="evenodd" stroke-opacity="${opacity}" />`;
-  if (type === 'LineString') return `<path d="${pathFromPoints(projectLine(map, coords, scale), false)}" fill="none" stroke="${stroke}" stroke-width="${strokeWidth}"${dash} stroke-linecap="round" stroke-linejoin="round" stroke-opacity="${opacity}" />`;
-  if (type === 'MultiLineString') return `<path d="${coords.map((line) => pathFromPoints(projectLine(map, line, scale), false)).filter(Boolean).join(' ')}" fill="none" stroke="${stroke}" stroke-width="${strokeWidth}"${dash} stroke-linecap="round" stroke-linejoin="round" stroke-opacity="${opacity}" />`;
+  const effectiveFill = doFill ? fill : 'none';
+  const effectiveFillOpacity = doFill ? fillOpacity : 0;
+  const effectiveStrokeWidth = doStroke ? strokeWidth : 0;
+  const effectiveStrokeOpacity = doStroke ? strokeOpacity : 0;
+  if (type === 'Polygon') return `<path d="${coords.map((ring) => pathFromPoints(projectRing(map, ring, scale), true)).filter(Boolean).join(' ')}" fill="${effectiveFill}" fill-opacity="${effectiveFillOpacity}" stroke="${stroke}" stroke-width="${effectiveStrokeWidth}"${dash} fill-rule="evenodd" stroke-opacity="${effectiveStrokeOpacity}" />`;
+  if (type === 'MultiPolygon') return `<path d="${coords.flatMap((polygon) => polygon.map((ring) => pathFromPoints(projectRing(map, ring, scale), true))).filter(Boolean).join(' ')}" fill="${effectiveFill}" fill-opacity="${effectiveFillOpacity}" stroke="${stroke}" stroke-width="${effectiveStrokeWidth}"${dash} fill-rule="evenodd" stroke-opacity="${effectiveStrokeOpacity}" />`;
+  if (type === 'LineString') return `<path d="${pathFromPoints(projectLine(map, coords, scale), false)}" fill="none" stroke="${stroke}" stroke-width="${effectiveStrokeWidth}"${dash} stroke-linecap="round" stroke-linejoin="round" stroke-opacity="${effectiveStrokeOpacity}" />`;
+  if (type === 'MultiLineString') return `<path d="${coords.map((line) => pathFromPoints(projectLine(map, line, scale), false)).filter(Boolean).join(' ')}" fill="none" stroke="${stroke}" stroke-width="${effectiveStrokeWidth}"${dash} stroke-linecap="round" stroke-linejoin="round" stroke-opacity="${effectiveStrokeOpacity}" />`;
   if (type === 'Point') { const pt = projectCoordinate(map, coords, scale); const radius = (style.markerSize ?? 8) * scale * 0.5; return `<circle cx="${pt.x.toFixed(2)}" cy="${pt.y.toFixed(2)}" r="${radius.toFixed(2)}" fill="${style.markerFill || fill}" stroke="${style.markerColor || stroke}" stroke-width="${Math.max(scale, strokeWidth * 0.4).toFixed(2)}" opacity="${opacity}" />`; }
   if (type === 'MultiPoint') return coords.map((coord) => geometryToSvg(map, { geometry: { type: 'Point', coordinates: coord } }, style, scale)).join('');
   return '';
 }
 function getOverlayMetrics(scene) {
+  // Prefer zones already resolved in buildScene (includes corner-anchor overrides)
+  if (scene.template?.zones) return scene.template.zones;
   return resolveTemplateZones(scene.template, scene.project.layout || {}, { width: scene.width, height: scene.height });
 }
 function drawRoundedRect(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
@@ -435,7 +457,9 @@ function drawEllipsesCanvas(ctx, scene, scale) {
 export async function renderSceneToCanvas(scene, options = {}) {
   const scale = Number(options.pixelRatio || scene.project.layout?.exportSettings?.pixelRatio || 2);
   const canvas = document.createElement('canvas'); canvas.width = Math.round(scene.width * scale); canvas.height = Math.round(scene.height * scale); const ctx = canvas.getContext('2d');
-  ctx.fillStyle = '#f3f5f7'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+  const bgColor = scene.project.layout?.backgroundColor;
+  ctx.fillStyle = bgColor || '#f3f5f7';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
   await drawTilesCanvas(ctx, scene, scale); drawVectorsCanvas(ctx, scene, scale); drawEllipsesCanvas(ctx, scene, scale); await drawMarkersCanvas(ctx, scene, scale); drawCalloutsCanvas(ctx, scene, scale); drawTitleBlockCanvas(ctx, scene, scale); drawLegendCanvas(ctx, scene, scale); drawNorthArrowCanvas(ctx, scene, scale); await drawInsetCanvas(ctx, scene, scale); drawScaleBarCanvas(ctx, scene, scale); drawFooterCanvas(ctx, scene, scale); await drawLogoCanvas(ctx, scene, scale);
   return canvas;
 }
@@ -448,7 +472,7 @@ async function drawTilesCanvas(ctx, scene, scale) {
     ctx.save(); ctx.globalAlpha = tile.opacity; ctx.drawImage(img, tile.x * scale, tile.y * scale, tile.width * scale, tile.height * scale); ctx.restore();
   }
 }
-function drawVectorsCanvas(ctx, scene, scale) { (scene.project.layers || []).filter((layer) => layer.visible !== false && layer.geojson).forEach((layer) => featureCollectionFeatures(layer.geojson).forEach((feature) => drawCanvasGeometry(ctx, scene.map, feature, getTemplateStyle(scene.template, layer), scale))); }
+function drawVectorsCanvas(ctx, scene, scale) { (scene.project.layers || []).filter((layer) => layer.visible !== false && (layer.geojson || layer.geojsonSimplified)).forEach((layer) => featureCollectionFeatures(layer.geojson || layer.geojsonSimplified).forEach((feature) => drawCanvasGeometry(ctx, scene.map, feature, getTemplateStyle(scene.template, layer), scale))); }
 async function drawLogoCanvas(ctx, scene, scale) {
   const logo = scene.project.layout?.logo; if (!logo) return;
   const zone = getOverlayMetrics(scene).logo; const x = zone.left * scale, y = zone.top * scale, w = zone.width * scale, h = zone.height * scale, padding = 10 * scale;
@@ -503,7 +527,7 @@ async function renderBasemapImageSvg(scene, scale) {
 
   return `<image href="${escapeXml(pngDataUrl)}" x="0" y="0" width="${width}" height="${height}" preserveAspectRatio="none" />`;
 }
-function renderVectorsSvg(scene, scale) { return (scene.project.layers || []).filter((layer) => layer.visible !== false && layer.geojson).map((layer) => featureCollectionFeatures(layer.geojson).map((feature) => geometryToSvg(scene.map, feature, getTemplateStyle(scene.template, layer), scale)).join('\n')).join('\n'); }
+function renderVectorsSvg(scene, scale) { return (scene.project.layers || []).filter((layer) => layer.visible !== false && (layer.geojson || layer.geojsonSimplified)).map((layer) => featureCollectionFeatures(layer.geojson || layer.geojsonSimplified).map((feature) => geometryToSvg(scene.map, feature, getTemplateStyle(scene.template, layer), scale)).join('\n')).join('\n'); }
 function renderMarkerLabelSvg(scene, marker, point, scale) {
   if (!marker.label) return '';
   const labelX = point.x + (marker.size || 18) * scale * 0.5 + 8 * scale;
@@ -584,8 +608,10 @@ function renderCalloutsSvg(scene, scale) { return placeCallouts(scene, scale).ma
 
 export async function renderSceneToSvg(scene, options = {}) {
   const scale = Number(options.pixelRatio || scene.project.layout?.exportSettings?.pixelRatio || 2); const width = Math.round(scene.width * scale), height = Math.round(scene.height * scale);
+  const bgColor = scene.project.layout?.backgroundColor;
+  const bgRect = `<rect width="100%" height="100%" fill="${escapeXml(bgColor || '#f3f5f7')}" />`;
   const basemapImage = await renderBasemapImageSvg(scene, scale);
-  return `<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="100%" height="100%" fill="#f3f5f7" />${basemapImage}${renderVectorsSvg(scene, scale)}${renderEllipsesSvg(scene, scale)}${renderMarkersSvg(scene, scale)}${renderCalloutsSvg(scene, scale)}${renderTitleSvg(scene, scale)}${renderLegendSvg(scene, scale)}${renderNorthArrowSvg(scene, scale)}${renderInsetSvg(scene, scale)}${renderScaleBarSvg(scene, scale)}${renderFooterSvg(scene, scale)}${renderLogoSvg(scene, scale)}</svg>`;
+  return `<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${bgRect}${basemapImage}${renderVectorsSvg(scene, scale)}${renderEllipsesSvg(scene, scale)}${renderMarkersSvg(scene, scale)}${renderCalloutsSvg(scene, scale)}${renderTitleSvg(scene, scale)}${renderLegendSvg(scene, scale)}${renderNorthArrowSvg(scene, scale)}${renderInsetSvg(scene, scale)}${renderScaleBarSvg(scene, scale)}${renderFooterSvg(scene, scale)}${renderLogoSvg(scene, scale)}</svg>`;
 }
 export function downloadCanvas(filename, canvas) { const link = document.createElement('a'); link.download = filename; link.href = canvas.toDataURL('image/png', 1.0); link.click(); }
 export function downloadSvg(filename, svgText) { downloadBlob(filename, new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' })); }
