@@ -14,10 +14,8 @@ import { exportPNG } from './export/exportPNG';
 import { exportSVG } from './export/exportSVG';
 import {
   CALLOUT_TYPES,
-  COMPOSITION_PRESETS,
   createInitialProjectState,
   FONT_OPTIONS,
-  INSET_MODES,
   ROLE_LABELS,
   TEMPLATE_MODES,
   TEMPLATE_THEMES,
@@ -239,18 +237,22 @@ export default function App() {
   const [localSubtitle, setLocalSubtitle] = useState(project.layout.subtitle || '');
   const titleDebounceRef = useRef(null);
   const subtitleDebounceRef = useRef(null);
+  const layersSectionRef = useRef(null);
+  const markersSectionRef = useRef(null);
+  const calloutsSectionRef = useRef(null);
+  const drillholeSectionRef = useRef(null);
 
   const template = useMemo(() => getTemplate(project.layout?.templateId || 'technical_results_v2'), [project.layout?.templateId]);
   const selectedLayer = useMemo(() => project.layers.find((layer) => layer.id === selectedLayerId) || null, [project.layers, selectedLayerId]);
   const selectedCallout = useMemo(() => project.callouts.find((callout) => callout.id === selectedCalloutId) || null, [project.callouts, selectedCalloutId]);
   const selectedMarker = useMemo(() => project.markers?.find((marker) => marker.id === selectedMarkerId) || null, [project.markers, selectedMarkerId]);
   const selectedEllipse = useMemo(() => project.ellipses?.find((ellipse) => ellipse.id === selectedEllipseId) || null, [project.ellipses, selectedEllipseId]);
-  const resolvedZones = useMemo(() => resolveTemplateZones(template, project.layout, mapSize), [template, project.layout, mapSize]);
+  const legendItems = useMemo(() => buildLegendItems(template, project.layers, project.layout), [template, project.layers, project.layout]);
+  const legendGroups = useMemo(() => renderLegendGroups(legendItems, project.layout), [legendItems, project.layout]);
+  const resolvedZones = useMemo(() => resolveTemplateZones(template, project.layout, mapSize, legendItems), [template, project.layout, mapSize, legendItems]);
   // Keep a ref so the framing effect can read the current zones without them being a reactive trigger
   const resolvedZonesRef = useRef(resolvedZones);
   useEffect(() => { resolvedZonesRef.current = resolvedZones; }, [resolvedZones]);
-  const legendItems = useMemo(() => buildLegendItems(template, project.layers, project.layout), [template, project.layers, project.layout]);
-  const legendGroups = useMemo(() => renderLegendGroups(legendItems, project.layout), [legendItems, project.layout]);
   const themeTokens = useMemo(() => {
     const base = getThemeTokens(project.layout?.themeId || 'modern_rounded');
     const accent = project.layout?.accentColor;
@@ -338,6 +340,31 @@ export default function App() {
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [selectedMarkerId, selectedCalloutId, selectedEllipseId]);
+
+  useEffect(() => {
+    if (selectedLayerId && layersSectionRef.current)
+      layersSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, [selectedLayerId]);
+
+  useEffect(() => {
+    if (selectedMarkerId && markersSectionRef.current)
+      markersSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, [selectedMarkerId]);
+
+  useEffect(() => {
+    if (selectedEllipseId && markersSectionRef.current)
+      markersSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, [selectedEllipseId]);
+
+  useEffect(() => {
+    if (selectedCalloutId && calloutsSectionRef.current)
+      calloutsSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, [selectedCalloutId]);
+
+  useEffect(() => {
+    if (selectedFeature && drillholeSectionRef.current)
+      drillholeSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, [selectedFeature]);
 
   const updateLayout = (patch) => {
     setProject((prev) => ({
@@ -432,12 +459,43 @@ export default function App() {
     }
   };
 
+  const extractDominantColor = (imageData) => {
+    const buckets = {};
+    for (let i = 0; i < imageData.length; i += 4) {
+      const r = imageData[i]; const g = imageData[i + 1]; const b = imageData[i + 2]; const a = imageData[i + 3];
+      if (a < 128) continue;
+      const brightness = (r + g + b) / 3;
+      if (brightness > 220 || brightness < 30) continue;
+      const key = `${r >> 5},${g >> 5},${b >> 5}`;
+      buckets[key] = (buckets[key] || 0) + 1;
+    }
+    const top = Object.entries(buckets).sort((a, b) => b[1] - a[1])[0];
+    if (!top) return null;
+    const [rk, gk, bk] = top[0].split(',').map(Number);
+    return '#' + [rk << 5, gk << 5, bk << 5].map((v) => Math.min(255, v).toString(16).padStart(2, '0')).join('');
+  };
+
   const handleLogoChange = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     try {
       const dataUrl = await readFileAsDataURL(file);
-      updateLayout({ logo: dataUrl });
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = 64; canvas.height = 64;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, 64, 64);
+          const { data } = ctx.getImageData(0, 0, 64, 64);
+          const color = extractDominantColor(data);
+          updateLayout({ logo: dataUrl, ...(color ? { accentColor: color } : {}) });
+        } catch {
+          updateLayout({ logo: dataUrl });
+        }
+      };
+      img.onerror = () => updateLayout({ logo: dataUrl });
+      img.src = dataUrl;
       setUploadStatus({ type: 'success', message: `Loaded logo: ${file.name}` });
     } catch (err) {
       setUploadStatus({ type: 'error', message: `Logo import failed: ${err.message}` });
@@ -608,13 +666,17 @@ export default function App() {
     if (selectedCalloutId === calloutId) setSelectedCalloutId(null);
   };
 
-  const handleFeatureClick = ({ layerId, feature, latlng }) => {
+  const handleFeatureClick = ({ layerId, feature, latlng, isLayerSelect }) => {
     const layer = project.layers.find((item) => item.id === layerId) || null;
     if (!layer) return;
     setSelectedLayerId(layerId);
     setAnnotationTool(null);
     setSelectedMarkerId(null);
     setSelectedEllipseId(null);
+    if (isLayerSelect) {
+      setSelectedFeature(null);
+      return;
+    }
     setSelectedFeature({
       layerId,
       layerName: layer.displayName || layer.name,
@@ -864,6 +926,18 @@ export default function App() {
           </button>
         </div>
 
+        {project.layers.length === 0 && !project.layout.logo ? (
+          <div className="onboarding-card">
+            <div className="onboarding-title">Get started</div>
+            <ol className="onboarding-steps">
+              <li>Upload claims / property boundary (GeoJSON or .zip shapefile)</li>
+              <li>Upload your logo — colours will be auto-applied to the map</li>
+              <li>Upload an inset image</li>
+              <li>Upload drillholes or other layers (optional)</li>
+            </ol>
+          </div>
+        ) : null}
+
         <UploadPanel onUploadFile={handleUploadFile} inputRef={uploadInputRef} status={uploadStatus} layers={project.layers} />
 
         <section className="control-section">
@@ -902,14 +976,6 @@ export default function App() {
                 </div>
               </div>
             </div>
-            <div className="control-row">
-              <label>Composition</label>
-              <select value={project.layout.compositionPreset} onChange={(e) => updateLayout({ compositionPreset: e.target.value, frameVersion: (project.layout.frameVersion || 0) + 1 })}>
-                {Object.entries(COMPOSITION_PRESETS).map(([value, label]) => (
-                  <option key={value} value={value}>{label}</option>
-                ))}
-              </select>
-            </div>
             <div className="button-row">
               <button className="btn" type="button" onClick={autoFrameAll}>Refit Map</button>
               <button className="btn primary" type="button" onClick={improveMap}>Improve Map</button>
@@ -940,14 +1006,6 @@ export default function App() {
                   <option value="satellite">Satellite</option>
                   <option value="topo">Topo</option>
                   <option value="dark">Dark</option>
-                </select>
-              </div>
-              <div>
-                <label>Inset Mode</label>
-                <select value={project.layout.insetMode} onChange={(e) => updateLayout({ insetMode: e.target.value, insetEnabled: true })}>
-                  {Object.entries(INSET_MODES).map(([value, label]) => (
-                    <option key={value} value={value}>{label}</option>
-                  ))}
                 </select>
               </div>
             </div>
@@ -1003,17 +1061,10 @@ export default function App() {
             <div className="small-note">Recommended inset size: roughly 15–25% of the map width. The inset now scales with the uploaded image ratio to reduce cropping.</div>
             <input ref={logoInputRef} type="file" accept="image/*" onChange={handleLogoChange} hidden />
             <input ref={insetInputRef} type="file" accept="image/*" onChange={handleInsetImageChange} hidden />
-            {project.layout.insetMode === 'custom_image' ? (
+            {project.layout.insetImage ? (
               <div className="inset-status-card">
-                {project.layout.insetImage ? (
-                  <>
-                    <div className="inset-preview"><img src={project.layout.insetImage} alt="Inset preview" /></div>
-                    <div className="small-note">Custom inset is active and anchored in the top-right corner.</div>
-                    <button className="secondary-btn" type="button" onClick={() => updateLayout({ insetImage: null })}>Remove Inset Image</button>
-                  </>
-                ) : (
-                  <div className="small-note">Custom inset mode is selected, but no image is loaded yet.</div>
-                )}
+                <div className="inset-preview"><img src={project.layout.insetImage} alt="Inset preview" /></div>
+                <button className="secondary-btn" type="button" onClick={() => updateLayout({ insetImage: null, insetEnabled: false })}>Remove Inset Image</button>
               </div>
             ) : null}
           </div>
@@ -1028,7 +1079,7 @@ export default function App() {
           </div>
         </section>
 
-        <section className="control-section">
+        <section className="control-section" ref={layersSectionRef}>
           <h2>Layers</h2>
           <LayerList layers={project.layers} selectedLayerId={selectedLayerId} onSelect={setSelectedLayerId} onToggleVisible={toggleLayerVisible} />
           {selectedLayer ? (
@@ -1081,7 +1132,7 @@ export default function App() {
           ) : <p className="small-note">Select a layer to edit its display label, role, order, and colors.</p>}
         </section>
 
-        <section className="control-section">
+        <section className="control-section" ref={markersSectionRef}>
           <h2>Markers & Highlight Areas</h2>
           <div className="button-row">
             <button className={`secondary-btn ${annotationTool === 'marker' ? 'active-toggle' : ''}`} type="button" onClick={() => { setAnnotationTool(annotationTool === 'marker' ? null : 'marker'); setSelectedFeature(null); }}>Place Marker</button>
@@ -1146,7 +1197,7 @@ export default function App() {
           ) : null}
         </section>
 
-        <section className="control-section">
+        <section className="control-section" ref={drillholeSectionRef}>
           <h2>Drillhole Label Tool</h2>
           {selectedFeature ? (
             <div className="control-grid">
@@ -1206,7 +1257,7 @@ export default function App() {
           )}
         </section>
 
-        <section className="control-section">
+        <section className="control-section" ref={calloutsSectionRef}>
           <h2>Callouts</h2>
           <div className="button-row" style={{ marginBottom: 10 }}>
             <button className="btn primary" type="button" onClick={addCalloutFromSelectedLayer} disabled={!selectedLayer}>Add From Selected Layer</button>
@@ -1371,7 +1422,7 @@ export default function App() {
           map={leafletMapRef.current}
           callouts={project.callouts}
           selectedCalloutId={selectedCalloutId}
-          onSelect={setSelectedCalloutId}
+          onSelect={(id) => { setSelectedCalloutId(id); setSelectedMarkerId(null); setSelectedEllipseId(null); setSelectedFeature(null); }}
           onMove={(id, offset) => updateCallout(id, { offset: { x: offset.x, y: offset.y }, isManualPosition: true })}
           fontFamily={project.layout.fonts?.callout}
         />
@@ -1392,7 +1443,12 @@ export default function App() {
                   <div key={group.heading || 'all'} className="legend-group">
                     {group.heading ? <div className="legend-group-title">{group.heading}</div> : null}
                     {group.items.map((item) => (
-                      <div key={item.id} className="legend-item">
+                      <div
+                        key={item.id}
+                        className="legend-item legend-item-clickable"
+                        title="Click to edit this layer"
+                        onClick={() => { setSelectedLayerId(item.id); }}
+                      >
                         {item.type === 'points' ? (
                           <span className="legend-point" style={{ borderColor: item.style.markerColor || '#111', background: item.style.markerFill || '#fff' }} />
                         ) : (

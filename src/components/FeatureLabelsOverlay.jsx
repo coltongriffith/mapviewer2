@@ -7,8 +7,8 @@ export default function FeatureLabelsOverlay({ map, labels }) {
   useEffect(() => {
     if (!map) return undefined;
     const rerender = () => setTick((v) => v + 1);
-    map.on("move zoom zoomend moveend resize", rerender);
-    return () => map.off("move zoom zoomend moveend resize", rerender);
+    map.on("zoomend moveend resize", rerender);
+    return () => map.off("zoomend moveend resize", rerender);
   }, [map]);
 
   const placed = useMemo(() => placeFeatureLabels(labels || [], map), [labels, map, tick]);
