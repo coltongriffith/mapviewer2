@@ -134,6 +134,7 @@ button, input, select, textarea { font: inherit; }
 .legend-item { display: flex; align-items: center; gap: 12px; color: var(--body-text, #1d2b3d); font-size: 12px; }
 .legend-swatch { width: 18px; height: 12px; border-radius: 2px; border: 1px solid #3b82f6; flex: 0 0 auto; }
 .legend-point { width: 12px; height: 12px; border-radius: 999px; border: 1px solid #111; background: #fff; flex: 0 0 auto; }
+.legend-line-svg { display: block; flex: 0 0 auto; overflow: visible; }
 .north-arrow-card { display: flex; align-items: center; justify-content: center; flex-direction: column; background: var(--north-fill, var(--panel-bg, rgba(255,255,255,0.95))); }
 .north-arrow-label { font-weight: 700; font-size: 22px; color: var(--north-fg, #122033); margin-top: 10px; }
 .north-arrow-icon { color: var(--north-fg, #122033); font-size: 44px; line-height: 1; margin-top: 2px; }

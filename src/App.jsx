@@ -459,6 +459,31 @@ export default function App() {
     }
   };
 
+  const hexToHsl = (hex) => {
+    const r = parseInt(hex.slice(1, 3), 16) / 255;
+    const g = parseInt(hex.slice(3, 5), 16) / 255;
+    const b = parseInt(hex.slice(5, 7), 16) / 255;
+    const max = Math.max(r, g, b); const min = Math.min(r, g, b);
+    let h = 0; let s = 0; const l = (max + min) / 2;
+    if (max !== min) {
+      const d = max - min;
+      s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+      if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
+      else if (max === g) h = ((b - r) / d + 2) / 6;
+      else h = ((r - g) / d + 4) / 6;
+    }
+    return [Math.round(h * 360), Math.round(s * 100), Math.round(l * 100)];
+  };
+
+  const hslToHex = (h, s, l) => {
+    const hn = ((h % 360) + 360) % 360;
+    const sn = s / 100; const ln = l / 100;
+    const k = (n) => (n + hn / 30) % 12;
+    const a = sn * Math.min(ln, 1 - ln);
+    const f = (n) => ln - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+    return '#' + [f(0), f(8), f(4)].map((v) => Math.round(v * 255).toString(16).padStart(2, '0')).join('');
+  };
+
   const extractDominantColor = (imageData) => {
     const buckets = {};
     for (let i = 0; i < imageData.length; i += 4) {
@@ -475,6 +500,31 @@ export default function App() {
     return '#' + [rk << 5, gk << 5, bk << 5].map((v) => Math.min(255, v).toString(16).padStart(2, '0')).join('');
   };
 
+  const applyBrandPaletteToLayers = (color) => {
+    const [h, s] = hexToHsl(color);
+    const sat = Math.max(s, 62);
+    const claimsStroke = hslToHex(h, sat, 48);
+    const claimsFill   = hslToHex(h, Math.max(s, 42), 76);
+    const targetsStroke = hslToHex((h + 150) % 360, Math.max(s, 65), 48);
+    const targetsFill   = hslToHex((h + 150) % 360, Math.max(s, 48), 76);
+    const drillColor    = hslToHex(h, Math.max(s, 65), 24);
+    setProject((prev) => ({
+      ...prev,
+      layers: prev.layers.map((layer) => {
+        if (layer.role === 'claims') {
+          return { ...layer, style: { ...layer.style, stroke: claimsStroke, fill: claimsFill } };
+        }
+        if (layer.role === 'target_areas' || layer.role === 'anomalies') {
+          return { ...layer, style: { ...layer.style, stroke: targetsStroke, fill: targetsFill } };
+        }
+        if (layer.role === 'drillholes') {
+          return { ...layer, style: { ...layer.style, markerColor: drillColor, markerFill: '#ffffff' } };
+        }
+        return layer;
+      }),
+    }));
+  };
+
   const handleLogoChange = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -489,14 +539,19 @@ export default function App() {
           ctx.drawImage(img, 0, 0, 64, 64);
           const { data } = ctx.getImageData(0, 0, 64, 64);
           const color = extractDominantColor(data);
-          updateLayout({ logo: dataUrl, ...(color ? { accentColor: color } : {}) });
+          if (color) {
+            updateLayout({ logo: dataUrl, accentColor: color });
+            applyBrandPaletteToLayers(color);
+          } else {
+            updateLayout({ logo: dataUrl });
+          }
         } catch {
           updateLayout({ logo: dataUrl });
         }
       };
       img.onerror = () => updateLayout({ logo: dataUrl });
       img.src = dataUrl;
-      setUploadStatus({ type: 'success', message: `Loaded logo: ${file.name}` });
+      setUploadStatus({ type: 'success', message: `Loaded logo: ${file.name}. Brand colours applied.` });
     } catch (err) {
       setUploadStatus({ type: 'error', message: `Logo import failed: ${err.message}` });
     } finally {
@@ -1058,7 +1113,6 @@ export default function App() {
               </div>
               <div className="range-value">{Math.round((project.layout.insetScale || 1) * 100)}%</div>
             </div>
-            <div className="small-note">Recommended inset size: roughly 15–25% of the map width. The inset now scales with the uploaded image ratio to reduce cropping.</div>
             <input ref={logoInputRef} type="file" accept="image/*" onChange={handleLogoChange} hidden />
             <input ref={insetInputRef} type="file" accept="image/*" onChange={handleInsetImageChange} hidden />
             {project.layout.insetImage ? (
@@ -1451,6 +1505,14 @@ export default function App() {
                       >
                         {item.type === 'points' ? (
                           <span className="legend-point" style={{ borderColor: item.style.markerColor || '#111', background: item.style.markerFill || '#fff' }} />
+                        ) : item.type === 'line' ? (
+                          <svg className="legend-line-svg" width="22" height="12" aria-hidden="true" style={{ flexShrink: 0 }}>
+                            <line x1="0" y1="6" x2="22" y2="6"
+                              stroke={item.style.stroke || '#333'}
+                              strokeWidth={Math.min(item.style.strokeWidth ?? 2, 3)}
+                              strokeDasharray={item.style.dashArray || ''}
+                            />
+                          </svg>
                         ) : (
                           <span className="legend-swatch" style={{ borderColor: item.style.stroke || '#3b82f6', background: item.style.fill || '#93c5fd', opacity: item.style.fillOpacity ?? 1 }} />
                         )}
