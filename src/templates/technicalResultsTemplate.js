@@ -172,7 +172,7 @@ function buildOverlayLegendItems(layout) {
       group: 'Infrastructure',
       label: 'Railway Network',
       type: 'line',
-      style: { stroke: '#7b1fa2', fill: '#7b1fa2', fillOpacity: 0, strokeWidth: 2 },
+      style: { stroke: '#b04020', fill: '#b04020', fillOpacity: 0, strokeWidth: 2 },
     });
   }
   if (layout?.referenceOverlays?.labels) {
