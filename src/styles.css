@@ -27,6 +27,10 @@ button, input, select, textarea { font: inherit; }
 .sidebar h1 { margin: 0 0 4px; font-size: 20px; }
 .sidebar-subtitle { margin: 0 0 16px; color: #6b7280; font-size: 13px; }
 .sidebar-header-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.onboarding-card { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 12px 14px; margin-bottom: 12px; }
+.onboarding-title { font-size: 13px; font-weight: 600; color: #1d4ed8; margin-bottom: 8px; }
+.onboarding-steps { margin: 0; padding-left: 18px; display: grid; gap: 5px; }
+.onboarding-steps li { font-size: 12px; color: #374151; line-height: 1.4; }
 .secondary-btn.compact { width: auto; padding: 8px 10px; }
 
 .control-section {
@@ -119,7 +123,9 @@ button, input, select, textarea { font: inherit; }
 .title-card::before { content: ''; position: absolute; inset: 0 0 auto 0; height: 5px; background: var(--title-accent, transparent); }
 .title-card h2 { margin: 0; font-size: 28px; color: var(--title-fg, #fff); font-family: var(--font-title); }
 .title-card p { margin: 8px 0 0; font-size: 14px; color: var(--subtitle-fg, rgba(255,255,255,0.86)); font-family: var(--font-title); }
-.legend-card { padding: 14px 16px; font-family: var(--font-legend); }
+.legend-card { padding: 14px 16px; font-family: var(--font-legend); overflow-y: auto; max-height: 100%; }
+.legend-item-clickable { cursor: pointer; border-radius: 3px; padding: 2px 4px; margin: -2px -4px; transition: background 0.12s; }
+.legend-item-clickable:hover { background: rgba(37, 99, 235, 0.08); }
 .legend-card h3 { margin: 0 0 12px; font-size: 15px; color: var(--panel-title, #132033); }
 .legend-header { display: flex; align-items: center; justify-content: space-between; }
 .legend-list { display: grid; gap: 10px; }
@@ -128,6 +134,7 @@ button, input, select, textarea { font: inherit; }
 .legend-item { display: flex; align-items: center; gap: 12px; color: var(--body-text, #1d2b3d); font-size: 12px; }
 .legend-swatch { width: 18px; height: 12px; border-radius: 2px; border: 1px solid #3b82f6; flex: 0 0 auto; }
 .legend-point { width: 12px; height: 12px; border-radius: 999px; border: 1px solid #111; background: #fff; flex: 0 0 auto; }
+.legend-line-svg { display: block; flex: 0 0 auto; overflow: visible; }
 .north-arrow-card { display: flex; align-items: center; justify-content: center; flex-direction: column; background: var(--north-fill, var(--panel-bg, rgba(255,255,255,0.95))); }
 .north-arrow-label { font-weight: 700; font-size: 22px; color: var(--north-fg, #122033); margin-top: 10px; }
 .north-arrow-icon { color: var(--north-fg, #122033); font-size: 44px; line-height: 1; margin-top: 2px; }

@@ -69,8 +69,8 @@ export default function CalloutsOverlay({ map, callouts, selectedCalloutId, onSe
   useEffect(() => {
     if (!map) return undefined;
     const rerender = () => setTick((value) => value + 1);
-    map.on('move zoom zoomend moveend resize', rerender);
-    return () => map.off('move zoom zoomend moveend resize', rerender);
+    map.on('zoomend moveend resize', rerender);
+    return () => map.off('zoomend moveend resize', rerender);
   }, [map]);
 
   useEffect(() => {

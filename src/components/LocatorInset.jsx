@@ -108,7 +108,7 @@ export default function LocatorInset({ layers, insetMode, mode, insetImage, zone
           ) : null}
         </svg>
       )}
-      <div className="inset-mode-label">{showCustom ? INSET_MODES.custom_image : referenceBounds?.label || 'Project in State'}</div>
+      {!showCustom ? <div className="inset-mode-label">{referenceBounds?.label || 'Project in State'}</div> : null}
     </div>
   );
 }

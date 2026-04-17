@@ -196,9 +196,20 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
               onFeatureClick?.({ layerId: layer.id, feature, latlng });
             });
             marker.bindTooltip('Click to edit callout', { direction: 'top', offset: [0, -10], opacity: 0.9, sticky: true });
+          } else {
+            marker.on('click', (e) => {
+              L.DomEvent.stopPropagation(e);
+              onFeatureClick?.({ layerId: layer.id, feature: null, latlng: null, isLayerSelect: true });
+            });
           }
 
           return marker;
+        },
+        onEachFeature: isDrillholes ? undefined : (feature, featureLayer) => {
+          featureLayer.on('click', (e) => {
+            L.DomEvent.stopPropagation(e);
+            onFeatureClick?.({ layerId: layer.id, feature: null, latlng: null, isLayerSelect: true });
+          });
         },
       });
 
