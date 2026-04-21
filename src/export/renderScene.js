@@ -3,6 +3,10 @@ import { geojsonBounds, unionBounds } from '../utils/geometry';
 import { resolveTemplateZones } from '../templates/technicalResultsTemplate';
 import { getThemeTokens } from '../utils/themeTokens';
 import { MARKER_ICON_PATHS, markerIconSvgFragment, drawMarkerIconCanvas } from '../utils/markerIcons.jsx';
+import { safeColor } from '../utils/colorUtils.js';
+
+let _exportWarnings = [];
+export function getExportWarnings() { return _exportWarnings; }
 
 function clonePoint(point, scale = 1) {
   return { x: point.x * scale, y: point.y * scale };
@@ -102,8 +106,8 @@ function drawCanvasGeometry(ctx, map, feature, style, scale) {
 }
 function geometryToSvg(map, feature, style, scale) {
   const type = getLayerGeometryType(feature); const coords = feature?.geometry?.coordinates; if (!coords) return '';
-  const stroke = style.stroke || style.markerColor || '#111111';
-  const fill = style.fill || style.markerFill || style.markerColor || '#111111';
+  const stroke = safeColor(style.stroke || style.markerColor, '#111111');
+  const fill = safeColor(style.fill || style.markerFill || style.markerColor, '#111111');
   const fillOpacity = (style.fillOpacity ?? 0.2) * (style.opacity ?? 1);
   const strokeWidth = (style.strokeWidth ?? 2) * scale;
   const opacity = Math.max(0, Math.min(1, style.opacity ?? 1));
@@ -112,7 +116,7 @@ function geometryToSvg(map, feature, style, scale) {
   if (type === 'MultiPolygon') return `<path d="${coords.flatMap((polygon) => polygon.map((ring) => pathFromPoints(projectRing(map, ring, scale), true))).filter(Boolean).join(' ')}" fill="${fill}" fill-opacity="${fillOpacity}" stroke="${stroke}" stroke-width="${strokeWidth}"${dash} fill-rule="evenodd" stroke-opacity="${opacity}" />`;
   if (type === 'LineString') return `<path d="${pathFromPoints(projectLine(map, coords, scale), false)}" fill="none" stroke="${stroke}" stroke-width="${strokeWidth}"${dash} stroke-linecap="round" stroke-linejoin="round" stroke-opacity="${opacity}" />`;
   if (type === 'MultiLineString') return `<path d="${coords.map((line) => pathFromPoints(projectLine(map, line, scale), false)).filter(Boolean).join(' ')}" fill="none" stroke="${stroke}" stroke-width="${strokeWidth}"${dash} stroke-linecap="round" stroke-linejoin="round" stroke-opacity="${opacity}" />`;
-  if (type === 'Point') { const pt = projectCoordinate(map, coords, scale); const radius = (style.markerSize ?? 8) * scale * 0.5; return `<circle cx="${pt.x.toFixed(2)}" cy="${pt.y.toFixed(2)}" r="${radius.toFixed(2)}" fill="${style.markerFill || fill}" stroke="${style.markerColor || stroke}" stroke-width="${Math.max(scale, strokeWidth * 0.4).toFixed(2)}" opacity="${opacity}" />`; }
+  if (type === 'Point') { const pt = projectCoordinate(map, coords, scale); const radius = (style.markerSize ?? 8) * scale * 0.5; return `<circle cx="${pt.x.toFixed(2)}" cy="${pt.y.toFixed(2)}" r="${radius.toFixed(2)}" fill="${safeColor(style.markerFill || fill)}" stroke="${safeColor(style.markerColor || stroke)}" stroke-width="${Math.max(scale, strokeWidth * 0.4).toFixed(2)}" opacity="${opacity}" />`; }
   if (type === 'MultiPoint') return coords.map((coord) => geometryToSvg(map, { geometry: { type: 'Point', coordinates: coord } }, style, scale)).join('');
   return '';
 }
@@ -260,7 +264,7 @@ async function drawInsetCanvas(ctx, scene, scale) {
   const innerX = x + 10 * scale, innerY = y + 30 * scale, innerW = w - 20 * scale, innerH = h - 56 * scale;
   const customInset = scene.project.layout?.insetMode === 'custom_image' && scene.project.layout?.insetImage;
   if (customInset) {
-    const img = await new Promise((resolve, reject) => { const el = new Image(); el.onload = () => resolve(el); el.onerror = reject; el.src = scene.project.layout.insetImage; }).catch(() => null);
+    const img = await new Promise((resolve, reject) => { const el = new Image(); el.onload = () => resolve(el); el.onerror = reject; el.src = scene.project.layout.insetImage; }).catch(() => { _exportWarnings.push('inset image could not be embedded'); return null; });
     if (img) { ctx.save(); drawRoundedRect(ctx, innerX, innerY, innerW, innerH, 8 * scale); ctx.clip(); ctx.drawImage(img, innerX, innerY, innerW, innerH); ctx.restore(); }
     return;
   }
@@ -445,6 +449,7 @@ function drawEllipsesCanvas(ctx, scene, scale) {
 }
 
 export async function renderSceneToCanvas(scene, options = {}) {
+  _exportWarnings = [];
   const scale = Number(options.pixelRatio || scene.project.layout?.exportSettings?.pixelRatio || 2);
   const canvas = document.createElement('canvas'); canvas.width = Math.round(scene.width * scale); canvas.height = Math.round(scene.height * scale); const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#f3f5f7'; ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -466,7 +471,7 @@ async function drawLogoCanvas(ctx, scene, scale) {
   const zone = getOverlayMetrics(scene).logo; const x = zone.left * scale, y = zone.top * scale, w = zone.width * scale, h = zone.height * scale, padding = 10 * scale;
   const theme = getTheme(scene);
   drawPanelRect(ctx, x, y, w, h, (theme.panelRadius || 10) * scale, theme.logoFill, theme.logoBorder, scale);
-  const img = await new Promise((resolve, reject) => { const el = new Image(); el.onload = () => resolve(el); el.onerror = reject; el.src = logo; }).catch(() => null);
+  const img = await new Promise((resolve, reject) => { const el = new Image(); el.onload = () => resolve(el); el.onerror = reject; el.src = logo; }).catch(() => { _exportWarnings.push('logo could not be embedded'); return null; });
   if (img) {
     // Aspect-fit: scale to fill available space preserving ratio, centered (mirrors SVG preserveAspectRatio="xMidYMid meet")
     const availW = w - padding * 2;
@@ -528,7 +533,7 @@ function renderMarkersSvg(scene, scale) {
   return (scene.project.markers || []).map((marker) => {
     const point = clonePoint(scene.map.latLngToContainerPoint([marker.lat, marker.lng]), scale);
     const size = (marker.size || 18) * scale;
-    const color = marker.color || '#d97706';
+    const color = safeColor(marker.color, '#d97706');
     let symbol = '';
     if (markerIsVectorIcon(marker.type)) {
       // Use the shared SVG path data — same source as the editor, guaranteed consistent
@@ -553,7 +558,7 @@ function renderEllipsesSvg(scene, scale) {
     const height = (ellipse.height || 56) * scale;
     const rotation = ellipse.rotation || 0;
     const dash = ellipse.dashed === false ? '' : ` stroke-dasharray="${6 * scale} ${4 * scale}"`;
-    const color = ellipse.color || '#dc2626';
+    const color = safeColor(ellipse.color, '#dc2626');
     const pos = ellipseLabelPlacement(center, width, height, rotation, scale);
     const labelWidth = ellipse.label ? ellipse.label.length * 12 * scale * 0.62 + 16 * scale : 0;
     const label = ellipse.label
@@ -610,6 +615,7 @@ function renderCalloutsSvg(scene, scale) {
 }
 
 export async function renderSceneToSvg(scene, options = {}) {
+  _exportWarnings = [];
   const scale = Number(options.pixelRatio || scene.project.layout?.exportSettings?.pixelRatio || 2); const width = Math.round(scene.width * scale), height = Math.round(scene.height * scale);
   const basemapImage = await renderBasemapImageSvg(scene, scale);
   return `<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="100%" height="100%" fill="#f3f5f7" />${basemapImage}${renderVectorsSvg(scene, scale)}${renderEllipsesSvg(scene, scale)}${renderMarkersSvg(scene, scale)}${renderCalloutsSvg(scene, scale)}${renderTitleSvg(scene, scale)}${renderLegendSvg(scene, scale)}${renderNorthArrowSvg(scene, scale)}${renderInsetSvg(scene, scale)}${renderScaleBarSvg(scene, scale)}${renderFooterSvg(scene, scale)}${renderLogoSvg(scene, scale)}</svg>`;

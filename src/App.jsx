@@ -12,6 +12,7 @@ import { loadGeoJSON } from './utils/importers';
 import { buildScene } from './export/buildScene';
 import { exportPNG } from './export/exportPNG';
 import { exportSVG } from './export/exportSVG';
+import { getExportWarnings } from './export/renderScene';
 import {
   CALLOUT_TYPES,
   createInitialProjectState,
@@ -282,6 +283,15 @@ export default function App() {
     setRecentProjects(listProjects());
   }, [projectId, isDirty]);
 
+  useEffect(() => {
+    const handler = () => setUploadStatus({
+      type: 'error',
+      message: 'Storage full — project may not be saved. Export your work to avoid losing it.',
+    });
+    window.addEventListener('storage-quota-exceeded', handler);
+    return () => window.removeEventListener('storage-quota-exceeded', handler);
+  }, []);
+
   // Sync local title/subtitle when project changes from an external action (open, duplicate, new)
   useEffect(() => {
     setLocalTitle(project.layout.title || '');
@@ -527,6 +537,11 @@ export default function App() {
   const handleLogoChange = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (file.size > 3 * 1024 * 1024) {
+      setUploadStatus({ type: 'error', message: 'Logo image must be under 3 MB.' });
+      e.target.value = '';
+      return;
+    }
     try {
       const dataUrl = await readFileAsDataURL(file);
       const img = new Image();
@@ -561,6 +576,11 @@ export default function App() {
   const handleInsetImageChange = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (file.size > 3 * 1024 * 1024) {
+      setUploadStatus({ type: 'error', message: 'Inset image must be under 3 MB.' });
+      e.target.value = '';
+      return;
+    }
     try {
       const dataUrl = await readFileAsDataURL(file);
       const aspectRatio = await new Promise((resolve) => {
@@ -862,6 +882,10 @@ export default function App() {
       } else {
         await exportSVG(scene, project.layout?.exportSettings || {});
       }
+      const warnings = getExportWarnings();
+      if (warnings.length > 0) {
+        setUploadStatus({ type: 'info', message: `Export complete — note: ${warnings.join('; ')}.` });
+      }
     } catch (err) {
       setUploadStatus({ type: 'error', message: `Export failed: ${err.message}` });
     } finally {
@@ -877,6 +901,10 @@ export default function App() {
     try {
       const scene = buildScene(mapContainerRef.current, { ...project, layout: { ...project.layout, legendItems } }, leafletMapRef.current);
       await exportSVG(scene, project.layout?.exportSettings || {});
+      const warnings = getExportWarnings();
+      if (warnings.length > 0) {
+        setUploadStatus({ type: 'info', message: `Export complete — note: ${warnings.join('; ')}.` });
+      }
     } catch (err) {
       setUploadStatus({ type: 'error', message: `SVG Export failed: ${err.message}` });
     } finally {
@@ -1378,8 +1406,8 @@ export default function App() {
               </div>
             </div>
             <div className="button-row">
-              <button className="btn primary" type="button" onClick={() => handleExport('png')} disabled={exporting}>Export PNG</button>
-              <button className="btn" type="button" onClick={() => setShowSvgExportModal(true)} disabled={exporting}>Export SVG</button>
+              <button className="btn primary" type="button" onClick={() => handleExport('png')} disabled={exporting}>{exporting ? 'Exporting…' : 'Export PNG'}</button>
+              <button className="btn" type="button" onClick={() => setShowSvgExportModal(true)} disabled={exporting}>{exporting ? 'Exporting…' : 'Export SVG'}</button>
             </div>
           </div>
         </section>

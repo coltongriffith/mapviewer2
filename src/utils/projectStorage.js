@@ -10,12 +10,22 @@ function safeParse(value, fallback) {
   }
 }
 
+function safeSetItem(key, value) {
+  try {
+    localStorage.setItem(key, value);
+  } catch (e) {
+    if (e.name === 'QuotaExceededError' || e.code === 22) {
+      window.dispatchEvent(new CustomEvent('storage-quota-exceeded'));
+    }
+  }
+}
+
 function readProjects() {
   return safeParse(localStorage.getItem(PROJECTS_KEY), []);
 }
 
 function writeProjects(projects) {
-  localStorage.setItem(PROJECTS_KEY, JSON.stringify(projects));
+  safeSetItem(PROJECTS_KEY, JSON.stringify(projects));
 }
 
 export function listProjects() {
@@ -37,7 +47,7 @@ export function saveProjectRecord({ id, name, payload }) {
   if (index >= 0) projects[index] = next;
   else projects.push(next);
   writeProjects(projects);
-  localStorage.setItem(LAST_OPENED_PROJECT_KEY, id);
+  safeSetItem(LAST_OPENED_PROJECT_KEY, id);
   return next;
 }
 
@@ -54,13 +64,13 @@ export function getProjectRecord(id) {
 }
 
 export function saveDraft({ payload, projectId, projectName }) {
-  localStorage.setItem(DRAFT_KEY, JSON.stringify({
+  safeSetItem(DRAFT_KEY, JSON.stringify({
     payload,
     projectId: projectId || null,
     projectName: projectName || null,
     updatedAt: new Date().toISOString(),
   }));
-  if (projectId) localStorage.setItem(LAST_OPENED_PROJECT_KEY, projectId);
+  if (projectId) safeSetItem(LAST_OPENED_PROJECT_KEY, projectId);
   else localStorage.removeItem(LAST_OPENED_PROJECT_KEY);
 }
 
@@ -90,6 +100,6 @@ export function clearActiveProjectContext() {
 }
 
 export function touchLastOpenedProject(projectId) {
-  if (projectId) localStorage.setItem(LAST_OPENED_PROJECT_KEY, projectId);
+  if (projectId) safeSetItem(LAST_OPENED_PROJECT_KEY, projectId);
   else localStorage.removeItem(LAST_OPENED_PROJECT_KEY);
 }

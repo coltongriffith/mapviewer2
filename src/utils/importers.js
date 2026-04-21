@@ -1,8 +1,14 @@
 import shp from "shpjs";
 
+const MAX_UPLOAD_SIZE = 50 * 1024 * 1024; // 50 MB
+
 export async function loadGeoJSON(file) {
   if (!file) {
     throw new Error("No file provided.");
+  }
+
+  if (file.size > MAX_UPLOAD_SIZE) {
+    throw new Error(`File too large (${(file.size / 1024 / 1024).toFixed(0)} MB). Maximum is 50 MB.`);
   }
 
   const name = file.name.toLowerCase();
