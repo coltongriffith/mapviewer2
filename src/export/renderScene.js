@@ -144,8 +144,9 @@ function drawTitleBlockCanvas(ctx, scene, scale) {
   const { title } = getOverlayMetrics(scene); const x = title.left * scale, y = title.top * scale, w = title.width * scale, h = title.height * scale;
   drawPanelRect(ctx, x, y, w, h, (theme.titleRadius || theme.panelRadius || 10) * scale, theme.titleFill, theme.titleBorder, scale);
   if (theme.titleAccent) { ctx.fillStyle = theme.titleAccent; ctx.fillRect(x, y, w, 5 * scale); }
-  ctx.fillStyle = theme.titleText; ctx.font = `700 ${26 * scale}px Arial`; ctx.textBaseline = 'top'; ctx.fillText(scene.project.layout?.title || 'Project Map', x + 18 * scale, y + (theme.titleAccent ? 20 : 16) * scale);
-  ctx.fillStyle = theme.subtitleText; ctx.font = `${14 * scale}px Arial`; ctx.fillText(scene.project.layout?.subtitle || 'Technical results template', x + 18 * scale, y + (theme.titleAccent ? 56 : 52) * scale);
+  const titleFont = `${scene.project.layout?.fonts?.title || 'Inter'}, Arial, sans-serif`;
+  ctx.fillStyle = theme.titleText; ctx.font = `700 ${26 * scale}px ${titleFont}`; ctx.textBaseline = 'top'; ctx.fillText(scene.project.layout?.title || 'Project Map', x + 18 * scale, y + (theme.titleAccent ? 20 : 16) * scale);
+  ctx.fillStyle = theme.subtitleText; ctx.font = `${14 * scale}px ${titleFont}`; ctx.fillText(scene.project.layout?.subtitle || 'Technical results template', x + 18 * scale, y + (theme.titleAccent ? 56 : 52) * scale);
 }
 
 function groupLegendItems(items, layout) {
@@ -169,20 +170,21 @@ function legendSwatchSvg(item, x, y, scale) {
 }
 function drawLegendCanvas(ctx, scene, scale) {
   const theme = getTheme(scene);
+  const legendFont = `${scene.project.layout?.fonts?.legend || 'Inter'}, Arial, sans-serif`;
   const { legend } = getOverlayMetrics(scene); const items = scene.project.layout?.legendItems || []; if (!items.length || !legend?.width || !legend?.height) return;
   const x = legend.left * scale, y = legend.top * scale, w = legend.width * scale, h = legend.height * scale;
   drawPanelRect(ctx, x, y, w, h, (theme.panelRadius || 10) * scale, theme.panelFill, theme.panelBorder, scale);
-  ctx.fillStyle = theme.panelTitle; ctx.font = `700 ${15 * scale}px Arial`; ctx.textBaseline = 'top'; ctx.fillText('Legend', x + 16 * scale, y + 14 * scale);
+  ctx.fillStyle = theme.panelTitle; ctx.font = `700 ${15 * scale}px ${legendFont}`; ctx.textBaseline = 'top'; ctx.fillText('Legend', x + 16 * scale, y + 14 * scale);
   let rowY = y + 40 * scale;
   groupLegendItems(items, scene.project.layout).forEach((group) => {
-    if (group.heading) { ctx.fillStyle = theme.mutedText; ctx.font = `700 ${11 * scale}px Arial`; ctx.fillText(group.heading.toUpperCase(), x + 16 * scale, rowY); rowY += 18 * scale; }
+    if (group.heading) { ctx.fillStyle = theme.mutedText; ctx.font = `700 ${11 * scale}px ${legendFont}`; ctx.fillText(group.heading.toUpperCase(), x + 16 * scale, rowY); rowY += 18 * scale; }
     group.items.forEach((item) => {
       if (item.type === 'points') {
         ctx.beginPath(); ctx.arc(x + 24 * scale, rowY + 9 * scale, 5 * scale, 0, Math.PI * 2); ctx.fillStyle = item.style.markerFill || item.style.markerColor || '#ffffff'; ctx.fill(); ctx.strokeStyle = item.style.markerColor || '#111111'; ctx.lineWidth = Math.max(1, scale); ctx.stroke();
       } else {
         ctx.fillStyle = rgba(item.style.fill || '#93c5fd', item.style.fillOpacity ?? 0.22); ctx.fillRect(x + 16 * scale, rowY + 2 * scale, 18 * scale, 12 * scale); ctx.strokeStyle = item.style.stroke || '#3b82f6'; ctx.lineWidth = Math.max(1, scale); ctx.strokeRect(x + 16 * scale, rowY + 2 * scale, 18 * scale, 12 * scale);
       }
-      ctx.fillStyle = theme.bodyText; ctx.font = `${13 * scale}px Arial`; ctx.textBaseline = 'middle'; ctx.fillText(item.label || 'Layer', x + 46 * scale, rowY + 9 * scale); rowY += 24 * scale;
+      ctx.fillStyle = theme.bodyText; ctx.font = `${13 * scale}px ${legendFont}`; ctx.textBaseline = 'middle'; ctx.fillText(item.label || 'Layer', x + 46 * scale, rowY + 9 * scale); rowY += 24 * scale;
     });
     rowY += 6 * scale;
   });
@@ -211,7 +213,8 @@ function drawScaleBarCanvas(ctx, scene, scale) {
   const { scaleBar } = getOverlayMetrics(scene); const x = scaleBar.left * scale, y = scaleBar.top * scale, w = scaleBar.width * scale, h = scaleBar.height * scale, scaleState = pickScaleLabel(scene.map), barWidth = scaleState.widthPx * scale;
   drawPanelRect(ctx, x, y, w, h, (theme.panelRadius || 10) * scale, theme.scaleFill, theme.panelBorder, scale);
   ctx.fillStyle = theme.scaleStroke; ctx.fillRect(x + 16 * scale, y + 18 * scale, barWidth / 2, 10 * scale); ctx.fillStyle = '#ffffff'; ctx.fillRect(x + 16 * scale + barWidth / 2, y + 18 * scale, barWidth / 2, 10 * scale); ctx.strokeStyle = theme.scaleStroke; ctx.lineWidth = Math.max(1, scale); ctx.strokeRect(x + 16 * scale, y + 18 * scale, barWidth, 10 * scale);
-  ctx.fillStyle = theme.bodyText; ctx.font = `${12 * scale}px Arial`; ctx.textBaseline = 'top'; ctx.fillText(scaleState.label, x + 16 * scale, y + 40 * scale);
+  const footerFont = `${scene.project.layout?.fonts?.footer || 'Inter'}, Arial, sans-serif`;
+  ctx.fillStyle = theme.bodyText; ctx.font = `${12 * scale}px ${footerFont}`; ctx.textBaseline = 'top'; ctx.fillText(scaleState.label, x + 16 * scale, y + 40 * scale);
 }
 
 function resolveReferenceBounds(bounds, insetMode) {
@@ -270,7 +273,7 @@ function drawFooterCanvas(ctx, scene, scale) {
   const theme = getTheme(scene);
   const text = scene.project.layout?.footerText; const zone = getOverlayMetrics(scene).footer; if (!text || !zone) return; const x = zone.left * scale, y = zone.top * scale, w = zone.width * scale, h = zone.height * scale;
   drawPanelRect(ctx, x, y, w, h, (theme.panelRadius || 10) * scale, theme.footerFill, theme.panelBorder, scale);
-  ctx.fillStyle = theme.footerText; ctx.font = `${12 * scale}px Arial`; ctx.textBaseline = 'middle'; ctx.fillText(text, x + 12 * scale, y + h / 2);
+  ctx.fillStyle = theme.footerText; ctx.font = `${12 * scale}px ${scene.project.layout?.fonts?.footer || 'Inter'}, Arial, sans-serif`; ctx.textBaseline = 'middle'; ctx.fillText(text, x + 12 * scale, y + h / 2);
 }
 
 function intersectsCallout(a, b, padding = 10) { return !(a.left + a.width + padding < b.left || b.left + b.width + padding < a.left || a.top + a.height + padding < b.top || b.top + b.height + padding < a.top); }
@@ -279,7 +282,9 @@ function placeCallouts(scene, scale) {
   callouts.forEach((callout) => {
     if (!callout.anchor) return;
     const pt = scene.map.latLngToContainerPoint([callout.anchor.lat, callout.anchor.lng]);
-    const width = callout.type === 'boxed' ? 188 : callout.type === 'leader' ? 146 : 136; const height = callout.type === 'boxed' ? 42 : 24;
+    const width = callout.boxWidth || (callout.type === 'boxed' ? 188 : callout.type === 'leader' ? 146 : 136);
+    const hasSubtext = !!callout.subtext;
+    const height = callout.type === 'boxed' ? (hasSubtext ? 62 : 42) : (hasSubtext ? 38 : 24);
     let left = pt.x + (callout.offset?.x || 0); let top = pt.y + (callout.offset?.y || 0); let candidate = { ...callout, left, top, width, height, anchorPx: { x: pt.x, y: pt.y } }; let attempts = 0;
     while (placed.some((other) => intersectsCallout(candidate, other, 10)) && attempts < 8) { top += 18; left += attempts % 2 === 0 ? 8 : -6; candidate = { ...candidate, left, top }; attempts += 1; }
     if (!placed.some((other) => intersectsCallout(candidate, other, 2))) placed.push({ ...candidate, left: left * scale, top: top * scale, width: width * scale, height: height * scale, anchorPx: { x: pt.x * scale, y: pt.y * scale } });
@@ -287,12 +292,20 @@ function placeCallouts(scene, scale) {
   return placed;
 }
 function drawCalloutsCanvas(ctx, scene, scale) {
+  const calloutFont = `${scene.project.layout?.fonts?.callout || 'Inter'}, Arial, sans-serif`;
   placeCallouts(scene, scale).forEach((c) => {
-    if (c.type === 'leader' || c.type === 'boxed') { ctx.beginPath(); ctx.moveTo(c.anchorPx.x, c.anchorPx.y); ctx.lineTo(c.left + 10 * scale, c.top + c.height / 2); ctx.strokeStyle = '#102640'; ctx.lineWidth = 1.4 * scale; ctx.setLineDash(c.type === 'leader' ? [5 * scale, 3 * scale] : []); ctx.stroke(); }
-    ctx.setLineDash([]);
     const theme = getTheme(scene);
-    if (c.type !== 'plain') { drawRoundedRect(ctx, c.left, c.top, c.width, c.height, Math.max(3, (theme.panelRadius || 10) - 4) * scale); ctx.fillStyle = theme.calloutFill; ctx.fill(); ctx.strokeStyle = theme.calloutBorder; ctx.lineWidth = 1 * scale; ctx.stroke(); }
-    ctx.fillStyle = theme.calloutText; ctx.font = `700 ${12 * scale}px Arial`; ctx.textBaseline = 'middle'; ctx.fillText(c.text || '', c.left + (c.type === 'plain' ? 0 : 10 * scale), c.top + (c.type === 'plain' ? 10 * scale : c.height / 2));
+    if (c.type === 'leader' || c.type === 'boxed') { ctx.beginPath(); ctx.moveTo(c.anchorPx.x, c.anchorPx.y); ctx.lineTo(c.left + 10 * scale, c.top + c.height / 2); ctx.strokeStyle = c.style?.border || '#102640'; ctx.lineWidth = 1.4 * scale; ctx.setLineDash(c.type === 'leader' ? [5 * scale, 3 * scale] : []); ctx.stroke(); }
+    ctx.setLineDash([]);
+    if (c.type !== 'plain') { drawRoundedRect(ctx, c.left, c.top, c.width, c.height, Math.max(3, (theme.panelRadius || 10) - 4) * scale); ctx.fillStyle = c.style?.background || theme.calloutFill; ctx.fill(); ctx.strokeStyle = c.style?.border || theme.calloutBorder; ctx.lineWidth = 1 * scale; ctx.stroke(); }
+    const textX = c.left + (c.type === 'plain' ? 0 : 10 * scale);
+    const textY = c.top + (c.type === 'plain' ? 10 * scale : c.subtext ? c.height / 2 - 9 * scale : c.height / 2);
+    ctx.fillStyle = c.style?.textColor || theme.calloutText; ctx.font = `700 ${12 * scale}px ${calloutFont}`; ctx.textBaseline = 'middle'; ctx.fillText(c.text || '', textX, textY);
+    if (c.subtext) {
+      ctx.fillStyle = c.style?.subtextColor || '#475569';
+      ctx.font = `${10 * scale}px ${calloutFont}`;
+      ctx.fillText(c.subtext, textX, textY + 16 * scale);
+    }
   });
 }
 
@@ -579,7 +592,22 @@ function renderInsetSvg(scene, scale) {
   const theme = getTheme(scene); return `<g>${svgRect(x, y, w, h, (theme.panelRadius || 10) * scale, theme.insetFill, theme.insetBorder, scale)}<text x="${x + 12 * scale}" y="${y + 16 * scale}" fill="${theme.insetTitle}" font-family="Arial" font-size="${12 * scale}" font-weight="700">Project Locator</text>${insetBackdropSvg(innerX, innerY, innerW, innerH, scale)}${markerSvg}<text x="${x + 12 * scale}" y="${y + h - 10 * scale}" fill="${theme.insetMuted}" font-family="Arial" font-size="${11 * scale}">${escapeXml(ref.label)}</text></g>`;
 }
 function renderLogoSvg(scene, scale) { const theme = getTheme(scene); const logo = scene.project.layout?.logo; if (!logo) return ''; const zone = getOverlayMetrics(scene).logo; if (!zone?.width || !zone?.height) return '';  const x = zone.left * scale, y = zone.top * scale, w = zone.width * scale, h = zone.height * scale, padding = 10 * scale; return `<g>${svgRect(x, y, w, h, (theme.panelRadius || 10) * scale, theme.logoFill, theme.logoBorder, scale)}<image href="${escapeXml(logo)}" x="${x + padding}" y="${y + padding}" width="${w - padding * 2}" height="${h - padding * 2}" preserveAspectRatio="xMidYMid meet" /></g>`; }
-function renderCalloutsSvg(scene, scale) { return placeCallouts(scene, scale).map((c) => { const line = c.type === 'leader' || c.type === 'boxed' ? `<line x1="${c.anchorPx.x}" y1="${c.anchorPx.y}" x2="${c.left + 10 * scale}" y2="${c.top + c.height / 2}" stroke="#102640" stroke-width="${1.4 * scale}" ${c.type === 'leader' ? `stroke-dasharray="${5 * scale} ${3 * scale}"` : ''} />` : ''; const box = c.type !== 'plain' ? `<rect x="${c.left}" y="${c.top}" width="${c.width}" height="${c.height}" rx="${6 * scale}" fill="rgba(255,255,255,0.97)" stroke="#17304f" />` : ''; return `<g>${line}${box}<text x="${c.left + (c.type === 'plain' ? 0 : 10 * scale)}" y="${c.top + (c.type === 'plain' ? 10 * scale : c.height / 2)}" dominant-baseline="middle" fill="#102640" font-family="Arial" font-size="${12 * scale}" font-weight="700">${escapeXml(c.text || '')}</text></g>`; }).join('\n'); }
+function renderCalloutsSvg(scene, scale) {
+  const calloutFont = `${scene.project.layout?.fonts?.callout || 'Inter'}, Arial, sans-serif`;
+  return placeCallouts(scene, scale).map((c) => {
+    const leaderColor = c.style?.border || '#102640';
+    const line = c.type === 'leader' || c.type === 'boxed' ? `<line x1="${c.anchorPx.x}" y1="${c.anchorPx.y}" x2="${c.left + 10 * scale}" y2="${c.top + c.height / 2}" stroke="${leaderColor}" stroke-width="${1.4 * scale}" ${c.type === 'leader' ? `stroke-dasharray="${5 * scale} ${3 * scale}"` : ''} />` : '';
+    const boxFill = c.style?.background || 'rgba(255,255,255,0.97)';
+    const boxStroke = c.style?.border || '#17304f';
+    const box = c.type !== 'plain' ? `<rect x="${c.left}" y="${c.top}" width="${c.width}" height="${c.height}" rx="${6 * scale}" fill="${boxFill}" stroke="${boxStroke}" />` : '';
+    const textFill = c.style?.textColor || '#102640';
+    const textX = c.left + (c.type === 'plain' ? 0 : 10 * scale);
+    const textY = c.top + (c.type === 'plain' ? 10 * scale : c.subtext ? c.height / 2 - 9 * scale : c.height / 2);
+    const mainText = `<text x="${textX}" y="${textY}" dominant-baseline="middle" fill="${textFill}" font-family="${calloutFont}" font-size="${12 * scale}" font-weight="700">${escapeXml(c.text || '')}</text>`;
+    const subtextEl = c.subtext ? `<text x="${textX}" y="${textY + 16 * scale}" dominant-baseline="middle" fill="${c.style?.subtextColor || '#475569'}" font-family="${calloutFont}" font-size="${10 * scale}">${escapeXml(c.subtext)}</text>` : '';
+    return `<g>${line}${box}${mainText}${subtextEl}</g>`;
+  }).join('\n');
+}
 
 export async function renderSceneToSvg(scene, options = {}) {
   const scale = Number(options.pixelRatio || scene.project.layout?.exportSettings?.pixelRatio || 2); const width = Math.round(scene.width * scale), height = Math.round(scene.height * scale);
