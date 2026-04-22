@@ -992,19 +992,24 @@ export default function App() {
   const referenceOverlays = project.layout.referenceOverlays || {};
 
   if (screen === 'landing') {
-    return <LandingPage onOpenEditor={() => setScreen('editor')} />;
+    return (
+      <LandingPage
+        onOpenEditor={() => setScreen('editor')}
+        recentProjects={recentProjects}
+        onOpenProject={(entry) => { openProjectFromRecent(entry); setScreen('editor'); }}
+      />
+    );
   }
 
   return (
     <div className="app-shell">
       <Sidebar>
         <div className="sidebar-header-row">
-          <div>
-            <h1>Mapviewer</h1>
-            <p className="sidebar-subtitle">Upload on the left, design in the center, export when ready.</p>
-          </div>
-          <button className="secondary-btn compact" type="button" onClick={() => setScreen('landing')}>
-            Home
+          <button className="sidebar-wordmark" type="button" onClick={() => setScreen('landing')}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" fill="#2563eb" />
+            </svg>
+            Exploration Maps
           </button>
         </div>
 
