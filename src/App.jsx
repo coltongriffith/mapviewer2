@@ -485,6 +485,7 @@ export default function App() {
 
   const loadSampleData = async () => {
     const makeFile = (json, name) => new File([JSON.stringify(json)], name, { type: 'application/json' });
+    setProject(createInitialProjectState());
     try {
       await addGeoJSONLayer(makeFile(sampleClaims, 'Sample Claims.geojson'));
       await addGeoJSONLayer(makeFile(sampleDrillholes, 'Sample Drillholes.geojson'));
@@ -1189,10 +1190,13 @@ export default function App() {
             </div>
             <div className="corner-pickers">
               {[
-                { label: 'Logo corner', key: 'logoCorner' },
-                { label: 'Legend corner', key: 'legendCorner' },
-                { label: 'Inset corner', key: 'insetCorner' },
-              ].map(({ label, key }) => (
+                { label: 'Title',      key: 'titleCorner',      def: 'tl' },
+                { label: 'Logo',       key: 'logoCorner',       def: 'tl' },
+                { label: 'Inset',      key: 'insetCorner',      def: 'tr' },
+                { label: 'Legend',     key: 'legendCorner',     def: 'bl' },
+                { label: 'Scale bar',  key: 'scaleBarCorner',   def: 'bl' },
+                { label: 'North arrow', key: 'northArrowCorner', def: 'br' },
+              ].map(({ label, key, def }) => (
                 <div key={key} className="corner-picker-row">
                   <span className="corner-picker-label">{label}</span>
                   <div className="corner-picker">
@@ -1200,7 +1204,7 @@ export default function App() {
                       <button
                         key={c}
                         type="button"
-                        className={`corner-btn corner-btn-${c}${(project.layout[key] || (key === 'insetCorner' ? 'tr' : key === 'legendCorner' ? 'bl' : 'tl')) === c ? ' active' : ''}`}
+                        className={`corner-btn corner-btn-${c}${(project.layout[key] || def) === c ? ' active' : ''}`}
                         title={{ tl: 'Top Left', tr: 'Top Right', bl: 'Bottom Left', br: 'Bottom Right' }[c]}
                         onClick={() => updateLayout({ [key]: c })}
                       />
@@ -1413,47 +1417,50 @@ export default function App() {
             <button className="btn primary" type="button" onClick={addCalloutFromSelectedLayer} disabled={!selectedLayer}>Add From Selected Layer</button>
             <button className="btn" type="button" onClick={autoFrameAll}>Auto Frame All</button>
           </div>
-          {selectedCallout ? <div className="selected-note">Selected callout: {selectedCallout.text}</div> : null}
           <div className="callout-list">
-            {project.callouts.map((callout, index) => (
-              <div key={callout.id} className={`callout-card ${selectedCalloutId === callout.id ? 'active' : ''}`}>
-                <div className="callout-card-header">
-                  <span>Callout {index + 1}</span>
-                  <div className="callout-card-actions">
-                    <button className="secondary-btn" type="button" onClick={() => setSelectedCalloutId(callout.id)}>Select</button>
-                    <button className="secondary-btn" type="button" onClick={() => removeCallout(callout.id)}>Remove</button>
-                  </div>
-                </div>
-                <div className="control-grid">
-                  <div className="control-row"><label>Text</label><input value={callout.text} onChange={(e) => updateCallout(callout.id, { text: e.target.value })} /></div>
-                  <div className="control-row inline-2">
-                    <div>
-                      <label>Type</label>
-                      <select value={callout.type} onChange={(e) => updateCallout(callout.id, { type: e.target.value })}>
-                        {Object.entries(CALLOUT_TYPES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label>Priority</label>
-                      <select value={callout.priority} onChange={(e) => updateCallout(callout.id, { priority: Number(e.target.value) })}>
-                        <option value={1}>High</option>
-                        <option value={2}>Medium</option>
-                        <option value={3}>Low</option>
-                      </select>
+            {project.callouts.map((callout, index) => {
+              const isOpen = selectedCalloutId === callout.id;
+              return (
+                <div key={callout.id} className={`callout-card ${isOpen ? 'active' : ''}`}>
+                  <div className="callout-card-header" style={{ cursor: 'pointer', marginBottom: isOpen ? 8 : 0 }} onClick={() => setSelectedCalloutId(isOpen ? null : callout.id)}>
+                    <span>{callout.text ? callout.text.slice(0, 28) : `Callout ${index + 1}`}</span>
+                    <div className="callout-card-actions">
+                      <button className="secondary-btn" type="button" onClick={(e) => { e.stopPropagation(); removeCallout(callout.id); }}>Remove</button>
                     </div>
                   </div>
-                  <div className="control-label">Nudge</div>
-                  <div className="nudge-grid">
-                    <span />
-                    <button className="secondary-btn" type="button" onClick={() => nudgeCallout(callout.id, 0, -8)}>↑</button>
-                    <span />
-                    <button className="secondary-btn" type="button" onClick={() => nudgeCallout(callout.id, -8, 0)}>←</button>
-                    <button className="secondary-btn" type="button" onClick={() => nudgeCallout(callout.id, 0, 8)}>↓</button>
-                    <button className="secondary-btn" type="button" onClick={() => nudgeCallout(callout.id, 8, 0)}>→</button>
-                  </div>
+                  {isOpen && (
+                    <div className="control-grid">
+                      <div className="control-row"><label>Text</label><input autoFocus value={callout.text} onChange={(e) => updateCallout(callout.id, { text: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter') setSelectedCalloutId(null); }} /></div>
+                      <div className="control-row inline-2">
+                        <div>
+                          <label>Type</label>
+                          <select value={callout.type} onChange={(e) => updateCallout(callout.id, { type: e.target.value })}>
+                            {Object.entries(CALLOUT_TYPES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <label>Priority</label>
+                          <select value={callout.priority} onChange={(e) => updateCallout(callout.id, { priority: Number(e.target.value) })}>
+                            <option value={1}>High</option>
+                            <option value={2}>Medium</option>
+                            <option value={3}>Low</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div className="control-label">Nudge</div>
+                      <div className="nudge-grid">
+                        <span />
+                        <button className="secondary-btn" type="button" onClick={() => nudgeCallout(callout.id, 0, -8)}>↑</button>
+                        <span />
+                        <button className="secondary-btn" type="button" onClick={() => nudgeCallout(callout.id, -8, 0)}>←</button>
+                        <button className="secondary-btn" type="button" onClick={() => nudgeCallout(callout.id, 0, 8)}>↓</button>
+                        <button className="secondary-btn" type="button" onClick={() => nudgeCallout(callout.id, 8, 0)}>→</button>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </section>
 
