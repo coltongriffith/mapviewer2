@@ -454,7 +454,7 @@ export async function renderSceneToCanvas(scene, options = {}) {
   const canvas = document.createElement('canvas'); canvas.width = Math.round(scene.width * scale); canvas.height = Math.round(scene.height * scale); const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#f3f5f7'; ctx.fillRect(0, 0, canvas.width, canvas.height);
   await drawTilesCanvas(ctx, scene, scale); drawVectorsCanvas(ctx, scene, scale); drawEllipsesCanvas(ctx, scene, scale); await drawMarkersCanvas(ctx, scene, scale); drawCalloutsCanvas(ctx, scene, scale); drawTitleBlockCanvas(ctx, scene, scale); drawLegendCanvas(ctx, scene, scale); drawNorthArrowCanvas(ctx, scene, scale); await drawInsetCanvas(ctx, scene, scale); drawScaleBarCanvas(ctx, scene, scale); drawFooterCanvas(ctx, scene, scale); await drawLogoCanvas(ctx, scene, scale);
-  ctx.save(); ctx.font = `${9 * scale}px Arial, sans-serif`; ctx.fillStyle = 'rgba(100,116,139,0.5)'; ctx.textAlign = 'right'; ctx.textBaseline = 'bottom'; ctx.fillText('explorationmaps.com', canvas.width - 8 * scale, canvas.height - 5 * scale); ctx.restore();
+  if (!options.noWatermark) { ctx.save(); ctx.font = `${9 * scale}px Arial, sans-serif`; ctx.fillStyle = 'rgba(100,116,139,0.5)'; ctx.textAlign = 'right'; ctx.textBaseline = 'bottom'; ctx.fillText('explorationmaps.com', canvas.width - 8 * scale, canvas.height - 5 * scale); ctx.restore(); }
   return canvas;
 }
 
@@ -619,7 +619,7 @@ export async function renderSceneToSvg(scene, options = {}) {
   _exportWarnings = [];
   const scale = Number(options.pixelRatio || scene.project.layout?.exportSettings?.pixelRatio || 2); const width = Math.round(scene.width * scale), height = Math.round(scene.height * scale);
   const basemapImage = await renderBasemapImageSvg(scene, scale);
-  const watermark = `<text x="${width - 8}" y="${height - 5}" font-family="Arial,sans-serif" font-size="9" fill="rgba(100,116,139,0.5)" text-anchor="end">explorationmaps.com</text>`;
+  const watermark = options.noWatermark ? '' : `<text x="${width - 8}" y="${height - 5}" font-family="Arial,sans-serif" font-size="9" fill="rgba(100,116,139,0.5)" text-anchor="end">explorationmaps.com</text>`;
   return `<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="100%" height="100%" fill="#f3f5f7" />${basemapImage}${renderVectorsSvg(scene, scale)}${renderEllipsesSvg(scene, scale)}${renderMarkersSvg(scene, scale)}${renderCalloutsSvg(scene, scale)}${renderTitleSvg(scene, scale)}${renderLegendSvg(scene, scale)}${renderNorthArrowSvg(scene, scale)}${renderInsetSvg(scene, scale)}${renderScaleBarSvg(scene, scale)}${renderFooterSvg(scene, scale)}${renderLogoSvg(scene, scale)}${watermark}</svg>`;
 }
 export function downloadCanvas(filename, canvas) { const link = document.createElement('a'); link.download = filename; link.href = canvas.toDataURL('image/png', 1.0); link.click(); }

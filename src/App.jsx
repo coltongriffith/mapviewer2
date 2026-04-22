@@ -233,7 +233,8 @@ export default function App() {
   const [projectName, setProjectName] = useState(initialWorkspace.projectName);
   const [recentProjects, setRecentProjects] = useState(() => listProjects());
   const [showRecentProjects, setShowRecentProjects] = useState(false);
-  const [showSvgExportModal, setShowSvgExportModal] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [pendingExportFormat, setPendingExportFormat] = useState(null);
   const [isDirty, setIsDirty] = useState(false);
   const [selectedLayerId, setSelectedLayerId] = useState(null);
   const [selectedCalloutId, setSelectedCalloutId] = useState(null);
@@ -910,15 +911,16 @@ export default function App() {
     if (selectedEllipseId === ellipseId) setSelectedEllipseId(null);
   };
 
-  const handleExport = async (format) => {
+  const handleExport = async (format, extraOptions = {}) => {
     if (!leafletMapRef.current || !mapContainerRef.current || exporting) return;
     setExporting(true);
     try {
       const scene = buildScene(mapContainerRef.current, { ...project, layout: { ...project.layout, legendItems } }, leafletMapRef.current);
+      const opts = { ...(project.layout?.exportSettings || {}), ...extraOptions };
       if (format === 'png') {
-        await exportPNG(scene, project.layout?.exportSettings || {});
+        await exportPNG(scene, opts);
       } else {
-        await exportSVG(scene, project.layout?.exportSettings || {});
+        await exportSVG(scene, opts);
       }
       const warnings = getExportWarnings();
       if (warnings.length > 0) {
@@ -931,24 +933,26 @@ export default function App() {
     }
   };
 
-  const handleSvgExportConfirm = async (email) => {
-    setShowSvgExportModal(false);
-    if (email) saveLead({ email, projectTitle: project.layout?.title || '' });
-    if (!leafletMapRef.current || !mapContainerRef.current || exporting) return;
-    setExporting(true);
-    try {
-      const scene = buildScene(mapContainerRef.current, { ...project, layout: { ...project.layout, legendItems } }, leafletMapRef.current);
-      await exportSVG(scene, project.layout?.exportSettings || {});
-      const warnings = getExportWarnings();
-      if (warnings.length > 0) {
-        setUploadStatus({ type: 'info', message: `Export complete — note: ${warnings.join('; ')}.` });
-      }
-    } catch (err) {
-      setUploadStatus({ type: 'error', message: `SVG Export failed: ${err.message}` });
-    } finally {
-      setExporting(false);
+  const handleExportClick = (format) => {
+    if (getLastLeadEmail()) {
+      handleExport(format, { noWatermark: true });
+    } else {
+      setPendingExportFormat(format);
+      setShowExportModal(true);
     }
   };
+
+  const handleExportModalConfirm = async (email) => {
+    setShowExportModal(false);
+    saveLead({ email, projectTitle: project.layout?.title || '' });
+    await handleExport(pendingExportFormat, { noWatermark: true });
+  };
+
+  const handleExportModalWithWatermark = () => {
+    setShowExportModal(false);
+    handleExport(pendingExportFormat, { noWatermark: false });
+  };
+
 
   const saveCurrentProject = (nextName = null) => {
     const nameToSave = (nextName || projectName || project.layout?.title || 'Untitled map').trim();
@@ -1482,8 +1486,8 @@ export default function App() {
               </div>
             </div>
             <div className="button-row">
-              <button className="btn primary" type="button" onClick={() => handleExport('png')} disabled={exporting}>{exporting ? 'Exporting…' : 'Export PNG'}</button>
-              <button className="btn" type="button" onClick={() => setShowSvgExportModal(true)} disabled={exporting}>{exporting ? 'Exporting…' : 'Export SVG'}</button>
+              <button className="btn primary" type="button" onClick={() => handleExportClick('png')} disabled={exporting}>{exporting ? 'Exporting…' : 'Export PNG'}</button>
+              <button className="btn" type="button" onClick={() => handleExportClick('svg')} disabled={exporting}>{exporting ? 'Exporting…' : 'Export SVG'}</button>
             </div>
           </div>
         </section>
@@ -1516,7 +1520,7 @@ export default function App() {
               >+</button>
             </div>
             <button className="btn primary" type="button" onClick={() => handleExport('png')} disabled={exporting}>Export PNG</button>
-            <button className="btn" type="button" onClick={() => setShowSvgExportModal(true)} disabled={exporting}>Export SVG</button>
+            <button className="btn" type="button" onClick={() => handleExportClick('svg')} disabled={exporting}>Export SVG</button>
           </div>
         </div>
         <div className="map-viewport">
@@ -1678,10 +1682,12 @@ export default function App() {
           </div>
         </div>
       ) : null}
-      {showSvgExportModal ? (
+      {showExportModal ? (
         <ExportHDModal
-          onConfirm={handleSvgExportConfirm}
-          onClose={() => setShowSvgExportModal(false)}
+          format={pendingExportFormat}
+          onConfirm={handleExportModalConfirm}
+          onWithWatermark={handleExportModalWithWatermark}
+          onClose={() => setShowExportModal(false)}
         />
       ) : null}
     </div>
