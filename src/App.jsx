@@ -495,6 +495,7 @@ export default function App() {
         subtitle: 'Cariboo Region, British Columbia',
         footerText: 'Buckhorn Creek Mining Corp. | Cariboo Region, BC | For internal use only',
         footerEnabled: true,
+        exportSettings: { filename: 'buckhorn-creek-property', pixelRatio: 2 },
       });
       applyBrandPaletteToLayers(SAMPLE_ACCENT);
       setScreen('editor');
@@ -1185,6 +1186,28 @@ export default function App() {
                 <input type="range" min="0.7" max="1.6" step="0.05" value={project.layout.insetScale || 1} onChange={(e) => updateLayout({ insetScale: Number(e.target.value) })} />
               </div>
               <div className="range-value">{Math.round((project.layout.insetScale || 1) * 100)}%</div>
+            </div>
+            <div className="corner-pickers">
+              {[
+                { label: 'Logo corner', key: 'logoCorner' },
+                { label: 'Legend corner', key: 'legendCorner' },
+                { label: 'Inset corner', key: 'insetCorner' },
+              ].map(({ label, key }) => (
+                <div key={key} className="corner-picker-row">
+                  <span className="corner-picker-label">{label}</span>
+                  <div className="corner-picker">
+                    {['tl', 'tr', 'bl', 'br'].map((c) => (
+                      <button
+                        key={c}
+                        type="button"
+                        className={`corner-btn corner-btn-${c}${(project.layout[key] || (key === 'insetCorner' ? 'tr' : key === 'legendCorner' ? 'bl' : 'tl')) === c ? ' active' : ''}`}
+                        title={{ tl: 'Top Left', tr: 'Top Right', bl: 'Bottom Left', br: 'Bottom Right' }[c]}
+                        onClick={() => updateLayout({ [key]: c })}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
             <input ref={logoInputRef} type="file" accept="image/*" onChange={handleLogoChange} hidden />
             <input ref={insetInputRef} type="file" accept="image/*" onChange={handleInsetImageChange} hidden />

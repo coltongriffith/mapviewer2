@@ -33,6 +33,19 @@ button, input, select, textarea { font: inherit; }
 .sidebar-home-link:hover { color: #2563eb; }
 .sample-data-link { background: none; border: none; padding: 0; color: #2563eb; font-size: 13px; cursor: pointer; text-align: left; margin-top: 12px; font-family: inherit; display: block; }
 .sample-data-link:hover { text-decoration: underline; }
+.corner-pickers { display: grid; gap: 10px; }
+.corner-picker-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.corner-picker-label { font-size: 12px; color: #516173; }
+.corner-picker { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 3px; width: 52px; flex-shrink: 0; }
+.corner-btn { width: 23px; height: 23px; border: 1.5px solid #cdd8e6; border-radius: 5px; background: #f8fbff; cursor: pointer; position: relative; }
+.corner-btn::after { content: ''; position: absolute; width: 7px; height: 7px; background: #94a3b8; border-radius: 1px; }
+.corner-btn-tl::after { top: 3px; left: 3px; }
+.corner-btn-tr::after { top: 3px; right: 3px; }
+.corner-btn-bl::after { bottom: 3px; left: 3px; }
+.corner-btn-br::after { bottom: 3px; right: 3px; }
+.corner-btn.active { border-color: #2563eb; background: #eff6ff; }
+.corner-btn.active::after { background: #2563eb; }
+.corner-btn:hover:not(.active) { border-color: #93c5fd; background: #f0f7ff; }
 .onboarding-card { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 12px 14px; margin-bottom: 12px; }
 .onboarding-title { font-size: 13px; font-weight: 600; color: #1d4ed8; margin-bottom: 8px; }
 .onboarding-steps { margin: 0; padding-left: 18px; display: grid; gap: 5px; }
