@@ -1519,7 +1519,7 @@ export default function App() {
                 onClick={() => leafletMapRef.current?.zoomIn(1)}
               >+</button>
             </div>
-            <button className="btn primary" type="button" onClick={() => handleExport('png')} disabled={exporting}>Export PNG</button>
+            <button className="btn primary" type="button" onClick={() => handleExportClick('png')} disabled={exporting}>Export PNG</button>
             <button className="btn" type="button" onClick={() => handleExportClick('svg')} disabled={exporting}>Export SVG</button>
           </div>
         </div>
