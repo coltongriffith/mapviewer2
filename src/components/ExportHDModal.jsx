@@ -22,7 +22,7 @@ export default function ExportHDModal({ format = 'png', onConfirm, onWithWaterma
   };
 
   return (
-    <div className="export-hd-overlay" role="dialog" aria-modal="true" aria-labelledby="hd-modal-title">
+    <div className="export-hd-overlay" role="dialog" aria-modal="true" aria-labelledby="hd-modal-title" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="export-hd-card">
         <button className="export-hd-close" type="button" onClick={onClose} aria-label="Close">✕</button>
 

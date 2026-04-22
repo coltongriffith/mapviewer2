@@ -325,6 +325,13 @@ export default function App() {
   }, [screen]);
 
   useEffect(() => {
+    if (screen !== 'editor') {
+      setMapReady(false);
+      leafletMapRef.current = null;
+    }
+  }, [screen]);
+
+  useEffect(() => {
     const map = leafletMapRef.current;
     if (!map || project.layers.length === 0) return;
     // Use the ref so cosmetic layout changes (title, logo size, opacity…) don't
@@ -754,6 +761,7 @@ export default function App() {
       anchor: { lat: center.lat, lng: center.lng },
       layerId: selectedLayer.id,
     });
+    setSelectedCalloutId(null);
   };
 
   const updateCallout = (calloutId, patch) => {
@@ -825,6 +833,7 @@ export default function App() {
       boxWidth: selectedFeature.boxWidth || 188,
       style: selectedFeature.style || {},
     });
+    setSelectedCalloutId(null);
   };
 
   const addMarkerAt = (latlng) => {
@@ -1566,27 +1575,31 @@ export default function App() {
             }}
           >
         <MapCanvas onReady={onMapReady} project={project} template={template} onFeatureClick={handleFeatureClick} onMapClick={handleMapClick} />
-        <AnnotationOverlay
-          map={leafletMapRef.current}
-          markers={project.markers || []}
-          ellipses={project.ellipses || []}
-          selectedMarkerId={selectedMarkerId}
-          selectedEllipseId={selectedEllipseId}
-          onSelectMarker={(id) => { setSelectedMarkerId(id); setSelectedEllipseId(null); setSelectedFeature(null); }}
-          onSelectEllipse={(id) => { setSelectedEllipseId(id); setSelectedMarkerId(null); setSelectedFeature(null); }}
-          onMoveMarker={updateMarker}
-          onMoveEllipse={updateEllipse}
-          onMoveLabelOffset={(id, offset) => updateMarker(id, { labelOffsetX: offset.x, labelOffsetY: offset.y })}
-          labelFont={project.layout.fonts?.label}
-        />
-        <CalloutsOverlay
-          map={leafletMapRef.current}
-          callouts={project.callouts}
-          selectedCalloutId={selectedCalloutId}
-          onSelect={(id) => { setSelectedCalloutId(id); setSelectedMarkerId(null); setSelectedEllipseId(null); setSelectedFeature(null); }}
-          onMove={(id, offset) => updateCallout(id, { offset: { x: offset.x, y: offset.y }, isManualPosition: true })}
-          fontFamily={project.layout.fonts?.callout}
-        />
+        {mapReady && (
+          <>
+            <AnnotationOverlay
+              map={leafletMapRef.current}
+              markers={project.markers || []}
+              ellipses={project.ellipses || []}
+              selectedMarkerId={selectedMarkerId}
+              selectedEllipseId={selectedEllipseId}
+              onSelectMarker={(id) => { setSelectedMarkerId(id); setSelectedEllipseId(null); setSelectedFeature(null); }}
+              onSelectEllipse={(id) => { setSelectedEllipseId(id); setSelectedMarkerId(null); setSelectedFeature(null); }}
+              onMoveMarker={updateMarker}
+              onMoveEllipse={updateEllipse}
+              onMoveLabelOffset={(id, offset) => updateMarker(id, { labelOffsetX: offset.x, labelOffsetY: offset.y })}
+              labelFont={project.layout.fonts?.label}
+            />
+            <CalloutsOverlay
+              map={leafletMapRef.current}
+              callouts={project.callouts}
+              selectedCalloutId={selectedCalloutId}
+              onSelect={(id) => { setSelectedCalloutId(id); setSelectedMarkerId(null); setSelectedEllipseId(null); setSelectedFeature(null); }}
+              onMove={(id, offset) => updateCallout(id, { offset: { x: offset.x, y: offset.y }, isManualPosition: true })}
+              fontFamily={project.layout.fonts?.callout}
+            />
+          </>
+        )}
 
         <div className="template-zone" style={zoneStyle(resolvedZones.title)}>
           <div className="template-card title-card">

@@ -192,6 +192,7 @@ button, input, select, textarea { font: inherit; }
   user-select: none;
   touch-action: none;
   font-family: var(--font-callout);
+  overflow: hidden;
 }
 .map-callout.plain { background: transparent; border: none; box-shadow: none; text-shadow: 0 0 4px rgba(255,255,255,0.95); color: var(--callout-fg, #0f172a); }
 .map-callout.leader { min-width: 132px; }
@@ -393,6 +394,8 @@ button, input, select, textarea { font: inherit; }
 .map-stage { position: relative; width: 100%; height: 100%; }
 .map-stage[data-annotation-tool="marker"],
 .map-stage[data-annotation-tool="ellipse"] { cursor: crosshair; }
+.map-stage[data-annotation-tool="marker"] .leaflet-interactive,
+.map-stage[data-annotation-tool="ellipse"] .leaflet-interactive { pointer-events: none !important; }
 .leaflet-map-canvas { position: absolute; inset: 0; z-index: 1; }
 .map-topbar {
   width: 100%;
