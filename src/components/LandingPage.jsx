@@ -11,7 +11,7 @@ function formatRelativeDate(iso) {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-export default function LandingPage({ onOpenEditor, recentProjects = [], onOpenProject }) {
+export default function LandingPage({ onOpenEditor, onLoadSample, recentProjects = [], onOpenProject }) {
   return (
     <div className="landing-shell">
       <nav className="landing-nav">
@@ -40,6 +40,11 @@ export default function LandingPage({ onOpenEditor, recentProjects = [], onOpenP
               <button className="btn primary large" type="button" onClick={onOpenEditor}>
                 Open Map Editor
               </button>
+              {onLoadSample && (
+                <button className="btn sample-btn" type="button" onClick={onLoadSample}>
+                  Try with sample data →
+                </button>
+              )}
             </div>
 
             <div className="landing-pain-grid">

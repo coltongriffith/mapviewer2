@@ -9,6 +9,8 @@ import ExportHDModal from './components/ExportHDModal';
 import UploadPanel from './components/UploadPanel';
 import AnnotationOverlay from './components/AnnotationOverlay';
 import { loadGeoJSON } from './utils/importers';
+import sampleClaims from './assets/sampleClaims.json';
+import sampleDrillholes from './assets/sampleDrillholes.json';
 import { buildScene } from './export/buildScene';
 import { exportPNG } from './export/exportPNG';
 import { exportSVG } from './export/exportSVG';
@@ -38,6 +40,10 @@ import {
   saveProjectRecord,
   touchLastOpenedProject,
 } from './utils/projectStorage';
+
+const SAMPLE_LOGO_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect width="100" height="100" rx="18" fill="#b87333"/><text x="50" y="67" text-anchor="middle" font-family="sans-serif" font-size="42" font-weight="800" fill="#fff">BC</text></svg>';
+const SAMPLE_LOGO_URL = `data:image/svg+xml;base64,${btoa(SAMPLE_LOGO_SVG)}`;
+const SAMPLE_ACCENT = '#b87333';
 
 const MARKER_TYPES = {
   circle: 'Circle',
@@ -465,6 +471,20 @@ export default function App() {
       if (screen !== 'editor') setScreen('editor');
     } catch (err) {
       setUploadStatus({ type: 'error', message: `Import failed: ${err.message}` });
+    }
+  };
+
+  const loadSampleData = async () => {
+    const makeFile = (json, name) => new File([JSON.stringify(json)], name, { type: 'application/json' });
+    try {
+      await addGeoJSONLayer(makeFile(sampleClaims, 'Sample Claims.geojson'));
+      await addGeoJSONLayer(makeFile(sampleDrillholes, 'Sample Drillholes.geojson'));
+      updateLayout({ logo: SAMPLE_LOGO_URL, accentColor: SAMPLE_ACCENT });
+      applyBrandPaletteToLayers(SAMPLE_ACCENT);
+      setScreen('editor');
+      setUploadStatus({ type: 'success', message: 'Sample data loaded. Explore the editor and export to try it out.' });
+    } catch (err) {
+      setUploadStatus({ type: 'error', message: `Sample data error: ${err.message}` });
     }
   };
 
@@ -995,6 +1015,7 @@ export default function App() {
     return (
       <LandingPage
         onOpenEditor={() => setScreen('editor')}
+        onLoadSample={loadSampleData}
         recentProjects={recentProjects}
         onOpenProject={(entry) => { openProjectFromRecent(entry); setScreen('editor'); }}
       />
@@ -1011,6 +1032,7 @@ export default function App() {
             </svg>
             Exploration Maps
           </button>
+          <button className="sidebar-home-link" type="button" onClick={() => setScreen('landing')}>← Home</button>
         </div>
 
         {project.layers.length === 0 && !project.layout.logo ? (
@@ -1022,6 +1044,9 @@ export default function App() {
               <li>Upload an inset image</li>
               <li>Upload drillholes or other layers (optional)</li>
             </ol>
+            <button className="sample-data-link" type="button" onClick={loadSampleData}>
+              Or load sample mining data →
+            </button>
           </div>
         ) : null}
 

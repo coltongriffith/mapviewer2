@@ -29,6 +29,10 @@ button, input, select, textarea { font: inherit; }
 .sidebar-header-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
 .sidebar-wordmark { background: none; border: none; padding: 0; margin: 0; font-family: inherit; font-size: 15px; font-weight: 800; color: #10243c; letter-spacing: -0.02em; cursor: pointer; display: flex; align-items: center; gap: 7px; }
 .sidebar-wordmark:hover { color: #2563eb; }
+.sidebar-home-link { background: none; border: none; padding: 0; font-size: 12px; color: #6b7280; cursor: pointer; font-family: inherit; }
+.sidebar-home-link:hover { color: #2563eb; }
+.sample-data-link { background: none; border: none; padding: 0; color: #2563eb; font-size: 13px; cursor: pointer; text-align: left; margin-top: 12px; font-family: inherit; display: block; }
+.sample-data-link:hover { text-decoration: underline; }
 .onboarding-card { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 12px 14px; margin-bottom: 12px; }
 .onboarding-title { font-size: 13px; font-weight: 600; color: #1d4ed8; margin-bottom: 8px; }
 .onboarding-steps { margin: 0; padding-left: 18px; display: grid; gap: 5px; }
@@ -262,10 +266,14 @@ button, input, select, textarea { font: inherit; }
 .landing-badge { display: inline-flex; padding: 6px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; background: #e8f1ff; color: #1d4ed8; }
 .landing-copy h1 { margin: 16px 0 12px; max-width: 680px; font-size: 48px; line-height: 1.05; color: #10243c; }
 .landing-copy > p { margin: 0; max-width: 700px; color: #516173; font-size: 17px; line-height: 1.6; }
-.landing-actions { margin-top: 22px; }
+.landing-actions { margin-top: 22px; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
 .btn.large { width: auto; padding: 14px 18px; }
+.landing-nav .btn { width: auto; padding: 9px 18px; background: #fff; color: #1d4ed8; border-color: #bfcfe8; }
+.landing-nav .btn:hover { background: #eff6ff; }
+.btn.sample-btn { width: auto; padding: 12px 18px; background: #fff; border-color: #bfcfe8; color: #2563eb; font-weight: 600; }
+.btn.sample-btn:hover { background: #eff6ff; }
 .landing-pain-grid, .landing-mini-grid { display: grid; gap: 14px; }
-.landing-pain-grid { margin-top: 24px; }
+.landing-pain-grid { margin-top: 24px; grid-template-columns: repeat(3, 1fr); }
 .landing-pain-card { border: 1px solid #dbe4ee; background: #fbfdff; border-radius: 16px; padding: 16px; display: grid; gap: 8px; }
 .landing-pain-card strong { color: #11263f; }
 .landing-pain-card span { color: #607086; line-height: 1.5; }
@@ -361,6 +369,7 @@ button, input, select, textarea { font: inherit; }
   .app-shell { grid-template-columns: 1fr; }
   .sidebar { max-height: 46vh; }
   .landing-mini-grid { grid-template-columns: 1fr; }
+  .landing-pain-grid { grid-template-columns: 1fr; }
   .landing-recent-grid { grid-template-columns: 1fr; }
   .landing-nav { padding: 12px 16px; }
   .landing-hero { padding: 16px 16px 12px; }

@@ -1,0 +1,40 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "HoleID": "DDH-001", "Au_gpt": 2.4, "Length_m": 84, "Az": 145, "Dip": -55 },
+      "geometry": { "type": "Point", "coordinates": [-121.542, 53.088] }
+    },
+    {
+      "type": "Feature",
+      "properties": { "HoleID": "DDH-002", "Au_gpt": 0.8, "Length_m": 92, "Az": 145, "Dip": -55 },
+      "geometry": { "type": "Point", "coordinates": [-121.538, 53.086] }
+    },
+    {
+      "type": "Feature",
+      "properties": { "HoleID": "DDH-003", "Au_gpt": 3.1, "Length_m": 106, "Az": 145, "Dip": -55 },
+      "geometry": { "type": "Point", "coordinates": [-121.535, 53.089] }
+    },
+    {
+      "type": "Feature",
+      "properties": { "HoleID": "DDH-004", "Au_gpt": 1.6, "Length_m": 72, "Az": 145, "Dip": -55 },
+      "geometry": { "type": "Point", "coordinates": [-121.540, 53.091] }
+    },
+    {
+      "type": "Feature",
+      "properties": { "HoleID": "DDH-005", "Au_gpt": 0.3, "Length_m": 60, "Az": 145, "Dip": -55 },
+      "geometry": { "type": "Point", "coordinates": [-121.544, 53.084] }
+    },
+    {
+      "type": "Feature",
+      "properties": { "HoleID": "DDH-006", "Au_gpt": 4.2, "Length_m": 118, "Az": 145, "Dip": -55 },
+      "geometry": { "type": "Point", "coordinates": [-121.537, 53.093] }
+    },
+    {
+      "type": "Feature",
+      "properties": { "HoleID": "DDH-007", "Au_gpt": 1.1, "Length_m": 78, "Az": 145, "Dip": -55 },
+      "geometry": { "type": "Point", "coordinates": [-121.531, 53.087] }
+    }
+  ]
+}
