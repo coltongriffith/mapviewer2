@@ -41,8 +41,17 @@ import {
   touchLastOpenedProject,
 } from './utils/projectStorage';
 
-const SAMPLE_LOGO_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><rect width="100" height="100" rx="18" fill="#b87333"/><text x="50" y="67" text-anchor="middle" font-family="sans-serif" font-size="42" font-weight="800" fill="#fff">BC</text></svg>';
-const SAMPLE_LOGO_URL = `data:image/svg+xml;base64,${btoa(SAMPLE_LOGO_SVG)}`;
+const SAMPLE_LOGO_SVG = [
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 56" width="220" height="56">',
+  '<path d="M24 4L40 4L48 18L40 32L24 32L16 18Z" fill="#b87333"/>',
+  '<polygon points="32,11 22,29 42,29" fill="white"/>',
+  '<polygon points="28,29 32,21 36,29" fill="#e8a06a"/>',
+  '<text x="58" y="18" font-family="Arial,sans-serif" font-size="13" font-weight="700" fill="#1a2635" letter-spacing="0.8">BUCKHORN CREEK</text>',
+  '<text x="58" y="31" font-family="Arial,sans-serif" font-size="9" font-weight="400" fill="#b87333" letter-spacing="2">MINING CORP.</text>',
+  '<text x="58" y="45" font-family="Arial,sans-serif" font-size="8" fill="#94a3b8">Cariboo Region, British Columbia</text>',
+  '</svg>',
+].join('');
+const SAMPLE_LOGO_URL = `data:image/svg+xml,${encodeURIComponent(SAMPLE_LOGO_SVG)}`;
 const SAMPLE_ACCENT = '#b87333';
 
 const MARKER_TYPES = {
@@ -479,7 +488,14 @@ export default function App() {
     try {
       await addGeoJSONLayer(makeFile(sampleClaims, 'Sample Claims.geojson'));
       await addGeoJSONLayer(makeFile(sampleDrillholes, 'Sample Drillholes.geojson'));
-      updateLayout({ logo: SAMPLE_LOGO_URL, accentColor: SAMPLE_ACCENT });
+      updateLayout({
+        logo: SAMPLE_LOGO_URL,
+        accentColor: SAMPLE_ACCENT,
+        title: 'Buckhorn Creek Property',
+        subtitle: 'Cariboo Region, British Columbia',
+        footerText: 'Buckhorn Creek Mining Corp. | Cariboo Region, BC | For internal use only',
+        footerEnabled: true,
+      });
       applyBrandPaletteToLayers(SAMPLE_ACCENT);
       setScreen('editor');
       setUploadStatus({ type: 'success', message: 'Sample data loaded. Explore the editor and export to try it out.' });

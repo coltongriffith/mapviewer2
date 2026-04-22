@@ -274,9 +274,9 @@ button, input, select, textarea { font: inherit; }
 .btn.sample-btn:hover { background: #eff6ff; }
 .landing-pain-grid, .landing-mini-grid { display: grid; gap: 14px; }
 .landing-pain-grid { margin-top: 24px; grid-template-columns: repeat(3, 1fr); }
-.landing-pain-card { border: 1px solid #dbe4ee; background: #fbfdff; border-radius: 16px; padding: 16px; display: grid; gap: 8px; }
-.landing-pain-card strong { color: #11263f; }
-.landing-pain-card span { color: #607086; line-height: 1.5; }
+.landing-pain-card { border: 1px solid #dbe4ee; background: #fbfdff; border-radius: 16px; padding: 14px; display: grid; grid-template-columns: auto 1fr; gap: 6px 10px; align-items: start; }
+.landing-pain-card strong { grid-column: 2; color: #11263f; font-size: 13px; line-height: 1.3; }
+.landing-pain-card span { grid-column: 2; color: #607086; font-size: 12px; line-height: 1.45; }
 .landing-visuals { display: grid; gap: 14px; }
 .landing-window { border: 1px solid #dbe4ee; border-radius: 22px; background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%); box-shadow: 0 12px 28px rgba(15,23,42,0.06); overflow: hidden; }
 .landing-window-bar { display: flex; gap: 6px; padding: 12px 14px; border-bottom: 1px solid #edf1f6; }
@@ -335,10 +335,7 @@ button, input, select, textarea { font: inherit; }
 .mock-legend-label.short { width: 55%; flex: none; }
 
 /* Pain card icons */
-.landing-pain-icon { width: 30px; height: 30px; border-radius: 8px; background: #eff6ff; display: flex; align-items: center; justify-content: center; }
-.landing-pain-card { display: grid; grid-template-columns: auto 1fr; gap: 8px 12px; align-items: start; }
-.landing-pain-card strong { grid-column: 2; }
-.landing-pain-card span { grid-column: 2; }
+.landing-pain-icon { width: 28px; height: 28px; border-radius: 8px; background: #eff6ff; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 
 /* Recent projects */
 .landing-recent { padding: 0 28px 28px; max-width: 1236px; margin: 0 auto; width: 100%; box-sizing: border-box; }

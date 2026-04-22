@@ -3,77 +3,78 @@
   "features": [
     {
       "type": "Feature",
-      "properties": {
-        "name": "Buckhorn Creek 1",
-        "TENURE_NUMBER": "BCM-2024-001",
-        "TITLE_TYPE": "CLAIM",
-        "AREA_HA": 108.4
-      },
+      "properties": { "name": "Buckhorn Creek 1", "TENURE_NUMBER": "BCM-2024-001", "TITLE_TYPE": "CLAIM", "AREA_HA": 54.2 },
       "geometry": {
         "type": "Polygon",
         "coordinates": [[
-          [-121.548, 53.082],
-          [-121.533, 53.082],
-          [-121.533, 53.093],
-          [-121.548, 53.093],
-          [-121.548, 53.082]
+          [-121.570, 53.070], [-121.560, 53.070], [-121.560, 53.076],
+          [-121.570, 53.076], [-121.570, 53.070]
         ]]
       }
     },
     {
       "type": "Feature",
-      "properties": {
-        "name": "Buckhorn Creek 2",
-        "TENURE_NUMBER": "BCM-2024-002",
-        "TITLE_TYPE": "CLAIM",
-        "AREA_HA": 94.2
-      },
+      "properties": { "name": "Buckhorn Creek 2", "TENURE_NUMBER": "BCM-2024-002", "TITLE_TYPE": "CLAIM", "AREA_HA": 54.2 },
       "geometry": {
         "type": "Polygon",
         "coordinates": [[
-          [-121.533, 53.082],
-          [-121.519, 53.082],
-          [-121.519, 53.093],
-          [-121.533, 53.093],
-          [-121.533, 53.082]
+          [-121.560, 53.070], [-121.550, 53.070], [-121.550, 53.076],
+          [-121.560, 53.076], [-121.560, 53.070]
         ]]
       }
     },
     {
       "type": "Feature",
-      "properties": {
-        "name": "Buckhorn Creek 3",
-        "TENURE_NUMBER": "BCM-2024-003",
-        "TITLE_TYPE": "CLAIM",
-        "AREA_HA": 86.1
-      },
+      "properties": { "name": "Buckhorn Creek 3", "TENURE_NUMBER": "BCM-2024-003", "TITLE_TYPE": "CLAIM", "AREA_HA": 54.2 },
       "geometry": {
         "type": "Polygon",
         "coordinates": [[
-          [-121.545, 53.091],
-          [-121.530, 53.091],
-          [-121.530, 53.101],
-          [-121.545, 53.101],
-          [-121.545, 53.091]
+          [-121.550, 53.070], [-121.540, 53.070], [-121.540, 53.076],
+          [-121.550, 53.076], [-121.550, 53.070]
         ]]
       }
     },
     {
       "type": "Feature",
-      "properties": {
-        "name": "Buckhorn Creek 4",
-        "TENURE_NUMBER": "BCM-2024-004",
-        "TITLE_TYPE": "CLAIM",
-        "AREA_HA": 62.8
-      },
+      "properties": { "name": "Buckhorn Creek 4", "TENURE_NUMBER": "BCM-2024-004", "TITLE_TYPE": "CLAIM", "AREA_HA": 54.2 },
       "geometry": {
         "type": "Polygon",
         "coordinates": [[
-          [-121.555, 53.074],
-          [-121.545, 53.074],
-          [-121.545, 53.082],
-          [-121.555, 53.082],
-          [-121.555, 53.074]
+          [-121.570, 53.076], [-121.560, 53.076], [-121.560, 53.082],
+          [-121.570, 53.082], [-121.570, 53.076]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Buckhorn Creek 5", "TENURE_NUMBER": "BCM-2024-005", "TITLE_TYPE": "CLAIM", "AREA_HA": 54.2 },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-121.560, 53.076], [-121.550, 53.076], [-121.550, 53.082],
+          [-121.560, 53.082], [-121.560, 53.076]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Buckhorn Creek 6", "TENURE_NUMBER": "BCM-2024-006", "TITLE_TYPE": "CLAIM", "AREA_HA": 54.2 },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-121.560, 53.082], [-121.550, 53.082], [-121.550, 53.088],
+          [-121.560, 53.088], [-121.560, 53.082]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "name": "Buckhorn Creek 7", "TENURE_NUMBER": "BCM-2024-007", "TITLE_TYPE": "CLAIM", "AREA_HA": 54.2 },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-121.550, 53.082], [-121.540, 53.082], [-121.540, 53.088],
+          [-121.550, 53.088], [-121.550, 53.082]
         ]]
       }
     }

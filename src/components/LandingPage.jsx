@@ -53,21 +53,21 @@ export default function LandingPage({ onOpenEditor, onLoadSample, recentProjects
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 6h16M4 10h16M4 14h10" stroke="#2563eb" strokeWidth="2" strokeLinecap="round"/></svg>
                 </div>
                 <strong>Skip the GIS cleanup loop</strong>
-                <span>No more exporting to Illustrator to fix labels and spacing. Legends, callouts, and layout stay clean inside the editor.</span>
+                <span>Legends, labels, and callouts stay clean — no Illustrator round-trip.</span>
               </div>
               <div className="landing-pain-card">
                 <div className="landing-pain-icon">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 4v16l4-4 4 4 4-4 4 4V4" stroke="#2563eb" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
                 </div>
                 <strong>Update claims in seconds</strong>
-                <span>Drop in a revised shapefile and your map layout — title, inset, north arrow, scale bar — stays intact. No rebuild required.</span>
+                <span>Drop in a revised shapefile — title, north arrow, and inset stay intact.</span>
               </div>
               <div className="landing-pain-card">
                 <div className="landing-pain-icon">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="3" stroke="#2563eb" strokeWidth="2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3" stroke="#2563eb" strokeWidth="2" strokeLinecap="round"/></svg>
                 </div>
-                <strong>Make the target area obvious</strong>
-                <span>Add callouts, highlight zones, and a locator inset so reviewers and investors immediately understand the project area.</span>
+                <strong>Make the target obvious</strong>
+                <span>Callouts and a locator inset make the project area immediately clear.</span>
               </div>
             </div>
           </div>

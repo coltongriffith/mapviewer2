@@ -3,38 +3,38 @@
   "features": [
     {
       "type": "Feature",
-      "properties": { "HoleID": "DDH-001", "Au_gpt": 2.4, "Length_m": 84, "Az": 145, "Dip": -55 },
-      "geometry": { "type": "Point", "coordinates": [-121.542, 53.088] }
+      "properties": { "HoleID": "BCM-001", "Au_gpt": 0.4, "Length_m": 42, "Az": 160, "Dip": -60, "Status": "Complete" },
+      "geometry": { "type": "Point", "coordinates": [-121.558, 53.077] }
     },
     {
       "type": "Feature",
-      "properties": { "HoleID": "DDH-002", "Au_gpt": 0.8, "Length_m": 92, "Az": 145, "Dip": -55 },
-      "geometry": { "type": "Point", "coordinates": [-121.538, 53.086] }
+      "properties": { "HoleID": "BCM-002", "Au_gpt": 1.2, "Length_m": 60, "Az": 160, "Dip": -60, "Status": "Complete" },
+      "geometry": { "type": "Point", "coordinates": [-121.555, 53.077] }
     },
     {
       "type": "Feature",
-      "properties": { "HoleID": "DDH-003", "Au_gpt": 3.1, "Length_m": 106, "Az": 145, "Dip": -55 },
-      "geometry": { "type": "Point", "coordinates": [-121.535, 53.089] }
+      "properties": { "HoleID": "BCM-003", "Au_gpt": 0.7, "Length_m": 54, "Az": 160, "Dip": -60, "Status": "Complete" },
+      "geometry": { "type": "Point", "coordinates": [-121.552, 53.077] }
     },
     {
       "type": "Feature",
-      "properties": { "HoleID": "DDH-004", "Au_gpt": 1.6, "Length_m": 72, "Az": 145, "Dip": -55 },
-      "geometry": { "type": "Point", "coordinates": [-121.540, 53.091] }
+      "properties": { "HoleID": "BCM-004", "Au_gpt": 2.8, "Length_m": 84, "Az": 160, "Dip": -60, "Status": "Complete" },
+      "geometry": { "type": "Point", "coordinates": [-121.557, 53.079] }
     },
     {
       "type": "Feature",
-      "properties": { "HoleID": "DDH-005", "Au_gpt": 0.3, "Length_m": 60, "Az": 145, "Dip": -55 },
-      "geometry": { "type": "Point", "coordinates": [-121.544, 53.084] }
+      "properties": { "HoleID": "BCM-005", "Au_gpt": 4.1, "Length_m": 96, "Az": 160, "Dip": -60, "Status": "Complete" },
+      "geometry": { "type": "Point", "coordinates": [-121.554, 53.079] }
     },
     {
       "type": "Feature",
-      "properties": { "HoleID": "DDH-006", "Au_gpt": 4.2, "Length_m": 118, "Az": 145, "Dip": -55 },
-      "geometry": { "type": "Point", "coordinates": [-121.537, 53.093] }
+      "properties": { "HoleID": "BCM-006", "Au_gpt": 3.3, "Length_m": 90, "Az": 160, "Dip": -60, "Status": "Complete" },
+      "geometry": { "type": "Point", "coordinates": [-121.551, 53.079] }
     },
     {
       "type": "Feature",
-      "properties": { "HoleID": "DDH-007", "Au_gpt": 1.1, "Length_m": 78, "Az": 145, "Dip": -55 },
-      "geometry": { "type": "Point", "coordinates": [-121.531, 53.087] }
+      "properties": { "HoleID": "BCM-007", "Au_gpt": 1.9, "Length_m": 78, "Az": 160, "Dip": -60, "Status": "Complete" },
+      "geometry": { "type": "Point", "coordinates": [-121.555, 53.081] }
     }
   ]
 }
