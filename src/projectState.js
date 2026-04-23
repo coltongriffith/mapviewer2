@@ -73,6 +73,8 @@ export function createInitialProjectState() {
       logoScale: 1,
       insetImage: null,
       autoInsetRegion: null,
+      insetTitle: 'Project Locator',
+      insetLabel: '',
       legendItems: [],
       legendMode: 'auto',
       titleWidth: 'standard',

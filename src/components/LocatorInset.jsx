@@ -85,7 +85,7 @@ function buildAutoSvg(region, visibleBounds) {
   return { paths, markerEl };
 }
 
-export default function LocatorInset({ layers, insetMode, mode, insetImage, autoInsetRegion, zone }) {
+export default function LocatorInset({ layers, insetMode, mode, insetImage, autoInsetRegion, insetTitle, insetLabel, zone }) {
   const { visibleBounds, referenceBounds } = useMemo(() => {
     const visible = (layers || []).filter((layer) => layer.visible !== false);
     const visibleBounds = unionBounds(visible.map((layer) => geojsonBounds(layer.geojson)).filter(Boolean));
@@ -108,7 +108,7 @@ export default function LocatorInset({ layers, insetMode, mode, insetImage, auto
   return (
     <div className="template-card inset-card polished" style={zone}>
       <div className="inset-header-row">
-        <div className="inset-header">Project Locator</div>
+        <div className="inset-header">{insetTitle || 'Project Locator'}</div>
       </div>
       {showCustom ? (
         <div className="inset-image-wrap">
@@ -188,7 +188,7 @@ export default function LocatorInset({ layers, insetMode, mode, insetImage, auto
       )}
       {!showCustom ? (
         <div className="inset-mode-label">
-          {showAuto ? autoInsetRegion.name : (referenceBounds?.label || 'Project in State')}
+          {insetLabel || (showAuto ? autoInsetRegion.name : (referenceBounds?.label || 'Project in State'))}
         </div>
       ) : null}
     </div>

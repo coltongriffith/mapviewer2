@@ -482,11 +482,10 @@ export default function App() {
       return applyModeToProject(next, template, prev.layout.mode);
     });
 
-    // Async region detection — update layout once resolved
-    const allBoundsAfter = unionBounds(
-      [...project.layers, nextLayer].map(l => geojsonBounds(l.geojson)).filter(Boolean)
-    );
-    detectRegion(allBoundsAfter).then(region => {
+    // Detect region from the new layer's bounds only (not the union of all layers,
+    // which would misplace the centroid when layers span multiple regions).
+    const newLayerBounds = geojsonBounds(nextLayer.geojson);
+    detectRegion(newLayerBounds).then(region => {
       if (region) {
         setProject(prev => ({
           ...prev,
@@ -1223,6 +1222,16 @@ export default function App() {
             )}
             <div className="control-row inline-2">
               <div>
+                <label>Inset Title</label>
+                <input value={project.layout.insetTitle ?? 'Project Locator'} onChange={(e) => updateLayout({ insetTitle: e.target.value })} placeholder="Project Locator" />
+              </div>
+              <div>
+                <label>Inset Label</label>
+                <input value={project.layout.insetLabel ?? ''} onChange={(e) => updateLayout({ insetLabel: e.target.value })} placeholder={project.layout.autoInsetRegion?.name || 'Province / State'} />
+              </div>
+            </div>
+            <div className="control-row inline-2">
+              <div>
                 <label>Logo Size</label>
                 <input type="range" min="0.6" max="1.8" step="0.05" value={project.layout.logoScale || 1} onChange={(e) => updateLayout({ logoScale: Number(e.target.value) })} />
               </div>
@@ -1685,7 +1694,7 @@ export default function App() {
         <div className="template-zone" style={zoneStyle(resolvedZones.northArrow)}><NorthArrow /></div>
         {project.layout.insetEnabled !== false && resolvedZones.inset?.width ? (
           <div className="template-zone" style={zoneStyle(resolvedZones.inset)}>
-            <LocatorInset layers={project.layers} insetMode={project.layout.insetMode} insetImage={project.layout.insetImage} autoInsetRegion={project.layout.autoInsetRegion} mode={project.layout.mode} zone={{ width: '100%', height: '100%' }} />
+            <LocatorInset layers={project.layers} insetMode={project.layout.insetMode} insetImage={project.layout.insetImage} autoInsetRegion={project.layout.autoInsetRegion} insetTitle={project.layout.insetTitle} insetLabel={project.layout.insetLabel} mode={project.layout.mode} zone={{ width: '100%', height: '100%' }} />
           </div>
         ) : null}
         <div className="template-zone" style={zoneStyle(resolvedZones.scaleBar)}><ScaleBar map={leafletMapRef.current} /></div>
