@@ -1502,8 +1502,8 @@ export default function App() {
               </div>
             </div>
             <div className="button-row">
-              <button className="btn primary" type="button" onClick={() => handleExportClick('png')} disabled={!mapReady || exporting}>{exporting ? 'Exporting…' : 'Export PNG'}</button>
-              <button className="btn" type="button" onClick={() => handleExportClick('svg')} disabled={!mapReady || exporting}>{exporting ? 'Exporting…' : 'Export SVG'}</button>
+              <button className="btn primary" type="button" onClick={() => handleExportClick('png')} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export PNG'}</button>
+              <button className="btn" type="button" onClick={() => handleExportClick('svg')} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export SVG'}</button>
             </div>
             {exportError && <div className="export-error-msg">{exportError}</div>}
           </div>
@@ -1536,8 +1536,8 @@ export default function App() {
                 onClick={() => leafletMapRef.current?.zoomIn(1)}
               >+</button>
             </div>
-            <button className="btn primary" type="button" onClick={() => handleExport('png', { noWatermark: !!getLastLeadEmail() })} disabled={!mapReady || exporting}>Export PNG</button>
-            <button className="btn" type="button" onClick={() => handleExport('svg', { noWatermark: !!getLastLeadEmail() })} disabled={!mapReady || exporting}>Export SVG</button>
+            <button className="btn primary" type="button" onClick={() => handleExport('png', { noWatermark: !!getLastLeadEmail() })} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export PNG'}</button>
+            <button className="btn" type="button" onClick={() => handleExport('svg', { noWatermark: !!getLastLeadEmail() })} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export SVG'}</button>
             {exportError && <div className="export-error-msg">{exportError}</div>}
           </div>
         </div>

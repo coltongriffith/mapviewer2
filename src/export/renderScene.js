@@ -516,28 +516,33 @@ async function renderBasemapImageSvg(scene, scale) {
   canvas.width = width;
   canvas.height = height;
   const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('Unable to prepare canvas for SVG basemap export.');
+  if (!ctx) return '';
 
-  for (const tile of tiles) {
-    let image = null;
-    if (tile.href) {
-      image = await loadImage(tile.href, 'anonymous').catch(() => null);
-    }
-    if (!image) continue;
+  // Load all tiles in parallel (much faster than sequential await)
+  const images = await Promise.all(
+    tiles.map((tile) => tile.href ? loadImage(tile.href, 'anonymous').catch(() => null) : Promise.resolve(null))
+  );
+
+  let anyDrawn = false;
+  tiles.forEach((tile, i) => {
+    const image = images[i];
+    if (!image) return;
     ctx.save();
     ctx.globalAlpha = tile.opacity;
     ctx.drawImage(image, tile.x * scale, tile.y * scale, tile.width * scale, tile.height * scale);
     ctx.restore();
-  }
+    anyDrawn = true;
+  });
 
-  let pngDataUrl = null;
+  if (!anyDrawn) return '';
+
   try {
-    pngDataUrl = canvas.toDataURL('image/png', 1.0);
-  } catch (error) {
-    throw new Error('SVG basemap embedding failed because tile images block canvas export (CORS/tainted canvas). Use PNG export for full basemap fidelity or switch to a CORS-enabled basemap provider.');
+    const pngDataUrl = canvas.toDataURL('image/png', 1.0);
+    return `<image href="${escapeXml(pngDataUrl)}" x="0" y="0" width="${width}" height="${height}" preserveAspectRatio="none" />`;
+  } catch {
+    _exportWarnings.push('basemap omitted from SVG (CORS restriction on tile server)');
+    return '';
   }
-
-  return `<image href="${escapeXml(pngDataUrl)}" x="0" y="0" width="${width}" height="${height}" preserveAspectRatio="none" />`;
 }
 function renderVectorsSvg(scene, scale) { return (scene.project.layers || []).filter((layer) => layer.visible !== false && layer.geojson).map((layer) => featureCollectionFeatures(layer.geojson).map((feature) => geometryToSvg(scene.map, feature, getTemplateStyle(scene.template, layer), scale)).join('\n')).join('\n'); }
 function renderMarkerLabelSvg(scene, marker, point, scale) {
