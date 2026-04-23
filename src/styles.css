@@ -75,8 +75,9 @@ button, input, select, textarea { font: inherit; }
 }
 .control-row input[type='range'] { padding: 0; }
 .control-row textarea { min-height: 72px; resize: vertical; }
-.btn, .secondary-btn { cursor: pointer; }
+.btn, .secondary-btn { cursor: pointer; transition: transform 0.05s ease, filter 0.1s ease, background-color 0.1s ease; }
 .btn:disabled, .secondary-btn:disabled { opacity: 0.5; cursor: not-allowed; pointer-events: none; }
+.btn:active:not(:disabled), .secondary-btn:active:not(:disabled) { transform: translateY(1px); filter: brightness(0.92); }
 .export-error-msg { color: #b91c1c; font-size: 12px; margin-top: 4px; }
 .btn.primary { background: #1d4ed8; border-color: #1d4ed8; color: #ffffff; }
 .secondary-btn { background: #ffffff; color: #16324f; border-color: #cdd8e6; }

@@ -30,7 +30,7 @@ import { geojsonCenter } from './utils/geometry';
 import { cleanLayerName } from './utils/cleanLayerName';
 import { fitProjectToTemplate } from './utils/frameMapForTemplate';
 import { getThemeTokens } from './utils/themeTokens';
-import { saveLead } from './utils/leadCapture';
+import { saveLead, getLastLeadEmail } from './utils/leadCapture';
 import {
   clearActiveProjectContext,
   duplicateProjectRecord,
@@ -1502,8 +1502,8 @@ export default function App() {
               </div>
             </div>
             <div className="button-row">
-              <button className="btn primary" type="button" onClick={() => handleExportClick('png')} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export PNG'}</button>
-              <button className="btn" type="button" onClick={() => handleExportClick('svg')} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export SVG'}</button>
+              <button className="btn primary" type="button" onClick={() => { try { handleExportClick('png'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export PNG'}</button>
+              <button className="btn" type="button" onClick={() => { try { handleExportClick('svg'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export SVG'}</button>
             </div>
             {exportError && <div className="export-error-msg">{exportError}</div>}
           </div>
@@ -1536,8 +1536,8 @@ export default function App() {
                 onClick={() => leafletMapRef.current?.zoomIn(1)}
               >+</button>
             </div>
-            <button className="btn primary" type="button" onClick={() => handleExport('png', { noWatermark: !!getLastLeadEmail() })} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export PNG'}</button>
-            <button className="btn" type="button" onClick={() => handleExport('svg', { noWatermark: !!getLastLeadEmail() })} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export SVG'}</button>
+            <button className="btn primary" type="button" onClick={() => { try { handleExport('png', { noWatermark: !!getLastLeadEmail() }); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export PNG'}</button>
+            <button className="btn" type="button" onClick={() => { try { handleExport('svg', { noWatermark: !!getLastLeadEmail() }); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export SVG'}</button>
             {exportError && <div className="export-error-msg">{exportError}</div>}
           </div>
         </div>
