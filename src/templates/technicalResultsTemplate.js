@@ -132,35 +132,63 @@ export function resolveTemplateZones(template, layout, mapSize, legendItems) {
     ? Math.round(insetWidth / layout.insetAspectRatio)
     : Math.round(BASE_ZONES.inset.height * insetScale * insetScaleBase);
 
-  const zones = {
-    title: clampZone({ top: safe.top, left: safe.left, width: titleWidth, height: BASE_ZONES.title.height }, safe, width, height),
-    logo: clampZone({ top: safe.top + BASE_ZONES.title.height + 10, left: safe.left, width: Math.round(BASE_ZONES.logo.width * logoScale), height: Math.round(BASE_ZONES.logo.height * logoScale) }, safe, width, height),
-    inset: layout?.insetEnabled === false
-      ? { top: safe.top, left: width - safe.right, width: 0, height: 0 }
-      : clampZone({ top: safe.top, right: safe.right, width: insetWidth, height: insetHeight }, safe, width, height),
-    scaleBar: clampZone({ bottom: safe.bottom, left: safe.left, width: BASE_ZONES.scaleBar.width, height: BASE_ZONES.scaleBar.height }, safe, width, height),
-    legend: clampZone({ bottom: safe.bottom + BASE_ZONES.scaleBar.height + 10, left: safe.left, width: BASE_ZONES.legend.width, height: legendHeight }, safe, width, height),
-    northArrow: clampZone({ bottom: safe.bottom, right: safe.right, width: BASE_ZONES.northArrow.width, height: BASE_ZONES.northArrow.height }, safe, width, height),
-    footer: clampZone({ bottom: safe.bottom, left: BASE_ZONES.footer.left, width: BASE_ZONES.footer.width, height: BASE_ZONES.footer.height }, safe, width, height),
+  const titleCorner    = layout?.titleCorner     || 'tl';
+  const logoCorner     = layout?.logoCorner      || 'tl';
+  const insetCorner    = layout?.insetCorner     || 'tr';
+  const northArrowCorner = layout?.northArrowCorner || 'br';
+  const scaleBarCorner = layout?.scaleBarCorner  || 'bl';
+  const legendCorner   = layout?.legendCorner    || 'bl';
+
+  // Stacking accumulator — tracks space consumed at each corner (offset from that edge)
+  const vOffset = { tl: 0, tr: 0, bl: 0, br: 0 };
+
+  function anchorAt(corner) {
+    switch (corner) {
+      case 'tr': return { top: safe.top + vOffset.tr, right: safe.right };
+      case 'bl': return { bottom: safe.bottom + vOffset.bl, left: safe.left };
+      case 'br': return { bottom: safe.bottom + vOffset.br, right: safe.right };
+      case 'tl': default: return { top: safe.top + vOffset.tl, left: safe.left };
+    }
+  }
+
+  // Placement order: title → logo → inset → north arrow → scale bar → legend
+  const titleZone = clampZone({ ...anchorAt(titleCorner), width: titleWidth, height: BASE_ZONES.title.height }, safe, width, height);
+  vOffset[titleCorner] += BASE_ZONES.title.height + 10;
+
+  const logoW = Math.round(BASE_ZONES.logo.width * logoScale);
+  const logoH = Math.round(BASE_ZONES.logo.height * logoScale);
+  const logoZone = clampZone({ ...anchorAt(logoCorner), width: logoW, height: logoH }, safe, width, height);
+  vOffset[logoCorner] += logoH + 10;
+
+  const insetZone = layout?.insetEnabled === false
+    ? { top: safe.top, left: width - safe.right, width: 0, height: 0 }
+    : clampZone({ ...anchorAt(insetCorner), width: insetWidth, height: insetHeight }, safe, width, height);
+  if (layout?.insetEnabled !== false) vOffset[insetCorner] += insetHeight + 10;
+
+  const northArrowZone = clampZone({ ...anchorAt(northArrowCorner), width: BASE_ZONES.northArrow.width, height: BASE_ZONES.northArrow.height }, safe, width, height);
+  vOffset[northArrowCorner] += BASE_ZONES.northArrow.height + 10;
+
+  const scaleBarZone = clampZone({ ...anchorAt(scaleBarCorner), width: BASE_ZONES.scaleBar.width, height: BASE_ZONES.scaleBar.height }, safe, width, height);
+  vOffset[scaleBarCorner] += BASE_ZONES.scaleBar.height + 10;
+
+  const legendZone = clampZone({ ...anchorAt(legendCorner), width: BASE_ZONES.legend.width, height: legendHeight }, safe, width, height);
+
+  // Footer: bottom-center strip, hidden if it collides with anything below
+  const footerZone = clampZone({ bottom: safe.bottom, left: BASE_ZONES.footer.left, width: BASE_ZONES.footer.width, height: BASE_ZONES.footer.height }, safe, width, height);
+  if (intersects(legendZone, footerZone) || intersects(scaleBarZone, footerZone) || intersects(northArrowZone, footerZone)) {
+    footerZone.width = 0;
+    footerZone.height = 0;
+  }
+
+  return {
+    title: titleZone,
+    logo: logoZone,
+    inset: insetZone,
+    scaleBar: scaleBarZone,
+    legend: legendZone,
+    northArrow: northArrowZone,
+    footer: footerZone,
   };
-
-  // Collision protection
-  if (intersects(zones.inset, zones.title) || intersects(zones.inset, zones.logo)) {
-    zones.inset.top = Math.min(height - safe.bottom - zones.inset.height, zones.logo.top + zones.logo.height + 10);
-  }
-
-  const legendTopLimit = zones.title.top + zones.title.height + 20;
-  if (zones.legend.top < legendTopLimit) {
-    zones.legend.height = Math.max(90, zones.legend.height - (legendTopLimit - zones.legend.top));
-    zones.legend.top = legendTopLimit;
-  }
-
-  if (intersects(zones.legend, zones.footer)) {
-    zones.footer.width = 0;
-    zones.footer.height = 0;
-  }
-
-  return zones;
 }
 
 function buildOverlayLegendItems(layout) {

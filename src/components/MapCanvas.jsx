@@ -192,7 +192,8 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
           });
 
           if (isDrillholes) {
-            marker.on('click', () => {
+            marker.on('click', (e) => {
+              L.DomEvent.stopPropagation(e);
               onFeatureClick?.({ layerId: layer.id, feature, latlng });
             });
             marker.bindTooltip('Click to edit callout', { direction: 'top', offset: [0, -10], opacity: 0.9, sticky: true });

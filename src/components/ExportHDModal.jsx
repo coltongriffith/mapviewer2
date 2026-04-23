@@ -3,29 +3,17 @@ import { getLastLeadEmail } from '../utils/leadCapture';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-/**
- * SVG Export modal — prompts for an optional email before triggering SVG export.
- *
- * Props:
- *   onConfirm(email: string | null) — called when the user clicks "Export SVG".
- *                                     email is null if skipped or left blank.
- *   onClose() — called when the user dismisses without downloading.
- */
-export default function ExportHDModal({ onConfirm, onClose }) {
+export default function ExportHDModal({ format = 'png', onConfirm, onWithWatermark, onClose }) {
   const [email, setEmail] = useState(() => getLastLeadEmail() || '');
   const [error, setError] = useState('');
 
+  const formatLabel = format === 'svg' ? 'SVG' : 'PNG';
+
   const handleSubmit = () => {
     const trimmed = email.trim();
-    if (trimmed && !EMAIL_RE.test(trimmed)) {
-      setError('Please enter a valid email address.');
-      return;
-    }
-    onConfirm(trimmed || null);
-  };
-
-  const handleSkip = () => {
-    onConfirm(null);
+    if (!trimmed) { setError('Email is required to remove the watermark.'); return; }
+    if (!EMAIL_RE.test(trimmed)) { setError('Please enter a valid email address.'); return; }
+    onConfirm(trimmed);
   };
 
   const handleKeyDown = (e) => {
@@ -34,7 +22,7 @@ export default function ExportHDModal({ onConfirm, onClose }) {
   };
 
   return (
-    <div className="export-hd-overlay" role="dialog" aria-modal="true" aria-labelledby="hd-modal-title">
+    <div className="export-hd-overlay" role="dialog" aria-modal="true" aria-labelledby="hd-modal-title" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="export-hd-card">
         <button className="export-hd-close" type="button" onClick={onClose} aria-label="Close">✕</button>
 
@@ -46,15 +34,13 @@ export default function ExportHDModal({ onConfirm, onClose }) {
           </svg>
         </div>
 
-        <h3 id="hd-modal-title" className="export-hd-title">Export as SVG</h3>
+        <h3 id="hd-modal-title" className="export-hd-title">Export {formatLabel} without watermark</h3>
         <p className="export-hd-desc">
-          Vector format — scales to any size. Ideal for print, Illustrator, and Inkscape.
+          Enter your email to unlock clean exports — no <em>explorationmaps.com</em> label. Free forever, and your email is remembered for future exports.
         </p>
 
         <div className="export-hd-field">
-          <label htmlFor="hd-email" className="export-hd-label">
-            Email address <span className="export-hd-optional">(optional)</span>
-          </label>
+          <label htmlFor="hd-email" className="export-hd-label">Work email</label>
           <input
             id="hd-email"
             type="email"
@@ -67,15 +53,15 @@ export default function ExportHDModal({ onConfirm, onClose }) {
             autoFocus
           />
           {error && <div className="export-hd-error" role="alert">{error}</div>}
-          <p className="export-hd-small">Occasionally used for product updates. No spam, unsubscribe anytime.</p>
+          <p className="export-hd-small">No spam. Occasionally used for product updates — unsubscribe anytime.</p>
         </div>
 
         <div className="export-hd-actions">
           <button className="btn primary export-hd-btn-primary" type="button" onClick={handleSubmit}>
-            Download SVG
+            Download clean {formatLabel}
           </button>
-          <button className="export-hd-skip" type="button" onClick={handleSkip}>
-            Skip and download
+          <button className="export-hd-skip" type="button" onClick={onWithWatermark}>
+            Download with watermark
           </button>
         </div>
       </div>

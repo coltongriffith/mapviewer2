@@ -1,3 +1,5 @@
+import { safeColor } from './colorUtils.js';
+
 /**
  * SVG path data for custom marker icons.
  * All paths are designed for a 24x24 viewBox and center-anchored.
@@ -53,7 +55,7 @@ export function markerIconSvgFragment(type, x, y, size, color) {
   const icon = MARKER_ICON_PATHS[type];
   if (!icon) return '';
   const half = size / 2;
-  return `<svg x="${x - half}" y="${y - half}" width="${size}" height="${size}" viewBox="${icon.viewBox}" fill="${color}" xmlns="http://www.w3.org/2000/svg"><path d="${icon.path}" /></svg>`;
+  return `<svg x="${x - half}" y="${y - half}" width="${size}" height="${size}" viewBox="${icon.viewBox}" fill="${safeColor(color)}" xmlns="http://www.w3.org/2000/svg"><path d="${icon.path}" /></svg>`;
 }
 
 /**
@@ -66,7 +68,7 @@ export function drawMarkerIconCanvas(ctx, type, cx, cy, size, color) {
 
   // Parse the viewBox to get source dimensions
   const [, , vw, vh] = icon.viewBox.split(' ').map(Number);
-  const svgSrc = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${icon.viewBox}" width="${size}" height="${size}"><path d="${icon.path}" fill="${color}"/></svg>`;
+  const svgSrc = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${icon.viewBox}" width="${size}" height="${size}"><path d="${icon.path}" fill="${safeColor(color)}"/></svg>`;
   const blob = new Blob([svgSrc], { type: 'image/svg+xml' });
   const url = URL.createObjectURL(blob);
 

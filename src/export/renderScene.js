@@ -3,6 +3,10 @@ import { geojsonBounds, unionBounds } from '../utils/geometry';
 import { resolveTemplateZones } from '../templates/technicalResultsTemplate';
 import { getThemeTokens } from '../utils/themeTokens';
 import { MARKER_ICON_PATHS, markerIconSvgFragment, drawMarkerIconCanvas } from '../utils/markerIcons.jsx';
+import { safeColor } from '../utils/colorUtils.js';
+
+let _exportWarnings = [];
+export function getExportWarnings() { return _exportWarnings; }
 
 function clonePoint(point, scale = 1) {
   return { x: point.x * scale, y: point.y * scale };
@@ -52,12 +56,14 @@ function getTileImages(container) {
     .filter((tile) => tile.href && tile.width > 0 && tile.height > 0);
 }
 
-function loadImage(src, crossOrigin = null) {
+function loadImage(src, crossOrigin = null, timeoutMs = 8000) {
   return new Promise((resolve, reject) => {
     const el = new Image();
+    const timer = setTimeout(() => reject(new Error('timeout')), timeoutMs);
+    const done = (fn) => (...args) => { clearTimeout(timer); fn(...args); };
     if (crossOrigin) el.crossOrigin = crossOrigin;
-    el.onload = () => resolve(el);
-    el.onerror = reject;
+    el.onload = done(resolve.bind(null, el));
+    el.onerror = done(reject);
     el.src = src;
   });
 }
@@ -102,8 +108,8 @@ function drawCanvasGeometry(ctx, map, feature, style, scale) {
 }
 function geometryToSvg(map, feature, style, scale) {
   const type = getLayerGeometryType(feature); const coords = feature?.geometry?.coordinates; if (!coords) return '';
-  const stroke = style.stroke || style.markerColor || '#111111';
-  const fill = style.fill || style.markerFill || style.markerColor || '#111111';
+  const stroke = safeColor(style.stroke || style.markerColor, '#111111');
+  const fill = safeColor(style.fill || style.markerFill || style.markerColor, '#111111');
   const fillOpacity = (style.fillOpacity ?? 0.2) * (style.opacity ?? 1);
   const strokeWidth = (style.strokeWidth ?? 2) * scale;
   const opacity = Math.max(0, Math.min(1, style.opacity ?? 1));
@@ -112,7 +118,7 @@ function geometryToSvg(map, feature, style, scale) {
   if (type === 'MultiPolygon') return `<path d="${coords.flatMap((polygon) => polygon.map((ring) => pathFromPoints(projectRing(map, ring, scale), true))).filter(Boolean).join(' ')}" fill="${fill}" fill-opacity="${fillOpacity}" stroke="${stroke}" stroke-width="${strokeWidth}"${dash} fill-rule="evenodd" stroke-opacity="${opacity}" />`;
   if (type === 'LineString') return `<path d="${pathFromPoints(projectLine(map, coords, scale), false)}" fill="none" stroke="${stroke}" stroke-width="${strokeWidth}"${dash} stroke-linecap="round" stroke-linejoin="round" stroke-opacity="${opacity}" />`;
   if (type === 'MultiLineString') return `<path d="${coords.map((line) => pathFromPoints(projectLine(map, line, scale), false)).filter(Boolean).join(' ')}" fill="none" stroke="${stroke}" stroke-width="${strokeWidth}"${dash} stroke-linecap="round" stroke-linejoin="round" stroke-opacity="${opacity}" />`;
-  if (type === 'Point') { const pt = projectCoordinate(map, coords, scale); const radius = (style.markerSize ?? 8) * scale * 0.5; return `<circle cx="${pt.x.toFixed(2)}" cy="${pt.y.toFixed(2)}" r="${radius.toFixed(2)}" fill="${style.markerFill || fill}" stroke="${style.markerColor || stroke}" stroke-width="${Math.max(scale, strokeWidth * 0.4).toFixed(2)}" opacity="${opacity}" />`; }
+  if (type === 'Point') { const pt = projectCoordinate(map, coords, scale); const radius = (style.markerSize ?? 8) * scale * 0.5; return `<circle cx="${pt.x.toFixed(2)}" cy="${pt.y.toFixed(2)}" r="${radius.toFixed(2)}" fill="${safeColor(style.markerFill || fill)}" stroke="${safeColor(style.markerColor || stroke)}" stroke-width="${Math.max(scale, strokeWidth * 0.4).toFixed(2)}" opacity="${opacity}" />`; }
   if (type === 'MultiPoint') return coords.map((coord) => geometryToSvg(map, { geometry: { type: 'Point', coordinates: coord } }, style, scale)).join('');
   return '';
 }
@@ -122,7 +128,16 @@ function getOverlayMetrics(scene) {
 function drawRoundedRect(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
 
 function getTheme(scene) {
-  return getThemeTokens(scene?.project?.layout?.themeId || 'modern_rounded');
+  const base = getThemeTokens(scene?.project?.layout?.themeId || 'modern_rounded');
+  const accent = scene?.project?.layout?.accentColor;
+  if (!accent) return base;
+  const themeId = scene?.project?.layout?.themeId;
+  return {
+    ...base,
+    titleAccent: accent,
+    calloutBorder: accent,
+    ...(!themeId || themeId === 'modern_rounded' ? { titleFill: accent + 'dd' } : {}),
+  };
 }
 
 function drawPanelRect(ctx, x, y, w, h, radius, fill, border, scale) {
@@ -144,8 +159,9 @@ function drawTitleBlockCanvas(ctx, scene, scale) {
   const { title } = getOverlayMetrics(scene); const x = title.left * scale, y = title.top * scale, w = title.width * scale, h = title.height * scale;
   drawPanelRect(ctx, x, y, w, h, (theme.titleRadius || theme.panelRadius || 10) * scale, theme.titleFill, theme.titleBorder, scale);
   if (theme.titleAccent) { ctx.fillStyle = theme.titleAccent; ctx.fillRect(x, y, w, 5 * scale); }
-  ctx.fillStyle = theme.titleText; ctx.font = `700 ${26 * scale}px Arial`; ctx.textBaseline = 'top'; ctx.fillText(scene.project.layout?.title || 'Project Map', x + 18 * scale, y + (theme.titleAccent ? 20 : 16) * scale);
-  ctx.fillStyle = theme.subtitleText; ctx.font = `${14 * scale}px Arial`; ctx.fillText(scene.project.layout?.subtitle || 'Technical results template', x + 18 * scale, y + (theme.titleAccent ? 56 : 52) * scale);
+  const titleFont = `${scene.project.layout?.fonts?.title || 'Inter'}, Arial, sans-serif`;
+  ctx.fillStyle = theme.titleText; ctx.font = `700 ${26 * scale}px ${titleFont}`; ctx.textBaseline = 'top'; ctx.fillText(scene.project.layout?.title || 'Project Map', x + 18 * scale, y + (theme.titleAccent ? 20 : 16) * scale);
+  ctx.fillStyle = theme.subtitleText; ctx.font = `${14 * scale}px ${titleFont}`; ctx.fillText(scene.project.layout?.subtitle || 'Technical results template', x + 18 * scale, y + (theme.titleAccent ? 56 : 52) * scale);
 }
 
 function groupLegendItems(items, layout) {
@@ -169,20 +185,21 @@ function legendSwatchSvg(item, x, y, scale) {
 }
 function drawLegendCanvas(ctx, scene, scale) {
   const theme = getTheme(scene);
+  const legendFont = `${scene.project.layout?.fonts?.legend || 'Inter'}, Arial, sans-serif`;
   const { legend } = getOverlayMetrics(scene); const items = scene.project.layout?.legendItems || []; if (!items.length || !legend?.width || !legend?.height) return;
   const x = legend.left * scale, y = legend.top * scale, w = legend.width * scale, h = legend.height * scale;
   drawPanelRect(ctx, x, y, w, h, (theme.panelRadius || 10) * scale, theme.panelFill, theme.panelBorder, scale);
-  ctx.fillStyle = theme.panelTitle; ctx.font = `700 ${15 * scale}px Arial`; ctx.textBaseline = 'top'; ctx.fillText('Legend', x + 16 * scale, y + 14 * scale);
+  ctx.fillStyle = theme.panelTitle; ctx.font = `700 ${15 * scale}px ${legendFont}`; ctx.textBaseline = 'top'; ctx.fillText('Legend', x + 16 * scale, y + 14 * scale);
   let rowY = y + 40 * scale;
   groupLegendItems(items, scene.project.layout).forEach((group) => {
-    if (group.heading) { ctx.fillStyle = theme.mutedText; ctx.font = `700 ${11 * scale}px Arial`; ctx.fillText(group.heading.toUpperCase(), x + 16 * scale, rowY); rowY += 18 * scale; }
+    if (group.heading) { ctx.fillStyle = theme.mutedText; ctx.font = `700 ${11 * scale}px ${legendFont}`; ctx.fillText(group.heading.toUpperCase(), x + 16 * scale, rowY); rowY += 18 * scale; }
     group.items.forEach((item) => {
       if (item.type === 'points') {
         ctx.beginPath(); ctx.arc(x + 24 * scale, rowY + 9 * scale, 5 * scale, 0, Math.PI * 2); ctx.fillStyle = item.style.markerFill || item.style.markerColor || '#ffffff'; ctx.fill(); ctx.strokeStyle = item.style.markerColor || '#111111'; ctx.lineWidth = Math.max(1, scale); ctx.stroke();
       } else {
         ctx.fillStyle = rgba(item.style.fill || '#93c5fd', item.style.fillOpacity ?? 0.22); ctx.fillRect(x + 16 * scale, rowY + 2 * scale, 18 * scale, 12 * scale); ctx.strokeStyle = item.style.stroke || '#3b82f6'; ctx.lineWidth = Math.max(1, scale); ctx.strokeRect(x + 16 * scale, rowY + 2 * scale, 18 * scale, 12 * scale);
       }
-      ctx.fillStyle = theme.bodyText; ctx.font = `${13 * scale}px Arial`; ctx.textBaseline = 'middle'; ctx.fillText(item.label || 'Layer', x + 46 * scale, rowY + 9 * scale); rowY += 24 * scale;
+      ctx.fillStyle = theme.bodyText; ctx.font = `${13 * scale}px ${legendFont}`; ctx.textBaseline = 'middle'; ctx.fillText(item.label || 'Layer', x + 46 * scale, rowY + 9 * scale); rowY += 24 * scale;
     });
     rowY += 6 * scale;
   });
@@ -211,7 +228,8 @@ function drawScaleBarCanvas(ctx, scene, scale) {
   const { scaleBar } = getOverlayMetrics(scene); const x = scaleBar.left * scale, y = scaleBar.top * scale, w = scaleBar.width * scale, h = scaleBar.height * scale, scaleState = pickScaleLabel(scene.map), barWidth = scaleState.widthPx * scale;
   drawPanelRect(ctx, x, y, w, h, (theme.panelRadius || 10) * scale, theme.scaleFill, theme.panelBorder, scale);
   ctx.fillStyle = theme.scaleStroke; ctx.fillRect(x + 16 * scale, y + 18 * scale, barWidth / 2, 10 * scale); ctx.fillStyle = '#ffffff'; ctx.fillRect(x + 16 * scale + barWidth / 2, y + 18 * scale, barWidth / 2, 10 * scale); ctx.strokeStyle = theme.scaleStroke; ctx.lineWidth = Math.max(1, scale); ctx.strokeRect(x + 16 * scale, y + 18 * scale, barWidth, 10 * scale);
-  ctx.fillStyle = theme.bodyText; ctx.font = `${12 * scale}px Arial`; ctx.textBaseline = 'top'; ctx.fillText(scaleState.label, x + 16 * scale, y + 40 * scale);
+  const footerFont = `${scene.project.layout?.fonts?.footer || 'Inter'}, Arial, sans-serif`;
+  ctx.fillStyle = theme.bodyText; ctx.font = `${12 * scale}px ${footerFont}`; ctx.textBaseline = 'top'; ctx.fillText(scaleState.label, x + 16 * scale, y + 40 * scale);
 }
 
 function resolveReferenceBounds(bounds, insetMode) {
@@ -231,6 +249,98 @@ function normalizeInset(visibleBounds, referenceBounds) {
     h: ((visibleBounds.maxLat - visibleBounds.minLat) / height) * (100 - pad * 2),
   };
 }
+function projectToCanvas(lng, lat, refBbox, x, y, w, h, pad) {
+  const [minLng, minLat, maxLng, maxLat] = refBbox;
+  const rngW = maxLng - minLng || 1, rngH = maxLat - minLat || 1;
+  return [
+    x + pad + ((lng - minLng) / rngW) * (w - pad * 2),
+    (y + h - pad) - ((lat - minLat) / rngH) * (h - pad * 2),
+  ];
+}
+
+function getAutoInsetRefBbox(region) {
+  const [minLng, minLat, maxLng, maxLat] = region.bbox;
+  const padFrac = 0.06;
+  const dLng = (maxLng - minLng) * padFrac, dLat = (maxLat - minLat) * padFrac;
+  return [minLng - dLng, minLat - dLat, maxLng + dLng, maxLat + dLat];
+}
+
+function drawAutoInsetCanvas(ctx, innerX, innerY, innerW, innerH, scale, region, visibleBounds) {
+  const pad = 6 * scale;
+  const refBbox = getAutoInsetRefBbox(region);
+
+  // Background
+  ctx.fillStyle = '#f0f4f8';
+  ctx.fillRect(innerX, innerY, innerW, innerH);
+
+  // Province/state silhouette
+  ctx.fillStyle = '#dce8f5';
+  ctx.strokeStyle = '#8aabcf';
+  ctx.lineWidth = 0.8 * scale;
+  region.coordinates.forEach(ring => {
+    if (ring.length < 2) return;
+    ctx.beginPath();
+    ring.forEach(([lng, lat], i) => {
+      const [px, py] = projectToCanvas(lng, lat, refBbox, innerX, innerY, innerW, innerH, pad);
+      if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    });
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  });
+
+  // Project location marker
+  if (visibleBounds) {
+    const [mx1, my1] = projectToCanvas(visibleBounds.minLng, visibleBounds.maxLat, refBbox, innerX, innerY, innerW, innerH, pad);
+    const [mx2, my2] = projectToCanvas(visibleBounds.maxLng, visibleBounds.minLat, refBbox, innerX, innerY, innerW, innerH, pad);
+    const rx = Math.min(mx1, mx2), ry = Math.min(my1, my2);
+    const rw = Math.max(4 * scale, Math.abs(mx2 - mx1)), rh = Math.max(4 * scale, Math.abs(my2 - my1));
+    ctx.fillStyle = 'rgba(96,165,250,0.25)';
+    ctx.strokeStyle = '#2563eb';
+    ctx.lineWidth = 1.2 * scale;
+    ctx.beginPath();
+    ctx.rect(Math.max(innerX + pad, rx), Math.max(innerY + pad, ry), rw, rh);
+    ctx.fill();
+    ctx.stroke();
+    const dotX = Math.max(innerX + pad + 3 * scale, Math.min(innerX + innerW - pad - 3 * scale, rx + rw / 2));
+    const dotY = Math.max(innerY + pad + 3 * scale, Math.min(innerY + innerH - pad - 3 * scale, ry + rh / 2));
+    ctx.beginPath();
+    ctx.arc(dotX, dotY, 3.5 * scale, 0, Math.PI * 2);
+    ctx.fillStyle = '#1d4ed8';
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1.2 * scale;
+    ctx.fill();
+    ctx.stroke();
+  }
+}
+
+function autoInsetSvg(innerX, innerY, innerW, innerH, scale, region, visibleBounds) {
+  const pad = 6 * scale;
+  const refBbox = getAutoInsetRefBbox(region);
+  const project = (lng, lat) => projectToCanvas(lng, lat, refBbox, innerX, innerY, innerW, innerH, pad);
+
+  const paths = region.coordinates.map(ring => {
+    if (ring.length < 2) return '';
+    const pts = ring.map(([lng, lat]) => { const [px, py] = project(lng, lat); return `${px.toFixed(1)},${py.toFixed(1)}`; });
+    return `<path d="M ${pts.join(' L ')} Z" fill="#dce8f5" stroke="#8aabcf" stroke-width="${0.8 * scale}" />`;
+  }).join('');
+
+  let markerSvg = '';
+  if (visibleBounds) {
+    const [mx1, my1] = project(visibleBounds.minLng, visibleBounds.maxLat);
+    const [mx2, my2] = project(visibleBounds.maxLng, visibleBounds.minLat);
+    const rx = Math.max(innerX + pad, Math.min(mx1, mx2));
+    const ry = Math.max(innerY + pad, Math.min(my1, my2));
+    const rw = Math.max(4 * scale, Math.abs(mx2 - mx1));
+    const rh = Math.max(4 * scale, Math.abs(my2 - my1));
+    const dotX = Math.max(innerX + pad + 3 * scale, Math.min(innerX + innerW - pad - 3 * scale, rx + rw / 2));
+    const dotY = Math.max(innerY + pad + 3 * scale, Math.min(innerY + innerH - pad - 3 * scale, ry + rh / 2));
+    markerSvg = `<rect x="${rx}" y="${ry}" width="${rw}" height="${rh}" fill="rgba(96,165,250,0.25)" stroke="#2563eb" stroke-width="${1.2 * scale}" /><circle cx="${dotX}" cy="${dotY}" r="${3.5 * scale}" fill="#1d4ed8" stroke="#ffffff" stroke-width="${1.2 * scale}" />`;
+  }
+
+  return `<rect x="${innerX}" y="${innerY}" width="${innerW}" height="${innerH}" fill="#f0f4f8" />${paths}${markerSvg}`;
+}
+
 function drawInsetBackdropCanvas(ctx, x, y, w, h, scale) {
   const lg = ctx.createLinearGradient(x, y, x + w, y + h); lg.addColorStop(0, '#f8fafc'); lg.addColorStop(1, '#eef3f8');
   ctx.fillStyle = lg; drawRoundedRect(ctx, x, y, w, h, 8 * scale); ctx.fill(); ctx.strokeStyle = '#d3dce8'; ctx.stroke();
@@ -253,24 +363,32 @@ async function drawInsetCanvas(ctx, scene, scale) {
   const zone = getOverlayMetrics(scene).inset; if (!zone || !zone.width || !zone.height) return; const x = zone.left * scale, y = zone.top * scale, w = zone.width * scale, h = zone.height * scale;
   const theme = getTheme(scene);
   drawPanelRect(ctx, x, y, w, h, (theme.panelRadius || 10) * scale, theme.insetFill, theme.insetBorder, scale);
-  ctx.fillStyle = theme.insetTitle; ctx.font = `700 ${12 * scale}px Arial`; ctx.textBaseline = 'top'; ctx.fillText('Project Locator', x + 12 * scale, y + 10 * scale);
+  const { insetImage, insetMode, autoInsetRegion, insetTitle, insetLabel } = scene.project.layout || {};
+  ctx.fillStyle = theme.insetTitle; ctx.font = `700 ${12 * scale}px Arial`; ctx.textBaseline = 'top'; ctx.fillText(insetTitle || 'Project Locator', x + 12 * scale, y + 10 * scale);
   const innerX = x + 10 * scale, innerY = y + 30 * scale, innerW = w - 20 * scale, innerH = h - 56 * scale;
-  const customInset = scene.project.layout?.insetMode === 'custom_image' && scene.project.layout?.insetImage;
+  const customInset = insetMode === 'custom_image' && insetImage;
   if (customInset) {
-    const img = await new Promise((resolve, reject) => { const el = new Image(); el.onload = () => resolve(el); el.onerror = reject; el.src = scene.project.layout.insetImage; }).catch(() => null);
+    const img = await new Promise((resolve, reject) => { const el = new Image(); el.onload = () => resolve(el); el.onerror = reject; el.src = insetImage; }).catch(() => { _exportWarnings.push('inset image could not be embedded'); return null; });
     if (img) { ctx.save(); drawRoundedRect(ctx, innerX, innerY, innerW, innerH, 8 * scale); ctx.clip(); ctx.drawImage(img, innerX, innerY, innerW, innerH); ctx.restore(); }
     return;
   }
-  const visible = (scene.project.layers || []).filter((layer) => layer.visible !== false && layer.geojson); const bounds = unionBounds(visible.map((layer) => geojsonBounds(layer.geojson)).filter(Boolean)); const ref = resolveReferenceBounds(bounds, scene.project.layout?.insetMode); const marker = normalizeInset(bounds, ref);
+  const visible = (scene.project.layers || []).filter((layer) => layer.visible !== false && layer.geojson);
+  const bounds = unionBounds(visible.map((layer) => geojsonBounds(layer.geojson)).filter(Boolean));
+  if (autoInsetRegion) {
+    drawAutoInsetCanvas(ctx, innerX, innerY, innerW, innerH, scale, autoInsetRegion, bounds);
+    ctx.fillStyle = theme.insetMuted; ctx.font = `${11 * scale}px Arial`; ctx.textBaseline = 'alphabetic'; ctx.fillText(insetLabel || autoInsetRegion.name, x + 12 * scale, y + h - 10 * scale);
+    return;
+  }
+  const ref = resolveReferenceBounds(bounds, insetMode); const marker = normalizeInset(bounds, ref);
   drawInsetBackdropCanvas(ctx, innerX, innerY, innerW, innerH, scale);
   if (marker) { const mx = Math.max(innerX + 8 * scale, innerX + (marker.x / 100) * innerW), my = Math.max(innerY + 8 * scale, innerY + (marker.y / 100) * innerH), mw = Math.max(8 * scale, Math.max(10 * scale, (marker.w / 100) * innerW)), mh = Math.max(8 * scale, Math.max(10 * scale, (marker.h / 100) * innerH)); ctx.fillStyle = 'rgba(96,165,250,0.16)'; drawRoundedRect(ctx, mx, my, mw, mh, 2 * scale); ctx.fill(); ctx.strokeStyle = '#2563eb'; ctx.lineWidth = 1.5 * scale; ctx.stroke(); ctx.beginPath(); ctx.arc(Math.min(innerX + innerW - 8 * scale, Math.max(innerX + 8 * scale, mx + mw / 2)), Math.min(innerY + innerH - 8 * scale, Math.max(innerY + 8 * scale, my + mh / 2)), 3.2 * scale, 0, Math.PI * 2); ctx.fillStyle = '#0f2c56'; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.2 * scale; ctx.fill(); ctx.stroke(); }
-  ctx.fillStyle = theme.insetMuted; ctx.font = `${11 * scale}px Arial`; ctx.textBaseline = 'alphabetic'; ctx.fillText(ref.label, x + 12 * scale, y + h - 10 * scale);
+  ctx.fillStyle = theme.insetMuted; ctx.font = `${11 * scale}px Arial`; ctx.textBaseline = 'alphabetic'; ctx.fillText(insetLabel || ref.label, x + 12 * scale, y + h - 10 * scale);
 }
 function drawFooterCanvas(ctx, scene, scale) {
   const theme = getTheme(scene);
-  const text = scene.project.layout?.footerText; const zone = getOverlayMetrics(scene).footer; if (!text || !zone) return; const x = zone.left * scale, y = zone.top * scale, w = zone.width * scale, h = zone.height * scale;
+  const text = scene.project.layout?.footerText; const zone = getOverlayMetrics(scene).footer; if (!text || !zone || !zone.width || !zone.height) return; const x = zone.left * scale, y = zone.top * scale, w = zone.width * scale, h = zone.height * scale;
   drawPanelRect(ctx, x, y, w, h, (theme.panelRadius || 10) * scale, theme.footerFill, theme.panelBorder, scale);
-  ctx.fillStyle = theme.footerText; ctx.font = `${12 * scale}px Arial`; ctx.textBaseline = 'middle'; ctx.fillText(text, x + 12 * scale, y + h / 2);
+  ctx.fillStyle = theme.footerText; ctx.font = `${12 * scale}px ${scene.project.layout?.fonts?.footer || 'Inter'}, Arial, sans-serif`; ctx.textBaseline = 'middle'; ctx.fillText(text, x + 12 * scale, y + h / 2);
 }
 
 function intersectsCallout(a, b, padding = 10) { return !(a.left + a.width + padding < b.left || b.left + b.width + padding < a.left || a.top + a.height + padding < b.top || b.top + b.height + padding < a.top); }
@@ -279,20 +397,39 @@ function placeCallouts(scene, scale) {
   callouts.forEach((callout) => {
     if (!callout.anchor) return;
     const pt = scene.map.latLngToContainerPoint([callout.anchor.lat, callout.anchor.lng]);
-    const width = callout.type === 'boxed' ? 188 : callout.type === 'leader' ? 146 : 136; const height = callout.type === 'boxed' ? 42 : 24;
+    const width = callout.boxWidth || (callout.type === 'boxed' ? 188 : callout.type === 'leader' ? 146 : 136);
+    const hasSubtext = !!callout.subtext;
+    const height = callout.type === 'boxed' ? (hasSubtext ? 62 : 42) : (hasSubtext ? 38 : 24);
     let left = pt.x + (callout.offset?.x || 0); let top = pt.y + (callout.offset?.y || 0); let candidate = { ...callout, left, top, width, height, anchorPx: { x: pt.x, y: pt.y } }; let attempts = 0;
+    if (callout.isManualPosition) { placed.push({ ...candidate, left: left * scale, top: top * scale, width: width * scale, height: height * scale, anchorPx: { x: pt.x * scale, y: pt.y * scale } }); return; }
     while (placed.some((other) => intersectsCallout(candidate, other, 10)) && attempts < 8) { top += 18; left += attempts % 2 === 0 ? 8 : -6; candidate = { ...candidate, left, top }; attempts += 1; }
     if (!placed.some((other) => intersectsCallout(candidate, other, 2))) placed.push({ ...candidate, left: left * scale, top: top * scale, width: width * scale, height: height * scale, anchorPx: { x: pt.x * scale, y: pt.y * scale } });
   });
   return placed;
 }
+function fitText(ctx, text, maxWidth) {
+  if (!text || ctx.measureText(text).width <= maxWidth) return text;
+  let t = text;
+  while (t.length > 0 && ctx.measureText(t + '…').width > maxWidth) t = t.slice(0, -1);
+  return t + '…';
+}
+
 function drawCalloutsCanvas(ctx, scene, scale) {
+  const calloutFont = `${scene.project.layout?.fonts?.callout || 'Inter'}, Arial, sans-serif`;
   placeCallouts(scene, scale).forEach((c) => {
-    if (c.type === 'leader' || c.type === 'boxed') { ctx.beginPath(); ctx.moveTo(c.anchorPx.x, c.anchorPx.y); ctx.lineTo(c.left + 10 * scale, c.top + c.height / 2); ctx.strokeStyle = '#102640'; ctx.lineWidth = 1.4 * scale; ctx.setLineDash(c.type === 'leader' ? [5 * scale, 3 * scale] : []); ctx.stroke(); }
-    ctx.setLineDash([]);
     const theme = getTheme(scene);
-    if (c.type !== 'plain') { drawRoundedRect(ctx, c.left, c.top, c.width, c.height, Math.max(3, (theme.panelRadius || 10) - 4) * scale); ctx.fillStyle = theme.calloutFill; ctx.fill(); ctx.strokeStyle = theme.calloutBorder; ctx.lineWidth = 1 * scale; ctx.stroke(); }
-    ctx.fillStyle = theme.calloutText; ctx.font = `700 ${12 * scale}px Arial`; ctx.textBaseline = 'middle'; ctx.fillText(c.text || '', c.left + (c.type === 'plain' ? 0 : 10 * scale), c.top + (c.type === 'plain' ? 10 * scale : c.height / 2));
+    if (c.type === 'leader' || c.type === 'boxed') { ctx.beginPath(); ctx.moveTo(c.anchorPx.x, c.anchorPx.y); ctx.lineTo(c.left + 10 * scale, c.top + c.height / 2); ctx.strokeStyle = c.style?.border || '#102640'; ctx.lineWidth = 1.4 * scale; ctx.setLineDash(c.type === 'leader' ? [5 * scale, 3 * scale] : []); ctx.stroke(); }
+    ctx.setLineDash([]);
+    if (c.type !== 'plain') { drawRoundedRect(ctx, c.left, c.top, c.width, c.height, Math.max(3, (theme.panelRadius || 10) - 4) * scale); ctx.fillStyle = c.style?.background || theme.calloutFill; ctx.fill(); ctx.strokeStyle = c.style?.border || theme.calloutBorder; ctx.lineWidth = 1 * scale; ctx.stroke(); }
+    const textX = c.left + (c.type === 'plain' ? 0 : 10 * scale);
+    const textY = c.top + (c.type === 'plain' ? 10 * scale : c.subtext ? c.height / 2 - 9 * scale : c.height / 2);
+    const maxTextW = c.width - (c.type === 'plain' ? 0 : 20 * scale);
+    ctx.fillStyle = c.style?.textColor || theme.calloutText; ctx.font = `700 ${12 * scale}px ${calloutFont}`; ctx.textBaseline = 'middle'; ctx.fillText(fitText(ctx, c.text || '', maxTextW), textX, textY);
+    if (c.subtext) {
+      ctx.fillStyle = c.style?.subtextColor || '#475569';
+      ctx.font = `${10 * scale}px ${calloutFont}`;
+      ctx.fillText(fitText(ctx, c.subtext, maxTextW), textX, textY + 16 * scale);
+    }
   });
 }
 
@@ -432,10 +569,12 @@ function drawEllipsesCanvas(ctx, scene, scale) {
 }
 
 export async function renderSceneToCanvas(scene, options = {}) {
+  _exportWarnings = [];
   const scale = Number(options.pixelRatio || scene.project.layout?.exportSettings?.pixelRatio || 2);
   const canvas = document.createElement('canvas'); canvas.width = Math.round(scene.width * scale); canvas.height = Math.round(scene.height * scale); const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#f3f5f7'; ctx.fillRect(0, 0, canvas.width, canvas.height);
   await drawTilesCanvas(ctx, scene, scale); drawVectorsCanvas(ctx, scene, scale); drawEllipsesCanvas(ctx, scene, scale); await drawMarkersCanvas(ctx, scene, scale); drawCalloutsCanvas(ctx, scene, scale); drawTitleBlockCanvas(ctx, scene, scale); drawLegendCanvas(ctx, scene, scale); drawNorthArrowCanvas(ctx, scene, scale); await drawInsetCanvas(ctx, scene, scale); drawScaleBarCanvas(ctx, scene, scale); drawFooterCanvas(ctx, scene, scale); await drawLogoCanvas(ctx, scene, scale);
+  if (!options.noWatermark) { ctx.save(); ctx.font = `bold ${9 * scale}px Arial, sans-serif`; ctx.fillStyle = 'rgba(100,116,139,0.72)'; ctx.textAlign = 'right'; ctx.textBaseline = 'bottom'; ctx.shadowColor = 'rgba(255,255,255,0.6)'; ctx.shadowBlur = 3 * scale; ctx.fillText('explorationmaps.com', canvas.width - 8 * scale, canvas.height - 5 * scale); ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.restore(); }
   return canvas;
 }
 
@@ -453,7 +592,7 @@ async function drawLogoCanvas(ctx, scene, scale) {
   const zone = getOverlayMetrics(scene).logo; const x = zone.left * scale, y = zone.top * scale, w = zone.width * scale, h = zone.height * scale, padding = 10 * scale;
   const theme = getTheme(scene);
   drawPanelRect(ctx, x, y, w, h, (theme.panelRadius || 10) * scale, theme.logoFill, theme.logoBorder, scale);
-  const img = await new Promise((resolve, reject) => { const el = new Image(); el.onload = () => resolve(el); el.onerror = reject; el.src = logo; }).catch(() => null);
+  const img = await new Promise((resolve, reject) => { const el = new Image(); el.onload = () => resolve(el); el.onerror = reject; el.src = logo; }).catch(() => { _exportWarnings.push('logo could not be embedded'); return null; });
   if (img) {
     // Aspect-fit: scale to fill available space preserving ratio, centered (mirrors SVG preserveAspectRatio="xMidYMid meet")
     const availW = w - padding * 2;
@@ -477,30 +616,33 @@ async function renderBasemapImageSvg(scene, scale) {
   canvas.width = width;
   canvas.height = height;
   const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('Unable to prepare canvas for SVG basemap export.');
+  if (!ctx) return '';
 
-  for (const tile of tiles) {
-    let image = null;
-    if (tile.element?.complete && tile.element?.naturalWidth > 0) {
-      image = tile.element;
-    } else if (tile.href) {
-      image = await loadImage(tile.href, 'anonymous').catch(() => null);
-    }
-    if (!image) continue;
+  // Load all tiles in parallel (much faster than sequential await)
+  const images = await Promise.all(
+    tiles.map((tile) => tile.href ? loadImage(tile.href, 'anonymous').catch(() => null) : Promise.resolve(null))
+  );
+
+  let anyDrawn = false;
+  tiles.forEach((tile, i) => {
+    const image = images[i];
+    if (!image) return;
     ctx.save();
     ctx.globalAlpha = tile.opacity;
     ctx.drawImage(image, tile.x * scale, tile.y * scale, tile.width * scale, tile.height * scale);
     ctx.restore();
-  }
+    anyDrawn = true;
+  });
 
-  let pngDataUrl = null;
+  if (!anyDrawn) return '';
+
   try {
-    pngDataUrl = canvas.toDataURL('image/png', 1.0);
-  } catch (error) {
-    throw new Error('SVG basemap embedding failed because tile images block canvas export (CORS/tainted canvas). Use PNG export for full basemap fidelity or switch to a CORS-enabled basemap provider.');
+    const pngDataUrl = canvas.toDataURL('image/png', 1.0);
+    return `<image href="${escapeXml(pngDataUrl)}" x="0" y="0" width="${width}" height="${height}" preserveAspectRatio="none" />`;
+  } catch {
+    _exportWarnings.push('basemap omitted from SVG (CORS restriction on tile server)');
+    return '';
   }
-
-  return `<image href="${escapeXml(pngDataUrl)}" x="0" y="0" width="${width}" height="${height}" preserveAspectRatio="none" />`;
 }
 function renderVectorsSvg(scene, scale) { return (scene.project.layers || []).filter((layer) => layer.visible !== false && layer.geojson).map((layer) => featureCollectionFeatures(layer.geojson).map((feature) => geometryToSvg(scene.map, feature, getTemplateStyle(scene.template, layer), scale)).join('\n')).join('\n'); }
 function renderMarkerLabelSvg(scene, marker, point, scale) {
@@ -515,7 +657,7 @@ function renderMarkersSvg(scene, scale) {
   return (scene.project.markers || []).map((marker) => {
     const point = clonePoint(scene.map.latLngToContainerPoint([marker.lat, marker.lng]), scale);
     const size = (marker.size || 18) * scale;
-    const color = marker.color || '#d97706';
+    const color = safeColor(marker.color, '#d97706');
     let symbol = '';
     if (markerIsVectorIcon(marker.type)) {
       // Use the shared SVG path data — same source as the editor, guaranteed consistent
@@ -540,7 +682,7 @@ function renderEllipsesSvg(scene, scale) {
     const height = (ellipse.height || 56) * scale;
     const rotation = ellipse.rotation || 0;
     const dash = ellipse.dashed === false ? '' : ` stroke-dasharray="${6 * scale} ${4 * scale}"`;
-    const color = ellipse.color || '#dc2626';
+    const color = safeColor(ellipse.color, '#dc2626');
     const pos = ellipseLabelPlacement(center, width, height, rotation, scale);
     const labelWidth = ellipse.label ? ellipse.label.length * 12 * scale * 0.62 + 16 * scale : 0;
     const label = ellipse.label
@@ -558,7 +700,7 @@ function renderLegendSvg(scene, scale) {
 }
 function renderNorthArrowSvg(scene, scale) { const theme = getTheme(scene); const { northArrow } = getOverlayMetrics(scene); const x = northArrow.left * scale, y = northArrow.top * scale, w = northArrow.width * scale, h = northArrow.height * scale, cx = x + w / 2; return `<g>${svgRect(x, y, w, h, (theme.panelRadius || 10) * scale, theme.northArrowFill, theme.panelBorder, scale)}<text x="${cx}" y="${y + 24 * scale}" text-anchor="middle" fill="${theme.northArrowText}" font-family="Arial" font-size="${14 * scale}" font-weight="700">N</text><path d="M ${cx} ${y + 28 * scale} L ${cx - 12 * scale} ${y + 62 * scale} L ${cx - 3 * scale} ${y + 62 * scale} L ${cx - 3 * scale} ${y + 88 * scale} L ${cx + 3 * scale} ${y + 88 * scale} L ${cx + 3 * scale} ${y + 62 * scale} L ${cx + 12 * scale} ${y + 62 * scale} Z" fill="${theme.northArrowText}" /></g>`; }
 function renderScaleBarSvg(scene, scale) { const theme = getTheme(scene); const { scaleBar } = getOverlayMetrics(scene); const x = scaleBar.left * scale, y = scaleBar.top * scale, w = scaleBar.width * scale, h = scaleBar.height * scale, scaleState = pickScaleLabel(scene.map), barWidth = scaleState.widthPx * scale; return `<g>${svgRect(x, y, w, h, (theme.panelRadius || 10) * scale, theme.scaleFill, theme.panelBorder, scale)}<rect x="${x + 16 * scale}" y="${y + 18 * scale}" width="${barWidth / 2}" height="${10 * scale}" fill="${theme.scaleStroke}" /><rect x="${x + 16 * scale + barWidth / 2}" y="${y + 18 * scale}" width="${barWidth / 2}" height="${10 * scale}" fill="#ffffff" stroke="${theme.scaleStroke}" stroke-width="${Math.max(1, scale)}" /><rect x="${x + 16 * scale}" y="${y + 18 * scale}" width="${barWidth}" height="${10 * scale}" fill="none" stroke="${theme.scaleStroke}" stroke-width="${Math.max(1, scale)}" /><text x="${x + 16 * scale}" y="${y + 48 * scale}" fill="${theme.bodyText}" font-family="Arial" font-size="${12 * scale}">${escapeXml(scaleState.label)}</text></g>`; }
-function renderFooterSvg(scene, scale) { const theme = getTheme(scene); const text = scene.project.layout?.footerText; const zone = getOverlayMetrics(scene).footer; if (!text || !zone) return ''; const x = zone.left * scale, y = zone.top * scale, w = zone.width * scale, h = zone.height * scale; return `<g>${svgRect(x, y, w, h, (theme.panelRadius || 10) * scale, theme.footerFill, theme.panelBorder, scale)}<text x="${x + 12 * scale}" y="${y + 25 * scale}" fill="${theme.footerText}" font-family="Arial" font-size="${12 * scale}">${escapeXml(text)}</text></g>`; }
+function renderFooterSvg(scene, scale) { const theme = getTheme(scene); const text = scene.project.layout?.footerText; const zone = getOverlayMetrics(scene).footer; if (!text || !zone || !zone.width || !zone.height) return ''; const x = zone.left * scale, y = zone.top * scale, w = zone.width * scale, h = zone.height * scale; return `<g>${svgRect(x, y, w, h, (theme.panelRadius || 10) * scale, theme.footerFill, theme.panelBorder, scale)}<text x="${x + 12 * scale}" y="${y + 25 * scale}" fill="${theme.footerText}" font-family="Arial" font-size="${12 * scale}">${escapeXml(text)}</text></g>`; }
 function insetBackdropSvg(innerX, innerY, innerW, innerH, scale) {
   const px = (n) => n / 100;
   const path1 = `M ${innerX + px(12) * innerW} ${innerY + px(20) * innerH} C ${innerX + px(20) * innerW} ${innerY + px(12) * innerH}, ${innerX + px(35) * innerW} ${innerY + px(10) * innerH}, ${innerX + px(45) * innerW} ${innerY + px(16) * innerH} C ${innerX + px(55) * innerW} ${innerY + px(22) * innerH}, ${innerX + px(60) * innerW} ${innerY + px(30) * innerH}, ${innerX + px(72) * innerW} ${innerY + px(32) * innerH} C ${innerX + px(82) * innerW} ${innerY + px(34) * innerH}, ${innerX + px(88) * innerW} ${innerY + px(40) * innerH}, ${innerX + px(88) * innerW} ${innerY + px(52) * innerH} C ${innerX + px(88) * innerW} ${innerY + px(68) * innerH}, ${innerX + px(76) * innerW} ${innerY + px(78) * innerH}, ${innerX + px(62) * innerW} ${innerY + px(82) * innerH} C ${innerX + px(50) * innerW} ${innerY + px(86) * innerH}, ${innerX + px(36) * innerW} ${innerY + px(88) * innerH}, ${innerX + px(22) * innerW} ${innerY + px(82) * innerH} C ${innerX + px(12) * innerW} ${innerY + px(78) * innerH}, ${innerX + px(8) * innerW} ${innerY + px(68) * innerH}, ${innerX + px(10) * innerW} ${innerY + px(54) * innerH} C ${innerX + px(12) * innerW} ${innerY + px(42) * innerH}, ${innerX + px(8) * innerW} ${innerY + px(30) * innerH}, ${innerX + px(12) * innerW} ${innerY + px(20) * innerH} Z`;
@@ -570,21 +712,62 @@ function insetBackdropSvg(innerX, innerY, innerW, innerH, scale) {
 function renderInsetSvg(scene, scale) {
   const zone = getOverlayMetrics(scene).inset; if (!zone || !zone.width || !zone.height) return ''; 
   const x = zone.left * scale, y = zone.top * scale, w = zone.width * scale, h = zone.height * scale, innerX = x + 10 * scale, innerY = y + 30 * scale, innerW = w - 20 * scale, innerH = h - 56 * scale;
-  const customInset = scene.project.layout?.insetMode === 'custom_image' && scene.project.layout?.insetImage;
+  const { insetImage, insetMode, autoInsetRegion, insetTitle, insetLabel } = scene.project.layout || {};
+  const customInset = insetMode === 'custom_image' && insetImage;
+  const theme = getTheme(scene);
+  const panelSvg = svgRect(x, y, w, h, (theme.panelRadius || 10) * scale, theme.insetFill, theme.insetBorder, scale);
+  const titleSvg = `<text x="${x + 12 * scale}" y="${y + 16 * scale}" fill="${theme.insetTitle}" font-family="Arial" font-size="${12 * scale}" font-weight="700">${escapeXml(insetTitle || 'Project Locator')}</text>`;
   if (customInset) {
-    const theme = getTheme(scene); return `<g>${svgRect(x, y, w, h, (theme.panelRadius || 10) * scale, theme.insetFill, theme.insetBorder, scale)}<text x="${x + 12 * scale}" y="${y + 16 * scale}" fill="${theme.insetTitle}" font-family="Arial" font-size="${12 * scale}" font-weight="700">Project Locator</text><image href="${escapeXml(scene.project.layout.insetImage)}" x="${innerX}" y="${innerY}" width="${innerW}" height="${innerH}" preserveAspectRatio="xMidYMid slice" /></g>`;
+    return `<g>${panelSvg}${titleSvg}<image href="${escapeXml(insetImage)}" x="${innerX}" y="${innerY}" width="${innerW}" height="${innerH}" preserveAspectRatio="xMidYMid slice" /></g>`;
   }
-  const visible = (scene.project.layers || []).filter((layer) => layer.visible !== false && layer.geojson); const bounds = unionBounds(visible.map((layer) => geojsonBounds(layer.geojson)).filter(Boolean)); const ref = resolveReferenceBounds(bounds, scene.project.layout?.insetMode); const marker = normalizeInset(bounds, ref);
+  const visible = (scene.project.layers || []).filter((layer) => layer.visible !== false && layer.geojson);
+  const bounds = unionBounds(visible.map((layer) => geojsonBounds(layer.geojson)).filter(Boolean));
+  if (autoInsetRegion) {
+    const innerSvg = autoInsetSvg(innerX, innerY, innerW, innerH, scale, autoInsetRegion, bounds);
+    const labelSvg = `<text x="${x + 12 * scale}" y="${y + h - 10 * scale}" fill="${theme.insetMuted}" font-family="Arial" font-size="${11 * scale}">${escapeXml(insetLabel || autoInsetRegion.name)}</text>`;
+    return `<g>${panelSvg}${titleSvg}${innerSvg}${labelSvg}</g>`;
+  }
+  const ref = resolveReferenceBounds(bounds, insetMode); const marker = normalizeInset(bounds, ref);
   const markerSvg = marker ? `<rect x="${Math.max(innerX + 8 * scale, innerX + (marker.x / 100) * innerW)}" y="${Math.max(innerY + 8 * scale, innerY + (marker.y / 100) * innerH)}" width="${Math.max(8 * scale, Math.max(10 * scale, (marker.w / 100) * innerW))}" height="${Math.max(8 * scale, Math.max(10 * scale, (marker.h / 100) * innerH))}" fill="rgba(96,165,250,0.16)" stroke="#2563eb" stroke-width="${1.5 * scale}" rx="${2 * scale}" /><circle cx="${Math.min(innerX + innerW - 8 * scale, Math.max(innerX + 8 * scale, innerX + (marker.x / 100) * innerW + Math.max(10 * scale, (marker.w / 100) * innerW) / 2))}" cy="${Math.min(innerY + innerH - 8 * scale, Math.max(innerY + 8 * scale, innerY + (marker.y / 100) * innerH + Math.max(10 * scale, (marker.h / 100) * innerH) / 2))}" r="${3.2 * scale}" fill="#0f2c56" stroke="#ffffff" stroke-width="${1.2 * scale}" />` : '';
-  const theme = getTheme(scene); return `<g>${svgRect(x, y, w, h, (theme.panelRadius || 10) * scale, theme.insetFill, theme.insetBorder, scale)}<text x="${x + 12 * scale}" y="${y + 16 * scale}" fill="${theme.insetTitle}" font-family="Arial" font-size="${12 * scale}" font-weight="700">Project Locator</text>${insetBackdropSvg(innerX, innerY, innerW, innerH, scale)}${markerSvg}<text x="${x + 12 * scale}" y="${y + h - 10 * scale}" fill="${theme.insetMuted}" font-family="Arial" font-size="${11 * scale}">${escapeXml(ref.label)}</text></g>`;
+  return `<g>${panelSvg}${titleSvg}${insetBackdropSvg(innerX, innerY, innerW, innerH, scale)}${markerSvg}<text x="${x + 12 * scale}" y="${y + h - 10 * scale}" fill="${theme.insetMuted}" font-family="Arial" font-size="${11 * scale}">${escapeXml(insetLabel || ref.label)}</text></g>`;
 }
 function renderLogoSvg(scene, scale) { const theme = getTheme(scene); const logo = scene.project.layout?.logo; if (!logo) return ''; const zone = getOverlayMetrics(scene).logo; if (!zone?.width || !zone?.height) return '';  const x = zone.left * scale, y = zone.top * scale, w = zone.width * scale, h = zone.height * scale, padding = 10 * scale; return `<g>${svgRect(x, y, w, h, (theme.panelRadius || 10) * scale, theme.logoFill, theme.logoBorder, scale)}<image href="${escapeXml(logo)}" x="${x + padding}" y="${y + padding}" width="${w - padding * 2}" height="${h - padding * 2}" preserveAspectRatio="xMidYMid meet" /></g>`; }
-function renderCalloutsSvg(scene, scale) { return placeCallouts(scene, scale).map((c) => { const line = c.type === 'leader' || c.type === 'boxed' ? `<line x1="${c.anchorPx.x}" y1="${c.anchorPx.y}" x2="${c.left + 10 * scale}" y2="${c.top + c.height / 2}" stroke="#102640" stroke-width="${1.4 * scale}" ${c.type === 'leader' ? `stroke-dasharray="${5 * scale} ${3 * scale}"` : ''} />` : ''; const box = c.type !== 'plain' ? `<rect x="${c.left}" y="${c.top}" width="${c.width}" height="${c.height}" rx="${6 * scale}" fill="rgba(255,255,255,0.97)" stroke="#17304f" />` : ''; return `<g>${line}${box}<text x="${c.left + (c.type === 'plain' ? 0 : 10 * scale)}" y="${c.top + (c.type === 'plain' ? 10 * scale : c.height / 2)}" dominant-baseline="middle" fill="#102640" font-family="Arial" font-size="${12 * scale}" font-weight="700">${escapeXml(c.text || '')}</text></g>`; }).join('\n'); }
+function renderCalloutsSvg(scene, scale) {
+  const calloutFont = `${scene.project.layout?.fonts?.callout || 'Inter'}, Arial, sans-serif`;
+  return placeCallouts(scene, scale).map((c) => {
+    const leaderColor = c.style?.border || '#102640';
+    const line = c.type === 'leader' || c.type === 'boxed' ? `<line x1="${c.anchorPx.x}" y1="${c.anchorPx.y}" x2="${c.left + 10 * scale}" y2="${c.top + c.height / 2}" stroke="${leaderColor}" stroke-width="${1.4 * scale}" ${c.type === 'leader' ? `stroke-dasharray="${5 * scale} ${3 * scale}"` : ''} />` : '';
+    const boxFill = c.style?.background || 'rgba(255,255,255,0.97)';
+    const boxStroke = c.style?.border || '#17304f';
+    const box = c.type !== 'plain' ? `<rect x="${c.left}" y="${c.top}" width="${c.width}" height="${c.height}" rx="${6 * scale}" fill="${boxFill}" stroke="${boxStroke}" />` : '';
+    const textFill = c.style?.textColor || '#102640';
+    const textX = c.left + (c.type === 'plain' ? 0 : 10 * scale);
+    const textY = c.top + (c.type === 'plain' ? 10 * scale : c.subtext ? c.height / 2 - 9 * scale : c.height / 2);
+    const mainText = `<text x="${textX}" y="${textY}" dominant-baseline="middle" fill="${textFill}" font-family="${calloutFont}" font-size="${12 * scale}" font-weight="700">${escapeXml(c.text || '')}</text>`;
+    const subtextEl = c.subtext ? `<text x="${textX}" y="${textY + 16 * scale}" dominant-baseline="middle" fill="${c.style?.subtextColor || '#475569'}" font-family="${calloutFont}" font-size="${10 * scale}">${escapeXml(c.subtext)}</text>` : '';
+    return `<g>${line}${box}${mainText}${subtextEl}</g>`;
+  }).join('\n');
+}
 
 export async function renderSceneToSvg(scene, options = {}) {
+  _exportWarnings = [];
   const scale = Number(options.pixelRatio || scene.project.layout?.exportSettings?.pixelRatio || 2); const width = Math.round(scene.width * scale), height = Math.round(scene.height * scale);
   const basemapImage = await renderBasemapImageSvg(scene, scale);
-  return `<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="100%" height="100%" fill="#f3f5f7" />${basemapImage}${renderVectorsSvg(scene, scale)}${renderEllipsesSvg(scene, scale)}${renderMarkersSvg(scene, scale)}${renderCalloutsSvg(scene, scale)}${renderTitleSvg(scene, scale)}${renderLegendSvg(scene, scale)}${renderNorthArrowSvg(scene, scale)}${renderInsetSvg(scene, scale)}${renderScaleBarSvg(scene, scale)}${renderFooterSvg(scene, scale)}${renderLogoSvg(scene, scale)}</svg>`;
+  const watermark = options.noWatermark ? '' : `<text x="${width - 8}" y="${height - 5}" font-family="Arial,sans-serif" font-size="9" font-weight="bold" fill="rgba(100,116,139,0.72)" text-anchor="end" paint-order="stroke" stroke="rgba(255,255,255,0.55)" stroke-width="2.5" stroke-linejoin="round">explorationmaps.com</text>`;
+  return `<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="100%" height="100%" fill="#f3f5f7" />${basemapImage}${renderVectorsSvg(scene, scale)}${renderEllipsesSvg(scene, scale)}${renderMarkersSvg(scene, scale)}${renderCalloutsSvg(scene, scale)}${renderTitleSvg(scene, scale)}${renderLegendSvg(scene, scale)}${renderNorthArrowSvg(scene, scale)}${renderInsetSvg(scene, scale)}${renderScaleBarSvg(scene, scale)}${renderFooterSvg(scene, scale)}${renderLogoSvg(scene, scale)}${watermark}</svg>`;
 }
-export function downloadCanvas(filename, canvas) { const link = document.createElement('a'); link.download = filename; link.href = canvas.toDataURL('image/png', 1.0); link.click(); }
+export function downloadCanvas(filename, canvas) {
+  canvas.toBlob((blob) => {
+    if (!blob) return;
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.download = filename;
+    link.href = url;
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(url), 100);
+  }, 'image/png', 1.0);
+}
 export function downloadSvg(filename, svgText) { downloadBlob(filename, new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' })); }

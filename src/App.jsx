@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import MapCanvas from './components/MapCanvas';
 import Sidebar from './components/Sidebar';
 import LayerList from './components/LayerList';
@@ -9,9 +9,12 @@ import ExportHDModal from './components/ExportHDModal';
 import UploadPanel from './components/UploadPanel';
 import AnnotationOverlay from './components/AnnotationOverlay';
 import { loadGeoJSON } from './utils/importers';
+import sampleClaims from './assets/sampleClaims.json';
+import sampleDrillholes from './assets/sampleDrillholes.json';
 import { buildScene } from './export/buildScene';
 import { exportPNG } from './export/exportPNG';
 import { exportSVG } from './export/exportSVG';
+import { getExportWarnings } from './export/renderScene';
 import {
   CALLOUT_TYPES,
   createInitialProjectState,
@@ -23,11 +26,12 @@ import {
 import { applyRoleToLayer, inferRoleFromLayer } from './mapPresets';
 import { getTemplate } from './templates';
 import { buildLegendItems, resolveTemplateZones } from './templates/technicalResultsTemplate';
-import { geojsonCenter } from './utils/geometry';
+import { geojsonBounds, geojsonCenter, unionBounds } from './utils/geometry';
+import { detectRegion } from './utils/detectRegion';
 import { cleanLayerName } from './utils/cleanLayerName';
 import { fitProjectToTemplate } from './utils/frameMapForTemplate';
 import { getThemeTokens } from './utils/themeTokens';
-import { saveLead } from './utils/leadCapture';
+import { saveLead, getLastLeadEmail } from './utils/leadCapture';
 import {
   clearActiveProjectContext,
   duplicateProjectRecord,
@@ -37,6 +41,19 @@ import {
   saveProjectRecord,
   touchLastOpenedProject,
 } from './utils/projectStorage';
+
+const SAMPLE_LOGO_SVG = [
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 56" width="220" height="56">',
+  '<path d="M24 4L40 4L48 18L40 32L24 32L16 18Z" fill="#b87333"/>',
+  '<polygon points="32,11 22,29 42,29" fill="white"/>',
+  '<polygon points="28,29 32,21 36,29" fill="#e8a06a"/>',
+  '<text x="58" y="18" font-family="Arial,sans-serif" font-size="13" font-weight="700" fill="#1a2635" letter-spacing="0.8">BUCKHORN CREEK</text>',
+  '<text x="58" y="31" font-family="Arial,sans-serif" font-size="9" font-weight="400" fill="#b87333" letter-spacing="2">MINING CORP.</text>',
+  '<text x="58" y="45" font-family="Arial,sans-serif" font-size="8" fill="#94a3b8">Cariboo Region, British Columbia</text>',
+  '</svg>',
+].join('');
+const SAMPLE_LOGO_URL = `data:image/svg+xml,${encodeURIComponent(SAMPLE_LOGO_SVG)}`;
+const SAMPLE_ACCENT = '#b87333';
 
 const MARKER_TYPES = {
   circle: 'Circle',
@@ -217,7 +234,8 @@ export default function App() {
   const [projectName, setProjectName] = useState(initialWorkspace.projectName);
   const [recentProjects, setRecentProjects] = useState(() => listProjects());
   const [showRecentProjects, setShowRecentProjects] = useState(false);
-  const [showSvgExportModal, setShowSvgExportModal] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [pendingExportFormat, setPendingExportFormat] = useState(null);
   const [isDirty, setIsDirty] = useState(false);
   const [selectedLayerId, setSelectedLayerId] = useState(null);
   const [selectedCalloutId, setSelectedCalloutId] = useState(null);
@@ -227,6 +245,7 @@ export default function App() {
   const [annotationTool, setAnnotationTool] = useState(null);
   const [uploadStatus, setUploadStatus] = useState({ type: 'info', message: 'Open the editor, then upload your first file from the left panel.' });
   const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState('');
   const [mapSize, setMapSize] = useState({ width: 1600, height: 1000 });
   const [featureEditorTick, setFeatureEditorTick] = useState(0);
   const [mapReady, setMapReady] = useState(false);
@@ -282,6 +301,15 @@ export default function App() {
     setRecentProjects(listProjects());
   }, [projectId, isDirty]);
 
+  useEffect(() => {
+    const handler = () => setUploadStatus({
+      type: 'error',
+      message: 'Storage full — project may not be saved. Export your work to avoid losing it.',
+    });
+    window.addEventListener('storage-quota-exceeded', handler);
+    return () => window.removeEventListener('storage-quota-exceeded', handler);
+  }, []);
+
   // Sync local title/subtitle when project changes from an external action (open, duplicate, new)
   useEffect(() => {
     setLocalTitle(project.layout.title || '');
@@ -296,6 +324,13 @@ export default function App() {
     const ro = new ResizeObserver(update);
     ro.observe(container);
     return () => ro.disconnect();
+  }, [screen]);
+
+  useEffect(() => {
+    if (screen !== 'editor') {
+      setMapReady(false);
+      leafletMapRef.current = null;
+    }
   }, [screen]);
 
   useEffect(() => {
@@ -372,7 +407,6 @@ export default function App() {
       layout: {
         ...prev.layout,
         ...patch,
-        legendItems,
         fonts: patch.fonts ? { ...(prev.layout.fonts || {}), ...patch.fonts } : prev.layout.fonts,
         referenceOverlays: patch.referenceOverlays ? { ...(prev.layout.referenceOverlays || {}), ...patch.referenceOverlays } : prev.layout.referenceOverlays,
         exportSettings: patch.exportSettings ? { ...(prev.layout?.exportSettings || {}), ...patch.exportSettings } : prev.layout?.exportSettings,
@@ -399,10 +433,10 @@ export default function App() {
     });
   };
 
-  const onMapReady = (map) => {
+  const onMapReady = useCallback((map) => {
     leafletMapRef.current = map;
     setMapReady(true);
-  };
+  }, []);
 
   const addGeoJSONLayer = async (file) => {
     const geojson = await loadGeoJSON(file);
@@ -435,9 +469,10 @@ export default function App() {
     );
 
     setProject((prev) => {
+      const allLayers = [...prev.layers, nextLayer];
       const next = {
         ...prev,
-        layers: [...prev.layers, nextLayer],
+        layers: allLayers,
         layout: {
           ...prev.layout,
           primaryLayerId: prev.layout.primaryLayerId || id,
@@ -446,6 +481,19 @@ export default function App() {
       };
       return applyModeToProject(next, template, prev.layout.mode);
     });
+
+    // Detect region from the new layer's bounds only (not the union of all layers,
+    // which would misplace the centroid when layers span multiple regions).
+    const newLayerBounds = geojsonBounds(nextLayer.geojson);
+    detectRegion(newLayerBounds).then(region => {
+      if (region) {
+        setProject(prev => ({
+          ...prev,
+          layout: { ...prev.layout, autoInsetRegion: region },
+        }));
+      }
+    }).catch(() => {});
+
     setSelectedLayerId(id);
     setUploadStatus({ type: 'success', message: `Imported ${file.name}. ${kind === 'points' ? 'Point layer detected and kept visible for editing.' : 'Layer added successfully.'}` });
   };
@@ -456,6 +504,29 @@ export default function App() {
       if (screen !== 'editor') setScreen('editor');
     } catch (err) {
       setUploadStatus({ type: 'error', message: `Import failed: ${err.message}` });
+    }
+  };
+
+  const loadSampleData = async () => {
+    const makeFile = (json, name) => new File([JSON.stringify(json)], name, { type: 'application/json' });
+    setProject(createInitialProjectState());
+    try {
+      await addGeoJSONLayer(makeFile(sampleClaims, 'Sample Claims.geojson'));
+      await addGeoJSONLayer(makeFile(sampleDrillholes, 'Sample Drillholes.geojson'));
+      updateLayout({
+        logo: SAMPLE_LOGO_URL,
+        accentColor: SAMPLE_ACCENT,
+        title: 'Buckhorn Creek Property',
+        subtitle: 'Cariboo Region, British Columbia',
+        footerText: 'Buckhorn Creek Mining Corp. | Cariboo Region, BC | For internal use only',
+        footerEnabled: true,
+        exportSettings: { filename: 'buckhorn-creek-property', pixelRatio: 2 },
+      });
+      applyBrandPaletteToLayers(SAMPLE_ACCENT);
+      setScreen('editor');
+      setUploadStatus({ type: 'success', message: 'Sample data loaded. Explore the editor and export to try it out.' });
+    } catch (err) {
+      setUploadStatus({ type: 'error', message: `Sample data error: ${err.message}` });
     }
   };
 
@@ -528,6 +599,11 @@ export default function App() {
   const handleLogoChange = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (file.size > 3 * 1024 * 1024) {
+      setUploadStatus({ type: 'error', message: 'Logo image must be under 3 MB.' });
+      e.target.value = '';
+      return;
+    }
     try {
       const dataUrl = await readFileAsDataURL(file);
       const img = new Image();
@@ -562,6 +638,11 @@ export default function App() {
   const handleInsetImageChange = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (file.size > 3 * 1024 * 1024) {
+      setUploadStatus({ type: 'error', message: 'Inset image must be under 3 MB.' });
+      e.target.value = '';
+      return;
+    }
     try {
       const dataUrl = await readFileAsDataURL(file);
       const aspectRatio = await new Promise((resolve) => {
@@ -696,6 +777,7 @@ export default function App() {
       anchor: { lat: center.lat, lng: center.lng },
       layerId: selectedLayer.id,
     });
+    setSelectedCalloutId(null);
   };
 
   const updateCallout = (calloutId, patch) => {
@@ -767,6 +849,7 @@ export default function App() {
       boxWidth: selectedFeature.boxWidth || 188,
       style: selectedFeature.style || {},
     });
+    setSelectedCalloutId(null);
   };
 
   const addMarkerAt = (latlng) => {
@@ -853,37 +936,54 @@ export default function App() {
     if (selectedEllipseId === ellipseId) setSelectedEllipseId(null);
   };
 
-  const handleExport = async (format) => {
-    if (!leafletMapRef.current || !mapContainerRef.current || exporting) return;
+  const handleExport = async (format, extraOptions = {}) => {
+    if (exporting) return;
+    setExportError('');
+    if (!leafletMapRef.current || !mapContainerRef.current) {
+      setExportError('Map not ready — please wait a moment then try again.');
+      return;
+    }
     setExporting(true);
     try {
       const scene = buildScene(mapContainerRef.current, { ...project, layout: { ...project.layout, legendItems } }, leafletMapRef.current);
+      const opts = { ...(project.layout?.exportSettings || {}), ...extraOptions };
       if (format === 'png') {
-        await exportPNG(scene, project.layout?.exportSettings || {});
+        await exportPNG(scene, opts);
       } else {
-        await exportSVG(scene, project.layout?.exportSettings || {});
+        await exportSVG(scene, opts);
+      }
+      const warnings = getExportWarnings();
+      if (warnings.length > 0) {
+        setUploadStatus({ type: 'info', message: `Export complete — note: ${warnings.join('; ')}.` });
       }
     } catch (err) {
+      setExportError(`Export failed: ${err.message}`);
       setUploadStatus({ type: 'error', message: `Export failed: ${err.message}` });
     } finally {
       setExporting(false);
     }
   };
 
-  const handleSvgExportConfirm = async (email) => {
-    setShowSvgExportModal(false);
-    if (email) saveLead({ email, projectTitle: project.layout?.title || '' });
-    if (!leafletMapRef.current || !mapContainerRef.current || exporting) return;
-    setExporting(true);
-    try {
-      const scene = buildScene(mapContainerRef.current, { ...project, layout: { ...project.layout, legendItems } }, leafletMapRef.current);
-      await exportSVG(scene, project.layout?.exportSettings || {});
-    } catch (err) {
-      setUploadStatus({ type: 'error', message: `SVG Export failed: ${err.message}` });
-    } finally {
-      setExporting(false);
+  const handleExportClick = (format) => {
+    if (getLastLeadEmail()) {
+      handleExport(format, { noWatermark: true });
+    } else {
+      setPendingExportFormat(format);
+      setShowExportModal(true);
     }
   };
+
+  const handleExportModalConfirm = async (email) => {
+    setShowExportModal(false);
+    saveLead({ email, projectTitle: project.layout?.title || '' });
+    await handleExport(pendingExportFormat, { noWatermark: true });
+  };
+
+  const handleExportModalWithWatermark = () => {
+    setShowExportModal(false);
+    handleExport(pendingExportFormat, { noWatermark: false });
+  };
+
 
   const saveCurrentProject = (nextName = null) => {
     const nameToSave = (nextName || projectName || project.layout?.title || 'Untitled map').trim();
@@ -898,8 +998,16 @@ export default function App() {
     setUploadStatus({ type: 'success', message: `Saved project: ${saved.name}` });
   };
 
+  const nextFreeName = (base, existing) => {
+    if (!existing.includes(base)) return base;
+    let n = 2;
+    while (existing.includes(`${base} (${n})`)) n++;
+    return `${base} (${n})`;
+  };
+
   const saveAsProject = () => {
-    const defaultName = projectName || project.layout?.title || 'Untitled map';
+    const existingNames = recentProjects.map(p => p.name);
+    const defaultName = nextFreeName(projectName || project.layout?.title || 'Untitled map', existingNames);
     const nextName = window.prompt('Save project as', defaultName);
     if (!nextName) return;
     const saved = saveProjectRecord({ id: crypto.randomUUID(), name: nextName.trim(), payload: project });
@@ -965,23 +1073,30 @@ export default function App() {
   const referenceOverlays = project.layout.referenceOverlays || {};
 
   if (screen === 'landing') {
-    return <LandingPage onOpenEditor={() => setScreen('editor')} />;
+    return (
+      <LandingPage
+        onOpenEditor={() => setScreen('editor')}
+        onLoadSample={loadSampleData}
+        recentProjects={recentProjects}
+        onOpenProject={(entry) => { openProjectFromRecent(entry); setScreen('editor'); }}
+      />
+    );
   }
 
   return (
     <div className="app-shell">
       <Sidebar>
         <div className="sidebar-header-row">
-          <div>
-            <h1>Mapviewer</h1>
-            <p className="sidebar-subtitle">Upload on the left, design in the center, export when ready.</p>
-          </div>
-          <button className="secondary-btn compact" type="button" onClick={() => setScreen('landing')}>
-            Home
+          <button className="sidebar-wordmark" type="button" onClick={() => setScreen('landing')}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" fill="#2563eb" />
+            </svg>
+            Exploration Maps
           </button>
+          <button className="sidebar-home-link" type="button" onClick={() => setScreen('landing')}>← Home</button>
         </div>
 
-        {project.layers.length === 0 && !project.layout.logo ? (
+        {project.layers.length === 0 ? (
           <div className="onboarding-card">
             <div className="onboarding-title">Get started</div>
             <ol className="onboarding-steps">
@@ -990,6 +1105,9 @@ export default function App() {
               <li>Upload an inset image</li>
               <li>Upload drillholes or other layers (optional)</li>
             </ol>
+            <button className="sample-data-link" type="button" onClick={loadSampleData}>
+              Or load sample mining data →
+            </button>
           </div>
         ) : null}
 
@@ -1099,6 +1217,19 @@ export default function App() {
               <button className="btn" type="button" onClick={() => insetInputRef.current?.click()}>Upload Inset</button>
               <button className="btn" type="button" onClick={() => updateLayout({ insetEnabled: project.layout.insetEnabled === false })}>{project.layout.insetEnabled === false ? 'Show Inset' : 'Hide Inset'}</button>
             </div>
+            {project.layout.autoInsetRegion && !project.layout.insetImage && project.layout.insetEnabled !== false && (
+              <div className="inset-detected-badge">Detected: {project.layout.autoInsetRegion.name}</div>
+            )}
+            <div className="control-row inline-2">
+              <div>
+                <label>Inset Title</label>
+                <input value={project.layout.insetTitle ?? 'Project Locator'} onChange={(e) => updateLayout({ insetTitle: e.target.value })} placeholder="Project Locator" />
+              </div>
+              <div>
+                <label>Inset Label</label>
+                <input value={project.layout.insetLabel ?? ''} onChange={(e) => updateLayout({ insetLabel: e.target.value })} placeholder={project.layout.autoInsetRegion?.name || 'Province / State'} />
+              </div>
+            </div>
             <div className="control-row inline-2">
               <div>
                 <label>Logo Size</label>
@@ -1113,12 +1244,37 @@ export default function App() {
               </div>
               <div className="range-value">{Math.round((project.layout.insetScale || 1) * 100)}%</div>
             </div>
+            <div className="corner-pickers">
+              {[
+                { label: 'Title',      key: 'titleCorner',      def: 'tl' },
+                { label: 'Logo',       key: 'logoCorner',       def: 'tl' },
+                { label: 'Inset',      key: 'insetCorner',      def: 'tr' },
+                { label: 'Legend',     key: 'legendCorner',     def: 'bl' },
+                { label: 'Scale bar',  key: 'scaleBarCorner',   def: 'bl' },
+                { label: 'North arrow', key: 'northArrowCorner', def: 'br' },
+              ].map(({ label, key, def }) => (
+                <div key={key} className="corner-picker-row">
+                  <span className="corner-picker-label">{label}</span>
+                  <div className="corner-picker">
+                    {['tl', 'tr', 'bl', 'br'].map((c) => (
+                      <button
+                        key={c}
+                        type="button"
+                        className={`corner-btn corner-btn-${c}${(project.layout[key] || def) === c ? ' active' : ''}`}
+                        title={{ tl: 'Top Left', tr: 'Top Right', bl: 'Bottom Left', br: 'Bottom Right' }[c]}
+                        onClick={() => updateLayout({ [key]: c })}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
             <input ref={logoInputRef} type="file" accept="image/*" onChange={handleLogoChange} hidden />
             <input ref={insetInputRef} type="file" accept="image/*" onChange={handleInsetImageChange} hidden />
             {project.layout.insetImage ? (
               <div className="inset-status-card">
                 <div className="inset-preview"><img src={project.layout.insetImage} alt="Inset preview" /></div>
-                <button className="secondary-btn" type="button" onClick={() => updateLayout({ insetImage: null, insetEnabled: false })}>Remove Inset Image</button>
+                <button className="secondary-btn" type="button" onClick={() => updateLayout({ insetImage: null, insetEnabled: true })}>Remove Inset Image</button>
               </div>
             ) : null}
           </div>
@@ -1317,47 +1473,50 @@ export default function App() {
             <button className="btn primary" type="button" onClick={addCalloutFromSelectedLayer} disabled={!selectedLayer}>Add From Selected Layer</button>
             <button className="btn" type="button" onClick={autoFrameAll}>Auto Frame All</button>
           </div>
-          {selectedCallout ? <div className="selected-note">Selected callout: {selectedCallout.text}</div> : null}
           <div className="callout-list">
-            {project.callouts.map((callout, index) => (
-              <div key={callout.id} className={`callout-card ${selectedCalloutId === callout.id ? 'active' : ''}`}>
-                <div className="callout-card-header">
-                  <span>Callout {index + 1}</span>
-                  <div className="callout-card-actions">
-                    <button className="secondary-btn" type="button" onClick={() => setSelectedCalloutId(callout.id)}>Select</button>
-                    <button className="secondary-btn" type="button" onClick={() => removeCallout(callout.id)}>Remove</button>
-                  </div>
-                </div>
-                <div className="control-grid">
-                  <div className="control-row"><label>Text</label><input value={callout.text} onChange={(e) => updateCallout(callout.id, { text: e.target.value })} /></div>
-                  <div className="control-row inline-2">
-                    <div>
-                      <label>Type</label>
-                      <select value={callout.type} onChange={(e) => updateCallout(callout.id, { type: e.target.value })}>
-                        {Object.entries(CALLOUT_TYPES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label>Priority</label>
-                      <select value={callout.priority} onChange={(e) => updateCallout(callout.id, { priority: Number(e.target.value) })}>
-                        <option value={1}>High</option>
-                        <option value={2}>Medium</option>
-                        <option value={3}>Low</option>
-                      </select>
+            {project.callouts.map((callout, index) => {
+              const isOpen = selectedCalloutId === callout.id;
+              return (
+                <div key={callout.id} className={`callout-card ${isOpen ? 'active' : ''}`}>
+                  <div className="callout-card-header" style={{ cursor: 'pointer', marginBottom: isOpen ? 8 : 0 }} onClick={() => setSelectedCalloutId(isOpen ? null : callout.id)}>
+                    <span>{callout.text ? callout.text.slice(0, 28) : `Callout ${index + 1}`}</span>
+                    <div className="callout-card-actions">
+                      <button className="secondary-btn" type="button" onClick={(e) => { e.stopPropagation(); removeCallout(callout.id); }}>Remove</button>
                     </div>
                   </div>
-                  <div className="control-label">Nudge</div>
-                  <div className="nudge-grid">
-                    <span />
-                    <button className="secondary-btn" type="button" onClick={() => nudgeCallout(callout.id, 0, -8)}>↑</button>
-                    <span />
-                    <button className="secondary-btn" type="button" onClick={() => nudgeCallout(callout.id, -8, 0)}>←</button>
-                    <button className="secondary-btn" type="button" onClick={() => nudgeCallout(callout.id, 0, 8)}>↓</button>
-                    <button className="secondary-btn" type="button" onClick={() => nudgeCallout(callout.id, 8, 0)}>→</button>
-                  </div>
+                  {isOpen && (
+                    <div className="control-grid">
+                      <div className="control-row"><label>Text</label><input autoFocus value={callout.text} onChange={(e) => updateCallout(callout.id, { text: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter') setSelectedCalloutId(null); }} /></div>
+                      <div className="control-row inline-2">
+                        <div>
+                          <label>Type</label>
+                          <select value={callout.type} onChange={(e) => updateCallout(callout.id, { type: e.target.value })}>
+                            {Object.entries(CALLOUT_TYPES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <label>Priority</label>
+                          <select value={callout.priority} onChange={(e) => updateCallout(callout.id, { priority: Number(e.target.value) })}>
+                            <option value={1}>High</option>
+                            <option value={2}>Medium</option>
+                            <option value={3}>Low</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div className="control-label">Nudge</div>
+                      <div className="nudge-grid">
+                        <span />
+                        <button className="secondary-btn" type="button" onClick={() => nudgeCallout(callout.id, 0, -8)}>↑</button>
+                        <span />
+                        <button className="secondary-btn" type="button" onClick={() => nudgeCallout(callout.id, -8, 0)}>←</button>
+                        <button className="secondary-btn" type="button" onClick={() => nudgeCallout(callout.id, 0, 8)}>↓</button>
+                        <button className="secondary-btn" type="button" onClick={() => nudgeCallout(callout.id, 8, 0)}>→</button>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </section>
 
@@ -1372,16 +1531,17 @@ export default function App() {
               <div>
                 <label>Scale</label>
                 <select value={project.layout.exportSettings.pixelRatio} onChange={(e) => updateLayout({ exportSettings: { pixelRatio: Number(e.target.value) } })}>
-                  <option value={1}>1x</option>
-                  <option value={2}>2x</option>
-                  <option value={3}>3x</option>
+                  <option value={1}>1× — Screen</option>
+                  <option value={2}>2× — Print</option>
+                  <option value={3}>3× — Large format</option>
                 </select>
               </div>
             </div>
             <div className="button-row">
-              <button className="btn primary" type="button" onClick={() => handleExport('png')} disabled={exporting}>Export PNG</button>
-              <button className="btn" type="button" onClick={() => setShowSvgExportModal(true)} disabled={exporting}>Export SVG</button>
+              <button className={`btn primary${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('png'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export PNG'}</button>
+              <button className={`btn${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('svg'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export SVG'}</button>
             </div>
+            {exportError && <div className="export-error-msg">{exportError}</div>}
           </div>
         </section>
       </Sidebar>
@@ -1412,8 +1572,9 @@ export default function App() {
                 onClick={() => leafletMapRef.current?.zoomIn(1)}
               >+</button>
             </div>
-            <button className="btn primary" type="button" onClick={() => handleExport('png')} disabled={exporting}>Export PNG</button>
-            <button className="btn" type="button" onClick={() => setShowSvgExportModal(true)} disabled={exporting}>Export SVG</button>
+            <button className={`btn primary${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExport('png', { noWatermark: !!getLastLeadEmail() }); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export PNG'}</button>
+            <button className={`btn${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExport('svg', { noWatermark: !!getLastLeadEmail() }); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export SVG'}</button>
+            {exportError && <div className="export-error-msg">{exportError}</div>}
           </div>
         </div>
         <div className="map-viewport">
@@ -1459,27 +1620,31 @@ export default function App() {
             }}
           >
         <MapCanvas onReady={onMapReady} project={project} template={template} onFeatureClick={handleFeatureClick} onMapClick={handleMapClick} />
-        <AnnotationOverlay
-          map={leafletMapRef.current}
-          markers={project.markers || []}
-          ellipses={project.ellipses || []}
-          selectedMarkerId={selectedMarkerId}
-          selectedEllipseId={selectedEllipseId}
-          onSelectMarker={(id) => { setSelectedMarkerId(id); setSelectedEllipseId(null); setSelectedFeature(null); }}
-          onSelectEllipse={(id) => { setSelectedEllipseId(id); setSelectedMarkerId(null); setSelectedFeature(null); }}
-          onMoveMarker={updateMarker}
-          onMoveEllipse={updateEllipse}
-          onMoveLabelOffset={(id, offset) => updateMarker(id, { labelOffsetX: offset.x, labelOffsetY: offset.y })}
-          labelFont={project.layout.fonts?.label}
-        />
-        <CalloutsOverlay
-          map={leafletMapRef.current}
-          callouts={project.callouts}
-          selectedCalloutId={selectedCalloutId}
-          onSelect={(id) => { setSelectedCalloutId(id); setSelectedMarkerId(null); setSelectedEllipseId(null); setSelectedFeature(null); }}
-          onMove={(id, offset) => updateCallout(id, { offset: { x: offset.x, y: offset.y }, isManualPosition: true })}
-          fontFamily={project.layout.fonts?.callout}
-        />
+        {mapReady && (
+          <>
+            <AnnotationOverlay
+              map={leafletMapRef.current}
+              markers={project.markers || []}
+              ellipses={project.ellipses || []}
+              selectedMarkerId={selectedMarkerId}
+              selectedEllipseId={selectedEllipseId}
+              onSelectMarker={(id) => { setSelectedMarkerId(id); setSelectedEllipseId(null); setSelectedFeature(null); }}
+              onSelectEllipse={(id) => { setSelectedEllipseId(id); setSelectedMarkerId(null); setSelectedFeature(null); }}
+              onMoveMarker={updateMarker}
+              onMoveEllipse={updateEllipse}
+              onMoveLabelOffset={(id, offset) => updateMarker(id, { labelOffsetX: offset.x, labelOffsetY: offset.y })}
+              labelFont={project.layout.fonts?.label}
+            />
+            <CalloutsOverlay
+              map={leafletMapRef.current}
+              callouts={project.callouts}
+              selectedCalloutId={selectedCalloutId}
+              onSelect={(id) => { setSelectedCalloutId(id); setSelectedMarkerId(null); setSelectedEllipseId(null); setSelectedFeature(null); }}
+              onMove={(id, offset) => updateCallout(id, { offset: { x: offset.x, y: offset.y }, isManualPosition: true })}
+              fontFamily={project.layout.fonts?.callout}
+            />
+          </>
+        )}
 
         <div className="template-zone" style={zoneStyle(resolvedZones.title)}>
           <div className="template-card title-card">
@@ -1529,7 +1694,7 @@ export default function App() {
         <div className="template-zone" style={zoneStyle(resolvedZones.northArrow)}><NorthArrow /></div>
         {project.layout.insetEnabled !== false && resolvedZones.inset?.width ? (
           <div className="template-zone" style={zoneStyle(resolvedZones.inset)}>
-            <LocatorInset layers={project.layers} insetMode={project.layout.insetMode} insetImage={project.layout.insetImage} mode={project.layout.mode} zone={{ width: '100%', height: '100%' }} />
+            <LocatorInset layers={project.layers} insetMode={project.layout.insetMode} insetImage={project.layout.insetImage} autoInsetRegion={project.layout.autoInsetRegion} insetTitle={project.layout.insetTitle} insetLabel={project.layout.insetLabel} mode={project.layout.mode} zone={{ width: '100%', height: '100%' }} />
           </div>
         ) : null}
         <div className="template-zone" style={zoneStyle(resolvedZones.scaleBar)}><ScaleBar map={leafletMapRef.current} /></div>
@@ -1575,10 +1740,12 @@ export default function App() {
           </div>
         </div>
       ) : null}
-      {showSvgExportModal ? (
+      {showExportModal ? (
         <ExportHDModal
-          onConfirm={handleSvgExportConfirm}
-          onClose={() => setShowSvgExportModal(false)}
+          format={pendingExportFormat}
+          onConfirm={handleExportModalConfirm}
+          onWithWatermark={handleExportModalWithWatermark}
+          onClose={() => setShowExportModal(false)}
         />
       ) : null}
     </div>
