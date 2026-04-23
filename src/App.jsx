@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import MapCanvas from './components/MapCanvas';
 import Sidebar from './components/Sidebar';
 import LayerList from './components/LayerList';
@@ -431,10 +431,10 @@ export default function App() {
     });
   };
 
-  const onMapReady = (map) => {
+  const onMapReady = useCallback((map) => {
     leafletMapRef.current = map;
     setMapReady(true);
-  };
+  }, []);
 
   const addGeoJSONLayer = async (file) => {
     const geojson = await loadGeoJSON(file);
@@ -921,7 +921,11 @@ export default function App() {
   };
 
   const handleExport = async (format, extraOptions = {}) => {
-    if (!leafletMapRef.current || !mapContainerRef.current || exporting) return;
+    if (exporting) return;
+    if (!leafletMapRef.current || !mapContainerRef.current) {
+      setUploadStatus({ type: 'error', message: 'Export failed: map not ready. Please wait a moment and try again.' });
+      return;
+    }
     setExporting(true);
     try {
       const scene = buildScene(mapContainerRef.current, { ...project, layout: { ...project.layout, legendItems } }, leafletMapRef.current);

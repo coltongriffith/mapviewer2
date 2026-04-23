@@ -56,12 +56,14 @@ function getTileImages(container) {
     .filter((tile) => tile.href && tile.width > 0 && tile.height > 0);
 }
 
-function loadImage(src, crossOrigin = null) {
+function loadImage(src, crossOrigin = null, timeoutMs = 8000) {
   return new Promise((resolve, reject) => {
     const el = new Image();
+    const timer = setTimeout(() => reject(new Error('timeout')), timeoutMs);
+    const done = (fn) => (...args) => { clearTimeout(timer); fn(...args); };
     if (crossOrigin) el.crossOrigin = crossOrigin;
-    el.onload = () => resolve(el);
-    el.onerror = reject;
+    el.onload = done(resolve.bind(null, el));
+    el.onerror = done(reject);
     el.src = src;
   });
 }
@@ -638,5 +640,5 @@ export async function renderSceneToSvg(scene, options = {}) {
   const watermark = options.noWatermark ? '' : `<text x="${width - 8}" y="${height - 5}" font-family="Arial,sans-serif" font-size="9" font-weight="bold" fill="rgba(100,116,139,0.72)" text-anchor="end" paint-order="stroke" stroke="rgba(255,255,255,0.55)" stroke-width="2.5" stroke-linejoin="round">explorationmaps.com</text>`;
   return `<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="100%" height="100%" fill="#f3f5f7" />${basemapImage}${renderVectorsSvg(scene, scale)}${renderEllipsesSvg(scene, scale)}${renderMarkersSvg(scene, scale)}${renderCalloutsSvg(scene, scale)}${renderTitleSvg(scene, scale)}${renderLegendSvg(scene, scale)}${renderNorthArrowSvg(scene, scale)}${renderInsetSvg(scene, scale)}${renderScaleBarSvg(scene, scale)}${renderFooterSvg(scene, scale)}${renderLogoSvg(scene, scale)}${watermark}</svg>`;
 }
-export function downloadCanvas(filename, canvas) { const link = document.createElement('a'); link.download = filename; link.href = canvas.toDataURL('image/png', 1.0); link.click(); }
+export function downloadCanvas(filename, canvas) { const link = document.createElement('a'); link.download = filename; link.href = canvas.toDataURL('image/png', 1.0); link.style.display = 'none'; document.body.appendChild(link); link.click(); document.body.removeChild(link); }
 export function downloadSvg(filename, svgText) { downloadBlob(filename, new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' })); }
