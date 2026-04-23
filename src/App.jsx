@@ -244,6 +244,7 @@ export default function App() {
   const [annotationTool, setAnnotationTool] = useState(null);
   const [uploadStatus, setUploadStatus] = useState({ type: 'info', message: 'Open the editor, then upload your first file from the left panel.' });
   const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState('');
   const [mapSize, setMapSize] = useState({ width: 1600, height: 1000 });
   const [featureEditorTick, setFeatureEditorTick] = useState(0);
   const [mapReady, setMapReady] = useState(false);
@@ -922,8 +923,9 @@ export default function App() {
 
   const handleExport = async (format, extraOptions = {}) => {
     if (exporting) return;
+    setExportError('');
     if (!leafletMapRef.current || !mapContainerRef.current) {
-      setUploadStatus({ type: 'error', message: 'Export failed: map not ready. Please wait a moment and try again.' });
+      setExportError('Map not ready — please wait a moment then try again.');
       return;
     }
     setExporting(true);
@@ -940,6 +942,7 @@ export default function App() {
         setUploadStatus({ type: 'info', message: `Export complete — note: ${warnings.join('; ')}.` });
       }
     } catch (err) {
+      setExportError(`Export failed: ${err.message}`);
       setUploadStatus({ type: 'error', message: `Export failed: ${err.message}` });
     } finally {
       setExporting(false);
@@ -1499,9 +1502,10 @@ export default function App() {
               </div>
             </div>
             <div className="button-row">
-              <button className="btn primary" type="button" onClick={() => handleExportClick('png')} disabled={exporting}>{exporting ? 'Exporting…' : 'Export PNG'}</button>
-              <button className="btn" type="button" onClick={() => handleExportClick('svg')} disabled={exporting}>{exporting ? 'Exporting…' : 'Export SVG'}</button>
+              <button className="btn primary" type="button" onClick={() => handleExportClick('png')} disabled={!mapReady || exporting}>{exporting ? 'Exporting…' : 'Export PNG'}</button>
+              <button className="btn" type="button" onClick={() => handleExportClick('svg')} disabled={!mapReady || exporting}>{exporting ? 'Exporting…' : 'Export SVG'}</button>
             </div>
+            {exportError && <div className="export-error-msg">{exportError}</div>}
           </div>
         </section>
       </Sidebar>
@@ -1532,8 +1536,9 @@ export default function App() {
                 onClick={() => leafletMapRef.current?.zoomIn(1)}
               >+</button>
             </div>
-            <button className="btn primary" type="button" onClick={() => handleExportClick('png')} disabled={exporting}>Export PNG</button>
-            <button className="btn" type="button" onClick={() => handleExportClick('svg')} disabled={exporting}>Export SVG</button>
+            <button className="btn primary" type="button" onClick={() => handleExport('png', { noWatermark: !!getLastLeadEmail() })} disabled={!mapReady || exporting}>Export PNG</button>
+            <button className="btn" type="button" onClick={() => handleExport('svg', { noWatermark: !!getLastLeadEmail() })} disabled={!mapReady || exporting}>Export SVG</button>
+            {exportError && <div className="export-error-msg">{exportError}</div>}
           </div>
         </div>
         <div className="map-viewport">

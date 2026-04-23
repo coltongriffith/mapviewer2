@@ -77,6 +77,7 @@ button, input, select, textarea { font: inherit; }
 .control-row textarea { min-height: 72px; resize: vertical; }
 .btn, .secondary-btn { cursor: pointer; }
 .btn:disabled, .secondary-btn:disabled { opacity: 0.5; cursor: not-allowed; pointer-events: none; }
+.export-error-msg { color: #b91c1c; font-size: 12px; margin-top: 4px; }
 .btn.primary { background: #1d4ed8; border-color: #1d4ed8; color: #ffffff; }
 .secondary-btn { background: #ffffff; color: #16324f; border-color: #cdd8e6; }
 .secondary-btn.active-toggle { background: #e7f0ff; border-color: #7aa2e3; color: #14365f; }

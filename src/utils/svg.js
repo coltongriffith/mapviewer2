@@ -22,12 +22,13 @@ export function svgNodeToDataUrl(svgNode) {
 }
 
 export function downloadBlob(filename, blob) {
+  const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
+  a.href = url;
   a.download = filename;
   a.style.display = 'none';
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
-  setTimeout(() => URL.revokeObjectURL(a.href), 100);
+  setTimeout(() => URL.revokeObjectURL(url), 100);
 }
