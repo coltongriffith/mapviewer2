@@ -72,6 +72,7 @@ export function createInitialProjectState() {
       logo: null,
       logoScale: 1,
       insetImage: null,
+      autoInsetRegion: null,
       legendItems: [],
       legendMode: 'auto',
       titleWidth: 'standard',

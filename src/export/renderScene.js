@@ -249,6 +249,98 @@ function normalizeInset(visibleBounds, referenceBounds) {
     h: ((visibleBounds.maxLat - visibleBounds.minLat) / height) * (100 - pad * 2),
   };
 }
+function projectToCanvas(lng, lat, refBbox, x, y, w, h, pad) {
+  const [minLng, minLat, maxLng, maxLat] = refBbox;
+  const rngW = maxLng - minLng || 1, rngH = maxLat - minLat || 1;
+  return [
+    x + pad + ((lng - minLng) / rngW) * (w - pad * 2),
+    (y + h - pad) - ((lat - minLat) / rngH) * (h - pad * 2),
+  ];
+}
+
+function getAutoInsetRefBbox(region) {
+  const [minLng, minLat, maxLng, maxLat] = region.bbox;
+  const padFrac = 0.06;
+  const dLng = (maxLng - minLng) * padFrac, dLat = (maxLat - minLat) * padFrac;
+  return [minLng - dLng, minLat - dLat, maxLng + dLng, maxLat + dLat];
+}
+
+function drawAutoInsetCanvas(ctx, innerX, innerY, innerW, innerH, scale, region, visibleBounds) {
+  const pad = 6 * scale;
+  const refBbox = getAutoInsetRefBbox(region);
+
+  // Background
+  ctx.fillStyle = '#f0f4f8';
+  ctx.fillRect(innerX, innerY, innerW, innerH);
+
+  // Province/state silhouette
+  ctx.fillStyle = '#dce8f5';
+  ctx.strokeStyle = '#8aabcf';
+  ctx.lineWidth = 0.8 * scale;
+  region.coordinates.forEach(ring => {
+    if (ring.length < 2) return;
+    ctx.beginPath();
+    ring.forEach(([lng, lat], i) => {
+      const [px, py] = projectToCanvas(lng, lat, refBbox, innerX, innerY, innerW, innerH, pad);
+      if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    });
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  });
+
+  // Project location marker
+  if (visibleBounds) {
+    const [mx1, my1] = projectToCanvas(visibleBounds.minLng, visibleBounds.maxLat, refBbox, innerX, innerY, innerW, innerH, pad);
+    const [mx2, my2] = projectToCanvas(visibleBounds.maxLng, visibleBounds.minLat, refBbox, innerX, innerY, innerW, innerH, pad);
+    const rx = Math.min(mx1, mx2), ry = Math.min(my1, my2);
+    const rw = Math.max(4 * scale, Math.abs(mx2 - mx1)), rh = Math.max(4 * scale, Math.abs(my2 - my1));
+    ctx.fillStyle = 'rgba(96,165,250,0.25)';
+    ctx.strokeStyle = '#2563eb';
+    ctx.lineWidth = 1.2 * scale;
+    ctx.beginPath();
+    ctx.rect(Math.max(innerX + pad, rx), Math.max(innerY + pad, ry), rw, rh);
+    ctx.fill();
+    ctx.stroke();
+    const dotX = Math.max(innerX + pad + 3 * scale, Math.min(innerX + innerW - pad - 3 * scale, rx + rw / 2));
+    const dotY = Math.max(innerY + pad + 3 * scale, Math.min(innerY + innerH - pad - 3 * scale, ry + rh / 2));
+    ctx.beginPath();
+    ctx.arc(dotX, dotY, 3.5 * scale, 0, Math.PI * 2);
+    ctx.fillStyle = '#1d4ed8';
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1.2 * scale;
+    ctx.fill();
+    ctx.stroke();
+  }
+}
+
+function autoInsetSvg(innerX, innerY, innerW, innerH, scale, region, visibleBounds) {
+  const pad = 6 * scale;
+  const refBbox = getAutoInsetRefBbox(region);
+  const project = (lng, lat) => projectToCanvas(lng, lat, refBbox, innerX, innerY, innerW, innerH, pad);
+
+  const paths = region.coordinates.map(ring => {
+    if (ring.length < 2) return '';
+    const pts = ring.map(([lng, lat]) => { const [px, py] = project(lng, lat); return `${px.toFixed(1)},${py.toFixed(1)}`; });
+    return `<path d="M ${pts.join(' L ')} Z" fill="#dce8f5" stroke="#8aabcf" stroke-width="${0.8 * scale}" />`;
+  }).join('');
+
+  let markerSvg = '';
+  if (visibleBounds) {
+    const [mx1, my1] = project(visibleBounds.minLng, visibleBounds.maxLat);
+    const [mx2, my2] = project(visibleBounds.maxLng, visibleBounds.minLat);
+    const rx = Math.max(innerX + pad, Math.min(mx1, mx2));
+    const ry = Math.max(innerY + pad, Math.min(my1, my2));
+    const rw = Math.max(4 * scale, Math.abs(mx2 - mx1));
+    const rh = Math.max(4 * scale, Math.abs(my2 - my1));
+    const dotX = Math.max(innerX + pad + 3 * scale, Math.min(innerX + innerW - pad - 3 * scale, rx + rw / 2));
+    const dotY = Math.max(innerY + pad + 3 * scale, Math.min(innerY + innerH - pad - 3 * scale, ry + rh / 2));
+    markerSvg = `<rect x="${rx}" y="${ry}" width="${rw}" height="${rh}" fill="rgba(96,165,250,0.25)" stroke="#2563eb" stroke-width="${1.2 * scale}" /><circle cx="${dotX}" cy="${dotY}" r="${3.5 * scale}" fill="#1d4ed8" stroke="#ffffff" stroke-width="${1.2 * scale}" />`;
+  }
+
+  return `<rect x="${innerX}" y="${innerY}" width="${innerW}" height="${innerH}" fill="#f0f4f8" />${paths}${markerSvg}`;
+}
+
 function drawInsetBackdropCanvas(ctx, x, y, w, h, scale) {
   const lg = ctx.createLinearGradient(x, y, x + w, y + h); lg.addColorStop(0, '#f8fafc'); lg.addColorStop(1, '#eef3f8');
   ctx.fillStyle = lg; drawRoundedRect(ctx, x, y, w, h, 8 * scale); ctx.fill(); ctx.strokeStyle = '#d3dce8'; ctx.stroke();
@@ -273,13 +365,21 @@ async function drawInsetCanvas(ctx, scene, scale) {
   drawPanelRect(ctx, x, y, w, h, (theme.panelRadius || 10) * scale, theme.insetFill, theme.insetBorder, scale);
   ctx.fillStyle = theme.insetTitle; ctx.font = `700 ${12 * scale}px Arial`; ctx.textBaseline = 'top'; ctx.fillText('Project Locator', x + 12 * scale, y + 10 * scale);
   const innerX = x + 10 * scale, innerY = y + 30 * scale, innerW = w - 20 * scale, innerH = h - 56 * scale;
-  const customInset = scene.project.layout?.insetMode === 'custom_image' && scene.project.layout?.insetImage;
+  const { insetImage, insetMode, autoInsetRegion } = scene.project.layout || {};
+  const customInset = insetMode === 'custom_image' && insetImage;
   if (customInset) {
-    const img = await new Promise((resolve, reject) => { const el = new Image(); el.onload = () => resolve(el); el.onerror = reject; el.src = scene.project.layout.insetImage; }).catch(() => { _exportWarnings.push('inset image could not be embedded'); return null; });
+    const img = await new Promise((resolve, reject) => { const el = new Image(); el.onload = () => resolve(el); el.onerror = reject; el.src = insetImage; }).catch(() => { _exportWarnings.push('inset image could not be embedded'); return null; });
     if (img) { ctx.save(); drawRoundedRect(ctx, innerX, innerY, innerW, innerH, 8 * scale); ctx.clip(); ctx.drawImage(img, innerX, innerY, innerW, innerH); ctx.restore(); }
     return;
   }
-  const visible = (scene.project.layers || []).filter((layer) => layer.visible !== false && layer.geojson); const bounds = unionBounds(visible.map((layer) => geojsonBounds(layer.geojson)).filter(Boolean)); const ref = resolveReferenceBounds(bounds, scene.project.layout?.insetMode); const marker = normalizeInset(bounds, ref);
+  const visible = (scene.project.layers || []).filter((layer) => layer.visible !== false && layer.geojson);
+  const bounds = unionBounds(visible.map((layer) => geojsonBounds(layer.geojson)).filter(Boolean));
+  if (autoInsetRegion) {
+    drawAutoInsetCanvas(ctx, innerX, innerY, innerW, innerH, scale, autoInsetRegion, bounds);
+    ctx.fillStyle = theme.insetMuted; ctx.font = `${11 * scale}px Arial`; ctx.textBaseline = 'alphabetic'; ctx.fillText(autoInsetRegion.name, x + 12 * scale, y + h - 10 * scale);
+    return;
+  }
+  const ref = resolveReferenceBounds(bounds, insetMode); const marker = normalizeInset(bounds, ref);
   drawInsetBackdropCanvas(ctx, innerX, innerY, innerW, innerH, scale);
   if (marker) { const mx = Math.max(innerX + 8 * scale, innerX + (marker.x / 100) * innerW), my = Math.max(innerY + 8 * scale, innerY + (marker.y / 100) * innerH), mw = Math.max(8 * scale, Math.max(10 * scale, (marker.w / 100) * innerW)), mh = Math.max(8 * scale, Math.max(10 * scale, (marker.h / 100) * innerH)); ctx.fillStyle = 'rgba(96,165,250,0.16)'; drawRoundedRect(ctx, mx, my, mw, mh, 2 * scale); ctx.fill(); ctx.strokeStyle = '#2563eb'; ctx.lineWidth = 1.5 * scale; ctx.stroke(); ctx.beginPath(); ctx.arc(Math.min(innerX + innerW - 8 * scale, Math.max(innerX + 8 * scale, mx + mw / 2)), Math.min(innerY + innerH - 8 * scale, Math.max(innerY + 8 * scale, my + mh / 2)), 3.2 * scale, 0, Math.PI * 2); ctx.fillStyle = '#0f2c56'; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.2 * scale; ctx.fill(); ctx.stroke(); }
   ctx.fillStyle = theme.insetMuted; ctx.font = `${11 * scale}px Arial`; ctx.textBaseline = 'alphabetic'; ctx.fillText(ref.label, x + 12 * scale, y + h - 10 * scale);
@@ -612,13 +712,24 @@ function insetBackdropSvg(innerX, innerY, innerW, innerH, scale) {
 function renderInsetSvg(scene, scale) {
   const zone = getOverlayMetrics(scene).inset; if (!zone || !zone.width || !zone.height) return ''; 
   const x = zone.left * scale, y = zone.top * scale, w = zone.width * scale, h = zone.height * scale, innerX = x + 10 * scale, innerY = y + 30 * scale, innerW = w - 20 * scale, innerH = h - 56 * scale;
-  const customInset = scene.project.layout?.insetMode === 'custom_image' && scene.project.layout?.insetImage;
+  const { insetImage, insetMode, autoInsetRegion } = scene.project.layout || {};
+  const customInset = insetMode === 'custom_image' && insetImage;
+  const theme = getTheme(scene);
+  const panelSvg = svgRect(x, y, w, h, (theme.panelRadius || 10) * scale, theme.insetFill, theme.insetBorder, scale);
+  const titleSvg = `<text x="${x + 12 * scale}" y="${y + 16 * scale}" fill="${theme.insetTitle}" font-family="Arial" font-size="${12 * scale}" font-weight="700">Project Locator</text>`;
   if (customInset) {
-    const theme = getTheme(scene); return `<g>${svgRect(x, y, w, h, (theme.panelRadius || 10) * scale, theme.insetFill, theme.insetBorder, scale)}<text x="${x + 12 * scale}" y="${y + 16 * scale}" fill="${theme.insetTitle}" font-family="Arial" font-size="${12 * scale}" font-weight="700">Project Locator</text><image href="${escapeXml(scene.project.layout.insetImage)}" x="${innerX}" y="${innerY}" width="${innerW}" height="${innerH}" preserveAspectRatio="xMidYMid slice" /></g>`;
+    return `<g>${panelSvg}${titleSvg}<image href="${escapeXml(insetImage)}" x="${innerX}" y="${innerY}" width="${innerW}" height="${innerH}" preserveAspectRatio="xMidYMid slice" /></g>`;
   }
-  const visible = (scene.project.layers || []).filter((layer) => layer.visible !== false && layer.geojson); const bounds = unionBounds(visible.map((layer) => geojsonBounds(layer.geojson)).filter(Boolean)); const ref = resolveReferenceBounds(bounds, scene.project.layout?.insetMode); const marker = normalizeInset(bounds, ref);
+  const visible = (scene.project.layers || []).filter((layer) => layer.visible !== false && layer.geojson);
+  const bounds = unionBounds(visible.map((layer) => geojsonBounds(layer.geojson)).filter(Boolean));
+  if (autoInsetRegion) {
+    const innerSvg = autoInsetSvg(innerX, innerY, innerW, innerH, scale, autoInsetRegion, bounds);
+    const labelSvg = `<text x="${x + 12 * scale}" y="${y + h - 10 * scale}" fill="${theme.insetMuted}" font-family="Arial" font-size="${11 * scale}">${escapeXml(autoInsetRegion.name)}</text>`;
+    return `<g>${panelSvg}${titleSvg}${innerSvg}${labelSvg}</g>`;
+  }
+  const ref = resolveReferenceBounds(bounds, insetMode); const marker = normalizeInset(bounds, ref);
   const markerSvg = marker ? `<rect x="${Math.max(innerX + 8 * scale, innerX + (marker.x / 100) * innerW)}" y="${Math.max(innerY + 8 * scale, innerY + (marker.y / 100) * innerH)}" width="${Math.max(8 * scale, Math.max(10 * scale, (marker.w / 100) * innerW))}" height="${Math.max(8 * scale, Math.max(10 * scale, (marker.h / 100) * innerH))}" fill="rgba(96,165,250,0.16)" stroke="#2563eb" stroke-width="${1.5 * scale}" rx="${2 * scale}" /><circle cx="${Math.min(innerX + innerW - 8 * scale, Math.max(innerX + 8 * scale, innerX + (marker.x / 100) * innerW + Math.max(10 * scale, (marker.w / 100) * innerW) / 2))}" cy="${Math.min(innerY + innerH - 8 * scale, Math.max(innerY + 8 * scale, innerY + (marker.y / 100) * innerH + Math.max(10 * scale, (marker.h / 100) * innerH) / 2))}" r="${3.2 * scale}" fill="#0f2c56" stroke="#ffffff" stroke-width="${1.2 * scale}" />` : '';
-  const theme = getTheme(scene); return `<g>${svgRect(x, y, w, h, (theme.panelRadius || 10) * scale, theme.insetFill, theme.insetBorder, scale)}<text x="${x + 12 * scale}" y="${y + 16 * scale}" fill="${theme.insetTitle}" font-family="Arial" font-size="${12 * scale}" font-weight="700">Project Locator</text>${insetBackdropSvg(innerX, innerY, innerW, innerH, scale)}${markerSvg}<text x="${x + 12 * scale}" y="${y + h - 10 * scale}" fill="${theme.insetMuted}" font-family="Arial" font-size="${11 * scale}">${escapeXml(ref.label)}</text></g>`;
+  return `<g>${panelSvg}${titleSvg}${insetBackdropSvg(innerX, innerY, innerW, innerH, scale)}${markerSvg}<text x="${x + 12 * scale}" y="${y + h - 10 * scale}" fill="${theme.insetMuted}" font-family="Arial" font-size="${11 * scale}">${escapeXml(ref.label)}</text></g>`;
 }
 function renderLogoSvg(scene, scale) { const theme = getTheme(scene); const logo = scene.project.layout?.logo; if (!logo) return ''; const zone = getOverlayMetrics(scene).logo; if (!zone?.width || !zone?.height) return '';  const x = zone.left * scale, y = zone.top * scale, w = zone.width * scale, h = zone.height * scale, padding = 10 * scale; return `<g>${svgRect(x, y, w, h, (theme.panelRadius || 10) * scale, theme.logoFill, theme.logoBorder, scale)}<image href="${escapeXml(logo)}" x="${x + padding}" y="${y + padding}" width="${w - padding * 2}" height="${h - padding * 2}" preserveAspectRatio="xMidYMid meet" /></g>`; }
 function renderCalloutsSvg(scene, scale) {

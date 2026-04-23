@@ -26,7 +26,8 @@ import {
 import { applyRoleToLayer, inferRoleFromLayer } from './mapPresets';
 import { getTemplate } from './templates';
 import { buildLegendItems, resolveTemplateZones } from './templates/technicalResultsTemplate';
-import { geojsonCenter } from './utils/geometry';
+import { geojsonBounds, geojsonCenter, unionBounds } from './utils/geometry';
+import { detectRegion } from './utils/detectRegion';
 import { cleanLayerName } from './utils/cleanLayerName';
 import { fitProjectToTemplate } from './utils/frameMapForTemplate';
 import { getThemeTokens } from './utils/themeTokens';
@@ -468,9 +469,10 @@ export default function App() {
     );
 
     setProject((prev) => {
+      const allLayers = [...prev.layers, nextLayer];
       const next = {
         ...prev,
-        layers: [...prev.layers, nextLayer],
+        layers: allLayers,
         layout: {
           ...prev.layout,
           primaryLayerId: prev.layout.primaryLayerId || id,
@@ -479,6 +481,20 @@ export default function App() {
       };
       return applyModeToProject(next, template, prev.layout.mode);
     });
+
+    // Async region detection — update layout once resolved
+    const allBoundsAfter = unionBounds(
+      [...project.layers, nextLayer].map(l => geojsonBounds(l.geojson)).filter(Boolean)
+    );
+    detectRegion(allBoundsAfter).then(region => {
+      if (region) {
+        setProject(prev => ({
+          ...prev,
+          layout: { ...prev.layout, autoInsetRegion: region },
+        }));
+      }
+    }).catch(() => {});
+
     setSelectedLayerId(id);
     setUploadStatus({ type: 'success', message: `Imported ${file.name}. ${kind === 'points' ? 'Point layer detected and kept visible for editing.' : 'Layer added successfully.'}` });
   };
@@ -983,8 +999,16 @@ export default function App() {
     setUploadStatus({ type: 'success', message: `Saved project: ${saved.name}` });
   };
 
+  const nextFreeName = (base, existing) => {
+    if (!existing.includes(base)) return base;
+    let n = 2;
+    while (existing.includes(`${base} (${n})`)) n++;
+    return `${base} (${n})`;
+  };
+
   const saveAsProject = () => {
-    const defaultName = projectName || project.layout?.title || 'Untitled map';
+    const existingNames = recentProjects.map(p => p.name);
+    const defaultName = nextFreeName(projectName || project.layout?.title || 'Untitled map', existingNames);
     const nextName = window.prompt('Save project as', defaultName);
     if (!nextName) return;
     const saved = saveProjectRecord({ id: crypto.randomUUID(), name: nextName.trim(), payload: project });
@@ -1073,7 +1097,7 @@ export default function App() {
           <button className="sidebar-home-link" type="button" onClick={() => setScreen('landing')}>← Home</button>
         </div>
 
-        {project.layers.length === 0 && !project.layout.logo ? (
+        {project.layers.length === 0 ? (
           <div className="onboarding-card">
             <div className="onboarding-title">Get started</div>
             <ol className="onboarding-steps">
@@ -1194,6 +1218,9 @@ export default function App() {
               <button className="btn" type="button" onClick={() => insetInputRef.current?.click()}>Upload Inset</button>
               <button className="btn" type="button" onClick={() => updateLayout({ insetEnabled: project.layout.insetEnabled === false })}>{project.layout.insetEnabled === false ? 'Show Inset' : 'Hide Inset'}</button>
             </div>
+            {project.layout.autoInsetRegion && !project.layout.insetImage && project.layout.insetEnabled !== false && (
+              <div className="inset-detected-badge">Detected: {project.layout.autoInsetRegion.name}</div>
+            )}
             <div className="control-row inline-2">
               <div>
                 <label>Logo Size</label>
@@ -1238,7 +1265,7 @@ export default function App() {
             {project.layout.insetImage ? (
               <div className="inset-status-card">
                 <div className="inset-preview"><img src={project.layout.insetImage} alt="Inset preview" /></div>
-                <button className="secondary-btn" type="button" onClick={() => updateLayout({ insetImage: null, insetEnabled: false })}>Remove Inset Image</button>
+                <button className="secondary-btn" type="button" onClick={() => updateLayout({ insetImage: null, insetEnabled: true })}>Remove Inset Image</button>
               </div>
             ) : null}
           </div>
@@ -1495,15 +1522,15 @@ export default function App() {
               <div>
                 <label>Scale</label>
                 <select value={project.layout.exportSettings.pixelRatio} onChange={(e) => updateLayout({ exportSettings: { pixelRatio: Number(e.target.value) } })}>
-                  <option value={1}>1x</option>
-                  <option value={2}>2x</option>
-                  <option value={3}>3x</option>
+                  <option value={1}>1× — Screen</option>
+                  <option value={2}>2× — Print</option>
+                  <option value={3}>3× — Large format</option>
                 </select>
               </div>
             </div>
             <div className="button-row">
-              <button className="btn primary" type="button" onClick={() => { try { handleExportClick('png'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export PNG'}</button>
-              <button className="btn" type="button" onClick={() => { try { handleExportClick('svg'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export SVG'}</button>
+              <button className={`btn primary${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('png'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export PNG'}</button>
+              <button className={`btn${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('svg'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export SVG'}</button>
             </div>
             {exportError && <div className="export-error-msg">{exportError}</div>}
           </div>
@@ -1536,8 +1563,8 @@ export default function App() {
                 onClick={() => leafletMapRef.current?.zoomIn(1)}
               >+</button>
             </div>
-            <button className="btn primary" type="button" onClick={() => { try { handleExport('png', { noWatermark: !!getLastLeadEmail() }); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export PNG'}</button>
-            <button className="btn" type="button" onClick={() => { try { handleExport('svg', { noWatermark: !!getLastLeadEmail() }); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export SVG'}</button>
+            <button className={`btn primary${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExport('png', { noWatermark: !!getLastLeadEmail() }); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export PNG'}</button>
+            <button className={`btn${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExport('svg', { noWatermark: !!getLastLeadEmail() }); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export SVG'}</button>
             {exportError && <div className="export-error-msg">{exportError}</div>}
           </div>
         </div>
@@ -1658,7 +1685,7 @@ export default function App() {
         <div className="template-zone" style={zoneStyle(resolvedZones.northArrow)}><NorthArrow /></div>
         {project.layout.insetEnabled !== false && resolvedZones.inset?.width ? (
           <div className="template-zone" style={zoneStyle(resolvedZones.inset)}>
-            <LocatorInset layers={project.layers} insetMode={project.layout.insetMode} insetImage={project.layout.insetImage} mode={project.layout.mode} zone={{ width: '100%', height: '100%' }} />
+            <LocatorInset layers={project.layers} insetMode={project.layout.insetMode} insetImage={project.layout.insetImage} autoInsetRegion={project.layout.autoInsetRegion} mode={project.layout.mode} zone={{ width: '100%', height: '100%' }} />
           </div>
         ) : null}
         <div className="template-zone" style={zoneStyle(resolvedZones.scaleBar)}><ScaleBar map={leafletMapRef.current} /></div>
