@@ -24,7 +24,22 @@ export async function exportPDF(scene, options = {}) {
   const canvas = await renderSceneToCanvas(scene, options);
   const imgData = canvas.toDataURL('image/jpeg', 0.93);
 
-  pdf.addImage(imgData, 'JPEG', 0, 0, size.w, size.h);
+  // Letterbox: fit the map image within the PDF page preserving its aspect ratio
+  const canvasAspect = canvas.width / canvas.height;
+  const pageAspect = size.w / size.h;
+  let imgW, imgH, imgX, imgY;
+  if (canvasAspect > pageAspect) {
+    imgW = size.w;
+    imgH = size.w / canvasAspect;
+    imgX = 0;
+    imgY = (size.h - imgH) / 2;
+  } else {
+    imgH = size.h;
+    imgW = size.h * canvasAspect;
+    imgX = (size.w - imgW) / 2;
+    imgY = 0;
+  }
+  pdf.addImage(imgData, 'JPEG', imgX, imgY, imgW, imgH);
 
   const filename = options.filename || scene.project?.layout?.exportSettings?.filename || 'mapviewer-export';
   pdf.save(`${filename}.pdf`);

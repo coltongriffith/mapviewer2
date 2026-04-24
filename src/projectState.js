@@ -40,13 +40,9 @@ export const CALLOUT_TYPES = {
 
 
 export const TEMPLATE_THEMES = {
-  modern_rounded:    'Modern Rounded',
-  technical_sharp:   'Technical Sharp',
-  investor_clean:    'Investor Clean',
-  clean_corporate:   'Clean Corporate',
-  technical_science: 'Technical / Science',
-  modern_dark:       'Modern Dark',
-  government_report: 'Government / Report',
+  investor_clean:  'Clean Investor Style',
+  technical_sharp: 'Technical Style',
+  modern_dark:     'Dark Modern Style',
 };
 
 export const FONT_OPTIONS = {
@@ -65,7 +61,7 @@ export function createInitialProjectState() {
       subtitle: 'Technical Results',
       basemap: 'light',
       templateId: 'technical_results_v2',
-      themeId: 'modern_rounded',
+      themeId: 'investor_clean',
       mode: 'project_overview',
       compositionPreset: 'balanced',
       insetMode: 'province_state',

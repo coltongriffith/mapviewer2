@@ -1090,7 +1090,8 @@ export default function App() {
   };
 
   const handleExportClick = (format) => {
-    if (getLastLeadEmail()) {
+    // PDF always shows the modal so the user can choose the page size
+    if (format !== 'pdf' && getLastLeadEmail()) {
       handleExport(format, { noWatermark: true });
     } else {
       setPendingExportFormat(format);
