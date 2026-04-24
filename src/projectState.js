@@ -10,11 +10,11 @@ export const ROLE_LABELS = {
 };
 
 export const TEMPLATE_MODES = {
-  project_overview: 'Project Overview',
-  regional_claims: 'Regional Claims',
-  drill_plan: 'Drill Plan',
-  target_anomaly: 'Target / Anomaly',
-  access_location: 'Access / Location',
+  project_overview: 'Regional Location Map',
+  regional_claims:  'Claims Map',
+  drill_plan:       'Drill Results Map',
+  target_anomaly:   'Target Generation Map',
+  access_location:  'Infrastructure Map',
 };
 
 export const COMPOSITION_PRESETS = {
@@ -40,9 +40,13 @@ export const CALLOUT_TYPES = {
 
 
 export const TEMPLATE_THEMES = {
-  modern_rounded: 'Modern Rounded',
-  technical_sharp: 'Technical Sharp',
-  investor_clean: 'Investor Clean',
+  modern_rounded:    'Modern Rounded',
+  technical_sharp:   'Technical Sharp',
+  investor_clean:    'Investor Clean',
+  clean_corporate:   'Clean Corporate',
+  technical_science: 'Technical / Science',
+  modern_dark:       'Modern Dark',
+  government_report: 'Government / Report',
 };
 
 export const FONT_OPTIONS = {

@@ -8,12 +8,14 @@ import LandingPage from './components/LandingPage';
 import ExportHDModal from './components/ExportHDModal';
 import UploadPanel from './components/UploadPanel';
 import AnnotationOverlay from './components/AnnotationOverlay';
-import { loadGeoJSON } from './utils/importers';
+import ColumnMapperModal from './components/ColumnMapperModal';
+import { loadGeoJSON, loadCSV } from './utils/importers';
 import sampleClaims from './assets/sampleClaims.json';
 import sampleDrillholes from './assets/sampleDrillholes.json';
 import { buildScene } from './export/buildScene';
 import { exportPNG } from './export/exportPNG';
 import { exportSVG } from './export/exportSVG';
+import { exportPDF } from './export/exportPDF';
 import { getExportWarnings } from './export/renderScene';
 import {
   CALLOUT_TYPES,
@@ -357,6 +359,7 @@ export default function App() {
   const subtitleDebounceRef = useRef(null);
   const annotationToolRef = useRef(null);
   const [editingTitleField, setEditingTitleField] = useState(null);
+  const [csvMappingData, setCsvMappingData] = useState(null); // { headers, rows, filename } for ColumnMapperModal
   const layersSectionRef = useRef(null);
   const markersSectionRef = useRef(null);
   const calloutsSectionRef = useRef(null);
@@ -539,10 +542,9 @@ export default function App() {
     setMapReady(true);
   }, []);
 
-  const addGeoJSONLayer = async (file) => {
-    const geojson = await loadGeoJSON(file);
+  const addGeoJSONAsLayer = async (geojson, fileName) => {
     const id = crypto.randomUUID();
-    const baseName = file.name.replace(/\.(zip|geojson|json)$/i, '') || 'Layer';
+    const baseName = fileName.replace(/\.(zip|geojson|json|kml|kmz|csv)$/i, '') || 'Layer';
     const kind = detectLayerKind(geojson);
     const role = inferRoleFromLayer({ name: baseName, type: kind });
     const displayName = cleanLayerName(baseName, role);
@@ -553,7 +555,7 @@ export default function App() {
       {
         id,
         name: baseName,
-        sourceName: file.name,
+        sourceName: fileName,
         displayName,
         type: kind,
         visible: true,
@@ -596,13 +598,29 @@ export default function App() {
     }).catch(() => {});
 
     setSelectedLayerId(id);
-    setUploadStatus({ type: 'success', message: `Imported ${file.name}. ${kind === 'points' ? 'Point layer detected and kept visible for editing.' : 'Layer added successfully.'}` });
+    setUploadStatus({ type: 'success', message: `Imported ${fileName}. ${kind === 'points' ? 'Point layer detected.' : 'Layer added successfully.'}` });
+  };
+
+  const addGeoJSONLayer = async (file) => {
+    const geojson = await loadGeoJSON(file);
+    await addGeoJSONAsLayer(geojson, file.name);
   };
 
   const handleUploadFile = async (file) => {
     try {
-      await addGeoJSONLayer(file);
-      if (screen !== 'editor') setScreen('editor');
+      const name = file.name.toLowerCase();
+      if (name.endsWith('.csv')) {
+        const result = await loadCSV(file);
+        if (result.needsMapping) {
+          setCsvMappingData({ headers: result.headers, rows: result.rows, filename: file.name });
+        } else {
+          await addGeoJSONAsLayer(result, file.name);
+          if (screen !== 'editor') setScreen('editor');
+        }
+      } else {
+        await addGeoJSONLayer(file);
+        if (screen !== 'editor') setScreen('editor');
+      }
     } catch (err) {
       setUploadStatus({ type: 'error', message: `Import failed: ${err.message}` });
     }
@@ -1054,8 +1072,10 @@ export default function App() {
       const opts = { ...(project.layout?.exportSettings || {}), ...extraOptions };
       if (format === 'png') {
         await exportPNG(scene, opts);
-      } else {
+      } else if (format === 'svg') {
         await exportSVG(scene, opts);
+      } else if (format === 'pdf') {
+        await exportPDF(scene, opts);
       }
       const warnings = getExportWarnings();
       if (warnings.length > 0) {
@@ -1078,10 +1098,10 @@ export default function App() {
     }
   };
 
-  const handleExportModalConfirm = async (email) => {
+  const handleExportModalConfirm = async (email, extraOpts = {}) => {
     setShowExportModal(false);
     saveLead({ email, projectTitle: project.layout?.title || '' });
-    await handleExport(pendingExportFormat, { noWatermark: true });
+    await handleExport(pendingExportFormat, { noWatermark: true, ...extraOpts });
   };
 
   const handleExportModalWithWatermark = () => {
@@ -1645,6 +1665,7 @@ export default function App() {
             <div className="button-row">
               <button className={`btn primary${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('png'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export PNG'}</button>
               <button className={`btn${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('svg'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export SVG'}</button>
+              <button className={`btn${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('pdf'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export PDF'}</button>
             </div>
             {exportError && <div className="export-error-msg">{exportError}</div>}
           </div>
@@ -1677,8 +1698,9 @@ export default function App() {
                 onClick={() => leafletMapRef.current?.zoomIn(1)}
               >+</button>
             </div>
-            <button className={`btn primary${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExport('png', { noWatermark: !!getLastLeadEmail() }); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export PNG'}</button>
-            <button className={`btn${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExport('svg', { noWatermark: !!getLastLeadEmail() }); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export SVG'}</button>
+            <button className={`btn primary${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('png'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export PNG'}</button>
+            <button className={`btn${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('svg'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export SVG'}</button>
+            <button className={`btn${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('pdf'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export PDF'}</button>
             {exportError && <div className="export-error-msg">{exportError}</div>}
           </div>
         </div>
@@ -1871,6 +1893,23 @@ export default function App() {
           onConfirm={handleExportModalConfirm}
           onWithWatermark={handleExportModalWithWatermark}
           onClose={() => setShowExportModal(false)}
+        />
+      ) : null}
+      {csvMappingData ? (
+        <ColumnMapperModal
+          headers={csvMappingData.headers}
+          rows={csvMappingData.rows}
+          filename={csvMappingData.filename}
+          onImport={async (geojson) => {
+            setCsvMappingData(null);
+            try {
+              await addGeoJSONAsLayer(geojson, csvMappingData.filename);
+              if (screen !== 'editor') setScreen('editor');
+            } catch (err) {
+              setUploadStatus({ type: 'error', message: `Import failed: ${err.message}` });
+            }
+          }}
+          onClose={() => setCsvMappingData(null)}
         />
       ) : null}
     </div>
