@@ -8,8 +8,10 @@
     "build": "vite build"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.104.1",
     "@tmcw/togeojson": "^7.1.2",
     "@vercel/analytics": "^2.0.1",
+    "fflate": "^0.8.2",
     "jspdf": "^4.2.1",
     "jszip": "^3.10.1",
     "leaflet": "^1.9.4",

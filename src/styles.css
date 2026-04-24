@@ -704,3 +704,125 @@ button, input, select, textarea { font: inherit; }
   .map-topbar-left { min-width: 120px; }
   .map-zoom-inline { min-width: 140px; }
 }
+
+/* ── Auth Modal ─────────────────────────────────────────────────────────────── */
+.auth-modal {
+  width: 100%;
+  max-width: 380px;
+  padding: 32px 28px 24px;
+}
+.auth-modal-title {
+  margin: 0 0 20px;
+  font-size: 20px;
+  font-weight: 800;
+  color: #0f1f38;
+}
+.auth-form { display: grid; gap: 14px; }
+.auth-label { display: grid; gap: 5px; font-size: 12px; font-weight: 700; color: #667085; letter-spacing: 0.02em; text-transform: uppercase; }
+.auth-input {
+  border: 1px solid #d4deea;
+  border-radius: 10px;
+  padding: 11px 13px;
+  font-size: 14px;
+  color: #122033;
+  background: #fff;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.auth-input:focus { border-color: #4d86d5; box-shadow: 0 0 0 3px rgba(77,134,213,0.14); }
+.auth-submit-btn { width: 100%; padding: 13px; font-size: 15px; font-weight: 700; border-radius: 12px; margin-top: 4px; }
+.auth-footer-links { display: flex; gap: 6px; align-items: center; justify-content: center; margin-top: 16px; flex-wrap: wrap; }
+.auth-link-sep { color: #cbd5e1; font-size: 13px; }
+.link-btn { background: none; border: none; color: #4d86d5; font-size: 13px; cursor: pointer; padding: 0; text-decoration: underline; }
+.link-btn:hover { color: #2563eb; }
+.auth-info-msg { background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; border-radius: 8px; padding: 10px 14px; font-size: 13px; margin-bottom: 10px; }
+.auth-error-msg { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; border-radius: 8px; padding: 10px 14px; font-size: 13px; margin-bottom: 10px; }
+
+/* ── User Menu ──────────────────────────────────────────────────────────────── */
+.user-menu-wrap { position: relative; }
+.user-menu-signin-btn { font-size: 13px; }
+.user-menu-btn { font-size: 12px; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.user-menu-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 180px;
+  background: #fff;
+  border: 1px solid #d4deea;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(15,23,42,0.12);
+  z-index: 9999;
+  overflow: hidden;
+}
+.user-menu-email { padding: 10px 14px 8px; font-size: 11px; color: #94a3b8; border-bottom: 1px solid #f1f5f9; word-break: break-all; }
+.user-menu-item {
+  display: block;
+  width: 100%;
+  padding: 10px 14px;
+  text-align: left;
+  background: none;
+  border: none;
+  font-size: 13px;
+  color: #1e293b;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.user-menu-item:hover { background: #f1f5f9; }
+
+/* ── Storage Warning Banner ─────────────────────────────────────────────────── */
+.storage-warning-banner {
+  background: #fffbeb;
+  border-bottom: 1px solid #fcd34d;
+  color: #92400e;
+  padding: 8px 16px;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.storage-warning-dismiss {
+  margin-left: auto;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #92400e;
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 4px;
+}
+
+/* ── Template Manager (in Design section) ───────────────────────────────────── */
+.template-manager-block {
+  margin-top: 14px;
+  border-top: 1px solid #e2e8f0;
+  padding-top: 12px;
+}
+.template-manager-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.template-manager-label { font-size: 12px; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.04em; }
+.template-manager-hint { margin: 6px 0 0; font-size: 12px; color: #94a3b8; }
+.template-manager-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.template-manager-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+}
+.template-name { flex: 1; font-size: 13px; color: #1e293b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.template-default-star {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 15px;
+  color: #cbd5e1;
+  padding: 0;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.template-default-star.active { color: #f59e0b; }
+.template-default-star:hover { color: #f59e0b; }
+.btn.compact, .secondary-btn.compact { padding: 4px 10px; font-size: 12px; border-radius: 6px; }
