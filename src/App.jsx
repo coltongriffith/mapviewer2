@@ -38,6 +38,7 @@ import {
   clearActiveProjectContext,
   deleteProjectRecord,
   duplicateProjectRecord,
+  estimateStorageUsedBytes,
   listProjects,
   renameProjectRecord,
   resolveInitialWorkspace,
@@ -45,6 +46,20 @@ import {
   saveProjectRecord,
   touchLastOpenedProject,
 } from './utils/projectStorage';
+import {
+  deleteCloudProject,
+  deleteTemplate,
+  getDefaultTemplate,
+  listCloudProjects,
+  listTemplates,
+  renameCloudProject,
+  saveCloudProject,
+  saveTemplate,
+  setDefaultTemplate,
+  applyTemplateConfig,
+} from './utils/cloudStorage';
+import { useAuth } from './hooks/useAuth';
+import UserMenu from './components/UserMenu';
 
 const SAMPLE_LOGO_SVG = [
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 56" width="220" height="56">',
@@ -328,6 +343,12 @@ export default function App() {
   const insetInputRef = useRef(null);
   const uploadInputRef = useRef(null);
 
+  const { user } = useAuth();
+  const [storageWarningDismissed, setStorageWarningDismissed] = useState(false);
+  const [showTemplateManager, setShowTemplateManager] = useState(false);
+  const [cloudTemplates, setCloudTemplates] = useState([]);
+  const [savingTemplate, setSavingTemplate] = useState(false);
+
   const [screen, setScreen] = useState('landing');
   const initialWorkspace = useMemo(() => initialWorkspaceState(), []);
   const [project, setProject] = useState(initialWorkspace.project);
@@ -414,8 +435,24 @@ export default function App() {
   }, [project, projectId, projectName]);
 
   useEffect(() => {
-    setRecentProjects(listProjects());
-  }, [projectId, isDirty]);
+    if (user) {
+      listCloudProjects().then(setRecentProjects).catch(() => setRecentProjects(listProjects()));
+      listTemplates().then(setCloudTemplates).catch(() => {});
+    } else {
+      setRecentProjects(listProjects());
+    }
+  }, [user, projectId, isDirty]);
+
+  // When user logs in, apply their default template to the current (unsaved) project
+  useEffect(() => {
+    if (!user) return;
+    getDefaultTemplate().then((tmpl) => {
+      if (tmpl?.config) {
+        setProject((prev) => ({ ...prev, layout: applyTemplateConfig(tmpl.config, prev.layout) }));
+      }
+    }).catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   useEffect(() => {
     const handler = () => setUploadStatus({
@@ -425,6 +462,9 @@ export default function App() {
     window.addEventListener('storage-quota-exceeded', handler);
     return () => window.removeEventListener('storage-quota-exceeded', handler);
   }, []);
+
+  // Show storage warning banner for anonymous users when local storage is getting full
+  const showStorageWarning = !user && !storageWarningDismissed && estimateStorageUsedBytes() > 3_500_000;
 
   // Sync local title/subtitle when project changes from an external action (open, duplicate, new)
   useEffect(() => {
@@ -1125,17 +1165,32 @@ export default function App() {
   };
 
 
-  const saveCurrentProject = (nextName = null) => {
+  const saveCurrentProject = async (nextName = null) => {
     const nameToSave = (nextName || projectName || project.layout?.title || 'Untitled map').trim();
     const idToSave = projectId || crypto.randomUUID();
-    const saved = saveProjectRecord({ id: idToSave, name: nameToSave, payload: project });
-    setProjectId(saved.id);
-    setProjectName(saved.name);
-    setRecentProjects(listProjects());
-    lastSavedSnapshotRef.current = JSON.stringify(project);
-    setIsDirty(false);
-    saveDraft({ payload: project, projectId: saved.id, projectName: saved.name });
-    setUploadStatus({ type: 'success', message: `Saved project: ${saved.name}` });
+    if (user) {
+      try {
+        const cloudId = await saveCloudProject({ id: idToSave, name: nameToSave, payload: project });
+        setProjectId(cloudId);
+        setProjectName(nameToSave);
+        lastSavedSnapshotRef.current = JSON.stringify(project);
+        setIsDirty(false);
+        saveDraft({ payload: project, projectId: cloudId, projectName: nameToSave });
+        listCloudProjects().then(setRecentProjects).catch(() => {});
+        setUploadStatus({ type: 'success', message: `Saved to cloud: ${nameToSave}` });
+      } catch (err) {
+        setUploadStatus({ type: 'error', message: `Cloud save failed: ${err.message}` });
+      }
+    } else {
+      const saved = saveProjectRecord({ id: idToSave, name: nameToSave, payload: project });
+      setProjectId(saved.id);
+      setProjectName(saved.name);
+      setRecentProjects(listProjects());
+      lastSavedSnapshotRef.current = JSON.stringify(project);
+      setIsDirty(false);
+      saveDraft({ payload: project, projectId: saved.id, projectName: saved.name });
+      setUploadStatus({ type: 'success', message: `Saved project: ${saved.name}` });
+    }
   };
 
   const nextFreeName = (base, existing) => {
@@ -1145,19 +1200,35 @@ export default function App() {
     return `${base} (${n})`;
   };
 
-  const saveAsProject = () => {
+  const saveAsProject = async () => {
     const existingNames = recentProjects.map(p => p.name);
     const defaultName = nextFreeName(projectName || project.layout?.title || 'Untitled map', existingNames);
     const nextName = window.prompt('Save project as', defaultName);
     if (!nextName) return;
-    const saved = saveProjectRecord({ id: crypto.randomUUID(), name: nextName.trim(), payload: project });
-    setProjectId(saved.id);
-    setProjectName(saved.name);
-    setRecentProjects(listProjects());
-    lastSavedSnapshotRef.current = JSON.stringify(project);
-    setIsDirty(false);
-    saveDraft({ payload: project, projectId: saved.id, projectName: saved.name });
-    setUploadStatus({ type: 'success', message: `Saved as new project: ${saved.name}` });
+    const nameToSave = nextName.trim();
+    if (user) {
+      try {
+        const cloudId = await saveCloudProject({ id: null, name: nameToSave, payload: project });
+        setProjectId(cloudId);
+        setProjectName(nameToSave);
+        lastSavedSnapshotRef.current = JSON.stringify(project);
+        setIsDirty(false);
+        saveDraft({ payload: project, projectId: cloudId, projectName: nameToSave });
+        listCloudProjects().then(setRecentProjects).catch(() => {});
+        setUploadStatus({ type: 'success', message: `Saved to cloud as: ${nameToSave}` });
+      } catch (err) {
+        setUploadStatus({ type: 'error', message: `Cloud save failed: ${err.message}` });
+      }
+    } else {
+      const saved = saveProjectRecord({ id: crypto.randomUUID(), name: nameToSave, payload: project });
+      setProjectId(saved.id);
+      setProjectName(saved.name);
+      setRecentProjects(listProjects());
+      lastSavedSnapshotRef.current = JSON.stringify(project);
+      setIsDirty(false);
+      saveDraft({ payload: project, projectId: saved.id, projectName: saved.name });
+      setUploadStatus({ type: 'success', message: `Saved as new project: ${saved.name}` });
+    }
   };
 
   const openProjectFromRecent = (entry) => {
@@ -1178,16 +1249,31 @@ export default function App() {
     setUploadStatus({ type: 'success', message: `Opened project: ${entry.name}` });
   };
 
-  const duplicateCurrentProject = () => {
+  const duplicateCurrentProject = async () => {
     const name = `${projectName || project.layout?.title || 'Untitled map'} Copy`;
-    const saved = duplicateProjectRecord({ sourcePayload: project, name });
-    setProjectId(saved.id);
-    setProjectName(saved.name);
-    setRecentProjects(listProjects());
-    lastSavedSnapshotRef.current = JSON.stringify(project);
-    setIsDirty(false);
-    saveDraft({ payload: project, projectId: saved.id, projectName: saved.name });
-    setUploadStatus({ type: 'success', message: `Duplicated project as: ${saved.name}` });
+    if (user) {
+      try {
+        const cloudId = await saveCloudProject({ id: null, name, payload: project });
+        setProjectId(cloudId);
+        setProjectName(name);
+        lastSavedSnapshotRef.current = JSON.stringify(project);
+        setIsDirty(false);
+        saveDraft({ payload: project, projectId: cloudId, projectName: name });
+        listCloudProjects().then(setRecentProjects).catch(() => {});
+        setUploadStatus({ type: 'success', message: `Duplicated to cloud as: ${name}` });
+      } catch (err) {
+        setUploadStatus({ type: 'error', message: `Cloud duplicate failed: ${err.message}` });
+      }
+    } else {
+      const saved = duplicateProjectRecord({ sourcePayload: project, name });
+      setProjectId(saved.id);
+      setProjectName(saved.name);
+      setRecentProjects(listProjects());
+      lastSavedSnapshotRef.current = JSON.stringify(project);
+      setIsDirty(false);
+      saveDraft({ payload: project, projectId: saved.id, projectName: saved.name });
+      setUploadStatus({ type: 'success', message: `Duplicated project as: ${saved.name}` });
+    }
   };
 
 
@@ -1674,6 +1760,97 @@ export default function App() {
               <button className="btn" type="button" onClick={autoFrameAll}>Refit Map</button>
               <button className="btn primary" type="button" onClick={improveMap}>Improve Map</button>
             </div>
+
+            {/* Company Templates */}
+            <div className="template-manager-block">
+              <div className="template-manager-header">
+                <span className="template-manager-label">Company Templates</span>
+                {user && (
+                  <button
+                    className="btn compact"
+                    type="button"
+                    disabled={savingTemplate}
+                    onClick={async () => {
+                      const name = window.prompt('Template name', projectName || 'My Template');
+                      if (!name) return;
+                      setSavingTemplate(true);
+                      try {
+                        const config = {
+                          themeId: project.layout.themeId,
+                          accentColor: project.layout.accentColor,
+                          titleBgColor: project.layout.titleBgColor,
+                          titleFgColor: project.layout.titleFgColor,
+                          panelBgColor: project.layout.panelBgColor,
+                          panelFgColor: project.layout.panelFgColor,
+                          logo: project.layout.logo,
+                          logoScale: project.layout.logoScale,
+                          mode: project.layout.mode,
+                          fonts: project.layout.fonts,
+                        };
+                        await saveTemplate({ name, config });
+                        const updated = await listTemplates();
+                        setCloudTemplates(updated);
+                        setUploadStatus({ type: 'success', message: `Template "${name}" saved.` });
+                      } catch (err) {
+                        setUploadStatus({ type: 'error', message: `Failed to save template: ${err.message}` });
+                      } finally {
+                        setSavingTemplate(false);
+                      }
+                    }}
+                  >
+                    + Save
+                  </button>
+                )}
+              </div>
+              {!user ? (
+                <p className="template-manager-hint">Sign in to save and apply company templates.</p>
+              ) : cloudTemplates.length === 0 ? (
+                <p className="template-manager-hint">No templates yet. Save one above.</p>
+              ) : (
+                <ul className="template-manager-list">
+                  {cloudTemplates.map((tmpl) => (
+                    <li key={tmpl.id} className="template-manager-row">
+                      <button
+                        className={`template-default-star${tmpl.is_default ? ' active' : ''}`}
+                        title={tmpl.is_default ? 'Default template' : 'Set as default'}
+                        onClick={async () => {
+                          try {
+                            await setDefaultTemplate(tmpl.id);
+                            const updated = await listTemplates();
+                            setCloudTemplates(updated);
+                          } catch (err) {
+                            setUploadStatus({ type: 'error', message: err.message });
+                          }
+                        }}
+                      >★</button>
+                      <span className="template-name">{tmpl.name}</span>
+                      <button
+                        className="btn compact"
+                        type="button"
+                        onClick={() => {
+                          updateLayout(applyTemplateConfig(tmpl.config, project.layout));
+                          setUploadStatus({ type: 'success', message: `Applied template "${tmpl.name}".` });
+                        }}
+                      >Apply</button>
+                      <button
+                        className="secondary-btn compact"
+                        type="button"
+                        onClick={async () => {
+                          if (!window.confirm(`Delete template "${tmpl.name}"?`)) return;
+                          try {
+                            await deleteTemplate(tmpl.id);
+                            const updated = await listTemplates();
+                            setCloudTemplates(updated);
+                          } catch (err) {
+                            setUploadStatus({ type: 'error', message: err.message });
+                          }
+                        }}
+                      >✕</button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </div>
         </section>
 
@@ -1714,12 +1891,20 @@ export default function App() {
       </Sidebar>
 
       <div className="editor-main">
+        {showStorageWarning && (
+          <div className="storage-warning-banner">
+            Local storage is getting full.{' '}
+            <strong>Sign in</strong> to save projects to the cloud.
+            <button className="storage-warning-dismiss" onClick={() => setStorageWarningDismissed(true)}>✕</button>
+          </div>
+        )}
         <div className="map-topbar editor-toolbar">
           <div className="map-topbar-left">
             <div className="map-topbar-title">{project.layout.title || 'Project Map'}</div>
           </div>
           <div className="map-topbar-right">
-            <div className={`autosave-badge ${isDirty ? 'dirty' : 'clean'}`}>{isDirty ? 'Unsaved' : 'Saved'}</div>
+            <UserMenu onOpenTemplates={() => setShowTemplateManager(true)} />
+            <div className={`autosave-badge ${isDirty ? 'dirty' : 'clean'}`}>{isDirty ? 'Unsaved' : user ? 'Cloud' : 'Saved'}</div>
             <button className="btn" type="button" onClick={() => saveCurrentProject()}>Save</button>
             <button className="btn" type="button" onClick={saveAsProject}>Save As</button>
             <button className="btn" type="button" onClick={startNewProject}>New</button>
@@ -1916,13 +2101,21 @@ export default function App() {
           currentProjectId={projectId}
           onOpen={(entry) => { openProjectFromRecent(entry); setShowRecentProjects(false); }}
           onRename={(id, newName) => {
-            renameProjectRecord(id, newName);
-            setRecentProjects(listProjects());
+            if (user) {
+              renameCloudProject(id, newName).then(() => listCloudProjects().then(setRecentProjects)).catch(() => {});
+            } else {
+              renameProjectRecord(id, newName);
+              setRecentProjects(listProjects());
+            }
             if (id === projectId) setProjectName(newName);
           }}
           onDelete={(id) => {
-            deleteProjectRecord(id);
-            setRecentProjects(listProjects());
+            if (user) {
+              deleteCloudProject(id).then(() => listCloudProjects().then(setRecentProjects)).catch(() => {});
+            } else {
+              deleteProjectRecord(id);
+              setRecentProjects(listProjects());
+            }
             if (id === projectId) { setProjectId(null); clearActiveProjectContext(); }
           }}
           onClose={() => setShowRecentProjects(false)}
