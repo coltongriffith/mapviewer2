@@ -177,6 +177,34 @@ function applyModeToProject(project, template, mode) {
 
 
 
+function LegendLabelEditable({ label, onSave }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(label);
+  const commit = () => { setEditing(false); if (draft !== label) onSave(draft); };
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); if (e.key === 'Escape') { setDraft(label); setEditing(false); } }}
+        onClick={(e) => e.stopPropagation()}
+        style={{ font: 'inherit', fontSize: 'inherit', border: 'none', background: 'transparent', outline: '1px solid #3b82f6', borderRadius: 2, padding: '0 2px', width: '100%', minWidth: 40 }}
+      />
+    );
+  }
+  return (
+    <span
+      title="Click to rename"
+      style={{ cursor: 'text' }}
+      onClick={(e) => { e.stopPropagation(); setDraft(label); setEditing(true); }}
+    >
+      {label}
+    </span>
+  );
+}
+
 function renderLegendGroups(items, layout) {
   const mode = layout?.legendMode || 'auto';
   const compact = mode === 'compact' || (mode === 'auto' && items.length <= 2);
@@ -850,6 +878,7 @@ export default function App() {
       style: selectedFeature.style || {},
     });
     setSelectedCalloutId(null);
+    setSelectedFeature(null);
   };
 
   const addMarkerAt = (latlng) => {
@@ -862,7 +891,8 @@ export default function App() {
           id,
           lat: latlng.lat,
           lng: latlng.lng,
-          ...(prev.layout?.markerDefaults || { type: 'circle', color: '#d97706', size: 18, label: '' }),
+          ...(prev.layout?.markerDefaults || { type: 'circle', size: 18, label: '' }),
+          color: prev.layout?.accentColor || '#dc2626',
         },
       ],
     }));
@@ -1217,6 +1247,12 @@ export default function App() {
               <button className="btn" type="button" onClick={() => insetInputRef.current?.click()}>Upload Inset</button>
               <button className="btn" type="button" onClick={() => updateLayout({ insetEnabled: project.layout.insetEnabled === false })}>{project.layout.insetEnabled === false ? 'Show Inset' : 'Hide Inset'}</button>
             </div>
+            {project.layout.insetImage ? (
+              <div className="inset-status-card">
+                <div className="inset-preview"><img src={project.layout.insetImage} alt="Inset preview" /></div>
+                <button className="secondary-btn" type="button" onClick={() => updateLayout({ insetImage: null, insetEnabled: true })}>Remove Inset Image</button>
+              </div>
+            ) : null}
             {project.layout.autoInsetRegion && !project.layout.insetImage && project.layout.insetEnabled !== false && (
               <div className="inset-detected-badge">Detected: {project.layout.autoInsetRegion.name}</div>
             )}
@@ -1271,12 +1307,6 @@ export default function App() {
             </div>
             <input ref={logoInputRef} type="file" accept="image/*" onChange={handleLogoChange} hidden />
             <input ref={insetInputRef} type="file" accept="image/*" onChange={handleInsetImageChange} hidden />
-            {project.layout.insetImage ? (
-              <div className="inset-status-card">
-                <div className="inset-preview"><img src={project.layout.insetImage} alt="Inset preview" /></div>
-                <button className="secondary-btn" type="button" onClick={() => updateLayout({ insetImage: null, insetEnabled: true })}>Remove Inset Image</button>
-              </div>
-            ) : null}
           </div>
         </section>
 
@@ -1641,6 +1671,7 @@ export default function App() {
               selectedCalloutId={selectedCalloutId}
               onSelect={(id) => { setSelectedCalloutId(id); setSelectedMarkerId(null); setSelectedEllipseId(null); setSelectedFeature(null); }}
               onMove={(id, offset) => updateCallout(id, { offset: { x: offset.x, y: offset.y }, isManualPosition: true })}
+              onUpdate={updateCallout}
               fontFamily={project.layout.fonts?.callout}
             />
           </>
@@ -1665,7 +1696,6 @@ export default function App() {
                       <div
                         key={item.id}
                         className="legend-item legend-item-clickable"
-                        title="Click to edit this layer"
                         onClick={() => { setSelectedLayerId(item.id); }}
                       >
                         {item.type === 'points' ? (
@@ -1681,7 +1711,7 @@ export default function App() {
                         ) : (
                           <span className="legend-swatch" style={{ borderColor: item.style.stroke || '#3b82f6', background: item.style.fill || '#93c5fd', opacity: item.style.fillOpacity ?? 1 }} />
                         )}
-                        <span>{item.label}</span>
+                        <LegendLabelEditable label={item.label} onSave={(val) => setDisplayLabel(item.id, val)} />
                       </div>
                     ))}
                   </div>
