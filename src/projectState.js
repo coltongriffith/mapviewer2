@@ -10,11 +10,11 @@ export const ROLE_LABELS = {
 };
 
 export const TEMPLATE_MODES = {
-  project_overview: 'Project Overview',
-  regional_claims: 'Regional Claims',
-  drill_plan: 'Drill Plan',
-  target_anomaly: 'Target / Anomaly',
-  access_location: 'Access / Location',
+  project_overview: 'Regional Location Map',
+  regional_claims:  'Claims Map',
+  drill_plan:       'Drill Results Map',
+  target_anomaly:   'Target Generation Map',
+  access_location:  'Infrastructure Map',
 };
 
 export const COMPOSITION_PRESETS = {
@@ -40,9 +40,9 @@ export const CALLOUT_TYPES = {
 
 
 export const TEMPLATE_THEMES = {
-  modern_rounded: 'Modern Rounded',
-  technical_sharp: 'Technical Sharp',
-  investor_clean: 'Investor Clean',
+  investor_clean:  'Clean Investor Style',
+  technical_sharp: 'Technical Style',
+  modern_dark:     'Dark Modern Style',
 };
 
 export const FONT_OPTIONS = {
@@ -61,7 +61,7 @@ export function createInitialProjectState() {
       subtitle: 'Technical Results',
       basemap: 'light',
       templateId: 'technical_results_v2',
-      themeId: 'modern_rounded',
+      themeId: 'investor_clean',
       mode: 'project_overview',
       compositionPreset: 'balanced',
       insetMode: 'province_state',
@@ -89,6 +89,10 @@ export function createInitialProjectState() {
       zoomPercent: 100,
       zoomDelta: 0,
       accentColor: null,
+      titleBgColor: null,
+      titleFgColor: null,
+      panelBgColor: null,
+      panelFgColor: null,
       logoCorner: 'tl',
       legendCorner: 'bl',
       insetCorner: 'tr',

@@ -8,12 +8,14 @@ import LandingPage from './components/LandingPage';
 import ExportHDModal from './components/ExportHDModal';
 import UploadPanel from './components/UploadPanel';
 import AnnotationOverlay from './components/AnnotationOverlay';
-import { loadGeoJSON } from './utils/importers';
+import ColumnMapperModal from './components/ColumnMapperModal';
+import { loadGeoJSON, loadCSV } from './utils/importers';
 import sampleClaims from './assets/sampleClaims.json';
 import sampleDrillholes from './assets/sampleDrillholes.json';
 import { buildScene } from './export/buildScene';
 import { exportPNG } from './export/exportPNG';
 import { exportSVG } from './export/exportSVG';
+import { exportPDF } from './export/exportPDF';
 import { getExportWarnings } from './export/renderScene';
 import {
   CALLOUT_TYPES,
@@ -357,6 +359,7 @@ export default function App() {
   const subtitleDebounceRef = useRef(null);
   const annotationToolRef = useRef(null);
   const [editingTitleField, setEditingTitleField] = useState(null);
+  const [csvMappingData, setCsvMappingData] = useState(null); // { headers, rows, filename } for ColumnMapperModal
   const layersSectionRef = useRef(null);
   const markersSectionRef = useRef(null);
   const calloutsSectionRef = useRef(null);
@@ -374,16 +377,28 @@ export default function App() {
   const resolvedZonesRef = useRef(resolvedZones);
   useEffect(() => { resolvedZonesRef.current = resolvedZones; }, [resolvedZones]);
   const themeTokens = useMemo(() => {
-    const base = getThemeTokens(project.layout?.themeId || 'modern_rounded');
-    const accent = project.layout?.accentColor;
-    if (!accent) return base;
-    return {
-      ...base,
-      titleAccent: accent,
-      calloutBorder: accent,
-      ...(project.layout?.themeId === 'modern_rounded' || !project.layout?.themeId ? { titleFill: accent + 'dd' } : {}),
-    };
-  }, [project.layout?.themeId, project.layout?.accentColor]);
+    const layout = project.layout || {};
+    const base = getThemeTokens(layout.themeId || 'investor_clean');
+    const { accentColor, titleBgColor, titleFgColor, panelBgColor, panelFgColor } = layout;
+    const overrides = {};
+    if (accentColor) { overrides.titleAccent = accentColor; overrides.calloutBorder = accentColor; }
+    if (titleBgColor) overrides.titleFill = titleBgColor;
+    if (titleFgColor) { overrides.titleText = titleFgColor; overrides.subtitleText = titleFgColor + 'bb'; }
+    if (panelBgColor) {
+      overrides.panelFill = panelBgColor; overrides.northArrowFill = panelBgColor;
+      overrides.scaleFill = panelBgColor; overrides.insetFill = panelBgColor;
+      overrides.logoFill = panelBgColor; overrides.footerFill = panelBgColor;
+      overrides.calloutFill = panelBgColor;
+    }
+    if (panelFgColor) {
+      overrides.bodyText = panelFgColor; overrides.panelTitle = panelFgColor;
+      overrides.northArrowText = panelFgColor; overrides.scaleStroke = panelFgColor;
+      overrides.insetTitle = panelFgColor; overrides.insetMuted = panelFgColor + 'aa';
+      overrides.footerText = panelFgColor; overrides.calloutText = panelFgColor;
+      overrides.mutedText = panelFgColor + 'aa';
+    }
+    return Object.keys(overrides).length ? { ...base, ...overrides } : base;
+  }, [project.layout?.themeId, project.layout?.accentColor, project.layout?.titleBgColor, project.layout?.titleFgColor, project.layout?.panelBgColor, project.layout?.panelFgColor]);
 
   useEffect(() => {
     if (!bootstrappedRef.current) {
@@ -539,10 +554,9 @@ export default function App() {
     setMapReady(true);
   }, []);
 
-  const addGeoJSONLayer = async (file) => {
-    const geojson = await loadGeoJSON(file);
+  const addGeoJSONAsLayer = async (geojson, fileName) => {
     const id = crypto.randomUUID();
-    const baseName = file.name.replace(/\.(zip|geojson|json)$/i, '') || 'Layer';
+    const baseName = fileName.replace(/\.(zip|geojson|json|kml|kmz|csv)$/i, '') || 'Layer';
     const kind = detectLayerKind(geojson);
     const role = inferRoleFromLayer({ name: baseName, type: kind });
     const displayName = cleanLayerName(baseName, role);
@@ -553,7 +567,7 @@ export default function App() {
       {
         id,
         name: baseName,
-        sourceName: file.name,
+        sourceName: fileName,
         displayName,
         type: kind,
         visible: true,
@@ -596,13 +610,29 @@ export default function App() {
     }).catch(() => {});
 
     setSelectedLayerId(id);
-    setUploadStatus({ type: 'success', message: `Imported ${file.name}. ${kind === 'points' ? 'Point layer detected and kept visible for editing.' : 'Layer added successfully.'}` });
+    setUploadStatus({ type: 'success', message: `Imported ${fileName}. ${kind === 'points' ? 'Point layer detected.' : 'Layer added successfully.'}` });
+  };
+
+  const addGeoJSONLayer = async (file) => {
+    const geojson = await loadGeoJSON(file);
+    await addGeoJSONAsLayer(geojson, file.name);
   };
 
   const handleUploadFile = async (file) => {
     try {
-      await addGeoJSONLayer(file);
-      if (screen !== 'editor') setScreen('editor');
+      const name = file.name.toLowerCase();
+      if (name.endsWith('.csv')) {
+        const result = await loadCSV(file);
+        if (result.needsMapping) {
+          setCsvMappingData({ headers: result.headers, rows: result.rows, filename: file.name });
+        } else {
+          await addGeoJSONAsLayer(result, file.name);
+          if (screen !== 'editor') setScreen('editor');
+        }
+      } else {
+        await addGeoJSONLayer(file);
+        if (screen !== 'editor') setScreen('editor');
+      }
     } catch (err) {
       setUploadStatus({ type: 'error', message: `Import failed: ${err.message}` });
     }
@@ -1054,8 +1084,10 @@ export default function App() {
       const opts = { ...(project.layout?.exportSettings || {}), ...extraOptions };
       if (format === 'png') {
         await exportPNG(scene, opts);
-      } else {
+      } else if (format === 'svg') {
         await exportSVG(scene, opts);
+      } else if (format === 'pdf') {
+        await exportPDF(scene, opts);
       }
       const warnings = getExportWarnings();
       if (warnings.length > 0) {
@@ -1070,7 +1102,8 @@ export default function App() {
   };
 
   const handleExportClick = (format) => {
-    if (getLastLeadEmail()) {
+    // PDF always shows the modal so the user can choose the page size
+    if (format !== 'pdf' && getLastLeadEmail()) {
       handleExport(format, { noWatermark: true });
     } else {
       setPendingExportFormat(format);
@@ -1078,10 +1111,10 @@ export default function App() {
     }
   };
 
-  const handleExportModalConfirm = async (email) => {
+  const handleExportModalConfirm = async (email, extraOpts = {}) => {
     setShowExportModal(false);
     saveLead({ email, projectTitle: project.layout?.title || '' });
-    await handleExport(pendingExportFormat, { noWatermark: true });
+    await handleExport(pendingExportFormat, { noWatermark: true, ...extraOpts });
   };
 
   const handleExportModalWithWatermark = () => {
@@ -1229,30 +1262,56 @@ export default function App() {
                 ))}
               </select>
             </div>
-            <div className="control-row inline-2">
-              <div>
-                <label>Design Theme</label>
-                <select value={project.layout.themeId || 'modern_rounded'} onChange={(e) => updateLayout({ themeId: e.target.value })}>
-                  {Object.entries(TEMPLATE_THEMES).map(([value, label]) => (
-                    <option key={value} value={value}>{label}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label>Accent color</label>
-                <div className="accent-color-row">
-                  <input
-                    type="color"
-                    className="accent-color-input"
-                    value={project.layout.accentColor || '#2563eb'}
-                    onChange={(e) => updateLayout({ accentColor: e.target.value })}
-                    title="Pick accent color"
-                  />
-                  {project.layout.accentColor && (
-                    <button className="secondary-btn compact" type="button" onClick={() => updateLayout({ accentColor: null })}>Reset</button>
-                  )}
+            <div className="control-row">
+              <label>Design Theme</label>
+              <select value={project.layout.themeId || 'investor_clean'} onChange={(e) => updateLayout({ themeId: e.target.value })}>
+                {Object.entries(TEMPLATE_THEMES).map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
+            </div>
+            <div className="color-overrides-grid">
+              <div className="color-override-cell">
+                <label>Title bg</label>
+                <div className="color-swatch-wrap">
+                  <input type="color" className="swatch-input" value={project.layout.titleBgColor || themeTokens.titleFill?.replace(/rgba?\([^)]+\)/i, '') || '#0c1a35'} onChange={(e) => updateLayout({ titleBgColor: e.target.value })} title="Title block background" />
+                  {project.layout.titleBgColor && <button className="swatch-reset" type="button" onClick={() => updateLayout({ titleBgColor: null })} title="Reset">✕</button>}
                 </div>
               </div>
+              <div className="color-override-cell">
+                <label>Title text</label>
+                <div className="color-swatch-wrap">
+                  <input type="color" className="swatch-input" value={project.layout.titleFgColor || themeTokens.titleText || '#ffffff'} onChange={(e) => updateLayout({ titleFgColor: e.target.value })} title="Title text color" />
+                  {project.layout.titleFgColor && <button className="swatch-reset" type="button" onClick={() => updateLayout({ titleFgColor: null })} title="Reset">✕</button>}
+                </div>
+              </div>
+              <div className="color-override-cell">
+                <label>Panel bg</label>
+                <div className="color-swatch-wrap">
+                  <input type="color" className="swatch-input" value={project.layout.panelBgColor || '#ffffff'} onChange={(e) => updateLayout({ panelBgColor: e.target.value })} title="Overlay panel background" />
+                  {project.layout.panelBgColor && <button className="swatch-reset" type="button" onClick={() => updateLayout({ panelBgColor: null })} title="Reset">✕</button>}
+                </div>
+              </div>
+              <div className="color-override-cell">
+                <label>Panel text</label>
+                <div className="color-swatch-wrap">
+                  <input type="color" className="swatch-input" value={project.layout.panelFgColor || themeTokens.bodyText || '#1e293b'} onChange={(e) => updateLayout({ panelFgColor: e.target.value })} title="Panel text color" />
+                  {project.layout.panelFgColor && <button className="swatch-reset" type="button" onClick={() => updateLayout({ panelFgColor: null })} title="Reset">✕</button>}
+                </div>
+              </div>
+              <div className="color-override-cell">
+                <label>Accent</label>
+                <div className="color-swatch-wrap">
+                  <input type="color" className="swatch-input" value={project.layout.accentColor || themeTokens.titleAccent || '#2563eb'} onChange={(e) => updateLayout({ accentColor: e.target.value })} title="Accent color (stripe, callout borders)" />
+                  {project.layout.accentColor && <button className="swatch-reset" type="button" onClick={() => updateLayout({ accentColor: null })} title="Reset">✕</button>}
+                </div>
+              </div>
+              {(project.layout.titleBgColor || project.layout.titleFgColor || project.layout.panelBgColor || project.layout.panelFgColor || project.layout.accentColor) && (
+                <div className="color-override-cell">
+                  <label>&nbsp;</label>
+                  <button className="swatch-reset-all" type="button" onClick={() => updateLayout({ titleBgColor: null, titleFgColor: null, panelBgColor: null, panelFgColor: null, accentColor: null })}>Reset all</button>
+                </div>
+              )}
             </div>
             <div className="button-row">
               <button className="btn" type="button" onClick={autoFrameAll}>Refit Map</button>
@@ -1645,6 +1704,7 @@ export default function App() {
             <div className="button-row">
               <button className={`btn primary${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('png'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export PNG'}</button>
               <button className={`btn${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('svg'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export SVG'}</button>
+              <button className={`btn${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('pdf'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export PDF'}</button>
             </div>
             {exportError && <div className="export-error-msg">{exportError}</div>}
           </div>
@@ -1677,8 +1737,9 @@ export default function App() {
                 onClick={() => leafletMapRef.current?.zoomIn(1)}
               >+</button>
             </div>
-            <button className={`btn primary${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExport('png', { noWatermark: !!getLastLeadEmail() }); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export PNG'}</button>
-            <button className={`btn${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExport('svg', { noWatermark: !!getLastLeadEmail() }); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export SVG'}</button>
+            <button className={`btn primary${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('png'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export PNG'}</button>
+            <button className={`btn${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('svg'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export SVG'}</button>
+            <button className={`btn${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('pdf'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export PDF'}</button>
             {exportError && <div className="export-error-msg">{exportError}</div>}
           </div>
         </div>
@@ -1871,6 +1932,23 @@ export default function App() {
           onConfirm={handleExportModalConfirm}
           onWithWatermark={handleExportModalWithWatermark}
           onClose={() => setShowExportModal(false)}
+        />
+      ) : null}
+      {csvMappingData ? (
+        <ColumnMapperModal
+          headers={csvMappingData.headers}
+          rows={csvMappingData.rows}
+          filename={csvMappingData.filename}
+          onImport={async (geojson) => {
+            setCsvMappingData(null);
+            try {
+              await addGeoJSONAsLayer(geojson, csvMappingData.filename);
+              if (screen !== 'editor') setScreen('editor');
+            } catch (err) {
+              setUploadStatus({ type: 'error', message: `Import failed: ${err.message}` });
+            }
+          }}
+          onClose={() => setCsvMappingData(null)}
         />
       ) : null}
     </div>

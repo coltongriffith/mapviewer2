@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 
 function formatAccepted() {
-  return '.zip, .geojson, .json';
+  return '.zip, .geojson, .json, .kml, .kmz, .csv';
 }
 
 export default function UploadPanel({ onUploadFile, inputRef, status, layers }) {
@@ -24,7 +24,7 @@ export default function UploadPanel({ onUploadFile, inputRef, status, layers }) 
         <div className="hover-help">
           <button className="hover-help-trigger" type="button" aria-label="What is a shapefile?">i</button>
           <div className="hover-help-tooltip">
-            A shapefile usually comes as multiple files used together. Upload one <code>.zip</code> that contains the main parts like <code>.shp</code>, <code>.shx</code>, <code>.dbf</code>, and often <code>.prj</code>. You can also upload <code>.geojson</code> or <code>.json</code> directly.
+            A shapefile usually comes as multiple files used together. Upload one <code>.zip</code> that contains the main parts like <code>.shp</code>, <code>.shx</code>, <code>.dbf</code>, and often <code>.prj</code>. You can also upload <code>.geojson</code>, <code>.json</code>, <code>.kml</code>, or <code>.kmz</code> directly. For drillhole collar tables, upload a <code>.csv</code> file with lat/lon or easting/northing columns.
           </div>
         </div>
       </div>
