@@ -747,7 +747,9 @@ export default function App() {
           const { data } = ctx.getImageData(0, 0, 64, 64);
           const color = extractDominantColor(data);
           if (color) {
-            updateLayout({ logo: dataUrl, accentColor: color });
+            const [h, s] = hexToHsl(color);
+            const titleBg = hslToHex(h, Math.max(s, 68), 18);
+            updateLayout({ logo: dataUrl, accentColor: color, titleBgColor: titleBg, titleFgColor: '#ffffff' });
             applyBrandPaletteToLayers(color);
           } else {
             updateLayout({ logo: dataUrl });
@@ -1252,75 +1254,6 @@ export default function App() {
         <UploadPanel onUploadFile={handleUploadFile} inputRef={uploadInputRef} status={uploadStatus} layers={project.layers} />
 
         <section className="control-section">
-          <h2>Template</h2>
-          <div className="control-grid">
-            <div className="control-row">
-              <label>Mode</label>
-              <select value={project.layout.mode} onChange={(e) => applyMode(e.target.value)}>
-                {Object.entries(TEMPLATE_MODES).map(([value, label]) => (
-                  <option key={value} value={value}>{label}</option>
-                ))}
-              </select>
-            </div>
-            <div className="control-row">
-              <label>Design Theme</label>
-              <select value={project.layout.themeId || 'investor_clean'} onChange={(e) => updateLayout({ themeId: e.target.value })}>
-                {Object.entries(TEMPLATE_THEMES).map(([value, label]) => (
-                  <option key={value} value={value}>{label}</option>
-                ))}
-              </select>
-            </div>
-            <div className="color-overrides-grid">
-              <div className="color-override-cell">
-                <label>Title bg</label>
-                <div className="color-swatch-wrap">
-                  <input type="color" className="swatch-input" value={project.layout.titleBgColor || themeTokens.titleFill?.replace(/rgba?\([^)]+\)/i, '') || '#0c1a35'} onChange={(e) => updateLayout({ titleBgColor: e.target.value })} title="Title block background" />
-                  {project.layout.titleBgColor && <button className="swatch-reset" type="button" onClick={() => updateLayout({ titleBgColor: null })} title="Reset">✕</button>}
-                </div>
-              </div>
-              <div className="color-override-cell">
-                <label>Title text</label>
-                <div className="color-swatch-wrap">
-                  <input type="color" className="swatch-input" value={project.layout.titleFgColor || themeTokens.titleText || '#ffffff'} onChange={(e) => updateLayout({ titleFgColor: e.target.value })} title="Title text color" />
-                  {project.layout.titleFgColor && <button className="swatch-reset" type="button" onClick={() => updateLayout({ titleFgColor: null })} title="Reset">✕</button>}
-                </div>
-              </div>
-              <div className="color-override-cell">
-                <label>Panel bg</label>
-                <div className="color-swatch-wrap">
-                  <input type="color" className="swatch-input" value={project.layout.panelBgColor || '#ffffff'} onChange={(e) => updateLayout({ panelBgColor: e.target.value })} title="Overlay panel background" />
-                  {project.layout.panelBgColor && <button className="swatch-reset" type="button" onClick={() => updateLayout({ panelBgColor: null })} title="Reset">✕</button>}
-                </div>
-              </div>
-              <div className="color-override-cell">
-                <label>Panel text</label>
-                <div className="color-swatch-wrap">
-                  <input type="color" className="swatch-input" value={project.layout.panelFgColor || themeTokens.bodyText || '#1e293b'} onChange={(e) => updateLayout({ panelFgColor: e.target.value })} title="Panel text color" />
-                  {project.layout.panelFgColor && <button className="swatch-reset" type="button" onClick={() => updateLayout({ panelFgColor: null })} title="Reset">✕</button>}
-                </div>
-              </div>
-              <div className="color-override-cell">
-                <label>Accent</label>
-                <div className="color-swatch-wrap">
-                  <input type="color" className="swatch-input" value={project.layout.accentColor || themeTokens.titleAccent || '#2563eb'} onChange={(e) => updateLayout({ accentColor: e.target.value })} title="Accent color (stripe, callout borders)" />
-                  {project.layout.accentColor && <button className="swatch-reset" type="button" onClick={() => updateLayout({ accentColor: null })} title="Reset">✕</button>}
-                </div>
-              </div>
-              {(project.layout.titleBgColor || project.layout.titleFgColor || project.layout.panelBgColor || project.layout.panelFgColor || project.layout.accentColor) && (
-                <div className="color-override-cell">
-                  <label>&nbsp;</label>
-                  <button className="swatch-reset-all" type="button" onClick={() => updateLayout({ titleBgColor: null, titleFgColor: null, panelBgColor: null, panelFgColor: null, accentColor: null })}>Reset all</button>
-                </div>
-              )}
-            </div>
-            <div className="button-row">
-              <button className="btn" type="button" onClick={autoFrameAll}>Refit Map</button>
-              <button className="btn primary" type="button" onClick={improveMap}>Improve Map</button>
-            </div>
-          </div>
-        </section>
-
-        <section className="control-section">
           <h2>Map Content</h2>
           <div className="control-grid">
             <div className="control-row"><label>Title</label><input value={localTitle} onChange={(e) => {
@@ -1444,15 +1377,6 @@ export default function App() {
           </div>
         </section>
 
-        <section className="control-section">
-          <h2>Reference Overlays</h2>
-          <div className="toggle-grid">
-            <label className="toggle-row"><input type="checkbox" checked={referenceOverlays.context} onChange={(e) => updateLayout({ referenceOverlays: { context: e.target.checked } })} /> <span>Roads / Water / Towns</span></label>
-            <label className="toggle-row"><input type="checkbox" checked={referenceOverlays.labels} onChange={(e) => updateLayout({ referenceOverlays: { labels: e.target.checked } })} /> <span>Reference Labels</span></label>
-            <label className="toggle-row"><input type="checkbox" checked={referenceOverlays.rail} onChange={(e) => updateLayout({ referenceOverlays: { rail: e.target.checked } })} /> <span>Railways</span></label>
-          </div>
-        </section>
-
         <section className="control-section" ref={layersSectionRef}>
           <h2>Layers</h2>
           <LayerList layers={project.layers} selectedLayerId={selectedLayerId} onSelect={setSelectedLayerId} onToggleVisible={toggleLayerVisible} />
@@ -1504,71 +1428,6 @@ export default function App() {
               )}
             </div>
           ) : <p className="small-note">Select a layer to edit its display label, role, order, and colors.</p>}
-        </section>
-
-        <section className="control-section" ref={markersSectionRef}>
-          <h2>Markers & Highlight Areas</h2>
-          <div className="button-row">
-            <button className={`secondary-btn ${annotationTool === 'marker' ? 'active-toggle' : ''}`} type="button" onClick={() => { const next = annotationTool === 'marker' ? null : 'marker'; setAnnotationTool(next); annotationToolRef.current = next; setSelectedFeature(null); }}>Place Marker</button>
-            <button className={`secondary-btn ${annotationTool === 'ellipse' ? 'active-toggle' : ''}`} type="button" onClick={() => { const next = annotationTool === 'ellipse' ? null : 'ellipse'; setAnnotationTool(next); annotationToolRef.current = next; setSelectedFeature(null); }}>Draw Dashed Area</button>
-          </div>
-          <div className="small-note" style={{ marginTop: 8 }}>{annotationTool ? 'Click anywhere on the map to place the selected annotation.' : 'Add highlight markers or dashed ellipses anywhere on the map.'}</div>
-
-          {selectedMarker ? (
-            <div className="control-grid" style={{ marginTop: 10 }}>
-              <div className="selected-note">Selected marker</div>
-              <div className="control-row"><label>Label</label><input value={selectedMarker.label || ''} onChange={(e) => updateMarker(selectedMarker.id, { label: e.target.value })} /></div>
-              <div className="control-row inline-2">
-                <div>
-                  <label>Marker Type</label>
-                  <select value={selectedMarker.type} onChange={(e) => updateMarker(selectedMarker.id, { type: e.target.value })}>
-                    {Object.entries(MARKER_TYPES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label>Color</label>
-                  <input type="color" value={selectedMarker.color} onChange={(e) => updateMarker(selectedMarker.id, { color: e.target.value })} />
-                </div>
-              </div>
-              <div className="control-row inline-2">
-                <div>
-                  <label>Size</label>
-                  <input type="range" min="12" max="36" step="1" value={selectedMarker.size} onChange={(e) => updateMarker(selectedMarker.id, { size: Number(e.target.value) })} />
-                </div>
-                <div className="range-value">{selectedMarker.size}px</div>
-              </div>
-              <button className="secondary-btn" type="button" onClick={() => removeMarker(selectedMarker.id)}>Remove Marker</button>
-            </div>
-          ) : null}
-
-          {selectedEllipse ? (
-            <div className="control-grid" style={{ marginTop: 10 }}>
-              <div className="selected-note">Selected highlight area</div>
-              <div className="control-row"><label>Label</label><input value={selectedEllipse.label || ''} onChange={(e) => updateEllipse(selectedEllipse.id, { label: e.target.value })} /></div>
-              <div className="control-row inline-2">
-                <div>
-                  <label>Width</label>
-                  <input type="number" min="24" max="320" step="1" value={selectedEllipse.width} onChange={(e) => updateEllipse(selectedEllipse.id, { width: Number(e.target.value) })} />
-                </div>
-                <div>
-                  <label>Height</label>
-                  <input type="number" min="24" max="320" step="1" value={selectedEllipse.height} onChange={(e) => updateEllipse(selectedEllipse.id, { height: Number(e.target.value) })} />
-                </div>
-              </div>
-              <div className="control-row inline-2">
-                <div>
-                  <label>Rotation</label>
-                  <input type="number" min="-180" max="180" step="1" value={selectedEllipse.rotation} onChange={(e) => updateEllipse(selectedEllipse.id, { rotation: Number(e.target.value) })} />
-                </div>
-                <div>
-                  <label>Color</label>
-                  <input type="color" value={selectedEllipse.color} onChange={(e) => updateEllipse(selectedEllipse.id, { color: e.target.value })} />
-                </div>
-              </div>
-              <label className="toggle-row"><input type="checkbox" checked={selectedEllipse.dashed !== false} onChange={(e) => updateEllipse(selectedEllipse.id, { dashed: e.target.checked })} /> <span>Dashed outline</span></label>
-              <button className="secondary-btn" type="button" onClick={() => removeEllipse(selectedEllipse.id)}>Remove Highlight Area</button>
-            </div>
-          ) : null}
         </section>
 
         <section className="control-section" ref={drillholeSectionRef}>
@@ -1681,6 +1540,149 @@ export default function App() {
                 </div>
               );
             })}
+          </div>
+        </section>
+
+        <section className="control-section" ref={markersSectionRef}>
+          <h2>Markers & Highlight Areas</h2>
+          <div className="button-row">
+            <button className={`secondary-btn ${annotationTool === 'marker' ? 'active-toggle' : ''}`} type="button" onClick={() => { const next = annotationTool === 'marker' ? null : 'marker'; setAnnotationTool(next); annotationToolRef.current = next; setSelectedFeature(null); }}>Place Marker</button>
+            <button className={`secondary-btn ${annotationTool === 'ellipse' ? 'active-toggle' : ''}`} type="button" onClick={() => { const next = annotationTool === 'ellipse' ? null : 'ellipse'; setAnnotationTool(next); annotationToolRef.current = next; setSelectedFeature(null); }}>Draw Dashed Area</button>
+          </div>
+          <div className="small-note" style={{ marginTop: 8 }}>{annotationTool ? 'Click anywhere on the map to place the selected annotation.' : 'Add highlight markers or dashed ellipses anywhere on the map.'}</div>
+
+          {selectedMarker ? (
+            <div className="control-grid" style={{ marginTop: 10 }}>
+              <div className="selected-note">Selected marker</div>
+              <div className="control-row"><label>Label</label><input value={selectedMarker.label || ''} onChange={(e) => updateMarker(selectedMarker.id, { label: e.target.value })} /></div>
+              <div className="control-row inline-2">
+                <div>
+                  <label>Marker Type</label>
+                  <select value={selectedMarker.type} onChange={(e) => updateMarker(selectedMarker.id, { type: e.target.value })}>
+                    {Object.entries(MARKER_TYPES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label>Color</label>
+                  <input type="color" value={selectedMarker.color} onChange={(e) => updateMarker(selectedMarker.id, { color: e.target.value })} />
+                </div>
+              </div>
+              <div className="control-row inline-2">
+                <div>
+                  <label>Size</label>
+                  <input type="range" min="12" max="36" step="1" value={selectedMarker.size} onChange={(e) => updateMarker(selectedMarker.id, { size: Number(e.target.value) })} />
+                </div>
+                <div className="range-value">{selectedMarker.size}px</div>
+              </div>
+              <button className="secondary-btn" type="button" onClick={() => removeMarker(selectedMarker.id)}>Remove Marker</button>
+            </div>
+          ) : null}
+
+          {selectedEllipse ? (
+            <div className="control-grid" style={{ marginTop: 10 }}>
+              <div className="selected-note">Selected highlight area</div>
+              <div className="control-row"><label>Label</label><input value={selectedEllipse.label || ''} onChange={(e) => updateEllipse(selectedEllipse.id, { label: e.target.value })} /></div>
+              <div className="control-row inline-2">
+                <div>
+                  <label>Width</label>
+                  <input type="number" min="24" max="320" step="1" value={selectedEllipse.width} onChange={(e) => updateEllipse(selectedEllipse.id, { width: Number(e.target.value) })} />
+                </div>
+                <div>
+                  <label>Height</label>
+                  <input type="number" min="24" max="320" step="1" value={selectedEllipse.height} onChange={(e) => updateEllipse(selectedEllipse.id, { height: Number(e.target.value) })} />
+                </div>
+              </div>
+              <div className="control-row inline-2">
+                <div>
+                  <label>Rotation</label>
+                  <input type="number" min="-180" max="180" step="1" value={selectedEllipse.rotation} onChange={(e) => updateEllipse(selectedEllipse.id, { rotation: Number(e.target.value) })} />
+                </div>
+                <div>
+                  <label>Color</label>
+                  <input type="color" value={selectedEllipse.color} onChange={(e) => updateEllipse(selectedEllipse.id, { color: e.target.value })} />
+                </div>
+              </div>
+              <label className="toggle-row"><input type="checkbox" checked={selectedEllipse.dashed !== false} onChange={(e) => updateEllipse(selectedEllipse.id, { dashed: e.target.checked })} /> <span>Dashed outline</span></label>
+              <button className="secondary-btn" type="button" onClick={() => removeEllipse(selectedEllipse.id)}>Remove Highlight Area</button>
+            </div>
+          ) : null}
+        </section>
+
+        <section className="control-section">
+          <h2>Template</h2>
+          <div className="control-grid">
+            <div className="control-row">
+              <label>Mode</label>
+              <select value={project.layout.mode} onChange={(e) => applyMode(e.target.value)}>
+                {Object.entries(TEMPLATE_MODES).map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
+            </div>
+            <div className="control-row">
+              <label>Design Theme</label>
+              <select value={project.layout.themeId || 'investor_clean'} onChange={(e) => updateLayout({ themeId: e.target.value })}>
+                {Object.entries(TEMPLATE_THEMES).map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
+            </div>
+            <div className="color-overrides-grid">
+              <div className="color-override-cell">
+                <label>Title bg</label>
+                <div className="color-swatch-wrap">
+                  <input type="color" className="swatch-input" value={project.layout.titleBgColor || themeTokens.titleFill?.replace(/rgba?\([^)]+\)/i, '') || '#0c1a35'} onChange={(e) => updateLayout({ titleBgColor: e.target.value })} title="Title block background" />
+                  {project.layout.titleBgColor && <button className="swatch-reset" type="button" onClick={() => updateLayout({ titleBgColor: null })} title="Reset">✕</button>}
+                </div>
+              </div>
+              <div className="color-override-cell">
+                <label>Title text</label>
+                <div className="color-swatch-wrap">
+                  <input type="color" className="swatch-input" value={project.layout.titleFgColor || themeTokens.titleText || '#ffffff'} onChange={(e) => updateLayout({ titleFgColor: e.target.value })} title="Title text color" />
+                  {project.layout.titleFgColor && <button className="swatch-reset" type="button" onClick={() => updateLayout({ titleFgColor: null })} title="Reset">✕</button>}
+                </div>
+              </div>
+              <div className="color-override-cell">
+                <label>Panel bg</label>
+                <div className="color-swatch-wrap">
+                  <input type="color" className="swatch-input" value={project.layout.panelBgColor || '#ffffff'} onChange={(e) => updateLayout({ panelBgColor: e.target.value })} title="Overlay panel background" />
+                  {project.layout.panelBgColor && <button className="swatch-reset" type="button" onClick={() => updateLayout({ panelBgColor: null })} title="Reset">✕</button>}
+                </div>
+              </div>
+              <div className="color-override-cell">
+                <label>Panel text</label>
+                <div className="color-swatch-wrap">
+                  <input type="color" className="swatch-input" value={project.layout.panelFgColor || themeTokens.bodyText || '#1e293b'} onChange={(e) => updateLayout({ panelFgColor: e.target.value })} title="Panel text color" />
+                  {project.layout.panelFgColor && <button className="swatch-reset" type="button" onClick={() => updateLayout({ panelFgColor: null })} title="Reset">✕</button>}
+                </div>
+              </div>
+              <div className="color-override-cell">
+                <label>Accent</label>
+                <div className="color-swatch-wrap">
+                  <input type="color" className="swatch-input" value={project.layout.accentColor || themeTokens.titleAccent || '#2563eb'} onChange={(e) => updateLayout({ accentColor: e.target.value })} title="Accent color (stripe, callout borders)" />
+                  {project.layout.accentColor && <button className="swatch-reset" type="button" onClick={() => updateLayout({ accentColor: null })} title="Reset">✕</button>}
+                </div>
+              </div>
+              {(project.layout.titleBgColor || project.layout.titleFgColor || project.layout.panelBgColor || project.layout.panelFgColor || project.layout.accentColor) && (
+                <div className="color-override-cell">
+                  <label>&nbsp;</label>
+                  <button className="swatch-reset-all" type="button" onClick={() => updateLayout({ titleBgColor: null, titleFgColor: null, panelBgColor: null, panelFgColor: null, accentColor: null })}>Reset all</button>
+                </div>
+              )}
+            </div>
+            <div className="button-row">
+              <button className="btn" type="button" onClick={autoFrameAll}>Refit Map</button>
+              <button className="btn primary" type="button" onClick={improveMap}>Improve Map</button>
+            </div>
+          </div>
+        </section>
+
+        <section className="control-section">
+          <h2>Reference Overlays</h2>
+          <div className="toggle-grid">
+            <label className="toggle-row"><input type="checkbox" checked={referenceOverlays.context} onChange={(e) => updateLayout({ referenceOverlays: { context: e.target.checked } })} /> <span>Roads / Water / Towns</span></label>
+            <label className="toggle-row"><input type="checkbox" checked={referenceOverlays.labels} onChange={(e) => updateLayout({ referenceOverlays: { labels: e.target.checked } })} /> <span>Reference Labels</span></label>
+            <label className="toggle-row"><input type="checkbox" checked={referenceOverlays.rail} onChange={(e) => updateLayout({ referenceOverlays: { rail: e.target.checked } })} /> <span>Railways</span></label>
           </div>
         </section>
 
