@@ -284,6 +284,8 @@ export default function App() {
   const [localSubtitle, setLocalSubtitle] = useState(project.layout.subtitle || '');
   const titleDebounceRef = useRef(null);
   const subtitleDebounceRef = useRef(null);
+  const annotationToolRef = useRef(null);
+  const [editingTitleField, setEditingTitleField] = useState(null);
   const layersSectionRef = useRef(null);
   const markersSectionRef = useRef(null);
   const calloutsSectionRef = useRef(null);
@@ -924,9 +926,11 @@ export default function App() {
     if (annotationTool === 'marker') {
       addMarkerAt(latlng);
       setAnnotationTool(null);
+      annotationToolRef.current = null;
     } else if (annotationTool === 'ellipse') {
       addEllipseAt(latlng);
       setAnnotationTool(null);
+      annotationToolRef.current = null;
     }
   };
 
@@ -1375,8 +1379,8 @@ export default function App() {
         <section className="control-section" ref={markersSectionRef}>
           <h2>Markers & Highlight Areas</h2>
           <div className="button-row">
-            <button className={`secondary-btn ${annotationTool === 'marker' ? 'active-toggle' : ''}`} type="button" onClick={() => { setAnnotationTool(annotationTool === 'marker' ? null : 'marker'); setSelectedFeature(null); }}>Place Marker</button>
-            <button className={`secondary-btn ${annotationTool === 'ellipse' ? 'active-toggle' : ''}`} type="button" onClick={() => { setAnnotationTool(annotationTool === 'ellipse' ? null : 'ellipse'); setSelectedFeature(null); }}>Draw Dashed Area</button>
+            <button className={`secondary-btn ${annotationTool === 'marker' ? 'active-toggle' : ''}`} type="button" onClick={() => { const next = annotationTool === 'marker' ? null : 'marker'; setAnnotationTool(next); annotationToolRef.current = next; setSelectedFeature(null); }}>Place Marker</button>
+            <button className={`secondary-btn ${annotationTool === 'ellipse' ? 'active-toggle' : ''}`} type="button" onClick={() => { const next = annotationTool === 'ellipse' ? null : 'ellipse'; setAnnotationTool(next); annotationToolRef.current = next; setSelectedFeature(null); }}>Draw Dashed Area</button>
           </div>
           <div className="small-note" style={{ marginTop: 8 }}>{annotationTool ? 'Click anywhere on the map to place the selected annotation.' : 'Add highlight markers or dashed ellipses anywhere on the map.'}</div>
 
@@ -1649,7 +1653,7 @@ export default function App() {
               '--font-footer': `${project.layout.fonts?.footer || 'Inter'}, sans-serif`,
             }}
           >
-        <MapCanvas onReady={onMapReady} project={project} template={template} onFeatureClick={handleFeatureClick} onMapClick={handleMapClick} />
+        <MapCanvas onReady={onMapReady} project={project} template={template} onFeatureClick={handleFeatureClick} onMapClick={handleMapClick} annotationToolRef={annotationToolRef} />
         {mapReady && (
           <>
             <AnnotationOverlay
@@ -1679,8 +1683,28 @@ export default function App() {
 
         <div className="template-zone" style={zoneStyle(resolvedZones.title)}>
           <div className="template-card title-card">
-            <h2>{project.layout.title}</h2>
-            <p>{project.layout.subtitle}</p>
+            {editingTitleField === 'title' ? (
+              <input
+                className="title-inline-input"
+                autoFocus
+                defaultValue={project.layout.title || ''}
+                onBlur={(e) => { updateLayout({ title: e.target.value }); setLocalTitle(e.target.value); setEditingTitleField(null); }}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === 'Escape') e.target.blur(); }}
+              />
+            ) : (
+              <h2 style={{ cursor: 'text' }} title="Click to edit" onClick={() => setEditingTitleField('title')}>{project.layout.title}</h2>
+            )}
+            {editingTitleField === 'subtitle' ? (
+              <input
+                className="title-inline-input subtitle-inline-input"
+                autoFocus
+                defaultValue={project.layout.subtitle || ''}
+                onBlur={(e) => { updateLayout({ subtitle: e.target.value }); setLocalSubtitle(e.target.value); setEditingTitleField(null); }}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === 'Escape') e.target.blur(); }}
+              />
+            ) : (
+              <p style={{ cursor: 'text' }} title="Click to edit" onClick={() => setEditingTitleField('subtitle')}>{project.layout.subtitle}</p>
+            )}
           </div>
         </div>
 

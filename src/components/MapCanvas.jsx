@@ -51,7 +51,7 @@ function detectGeomType(geojson) {
   return 'polygon';
 }
 
-export default function MapCanvas({ onReady, project, template, onFeatureClick, onMapClick }) {
+export default function MapCanvas({ onReady, project, template, onFeatureClick, onMapClick, annotationToolRef }) {
   const mapRef = useRef(null);
   const onMapClickRef = useRef(onMapClick);
   const mapElRef = useRef(null);
@@ -193,12 +193,14 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
 
           if (isDrillholes) {
             marker.on('click', (e) => {
+              if (annotationToolRef?.current) return;
               L.DomEvent.stopPropagation(e);
               onFeatureClick?.({ layerId: layer.id, feature, latlng });
             });
             marker.bindTooltip('Click to edit callout', { direction: 'top', offset: [0, -10], opacity: 0.9, sticky: true });
           } else {
             marker.on('click', (e) => {
+              if (annotationToolRef?.current) return;
               L.DomEvent.stopPropagation(e);
               onFeatureClick?.({ layerId: layer.id, feature: null, latlng: null, isLayerSelect: true });
             });
@@ -208,6 +210,7 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
         },
         onEachFeature: isDrillholes ? undefined : (feature, featureLayer) => {
           featureLayer.on('click', (e) => {
+            if (annotationToolRef?.current) return;
             L.DomEvent.stopPropagation(e);
             onFeatureClick?.({ layerId: layer.id, feature: null, latlng: null, isLayerSelect: true });
           });
