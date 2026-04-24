@@ -21,7 +21,7 @@ export default function UserMenu({ onOpenTemplates }) {
   if (!user) {
     return (
       <>
-        <button className="btn user-menu-signin-btn" onClick={() => setShowAuth(true)}>
+        <button className="user-menu-signin-btn" onClick={() => setShowAuth(true)}>
           Sign in
         </button>
         {showAuth && <AuthModal onClose={() => setShowAuth(false)} />}
@@ -29,18 +29,19 @@ export default function UserMenu({ onOpenTemplates }) {
     );
   }
 
-  const displayEmail = user.email
-    ? user.email.length > 22 ? user.email.slice(0, 20) + '…' : user.email
-    : 'Account';
+  const initials = user.email
+    ? user.email.slice(0, 2).toUpperCase()
+    : '??';
+  const displayEmail = user.email || 'Account';
 
   return (
     <div className="user-menu-wrap" ref={menuRef}>
       <button
-        className="btn user-menu-btn"
+        className="user-avatar-btn"
         onClick={() => setOpen((v) => !v)}
-        title={user.email}
+        title={displayEmail}
       >
-        {displayEmail}
+        {initials}
       </button>
       {open && (
         <div className="user-menu-dropdown">

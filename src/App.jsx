@@ -1828,7 +1828,11 @@ export default function App() {
                         className="btn compact"
                         type="button"
                         onClick={() => {
-                          updateLayout(applyTemplateConfig(tmpl.config, project.layout));
+                          const cfg = tmpl.config || {};
+                          const keys = ['themeId','accentColor','titleBgColor','titleFgColor','panelBgColor','panelFgColor','logo','logoScale','mode'];
+                          const patch = Object.fromEntries(keys.filter(k => cfg[k] !== undefined).map(k => [k, cfg[k]]));
+                          if (cfg.fonts) patch.fonts = { ...project.layout.fonts, ...cfg.fonts };
+                          if (Object.keys(patch).length) updateLayout(patch);
                           setUploadStatus({ type: 'success', message: `Applied template "${tmpl.name}".` });
                         }}
                       >Apply</button>
@@ -1901,15 +1905,14 @@ export default function App() {
         <div className="map-topbar editor-toolbar">
           <div className="map-topbar-left">
             <div className="map-topbar-title">{project.layout.title || 'Project Map'}</div>
+            <div className={`autosave-badge ${isDirty ? 'dirty' : 'clean'}`}>{isDirty ? 'Unsaved' : user ? 'Cloud' : 'Saved'}</div>
           </div>
           <div className="map-topbar-right">
-            <UserMenu onOpenTemplates={() => setShowTemplateManager(true)} />
-            <div className={`autosave-badge ${isDirty ? 'dirty' : 'clean'}`}>{isDirty ? 'Unsaved' : user ? 'Cloud' : 'Saved'}</div>
-            <button className="btn" type="button" onClick={() => saveCurrentProject()}>Save</button>
-            <button className="btn" type="button" onClick={saveAsProject}>Save As</button>
-            <button className="btn" type="button" onClick={startNewProject}>New</button>
-            <button className="btn" type="button" onClick={() => setShowRecentProjects(true)}>Open</button>
-            <button className="btn" type="button" onClick={duplicateCurrentProject}>Duplicate</button>
+            <button className="topbar-btn" type="button" onClick={() => saveCurrentProject()}>Save</button>
+            <button className="topbar-btn" type="button" onClick={saveAsProject}>Save As</button>
+            <button className="topbar-btn" type="button" onClick={startNewProject}>New</button>
+            <button className="topbar-btn" type="button" onClick={() => setShowRecentProjects(true)}>Open</button>
+            <button className="topbar-btn" type="button" onClick={duplicateCurrentProject}>Dup</button>
             <div className="map-zoom-btns">
               <button
                 className="secondary-btn compact"
@@ -1924,10 +1927,14 @@ export default function App() {
                 onClick={() => leafletMapRef.current?.zoomIn(1)}
               >+</button>
             </div>
-            <button className={`btn primary${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('png'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export PNG'}</button>
-            <button className={`btn${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('svg'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export SVG'}</button>
-            <button className={`btn${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('pdf'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export PDF'}</button>
+            <div className="topbar-divider" />
+            <button className={`topbar-btn primary${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('png'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing…' : ''}>{exporting ? '…' : 'PNG'}</button>
+            <button className={`topbar-btn${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('svg'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting}>SVG</button>
+            <button className={`topbar-btn${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('pdf'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting}>PDF</button>
             {exportError && <div className="export-error-msg">{exportError}</div>}
+          </div>
+          <div className="map-topbar-account">
+            <UserMenu onOpenTemplates={() => setShowTemplateManager(true)} />
           </div>
         </div>
         <div className="map-viewport">
