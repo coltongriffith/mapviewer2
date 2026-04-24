@@ -62,9 +62,12 @@ function resolveCalloutBoxes(callouts, map) {
   return placed;
 }
 
-export default function CalloutsOverlay({ map, callouts, selectedCalloutId, onSelect, onMove, fontFamily }) {
+export default function CalloutsOverlay({ map, callouts, selectedCalloutId, onSelect, onMove, onUpdate, fontFamily }) {
   const [tick, setTick] = useState(0);
+  const [editingField, setEditingField] = useState(null);
   const dragRef = useRef(null);
+
+  useEffect(() => { setEditingField(null); }, [selectedCalloutId]);
 
   useEffect(() => {
     if (!map) return undefined;
@@ -155,8 +158,47 @@ export default function CalloutsOverlay({ map, callouts, selectedCalloutId, onSe
               };
             }}
           >
-            <div className="map-callout-title">{callout.text}</div>
-            {callout.subtext ? <div className="map-callout-subtext" style={{ color: style.subtextColor || '#475569' }}>{callout.subtext}</div> : null}
+            {editingField?.id === callout.id && editingField?.field === 'text' ? (
+              <input
+                autoFocus
+                defaultValue={callout.text}
+                className="map-callout-title-input"
+                onBlur={(e) => { onUpdate?.(callout.id, { text: e.target.value }); setEditingField(null); }}
+                onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); if (e.key === 'Escape') setEditingField(null); }}
+                onClick={(e) => e.stopPropagation()}
+                onPointerDown={(e) => e.stopPropagation()}
+              />
+            ) : (
+              <div
+                className="map-callout-title"
+                style={{ cursor: selectedCalloutId === callout.id ? 'text' : 'default' }}
+                onClick={(e) => { if (selectedCalloutId === callout.id) { e.stopPropagation(); setEditingField({ id: callout.id, field: 'text' }); } }}
+              >
+                {callout.text}
+              </div>
+            )}
+            {callout.subtext ? (
+              editingField?.id === callout.id && editingField?.field === 'subtext' ? (
+                <input
+                  autoFocus
+                  defaultValue={callout.subtext}
+                  className="map-callout-subtext-input"
+                  style={{ color: style.subtextColor || '#475569' }}
+                  onBlur={(e) => { onUpdate?.(callout.id, { subtext: e.target.value }); setEditingField(null); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); if (e.key === 'Escape') setEditingField(null); }}
+                  onClick={(e) => e.stopPropagation()}
+                  onPointerDown={(e) => e.stopPropagation()}
+                />
+              ) : (
+                <div
+                  className="map-callout-subtext"
+                  style={{ color: style.subtextColor || '#475569', cursor: selectedCalloutId === callout.id ? 'text' : 'default' }}
+                  onClick={(e) => { if (selectedCalloutId === callout.id) { e.stopPropagation(); setEditingField({ id: callout.id, field: 'subtext' }); } }}
+                >
+                  {callout.subtext}
+                </div>
+              )
+            ) : null}
           </div>
         );
       })}
