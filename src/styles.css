@@ -464,17 +464,27 @@ button, input, select, textarea { font: inherit; }
 .recent-projects-header h3 { margin: 0; color: #16324f; }
 .recent-projects-list { display: grid; gap: 8px; }
 .recent-project-row {
-  text-align: left;
-  display: grid;
-  gap: 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   border: 1px solid #dbe4ee;
   border-radius: 10px;
   background: #f8fbff;
   padding: 10px 12px;
-  cursor: pointer;
+  transition: border-color 0.15s;
 }
-.recent-project-row strong { color: #14365f; }
-.recent-project-row span { color: #6b7f96; font-size: 12px; }
+.recent-project-row.current { border-color: #3b82f6; background: #eff6ff; }
+.recent-project-main { flex: 1; display: flex; flex-direction: column; gap: 2px; cursor: pointer; min-width: 0; }
+.recent-project-main:hover .recent-project-name { color: #2563eb; }
+.recent-project-name { color: #14365f; font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.recent-project-date { color: #6b7f96; font-size: 12px; }
+.recent-project-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.recent-project-confirm-label { font-size: 12px; color: #dc2626; font-weight: 600; }
+.proj-action-btn { padding: 4px 8px; border-radius: 6px; border: 1px solid #dbe4ee; background: #fff; color: #475569; font-size: 13px; cursor: pointer; transition: background 0.12s, color 0.12s; }
+.proj-action-btn:hover { background: #f1f5f9; color: #0f172a; }
+.proj-action-btn.danger { color: #dc2626; border-color: #fca5a5; }
+.proj-action-btn.danger:hover { background: #fef2f2; }
+.project-name-input { font: inherit; font-size: 14px; font-weight: 600; color: #14365f; border: none; border-bottom: 2px solid #3b82f6; outline: none; background: transparent; width: 100%; padding: 0; }
 
 .floating-north-arrow { position: absolute; right: 14px; bottom: 18px; width: 64px; height: 112px; z-index: 540; }
 .floating-north-arrow .north-arrow-card { border-radius: 10px; }
