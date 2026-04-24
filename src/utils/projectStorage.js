@@ -95,6 +95,29 @@ export function resolveInitialWorkspace(fallbackProject) {
   };
 }
 
+// --- Mutation helpers ---
+// These are intentionally thin wrappers over localStorage so they can be
+// swapped for API calls when user accounts are introduced.
+
+export function renameProjectRecord(id, newName) {
+  const projects = readProjects();
+  const index = projects.findIndex((item) => item.id === id);
+  if (index < 0) return false;
+  projects[index] = { ...projects[index], name: newName.trim() || projects[index].name };
+  writeProjects(projects);
+  return true;
+}
+
+export function deleteProjectRecord(id) {
+  const projects = readProjects();
+  const next = projects.filter((item) => item.id !== id);
+  if (next.length === projects.length) return false;
+  writeProjects(next);
+  const lastId = localStorage.getItem(LAST_OPENED_PROJECT_KEY);
+  if (lastId === id) localStorage.removeItem(LAST_OPENED_PROJECT_KEY);
+  return true;
+}
+
 export function clearActiveProjectContext() {
   localStorage.removeItem(LAST_OPENED_PROJECT_KEY);
 }

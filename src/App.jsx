@@ -34,8 +34,10 @@ import { getThemeTokens } from './utils/themeTokens';
 import { saveLead, getLastLeadEmail } from './utils/leadCapture';
 import {
   clearActiveProjectContext,
+  deleteProjectRecord,
   duplicateProjectRecord,
   listProjects,
+  renameProjectRecord,
   resolveInitialWorkspace,
   saveDraft,
   saveProjectRecord,
@@ -202,6 +204,75 @@ function LegendLabelEditable({ label, onSave }) {
     >
       {label}
     </span>
+  );
+}
+
+function ProjectNameInput({ initialValue, onSave, onCancel }) {
+  const [value, setValue] = useState(initialValue);
+  return (
+    <input
+      autoFocus
+      className="project-name-input"
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+      onBlur={() => value.trim() ? onSave(value.trim()) : onCancel()}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') e.target.blur();
+        if (e.key === 'Escape') onCancel();
+      }}
+      onClick={(e) => e.stopPropagation()}
+    />
+  );
+}
+
+function RecentProjectsModal({ entries, currentProjectId, onOpen, onRename, onDelete, onClose }) {
+  const [editingId, setEditingId] = useState(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+
+  return (
+    <div className="recent-projects-modal" role="dialog" aria-modal="true">
+      <div className="recent-projects-card">
+        <div className="recent-projects-header">
+          <h3>Saved Projects</h3>
+          <button className="secondary-btn" type="button" onClick={onClose}>Close</button>
+        </div>
+        <div className="recent-projects-list">
+          {entries.length ? entries.map((entry) => (
+            <div
+              key={entry.id}
+              className={`recent-project-row${entry.id === currentProjectId ? ' current' : ''}`}
+            >
+              <div className="recent-project-main" onClick={() => editingId !== entry.id && onOpen(entry)}>
+                {editingId === entry.id ? (
+                  <ProjectNameInput
+                    initialValue={entry.name}
+                    onSave={(name) => { onRename(entry.id, name); setEditingId(null); }}
+                    onCancel={() => setEditingId(null)}
+                  />
+                ) : (
+                  <strong className="recent-project-name">{entry.name}</strong>
+                )}
+                <span className="recent-project-date">{new Date(entry.updatedAt).toLocaleString()}</span>
+              </div>
+              <div className="recent-project-actions" onClick={(e) => e.stopPropagation()}>
+                {confirmDeleteId === entry.id ? (
+                  <>
+                    <span className="recent-project-confirm-label">Delete?</span>
+                    <button className="proj-action-btn danger" type="button" onClick={() => { onDelete(entry.id); setConfirmDeleteId(null); }}>Yes</button>
+                    <button className="proj-action-btn" type="button" onClick={() => setConfirmDeleteId(null)}>No</button>
+                  </>
+                ) : (
+                  <>
+                    <button className="proj-action-btn" type="button" title="Rename" onClick={() => { setEditingId(entry.id); setConfirmDeleteId(null); }}>✎</button>
+                    <button className="proj-action-btn danger" type="button" title="Delete" onClick={() => { setConfirmDeleteId(entry.id); setEditingId(null); }}>✕</button>
+                  </>
+                )}
+              </div>
+            </div>
+          )) : <div className="small-note">No saved projects yet.</div>}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1777,22 +1848,22 @@ export default function App() {
         </div>
       </div>
       {showRecentProjects ? (
-        <div className="recent-projects-modal" role="dialog" aria-modal="true">
-          <div className="recent-projects-card">
-            <div className="recent-projects-header">
-              <h3>Recent Projects</h3>
-              <button className="secondary-btn" type="button" onClick={() => setShowRecentProjects(false)}>Close</button>
-            </div>
-            <div className="recent-projects-list">
-              {recentProjects.length ? recentProjects.map((entry) => (
-                <button key={entry.id} type="button" className="recent-project-row" onClick={() => openProjectFromRecent(entry)}>
-                  <strong>{entry.name}</strong>
-                  <span>{new Date(entry.updatedAt).toLocaleString()}</span>
-                </button>
-              )) : <div className="small-note">No saved local projects yet.</div>}
-            </div>
-          </div>
-        </div>
+        <RecentProjectsModal
+          entries={recentProjects}
+          currentProjectId={projectId}
+          onOpen={(entry) => { openProjectFromRecent(entry); setShowRecentProjects(false); }}
+          onRename={(id, newName) => {
+            renameProjectRecord(id, newName);
+            setRecentProjects(listProjects());
+            if (id === projectId) setProjectName(newName);
+          }}
+          onDelete={(id) => {
+            deleteProjectRecord(id);
+            setRecentProjects(listProjects());
+            if (id === projectId) { setProjectId(null); clearActiveProjectContext(); }
+          }}
+          onClose={() => setShowRecentProjects(false)}
+        />
       ) : null}
       {showExportModal ? (
         <ExportHDModal
