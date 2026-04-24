@@ -128,16 +128,27 @@ function getOverlayMetrics(scene) {
 function drawRoundedRect(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
 
 function getTheme(scene) {
-  const base = getThemeTokens(scene?.project?.layout?.themeId || 'modern_rounded');
-  const accent = scene?.project?.layout?.accentColor;
-  if (!accent) return base;
-  const themeId = scene?.project?.layout?.themeId;
-  return {
-    ...base,
-    titleAccent: accent,
-    calloutBorder: accent,
-    ...(!themeId || themeId === 'modern_rounded' ? { titleFill: accent + 'dd' } : {}),
-  };
+  const layout = scene?.project?.layout || {};
+  const base = getThemeTokens(layout.themeId || 'investor_clean');
+  const { accentColor, titleBgColor, titleFgColor, panelBgColor, panelFgColor } = layout;
+  const overrides = {};
+  if (accentColor) { overrides.titleAccent = accentColor; overrides.calloutBorder = accentColor; }
+  if (titleBgColor) overrides.titleFill = titleBgColor;
+  if (titleFgColor) { overrides.titleText = titleFgColor; overrides.subtitleText = titleFgColor + 'bb'; }
+  if (panelBgColor) {
+    overrides.panelFill = panelBgColor; overrides.northArrowFill = panelBgColor;
+    overrides.scaleFill = panelBgColor; overrides.insetFill = panelBgColor;
+    overrides.logoFill = panelBgColor; overrides.footerFill = panelBgColor;
+    overrides.calloutFill = panelBgColor;
+  }
+  if (panelFgColor) {
+    overrides.bodyText = panelFgColor; overrides.panelTitle = panelFgColor;
+    overrides.northArrowText = panelFgColor; overrides.scaleStroke = panelFgColor;
+    overrides.insetTitle = panelFgColor; overrides.insetMuted = panelFgColor + 'aa';
+    overrides.footerText = panelFgColor; overrides.calloutText = panelFgColor;
+    overrides.mutedText = panelFgColor + 'aa';
+  }
+  return Object.keys(overrides).length ? { ...base, ...overrides } : base;
 }
 
 function drawPanelRect(ctx, x, y, w, h, radius, fill, border, scale) {

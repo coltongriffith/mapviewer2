@@ -377,16 +377,28 @@ export default function App() {
   const resolvedZonesRef = useRef(resolvedZones);
   useEffect(() => { resolvedZonesRef.current = resolvedZones; }, [resolvedZones]);
   const themeTokens = useMemo(() => {
-    const base = getThemeTokens(project.layout?.themeId || 'modern_rounded');
-    const accent = project.layout?.accentColor;
-    if (!accent) return base;
-    return {
-      ...base,
-      titleAccent: accent,
-      calloutBorder: accent,
-      ...(project.layout?.themeId === 'modern_rounded' || !project.layout?.themeId ? { titleFill: accent + 'dd' } : {}),
-    };
-  }, [project.layout?.themeId, project.layout?.accentColor]);
+    const layout = project.layout || {};
+    const base = getThemeTokens(layout.themeId || 'investor_clean');
+    const { accentColor, titleBgColor, titleFgColor, panelBgColor, panelFgColor } = layout;
+    const overrides = {};
+    if (accentColor) { overrides.titleAccent = accentColor; overrides.calloutBorder = accentColor; }
+    if (titleBgColor) overrides.titleFill = titleBgColor;
+    if (titleFgColor) { overrides.titleText = titleFgColor; overrides.subtitleText = titleFgColor + 'bb'; }
+    if (panelBgColor) {
+      overrides.panelFill = panelBgColor; overrides.northArrowFill = panelBgColor;
+      overrides.scaleFill = panelBgColor; overrides.insetFill = panelBgColor;
+      overrides.logoFill = panelBgColor; overrides.footerFill = panelBgColor;
+      overrides.calloutFill = panelBgColor;
+    }
+    if (panelFgColor) {
+      overrides.bodyText = panelFgColor; overrides.panelTitle = panelFgColor;
+      overrides.northArrowText = panelFgColor; overrides.scaleStroke = panelFgColor;
+      overrides.insetTitle = panelFgColor; overrides.insetMuted = panelFgColor + 'aa';
+      overrides.footerText = panelFgColor; overrides.calloutText = panelFgColor;
+      overrides.mutedText = panelFgColor + 'aa';
+    }
+    return Object.keys(overrides).length ? { ...base, ...overrides } : base;
+  }, [project.layout?.themeId, project.layout?.accentColor, project.layout?.titleBgColor, project.layout?.titleFgColor, project.layout?.panelBgColor, project.layout?.panelFgColor]);
 
   useEffect(() => {
     if (!bootstrappedRef.current) {
@@ -1250,30 +1262,56 @@ export default function App() {
                 ))}
               </select>
             </div>
-            <div className="control-row inline-2">
-              <div>
-                <label>Design Theme</label>
-                <select value={project.layout.themeId || 'modern_rounded'} onChange={(e) => updateLayout({ themeId: e.target.value })}>
-                  {Object.entries(TEMPLATE_THEMES).map(([value, label]) => (
-                    <option key={value} value={value}>{label}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label>Accent color</label>
-                <div className="accent-color-row">
-                  <input
-                    type="color"
-                    className="accent-color-input"
-                    value={project.layout.accentColor || '#2563eb'}
-                    onChange={(e) => updateLayout({ accentColor: e.target.value })}
-                    title="Pick accent color"
-                  />
-                  {project.layout.accentColor && (
-                    <button className="secondary-btn compact" type="button" onClick={() => updateLayout({ accentColor: null })}>Reset</button>
-                  )}
+            <div className="control-row">
+              <label>Design Theme</label>
+              <select value={project.layout.themeId || 'investor_clean'} onChange={(e) => updateLayout({ themeId: e.target.value })}>
+                {Object.entries(TEMPLATE_THEMES).map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
+            </div>
+            <div className="color-overrides-grid">
+              <div className="color-override-cell">
+                <label>Title bg</label>
+                <div className="color-swatch-wrap">
+                  <input type="color" className="swatch-input" value={project.layout.titleBgColor || themeTokens.titleFill?.replace(/rgba?\([^)]+\)/i, '') || '#0c1a35'} onChange={(e) => updateLayout({ titleBgColor: e.target.value })} title="Title block background" />
+                  {project.layout.titleBgColor && <button className="swatch-reset" type="button" onClick={() => updateLayout({ titleBgColor: null })} title="Reset">✕</button>}
                 </div>
               </div>
+              <div className="color-override-cell">
+                <label>Title text</label>
+                <div className="color-swatch-wrap">
+                  <input type="color" className="swatch-input" value={project.layout.titleFgColor || themeTokens.titleText || '#ffffff'} onChange={(e) => updateLayout({ titleFgColor: e.target.value })} title="Title text color" />
+                  {project.layout.titleFgColor && <button className="swatch-reset" type="button" onClick={() => updateLayout({ titleFgColor: null })} title="Reset">✕</button>}
+                </div>
+              </div>
+              <div className="color-override-cell">
+                <label>Panel bg</label>
+                <div className="color-swatch-wrap">
+                  <input type="color" className="swatch-input" value={project.layout.panelBgColor || '#ffffff'} onChange={(e) => updateLayout({ panelBgColor: e.target.value })} title="Overlay panel background" />
+                  {project.layout.panelBgColor && <button className="swatch-reset" type="button" onClick={() => updateLayout({ panelBgColor: null })} title="Reset">✕</button>}
+                </div>
+              </div>
+              <div className="color-override-cell">
+                <label>Panel text</label>
+                <div className="color-swatch-wrap">
+                  <input type="color" className="swatch-input" value={project.layout.panelFgColor || themeTokens.bodyText || '#1e293b'} onChange={(e) => updateLayout({ panelFgColor: e.target.value })} title="Panel text color" />
+                  {project.layout.panelFgColor && <button className="swatch-reset" type="button" onClick={() => updateLayout({ panelFgColor: null })} title="Reset">✕</button>}
+                </div>
+              </div>
+              <div className="color-override-cell">
+                <label>Accent</label>
+                <div className="color-swatch-wrap">
+                  <input type="color" className="swatch-input" value={project.layout.accentColor || themeTokens.titleAccent || '#2563eb'} onChange={(e) => updateLayout({ accentColor: e.target.value })} title="Accent color (stripe, callout borders)" />
+                  {project.layout.accentColor && <button className="swatch-reset" type="button" onClick={() => updateLayout({ accentColor: null })} title="Reset">✕</button>}
+                </div>
+              </div>
+              {(project.layout.titleBgColor || project.layout.titleFgColor || project.layout.panelBgColor || project.layout.panelFgColor || project.layout.accentColor) && (
+                <div className="color-override-cell">
+                  <label>&nbsp;</label>
+                  <button className="swatch-reset-all" type="button" onClick={() => updateLayout({ titleBgColor: null, titleFgColor: null, panelBgColor: null, panelFgColor: null, accentColor: null })}>Reset all</button>
+                </div>
+              )}
             </div>
             <div className="button-row">
               <button className="btn" type="button" onClick={autoFrameAll}>Refit Map</button>
