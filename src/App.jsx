@@ -52,6 +52,7 @@ import {
   getDefaultTemplate,
   listCloudProjects,
   listTemplates,
+  loadCloudProject,
   renameCloudProject,
   saveCloudProject,
   saveTemplate,
@@ -1231,8 +1232,19 @@ export default function App() {
     }
   };
 
-  const openProjectFromRecent = (entry) => {
-    setProject(entry.payload);
+  const openProjectFromRecent = async (entry) => {
+    let payload = entry.payload;
+    if (!payload && user) {
+      try {
+        const full = await loadCloudProject(entry.id);
+        payload = full.payload;
+      } catch (err) {
+        setUploadStatus({ type: 'error', message: `Failed to open project: ${err.message}` });
+        return;
+      }
+    }
+    if (!payload) return;
+    setProject(payload);
     setProjectId(entry.id);
     setProjectName(entry.name);
     setSelectedLayerId(null);
@@ -1243,8 +1255,8 @@ export default function App() {
     setAnnotationTool(null);
     setShowRecentProjects(false);
     touchLastOpenedProject(entry.id);
-    saveDraft({ payload: entry.payload, projectId: entry.id, projectName: entry.name });
-    lastSavedSnapshotRef.current = JSON.stringify(entry.payload);
+    saveDraft({ payload, projectId: entry.id, projectName: entry.name });
+    lastSavedSnapshotRef.current = JSON.stringify(payload);
     setIsDirty(false);
     setUploadStatus({ type: 'success', message: `Opened project: ${entry.name}` });
   };
@@ -1908,30 +1920,24 @@ export default function App() {
             <div className={`autosave-badge ${isDirty ? 'dirty' : 'clean'}`}>{isDirty ? 'Unsaved' : user ? 'Cloud' : 'Saved'}</div>
           </div>
           <div className="map-topbar-right">
-            <button className="topbar-btn" type="button" onClick={() => saveCurrentProject()}>Save</button>
-
-            <button className="topbar-btn" type="button" onClick={saveAsProject}>Save As</button>
-            <button className="topbar-btn" type="button" onClick={startNewProject}>New</button>
-            <button className="topbar-btn" type="button" onClick={() => setShowRecentProjects(true)}>Open</button>
-            <button className="topbar-btn" type="button" onClick={duplicateCurrentProject}>Dup</button>
-            <div className="map-zoom-btns">
-              <button
-                className="secondary-btn compact"
-                type="button"
-                aria-label="Zoom out"
-                onClick={() => leafletMapRef.current?.zoomOut(1)}
-              >−</button>
-              <button
-                className="secondary-btn compact"
-                type="button"
-                aria-label="Zoom in"
-                onClick={() => leafletMapRef.current?.zoomIn(1)}
-              >+</button>
+            <div className="topbar-btn-group">
+              <button className="topbar-btn" type="button" onClick={() => saveCurrentProject()}>Save</button>
+              <button className="topbar-btn" type="button" onClick={saveAsProject}>Save As</button>
+              <button className="topbar-btn" type="button" onClick={() => setShowRecentProjects(true)}>Open</button>
+              <button className="topbar-btn" type="button" onClick={startNewProject}>New</button>
+              <button className="topbar-btn" type="button" onClick={duplicateCurrentProject}>Dup</button>
             </div>
             <div className="topbar-divider" />
-            <button className={`topbar-btn primary${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('png'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing…' : ''}>{exporting ? '…' : 'PNG'}</button>
-            <button className={`topbar-btn${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('svg'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting}>SVG</button>
-            <button className={`topbar-btn${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('pdf'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting}>PDF</button>
+            <div className="topbar-btn-group">
+              <button className="topbar-btn" type="button" aria-label="Zoom out" onClick={() => leafletMapRef.current?.zoomOut(1)}>−</button>
+              <button className="topbar-btn" type="button" aria-label="Zoom in" onClick={() => leafletMapRef.current?.zoomIn(1)}>+</button>
+            </div>
+            <div className="topbar-divider" />
+            <div className="topbar-btn-group">
+              <button className={`topbar-btn primary${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('png'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing…' : ''}>{exporting ? 'Exporting…' : 'PNG'}</button>
+              <button className={`topbar-btn${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('svg'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting}>SVG</button>
+              <button className={`topbar-btn${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('pdf'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting}>PDF</button>
+            </div>
             {exportError && <div className="export-error-msg">{exportError}</div>}
           </div>
         </div>
