@@ -1311,7 +1311,7 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <Sidebar>
+      <Sidebar footer={<UserMenu onOpenTemplates={() => setShowTemplateManager(true)} />}>
         <div className="sidebar-header-row">
           <button className="sidebar-wordmark" type="button" onClick={() => setScreen('landing')}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -1909,6 +1909,7 @@ export default function App() {
           </div>
           <div className="map-topbar-right">
             <button className="topbar-btn" type="button" onClick={() => saveCurrentProject()}>Save</button>
+
             <button className="topbar-btn" type="button" onClick={saveAsProject}>Save As</button>
             <button className="topbar-btn" type="button" onClick={startNewProject}>New</button>
             <button className="topbar-btn" type="button" onClick={() => setShowRecentProjects(true)}>Open</button>
@@ -1932,9 +1933,6 @@ export default function App() {
             <button className={`topbar-btn${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('svg'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting}>SVG</button>
             <button className={`topbar-btn${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('pdf'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting}>PDF</button>
             {exportError && <div className="export-error-msg">{exportError}</div>}
-          </div>
-          <div className="map-topbar-account">
-            <UserMenu onOpenTemplates={() => setShowTemplateManager(true)} />
           </div>
         </div>
         <div className="map-viewport">
