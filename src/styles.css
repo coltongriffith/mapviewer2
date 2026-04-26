@@ -203,6 +203,41 @@ button, input, select, textarea { font: inherit; }
 .inset-svg { width: 100%; height: calc(100% - 34px); display: block; }
 .inset-mode-label { font-size: 11px; color: var(--inset-muted, #526172); margin-top: 6px; }
 .inset-image-wrap { height: calc(100% - 28px); border-radius: max(3px, calc(var(--template-radius, 12px) - 4px)); overflow: hidden; border: 1px solid var(--inset-border, #d5dfea); }
+.logo-upload-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1.5px dashed #d1dae5;
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  background: #f8fafc;
+  transition: border-color 0.15s;
+}
+.logo-upload-card:hover { border-color: #93c5fd; }
+.logo-upload-card.has-logo { border-style: solid; border-color: #dbe4ee; background: #fff; }
+.logo-upload-btn {
+  background: #fff;
+  border: 1px solid #d1dae5;
+  border-radius: 7px;
+  color: #1e293b;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 6px 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background 0.1s, border-color 0.1s;
+}
+.logo-upload-btn:hover { background: #eff3f9; border-color: #93c5fd; }
+.logo-upload-icon { font-size: 13px; margin-right: 2px; }
+.logo-card-hint { font-size: 11.5px; color: #94a3b8; }
+.logo-thumb { width: 48px; height: 48px; object-fit: contain; border-radius: 6px; border: 1px solid #e8eef6; background: #fff; flex-shrink: 0; padding: 3px; }
+.logo-card-info { display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 0; }
+.logo-card-status { font-size: 12px; font-weight: 600; color: #16a34a; }
+.logo-card-actions { display: flex; gap: 5px; }
+.logo-card-actions .btn.compact, .logo-card-actions .secondary-btn.compact { padding: 4px 9px; font-size: 11.5px; }
+
 .inset-detected-badge { font-size: 12px; color: #15803d; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 5px; padding: 4px 8px; margin-top: 6px; text-align: center; }
 .region-highlights-section { padding: 6px 0 2px; }
 .control-section-subheader { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; padding: 4px 0 6px; }

@@ -1379,6 +1379,29 @@ export default function App() {
 
         <UploadPanel onUploadFile={handleUploadFile} inputRef={uploadInputRef} status={uploadStatus} layers={project.layers} />
 
+        <div className={`logo-upload-card${project.layout.logo ? ' has-logo' : ''}`}>
+          {project.layout.logo ? (
+            <>
+              <img className="logo-thumb" src={project.layout.logo} alt="Logo" />
+              <div className="logo-card-info">
+                <span className="logo-card-status">Brand colors applied</span>
+                <div className="logo-card-actions">
+                  <button className="btn compact" type="button" onClick={() => logoInputRef.current?.click()}>Replace</button>
+                  <button className="secondary-btn compact" type="button" onClick={() => updateLayout({ logo: null, accentColor: null, titleBgColor: null, titleFgColor: null })}>Remove</button>
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <button className="logo-upload-btn" type="button" onClick={() => logoInputRef.current?.click()}>
+                <span className="logo-upload-icon">↑</span> Upload Logo
+              </button>
+              <span className="logo-card-hint">Auto-applies your brand colors</span>
+            </>
+          )}
+        </div>
+        <input ref={logoInputRef} type="file" accept="image/*" onChange={handleLogoChange} hidden />
+
         <section className="control-section">
           <h2>Content</h2>
           <div className="control-grid">
@@ -1890,7 +1913,6 @@ export default function App() {
           <h2 className="section-toggle-btn" onClick={() => toggleSection('elements')}>Elements <span className={`section-chevron${collapsedSections.elements ? '' : ' open'}`}>›</span></h2>
           {!collapsedSections.elements && <div className="control-grid">
             <div className="button-row three">
-              <button className="btn" type="button" onClick={() => logoInputRef.current?.click()}>Upload Logo</button>
               <button className="btn" type="button" onClick={() => insetInputRef.current?.click()}>Upload Inset</button>
             </div>
             {project.layout.insetImage ? (
@@ -1933,7 +1955,6 @@ export default function App() {
                 </div>
               ))}
             </div>
-            <input ref={logoInputRef} type="file" accept="image/*" onChange={handleLogoChange} hidden />
             <input ref={insetInputRef} type="file" accept="image/*" onChange={handleInsetImageChange} hidden />
           </div>}
         </section>
