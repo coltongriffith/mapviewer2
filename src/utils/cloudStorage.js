@@ -1,9 +1,15 @@
 import { supabase } from '../lib/supabase';
 
+function requireSupabase() {
+  if (!supabase) throw new Error('Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to your environment.');
+  return supabase;
+}
+
 // ── Projects ─────────────────────────────────────────────────────────────────
 
 export async function listCloudProjects() {
-  const { data, error } = await supabase
+  const sb = requireSupabase();
+  const { data, error } = await sb
     .from('projects')
     .select('id, name, updated_at')
     .order('updated_at', { ascending: false });
@@ -16,21 +22,21 @@ export async function listCloudProjects() {
 }
 
 export async function saveCloudProject({ id, name, payload }) {
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: { user } } = await requireSupabase().auth.getUser();
   if (!user) throw new Error('Not authenticated');
 
   const now = new Date().toISOString();
   const record = { name: name || payload?.layout?.title || 'Untitled map', payload, updated_at: now };
 
   if (id) {
-    const { error } = await supabase
+    const { error } = await requireSupabase()
       .from('projects')
       .upsert({ id, user_id: user.id, ...record })
       .eq('id', id);
     if (error) throw error;
     return id;
   } else {
-    const { data, error } = await supabase
+    const { data, error } = await requireSupabase()
       .from('projects')
       .insert({ user_id: user.id, ...record })
       .select('id')
@@ -41,7 +47,7 @@ export async function saveCloudProject({ id, name, payload }) {
 }
 
 export async function loadCloudProject(id) {
-  const { data, error } = await supabase
+  const { data, error } = await requireSupabase()
     .from('projects')
     .select('*')
     .eq('id', id)
@@ -51,12 +57,12 @@ export async function loadCloudProject(id) {
 }
 
 export async function deleteCloudProject(id) {
-  const { error } = await supabase.from('projects').delete().eq('id', id);
+  const { error } = await requireSupabase().from('projects').delete().eq('id', id);
   if (error) throw error;
 }
 
 export async function renameCloudProject(id, name) {
-  const { error } = await supabase
+  const { error } = await requireSupabase()
     .from('projects')
     .update({ name, updated_at: new Date().toISOString() })
     .eq('id', id);
@@ -66,7 +72,7 @@ export async function renameCloudProject(id, name) {
 // ── Templates ─────────────────────────────────────────────────────────────────
 
 export async function listTemplates() {
-  const { data, error } = await supabase
+  const { data, error } = await requireSupabase()
     .from('templates')
     .select('*')
     .order('created_at', { ascending: true });
@@ -75,17 +81,17 @@ export async function listTemplates() {
 }
 
 export async function saveTemplate({ name, config, isDefault = false }) {
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: { user } } = await requireSupabase().auth.getUser();
   if (!user) throw new Error('Not authenticated');
 
   if (isDefault) {
-    await supabase
+    await requireSupabase()
       .from('templates')
       .update({ is_default: false })
       .eq('user_id', user.id);
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await requireSupabase()
     .from('templates')
     .insert({ user_id: user.id, name, config, is_default: isDefault })
     .select('*')
@@ -95,7 +101,7 @@ export async function saveTemplate({ name, config, isDefault = false }) {
 }
 
 export async function updateTemplate(id, updates) {
-  const { error } = await supabase
+  const { error } = await requireSupabase()
     .from('templates')
     .update({ ...updates, updated_at: new Date().toISOString() })
     .eq('id', id);
@@ -103,20 +109,20 @@ export async function updateTemplate(id, updates) {
 }
 
 export async function setDefaultTemplate(id) {
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: { user } } = await requireSupabase().auth.getUser();
   if (!user) throw new Error('Not authenticated');
-  await supabase.from('templates').update({ is_default: false }).eq('user_id', user.id);
-  const { error } = await supabase.from('templates').update({ is_default: true }).eq('id', id);
+  await requireSupabase().from('templates').update({ is_default: false }).eq('user_id', user.id);
+  const { error } = await requireSupabase().from('templates').update({ is_default: true }).eq('id', id);
   if (error) throw error;
 }
 
 export async function deleteTemplate(id) {
-  const { error } = await supabase.from('templates').delete().eq('id', id);
+  const { error } = await requireSupabase().from('templates').delete().eq('id', id);
   if (error) throw error;
 }
 
 export async function getDefaultTemplate() {
-  const { data, error } = await supabase
+  const { data, error } = await requireSupabase()
     .from('templates')
     .select('*')
     .eq('is_default', true)

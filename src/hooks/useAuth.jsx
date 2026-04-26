@@ -8,6 +8,12 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!supabase) {
+      // Supabase not configured — app runs in anonymous localStorage-only mode.
+      setLoading(false);
+      return;
+    }
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
       setLoading(false);
@@ -21,21 +27,25 @@ export function AuthProvider({ children }) {
   }, []);
 
   async function signIn(email, password) {
+    if (!supabase) throw new Error('Auth not configured');
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
   }
 
   async function signUp(email, password) {
+    if (!supabase) throw new Error('Auth not configured');
     const { error } = await supabase.auth.signUp({ email, password });
     if (error) throw error;
   }
 
   async function signOut() {
+    if (!supabase) return;
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
   }
 
   async function resetPassword(email) {
+    if (!supabase) throw new Error('Auth not configured');
     const { error } = await supabase.auth.resetPasswordForEmail(email);
     if (error) throw error;
   }
