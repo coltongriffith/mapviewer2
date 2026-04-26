@@ -1406,11 +1406,22 @@ export default function App() {
                 </select>
               </div>
             </div>
-            <div className="control-row"><label>Footer / Source Note</label><input value={project.layout.footerText || ''} onChange={(e) => updateLayout({ footerText: e.target.value })} /></div>
+            <div className="control-row"><label>Legend Title</label><input value={project.layout.legendTitle ?? 'Legend'} onChange={(e) => updateLayout({ legendTitle: e.target.value })} placeholder="Legend" /></div>
+            <div className="control-row"><label>Disclaimer / Footer</label><input value={project.layout.footerText || ''} onChange={(e) => updateLayout({ footerText: e.target.value })} placeholder="e.g. For internal use only" /></div>
+            <div className="control-row inline-2">
+              <div><label>Map Date</label><input value={project.layout.mapDate || ''} onChange={(e) => updateLayout({ mapDate: e.target.value })} placeholder="e.g. April 2025" /></div>
+              <div><label>Project #</label><input value={project.layout.projectNumber || ''} onChange={(e) => updateLayout({ projectNumber: e.target.value })} placeholder="e.g. P-2024-01" /></div>
+            </div>
+            <div className="control-row"><label>Scale Note</label><input value={project.layout.mapScaleNote || ''} onChange={(e) => updateLayout({ mapScaleNote: e.target.value })} placeholder="e.g. 1:50,000" /></div>
+            <div className="element-visibility-row">
+              <label className="toggle-row"><input type="checkbox" checked={project.layout.showNorthArrow !== false} onChange={(e) => updateLayout({ showNorthArrow: e.target.checked })} /><span>North Arrow</span></label>
+              <label className="toggle-row"><input type="checkbox" checked={project.layout.showScaleBar !== false} onChange={(e) => updateLayout({ showScaleBar: e.target.checked })} /><span>Scale Bar</span></label>
+              <label className="toggle-row"><input type="checkbox" checked={project.layout.footerEnabled !== false} onChange={(e) => updateLayout({ footerEnabled: e.target.checked })} /><span>Footer</span></label>
+              <label className="toggle-row"><input type="checkbox" checked={project.layout.insetEnabled !== false} onChange={(e) => updateLayout({ insetEnabled: e.target.checked })} /><span>Inset Map</span></label>
+            </div>
             <div className="button-row three">
               <button className="btn" type="button" onClick={() => logoInputRef.current?.click()}>Upload Logo</button>
               <button className="btn" type="button" onClick={() => insetInputRef.current?.click()}>Upload Inset</button>
-              <button className="btn" type="button" onClick={() => updateLayout({ insetEnabled: project.layout.insetEnabled === false })}>{project.layout.insetEnabled === false ? 'Show Inset' : 'Hide Inset'}</button>
             </div>
             {project.layout.insetImage ? (
               <div className="inset-status-card">
@@ -2075,13 +2086,13 @@ export default function App() {
           </div>
         ) : null}
 
-        <div className="template-zone" style={zoneStyle(resolvedZones.northArrow)}><NorthArrow /></div>
+        {project.layout.showNorthArrow !== false && <div className="template-zone" style={zoneStyle(resolvedZones.northArrow)}><NorthArrow /></div>}
         {project.layout.insetEnabled !== false && resolvedZones.inset?.width ? (
           <div className="template-zone" style={zoneStyle(resolvedZones.inset)}>
             <LocatorInset layers={project.layers} insetMode={project.layout.insetMode} insetImage={project.layout.insetImage} autoInsetRegion={project.layout.autoInsetRegion} insetTitle={project.layout.insetTitle} insetLabel={project.layout.insetLabel} mode={project.layout.mode} zone={{ width: '100%', height: '100%' }} />
           </div>
         ) : null}
-        <div className="template-zone" style={zoneStyle(resolvedZones.scaleBar)}><ScaleBar map={leafletMapRef.current} /></div>
+        {project.layout.showScaleBar !== false && <div className="template-zone" style={zoneStyle(resolvedZones.scaleBar)}><ScaleBar map={leafletMapRef.current} /></div>}
         {project.layout.footerText && project.layout.footerEnabled !== false ? <div className="template-zone" style={zoneStyle(resolvedZones.footer)}><div className="template-card footer-card">{project.layout.footerText}</div></div> : null}
         {project.layout.logo ? <div className="template-zone" style={zoneStyle(resolvedZones.logo)}><div className="template-card logo-card"><img src={project.layout.logo} alt="Logo" /></div></div> : null}
         {selectedFeature && featureEditorPoint ? (

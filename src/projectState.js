@@ -40,9 +40,11 @@ export const CALLOUT_TYPES = {
 
 
 export const TEMPLATE_THEMES = {
-  investor_clean:  'Clean Investor Style',
-  technical_sharp: 'Technical Style',
-  modern_dark:     'Dark Modern Style',
+  investor_clean:      'Investor — Navy & White',
+  technical_sharp:     'Technical — Sharp Borders',
+  modern_dark:         'Modern — Dark Indigo',
+  warm_terrain:        'Terrain — Earthy & Warm',
+  midnight_blueprint:  'Blueprint — Midnight Cyan',
 };
 
 export const FONT_OPTIONS = {
@@ -80,6 +82,12 @@ export function createInitialProjectState() {
       titleWidth: 'standard',
       footerText: '',
       footerEnabled: true,
+      showNorthArrow: true,
+      showScaleBar: true,
+      legendTitle: 'Legend',
+      mapDate: '',
+      projectNumber: '',
+      mapScaleNote: '',
       referenceOverlays: {
         context: false,
         labels: false,

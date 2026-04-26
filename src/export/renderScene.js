@@ -173,19 +173,31 @@ function svgRect(x, y, w, h, r, fill, border, scale) {
 
 function drawTitleBlockCanvas(ctx, scene, scale) {
   const theme = getTheme(scene);
+  const layout = scene.project.layout || {};
   const { title } = getOverlayMetrics(scene); const x = title.left * scale, y = title.top * scale, w = title.width * scale, h = title.height * scale;
-  drawPanelRect(ctx, x, y, w, h, (theme.titleRadius || theme.panelRadius || 10) * scale, theme.titleFill, theme.titleBorder, scale);
+  drawPanelRect(ctx, x, y, w, h, (theme.titleRadius ?? theme.panelRadius ?? 10) * scale, theme.titleFill, theme.titleBorder, scale);
   const leftBar = theme.titleAccent && theme.titleAccentStyle === 'left';
   if (theme.titleAccent) {
     ctx.fillStyle = theme.titleAccent;
     if (leftBar) { ctx.fillRect(x, y, 6 * scale, h); }
     else { ctx.fillRect(x, y, w, 5 * scale); }
   }
-  const titleFont = `${scene.project.layout?.fonts?.title || 'Inter'}, Arial, sans-serif`;
+  const titleFont = `${layout.fonts?.title || 'Inter'}, Arial, sans-serif`;
   const textX = (x + (leftBar ? 22 : 18) * scale);
   const topOff = (theme.titleAccent && !leftBar) ? 20 : 16;
-  ctx.fillStyle = theme.titleText; ctx.font = `700 ${26 * scale}px ${titleFont}`; ctx.textBaseline = 'top'; ctx.fillText(scene.project.layout?.title || 'Project Map', textX, y + topOff * scale);
-  ctx.fillStyle = theme.subtitleText; ctx.font = `${14 * scale}px ${titleFont}`; ctx.fillText(scene.project.layout?.subtitle || 'Technical results template', textX, y + (topOff + 36) * scale);
+  ctx.fillStyle = theme.titleText; ctx.font = `700 ${26 * scale}px ${titleFont}`; ctx.textBaseline = 'top'; ctx.fillText(layout.title || 'Project Map', textX, y + topOff * scale);
+  ctx.fillStyle = theme.subtitleText; ctx.font = `${14 * scale}px ${titleFont}`; ctx.fillText(layout.subtitle || '', textX, y + (topOff + 34) * scale);
+  // Metadata rows (date / project # / scale note) — right-aligned in title block
+  const metaItems = [layout.mapDate, layout.projectNumber, layout.mapScaleNote].filter(Boolean);
+  if (metaItems.length) {
+    const metaFont = `${10 * scale}px ${titleFont}`;
+    ctx.font = metaFont; ctx.textBaseline = 'top';
+    ctx.fillStyle = theme.subtitleText;
+    const rightX = x + w - 12 * scale;
+    const savedAlign = ctx.textAlign; ctx.textAlign = 'right';
+    metaItems.forEach((item, i) => { ctx.fillText(item, rightX, y + (topOff + 2 + i * 14) * scale); });
+    ctx.textAlign = savedAlign;
+  }
 }
 
 function groupLegendItems(items, layout) {
@@ -212,10 +224,10 @@ function drawLegendCanvas(ctx, scene, scale) {
   const legendFont = `${scene.project.layout?.fonts?.legend || 'Inter'}, Arial, sans-serif`;
   const { legend } = getOverlayMetrics(scene); const items = scene.project.layout?.legendItems || []; if (!items.length || !legend?.width || !legend?.height) return;
   const x = legend.left * scale, y = legend.top * scale, w = legend.width * scale, h = legend.height * scale;
-  drawPanelRect(ctx, x, y, w, h, (theme.panelRadius || 10) * scale, theme.panelFill, theme.panelBorder, scale);
+  drawPanelRect(ctx, x, y, w, h, (theme.panelRadius ?? 10) * scale, theme.panelFill, theme.panelBorder, scale);
   drawPanelAccentLeft(ctx, x, y, h, theme, scale);
   const leftPad = theme.panelAccentLeft ? 20 : 16;
-  ctx.fillStyle = theme.panelTitle; ctx.font = `700 ${15 * scale}px ${legendFont}`; ctx.textBaseline = 'top'; ctx.fillText('Legend', x + leftPad * scale, y + 14 * scale);
+  ctx.fillStyle = theme.panelTitle; ctx.font = `700 ${15 * scale}px ${legendFont}`; ctx.textBaseline = 'top'; ctx.fillText(scene.project.layout?.legendTitle || 'Legend', x + leftPad * scale, y + 14 * scale);
   const lp = (theme.panelAccentLeft ? 20 : 16) * scale;
   let rowY = y + 40 * scale;
   groupLegendItems(items, scene.project.layout).forEach((group) => {
@@ -233,9 +245,10 @@ function drawLegendCanvas(ctx, scene, scale) {
 }
 
 function drawNorthArrowCanvas(ctx, scene, scale) {
+  if (scene.project.layout?.showNorthArrow === false) return;
   const theme = getTheme(scene);
   const { northArrow } = getOverlayMetrics(scene); const x = northArrow.left * scale, y = northArrow.top * scale, w = northArrow.width * scale, h = northArrow.height * scale, cx = x + w / 2;
-  drawPanelRect(ctx, x, y, w, h, (theme.panelRadius || 10) * scale, theme.northArrowFill, theme.panelBorder, scale);
+  drawPanelRect(ctx, x, y, w, h, (theme.panelRadius ?? 10) * scale, theme.northArrowFill, theme.panelBorder, scale);
   drawPanelAccentLeft(ctx, x, y, h, theme, scale);
   ctx.fillStyle = theme.northArrowText; ctx.font = `700 ${14 * scale}px Arial`; ctx.textAlign = 'center'; ctx.textBaseline = 'top'; ctx.fillText('N', cx, y + 12 * scale);
   ctx.beginPath(); ctx.moveTo(cx, y + 28 * scale); ctx.lineTo(cx - 12 * scale, y + 62 * scale); ctx.lineTo(cx - 3 * scale, y + 62 * scale); ctx.lineTo(cx - 3 * scale, y + 88 * scale); ctx.lineTo(cx + 3 * scale, y + 88 * scale); ctx.lineTo(cx + 3 * scale, y + 62 * scale); ctx.lineTo(cx + 12 * scale, y + 62 * scale); ctx.closePath(); ctx.fill();
@@ -252,9 +265,10 @@ function pickScaleLabel(map) {
   return { label: nice >= 1000 ? `${nice / 1000} km` : `${nice} m`, widthPx: Math.max(70, Math.min(180, Math.round((130 * nice) / meters))) };
 }
 function drawScaleBarCanvas(ctx, scene, scale) {
+  if (scene.project.layout?.showScaleBar === false) return;
   const theme = getTheme(scene);
   const { scaleBar } = getOverlayMetrics(scene); const x = scaleBar.left * scale, y = scaleBar.top * scale, w = scaleBar.width * scale, h = scaleBar.height * scale, scaleState = pickScaleLabel(scene.map), barWidth = scaleState.widthPx * scale;
-  drawPanelRect(ctx, x, y, w, h, (theme.panelRadius || 10) * scale, theme.scaleFill, theme.panelBorder, scale);
+  drawPanelRect(ctx, x, y, w, h, (theme.panelRadius ?? 10) * scale, theme.scaleFill, theme.panelBorder, scale);
   drawPanelAccentLeft(ctx, x, y, h, theme, scale);
   ctx.fillStyle = theme.scaleStroke; ctx.fillRect(x + 16 * scale, y + 18 * scale, barWidth / 2, 10 * scale); ctx.fillStyle = '#ffffff'; ctx.fillRect(x + 16 * scale + barWidth / 2, y + 18 * scale, barWidth / 2, 10 * scale); ctx.strokeStyle = theme.scaleStroke; ctx.lineWidth = Math.max(1, scale); ctx.strokeRect(x + 16 * scale, y + 18 * scale, barWidth, 10 * scale);
   const footerFont = `${scene.project.layout?.fonts?.footer || 'Inter'}, Arial, sans-serif`;
@@ -391,7 +405,7 @@ function drawInsetBackdropCanvas(ctx, x, y, w, h, scale) {
 async function drawInsetCanvas(ctx, scene, scale) {
   const zone = getOverlayMetrics(scene).inset; if (!zone || !zone.width || !zone.height) return; const x = zone.left * scale, y = zone.top * scale, w = zone.width * scale, h = zone.height * scale;
   const theme = getTheme(scene);
-  drawPanelRect(ctx, x, y, w, h, (theme.panelRadius || 10) * scale, theme.insetFill, theme.insetBorder, scale);
+  drawPanelRect(ctx, x, y, w, h, (theme.panelRadius ?? 10) * scale, theme.insetFill, theme.insetBorder, scale);
   const { insetImage, insetMode, autoInsetRegion, insetTitle, insetLabel } = scene.project.layout || {};
   ctx.fillStyle = theme.insetTitle; ctx.font = `700 ${12 * scale}px Arial`; ctx.textBaseline = 'top'; ctx.fillText(insetTitle || 'Project Locator', x + 12 * scale, y + 10 * scale);
   const innerX = x + 10 * scale, innerY = y + 30 * scale, innerW = w - 20 * scale, innerH = h - 56 * scale;
@@ -416,7 +430,7 @@ async function drawInsetCanvas(ctx, scene, scale) {
 function drawFooterCanvas(ctx, scene, scale) {
   const theme = getTheme(scene);
   const text = scene.project.layout?.footerText; const zone = getOverlayMetrics(scene).footer; if (!text || !zone || !zone.width || !zone.height) return; const x = zone.left * scale, y = zone.top * scale, w = zone.width * scale, h = zone.height * scale;
-  drawPanelRect(ctx, x, y, w, h, (theme.panelRadius || 10) * scale, theme.footerFill, theme.panelBorder, scale);
+  drawPanelRect(ctx, x, y, w, h, (theme.panelRadius ?? 10) * scale, theme.footerFill, theme.panelBorder, scale);
   ctx.fillStyle = theme.footerText; ctx.font = `${12 * scale}px ${scene.project.layout?.fonts?.footer || 'Inter'}, Arial, sans-serif`; ctx.textBaseline = 'middle'; ctx.fillText(text, x + 12 * scale, y + h / 2);
 }
 
@@ -449,7 +463,7 @@ function drawCalloutsCanvas(ctx, scene, scale) {
     const theme = getTheme(scene);
     if (c.type === 'leader' || c.type === 'boxed') { ctx.beginPath(); ctx.moveTo(c.anchorPx.x, c.anchorPx.y); ctx.lineTo(c.left + 10 * scale, c.top + c.height / 2); ctx.strokeStyle = c.style?.border || '#102640'; ctx.lineWidth = 1.4 * scale; ctx.setLineDash(c.type === 'leader' ? [5 * scale, 3 * scale] : []); ctx.stroke(); }
     ctx.setLineDash([]);
-    if (c.type !== 'plain') { drawRoundedRect(ctx, c.left, c.top, c.width, c.height, Math.max(3, (theme.panelRadius || 10) - 4) * scale); ctx.fillStyle = c.style?.background || theme.calloutFill; ctx.fill(); ctx.strokeStyle = c.style?.border || theme.calloutBorder; ctx.lineWidth = 1 * scale; ctx.stroke(); }
+    if (c.type !== 'plain') { drawRoundedRect(ctx, c.left, c.top, c.width, c.height, Math.max(0, (theme.panelRadius ?? 10) - 4) * scale); ctx.fillStyle = c.style?.background || theme.calloutFill; ctx.fill(); ctx.strokeStyle = c.style?.border || theme.calloutBorder; ctx.lineWidth = 1 * scale; ctx.stroke(); }
     const textX = c.left + (c.type === 'plain' ? 0 : 10 * scale);
     const textY = c.top + (c.type === 'plain' ? 10 * scale : c.subtext ? c.height / 2 - 9 * scale : c.height / 2);
     const maxTextW = c.width - (c.type === 'plain' ? 0 : 20 * scale);
@@ -620,7 +634,7 @@ async function drawLogoCanvas(ctx, scene, scale) {
   const logo = scene.project.layout?.logo; if (!logo) return;
   const zone = getOverlayMetrics(scene).logo; const x = zone.left * scale, y = zone.top * scale, w = zone.width * scale, h = zone.height * scale, padding = 10 * scale;
   const theme = getTheme(scene);
-  drawPanelRect(ctx, x, y, w, h, (theme.panelRadius || 10) * scale, theme.logoFill, theme.logoBorder, scale);
+  drawPanelRect(ctx, x, y, w, h, (theme.panelRadius ?? 10) * scale, theme.logoFill, theme.logoBorder, scale);
   const img = await new Promise((resolve, reject) => { const el = new Image(); el.onload = () => resolve(el); el.onerror = reject; el.src = logo; }).catch(() => { _exportWarnings.push('logo could not be embedded'); return null; });
   if (img) {
     // Aspect-fit: scale to fill available space preserving ratio, centered (mirrors SVG preserveAspectRatio="xMidYMid meet")
@@ -722,6 +736,7 @@ function renderEllipsesSvg(scene, scale) {
 }
 function renderTitleSvg(scene, scale) {
   const theme = getTheme(scene);
+  const layout = scene.project.layout || {};
   const { title } = getOverlayMetrics(scene);
   const x = title.left * scale, y = title.top * scale, w = title.width * scale, h = title.height * scale;
   const leftBar = theme.titleAccent && theme.titleAccentStyle === 'left';
@@ -732,7 +747,11 @@ function renderTitleSvg(scene, scale) {
     : '';
   const textX = x + (leftBar ? 22 : 18) * scale;
   const topOff = (theme.titleAccent && !leftBar) ? 46 : 42;
-  return `<g>${svgRect(x, y, w, h, (theme.titleRadius || theme.panelRadius || 10) * scale, theme.titleFill, theme.titleBorder, scale)}${accent}<text x="${textX}" y="${y + topOff * scale}" fill="${theme.titleText}" font-family="Arial" font-size="${26 * scale}" font-weight="700">${escapeXml(scene.project.layout?.title || 'Project Map')}</text><text x="${textX}" y="${y + (topOff + 24) * scale}" fill="${theme.subtitleText}" font-family="Arial" font-size="${14 * scale}">${escapeXml(scene.project.layout?.subtitle || 'Technical results template')}</text></g>`;
+  const metaItems = [layout.mapDate, layout.projectNumber, layout.mapScaleNote].filter(Boolean);
+  const metaSvg = metaItems.map((item, i) =>
+    `<text x="${x + w - 12 * scale}" y="${y + (topOff - 22 + i * 14) * scale}" text-anchor="end" fill="${theme.subtitleText}" font-family="Arial" font-size="${10 * scale}">${escapeXml(item)}</text>`
+  ).join('');
+  return `<g>${svgRect(x, y, w, h, (theme.titleRadius ?? theme.panelRadius ?? 10) * scale, theme.titleFill, theme.titleBorder, scale)}${accent}<text x="${textX}" y="${y + topOff * scale}" fill="${theme.titleText}" font-family="Arial" font-size="${26 * scale}" font-weight="700">${escapeXml(layout.title || 'Project Map')}</text><text x="${textX}" y="${y + (topOff + 22) * scale}" fill="${theme.subtitleText}" font-family="Arial" font-size="${14 * scale}">${escapeXml(layout.subtitle || '')}</text>${metaSvg}</g>`;
 }
 function svgPanelAccentLeft(x, y, h, theme, scale) {
   if (!theme.panelAccentLeft) return '';
@@ -744,17 +763,19 @@ function renderLegendSvg(scene, scale) {
   const theme = getTheme(scene);
   const lp = (theme.panelAccentLeft ? 20 : 16) * scale;
   const rows = items.map((item, index) => { const rowY = y + (40 + index * 24) * scale; return `${legendSwatchSvg(item, x + lp, rowY + 1 * scale, scale)}<text x="${x + lp + 30 * scale}" y="${rowY + 12 * scale}" fill="${theme.bodyText}" font-family="Arial" font-size="${13 * scale}">${escapeXml(item.label || 'Layer')}</text>`; }).join('\n');
-  return `<g>${svgRect(x, y, w, h, (theme.panelRadius || 10) * scale, theme.panelFill, theme.panelBorder, scale)}${svgPanelAccentLeft(x, y, h, theme, scale)}<text x="${x + lp}" y="${y + 24 * scale}" fill="${theme.panelTitle}" font-family="Arial" font-size="${15 * scale}" font-weight="700">Legend</text>${rows}</g>`;
+  return `<g>${svgRect(x, y, w, h, (theme.panelRadius ?? 10) * scale, theme.panelFill, theme.panelBorder, scale)}${svgPanelAccentLeft(x, y, h, theme, scale)}<text x="${x + lp}" y="${y + 24 * scale}" fill="${theme.panelTitle}" font-family="Arial" font-size="${15 * scale}" font-weight="700">${escapeXml(scene.project.layout?.legendTitle || 'Legend')}</text>${rows}</g>`;
 }
 function renderNorthArrowSvg(scene, scale) {
+  if (scene.project.layout?.showNorthArrow === false) return '';
   const theme = getTheme(scene); const { northArrow } = getOverlayMetrics(scene); const x = northArrow.left * scale, y = northArrow.top * scale, w = northArrow.width * scale, h = northArrow.height * scale, cx = x + w / 2;
-  return `<g>${svgRect(x, y, w, h, (theme.panelRadius || 10) * scale, theme.northArrowFill, theme.panelBorder, scale)}${svgPanelAccentLeft(x, y, h, theme, scale)}<text x="${cx}" y="${y + 24 * scale}" text-anchor="middle" fill="${theme.northArrowText}" font-family="Arial" font-size="${14 * scale}" font-weight="700">N</text><path d="M ${cx} ${y + 28 * scale} L ${cx - 12 * scale} ${y + 62 * scale} L ${cx - 3 * scale} ${y + 62 * scale} L ${cx - 3 * scale} ${y + 88 * scale} L ${cx + 3 * scale} ${y + 88 * scale} L ${cx + 3 * scale} ${y + 62 * scale} L ${cx + 12 * scale} ${y + 62 * scale} Z" fill="${theme.northArrowText}" /></g>`;
+  return `<g>${svgRect(x, y, w, h, (theme.panelRadius ?? 10) * scale, theme.northArrowFill, theme.panelBorder, scale)}${svgPanelAccentLeft(x, y, h, theme, scale)}<text x="${cx}" y="${y + 24 * scale}" text-anchor="middle" fill="${theme.northArrowText}" font-family="Arial" font-size="${14 * scale}" font-weight="700">N</text><path d="M ${cx} ${y + 28 * scale} L ${cx - 12 * scale} ${y + 62 * scale} L ${cx - 3 * scale} ${y + 62 * scale} L ${cx - 3 * scale} ${y + 88 * scale} L ${cx + 3 * scale} ${y + 88 * scale} L ${cx + 3 * scale} ${y + 62 * scale} L ${cx + 12 * scale} ${y + 62 * scale} Z" fill="${theme.northArrowText}" /></g>`;
 }
 function renderScaleBarSvg(scene, scale) {
+  if (scene.project.layout?.showScaleBar === false) return '';
   const theme = getTheme(scene); const { scaleBar } = getOverlayMetrics(scene); const x = scaleBar.left * scale, y = scaleBar.top * scale, w = scaleBar.width * scale, h = scaleBar.height * scale, scaleState = pickScaleLabel(scene.map), barWidth = scaleState.widthPx * scale;
-  return `<g>${svgRect(x, y, w, h, (theme.panelRadius || 10) * scale, theme.scaleFill, theme.panelBorder, scale)}${svgPanelAccentLeft(x, y, h, theme, scale)}<rect x="${x + 16 * scale}" y="${y + 18 * scale}" width="${barWidth / 2}" height="${10 * scale}" fill="${theme.scaleStroke}" /><rect x="${x + 16 * scale + barWidth / 2}" y="${y + 18 * scale}" width="${barWidth / 2}" height="${10 * scale}" fill="#ffffff" stroke="${theme.scaleStroke}" stroke-width="${Math.max(1, scale)}" /><rect x="${x + 16 * scale}" y="${y + 18 * scale}" width="${barWidth}" height="${10 * scale}" fill="none" stroke="${theme.scaleStroke}" stroke-width="${Math.max(1, scale)}" /><text x="${x + 16 * scale}" y="${y + 48 * scale}" fill="${theme.bodyText}" font-family="Arial" font-size="${12 * scale}">${escapeXml(scaleState.label)}</text></g>`;
+  return `<g>${svgRect(x, y, w, h, (theme.panelRadius ?? 10) * scale, theme.scaleFill, theme.panelBorder, scale)}${svgPanelAccentLeft(x, y, h, theme, scale)}<rect x="${x + 16 * scale}" y="${y + 18 * scale}" width="${barWidth / 2}" height="${10 * scale}" fill="${theme.scaleStroke}" /><rect x="${x + 16 * scale + barWidth / 2}" y="${y + 18 * scale}" width="${barWidth / 2}" height="${10 * scale}" fill="#ffffff" stroke="${theme.scaleStroke}" stroke-width="${Math.max(1, scale)}" /><rect x="${x + 16 * scale}" y="${y + 18 * scale}" width="${barWidth}" height="${10 * scale}" fill="none" stroke="${theme.scaleStroke}" stroke-width="${Math.max(1, scale)}" /><text x="${x + 16 * scale}" y="${y + 48 * scale}" fill="${theme.bodyText}" font-family="Arial" font-size="${12 * scale}">${escapeXml(scaleState.label)}</text></g>`;
 }
-function renderFooterSvg(scene, scale) { const theme = getTheme(scene); const text = scene.project.layout?.footerText; const zone = getOverlayMetrics(scene).footer; if (!text || !zone || !zone.width || !zone.height) return ''; const x = zone.left * scale, y = zone.top * scale, w = zone.width * scale, h = zone.height * scale; return `<g>${svgRect(x, y, w, h, (theme.panelRadius || 10) * scale, theme.footerFill, theme.panelBorder, scale)}<text x="${x + 12 * scale}" y="${y + 25 * scale}" fill="${theme.footerText}" font-family="Arial" font-size="${12 * scale}">${escapeXml(text)}</text></g>`; }
+function renderFooterSvg(scene, scale) { const theme = getTheme(scene); const text = scene.project.layout?.footerText; const zone = getOverlayMetrics(scene).footer; if (!text || !zone || !zone.width || !zone.height) return ''; const x = zone.left * scale, y = zone.top * scale, w = zone.width * scale, h = zone.height * scale; return `<g>${svgRect(x, y, w, h, (theme.panelRadius ?? 10) * scale, theme.footerFill, theme.panelBorder, scale)}<text x="${x + 12 * scale}" y="${y + 25 * scale}" fill="${theme.footerText}" font-family="Arial" font-size="${12 * scale}">${escapeXml(text)}</text></g>`; }
 function insetBackdropSvg(innerX, innerY, innerW, innerH, scale) {
   const px = (n) => n / 100;
   const path1 = `M ${innerX + px(12) * innerW} ${innerY + px(20) * innerH} C ${innerX + px(20) * innerW} ${innerY + px(12) * innerH}, ${innerX + px(35) * innerW} ${innerY + px(10) * innerH}, ${innerX + px(45) * innerW} ${innerY + px(16) * innerH} C ${innerX + px(55) * innerW} ${innerY + px(22) * innerH}, ${innerX + px(60) * innerW} ${innerY + px(30) * innerH}, ${innerX + px(72) * innerW} ${innerY + px(32) * innerH} C ${innerX + px(82) * innerW} ${innerY + px(34) * innerH}, ${innerX + px(88) * innerW} ${innerY + px(40) * innerH}, ${innerX + px(88) * innerW} ${innerY + px(52) * innerH} C ${innerX + px(88) * innerW} ${innerY + px(68) * innerH}, ${innerX + px(76) * innerW} ${innerY + px(78) * innerH}, ${innerX + px(62) * innerW} ${innerY + px(82) * innerH} C ${innerX + px(50) * innerW} ${innerY + px(86) * innerH}, ${innerX + px(36) * innerW} ${innerY + px(88) * innerH}, ${innerX + px(22) * innerW} ${innerY + px(82) * innerH} C ${innerX + px(12) * innerW} ${innerY + px(78) * innerH}, ${innerX + px(8) * innerW} ${innerY + px(68) * innerH}, ${innerX + px(10) * innerW} ${innerY + px(54) * innerH} C ${innerX + px(12) * innerW} ${innerY + px(42) * innerH}, ${innerX + px(8) * innerW} ${innerY + px(30) * innerH}, ${innerX + px(12) * innerW} ${innerY + px(20) * innerH} Z`;
@@ -769,7 +790,7 @@ function renderInsetSvg(scene, scale) {
   const { insetImage, insetMode, autoInsetRegion, insetTitle, insetLabel } = scene.project.layout || {};
   const customInset = insetMode === 'custom_image' && insetImage;
   const theme = getTheme(scene);
-  const panelSvg = svgRect(x, y, w, h, (theme.panelRadius || 10) * scale, theme.insetFill, theme.insetBorder, scale);
+  const panelSvg = svgRect(x, y, w, h, (theme.panelRadius ?? 10) * scale, theme.insetFill, theme.insetBorder, scale);
   const titleSvg = `<text x="${x + 12 * scale}" y="${y + 16 * scale}" fill="${theme.insetTitle}" font-family="Arial" font-size="${12 * scale}" font-weight="700">${escapeXml(insetTitle || 'Project Locator')}</text>`;
   if (customInset) {
     return `<g>${panelSvg}${titleSvg}<image href="${escapeXml(insetImage)}" x="${innerX}" y="${innerY}" width="${innerW}" height="${innerH}" preserveAspectRatio="xMidYMid slice" /></g>`;
@@ -785,7 +806,7 @@ function renderInsetSvg(scene, scale) {
   const markerSvg = marker ? `<rect x="${Math.max(innerX + 8 * scale, innerX + (marker.x / 100) * innerW)}" y="${Math.max(innerY + 8 * scale, innerY + (marker.y / 100) * innerH)}" width="${Math.max(8 * scale, Math.max(10 * scale, (marker.w / 100) * innerW))}" height="${Math.max(8 * scale, Math.max(10 * scale, (marker.h / 100) * innerH))}" fill="rgba(96,165,250,0.16)" stroke="#2563eb" stroke-width="${1.5 * scale}" rx="${2 * scale}" /><circle cx="${Math.min(innerX + innerW - 8 * scale, Math.max(innerX + 8 * scale, innerX + (marker.x / 100) * innerW + Math.max(10 * scale, (marker.w / 100) * innerW) / 2))}" cy="${Math.min(innerY + innerH - 8 * scale, Math.max(innerY + 8 * scale, innerY + (marker.y / 100) * innerH + Math.max(10 * scale, (marker.h / 100) * innerH) / 2))}" r="${3.2 * scale}" fill="#0f2c56" stroke="#ffffff" stroke-width="${1.2 * scale}" />` : '';
   return `<g>${panelSvg}${titleSvg}${insetBackdropSvg(innerX, innerY, innerW, innerH, scale)}${markerSvg}<text x="${x + 12 * scale}" y="${y + h - 10 * scale}" fill="${theme.insetMuted}" font-family="Arial" font-size="${11 * scale}">${escapeXml(insetLabel || ref.label)}</text></g>`;
 }
-function renderLogoSvg(scene, scale) { const theme = getTheme(scene); const logo = scene.project.layout?.logo; if (!logo) return ''; const zone = getOverlayMetrics(scene).logo; if (!zone?.width || !zone?.height) return '';  const x = zone.left * scale, y = zone.top * scale, w = zone.width * scale, h = zone.height * scale, padding = 10 * scale; return `<g>${svgRect(x, y, w, h, (theme.panelRadius || 10) * scale, theme.logoFill, theme.logoBorder, scale)}<image href="${escapeXml(logo)}" x="${x + padding}" y="${y + padding}" width="${w - padding * 2}" height="${h - padding * 2}" preserveAspectRatio="xMidYMid meet" /></g>`; }
+function renderLogoSvg(scene, scale) { const theme = getTheme(scene); const logo = scene.project.layout?.logo; if (!logo) return ''; const zone = getOverlayMetrics(scene).logo; if (!zone?.width || !zone?.height) return '';  const x = zone.left * scale, y = zone.top * scale, w = zone.width * scale, h = zone.height * scale, padding = 10 * scale; return `<g>${svgRect(x, y, w, h, (theme.panelRadius ?? 10) * scale, theme.logoFill, theme.logoBorder, scale)}<image href="${escapeXml(logo)}" x="${x + padding}" y="${y + padding}" width="${w - padding * 2}" height="${h - padding * 2}" preserveAspectRatio="xMidYMid meet" /></g>`; }
 function renderCalloutsSvg(scene, scale) {
   const calloutFont = `${scene.project.layout?.fonts?.callout || 'Inter'}, Arial, sans-serif`;
   return placeCallouts(scene, scale).map((c) => {
