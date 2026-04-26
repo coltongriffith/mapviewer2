@@ -182,6 +182,30 @@ export default function AnnotationOverlay({
             </g>
           );
         })}
+        {/* Map-wide region text labels */}
+        {placedMarkers.filter((m) => m.type === 'maplabel').map((m) => (
+          <text
+            key={`maplabel-${m.id}`}
+            x={m.x} y={m.y}
+            textAnchor="middle" dominantBaseline="middle"
+            fill={m.color || '#1e293b'}
+            fillOpacity={m.opacity ?? 0.35}
+            fontSize={m.size || 28}
+            fontWeight={m.bold !== false ? '700' : '400'}
+            fontFamily={labelFont || 'Inter, sans-serif'}
+            letterSpacing={`${(m.tracking ?? 0.12)}em`}
+            transform={m.rotation ? `rotate(${m.rotation}, ${m.x}, ${m.y})` : undefined}
+            style={{ pointerEvents: 'auto', cursor: 'move', userSelect: 'none', textTransform: 'uppercase' }}
+            onClick={(e) => { e.stopPropagation(); onSelectMarker?.(m.id); }}
+            onPointerDown={(e) => {
+              e.preventDefault(); e.stopPropagation();
+              onSelectMarker?.(m.id);
+              dragRef.current = { id: m.id, kind: 'marker', startX: e.clientX, startY: e.clientY, startPoint: { x: m.x, y: m.y }, pointerId: e.pointerId };
+            }}
+          >
+            {(m.label || '').toUpperCase()}
+          </text>
+        ))}
       </svg>
 
       {placedEllipses.filter((ellipse) => ellipse.label || ellipse.isRing).map((ellipse) => {
@@ -203,7 +227,7 @@ export default function AnnotationOverlay({
         );
       })}
 
-      {placedMarkers.map((marker) => {
+      {placedMarkers.filter((m) => m.type !== 'maplabel').map((marker) => {
         const size = marker.size || 22;
         const color = marker.color || '#d97706';
         // Label offset — defaults to 10px right, 0px vertical from center

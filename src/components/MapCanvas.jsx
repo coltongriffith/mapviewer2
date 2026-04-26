@@ -191,8 +191,11 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
       const isDrillholes = layer.role === 'drillholes' || layer.type === 'points';
 
       const lo = style.layerOpacity ?? 1;
+      const hasPattern = style.fillPattern && style.fillPattern !== 'none' && geomType !== 'line';
+      const svgRenderer = hasPattern ? L.svg({ padding: 0.1 }) : undefined;
       const geoLayer = L.geoJSON(layer.geojson, {
         pane: 'overlayPane',
+        renderer: svgRenderer,
         style: () => ({
           color: style.stroke || '#54a6ff',
           weight: style.strokeWidth ?? 2,
@@ -238,6 +241,36 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
       });
 
       geoLayer.addTo(group);
+
+      if (hasPattern && svgRenderer) {
+        const fillColor = style.fill || '#54a6ff';
+        const fillOpacity = style.fillOpacity ?? 0.6;
+        const spacing = style.fillPatternSpacing || 6;
+        const patternId = `lf-pat-${layer.id}`;
+        const svgEl = svgRenderer._container;
+        if (svgEl) {
+          let defs = svgEl.querySelector('defs');
+          if (!defs) { defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs'); svgEl.insertBefore(defs, svgEl.firstChild); }
+          defs.innerHTML = '';
+          const patEl = document.createElementNS('http://www.w3.org/2000/svg', 'pattern');
+          patEl.setAttribute('id', patternId);
+          patEl.setAttribute('patternUnits', 'userSpaceOnUse');
+          patEl.setAttribute('width', spacing * 2);
+          patEl.setAttribute('height', spacing * 2);
+          if (style.fillPattern === 'hatch') {
+            const makeL = (x1, y1, x2, y2) => { const l = document.createElementNS('http://www.w3.org/2000/svg', 'line'); l.setAttribute('x1', x1); l.setAttribute('y1', y1); l.setAttribute('x2', x2); l.setAttribute('y2', y2); l.setAttribute('stroke', fillColor); l.setAttribute('stroke-width', 1.5); l.setAttribute('stroke-opacity', fillOpacity); patEl.appendChild(l); };
+            makeL(0, spacing * 2, spacing * 2, 0); makeL(-spacing, spacing, spacing, -spacing); makeL(spacing, spacing * 3, spacing * 3, spacing);
+          } else if (style.fillPattern === 'cross') {
+            const makeL = (x1, y1, x2, y2) => { const l = document.createElementNS('http://www.w3.org/2000/svg', 'line'); l.setAttribute('x1', x1); l.setAttribute('y1', y1); l.setAttribute('x2', x2); l.setAttribute('y2', y2); l.setAttribute('stroke', fillColor); l.setAttribute('stroke-width', 1.5); l.setAttribute('stroke-opacity', fillOpacity); patEl.appendChild(l); };
+            makeL(0, spacing, spacing * 2, spacing); makeL(spacing, 0, spacing, spacing * 2);
+          } else if (style.fillPattern === 'dots') {
+            const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle'); c.setAttribute('cx', spacing); c.setAttribute('cy', spacing); c.setAttribute('r', 2); c.setAttribute('fill', fillColor); c.setAttribute('fill-opacity', fillOpacity); patEl.appendChild(c);
+          }
+          defs.appendChild(patEl);
+          geoLayer.eachLayer((l) => { if (l._path) { l._path.setAttribute('fill', `url(#${patternId})`); l._path.setAttribute('fill-opacity', 1); } });
+        }
+      }
+
       if (isDrillholes && typeof geoLayer.bringToFront === 'function') {
         geoLayer.bringToFront();
       }

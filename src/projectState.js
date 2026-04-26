@@ -36,6 +36,7 @@ export const CALLOUT_TYPES = {
   plain: 'Plain Label',
   leader: 'Leader Label',
   boxed: 'Boxed Annotation',
+  badge: 'Badge Label',
 };
 
 

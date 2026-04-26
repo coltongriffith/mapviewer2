@@ -912,7 +912,7 @@ export default function App() {
     setUploadStatus({ type: 'success', message: 'Applied polished default template spacing and alignment.' });
   };
 
-  const addCalloutAtAnchor = ({ text, subtext = '', type = 'leader', anchor, featureId, layerId, style = {}, boxWidth = 188 }) => {
+  const addCalloutAtAnchor = ({ text, subtext = '', type = 'leader', anchor, featureId, layerId, style = {}, boxWidth = 188, badgeValue, badgeColor }) => {
     const calloutId = crypto.randomUUID();
     setProject((prev) => ({
       ...prev,
@@ -929,6 +929,8 @@ export default function App() {
           featureId: featureId || null,
           layerId: layerId || null,
           boxWidth,
+          ...(badgeValue !== undefined ? { badgeValue } : {}),
+          ...(badgeColor !== undefined ? { badgeColor } : {}),
           style: {
             background: '#ffffff',
             border: '#102640',
@@ -1026,6 +1028,8 @@ export default function App() {
       layerId: selectedFeature.layerId,
       boxWidth: selectedFeature.boxWidth || 188,
       style: selectedFeature.style || {},
+      badgeValue: selectedFeature.badgeValue,
+      badgeColor: selectedFeature.badgeColor,
     });
     setSelectedCalloutId(null);
     setSelectedFeature(null);
@@ -1090,6 +1094,20 @@ export default function App() {
     setSelectedCalloutId(null);
   };
 
+  const addMapLabelAt = (latlng) => {
+    const id = crypto.randomUUID();
+    setProject((prev) => ({
+      ...prev,
+      markers: [
+        ...(prev.markers || []),
+        { id, lat: latlng.lat, lng: latlng.lng, type: 'maplabel', label: 'REGION NAME', size: 28, color: '#1e293b', opacity: 0.35, rotation: 0, bold: true, tracking: 0.12 },
+      ],
+    }));
+    setSelectedMarkerId(id);
+    setSelectedEllipseId(null);
+    setSelectedCalloutId(null);
+  };
+
   const handleMapClick = (latlng) => {
     if (annotationTool === 'marker') {
       addMarkerAt(latlng);
@@ -1101,6 +1119,10 @@ export default function App() {
       annotationToolRef.current = null;
     } else if (annotationTool === 'ring') {
       addRingAt(latlng);
+      setAnnotationTool(null);
+      annotationToolRef.current = null;
+    } else if (annotationTool === 'maplabel') {
+      addMapLabelAt(latlng);
       setAnnotationTool(null);
       annotationToolRef.current = null;
     }
@@ -1491,6 +1513,25 @@ export default function App() {
                     </div>
                     <div className="range-value">{Math.round((selectedLayer.style?.layerOpacity ?? 1) * 100)}%</div>
                   </div>
+                  <div className="control-row">
+                    <label>Fill Pattern</label>
+                    <div className="fill-pattern-picker">
+                      {[['none', 'Solid'], ['hatch', 'Hatch'], ['cross', 'Cross'], ['dots', 'Dots']].map(([val, title]) => (
+                        <button
+                          key={val}
+                          type="button"
+                          title={title}
+                          className={`pattern-btn${(selectedLayer.style?.fillPattern || 'none') === val ? ' active' : ''}`}
+                          onClick={() => updateLayer(selectedLayer.id, { style: { fillPattern: val === 'none' ? undefined : val } })}
+                        >
+                          {val === 'none' && <svg width="24" height="18"><rect x="1" y="1" width="22" height="16" rx="2" fill="rgba(100,116,139,0.3)" /></svg>}
+                          {val === 'hatch' && <svg width="24" height="18"><rect x="1" y="1" width="22" height="16" rx="2" fill="none" stroke="#94a3b8" />{[0,6,12,18,24].map((o) => <line key={o} x1={o} y1={18} x2={o + 18} y2={0} stroke="#64748b" strokeWidth="1.2" />)}</svg>}
+                          {val === 'cross' && <svg width="24" height="18"><rect x="1" y="1" width="22" height="16" rx="2" fill="none" stroke="#94a3b8" />{[3,9,15,21].map((x) => <line key={`v${x}`} x1={x} y1={2} x2={x} y2={16} stroke="#64748b" strokeWidth="1.2" />)}{[4,10,16].map((y) => <line key={`h${y}`} x1={2} y1={y} x2={22} y2={y} stroke="#64748b" strokeWidth="1.2" />)}</svg>}
+                          {val === 'dots' && <svg width="24" height="18"><rect x="1" y="1" width="22" height="16" rx="2" fill="none" stroke="#94a3b8" />{[5,11,17].map((x) => [4,10,16].map((y) => <circle key={`${x}${y}`} cx={x} cy={y} r="1.8" fill="#64748b" />))}</svg>}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </>
               )}
             </div>
@@ -1523,6 +1564,18 @@ export default function App() {
                   <input type="number" min="140" max="320" step="2" value={selectedFeature.boxWidth || 188} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, boxWidth: Number(e.target.value || 188) }))} />
                 </div>
               </div>
+              {selectedFeature.calloutType === 'badge' && (
+                <div className="control-row inline-2">
+                  <div>
+                    <label>Chip Text</label>
+                    <input value={selectedFeature.badgeValue || ''} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, badgeValue: e.target.value }))} placeholder=">14 Moz" />
+                  </div>
+                  <div>
+                    <label>Chip Color</label>
+                    <input type="color" value={selectedFeature.badgeColor || '#d97706'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, badgeColor: e.target.value }))} />
+                  </div>
+                </div>
+              )}
               <div className="control-row inline-2">
                 <div>
                   <label>Background</label>
@@ -1593,6 +1646,18 @@ export default function App() {
                           </select>
                         </div>
                       </div>
+                      {callout.type === 'badge' && (
+                        <div className="control-row inline-2">
+                          <div>
+                            <label>Chip Text</label>
+                            <input value={callout.badgeValue || ''} onChange={(e) => updateCallout(callout.id, { badgeValue: e.target.value })} placeholder=">14 Moz" />
+                          </div>
+                          <div>
+                            <label>Chip Color</label>
+                            <input type="color" value={callout.badgeColor || '#d97706'} onChange={(e) => updateCallout(callout.id, { badgeColor: e.target.value })} />
+                          </div>
+                        </div>
+                      )}
                       <div className="control-label">Nudge</div>
                       <div className="nudge-grid">
                         <span />
@@ -1616,10 +1681,41 @@ export default function App() {
             <button className={`secondary-btn ${annotationTool === 'marker' ? 'active-toggle' : ''}`} type="button" onClick={() => { const next = annotationTool === 'marker' ? null : 'marker'; setAnnotationTool(next); annotationToolRef.current = next; setSelectedFeature(null); }}>Place Marker</button>
             <button className={`secondary-btn ${annotationTool === 'ellipse' ? 'active-toggle' : ''}`} type="button" onClick={() => { const next = annotationTool === 'ellipse' ? null : 'ellipse'; setAnnotationTool(next); annotationToolRef.current = next; setSelectedFeature(null); }}>Draw Dashed Area</button>
             <button className={`secondary-btn ${annotationTool === 'ring' ? 'active-toggle' : ''}`} type="button" onClick={() => { const next = annotationTool === 'ring' ? null : 'ring'; setAnnotationTool(next); annotationToolRef.current = next; setSelectedFeature(null); }}>Draw Distance Ring</button>
+            <button className={`secondary-btn ${annotationTool === 'maplabel' ? 'active-toggle' : ''}`} type="button" onClick={() => { const next = annotationTool === 'maplabel' ? null : 'maplabel'; setAnnotationTool(next); annotationToolRef.current = next; setSelectedFeature(null); }}>Place Map Label</button>
           </div>
           <div className="small-note" style={{ marginTop: 8 }}>{annotationTool ? 'Click anywhere on the map to place the selected annotation.' : 'Add highlight markers or dashed ellipses anywhere on the map.'}</div>
 
-          {selectedMarker ? (
+          {selectedMarker?.type === 'maplabel' ? (
+            <div className="control-grid" style={{ marginTop: 10 }}>
+              <div className="selected-note">Map Label</div>
+              <div className="control-row"><label>Text</label><input value={selectedMarker.label || ''} onChange={(e) => updateMarker(selectedMarker.id, { label: e.target.value })} placeholder="BRITISH COLUMBIA" /></div>
+              <div className="control-row inline-2">
+                <div>
+                  <label>Size</label>
+                  <input type="range" min="14" max="72" step="1" value={selectedMarker.size || 28} onChange={(e) => updateMarker(selectedMarker.id, { size: Number(e.target.value) })} />
+                </div>
+                <div className="range-value">{selectedMarker.size || 28}pt</div>
+              </div>
+              <div className="control-row inline-2">
+                <div>
+                  <label>Opacity</label>
+                  <input type="range" min="0.05" max="1" step="0.05" value={selectedMarker.opacity ?? 0.35} onChange={(e) => updateMarker(selectedMarker.id, { opacity: Number(e.target.value) })} />
+                </div>
+                <div className="range-value">{Math.round((selectedMarker.opacity ?? 0.35) * 100)}%</div>
+              </div>
+              <div className="control-row inline-2">
+                <div>
+                  <label>Rotation</label>
+                  <input type="number" min="-180" max="180" step="1" value={selectedMarker.rotation || 0} onChange={(e) => updateMarker(selectedMarker.id, { rotation: Number(e.target.value) })} />
+                </div>
+                <div>
+                  <label>Color</label>
+                  <input type="color" value={selectedMarker.color || '#1e293b'} onChange={(e) => updateMarker(selectedMarker.id, { color: e.target.value })} />
+                </div>
+              </div>
+              <button className="secondary-btn" type="button" onClick={() => { setProject((prev) => ({ ...prev, markers: prev.markers.filter((m) => m.id !== selectedMarker.id) })); setSelectedFeature(null); }}>Remove Label</button>
+            </div>
+          ) : selectedMarker ? (
             <div className="control-grid" style={{ marginTop: 10 }}>
               <div className="selected-note">Selected marker</div>
               <div className="control-row"><label>Label</label><input value={selectedMarker.label || ''} onChange={(e) => updateMarker(selectedMarker.id, { label: e.target.value })} /></div>

@@ -274,7 +274,15 @@ button, input, select, textarea { font: inherit; }
 .map-callout.plain { background: transparent; border: none; box-shadow: none; text-shadow: 0 0 4px rgba(255,255,255,0.95); color: var(--callout-fg, #0f172a); }
 .map-callout.leader { min-width: 132px; }
 .map-callout.boxed { min-width: 170px; }
+.map-callout.badge { border: none; box-shadow: 0 2px 8px rgba(15,23,42,0.12); border-radius: 8px; overflow: hidden; }
 .map-callout.selected { outline: 2px solid rgba(37,99,235,0.9); outline-offset: 1px; }
+.badge-callout { display: flex; height: 32px; border-radius: inherit; overflow: hidden; }
+.badge-chip { padding: 0 10px; display: flex; align-items: center; font-size: 12px; font-weight: 700; color: #fff; white-space: nowrap; flex-shrink: 0; }
+.badge-label { padding: 0 10px; display: flex; align-items: center; font-size: 12px; font-weight: 600; flex: 1; white-space: nowrap; overflow: hidden; }
+.fill-pattern-picker { display: flex; gap: 6px; }
+.pattern-btn { background: #f8fafc; border: 1.5px solid #dbe4ee; border-radius: 6px; cursor: pointer; padding: 3px; display: flex; align-items: center; justify-content: center; transition: border-color 0.12s, background 0.12s; }
+.pattern-btn:hover { border-color: #93c5fd; background: #eff6ff; }
+.pattern-btn.active { border-color: #3b82f6; background: #eff6ff; box-shadow: 0 0 0 2px rgba(59,130,246,0.18); }
 
 .annotation-overlay { position: absolute; inset: 0; z-index: 510; pointer-events: none; }
 .annotation-leader-svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
