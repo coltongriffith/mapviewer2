@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import regionsNA from '../assets/regionsNA.json';
 
 const BASEMAPS = {
   light: {
@@ -57,6 +58,7 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
   const mapElRef = useRef(null);
   const baseLayerRef = useRef(null);
   const overlayGroupRef = useRef(null);
+  const regionHighlightGroupRef = useRef(null);
   const referenceRefs = useRef({});
 
   useEffect(() => {
@@ -85,6 +87,7 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
     map.on('click', (event) => onMapClickRef.current?.(event.latlng));
 
     overlayGroupRef.current = L.layerGroup().addTo(map);
+    regionHighlightGroupRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
     onReady?.(map);
   }, [onReady]);
@@ -94,6 +97,7 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
       mapRef.current.remove();
       mapRef.current = null;
       overlayGroupRef.current = null;
+      regionHighlightGroupRef.current = null;
       baseLayerRef.current = null;
       referenceRefs.current = {};
     }
@@ -157,6 +161,21 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
   }, [project?.layout?.referenceOverlays, project?.layout?.referenceOpacity]);
 
   useEffect(() => {
+    const group = regionHighlightGroupRef.current;
+    if (!group) return;
+    group.clearLayers();
+    const highlights = project?.layout?.regionHighlights || [];
+    highlights.forEach(({ regionId, color, opacity }) => {
+      const region = regionsNA.find((r) => r.id === regionId);
+      if (!region) return;
+      L.geoJSON(
+        { type: 'Feature', geometry: { type: 'Polygon', coordinates: region.coordinates } },
+        { style: () => ({ fillColor: color || '#ef4444', fillOpacity: opacity ?? 0.45, stroke: false, weight: 0 }) }
+      ).addTo(group);
+    });
+  }, [project?.layout?.regionHighlights]);
+
+  useEffect(() => {
     const map = mapRef.current;
     const group = overlayGroupRef.current;
     if (!map || !group) return;
@@ -171,24 +190,25 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
       const geomType = detectGeomType(layer.geojson);
       const isDrillholes = layer.role === 'drillholes' || layer.type === 'points';
 
+      const lo = style.layerOpacity ?? 1;
       const geoLayer = L.geoJSON(layer.geojson, {
         pane: 'overlayPane',
         style: () => ({
           color: style.stroke || '#54a6ff',
           weight: style.strokeWidth ?? 2,
           fillColor: style.fill || '#54a6ff',
-          fillOpacity: geomType === 'line' ? 0 : style.fillOpacity ?? 0.22,
+          fillOpacity: geomType === 'line' ? 0 : (style.fillOpacity ?? 0.22) * lo,
           dashArray: style.dashArray || '',
-          opacity: style.opacity ?? 1,
+          opacity: (style.opacity ?? 1) * lo,
         }),
         pointToLayer: (feature, latlng) => {
           const marker = L.circleMarker(latlng, {
             radius: Math.max(4, (style.markerSize ?? 10) / 2),
             color: style.markerColor || style.stroke || '#111111',
             fillColor: style.markerFill || style.fill || style.markerColor || '#ffffff',
-            fillOpacity: 1,
+            fillOpacity: lo,
             weight: style.strokeWidth ?? 1.5,
-            opacity: 1,
+            opacity: lo,
           });
 
           if (isDrillholes) {

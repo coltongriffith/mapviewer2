@@ -84,6 +84,7 @@ export function createInitialProjectState() {
       footerEnabled: true,
       showNorthArrow: true,
       showScaleBar: true,
+      regionHighlights: [],
       legendTitle: 'Legend',
       mapDate: '',
       projectNumber: '',

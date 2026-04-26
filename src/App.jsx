@@ -31,6 +31,7 @@ import { buildLegendItems, resolveTemplateZones } from './templates/technicalRes
 import { geojsonBounds, geojsonCenter, unionBounds } from './utils/geometry';
 import { detectRegion } from './utils/detectRegion';
 import { cleanLayerName } from './utils/cleanLayerName';
+import regionsNA from './assets/regionsNA.json';
 import { fitProjectToTemplate } from './utils/frameMapForTemplate';
 import { getThemeTokens } from './utils/themeTokens';
 import { saveLead, getLastLeadEmail } from './utils/leadCapture';
@@ -1066,6 +1067,20 @@ export default function App() {
     setSelectedCalloutId(null);
   };
 
+  const addRingAt = (latlng) => {
+    const id = crypto.randomUUID();
+    setProject((prev) => ({
+      ...prev,
+      ellipses: [
+        ...(prev.ellipses || []),
+        { id, lat: latlng.lat, lng: latlng.lng, isRing: true, radiusKm: 50, color: '#dc2626', dashed: true, label: '' },
+      ],
+    }));
+    setSelectedEllipseId(id);
+    setSelectedMarkerId(null);
+    setSelectedCalloutId(null);
+  };
+
   const handleMapClick = (latlng) => {
     if (annotationTool === 'marker') {
       addMarkerAt(latlng);
@@ -1073,6 +1088,10 @@ export default function App() {
       annotationToolRef.current = null;
     } else if (annotationTool === 'ellipse') {
       addEllipseAt(latlng);
+      setAnnotationTool(null);
+      annotationToolRef.current = null;
+    } else if (annotationTool === 'ring') {
+      addRingAt(latlng);
       setAnnotationTool(null);
       annotationToolRef.current = null;
     }
@@ -1419,6 +1438,36 @@ export default function App() {
               <label className="toggle-row"><input type="checkbox" checked={project.layout.footerEnabled !== false} onChange={(e) => updateLayout({ footerEnabled: e.target.checked })} /><span>Footer</span></label>
               <label className="toggle-row"><input type="checkbox" checked={project.layout.insetEnabled !== false} onChange={(e) => updateLayout({ insetEnabled: e.target.checked })} /><span>Inset Map</span></label>
             </div>
+            <div className="region-highlights-section">
+              <div className="control-section-subheader">Region Highlights</div>
+              {(project.layout.regionHighlights || []).map((h, i) => {
+                const regionName = regionsNA.find((r) => r.id === h.regionId)?.name || h.regionId;
+                return (
+                  <div key={h.regionId} className="region-highlight-row">
+                    <span className="region-highlight-name">{regionName}</span>
+                    <input type="color" value={h.color || '#ef4444'} title="Color" onChange={(e) => updateLayout({ regionHighlights: project.layout.regionHighlights.map((x, j) => j === i ? { ...x, color: e.target.value } : x) })} />
+                    <input type="range" min="0.1" max="1" step="0.05" value={h.opacity ?? 0.45} title="Opacity" onChange={(e) => updateLayout({ regionHighlights: project.layout.regionHighlights.map((x, j) => j === i ? { ...x, opacity: Number(e.target.value) } : x) })} />
+                    <span className="range-label">{Math.round((h.opacity ?? 0.45) * 100)}%</span>
+                    <button className="icon-btn remove-btn" type="button" title="Remove" onClick={() => updateLayout({ regionHighlights: project.layout.regionHighlights.filter((_, j) => j !== i) })}>×</button>
+                  </div>
+                );
+              })}
+              <div className="region-highlight-add-row">
+                <select
+                  value=""
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    if (!id || (project.layout.regionHighlights || []).some((h) => h.regionId === id)) return;
+                    updateLayout({ regionHighlights: [...(project.layout.regionHighlights || []), { regionId: id, color: '#ef4444', opacity: 0.45 }] });
+                  }}
+                >
+                  <option value="">+ Add Region Highlight…</option>
+                  {regionsNA.map((r) => (
+                    <option key={r.id} value={r.id}>{r.name} ({r.abbrev})</option>
+                  ))}
+                </select>
+              </div>
+            </div>
             <div className="button-row three">
               <button className="btn" type="button" onClick={() => logoInputRef.current?.click()}>Upload Logo</button>
               <button className="btn" type="button" onClick={() => insetInputRef.current?.click()}>Upload Inset</button>
@@ -1527,13 +1576,22 @@ export default function App() {
                   <div className="range-value">{selectedLayer.style?.markerSize ?? 12}px</div>
                 </div>
               ) : (
-                <div className="control-row inline-2">
-                  <div>
-                    <label>Fill Opacity</label>
-                    <input type="range" min="0" max="1" step="0.05" value={selectedLayer.style?.fillOpacity ?? 0.22} onChange={(e) => updateLayer(selectedLayer.id, { style: { fillOpacity: Number(e.target.value) } })} />
+                <>
+                  <div className="control-row inline-2">
+                    <div>
+                      <label>Fill Opacity</label>
+                      <input type="range" min="0" max="1" step="0.05" value={selectedLayer.style?.fillOpacity ?? 0.22} onChange={(e) => updateLayer(selectedLayer.id, { style: { fillOpacity: Number(e.target.value) } })} />
+                    </div>
+                    <div className="range-value">{Math.round((selectedLayer.style?.fillOpacity ?? 0.22) * 100)}%</div>
                   </div>
-                  <div className="range-value">{Math.round((selectedLayer.style?.fillOpacity ?? 0.22) * 100)}%</div>
-                </div>
+                  <div className="control-row inline-2">
+                    <div>
+                      <label>Layer Opacity</label>
+                      <input type="range" min="0" max="1" step="0.05" value={selectedLayer.style?.layerOpacity ?? 1} onChange={(e) => updateLayer(selectedLayer.id, { style: { layerOpacity: Number(e.target.value) } })} />
+                    </div>
+                    <div className="range-value">{Math.round((selectedLayer.style?.layerOpacity ?? 1) * 100)}%</div>
+                  </div>
+                </>
               )}
             </div>
           ) : <p className="small-note">Select a layer to edit its display label, role, order, and colors.</p>}
@@ -1657,6 +1715,7 @@ export default function App() {
           <div className="button-row">
             <button className={`secondary-btn ${annotationTool === 'marker' ? 'active-toggle' : ''}`} type="button" onClick={() => { const next = annotationTool === 'marker' ? null : 'marker'; setAnnotationTool(next); annotationToolRef.current = next; setSelectedFeature(null); }}>Place Marker</button>
             <button className={`secondary-btn ${annotationTool === 'ellipse' ? 'active-toggle' : ''}`} type="button" onClick={() => { const next = annotationTool === 'ellipse' ? null : 'ellipse'; setAnnotationTool(next); annotationToolRef.current = next; setSelectedFeature(null); }}>Draw Dashed Area</button>
+            <button className={`secondary-btn ${annotationTool === 'ring' ? 'active-toggle' : ''}`} type="button" onClick={() => { const next = annotationTool === 'ring' ? null : 'ring'; setAnnotationTool(next); annotationToolRef.current = next; setSelectedFeature(null); }}>Draw Distance Ring</button>
           </div>
           <div className="small-note" style={{ marginTop: 8 }}>{annotationTool ? 'Click anywhere on the map to place the selected annotation.' : 'Add highlight markers or dashed ellipses anywhere on the map.'}</div>
 
@@ -1689,30 +1748,45 @@ export default function App() {
 
           {selectedEllipse ? (
             <div className="control-grid" style={{ marginTop: 10 }}>
-              <div className="selected-note">Selected highlight area</div>
-              <div className="control-row"><label>Label</label><input value={selectedEllipse.label || ''} onChange={(e) => updateEllipse(selectedEllipse.id, { label: e.target.value })} /></div>
-              <div className="control-row inline-2">
-                <div>
-                  <label>Width</label>
-                  <input type="number" min="24" max="320" step="1" value={selectedEllipse.width} onChange={(e) => updateEllipse(selectedEllipse.id, { width: Number(e.target.value) })} />
+              <div className="selected-note">{selectedEllipse.isRing ? 'Selected distance ring' : 'Selected highlight area'}</div>
+              <div className="control-row"><label>Label</label><input value={selectedEllipse.label || ''} onChange={(e) => updateEllipse(selectedEllipse.id, { label: e.target.value })} placeholder={selectedEllipse.isRing ? `${selectedEllipse.radiusKm} km` : ''} /></div>
+              {selectedEllipse.isRing ? (
+                <div className="control-row inline-2">
+                  <div>
+                    <label>Radius (km)</label>
+                    <input type="number" min="1" max="5000" step="1" value={selectedEllipse.radiusKm ?? 50} onChange={(e) => updateEllipse(selectedEllipse.id, { radiusKm: Number(e.target.value) })} />
+                  </div>
+                  <div>
+                    <label>Color</label>
+                    <input type="color" value={selectedEllipse.color || '#dc2626'} onChange={(e) => updateEllipse(selectedEllipse.id, { color: e.target.value })} />
+                  </div>
                 </div>
-                <div>
-                  <label>Height</label>
-                  <input type="number" min="24" max="320" step="1" value={selectedEllipse.height} onChange={(e) => updateEllipse(selectedEllipse.id, { height: Number(e.target.value) })} />
-                </div>
-              </div>
-              <div className="control-row inline-2">
-                <div>
-                  <label>Rotation</label>
-                  <input type="number" min="-180" max="180" step="1" value={selectedEllipse.rotation} onChange={(e) => updateEllipse(selectedEllipse.id, { rotation: Number(e.target.value) })} />
-                </div>
-                <div>
-                  <label>Color</label>
-                  <input type="color" value={selectedEllipse.color} onChange={(e) => updateEllipse(selectedEllipse.id, { color: e.target.value })} />
-                </div>
-              </div>
+              ) : (
+                <>
+                  <div className="control-row inline-2">
+                    <div>
+                      <label>Width</label>
+                      <input type="number" min="24" max="320" step="1" value={selectedEllipse.width} onChange={(e) => updateEllipse(selectedEllipse.id, { width: Number(e.target.value) })} />
+                    </div>
+                    <div>
+                      <label>Height</label>
+                      <input type="number" min="24" max="320" step="1" value={selectedEllipse.height} onChange={(e) => updateEllipse(selectedEllipse.id, { height: Number(e.target.value) })} />
+                    </div>
+                  </div>
+                  <div className="control-row inline-2">
+                    <div>
+                      <label>Rotation</label>
+                      <input type="number" min="-180" max="180" step="1" value={selectedEllipse.rotation} onChange={(e) => updateEllipse(selectedEllipse.id, { rotation: Number(e.target.value) })} />
+                    </div>
+                    <div>
+                      <label>Color</label>
+                      <input type="color" value={selectedEllipse.color} onChange={(e) => updateEllipse(selectedEllipse.id, { color: e.target.value })} />
+                    </div>
+                  </div>
+                </>
+              )}
               <label className="toggle-row"><input type="checkbox" checked={selectedEllipse.dashed !== false} onChange={(e) => updateEllipse(selectedEllipse.id, { dashed: e.target.checked })} /> <span>Dashed outline</span></label>
-              <button className="secondary-btn" type="button" onClick={() => removeEllipse(selectedEllipse.id)}>Remove Highlight Area</button>
+              <button className="secondary-btn" type="button" onClick={() => removeEllipse(selectedEllipse.id)}>{selectedEllipse.isRing ? 'Remove Ring' : 'Remove Highlight Area'}</button>
             </div>
           ) : null}
         </section>

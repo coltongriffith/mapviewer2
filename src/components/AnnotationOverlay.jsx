@@ -22,7 +22,13 @@ function resolvePositions(items, map, kind) {
   return items.map((item) => {
     const pt = map.latLngToContainerPoint([item.lat, item.lng]);
     if (kind === 'ellipse') {
-      return { ...item, left: pt.x - item.width / 2, top: pt.y - item.height / 2, x: pt.x, y: pt.y };
+      let w = item.width, h = item.height;
+      if (item.isRing && item.radiusKm) {
+        const northPt = map.latLngToContainerPoint([item.lat + item.radiusKm / 111.32, item.lng]);
+        const pixelR = Math.max(4, Math.abs(pt.y - northPt.y));
+        w = pixelR * 2; h = pixelR * 2;
+      }
+      return { ...item, width: w, height: h, left: pt.x - w / 2, top: pt.y - h / 2, x: pt.x, y: pt.y };
     }
     return { ...item, left: pt.x, top: pt.y, x: pt.x, y: pt.y };
   });
@@ -100,7 +106,7 @@ export default function AnnotationOverlay({
             height: ellipse.height,
             borderColor: ellipse.color,
             borderStyle: ellipse.dashed === false ? 'solid' : 'dashed',
-            transform: `rotate(${ellipse.rotation || 0}deg)`,
+            transform: ellipse.isRing ? 'none' : `rotate(${ellipse.rotation || 0}deg)`,
           }}
           onClick={(e) => {
             e.stopPropagation();
@@ -118,7 +124,7 @@ export default function AnnotationOverlay({
       ))}
 
       <svg className="annotation-leader-svg" aria-hidden="true">
-        {placedEllipses.filter((ellipse) => ellipse.label).map((ellipse) => {
+        {placedEllipses.filter((ellipse) => ellipse.label || ellipse.isRing).map((ellipse) => {
           const pos = ellipseLabelPlacement(ellipse);
           return (
             <g key={`ellipse-label-${ellipse.id}`}>
@@ -136,7 +142,9 @@ export default function AnnotationOverlay({
         })}
       </svg>
 
-      {placedEllipses.filter((ellipse) => ellipse.label).map((ellipse) => {
+      {placedEllipses.filter((ellipse) => ellipse.label || ellipse.isRing).map((ellipse) => {
+        const displayLabel = ellipse.label || (ellipse.isRing ? `${ellipse.radiusKm} km` : null);
+        if (!displayLabel) return null;
         const pos = ellipseLabelPlacement(ellipse);
         return (
           <div
@@ -148,7 +156,7 @@ export default function AnnotationOverlay({
               onSelectEllipse?.(ellipse.id);
             }}
           >
-            {ellipse.label}
+            {displayLabel}
           </div>
         );
       })}

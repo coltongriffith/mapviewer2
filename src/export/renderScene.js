@@ -4,6 +4,7 @@ import { resolveTemplateZones } from '../templates/technicalResultsTemplate';
 import { getThemeTokens } from '../utils/themeTokens';
 import { MARKER_ICON_PATHS, markerIconSvgFragment, drawMarkerIconCanvas } from '../utils/markerIcons.jsx';
 import { safeColor } from '../utils/colorUtils.js';
+import regionsNA from '../assets/regionsNA.json';
 
 let _exportWarnings = [];
 export function getExportWarnings() { return _exportWarnings; }
@@ -590,16 +591,23 @@ function drawEllipseLabelCanvas(ctx, scene, ellipse, center, width, height, rota
   ctx.restore();
 }
 
+function resolveEllipseDimensions(ellipse, map, scale) {
+  const center = clonePoint(map.latLngToContainerPoint([ellipse.lat, ellipse.lng]), scale);
+  if (ellipse.isRing && ellipse.radiusKm) {
+    const northPt = clonePoint(map.latLngToContainerPoint([ellipse.lat + ellipse.radiusKm / 111.32, ellipse.lng]), scale);
+    const pixelR = Math.max(4 * scale, Math.abs(center.y - northPt.y));
+    return { center, width: pixelR * 2, height: pixelR * 2, rotation: 0 };
+  }
+  return { center, width: (ellipse.width || 90) * scale, height: (ellipse.height || 56) * scale, rotation: ellipse.rotation || 0 };
+}
+
 function drawEllipsesCanvas(ctx, scene, scale) {
   (scene.project.ellipses || []).forEach((ellipse) => {
-    const center = clonePoint(scene.map.latLngToContainerPoint([ellipse.lat, ellipse.lng]), scale);
-    const width = (ellipse.width || 90) * scale;
-    const height = (ellipse.height || 56) * scale;
-    const rotation = ((ellipse.rotation || 0) * Math.PI) / 180;
-
+    const { center, width, height, rotation } = resolveEllipseDimensions(ellipse, scene.map, scale);
+    const rotRad = (rotation * Math.PI) / 180;
     ctx.save();
     ctx.translate(center.x, center.y);
-    ctx.rotate(rotation);
+    ctx.rotate(rotRad);
     ctx.beginPath();
     ctx.ellipse(0, 0, width / 2, height / 2, 0, 0, Math.PI * 2);
     ctx.strokeStyle = ellipse.color || '#dc2626';
@@ -607,7 +615,8 @@ function drawEllipsesCanvas(ctx, scene, scale) {
     ctx.setLineDash(ellipse.dashed === false ? [] : [6 * scale, 4 * scale]);
     ctx.stroke();
     ctx.restore();
-    drawEllipseLabelCanvas(ctx, scene, ellipse, center, width, height, ellipse.rotation || 0, scale);
+    const label = ellipse.isRing && !ellipse.label ? `${ellipse.radiusKm} km` : ellipse.label;
+    drawEllipseLabelCanvas(ctx, scene, { ...ellipse, label }, center, width, height, rotation, scale);
   });
 }
 
@@ -616,7 +625,7 @@ export async function renderSceneToCanvas(scene, options = {}) {
   const scale = Number(options.pixelRatio || scene.project.layout?.exportSettings?.pixelRatio || 2);
   const canvas = document.createElement('canvas'); canvas.width = Math.round(scene.width * scale); canvas.height = Math.round(scene.height * scale); const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-  await drawTilesCanvas(ctx, scene, scale); drawVectorsCanvas(ctx, scene, scale); drawEllipsesCanvas(ctx, scene, scale); await drawMarkersCanvas(ctx, scene, scale); drawCalloutsCanvas(ctx, scene, scale); drawTitleBlockCanvas(ctx, scene, scale); drawLegendCanvas(ctx, scene, scale); drawNorthArrowCanvas(ctx, scene, scale); await drawInsetCanvas(ctx, scene, scale); drawScaleBarCanvas(ctx, scene, scale); drawFooterCanvas(ctx, scene, scale); await drawLogoCanvas(ctx, scene, scale);
+  await drawTilesCanvas(ctx, scene, scale); drawRegionHighlightsCanvas(ctx, scene, scale); drawVectorsCanvas(ctx, scene, scale); drawEllipsesCanvas(ctx, scene, scale); await drawMarkersCanvas(ctx, scene, scale); drawCalloutsCanvas(ctx, scene, scale); drawTitleBlockCanvas(ctx, scene, scale); drawLegendCanvas(ctx, scene, scale); drawNorthArrowCanvas(ctx, scene, scale); await drawInsetCanvas(ctx, scene, scale); drawScaleBarCanvas(ctx, scene, scale); drawFooterCanvas(ctx, scene, scale); await drawLogoCanvas(ctx, scene, scale);
   if (!options.noWatermark) { ctx.save(); ctx.font = `bold ${9 * scale}px Arial, sans-serif`; ctx.fillStyle = 'rgba(100,116,139,0.72)'; ctx.textAlign = 'right'; ctx.textBaseline = 'bottom'; ctx.shadowColor = 'rgba(255,255,255,0.6)'; ctx.shadowBlur = 3 * scale; ctx.fillText('explorationmaps.com', canvas.width - 8 * scale, canvas.height - 5 * scale); ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.restore(); }
   return canvas;
 }
@@ -629,7 +638,38 @@ async function drawTilesCanvas(ctx, scene, scale) {
     ctx.save(); ctx.globalAlpha = tile.opacity; ctx.drawImage(img, tile.x * scale, tile.y * scale, tile.width * scale, tile.height * scale); ctx.restore();
   }
 }
-function drawVectorsCanvas(ctx, scene, scale) { (scene.project.layers || []).filter((layer) => layer.visible !== false && layer.geojson).forEach((layer) => featureCollectionFeatures(layer.geojson).forEach((feature) => drawCanvasGeometry(ctx, scene.map, feature, getTemplateStyle(scene.template, layer), scale))); }
+function drawRegionHighlightsCanvas(ctx, scene, scale) {
+  const highlights = scene.project.layout?.regionHighlights || [];
+  if (!highlights.length) return;
+  highlights.forEach(({ regionId, color, opacity }) => {
+    const region = regionsNA.find((r) => r.id === regionId);
+    if (!region) return;
+    const rings = region.coordinates;
+    ctx.save();
+    ctx.globalAlpha = opacity ?? 0.45;
+    ctx.fillStyle = color || '#ef4444';
+    ctx.beginPath();
+    rings.forEach((ring) => {
+      ring.forEach(([lng, lat], i) => {
+        const pt = scene.map.latLngToContainerPoint([lat, lng]);
+        if (i === 0) ctx.moveTo(pt.x * scale, pt.y * scale);
+        else ctx.lineTo(pt.x * scale, pt.y * scale);
+      });
+      ctx.closePath();
+    });
+    ctx.fill();
+    ctx.restore();
+  });
+}
+
+function drawVectorsCanvas(ctx, scene, scale) {
+  (scene.project.layers || []).filter((layer) => layer.visible !== false && layer.geojson).forEach((layer) => {
+    const lo = layer.style?.layerOpacity ?? 1;
+    ctx.save(); ctx.globalAlpha = lo;
+    featureCollectionFeatures(layer.geojson).forEach((feature) => drawCanvasGeometry(ctx, scene.map, feature, getTemplateStyle(scene.template, layer), scale));
+    ctx.restore();
+  });
+}
 async function drawLogoCanvas(ctx, scene, scale) {
   const logo = scene.project.layout?.logo; if (!logo) return;
   const zone = getOverlayMetrics(scene).logo; const x = zone.left * scale, y = zone.top * scale, w = zone.width * scale, h = zone.height * scale, padding = 10 * scale;
@@ -687,7 +727,30 @@ async function renderBasemapImageSvg(scene, scale) {
     return '';
   }
 }
-function renderVectorsSvg(scene, scale) { return (scene.project.layers || []).filter((layer) => layer.visible !== false && layer.geojson).map((layer) => featureCollectionFeatures(layer.geojson).map((feature) => geometryToSvg(scene.map, feature, getTemplateStyle(scene.template, layer), scale)).join('\n')).join('\n'); }
+function renderRegionHighlightsSvg(scene, scale) {
+  const highlights = scene.project.layout?.regionHighlights || [];
+  if (!highlights.length) return '';
+  return highlights.map(({ regionId, color, opacity }) => {
+    const region = regionsNA.find((r) => r.id === regionId);
+    if (!region) return '';
+    const pathData = region.coordinates.map((ring) => {
+      const pts = ring.map(([lng, lat]) => {
+        const pt = scene.map.latLngToContainerPoint([lat, lng]);
+        return `${pt.x * scale},${pt.y * scale}`;
+      });
+      return `M${pts.join(' L')}Z`;
+    }).join(' ');
+    return `<path d="${pathData}" fill="${escapeXml(color || '#ef4444')}" fill-opacity="${opacity ?? 0.45}" stroke="none" />`;
+  }).join('\n');
+}
+
+function renderVectorsSvg(scene, scale) {
+  return (scene.project.layers || []).filter((layer) => layer.visible !== false && layer.geojson).map((layer) => {
+    const lo = layer.style?.layerOpacity ?? 1;
+    const paths = featureCollectionFeatures(layer.geojson).map((feature) => geometryToSvg(scene.map, feature, getTemplateStyle(scene.template, layer), scale)).join('\n');
+    return lo < 1 ? `<g opacity="${lo}">${paths}</g>` : paths;
+  }).join('\n');
+}
 function renderMarkerLabelSvg(scene, marker, point, scale) {
   if (!marker.label) return '';
   const labelX = point.x + (marker.size || 18) * scale * 0.5 + 8 * scale;
@@ -720,16 +783,15 @@ function renderMarkersSvg(scene, scale) {
 }
 function renderEllipsesSvg(scene, scale) {
   return (scene.project.ellipses || []).map((ellipse) => {
-    const center = clonePoint(scene.map.latLngToContainerPoint([ellipse.lat, ellipse.lng]), scale);
-    const width = (ellipse.width || 90) * scale;
-    const height = (ellipse.height || 56) * scale;
-    const rotation = ellipse.rotation || 0;
+    const { center, width, height, rotation } = resolveEllipseDimensions(ellipse, scene.map, scale);
+    const effectiveLabel = ellipse.isRing && !ellipse.label ? `${ellipse.radiusKm} km` : ellipse.label;
     const dash = ellipse.dashed === false ? '' : ` stroke-dasharray="${6 * scale} ${4 * scale}"`;
     const color = safeColor(ellipse.color, '#dc2626');
     const pos = ellipseLabelPlacement(center, width, height, rotation, scale);
-    const labelWidth = ellipse.label ? ellipse.label.length * 12 * scale * 0.62 + 16 * scale : 0;
-    const label = ellipse.label
-      ? `<g><line x1="${pos.anchorX}" y1="${pos.anchorY}" x2="${pos.labelX}" y2="${pos.labelY + 10 * scale}" stroke="${color}" stroke-width="${Math.max(1, 1.4 * scale)}" stroke-dasharray="${5 * scale} ${3 * scale}" /><rect x="${pos.labelX}" y="${pos.labelY}" width="${labelWidth}" height="${20 * scale}" rx="${10 * scale}" fill="rgba(255,255,255,0.95)" stroke="rgba(15,23,42,0.12)" stroke-width="${Math.max(1, scale * 0.8)}" /><text x="${pos.labelX + 8 * scale}" y="${pos.labelY + 10 * scale}" dominant-baseline="middle" fill="#0f172a" font-family="${escapeXml(scene.project.layout?.fonts?.label || 'Inter')}, Arial, sans-serif" font-size="${12 * scale}" font-weight="700">${escapeXml(ellipse.label)}</text></g>`
+    const labelText = effectiveLabel;
+    const labelWidth = labelText ? labelText.length * 12 * scale * 0.62 + 16 * scale : 0;
+    const label = labelText
+      ? `<g><line x1="${pos.anchorX}" y1="${pos.anchorY}" x2="${pos.labelX}" y2="${pos.labelY + 10 * scale}" stroke="${color}" stroke-width="${Math.max(1, 1.4 * scale)}" stroke-dasharray="${5 * scale} ${3 * scale}" /><rect x="${pos.labelX}" y="${pos.labelY}" width="${labelWidth}" height="${20 * scale}" rx="${10 * scale}" fill="rgba(255,255,255,0.95)" stroke="rgba(15,23,42,0.12)" stroke-width="${Math.max(1, scale * 0.8)}" /><text x="${pos.labelX + 8 * scale}" y="${pos.labelY + 10 * scale}" dominant-baseline="middle" fill="#0f172a" font-family="${escapeXml(scene.project.layout?.fonts?.label || 'Inter')}, Arial, sans-serif" font-size="${12 * scale}" font-weight="700">${escapeXml(labelText)}</text></g>`
       : '';
     return `<g><g transform="rotate(${rotation} ${center.x} ${center.y})"><ellipse cx="${center.x}" cy="${center.y}" rx="${width / 2}" ry="${height / 2}" fill="none" stroke="${color}" stroke-width="${2 * scale}"${dash} /></g>${label}</g>`;
   }).join('\n');
@@ -829,7 +891,7 @@ export async function renderSceneToSvg(scene, options = {}) {
   const scale = Number(options.pixelRatio || scene.project.layout?.exportSettings?.pixelRatio || 2); const width = Math.round(scene.width * scale), height = Math.round(scene.height * scale);
   const basemapImage = await renderBasemapImageSvg(scene, scale);
   const watermark = options.noWatermark ? '' : `<text x="${width - 8}" y="${height - 5}" font-family="Arial,sans-serif" font-size="9" font-weight="bold" fill="rgba(100,116,139,0.72)" text-anchor="end" paint-order="stroke" stroke="rgba(255,255,255,0.55)" stroke-width="2.5" stroke-linejoin="round">explorationmaps.com</text>`;
-  return `<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="100%" height="100%" fill="#ffffff" />${basemapImage}${renderVectorsSvg(scene, scale)}${renderEllipsesSvg(scene, scale)}${renderMarkersSvg(scene, scale)}${renderCalloutsSvg(scene, scale)}${renderTitleSvg(scene, scale)}${renderLegendSvg(scene, scale)}${renderNorthArrowSvg(scene, scale)}${renderInsetSvg(scene, scale)}${renderScaleBarSvg(scene, scale)}${renderFooterSvg(scene, scale)}${renderLogoSvg(scene, scale)}${watermark}</svg>`;
+  return `<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="100%" height="100%" fill="#ffffff" />${basemapImage}${renderRegionHighlightsSvg(scene, scale)}${renderVectorsSvg(scene, scale)}${renderEllipsesSvg(scene, scale)}${renderMarkersSvg(scene, scale)}${renderCalloutsSvg(scene, scale)}${renderTitleSvg(scene, scale)}${renderLegendSvg(scene, scale)}${renderNorthArrowSvg(scene, scale)}${renderInsetSvg(scene, scale)}${renderScaleBarSvg(scene, scale)}${renderFooterSvg(scene, scale)}${renderLogoSvg(scene, scale)}${watermark}</svg>`;
 }
 export function downloadCanvas(filename, canvas) {
   canvas.toBlob((blob) => {
