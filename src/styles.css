@@ -72,6 +72,18 @@ button, input, select, textarea { font: inherit; }
   box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04);
 }
 .control-section h2 { margin: 0 0 10px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: #64748b; font-weight: 700; }
+.section-toggle-btn { cursor: pointer; display: flex; justify-content: space-between; align-items: center; margin: 0; user-select: none; }
+.section-toggle-btn:hover { color: #334155; }
+.section-chevron { font-size: 14px; color: #94a3b8; transform: rotate(0deg); transition: transform 0.18s; display: inline-block; margin-bottom: 1px; }
+.section-chevron.open { transform: rotate(90deg); }
+.sub-details { border-top: 1px solid #e8eef6; margin-top: 6px; padding-top: 4px; }
+.sub-details summary { font-size: 11px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; cursor: pointer; padding: 5px 0; list-style: none; display: flex; align-items: center; gap: 5px; }
+.sub-details summary::-webkit-details-marker { display: none; }
+.sub-details summary::before { content: '›'; font-size: 13px; transition: transform 0.15s; display: inline-block; }
+.sub-details[open] summary::before { transform: rotate(90deg); }
+.sub-details summary:hover { color: #475569; }
+.sub-details-body { padding-top: 8px; display: grid; gap: 8px; }
+.sub-badge { background: #dbeafe; color: #1d4ed8; font-size: 10px; font-weight: 700; border-radius: 10px; padding: 1px 6px; margin-left: 4px; text-transform: none; letter-spacing: 0; }
 .control-grid { display: grid; gap: 10px; }
 .control-row { display: grid; gap: 6px; }
 .control-row.inline-2 { grid-template-columns: 1fr 1fr; gap: 8px; align-items: start; }

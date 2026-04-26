@@ -95,7 +95,8 @@ export default function AnnotationOverlay({
 
   return (
     <div className="annotation-overlay">
-      {placedEllipses.map((ellipse) => (
+      {/* Non-ring ellipses as divs */}
+      {placedEllipses.filter((e) => !e.isRing).map((ellipse) => (
         <div
           key={ellipse.id}
           className={`ellipse-annotation ${selectedEllipseId === ellipse.id ? 'selected' : ''}`}
@@ -106,36 +107,77 @@ export default function AnnotationOverlay({
             height: ellipse.height,
             borderColor: ellipse.color,
             borderStyle: ellipse.dashed === false ? 'solid' : 'dashed',
-            transform: ellipse.isRing ? 'none' : `rotate(${ellipse.rotation || 0}deg)`,
+            transform: `rotate(${ellipse.rotation || 0}deg)`,
           }}
-          onClick={(e) => {
-            e.stopPropagation();
-            onSelectEllipse?.(ellipse.id);
-          }}
+          onClick={(e) => { e.stopPropagation(); onSelectEllipse?.(ellipse.id); }}
           onPointerDown={(e) => {
             e.preventDefault();
             e.stopPropagation();
             onSelectEllipse?.(ellipse.id);
             dragRef.current = { id: ellipse.id, kind: 'ellipse', startX: e.clientX, startY: e.clientY, startPoint: { x: ellipse.x, y: ellipse.y }, pointerId: e.pointerId };
           }}
-        >
-          {null}
-        </div>
+        />
       ))}
 
-      <svg className="annotation-leader-svg" aria-hidden="true">
-        {placedEllipses.filter((ellipse) => ellipse.label || ellipse.isRing).map((ellipse) => {
+      <svg className="annotation-leader-svg" style={{ pointerEvents: 'none' }}>
+        {/* Distance rings — rendered in SVG so pointer-events="stroke" makes only the border clickable */}
+        {placedEllipses.filter((e) => e.isRing).map((ellipse) => {
+          const r = ellipse.width / 2;
+          const isSelected = selectedEllipseId === ellipse.id;
+          return (
+            <g key={`ring-${ellipse.id}`} style={{ pointerEvents: 'auto' }}>
+              {/* Wide invisible hit area for easy grabbing */}
+              <circle
+                cx={ellipse.x} cy={ellipse.y} r={r}
+                fill="none" stroke="transparent" strokeWidth={16}
+                style={{ cursor: 'move', pointerEvents: 'stroke' }}
+                onClick={(e) => { e.stopPropagation(); onSelectEllipse?.(ellipse.id); }}
+                onPointerDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onSelectEllipse?.(ellipse.id);
+                  dragRef.current = { id: ellipse.id, kind: 'ellipse', startX: e.clientX, startY: e.clientY, startPoint: { x: ellipse.x, y: ellipse.y }, pointerId: e.pointerId };
+                }}
+              />
+              {/* Visible ring */}
+              <circle
+                cx={ellipse.x} cy={ellipse.y} r={r}
+                fill="none"
+                stroke={ellipse.color || '#dc2626'}
+                strokeWidth={isSelected ? 2.5 : 2}
+                strokeDasharray={ellipse.dashed === false ? 'none' : '10 5'}
+                style={{ pointerEvents: 'none' }}
+              />
+              {isSelected && (
+                <circle cx={ellipse.x} cy={ellipse.y} r={r} fill="none" stroke="rgba(59,130,246,0.5)" strokeWidth={4} style={{ pointerEvents: 'none' }} />
+              )}
+              {/* Leader line to label */}
+              {(ellipse.label || ellipse.isRing) && (() => {
+                const pos = ellipseLabelPlacement(ellipse);
+                return (
+                  <line
+                    x1={pos.anchorX} y1={pos.anchorY}
+                    x2={pos.labelX} y2={pos.labelY + 10}
+                    stroke={ellipse.color || '#dc2626'}
+                    strokeWidth={1.5} strokeDasharray="5 3"
+                    style={{ pointerEvents: 'none' }}
+                  />
+                );
+              })()}
+            </g>
+          );
+        })}
+
+        {/* Leader lines for non-ring ellipses */}
+        {placedEllipses.filter((ellipse) => !ellipse.isRing && ellipse.label).map((ellipse) => {
           const pos = ellipseLabelPlacement(ellipse);
           return (
             <g key={`ellipse-label-${ellipse.id}`}>
               <line
-                x1={pos.anchorX}
-                y1={pos.anchorY}
-                x2={pos.labelX}
-                y2={pos.labelY + 10}
+                x1={pos.anchorX} y1={pos.anchorY}
+                x2={pos.labelX} y2={pos.labelY + 10}
                 stroke={ellipse.color || '#dc2626'}
-                strokeWidth={1.5}
-                strokeDasharray="5 3"
+                strokeWidth={1.5} strokeDasharray="5 3"
               />
             </g>
           );
