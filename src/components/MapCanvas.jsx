@@ -202,8 +202,10 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
       const svgRenderer = hasPattern ? L.svg({ padding: 0.1 }) : undefined;
       if (svgRenderer) svgRendererRefs.current.push(svgRenderer);
 
+      const drillholeRenderer = isDrillholes ? L.svg({ pane: 'drillholePane', padding: 0 }) : undefined;
+      if (drillholeRenderer) svgRendererRefs.current.push(drillholeRenderer);
+
       const geoLayer = L.geoJSON(layer.geojson, {
-        pane: isDrillholes ? 'drillholePane' : 'overlayPane',
         renderer: svgRenderer,
         style: () => ({
           color: style.stroke || '#54a6ff',
@@ -215,6 +217,7 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
         }),
         pointToLayer: (feature, latlng) => {
           const marker = L.circleMarker(latlng, {
+            renderer: drillholeRenderer,
             radius: Math.max(4, (style.markerSize ?? 10) / 2),
             color: style.markerColor || style.stroke || '#111111',
             fillColor: style.markerFill || style.fill || style.markerColor || '#ffffff',
