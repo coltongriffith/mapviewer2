@@ -1747,16 +1747,48 @@ export default function App() {
               <div className="selected-note">{selectedEllipse.isRing ? 'Selected distance ring' : 'Selected highlight area'}</div>
               <div className="control-row"><label>Label</label><input value={selectedEllipse.label || ''} onChange={(e) => updateEllipse(selectedEllipse.id, { label: e.target.value })} placeholder={selectedEllipse.isRing ? `${selectedEllipse.radiusKm} km` : ''} /></div>
               {selectedEllipse.isRing ? (
-                <div className="control-row inline-2">
-                  <div>
-                    <label>Radius (km)</label>
-                    <input type="number" min="1" max="5000" step="1" value={selectedEllipse.radiusKm ?? 50} onChange={(e) => updateEllipse(selectedEllipse.id, { radiusKm: Number(e.target.value) })} />
+                <>
+                  <div className="control-row inline-2">
+                    <div>
+                      <label>Radius (km)</label>
+                      <input type="number" min="1" max="5000" step="1" value={selectedEllipse.radiusKm ?? 50} onChange={(e) => updateEllipse(selectedEllipse.id, { radiusKm: Number(e.target.value) })} />
+                    </div>
+                    <div>
+                      <label>Ring Color</label>
+                      <input type="color" value={selectedEllipse.color || '#dc2626'} onChange={(e) => updateEllipse(selectedEllipse.id, { color: e.target.value })} />
+                    </div>
                   </div>
-                  <div>
-                    <label>Color</label>
-                    <input type="color" value={selectedEllipse.color || '#dc2626'} onChange={(e) => updateEllipse(selectedEllipse.id, { color: e.target.value })} />
+                  <div className="control-row inline-2">
+                    <div>
+                      <label>Label Size</label>
+                      <input type="range" min="9" max="22" step="1" value={selectedEllipse.labelFontSize || 11} onChange={(e) => updateEllipse(selectedEllipse.id, { labelFontSize: Number(e.target.value) })} />
+                    </div>
+                    <div className="range-value">{selectedEllipse.labelFontSize || 11}px</div>
                   </div>
-                </div>
+                  <div className="control-row inline-2">
+                    <div>
+                      <label>Label Color</label>
+                      <input type="color" value={selectedEllipse.labelColor || selectedEllipse.color || '#dc2626'} onChange={(e) => updateEllipse(selectedEllipse.id, { labelColor: e.target.value })} />
+                    </div>
+                    <label className="toggle-row" style={{ marginTop: 0 }}>
+                      <input type="checkbox" checked={selectedEllipse.labelBold !== false} onChange={(e) => updateEllipse(selectedEllipse.id, { labelBold: e.target.checked })} />
+                      <span>Bold</span>
+                    </label>
+                  </div>
+                  <label className="toggle-row">
+                    <input type="checkbox" checked={!!selectedEllipse.labelArc} onChange={(e) => updateEllipse(selectedEllipse.id, { labelArc: e.target.checked })} />
+                    <span>Curved arc label</span>
+                  </label>
+                  {selectedEllipse.labelArc && (
+                    <div className="control-row inline-2">
+                      <div>
+                        <label>Angle (0° = top)</label>
+                        <input type="range" min="0" max="359" step="1" value={selectedEllipse.labelAngle ?? 0} onChange={(e) => updateEllipse(selectedEllipse.id, { labelAngle: Number(e.target.value) })} />
+                      </div>
+                      <div className="range-value">{selectedEllipse.labelAngle ?? 0}°</div>
+                    </div>
+                  )}
+                </>
               ) : (
                 <>
                   <div className="control-row inline-2">
@@ -2182,6 +2214,8 @@ export default function App() {
               onMoveMarker={updateMarker}
               onMoveEllipse={updateEllipse}
               onMoveLabelOffset={(id, offset) => updateMarker(id, { labelOffsetX: offset.x, labelOffsetY: offset.y })}
+              onMoveEllipseLabelOffset={(id, offset) => updateEllipse(id, { labelOffsetX: offset.x, labelOffsetY: offset.y })}
+              onMoveEllipseLabelAngle={(id, angle) => updateEllipse(id, { labelAngle: angle })}
               labelFont={project.layout.fonts?.label}
             />
             <CalloutsOverlay

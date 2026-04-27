@@ -45,6 +45,8 @@ export default function AnnotationOverlay({
   onMoveMarker,
   onMoveEllipse,
   onMoveLabelOffset,
+  onMoveEllipseLabelOffset,
+  onMoveEllipseLabelAngle,
   labelFont,
 }) {
   const [tick, setTick] = useState(0);
@@ -66,8 +68,22 @@ export default function AnnotationOverlay({
       const dy = event.clientY - startY;
 
       if (kind === 'label') {
-        // Label drag: update pixel offset directly, no lat/lng conversion needed
         onMoveLabelOffset?.(id, { x: startPoint.x + dx, y: startPoint.y + dy });
+        return;
+      }
+      if (kind === 'ellipse-label') {
+        onMoveEllipseLabelOffset?.(id, { x: startPoint.x + dx, y: startPoint.y + dy });
+        return;
+      }
+      if (kind === 'ellipse-label-arc') {
+        const mapRect = map.getContainer().getBoundingClientRect();
+        const mx = event.clientX - mapRect.left;
+        const my = event.clientY - mapRect.top;
+        const ax = mx - startPoint.x;
+        const ay = my - startPoint.y;
+        let angle = Math.atan2(ax, -ay) * 180 / Math.PI;
+        angle = ((angle % 360) + 360) % 360;
+        onMoveEllipseLabelAngle?.(id, Math.round(angle));
         return;
       }
 
@@ -88,7 +104,7 @@ export default function AnnotationOverlay({
       window.removeEventListener('pointerup', handleUp);
       window.removeEventListener('pointercancel', handleUp);
     };
-  }, [map, onMoveEllipse, onMoveMarker, onMoveLabelOffset]);
+  }, [map, onMoveEllipse, onMoveMarker, onMoveLabelOffset, onMoveEllipseLabelOffset, onMoveEllipseLabelAngle]);
 
   const placedMarkers = useMemo(() => resolvePositions(markers, map, 'marker'), [markers, map, tick]);
   const placedEllipses = useMemo(() => resolvePositions(ellipses, map, 'ellipse'), [ellipses, map, tick]);
@@ -120,13 +136,24 @@ export default function AnnotationOverlay({
       ))}
 
       <svg className="annotation-leader-svg" style={{ pointerEvents: 'none' }}>
-        {/* Distance rings — rendered in SVG so pointer-events="stroke" makes only the border clickable */}
+        {/* Distance rings */}
         {placedEllipses.filter((e) => e.isRing).map((ellipse) => {
           const r = ellipse.width / 2;
           const isSelected = selectedEllipseId === ellipse.id;
+          const displayLabel = ellipse.label || `${ellipse.radiusKm} km`;
+          const labelFontSize = ellipse.labelFontSize || 11;
+          const labelColor = ellipse.labelColor || ellipse.color || '#dc2626';
+
+          // Arc text path: full clockwise circle starting at top
+          const arcPath = `M ${ellipse.x} ${ellipse.y - r} A ${r} ${r} 0 0 1 ${ellipse.x} ${ellipse.y + r} A ${r} ${r} 0 0 1 ${ellipse.x} ${ellipse.y - r}`;
+          const arcOffset = `${((ellipse.labelAngle || 0) / 360) * 100}%`;
+
           return (
             <g key={`ring-${ellipse.id}`} style={{ pointerEvents: 'auto' }}>
-              {/* Wide invisible hit area for easy grabbing */}
+              <defs>
+                <path id={`ring-arc-${ellipse.id}`} d={arcPath} />
+              </defs>
+              {/* Wide invisible hit area */}
               <circle
                 cx={ellipse.x} cy={ellipse.y} r={r}
                 fill="none" stroke="transparent" strokeWidth={16}
@@ -151,13 +178,46 @@ export default function AnnotationOverlay({
               {isSelected && (
                 <circle cx={ellipse.x} cy={ellipse.y} r={r} fill="none" stroke="rgba(59,130,246,0.5)" strokeWidth={4} style={{ pointerEvents: 'none' }} />
               )}
-              {/* Leader line to label */}
-              {(ellipse.label || ellipse.isRing) && (() => {
+
+              {/* Arc label */}
+              {ellipse.labelArc && (() => {
+                const textR = r + labelFontSize * 0.6 + 4;
+                const arcPathOuter = `M ${ellipse.x} ${ellipse.y - textR} A ${textR} ${textR} 0 0 1 ${ellipse.x} ${ellipse.y + textR} A ${textR} ${textR} 0 0 1 ${ellipse.x} ${ellipse.y - textR}`;
+                return (
+                  <>
+                    <defs>
+                      <path id={`ring-arc-outer-${ellipse.id}`} d={arcPathOuter} />
+                    </defs>
+                    <text
+                      fontSize={labelFontSize}
+                      fontWeight={ellipse.labelBold !== false ? '700' : '400'}
+                      fill={labelColor}
+                      fontFamily={labelFont || 'Inter, sans-serif'}
+                      style={{ pointerEvents: 'auto', cursor: 'move', userSelect: 'none' }}
+                      onClick={(e) => { e.stopPropagation(); onSelectEllipse?.(ellipse.id); }}
+                      onPointerDown={(e) => {
+                        e.preventDefault(); e.stopPropagation();
+                        onSelectEllipse?.(ellipse.id);
+                        dragRef.current = { id: ellipse.id, kind: 'ellipse-label-arc', startX: e.clientX, startY: e.clientY, startPoint: { x: ellipse.x, y: ellipse.y }, pointerId: e.pointerId };
+                      }}
+                    >
+                      <textPath href={`#ring-arc-outer-${ellipse.id}`} startOffset={arcOffset} textAnchor="middle">
+                        {displayLabel}
+                      </textPath>
+                    </text>
+                  </>
+                );
+              })()}
+
+              {/* Leader line for non-arc label */}
+              {!ellipse.labelArc && (() => {
                 const pos = ellipseLabelPlacement(ellipse);
+                const finalX = pos.labelX + (ellipse.labelOffsetX || 0);
+                const finalY = pos.labelY + (ellipse.labelOffsetY || 0);
                 return (
                   <line
                     x1={pos.anchorX} y1={pos.anchorY}
-                    x2={pos.labelX} y2={pos.labelY + 10}
+                    x2={finalX} y2={finalY + 10}
                     stroke={ellipse.color || '#dc2626'}
                     strokeWidth={1.5} strokeDasharray="5 3"
                     style={{ pointerEvents: 'none' }}
@@ -171,17 +231,20 @@ export default function AnnotationOverlay({
         {/* Leader lines for non-ring ellipses */}
         {placedEllipses.filter((ellipse) => !ellipse.isRing && ellipse.label).map((ellipse) => {
           const pos = ellipseLabelPlacement(ellipse);
+          const finalX = pos.labelX + (ellipse.labelOffsetX || 0);
+          const finalY = pos.labelY + (ellipse.labelOffsetY || 0);
           return (
             <g key={`ellipse-label-${ellipse.id}`}>
               <line
                 x1={pos.anchorX} y1={pos.anchorY}
-                x2={pos.labelX} y2={pos.labelY + 10}
+                x2={finalX} y2={finalY + 10}
                 stroke={ellipse.color || '#dc2626'}
                 strokeWidth={1.5} strokeDasharray="5 3"
               />
             </g>
           );
         })}
+
         {/* Map-wide region text labels */}
         {placedMarkers.filter((m) => m.type === 'maplabel').map((m) => (
           <text
@@ -208,18 +271,37 @@ export default function AnnotationOverlay({
         ))}
       </svg>
 
-      {placedEllipses.filter((ellipse) => ellipse.label || ellipse.isRing).map((ellipse) => {
+      {/* Ellipse labels (non-arc, draggable) */}
+      {placedEllipses.filter((ellipse) => (ellipse.label || ellipse.isRing) && !ellipse.labelArc).map((ellipse) => {
         const displayLabel = ellipse.label || (ellipse.isRing ? `${ellipse.radiusKm} km` : null);
         if (!displayLabel) return null;
         const pos = ellipseLabelPlacement(ellipse);
+        const finalX = pos.labelX + (ellipse.labelOffsetX || 0);
+        const finalY = pos.labelY + (ellipse.labelOffsetY || 0);
         return (
           <div
             key={`ellipse-tag-${ellipse.id}`}
             className="ellipse-annotation-label with-leader"
-            style={{ left: pos.labelX, top: pos.labelY, fontFamily: labelFont || 'Inter, sans-serif' }}
-            onClick={(e) => {
-              e.stopPropagation();
+            style={{
+              left: finalX,
+              top: finalY,
+              fontFamily: labelFont || 'Inter, sans-serif',
+              fontSize: ellipse.labelFontSize || 11,
+              fontWeight: ellipse.labelBold !== false ? '700' : '400',
+              color: ellipse.labelColor || ellipse.color || '#dc2626',
+              cursor: 'move',
+              pointerEvents: 'auto',
+            }}
+            onClick={(e) => { e.stopPropagation(); onSelectEllipse?.(ellipse.id); }}
+            onPointerDown={(e) => {
+              e.preventDefault(); e.stopPropagation();
               onSelectEllipse?.(ellipse.id);
+              dragRef.current = {
+                id: ellipse.id, kind: 'ellipse-label',
+                startX: e.clientX, startY: e.clientY,
+                startPoint: { x: ellipse.labelOffsetX || 0, y: ellipse.labelOffsetY || 0 },
+                pointerId: e.pointerId,
+              };
             }}
           >
             {displayLabel}
@@ -230,7 +312,6 @@ export default function AnnotationOverlay({
       {placedMarkers.filter((m) => m.type !== 'maplabel').map((marker) => {
         const size = marker.size || 22;
         const color = marker.color || '#d97706';
-        // Label offset — defaults to 10px right, 0px vertical from center
         const labelOffsetX = marker.labelOffsetX ?? (size / 2 + 6);
         const labelOffsetY = marker.labelOffsetY ?? -(size / 2);
 
@@ -251,10 +332,8 @@ export default function AnnotationOverlay({
             }}
           >
             {isVectorIcon(marker.type) ? (
-              // Vector SVG icon — size is fully controlled by marker.size
               <MarkerSvgIcon type={marker.type} size={size} color={color} />
             ) : (
-              // Geometric shapes (circle, square, triangle)
               <div
                 className={`free-marker-symbol ${shapeClass(marker.type)}`}
                 style={{
@@ -268,7 +347,6 @@ export default function AnnotationOverlay({
             )}
 
             {marker.label ? (
-              // Label is independently draggable via its own pointer events
               <div
                 className="free-marker-label"
                 style={{

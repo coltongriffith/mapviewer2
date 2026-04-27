@@ -267,7 +267,17 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
             const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle'); c.setAttribute('cx', spacing); c.setAttribute('cy', spacing); c.setAttribute('r', 2); c.setAttribute('fill', fillColor); c.setAttribute('fill-opacity', fillOpacity); patEl.appendChild(c);
           }
           defs.appendChild(patEl);
-          geoLayer.eachLayer((l) => { if (l._path) { l._path.setAttribute('fill', `url(#${patternId})`); l._path.setAttribute('fill-opacity', 1); } });
+          const applyPattern = (l) => {
+            if (!l._path) return;
+            l._path.style.fill = `url(#${patternId})`;
+            l._path.style.fillOpacity = '1';
+            const orig = l._updateStyle?.bind(l);
+            l._updateStyle = function () {
+              if (orig) orig();
+              if (this._path) { this._path.style.fill = `url(#${patternId})`; this._path.style.fillOpacity = '1'; }
+            };
+          };
+          geoLayer.eachLayer(applyPattern);
         }
       }
 

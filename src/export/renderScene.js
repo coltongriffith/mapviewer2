@@ -678,29 +678,54 @@ function ellipseLabelPlacement(center, width, height, rotationDeg, scale) {
 
 function drawEllipseLabelCanvas(ctx, scene, ellipse, center, width, height, rotationDeg, scale) {
   if (!ellipse.label) return;
+  const labelFont = scene.project.layout?.fonts?.label || 'Inter';
+  const labelFontSize = (ellipse.labelFontSize || 11) * scale;
+  const labelColor = ellipse.labelColor || ellipse.color || '#dc2626';
+  const fontWeight = ellipse.labelBold !== false ? '700' : '400';
+
+  if (ellipse.labelArc) {
+    const r = width / 2;
+    const angle = ((ellipse.labelAngle ?? 0) / 360) * Math.PI * 2 - Math.PI / 2;
+    const textR = r + labelFontSize * 0.6 + 4 * scale;
+    const tx = center.x + textR * Math.cos(angle);
+    const ty = center.y + textR * Math.sin(angle);
+    ctx.save();
+    ctx.translate(tx, ty);
+    ctx.rotate(angle + Math.PI / 2);
+    ctx.fillStyle = labelColor;
+    ctx.font = `${fontWeight} ${labelFontSize}px ${labelFont}, Arial, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(ellipse.label, 0, 0);
+    ctx.restore();
+    return;
+  }
+
   const pos = ellipseLabelPlacement(center, width, height, rotationDeg, scale);
+  const finalX = pos.labelX + (ellipse.labelOffsetX || 0) * scale;
+  const finalY = pos.labelY + (ellipse.labelOffsetY || 0) * scale;
   ctx.save();
-  ctx.strokeStyle = ellipse.color || '#dc2626';
+  ctx.strokeStyle = labelColor;
   ctx.lineWidth = Math.max(1, 1.4 * scale);
   ctx.setLineDash([5 * scale, 3 * scale]);
   ctx.beginPath();
   ctx.moveTo(pos.anchorX, pos.anchorY);
-  ctx.lineTo(pos.labelX, pos.labelY + 10 * scale);
+  ctx.lineTo(finalX, finalY + 10 * scale);
   ctx.stroke();
   ctx.setLineDash([]);
-  ctx.font = annotationLabelFont(scene, scale);
+  ctx.font = `${fontWeight} ${labelFontSize}px ${labelFont}, Arial, sans-serif`;
   ctx.textBaseline = 'middle';
   const textWidth = ctx.measureText(ellipse.label).width;
   const labelWidth = textWidth + 16 * scale;
   const labelHeight = 20 * scale;
-  drawRoundedRect(ctx, pos.labelX, pos.labelY, labelWidth, labelHeight, 10 * scale);
+  drawRoundedRect(ctx, finalX, finalY, labelWidth, labelHeight, 10 * scale);
   ctx.fillStyle = 'rgba(255,255,255,0.95)';
   ctx.fill();
   ctx.strokeStyle = 'rgba(15,23,42,0.12)';
   ctx.lineWidth = Math.max(1, scale * 0.8);
   ctx.stroke();
-  ctx.fillStyle = '#0f172a';
-  ctx.fillText(ellipse.label, pos.labelX + 8 * scale, pos.labelY + labelHeight / 2);
+  ctx.fillStyle = labelColor;
+  ctx.fillText(ellipse.label, finalX + 8 * scale, finalY + labelHeight / 2);
   ctx.restore();
 }
 
@@ -902,17 +927,34 @@ function renderMarkersSvg(scene, scale) {
   }).join('\n');
 }
 function renderEllipsesSvg(scene, scale) {
+  const labelFontFamily = escapeXml(scene.project.layout?.fonts?.label || 'Inter');
   return (scene.project.ellipses || []).map((ellipse) => {
     const { center, width, height, rotation } = resolveEllipseDimensions(ellipse, scene.map, scale);
     const effectiveLabel = ellipse.isRing && !ellipse.label ? `${ellipse.radiusKm} km` : ellipse.label;
     const dash = ellipse.dashed === false ? '' : ` stroke-dasharray="${6 * scale} ${4 * scale}"`;
     const color = safeColor(ellipse.color, '#dc2626');
-    const pos = ellipseLabelPlacement(center, width, height, rotation, scale);
-    const labelText = effectiveLabel;
-    const labelWidth = labelText ? labelText.length * 12 * scale * 0.62 + 16 * scale : 0;
-    const label = labelText
-      ? `<g><line x1="${pos.anchorX}" y1="${pos.anchorY}" x2="${pos.labelX}" y2="${pos.labelY + 10 * scale}" stroke="${color}" stroke-width="${Math.max(1, 1.4 * scale)}" stroke-dasharray="${5 * scale} ${3 * scale}" /><rect x="${pos.labelX}" y="${pos.labelY}" width="${labelWidth}" height="${20 * scale}" rx="${10 * scale}" fill="rgba(255,255,255,0.95)" stroke="rgba(15,23,42,0.12)" stroke-width="${Math.max(1, scale * 0.8)}" /><text x="${pos.labelX + 8 * scale}" y="${pos.labelY + 10 * scale}" dominant-baseline="middle" fill="#0f172a" font-family="${escapeXml(scene.project.layout?.fonts?.label || 'Inter')}, Arial, sans-serif" font-size="${12 * scale}" font-weight="700">${escapeXml(labelText)}</text></g>`
-      : '';
+    const labelColor = safeColor(ellipse.labelColor || ellipse.color, '#dc2626');
+    const labelFontSize = (ellipse.labelFontSize || 11) * scale;
+    const fontWeight = ellipse.labelBold !== false ? '700' : '400';
+
+    let label = '';
+    if (effectiveLabel) {
+      if (ellipse.labelArc) {
+        const r = width / 2;
+        const textR = r + labelFontSize * 0.6 + 4 * scale;
+        const cx = center.x, cy = center.y;
+        const arcPath = `M ${cx} ${cy - textR} A ${textR} ${textR} 0 0 1 ${cx} ${cy + textR} A ${textR} ${textR} 0 0 1 ${cx} ${cy - textR}`;
+        const offset = `${((ellipse.labelAngle ?? 0) / 360) * 100}%`;
+        const pid = `svg-arc-${ellipse.id.replace(/[^a-zA-Z0-9]/g, '')}`;
+        label = `<defs><path id="${pid}" d="${arcPath}" /></defs><text font-size="${labelFontSize}" font-weight="${fontWeight}" fill="${labelColor}" font-family="${labelFontFamily}, Arial, sans-serif"><textPath href="#${pid}" startOffset="${offset}" text-anchor="middle">${escapeXml(effectiveLabel)}</textPath></text>`;
+      } else {
+        const pos = ellipseLabelPlacement(center, width, height, rotation, scale);
+        const finalX = pos.labelX + (ellipse.labelOffsetX || 0) * scale;
+        const finalY = pos.labelY + (ellipse.labelOffsetY || 0) * scale;
+        const labelWidth = effectiveLabel.length * labelFontSize * 0.62 + 16 * scale;
+        label = `<g><line x1="${pos.anchorX}" y1="${pos.anchorY}" x2="${finalX}" y2="${finalY + 10 * scale}" stroke="${labelColor}" stroke-width="${Math.max(1, 1.4 * scale)}" stroke-dasharray="${5 * scale} ${3 * scale}" /><rect x="${finalX}" y="${finalY}" width="${labelWidth}" height="${20 * scale}" rx="${10 * scale}" fill="rgba(255,255,255,0.95)" stroke="rgba(15,23,42,0.12)" stroke-width="${Math.max(1, scale * 0.8)}" /><text x="${finalX + 8 * scale}" y="${finalY + 10 * scale}" dominant-baseline="middle" fill="${labelColor}" font-family="${labelFontFamily}, Arial, sans-serif" font-size="${labelFontSize}" font-weight="${fontWeight}">${escapeXml(effectiveLabel)}</text></g>`;
+      }
+    }
     return `<g><g transform="rotate(${rotation} ${center.x} ${center.y})"><ellipse cx="${center.x}" cy="${center.y}" rx="${width / 2}" ry="${height / 2}" fill="none" stroke="${color}" stroke-width="${2 * scale}"${dash} /></g>${label}</g>`;
   }).join('\n');
 }
