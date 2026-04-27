@@ -982,11 +982,11 @@ export default function App() {
   const handleFeatureClick = ({ layerId, feature, latlng, isLayerSelect }) => {
     const layer = project.layers.find((item) => item.id === layerId) || null;
     if (!layer) return;
-    setSelectedLayerId(layerId);
     setAnnotationTool(null);
     setSelectedMarkerId(null);
     setSelectedEllipseId(null);
     if (isLayerSelect) {
+      setSelectedLayerId(layerId);
       setSelectedFeature(null);
       return;
     }
@@ -1127,12 +1127,13 @@ export default function App() {
   const zoomDelta = Math.max(-8, Math.min(8, Number(project.layout.zoomDelta ?? 0)));
   const featureEditorPoint = useMemo(() => {
     if (!leafletMapRef.current || !selectedFeature?.latlng) return null;
+    const rect = leafletMapRef.current.getContainer().getBoundingClientRect();
     const pt = leafletMapRef.current.latLngToContainerPoint([selectedFeature.latlng.lat, selectedFeature.latlng.lng]);
-    const maxLeft = Math.max(12, mapSize.width - 280);
-    const maxTop = Math.max(12, mapSize.height - 210);
+    const popupW = 292;
+    const popupH = 340;
     return {
-      left: Math.min(maxLeft, Math.max(12, pt.x + 14)),
-      top: Math.min(maxTop, Math.max(70, pt.y - 24)),
+      left: Math.min(window.innerWidth - popupW - 12, Math.max(rect.left + 12, rect.left + pt.x + 14)),
+      top:  Math.min(window.innerHeight - popupH - 12, Math.max(rect.top + 12, rect.top + pt.y - 24)),
     };
   }, [selectedFeature, mapSize, featureEditorTick]);
 
