@@ -60,6 +60,7 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
   const overlayGroupRef = useRef(null);
   const regionHighlightGroupRef = useRef(null);
   const referenceRefs = useRef({});
+  const svgRendererRefs = useRef([]);
 
   useEffect(() => {
     onMapClickRef.current = onMapClick;
@@ -85,6 +86,9 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
     map.keyboard.enable();
 
     map.on('click', (event) => onMapClickRef.current?.(event.latlng));
+
+    // Dedicated pane for drillhole points — sits above polygon fills so they always receive clicks
+    map.createPane('drillholePane').style.zIndex = 620;
 
     overlayGroupRef.current = L.layerGroup().addTo(map);
     regionHighlightGroupRef.current = L.layerGroup().addTo(map);
@@ -181,6 +185,9 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
     if (!map || !group) return;
 
     group.clearLayers();
+    // Remove stale SVG renderers from previous render to prevent pattern ID conflicts
+    svgRendererRefs.current.forEach((r) => { try { r.remove(); } catch (_) {} });
+    svgRendererRefs.current = [];
 
     (project?.layers || []).forEach((layer) => {
       if (layer.visible === false || !layer.geojson) return;
@@ -193,8 +200,10 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
       const lo = style.layerOpacity ?? 1;
       const hasPattern = style.fillPattern && style.fillPattern !== 'none' && geomType !== 'line';
       const svgRenderer = hasPattern ? L.svg({ padding: 0.1 }) : undefined;
+      if (svgRenderer) svgRendererRefs.current.push(svgRenderer);
+
       const geoLayer = L.geoJSON(layer.geojson, {
-        pane: 'overlayPane',
+        pane: isDrillholes ? 'drillholePane' : 'overlayPane',
         renderer: svgRenderer,
         style: () => ({
           color: style.stroke || '#54a6ff',
@@ -214,24 +223,18 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
             opacity: lo,
           });
 
-          if (isDrillholes) {
-            marker.on('click', (e) => {
-              if (annotationToolRef?.current) return;
-              L.DomEvent.stopPropagation(e);
-              onFeatureClick?.({ layerId: layer.id, feature, latlng });
-            });
-            marker.bindTooltip('Click to edit callout', { direction: 'top', offset: [0, -10], opacity: 0.9, sticky: true });
-          } else {
-            marker.on('click', (e) => {
-              if (annotationToolRef?.current) return;
-              L.DomEvent.stopPropagation(e);
-              onFeatureClick?.({ layerId: layer.id, feature: null, latlng: null, isLayerSelect: true });
-            });
-          }
+          // All point markers open the callout editor — role determines pre-fill style,
+          // but any point on the map should be clickable regardless of selected layer
+          marker.on('click', (e) => {
+            if (annotationToolRef?.current) return;
+            L.DomEvent.stopPropagation(e);
+            onFeatureClick?.({ layerId: layer.id, feature, latlng });
+          });
+          marker.bindTooltip('Click to add callout', { direction: 'top', offset: [0, -10], opacity: 0.9, sticky: true });
 
           return marker;
         },
-        onEachFeature: isDrillholes ? undefined : (feature, featureLayer) => {
+        onEachFeature: geomType === 'point' ? undefined : (feature, featureLayer) => {
           featureLayer.on('click', (e) => {
             if (annotationToolRef?.current) return;
             L.DomEvent.stopPropagation(e);
@@ -246,7 +249,8 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
         const fillColor = style.fill || '#54a6ff';
         const fillOpacity = style.fillOpacity ?? 0.6;
         const spacing = style.fillPatternSpacing || 6;
-        const patternId = `lf-pat-${layer.id}`;
+        // Include pattern type in ID so switching patterns doesn't reuse stale definitions
+        const patternId = `lf-pat-${layer.id}-${style.fillPattern}`;
         const svgEl = svgRenderer._container;
         if (svgEl) {
           let defs = svgEl.querySelector('defs');
