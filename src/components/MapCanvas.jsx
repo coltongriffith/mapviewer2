@@ -226,11 +226,10 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
             opacity: lo,
           });
 
-          // All point markers open the callout editor — role determines pre-fill style,
-          // but any point on the map should be clickable regardless of selected layer
+          // Point markers always open the callout popup — clear any active annotation tool first
           marker.on('click', (e) => {
-            if (annotationToolRef?.current) return;
             L.DomEvent.stopPropagation(e);
+            if (annotationToolRef) annotationToolRef.current = null;
             onFeatureClick?.({ layerId: layer.id, feature, latlng });
           });
           marker.bindTooltip('Click to add callout', { direction: 'top', offset: [0, -10], opacity: 0.9, sticky: true });

@@ -984,6 +984,7 @@ export default function App() {
     const layer = project.layers.find((item) => item.id === layerId) || null;
     if (!layer) return;
     setAnnotationTool(null);
+    annotationToolRef.current = null;
     setSelectedMarkerId(null);
     setSelectedEllipseId(null);
     if (isLayerSelect) {
