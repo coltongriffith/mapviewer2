@@ -225,16 +225,24 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
             opacity: lo,
           });
 
-          marker.on('click', (e) => {
-            if (annotationToolRef?.current) return;
-            L.DomEvent.stopPropagation(e);
-            onFeatureClick?.({ layerId: layer.id, feature, latlng });
-          });
-          marker.bindTooltip('Click to edit callout', { direction: 'top', offset: [0, -10], opacity: 0.9, sticky: true });
+          if (isDrillholes) {
+            marker.on('click', (e) => {
+              if (annotationToolRef?.current) return;
+              L.DomEvent.stopPropagation(e);
+              onFeatureClick?.({ layerId: layer.id, feature, latlng });
+            });
+            marker.bindTooltip('Click to edit callout', { direction: 'top', offset: [0, -10], opacity: 0.9, sticky: true });
+          } else {
+            marker.on('click', (e) => {
+              if (annotationToolRef?.current) return;
+              L.DomEvent.stopPropagation(e);
+              onFeatureClick?.({ layerId: layer.id, feature: null, latlng: null, isLayerSelect: true });
+            });
+          }
 
           return marker;
         },
-        onEachFeature: geomType === 'point' ? undefined : (feature, featureLayer) => {
+        onEachFeature: isDrillholes ? undefined : (feature, featureLayer) => {
           featureLayer.on('click', (e) => {
             if (annotationToolRef?.current) return;
             L.DomEvent.stopPropagation(e);
