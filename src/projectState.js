@@ -36,6 +36,7 @@ export const CALLOUT_TYPES = {
   plain: 'Plain Label',
   leader: 'Leader Label',
   boxed: 'Boxed Annotation',
+  badge: 'Badge Label',
 };
 
 
@@ -84,6 +85,7 @@ export function createInitialProjectState() {
       footerEnabled: true,
       showNorthArrow: true,
       showScaleBar: true,
+      regionHighlights: [],
       legendTitle: 'Legend',
       mapDate: '',
       projectNumber: '',

@@ -4,6 +4,7 @@ import { resolveTemplateZones } from '../templates/technicalResultsTemplate';
 import { getThemeTokens } from '../utils/themeTokens';
 import { MARKER_ICON_PATHS, markerIconSvgFragment, drawMarkerIconCanvas } from '../utils/markerIcons.jsx';
 import { safeColor } from '../utils/colorUtils.js';
+import regionsNA from '../assets/regionsNA.json';
 
 let _exportWarnings = [];
 export function getExportWarnings() { return _exportWarnings; }
@@ -92,7 +93,40 @@ function setCanvasStroke(ctx, style, scale) {
   ctx.lineWidth = (style.strokeWidth ?? 2) * (scale >= 1 ? 1 : scale);
   ctx.setLineDash(style.dashArray ? style.dashArray.split(/[ ,]+/).map(Number).filter((n) => Number.isFinite(n) && n > 0) : []);
 }
-function setCanvasFill(ctx, style) { ctx.fillStyle = rgba(style.fill || style.markerFill || style.markerColor || '#111111', style.fillOpacity ?? 0.2); }
+function buildPatternCanvas(style, scale) {
+  const spacing = (style.fillPatternSpacing || 6) * scale;
+  const color = rgba(style.fill || '#54a6ff', style.fillOpacity ?? 0.6);
+  const pc = document.createElement('canvas');
+  if (style.fillPattern === 'hatch') {
+    pc.width = pc.height = spacing * 2;
+    const px = pc.getContext('2d');
+    px.strokeStyle = color; px.lineWidth = Math.max(1, 1.5 * scale);
+    px.beginPath(); px.moveTo(0, spacing * 2); px.lineTo(spacing * 2, 0); px.stroke();
+    px.beginPath(); px.moveTo(-spacing, spacing); px.lineTo(spacing, -spacing); px.stroke();
+    px.beginPath(); px.moveTo(spacing, spacing * 3); px.lineTo(spacing * 3, spacing); px.stroke();
+  } else if (style.fillPattern === 'cross') {
+    pc.width = pc.height = spacing * 2;
+    const px = pc.getContext('2d');
+    px.strokeStyle = color; px.lineWidth = Math.max(1, 1.5 * scale);
+    px.beginPath(); px.moveTo(0, spacing); px.lineTo(spacing * 2, spacing); px.stroke();
+    px.beginPath(); px.moveTo(spacing, 0); px.lineTo(spacing, spacing * 2); px.stroke();
+  } else if (style.fillPattern === 'dots') {
+    pc.width = pc.height = spacing * 2;
+    const px = pc.getContext('2d');
+    px.fillStyle = color;
+    px.beginPath(); px.arc(spacing, spacing, Math.max(1.5, 2 * scale), 0, Math.PI * 2); px.fill();
+  }
+  return pc;
+}
+function setCanvasFill(ctx, style) {
+  if (style.fillPattern && style.fillPattern !== 'none') {
+    const patternCanvas = buildPatternCanvas(style, 1);
+    const pattern = ctx.createPattern(patternCanvas, 'repeat');
+    ctx.fillStyle = pattern || rgba(style.fill || '#111111', style.fillOpacity ?? 0.2);
+  } else {
+    ctx.fillStyle = rgba(style.fill || style.markerFill || style.markerColor || '#111111', style.fillOpacity ?? 0.2);
+  }
+}
 function drawCanvasGeometry(ctx, map, feature, style, scale) {
   const type = getLayerGeometryType(feature); const coords = feature?.geometry?.coordinates; if (!coords) return;
   const baseOpacity = Math.max(0, Math.min(1, style.opacity ?? 1));
@@ -106,6 +140,22 @@ function drawCanvasGeometry(ctx, map, feature, style, scale) {
   if (type === 'MultiPoint') { coords.forEach((coord) => drawCanvasGeometry(ctx, map, { geometry: { type: 'Point', coordinates: coord } }, style, scale)); ctx.restore(); return; }
   ctx.restore();
 }
+function buildSvgPatternDef(style, patternId, scale) {
+  const color = safeColor(style.fill, '#54a6ff');
+  const opacity = style.fillOpacity ?? 0.6;
+  const spacing = (style.fillPatternSpacing || 6) * scale;
+  if (style.fillPattern === 'hatch') {
+    return `<pattern id="${patternId}" patternUnits="userSpaceOnUse" width="${spacing * 2}" height="${spacing * 2}"><line x1="0" y1="${spacing * 2}" x2="${spacing * 2}" y2="0" stroke="${color}" stroke-width="${Math.max(1, 1.5 * scale)}" stroke-opacity="${opacity}" /><line x1="${-spacing}" y1="${spacing}" x2="${spacing}" y2="${-spacing}" stroke="${color}" stroke-width="${Math.max(1, 1.5 * scale)}" stroke-opacity="${opacity}" /><line x1="${spacing}" y1="${spacing * 3}" x2="${spacing * 3}" y2="${spacing}" stroke="${color}" stroke-width="${Math.max(1, 1.5 * scale)}" stroke-opacity="${opacity}" /></pattern>`;
+  }
+  if (style.fillPattern === 'cross') {
+    return `<pattern id="${patternId}" patternUnits="userSpaceOnUse" width="${spacing * 2}" height="${spacing * 2}"><line x1="0" y1="${spacing}" x2="${spacing * 2}" y2="${spacing}" stroke="${color}" stroke-width="${Math.max(1, 1.5 * scale)}" stroke-opacity="${opacity}" /><line x1="${spacing}" y1="0" x2="${spacing}" y2="${spacing * 2}" stroke="${color}" stroke-width="${Math.max(1, 1.5 * scale)}" stroke-opacity="${opacity}" /></pattern>`;
+  }
+  if (style.fillPattern === 'dots') {
+    const r = Math.max(1.5, 2 * scale);
+    return `<pattern id="${patternId}" patternUnits="userSpaceOnUse" width="${spacing * 2}" height="${spacing * 2}"><circle cx="${spacing}" cy="${spacing}" r="${r}" fill="${color}" fill-opacity="${opacity}" /></pattern>`;
+  }
+  return '';
+}
 function geometryToSvg(map, feature, style, scale) {
   const type = getLayerGeometryType(feature); const coords = feature?.geometry?.coordinates; if (!coords) return '';
   const stroke = safeColor(style.stroke || style.markerColor, '#111111');
@@ -114,8 +164,17 @@ function geometryToSvg(map, feature, style, scale) {
   const strokeWidth = (style.strokeWidth ?? 2) * scale;
   const opacity = Math.max(0, Math.min(1, style.opacity ?? 1));
   const dash = style.dashArray ? ` stroke-dasharray="${escapeXml(style.dashArray)}"` : '';
-  if (type === 'Polygon') return `<path d="${coords.map((ring) => pathFromPoints(projectRing(map, ring, scale), true)).filter(Boolean).join(' ')}" fill="${fill}" fill-opacity="${fillOpacity}" stroke="${stroke}" stroke-width="${strokeWidth}"${dash} fill-rule="evenodd" stroke-opacity="${opacity}" />`;
-  if (type === 'MultiPolygon') return `<path d="${coords.flatMap((polygon) => polygon.map((ring) => pathFromPoints(projectRing(map, ring, scale), true))).filter(Boolean).join(' ')}" fill="${fill}" fill-opacity="${fillOpacity}" stroke="${stroke}" stroke-width="${strokeWidth}"${dash} fill-rule="evenodd" stroke-opacity="${opacity}" />`;
+
+  let fillAttr = `fill="${fill}" fill-opacity="${fillOpacity}"`;
+  let patternDef = '';
+  if (style.fillPattern && style.fillPattern !== 'none' && (type === 'Polygon' || type === 'MultiPolygon')) {
+    const pid = `pat-${style.fillPattern}-${Math.round((style.fillPatternSpacing || 6) * scale)}-${fill.replace('#', '')}`;
+    patternDef = `<defs>${buildSvgPatternDef(style, pid, scale)}</defs>`;
+    fillAttr = `fill="url(#${pid})"`;
+  }
+
+  if (type === 'Polygon') return `${patternDef}<path d="${coords.map((ring) => pathFromPoints(projectRing(map, ring, scale), true)).filter(Boolean).join(' ')}" ${fillAttr} stroke="${stroke}" stroke-width="${strokeWidth}"${dash} fill-rule="evenodd" stroke-opacity="${opacity}" />`;
+  if (type === 'MultiPolygon') return `${patternDef}<path d="${coords.flatMap((polygon) => polygon.map((ring) => pathFromPoints(projectRing(map, ring, scale), true))).filter(Boolean).join(' ')}" ${fillAttr} stroke="${stroke}" stroke-width="${strokeWidth}"${dash} fill-rule="evenodd" stroke-opacity="${opacity}" />`;
   if (type === 'LineString') return `<path d="${pathFromPoints(projectLine(map, coords, scale), false)}" fill="none" stroke="${stroke}" stroke-width="${strokeWidth}"${dash} stroke-linecap="round" stroke-linejoin="round" stroke-opacity="${opacity}" />`;
   if (type === 'MultiLineString') return `<path d="${coords.map((line) => pathFromPoints(projectLine(map, line, scale), false)).filter(Boolean).join(' ')}" fill="none" stroke="${stroke}" stroke-width="${strokeWidth}"${dash} stroke-linecap="round" stroke-linejoin="round" stroke-opacity="${opacity}" />`;
   if (type === 'Point') { const pt = projectCoordinate(map, coords, scale); const radius = (style.markerSize ?? 8) * scale * 0.5; return `<circle cx="${pt.x.toFixed(2)}" cy="${pt.y.toFixed(2)}" r="${radius.toFixed(2)}" fill="${safeColor(style.markerFill || fill)}" stroke="${safeColor(style.markerColor || stroke)}" stroke-width="${Math.max(scale, strokeWidth * 0.4).toFixed(2)}" opacity="${opacity}" />`; }
@@ -440,9 +499,17 @@ function placeCallouts(scene, scale) {
   callouts.forEach((callout) => {
     if (!callout.anchor) return;
     const pt = scene.map.latLngToContainerPoint([callout.anchor.lat, callout.anchor.lng]);
-    const width = callout.boxWidth || (callout.type === 'boxed' ? 188 : callout.type === 'leader' ? 146 : 136);
-    const hasSubtext = !!callout.subtext;
-    const height = callout.type === 'boxed' ? (hasSubtext ? 62 : 42) : (hasSubtext ? 38 : 24);
+    let width, height;
+    if (callout.type === 'badge') {
+      const chipChars = (callout.badgeValue || '').length;
+      const chipW = Math.max(44, chipChars * 8 + 20);
+      const labelW = Math.max(80, Math.min(callout.boxWidth || 160, 260));
+      width = chipW + labelW; height = 32;
+    } else {
+      width = callout.boxWidth || (callout.type === 'boxed' ? 188 : callout.type === 'leader' ? 146 : 136);
+      const hasSubtext = !!callout.subtext;
+      height = callout.type === 'boxed' ? (hasSubtext ? 62 : 42) : (hasSubtext ? 38 : 24);
+    }
     let left = pt.x + (callout.offset?.x || 0); let top = pt.y + (callout.offset?.y || 0); let candidate = { ...callout, left, top, width, height, anchorPx: { x: pt.x, y: pt.y } }; let attempts = 0;
     if (callout.isManualPosition) { placed.push({ ...candidate, left: left * scale, top: top * scale, width: width * scale, height: height * scale, anchorPx: { x: pt.x * scale, y: pt.y * scale } }); return; }
     while (placed.some((other) => intersectsCallout(candidate, other, 10)) && attempts < 8) { top += 18; left += attempts % 2 === 0 ? 8 : -6; candidate = { ...candidate, left, top }; attempts += 1; }
@@ -461,13 +528,41 @@ function drawCalloutsCanvas(ctx, scene, scale) {
   const calloutFont = `${scene.project.layout?.fonts?.callout || 'Inter'}, Arial, sans-serif`;
   placeCallouts(scene, scale).forEach((c) => {
     const theme = getTheme(scene);
+    const radius = Math.max(0, (theme.panelRadius ?? 10) - 4) * scale;
+
+    if (c.type === 'badge') {
+      // Leader line from anchor to box left edge
+      ctx.beginPath(); ctx.moveTo(c.anchorPx.x, c.anchorPx.y); ctx.lineTo(c.left + 10 * scale, c.top + c.height / 2);
+      ctx.strokeStyle = c.style?.border || '#102640'; ctx.lineWidth = 1.4 * scale; ctx.setLineDash([]); ctx.stroke();
+      const chipChars = (c.badgeValue || '').length;
+      const chipW = Math.max(44 * scale, chipChars * 8 * scale + 20 * scale);
+      const labelW = c.width - chipW;
+      // Left chip
+      drawRoundedRect(ctx, c.left, c.top, chipW, c.height, radius);
+      ctx.fillStyle = c.badgeColor || '#d97706'; ctx.fill();
+      // Right label
+      drawRoundedRect(ctx, c.left + chipW, c.top, labelW, c.height, radius);
+      ctx.fillStyle = c.style?.background || '#ffffff'; ctx.fill();
+      // Anchor dot
+      ctx.beginPath(); ctx.arc(c.anchorPx.x, c.anchorPx.y, 4 * scale, 0, Math.PI * 2);
+      ctx.fillStyle = c.style?.border || '#102640'; ctx.fill();
+      // Chip text
+      ctx.textBaseline = 'middle'; ctx.font = `700 ${12 * scale}px ${calloutFont}`;
+      ctx.fillStyle = '#ffffff'; ctx.textAlign = 'center';
+      ctx.fillText(fitText(ctx, c.badgeValue || '—', chipW - 8 * scale), c.left + chipW / 2, c.top + c.height / 2);
+      // Label text
+      ctx.fillStyle = c.style?.textColor || '#0f172a'; ctx.textAlign = 'left';
+      ctx.fillText(fitText(ctx, c.text || '', labelW - 16 * scale), c.left + chipW + 8 * scale, c.top + c.height / 2);
+      return;
+    }
+
     if (c.type === 'leader' || c.type === 'boxed') { ctx.beginPath(); ctx.moveTo(c.anchorPx.x, c.anchorPx.y); ctx.lineTo(c.left + 10 * scale, c.top + c.height / 2); ctx.strokeStyle = c.style?.border || '#102640'; ctx.lineWidth = 1.4 * scale; ctx.setLineDash(c.type === 'leader' ? [5 * scale, 3 * scale] : []); ctx.stroke(); }
     ctx.setLineDash([]);
-    if (c.type !== 'plain') { drawRoundedRect(ctx, c.left, c.top, c.width, c.height, Math.max(0, (theme.panelRadius ?? 10) - 4) * scale); ctx.fillStyle = c.style?.background || theme.calloutFill; ctx.fill(); ctx.strokeStyle = c.style?.border || theme.calloutBorder; ctx.lineWidth = 1 * scale; ctx.stroke(); }
+    if (c.type !== 'plain') { drawRoundedRect(ctx, c.left, c.top, c.width, c.height, radius); ctx.fillStyle = c.style?.background || theme.calloutFill; ctx.fill(); ctx.strokeStyle = c.style?.border || theme.calloutBorder; ctx.lineWidth = 1 * scale; ctx.stroke(); }
     const textX = c.left + (c.type === 'plain' ? 0 : 10 * scale);
     const textY = c.top + (c.type === 'plain' ? 10 * scale : c.subtext ? c.height / 2 - 9 * scale : c.height / 2);
     const maxTextW = c.width - (c.type === 'plain' ? 0 : 20 * scale);
-    ctx.fillStyle = c.style?.textColor || theme.calloutText; ctx.font = `700 ${12 * scale}px ${calloutFont}`; ctx.textBaseline = 'middle'; ctx.fillText(fitText(ctx, c.text || '', maxTextW), textX, textY);
+    ctx.fillStyle = c.style?.textColor || theme.calloutText; ctx.font = `700 ${12 * scale}px ${calloutFont}`; ctx.textBaseline = 'middle'; ctx.textAlign = 'left'; ctx.fillText(fitText(ctx, c.text || '', maxTextW), textX, textY);
     if (c.subtext) {
       ctx.fillStyle = c.style?.subtextColor || '#475569';
       ctx.font = `${10 * scale}px ${calloutFont}`;
@@ -514,6 +609,25 @@ async function drawMarkersCanvas(ctx, scene, scale) {
     const point = clonePoint(scene.map.latLngToContainerPoint([marker.lat, marker.lng]), scale);
     const size = (marker.size || 18) * scale;
     const color = marker.color || '#d97706';
+
+    if (marker.type === 'maplabel') {
+      const labelFont = scene.project.layout?.fonts?.label || 'Inter';
+      ctx.save();
+      ctx.globalAlpha = marker.opacity ?? 0.35;
+      ctx.font = `${marker.bold !== false ? '700' : '400'} ${(marker.size || 28) * scale}px ${labelFont}, Arial, sans-serif`;
+      ctx.fillStyle = marker.color || '#1e293b';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      if (marker.rotation) {
+        ctx.translate(point.x, point.y);
+        ctx.rotate((marker.rotation * Math.PI) / 180);
+        ctx.fillText((marker.label || '').toUpperCase(), 0, 0);
+      } else {
+        ctx.fillText((marker.label || '').toUpperCase(), point.x, point.y);
+      }
+      ctx.restore();
+      continue;
+    }
 
     if (markerIsVectorIcon(marker.type)) {
       // Render via SVG-to-image for crisp, consistent icon export
@@ -564,42 +678,74 @@ function ellipseLabelPlacement(center, width, height, rotationDeg, scale) {
 
 function drawEllipseLabelCanvas(ctx, scene, ellipse, center, width, height, rotationDeg, scale) {
   if (!ellipse.label) return;
+  const labelFont = scene.project.layout?.fonts?.label || 'Inter';
+  const labelFontSize = (ellipse.labelFontSize || 11) * scale;
+  const labelColor = ellipse.labelColor || ellipse.color || '#dc2626';
+  const fontWeight = ellipse.labelBold !== false ? '700' : '400';
+
+  if (ellipse.labelArc) {
+    const r = width / 2;
+    const angle = ((ellipse.labelAngle ?? 0) / 360) * Math.PI * 2 - Math.PI / 2;
+    const textR = r + labelFontSize * 0.6 + 4 * scale;
+    const tx = center.x + textR * Math.cos(angle);
+    const ty = center.y + textR * Math.sin(angle);
+    ctx.save();
+    ctx.translate(tx, ty);
+    ctx.rotate(angle + Math.PI / 2);
+    ctx.fillStyle = labelColor;
+    ctx.font = `${fontWeight} ${labelFontSize}px ${labelFont}, Arial, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(ellipse.label, 0, 0);
+    ctx.restore();
+    return;
+  }
+
   const pos = ellipseLabelPlacement(center, width, height, rotationDeg, scale);
+  const finalX = pos.labelX + (ellipse.labelOffsetX || 0) * scale;
+  const finalY = pos.labelY + (ellipse.labelOffsetY || 0) * scale;
   ctx.save();
-  ctx.strokeStyle = ellipse.color || '#dc2626';
+  ctx.strokeStyle = labelColor;
   ctx.lineWidth = Math.max(1, 1.4 * scale);
   ctx.setLineDash([5 * scale, 3 * scale]);
   ctx.beginPath();
   ctx.moveTo(pos.anchorX, pos.anchorY);
-  ctx.lineTo(pos.labelX, pos.labelY + 10 * scale);
+  ctx.lineTo(finalX, finalY + 10 * scale);
   ctx.stroke();
   ctx.setLineDash([]);
-  ctx.font = annotationLabelFont(scene, scale);
+  ctx.font = `${fontWeight} ${labelFontSize}px ${labelFont}, Arial, sans-serif`;
   ctx.textBaseline = 'middle';
   const textWidth = ctx.measureText(ellipse.label).width;
   const labelWidth = textWidth + 16 * scale;
   const labelHeight = 20 * scale;
-  drawRoundedRect(ctx, pos.labelX, pos.labelY, labelWidth, labelHeight, 10 * scale);
+  drawRoundedRect(ctx, finalX, finalY, labelWidth, labelHeight, 10 * scale);
   ctx.fillStyle = 'rgba(255,255,255,0.95)';
   ctx.fill();
   ctx.strokeStyle = 'rgba(15,23,42,0.12)';
   ctx.lineWidth = Math.max(1, scale * 0.8);
   ctx.stroke();
-  ctx.fillStyle = '#0f172a';
-  ctx.fillText(ellipse.label, pos.labelX + 8 * scale, pos.labelY + labelHeight / 2);
+  ctx.fillStyle = labelColor;
+  ctx.fillText(ellipse.label, finalX + 8 * scale, finalY + labelHeight / 2);
   ctx.restore();
+}
+
+function resolveEllipseDimensions(ellipse, map, scale) {
+  const center = clonePoint(map.latLngToContainerPoint([ellipse.lat, ellipse.lng]), scale);
+  if (ellipse.isRing && ellipse.radiusKm) {
+    const northPt = clonePoint(map.latLngToContainerPoint([ellipse.lat + ellipse.radiusKm / 111.32, ellipse.lng]), scale);
+    const pixelR = Math.max(4 * scale, Math.abs(center.y - northPt.y));
+    return { center, width: pixelR * 2, height: pixelR * 2, rotation: 0 };
+  }
+  return { center, width: (ellipse.width || 90) * scale, height: (ellipse.height || 56) * scale, rotation: ellipse.rotation || 0 };
 }
 
 function drawEllipsesCanvas(ctx, scene, scale) {
   (scene.project.ellipses || []).forEach((ellipse) => {
-    const center = clonePoint(scene.map.latLngToContainerPoint([ellipse.lat, ellipse.lng]), scale);
-    const width = (ellipse.width || 90) * scale;
-    const height = (ellipse.height || 56) * scale;
-    const rotation = ((ellipse.rotation || 0) * Math.PI) / 180;
-
+    const { center, width, height, rotation } = resolveEllipseDimensions(ellipse, scene.map, scale);
+    const rotRad = (rotation * Math.PI) / 180;
     ctx.save();
     ctx.translate(center.x, center.y);
-    ctx.rotate(rotation);
+    ctx.rotate(rotRad);
     ctx.beginPath();
     ctx.ellipse(0, 0, width / 2, height / 2, 0, 0, Math.PI * 2);
     ctx.strokeStyle = ellipse.color || '#dc2626';
@@ -607,7 +753,8 @@ function drawEllipsesCanvas(ctx, scene, scale) {
     ctx.setLineDash(ellipse.dashed === false ? [] : [6 * scale, 4 * scale]);
     ctx.stroke();
     ctx.restore();
-    drawEllipseLabelCanvas(ctx, scene, ellipse, center, width, height, ellipse.rotation || 0, scale);
+    const label = ellipse.isRing && !ellipse.label ? `${ellipse.radiusKm} km` : ellipse.label;
+    drawEllipseLabelCanvas(ctx, scene, { ...ellipse, label }, center, width, height, rotation, scale);
   });
 }
 
@@ -616,7 +763,7 @@ export async function renderSceneToCanvas(scene, options = {}) {
   const scale = Number(options.pixelRatio || scene.project.layout?.exportSettings?.pixelRatio || 2);
   const canvas = document.createElement('canvas'); canvas.width = Math.round(scene.width * scale); canvas.height = Math.round(scene.height * scale); const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-  await drawTilesCanvas(ctx, scene, scale); drawVectorsCanvas(ctx, scene, scale); drawEllipsesCanvas(ctx, scene, scale); await drawMarkersCanvas(ctx, scene, scale); drawCalloutsCanvas(ctx, scene, scale); drawTitleBlockCanvas(ctx, scene, scale); drawLegendCanvas(ctx, scene, scale); drawNorthArrowCanvas(ctx, scene, scale); await drawInsetCanvas(ctx, scene, scale); drawScaleBarCanvas(ctx, scene, scale); drawFooterCanvas(ctx, scene, scale); await drawLogoCanvas(ctx, scene, scale);
+  await drawTilesCanvas(ctx, scene, scale); drawRegionHighlightsCanvas(ctx, scene, scale); drawVectorsCanvas(ctx, scene, scale); drawEllipsesCanvas(ctx, scene, scale); await drawMarkersCanvas(ctx, scene, scale); drawCalloutsCanvas(ctx, scene, scale); drawTitleBlockCanvas(ctx, scene, scale); drawLegendCanvas(ctx, scene, scale); drawNorthArrowCanvas(ctx, scene, scale); await drawInsetCanvas(ctx, scene, scale); drawScaleBarCanvas(ctx, scene, scale); drawFooterCanvas(ctx, scene, scale); await drawLogoCanvas(ctx, scene, scale);
   if (!options.noWatermark) { ctx.save(); ctx.font = `bold ${9 * scale}px Arial, sans-serif`; ctx.fillStyle = 'rgba(100,116,139,0.72)'; ctx.textAlign = 'right'; ctx.textBaseline = 'bottom'; ctx.shadowColor = 'rgba(255,255,255,0.6)'; ctx.shadowBlur = 3 * scale; ctx.fillText('explorationmaps.com', canvas.width - 8 * scale, canvas.height - 5 * scale); ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.restore(); }
   return canvas;
 }
@@ -629,7 +776,38 @@ async function drawTilesCanvas(ctx, scene, scale) {
     ctx.save(); ctx.globalAlpha = tile.opacity; ctx.drawImage(img, tile.x * scale, tile.y * scale, tile.width * scale, tile.height * scale); ctx.restore();
   }
 }
-function drawVectorsCanvas(ctx, scene, scale) { (scene.project.layers || []).filter((layer) => layer.visible !== false && layer.geojson).forEach((layer) => featureCollectionFeatures(layer.geojson).forEach((feature) => drawCanvasGeometry(ctx, scene.map, feature, getTemplateStyle(scene.template, layer), scale))); }
+function drawRegionHighlightsCanvas(ctx, scene, scale) {
+  const highlights = scene.project.layout?.regionHighlights || [];
+  if (!highlights.length) return;
+  highlights.forEach(({ regionId, color, opacity }) => {
+    const region = regionsNA.find((r) => r.id === regionId);
+    if (!region) return;
+    const rings = region.coordinates;
+    ctx.save();
+    ctx.globalAlpha = opacity ?? 0.45;
+    ctx.fillStyle = color || '#ef4444';
+    ctx.beginPath();
+    rings.forEach((ring) => {
+      ring.forEach(([lng, lat], i) => {
+        const pt = scene.map.latLngToContainerPoint([lat, lng]);
+        if (i === 0) ctx.moveTo(pt.x * scale, pt.y * scale);
+        else ctx.lineTo(pt.x * scale, pt.y * scale);
+      });
+      ctx.closePath();
+    });
+    ctx.fill();
+    ctx.restore();
+  });
+}
+
+function drawVectorsCanvas(ctx, scene, scale) {
+  (scene.project.layers || []).filter((layer) => layer.visible !== false && layer.geojson).forEach((layer) => {
+    const lo = layer.style?.layerOpacity ?? 1;
+    ctx.save(); ctx.globalAlpha = lo;
+    featureCollectionFeatures(layer.geojson).forEach((feature) => drawCanvasGeometry(ctx, scene.map, feature, getTemplateStyle(scene.template, layer), scale));
+    ctx.restore();
+  });
+}
 async function drawLogoCanvas(ctx, scene, scale) {
   const logo = scene.project.layout?.logo; if (!logo) return;
   const zone = getOverlayMetrics(scene).logo; const x = zone.left * scale, y = zone.top * scale, w = zone.width * scale, h = zone.height * scale, padding = 10 * scale;
@@ -687,7 +865,30 @@ async function renderBasemapImageSvg(scene, scale) {
     return '';
   }
 }
-function renderVectorsSvg(scene, scale) { return (scene.project.layers || []).filter((layer) => layer.visible !== false && layer.geojson).map((layer) => featureCollectionFeatures(layer.geojson).map((feature) => geometryToSvg(scene.map, feature, getTemplateStyle(scene.template, layer), scale)).join('\n')).join('\n'); }
+function renderRegionHighlightsSvg(scene, scale) {
+  const highlights = scene.project.layout?.regionHighlights || [];
+  if (!highlights.length) return '';
+  return highlights.map(({ regionId, color, opacity }) => {
+    const region = regionsNA.find((r) => r.id === regionId);
+    if (!region) return '';
+    const pathData = region.coordinates.map((ring) => {
+      const pts = ring.map(([lng, lat]) => {
+        const pt = scene.map.latLngToContainerPoint([lat, lng]);
+        return `${pt.x * scale},${pt.y * scale}`;
+      });
+      return `M${pts.join(' L')}Z`;
+    }).join(' ');
+    return `<path d="${pathData}" fill="${escapeXml(color || '#ef4444')}" fill-opacity="${opacity ?? 0.45}" stroke="none" />`;
+  }).join('\n');
+}
+
+function renderVectorsSvg(scene, scale) {
+  return (scene.project.layers || []).filter((layer) => layer.visible !== false && layer.geojson).map((layer) => {
+    const lo = layer.style?.layerOpacity ?? 1;
+    const paths = featureCollectionFeatures(layer.geojson).map((feature) => geometryToSvg(scene.map, feature, getTemplateStyle(scene.template, layer), scale)).join('\n');
+    return lo < 1 ? `<g opacity="${lo}">${paths}</g>` : paths;
+  }).join('\n');
+}
 function renderMarkerLabelSvg(scene, marker, point, scale) {
   if (!marker.label) return '';
   const labelX = point.x + (marker.size || 18) * scale * 0.5 + 8 * scale;
@@ -701,6 +902,13 @@ function renderMarkersSvg(scene, scale) {
     const point = clonePoint(scene.map.latLngToContainerPoint([marker.lat, marker.lng]), scale);
     const size = (marker.size || 18) * scale;
     const color = safeColor(marker.color, '#d97706');
+
+    if (marker.type === 'maplabel') {
+      const labelFont = escapeXml(scene.project.layout?.fonts?.label || 'Inter');
+      const rotate = marker.rotation ? ` transform="rotate(${marker.rotation}, ${point.x}, ${point.y})"` : '';
+      return `<text x="${point.x}" y="${point.y}" text-anchor="middle" dominant-baseline="middle" fill="${safeColor(marker.color, '#1e293b')}" fill-opacity="${marker.opacity ?? 0.35}" font-size="${(marker.size || 28) * scale}" font-weight="${marker.bold !== false ? '700' : '400'}" font-family="${labelFont}, Arial, sans-serif" letter-spacing="${(marker.tracking ?? 0.12)}em"${rotate}>${escapeXml((marker.label || '').toUpperCase())}</text>`;
+    }
+
     let symbol = '';
     if (markerIsVectorIcon(marker.type)) {
       // Use the shared SVG path data — same source as the editor, guaranteed consistent
@@ -719,18 +927,34 @@ function renderMarkersSvg(scene, scale) {
   }).join('\n');
 }
 function renderEllipsesSvg(scene, scale) {
+  const labelFontFamily = escapeXml(scene.project.layout?.fonts?.label || 'Inter');
   return (scene.project.ellipses || []).map((ellipse) => {
-    const center = clonePoint(scene.map.latLngToContainerPoint([ellipse.lat, ellipse.lng]), scale);
-    const width = (ellipse.width || 90) * scale;
-    const height = (ellipse.height || 56) * scale;
-    const rotation = ellipse.rotation || 0;
+    const { center, width, height, rotation } = resolveEllipseDimensions(ellipse, scene.map, scale);
+    const effectiveLabel = ellipse.isRing && !ellipse.label ? `${ellipse.radiusKm} km` : ellipse.label;
     const dash = ellipse.dashed === false ? '' : ` stroke-dasharray="${6 * scale} ${4 * scale}"`;
     const color = safeColor(ellipse.color, '#dc2626');
-    const pos = ellipseLabelPlacement(center, width, height, rotation, scale);
-    const labelWidth = ellipse.label ? ellipse.label.length * 12 * scale * 0.62 + 16 * scale : 0;
-    const label = ellipse.label
-      ? `<g><line x1="${pos.anchorX}" y1="${pos.anchorY}" x2="${pos.labelX}" y2="${pos.labelY + 10 * scale}" stroke="${color}" stroke-width="${Math.max(1, 1.4 * scale)}" stroke-dasharray="${5 * scale} ${3 * scale}" /><rect x="${pos.labelX}" y="${pos.labelY}" width="${labelWidth}" height="${20 * scale}" rx="${10 * scale}" fill="rgba(255,255,255,0.95)" stroke="rgba(15,23,42,0.12)" stroke-width="${Math.max(1, scale * 0.8)}" /><text x="${pos.labelX + 8 * scale}" y="${pos.labelY + 10 * scale}" dominant-baseline="middle" fill="#0f172a" font-family="${escapeXml(scene.project.layout?.fonts?.label || 'Inter')}, Arial, sans-serif" font-size="${12 * scale}" font-weight="700">${escapeXml(ellipse.label)}</text></g>`
-      : '';
+    const labelColor = safeColor(ellipse.labelColor || ellipse.color, '#dc2626');
+    const labelFontSize = (ellipse.labelFontSize || 11) * scale;
+    const fontWeight = ellipse.labelBold !== false ? '700' : '400';
+
+    let label = '';
+    if (effectiveLabel) {
+      if (ellipse.labelArc) {
+        const r = width / 2;
+        const textR = r + labelFontSize * 0.6 + 4 * scale;
+        const cx = center.x, cy = center.y;
+        const arcPath = `M ${cx} ${cy - textR} A ${textR} ${textR} 0 0 1 ${cx} ${cy + textR} A ${textR} ${textR} 0 0 1 ${cx} ${cy - textR}`;
+        const offset = `${((ellipse.labelAngle ?? 0) / 360) * 100}%`;
+        const pid = `svg-arc-${ellipse.id.replace(/[^a-zA-Z0-9]/g, '')}`;
+        label = `<defs><path id="${pid}" d="${arcPath}" /></defs><text font-size="${labelFontSize}" font-weight="${fontWeight}" fill="${labelColor}" font-family="${labelFontFamily}, Arial, sans-serif"><textPath href="#${pid}" startOffset="${offset}" text-anchor="middle">${escapeXml(effectiveLabel)}</textPath></text>`;
+      } else {
+        const pos = ellipseLabelPlacement(center, width, height, rotation, scale);
+        const finalX = pos.labelX + (ellipse.labelOffsetX || 0) * scale;
+        const finalY = pos.labelY + (ellipse.labelOffsetY || 0) * scale;
+        const labelWidth = effectiveLabel.length * labelFontSize * 0.62 + 16 * scale;
+        label = `<g><line x1="${pos.anchorX}" y1="${pos.anchorY}" x2="${finalX}" y2="${finalY + 10 * scale}" stroke="${labelColor}" stroke-width="${Math.max(1, 1.4 * scale)}" stroke-dasharray="${5 * scale} ${3 * scale}" /><rect x="${finalX}" y="${finalY}" width="${labelWidth}" height="${20 * scale}" rx="${10 * scale}" fill="rgba(255,255,255,0.95)" stroke="rgba(15,23,42,0.12)" stroke-width="${Math.max(1, scale * 0.8)}" /><text x="${finalX + 8 * scale}" y="${finalY + 10 * scale}" dominant-baseline="middle" fill="${labelColor}" font-family="${labelFontFamily}, Arial, sans-serif" font-size="${labelFontSize}" font-weight="${fontWeight}">${escapeXml(effectiveLabel)}</text></g>`;
+      }
+    }
     return `<g><g transform="rotate(${rotation} ${center.x} ${center.y})"><ellipse cx="${center.x}" cy="${center.y}" rx="${width / 2}" ry="${height / 2}" fill="none" stroke="${color}" stroke-width="${2 * scale}"${dash} /></g>${label}</g>`;
   }).join('\n');
 }
@@ -811,6 +1035,21 @@ function renderCalloutsSvg(scene, scale) {
   const calloutFont = `${scene.project.layout?.fonts?.callout || 'Inter'}, Arial, sans-serif`;
   return placeCallouts(scene, scale).map((c) => {
     const leaderColor = c.style?.border || '#102640';
+    const dot = `<circle cx="${c.anchorPx.x}" cy="${c.anchorPx.y}" r="${4 * scale}" fill="${leaderColor}" />`;
+
+    if (c.type === 'badge') {
+      const chipChars = (c.badgeValue || '').length;
+      const chipW = Math.max(44 * scale, chipChars * 8 * scale + 20 * scale);
+      const labelW = c.width - chipW;
+      const midY = c.top + c.height / 2;
+      const line = `<line x1="${c.anchorPx.x}" y1="${c.anchorPx.y}" x2="${c.left + 10 * scale}" y2="${midY}" stroke="${leaderColor}" stroke-width="${1.4 * scale}" />`;
+      const chipRect = `<rect x="${c.left}" y="${c.top}" width="${chipW}" height="${c.height}" rx="${6 * scale}" fill="${c.badgeColor || '#d97706'}" />`;
+      const labelRect = `<rect x="${c.left + chipW}" y="${c.top}" width="${labelW}" height="${c.height}" rx="${6 * scale}" fill="${c.style?.background || '#ffffff'}" />`;
+      const chipText = `<text x="${c.left + chipW / 2}" y="${midY}" text-anchor="middle" dominant-baseline="middle" fill="#ffffff" font-family="${calloutFont}" font-size="${12 * scale}" font-weight="700">${escapeXml(c.badgeValue || '—')}</text>`;
+      const labelText = `<text x="${c.left + chipW + 8 * scale}" y="${midY}" dominant-baseline="middle" fill="${c.style?.textColor || '#0f172a'}" font-family="${calloutFont}" font-size="${12 * scale}" font-weight="600">${escapeXml(c.text || '')}</text>`;
+      return `<g>${line}${dot}${chipRect}${labelRect}${chipText}${labelText}</g>`;
+    }
+
     const line = c.type === 'leader' || c.type === 'boxed' ? `<line x1="${c.anchorPx.x}" y1="${c.anchorPx.y}" x2="${c.left + 10 * scale}" y2="${c.top + c.height / 2}" stroke="${leaderColor}" stroke-width="${1.4 * scale}" ${c.type === 'leader' ? `stroke-dasharray="${5 * scale} ${3 * scale}"` : ''} />` : '';
     const boxFill = c.style?.background || 'rgba(255,255,255,0.97)';
     const boxStroke = c.style?.border || '#17304f';
@@ -820,7 +1059,7 @@ function renderCalloutsSvg(scene, scale) {
     const textY = c.top + (c.type === 'plain' ? 10 * scale : c.subtext ? c.height / 2 - 9 * scale : c.height / 2);
     const mainText = `<text x="${textX}" y="${textY}" dominant-baseline="middle" fill="${textFill}" font-family="${calloutFont}" font-size="${12 * scale}" font-weight="700">${escapeXml(c.text || '')}</text>`;
     const subtextEl = c.subtext ? `<text x="${textX}" y="${textY + 16 * scale}" dominant-baseline="middle" fill="${c.style?.subtextColor || '#475569'}" font-family="${calloutFont}" font-size="${10 * scale}">${escapeXml(c.subtext)}</text>` : '';
-    return `<g>${line}${box}${mainText}${subtextEl}</g>`;
+    return `<g>${line}${dot}${box}${mainText}${subtextEl}</g>`;
   }).join('\n');
 }
 
@@ -829,7 +1068,7 @@ export async function renderSceneToSvg(scene, options = {}) {
   const scale = Number(options.pixelRatio || scene.project.layout?.exportSettings?.pixelRatio || 2); const width = Math.round(scene.width * scale), height = Math.round(scene.height * scale);
   const basemapImage = await renderBasemapImageSvg(scene, scale);
   const watermark = options.noWatermark ? '' : `<text x="${width - 8}" y="${height - 5}" font-family="Arial,sans-serif" font-size="9" font-weight="bold" fill="rgba(100,116,139,0.72)" text-anchor="end" paint-order="stroke" stroke="rgba(255,255,255,0.55)" stroke-width="2.5" stroke-linejoin="round">explorationmaps.com</text>`;
-  return `<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="100%" height="100%" fill="#ffffff" />${basemapImage}${renderVectorsSvg(scene, scale)}${renderEllipsesSvg(scene, scale)}${renderMarkersSvg(scene, scale)}${renderCalloutsSvg(scene, scale)}${renderTitleSvg(scene, scale)}${renderLegendSvg(scene, scale)}${renderNorthArrowSvg(scene, scale)}${renderInsetSvg(scene, scale)}${renderScaleBarSvg(scene, scale)}${renderFooterSvg(scene, scale)}${renderLogoSvg(scene, scale)}${watermark}</svg>`;
+  return `<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="100%" height="100%" fill="#ffffff" />${basemapImage}${renderRegionHighlightsSvg(scene, scale)}${renderVectorsSvg(scene, scale)}${renderEllipsesSvg(scene, scale)}${renderMarkersSvg(scene, scale)}${renderCalloutsSvg(scene, scale)}${renderTitleSvg(scene, scale)}${renderLegendSvg(scene, scale)}${renderNorthArrowSvg(scene, scale)}${renderInsetSvg(scene, scale)}${renderScaleBarSvg(scene, scale)}${renderFooterSvg(scene, scale)}${renderLogoSvg(scene, scale)}${watermark}</svg>`;
 }
 export function downloadCanvas(filename, canvas) {
   canvas.toBlob((blob) => {

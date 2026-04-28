@@ -5,6 +5,12 @@ function intersects(a, b, padding = 10) {
 }
 
 function estimateBox(callout) {
+  if (callout.type === 'badge') {
+    const chipChars = (callout.badgeValue || '').length;
+    const chipW = Math.max(44, chipChars * 8 + 20);
+    const labelW = Math.max(80, Math.min(callout.boxWidth || 160, 260));
+    return { width: chipW + labelW, height: 32 };
+  }
   const title = callout.text || '';
   const subtext = callout.subtext || '';
   const style = callout.style || {};
@@ -138,11 +144,18 @@ export default function CalloutsOverlay({ map, callouts, selectedCalloutId, onSe
               width: callout.width,
               minHeight: callout.height,
               fontFamily: fontFamily || 'Inter, sans-serif',
-              background: callout.type === 'plain' ? 'transparent' : (style.background || '#ffffff'),
-              borderColor: style.border || '#102640',
-              color: style.textColor || '#0f172a',
-              fontSize: style.fontSize || 12,
-              padding: `${style.paddingY || 8}px ${style.paddingX || 10}px`,
+              ...(callout.type === 'badge' ? {
+                background: 'transparent',
+                padding: 0,
+                overflow: 'hidden',
+                borderColor: 'transparent',
+              } : {
+                background: callout.type === 'plain' ? 'transparent' : (style.background || '#ffffff'),
+                borderColor: style.border || '#102640',
+                color: style.textColor || '#0f172a',
+                fontSize: style.fontSize || 12,
+                padding: `${style.paddingY || 8}px ${style.paddingX || 10}px`,
+              }),
             }}
             onClick={() => onSelect?.(callout.id)}
             onPointerDown={(event) => {
@@ -158,47 +171,60 @@ export default function CalloutsOverlay({ map, callouts, selectedCalloutId, onSe
               };
             }}
           >
-            {editingField?.id === callout.id && editingField?.field === 'text' ? (
-              <input
-                autoFocus
-                defaultValue={callout.text}
-                className="map-callout-title-input"
-                onBlur={(e) => { onUpdate?.(callout.id, { text: e.target.value }); setEditingField(null); }}
-                onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); if (e.key === 'Escape') setEditingField(null); }}
-                onClick={(e) => e.stopPropagation()}
-                onPointerDown={(e) => e.stopPropagation()}
-              />
-            ) : (
-              <div
-                className="map-callout-title"
-                style={{ cursor: selectedCalloutId === callout.id ? 'text' : 'default' }}
-                onClick={(e) => { if (selectedCalloutId === callout.id) { e.stopPropagation(); setEditingField({ id: callout.id, field: 'text' }); } }}
-              >
-                {callout.text}
-              </div>
-            )}
-            {callout.subtext ? (
-              editingField?.id === callout.id && editingField?.field === 'subtext' ? (
-                <input
-                  autoFocus
-                  defaultValue={callout.subtext}
-                  className="map-callout-subtext-input"
-                  style={{ color: style.subtextColor || '#475569' }}
-                  onBlur={(e) => { onUpdate?.(callout.id, { subtext: e.target.value }); setEditingField(null); }}
-                  onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); if (e.key === 'Escape') setEditingField(null); }}
-                  onClick={(e) => e.stopPropagation()}
-                  onPointerDown={(e) => e.stopPropagation()}
-                />
-              ) : (
-                <div
-                  className="map-callout-subtext"
-                  style={{ color: style.subtextColor || '#475569', cursor: selectedCalloutId === callout.id ? 'text' : 'default' }}
-                  onClick={(e) => { if (selectedCalloutId === callout.id) { e.stopPropagation(); setEditingField({ id: callout.id, field: 'subtext' }); } }}
-                >
-                  {callout.subtext}
+            {callout.type === 'badge' ? (
+              <div className="badge-callout" style={{ fontFamily: fontFamily || 'Inter, sans-serif', fontSize: style.fontSize || 12 }}>
+                <div className="badge-chip" style={{ background: callout.badgeColor || '#d97706' }}>
+                  {callout.badgeValue || '—'}
                 </div>
-              )
-            ) : null}
+                <div className="badge-label" style={{ background: style.background || '#ffffff', color: style.textColor || '#0f172a' }}>
+                  {callout.text}
+                </div>
+              </div>
+            ) : (
+              <>
+                {editingField?.id === callout.id && editingField?.field === 'text' ? (
+                  <input
+                    autoFocus
+                    defaultValue={callout.text}
+                    className="map-callout-title-input"
+                    onBlur={(e) => { onUpdate?.(callout.id, { text: e.target.value }); setEditingField(null); }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); if (e.key === 'Escape') setEditingField(null); }}
+                    onClick={(e) => e.stopPropagation()}
+                    onPointerDown={(e) => e.stopPropagation()}
+                  />
+                ) : (
+                  <div
+                    className="map-callout-title"
+                    style={{ cursor: selectedCalloutId === callout.id ? 'text' : 'default' }}
+                    onClick={(e) => { if (selectedCalloutId === callout.id) { e.stopPropagation(); setEditingField({ id: callout.id, field: 'text' }); } }}
+                  >
+                    {callout.text}
+                  </div>
+                )}
+                {callout.subtext ? (
+                  editingField?.id === callout.id && editingField?.field === 'subtext' ? (
+                    <input
+                      autoFocus
+                      defaultValue={callout.subtext}
+                      className="map-callout-subtext-input"
+                      style={{ color: style.subtextColor || '#475569' }}
+                      onBlur={(e) => { onUpdate?.(callout.id, { subtext: e.target.value }); setEditingField(null); }}
+                      onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); if (e.key === 'Escape') setEditingField(null); }}
+                      onClick={(e) => e.stopPropagation()}
+                      onPointerDown={(e) => e.stopPropagation()}
+                    />
+                  ) : (
+                    <div
+                      className="map-callout-subtext"
+                      style={{ color: style.subtextColor || '#475569', cursor: selectedCalloutId === callout.id ? 'text' : 'default' }}
+                      onClick={(e) => { if (selectedCalloutId === callout.id) { e.stopPropagation(); setEditingField({ id: callout.id, field: 'subtext' }); } }}
+                    >
+                      {callout.subtext}
+                    </div>
+                  )
+                ) : null}
+              </>
+            )}
           </div>
         );
       })}

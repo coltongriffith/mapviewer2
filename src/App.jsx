@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import MapCanvas from './components/MapCanvas';
 import Sidebar from './components/Sidebar';
 import LayerList from './components/LayerList';
@@ -31,6 +32,7 @@ import { buildLegendItems, resolveTemplateZones } from './templates/technicalRes
 import { geojsonBounds, geojsonCenter, unionBounds } from './utils/geometry';
 import { detectRegion } from './utils/detectRegion';
 import { cleanLayerName } from './utils/cleanLayerName';
+import regionsNA from './assets/regionsNA.json';
 import { fitProjectToTemplate } from './utils/frameMapForTemplate';
 import { getThemeTokens } from './utils/themeTokens';
 import { saveLead, getLastLeadEmail } from './utils/leadCapture';
@@ -389,6 +391,9 @@ export default function App() {
 
   const template = useMemo(() => getTemplate(project.layout?.templateId || 'technical_results_v2'), [project.layout?.templateId]);
   const selectedLayer = useMemo(() => project.layers.find((layer) => layer.id === selectedLayerId) || null, [project.layers, selectedLayerId]);
+  const [collapsedSections, setCollapsedSections] = useState({ drillhole: true, elements: true, refoverlays: true, export: true });
+  const toggleSection = (key) => setCollapsedSections((prev) => ({ ...prev, [key]: !prev[key] }));
+
   const selectedCallout = useMemo(() => project.callouts.find((callout) => callout.id === selectedCalloutId) || null, [project.callouts, selectedCalloutId]);
   const selectedMarker = useMemo(() => project.markers?.find((marker) => marker.id === selectedMarkerId) || null, [project.markers, selectedMarkerId]);
   const selectedEllipse = useMemo(() => project.ellipses?.find((ellipse) => ellipse.id === selectedEllipseId) || null, [project.ellipses, selectedEllipseId]);
@@ -553,10 +558,6 @@ export default function App() {
       calloutsSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }, [selectedCalloutId]);
 
-  useEffect(() => {
-    if (selectedFeature && drillholeSectionRef.current)
-      drillholeSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  }, [selectedFeature]);
 
   const updateLayout = (patch) => {
     setProject((prev) => ({
@@ -908,7 +909,7 @@ export default function App() {
     setUploadStatus({ type: 'success', message: 'Applied polished default template spacing and alignment.' });
   };
 
-  const addCalloutAtAnchor = ({ text, subtext = '', type = 'leader', anchor, featureId, layerId, style = {}, boxWidth = 188 }) => {
+  const addCalloutAtAnchor = ({ text, subtext = '', type = 'leader', anchor, featureId, layerId, style = {}, boxWidth = 188, badgeValue, badgeColor }) => {
     const calloutId = crypto.randomUUID();
     setProject((prev) => ({
       ...prev,
@@ -925,6 +926,8 @@ export default function App() {
           featureId: featureId || null,
           layerId: layerId || null,
           boxWidth,
+          ...(badgeValue !== undefined ? { badgeValue } : {}),
+          ...(badgeColor !== undefined ? { badgeColor } : {}),
           style: {
             background: '#ffffff',
             border: '#102640',
@@ -980,11 +983,12 @@ export default function App() {
   const handleFeatureClick = ({ layerId, feature, latlng, isLayerSelect }) => {
     const layer = project.layers.find((item) => item.id === layerId) || null;
     if (!layer) return;
-    setSelectedLayerId(layerId);
     setAnnotationTool(null);
+    annotationToolRef.current = null;
     setSelectedMarkerId(null);
     setSelectedEllipseId(null);
     if (isLayerSelect) {
+      setSelectedLayerId(layerId);
       setSelectedFeature(null);
       return;
     }
@@ -1022,6 +1026,8 @@ export default function App() {
       layerId: selectedFeature.layerId,
       boxWidth: selectedFeature.boxWidth || 188,
       style: selectedFeature.style || {},
+      badgeValue: selectedFeature.badgeValue,
+      badgeColor: selectedFeature.badgeColor,
     });
     setSelectedCalloutId(null);
     setSelectedFeature(null);
@@ -1066,6 +1072,40 @@ export default function App() {
     setSelectedCalloutId(null);
   };
 
+  const addRingAt = (latlng) => {
+    const id = crypto.randomUUID();
+    let radiusKm = 10;
+    if (leafletMapRef.current) {
+      const bounds = leafletMapRef.current.getBounds();
+      const spanKm = (bounds.getNorth() - bounds.getSouth()) * 111.32;
+      radiusKm = Math.max(1, Math.round(spanKm * 0.22));
+    }
+    setProject((prev) => ({
+      ...prev,
+      ellipses: [
+        ...(prev.ellipses || []),
+        { id, lat: latlng.lat, lng: latlng.lng, isRing: true, radiusKm, color: '#dc2626', dashed: true, label: '' },
+      ],
+    }));
+    setSelectedEllipseId(id);
+    setSelectedMarkerId(null);
+    setSelectedCalloutId(null);
+  };
+
+  const addMapLabelAt = (latlng) => {
+    const id = crypto.randomUUID();
+    setProject((prev) => ({
+      ...prev,
+      markers: [
+        ...(prev.markers || []),
+        { id, lat: latlng.lat, lng: latlng.lng, type: 'maplabel', label: 'REGION NAME', size: 28, color: '#1e293b', opacity: 0.35, rotation: 0, bold: true, tracking: 0.12 },
+      ],
+    }));
+    setSelectedMarkerId(id);
+    setSelectedEllipseId(null);
+    setSelectedCalloutId(null);
+  };
+
   const handleMapClick = (latlng) => {
     if (annotationTool === 'marker') {
       addMarkerAt(latlng);
@@ -1075,6 +1115,14 @@ export default function App() {
       addEllipseAt(latlng);
       setAnnotationTool(null);
       annotationToolRef.current = null;
+    } else if (annotationTool === 'ring') {
+      addRingAt(latlng);
+      setAnnotationTool(null);
+      annotationToolRef.current = null;
+    } else if (annotationTool === 'maplabel') {
+      addMapLabelAt(latlng);
+      setAnnotationTool(null);
+      annotationToolRef.current = null;
     }
   };
 
@@ -1082,8 +1130,8 @@ export default function App() {
   const featureEditorPoint = useMemo(() => {
     if (!leafletMapRef.current || !selectedFeature?.latlng) return null;
     const pt = leafletMapRef.current.latLngToContainerPoint([selectedFeature.latlng.lat, selectedFeature.latlng.lng]);
-    const maxLeft = Math.max(12, mapSize.width - 280);
-    const maxTop = Math.max(12, mapSize.height - 210);
+    const maxLeft = Math.max(12, mapSize.width - 292);
+    const maxTop = Math.max(12, mapSize.height - 340);
     return {
       left: Math.min(maxLeft, Math.max(12, pt.x + 14)),
       top: Math.min(maxTop, Math.max(70, pt.y - 24)),
@@ -1351,8 +1399,31 @@ export default function App() {
 
         <UploadPanel onUploadFile={handleUploadFile} inputRef={uploadInputRef} status={uploadStatus} layers={project.layers} />
 
+        <div className={`logo-upload-card${project.layout.logo ? ' has-logo' : ''}`}>
+          {project.layout.logo ? (
+            <>
+              <img className="logo-thumb" src={project.layout.logo} alt="Logo" />
+              <div className="logo-card-info">
+                <span className="logo-card-status">Brand colors applied</span>
+                <div className="logo-card-actions">
+                  <button className="btn compact" type="button" onClick={() => logoInputRef.current?.click()}>Replace</button>
+                  <button className="secondary-btn compact" type="button" onClick={() => updateLayout({ logo: null, accentColor: null, titleBgColor: null, titleFgColor: null })}>Remove</button>
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <button className="logo-upload-btn" type="button" onClick={() => logoInputRef.current?.click()}>
+                <span className="logo-upload-icon">↑</span> Upload Logo
+              </button>
+              <span className="logo-card-hint">Auto-applies your brand colors</span>
+            </>
+          )}
+        </div>
+        <input ref={logoInputRef} type="file" accept="image/*" onChange={handleLogoChange} hidden />
+
         <section className="control-section">
-          <h2>Map Content</h2>
+          <h2>Content</h2>
           <div className="control-grid">
             <div className="control-row"><label>Title</label><input value={localTitle} onChange={(e) => {
               const val = e.target.value;
@@ -1366,127 +1437,25 @@ export default function App() {
               clearTimeout(subtitleDebounceRef.current);
               subtitleDebounceRef.current = setTimeout(() => updateLayout({ subtitle: val }), 300);
             }} /></div>
-            <div className="control-row inline-2">
-              <div>
-                <label>Basemap</label>
-                <select value={project.layout.basemap} onChange={(e) => updateLayout({ basemap: e.target.value })}>
-                  <option value="light">Light</option>
-                  <option value="satellite">Satellite</option>
-                  <option value="topo">Topo</option>
-                  <option value="dark">Dark</option>
-                </select>
-              </div>
+            <div className="control-row">
+              <label>Basemap</label>
+              <select value={project.layout.basemap} onChange={(e) => updateLayout({ basemap: e.target.value })}>
+                <option value="light">Light</option>
+                <option value="satellite">Satellite</option>
+                <option value="topo">Topo</option>
+                <option value="dark">Dark</option>
+              </select>
             </div>
-            <div className="small-note">Zoom is now controlled directly on the map canvas for faster editing.</div>
-            <div className="control-row inline-2">
-              <div>
-                <label>Title Font</label>
-                <select value={selectValue(FONT_OPTIONS, project.layout.fonts?.title)} onChange={(e) => updateLayout({ fonts: { title: e.target.value } })}>
-                  {Object.entries(FONT_OPTIONS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                </select>
-              </div>
-              <div>
-                <label>Legend Font</label>
-                <select value={selectValue(FONT_OPTIONS, project.layout.fonts?.legend)} onChange={(e) => updateLayout({ fonts: { legend: e.target.value } })}>
-                  {Object.entries(FONT_OPTIONS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                </select>
-              </div>
-            </div>
-            <div className="control-row inline-2">
-              <div>
-                <label>Label Font</label>
-                <select value={selectValue(FONT_OPTIONS, project.layout.fonts?.label)} onChange={(e) => updateLayout({ fonts: { label: e.target.value } })}>
-                  {Object.entries(FONT_OPTIONS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                </select>
-              </div>
-              <div>
-                <label>Callout Font</label>
-                <select value={selectValue(FONT_OPTIONS, project.layout.fonts?.callout)} onChange={(e) => updateLayout({ fonts: { callout: e.target.value } })}>
-                  {Object.entries(FONT_OPTIONS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                </select>
-              </div>
-            </div>
-            <div className="control-row"><label>Legend Title</label><input value={project.layout.legendTitle ?? 'Legend'} onChange={(e) => updateLayout({ legendTitle: e.target.value })} placeholder="Legend" /></div>
-            <div className="control-row"><label>Disclaimer / Footer</label><input value={project.layout.footerText || ''} onChange={(e) => updateLayout({ footerText: e.target.value })} placeholder="e.g. For internal use only" /></div>
-            <div className="control-row inline-2">
-              <div><label>Map Date</label><input value={project.layout.mapDate || ''} onChange={(e) => updateLayout({ mapDate: e.target.value })} placeholder="e.g. April 2025" /></div>
-              <div><label>Project #</label><input value={project.layout.projectNumber || ''} onChange={(e) => updateLayout({ projectNumber: e.target.value })} placeholder="e.g. P-2024-01" /></div>
-            </div>
-            <div className="control-row"><label>Scale Note</label><input value={project.layout.mapScaleNote || ''} onChange={(e) => updateLayout({ mapScaleNote: e.target.value })} placeholder="e.g. 1:50,000" /></div>
             <div className="element-visibility-row">
               <label className="toggle-row"><input type="checkbox" checked={project.layout.showNorthArrow !== false} onChange={(e) => updateLayout({ showNorthArrow: e.target.checked })} /><span>North Arrow</span></label>
               <label className="toggle-row"><input type="checkbox" checked={project.layout.showScaleBar !== false} onChange={(e) => updateLayout({ showScaleBar: e.target.checked })} /><span>Scale Bar</span></label>
               <label className="toggle-row"><input type="checkbox" checked={project.layout.footerEnabled !== false} onChange={(e) => updateLayout({ footerEnabled: e.target.checked })} /><span>Footer</span></label>
               <label className="toggle-row"><input type="checkbox" checked={project.layout.insetEnabled !== false} onChange={(e) => updateLayout({ insetEnabled: e.target.checked })} /><span>Inset Map</span></label>
             </div>
-            <div className="button-row three">
-              <button className="btn" type="button" onClick={() => logoInputRef.current?.click()}>Upload Logo</button>
-              <button className="btn" type="button" onClick={() => insetInputRef.current?.click()}>Upload Inset</button>
-            </div>
-            {project.layout.insetImage ? (
-              <div className="inset-status-card">
-                <div className="inset-preview"><img src={project.layout.insetImage} alt="Inset preview" /></div>
-                <button className="secondary-btn" type="button" onClick={() => updateLayout({ insetImage: null, insetEnabled: true })}>Remove Inset Image</button>
-              </div>
-            ) : null}
-            {project.layout.autoInsetRegion && !project.layout.insetImage && project.layout.insetEnabled !== false && (
-              <div className="inset-detected-badge">Detected: {project.layout.autoInsetRegion.name}</div>
-            )}
-            <div className="control-row inline-2">
-              <div>
-                <label>Inset Title</label>
-                <input value={project.layout.insetTitle ?? 'Project Locator'} onChange={(e) => updateLayout({ insetTitle: e.target.value })} placeholder="Project Locator" />
-              </div>
-              <div>
-                <label>Inset Label</label>
-                <input value={project.layout.insetLabel ?? ''} onChange={(e) => updateLayout({ insetLabel: e.target.value })} placeholder={project.layout.autoInsetRegion?.name || 'Province / State'} />
-              </div>
-            </div>
-            <div className="control-row inline-2">
-              <div>
-                <label>Logo Size</label>
-                <input type="range" min="0.6" max="1.8" step="0.05" value={project.layout.logoScale || 1} onChange={(e) => updateLayout({ logoScale: Number(e.target.value) })} />
-              </div>
-              <div className="range-value">{Math.round((project.layout.logoScale || 1) * 100)}%</div>
-            </div>
-            <div className="control-row inline-2">
-              <div>
-                <label>Inset Size</label>
-                <input type="range" min="0.7" max="1.6" step="0.05" value={project.layout.insetScale || 1} onChange={(e) => updateLayout({ insetScale: Number(e.target.value) })} />
-              </div>
-              <div className="range-value">{Math.round((project.layout.insetScale || 1) * 100)}%</div>
-            </div>
-            <div className="corner-pickers">
-              {[
-                { label: 'Title',      key: 'titleCorner',      def: 'tl' },
-                { label: 'Logo',       key: 'logoCorner',       def: 'tl' },
-                { label: 'Inset',      key: 'insetCorner',      def: 'tr' },
-                { label: 'Legend',     key: 'legendCorner',     def: 'bl' },
-                { label: 'Scale bar',  key: 'scaleBarCorner',   def: 'bl' },
-                { label: 'North arrow', key: 'northArrowCorner', def: 'br' },
-              ].map(({ label, key, def }) => (
-                <div key={key} className="corner-picker-row">
-                  <span className="corner-picker-label">{label}</span>
-                  <div className="corner-picker">
-                    {['tl', 'tr', 'bl', 'br'].map((c) => (
-                      <button
-                        key={c}
-                        type="button"
-                        className={`corner-btn corner-btn-${c}${(project.layout[key] || def) === c ? ' active' : ''}`}
-                        title={{ tl: 'Top Left', tr: 'Top Right', bl: 'Bottom Left', br: 'Bottom Right' }[c]}
-                        onClick={() => updateLayout({ [key]: c })}
-                      />
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-            <input ref={logoInputRef} type="file" accept="image/*" onChange={handleLogoChange} hidden />
-            <input ref={insetInputRef} type="file" accept="image/*" onChange={handleInsetImageChange} hidden />
           </div>
         </section>
 
-        <section className="control-section" ref={layersSectionRef}>
+        <section className="control-section cs-collapsible" ref={layersSectionRef}>
           <h2>Layers</h2>
           <LayerList layers={project.layers} selectedLayerId={selectedLayerId} onSelect={setSelectedLayerId} onToggleVisible={toggleLayerVisible} />
           {selectedLayer ? (
@@ -1527,21 +1496,49 @@ export default function App() {
                   <div className="range-value">{selectedLayer.style?.markerSize ?? 12}px</div>
                 </div>
               ) : (
-                <div className="control-row inline-2">
-                  <div>
-                    <label>Fill Opacity</label>
-                    <input type="range" min="0" max="1" step="0.05" value={selectedLayer.style?.fillOpacity ?? 0.22} onChange={(e) => updateLayer(selectedLayer.id, { style: { fillOpacity: Number(e.target.value) } })} />
+                <>
+                  <div className="control-row inline-2">
+                    <div>
+                      <label>Fill Opacity</label>
+                      <input type="range" min="0" max="1" step="0.05" value={selectedLayer.style?.fillOpacity ?? 0.22} onChange={(e) => updateLayer(selectedLayer.id, { style: { fillOpacity: Number(e.target.value) } })} />
+                    </div>
+                    <div className="range-value">{Math.round((selectedLayer.style?.fillOpacity ?? 0.22) * 100)}%</div>
                   </div>
-                  <div className="range-value">{Math.round((selectedLayer.style?.fillOpacity ?? 0.22) * 100)}%</div>
-                </div>
+                  <div className="control-row inline-2">
+                    <div>
+                      <label>Layer Opacity</label>
+                      <input type="range" min="0" max="1" step="0.05" value={selectedLayer.style?.layerOpacity ?? 1} onChange={(e) => updateLayer(selectedLayer.id, { style: { layerOpacity: Number(e.target.value) } })} />
+                    </div>
+                    <div className="range-value">{Math.round((selectedLayer.style?.layerOpacity ?? 1) * 100)}%</div>
+                  </div>
+                  <div className="control-row">
+                    <label>Fill Pattern</label>
+                    <div className="fill-pattern-picker">
+                      {[['none', 'Solid'], ['hatch', 'Hatch'], ['cross', 'Cross'], ['dots', 'Dots']].map(([val, title]) => (
+                        <button
+                          key={val}
+                          type="button"
+                          title={title}
+                          className={`pattern-btn${(selectedLayer.style?.fillPattern || 'none') === val ? ' active' : ''}`}
+                          onClick={() => updateLayer(selectedLayer.id, { style: { fillPattern: val === 'none' ? undefined : val } })}
+                        >
+                          {val === 'none' && <svg width="24" height="18"><rect x="1" y="1" width="22" height="16" rx="2" fill="rgba(100,116,139,0.3)" /></svg>}
+                          {val === 'hatch' && <svg width="24" height="18"><rect x="1" y="1" width="22" height="16" rx="2" fill="none" stroke="#94a3b8" />{[0,6,12,18,24].map((o) => <line key={o} x1={o} y1={18} x2={o + 18} y2={0} stroke="#64748b" strokeWidth="1.2" />)}</svg>}
+                          {val === 'cross' && <svg width="24" height="18"><rect x="1" y="1" width="22" height="16" rx="2" fill="none" stroke="#94a3b8" />{[3,9,15,21].map((x) => <line key={`v${x}`} x1={x} y1={2} x2={x} y2={16} stroke="#64748b" strokeWidth="1.2" />)}{[4,10,16].map((y) => <line key={`h${y}`} x1={2} y1={y} x2={22} y2={y} stroke="#64748b" strokeWidth="1.2" />)}</svg>}
+                          {val === 'dots' && <svg width="24" height="18"><rect x="1" y="1" width="22" height="16" rx="2" fill="none" stroke="#94a3b8" />{[5,11,17].map((x) => [4,10,16].map((y) => <circle key={`${x}${y}`} cx={x} cy={y} r="1.8" fill="#64748b" />))}</svg>}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </>
               )}
             </div>
           ) : <p className="small-note">Select a layer to edit its display label, role, order, and colors.</p>}
         </section>
 
-        <section className="control-section" ref={drillholeSectionRef}>
-          <h2>Drillhole Label Tool</h2>
-          {selectedFeature ? (
+        <section className="control-section cs-collapsible" ref={drillholeSectionRef}>
+          <h2 className="section-toggle-btn" onClick={() => toggleSection('drillhole')}>Drillhole Labels <span className={`section-chevron${collapsedSections.drillhole ? '' : ' open'}`}>›</span></h2>
+          {!collapsedSections.drillhole && selectedFeature ? (
             <div className="control-grid">
               <div className="feature-chip">Selected: {selectedFeature.layerName}</div>
               <div className="small-note">Click a drillhole on the map, then refine the callout here. The selected hole is editable before you add the callout.</div>
@@ -1565,6 +1562,18 @@ export default function App() {
                   <input type="number" min="140" max="320" step="2" value={selectedFeature.boxWidth || 188} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, boxWidth: Number(e.target.value || 188) }))} />
                 </div>
               </div>
+              {selectedFeature.calloutType === 'badge' && (
+                <div className="control-row inline-2">
+                  <div>
+                    <label>Chip Text</label>
+                    <input value={selectedFeature.badgeValue || ''} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, badgeValue: e.target.value }))} placeholder=">14 Moz" />
+                  </div>
+                  <div>
+                    <label>Chip Color</label>
+                    <input type="color" value={selectedFeature.badgeColor || '#d97706'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, badgeColor: e.target.value }))} />
+                  </div>
+                </div>
+              )}
               <div className="control-row inline-2">
                 <div>
                   <label>Background</label>
@@ -1594,12 +1603,12 @@ export default function App() {
               </div>
               <button className="btn primary" type="button" onClick={addCalloutFromSelectedFeature}>Add / Update Callout</button>
             </div>
-          ) : (
+          ) : (!collapsedSections.drillhole &&
             <div className="small-note">Click a drillhole point on the map to open its callout editor.</div>
           )}
         </section>
 
-        <section className="control-section" ref={calloutsSectionRef}>
+        <section className="control-section cs-collapsible" ref={calloutsSectionRef}>
           <h2>Callouts</h2>
           <div className="button-row" style={{ marginBottom: 10 }}>
             <button className="btn primary" type="button" onClick={addCalloutFromSelectedLayer} disabled={!selectedLayer}>Add From Selected Layer</button>
@@ -1635,6 +1644,18 @@ export default function App() {
                           </select>
                         </div>
                       </div>
+                      {callout.type === 'badge' && (
+                        <div className="control-row inline-2">
+                          <div>
+                            <label>Chip Text</label>
+                            <input value={callout.badgeValue || ''} onChange={(e) => updateCallout(callout.id, { badgeValue: e.target.value })} placeholder=">14 Moz" />
+                          </div>
+                          <div>
+                            <label>Chip Color</label>
+                            <input type="color" value={callout.badgeColor || '#d97706'} onChange={(e) => updateCallout(callout.id, { badgeColor: e.target.value })} />
+                          </div>
+                        </div>
+                      )}
                       <div className="control-label">Nudge</div>
                       <div className="nudge-grid">
                         <span />
@@ -1652,15 +1673,47 @@ export default function App() {
           </div>
         </section>
 
-        <section className="control-section" ref={markersSectionRef}>
-          <h2>Markers & Highlight Areas</h2>
+        <section className="control-section cs-collapsible" ref={markersSectionRef}>
+          <h2>Annotations</h2>
           <div className="button-row">
             <button className={`secondary-btn ${annotationTool === 'marker' ? 'active-toggle' : ''}`} type="button" onClick={() => { const next = annotationTool === 'marker' ? null : 'marker'; setAnnotationTool(next); annotationToolRef.current = next; setSelectedFeature(null); }}>Place Marker</button>
             <button className={`secondary-btn ${annotationTool === 'ellipse' ? 'active-toggle' : ''}`} type="button" onClick={() => { const next = annotationTool === 'ellipse' ? null : 'ellipse'; setAnnotationTool(next); annotationToolRef.current = next; setSelectedFeature(null); }}>Draw Dashed Area</button>
+            <button className={`secondary-btn ${annotationTool === 'ring' ? 'active-toggle' : ''}`} type="button" onClick={() => { const next = annotationTool === 'ring' ? null : 'ring'; setAnnotationTool(next); annotationToolRef.current = next; setSelectedFeature(null); }}>Draw Distance Ring</button>
+            <button className={`secondary-btn ${annotationTool === 'maplabel' ? 'active-toggle' : ''}`} type="button" onClick={() => { const next = annotationTool === 'maplabel' ? null : 'maplabel'; setAnnotationTool(next); annotationToolRef.current = next; setSelectedFeature(null); }}>Place Map Label</button>
           </div>
           <div className="small-note" style={{ marginTop: 8 }}>{annotationTool ? 'Click anywhere on the map to place the selected annotation.' : 'Add highlight markers or dashed ellipses anywhere on the map.'}</div>
 
-          {selectedMarker ? (
+          {selectedMarker?.type === 'maplabel' ? (
+            <div className="control-grid" style={{ marginTop: 10 }}>
+              <div className="selected-note">Map Label</div>
+              <div className="control-row"><label>Text</label><input value={selectedMarker.label || ''} onChange={(e) => updateMarker(selectedMarker.id, { label: e.target.value })} placeholder="BRITISH COLUMBIA" /></div>
+              <div className="control-row inline-2">
+                <div>
+                  <label>Size</label>
+                  <input type="range" min="14" max="72" step="1" value={selectedMarker.size || 28} onChange={(e) => updateMarker(selectedMarker.id, { size: Number(e.target.value) })} />
+                </div>
+                <div className="range-value">{selectedMarker.size || 28}pt</div>
+              </div>
+              <div className="control-row inline-2">
+                <div>
+                  <label>Opacity</label>
+                  <input type="range" min="0.05" max="1" step="0.05" value={selectedMarker.opacity ?? 0.35} onChange={(e) => updateMarker(selectedMarker.id, { opacity: Number(e.target.value) })} />
+                </div>
+                <div className="range-value">{Math.round((selectedMarker.opacity ?? 0.35) * 100)}%</div>
+              </div>
+              <div className="control-row inline-2">
+                <div>
+                  <label>Rotation</label>
+                  <input type="number" min="-180" max="180" step="1" value={selectedMarker.rotation || 0} onChange={(e) => updateMarker(selectedMarker.id, { rotation: Number(e.target.value) })} />
+                </div>
+                <div>
+                  <label>Color</label>
+                  <input type="color" value={selectedMarker.color || '#1e293b'} onChange={(e) => updateMarker(selectedMarker.id, { color: e.target.value })} />
+                </div>
+              </div>
+              <button className="secondary-btn" type="button" onClick={() => { setProject((prev) => ({ ...prev, markers: prev.markers.filter((m) => m.id !== selectedMarker.id) })); setSelectedFeature(null); }}>Remove Label</button>
+            </div>
+          ) : selectedMarker ? (
             <div className="control-grid" style={{ marginTop: 10 }}>
               <div className="selected-note">Selected marker</div>
               <div className="control-row"><label>Label</label><input value={selectedMarker.label || ''} onChange={(e) => updateMarker(selectedMarker.id, { label: e.target.value })} /></div>
@@ -1689,36 +1742,83 @@ export default function App() {
 
           {selectedEllipse ? (
             <div className="control-grid" style={{ marginTop: 10 }}>
-              <div className="selected-note">Selected highlight area</div>
-              <div className="control-row"><label>Label</label><input value={selectedEllipse.label || ''} onChange={(e) => updateEllipse(selectedEllipse.id, { label: e.target.value })} /></div>
-              <div className="control-row inline-2">
-                <div>
-                  <label>Width</label>
-                  <input type="number" min="24" max="320" step="1" value={selectedEllipse.width} onChange={(e) => updateEllipse(selectedEllipse.id, { width: Number(e.target.value) })} />
-                </div>
-                <div>
-                  <label>Height</label>
-                  <input type="number" min="24" max="320" step="1" value={selectedEllipse.height} onChange={(e) => updateEllipse(selectedEllipse.id, { height: Number(e.target.value) })} />
-                </div>
-              </div>
-              <div className="control-row inline-2">
-                <div>
-                  <label>Rotation</label>
-                  <input type="number" min="-180" max="180" step="1" value={selectedEllipse.rotation} onChange={(e) => updateEllipse(selectedEllipse.id, { rotation: Number(e.target.value) })} />
-                </div>
-                <div>
-                  <label>Color</label>
-                  <input type="color" value={selectedEllipse.color} onChange={(e) => updateEllipse(selectedEllipse.id, { color: e.target.value })} />
-                </div>
-              </div>
+              <div className="selected-note">{selectedEllipse.isRing ? 'Selected distance ring' : 'Selected highlight area'}</div>
+              <div className="control-row"><label>Label</label><input value={selectedEllipse.label || ''} onChange={(e) => updateEllipse(selectedEllipse.id, { label: e.target.value })} placeholder={selectedEllipse.isRing ? `${selectedEllipse.radiusKm} km` : ''} /></div>
+              {selectedEllipse.isRing ? (
+                <>
+                  <div className="control-row inline-2">
+                    <div>
+                      <label>Radius (km)</label>
+                      <input type="number" min="1" max="5000" step="1" value={selectedEllipse.radiusKm ?? 50} onChange={(e) => updateEllipse(selectedEllipse.id, { radiusKm: Number(e.target.value) })} />
+                    </div>
+                    <div>
+                      <label>Ring Color</label>
+                      <input type="color" value={selectedEllipse.color || '#dc2626'} onChange={(e) => updateEllipse(selectedEllipse.id, { color: e.target.value })} />
+                    </div>
+                  </div>
+                  <div className="control-row inline-2">
+                    <div>
+                      <label>Label Size</label>
+                      <input type="range" min="9" max="22" step="1" value={selectedEllipse.labelFontSize || 11} onChange={(e) => updateEllipse(selectedEllipse.id, { labelFontSize: Number(e.target.value) })} />
+                    </div>
+                    <div className="range-value">{selectedEllipse.labelFontSize || 11}px</div>
+                  </div>
+                  <div className="control-row inline-2">
+                    <div>
+                      <label>Label Color</label>
+                      <input type="color" value={selectedEllipse.labelColor || selectedEllipse.color || '#dc2626'} onChange={(e) => updateEllipse(selectedEllipse.id, { labelColor: e.target.value })} />
+                    </div>
+                    <label className="toggle-row" style={{ marginTop: 0 }}>
+                      <input type="checkbox" checked={selectedEllipse.labelBold !== false} onChange={(e) => updateEllipse(selectedEllipse.id, { labelBold: e.target.checked })} />
+                      <span>Bold</span>
+                    </label>
+                  </div>
+                  <label className="toggle-row">
+                    <input type="checkbox" checked={!!selectedEllipse.labelArc} onChange={(e) => updateEllipse(selectedEllipse.id, { labelArc: e.target.checked })} />
+                    <span>Curved arc label</span>
+                  </label>
+                  {selectedEllipse.labelArc && (
+                    <div className="control-row inline-2">
+                      <div>
+                        <label>Angle (0° = top)</label>
+                        <input type="range" min="0" max="359" step="1" value={selectedEllipse.labelAngle ?? 0} onChange={(e) => updateEllipse(selectedEllipse.id, { labelAngle: Number(e.target.value) })} />
+                      </div>
+                      <div className="range-value">{selectedEllipse.labelAngle ?? 0}°</div>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <>
+                  <div className="control-row inline-2">
+                    <div>
+                      <label>Width</label>
+                      <input type="number" min="24" max="320" step="1" value={selectedEllipse.width} onChange={(e) => updateEllipse(selectedEllipse.id, { width: Number(e.target.value) })} />
+                    </div>
+                    <div>
+                      <label>Height</label>
+                      <input type="number" min="24" max="320" step="1" value={selectedEllipse.height} onChange={(e) => updateEllipse(selectedEllipse.id, { height: Number(e.target.value) })} />
+                    </div>
+                  </div>
+                  <div className="control-row inline-2">
+                    <div>
+                      <label>Rotation</label>
+                      <input type="number" min="-180" max="180" step="1" value={selectedEllipse.rotation} onChange={(e) => updateEllipse(selectedEllipse.id, { rotation: Number(e.target.value) })} />
+                    </div>
+                    <div>
+                      <label>Color</label>
+                      <input type="color" value={selectedEllipse.color} onChange={(e) => updateEllipse(selectedEllipse.id, { color: e.target.value })} />
+                    </div>
+                  </div>
+                </>
+              )}
               <label className="toggle-row"><input type="checkbox" checked={selectedEllipse.dashed !== false} onChange={(e) => updateEllipse(selectedEllipse.id, { dashed: e.target.checked })} /> <span>Dashed outline</span></label>
-              <button className="secondary-btn" type="button" onClick={() => removeEllipse(selectedEllipse.id)}>Remove Highlight Area</button>
+              <button className="secondary-btn" type="button" onClick={() => removeEllipse(selectedEllipse.id)}>{selectedEllipse.isRing ? 'Remove Ring' : 'Remove Highlight Area'}</button>
             </div>
           ) : null}
         </section>
 
-        <section className="control-section">
-          <h2>Template</h2>
+        <section className="control-section cs-collapsible">
+          <h2>Design</h2>
           <div className="control-grid">
             <div className="control-row">
               <label>Mode</label>
@@ -1783,6 +1883,60 @@ export default function App() {
               <button className="btn" type="button" onClick={autoFrameAll}>Refit Map</button>
               <button className="btn primary" type="button" onClick={improveMap}>Improve Map</button>
             </div>
+
+            {/* Fonts */}
+            <details className="sub-details">
+              <summary>Fonts</summary>
+              <div className="sub-details-body">
+                <div className="control-row inline-2">
+                  <div><label>Title</label><select value={selectValue(FONT_OPTIONS, project.layout.fonts?.title)} onChange={(e) => updateLayout({ fonts: { title: e.target.value } })}>{Object.entries(FONT_OPTIONS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></div>
+                  <div><label>Legend</label><select value={selectValue(FONT_OPTIONS, project.layout.fonts?.legend)} onChange={(e) => updateLayout({ fonts: { legend: e.target.value } })}>{Object.entries(FONT_OPTIONS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></div>
+                </div>
+                <div className="control-row inline-2">
+                  <div><label>Labels</label><select value={selectValue(FONT_OPTIONS, project.layout.fonts?.label)} onChange={(e) => updateLayout({ fonts: { label: e.target.value } })}>{Object.entries(FONT_OPTIONS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></div>
+                  <div><label>Callouts</label><select value={selectValue(FONT_OPTIONS, project.layout.fonts?.callout)} onChange={(e) => updateLayout({ fonts: { callout: e.target.value } })}>{Object.entries(FONT_OPTIONS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></div>
+                </div>
+              </div>
+            </details>
+
+            {/* Text & Metadata */}
+            <details className="sub-details">
+              <summary>Text & Metadata</summary>
+              <div className="sub-details-body">
+                <div className="control-row"><label>Legend Title</label><input value={project.layout.legendTitle ?? 'Legend'} onChange={(e) => updateLayout({ legendTitle: e.target.value })} placeholder="Legend" /></div>
+                <div className="control-row"><label>Footer / Disclaimer</label><input value={project.layout.footerText || ''} onChange={(e) => updateLayout({ footerText: e.target.value })} placeholder="e.g. For internal use only" /></div>
+                <div className="control-row inline-2">
+                  <div><label>Map Date</label><input value={project.layout.mapDate || ''} onChange={(e) => updateLayout({ mapDate: e.target.value })} placeholder="e.g. April 2025" /></div>
+                  <div><label>Project #</label><input value={project.layout.projectNumber || ''} onChange={(e) => updateLayout({ projectNumber: e.target.value })} placeholder="e.g. P-2024-01" /></div>
+                </div>
+                <div className="control-row"><label>Scale Note</label><input value={project.layout.mapScaleNote || ''} onChange={(e) => updateLayout({ mapScaleNote: e.target.value })} placeholder="e.g. 1:50,000" /></div>
+              </div>
+            </details>
+
+            {/* Region Highlights */}
+            <details className="sub-details">
+              <summary>Region Highlights {(project.layout.regionHighlights || []).length > 0 && <span className="sub-badge">{project.layout.regionHighlights.length}</span>}</summary>
+              <div className="sub-details-body">
+                {(project.layout.regionHighlights || []).map((h, i) => {
+                  const regionName = regionsNA.find((r) => r.id === h.regionId)?.name || h.regionId;
+                  return (
+                    <div key={h.regionId} className="region-highlight-row">
+                      <span className="region-highlight-name">{regionName}</span>
+                      <input type="color" value={h.color || '#ef4444'} title="Color" onChange={(e) => updateLayout({ regionHighlights: project.layout.regionHighlights.map((x, j) => j === i ? { ...x, color: e.target.value } : x) })} />
+                      <input type="range" min="0.1" max="1" step="0.05" value={h.opacity ?? 0.45} title="Opacity" onChange={(e) => updateLayout({ regionHighlights: project.layout.regionHighlights.map((x, j) => j === i ? { ...x, opacity: Number(e.target.value) } : x) })} />
+                      <span className="range-label">{Math.round((h.opacity ?? 0.45) * 100)}%</span>
+                      <button className="icon-btn remove-btn" type="button" title="Remove" onClick={() => updateLayout({ regionHighlights: project.layout.regionHighlights.filter((_, j) => j !== i) })}>×</button>
+                    </div>
+                  );
+                })}
+                <div className="region-highlight-add-row">
+                  <select value="" onChange={(e) => { const id = e.target.value; if (!id || (project.layout.regionHighlights || []).some((h) => h.regionId === id)) return; updateLayout({ regionHighlights: [...(project.layout.regionHighlights || []), { regionId: id, color: '#ef4444', opacity: 0.45 }] }); }}>
+                    <option value="">+ Add Region…</option>
+                    {regionsNA.map((r) => <option key={r.id} value={r.id}>{r.name} ({r.abbrev})</option>)}
+                  </select>
+                </div>
+              </div>
+            </details>
 
             {/* Company Templates */}
             <div className="template-manager-block">
@@ -1881,18 +2035,68 @@ export default function App() {
           </div>
         </section>
 
-        <section className="control-section">
-          <h2>Reference Overlays</h2>
-          <div className="toggle-grid">
+        <section className="control-section cs-collapsible">
+          <h2 className="section-toggle-btn" onClick={() => toggleSection('elements')}>Elements <span className={`section-chevron${collapsedSections.elements ? '' : ' open'}`}>›</span></h2>
+          {!collapsedSections.elements && <div className="control-grid">
+            <div className="button-row three">
+              <button className="btn" type="button" onClick={() => insetInputRef.current?.click()}>Upload Inset</button>
+            </div>
+            {project.layout.insetImage ? (
+              <div className="inset-status-card">
+                <div className="inset-preview"><img src={project.layout.insetImage} alt="Inset preview" /></div>
+                <button className="secondary-btn" type="button" onClick={() => updateLayout({ insetImage: null, insetEnabled: true })}>Remove Inset Image</button>
+              </div>
+            ) : null}
+            {project.layout.autoInsetRegion && !project.layout.insetImage && project.layout.insetEnabled !== false && (
+              <div className="inset-detected-badge">Detected: {project.layout.autoInsetRegion.name}</div>
+            )}
+            <div className="control-row inline-2">
+              <div><label>Inset Title</label><input value={project.layout.insetTitle ?? 'Project Locator'} onChange={(e) => updateLayout({ insetTitle: e.target.value })} placeholder="Project Locator" /></div>
+              <div><label>Inset Label</label><input value={project.layout.insetLabel ?? ''} onChange={(e) => updateLayout({ insetLabel: e.target.value })} placeholder={project.layout.autoInsetRegion?.name || 'Province / State'} /></div>
+            </div>
+            <div className="control-row inline-2">
+              <div><label>Logo Size</label><input type="range" min="0.6" max="1.8" step="0.05" value={project.layout.logoScale || 1} onChange={(e) => updateLayout({ logoScale: Number(e.target.value) })} /></div>
+              <div className="range-value">{Math.round((project.layout.logoScale || 1) * 100)}%</div>
+            </div>
+            <div className="control-row inline-2">
+              <div><label>Inset Size</label><input type="range" min="0.7" max="1.6" step="0.05" value={project.layout.insetScale || 1} onChange={(e) => updateLayout({ insetScale: Number(e.target.value) })} /></div>
+              <div className="range-value">{Math.round((project.layout.insetScale || 1) * 100)}%</div>
+            </div>
+            <div className="corner-pickers">
+              {[
+                { label: 'Title',       key: 'titleCorner',      def: 'tl' },
+                { label: 'Logo',        key: 'logoCorner',       def: 'tl' },
+                { label: 'Inset',       key: 'insetCorner',      def: 'tr' },
+                { label: 'Legend',      key: 'legendCorner',     def: 'bl' },
+                { label: 'Scale bar',   key: 'scaleBarCorner',   def: 'bl' },
+                { label: 'North arrow', key: 'northArrowCorner', def: 'br' },
+              ].map(({ label, key, def }) => (
+                <div key={key} className="corner-picker-row">
+                  <span className="corner-picker-label">{label}</span>
+                  <div className="corner-picker">
+                    {['tl', 'tr', 'bl', 'br'].map((c) => (
+                      <button key={c} type="button" className={`corner-btn corner-btn-${c}${(project.layout[key] || def) === c ? ' active' : ''}`} title={{ tl: 'Top Left', tr: 'Top Right', bl: 'Bottom Left', br: 'Bottom Right' }[c]} onClick={() => updateLayout({ [key]: c })} />
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <input ref={insetInputRef} type="file" accept="image/*" onChange={handleInsetImageChange} hidden />
+          </div>}
+        </section>
+
+        <section className="control-section cs-collapsible">
+          <h2 className="section-toggle-btn" onClick={() => toggleSection('refoverlays')}>Reference Overlays <span className={`section-chevron${collapsedSections.refoverlays ? '' : ' open'}`}>›</span></h2>
+          {!collapsedSections.refoverlays && <div className="toggle-grid">
             <label className="toggle-row"><input type="checkbox" checked={referenceOverlays.context} onChange={(e) => updateLayout({ referenceOverlays: { context: e.target.checked } })} /> <span>Roads / Water / Towns</span></label>
             <label className="toggle-row"><input type="checkbox" checked={referenceOverlays.labels} onChange={(e) => updateLayout({ referenceOverlays: { labels: e.target.checked } })} /> <span>Reference Labels</span></label>
             <label className="toggle-row"><input type="checkbox" checked={referenceOverlays.rail} onChange={(e) => updateLayout({ referenceOverlays: { rail: e.target.checked } })} /> <span>Railways</span></label>
-          </div>
+          </div>}
         </section>
 
-        <section className="control-section">
-          <h2>Export</h2>
-          <div className="control-grid">
+        <section className="control-section cs-collapsible">
+          <h2 className="section-toggle-btn" onClick={() => toggleSection('export')}>Export <span className={`section-chevron${collapsedSections.export ? '' : ' open'}`}>›</span></h2>
+          {!collapsedSections.export && <div className="control-grid">
             <div className="control-row inline-2">
               <div>
                 <label>Filename</label>
@@ -1913,7 +2117,7 @@ export default function App() {
               <button className={`btn${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('pdf'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export PDF'}</button>
             </div>
             {exportError && <div className="export-error-msg">{exportError}</div>}
-          </div>
+          </div>}
         </section>
       </Sidebar>
 
@@ -2008,6 +2212,8 @@ export default function App() {
               onMoveMarker={updateMarker}
               onMoveEllipse={updateEllipse}
               onMoveLabelOffset={(id, offset) => updateMarker(id, { labelOffsetX: offset.x, labelOffsetY: offset.y })}
+              onMoveEllipseLabelOffset={(id, offset) => updateEllipse(id, { labelOffsetX: offset.x, labelOffsetY: offset.y })}
+              onMoveEllipseLabelAngle={(id, angle) => updateEllipse(id, { labelAngle: angle })}
               labelFont={project.layout.fonts?.label}
             />
             <CalloutsOverlay
@@ -2097,21 +2303,57 @@ export default function App() {
         {project.layout.logo ? <div className="template-zone" style={zoneStyle(resolvedZones.logo)}><div className="template-card logo-card"><img src={project.layout.logo} alt="Logo" /></div></div> : null}
         {selectedFeature && featureEditorPoint ? (
           <div className="drillhole-inline-editor" style={{ left: featureEditorPoint.left, top: featureEditorPoint.top }}>
-            <div className="drillhole-inline-title">Edit drillhole callout</div>
-            <input
-              value={selectedFeature.suggestedLabel}
-              onChange={(e) => setSelectedFeature((prev) => ({ ...prev, suggestedLabel: e.target.value }))}
-              placeholder="Title"
-            />
-            <input
-              value={selectedFeature.suggestedSubtext || ''}
-              onChange={(e) => setSelectedFeature((prev) => ({ ...prev, suggestedSubtext: e.target.value }))}
-              placeholder="Subtext"
-            />
-            <div className="drillhole-inline-actions">
-              <button className="btn primary" type="button" onClick={addCalloutFromSelectedFeature}>Save Callout</button>
-              <button className="btn" type="button" onClick={() => setSelectedFeature(null)}>Close</button>
+            <div className="drillhole-inline-header">
+              <div className="drillhole-inline-title">{selectedFeature.layerName}</div>
+              <button className="drillhole-inline-close" type="button" onClick={() => setSelectedFeature(null)}>×</button>
             </div>
+            <div className="control-row">
+              <label>Title</label>
+              <input value={selectedFeature.suggestedLabel} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, suggestedLabel: e.target.value }))} placeholder="Title" />
+            </div>
+            <div className="control-row">
+              <label>Subtext</label>
+              <input value={selectedFeature.suggestedSubtext || ''} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, suggestedSubtext: e.target.value }))} placeholder="Subtext" />
+            </div>
+            <div className="drillhole-inline-row2">
+              <div className="control-row">
+                <label>Type</label>
+                <select value={selectedFeature.calloutType || 'leader'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, calloutType: e.target.value }))}>
+                  {Object.entries(CALLOUT_TYPES).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                </select>
+              </div>
+              <div className="control-row">
+                <label>Width</label>
+                <input type="number" min="140" max="320" step="2" value={selectedFeature.boxWidth || 188} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, boxWidth: Number(e.target.value || 188) }))} />
+              </div>
+            </div>
+            {selectedFeature.calloutType === 'badge' && (
+              <div className="drillhole-inline-row2">
+                <div className="control-row">
+                  <label>Chip Text</label>
+                  <input value={selectedFeature.badgeValue || ''} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, badgeValue: e.target.value }))} placeholder=">14 Moz" />
+                </div>
+                <div className="control-row">
+                  <label>Chip Color</label>
+                  <input type="color" value={selectedFeature.badgeColor || '#d97706'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, badgeColor: e.target.value }))} />
+                </div>
+              </div>
+            )}
+            <div className="drillhole-inline-row2">
+              <div className="control-row">
+                <label>BG</label>
+                <input type="color" value={selectedFeature.style?.background || '#ffffff'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, style: { ...(prev.style || {}), background: e.target.value } }))} />
+              </div>
+              <div className="control-row">
+                <label>Border</label>
+                <input type="color" value={selectedFeature.style?.border || '#102640'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, style: { ...(prev.style || {}), border: e.target.value } }))} />
+              </div>
+              <div className="control-row">
+                <label>Text</label>
+                <input type="color" value={selectedFeature.style?.textColor || '#0f172a'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, style: { ...(prev.style || {}), textColor: e.target.value } }))} />
+              </div>
+            </div>
+            <button className="btn primary" style={{ width: '100%' }} type="button" onClick={addCalloutFromSelectedFeature}>Add Callout</button>
           </div>
         ) : null}
           </div>
