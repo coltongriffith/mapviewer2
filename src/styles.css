@@ -648,7 +648,7 @@ button, input, select, textarea { font: inherit; }
 .floating-north-arrow .north-arrow-card { border-radius: 10px; }
 
 .drillhole-inline-editor {
-  position: fixed;
+  position: absolute;
   z-index: 2000;
   width: 280px;
   padding: 12px;

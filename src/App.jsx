@@ -1129,13 +1129,12 @@ export default function App() {
   const zoomDelta = Math.max(-8, Math.min(8, Number(project.layout.zoomDelta ?? 0)));
   const featureEditorPoint = useMemo(() => {
     if (!leafletMapRef.current || !selectedFeature?.latlng) return null;
-    const rect = leafletMapRef.current.getContainer().getBoundingClientRect();
     const pt = leafletMapRef.current.latLngToContainerPoint([selectedFeature.latlng.lat, selectedFeature.latlng.lng]);
-    const popupW = 292;
-    const popupH = 340;
+    const maxLeft = Math.max(12, mapSize.width - 292);
+    const maxTop = Math.max(12, mapSize.height - 340);
     return {
-      left: Math.min(window.innerWidth - popupW - 12, Math.max(rect.left + 12, rect.left + pt.x + 14)),
-      top:  Math.min(window.innerHeight - popupH - 12, Math.max(rect.top + 12, rect.top + pt.y - 24)),
+      left: Math.min(maxLeft, Math.max(12, pt.x + 14)),
+      top: Math.min(maxTop, Math.max(70, pt.y - 24)),
     };
   }, [selectedFeature, mapSize, featureEditorTick]);
 
@@ -2302,68 +2301,64 @@ export default function App() {
         {project.layout.showScaleBar !== false && <div className="template-zone" style={zoneStyle(resolvedZones.scaleBar)}><ScaleBar map={leafletMapRef.current} /></div>}
         {project.layout.footerText && project.layout.footerEnabled !== false ? <div className="template-zone" style={zoneStyle(resolvedZones.footer)}><div className="template-card footer-card">{project.layout.footerText}</div></div> : null}
         {project.layout.logo ? <div className="template-zone" style={zoneStyle(resolvedZones.logo)}><div className="template-card logo-card"><img src={project.layout.logo} alt="Logo" /></div></div> : null}
+        {selectedFeature && featureEditorPoint ? (
+          <div className="drillhole-inline-editor" style={{ left: featureEditorPoint.left, top: featureEditorPoint.top }}>
+            <div className="drillhole-inline-header">
+              <div className="drillhole-inline-title">{selectedFeature.layerName}</div>
+              <button className="drillhole-inline-close" type="button" onClick={() => setSelectedFeature(null)}>×</button>
+            </div>
+            <div className="control-row">
+              <label>Title</label>
+              <input value={selectedFeature.suggestedLabel} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, suggestedLabel: e.target.value }))} placeholder="Title" />
+            </div>
+            <div className="control-row">
+              <label>Subtext</label>
+              <input value={selectedFeature.suggestedSubtext || ''} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, suggestedSubtext: e.target.value }))} placeholder="Subtext" />
+            </div>
+            <div className="drillhole-inline-row2">
+              <div className="control-row">
+                <label>Type</label>
+                <select value={selectedFeature.calloutType || 'leader'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, calloutType: e.target.value }))}>
+                  {Object.entries(CALLOUT_TYPES).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                </select>
+              </div>
+              <div className="control-row">
+                <label>Width</label>
+                <input type="number" min="140" max="320" step="2" value={selectedFeature.boxWidth || 188} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, boxWidth: Number(e.target.value || 188) }))} />
+              </div>
+            </div>
+            {selectedFeature.calloutType === 'badge' && (
+              <div className="drillhole-inline-row2">
+                <div className="control-row">
+                  <label>Chip Text</label>
+                  <input value={selectedFeature.badgeValue || ''} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, badgeValue: e.target.value }))} placeholder=">14 Moz" />
+                </div>
+                <div className="control-row">
+                  <label>Chip Color</label>
+                  <input type="color" value={selectedFeature.badgeColor || '#d97706'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, badgeColor: e.target.value }))} />
+                </div>
+              </div>
+            )}
+            <div className="drillhole-inline-row2">
+              <div className="control-row">
+                <label>BG</label>
+                <input type="color" value={selectedFeature.style?.background || '#ffffff'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, style: { ...(prev.style || {}), background: e.target.value } }))} />
+              </div>
+              <div className="control-row">
+                <label>Border</label>
+                <input type="color" value={selectedFeature.style?.border || '#102640'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, style: { ...(prev.style || {}), border: e.target.value } }))} />
+              </div>
+              <div className="control-row">
+                <label>Text</label>
+                <input type="color" value={selectedFeature.style?.textColor || '#0f172a'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, style: { ...(prev.style || {}), textColor: e.target.value } }))} />
+              </div>
+            </div>
+            <button className="btn primary" style={{ width: '100%' }} type="button" onClick={addCalloutFromSelectedFeature}>Add Callout</button>
+          </div>
+        ) : null}
           </div>
         </div>
       </div>
-      {selectedFeature && createPortal(
-        <div className="drillhole-inline-editor" style={featureEditorPoint
-          ? { left: featureEditorPoint.left, top: featureEditorPoint.top }
-          : { right: 28, top: 80 }
-        }>
-          <div className="drillhole-inline-header">
-            <div className="drillhole-inline-title">{selectedFeature.layerName}</div>
-            <button className="drillhole-inline-close" type="button" onClick={() => setSelectedFeature(null)}>×</button>
-          </div>
-          <div className="control-row">
-            <label>Title</label>
-            <input value={selectedFeature.suggestedLabel} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, suggestedLabel: e.target.value }))} placeholder="Title" />
-          </div>
-          <div className="control-row">
-            <label>Subtext</label>
-            <input value={selectedFeature.suggestedSubtext || ''} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, suggestedSubtext: e.target.value }))} placeholder="Subtext" />
-          </div>
-          <div className="drillhole-inline-row2">
-            <div className="control-row">
-              <label>Type</label>
-              <select value={selectedFeature.calloutType || 'leader'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, calloutType: e.target.value }))}>
-                {Object.entries(CALLOUT_TYPES).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-              </select>
-            </div>
-            <div className="control-row">
-              <label>Width</label>
-              <input type="number" min="140" max="320" step="2" value={selectedFeature.boxWidth || 188} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, boxWidth: Number(e.target.value || 188) }))} />
-            </div>
-          </div>
-          {selectedFeature.calloutType === 'badge' && (
-            <div className="drillhole-inline-row2">
-              <div className="control-row">
-                <label>Chip Text</label>
-                <input value={selectedFeature.badgeValue || ''} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, badgeValue: e.target.value }))} placeholder=">14 Moz" />
-              </div>
-              <div className="control-row">
-                <label>Chip Color</label>
-                <input type="color" value={selectedFeature.badgeColor || '#d97706'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, badgeColor: e.target.value }))} />
-              </div>
-            </div>
-          )}
-          <div className="drillhole-inline-row2">
-            <div className="control-row">
-              <label>BG</label>
-              <input type="color" value={selectedFeature.style?.background || '#ffffff'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, style: { ...(prev.style || {}), background: e.target.value } }))} />
-            </div>
-            <div className="control-row">
-              <label>Border</label>
-              <input type="color" value={selectedFeature.style?.border || '#102640'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, style: { ...(prev.style || {}), border: e.target.value } }))} />
-            </div>
-            <div className="control-row">
-              <label>Text</label>
-              <input type="color" value={selectedFeature.style?.textColor || '#0f172a'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, style: { ...(prev.style || {}), textColor: e.target.value } }))} />
-            </div>
-          </div>
-          <button className="btn primary" style={{ width: '100%' }} type="button" onClick={addCalloutFromSelectedFeature}>Add Callout</button>
-        </div>,
-        document.body
-      )}
       {showRecentProjects ? (
         <RecentProjectsModal
           entries={recentProjects}

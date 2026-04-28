@@ -87,9 +87,6 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
 
     map.on('click', (event) => onMapClickRef.current?.(event.latlng));
 
-    // Dedicated pane for drillhole points — sits above polygon fills so they always receive clicks
-    map.createPane('drillholePane').style.zIndex = 620;
-
     overlayGroupRef.current = L.layerGroup().addTo(map);
     regionHighlightGroupRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
@@ -202,7 +199,9 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
       const svgRenderer = hasPattern ? L.svg({ padding: 0.1 }) : undefined;
       if (svgRenderer) svgRendererRefs.current.push(svgRenderer);
 
-      const drillholeRenderer = isDrillholes ? L.svg({ pane: 'drillholePane', padding: 0 }) : undefined;
+      // Use SVG renderer (overlayPane) for drillholes so they stack above canvas polygon fills.
+      // overlayPane SVG has pointer-events:auto from Leaflet CSS; custom panes do not.
+      const drillholeRenderer = isDrillholes ? L.svg({ padding: 0 }) : undefined;
       if (drillholeRenderer) svgRendererRefs.current.push(drillholeRenderer);
 
       const geoLayer = L.geoJSON(layer.geojson, {
@@ -226,13 +225,12 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
             opacity: lo,
           });
 
-          // Point markers always open the callout popup — clear any active annotation tool first
           marker.on('click', (e) => {
+            if (annotationToolRef?.current) return;
             L.DomEvent.stopPropagation(e);
-            if (annotationToolRef) annotationToolRef.current = null;
             onFeatureClick?.({ layerId: layer.id, feature, latlng });
           });
-          marker.bindTooltip('Click to add callout', { direction: 'top', offset: [0, -10], opacity: 0.9, sticky: true });
+          marker.bindTooltip('Click to edit callout', { direction: 'top', offset: [0, -10], opacity: 0.9, sticky: true });
 
           return marker;
         },
