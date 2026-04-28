@@ -851,6 +851,38 @@ button, input, select, textarea { font: inherit; }
   .map-zoom-inline { min-width: 140px; }
 }
 
+/* ── Modal shared backdrop + panel ──────────────────────────────────────────── */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: grid;
+  place-items: center;
+  background: rgba(2, 6, 23, 0.45);
+  backdrop-filter: blur(3px);
+}
+.modal-panel {
+  position: relative;
+  background: #ffffff;
+  border-radius: 18px;
+  border: 1px solid #dbe4ee;
+  box-shadow: 0 24px 56px rgba(15, 23, 42, 0.28);
+}
+.modal-close-btn {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  background: none;
+  border: none;
+  font-size: 22px;
+  line-height: 1;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+.modal-close-btn:hover { color: #1e293b; background: #f1f5f9; }
+
 /* ── Auth Modal ─────────────────────────────────────────────────────────────── */
 .auth-modal {
   width: 100%;
