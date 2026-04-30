@@ -854,52 +854,55 @@ button, input, select, textarea { font: inherit; }
 }
 .export-hd-skip:hover { background: #f1f5f9; border-color: #94a3b8; color: #1e293b; }
 
-/* ── Panel size pickers (title height, legend width) ── */
-.panel-size-row {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+/* ── Panel drag-resize handles ── */
+.panel-resize-handle {
+  position: absolute;
+  z-index: 600;
+  opacity: 0;
+  transition: opacity 0.15s;
 }
-.panel-size-group {
+.template-zone:hover .panel-resize-handle { opacity: 1; }
+.panel-resize-handle--bottom {
+  left: 12px;
+  right: 12px;
+  bottom: -5px;
+  height: 10px;
+  cursor: ns-resize;
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: center;
 }
-.panel-size-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: #64748b;
-  width: 90px;
-  flex-shrink: 0;
-}
-.panel-size-btns {
+.panel-resize-handle--right {
+  top: 12px;
+  bottom: 12px;
+  right: -5px;
+  width: 10px;
+  cursor: ew-resize;
   display: flex;
-  gap: 4px;
-  flex: 1;
+  align-items: center;
+  justify-content: center;
 }
-.panel-size-btn {
-  flex: 1;
-  padding: 5px 4px;
-  font-size: 11px;
-  font-weight: 500;
-  border: 1.5px solid #dde4ed;
-  border-radius: 6px;
-  background: #f8fafc;
-  color: #475569;
-  cursor: pointer;
-  transition: border-color 0.1s, background 0.1s, color 0.1s;
-  white-space: nowrap;
+/* Visible grip stripe */
+.panel-resize-handle--bottom::after {
+  content: '';
+  display: block;
+  width: 40px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(59, 130, 246, 0.7);
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.4);
 }
-.panel-size-btn:hover {
-  border-color: #4d86d5;
-  background: #eff6ff;
-  color: #1d4ed8;
+.panel-resize-handle--right::after {
+  content: '';
+  display: block;
+  height: 40px;
+  width: 4px;
+  border-radius: 2px;
+  background: rgba(59, 130, 246, 0.7);
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.4);
 }
-.panel-size-btn.active {
-  border-color: #2563eb;
-  background: #dbeafe;
-  color: #1d4ed8;
-}
+.panel-resize-handle:hover::after,
+.panel-resize-handle:active::after { background: rgba(37, 99, 235, 0.9); }
 
 /* ── Ratio export badge in HD modal ── */
 .export-hd-ratio-badge {

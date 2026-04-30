@@ -112,21 +112,18 @@ function intersects(a, b) {
   return a.left < b.left + b.width && a.left + a.width > b.left && a.top < b.top + b.height && a.top + a.height > b.top;
 }
 
-const TITLE_HEIGHTS = { compact: 68, standard: 92, expanded: 118 };
-const LEGEND_WIDTHS  = { narrow: 220, standard: 300, wide: 380 };
-
 export function resolveTemplateZones(template, layout, mapSize, legendItems) {
   const width = mapSize?.width || 1600;
   const height = mapSize?.height || 1000;
   const safe = { top: 22, right: 22, bottom: 22, left: 22, ...(layout?.safeMargins || {}) };
   const titleWidth = Math.max(420, Math.min(Math.round(width * 0.42), layout?.titleWidth === 'wide' ? 620 : 560));
-  const titleHeight = TITLE_HEIGHTS[layout?.titleSize || 'standard'] ?? TITLE_HEIGHTS.standard;
+  const titleHeight = Math.max(60, Math.min(180, layout?.titleHeightPx ?? 92));
 
   const resolvedLegendItems = legendItems || layout?.legendItems || [];
   const legendCount = resolvedLegendItems.length;
   const groupCount = new Set(resolvedLegendItems.map((item) => item.group).filter(Boolean)).size;
   const legendHeight = legendHeightFor(layout, legendCount, groupCount);
-  const legendWidth = LEGEND_WIDTHS[layout?.legendWidth || 'standard'] ?? LEGEND_WIDTHS.standard;
+  const legendWidth = Math.max(180, Math.min(480, layout?.legendWidthPx ?? 300));
   const logoScale = Math.max(0.7, Math.min(1.2, Number(layout?.logoScale || 1)));
   const insetScale = Math.max(0.8, Math.min(1.2, Number(layout?.insetScale || 1)));
   const insetSize = layout?.insetSize || 'medium';

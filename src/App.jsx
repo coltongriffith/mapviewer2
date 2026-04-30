@@ -2128,24 +2128,6 @@ export default function App() {
               <div><label>Inset Title</label><input value={project.layout.insetTitle ?? 'Project Locator'} onChange={(e) => updateLayout({ insetTitle: e.target.value })} placeholder="Project Locator" /></div>
               <div><label>Inset Label</label><input value={project.layout.insetLabel ?? ''} onChange={(e) => updateLayout({ insetLabel: e.target.value })} placeholder={project.layout.autoInsetRegion?.name || 'Province / State'} /></div>
             </div>
-            <div className="panel-size-row">
-              <div className="panel-size-group">
-                <label className="panel-size-label">Title Size</label>
-                <div className="panel-size-btns">
-                  {[{ v: 'compact', l: 'Compact' }, { v: 'standard', l: 'Standard' }, { v: 'expanded', l: 'Tall' }].map(({ v, l }) => (
-                    <button key={v} type="button" className={`panel-size-btn${(project.layout.titleSize || 'standard') === v ? ' active' : ''}`} onClick={() => updateLayout({ titleSize: v })}>{l}</button>
-                  ))}
-                </div>
-              </div>
-              <div className="panel-size-group">
-                <label className="panel-size-label">Legend Width</label>
-                <div className="panel-size-btns">
-                  {[{ v: 'narrow', l: 'Narrow' }, { v: 'standard', l: 'Normal' }, { v: 'wide', l: 'Wide' }].map(({ v, l }) => (
-                    <button key={v} type="button" className={`panel-size-btn${(project.layout.legendWidth || 'standard') === v ? ' active' : ''}`} onClick={() => updateLayout({ legendWidth: v })}>{l}</button>
-                  ))}
-                </div>
-              </div>
-            </div>
             <div className="control-row inline-2">
               <div><label>Logo Size</label><input type="range" min="0.6" max="1.8" step="0.05" value={project.layout.logoScale || 1} onChange={(e) => updateLayout({ logoScale: Number(e.target.value) })} /></div>
               <div className="range-value">{Math.round((project.layout.logoScale || 1) * 100)}%</div>
@@ -2354,6 +2336,28 @@ export default function App() {
               <p style={{ cursor: 'text' }} title="Click to edit" onClick={() => setEditingTitleField('subtitle')}>{project.layout.subtitle}</p>
             )}
           </div>
+          <div
+            className="panel-resize-handle panel-resize-handle--bottom"
+            title="Drag to resize title panel"
+            onMouseDown={(e) => {
+              e.preventDefault(); e.stopPropagation();
+              const map = leafletMapRef.current;
+              if (map) map.dragging.disable();
+              const startY = e.clientY;
+              const startH = project.layout.titleHeightPx ?? 92;
+              const onMove = (me) => {
+                const h = Math.max(60, Math.min(180, Math.round(startH + me.clientY - startY)));
+                setProject((p) => ({ ...p, layout: { ...p.layout, titleHeightPx: h } }));
+              };
+              const onUp = () => {
+                if (map) map.dragging.enable();
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup', onUp);
+              };
+              document.addEventListener('mousemove', onMove);
+              document.addEventListener('mouseup', onUp);
+            }}
+          />
         </div>
 
         {legendItems.length ? (
@@ -2390,6 +2394,28 @@ export default function App() {
                 ))}
               </div>
             </div>
+            <div
+              className="panel-resize-handle panel-resize-handle--right"
+              title="Drag to resize legend panel"
+              onMouseDown={(e) => {
+                e.preventDefault(); e.stopPropagation();
+                const map = leafletMapRef.current;
+                if (map) map.dragging.disable();
+                const startX = e.clientX;
+                const startW = project.layout.legendWidthPx ?? 300;
+                const onMove = (me) => {
+                  const w = Math.max(180, Math.min(480, Math.round(startW + me.clientX - startX)));
+                  setProject((p) => ({ ...p, layout: { ...p.layout, legendWidthPx: w } }));
+                };
+                const onUp = () => {
+                  if (map) map.dragging.enable();
+                  document.removeEventListener('mousemove', onMove);
+                  document.removeEventListener('mouseup', onUp);
+                };
+                document.addEventListener('mousemove', onMove);
+                document.addEventListener('mouseup', onUp);
+              }}
+            />
           </div>
         ) : null}
 

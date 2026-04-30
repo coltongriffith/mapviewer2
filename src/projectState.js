@@ -121,7 +121,9 @@ export function createInitialProjectState() {
         footer: 'Inter',
       },
       titleSize: 'standard',
+      titleHeightPx: 92,
       legendWidth: 'standard',
+      legendWidthPx: 300,
       exportSettings: {
         pixelRatio: 2,
         filename: 'mapviewer-export',
