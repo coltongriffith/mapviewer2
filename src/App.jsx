@@ -375,6 +375,8 @@ export default function App() {
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState('');
   const [mapSize, setMapSize] = useState({ width: 1600, height: 1000 });
+  const [saveFlash, setSaveFlash] = useState(false);
+  const saveFlashTimerRef = useRef(null);
   const [activeRatio, setActiveRatio] = useState(null);
   const activeRatioRef = useRef(null);
   const [viewportSize, setViewportSize] = useState({ width: 1600, height: 1000 });
@@ -442,7 +444,10 @@ export default function App() {
     setIsDirty(serialized !== lastSavedSnapshotRef.current);
     const timer = window.setTimeout(() => {
       saveDraft({ payload: project, projectId, projectName });
-    }, 500);
+      setSaveFlash(true);
+      clearTimeout(saveFlashTimerRef.current);
+      saveFlashTimerRef.current = setTimeout(() => setSaveFlash(false), 2000);
+    }, 250);
     return () => window.clearTimeout(timer);
   }, [project, projectId, projectName]);
 
@@ -972,36 +977,39 @@ export default function App() {
 
   const addCalloutAtAnchor = ({ text, subtext = '', type = 'leader', anchor, featureId, layerId, style = {}, boxWidth = 188, badgeValue, badgeColor }) => {
     const calloutId = crypto.randomUUID();
-    setProject((prev) => ({
-      ...prev,
-      callouts: [
-        ...prev.callouts,
-        {
-          id: calloutId,
-          text,
-          subtext,
-          type,
-          priority: 2,
-          anchor,
-          offset: { x: 20, y: -18 },
-          featureId: featureId || null,
-          layerId: layerId || null,
-          boxWidth,
-          ...(badgeValue !== undefined ? { badgeValue } : {}),
-          ...(badgeColor !== undefined ? { badgeColor } : {}),
-          style: {
-            background: '#ffffff',
-            border: '#102640',
-            textColor: '#0f172a',
-            subtextColor: '#475569',
-            fontSize: 12,
-            paddingX: 10,
-            paddingY: 8,
-            ...style,
+    setProject((prev) => {
+      const accent = prev.layout?.accentColor || null;
+      return {
+        ...prev,
+        callouts: [
+          ...prev.callouts,
+          {
+            id: calloutId,
+            text,
+            subtext,
+            type,
+            priority: 2,
+            anchor,
+            offset: { x: 20, y: -18 },
+            featureId: featureId || null,
+            layerId: layerId || null,
+            boxWidth,
+            ...(badgeValue !== undefined ? { badgeValue } : {}),
+            ...(badgeColor !== undefined ? { badgeColor } : {}),
+            style: {
+              background: '#ffffff',
+              border: accent || '#102640',
+              textColor: '#0f172a',
+              subtextColor: '#475569',
+              fontSize: 12,
+              paddingX: 10,
+              paddingY: 8,
+              ...style,
+            },
           },
-        },
-      ],
-    }));
+        ],
+      };
+    });
     setSelectedCalloutId(calloutId);
   };
 
@@ -1116,18 +1124,23 @@ export default function App() {
 
   const addEllipseAt = (latlng) => {
     const id = crypto.randomUUID();
-    setProject((prev) => ({
-      ...prev,
-      ellipses: [
-        ...(prev.ellipses || []),
-        {
-          id,
-          lat: latlng.lat,
-          lng: latlng.lng,
-          ...(prev.layout?.zoneDefaults || { width: 90, height: 56, rotation: -18, color: '#dc2626', dashed: true, label: '' }),
-        },
-      ],
-    }));
+    setProject((prev) => {
+      const accent = prev.layout?.accentColor || null;
+      const defaults = prev.layout?.zoneDefaults || { width: 90, height: 56, rotation: -18, color: '#dc2626', dashed: true, label: '' };
+      return {
+        ...prev,
+        ellipses: [
+          ...(prev.ellipses || []),
+          {
+            id,
+            lat: latlng.lat,
+            lng: latlng.lng,
+            ...defaults,
+            color: accent || defaults.color || '#dc2626',
+          },
+        ],
+      };
+    });
     setSelectedEllipseId(id);
     setSelectedMarkerId(null);
     setSelectedCalloutId(null);
@@ -1145,7 +1158,7 @@ export default function App() {
       ...prev,
       ellipses: [
         ...(prev.ellipses || []),
-        { id, lat: latlng.lat, lng: latlng.lng, isRing: true, radiusKm, color: '#dc2626', dashed: true, label: '' },
+        { id, lat: latlng.lat, lng: latlng.lng, isRing: true, radiusKm, color: prev.layout?.accentColor || '#dc2626', dashed: true, label: '' },
       ],
     }));
     setSelectedEllipseId(id);
@@ -2115,6 +2128,24 @@ export default function App() {
               <div><label>Inset Title</label><input value={project.layout.insetTitle ?? 'Project Locator'} onChange={(e) => updateLayout({ insetTitle: e.target.value })} placeholder="Project Locator" /></div>
               <div><label>Inset Label</label><input value={project.layout.insetLabel ?? ''} onChange={(e) => updateLayout({ insetLabel: e.target.value })} placeholder={project.layout.autoInsetRegion?.name || 'Province / State'} /></div>
             </div>
+            <div className="panel-size-row">
+              <div className="panel-size-group">
+                <label className="panel-size-label">Title Size</label>
+                <div className="panel-size-btns">
+                  {[{ v: 'compact', l: 'Compact' }, { v: 'standard', l: 'Standard' }, { v: 'expanded', l: 'Tall' }].map(({ v, l }) => (
+                    <button key={v} type="button" className={`panel-size-btn${(project.layout.titleSize || 'standard') === v ? ' active' : ''}`} onClick={() => updateLayout({ titleSize: v })}>{l}</button>
+                  ))}
+                </div>
+              </div>
+              <div className="panel-size-group">
+                <label className="panel-size-label">Legend Width</label>
+                <div className="panel-size-btns">
+                  {[{ v: 'narrow', l: 'Narrow' }, { v: 'standard', l: 'Normal' }, { v: 'wide', l: 'Wide' }].map(({ v, l }) => (
+                    <button key={v} type="button" className={`panel-size-btn${(project.layout.legendWidth || 'standard') === v ? ' active' : ''}`} onClick={() => updateLayout({ legendWidth: v })}>{l}</button>
+                  ))}
+                </div>
+              </div>
+            </div>
             <div className="control-row inline-2">
               <div><label>Logo Size</label><input type="range" min="0.6" max="1.8" step="0.05" value={project.layout.logoScale || 1} onChange={(e) => updateLayout({ logoScale: Number(e.target.value) })} /></div>
               <div className="range-value">{Math.round((project.layout.logoScale || 1) * 100)}%</div>
@@ -2194,7 +2225,9 @@ export default function App() {
         <div className="map-topbar editor-toolbar">
           <div className="map-topbar-left">
             <div className="map-topbar-title">{project.layout.title || 'Project Map'}</div>
-            <div className={`autosave-badge ${isDirty ? 'dirty' : 'clean'}`}>{isDirty ? 'Unsaved' : user ? 'Cloud' : 'Saved'}</div>
+            <div className={`autosave-badge ${isDirty ? 'dirty' : saveFlash ? 'flash' : 'clean'}`}>
+              {isDirty ? 'Unsaved' : saveFlash ? '✓ Saved' : user ? 'Cloud ✓' : 'Saved ✓'}
+            </div>
           </div>
           <div className="map-topbar-right">
             <div className="topbar-btn-group">

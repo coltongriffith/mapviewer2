@@ -112,16 +112,21 @@ function intersects(a, b) {
   return a.left < b.left + b.width && a.left + a.width > b.left && a.top < b.top + b.height && a.top + a.height > b.top;
 }
 
+const TITLE_HEIGHTS = { compact: 68, standard: 92, expanded: 118 };
+const LEGEND_WIDTHS  = { narrow: 220, standard: 300, wide: 380 };
+
 export function resolveTemplateZones(template, layout, mapSize, legendItems) {
   const width = mapSize?.width || 1600;
   const height = mapSize?.height || 1000;
   const safe = { top: 22, right: 22, bottom: 22, left: 22, ...(layout?.safeMargins || {}) };
   const titleWidth = Math.max(420, Math.min(Math.round(width * 0.42), layout?.titleWidth === 'wide' ? 620 : 560));
+  const titleHeight = TITLE_HEIGHTS[layout?.titleSize || 'standard'] ?? TITLE_HEIGHTS.standard;
 
   const resolvedLegendItems = legendItems || layout?.legendItems || [];
   const legendCount = resolvedLegendItems.length;
   const groupCount = new Set(resolvedLegendItems.map((item) => item.group).filter(Boolean)).size;
   const legendHeight = legendHeightFor(layout, legendCount, groupCount);
+  const legendWidth = LEGEND_WIDTHS[layout?.legendWidth || 'standard'] ?? LEGEND_WIDTHS.standard;
   const logoScale = Math.max(0.7, Math.min(1.2, Number(layout?.logoScale || 1)));
   const insetScale = Math.max(0.8, Math.min(1.2, Number(layout?.insetScale || 1)));
   const insetSize = layout?.insetSize || 'medium';
@@ -152,8 +157,8 @@ export function resolveTemplateZones(template, layout, mapSize, legendItems) {
   }
 
   // Placement order: title → logo → inset → north arrow → scale bar → legend
-  const titleZone = clampZone({ ...anchorAt(titleCorner), width: titleWidth, height: BASE_ZONES.title.height }, safe, width, height);
-  vOffset[titleCorner] += BASE_ZONES.title.height + 10;
+  const titleZone = clampZone({ ...anchorAt(titleCorner), width: titleWidth, height: titleHeight }, safe, width, height);
+  vOffset[titleCorner] += titleHeight + 10;
 
   const logoW = Math.round(BASE_ZONES.logo.width * logoScale);
   const logoH = Math.round(BASE_ZONES.logo.height * logoScale);
@@ -171,7 +176,7 @@ export function resolveTemplateZones(template, layout, mapSize, legendItems) {
   const scaleBarZone = clampZone({ ...anchorAt(scaleBarCorner), width: BASE_ZONES.scaleBar.width, height: BASE_ZONES.scaleBar.height }, safe, width, height);
   vOffset[scaleBarCorner] += BASE_ZONES.scaleBar.height + 10;
 
-  const legendZone = clampZone({ ...anchorAt(legendCorner), width: BASE_ZONES.legend.width, height: legendHeight }, safe, width, height);
+  const legendZone = clampZone({ ...anchorAt(legendCorner), width: legendWidth, height: legendHeight }, safe, width, height);
 
   // Footer: bottom-center strip, hidden if it collides with anything below
   const footerZone = clampZone({ bottom: safe.bottom, left: BASE_ZONES.footer.left, width: BASE_ZONES.footer.width, height: BASE_ZONES.footer.height }, safe, width, height);

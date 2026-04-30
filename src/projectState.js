@@ -120,6 +120,8 @@ export function createInitialProjectState() {
         label: 'Inter',
         footer: 'Inter',
       },
+      titleSize: 'standard',
+      legendWidth: 'standard',
       exportSettings: {
         pixelRatio: 2,
         filename: 'mapviewer-export',

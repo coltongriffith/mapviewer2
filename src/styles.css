@@ -637,6 +637,16 @@ button, input, select, textarea { font: inherit; }
 }
 .autosave-badge.clean { background: #edf9f0; border-color: #bfe4c8; color: #1f6a35; }
 .autosave-badge.dirty { background: #fff8eb; border-color: #f0d8a9; color: #8a5b08; }
+.autosave-badge.flash {
+  background: #d1fae5;
+  border-color: #6ee7b7;
+  color: #065f46;
+  animation: save-flash-in 0.18s ease;
+}
+@keyframes save-flash-in {
+  from { transform: scale(0.94); opacity: 0.7; }
+  to   { transform: scale(1);    opacity: 1; }
+}
 
 .recent-projects-modal {
   position: fixed;
@@ -843,6 +853,53 @@ button, input, select, textarea { font: inherit; }
   transition: background-color 0.1s ease, border-color 0.1s ease;
 }
 .export-hd-skip:hover { background: #f1f5f9; border-color: #94a3b8; color: #1e293b; }
+
+/* ── Panel size pickers (title height, legend width) ── */
+.panel-size-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.panel-size-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.panel-size-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  width: 90px;
+  flex-shrink: 0;
+}
+.panel-size-btns {
+  display: flex;
+  gap: 4px;
+  flex: 1;
+}
+.panel-size-btn {
+  flex: 1;
+  padding: 5px 4px;
+  font-size: 11px;
+  font-weight: 500;
+  border: 1.5px solid #dde4ed;
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #475569;
+  cursor: pointer;
+  transition: border-color 0.1s, background 0.1s, color 0.1s;
+  white-space: nowrap;
+}
+.panel-size-btn:hover {
+  border-color: #4d86d5;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+.panel-size-btn.active {
+  border-color: #2563eb;
+  background: #dbeafe;
+  color: #1d4ed8;
+}
 
 /* ── Ratio export badge in HD modal ── */
 .export-hd-ratio-badge {
