@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import MapCanvas from './components/MapCanvas';
+import RatioSwitcher from './components/RatioSwitcher';
 import Sidebar from './components/Sidebar';
 import LayerList from './components/LayerList';
 import LocatorInset from './components/LocatorInset';
@@ -26,6 +27,7 @@ import {
   TEMPLATE_MODES,
   TEMPLATE_THEMES,
 } from './projectState';
+import { EXPORT_RATIOS } from './constants';
 import { applyRoleToLayer, inferRoleFromLayer } from './mapPresets';
 import { getTemplate } from './templates';
 import { buildLegendItems, resolveTemplateZones } from './templates/technicalResultsTemplate';
@@ -341,6 +343,7 @@ function initialWorkspaceState() {
 
 export default function App() {
   const mapContainerRef = useRef(null);
+  const mapViewportRef = useRef(null);
   const leafletMapRef = useRef(null);
   const logoInputRef = useRef(null);
   const insetInputRef = useRef(null);
@@ -372,6 +375,9 @@ export default function App() {
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState('');
   const [mapSize, setMapSize] = useState({ width: 1600, height: 1000 });
+  const [activeRatio, setActiveRatio] = useState(null);
+  const activeRatioRef = useRef(null);
+  const [viewportSize, setViewportSize] = useState({ width: 1600, height: 1000 });
   const [featureEditorTick, setFeatureEditorTick] = useState(0);
   const [mapReady, setMapReady] = useState(false);
   const bootstrappedRef = useRef(false);
@@ -487,6 +493,61 @@ export default function App() {
     ro.observe(container);
     return () => ro.disconnect();
   }, [screen]);
+
+  useEffect(() => {
+    const viewport = mapViewportRef.current;
+    if (!viewport) return undefined;
+    const update = () => setViewportSize({ width: viewport.clientWidth, height: viewport.clientHeight });
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(viewport);
+    return () => ro.disconnect();
+  }, [screen]);
+
+  const constrainedStageSize = useMemo(() => {
+    if (!activeRatio) return null;
+    const config = EXPORT_RATIOS[activeRatio];
+    const PAD = 32;
+    const availW = Math.max(100, viewportSize.width - PAD * 2);
+    const availH = Math.max(100, viewportSize.height - PAD * 2);
+    if (availW / availH > config.ratio) {
+      return { width: Math.round(availH * config.ratio), height: availH };
+    }
+    return { width: availW, height: Math.round(availW / config.ratio) };
+  }, [activeRatio, viewportSize]);
+
+  const handleRatioChange = useCallback((newRatio) => {
+    const map = leafletMapRef.current;
+    const prevRatio = activeRatioRef.current;
+
+    if (map && prevRatio !== null) {
+      const center = map.getCenter();
+      const zoom = map.getZoom();
+      setProject((p) => ({
+        ...p,
+        ratioMapStates: { ...(p.ratioMapStates || {}), [prevRatio]: { center: { lat: center.lat, lng: center.lng }, zoom } },
+      }));
+    }
+
+    activeRatioRef.current = newRatio;
+    setActiveRatio(newRatio);
+  }, []);
+
+  useEffect(() => {
+    const map = leafletMapRef.current;
+    if (!map) return undefined;
+    const timer = setTimeout(() => {
+      map.invalidateSize({ animate: false });
+      if (activeRatio) {
+        const saved = project.ratioMapStates?.[activeRatio];
+        if (saved?.center) {
+          map.setView([saved.center.lat, saved.center.lng], saved.zoom, { animate: false });
+        }
+      }
+    }, 60);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [constrainedStageSize]);
 
   useEffect(() => {
     if (screen !== 'editor') {
@@ -2097,6 +2158,7 @@ export default function App() {
         <section className="control-section cs-collapsible">
           <h2 className="section-toggle-btn" onClick={() => toggleSection('export')}>Export <span className={`section-chevron${collapsedSections.export ? '' : ' open'}`}>›</span></h2>
           {!collapsedSections.export && <div className="control-grid">
+            <RatioSwitcher activeRatio={activeRatio} onRatioChange={handleRatioChange} />
             <div className="control-row inline-2">
               <div>
                 <label>Filename</label>
@@ -2156,13 +2218,19 @@ export default function App() {
             {exportError && <div className="export-error-msg">{exportError}</div>}
           </div>
         </div>
-        <div className="map-viewport">
+        <div ref={mapViewportRef} className={`map-viewport${activeRatio ? ' map-viewport--ratio-active' : ''}`}>
+          {activeRatio && (
+            <div className="ratio-frame-badge">
+              {EXPORT_RATIOS[activeRatio].label} — {EXPORT_RATIOS[activeRatio].description}
+            </div>
+          )}
           <div
             ref={mapContainerRef}
-            className="map-stage"
+            className={`map-stage${activeRatio ? ' map-stage--ratio-constrained' : ''}`}
             data-theme={project.layout.themeId || 'modern_rounded'}
             data-annotation-tool={annotationTool || ''}
             style={{
+              ...(constrainedStageSize || {}),
               '--template-radius': `${themeTokens.panelRadius}px`,
               '--title-radius': `${themeTokens.titleRadius}px`,
               '--panel-bg': themeTokens.panelFill,
@@ -2388,6 +2456,7 @@ export default function App() {
       {showExportModal ? (
         <ExportHDModal
           format={pendingExportFormat}
+          activeRatio={activeRatio}
           onConfirm={handleExportModalConfirm}
           onWithWatermark={handleExportModalWithWatermark}
           onClose={() => setShowExportModal(false)}

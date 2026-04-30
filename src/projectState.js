@@ -128,5 +128,6 @@ export function createInitialProjectState() {
     callouts: [],
     markers: [],
     ellipses: [],
+    ratioMapStates: {},
   };
 }

@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
 import { getLastLeadEmail } from '../utils/leadCapture';
 import { PDF_SIZES } from '../export/exportPDF';
+import { EXPORT_RATIOS } from '../constants';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export default function ExportHDModal({ format = 'png', onConfirm, onWithWatermark, onClose }) {
+export default function ExportHDModal({ format = 'png', activeRatio = null, onConfirm, onWithWatermark, onClose }) {
   const [email, setEmail] = useState(() => getLastLeadEmail() || '');
   const [error, setError] = useState('');
-  const [pdfSize, setPdfSize] = useState('letter_landscape');
+  const suggestedPdfSize = activeRatio ? (EXPORT_RATIOS[activeRatio]?.suggestedPdfSize || 'letter_landscape') : 'letter_landscape';
+  const [pdfSize, setPdfSize] = useState(suggestedPdfSize);
 
   const isPdf = format === 'pdf';
   const formatLabel = format === 'svg' ? 'SVG' : format === 'pdf' ? 'PDF' : 'PNG';
@@ -41,6 +43,15 @@ export default function ExportHDModal({ format = 'png', onConfirm, onWithWaterma
         <p className="export-hd-desc">
           Enter your email to unlock clean exports — no <em>explorationmaps.com</em> label. Free forever, and your email is remembered for future exports.
         </p>
+
+        {activeRatio && (
+          <div className="export-hd-ratio-badge">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true" style={{ flexShrink: 0 }}>
+              <rect x="1" y="1" width="12" height="12" rx="1.5" stroke="currentColor" strokeWidth="1.6" />
+            </svg>
+            Exporting {EXPORT_RATIOS[activeRatio].label} ({EXPORT_RATIOS[activeRatio].description}) ratio
+          </div>
+        )}
 
         {isPdf && (
           <div className="export-hd-field" style={{ marginBottom: 12 }}>
