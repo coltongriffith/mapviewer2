@@ -120,6 +120,19 @@ export function createInitialProjectState() {
         label: 'Inter',
         footer: 'Inter',
       },
+      titleSize: 'standard',
+      titleHeightPx: 92,
+      titleWidthPx: 520,
+      titleTransparent: false,
+      legendWidth: 'standard',
+      legendWidthPx: 300,
+      legendHeightPx: null,
+      legendTransparent: false,
+      logoWidthPx: 168,
+      logoHeightPx: 74,
+      logoTransparent: false,
+      insetWidthPx: 244,
+      insetHeightPx: 190,
       exportSettings: {
         pixelRatio: 2,
         filename: 'mapviewer-export',
@@ -128,5 +141,7 @@ export function createInitialProjectState() {
     callouts: [],
     markers: [],
     ellipses: [],
+    polygons: [],
+    ratioMapStates: {},
   };
 }
