@@ -2409,6 +2409,7 @@ export default function App() {
             ref={mapContainerRef}
             className={`map-stage${activeRatio ? ' map-stage--ratio-constrained' : ''}`}
             data-theme={project.layout.themeId || 'modern_rounded'}
+            data-title-accent-style={themeTokens.titleAccentStyle || 'top'}
             data-annotation-tool={annotationTool || ''}
             style={{
               ...(constrainedStageSize || {}),

@@ -168,7 +168,27 @@ button, input, select, textarea { font: inherit; }
   border-radius: var(--title-radius, var(--template-radius, 12px));
   padding: 16px 18px;
 }
-.title-card::before { content: ''; position: absolute; inset: 0 0 auto 0; height: 5px; background: var(--title-accent, transparent); }
+.title-card::before {
+  content: '';
+  position: absolute;
+  pointer-events: none;
+  background: var(--title-accent, transparent);
+  /* default: top stripe */
+  inset: 0 0 auto 0;
+  height: 5px;
+  width: auto;
+  border-radius: var(--title-radius, 10px) var(--title-radius, 10px) 0 0;
+}
+/* Left-bar variant: driven by data-title-accent-style on .map-stage */
+.map-stage[data-title-accent-style="left"] .title-card::before {
+  inset: 0 auto 0 0;
+  height: auto;
+  width: 6px;
+  border-radius: var(--title-radius, 10px) 0 0 var(--title-radius, 10px);
+}
+.map-stage[data-title-accent-style="left"] .title-card { padding-left: 24px; }
+/* Transparent panel hides accent stripe */
+.panel--transparent::before { display: none !important; }
 .title-card h2 { margin: 0; font-size: 28px; color: var(--title-fg, #fff); font-family: var(--font-title); }
 .title-card p { margin: 8px 0 0; font-size: 14px; color: var(--subtitle-fg, rgba(255,255,255,0.86)); font-family: var(--font-title); }
 .title-inline-input { display: block; width: 100%; margin: 0; font-size: 28px; font-family: var(--font-title); color: var(--title-fg, #fff); background: rgba(255,255,255,0.12); border: none; border-bottom: 2px solid rgba(255,255,255,0.5); outline: none; padding: 0 2px; }
@@ -489,7 +509,8 @@ button, input, select, textarea { font: inherit; }
   .landing-steps, .landing-features { padding-left: 16px; padding-right: 16px; }
 }
 
-.map-stage[data-theme="technical_sharp"] .title-card { padding-top: 20px; }
+/* Extra top padding only when accent bar sits at the top */
+.map-stage[data-title-accent-style="top"] .title-card { padding-top: 20px; }
 .map-stage[data-theme="investor_clean"] .title-card { padding-top: 20px; }
 .map-stage[data-theme="investor_clean"] .legend-group-title { letter-spacing: 0.06em; }
 .map-stage[data-theme="technical_sharp"] .template-card { box-shadow: none; }
