@@ -34,19 +34,38 @@ function resolvePositions(items, map, kind) {
   });
 }
 
+function chaikin(points, iterations = 3) {
+  let pts = points;
+  for (let i = 0; i < iterations; i++) {
+    const next = [];
+    for (let j = 0; j < pts.length; j++) {
+      const a = pts[j], b = pts[(j + 1) % pts.length];
+      next.push({ lat: 0.75 * a.lat + 0.25 * b.lat, lng: 0.75 * a.lng + 0.25 * b.lng });
+      next.push({ lat: 0.25 * a.lat + 0.75 * b.lat, lng: 0.25 * a.lng + 0.75 * b.lng });
+    }
+    pts = next;
+  }
+  return pts;
+}
+
 export default function AnnotationOverlay({
   map,
   markers,
   ellipses,
+  polygons,
+  pendingPolygon,
   selectedMarkerId,
   selectedEllipseId,
+  selectedPolygonId,
   onSelectMarker,
   onSelectEllipse,
+  onSelectPolygon,
   onMoveMarker,
   onMoveEllipse,
   onMoveLabelOffset,
   onMoveEllipseLabelOffset,
   onMoveEllipseLabelAngle,
+  onMovePolygonLabel,
   labelFont,
 }) {
   const [tick, setTick] = useState(0);
@@ -73,6 +92,10 @@ export default function AnnotationOverlay({
       }
       if (kind === 'ellipse-label') {
         onMoveEllipseLabelOffset?.(id, { x: startPoint.x + dx, y: startPoint.y + dy });
+        return;
+      }
+      if (kind === 'polygon-label') {
+        onMovePolygonLabel?.(id, { x: startPoint.x + dx, y: startPoint.y + dy });
         return;
       }
       if (kind === 'ellipse-label-arc') {
@@ -109,6 +132,26 @@ export default function AnnotationOverlay({
   const placedMarkers = useMemo(() => resolvePositions(markers, map, 'marker'), [markers, map, tick]);
   const placedEllipses = useMemo(() => resolvePositions(ellipses, map, 'ellipse'), [ellipses, map, tick]);
 
+  // Polygon screen points (computed fresh on each tick/zoom/pan)
+  const polygonScreenPts = useMemo(() => {
+    if (!map) return [];
+    return (polygons || []).map((poly) => {
+      const rawPts = poly.smoothed ? chaikin(poly.points || []) : (poly.points || []);
+      return rawPts.map(({ lat, lng }) => {
+        const pt = map.latLngToContainerPoint([lat, lng]);
+        return { x: pt.x, y: pt.y };
+      });
+    });
+  }, [polygons, map, tick]);
+
+  const pendingScreenPts = useMemo(() => {
+    if (!map || !pendingPolygon?.length) return [];
+    return pendingPolygon.map(({ lat, lng }) => {
+      const pt = map.latLngToContainerPoint([lat, lng]);
+      return { x: pt.x, y: pt.y };
+    });
+  }, [pendingPolygon, map, tick]);
+
   return (
     <div className="annotation-overlay">
       {/* Non-ring ellipses as divs */}
@@ -136,6 +179,90 @@ export default function AnnotationOverlay({
       ))}
 
       <svg className="annotation-leader-svg" style={{ pointerEvents: 'none' }}>
+        {/* Outside shade for rings (evenodd mask) */}
+        {placedEllipses.filter((e) => e.isRing && e.outsideShade).map((ellipse) => {
+          const r = ellipse.width / 2;
+          const W = map?.getContainer()?.offsetWidth || 2000;
+          const H = map?.getContainer()?.offsetHeight || 2000;
+          return (
+            <path
+              key={`shade-ring-${ellipse.id}`}
+              d={`M 0 0 L ${W} 0 L ${W} ${H} L 0 ${H} Z M ${ellipse.x} ${ellipse.y} m ${-r} 0 a ${r} ${r} 0 1 0 ${r * 2} 0 a ${r} ${r} 0 1 0 ${-r * 2} 0`}
+              fill={ellipse.outsideShadeColor || '#000000'}
+              fillOpacity={ellipse.outsideShadeOpacity ?? 0.35}
+              fillRule="evenodd"
+              style={{ pointerEvents: 'none' }}
+            />
+          );
+        })}
+
+        {/* Outside shade for polygons (evenodd mask) */}
+        {(polygons || []).filter((poly) => poly.outsideShade).map((poly, idx) => {
+          const pts = polygonScreenPts[idx];
+          if (!pts || pts.length < 3) return null;
+          const W = map?.getContainer()?.offsetWidth || 2000;
+          const H = map?.getContainer()?.offsetHeight || 2000;
+          const polyPath = `M ${pts.map((p) => `${p.x} ${p.y}`).join(' L ')} Z`;
+          return (
+            <path
+              key={`shade-poly-${poly.id}`}
+              d={`M 0 0 L ${W} 0 L ${W} ${H} L 0 ${H} Z ${polyPath}`}
+              fill={poly.outsideShadeColor || '#000000'}
+              fillOpacity={poly.outsideShadeOpacity ?? 0.35}
+              fillRule="evenodd"
+              style={{ pointerEvents: 'none' }}
+            />
+          );
+        })}
+
+        {/* Polygon boundaries */}
+        {(polygons || []).map((poly, idx) => {
+          const pts = polygonScreenPts[idx];
+          if (!pts || pts.length < 2) return null;
+          const d = `M ${pts.map((p) => `${p.x} ${p.y}`).join(' L ')} Z`;
+          const isSelected = selectedPolygonId === poly.id;
+          return (
+            <g key={`poly-${poly.id}`} style={{ pointerEvents: 'auto' }}>
+              {isSelected && <path d={d} fill="none" stroke="rgba(59,130,246,0.5)" strokeWidth={5} style={{ pointerEvents: 'none' }} />}
+              <path
+                d={d}
+                fill="none"
+                stroke={poly.color || '#000000'}
+                strokeWidth={poly.strokeWidth ?? 2}
+                strokeDasharray={poly.dashed === false ? 'none' : '10 5'}
+                style={{ pointerEvents: 'none' }}
+              />
+              {/* Wide invisible hit area */}
+              <path
+                d={d}
+                fill="transparent"
+                stroke="transparent"
+                strokeWidth={18}
+                style={{ cursor: 'pointer', pointerEvents: 'stroke' }}
+                onClick={(e) => { e.stopPropagation(); onSelectPolygon?.(poly.id); }}
+              />
+            </g>
+          );
+        })}
+
+        {/* Pending polygon (in-progress drawing) */}
+        {pendingScreenPts.length > 0 && (() => {
+          const d = pendingScreenPts.length === 1
+            ? ''
+            : `M ${pendingScreenPts.map((p) => `${p.x} ${p.y}`).join(' L ')}`;
+          const first = pendingScreenPts[0];
+          return (
+            <g style={{ pointerEvents: 'none' }}>
+              {d && <path d={d} fill="none" stroke="#3b82f6" strokeWidth={2} strokeDasharray="8 4" />}
+              {/* First point close-target circle */}
+              <circle cx={first.x} cy={first.y} r={8} fill="rgba(59,130,246,0.25)" stroke="#3b82f6" strokeWidth={1.5} />
+              {pendingScreenPts.map((p, i) => (
+                <circle key={i} cx={p.x} cy={p.y} r={3} fill="#3b82f6" />
+              ))}
+            </g>
+          );
+        })()}
+
         {/* Distance rings */}
         {placedEllipses.filter((e) => e.isRing).map((ellipse) => {
           const r = ellipse.width / 2;
@@ -305,6 +432,48 @@ export default function AnnotationOverlay({
             }}
           >
             {displayLabel}
+          </div>
+        );
+      })}
+
+      {/* Polygon labels (draggable) */}
+      {(polygons || []).filter((poly) => poly.label).map((poly, idx) => {
+        const pts = polygonScreenPts[idx];
+        if (!pts || !pts.length) return null;
+        // Position at top of bounding box
+        const minY = Math.min(...pts.map((p) => p.y));
+        const midX = (Math.min(...pts.map((p) => p.x)) + Math.max(...pts.map((p) => p.x))) / 2;
+        const baseX = midX + (poly.labelOffsetX || 0);
+        const baseY = minY - 18 + (poly.labelOffsetY || 0);
+        return (
+          <div
+            key={`poly-label-${poly.id}`}
+            className="ellipse-annotation-label"
+            style={{
+              left: baseX,
+              top: baseY,
+              transform: 'translateX(-50%)',
+              fontFamily: labelFont || 'Inter, sans-serif',
+              fontSize: poly.labelFontSize || 12,
+              fontWeight: poly.labelBold !== false ? '700' : '400',
+              color: poly.labelColor || poly.color || '#000000',
+              cursor: 'move',
+              pointerEvents: 'auto',
+              whiteSpace: 'nowrap',
+            }}
+            onClick={(e) => { e.stopPropagation(); onSelectPolygon?.(poly.id); }}
+            onPointerDown={(e) => {
+              e.preventDefault(); e.stopPropagation();
+              onSelectPolygon?.(poly.id);
+              dragRef.current = {
+                id: poly.id, kind: 'polygon-label',
+                startX: e.clientX, startY: e.clientY,
+                startPoint: { x: poly.labelOffsetX || 0, y: poly.labelOffsetY || 0 },
+                pointerId: e.pointerId,
+              };
+            }}
+          >
+            {poly.label}
           </div>
         );
       })}

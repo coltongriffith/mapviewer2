@@ -234,7 +234,7 @@ function drawTitleBlockCanvas(ctx, scene, scale) {
   const theme = getTheme(scene);
   const layout = scene.project.layout || {};
   const { title } = getOverlayMetrics(scene); const x = title.left * scale, y = title.top * scale, w = title.width * scale, h = title.height * scale;
-  drawPanelRect(ctx, x, y, w, h, (theme.titleRadius ?? theme.panelRadius ?? 10) * scale, theme.titleFill, theme.titleBorder, scale);
+  if (!layout.titleTransparent) drawPanelRect(ctx, x, y, w, h, (theme.titleRadius ?? theme.panelRadius ?? 10) * scale, theme.titleFill, theme.titleBorder, scale);
   const leftBar = theme.titleAccent && theme.titleAccentStyle === 'left';
   if (theme.titleAccent) {
     ctx.fillStyle = theme.titleAccent;
@@ -283,7 +283,7 @@ function drawLegendCanvas(ctx, scene, scale) {
   const legendFont = `${scene.project.layout?.fonts?.legend || 'Inter'}, Arial, sans-serif`;
   const { legend } = getOverlayMetrics(scene); const items = scene.project.layout?.legendItems || []; if (!items.length || !legend?.width || !legend?.height) return;
   const x = legend.left * scale, y = legend.top * scale, w = legend.width * scale, h = legend.height * scale;
-  drawPanelRect(ctx, x, y, w, h, (theme.panelRadius ?? 10) * scale, theme.panelFill, theme.panelBorder, scale);
+  if (!scene.project.layout?.legendTransparent) drawPanelRect(ctx, x, y, w, h, (theme.panelRadius ?? 10) * scale, theme.panelFill, theme.panelBorder, scale);
   drawPanelAccentLeft(ctx, x, y, h, theme, scale);
   const leftPad = theme.panelAccentLeft ? 20 : 16;
   ctx.fillStyle = theme.panelTitle; ctx.font = `700 ${15 * scale}px ${legendFont}`; ctx.textBaseline = 'top'; ctx.fillText(scene.project.layout?.legendTitle || 'Legend', x + leftPad * scale, y + 14 * scale);
@@ -739,9 +739,37 @@ function resolveEllipseDimensions(ellipse, map, scale) {
   return { center, width: (ellipse.width || 90) * scale, height: (ellipse.height || 56) * scale, rotation: ellipse.rotation || 0 };
 }
 
+function chaikinExport(points, iterations = 3) {
+  let pts = points;
+  for (let i = 0; i < iterations; i++) {
+    const next = [];
+    for (let j = 0; j < pts.length; j++) {
+      const a = pts[j], b = pts[(j + 1) % pts.length];
+      next.push({ lat: 0.75 * a.lat + 0.25 * b.lat, lng: 0.75 * a.lng + 0.25 * b.lng });
+      next.push({ lat: 0.25 * a.lat + 0.75 * b.lat, lng: 0.25 * a.lng + 0.75 * b.lng });
+    }
+    pts = next;
+  }
+  return pts;
+}
+
 function drawEllipsesCanvas(ctx, scene, scale) {
   (scene.project.ellipses || []).forEach((ellipse) => {
     const { center, width, height, rotation } = resolveEllipseDimensions(ellipse, scene.map, scale);
+
+    // Outside shade (evenodd) — drawn before the ring stroke
+    if (ellipse.isRing && ellipse.outsideShade) {
+      const r = width / 2;
+      ctx.save();
+      ctx.globalAlpha = ellipse.outsideShadeOpacity ?? 0.35;
+      ctx.fillStyle = ellipse.outsideShadeColor || '#000000';
+      ctx.beginPath();
+      ctx.rect(0, 0, scene.width * scale, scene.height * scale);
+      ctx.arc(center.x, center.y, r, 0, Math.PI * 2, true);
+      ctx.fill('evenodd');
+      ctx.restore();
+    }
+
     const rotRad = (rotation * Math.PI) / 180;
     ctx.save();
     ctx.translate(center.x, center.y);
@@ -758,12 +786,66 @@ function drawEllipsesCanvas(ctx, scene, scale) {
   });
 }
 
+function drawPolygonsCanvas(ctx, scene, scale) {
+  (scene.project.polygons || []).forEach((poly) => {
+    if (!poly.points?.length) return;
+    const rawPts = poly.smoothed ? chaikinExport(poly.points) : poly.points;
+    const pts = rawPts.map(({ lat, lng }) => {
+      const pt = scene.map.latLngToContainerPoint([lat, lng]);
+      return { x: pt.x * scale, y: pt.y * scale };
+    });
+    if (!pts.length) return;
+
+    // Outside shade (evenodd)
+    if (poly.outsideShade) {
+      ctx.save();
+      ctx.globalAlpha = poly.outsideShadeOpacity ?? 0.35;
+      ctx.fillStyle = poly.outsideShadeColor || '#000000';
+      ctx.beginPath();
+      ctx.rect(0, 0, scene.width * scale, scene.height * scale);
+      ctx.moveTo(pts[0].x, pts[0].y);
+      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+      ctx.closePath();
+      ctx.fill('evenodd');
+      ctx.restore();
+    }
+
+    // Dashed outline
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+    ctx.closePath();
+    ctx.strokeStyle = poly.color || '#000000';
+    ctx.lineWidth = (poly.strokeWidth ?? 2) * scale;
+    ctx.setLineDash(poly.dashed === false ? [] : [10 * scale, 5 * scale]);
+    ctx.stroke();
+    ctx.restore();
+
+    // Label at top of bounding box
+    if (poly.label) {
+      const minY = Math.min(...pts.map((p) => p.y));
+      const midX = (Math.min(...pts.map((p) => p.x)) + Math.max(...pts.map((p) => p.x))) / 2;
+      const lx = midX + (poly.labelOffsetX || 0) * scale;
+      const ly = minY - 18 * scale + (poly.labelOffsetY || 0) * scale;
+      const fontSize = (poly.labelFontSize || 12) * scale;
+      ctx.save();
+      ctx.font = `${poly.labelBold !== false ? '700' : '400'} ${fontSize}px Inter, Arial, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = poly.labelColor || poly.color || '#000000';
+      ctx.fillText(poly.label, lx, ly);
+      ctx.restore();
+    }
+  });
+}
+
 export async function renderSceneToCanvas(scene, options = {}) {
   _exportWarnings = [];
   const scale = Number(options.pixelRatio || scene.project.layout?.exportSettings?.pixelRatio || 2);
   const canvas = document.createElement('canvas'); canvas.width = Math.round(scene.width * scale); canvas.height = Math.round(scene.height * scale); const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-  await drawTilesCanvas(ctx, scene, scale); drawRegionHighlightsCanvas(ctx, scene, scale); drawVectorsCanvas(ctx, scene, scale); drawEllipsesCanvas(ctx, scene, scale); await drawMarkersCanvas(ctx, scene, scale); drawCalloutsCanvas(ctx, scene, scale); drawTitleBlockCanvas(ctx, scene, scale); drawLegendCanvas(ctx, scene, scale); drawNorthArrowCanvas(ctx, scene, scale); await drawInsetCanvas(ctx, scene, scale); drawScaleBarCanvas(ctx, scene, scale); drawFooterCanvas(ctx, scene, scale); await drawLogoCanvas(ctx, scene, scale);
+  await drawTilesCanvas(ctx, scene, scale); drawRegionHighlightsCanvas(ctx, scene, scale); drawVectorsCanvas(ctx, scene, scale); drawEllipsesCanvas(ctx, scene, scale); drawPolygonsCanvas(ctx, scene, scale); await drawMarkersCanvas(ctx, scene, scale); drawCalloutsCanvas(ctx, scene, scale); drawTitleBlockCanvas(ctx, scene, scale); drawLegendCanvas(ctx, scene, scale); drawNorthArrowCanvas(ctx, scene, scale); await drawInsetCanvas(ctx, scene, scale); drawScaleBarCanvas(ctx, scene, scale); drawFooterCanvas(ctx, scene, scale); await drawLogoCanvas(ctx, scene, scale);
   if (!options.noWatermark) { ctx.save(); ctx.font = `bold ${9 * scale}px Arial, sans-serif`; ctx.fillStyle = 'rgba(100,116,139,0.72)'; ctx.textAlign = 'right'; ctx.textBaseline = 'bottom'; ctx.shadowColor = 'rgba(255,255,255,0.6)'; ctx.shadowBlur = 3 * scale; ctx.fillText('explorationmaps.com', canvas.width - 8 * scale, canvas.height - 5 * scale); ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.restore(); }
   return canvas;
 }
@@ -812,7 +894,7 @@ async function drawLogoCanvas(ctx, scene, scale) {
   const logo = scene.project.layout?.logo; if (!logo) return;
   const zone = getOverlayMetrics(scene).logo; const x = zone.left * scale, y = zone.top * scale, w = zone.width * scale, h = zone.height * scale, padding = 10 * scale;
   const theme = getTheme(scene);
-  drawPanelRect(ctx, x, y, w, h, (theme.panelRadius ?? 10) * scale, theme.logoFill, theme.logoBorder, scale);
+  if (!scene.project.layout?.logoTransparent) drawPanelRect(ctx, x, y, w, h, (theme.panelRadius ?? 10) * scale, theme.logoFill, theme.logoBorder, scale);
   const img = await new Promise((resolve, reject) => { const el = new Image(); el.onload = () => resolve(el); el.onerror = reject; el.src = logo; }).catch(() => { _exportWarnings.push('logo could not be embedded'); return null; });
   if (img) {
     // Aspect-fit: scale to fill available space preserving ratio, centered (mirrors SVG preserveAspectRatio="xMidYMid meet")
@@ -926,6 +1008,51 @@ function renderMarkersSvg(scene, scale) {
     return `<g>${symbol}${renderMarkerLabelSvg(scene, marker, point, scale)}</g>`;
   }).join('\n');
 }
+function renderPolygonsSvg(scene, scale) {
+  function chaikinSvg(points, iterations = 3) {
+    let pts = points;
+    for (let i = 0; i < iterations; i++) {
+      const next = [];
+      for (let j = 0; j < pts.length; j++) {
+        const a = pts[j], b = pts[(j + 1) % pts.length];
+        next.push({ lat: 0.75 * a.lat + 0.25 * b.lat, lng: 0.75 * a.lng + 0.25 * b.lng });
+        next.push({ lat: 0.25 * a.lat + 0.75 * b.lat, lng: 0.25 * a.lng + 0.75 * b.lng });
+      }
+      pts = next;
+    }
+    return pts;
+  }
+  const W = scene.width * scale, H = scene.height * scale;
+  return (scene.project.polygons || []).map((poly) => {
+    if (!poly.points?.length) return '';
+    const rawPts = poly.smoothed ? chaikinSvg(poly.points) : poly.points;
+    const pts = rawPts.map(({ lat, lng }) => {
+      const pt = scene.map.latLngToContainerPoint([lat, lng]);
+      return { x: pt.x * scale, y: pt.y * scale };
+    });
+    if (!pts.length) return '';
+    const polyPath = `M ${pts.map((p) => `${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' L ')} Z`;
+    const dash = poly.dashed === false ? '' : ` stroke-dasharray="${10 * scale} ${5 * scale}"`;
+    const color = safeColor(poly.color, '#000000');
+    let shadeSvg = '';
+    if (poly.outsideShade) {
+      shadeSvg = `<path d="M 0 0 L ${W} 0 L ${W} ${H} L 0 ${H} Z ${polyPath}" fill="${escapeXml(poly.outsideShadeColor || '#000000')}" fill-opacity="${poly.outsideShadeOpacity ?? 0.35}" fill-rule="evenodd" stroke="none" />`;
+    }
+    let labelSvg = '';
+    if (poly.label) {
+      const minY = Math.min(...pts.map((p) => p.y));
+      const midX = (Math.min(...pts.map((p) => p.x)) + Math.max(...pts.map((p) => p.x))) / 2;
+      const lx = midX + (poly.labelOffsetX || 0) * scale;
+      const ly = minY - 18 * scale + (poly.labelOffsetY || 0) * scale;
+      const fontSize = (poly.labelFontSize || 12) * scale;
+      const fw = poly.labelBold !== false ? '700' : '400';
+      const lc = escapeXml(poly.labelColor || poly.color || '#000000');
+      labelSvg = `<text x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" text-anchor="middle" dominant-baseline="middle" fill="${lc}" font-family="Inter, Arial, sans-serif" font-size="${fontSize}" font-weight="${fw}">${escapeXml(poly.label)}</text>`;
+    }
+    return `<g>${shadeSvg}<path d="${polyPath}" fill="none" stroke="${color}" stroke-width="${(poly.strokeWidth ?? 2) * scale}"${dash} />${labelSvg}</g>`;
+  }).join('\n');
+}
+
 function renderEllipsesSvg(scene, scale) {
   const labelFontFamily = escapeXml(scene.project.layout?.fonts?.label || 'Inter');
   return (scene.project.ellipses || []).map((ellipse) => {
@@ -955,7 +1082,14 @@ function renderEllipsesSvg(scene, scale) {
         label = `<g><line x1="${pos.anchorX}" y1="${pos.anchorY}" x2="${finalX}" y2="${finalY + 10 * scale}" stroke="${labelColor}" stroke-width="${Math.max(1, 1.4 * scale)}" stroke-dasharray="${5 * scale} ${3 * scale}" /><rect x="${finalX}" y="${finalY}" width="${labelWidth}" height="${20 * scale}" rx="${10 * scale}" fill="rgba(255,255,255,0.95)" stroke="rgba(15,23,42,0.12)" stroke-width="${Math.max(1, scale * 0.8)}" /><text x="${finalX + 8 * scale}" y="${finalY + 10 * scale}" dominant-baseline="middle" fill="${labelColor}" font-family="${labelFontFamily}, Arial, sans-serif" font-size="${labelFontSize}" font-weight="${fontWeight}">${escapeXml(effectiveLabel)}</text></g>`;
       }
     }
-    return `<g><g transform="rotate(${rotation} ${center.x} ${center.y})"><ellipse cx="${center.x}" cy="${center.y}" rx="${width / 2}" ry="${height / 2}" fill="none" stroke="${color}" stroke-width="${2 * scale}"${dash} /></g>${label}</g>`;
+    let shadeSvg = '';
+    if (ellipse.isRing && ellipse.outsideShade) {
+      const W = scene.width * scale, H = scene.height * scale;
+      const r = width / 2;
+      const cx = center.x, cy = center.y;
+      shadeSvg = `<path d="M 0 0 L ${W} 0 L ${W} ${H} L 0 ${H} Z M ${cx} ${cy} m ${-r} 0 a ${r} ${r} 0 1 0 ${r * 2} 0 a ${r} ${r} 0 1 0 ${-r * 2} 0" fill="${escapeXml(ellipse.outsideShadeColor || '#000000')}" fill-opacity="${ellipse.outsideShadeOpacity ?? 0.35}" fill-rule="evenodd" stroke="none" />`;
+    }
+    return `<g>${shadeSvg}<g transform="rotate(${rotation} ${center.x} ${center.y})"><ellipse cx="${center.x}" cy="${center.y}" rx="${width / 2}" ry="${height / 2}" fill="none" stroke="${color}" stroke-width="${2 * scale}"${dash} /></g>${label}</g>`;
   }).join('\n');
 }
 function renderTitleSvg(scene, scale) {
@@ -1068,7 +1202,7 @@ export async function renderSceneToSvg(scene, options = {}) {
   const scale = Number(options.pixelRatio || scene.project.layout?.exportSettings?.pixelRatio || 2); const width = Math.round(scene.width * scale), height = Math.round(scene.height * scale);
   const basemapImage = await renderBasemapImageSvg(scene, scale);
   const watermark = options.noWatermark ? '' : `<text x="${width - 8}" y="${height - 5}" font-family="Arial,sans-serif" font-size="9" font-weight="bold" fill="rgba(100,116,139,0.72)" text-anchor="end" paint-order="stroke" stroke="rgba(255,255,255,0.55)" stroke-width="2.5" stroke-linejoin="round">explorationmaps.com</text>`;
-  return `<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="100%" height="100%" fill="#ffffff" />${basemapImage}${renderRegionHighlightsSvg(scene, scale)}${renderVectorsSvg(scene, scale)}${renderEllipsesSvg(scene, scale)}${renderMarkersSvg(scene, scale)}${renderCalloutsSvg(scene, scale)}${renderTitleSvg(scene, scale)}${renderLegendSvg(scene, scale)}${renderNorthArrowSvg(scene, scale)}${renderInsetSvg(scene, scale)}${renderScaleBarSvg(scene, scale)}${renderFooterSvg(scene, scale)}${renderLogoSvg(scene, scale)}${watermark}</svg>`;
+  return `<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="100%" height="100%" fill="#ffffff" />${basemapImage}${renderRegionHighlightsSvg(scene, scale)}${renderVectorsSvg(scene, scale)}${renderEllipsesSvg(scene, scale)}${renderPolygonsSvg(scene, scale)}${renderMarkersSvg(scene, scale)}${renderCalloutsSvg(scene, scale)}${renderTitleSvg(scene, scale)}${renderLegendSvg(scene, scale)}${renderNorthArrowSvg(scene, scale)}${renderInsetSvg(scene, scale)}${renderScaleBarSvg(scene, scale)}${renderFooterSvg(scene, scale)}${renderLogoSvg(scene, scale)}${watermark}</svg>`;
 }
 export function downloadCanvas(filename, canvas) {
   canvas.toBlob((blob) => {

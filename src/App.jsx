@@ -370,6 +370,8 @@ export default function App() {
   const [selectedFeature, setSelectedFeature] = useState(null);
   const [selectedMarkerId, setSelectedMarkerId] = useState(null);
   const [selectedEllipseId, setSelectedEllipseId] = useState(null);
+  const [selectedPolygonId, setSelectedPolygonId] = useState(null);
+  const [pendingPolygonPoints, setPendingPolygonPoints] = useState([]);
   const [annotationTool, setAnnotationTool] = useState(null);
   const [uploadStatus, setUploadStatus] = useState({ type: 'info', message: 'Open the editor, then upload your first file from the left panel.' });
   const [exporting, setExporting] = useState(false);
@@ -405,6 +407,7 @@ export default function App() {
   const selectedCallout = useMemo(() => project.callouts.find((callout) => callout.id === selectedCalloutId) || null, [project.callouts, selectedCalloutId]);
   const selectedMarker = useMemo(() => project.markers?.find((marker) => marker.id === selectedMarkerId) || null, [project.markers, selectedMarkerId]);
   const selectedEllipse = useMemo(() => project.ellipses?.find((ellipse) => ellipse.id === selectedEllipseId) || null, [project.ellipses, selectedEllipseId]);
+  const selectedPolygon = useMemo(() => project.polygons?.find((poly) => poly.id === selectedPolygonId) || null, [project.polygons, selectedPolygonId]);
   const legendItems = useMemo(() => buildLegendItems(template, project.layers, project.layout), [template, project.layers, project.layout]);
   const legendGroups = useMemo(() => renderLegendGroups(legendItems, project.layout), [legendItems, project.layout]);
   const resolvedZones = useMemo(() => resolveTemplateZones(template, project.layout, mapSize, legendItems), [template, project.layout, mapSize, legendItems]);
@@ -598,11 +601,14 @@ export default function App() {
       } else if (selectedEllipseId) {
         setProject((prev) => ({ ...prev, ellipses: (prev.ellipses || []).filter((el) => el.id !== selectedEllipseId) }));
         setSelectedEllipseId(null);
+      } else if (selectedPolygonId) {
+        setProject((prev) => ({ ...prev, polygons: (prev.polygons || []).filter((poly) => poly.id !== selectedPolygonId) }));
+        setSelectedPolygonId(null);
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [selectedMarkerId, selectedCalloutId, selectedEllipseId]);
+  }, [selectedMarkerId, selectedCalloutId, selectedEllipseId, selectedPolygonId]);
 
   useEffect(() => {
     if (selectedLayerId && layersSectionRef.current)
@@ -1197,6 +1203,18 @@ export default function App() {
       addMapLabelAt(latlng);
       setAnnotationTool(null);
       annotationToolRef.current = null;
+    } else if (annotationTool === 'polygon') {
+      // Check if clicking near first point to close polygon
+      if (pendingPolygonPoints.length >= 3 && leafletMapRef.current) {
+        const firstPt = leafletMapRef.current.latLngToContainerPoint([pendingPolygonPoints[0].lat, pendingPolygonPoints[0].lng]);
+        const thisPt = leafletMapRef.current.latLngToContainerPoint([latlng.lat, latlng.lng]);
+        const dist = Math.hypot(thisPt.x - firstPt.x, thisPt.y - firstPt.y);
+        if (dist < 18) {
+          finishPolygon();
+          return;
+        }
+      }
+      setPendingPolygonPoints((prev) => [...prev, { lat: latlng.lat, lng: latlng.lng }]);
     }
   };
 
@@ -1234,6 +1252,53 @@ export default function App() {
   const removeEllipse = (ellipseId) => {
     setProject((prev) => ({ ...prev, ellipses: (prev.ellipses || []).filter((ellipse) => ellipse.id !== ellipseId) }));
     if (selectedEllipseId === ellipseId) setSelectedEllipseId(null);
+  };
+
+  const updatePolygon = (polyId, patch) => {
+    setProject((prev) => ({
+      ...prev,
+      polygons: (prev.polygons || []).map((poly) => (poly.id === polyId ? { ...poly, ...patch } : poly)),
+    }));
+  };
+
+  const removePolygon = (polyId) => {
+    setProject((prev) => ({ ...prev, polygons: (prev.polygons || []).filter((poly) => poly.id !== polyId) }));
+    if (selectedPolygonId === polyId) setSelectedPolygonId(null);
+  };
+
+  const finishPolygon = () => {
+    if (pendingPolygonPoints.length < 3) return;
+    const id = crypto.randomUUID();
+    setProject((prev) => ({
+      ...prev,
+      polygons: [
+        ...(prev.polygons || []),
+        {
+          id,
+          points: pendingPolygonPoints,
+          color: prev.layout?.accentColor || '#000000',
+          strokeWidth: 2,
+          dashed: true,
+          label: '',
+          labelFontSize: 13,
+          labelBold: true,
+          labelColor: null,
+          labelOffsetX: 0,
+          labelOffsetY: 0,
+          smoothed: false,
+          outsideShade: false,
+          outsideShadeColor: '#000000',
+          outsideShadeOpacity: 0.35,
+        },
+      ],
+    }));
+    setPendingPolygonPoints([]);
+    setAnnotationTool(null);
+    annotationToolRef.current = null;
+    setSelectedPolygonId(id);
+    setSelectedEllipseId(null);
+    setSelectedMarkerId(null);
+    setSelectedCalloutId(null);
   };
 
   const handleExport = async (format, extraOptions = {}) => {
@@ -1754,8 +1819,18 @@ export default function App() {
             <button className={`secondary-btn ${annotationTool === 'ellipse' ? 'active-toggle' : ''}`} type="button" onClick={() => { const next = annotationTool === 'ellipse' ? null : 'ellipse'; setAnnotationTool(next); annotationToolRef.current = next; setSelectedFeature(null); }}>Draw Dashed Area</button>
             <button className={`secondary-btn ${annotationTool === 'ring' ? 'active-toggle' : ''}`} type="button" onClick={() => { const next = annotationTool === 'ring' ? null : 'ring'; setAnnotationTool(next); annotationToolRef.current = next; setSelectedFeature(null); }}>Draw Distance Ring</button>
             <button className={`secondary-btn ${annotationTool === 'maplabel' ? 'active-toggle' : ''}`} type="button" onClick={() => { const next = annotationTool === 'maplabel' ? null : 'maplabel'; setAnnotationTool(next); annotationToolRef.current = next; setSelectedFeature(null); }}>Place Map Label</button>
+            <button className={`secondary-btn ${annotationTool === 'polygon' ? 'active-toggle' : ''}`} type="button" onClick={() => { const next = annotationTool === 'polygon' ? null : 'polygon'; setAnnotationTool(next); annotationToolRef.current = next; setPendingPolygonPoints([]); setSelectedFeature(null); }}>Draw Boundary</button>
           </div>
-          <div className="small-note" style={{ marginTop: 8 }}>{annotationTool ? 'Click anywhere on the map to place the selected annotation.' : 'Add highlight markers or dashed ellipses anywhere on the map.'}</div>
+          {annotationTool === 'polygon' && (
+            <div className="polygon-drawing-status">
+              <span>{pendingPolygonPoints.length < 3 ? `Click map to add points (${pendingPolygonPoints.length} so far, need 3+)` : `${pendingPolygonPoints.length} points — click first point or Close to finish`}</span>
+              <div className="button-row" style={{ marginTop: 6 }}>
+                <button className="btn primary" type="button" disabled={pendingPolygonPoints.length < 3} onClick={finishPolygon}>Close & Save</button>
+                <button className="btn" type="button" onClick={() => { setPendingPolygonPoints([]); setAnnotationTool(null); annotationToolRef.current = null; }}>Cancel</button>
+              </div>
+            </div>
+          )}
+          <div className="small-note" style={{ marginTop: 8 }}>{annotationTool === 'polygon' ? '' : annotationTool ? 'Click anywhere on the map to place the selected annotation.' : 'Add highlight markers or dashed ellipses anywhere on the map.'}</div>
 
           {selectedMarker?.type === 'maplabel' ? (
             <div className="control-grid" style={{ marginTop: 10 }}>
@@ -1886,7 +1961,86 @@ export default function App() {
                 </>
               )}
               <label className="toggle-row"><input type="checkbox" checked={selectedEllipse.dashed !== false} onChange={(e) => updateEllipse(selectedEllipse.id, { dashed: e.target.checked })} /> <span>Dashed outline</span></label>
+              <label className="toggle-row">
+                <input type="checkbox" checked={!!selectedEllipse.outsideShade} onChange={(e) => updateEllipse(selectedEllipse.id, { outsideShade: e.target.checked })} />
+                <span>Outside shade</span>
+              </label>
+              {selectedEllipse.outsideShade && (
+                <>
+                  <div className="shade-presets">
+                    {[{ label: 'Dark', c: '#000000', o: 0.35 }, { label: 'Light', c: '#ffffff', o: 0.30 }, { label: 'Warm', c: '#7c3b1a', o: 0.25 }].map(({ label, c, o }) => (
+                      <button key={label} className="shade-preset-btn" type="button" onClick={() => updateEllipse(selectedEllipse.id, { outsideShadeColor: c, outsideShadeOpacity: o })}>{label}</button>
+                    ))}
+                  </div>
+                  <div className="control-row inline-2">
+                    <div>
+                      <label>Shade Color</label>
+                      <input type="color" value={selectedEllipse.outsideShadeColor || '#000000'} onChange={(e) => updateEllipse(selectedEllipse.id, { outsideShadeColor: e.target.value })} />
+                    </div>
+                    <div>
+                      <label>Opacity</label>
+                      <input type="range" min="0.05" max="0.75" step="0.05" value={selectedEllipse.outsideShadeOpacity ?? 0.35} onChange={(e) => updateEllipse(selectedEllipse.id, { outsideShadeOpacity: Number(e.target.value) })} />
+                    </div>
+                  </div>
+                </>
+              )}
               <button className="secondary-btn" type="button" onClick={() => removeEllipse(selectedEllipse.id)}>{selectedEllipse.isRing ? 'Remove Ring' : 'Remove Highlight Area'}</button>
+            </div>
+          ) : null}
+
+          {selectedPolygon ? (
+            <div className="control-grid" style={{ marginTop: 10 }}>
+              <div className="selected-note">Selected boundary</div>
+              <div className="control-row"><label>Label</label><input value={selectedPolygon.label || ''} onChange={(e) => updatePolygon(selectedPolygon.id, { label: e.target.value })} placeholder="e.g. Target Zone" /></div>
+              <div className="control-row inline-2">
+                <div>
+                  <label>Color</label>
+                  <input type="color" value={selectedPolygon.color || '#000000'} onChange={(e) => updatePolygon(selectedPolygon.id, { color: e.target.value })} />
+                </div>
+                <div>
+                  <label>Stroke Width</label>
+                  <input type="range" min="1" max="8" step="0.5" value={selectedPolygon.strokeWidth ?? 2} onChange={(e) => updatePolygon(selectedPolygon.id, { strokeWidth: Number(e.target.value) })} />
+                </div>
+              </div>
+              <div className="control-row inline-2">
+                <div>
+                  <label>Label Size</label>
+                  <input type="range" min="9" max="28" step="1" value={selectedPolygon.labelFontSize || 12} onChange={(e) => updatePolygon(selectedPolygon.id, { labelFontSize: Number(e.target.value) })} />
+                </div>
+                <div className="range-value">{selectedPolygon.labelFontSize || 12}px</div>
+              </div>
+              <label className="toggle-row">
+                <input type="checkbox" checked={selectedPolygon.dashed !== false} onChange={(e) => updatePolygon(selectedPolygon.id, { dashed: e.target.checked })} />
+                <span>Dashed outline</span>
+              </label>
+              <label className="toggle-row">
+                <input type="checkbox" checked={!!selectedPolygon.smoothed} onChange={(e) => updatePolygon(selectedPolygon.id, { smoothed: e.target.checked })} />
+                <span>Smooth boundary</span>
+              </label>
+              <label className="toggle-row">
+                <input type="checkbox" checked={!!selectedPolygon.outsideShade} onChange={(e) => updatePolygon(selectedPolygon.id, { outsideShade: e.target.checked })} />
+                <span>Outside shade</span>
+              </label>
+              {selectedPolygon.outsideShade && (
+                <>
+                  <div className="shade-presets">
+                    {[{ label: 'Dark', c: '#000000', o: 0.35 }, { label: 'Light', c: '#ffffff', o: 0.30 }, { label: 'Warm', c: '#7c3b1a', o: 0.25 }].map(({ label, c, o }) => (
+                      <button key={label} className="shade-preset-btn" type="button" onClick={() => updatePolygon(selectedPolygon.id, { outsideShadeColor: c, outsideShadeOpacity: o })}>{label}</button>
+                    ))}
+                  </div>
+                  <div className="control-row inline-2">
+                    <div>
+                      <label>Shade Color</label>
+                      <input type="color" value={selectedPolygon.outsideShadeColor || '#000000'} onChange={(e) => updatePolygon(selectedPolygon.id, { outsideShadeColor: e.target.value })} />
+                    </div>
+                    <div>
+                      <label>Opacity</label>
+                      <input type="range" min="0.05" max="0.75" step="0.05" value={selectedPolygon.outsideShadeOpacity ?? 0.35} onChange={(e) => updatePolygon(selectedPolygon.id, { outsideShadeOpacity: Number(e.target.value) })} />
+                    </div>
+                  </div>
+                </>
+              )}
+              <button className="secondary-btn" type="button" onClick={() => removePolygon(selectedPolygon.id)}>Remove Boundary</button>
             </div>
           ) : null}
         </section>
@@ -1970,6 +2124,17 @@ export default function App() {
                   <div><label>Labels</label><select value={selectValue(FONT_OPTIONS, project.layout.fonts?.label)} onChange={(e) => updateLayout({ fonts: { label: e.target.value } })}>{Object.entries(FONT_OPTIONS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></div>
                   <div><label>Callouts</label><select value={selectValue(FONT_OPTIONS, project.layout.fonts?.callout)} onChange={(e) => updateLayout({ fonts: { callout: e.target.value } })}>{Object.entries(FONT_OPTIONS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></div>
                 </div>
+              </div>
+            </details>
+
+            {/* Panel box visibility */}
+            <details className="sub-details">
+              <summary>Panel Boxes</summary>
+              <div className="sub-details-body">
+                <div className="small-note" style={{ marginBottom: 8 }}>Hide the background box from any panel — text stays visible.</div>
+                <label className="toggle-row"><input type="checkbox" checked={!project.layout.titleTransparent} onChange={(e) => updateLayout({ titleTransparent: !e.target.checked })} /><span>Title box</span></label>
+                <label className="toggle-row"><input type="checkbox" checked={!project.layout.legendTransparent} onChange={(e) => updateLayout({ legendTransparent: !e.target.checked })} /><span>Legend box</span></label>
+                <label className="toggle-row"><input type="checkbox" checked={!project.layout.logoTransparent} onChange={(e) => updateLayout({ logoTransparent: !e.target.checked })} /><span>Logo box</span></label>
               </div>
             </details>
 
@@ -2288,15 +2453,20 @@ export default function App() {
               map={leafletMapRef.current}
               markers={project.markers || []}
               ellipses={project.ellipses || []}
+              polygons={project.polygons || []}
+              pendingPolygon={pendingPolygonPoints}
               selectedMarkerId={selectedMarkerId}
               selectedEllipseId={selectedEllipseId}
-              onSelectMarker={(id) => { setSelectedMarkerId(id); setSelectedEllipseId(null); setSelectedFeature(null); }}
-              onSelectEllipse={(id) => { setSelectedEllipseId(id); setSelectedMarkerId(null); setSelectedFeature(null); }}
+              selectedPolygonId={selectedPolygonId}
+              onSelectMarker={(id) => { setSelectedMarkerId(id); setSelectedEllipseId(null); setSelectedPolygonId(null); setSelectedFeature(null); }}
+              onSelectEllipse={(id) => { setSelectedEllipseId(id); setSelectedMarkerId(null); setSelectedPolygonId(null); setSelectedFeature(null); }}
+              onSelectPolygon={(id) => { setSelectedPolygonId(id); setSelectedEllipseId(null); setSelectedMarkerId(null); setSelectedFeature(null); }}
               onMoveMarker={updateMarker}
               onMoveEllipse={updateEllipse}
               onMoveLabelOffset={(id, offset) => updateMarker(id, { labelOffsetX: offset.x, labelOffsetY: offset.y })}
               onMoveEllipseLabelOffset={(id, offset) => updateEllipse(id, { labelOffsetX: offset.x, labelOffsetY: offset.y })}
               onMoveEllipseLabelAngle={(id, angle) => updateEllipse(id, { labelAngle: angle })}
+              onMovePolygonLabel={(id, offset) => updatePolygon(id, { labelOffsetX: offset.x, labelOffsetY: offset.y })}
               labelFont={project.layout.fonts?.label}
             />
             <CalloutsOverlay
@@ -2312,7 +2482,7 @@ export default function App() {
         )}
 
         <div className="template-zone" style={zoneStyle(resolvedZones.title)}>
-          <div className="template-card title-card">
+          <div className={`template-card title-card${project.layout.titleTransparent ? ' panel--transparent' : ''}`}>
             {editingTitleField === 'title' ? (
               <input
                 className="title-inline-input"
@@ -2338,7 +2508,7 @@ export default function App() {
           </div>
           <div
             className="panel-resize-handle panel-resize-handle--bottom"
-            title="Drag to resize title panel"
+            title="Drag to resize title height"
             onMouseDown={(e) => {
               e.preventDefault(); e.stopPropagation();
               const map = leafletMapRef.current;
@@ -2358,11 +2528,57 @@ export default function App() {
               document.addEventListener('mouseup', onUp);
             }}
           />
+          <div
+            className="panel-resize-handle panel-resize-handle--right"
+            title="Drag to resize title width"
+            onMouseDown={(e) => {
+              e.preventDefault(); e.stopPropagation();
+              const map = leafletMapRef.current;
+              if (map) map.dragging.disable();
+              const startX = e.clientX;
+              const startW = project.layout.titleWidthPx ?? 520;
+              const onMove = (me) => {
+                const w = Math.max(300, Math.min(800, Math.round(startW + me.clientX - startX)));
+                setProject((p) => ({ ...p, layout: { ...p.layout, titleWidthPx: w } }));
+              };
+              const onUp = () => {
+                if (map) map.dragging.enable();
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup', onUp);
+              };
+              document.addEventListener('mousemove', onMove);
+              document.addEventListener('mouseup', onUp);
+            }}
+          />
+          <div
+            className="panel-resize-handle panel-resize-handle--corner"
+            title="Drag corner to resize title width and height"
+            onMouseDown={(e) => {
+              e.preventDefault(); e.stopPropagation();
+              const map = leafletMapRef.current;
+              if (map) map.dragging.disable();
+              const startX = e.clientX; const startY = e.clientY;
+              const startW = project.layout.titleWidthPx ?? 520;
+              const startH = project.layout.titleHeightPx ?? 92;
+              const onMove = (me) => {
+                const w = Math.max(300, Math.min(800, Math.round(startW + me.clientX - startX)));
+                const h = Math.max(60, Math.min(180, Math.round(startH + me.clientY - startY)));
+                setProject((p) => ({ ...p, layout: { ...p.layout, titleWidthPx: w, titleHeightPx: h } }));
+              };
+              const onUp = () => {
+                if (map) map.dragging.enable();
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup', onUp);
+              };
+              document.addEventListener('mousemove', onMove);
+              document.addEventListener('mouseup', onUp);
+            }}
+          />
         </div>
 
         {legendItems.length ? (
           <div className="template-zone" style={zoneStyle(resolvedZones.legend)}>
-            <div className="template-card legend-card">
+            <div className={`template-card legend-card${project.layout.legendTransparent ? ' panel--transparent' : ''}`}>
               <div className="legend-header"><h3>Legend</h3></div>
               <div className="legend-list">
                 {legendGroups.map((group) => (
@@ -2396,7 +2612,7 @@ export default function App() {
             </div>
             <div
               className="panel-resize-handle panel-resize-handle--right"
-              title="Drag to resize legend panel"
+              title="Drag to resize legend width"
               onMouseDown={(e) => {
                 e.preventDefault(); e.stopPropagation();
                 const map = leafletMapRef.current;
@@ -2416,6 +2632,52 @@ export default function App() {
                 document.addEventListener('mouseup', onUp);
               }}
             />
+            <div
+              className="panel-resize-handle panel-resize-handle--bottom"
+              title="Drag to resize legend height"
+              onMouseDown={(e) => {
+                e.preventDefault(); e.stopPropagation();
+                const map = leafletMapRef.current;
+                if (map) map.dragging.disable();
+                const startY = e.clientY;
+                const startH = project.layout.legendHeightPx ?? resolvedZones.legend?.height ?? 168;
+                const onMove = (me) => {
+                  const h = Math.max(60, Math.min(500, Math.round(startH + me.clientY - startY)));
+                  setProject((p) => ({ ...p, layout: { ...p.layout, legendHeightPx: h } }));
+                };
+                const onUp = () => {
+                  if (map) map.dragging.enable();
+                  document.removeEventListener('mousemove', onMove);
+                  document.removeEventListener('mouseup', onUp);
+                };
+                document.addEventListener('mousemove', onMove);
+                document.addEventListener('mouseup', onUp);
+              }}
+            />
+            <div
+              className="panel-resize-handle panel-resize-handle--corner"
+              title="Drag corner to resize legend width and height"
+              onMouseDown={(e) => {
+                e.preventDefault(); e.stopPropagation();
+                const map = leafletMapRef.current;
+                if (map) map.dragging.disable();
+                const startX = e.clientX; const startY = e.clientY;
+                const startW = project.layout.legendWidthPx ?? 300;
+                const startH = project.layout.legendHeightPx ?? resolvedZones.legend?.height ?? 168;
+                const onMove = (me) => {
+                  const w = Math.max(180, Math.min(480, Math.round(startW + me.clientX - startX)));
+                  const h = Math.max(60, Math.min(500, Math.round(startH + me.clientY - startY)));
+                  setProject((p) => ({ ...p, layout: { ...p.layout, legendWidthPx: w, legendHeightPx: h } }));
+                };
+                const onUp = () => {
+                  if (map) map.dragging.enable();
+                  document.removeEventListener('mousemove', onMove);
+                  document.removeEventListener('mouseup', onUp);
+                };
+                document.addEventListener('mousemove', onMove);
+                document.addEventListener('mouseup', onUp);
+              }}
+            />
           </div>
         ) : null}
 
@@ -2423,11 +2685,21 @@ export default function App() {
         {project.layout.insetEnabled !== false && resolvedZones.inset?.width ? (
           <div className="template-zone" style={zoneStyle(resolvedZones.inset)}>
             <LocatorInset layers={project.layers} insetMode={project.layout.insetMode} insetImage={project.layout.insetImage} autoInsetRegion={project.layout.autoInsetRegion} insetTitle={project.layout.insetTitle} insetLabel={project.layout.insetLabel} mode={project.layout.mode} zone={{ width: '100%', height: '100%' }} />
+            <div className="panel-resize-handle panel-resize-handle--right" title="Drag to resize inset width" onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); const map = leafletMapRef.current; if (map) map.dragging.disable(); const startX = e.clientX; const startW = project.layout.insetWidthPx ?? 244; const onMove = (me) => { setProject((p) => ({ ...p, layout: { ...p.layout, insetWidthPx: Math.max(100, Math.min(600, Math.round(startW + me.clientX - startX))) } })); }; const onUp = () => { if (map) map.dragging.enable(); document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); }; document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp); }} />
+            <div className="panel-resize-handle panel-resize-handle--bottom" title="Drag to resize inset height" onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); const map = leafletMapRef.current; if (map) map.dragging.disable(); const startY = e.clientY; const startH = project.layout.insetHeightPx ?? 190; const onMove = (me) => { setProject((p) => ({ ...p, layout: { ...p.layout, insetHeightPx: Math.max(80, Math.min(500, Math.round(startH + me.clientY - startY))) } })); }; const onUp = () => { if (map) map.dragging.enable(); document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); }; document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp); }} />
+            <div className="panel-resize-handle panel-resize-handle--corner" title="Drag corner to resize inset" onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); const map = leafletMapRef.current; if (map) map.dragging.disable(); const startX = e.clientX; const startY = e.clientY; const startW = project.layout.insetWidthPx ?? 244; const startH = project.layout.insetHeightPx ?? 190; const onMove = (me) => { setProject((p) => ({ ...p, layout: { ...p.layout, insetWidthPx: Math.max(100, Math.min(600, Math.round(startW + me.clientX - startX))), insetHeightPx: Math.max(80, Math.min(500, Math.round(startH + me.clientY - startY))) } })); }; const onUp = () => { if (map) map.dragging.enable(); document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); }; document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp); }} />
           </div>
         ) : null}
         {project.layout.showScaleBar !== false && <div className="template-zone" style={zoneStyle(resolvedZones.scaleBar)}><ScaleBar map={leafletMapRef.current} /></div>}
         {project.layout.footerText && project.layout.footerEnabled !== false ? <div className="template-zone" style={zoneStyle(resolvedZones.footer)}><div className="template-card footer-card">{project.layout.footerText}</div></div> : null}
-        {project.layout.logo ? <div className="template-zone" style={zoneStyle(resolvedZones.logo)}><div className="template-card logo-card"><img src={project.layout.logo} alt="Logo" /></div></div> : null}
+        {project.layout.logo ? (
+          <div className="template-zone" style={zoneStyle(resolvedZones.logo)}>
+            <div className={`template-card logo-card${project.layout.logoTransparent ? ' panel--transparent' : ''}`}><img src={project.layout.logo} alt="Logo" /></div>
+            <div className="panel-resize-handle panel-resize-handle--right" title="Drag to resize logo width" onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); const map = leafletMapRef.current; if (map) map.dragging.disable(); const startX = e.clientX; const startW = project.layout.logoWidthPx ?? 168; const onMove = (me) => { setProject((p) => ({ ...p, layout: { ...p.layout, logoWidthPx: Math.max(40, Math.min(400, Math.round(startW + me.clientX - startX))) } })); }; const onUp = () => { if (map) map.dragging.enable(); document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); }; document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp); }} />
+            <div className="panel-resize-handle panel-resize-handle--bottom" title="Drag to resize logo height" onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); const map = leafletMapRef.current; if (map) map.dragging.disable(); const startY = e.clientY; const startH = project.layout.logoHeightPx ?? 74; const onMove = (me) => { setProject((p) => ({ ...p, layout: { ...p.layout, logoHeightPx: Math.max(20, Math.min(300, Math.round(startH + me.clientY - startY))) } })); }; const onUp = () => { if (map) map.dragging.enable(); document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); }; document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp); }} />
+            <div className="panel-resize-handle panel-resize-handle--corner" title="Drag corner to resize logo" onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); const map = leafletMapRef.current; if (map) map.dragging.disable(); const startX = e.clientX; const startY = e.clientY; const startW = project.layout.logoWidthPx ?? 168; const startH = project.layout.logoHeightPx ?? 74; const onMove = (me) => { setProject((p) => ({ ...p, layout: { ...p.layout, logoWidthPx: Math.max(40, Math.min(400, Math.round(startW + me.clientX - startX))), logoHeightPx: Math.max(20, Math.min(300, Math.round(startH + me.clientY - startY))) } })); }; const onUp = () => { if (map) map.dragging.enable(); document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); }; document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp); }} />
+          </div>
+        ) : null}
         {selectedFeature && featureEditorPoint ? (
           <div className="drillhole-inline-editor" style={{ left: featureEditorPoint.left, top: featureEditorPoint.top }}>
             <div className="drillhole-inline-header">
