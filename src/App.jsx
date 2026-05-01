@@ -12,6 +12,7 @@ import UploadPanel from './components/UploadPanel';
 import AnnotationOverlay from './components/AnnotationOverlay';
 import ShadeOverlay from './components/ShadeOverlay';
 import ColumnMapperModal from './components/ColumnMapperModal';
+import HowToUseModal from './components/HowToUseModal';
 import { loadGeoJSON, loadCSV } from './utils/importers';
 import sampleClaims from './assets/sampleClaims.json';
 import sampleDrillholes from './assets/sampleDrillholes.json';
@@ -364,6 +365,7 @@ export default function App() {
   const [recentProjects, setRecentProjects] = useState(() => listProjects());
   const [showRecentProjects, setShowRecentProjects] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
+  const [showHelpModal, setShowHelpModal] = useState(false);
   const [pendingExportFormat, setPendingExportFormat] = useState(null);
   const [isDirty, setIsDirty] = useState(false);
   const [selectedLayerId, setSelectedLayerId] = useState(null);
@@ -1505,7 +1507,9 @@ export default function App() {
         onLoadSample={loadSampleData}
         recentProjects={recentProjects}
         onOpenProject={(entry) => { openProjectFromRecent(entry); setScreen('editor'); }}
+        onShowHelp={() => setShowHelpModal(true)}
       />
+      {showHelpModal && <HowToUseModal onClose={() => setShowHelpModal(false)} />}
     );
   }
 
@@ -2391,6 +2395,7 @@ export default function App() {
               <button className="topbar-btn" type="button" aria-label="Zoom in" onClick={() => leafletMapRef.current?.zoomIn(1)}>+</button>
             </div>
             <div className="topbar-divider" />
+            <button className="help-icon-btn" type="button" title="How to use MapViewer" onClick={() => setShowHelpModal(true)}>?</button>
             <div className="topbar-btn-group">
               <button className={`topbar-btn primary${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('png'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing…' : ''}>{exporting ? 'Exporting…' : 'PNG'}</button>
               <button className={`topbar-btn${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('svg'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting}>SVG</button>
@@ -2801,6 +2806,7 @@ export default function App() {
           onClose={() => setShowExportModal(false)}
         />
       ) : null}
+      {showHelpModal && <HowToUseModal onClose={() => setShowHelpModal(false)} />}
       {csvMappingData ? (
         <ColumnMapperModal
           headers={csvMappingData.headers}
