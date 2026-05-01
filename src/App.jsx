@@ -10,6 +10,7 @@ import LandingPage from './components/LandingPage';
 import ExportHDModal from './components/ExportHDModal';
 import UploadPanel from './components/UploadPanel';
 import AnnotationOverlay from './components/AnnotationOverlay';
+import ShadeOverlay from './components/ShadeOverlay';
 import ColumnMapperModal from './components/ColumnMapperModal';
 import { loadGeoJSON, loadCSV } from './utils/importers';
 import sampleClaims from './assets/sampleClaims.json';
@@ -2480,6 +2481,12 @@ export default function App() {
             />
           </>
         )}
+
+        <ShadeOverlay
+          map={leafletMapRef.current}
+          ellipses={project.ellipses || []}
+          polygons={project.polygons || []}
+        />
 
         <div className="template-zone" style={zoneStyle(resolvedZones.title)}>
           <div className={`template-card title-card${project.layout.titleTransparent ? ' panel--transparent' : ''}`}>

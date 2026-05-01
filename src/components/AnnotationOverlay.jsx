@@ -179,42 +179,6 @@ export default function AnnotationOverlay({
       ))}
 
       <svg className="annotation-leader-svg" style={{ pointerEvents: 'none' }}>
-        {/* Outside shade for rings (evenodd mask) */}
-        {placedEllipses.filter((e) => e.isRing && e.outsideShade).map((ellipse) => {
-          const r = ellipse.width / 2;
-          const W = map?.getContainer()?.offsetWidth || 2000;
-          const H = map?.getContainer()?.offsetHeight || 2000;
-          return (
-            <path
-              key={`shade-ring-${ellipse.id}`}
-              d={`M 0 0 L ${W} 0 L ${W} ${H} L 0 ${H} Z M ${ellipse.x} ${ellipse.y} m ${-r} 0 a ${r} ${r} 0 1 0 ${r * 2} 0 a ${r} ${r} 0 1 0 ${-r * 2} 0`}
-              fill={ellipse.outsideShadeColor || '#000000'}
-              fillOpacity={ellipse.outsideShadeOpacity ?? 0.35}
-              fillRule="evenodd"
-              style={{ pointerEvents: 'none' }}
-            />
-          );
-        })}
-
-        {/* Outside shade for polygons (evenodd mask) */}
-        {(polygons || []).filter((poly) => poly.outsideShade).map((poly, idx) => {
-          const pts = polygonScreenPts[idx];
-          if (!pts || pts.length < 3) return null;
-          const W = map?.getContainer()?.offsetWidth || 2000;
-          const H = map?.getContainer()?.offsetHeight || 2000;
-          const polyPath = `M ${pts.map((p) => `${p.x} ${p.y}`).join(' L ')} Z`;
-          return (
-            <path
-              key={`shade-poly-${poly.id}`}
-              d={`M 0 0 L ${W} 0 L ${W} ${H} L 0 ${H} Z ${polyPath}`}
-              fill={poly.outsideShadeColor || '#000000'}
-              fillOpacity={poly.outsideShadeOpacity ?? 0.35}
-              fillRule="evenodd"
-              style={{ pointerEvents: 'none' }}
-            />
-          );
-        })}
-
         {/* Polygon boundaries */}
         {(polygons || []).map((poly, idx) => {
           const pts = polygonScreenPts[idx];
