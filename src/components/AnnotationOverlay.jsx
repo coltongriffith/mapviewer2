@@ -219,13 +219,21 @@ export default function AnnotationOverlay({
               {poly.arcLabel && poly.label && (() => {
                 const pts = polygonScreenPts[idx];
                 if (!pts || pts.length < 2) return null;
-                const arcD = `M ${pts.map((p) => `${p.x} ${p.y}`).join(' L ')} Z`;
-                const arcOffset = `${((poly.labelAngle || 0) / 360) * 100}%`;
                 const labelFontSize = poly.labelFontSize || 13;
                 const labelColor = poly.labelColor || poly.color || '#000000';
                 const pathId = `poly-arc-path-${poly.id}`;
                 const cx = pts.reduce((s, p) => s + p.x, 0) / pts.length;
                 const cy = pts.reduce((s, p) => s + p.y, 0) / pts.length;
+                // Expand each vertex outward from centroid to place text outside the boundary
+                const gap = labelFontSize * 0.7 + 10;
+                const expandedPts = pts.map((p) => {
+                  const dx = p.x - cx;
+                  const dy = p.y - cy;
+                  const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+                  return { x: cx + dx * (dist + gap) / dist, y: cy + dy * (dist + gap) / dist };
+                });
+                const arcD = `M ${expandedPts.map((p) => `${p.x} ${p.y}`).join(' L ')} Z`;
+                const arcOffset = `${((poly.labelAngle || 0) / 360) * 100}%`;
                 return (
                   <>
                     <defs><path id={pathId} d={arcD} /></defs>
@@ -233,6 +241,9 @@ export default function AnnotationOverlay({
                       fontSize={labelFontSize}
                       fontWeight={poly.labelBold !== false ? '700' : '400'}
                       fill={labelColor}
+                      stroke="rgba(255,255,255,0.85)"
+                      strokeWidth={3}
+                      paintOrder="stroke"
                       fontFamily={labelFont || 'Inter, sans-serif'}
                       style={{ pointerEvents: 'auto', cursor: 'move', userSelect: 'none' }}
                       onClick={(e) => { e.stopPropagation(); onSelectPolygon?.(poly.id); }}

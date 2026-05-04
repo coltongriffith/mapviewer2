@@ -1995,16 +1995,19 @@ export default function App() {
             <div className="control-grid" style={{ marginTop: 10 }}>
               <div className="selected-note">Selected boundary</div>
               <div className="control-row"><label>Label</label><input value={selectedPolygon.label || ''} onChange={(e) => updatePolygon(selectedPolygon.id, { label: e.target.value })} placeholder="e.g. Target Zone" /></div>
-              <div className="control-row">
-                <label>Arc label</label>
-                <label className="toggle-switch">
-                  <input type="checkbox"
-                    checked={!!selectedPolygon.arcLabel}
-                    onChange={(e) => updatePolygon(selectedPolygon.id, { arcLabel: e.target.checked })}
-                  />
-                  <span className="toggle-slider" />
-                </label>
-              </div>
+              <label className="toggle-row">
+                <input type="checkbox" checked={!!selectedPolygon.arcLabel} onChange={(e) => updatePolygon(selectedPolygon.id, { arcLabel: e.target.checked })} />
+                <span>Arc label along boundary</span>
+              </label>
+              {selectedPolygon.arcLabel && (
+                <div className="control-row inline-2">
+                  <div>
+                    <label>Position (0° = start)</label>
+                    <input type="range" min="0" max="359" step="1" value={selectedPolygon.labelAngle ?? 0} onChange={(e) => updatePolygon(selectedPolygon.id, { labelAngle: Number(e.target.value) })} />
+                  </div>
+                  <div className="range-value">{selectedPolygon.labelAngle ?? 0}°</div>
+                </div>
+              )}
               <div className="control-row inline-2">
                 <div>
                   <label>Color</label>
