@@ -1502,14 +1502,16 @@ export default function App() {
 
   if (screen === 'landing') {
     return (
-      <LandingPage
-        onOpenEditor={() => setScreen('editor')}
-        onLoadSample={loadSampleData}
-        recentProjects={recentProjects}
-        onOpenProject={(entry) => { openProjectFromRecent(entry); setScreen('editor'); }}
-        onShowHelp={() => setShowHelpModal(true)}
-      />
-      {showHelpModal && <HowToUseModal onClose={() => setShowHelpModal(false)} />}
+      <>
+        <LandingPage
+          onOpenEditor={() => setScreen('editor')}
+          onLoadSample={loadSampleData}
+          recentProjects={recentProjects}
+          onOpenProject={(entry) => { openProjectFromRecent(entry); setScreen('editor'); }}
+          onShowHelp={() => setShowHelpModal(true)}
+        />
+        {showHelpModal && <HowToUseModal onClose={() => setShowHelpModal(false)} />}
+      </>
     );
   }
 
