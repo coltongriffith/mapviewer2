@@ -41,6 +41,6 @@ export async function exportPDF(scene, options = {}) {
   }
   pdf.addImage(imgData, 'JPEG', imgX, imgY, imgW, imgH);
 
-  const filename = options.filename || scene.project?.layout?.exportSettings?.filename || 'mapviewer-export';
+  const filename = options.filename || scene.project?.layout?.exportSettings?.filename || 'exploration-maps-export';
   pdf.save(`${filename}.pdf`);
 }

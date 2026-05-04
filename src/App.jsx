@@ -2397,7 +2397,7 @@ export default function App() {
               <button className="topbar-btn" type="button" aria-label="Zoom in" onClick={() => leafletMapRef.current?.zoomIn(1)}>+</button>
             </div>
             <div className="topbar-divider" />
-            <button className="help-icon-btn" type="button" title="How to use MapViewer" onClick={() => setShowHelpModal(true)}>?</button>
+            <button className="help-icon-btn" type="button" title="How to use Exploration Maps" onClick={() => setShowHelpModal(true)}>?</button>
             <div className="topbar-btn-group">
               <button className={`topbar-btn primary${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('png'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing…' : ''}>{exporting ? 'Exporting…' : 'PNG'}</button>
               <button className={`topbar-btn${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('svg'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting}>SVG</button>
