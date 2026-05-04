@@ -9,6 +9,33 @@ function isVectorIcon(type) {
   return type in MARKER_ICON_PATHS;
 }
 
+function getPointAtFraction(pts, fraction) {
+  const n = pts.length;
+  const segs = [];
+  let totalLen = 0;
+  for (let i = 0; i < n; i++) {
+    const a = pts[i], b = pts[(i + 1) % n];
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    segs.push({ ax: a.x, ay: a.y, dx, dy, len });
+    totalLen += len;
+  }
+  let target = (((fraction % 1) + 1) % 1) * totalLen;
+  for (const seg of segs) {
+    if (target <= seg.len) {
+      const t = seg.len > 0 ? target / seg.len : 0;
+      const x = seg.ax + t * seg.dx;
+      const y = seg.ay + t * seg.dy;
+      let angle = Math.atan2(seg.dy, seg.dx) * 180 / Math.PI;
+      if (angle > 90) angle -= 180;
+      if (angle < -90) angle += 180;
+      return { x, y, angle };
+    }
+    target -= seg.len;
+  }
+  return { x: pts[0].x, y: pts[0].y, angle: 0 };
+}
+
 function ellipseLabelPlacement(ellipse) {
   const anchorX = ellipse.x + ellipse.width * 0.34;
   const anchorY = ellipse.y - ellipse.height * 0.24;
@@ -221,48 +248,37 @@ export default function AnnotationOverlay({
                 if (!pts || pts.length < 2) return null;
                 const labelFontSize = poly.labelFontSize || 13;
                 const labelColor = poly.labelColor || poly.color || '#000000';
-                const pathId = `poly-arc-path-${poly.id}`;
                 const cx = pts.reduce((s, p) => s + p.x, 0) / pts.length;
                 const cy = pts.reduce((s, p) => s + p.y, 0) / pts.length;
-                // Expand each vertex outward from centroid to place text outside the boundary
                 const gap = labelFontSize * 0.7 + 10;
                 const expandedPts = pts.map((p) => {
-                  const dx = p.x - cx;
-                  const dy = p.y - cy;
+                  const dx = p.x - cx, dy = p.y - cy;
                   const dist = Math.sqrt(dx * dx + dy * dy) || 1;
                   return { x: cx + dx * (dist + gap) / dist, y: cy + dy * (dist + gap) / dist };
                 });
-                const arcD = `M ${expandedPts.map((p) => `${p.x} ${p.y}`).join(' L ')} Z`;
-                const arcOffset = `${((poly.labelAngle || 0) / 360) * 100}%`;
+                const pos = getPointAtFraction(expandedPts, (poly.labelAngle || 0) / 360);
                 return (
-                  <>
-                    <defs><path id={pathId} d={arcD} /></defs>
-                    <text
-                      fontSize={labelFontSize}
-                      fontWeight={poly.labelBold !== false ? '700' : '400'}
-                      fill={labelColor}
-                      stroke="rgba(255,255,255,0.85)"
-                      strokeWidth={3}
-                      paintOrder="stroke"
-                      fontFamily={labelFont || 'Inter, sans-serif'}
-                      style={{ pointerEvents: 'auto', cursor: 'move', userSelect: 'none' }}
-                      onClick={(e) => { e.stopPropagation(); onSelectPolygon?.(poly.id); }}
-                      onPointerDown={(e) => {
-                        e.preventDefault(); e.stopPropagation();
-                        onSelectPolygon?.(poly.id);
-                        dragRef.current = {
-                          id: poly.id, kind: 'polygon-label-arc',
-                          startX: e.clientX, startY: e.clientY,
-                          startPoint: { x: cx, y: cy },
-                          pointerId: e.pointerId,
-                        };
-                      }}
-                    >
-                      <textPath href={`#${pathId}`} startOffset={arcOffset} textAnchor="middle">
-                        {poly.label}
-                      </textPath>
-                    </text>
-                  </>
+                  <text
+                    x={pos.x} y={pos.y}
+                    fontSize={labelFontSize}
+                    fontWeight={poly.labelBold !== false ? '700' : '400'}
+                    fill={labelColor}
+                    stroke="rgba(255,255,255,0.85)" strokeWidth={3} paintOrder="stroke"
+                    textAnchor="middle" dominantBaseline="middle"
+                    transform={`rotate(${pos.angle}, ${pos.x}, ${pos.y})`}
+                    fontFamily={labelFont || 'Inter, sans-serif'}
+                    style={{ pointerEvents: 'auto', cursor: 'move', userSelect: 'none' }}
+                    onClick={(e) => { e.stopPropagation(); onSelectPolygon?.(poly.id); }}
+                    onPointerDown={(e) => {
+                      e.preventDefault(); e.stopPropagation();
+                      onSelectPolygon?.(poly.id);
+                      dragRef.current = { id: poly.id, kind: 'polygon-label-arc',
+                        startX: e.clientX, startY: e.clientY,
+                        startPoint: { x: cx, y: cy }, pointerId: e.pointerId };
+                    }}
+                  >
+                    {poly.label}
+                  </text>
                 );
               })()}
             </g>
