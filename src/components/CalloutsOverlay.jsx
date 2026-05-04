@@ -8,7 +8,7 @@ function estimateBox(callout) {
   if (callout.type === 'badge') {
     const chipChars = (callout.badgeValue || '').length;
     const chipW = Math.max(44, chipChars * 8 + 20);
-    const labelW = Math.max(80, Math.min(callout.boxWidth || 160, 260));
+    const labelW = Math.max(80, callout.boxWidth ? Math.min(callout.boxWidth, 260) : 160);
     return { width: chipW + labelW, height: 32 };
   }
   const title = callout.text || '';
@@ -17,7 +17,10 @@ function estimateBox(callout) {
   const fontSize = style.fontSize || 12;
   const paddingX = style.paddingX || 10;
   const paddingY = style.paddingY || 8;
-  const width = Math.max(136, Math.min(callout.boxWidth || 188, 320));
+  // Auto-width from text when boxWidth not explicitly set by user
+  const width = callout.boxWidth
+    ? Math.max(100, Math.min(callout.boxWidth, 400))
+    : Math.max(120, Math.min(Math.max(title.length, subtext.length) * (fontSize * 0.58) + paddingX * 2 + 8, 280));
   const charsPerLine = Math.max(12, Math.floor((width - paddingX * 2) / Math.max(6, fontSize * 0.55)));
   const titleLines = Math.max(1, Math.ceil(title.length / charsPerLine));
   const subtextLines = subtext ? Math.max(1, Math.ceil(subtext.length / charsPerLine)) : 0;
@@ -85,9 +88,16 @@ export default function CalloutsOverlay({ map, callouts, selectedCalloutId, onSe
   useEffect(() => {
     const handleMove = (event) => {
       if (!dragRef.current) return;
-      const { startX, startY, startOffset, id, pointerId } = dragRef.current;
+      const { startX, startY, startOffset, startWidth, id, kind, pointerId } = dragRef.current;
       if (pointerId != null && event.pointerId !== pointerId) return;
       const dx = event.clientX - startX;
+
+      if (kind === 'resize') {
+        const newWidth = Math.max(100, Math.min(400, Math.round(startWidth + dx)));
+        onUpdate?.(id, { boxWidth: newWidth });
+        return;
+      }
+
       const dy = event.clientY - startY;
       onMove?.(id, { x: startOffset.x + dx, y: startOffset.y + dy, isManualPosition: true });
     };
@@ -139,6 +149,7 @@ export default function CalloutsOverlay({ map, callouts, selectedCalloutId, onSe
             key={callout.id}
             className={`map-callout ${callout.type} ${selectedCalloutId === callout.id ? 'selected' : ''}`}
             style={{
+              position: 'relative',
               left: callout.left,
               top: callout.top,
               width: callout.width,
@@ -224,6 +235,22 @@ export default function CalloutsOverlay({ map, callouts, selectedCalloutId, onSe
                   )
                 ) : null}
               </>
+            )}
+            {selectedCalloutId === callout.id && (
+              <div
+                className="callout-resize-handle"
+                onPointerDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  dragRef.current = {
+                    id: callout.id,
+                    kind: 'resize',
+                    startX: e.clientX,
+                    startWidth: callout.width,
+                    pointerId: e.pointerId,
+                  };
+                }}
+              />
             )}
           </div>
         );

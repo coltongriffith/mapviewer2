@@ -94,6 +94,17 @@ export default function AnnotationOverlay({
         onMoveEllipseLabelOffset?.(id, { x: startPoint.x + dx, y: startPoint.y + dy });
         return;
       }
+      if (kind === 'polygon-label-arc') {
+        const mapRect = map.getContainer().getBoundingClientRect();
+        const mx = event.clientX - mapRect.left;
+        const my = event.clientY - mapRect.top;
+        const ax = mx - startPoint.x;
+        const ay = my - startPoint.y;
+        let angle = Math.atan2(ax, -ay) * 180 / Math.PI;
+        angle = ((angle % 360) + 360) % 360;
+        onMovePolygonLabel?.(id, { angle: Math.round(angle) });
+        return;
+      }
       if (kind === 'polygon-label') {
         onMovePolygonLabel?.(id, { x: startPoint.x + dx, y: startPoint.y + dy });
         return;
@@ -205,6 +216,44 @@ export default function AnnotationOverlay({
                 style={{ cursor: 'pointer', pointerEvents: 'stroke' }}
                 onClick={(e) => { e.stopPropagation(); onSelectPolygon?.(poly.id); }}
               />
+              {poly.arcLabel && poly.label && (() => {
+                const pts = polygonScreenPts[idx];
+                if (!pts || pts.length < 2) return null;
+                const arcD = `M ${pts.map((p) => `${p.x} ${p.y}`).join(' L ')} Z`;
+                const arcOffset = `${((poly.labelAngle || 0) / 360) * 100}%`;
+                const labelFontSize = poly.labelFontSize || 13;
+                const labelColor = poly.labelColor || poly.color || '#000000';
+                const pathId = `poly-arc-path-${poly.id}`;
+                const cx = pts.reduce((s, p) => s + p.x, 0) / pts.length;
+                const cy = pts.reduce((s, p) => s + p.y, 0) / pts.length;
+                return (
+                  <>
+                    <defs><path id={pathId} d={arcD} /></defs>
+                    <text
+                      fontSize={labelFontSize}
+                      fontWeight={poly.labelBold !== false ? '700' : '400'}
+                      fill={labelColor}
+                      fontFamily={labelFont || 'Inter, sans-serif'}
+                      style={{ pointerEvents: 'auto', cursor: 'move', userSelect: 'none' }}
+                      onClick={(e) => { e.stopPropagation(); onSelectPolygon?.(poly.id); }}
+                      onPointerDown={(e) => {
+                        e.preventDefault(); e.stopPropagation();
+                        onSelectPolygon?.(poly.id);
+                        dragRef.current = {
+                          id: poly.id, kind: 'polygon-label-arc',
+                          startX: e.clientX, startY: e.clientY,
+                          startPoint: { x: cx, y: cy },
+                          pointerId: e.pointerId,
+                        };
+                      }}
+                    >
+                      <textPath href={`#${pathId}`} startOffset={arcOffset} textAnchor="middle">
+                        {poly.label}
+                      </textPath>
+                    </text>
+                  </>
+                );
+              })()}
             </g>
           );
         })}
@@ -401,7 +450,7 @@ export default function AnnotationOverlay({
       })}
 
       {/* Polygon labels (draggable) */}
-      {(polygons || []).filter((poly) => poly.label).map((poly, idx) => {
+      {(polygons || []).filter((poly) => poly.label && !poly.arcLabel).map((poly, idx) => {
         const pts = polygonScreenPts[idx];
         if (!pts || !pts.length) return null;
         // Position at top of bounding box

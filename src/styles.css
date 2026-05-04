@@ -1327,3 +1327,21 @@ button, input, select, textarea { font: inherit; }
 .help-icon-btn:hover { background: #e8f0fd; border-color: #93c5fd; color: #1d4ed8; }
 .landing-how-to-link { background: none; border: none; cursor: pointer; font-size: 13px; color: #64748b; padding: 0; text-decoration: underline; text-decoration-color: transparent; transition: all 0.12s; }
 .landing-how-to-link:hover { color: #2563eb; text-decoration-color: #2563eb; }
+.callout-resize-handle {
+  position: absolute;
+  right: -4px;
+  top: 0;
+  width: 10px;
+  height: 100%;
+  cursor: ew-resize;
+  z-index: 10;
+}
+.callout-resize-handle::after {
+  content: '';
+  display: block;
+  width: 3px;
+  height: 60%;
+  margin: 20% auto 0;
+  background: rgba(59,130,246,0.6);
+  border-radius: 2px;
+}
