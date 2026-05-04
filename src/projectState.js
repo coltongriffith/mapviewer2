@@ -135,7 +135,7 @@ export function createInitialProjectState() {
       insetHeightPx: 190,
       exportSettings: {
         pixelRatio: 2,
-        filename: 'mapviewer-export',
+        filename: 'exploration-maps-export',
       },
     },
     callouts: [],

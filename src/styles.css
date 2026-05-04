@@ -1297,3 +1297,51 @@ button, input, select, textarea { font: inherit; }
 .template-default-star.active { color: #f59e0b; }
 .template-default-star:hover { color: #f59e0b; }
 .btn.compact, .secondary-btn.compact { padding: 4px 10px; font-size: 12px; border-radius: 6px; }
+
+/* ── How To Use modal ── */
+.howto-overlay { position: fixed; inset: 0; z-index: 2050; display: grid; place-items: center; background: rgba(2,6,23,0.55); backdrop-filter: blur(3px); }
+.howto-card { position: relative; width: 95vw; height: 92vh; max-width: 1200px; border-radius: 16px; background: #fff; border: 1px solid #dbe4ee; box-shadow: 0 28px 72px rgba(15,23,42,0.24); display: flex; overflow: hidden; }
+.howto-close { position: absolute; top: 14px; right: 14px; z-index: 10; width: 30px; height: 30px; border-radius: 999px; border: 1px solid #e2e8f0; background: #f8fafc; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; color: #64748b; }
+.howto-close:hover { background: #fee2e2; border-color: #fca5a5; color: #dc2626; }
+.howto-nav { width: 240px; flex: 0 0 240px; border-right: 1px solid #e8edf3; overflow-y: auto; padding: 28px 0; background: #f8fafc; }
+.howto-nav-header { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #94a3b8; padding: 0 20px 12px; }
+.howto-nav-item { display: block; width: 100%; text-align: left; padding: 7px 20px; font-size: 13px; color: #475569; background: none; border: none; border-left: 2px solid transparent; cursor: pointer; transition: all 0.12s; }
+.howto-nav-item:hover { background: #eef2f8; color: #1e293b; }
+.howto-nav-item.active { color: #1d4ed8; border-left-color: #1d4ed8; background: #eff6ff; font-weight: 600; }
+.howto-content { flex: 1; overflow-y: auto; padding: 36px 48px 60px; }
+.howto-content h2 { font-size: 22px; color: #0f172a; margin: 40px 0 6px; padding-top: 8px; border-bottom: 2px solid #e8edf3; padding-bottom: 10px; }
+.howto-content h2:first-child { margin-top: 0; }
+.howto-content h3 { font-size: 15px; font-weight: 700; color: #1e293b; margin: 24px 0 8px; }
+.howto-content p, .howto-content li { font-size: 14px; line-height: 1.7; color: #374151; }
+.howto-content ul { padding-left: 20px; margin: 8px 0; }
+.howto-content li { margin-bottom: 4px; }
+.howto-content strong { color: #0f172a; }
+.howto-content table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 12px 0; }
+.howto-content th { background: #f1f5f9; text-align: left; padding: 8px 12px; font-weight: 700; color: #374151; border: 1px solid #e2e8f0; }
+.howto-content td { padding: 7px 12px; border: 1px solid #e2e8f0; color: #475569; vertical-align: top; }
+.howto-content dl { margin: 8px 0; }
+.howto-content dt { font-weight: 700; color: #0f172a; font-size: 14px; margin-top: 12px; }
+.howto-content dd { margin-left: 20px; font-size: 14px; color: #475569; line-height: 1.6; }
+.howto-img-placeholder { margin: 16px 0 24px; padding: 28px 20px; background: #f1f5f9; border: 2px dashed #cbd5e1; border-radius: 10px; text-align: center; font-size: 12px; color: #94a3b8; font-style: italic; min-height: 80px; display: flex; align-items: center; justify-content: center; }
+.help-icon-btn { width: 28px; height: 28px; border-radius: 999px; border: 1px solid #dbe4ee; background: #f8fafc; color: #64748b; font-size: 14px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.12s; }
+.help-icon-btn:hover { background: #e8f0fd; border-color: #93c5fd; color: #1d4ed8; }
+.landing-how-to-link { background: none; border: none; cursor: pointer; font-size: 13px; color: #64748b; padding: 0; text-decoration: underline; text-decoration-color: transparent; transition: all 0.12s; }
+.landing-how-to-link:hover { color: #2563eb; text-decoration-color: #2563eb; }
+.callout-resize-handle {
+  position: absolute;
+  right: -4px;
+  top: 0;
+  width: 10px;
+  height: 100%;
+  cursor: ew-resize;
+  z-index: 10;
+}
+.callout-resize-handle::after {
+  content: '';
+  display: block;
+  width: 3px;
+  height: 60%;
+  margin: 20% auto 0;
+  background: rgba(59,130,246,0.6);
+  border-radius: 2px;
+}

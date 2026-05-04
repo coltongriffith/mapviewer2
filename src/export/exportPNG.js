@@ -5,7 +5,7 @@ export async function exportPNG(scene, options = {}) {
     throw new Error("Map scene is not ready for export.");
   }
 
-  const filename = `${options.filename || scene.project.layout?.exportSettings?.filename || "mapviewer-export"}.png`;
+  const filename = `${options.filename || scene.project.layout?.exportSettings?.filename || "exploration-maps-export"}.png`;
   const canvas = await renderSceneToCanvas(scene, options);
   downloadCanvas(filename, canvas);
 }

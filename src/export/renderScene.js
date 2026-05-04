@@ -9,6 +9,33 @@ import regionsNA from '../assets/regionsNA.json';
 let _exportWarnings = [];
 export function getExportWarnings() { return _exportWarnings; }
 
+function getPointAtFraction(pts, fraction) {
+  const n = pts.length;
+  const segs = [];
+  let totalLen = 0;
+  for (let i = 0; i < n; i++) {
+    const a = pts[i], b = pts[(i + 1) % n];
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    segs.push({ ax: a.x, ay: a.y, dx, dy, len });
+    totalLen += len;
+  }
+  let target = (((fraction % 1) + 1) % 1) * totalLen;
+  for (const seg of segs) {
+    if (target <= seg.len) {
+      const t = seg.len > 0 ? target / seg.len : 0;
+      const x = seg.ax + t * seg.dx;
+      const y = seg.ay + t * seg.dy;
+      let angle = Math.atan2(seg.dy, seg.dx) * 180 / Math.PI;
+      if (angle > 90) angle -= 180;
+      if (angle < -90) angle += 180;
+      return { x, y, angle };
+    }
+    target -= seg.len;
+  }
+  return { x: pts[0].x, y: pts[0].y, angle: 0 };
+}
+
 function clonePoint(point, scale = 1) {
   return { x: point.x * scale, y: point.y * scale };
 }
@@ -822,20 +849,40 @@ function drawPolygonsCanvas(ctx, scene, scale) {
     ctx.stroke();
     ctx.restore();
 
-    // Label at top of bounding box
     if (poly.label) {
-      const minY = Math.min(...pts.map((p) => p.y));
-      const midX = (Math.min(...pts.map((p) => p.x)) + Math.max(...pts.map((p) => p.x))) / 2;
-      const lx = midX + (poly.labelOffsetX || 0) * scale;
-      const ly = minY - 18 * scale + (poly.labelOffsetY || 0) * scale;
       const fontSize = (poly.labelFontSize || 12) * scale;
-      ctx.save();
-      ctx.font = `${poly.labelBold !== false ? '700' : '400'} ${fontSize}px Inter, Arial, sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillStyle = poly.labelColor || poly.color || '#000000';
-      ctx.fillText(poly.label, lx, ly);
-      ctx.restore();
+      const fontWeight = poly.labelBold !== false ? '700' : '400';
+      const color = poly.labelColor || poly.color || '#000000';
+      if (poly.arcLabel) {
+        const gap = ((poly.labelFontSize || 12) * 0.7 + 10) * scale;
+        const pcx = pts.reduce((s, p) => s + p.x, 0) / pts.length;
+        const pcy = pts.reduce((s, p) => s + p.y, 0) / pts.length;
+        const expandedPts = pts.map((p) => {
+          const dx = p.x - pcx, dy = p.y - pcy;
+          const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+          return { x: pcx + dx * (dist + gap) / dist, y: pcy + dy * (dist + gap) / dist };
+        });
+        const pos = getPointAtFraction(expandedPts, (poly.labelAngle || 0) / 360);
+        ctx.save();
+        ctx.translate(pos.x, pos.y);
+        ctx.rotate(pos.angle * Math.PI / 180);
+        ctx.font = `${fontWeight} ${fontSize}px Inter, Arial, sans-serif`;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = 3 * scale;
+        ctx.strokeText(poly.label, 0, 0);
+        ctx.fillStyle = color; ctx.fillText(poly.label, 0, 0);
+        ctx.restore();
+      } else {
+        const minY = Math.min(...pts.map((p) => p.y));
+        const midX = (Math.min(...pts.map((p) => p.x)) + Math.max(...pts.map((p) => p.x))) / 2;
+        const lx = midX + (poly.labelOffsetX || 0) * scale;
+        const ly = minY - 18 * scale + (poly.labelOffsetY || 0) * scale;
+        ctx.save();
+        ctx.font = `${fontWeight} ${fontSize}px Inter, Arial, sans-serif`;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillStyle = color; ctx.fillText(poly.label, lx, ly);
+        ctx.restore();
+      }
     }
   });
 }

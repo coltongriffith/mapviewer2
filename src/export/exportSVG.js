@@ -5,7 +5,7 @@ export async function exportSVG(scene, options = {}) {
     throw new Error("Map scene is not ready for export.");
   }
 
-  const filename = `${options.filename || scene.project.layout?.exportSettings?.filename || "mapviewer-export"}.svg`;
+  const filename = `${options.filename || scene.project.layout?.exportSettings?.filename || "exploration-maps-export"}.svg`;
   const svg = await renderSceneToSvg(scene, options);
   downloadSvg(filename, svg);
 }

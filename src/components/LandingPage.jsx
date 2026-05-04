@@ -13,7 +13,7 @@ function formatRelativeDate(iso) {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-export default function LandingPage({ onOpenEditor, onLoadSample, recentProjects = [], onOpenProject }) {
+export default function LandingPage({ onOpenEditor, onLoadSample, recentProjects = [], onOpenProject, onShowHelp }) {
   const { user } = useAuth();
   const [showAuth, setShowAuth] = useState(false);
 
@@ -29,6 +29,11 @@ export default function LandingPage({ onOpenEditor, onLoadSample, recentProjects
           Exploration Maps
         </div>
         <div className="landing-nav-actions">
+          {onShowHelp && (
+            <button className="landing-how-to-link" type="button" onClick={onShowHelp}>
+              How to use →
+            </button>
+          )}
           {user ? (
             <span className="landing-nav-user">
               <span className="landing-nav-avatar">{user.email?.slice(0, 2).toUpperCase() ?? '??'}</span>

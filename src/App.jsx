@@ -12,6 +12,7 @@ import UploadPanel from './components/UploadPanel';
 import AnnotationOverlay from './components/AnnotationOverlay';
 import ShadeOverlay from './components/ShadeOverlay';
 import ColumnMapperModal from './components/ColumnMapperModal';
+import HowToUseModal from './components/HowToUseModal';
 import { loadGeoJSON, loadCSV } from './utils/importers';
 import sampleClaims from './assets/sampleClaims.json';
 import sampleDrillholes from './assets/sampleDrillholes.json';
@@ -364,6 +365,7 @@ export default function App() {
   const [recentProjects, setRecentProjects] = useState(() => listProjects());
   const [showRecentProjects, setShowRecentProjects] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
+  const [showHelpModal, setShowHelpModal] = useState(false);
   const [pendingExportFormat, setPendingExportFormat] = useState(null);
   const [isDirty, setIsDirty] = useState(false);
   const [selectedLayerId, setSelectedLayerId] = useState(null);
@@ -1500,12 +1502,16 @@ export default function App() {
 
   if (screen === 'landing') {
     return (
-      <LandingPage
-        onOpenEditor={() => setScreen('editor')}
-        onLoadSample={loadSampleData}
-        recentProjects={recentProjects}
-        onOpenProject={(entry) => { openProjectFromRecent(entry); setScreen('editor'); }}
-      />
+      <>
+        <LandingPage
+          onOpenEditor={() => setScreen('editor')}
+          onLoadSample={loadSampleData}
+          recentProjects={recentProjects}
+          onOpenProject={(entry) => { openProjectFromRecent(entry); setScreen('editor'); }}
+          onShowHelp={() => setShowHelpModal(true)}
+        />
+        {showHelpModal && <HowToUseModal onClose={() => setShowHelpModal(false)} />}
+      </>
     );
   }
 
@@ -1696,10 +1702,6 @@ export default function App() {
                   <select value={selectedFeature.calloutType || 'leader'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, calloutType: e.target.value }))}>
                     {Object.entries(CALLOUT_TYPES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                   </select>
-                </div>
-                <div>
-                  <label>Box Width</label>
-                  <input type="number" min="140" max="320" step="2" value={selectedFeature.boxWidth || 188} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, boxWidth: Number(e.target.value || 188) }))} />
                 </div>
               </div>
               {selectedFeature.calloutType === 'badge' && (
@@ -1993,6 +1995,19 @@ export default function App() {
             <div className="control-grid" style={{ marginTop: 10 }}>
               <div className="selected-note">Selected boundary</div>
               <div className="control-row"><label>Label</label><input value={selectedPolygon.label || ''} onChange={(e) => updatePolygon(selectedPolygon.id, { label: e.target.value })} placeholder="e.g. Target Zone" /></div>
+              <label className="toggle-row">
+                <input type="checkbox" checked={!!selectedPolygon.arcLabel} onChange={(e) => updatePolygon(selectedPolygon.id, { arcLabel: e.target.checked })} />
+                <span>Arc label along boundary</span>
+              </label>
+              {selectedPolygon.arcLabel && (
+                <div className="control-row inline-2">
+                  <div>
+                    <label>Position (0° = start)</label>
+                    <input type="range" min="0" max="359" step="1" value={selectedPolygon.labelAngle ?? 0} onChange={(e) => updatePolygon(selectedPolygon.id, { labelAngle: Number(e.target.value) })} />
+                  </div>
+                  <div className="range-value">{selectedPolygon.labelAngle ?? 0}°</div>
+                </div>
+              )}
               <div className="control-row inline-2">
                 <div>
                   <label>Color</label>
@@ -2294,14 +2309,6 @@ export default function App() {
               <div><label>Inset Title</label><input value={project.layout.insetTitle ?? 'Project Locator'} onChange={(e) => updateLayout({ insetTitle: e.target.value })} placeholder="Project Locator" /></div>
               <div><label>Inset Label</label><input value={project.layout.insetLabel ?? ''} onChange={(e) => updateLayout({ insetLabel: e.target.value })} placeholder={project.layout.autoInsetRegion?.name || 'Province / State'} /></div>
             </div>
-            <div className="control-row inline-2">
-              <div><label>Logo Size</label><input type="range" min="0.6" max="1.8" step="0.05" value={project.layout.logoScale || 1} onChange={(e) => updateLayout({ logoScale: Number(e.target.value) })} /></div>
-              <div className="range-value">{Math.round((project.layout.logoScale || 1) * 100)}%</div>
-            </div>
-            <div className="control-row inline-2">
-              <div><label>Inset Size</label><input type="range" min="0.7" max="1.6" step="0.05" value={project.layout.insetScale || 1} onChange={(e) => updateLayout({ insetScale: Number(e.target.value) })} /></div>
-              <div className="range-value">{Math.round((project.layout.insetScale || 1) * 100)}%</div>
-            </div>
             <div className="corner-pickers">
               {[
                 { label: 'Title',       key: 'titleCorner',      def: 'tl' },
@@ -2391,6 +2398,7 @@ export default function App() {
               <button className="topbar-btn" type="button" aria-label="Zoom in" onClick={() => leafletMapRef.current?.zoomIn(1)}>+</button>
             </div>
             <div className="topbar-divider" />
+            <button className="help-icon-btn" type="button" title="How to use Exploration Maps" onClick={() => setShowHelpModal(true)}>?</button>
             <div className="topbar-btn-group">
               <button className={`topbar-btn primary${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('png'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing…' : ''}>{exporting ? 'Exporting…' : 'PNG'}</button>
               <button className={`topbar-btn${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('svg'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting}>SVG</button>
@@ -2468,7 +2476,13 @@ export default function App() {
               onMoveLabelOffset={(id, offset) => updateMarker(id, { labelOffsetX: offset.x, labelOffsetY: offset.y })}
               onMoveEllipseLabelOffset={(id, offset) => updateEllipse(id, { labelOffsetX: offset.x, labelOffsetY: offset.y })}
               onMoveEllipseLabelAngle={(id, angle) => updateEllipse(id, { labelAngle: angle })}
-              onMovePolygonLabel={(id, offset) => updatePolygon(id, { labelOffsetX: offset.x, labelOffsetY: offset.y })}
+              onMovePolygonLabel={(id, data) => {
+                if ('angle' in data) {
+                  updatePolygon(id, { labelAngle: data.angle });
+                } else {
+                  updatePolygon(id, { labelOffsetX: data.x, labelOffsetY: data.y });
+                }
+              }}
               labelFont={project.layout.fonts?.label}
             />
             <CalloutsOverlay
@@ -2729,10 +2743,6 @@ export default function App() {
                   {Object.entries(CALLOUT_TYPES).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                 </select>
               </div>
-              <div className="control-row">
-                <label>Width</label>
-                <input type="number" min="140" max="320" step="2" value={selectedFeature.boxWidth || 188} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, boxWidth: Number(e.target.value || 188) }))} />
-              </div>
             </div>
             {selectedFeature.calloutType === 'badge' && (
               <div className="drillhole-inline-row2">
@@ -2801,6 +2811,7 @@ export default function App() {
           onClose={() => setShowExportModal(false)}
         />
       ) : null}
+      {showHelpModal && <HowToUseModal onClose={() => setShowHelpModal(false)} />}
       {csvMappingData ? (
         <ColumnMapperModal
           headers={csvMappingData.headers}
