@@ -192,6 +192,12 @@ ${body}
     <a href="/blog/">All Guides</a>
     <span class="site-footer-sep">·</span>
     <a href="/">Open Map Editor</a>
+    <span class="site-footer-sep">·</span>
+    <a href="/about/">About</a>
+    <span class="site-footer-sep">·</span>
+    <a href="/contact/">Contact</a>
+    <span class="site-footer-sep">·</span>
+    <a href="/privacy/">Privacy</a>
   </div>
   <p>© ${new Date().getFullYear()} ${esc(SITE_NAME)}</p>
 </footer>
