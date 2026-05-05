@@ -5,6 +5,8 @@ import "./styles.css";
 import "leaflet/dist/leaflet.css";
 import { exportLeadsCsv } from "./utils/leadCapture";
 import ErrorBoundary from "./components/ErrorBoundary";
+import { AuthProvider } from "./hooks/useAuth.jsx";
+import { inject } from "@vercel/analytics";
 
 if (typeof crypto.randomUUID !== 'function') {
   crypto.randomUUID = () =>
@@ -17,10 +19,14 @@ if (import.meta.env.DEV) {
   window.__exportLeads = exportLeadsCsv;
 }
 
+inject();
+
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <ErrorBoundary>
-      <App />
+      <AuthProvider>
+        <App />
+      </AuthProvider>
     </ErrorBoundary>
   </React.StrictMode>
 );

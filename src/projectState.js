@@ -10,11 +10,11 @@ export const ROLE_LABELS = {
 };
 
 export const TEMPLATE_MODES = {
-  project_overview: 'Project Overview',
-  regional_claims: 'Regional Claims',
-  drill_plan: 'Drill Plan',
-  target_anomaly: 'Target / Anomaly',
-  access_location: 'Access / Location',
+  project_overview: 'Regional Location Map',
+  regional_claims:  'Claims Map',
+  drill_plan:       'Drill Results Map',
+  target_anomaly:   'Target Generation Map',
+  access_location:  'Infrastructure Map',
 };
 
 export const COMPOSITION_PRESETS = {
@@ -36,13 +36,16 @@ export const CALLOUT_TYPES = {
   plain: 'Plain Label',
   leader: 'Leader Label',
   boxed: 'Boxed Annotation',
+  badge: 'Badge Label',
 };
 
 
 export const TEMPLATE_THEMES = {
-  modern_rounded: 'Modern Rounded',
-  technical_sharp: 'Technical Sharp',
-  investor_clean: 'Investor Clean',
+  investor_clean:      'Investor — Navy & White',
+  technical_sharp:     'Technical — Sharp Borders',
+  modern_dark:         'Modern — Dark Indigo',
+  warm_terrain:        'Terrain — Earthy & Warm',
+  midnight_blueprint:  'Blueprint — Midnight Cyan',
 };
 
 export const FONT_OPTIONS = {
@@ -61,7 +64,7 @@ export function createInitialProjectState() {
       subtitle: 'Technical Results',
       basemap: 'light',
       templateId: 'technical_results_v2',
-      themeId: 'modern_rounded',
+      themeId: 'investor_clean',
       mode: 'project_overview',
       compositionPreset: 'balanced',
       insetMode: 'province_state',
@@ -80,6 +83,13 @@ export function createInitialProjectState() {
       titleWidth: 'standard',
       footerText: '',
       footerEnabled: true,
+      showNorthArrow: true,
+      showScaleBar: true,
+      regionHighlights: [],
+      legendTitle: 'Legend',
+      mapDate: '',
+      projectNumber: '',
+      mapScaleNote: '',
       referenceOverlays: {
         context: false,
         labels: false,
@@ -89,6 +99,10 @@ export function createInitialProjectState() {
       zoomPercent: 100,
       zoomDelta: 0,
       accentColor: null,
+      titleBgColor: null,
+      titleFgColor: null,
+      panelBgColor: null,
+      panelFgColor: null,
       logoCorner: 'tl',
       legendCorner: 'bl',
       insetCorner: 'tr',
@@ -106,13 +120,28 @@ export function createInitialProjectState() {
         label: 'Inter',
         footer: 'Inter',
       },
+      titleSize: 'standard',
+      titleHeightPx: 92,
+      titleWidthPx: 520,
+      titleTransparent: false,
+      legendWidth: 'standard',
+      legendWidthPx: 300,
+      legendHeightPx: null,
+      legendTransparent: false,
+      logoWidthPx: 168,
+      logoHeightPx: 74,
+      logoTransparent: false,
+      insetWidthPx: 244,
+      insetHeightPx: 190,
       exportSettings: {
         pixelRatio: 2,
-        filename: 'mapviewer-export',
+        filename: 'exploration-maps-export',
       },
     },
     callouts: [],
     markers: [],
     ellipses: [],
+    polygons: [],
+    ratioMapStates: {},
   };
 }

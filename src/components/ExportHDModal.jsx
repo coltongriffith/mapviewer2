@@ -1,19 +1,24 @@
 import React, { useState } from 'react';
 import { getLastLeadEmail } from '../utils/leadCapture';
+import { PDF_SIZES } from '../export/exportPDF';
+import { EXPORT_RATIOS } from '../constants';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export default function ExportHDModal({ format = 'png', onConfirm, onWithWatermark, onClose }) {
+export default function ExportHDModal({ format = 'png', activeRatio = null, onConfirm, onWithWatermark, onClose }) {
   const [email, setEmail] = useState(() => getLastLeadEmail() || '');
   const [error, setError] = useState('');
+  const suggestedPdfSize = activeRatio ? (EXPORT_RATIOS[activeRatio]?.suggestedPdfSize || 'letter_landscape') : 'letter_landscape';
+  const [pdfSize, setPdfSize] = useState(suggestedPdfSize);
 
-  const formatLabel = format === 'svg' ? 'SVG' : 'PNG';
+  const isPdf = format === 'pdf';
+  const formatLabel = format === 'svg' ? 'SVG' : format === 'pdf' ? 'PDF' : 'PNG';
 
   const handleSubmit = () => {
     const trimmed = email.trim();
     if (!trimmed) { setError('Email is required to remove the watermark.'); return; }
     if (!EMAIL_RE.test(trimmed)) { setError('Please enter a valid email address.'); return; }
-    onConfirm(trimmed);
+    onConfirm(trimmed, { pdfSize });
   };
 
   const handleKeyDown = (e) => {
@@ -39,6 +44,31 @@ export default function ExportHDModal({ format = 'png', onConfirm, onWithWaterma
           Enter your email to unlock clean exports — no <em>explorationmaps.com</em> label. Free forever, and your email is remembered for future exports.
         </p>
 
+        {activeRatio && (
+          <div className="export-hd-ratio-badge">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true" style={{ flexShrink: 0 }}>
+              <rect x="1" y="1" width="12" height="12" rx="1.5" stroke="currentColor" strokeWidth="1.6" />
+            </svg>
+            Exporting {EXPORT_RATIOS[activeRatio].label} ({EXPORT_RATIOS[activeRatio].description}) ratio
+          </div>
+        )}
+
+        {isPdf && (
+          <div className="export-hd-field" style={{ marginBottom: 12 }}>
+            <label htmlFor="hd-pdf-size" className="export-hd-label">Page size</label>
+            <select
+              id="hd-pdf-size"
+              value={pdfSize}
+              onChange={(e) => setPdfSize(e.target.value)}
+              style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1.5px solid #e2e8f0', fontSize: 14 }}
+            >
+              {Object.entries(PDF_SIZES).map(([key, val]) => (
+                <option key={key} value={key}>{val.label} ({val.w}" × {val.h}")</option>
+              ))}
+            </select>
+          </div>
+        )}
+
         <div className="export-hd-field">
           <label htmlFor="hd-email" className="export-hd-label">Work email</label>
           <input
@@ -60,9 +90,11 @@ export default function ExportHDModal({ format = 'png', onConfirm, onWithWaterma
           <button className="btn primary export-hd-btn-primary" type="button" onClick={handleSubmit}>
             Download clean {formatLabel}
           </button>
-          <button className="export-hd-skip" type="button" onClick={onWithWatermark}>
-            Download with watermark
-          </button>
+          {!isPdf && (
+            <button className="export-hd-skip" type="button" onClick={onWithWatermark}>
+              Download with watermark
+            </button>
+          )}
         </div>
       </div>
     </div>

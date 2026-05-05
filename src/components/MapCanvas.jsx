@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import regionsNA from '../assets/regionsNA.json';
 
 const BASEMAPS = {
   light: {
@@ -51,13 +52,15 @@ function detectGeomType(geojson) {
   return 'polygon';
 }
 
-export default function MapCanvas({ onReady, project, template, onFeatureClick, onMapClick }) {
+export default function MapCanvas({ onReady, project, template, onFeatureClick, onMapClick, annotationToolRef }) {
   const mapRef = useRef(null);
   const onMapClickRef = useRef(onMapClick);
   const mapElRef = useRef(null);
   const baseLayerRef = useRef(null);
   const overlayGroupRef = useRef(null);
+  const regionHighlightGroupRef = useRef(null);
   const referenceRefs = useRef({});
+  const svgRendererRefs = useRef([]);
 
   useEffect(() => {
     onMapClickRef.current = onMapClick;
@@ -85,6 +88,7 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
     map.on('click', (event) => onMapClickRef.current?.(event.latlng));
 
     overlayGroupRef.current = L.layerGroup().addTo(map);
+    regionHighlightGroupRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
     onReady?.(map);
   }, [onReady]);
@@ -94,6 +98,7 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
       mapRef.current.remove();
       mapRef.current = null;
       overlayGroupRef.current = null;
+      regionHighlightGroupRef.current = null;
       baseLayerRef.current = null;
       referenceRefs.current = {};
     }
@@ -157,11 +162,29 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
   }, [project?.layout?.referenceOverlays, project?.layout?.referenceOpacity]);
 
   useEffect(() => {
+    const group = regionHighlightGroupRef.current;
+    if (!group) return;
+    group.clearLayers();
+    const highlights = project?.layout?.regionHighlights || [];
+    highlights.forEach(({ regionId, color, opacity }) => {
+      const region = regionsNA.find((r) => r.id === regionId);
+      if (!region) return;
+      L.geoJSON(
+        { type: 'Feature', geometry: { type: 'Polygon', coordinates: region.coordinates } },
+        { style: () => ({ fillColor: color || '#ef4444', fillOpacity: opacity ?? 0.45, stroke: false, weight: 0 }) }
+      ).addTo(group);
+    });
+  }, [project?.layout?.regionHighlights]);
+
+  useEffect(() => {
     const map = mapRef.current;
     const group = overlayGroupRef.current;
     if (!map || !group) return;
 
     group.clearLayers();
+    // Remove stale SVG renderers from previous render to prevent pattern ID conflicts
+    svgRendererRefs.current.forEach((r) => { try { r.remove(); } catch (_) {} });
+    svgRendererRefs.current = [];
 
     (project?.layers || []).forEach((layer) => {
       if (layer.visible === false || !layer.geojson) return;
@@ -171,34 +194,47 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
       const geomType = detectGeomType(layer.geojson);
       const isDrillholes = layer.role === 'drillholes' || layer.type === 'points';
 
+      const lo = style.layerOpacity ?? 1;
+      const hasPattern = style.fillPattern && style.fillPattern !== 'none' && geomType !== 'line';
+      const svgRenderer = hasPattern ? L.svg({ padding: 0.1 }) : undefined;
+      if (svgRenderer) svgRendererRefs.current.push(svgRenderer);
+
+      // Use SVG renderer (overlayPane) for drillholes so they stack above canvas polygon fills.
+      // overlayPane SVG has pointer-events:auto from Leaflet CSS; custom panes do not.
+      const drillholeRenderer = isDrillholes ? L.svg({ padding: 0 }) : undefined;
+      if (drillholeRenderer) svgRendererRefs.current.push(drillholeRenderer);
+
       const geoLayer = L.geoJSON(layer.geojson, {
-        pane: 'overlayPane',
+        renderer: svgRenderer,
         style: () => ({
           color: style.stroke || '#54a6ff',
           weight: style.strokeWidth ?? 2,
           fillColor: style.fill || '#54a6ff',
-          fillOpacity: geomType === 'line' ? 0 : style.fillOpacity ?? 0.22,
+          fillOpacity: geomType === 'line' ? 0 : (style.fillOpacity ?? 0.22) * lo,
           dashArray: style.dashArray || '',
-          opacity: style.opacity ?? 1,
+          opacity: (style.opacity ?? 1) * lo,
         }),
         pointToLayer: (feature, latlng) => {
           const marker = L.circleMarker(latlng, {
+            renderer: drillholeRenderer,
             radius: Math.max(4, (style.markerSize ?? 10) / 2),
             color: style.markerColor || style.stroke || '#111111',
             fillColor: style.markerFill || style.fill || style.markerColor || '#ffffff',
-            fillOpacity: 1,
+            fillOpacity: lo,
             weight: style.strokeWidth ?? 1.5,
-            opacity: 1,
+            opacity: lo,
           });
 
           if (isDrillholes) {
             marker.on('click', (e) => {
+              if (annotationToolRef?.current) return;
               L.DomEvent.stopPropagation(e);
               onFeatureClick?.({ layerId: layer.id, feature, latlng });
             });
             marker.bindTooltip('Click to edit callout', { direction: 'top', offset: [0, -10], opacity: 0.9, sticky: true });
           } else {
             marker.on('click', (e) => {
+              if (annotationToolRef?.current) return;
               L.DomEvent.stopPropagation(e);
               onFeatureClick?.({ layerId: layer.id, feature: null, latlng: null, isLayerSelect: true });
             });
@@ -208,6 +244,7 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
         },
         onEachFeature: isDrillholes ? undefined : (feature, featureLayer) => {
           featureLayer.on('click', (e) => {
+            if (annotationToolRef?.current) return;
             L.DomEvent.stopPropagation(e);
             onFeatureClick?.({ layerId: layer.id, feature: null, latlng: null, isLayerSelect: true });
           });
@@ -215,6 +252,47 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
       });
 
       geoLayer.addTo(group);
+
+      if (hasPattern && svgRenderer) {
+        const fillColor = style.fill || '#54a6ff';
+        const fillOpacity = style.fillOpacity ?? 0.6;
+        const spacing = style.fillPatternSpacing || 6;
+        // Include pattern type in ID so switching patterns doesn't reuse stale definitions
+        const patternId = `lf-pat-${layer.id}-${style.fillPattern}`;
+        const svgEl = svgRenderer._container;
+        if (svgEl) {
+          let defs = svgEl.querySelector('defs');
+          if (!defs) { defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs'); svgEl.insertBefore(defs, svgEl.firstChild); }
+          defs.innerHTML = '';
+          const patEl = document.createElementNS('http://www.w3.org/2000/svg', 'pattern');
+          patEl.setAttribute('id', patternId);
+          patEl.setAttribute('patternUnits', 'userSpaceOnUse');
+          patEl.setAttribute('width', spacing * 2);
+          patEl.setAttribute('height', spacing * 2);
+          if (style.fillPattern === 'hatch') {
+            const makeL = (x1, y1, x2, y2) => { const l = document.createElementNS('http://www.w3.org/2000/svg', 'line'); l.setAttribute('x1', x1); l.setAttribute('y1', y1); l.setAttribute('x2', x2); l.setAttribute('y2', y2); l.setAttribute('stroke', fillColor); l.setAttribute('stroke-width', 1.5); l.setAttribute('stroke-opacity', fillOpacity); patEl.appendChild(l); };
+            makeL(0, spacing * 2, spacing * 2, 0); makeL(-spacing, spacing, spacing, -spacing); makeL(spacing, spacing * 3, spacing * 3, spacing);
+          } else if (style.fillPattern === 'cross') {
+            const makeL = (x1, y1, x2, y2) => { const l = document.createElementNS('http://www.w3.org/2000/svg', 'line'); l.setAttribute('x1', x1); l.setAttribute('y1', y1); l.setAttribute('x2', x2); l.setAttribute('y2', y2); l.setAttribute('stroke', fillColor); l.setAttribute('stroke-width', 1.5); l.setAttribute('stroke-opacity', fillOpacity); patEl.appendChild(l); };
+            makeL(0, spacing, spacing * 2, spacing); makeL(spacing, 0, spacing, spacing * 2);
+          } else if (style.fillPattern === 'dots') {
+            const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle'); c.setAttribute('cx', spacing); c.setAttribute('cy', spacing); c.setAttribute('r', 2); c.setAttribute('fill', fillColor); c.setAttribute('fill-opacity', fillOpacity); patEl.appendChild(c);
+          }
+          defs.appendChild(patEl);
+          const applyPattern = (l) => {
+            if (!l._path) return;
+            l._path.style.fill = `url(#${patternId})`;
+            l._path.style.fillOpacity = '1';
+            const orig = l._updateStyle?.bind(l);
+            l._updateStyle = function () {
+              if (orig) orig();
+              if (this._path) { this._path.style.fill = `url(#${patternId})`; this._path.style.fillOpacity = '1'; }
+            };
+          };
+          geoLayer.eachLayer(applyPattern);
+        }
+      }
+
       if (isDrillholes && typeof geoLayer.bringToFront === 'function') {
         geoLayer.bringToFront();
       }

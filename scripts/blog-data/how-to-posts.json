@@ -1,0 +1,381 @@
+[
+  {
+    "slug": "how-to-make-a-mining-claims-map",
+    "mapTypeId": "mining-claims-map",
+    "title": "How to Make a Mining Claims Map",
+    "metaDescription": "Step-by-step guide to creating a professional mining claims map for investor presentations, NI 43-101 reports, and news releases using Exploration Maps.",
+    "directAnswer": "To make a mining claims map, import your claims boundary as a GeoJSON file, assign the Claims layer role for automatic styling, add context layers (roads, water), choose a basemap and design theme, then export as PNG or PDF.",
+    "sections": [
+      {
+        "h2": "What You Need Before You Start",
+        "body": "Before creating your mining claims map, gather the following:",
+        "items": [
+          "Your mineral claims boundary as a GeoJSON or Shapefile (convert Shapefiles to GeoJSON at mapshaper.org)",
+          "Optional: Roads and water body GeoJSON for geographic context",
+          "Your company logo (PNG or JPG)",
+          "The project name, map date, and any required disclaimers"
+        ]
+      },
+      {
+        "h2": "Step 1: Import Your Claims Data",
+        "body": "Open Exploration Maps and click the import button in the Layers section of the sidebar. Select your GeoJSON file — the layer is added automatically and the map fits to your claims boundary. If your claims data is in CSV format with corner coordinates, you can import that instead and the Column Mapper will help you assign the correct fields."
+      },
+      {
+        "h2": "Step 2: Assign the Claims Layer Role",
+        "body": "Click on the layer card to expand it, then select 'Claims' from the Role dropdown. This applies standard styling automatically: a blue stroke with a light blue semi-transparent fill. This is the conventional styling for mineral claims used in NI 43-101 technical reports and recognized by investors and regulatory reviewers."
+      },
+      {
+        "h2": "Step 3: Add Context Layers",
+        "body": "A claims map without geographic context is difficult to read. Add roads and water bodies to help viewers understand accessibility and regional geography. Enable the Context overlay in the Design section (roads, towns, water) and the Reference Labels overlay for place names. Reduce the overlay opacity to 40–60% so your claims data remains visually dominant."
+      },
+      {
+        "h2": "Step 4: Choose a Basemap and Theme",
+        "body": "For investor presentations and NI 43-101 reports, the Light basemap with the Investor — Navy & White theme is the standard choice. For properties with interesting terrain or for satellite imagery context, use the Satellite basemap. The Technical — Sharp Borders theme is preferred for regulatory filings and formal technical documents."
+      },
+      {
+        "h2": "Step 5: Configure the Title Block",
+        "body": "Click the title text on the map to edit it inline. Enter your project name as the main title and your company name as the subtitle. Add the Map Date and Project Number in Design → Text & Metadata. Upload your company logo using the logo uploader at the bottom of the Layers section."
+      },
+      {
+        "h2": "Step 6: Export Your Map",
+        "body": "Activate the appropriate ratio in the Export section: Landscape 16:9 for PowerPoint slides and news releases, Letter Portrait for technical reports. Pan and zoom to frame your claims precisely within the ratio bounds. Click PNG for presentations and web use, or PDF for print-ready documents. Enter your email to unlock watermark-free exports."
+      }
+    ],
+    "faqs": [
+      {
+        "q": "What file format do I need for mining claims data?",
+        "a": "GeoJSON is the preferred format. You can convert Shapefiles (.shp) to GeoJSON for free at mapshaper.org or using QGIS. If you only have corner coordinates in a spreadsheet, export it as CSV and use the Column Mapper to assign latitude and longitude columns."
+      },
+      {
+        "q": "What is the standard colour for mineral claims on a map?",
+        "a": "The conventional colour is blue — a medium blue stroke (#2563eb or similar) with a light blue semi-transparent fill at around 20–25% opacity. This is the default applied when you assign the Claims role in Exploration Maps, and it matches the convention used in most NI 43-101 technical reports."
+      },
+      {
+        "q": "Can I export a mining claims map as a PDF?",
+        "a": "Yes. Click the PDF button in the toolbar to export. Choose your page size (Letter Landscape, A4 Landscape, or News Release Figure) in the export dialog. PDFs are vector-quality and suitable for print in regulatory filings and technical reports."
+      },
+      {
+        "q": "How do I show multiple claim blocks with different colours?",
+        "a": "Import each claim block as a separate GeoJSON layer, then set a different colour for each layer using the stroke and fill colour pickers in the layer controls. Each layer will appear as a separate entry in the legend. You can rename each layer to something descriptive like 'Zone 1 Claims' or 'Optioned Claims'."
+      },
+      {
+        "q": "Does the map need a north arrow and scale bar?",
+        "a": "For NI 43-101 reports and most regulatory submissions, yes — a north arrow and scale bar are standard requirements. Toggle them on in the Design section. The scale bar calculates the displayed distance automatically from the current zoom level."
+      }
+    ],
+    "relatedSlugs": ["how-to-create-exploration-map-investor-presentation", "how-to-export-mining-map-pdf", "how-to-import-geojson-mining-map"]
+  },
+  {
+    "slug": "how-to-make-a-drill-results-map",
+    "mapTypeId": "drill-results-map",
+    "title": "How to Make a Drill Results Map",
+    "metaDescription": "Create a professional drill results map for exploration news releases and NI 43-101 reports. Step-by-step guide with callout labels and assay results.",
+    "directAnswer": "To make a drill results map, import your drill collar CSV, assign the Drillholes role, add callout labels showing hole ID and best intercept, then export as Landscape 16:9 PNG for news releases.",
+    "sections": [
+      {
+        "h2": "What Data You Need",
+        "body": "Prepare the following before starting:",
+        "items": [
+          "Drill collar CSV with columns: Hole ID, Latitude, Longitude, Total Depth (m)",
+          "Assay summary: best intercept per hole (grade × width), for callout labels",
+          "Property boundary GeoJSON",
+          "Company logo"
+        ]
+      },
+      {
+        "h2": "Step 1: Import Drill Collar CSV",
+        "body": "Click the import button in the Layers section and select your drill collar CSV. The Column Mapper opens automatically — assign your latitude and longitude columns. If your columns are named 'Lat', 'Long', 'Latitude', 'Longitude', 'Easting', or 'Northing', they are detected automatically. All other columns (Hole ID, Depth, Grade) are preserved as feature properties accessible when you click a hole on the map."
+      },
+      {
+        "h2": "Step 2: Assign the Drillholes Role",
+        "body": "Expand the layer card and select 'Drillholes' from the Role dropdown. This applies standard dark circle markers. Adjust marker size (12–16 px works well for most scales) in the layer styling controls."
+      },
+      {
+        "h2": "Step 3: Add Callout Labels",
+        "body": "Click on a drill hole on the map to open the inline feature editor. Enter the hole ID as the title and the best intercept as the subtext (e.g., '15.2m @ 4.8 g/t Au'). Click 'Add / Update Callout'. Repeat for your key holes. For high-priority results, switch the callout type to 'Badge Label' and enter the grade in the badge chip field — this highlights your best holes visually."
+      },
+      {
+        "h2": "Step 4: Add the Property Boundary",
+        "body": "Import your property claims boundary as a second layer and assign the Claims role. This provides the property context investors and analysts expect to see alongside drill results."
+      },
+      {
+        "h2": "Step 5: Set Layout for News Releases",
+        "body": "Activate the Landscape 16:9 ratio in the Export section — this is the standard format for figures attached to exploration news releases. Pan and zoom so all your drill holes and key callouts are visible within the frame. The Investor — Navy & White theme with a Light or Satellite basemap is the standard for drill results maps."
+      },
+      {
+        "h2": "Step 6: Export",
+        "body": "Export as PNG at 2× pixel ratio for email attachments and news release figures. If the news release has a separate map figure requirement (common in Canadian press releases), export as the News Release Figure PDF (6\" × 4.5\") for print-ready delivery."
+      }
+    ],
+    "faqs": [
+      {
+        "q": "What format should drill results be shown in on a map?",
+        "a": "The standard format is: '[width]m @ [grade] [unit] [element]' — for example '15.2m @ 4.8 g/t Au' or '82m @ 0.92% Cu'. This is what investors and analysts expect to see in callout labels on exploration drill maps."
+      },
+      {
+        "q": "How many drill holes should I label on the map?",
+        "a": "Label all holes from the current program plus any key historical holes for context. If you have more than 20 holes and the map becomes crowded, use the Priority field (High/Medium/Low) to control which callouts render on top, and only use Badge Labels for your top 3–5 intercepts."
+      },
+      {
+        "q": "Should I use a satellite or light basemap for drill results?",
+        "a": "Either works. Satellite basemaps are popular for drill results because terrain and vegetation help convey the property's physical setting. Light basemaps are better for formal technical reports where the data must be clearly legible. Use the Light basemap for PDF attachments in NI 43-101 reports."
+      },
+      {
+        "q": "Can I show historical and current drill holes differently?",
+        "a": "Yes — import them as separate layers and style them differently. Use filled dark markers for current holes and hollow or lighter markers for historical holes. Name the layers accordingly so they appear as separate legend entries."
+      }
+    ],
+    "relatedSlugs": ["how-to-make-a-mining-claims-map", "how-to-create-exploration-map-investor-presentation", "how-to-export-mining-map-pdf"]
+  },
+  {
+    "slug": "how-to-create-exploration-map-investor-presentation",
+    "mapTypeId": "location-map",
+    "title": "How to Create an Exploration Map for an Investor Presentation",
+    "metaDescription": "Create investor-ready exploration maps for PowerPoint presentations. Guide covering theme selection, layout, callouts, and 16:9 export for mining investor decks.",
+    "directAnswer": "For an investor presentation map, use the Investor — Navy & White theme, Landscape 16:9 ratio, satellite or light basemap, and export as PNG at 2× resolution. Keep the legend concise and add callouts for key drill results or targets.",
+    "sections": [
+      {
+        "h2": "Why Map Quality Matters in Mining Investor Decks",
+        "body": "Professional investors and analysts evaluate dozens of exploration companies. A clean, consistent map immediately signals operational competence. Blurry, cluttered, or inconsistently styled maps undermine confidence in the technical team. Your map should communicate the property's merits at a glance — even when the slide is viewed on a projector from the back of a room."
+      },
+      {
+        "h2": "Choose the Right Theme and Basemap",
+        "body": "The Investor — Navy & White theme is designed specifically for investor materials. Its dark navy title block and clean white panels match the aesthetic of institutional investor presentations. Pair it with a Satellite basemap to show terrain, vegetation, and infrastructure context, or the Light basemap for a cleaner technical look."
+      },
+      {
+        "h2": "Use the Landscape 16:9 Ratio",
+        "body": "Activate the Landscape 16:9 ratio in the Export section before framing your map. This matches the standard PowerPoint and Keynote slide ratio, so your map fills the slide without letterboxing or cropping. Set this ratio before panning and zooming — the frame shows exactly what will be exported."
+      },
+      {
+        "h2": "Keep the Legend Clean",
+        "body": "Investor presentations need to be scannable at speed. Disable legend entries for layers your audience doesn't need to identify. Use the Compact legend mode for most presentation maps. If your legend has more than 5 entries, consider splitting the map into two slides — a property overview map and a detailed results map."
+      },
+      {
+        "h2": "Add Callouts for Key Results",
+        "body": "Use Badge Label callouts for your top drill intercepts — they pop visually and immediately draw the eye to your best results. Plain Label callouts work well for target names. Keep callout text short: '32m @ 6.1 g/t Au' is better than 'Hole DH-23: 32 metres averaging 6.1 grams per tonne gold'."
+      },
+      {
+        "h2": "Export Settings for Presentations",
+        "body": "Export as PNG at 2× pixel ratio. This produces a sharp image suitable for both projected presentation screens (1920×1080) and printed slide handouts. If your presentation uses PowerPoint, insert the PNG as an image rather than a linked file to ensure it travels with the deck."
+      }
+    ],
+    "faqs": [
+      {
+        "q": "What size should a mining map be in a PowerPoint slide?",
+        "a": "Export at Landscape 16:9 ratio with 2× pixel ratio. At standard screen dimensions (1920×1080 effective), a 2× export produces a 3840×2160 image — sharp at any zoom level. Insert it as a full-slide image with no white border."
+      },
+      {
+        "q": "How many maps should I include in an investor presentation?",
+        "a": "Most effective investor decks include 2–3 maps: a regional location map (slide 3–4), a property overview map showing claims, and a detailed drill results or target map. Each serves a different purpose. Avoid using the same map for all three."
+      },
+      {
+        "q": "Should the company logo be on the map?",
+        "a": "Yes, particularly for maps shared outside of a controlled presentation environment — news releases, website downloads, and email attachments. For slides in a branded presentation deck, the logo on the slide template may be sufficient, but having it on the map itself protects the asset when it's extracted from the deck."
+      }
+    ],
+    "relatedSlugs": ["how-to-make-a-mining-claims-map", "how-to-make-a-drill-results-map", "how-to-export-mining-map-pdf"]
+  },
+  {
+    "slug": "how-to-import-geojson-mining-map",
+    "title": "How to Import GeoJSON Data into a Mining Map",
+    "metaDescription": "Complete guide to importing GeoJSON files into Exploration Maps for mining claims, drill holes, targets, and geological features.",
+    "directAnswer": "To import GeoJSON into Exploration Maps, click the import button in the Layers section, select your .geojson or .json file, and the layer is added automatically with the map fitting to your data bounds.",
+    "sections": [
+      {
+        "h2": "What is GeoJSON and Why It's Used for Mining Maps",
+        "body": "GeoJSON is an open standard format for encoding geographic data — polygons, lines, and points — as JSON. It is the most widely compatible format for web-based mapping tools. Most GIS software (QGIS, ArcGIS, MapInfo) can export to GeoJSON, and government mineral title databases often provide boundary data in GeoJSON or Shapefile format (which can be converted)."
+      },
+      {
+        "h2": "Converting Shapefiles to GeoJSON",
+        "body": "If your data is in Shapefile format (.shp, .dbf, .shx, .prj), convert it to GeoJSON before importing. The free online tool at mapshaper.org accepts Shapefile ZIP archives and exports clean GeoJSON in seconds. QGIS users can right-click any layer and choose Export → Save Features As → GeoJSON."
+      },
+      {
+        "h2": "Importing Your GeoJSON File",
+        "body": "In Exploration Maps, click the upload/import icon in the Layers section of the sidebar. Select your .geojson or .json file. The layer is added immediately and the map automatically fits to the extent of your data. If your file contains multiple geometry types (polygons and lines, for example), they are split into separate layers automatically."
+      },
+      {
+        "h2": "Assigning a Layer Role After Import",
+        "body": "After importing, expand the layer card and assign a Role. Roles drive automatic styling — Claims applies blue boundaries, Drillholes applies dark circle markers, Target Areas applies amber dashed outlines. Assigning the correct role saves significant manual styling time and ensures your map follows industry conventions."
+      },
+      {
+        "h2": "Checking Coordinate Systems",
+        "body": "Exploration Maps expects geographic coordinates in WGS84 (EPSG:4326 — standard latitude/longitude). If your GeoJSON displays in the wrong location or far off from expected, the source data may be in a projected coordinate system (UTM, NAD83). Re-export from your GIS software with the coordinate system set to WGS84 / EPSG:4326."
+      }
+    ],
+    "faqs": [
+      {
+        "q": "What file extensions does Exploration Maps accept?",
+        "a": "For vector data: .geojson and .json. For tabular point data: .csv. For images (logo and inset maps): .jpg and .png. Shapefiles must be converted to GeoJSON first."
+      },
+      {
+        "q": "My GeoJSON file shows in the wrong location — what's wrong?",
+        "a": "The most common cause is that the data is in a projected coordinate system (such as UTM Zone 10N or BC Albers) rather than geographic coordinates (WGS84 latitude/longitude). Re-export from your GIS software, specifying WGS84 / EPSG:4326 as the output coordinate reference system."
+      },
+      {
+        "q": "Can I import multiple GeoJSON files?",
+        "a": "Yes — import as many files as needed. Each file becomes a separate layer in the Layers list. You can toggle visibility, reorder layers (drag to change draw order), and style each layer independently."
+      }
+    ],
+    "relatedSlugs": ["how-to-make-a-mining-claims-map", "how-to-make-a-drill-results-map", "how-to-choose-basemap-mining-map"]
+  },
+  {
+    "slug": "how-to-choose-basemap-mining-map",
+    "title": "How to Choose the Right Basemap for a Mining Map",
+    "metaDescription": "Guide to choosing between light, satellite, topographic, and dark basemaps for mining exploration maps in investor presentations, technical reports, and news releases.",
+    "directAnswer": "Use the Light basemap for NI 43-101 reports and regulatory filings, Satellite for investor presentations and location maps showing terrain, Topographic for infrastructure and access maps, and Dark for digital dashboards and social media.",
+    "sections": [
+      {
+        "h2": "The Four Basemaps and When to Use Each",
+        "body": "Exploration Maps offers four basemap styles. Each has a specific context where it performs best:"
+      },
+      {
+        "h2": "Light Basemap: Technical Reports and Regulatory Filings",
+        "body": "The Light basemap uses a neutral light gray background that makes coloured data layers — claims boundaries, drill holes, target areas — stand out clearly. It is the standard choice for NI 43-101 technical reports, regulatory submissions, and any map where the data must be legible in black-and-white printing. Pair with the Technical — Sharp Borders theme for formal documents."
+      },
+      {
+        "h2": "Satellite Basemap: Investor Presentations and Location Maps",
+        "body": "The Satellite basemap shows real aerial imagery, giving investors immediate visual context for terrain, vegetation, access roads, and infrastructure. It is the most compelling basemap for investor materials and is especially effective for properties with distinct topographic features. Reduce the Reference Labels overlay opacity to 50% so place names are readable without overwhelming the imagery."
+      },
+      {
+        "h2": "Topographic Basemap: Infrastructure and Field Maps",
+        "body": "The Topographic basemap shows contour lines and elevation shading. It is ideal for infrastructure maps (road access, drill site planning), environmental assessments, and field geology maps where elevation context matters. Pair with the Terrain — Earthy & Warm theme for a cohesive look."
+      },
+      {
+        "h2": "Dark Basemap: Digital Presentations and Social Media",
+        "body": "The Dark basemap provides a high-contrast background that makes coloured data layers glow. It is best for digital-first content: website graphics, social media posts, and on-screen investor day presentations. It is not suitable for printed materials or formal technical documents."
+      },
+      {
+        "h2": "Reference Overlays: Adding Context to Any Basemap",
+        "body": "Regardless of which basemap you choose, the Context overlay adds roads, water bodies, and towns. The Reference Labels overlay adds place names. The Railway Network overlay adds rail infrastructure. These overlays work on top of any basemap and can be fine-tuned with the Overlay Opacity slider."
+      }
+    ],
+    "faqs": [
+      {
+        "q": "Which basemap is required for NI 43-101 reports?",
+        "a": "NI 43-101 does not specify a particular basemap style, but convention strongly favours the Light or Topographic basemap for technical maps. The requirement is that the map be legible, have a north arrow, scale bar, and appropriate legend — the style is at the discretion of the Qualified Person."
+      },
+      {
+        "q": "Can I use satellite imagery in a printed report?",
+        "a": "Yes. Satellite basemaps export at full resolution in PNG and PDF formats, suitable for print. Ensure your export pixel ratio is set to 2× or 3× for print-quality output."
+      },
+      {
+        "q": "What basemap works best for a regional location map?",
+        "a": "The Satellite basemap is most commonly used for regional location maps — it helps investors immediately understand the property's physical setting and surrounding terrain. The Topographic basemap is also effective for mountainous or complex terrain."
+      }
+    ],
+    "relatedSlugs": ["how-to-make-a-mining-claims-map", "how-to-create-exploration-map-investor-presentation", "how-to-export-mining-map-pdf"]
+  },
+  {
+    "slug": "how-to-export-mining-map-pdf",
+    "title": "How to Export a Mining Map as a PDF",
+    "metaDescription": "Export high-quality PDF mining maps for NI 43-101 reports, news releases, and regulatory filings. Guide covering page sizes, pixel ratio, and print settings.",
+    "directAnswer": "To export a mining map as PDF in Exploration Maps, click the PDF button in the toolbar, choose your page size (Letter, A4, or News Release Figure), enter your email to remove the watermark, and download.",
+    "sections": [
+      {
+        "h2": "PDF vs PNG: Which to Use",
+        "body": "Use PDF for documents that will be printed or submitted to regulators — NI 43-101 reports, permitting applications, environmental assessments. Use PNG for digital use — PowerPoint slides, email attachments, website images, and news release wire service submissions. Both formats export at full resolution with all panels (title, legend, logo) included."
+      },
+      {
+        "h2": "Choosing the Right PDF Page Size",
+        "body": "Exploration Maps offers five PDF page sizes: PowerPoint 16:9 (13.33\" × 7.5\") for presentation-ready PDFs, Letter Landscape (11\" × 8.5\") and Portrait (8.5\" × 11\") for North American regulatory filings, A4 Landscape and Portrait for international filings and European investors, and News Release Figure (6\" × 4.5\") for figures attached to press releases. Choose Letter or A4 Portrait for NI 43-101 appendix maps."
+      },
+      {
+        "h2": "Setting the Export Ratio Before Exporting PDF",
+        "body": "Activate the appropriate ratio in the Export section before clicking PDF. For Letter Portrait PDFs, use the Portrait 3:4 ratio. For Landscape PDFs, use Landscape 16:9. This ensures your map fills the page without letterboxing. Pan and zoom to frame your map within the ratio bounds — the dashed border shows the export frame."
+      },
+      {
+        "h2": "Watermark-Free Export",
+        "body": "Enter your work email in the export dialog to unlock clean PDF exports with no explorationmaps.com watermark. Your email is stored locally and remembered for future sessions. A 'Download with watermark' option is always available without entering an email if you need a quick draft."
+      },
+      {
+        "h2": "Pixel Ratio for Print-Quality PDFs",
+        "body": "Set the Pixel Ratio to 3× in Export Settings for any map that will be printed. 3× produces an image embedded in the PDF at approximately 300 DPI at standard page sizes — the minimum for professional print quality. 2× is sufficient for screen-only use."
+      }
+    ],
+    "faqs": [
+      {
+        "q": "What PDF page size should I use for a NI 43-101 technical report?",
+        "a": "NI 43-101 technical reports are typically formatted on Letter (8.5\" × 11\") or A4 (8.27\" × 11.69\") paper. Use the Letter Portrait or A4 Portrait PDF page size. For larger foldout maps included as appendices, use Letter Landscape."
+      },
+      {
+        "q": "Can I embed a PDF mining map into a Word document?",
+        "a": "Yes. In Word, use Insert → Object → Create from File to embed the PDF, or insert the PNG export as an image (which is simpler for most users). For NI 43-101 reports where the map is a separate appendix, the PDF file itself is typically submitted as a separate attachment."
+      },
+      {
+        "q": "What resolution is the exported PDF?",
+        "a": "PDFs from Exploration Maps contain a raster image at the resolution set by your Pixel Ratio setting. At 2× ratio and Letter Portrait size, the embedded image is approximately 200 DPI — suitable for most professional printing. At 3×, it approaches 300 DPI — the standard for high-quality print."
+      }
+    ],
+    "relatedSlugs": ["how-to-make-a-mining-claims-map", "how-to-create-exploration-map-investor-presentation", "how-to-choose-basemap-mining-map"]
+  },
+  {
+    "slug": "how-to-add-distance-ring-mining-map",
+    "title": "How to Add a Distance Ring to a Mining Map",
+    "metaDescription": "Add distance rings to exploration maps to show radius from a key point — drill target, town, or infrastructure. Step-by-step guide with arc labels.",
+    "directAnswer": "To add a distance ring, click 'Draw Distance Ring' in the Annotations section, click the center point on the map, then set the radius in kilometres and add an arc label to show the distance.",
+    "sections": [
+      {
+        "h2": "When to Use Distance Rings on Mining Maps",
+        "body": "Distance rings communicate scale and proximity — how far the project is from a town, port, mill, or power line. They are commonly used on location maps to show the project is within a certain radius of infrastructure, and on drill plan maps to show target spacing."
+      },
+      {
+        "h2": "Placing the Ring",
+        "body": "Click 'Draw Distance Ring' in the Annotations section of the sidebar. Click anywhere on the map to place the ring center. A ring appears immediately — adjust the radius in kilometres using the sidebar input."
+      },
+      {
+        "h2": "Adding an Arc Label",
+        "body": "Enable 'Curved arc label' in the ring controls. Enter the label text (e.g., '50 km from Port of Prince Rupert'). The label curves along the ring perimeter. Drag the label text or use the Angle slider to position it at any point around the ring — 0° is the top."
+      },
+      {
+        "h2": "Using Outside Shade for Focus",
+        "body": "Enable 'Outside shade' to add a translucent dark or light vignette over everything outside the ring. This focuses the viewer's attention on the interior area. Use the Dark preset (35% opacity) for a strong focus effect, or Light (30%) for a softer fog effect over satellite imagery."
+      }
+    ],
+    "faqs": [
+      {
+        "q": "How do I show a specific distance from a town or port?",
+        "a": "Place the ring center on the town or port location, set the radius to the desired distance in km, and add an arc label showing the distance and reference point. For example: '45 km from Stewart, BC'."
+      },
+      {
+        "q": "Can I add multiple rings at different radii?",
+        "a": "Yes — click 'Draw Distance Ring' multiple times to place multiple rings. Each ring is independently configurable with its own radius, color, and label."
+      }
+    ],
+    "relatedSlugs": ["how-to-make-a-mining-claims-map", "how-to-create-exploration-map-investor-presentation", "how-to-add-scale-bar-north-arrow"]
+  },
+  {
+    "slug": "how-to-add-scale-bar-north-arrow",
+    "title": "How to Add a Scale Bar and North Arrow to a Mining Map",
+    "metaDescription": "Add a scale bar and north arrow to your exploration map — required for NI 43-101 technical reports and regulatory submissions. Quick guide.",
+    "directAnswer": "Toggle the Scale Bar and North Arrow on in the Design section of the sidebar. They appear on the map automatically and can be repositioned using the corner picker controls.",
+    "sections": [
+      {
+        "h2": "Why Scale Bars and North Arrows Are Required",
+        "body": "NI 43-101 technical reports and most regulatory submissions require maps to include a scale bar and north arrow. These elements allow reviewers to measure distances and understand map orientation without additional tools. Without them, maps in technical documents are considered incomplete."
+      },
+      {
+        "h2": "Enabling the Scale Bar",
+        "body": "Open the Design section in the sidebar and toggle the Scale Bar switch on. The scale bar appears on the map and calculates the displayed distance automatically based on the current zoom level. As you zoom in or out, the scale bar updates in real time. The scale bar is included in all exports (PNG, SVG, PDF)."
+      },
+      {
+        "h2": "Enabling the North Arrow",
+        "body": "Toggle the North Arrow switch on in the Design section. The north arrow appears in the corner you specify using the corner picker. Position it in a corner that doesn't conflict with other panels (title, legend, logo, inset)."
+      },
+      {
+        "h2": "Positioning Both Elements",
+        "body": "Use the corner pickers in the Design section to assign the scale bar and north arrow to specific corners. Elements assigned to the same corner stack automatically without overlapping. Adjust Safe Margins to control how close elements can get to the map edge."
+      }
+    ],
+    "faqs": [
+      {
+        "q": "Is a scale bar required for NI 43-101 maps?",
+        "a": "Yes. NI 43-101 Form 43-101F1 specifies that all maps included in technical reports must have a scale indicator (scale bar or representative fraction), north arrow, and legend. Maps without these elements may result in comments from the reviewing securities commission."
+      },
+      {
+        "q": "Does the scale bar update when I zoom the map?",
+        "a": "Yes. The scale bar calculates the distance it represents based on the current zoom level and map projection. If you zoom in, the scale bar shows a shorter distance; zoom out and it shows a longer distance. This means you should set your final zoom level before exporting."
+      }
+    ],
+    "relatedSlugs": ["how-to-make-a-mining-claims-map", "how-to-export-mining-map-pdf", "how-to-create-exploration-map-investor-presentation"]
+  }
+]

@@ -5,13 +5,22 @@ function intersects(a, b, padding = 10) {
 }
 
 function estimateBox(callout) {
+  if (callout.type === 'badge') {
+    const chipChars = (callout.badgeValue || '').length;
+    const chipW = Math.max(44, chipChars * 8 + 20);
+    const labelW = Math.max(80, callout.boxWidth ? Math.min(callout.boxWidth, 260) : 160);
+    return { width: chipW + labelW, height: 32 };
+  }
   const title = callout.text || '';
   const subtext = callout.subtext || '';
   const style = callout.style || {};
   const fontSize = style.fontSize || 12;
   const paddingX = style.paddingX || 10;
   const paddingY = style.paddingY || 8;
-  const width = Math.max(136, Math.min(callout.boxWidth || 188, 320));
+  // Auto-width from text when boxWidth not explicitly set by user
+  const width = callout.boxWidth
+    ? Math.max(100, Math.min(callout.boxWidth, 400))
+    : Math.max(120, Math.min(Math.max(title.length, subtext.length) * (fontSize * 0.58) + paddingX * 2 + 8, 280));
   const charsPerLine = Math.max(12, Math.floor((width - paddingX * 2) / Math.max(6, fontSize * 0.55)));
   const titleLines = Math.max(1, Math.ceil(title.length / charsPerLine));
   const subtextLines = subtext ? Math.max(1, Math.ceil(subtext.length / charsPerLine)) : 0;
@@ -62,9 +71,12 @@ function resolveCalloutBoxes(callouts, map) {
   return placed;
 }
 
-export default function CalloutsOverlay({ map, callouts, selectedCalloutId, onSelect, onMove, fontFamily }) {
+export default function CalloutsOverlay({ map, callouts, selectedCalloutId, onSelect, onMove, onUpdate, fontFamily }) {
   const [tick, setTick] = useState(0);
+  const [editingField, setEditingField] = useState(null);
   const dragRef = useRef(null);
+
+  useEffect(() => { setEditingField(null); }, [selectedCalloutId]);
 
   useEffect(() => {
     if (!map) return undefined;
@@ -76,9 +88,16 @@ export default function CalloutsOverlay({ map, callouts, selectedCalloutId, onSe
   useEffect(() => {
     const handleMove = (event) => {
       if (!dragRef.current) return;
-      const { startX, startY, startOffset, id, pointerId } = dragRef.current;
+      const { startX, startY, startOffset, startWidth, id, kind, pointerId } = dragRef.current;
       if (pointerId != null && event.pointerId !== pointerId) return;
       const dx = event.clientX - startX;
+
+      if (kind === 'resize') {
+        const newWidth = Math.max(100, Math.min(400, Math.round(startWidth + dx)));
+        onUpdate?.(id, { boxWidth: newWidth });
+        return;
+      }
+
       const dy = event.clientY - startY;
       onMove?.(id, { x: startOffset.x + dx, y: startOffset.y + dy, isManualPosition: true });
     };
@@ -130,16 +149,24 @@ export default function CalloutsOverlay({ map, callouts, selectedCalloutId, onSe
             key={callout.id}
             className={`map-callout ${callout.type} ${selectedCalloutId === callout.id ? 'selected' : ''}`}
             style={{
+              position: 'relative',
               left: callout.left,
               top: callout.top,
               width: callout.width,
               minHeight: callout.height,
               fontFamily: fontFamily || 'Inter, sans-serif',
-              background: callout.type === 'plain' ? 'transparent' : (style.background || '#ffffff'),
-              borderColor: style.border || '#102640',
-              color: style.textColor || '#0f172a',
-              fontSize: style.fontSize || 12,
-              padding: `${style.paddingY || 8}px ${style.paddingX || 10}px`,
+              ...(callout.type === 'badge' ? {
+                background: 'transparent',
+                padding: 0,
+                overflow: 'hidden',
+                borderColor: 'transparent',
+              } : {
+                background: callout.type === 'plain' ? 'transparent' : (style.background || '#ffffff'),
+                borderColor: style.border || '#102640',
+                color: style.textColor || '#0f172a',
+                fontSize: style.fontSize || 12,
+                padding: `${style.paddingY || 8}px ${style.paddingX || 10}px`,
+              }),
             }}
             onClick={() => onSelect?.(callout.id)}
             onPointerDown={(event) => {
@@ -155,8 +182,76 @@ export default function CalloutsOverlay({ map, callouts, selectedCalloutId, onSe
               };
             }}
           >
-            <div className="map-callout-title">{callout.text}</div>
-            {callout.subtext ? <div className="map-callout-subtext" style={{ color: style.subtextColor || '#475569' }}>{callout.subtext}</div> : null}
+            {callout.type === 'badge' ? (
+              <div className="badge-callout" style={{ fontFamily: fontFamily || 'Inter, sans-serif', fontSize: style.fontSize || 12 }}>
+                <div className="badge-chip" style={{ background: callout.badgeColor || '#d97706' }}>
+                  {callout.badgeValue || '—'}
+                </div>
+                <div className="badge-label" style={{ background: style.background || '#ffffff', color: style.textColor || '#0f172a' }}>
+                  {callout.text}
+                </div>
+              </div>
+            ) : (
+              <>
+                {editingField?.id === callout.id && editingField?.field === 'text' ? (
+                  <input
+                    autoFocus
+                    defaultValue={callout.text}
+                    className="map-callout-title-input"
+                    onBlur={(e) => { onUpdate?.(callout.id, { text: e.target.value }); setEditingField(null); }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); if (e.key === 'Escape') setEditingField(null); }}
+                    onClick={(e) => e.stopPropagation()}
+                    onPointerDown={(e) => e.stopPropagation()}
+                  />
+                ) : (
+                  <div
+                    className="map-callout-title"
+                    style={{ cursor: selectedCalloutId === callout.id ? 'text' : 'default' }}
+                    onClick={(e) => { if (selectedCalloutId === callout.id) { e.stopPropagation(); setEditingField({ id: callout.id, field: 'text' }); } }}
+                  >
+                    {callout.text}
+                  </div>
+                )}
+                {callout.subtext ? (
+                  editingField?.id === callout.id && editingField?.field === 'subtext' ? (
+                    <input
+                      autoFocus
+                      defaultValue={callout.subtext}
+                      className="map-callout-subtext-input"
+                      style={{ color: style.subtextColor || '#475569' }}
+                      onBlur={(e) => { onUpdate?.(callout.id, { subtext: e.target.value }); setEditingField(null); }}
+                      onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); if (e.key === 'Escape') setEditingField(null); }}
+                      onClick={(e) => e.stopPropagation()}
+                      onPointerDown={(e) => e.stopPropagation()}
+                    />
+                  ) : (
+                    <div
+                      className="map-callout-subtext"
+                      style={{ color: style.subtextColor || '#475569', cursor: selectedCalloutId === callout.id ? 'text' : 'default' }}
+                      onClick={(e) => { if (selectedCalloutId === callout.id) { e.stopPropagation(); setEditingField({ id: callout.id, field: 'subtext' }); } }}
+                    >
+                      {callout.subtext}
+                    </div>
+                  )
+                ) : null}
+              </>
+            )}
+            {selectedCalloutId === callout.id && (
+              <div
+                className="callout-resize-handle"
+                onPointerDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  dragRef.current = {
+                    id: callout.id,
+                    kind: 'resize',
+                    startX: e.clientX,
+                    startWidth: callout.width,
+                    pointerId: e.pointerId,
+                  };
+                }}
+              />
+            )}
           </div>
         );
       })}
