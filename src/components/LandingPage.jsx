@@ -279,6 +279,12 @@ export default function LandingPage({ onOpenEditor, onLoadSample, recentProjects
           <a href="/blog/exploration-maps-vs-arcgis/" className="landing-footer-link">Exploration Maps vs ArcGIS</a>
           <span className="landing-footer-sep">·</span>
           <a href="/blog/best-mining-map-software-junior-exploration/" className="landing-footer-link">Best mining map software</a>
+          <span className="landing-footer-sep">·</span>
+          <a href="/about/" className="landing-footer-link">About</a>
+          <span className="landing-footer-sep">·</span>
+          <a href="/contact/" className="landing-footer-link">Contact</a>
+          <span className="landing-footer-sep">·</span>
+          <a href="/privacy/" className="landing-footer-link">Privacy</a>
         </div>
         © {new Date().getFullYear()} Exploration Maps · Sign in to save projects to the cloud and access company templates.
       </footer>
