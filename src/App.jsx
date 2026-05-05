@@ -118,6 +118,40 @@ function readFileAsDataURL(file) {
   });
 }
 
+function sanitizeSvgDataUrl(dataUrl) {
+  // Strip scripts, event handlers, and external references from SVG before storage.
+  const prefix = 'data:image/svg+xml';
+  if (!dataUrl.startsWith(prefix)) return dataUrl;
+
+  let svgText;
+  if (dataUrl.startsWith('data:image/svg+xml;base64,')) {
+    svgText = atob(dataUrl.slice('data:image/svg+xml;base64,'.length));
+  } else {
+    svgText = decodeURIComponent(dataUrl.slice(dataUrl.indexOf(',') + 1));
+  }
+
+  const doc = new DOMParser().parseFromString(svgText, 'image/svg+xml');
+
+  // Remove dangerous elements
+  doc.querySelectorAll('script, foreignObject').forEach(el => el.remove());
+
+  // Remove <use> pointing to external resources
+  doc.querySelectorAll('use').forEach(el => {
+    const href = el.getAttribute('href') || el.getAttributeNS('http://www.w3.org/1999/xlink', 'href') || '';
+    if (href.startsWith('http') || href.startsWith('//')) el.remove();
+  });
+
+  // Strip event handler attributes from every element
+  doc.querySelectorAll('*').forEach(el => {
+    [...el.attributes].forEach(attr => {
+      if (attr.name.startsWith('on')) el.removeAttribute(attr.name);
+    });
+  });
+
+  const clean = new XMLSerializer().serializeToString(doc.documentElement);
+  return `data:image/svg+xml,${encodeURIComponent(clean)}`;
+}
+
 function zoneStyle(zone) {
   if (!zone || !zone.width || !zone.height) return { display: 'none' };
   return {
@@ -853,7 +887,10 @@ export default function App() {
       return;
     }
     try {
-      const dataUrl = await readFileAsDataURL(file);
+      let dataUrl = await readFileAsDataURL(file);
+      if (file.type === 'image/svg+xml' || file.name.toLowerCase().endsWith('.svg')) {
+        dataUrl = sanitizeSvgDataUrl(dataUrl);
+      }
       const img = new Image();
       img.onload = () => {
         try {
