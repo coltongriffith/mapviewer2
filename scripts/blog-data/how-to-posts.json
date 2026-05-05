@@ -1,6 +1,7 @@
 [
   {
     "slug": "how-to-make-a-mining-claims-map",
+    "mapTypeId": "mining-claims-map",
     "title": "How to Make a Mining Claims Map",
     "metaDescription": "Step-by-step guide to creating a professional mining claims map for investor presentations, NI 43-101 reports, and news releases using Exploration Maps.",
     "directAnswer": "To make a mining claims map, import your claims boundary as a GeoJSON file, assign the Claims layer role for automatic styling, add context layers (roads, water), choose a basemap and design theme, then export as PNG or PDF.",
@@ -66,6 +67,7 @@
   },
   {
     "slug": "how-to-make-a-drill-results-map",
+    "mapTypeId": "drill-results-map",
     "title": "How to Make a Drill Results Map",
     "metaDescription": "Create a professional drill results map for exploration news releases and NI 43-101 reports. Step-by-step guide with callout labels and assay results.",
     "directAnswer": "To make a drill results map, import your drill collar CSV, assign the Drillholes role, add callout labels showing hole ID and best intercept, then export as Landscape 16:9 PNG for news releases.",
@@ -127,6 +129,7 @@
   },
   {
     "slug": "how-to-create-exploration-map-investor-presentation",
+    "mapTypeId": "location-map",
     "title": "How to Create an Exploration Map for an Investor Presentation",
     "metaDescription": "Create investor-ready exploration maps for PowerPoint presentations. Guide covering theme selection, layout, callouts, and 16:9 export for mining investor decks.",
     "directAnswer": "For an investor presentation map, use the Investor — Navy & White theme, Landscape 16:9 ratio, satellite or light basemap, and export as PNG at 2× resolution. Keep the legend concise and add callouts for key drill results or targets.",

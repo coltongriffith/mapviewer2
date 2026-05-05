@@ -5,7 +5,7 @@
  * Outputs static HTML to public/blog/[slug]/index.html
  */
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -14,6 +14,8 @@ const ROOT = join(__dirname, '..');
 const OUT = join(ROOT, 'public', 'blog');
 const SITE = 'https://www.explorationmaps.com';
 const SITE_NAME = 'Exploration Maps';
+const OG_IMAGE = `${SITE}/og-image.png`;
+const TODAY = new Date().toISOString().split('T')[0];
 
 // ─── Load data ────────────────────────────────────────────────────────────────
 
@@ -23,10 +25,6 @@ const locations     = JSON.parse(readFileSync(join(__dirname, 'blog-data', 'loca
 const mapTypes      = JSON.parse(readFileSync(join(__dirname, 'blog-data', 'map-types.json'), 'utf8'));
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function slug(str) {
-  return str.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-}
 
 function esc(str) {
   return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -105,7 +103,7 @@ article strong{color:#0f172a}
 .cta-btn{display:inline-block;background:#fff;color:#1e3a5f;padding:10px 22px;border-radius:8px;font-weight:700;font-size:14px;text-decoration:none}
 .cta-btn:hover{background:#dbeafe;text-decoration:none}
 /* Blog index */
-.blog-index-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:24px;padding:40px 0 80px}
+.blog-index-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:24px;padding:24px 0 40px}
 .blog-card{border:1px solid #e2e8f0;border-radius:12px;padding:24px;display:flex;flex-direction:column;gap:8px;transition:border-color .15s,box-shadow .15s}
 .blog-card:hover{border-color:#2563eb;box-shadow:0 4px 16px rgba(37,99,235,0.1)}
 .blog-card-tag{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#2563eb}
@@ -118,9 +116,30 @@ article strong{color:#0f172a}
 .page-hero h1{font-size:2.2rem;font-weight:800;color:#0f172a;max-width:720px;line-height:1.2;margin-bottom:12px}
 @media(max-width:600px){.page-hero h1{font-size:1.6rem}}
 .page-hero p{font-size:1.05rem;color:#475569;max-width:580px;line-height:1.65}
+/* Index section headers */
+.index-section-head{display:flex;align-items:baseline;justify-content:space-between;margin:40px 0 4px;padding-top:8px;border-top:2px solid #e8edf3}
+.index-section-head h2{font-size:1.1rem;font-weight:700;color:#0f172a}
+.index-section-head a{font-size:13px;color:#2563eb}
+/* Index TOC */
+.index-toc{display:flex;flex-wrap:wrap;gap:8px;padding:24px 0 8px;border-bottom:1px solid #e8edf3;margin-bottom:8px}
+.index-toc a{font-size:13px;font-weight:600;color:#475569;background:#f1f5f9;padding:4px 12px;border-radius:999px;text-decoration:none}
+.index-toc a:hover{background:#dbeafe;color:#1d4ed8}
+/* Location table */
+.location-table{width:100%;border-collapse:collapse;font-size:13px;margin:12px 0 32px}
+.location-table th{background:#f1f5f9;text-align:left;padding:8px 12px;font-weight:700;color:#374151;border:1px solid #e2e8f0}
+.location-table td{padding:7px 12px;border:1px solid #e2e8f0;color:#475569}
+.location-table tr:nth-child(even) td{background:#f8fafc}
+/* Category hub */
+.hub-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:20px;padding:24px 0 48px}
+.hub-card{border:1px solid #e2e8f0;border-radius:10px;padding:20px;display:flex;flex-direction:column;gap:6px}
+.hub-card h3{font-size:0.95rem;font-weight:700;color:#0f172a}
+.hub-card p{font-size:13px;color:#64748b;line-height:1.55;flex:1}
+.hub-card a{font-size:13px;font-weight:600;color:#2563eb}
 /* Footer */
-.site-footer{border-top:1px solid #e2e8f0;padding:32px 24px;text-align:center;font-size:13px;color:#94a3b8;margin-top:40px}
+.site-footer{border-top:1px solid #e2e8f0;padding:28px 24px;text-align:center;font-size:13px;color:#94a3b8;margin-top:40px}
+.site-footer-links{margin-bottom:8px;display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:6px}
 .site-footer a{color:#64748b}
+.site-footer-sep{color:#cbd5e1}
 `;
 
 // ─── Page shell ───────────────────────────────────────────────────────────────
@@ -138,11 +157,13 @@ ${noindex ? '<meta name="robots" content="noindex,follow">' : ''}
 <meta property="og:title" content="${esc(title)}">
 <meta property="og:description" content="${esc(description)}">
 <meta property="og:url" content="${esc(canonical)}">
-<meta property="og:type" content="website">
+<meta property="og:type" content="article">
 <meta property="og:site_name" content="${esc(SITE_NAME)}">
-<meta name="twitter:card" content="summary">
+<meta property="og:image" content="${OG_IMAGE}">
+<meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="${esc(title)}">
 <meta name="twitter:description" content="${esc(description)}">
+<meta name="twitter:image" content="${OG_IMAGE}">
 ${schema ? `<script type="application/ld+json">${JSON.stringify(schema, null, 0)}</script>` : ''}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -161,7 +182,18 @@ ${schema ? `<script type="application/ld+json">${JSON.stringify(schema, null, 0)
 </nav>
 ${body}
 <footer class="site-footer">
-  <p>© ${new Date().getFullYear()} ${esc(SITE_NAME)} · <a href="/">Open the map editor</a> · <a href="/blog/">Blog</a></p>
+  <div class="site-footer-links">
+    <a href="/blog/how-to/">How-to Guides</a>
+    <span class="site-footer-sep">·</span>
+    <a href="/blog/comparisons/">Comparisons</a>
+    <span class="site-footer-sep">·</span>
+    <a href="/blog/locations/">By Region</a>
+    <span class="site-footer-sep">·</span>
+    <a href="/blog/">All Guides</a>
+    <span class="site-footer-sep">·</span>
+    <a href="/">Open Map Editor</a>
+  </div>
+  <p>© ${new Date().getFullYear()} ${esc(SITE_NAME)}</p>
 </footer>
 </body>
 </html>`;
@@ -169,22 +201,35 @@ ${body}
 
 // ─── Sidebar ──────────────────────────────────────────────────────────────────
 
-function sidebar(relatedHtml = '') {
+function sidebar({ relatedHtml = '', compareHtml = '', howToHtml = '', locationHtml = '' } = {}) {
+  const comparisons = compareHtml ? `<div class="sidebar-card"><h3>Compare Tools</h3><ul>${compareHtml}</ul></div>` : '';
+  const howToGuide = howToHtml ? `<div class="sidebar-card"><h3>Step-by-Step Guide</h3><ul>${howToHtml}</ul></div>` : '';
+  const relatedCard = relatedHtml ? `<div class="sidebar-card"><h3>Related Guides</h3><ul>${relatedHtml}</ul></div>` : '';
+  const locationCard = locationHtml ? `<div class="sidebar-card"><h3>By Region</h3><ul>${locationHtml}</ul></div>` : '';
   return `<aside>
   <div class="cta-card">
     <h3>Create Your Map Now</h3>
     <p>No GIS experience needed. Import your data, choose a theme, and export in minutes.</p>
     <a class="cta-btn" href="/">Open Exploration Maps →</a>
   </div>
-  ${relatedHtml ? `<div class="sidebar-card"><h3>Related Guides</h3><ul>${relatedHtml}</ul></div>` : ''}
+  ${howToGuide}
+  ${relatedCard}
+  ${comparisons}
+  ${locationCard}
   <div class="sidebar-card">
     <h3>Map Types</h3>
     <ul>
-      ${mapTypes.map(t => `<li><a href="/blog/how-to-create-${t.slug}/">How to Create a ${esc(t.name)}</a></li>`).join('\n')}
+      ${mapTypes.map(t => `<li><a href="/blog/${t.howToSlug || `how-to-create-${t.slug}`}/">${esc(t.name)} Guide</a></li>`).join('\n')}
     </ul>
   </div>
 </aside>`;
 }
+
+// Fixed comparison sidebar links used on how-to and location pages
+const COMP_LINKS = `
+<li><a href="/blog/exploration-maps-vs-arcgis/">Exploration Maps vs ArcGIS</a></li>
+<li><a href="/blog/exploration-maps-vs-qgis/">Exploration Maps vs QGIS</a></li>
+<li><a href="/blog/best-mining-map-software-junior-exploration/">Best Mining Map Software</a></li>`;
 
 // ─── FAQ block ────────────────────────────────────────────────────────────────
 
@@ -209,23 +254,70 @@ function renderSections(sections) {
   }).join('\n');
 }
 
+// ─── Article schema builder ───────────────────────────────────────────────────
+
+function articleSchema(title, description, url) {
+  return {
+    '@type': 'Article',
+    headline: title,
+    description,
+    url,
+    datePublished: TODAY,
+    dateModified: TODAY,
+    author: { '@type': 'Organization', name: SITE_NAME, url: SITE },
+    publisher: { '@type': 'Organization', name: SITE_NAME, url: SITE },
+  };
+}
+
+function faqSchema(faqs) {
+  return {
+    '@type': 'FAQPage',
+    mainEntity: faqs.map(f => ({
+      '@type': 'Question',
+      name: f.q,
+      acceptedAnswer: { '@type': 'Answer', text: f.a },
+    })),
+    speakable: {
+      '@type': 'SpeakableSpecification',
+      cssSelector: ['.direct-answer', '.faq-a'],
+    },
+  };
+}
+
+function breadcrumbSchema(title, url) {
+  return {
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Home', item: SITE },
+      { '@type': 'ListItem', position: 2, name: 'Blog', item: `${SITE}/blog/` },
+      { '@type': 'ListItem', position: 3, name: title, item: url },
+    ],
+  };
+}
+
 // ─── How-to post page ─────────────────────────────────────────────────────────
 
 function buildHowToPage(post, allPosts) {
   const url = `${SITE}/blog/${post.slug}/`;
   const related = relatedLinks(post.relatedSlugs || [], allPosts);
 
+  // Location cross-links for posts that map to a specific map type
+  let locationHtml = '';
+  if (post.mapTypeId) {
+    const topLocations = ['british-columbia', 'nevada', 'ontario'];
+    locationHtml = topLocations
+      .map(locSlug => {
+        const loc = locations.find(l => l.slug === locSlug);
+        return loc ? `<li><a href="/blog/${post.mapTypeId}-${loc.slug}/">${loc.name}</a></li>` : '';
+      })
+      .filter(Boolean)
+      .join('\n');
+  }
+
   const schema = {
     '@context': 'https://schema.org',
     '@graph': [
-      {
-        '@type': 'Article',
-        headline: post.title,
-        description: post.metaDescription,
-        url,
-        author: { '@type': 'Organization', name: SITE_NAME, url: SITE },
-        publisher: { '@type': 'Organization', name: SITE_NAME, url: SITE },
-      },
+      articleSchema(post.title, post.metaDescription, url),
       {
         '@type': 'HowTo',
         name: post.title,
@@ -237,22 +329,8 @@ function buildHowToPage(post, allPosts) {
           text: s.body || (s.items || []).join('. '),
         })),
       },
-      ...(post.faqs?.length ? [{
-        '@type': 'FAQPage',
-        mainEntity: post.faqs.map(f => ({
-          '@type': 'Question',
-          name: f.q,
-          acceptedAnswer: { '@type': 'Answer', text: f.a },
-        })),
-      }] : []),
-      {
-        '@type': 'BreadcrumbList',
-        itemListElement: [
-          { '@type': 'ListItem', position: 1, name: 'Home', item: SITE },
-          { '@type': 'ListItem', position: 2, name: 'Blog', item: `${SITE}/blog/` },
-          { '@type': 'ListItem', position: 3, name: post.title, item: url },
-        ],
-      },
+      ...(post.faqs?.length ? [faqSchema(post.faqs)] : []),
+      breadcrumbSchema(post.title, url),
     ],
   };
 
@@ -260,13 +338,13 @@ function buildHowToPage(post, allPosts) {
 <div class="page-wrap">
   <div class="blog-layout">
     <article>
-      <p class="breadcrumb"><a href="/">Home</a><span>›</span><a href="/blog/">Blog</a><span>›</span>${esc(post.title)}</p>
+      <p class="breadcrumb"><a href="/">Home</a><span>›</span><a href="/blog/">Blog</a><span>›</span><a href="/blog/how-to/">How-to Guides</a><span>›</span>${esc(post.title)}</p>
       <h1>${esc(post.title)}</h1>
       <p class="direct-answer">${esc(post.directAnswer)}</p>
       ${renderSections(post.sections || [])}
       ${faqBlock(post.faqs)}
     </article>
-    ${sidebar(related)}
+    ${sidebar({ relatedHtml: related, compareHtml: COMP_LINKS, locationHtml })}
   </div>
 </div>`;
 
@@ -279,33 +357,29 @@ function buildCompPage(post, allPosts) {
   const url = `${SITE}/blog/${post.slug}/`;
   const related = relatedLinks(post.relatedSlugs || [], allPosts);
 
+  // Top location pages for the comparison sidebar
+  const topLocationHtml = ['mining-claims-map-british-columbia', 'drill-results-map-nevada', 'mining-claims-map-ontario']
+    .map(s => {
+      const [mtSlug, ...locParts] = s.split('-');
+      const locSlug = locParts.join('-');
+      // Rebuild properly from known slugs
+      return null;
+    })
+    .filter(Boolean).join('');
+
+  // Build location links properly
+  const locLinksHtml = [
+    { mt: 'mining-claims-map', loc: 'british-columbia', label: 'Mining Claims Map — BC' },
+    { mt: 'drill-results-map', loc: 'nevada', label: 'Drill Results Map — Nevada' },
+    { mt: 'mining-claims-map', loc: 'ontario', label: 'Mining Claims Map — Ontario' },
+  ].map(({ mt, loc, label }) => `<li><a href="/blog/${mt}-${loc}/">${label}</a></li>`).join('\n');
+
   const schema = {
     '@context': 'https://schema.org',
     '@graph': [
-      {
-        '@type': 'Article',
-        headline: post.title,
-        description: post.metaDescription,
-        url,
-        author: { '@type': 'Organization', name: SITE_NAME, url: SITE },
-        publisher: { '@type': 'Organization', name: SITE_NAME, url: SITE },
-      },
-      ...(post.faqs?.length ? [{
-        '@type': 'FAQPage',
-        mainEntity: post.faqs.map(f => ({
-          '@type': 'Question',
-          name: f.q,
-          acceptedAnswer: { '@type': 'Answer', text: f.a },
-        })),
-      }] : []),
-      {
-        '@type': 'BreadcrumbList',
-        itemListElement: [
-          { '@type': 'ListItem', position: 1, name: 'Home', item: SITE },
-          { '@type': 'ListItem', position: 2, name: 'Blog', item: `${SITE}/blog/` },
-          { '@type': 'ListItem', position: 3, name: post.title, item: url },
-        ],
-      },
+      articleSchema(post.title, post.metaDescription, url),
+      ...(post.faqs?.length ? [faqSchema(post.faqs)] : []),
+      breadcrumbSchema(post.title, url),
     ],
   };
 
@@ -322,14 +396,14 @@ function buildCompPage(post, allPosts) {
 <div class="page-wrap">
   <div class="blog-layout">
     <article>
-      <p class="breadcrumb"><a href="/">Home</a><span>›</span><a href="/blog/">Blog</a><span>›</span>${esc(post.title)}</p>
+      <p class="breadcrumb"><a href="/">Home</a><span>›</span><a href="/blog/">Blog</a><span>›</span><a href="/blog/comparisons/">Comparisons</a><span>›</span>${esc(post.title)}</p>
       <h1>${esc(post.title)}</h1>
       <p class="direct-answer">${esc(post.directAnswer)}</p>
       ${renderSections(post.sections || [])}
       ${tableHtml}
       ${faqBlock(post.faqs)}
     </article>
-    ${sidebar(related)}
+    ${sidebar({ relatedHtml: related, locationHtml: locLinksHtml })}
   </div>
 </div>`;
 
@@ -350,7 +424,7 @@ function buildLocationPage(location, mapType) {
 
   const directAnswer = `To create a ${mapType.primaryKeyword} for ${location.name}, import your ${location.abbreviation} claims or data as GeoJSON, assign the appropriate layer role for automatic styling, set the ${mapType.recommendedBasemap} basemap, and export as PNG or PDF. The entire process takes 15–30 minutes with no GIS experience required.`;
 
-  const steps = mapType.steps.map((step, i) => `<li>${esc(step)}</li>`).join('');
+  const steps = mapType.steps.map(step => `<li>${esc(step)}</li>`).join('');
 
   const faqs = [
     {
@@ -374,14 +448,7 @@ function buildLocationPage(location, mapType) {
   const schema = {
     '@context': 'https://schema.org',
     '@graph': [
-      {
-        '@type': 'Article',
-        headline: title,
-        description,
-        url,
-        author: { '@type': 'Organization', name: SITE_NAME, url: SITE },
-        publisher: { '@type': 'Organization', name: SITE_NAME, url: SITE },
-      },
+      articleSchema(title, description, url),
       {
         '@type': 'HowTo',
         name: `How to Create a ${mapType.name} for ${location.name}`,
@@ -393,45 +460,37 @@ function buildLocationPage(location, mapType) {
           text: step,
         })),
       },
-      {
-        '@type': 'FAQPage',
-        mainEntity: faqs.map(f => ({
-          '@type': 'Question',
-          name: f.q,
-          acceptedAnswer: { '@type': 'Answer', text: f.a },
-        })),
-      },
-      {
-        '@type': 'BreadcrumbList',
-        itemListElement: [
-          { '@type': 'ListItem', position: 1, name: 'Home', item: SITE },
-          { '@type': 'ListItem', position: 2, name: 'Blog', item: `${SITE}/blog/` },
-          { '@type': 'ListItem', position: 3, name: title, item: url },
-        ],
-      },
+      faqSchema(faqs),
+      breadcrumbSchema(title, url),
     ],
   };
 
-  // Related: same location, other map types + same map type, nearby locations
+  // Sidebar: same location, other map types
   const sameLocationLinks = mapTypes
     .filter(t => t.id !== mapType.id)
-    .slice(0, 3)
+    .slice(0, 4)
     .map(t => `<li><a href="/blog/${t.slug}-${location.slug}/">${esc(t.name)} — ${esc(location.name)}</a></li>`)
     .join('\n');
 
+  // Sidebar: same map type, nearby locations (same country)
   const sameTypeLinks = locations
     .filter(l => l.slug !== location.slug && l.country === location.country)
-    .slice(0, 3)
+    .slice(0, 4)
     .map(l => `<li><a href="/blog/${mapType.slug}-${l.slug}/">${esc(mapType.name)} — ${esc(l.name)}</a></li>`)
     .join('\n');
 
   const relatedHtml = sameLocationLinks + sameTypeLinks;
 
+  // Sidebar: link back to parent how-to guide
+  const howToHtml = mapType.howToSlug
+    ? `<li><a href="/blog/${mapType.howToSlug}/">How to Make a ${esc(mapType.name)}</a></li>`
+    : '';
+
   const body = `
 <div class="page-wrap">
   <div class="blog-layout">
     <article>
-      <p class="breadcrumb"><a href="/">Home</a><span>›</span><a href="/blog/">Blog</a><span>›</span>${esc(title)}</p>
+      <p class="breadcrumb"><a href="/">Home</a><span>›</span><a href="/blog/">Blog</a><span>›</span><a href="/blog/locations/">By Region</a><span>›</span>${esc(title)}</p>
       <h1>${esc(title)}</h1>
       <p class="direct-answer">${esc(directAnswer)}</p>
 
@@ -459,16 +518,40 @@ function buildLocationPage(location, mapType) {
 
       ${faqBlock(faqs)}
     </article>
-    ${sidebar(relatedHtml)}
+    ${sidebar({ relatedHtml, howToHtml, compareHtml: COMP_LINKS })}
   </div>
 </div>`;
 
   return { pageSlug, html: pageShell({ title, description, canonical: url, schema, body }) };
 }
 
+// ─── Category hub pages ───────────────────────────────────────────────────────
+
+function buildCategoryPage({ slug: pageSlug, title, description, label, body: contentBody }) {
+  const url = `${SITE}/blog/${pageSlug}/`;
+  const schema = {
+    '@context': 'https://schema.org',
+    '@type': 'CollectionPage',
+    name: title,
+    description,
+    url,
+    publisher: { '@type': 'Organization', name: SITE_NAME, url: SITE },
+  };
+  const body = `
+<div class="page-wrap">
+  <div class="page-hero">
+    <p class="page-hero-label">${esc(label)}</p>
+    <h1>${esc(title)}</h1>
+    <p>${esc(description)}</p>
+  </div>
+  ${contentBody}
+</div>`;
+  return { slug: pageSlug, html: pageShell({ title, description, canonical: url, schema, body }) };
+}
+
 // ─── Blog index page ──────────────────────────────────────────────────────────
 
-function buildBlogIndex(allPosts) {
+function buildBlogIndex(allUrls) {
   const url = `${SITE}/blog/`;
 
   const schema = {
@@ -496,18 +579,24 @@ function buildBlogIndex(allPosts) {
   <a href="/blog/${p.slug}/">Read comparison →</a>
 </div>`).join('\n');
 
-  const locationSample = [];
-  for (const loc of locations.slice(0, 6)) {
-    for (const mt of mapTypes.slice(0, 2)) {
-      locationSample.push(`
+  // All location pages, grouped by map type with anchor IDs
+  const locationSections = mapTypes.map(mt => {
+    const cards = locations.map(loc => `
 <div class="blog-card">
   <span class="blog-card-tag">Location Guide</span>
   <h3>${esc(mt.name)} — ${esc(loc.name)}</h3>
   <p>Create a professional ${esc(mt.primaryKeyword)} for exploration projects in ${esc(loc.name)}.</p>
   <a href="/blog/${mt.slug}-${loc.slug}/">Read guide →</a>
-</div>`);
-    }
-  }
+</div>`).join('\n');
+    return `<div class="index-section-head" id="${mt.slug}"><h2>${esc(mt.name)} (${locations.length} regions)</h2><a href="/blog/locations/">View all →</a></div>
+<div class="blog-index-grid">${cards}</div>`;
+  }).join('\n');
+
+  const toc = `<nav class="index-toc" aria-label="Jump to section">
+  <a href="#how-to">How-to Guides</a>
+  <a href="#comparisons">Comparisons</a>
+  ${mapTypes.map(mt => `<a href="#${mt.slug}">${esc(mt.name)}</a>`).join('\n  ')}
+</nav>`;
 
   const body = `
 <div class="page-wrap">
@@ -516,13 +605,13 @@ function buildBlogIndex(allPosts) {
     <h1>Exploration Mapping Guides</h1>
     <p>Step-by-step tutorials, software comparisons, and location-specific guides for creating professional mining exploration maps.</p>
   </div>
-  <h2 style="margin:40px 0 8px;font-size:1.1rem;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.05em">How-to Guides</h2>
+  ${toc}
+  <div class="index-section-head" id="how-to"><h2>How-to Guides</h2><a href="/blog/how-to/">View all →</a></div>
   <div class="blog-index-grid">${howToCards}</div>
-  <h2 style="margin:0 0 8px;font-size:1.1rem;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.05em">Software Comparisons</h2>
+  <div class="index-section-head" id="comparisons"><h2>Software Comparisons</h2><a href="/blog/comparisons/">View all →</a></div>
   <div class="blog-index-grid">${compCards}</div>
-  <h2 style="margin:0 0 8px;font-size:1.1rem;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.05em">Location Guides</h2>
-  <div class="blog-index-grid">${locationSample.join('\n')}</div>
-  <p style="text-align:center;color:#64748b;font-size:14px;padding-bottom:48px">${allPosts.length} guides published. More added regularly.</p>
+  ${locationSections}
+  <p style="text-align:center;color:#64748b;font-size:14px;padding-bottom:48px">${allUrls.length} guides published · <a href="/sitemap.xml">Sitemap</a></p>
 </div>`;
 
   return pageShell({ title: 'Exploration Mapping Guides & Tutorials', description: 'Guides, tutorials, and comparisons for creating professional mining exploration maps — investor presentations, NI 43-101 figures, and news release maps.', canonical: url, schema, body });
@@ -571,6 +660,55 @@ async function main() {
     }
   }
   console.log(`  ✓ location pages: ${locationCount}`);
+
+  // Category hub pages
+  const howToHub = buildCategoryPage({
+    slug: 'how-to',
+    label: 'How-to Guides',
+    title: 'Mining Map How-to Guides',
+    description: 'Step-by-step guides for creating professional mining exploration maps — claims maps, drill results maps, investor presentations, and more.',
+    body: `<div class="hub-grid">${howToPosts.map(p => `
+<div class="hub-card">
+  <h3>${esc(p.title)}</h3>
+  <p>${esc(p.metaDescription)}</p>
+  <a href="/blog/${p.slug}/">Read guide →</a>
+</div>`).join('')}</div>`,
+  });
+  writeFile(join(OUT, 'how-to', 'index.html'), howToHub.html);
+  allUrls.push(`${SITE}/blog/how-to/`);
+  console.log('  ✓ hub: how-to');
+
+  const compHub = buildCategoryPage({
+    slug: 'comparisons',
+    label: 'Software Comparisons',
+    title: 'Mining Map Software Comparisons',
+    description: 'Side-by-side comparisons of Exploration Maps vs ArcGIS, QGIS, and other tools for junior mining exploration companies.',
+    body: `<div class="hub-grid">${compPosts.map(p => `
+<div class="hub-card">
+  <h3>${esc(p.title)}</h3>
+  <p>${esc(p.metaDescription)}</p>
+  <a href="/blog/${p.slug}/">Read comparison →</a>
+</div>`).join('')}</div>`,
+  });
+  writeFile(join(OUT, 'comparisons', 'index.html'), compHub.html);
+  allUrls.push(`${SITE}/blog/comparisons/`);
+  console.log('  ✓ hub: comparisons');
+
+  const locTableRows = locations.map(loc => {
+    const links = mapTypes.map(mt => `<a href="/blog/${mt.slug}-${loc.slug}/">${esc(mt.name)}</a>`).join(' · ');
+    return `<tr><td><strong>${esc(loc.name)}</strong></td><td>${links}</td></tr>`;
+  }).join('');
+
+  const locHub = buildCategoryPage({
+    slug: 'locations',
+    label: 'By Region',
+    title: 'Mining Map Guides by Region',
+    description: 'Location-specific guides for creating professional exploration maps in Canadian provinces and US mining states.',
+    body: `<div style="overflow-x:auto"><table class="location-table"><thead><tr><th>Region</th><th>Map Guides</th></tr></thead><tbody>${locTableRows}</tbody></table></div>`,
+  });
+  writeFile(join(OUT, 'locations', 'index.html'), locHub.html);
+  allUrls.push(`${SITE}/blog/locations/`);
+  console.log('  ✓ hub: locations');
 
   // Blog index
   writeFile(join(OUT, 'index.html'), buildBlogIndex(allUrls));
