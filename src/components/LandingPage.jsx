@@ -274,15 +274,11 @@ export default function LandingPage({ onOpenEditor, onLoadSample, recentProjects
 
       <footer className="landing-footer">
         <div className="landing-footer-links">
-          <a href="/blog/how-to-make-a-mining-claims-map/" className="landing-footer-link">How to make a mining claims map</a>
-          <span className="landing-footer-sep">·</span>
-          <a href="/blog/exploration-maps-vs-arcgis/" className="landing-footer-link">Exploration Maps vs ArcGIS</a>
-          <span className="landing-footer-sep">·</span>
-          <a href="/blog/best-mining-map-software-junior-exploration/" className="landing-footer-link">Best mining map software</a>
+          <a href="/" className="landing-footer-link">Home</a>
           <span className="landing-footer-sep">·</span>
           <a href="/about/" className="landing-footer-link">About</a>
           <span className="landing-footer-sep">·</span>
-          <a href="/contact/" className="landing-footer-link">Contact</a>
+          <a href="/blog/" className="landing-footer-link">Guides</a>
           <span className="landing-footer-sep">·</span>
           <a href="/privacy/" className="landing-footer-link">Privacy</a>
         </div>

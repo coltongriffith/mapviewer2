@@ -183,19 +183,11 @@ ${schema ? `<script type="application/ld+json">${JSON.stringify(schema, null, 0)
 ${body}
 <footer class="site-footer">
   <div class="site-footer-links">
-    <a href="/blog/how-to/">How-to Guides</a>
-    <span class="site-footer-sep">·</span>
-    <a href="/blog/comparisons/">Comparisons</a>
-    <span class="site-footer-sep">·</span>
-    <a href="/blog/locations/">By Region</a>
-    <span class="site-footer-sep">·</span>
-    <a href="/blog/">All Guides</a>
-    <span class="site-footer-sep">·</span>
-    <a href="/">Open Map Editor</a>
+    <a href="/">Home</a>
     <span class="site-footer-sep">·</span>
     <a href="/about/">About</a>
     <span class="site-footer-sep">·</span>
-    <a href="/contact/">Contact</a>
+    <a href="/blog/">Guides</a>
     <span class="site-footer-sep">·</span>
     <a href="/privacy/">Privacy</a>
   </div>
