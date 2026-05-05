@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to Import GeoJSON Data into a Mining Map | Exploration Maps</title>
+<meta name="description" content="Complete guide to importing GeoJSON files into Exploration Maps for mining claims, drill holes, targets, and geological features.">
+<link rel="canonical" href="https://www.explorationmaps.com/blog/how-to-import-geojson-mining-map/">
+
+<meta property="og:title" content="How to Import GeoJSON Data into a Mining Map">
+<meta property="og:description" content="Complete guide to importing GeoJSON files into Exploration Maps for mining claims, drill holes, targets, and geological features.">
+<meta property="og:url" content="https://www.explorationmaps.com/blog/how-to-import-geojson-mining-map/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Exploration Maps">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="How to Import GeoJSON Data into a Mining Map">
+<meta name="twitter:description" content="Complete guide to importing GeoJSON files into Exploration Maps for mining claims, drill holes, targets, and geological features.">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"How to Import GeoJSON Data into a Mining Map","description":"Complete guide to importing GeoJSON files into Exploration Maps for mining claims, drill holes, targets, and geological features.","url":"https://www.explorationmaps.com/blog/how-to-import-geojson-mining-map/","author":{"@type":"Organization","name":"Exploration Maps","url":"https://www.explorationmaps.com"},"publisher":{"@type":"Organization","name":"Exploration Maps","url":"https://www.explorationmaps.com"}},{"@type":"HowTo","name":"How to Import GeoJSON Data into a Mining Map","description":"To import GeoJSON into Exploration Maps, click the import button in the Layers section, select your .geojson or .json file, and the layer is added automatically with the map fitting to your data bounds.","step":[{"@type":"HowToStep","position":1,"name":"What is GeoJSON and Why It's Used for Mining Maps","text":"GeoJSON is an open standard format for encoding geographic data — polygons, lines, and points — as JSON. It is the most widely compatible format for web-based mapping tools. Most GIS software (QGIS, ArcGIS, MapInfo) can export to GeoJSON, and government mineral title databases often provide boundary data in GeoJSON or Shapefile format (which can be converted)."},{"@type":"HowToStep","position":2,"name":"Converting Shapefiles to GeoJSON","text":"If your data is in Shapefile format (.shp, .dbf, .shx, .prj), convert it to GeoJSON before importing. The free online tool at mapshaper.org accepts Shapefile ZIP archives and exports clean GeoJSON in seconds. QGIS users can right-click any layer and choose Export → Save Features As → GeoJSON."},{"@type":"HowToStep","position":3,"name":"Importing Your GeoJSON File","text":"In Exploration Maps, click the upload/import icon in the Layers section of the sidebar. Select your .geojson or .json file. The layer is added immediately and the map automatically fits to the extent of your data. If your file contains multiple geometry types (polygons and lines, for example), they are split into separate layers automatically."},{"@type":"HowToStep","position":4,"name":"Assigning a Layer Role After Import","text":"After importing, expand the layer card and assign a Role. Roles drive automatic styling — Claims applies blue boundaries, Drillholes applies dark circle markers, Target Areas applies amber dashed outlines. Assigning the correct role saves significant manual styling time and ensures your map follows industry conventions."},{"@type":"HowToStep","position":5,"name":"Checking Coordinate Systems","text":"Exploration Maps expects geographic coordinates in WGS84 (EPSG:4326 — standard latitude/longitude). If your GeoJSON displays in the wrong location or far off from expected, the source data may be in a projected coordinate system (UTM, NAD83). Re-export from your GIS software with the coordinate system set to WGS84 / EPSG:4326."}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What file extensions does Exploration Maps accept?","acceptedAnswer":{"@type":"Answer","text":"For vector data: .geojson and .json. For tabular point data: .csv. For images (logo and inset maps): .jpg and .png. Shapefiles must be converted to GeoJSON first."}},{"@type":"Question","name":"My GeoJSON file shows in the wrong location — what's wrong?","acceptedAnswer":{"@type":"Answer","text":"The most common cause is that the data is in a projected coordinate system (such as UTM Zone 10N or BC Albers) rather than geographic coordinates (WGS84 latitude/longitude). Re-export from your GIS software, specifying WGS84 / EPSG:4326 as the output coordinate reference system."}},{"@type":"Question","name":"Can I import multiple GeoJSON files?","acceptedAnswer":{"@type":"Answer","text":"Yes — import as many files as needed. Each file becomes a separate layer in the Layers list. You can toggle visibility, reorder layers (drag to change draw order), and style each layer independently."}}]},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://www.explorationmaps.com"},{"@type":"ListItem","position":2,"name":"Blog","item":"https://www.explorationmaps.com/blog/"},{"@type":"ListItem","position":3,"name":"How to Import GeoJSON Data into a Mining Map","item":"https://www.explorationmaps.com/blog/how-to-import-geojson-mining-map/"}]}]}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{font-size:16px;-webkit-text-size-adjust:100%}
+body{font-family:'Inter',system-ui,-apple-system,sans-serif;color:#1e293b;background:#fff;line-height:1.6}
+a{color:#2563eb;text-decoration:none}a:hover{text-decoration:underline}
+img{max-width:100%;height:auto}
+/* Nav */
+.nav{display:flex;align-items:center;justify-content:space-between;padding:0 24px;height:56px;border-bottom:1px solid #e2e8f0;background:#fff;position:sticky;top:0;z-index:100}
+.nav-brand{display:flex;align-items:center;gap:8px;font-size:15px;font-weight:700;color:#0f172a;text-decoration:none}
+.nav-brand svg{flex-shrink:0}
+.nav-cta{background:#2563eb;color:#fff;padding:7px 16px;border-radius:8px;font-size:13px;font-weight:600;white-space:nowrap}
+.nav-cta:hover{background:#1d4ed8;text-decoration:none}
+/* Layout */
+.page-wrap{max-width:1100px;margin:0 auto;padding:0 24px}
+.blog-layout{display:grid;grid-template-columns:1fr 280px;gap:48px;padding:48px 0 80px;align-items:start}
+@media(max-width:768px){.blog-layout{grid-template-columns:1fr;padding:32px 0 60px}}
+/* Article */
+article h1{font-size:2rem;font-weight:800;line-height:1.2;color:#0f172a;margin-bottom:16px}
+@media(max-width:600px){article h1{font-size:1.5rem}}
+.direct-answer{font-size:1.05rem;color:#334155;background:#f0f9ff;border-left:4px solid #2563eb;padding:14px 18px;border-radius:0 8px 8px 0;margin-bottom:32px;line-height:1.65}
+.breadcrumb{font-size:13px;color:#64748b;margin-bottom:20px}
+.breadcrumb a{color:#64748b}
+.breadcrumb span{margin:0 6px}
+article h2{font-size:1.35rem;font-weight:700;color:#0f172a;margin:40px 0 12px;padding-bottom:8px;border-bottom:2px solid #e8edf3}
+article h2:first-of-type{margin-top:0}
+article h3{font-size:1.05rem;font-weight:700;color:#1e293b;margin:28px 0 8px}
+article p{margin-bottom:16px;color:#374151;line-height:1.75}
+article ul,article ol{padding-left:22px;margin-bottom:16px}
+article li{margin-bottom:6px;color:#374151;line-height:1.65}
+article strong{color:#0f172a}
+/* Steps */
+.steps-list{list-style:none;padding:0;counter-reset:step}
+.steps-list li{counter-increment:step;display:flex;gap:14px;margin-bottom:16px;align-items:flex-start}
+.steps-list li::before{content:counter(step);display:flex;align-items:center;justify-content:center;width:28px;height:28px;min-width:28px;background:#2563eb;color:#fff;border-radius:50%;font-size:13px;font-weight:700;margin-top:2px}
+/* Comparison table */
+.comparison-table{width:100%;border-collapse:collapse;margin:20px 0;font-size:14px}
+.comparison-table th{background:#1e3a5f;color:#fff;padding:10px 14px;text-align:left;font-weight:600}
+.comparison-table td{padding:9px 14px;border-bottom:1px solid #e2e8f0;vertical-align:top}
+.comparison-table tr:nth-child(even) td{background:#f8fafc}
+.comparison-table tr:first-child td:first-child{font-weight:600}
+/* FAQ */
+.faq-section{margin:48px 0 0}
+.faq-section h2{font-size:1.35rem;font-weight:700;color:#0f172a;margin-bottom:20px;padding-bottom:8px;border-bottom:2px solid #e8edf3}
+.faq-item{border:1px solid #e2e8f0;border-radius:10px;margin-bottom:12px;overflow:hidden}
+.faq-q{font-weight:700;color:#0f172a;padding:14px 18px;font-size:0.95rem;background:#f8fafc}
+.faq-a{padding:12px 18px;color:#374151;font-size:0.9rem;line-height:1.7;border-top:1px solid #e2e8f0}
+/* Sidebar */
+.sidebar-card{background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:24px;margin-bottom:24px}
+.sidebar-card h3{font-size:14px;font-weight:700;color:#0f172a;margin-bottom:12px;text-transform:uppercase;letter-spacing:0.05em}
+.sidebar-card ul{list-style:none;padding:0}
+.sidebar-card li{margin-bottom:8px;font-size:14px}
+.sidebar-card a{color:#2563eb}
+.cta-card{background:linear-gradient(135deg,#1e3a5f 0%,#2563eb 100%);border-radius:12px;padding:28px 24px;color:#fff;text-align:center;margin-bottom:24px}
+.cta-card h3{font-size:1.1rem;font-weight:700;margin-bottom:10px;color:#fff}
+.cta-card p{font-size:13px;color:#bfdbfe;margin-bottom:18px;line-height:1.6}
+.cta-btn{display:inline-block;background:#fff;color:#1e3a5f;padding:10px 22px;border-radius:8px;font-weight:700;font-size:14px;text-decoration:none}
+.cta-btn:hover{background:#dbeafe;text-decoration:none}
+/* Blog index */
+.blog-index-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:24px;padding:40px 0 80px}
+.blog-card{border:1px solid #e2e8f0;border-radius:12px;padding:24px;display:flex;flex-direction:column;gap:8px;transition:border-color .15s,box-shadow .15s}
+.blog-card:hover{border-color:#2563eb;box-shadow:0 4px 16px rgba(37,99,235,0.1)}
+.blog-card-tag{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#2563eb}
+.blog-card h3{font-size:1rem;font-weight:700;color:#0f172a;line-height:1.35}
+.blog-card p{font-size:13px;color:#64748b;line-height:1.6;flex:1}
+.blog-card a{font-size:13px;font-weight:600;color:#2563eb}
+/* Hero */
+.page-hero{padding:48px 0 32px;border-bottom:1px solid #e8edf3;margin-bottom:0}
+.page-hero-label{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#2563eb;margin-bottom:10px}
+.page-hero h1{font-size:2.2rem;font-weight:800;color:#0f172a;max-width:720px;line-height:1.2;margin-bottom:12px}
+@media(max-width:600px){.page-hero h1{font-size:1.6rem}}
+.page-hero p{font-size:1.05rem;color:#475569;max-width:580px;line-height:1.65}
+/* Footer */
+.site-footer{border-top:1px solid #e2e8f0;padding:32px 24px;text-align:center;font-size:13px;color:#94a3b8;margin-top:40px}
+.site-footer a{color:#64748b}
+</style>
+</head>
+<body>
+<nav class="nav">
+  <a class="nav-brand" href="/">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" fill="#2563eb"/>
+    </svg>
+    Exploration Maps
+  </a>
+  <a class="nav-cta" href="/">Open Editor →</a>
+</nav>
+
+<div class="page-wrap">
+  <div class="blog-layout">
+    <article>
+      <p class="breadcrumb"><a href="/">Home</a><span>›</span><a href="/blog/">Blog</a><span>›</span>How to Import GeoJSON Data into a Mining Map</p>
+      <h1>How to Import GeoJSON Data into a Mining Map</h1>
+      <p class="direct-answer">To import GeoJSON into Exploration Maps, click the import button in the Layers section, select your .geojson or .json file, and the layer is added automatically with the map fitting to your data bounds.</p>
+      <h2>What is GeoJSON and Why It's Used for Mining Maps</h2><p>GeoJSON is an open standard format for encoding geographic data — polygons, lines, and points — as JSON. It is the most widely compatible format for web-based mapping tools. Most GIS software (QGIS, ArcGIS, MapInfo) can export to GeoJSON, and government mineral title databases often provide boundary data in GeoJSON or Shapefile format (which can be converted).</p>
+<h2>Converting Shapefiles to GeoJSON</h2><p>If your data is in Shapefile format (.shp, .dbf, .shx, .prj), convert it to GeoJSON before importing. The free online tool at mapshaper.org accepts Shapefile ZIP archives and exports clean GeoJSON in seconds. QGIS users can right-click any layer and choose Export → Save Features As → GeoJSON.</p>
+<h2>Importing Your GeoJSON File</h2><p>In Exploration Maps, click the upload/import icon in the Layers section of the sidebar. Select your .geojson or .json file. The layer is added immediately and the map automatically fits to the extent of your data. If your file contains multiple geometry types (polygons and lines, for example), they are split into separate layers automatically.</p>
+<h2>Assigning a Layer Role After Import</h2><p>After importing, expand the layer card and assign a Role. Roles drive automatic styling — Claims applies blue boundaries, Drillholes applies dark circle markers, Target Areas applies amber dashed outlines. Assigning the correct role saves significant manual styling time and ensures your map follows industry conventions.</p>
+<h2>Checking Coordinate Systems</h2><p>Exploration Maps expects geographic coordinates in WGS84 (EPSG:4326 — standard latitude/longitude). If your GeoJSON displays in the wrong location or far off from expected, the source data may be in a projected coordinate system (UTM, NAD83). Re-export from your GIS software with the coordinate system set to WGS84 / EPSG:4326.</p>
+      <section class="faq-section" aria-label="Frequently Asked Questions">
+  <h2>Frequently Asked Questions</h2>
+  <div class="faq-item">
+    <div class="faq-q">What file extensions does Exploration Maps accept?</div>
+    <div class="faq-a">For vector data: .geojson and .json. For tabular point data: .csv. For images (logo and inset maps): .jpg and .png. Shapefiles must be converted to GeoJSON first.</div>
+  </div>
+<div class="faq-item">
+    <div class="faq-q">My GeoJSON file shows in the wrong location — what's wrong?</div>
+    <div class="faq-a">The most common cause is that the data is in a projected coordinate system (such as UTM Zone 10N or BC Albers) rather than geographic coordinates (WGS84 latitude/longitude). Re-export from your GIS software, specifying WGS84 / EPSG:4326 as the output coordinate reference system.</div>
+  </div>
+<div class="faq-item">
+    <div class="faq-q">Can I import multiple GeoJSON files?</div>
+    <div class="faq-a">Yes — import as many files as needed. Each file becomes a separate layer in the Layers list. You can toggle visibility, reorder layers (drag to change draw order), and style each layer independently.</div>
+  </div>
+</section>
+    </article>
+    <aside>
+  <div class="cta-card">
+    <h3>Create Your Map Now</h3>
+    <p>No GIS experience needed. Import your data, choose a theme, and export in minutes.</p>
+    <a class="cta-btn" href="/">Open Exploration Maps →</a>
+  </div>
+  <div class="sidebar-card"><h3>Related Guides</h3><ul><li><a href="/blog/how-to-make-a-mining-claims-map/">How to Make a Mining Claims Map</a></li>
+<li><a href="/blog/how-to-make-a-drill-results-map/">How to Make a Drill Results Map</a></li>
+<li><a href="/blog/how-to-choose-basemap-mining-map/">How to Choose the Right Basemap for a Mining Map</a></li></ul></div>
+  <div class="sidebar-card">
+    <h3>Map Types</h3>
+    <ul>
+      <li><a href="/blog/how-to-create-mining-claims-map/">How to Create a Mining Claims Map</a></li>
+<li><a href="/blog/how-to-create-drill-results-map/">How to Create a Drill Results Map</a></li>
+<li><a href="/blog/how-to-create-location-map/">How to Create a Location Map</a></li>
+<li><a href="/blog/how-to-create-target-generation-map/">How to Create a Target Generation Map</a></li>
+<li><a href="/blog/how-to-create-infrastructure-map/">How to Create a Infrastructure Map</a></li>
+    </ul>
+  </div>
+</aside>
+  </div>
+</div>
+<footer class="site-footer">
+  <p>© 2026 Exploration Maps · <a href="/">Open the map editor</a> · <a href="/blog/">Blog</a></p>
+</footer>
+</body>
+</html>

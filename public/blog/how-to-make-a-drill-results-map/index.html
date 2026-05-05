@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to Make a Drill Results Map | Exploration Maps</title>
+<meta name="description" content="Create a professional drill results map for exploration news releases and NI 43-101 reports. Step-by-step guide with callout labels and assay results.">
+<link rel="canonical" href="https://www.explorationmaps.com/blog/how-to-make-a-drill-results-map/">
+
+<meta property="og:title" content="How to Make a Drill Results Map">
+<meta property="og:description" content="Create a professional drill results map for exploration news releases and NI 43-101 reports. Step-by-step guide with callout labels and assay results.">
+<meta property="og:url" content="https://www.explorationmaps.com/blog/how-to-make-a-drill-results-map/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Exploration Maps">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="How to Make a Drill Results Map">
+<meta name="twitter:description" content="Create a professional drill results map for exploration news releases and NI 43-101 reports. Step-by-step guide with callout labels and assay results.">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"How to Make a Drill Results Map","description":"Create a professional drill results map for exploration news releases and NI 43-101 reports. Step-by-step guide with callout labels and assay results.","url":"https://www.explorationmaps.com/blog/how-to-make-a-drill-results-map/","author":{"@type":"Organization","name":"Exploration Maps","url":"https://www.explorationmaps.com"},"publisher":{"@type":"Organization","name":"Exploration Maps","url":"https://www.explorationmaps.com"}},{"@type":"HowTo","name":"How to Make a Drill Results Map","description":"To make a drill results map, import your drill collar CSV, assign the Drillholes role, add callout labels showing hole ID and best intercept, then export as Landscape 16:9 PNG for news releases.","step":[{"@type":"HowToStep","position":1,"name":"What Data You Need","text":"Prepare the following before starting:"},{"@type":"HowToStep","position":2,"name":"Step 1: Import Drill Collar CSV","text":"Click the import button in the Layers section and select your drill collar CSV. The Column Mapper opens automatically — assign your latitude and longitude columns. If your columns are named 'Lat', 'Long', 'Latitude', 'Longitude', 'Easting', or 'Northing', they are detected automatically. All other columns (Hole ID, Depth, Grade) are preserved as feature properties accessible when you click a hole on the map."},{"@type":"HowToStep","position":3,"name":"Step 2: Assign the Drillholes Role","text":"Expand the layer card and select 'Drillholes' from the Role dropdown. This applies standard dark circle markers. Adjust marker size (12–16 px works well for most scales) in the layer styling controls."},{"@type":"HowToStep","position":4,"name":"Step 3: Add Callout Labels","text":"Click on a drill hole on the map to open the inline feature editor. Enter the hole ID as the title and the best intercept as the subtext (e.g., '15.2m @ 4.8 g/t Au'). Click 'Add / Update Callout'. Repeat for your key holes. For high-priority results, switch the callout type to 'Badge Label' and enter the grade in the badge chip field — this highlights your best holes visually."},{"@type":"HowToStep","position":5,"name":"Step 4: Add the Property Boundary","text":"Import your property claims boundary as a second layer and assign the Claims role. This provides the property context investors and analysts expect to see alongside drill results."},{"@type":"HowToStep","position":6,"name":"Step 5: Set Layout for News Releases","text":"Activate the Landscape 16:9 ratio in the Export section — this is the standard format for figures attached to exploration news releases. Pan and zoom so all your drill holes and key callouts are visible within the frame. The Investor — Navy & White theme with a Light or Satellite basemap is the standard for drill results maps."},{"@type":"HowToStep","position":7,"name":"Step 6: Export","text":"Export as PNG at 2× pixel ratio for email attachments and news release figures. If the news release has a separate map figure requirement (common in Canadian press releases), export as the News Release Figure PDF (6\" × 4.5\") for print-ready delivery."}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What format should drill results be shown in on a map?","acceptedAnswer":{"@type":"Answer","text":"The standard format is: '[width]m @ [grade] [unit] [element]' — for example '15.2m @ 4.8 g/t Au' or '82m @ 0.92% Cu'. This is what investors and analysts expect to see in callout labels on exploration drill maps."}},{"@type":"Question","name":"How many drill holes should I label on the map?","acceptedAnswer":{"@type":"Answer","text":"Label all holes from the current program plus any key historical holes for context. If you have more than 20 holes and the map becomes crowded, use the Priority field (High/Medium/Low) to control which callouts render on top, and only use Badge Labels for your top 3–5 intercepts."}},{"@type":"Question","name":"Should I use a satellite or light basemap for drill results?","acceptedAnswer":{"@type":"Answer","text":"Either works. Satellite basemaps are popular for drill results because terrain and vegetation help convey the property's physical setting. Light basemaps are better for formal technical reports where the data must be clearly legible. Use the Light basemap for PDF attachments in NI 43-101 reports."}},{"@type":"Question","name":"Can I show historical and current drill holes differently?","acceptedAnswer":{"@type":"Answer","text":"Yes — import them as separate layers and style them differently. Use filled dark markers for current holes and hollow or lighter markers for historical holes. Name the layers accordingly so they appear as separate legend entries."}}]},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://www.explorationmaps.com"},{"@type":"ListItem","position":2,"name":"Blog","item":"https://www.explorationmaps.com/blog/"},{"@type":"ListItem","position":3,"name":"How to Make a Drill Results Map","item":"https://www.explorationmaps.com/blog/how-to-make-a-drill-results-map/"}]}]}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{font-size:16px;-webkit-text-size-adjust:100%}
+body{font-family:'Inter',system-ui,-apple-system,sans-serif;color:#1e293b;background:#fff;line-height:1.6}
+a{color:#2563eb;text-decoration:none}a:hover{text-decoration:underline}
+img{max-width:100%;height:auto}
+/* Nav */
+.nav{display:flex;align-items:center;justify-content:space-between;padding:0 24px;height:56px;border-bottom:1px solid #e2e8f0;background:#fff;position:sticky;top:0;z-index:100}
+.nav-brand{display:flex;align-items:center;gap:8px;font-size:15px;font-weight:700;color:#0f172a;text-decoration:none}
+.nav-brand svg{flex-shrink:0}
+.nav-cta{background:#2563eb;color:#fff;padding:7px 16px;border-radius:8px;font-size:13px;font-weight:600;white-space:nowrap}
+.nav-cta:hover{background:#1d4ed8;text-decoration:none}
+/* Layout */
+.page-wrap{max-width:1100px;margin:0 auto;padding:0 24px}
+.blog-layout{display:grid;grid-template-columns:1fr 280px;gap:48px;padding:48px 0 80px;align-items:start}
+@media(max-width:768px){.blog-layout{grid-template-columns:1fr;padding:32px 0 60px}}
+/* Article */
+article h1{font-size:2rem;font-weight:800;line-height:1.2;color:#0f172a;margin-bottom:16px}
+@media(max-width:600px){article h1{font-size:1.5rem}}
+.direct-answer{font-size:1.05rem;color:#334155;background:#f0f9ff;border-left:4px solid #2563eb;padding:14px 18px;border-radius:0 8px 8px 0;margin-bottom:32px;line-height:1.65}
+.breadcrumb{font-size:13px;color:#64748b;margin-bottom:20px}
+.breadcrumb a{color:#64748b}
+.breadcrumb span{margin:0 6px}
+article h2{font-size:1.35rem;font-weight:700;color:#0f172a;margin:40px 0 12px;padding-bottom:8px;border-bottom:2px solid #e8edf3}
+article h2:first-of-type{margin-top:0}
+article h3{font-size:1.05rem;font-weight:700;color:#1e293b;margin:28px 0 8px}
+article p{margin-bottom:16px;color:#374151;line-height:1.75}
+article ul,article ol{padding-left:22px;margin-bottom:16px}
+article li{margin-bottom:6px;color:#374151;line-height:1.65}
+article strong{color:#0f172a}
+/* Steps */
+.steps-list{list-style:none;padding:0;counter-reset:step}
+.steps-list li{counter-increment:step;display:flex;gap:14px;margin-bottom:16px;align-items:flex-start}
+.steps-list li::before{content:counter(step);display:flex;align-items:center;justify-content:center;width:28px;height:28px;min-width:28px;background:#2563eb;color:#fff;border-radius:50%;font-size:13px;font-weight:700;margin-top:2px}
+/* Comparison table */
+.comparison-table{width:100%;border-collapse:collapse;margin:20px 0;font-size:14px}
+.comparison-table th{background:#1e3a5f;color:#fff;padding:10px 14px;text-align:left;font-weight:600}
+.comparison-table td{padding:9px 14px;border-bottom:1px solid #e2e8f0;vertical-align:top}
+.comparison-table tr:nth-child(even) td{background:#f8fafc}
+.comparison-table tr:first-child td:first-child{font-weight:600}
+/* FAQ */
+.faq-section{margin:48px 0 0}
+.faq-section h2{font-size:1.35rem;font-weight:700;color:#0f172a;margin-bottom:20px;padding-bottom:8px;border-bottom:2px solid #e8edf3}
+.faq-item{border:1px solid #e2e8f0;border-radius:10px;margin-bottom:12px;overflow:hidden}
+.faq-q{font-weight:700;color:#0f172a;padding:14px 18px;font-size:0.95rem;background:#f8fafc}
+.faq-a{padding:12px 18px;color:#374151;font-size:0.9rem;line-height:1.7;border-top:1px solid #e2e8f0}
+/* Sidebar */
+.sidebar-card{background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:24px;margin-bottom:24px}
+.sidebar-card h3{font-size:14px;font-weight:700;color:#0f172a;margin-bottom:12px;text-transform:uppercase;letter-spacing:0.05em}
+.sidebar-card ul{list-style:none;padding:0}
+.sidebar-card li{margin-bottom:8px;font-size:14px}
+.sidebar-card a{color:#2563eb}
+.cta-card{background:linear-gradient(135deg,#1e3a5f 0%,#2563eb 100%);border-radius:12px;padding:28px 24px;color:#fff;text-align:center;margin-bottom:24px}
+.cta-card h3{font-size:1.1rem;font-weight:700;margin-bottom:10px;color:#fff}
+.cta-card p{font-size:13px;color:#bfdbfe;margin-bottom:18px;line-height:1.6}
+.cta-btn{display:inline-block;background:#fff;color:#1e3a5f;padding:10px 22px;border-radius:8px;font-weight:700;font-size:14px;text-decoration:none}
+.cta-btn:hover{background:#dbeafe;text-decoration:none}
+/* Blog index */
+.blog-index-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:24px;padding:40px 0 80px}
+.blog-card{border:1px solid #e2e8f0;border-radius:12px;padding:24px;display:flex;flex-direction:column;gap:8px;transition:border-color .15s,box-shadow .15s}
+.blog-card:hover{border-color:#2563eb;box-shadow:0 4px 16px rgba(37,99,235,0.1)}
+.blog-card-tag{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#2563eb}
+.blog-card h3{font-size:1rem;font-weight:700;color:#0f172a;line-height:1.35}
+.blog-card p{font-size:13px;color:#64748b;line-height:1.6;flex:1}
+.blog-card a{font-size:13px;font-weight:600;color:#2563eb}
+/* Hero */
+.page-hero{padding:48px 0 32px;border-bottom:1px solid #e8edf3;margin-bottom:0}
+.page-hero-label{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#2563eb;margin-bottom:10px}
+.page-hero h1{font-size:2.2rem;font-weight:800;color:#0f172a;max-width:720px;line-height:1.2;margin-bottom:12px}
+@media(max-width:600px){.page-hero h1{font-size:1.6rem}}
+.page-hero p{font-size:1.05rem;color:#475569;max-width:580px;line-height:1.65}
+/* Footer */
+.site-footer{border-top:1px solid #e2e8f0;padding:32px 24px;text-align:center;font-size:13px;color:#94a3b8;margin-top:40px}
+.site-footer a{color:#64748b}
+</style>
+</head>
+<body>
+<nav class="nav">
+  <a class="nav-brand" href="/">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" fill="#2563eb"/>
+    </svg>
+    Exploration Maps
+  </a>
+  <a class="nav-cta" href="/">Open Editor →</a>
+</nav>
+
+<div class="page-wrap">
+  <div class="blog-layout">
+    <article>
+      <p class="breadcrumb"><a href="/">Home</a><span>›</span><a href="/blog/">Blog</a><span>›</span>How to Make a Drill Results Map</p>
+      <h1>How to Make a Drill Results Map</h1>
+      <p class="direct-answer">To make a drill results map, import your drill collar CSV, assign the Drillholes role, add callout labels showing hole ID and best intercept, then export as Landscape 16:9 PNG for news releases.</p>
+      <h2>What Data You Need</h2><p>Prepare the following before starting:</p><ul><li>Drill collar CSV with columns: Hole ID, Latitude, Longitude, Total Depth (m)</li><li>Assay summary: best intercept per hole (grade × width), for callout labels</li><li>Property boundary GeoJSON</li><li>Company logo</li></ul>
+<h2>Step 1: Import Drill Collar CSV</h2><p>Click the import button in the Layers section and select your drill collar CSV. The Column Mapper opens automatically — assign your latitude and longitude columns. If your columns are named 'Lat', 'Long', 'Latitude', 'Longitude', 'Easting', or 'Northing', they are detected automatically. All other columns (Hole ID, Depth, Grade) are preserved as feature properties accessible when you click a hole on the map.</p>
+<h2>Step 2: Assign the Drillholes Role</h2><p>Expand the layer card and select 'Drillholes' from the Role dropdown. This applies standard dark circle markers. Adjust marker size (12–16 px works well for most scales) in the layer styling controls.</p>
+<h2>Step 3: Add Callout Labels</h2><p>Click on a drill hole on the map to open the inline feature editor. Enter the hole ID as the title and the best intercept as the subtext (e.g., '15.2m @ 4.8 g/t Au'). Click 'Add / Update Callout'. Repeat for your key holes. For high-priority results, switch the callout type to 'Badge Label' and enter the grade in the badge chip field — this highlights your best holes visually.</p>
+<h2>Step 4: Add the Property Boundary</h2><p>Import your property claims boundary as a second layer and assign the Claims role. This provides the property context investors and analysts expect to see alongside drill results.</p>
+<h2>Step 5: Set Layout for News Releases</h2><p>Activate the Landscape 16:9 ratio in the Export section — this is the standard format for figures attached to exploration news releases. Pan and zoom so all your drill holes and key callouts are visible within the frame. The Investor — Navy &amp; White theme with a Light or Satellite basemap is the standard for drill results maps.</p>
+<h2>Step 6: Export</h2><p>Export as PNG at 2× pixel ratio for email attachments and news release figures. If the news release has a separate map figure requirement (common in Canadian press releases), export as the News Release Figure PDF (6&quot; × 4.5&quot;) for print-ready delivery.</p>
+      <section class="faq-section" aria-label="Frequently Asked Questions">
+  <h2>Frequently Asked Questions</h2>
+  <div class="faq-item">
+    <div class="faq-q">What format should drill results be shown in on a map?</div>
+    <div class="faq-a">The standard format is: '[width]m @ [grade] [unit] [element]' — for example '15.2m @ 4.8 g/t Au' or '82m @ 0.92% Cu'. This is what investors and analysts expect to see in callout labels on exploration drill maps.</div>
+  </div>
+<div class="faq-item">
+    <div class="faq-q">How many drill holes should I label on the map?</div>
+    <div class="faq-a">Label all holes from the current program plus any key historical holes for context. If you have more than 20 holes and the map becomes crowded, use the Priority field (High/Medium/Low) to control which callouts render on top, and only use Badge Labels for your top 3–5 intercepts.</div>
+  </div>
+<div class="faq-item">
+    <div class="faq-q">Should I use a satellite or light basemap for drill results?</div>
+    <div class="faq-a">Either works. Satellite basemaps are popular for drill results because terrain and vegetation help convey the property's physical setting. Light basemaps are better for formal technical reports where the data must be clearly legible. Use the Light basemap for PDF attachments in NI 43-101 reports.</div>
+  </div>
+<div class="faq-item">
+    <div class="faq-q">Can I show historical and current drill holes differently?</div>
+    <div class="faq-a">Yes — import them as separate layers and style them differently. Use filled dark markers for current holes and hollow or lighter markers for historical holes. Name the layers accordingly so they appear as separate legend entries.</div>
+  </div>
+</section>
+    </article>
+    <aside>
+  <div class="cta-card">
+    <h3>Create Your Map Now</h3>
+    <p>No GIS experience needed. Import your data, choose a theme, and export in minutes.</p>
+    <a class="cta-btn" href="/">Open Exploration Maps →</a>
+  </div>
+  <div class="sidebar-card"><h3>Related Guides</h3><ul><li><a href="/blog/how-to-make-a-mining-claims-map/">How to Make a Mining Claims Map</a></li>
+<li><a href="/blog/how-to-create-exploration-map-investor-presentation/">How to Create an Exploration Map for an Investor Presentation</a></li>
+<li><a href="/blog/how-to-export-mining-map-pdf/">How to Export a Mining Map as a PDF</a></li></ul></div>
+  <div class="sidebar-card">
+    <h3>Map Types</h3>
+    <ul>
+      <li><a href="/blog/how-to-create-mining-claims-map/">How to Create a Mining Claims Map</a></li>
+<li><a href="/blog/how-to-create-drill-results-map/">How to Create a Drill Results Map</a></li>
+<li><a href="/blog/how-to-create-location-map/">How to Create a Location Map</a></li>
+<li><a href="/blog/how-to-create-target-generation-map/">How to Create a Target Generation Map</a></li>
+<li><a href="/blog/how-to-create-infrastructure-map/">How to Create a Infrastructure Map</a></li>
+    </ul>
+  </div>
+</aside>
+  </div>
+</div>
+<footer class="site-footer">
+  <p>© 2026 Exploration Maps · <a href="/">Open the map editor</a> · <a href="/blog/">Blog</a></p>
+</footer>
+</body>
+</html>

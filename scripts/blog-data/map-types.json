@@ -1,0 +1,117 @@
+[
+  {
+    "id": "mining-claims-map",
+    "name": "Mining Claims Map",
+    "slug": "mining-claims-map",
+    "verb": "Create a Mining Claims Map",
+    "description": "A map showing mineral claim boundaries and property outlines used for investor presentations, regulatory filings, and property acquisitions.",
+    "primaryKeyword": "mining claims map",
+    "intro": "A mining claims map shows the boundaries of mineral tenures, staked claims, and licence areas overlaid on a geographic basemap. It is the most commonly required map in junior mining and exploration — used in NI 43-101 technical reports, investor decks, news releases, and property acquisition packages.",
+    "useCases": ["NI 43-101 technical reports", "Investor presentations", "News release figures", "Property acquisition packages", "Regulatory filings"],
+    "roles": ["Claims", "Roads", "Rivers"],
+    "recommendedBasemap": "Light or Satellite",
+    "recommendedTheme": "Investor — Navy & White or Technical — Sharp Borders",
+    "steps": [
+      "Import your claims data as a GeoJSON or CSV file",
+      "Assign the Claims layer role to apply standard styling automatically",
+      "Add roads and water layers for geographic context",
+      "Select a basemap — Light for technical reports, Satellite for investor decks",
+      "Configure the title block with project name, company, and map date",
+      "Upload your company logo",
+      "Set the export ratio and frame your map",
+      "Export as PNG (presentations) or PDF (reports)"
+    ]
+  },
+  {
+    "id": "drill-results-map",
+    "name": "Drill Results Map",
+    "slug": "drill-results-map",
+    "verb": "Create a Drill Results Map",
+    "description": "A map displaying drill collar locations with assay results and intercept data, used in news releases and NI 43-101 reports.",
+    "primaryKeyword": "drill results map",
+    "intro": "A drill results map plots the collar locations of completed drill holes alongside key assay results — typically highest-grade intercept, hole depth, and azimuth. It is the standard figure included in exploration news releases and is scrutinized by investors and analysts to understand the spatial distribution of mineralization.",
+    "useCases": ["Exploration news releases", "NI 43-101 technical reports", "Investor day presentations", "Analyst briefings"],
+    "roles": ["Drillholes", "Claims", "Target Areas"],
+    "recommendedBasemap": "Light or Satellite",
+    "recommendedTheme": "Investor — Navy & White",
+    "steps": [
+      "Import your drill collar CSV (columns: hole ID, latitude, longitude, depth, assay)",
+      "Assign the Drillholes layer role",
+      "Import the property claims boundary as GeoJSON",
+      "Add callout labels to key holes showing hole ID and best intercept",
+      "Use Badge Label type to highlight the highest-grade holes",
+      "Configure the title with program name and date",
+      "Set the Landscape 16:9 ratio for news release figures",
+      "Export as PNG at 2× for email and PDF for the news release attachment"
+    ]
+  },
+  {
+    "id": "location-map",
+    "name": "Location Map",
+    "slug": "location-map",
+    "verb": "Create a Location Map",
+    "description": "A regional context map showing where an exploration project is situated within a province, state, or country — standard in all investor materials.",
+    "primaryKeyword": "exploration project location map",
+    "intro": "A location map provides geographic context for an exploration project — showing the property in relation to nearby infrastructure, towns, past-producing mines, and regional geology. It is required in virtually every investor presentation, technical report, and corporate presentation. A clear, professional location map immediately communicates project accessibility and regional context.",
+    "useCases": ["Corporate presentations", "NI 43-101 reports", "Investor decks", "Website project pages", "Regulatory submissions"],
+    "roles": ["Claims", "Roads", "Rivers", "Labels"],
+    "recommendedBasemap": "Satellite or Topographic",
+    "recommendedTheme": "Investor — Navy & White or Terrain — Earthy & Warm",
+    "steps": [
+      "Import your property boundary as GeoJSON",
+      "Enable the Province/State inset to show regional context",
+      "Turn on Context overlay for roads, towns, and water",
+      "Enable Reference Labels to show place names",
+      "Zoom out to show 50–200 km of surrounding area",
+      "Add a distance ring to show project scale",
+      "Configure the title with project name and region",
+      "Export as PNG for presentations or PDF for reports"
+    ]
+  },
+  {
+    "id": "target-generation-map",
+    "name": "Target Generation Map",
+    "slug": "target-generation-map",
+    "verb": "Create a Target Generation Map",
+    "description": "A map highlighting exploration targets, geophysical anomalies, and structural features used to prioritize drill locations.",
+    "primaryKeyword": "target generation map",
+    "intro": "A target generation map integrates multiple datasets — geophysical anomalies, geochemical results, structural features, and historical workings — to visually communicate which areas have the highest exploration priority. These maps are central to project generation pitches and technical program planning.",
+    "useCases": ["Exploration program planning", "Investor technical presentations", "JV partner presentations", "Staking decisions"],
+    "roles": ["Target Areas", "Anomalies", "Faults", "Claims"],
+    "recommendedBasemap": "Satellite",
+    "recommendedTheme": "Technical — Sharp Borders or Modern — Dark Indigo",
+    "steps": [
+      "Import target polygon outlines as GeoJSON",
+      "Import anomaly extents as a separate GeoJSON layer",
+      "Assign Target Areas and Anomalies roles",
+      "Import fault and structure lines",
+      "Use Outside Shade on key target polygons to focus attention",
+      "Add labels for each named target",
+      "Overlay on Satellite basemap to show terrain context",
+      "Export at high resolution (3×) for technical presentations"
+    ]
+  },
+  {
+    "id": "infrastructure-map",
+    "name": "Infrastructure Map",
+    "slug": "infrastructure-map",
+    "verb": "Create an Infrastructure Map",
+    "description": "A map showing access roads, power lines, water, and logistics infrastructure relative to an exploration property.",
+    "primaryKeyword": "mining infrastructure map",
+    "intro": "An infrastructure map communicates the logistical reality of an exploration project — road access, power availability, water sources, airstrips, and proximity to service communities. Investors and permitting authorities use these maps to assess project advancement costs and feasibility. A well-made infrastructure map can significantly de-risk a project in the eyes of financiers.",
+    "useCases": ["Permitting applications", "Feasibility studies", "Investor presentations", "Environmental assessments"],
+    "roles": ["Roads", "Rivers", "Claims", "Labels"],
+    "recommendedBasemap": "Topographic",
+    "recommendedTheme": "Terrain — Earthy & Warm or Technical — Sharp Borders",
+    "steps": [
+      "Import road network GeoJSON and assign Roads/Access role",
+      "Import water bodies and rivers",
+      "Import property boundary",
+      "Enable topographic basemap to show terrain and elevation context",
+      "Add labels for key infrastructure (airstrip, camp, power line)",
+      "Add a scale bar to communicate distances accurately",
+      "Enable North Arrow",
+      "Export as PDF for permitting packages"
+    ]
+  }
+]

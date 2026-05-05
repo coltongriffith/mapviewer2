@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to Make a Mining Claims Map | Exploration Maps</title>
+<meta name="description" content="Step-by-step guide to creating a professional mining claims map for investor presentations, NI 43-101 reports, and news releases using Exploration Maps.">
+<link rel="canonical" href="https://www.explorationmaps.com/blog/how-to-make-a-mining-claims-map/">
+
+<meta property="og:title" content="How to Make a Mining Claims Map">
+<meta property="og:description" content="Step-by-step guide to creating a professional mining claims map for investor presentations, NI 43-101 reports, and news releases using Exploration Maps.">
+<meta property="og:url" content="https://www.explorationmaps.com/blog/how-to-make-a-mining-claims-map/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Exploration Maps">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="How to Make a Mining Claims Map">
+<meta name="twitter:description" content="Step-by-step guide to creating a professional mining claims map for investor presentations, NI 43-101 reports, and news releases using Exploration Maps.">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"How to Make a Mining Claims Map","description":"Step-by-step guide to creating a professional mining claims map for investor presentations, NI 43-101 reports, and news releases using Exploration Maps.","url":"https://www.explorationmaps.com/blog/how-to-make-a-mining-claims-map/","author":{"@type":"Organization","name":"Exploration Maps","url":"https://www.explorationmaps.com"},"publisher":{"@type":"Organization","name":"Exploration Maps","url":"https://www.explorationmaps.com"}},{"@type":"HowTo","name":"How to Make a Mining Claims Map","description":"To make a mining claims map, import your claims boundary as a GeoJSON file, assign the Claims layer role for automatic styling, add context layers (roads, water), choose a basemap and design theme, then export as PNG or PDF.","step":[{"@type":"HowToStep","position":1,"name":"What You Need Before You Start","text":"Before creating your mining claims map, gather the following:"},{"@type":"HowToStep","position":2,"name":"Step 1: Import Your Claims Data","text":"Open Exploration Maps and click the import button in the Layers section of the sidebar. Select your GeoJSON file — the layer is added automatically and the map fits to your claims boundary. If your claims data is in CSV format with corner coordinates, you can import that instead and the Column Mapper will help you assign the correct fields."},{"@type":"HowToStep","position":3,"name":"Step 2: Assign the Claims Layer Role","text":"Click on the layer card to expand it, then select 'Claims' from the Role dropdown. This applies standard styling automatically: a blue stroke with a light blue semi-transparent fill. This is the conventional styling for mineral claims used in NI 43-101 technical reports and recognized by investors and regulatory reviewers."},{"@type":"HowToStep","position":4,"name":"Step 3: Add Context Layers","text":"A claims map without geographic context is difficult to read. Add roads and water bodies to help viewers understand accessibility and regional geography. Enable the Context overlay in the Design section (roads, towns, water) and the Reference Labels overlay for place names. Reduce the overlay opacity to 40–60% so your claims data remains visually dominant."},{"@type":"HowToStep","position":5,"name":"Step 4: Choose a Basemap and Theme","text":"For investor presentations and NI 43-101 reports, the Light basemap with the Investor — Navy & White theme is the standard choice. For properties with interesting terrain or for satellite imagery context, use the Satellite basemap. The Technical — Sharp Borders theme is preferred for regulatory filings and formal technical documents."},{"@type":"HowToStep","position":6,"name":"Step 5: Configure the Title Block","text":"Click the title text on the map to edit it inline. Enter your project name as the main title and your company name as the subtitle. Add the Map Date and Project Number in Design → Text & Metadata. Upload your company logo using the logo uploader at the bottom of the Layers section."},{"@type":"HowToStep","position":7,"name":"Step 6: Export Your Map","text":"Activate the appropriate ratio in the Export section: Landscape 16:9 for PowerPoint slides and news releases, Letter Portrait for technical reports. Pan and zoom to frame your claims precisely within the ratio bounds. Click PNG for presentations and web use, or PDF for print-ready documents. Enter your email to unlock watermark-free exports."}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What file format do I need for mining claims data?","acceptedAnswer":{"@type":"Answer","text":"GeoJSON is the preferred format. You can convert Shapefiles (.shp) to GeoJSON for free at mapshaper.org or using QGIS. If you only have corner coordinates in a spreadsheet, export it as CSV and use the Column Mapper to assign latitude and longitude columns."}},{"@type":"Question","name":"What is the standard colour for mineral claims on a map?","acceptedAnswer":{"@type":"Answer","text":"The conventional colour is blue — a medium blue stroke (#2563eb or similar) with a light blue semi-transparent fill at around 20–25% opacity. This is the default applied when you assign the Claims role in Exploration Maps, and it matches the convention used in most NI 43-101 technical reports."}},{"@type":"Question","name":"Can I export a mining claims map as a PDF?","acceptedAnswer":{"@type":"Answer","text":"Yes. Click the PDF button in the toolbar to export. Choose your page size (Letter Landscape, A4 Landscape, or News Release Figure) in the export dialog. PDFs are vector-quality and suitable for print in regulatory filings and technical reports."}},{"@type":"Question","name":"How do I show multiple claim blocks with different colours?","acceptedAnswer":{"@type":"Answer","text":"Import each claim block as a separate GeoJSON layer, then set a different colour for each layer using the stroke and fill colour pickers in the layer controls. Each layer will appear as a separate entry in the legend. You can rename each layer to something descriptive like 'Zone 1 Claims' or 'Optioned Claims'."}},{"@type":"Question","name":"Does the map need a north arrow and scale bar?","acceptedAnswer":{"@type":"Answer","text":"For NI 43-101 reports and most regulatory submissions, yes — a north arrow and scale bar are standard requirements. Toggle them on in the Design section. The scale bar calculates the displayed distance automatically from the current zoom level."}}]},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://www.explorationmaps.com"},{"@type":"ListItem","position":2,"name":"Blog","item":"https://www.explorationmaps.com/blog/"},{"@type":"ListItem","position":3,"name":"How to Make a Mining Claims Map","item":"https://www.explorationmaps.com/blog/how-to-make-a-mining-claims-map/"}]}]}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{font-size:16px;-webkit-text-size-adjust:100%}
+body{font-family:'Inter',system-ui,-apple-system,sans-serif;color:#1e293b;background:#fff;line-height:1.6}
+a{color:#2563eb;text-decoration:none}a:hover{text-decoration:underline}
+img{max-width:100%;height:auto}
+/* Nav */
+.nav{display:flex;align-items:center;justify-content:space-between;padding:0 24px;height:56px;border-bottom:1px solid #e2e8f0;background:#fff;position:sticky;top:0;z-index:100}
+.nav-brand{display:flex;align-items:center;gap:8px;font-size:15px;font-weight:700;color:#0f172a;text-decoration:none}
+.nav-brand svg{flex-shrink:0}
+.nav-cta{background:#2563eb;color:#fff;padding:7px 16px;border-radius:8px;font-size:13px;font-weight:600;white-space:nowrap}
+.nav-cta:hover{background:#1d4ed8;text-decoration:none}
+/* Layout */
+.page-wrap{max-width:1100px;margin:0 auto;padding:0 24px}
+.blog-layout{display:grid;grid-template-columns:1fr 280px;gap:48px;padding:48px 0 80px;align-items:start}
+@media(max-width:768px){.blog-layout{grid-template-columns:1fr;padding:32px 0 60px}}
+/* Article */
+article h1{font-size:2rem;font-weight:800;line-height:1.2;color:#0f172a;margin-bottom:16px}
+@media(max-width:600px){article h1{font-size:1.5rem}}
+.direct-answer{font-size:1.05rem;color:#334155;background:#f0f9ff;border-left:4px solid #2563eb;padding:14px 18px;border-radius:0 8px 8px 0;margin-bottom:32px;line-height:1.65}
+.breadcrumb{font-size:13px;color:#64748b;margin-bottom:20px}
+.breadcrumb a{color:#64748b}
+.breadcrumb span{margin:0 6px}
+article h2{font-size:1.35rem;font-weight:700;color:#0f172a;margin:40px 0 12px;padding-bottom:8px;border-bottom:2px solid #e8edf3}
+article h2:first-of-type{margin-top:0}
+article h3{font-size:1.05rem;font-weight:700;color:#1e293b;margin:28px 0 8px}
+article p{margin-bottom:16px;color:#374151;line-height:1.75}
+article ul,article ol{padding-left:22px;margin-bottom:16px}
+article li{margin-bottom:6px;color:#374151;line-height:1.65}
+article strong{color:#0f172a}
+/* Steps */
+.steps-list{list-style:none;padding:0;counter-reset:step}
+.steps-list li{counter-increment:step;display:flex;gap:14px;margin-bottom:16px;align-items:flex-start}
+.steps-list li::before{content:counter(step);display:flex;align-items:center;justify-content:center;width:28px;height:28px;min-width:28px;background:#2563eb;color:#fff;border-radius:50%;font-size:13px;font-weight:700;margin-top:2px}
+/* Comparison table */
+.comparison-table{width:100%;border-collapse:collapse;margin:20px 0;font-size:14px}
+.comparison-table th{background:#1e3a5f;color:#fff;padding:10px 14px;text-align:left;font-weight:600}
+.comparison-table td{padding:9px 14px;border-bottom:1px solid #e2e8f0;vertical-align:top}
+.comparison-table tr:nth-child(even) td{background:#f8fafc}
+.comparison-table tr:first-child td:first-child{font-weight:600}
+/* FAQ */
+.faq-section{margin:48px 0 0}
+.faq-section h2{font-size:1.35rem;font-weight:700;color:#0f172a;margin-bottom:20px;padding-bottom:8px;border-bottom:2px solid #e8edf3}
+.faq-item{border:1px solid #e2e8f0;border-radius:10px;margin-bottom:12px;overflow:hidden}
+.faq-q{font-weight:700;color:#0f172a;padding:14px 18px;font-size:0.95rem;background:#f8fafc}
+.faq-a{padding:12px 18px;color:#374151;font-size:0.9rem;line-height:1.7;border-top:1px solid #e2e8f0}
+/* Sidebar */
+.sidebar-card{background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:24px;margin-bottom:24px}
+.sidebar-card h3{font-size:14px;font-weight:700;color:#0f172a;margin-bottom:12px;text-transform:uppercase;letter-spacing:0.05em}
+.sidebar-card ul{list-style:none;padding:0}
+.sidebar-card li{margin-bottom:8px;font-size:14px}
+.sidebar-card a{color:#2563eb}
+.cta-card{background:linear-gradient(135deg,#1e3a5f 0%,#2563eb 100%);border-radius:12px;padding:28px 24px;color:#fff;text-align:center;margin-bottom:24px}
+.cta-card h3{font-size:1.1rem;font-weight:700;margin-bottom:10px;color:#fff}
+.cta-card p{font-size:13px;color:#bfdbfe;margin-bottom:18px;line-height:1.6}
+.cta-btn{display:inline-block;background:#fff;color:#1e3a5f;padding:10px 22px;border-radius:8px;font-weight:700;font-size:14px;text-decoration:none}
+.cta-btn:hover{background:#dbeafe;text-decoration:none}
+/* Blog index */
+.blog-index-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:24px;padding:40px 0 80px}
+.blog-card{border:1px solid #e2e8f0;border-radius:12px;padding:24px;display:flex;flex-direction:column;gap:8px;transition:border-color .15s,box-shadow .15s}
+.blog-card:hover{border-color:#2563eb;box-shadow:0 4px 16px rgba(37,99,235,0.1)}
+.blog-card-tag{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#2563eb}
+.blog-card h3{font-size:1rem;font-weight:700;color:#0f172a;line-height:1.35}
+.blog-card p{font-size:13px;color:#64748b;line-height:1.6;flex:1}
+.blog-card a{font-size:13px;font-weight:600;color:#2563eb}
+/* Hero */
+.page-hero{padding:48px 0 32px;border-bottom:1px solid #e8edf3;margin-bottom:0}
+.page-hero-label{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#2563eb;margin-bottom:10px}
+.page-hero h1{font-size:2.2rem;font-weight:800;color:#0f172a;max-width:720px;line-height:1.2;margin-bottom:12px}
+@media(max-width:600px){.page-hero h1{font-size:1.6rem}}
+.page-hero p{font-size:1.05rem;color:#475569;max-width:580px;line-height:1.65}
+/* Footer */
+.site-footer{border-top:1px solid #e2e8f0;padding:32px 24px;text-align:center;font-size:13px;color:#94a3b8;margin-top:40px}
+.site-footer a{color:#64748b}
+</style>
+</head>
+<body>
+<nav class="nav">
+  <a class="nav-brand" href="/">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" fill="#2563eb"/>
+    </svg>
+    Exploration Maps
+  </a>
+  <a class="nav-cta" href="/">Open Editor →</a>
+</nav>
+
+<div class="page-wrap">
+  <div class="blog-layout">
+    <article>
+      <p class="breadcrumb"><a href="/">Home</a><span>›</span><a href="/blog/">Blog</a><span>›</span>How to Make a Mining Claims Map</p>
+      <h1>How to Make a Mining Claims Map</h1>
+      <p class="direct-answer">To make a mining claims map, import your claims boundary as a GeoJSON file, assign the Claims layer role for automatic styling, add context layers (roads, water), choose a basemap and design theme, then export as PNG or PDF.</p>
+      <h2>What You Need Before You Start</h2><p>Before creating your mining claims map, gather the following:</p><ul><li>Your mineral claims boundary as a GeoJSON or Shapefile (convert Shapefiles to GeoJSON at mapshaper.org)</li><li>Optional: Roads and water body GeoJSON for geographic context</li><li>Your company logo (PNG or JPG)</li><li>The project name, map date, and any required disclaimers</li></ul>
+<h2>Step 1: Import Your Claims Data</h2><p>Open Exploration Maps and click the import button in the Layers section of the sidebar. Select your GeoJSON file — the layer is added automatically and the map fits to your claims boundary. If your claims data is in CSV format with corner coordinates, you can import that instead and the Column Mapper will help you assign the correct fields.</p>
+<h2>Step 2: Assign the Claims Layer Role</h2><p>Click on the layer card to expand it, then select 'Claims' from the Role dropdown. This applies standard styling automatically: a blue stroke with a light blue semi-transparent fill. This is the conventional styling for mineral claims used in NI 43-101 technical reports and recognized by investors and regulatory reviewers.</p>
+<h2>Step 3: Add Context Layers</h2><p>A claims map without geographic context is difficult to read. Add roads and water bodies to help viewers understand accessibility and regional geography. Enable the Context overlay in the Design section (roads, towns, water) and the Reference Labels overlay for place names. Reduce the overlay opacity to 40–60% so your claims data remains visually dominant.</p>
+<h2>Step 4: Choose a Basemap and Theme</h2><p>For investor presentations and NI 43-101 reports, the Light basemap with the Investor — Navy &amp; White theme is the standard choice. For properties with interesting terrain or for satellite imagery context, use the Satellite basemap. The Technical — Sharp Borders theme is preferred for regulatory filings and formal technical documents.</p>
+<h2>Step 5: Configure the Title Block</h2><p>Click the title text on the map to edit it inline. Enter your project name as the main title and your company name as the subtitle. Add the Map Date and Project Number in Design → Text &amp; Metadata. Upload your company logo using the logo uploader at the bottom of the Layers section.</p>
+<h2>Step 6: Export Your Map</h2><p>Activate the appropriate ratio in the Export section: Landscape 16:9 for PowerPoint slides and news releases, Letter Portrait for technical reports. Pan and zoom to frame your claims precisely within the ratio bounds. Click PNG for presentations and web use, or PDF for print-ready documents. Enter your email to unlock watermark-free exports.</p>
+      <section class="faq-section" aria-label="Frequently Asked Questions">
+  <h2>Frequently Asked Questions</h2>
+  <div class="faq-item">
+    <div class="faq-q">What file format do I need for mining claims data?</div>
+    <div class="faq-a">GeoJSON is the preferred format. You can convert Shapefiles (.shp) to GeoJSON for free at mapshaper.org or using QGIS. If you only have corner coordinates in a spreadsheet, export it as CSV and use the Column Mapper to assign latitude and longitude columns.</div>
+  </div>
+<div class="faq-item">
+    <div class="faq-q">What is the standard colour for mineral claims on a map?</div>
+    <div class="faq-a">The conventional colour is blue — a medium blue stroke (#2563eb or similar) with a light blue semi-transparent fill at around 20–25% opacity. This is the default applied when you assign the Claims role in Exploration Maps, and it matches the convention used in most NI 43-101 technical reports.</div>
+  </div>
+<div class="faq-item">
+    <div class="faq-q">Can I export a mining claims map as a PDF?</div>
+    <div class="faq-a">Yes. Click the PDF button in the toolbar to export. Choose your page size (Letter Landscape, A4 Landscape, or News Release Figure) in the export dialog. PDFs are vector-quality and suitable for print in regulatory filings and technical reports.</div>
+  </div>
+<div class="faq-item">
+    <div class="faq-q">How do I show multiple claim blocks with different colours?</div>
+    <div class="faq-a">Import each claim block as a separate GeoJSON layer, then set a different colour for each layer using the stroke and fill colour pickers in the layer controls. Each layer will appear as a separate entry in the legend. You can rename each layer to something descriptive like 'Zone 1 Claims' or 'Optioned Claims'.</div>
+  </div>
+<div class="faq-item">
+    <div class="faq-q">Does the map need a north arrow and scale bar?</div>
+    <div class="faq-a">For NI 43-101 reports and most regulatory submissions, yes — a north arrow and scale bar are standard requirements. Toggle them on in the Design section. The scale bar calculates the displayed distance automatically from the current zoom level.</div>
+  </div>
+</section>
+    </article>
+    <aside>
+  <div class="cta-card">
+    <h3>Create Your Map Now</h3>
+    <p>No GIS experience needed. Import your data, choose a theme, and export in minutes.</p>
+    <a class="cta-btn" href="/">Open Exploration Maps →</a>
+  </div>
+  <div class="sidebar-card"><h3>Related Guides</h3><ul><li><a href="/blog/how-to-create-exploration-map-investor-presentation/">How to Create an Exploration Map for an Investor Presentation</a></li>
+<li><a href="/blog/how-to-export-mining-map-pdf/">How to Export a Mining Map as a PDF</a></li>
+<li><a href="/blog/how-to-import-geojson-mining-map/">How to Import GeoJSON Data into a Mining Map</a></li></ul></div>
+  <div class="sidebar-card">
+    <h3>Map Types</h3>
+    <ul>
+      <li><a href="/blog/how-to-create-mining-claims-map/">How to Create a Mining Claims Map</a></li>
+<li><a href="/blog/how-to-create-drill-results-map/">How to Create a Drill Results Map</a></li>
+<li><a href="/blog/how-to-create-location-map/">How to Create a Location Map</a></li>
+<li><a href="/blog/how-to-create-target-generation-map/">How to Create a Target Generation Map</a></li>
+<li><a href="/blog/how-to-create-infrastructure-map/">How to Create a Infrastructure Map</a></li>
+    </ul>
+  </div>
+</aside>
+  </div>
+</div>
+<footer class="site-footer">
+  <p>© 2026 Exploration Maps · <a href="/">Open the map editor</a> · <a href="/blog/">Blog</a></p>
+</footer>
+</body>
+</html>
