@@ -5,6 +5,7 @@ import { getThemeTokens } from '../utils/themeTokens';
 import { MARKER_ICON_PATHS, markerIconSvgFragment, drawMarkerIconCanvas } from '../utils/markerIcons.jsx';
 import { safeColor } from '../utils/colorUtils.js';
 import regionsNA from '../assets/regionsNA.json';
+import { estimateBox, intersects as intersectsCallout, leaderEndpoint } from '../utils/calloutLayout';
 
 let _exportWarnings = [];
 export function getExportWarnings() { return _exportWarnings; }
@@ -520,27 +521,33 @@ function drawFooterCanvas(ctx, scene, scale) {
   ctx.fillStyle = theme.footerText; ctx.font = `${12 * scale}px ${scene.project.layout?.fonts?.footer || 'Inter'}, Arial, sans-serif`; ctx.textBaseline = 'middle'; ctx.fillText(text, x + 12 * scale, y + h / 2);
 }
 
-function intersectsCallout(a, b, padding = 10) { return !(a.left + a.width + padding < b.left || b.left + b.width + padding < a.left || a.top + a.height + padding < b.top || b.top + b.height + padding < a.top); }
+const CALLOUT_DIRECTIONS = [
+  { dx: 0, dy: 1 }, { dx: 0, dy: -1 }, { dx: 1, dy: 0 }, { dx: -1, dy: 0 },
+];
 function placeCallouts(scene, scale) {
-  const callouts = (scene.project.callouts || []).slice().sort((a, b) => (a.priority || 2) - (b.priority || 2)); const placed = [];
+  const callouts = (scene.project.callouts || []).slice().sort((a, b) => (a.priority || 2) - (b.priority || 2));
+  const placed = [];
   callouts.forEach((callout) => {
     if (!callout.anchor) return;
     const pt = scene.map.latLngToContainerPoint([callout.anchor.lat, callout.anchor.lng]);
-    let width, height;
-    if (callout.type === 'badge') {
-      const chipChars = (callout.badgeValue || '').length;
-      const chipW = Math.max(44, chipChars * 8 + 20);
-      const labelW = Math.max(80, Math.min(callout.boxWidth || 160, 260));
-      width = chipW + labelW; height = 32;
-    } else {
-      width = callout.boxWidth || (callout.type === 'boxed' ? 188 : callout.type === 'leader' ? 146 : 136);
-      const hasSubtext = !!callout.subtext;
-      height = callout.type === 'boxed' ? (hasSubtext ? 62 : 42) : (hasSubtext ? 38 : 24);
+    const { width, height } = estimateBox(callout);
+    let left = pt.x + (callout.offset?.x || 0);
+    let top = pt.y + (callout.offset?.y || 0);
+    let candidate = { ...callout, left, top, width, height, anchorPx: { x: pt.x, y: pt.y } };
+    if (callout.isManualPosition) {
+      placed.push({ ...candidate, left: left * scale, top: top * scale, width: width * scale, height: height * scale, anchorPx: { x: pt.x * scale, y: pt.y * scale } });
+      return;
     }
-    let left = pt.x + (callout.offset?.x || 0); let top = pt.y + (callout.offset?.y || 0); let candidate = { ...callout, left, top, width, height, anchorPx: { x: pt.x, y: pt.y } }; let attempts = 0;
-    if (callout.isManualPosition) { placed.push({ ...candidate, left: left * scale, top: top * scale, width: width * scale, height: height * scale, anchorPx: { x: pt.x * scale, y: pt.y * scale } }); return; }
-    while (placed.some((other) => intersectsCallout(candidate, other, 10)) && attempts < 8) { top += 18; left += attempts % 2 === 0 ? 8 : -6; candidate = { ...candidate, left, top }; attempts += 1; }
-    if (!placed.some((other) => intersectsCallout(candidate, other, 2))) placed.push({ ...candidate, left: left * scale, top: top * scale, width: width * scale, height: height * scale, anchorPx: { x: pt.x * scale, y: pt.y * scale } });
+    let attempts = 0;
+    while (placed.some((other) => intersectsCallout(candidate, other, 10)) && attempts < 40) {
+      const dir = CALLOUT_DIRECTIONS[Math.floor(attempts / 10) % 4];
+      const step = height * 0.7;
+      top += dir.dy * step;
+      left += dir.dx * step;
+      candidate = { ...candidate, left, top };
+      attempts++;
+    }
+    placed.push({ ...candidate, left: left * scale, top: top * scale, width: width * scale, height: height * scale, anchorPx: { x: pt.x * scale, y: pt.y * scale } });
   });
   return placed;
 }
@@ -558,8 +565,8 @@ function drawCalloutsCanvas(ctx, scene, scale) {
     const radius = Math.max(0, (theme.panelRadius ?? 10) - 4) * scale;
 
     if (c.type === 'badge') {
-      // Leader line from anchor to box left edge
-      ctx.beginPath(); ctx.moveTo(c.anchorPx.x, c.anchorPx.y); ctx.lineTo(c.left + 10 * scale, c.top + c.height / 2);
+      const badgeEp = leaderEndpoint(c.anchorPx, c);
+      ctx.beginPath(); ctx.moveTo(c.anchorPx.x, c.anchorPx.y); ctx.lineTo(badgeEp.x, badgeEp.y);
       ctx.strokeStyle = c.style?.border || '#102640'; ctx.lineWidth = 1.4 * scale; ctx.setLineDash([]); ctx.stroke();
       const chipChars = (c.badgeValue || '').length;
       const chipW = Math.max(44 * scale, chipChars * 8 * scale + 20 * scale);
@@ -583,7 +590,11 @@ function drawCalloutsCanvas(ctx, scene, scale) {
       return;
     }
 
-    if (c.type === 'leader' || c.type === 'boxed') { ctx.beginPath(); ctx.moveTo(c.anchorPx.x, c.anchorPx.y); ctx.lineTo(c.left + 10 * scale, c.top + c.height / 2); ctx.strokeStyle = c.style?.border || '#102640'; ctx.lineWidth = 1.4 * scale; ctx.setLineDash(c.type === 'leader' ? [5 * scale, 3 * scale] : []); ctx.stroke(); }
+    if (c.type === 'leader' || c.type === 'boxed') {
+      const ep = leaderEndpoint(c.anchorPx, c);
+      ctx.beginPath(); ctx.moveTo(c.anchorPx.x, c.anchorPx.y); ctx.lineTo(ep.x, ep.y);
+      ctx.strokeStyle = c.style?.border || '#102640'; ctx.lineWidth = 1.4 * scale; ctx.setLineDash(c.type === 'leader' ? [5 * scale, 3 * scale] : []); ctx.stroke();
+    }
     ctx.setLineDash([]);
     if (c.type !== 'plain') { drawRoundedRect(ctx, c.left, c.top, c.width, c.height, radius); ctx.fillStyle = c.style?.background || theme.calloutFill; ctx.fill(); ctx.strokeStyle = c.style?.border || theme.calloutBorder; ctx.lineWidth = 1 * scale; ctx.stroke(); }
     const textX = c.left + (c.type === 'plain' ? 0 : 10 * scale);
@@ -1222,8 +1233,9 @@ function renderCalloutsSvg(scene, scale) {
       const chipChars = (c.badgeValue || '').length;
       const chipW = Math.max(44 * scale, chipChars * 8 * scale + 20 * scale);
       const labelW = c.width - chipW;
+      const badgeSvgEp = leaderEndpoint(c.anchorPx, c);
       const midY = c.top + c.height / 2;
-      const line = `<line x1="${c.anchorPx.x}" y1="${c.anchorPx.y}" x2="${c.left + 10 * scale}" y2="${midY}" stroke="${leaderColor}" stroke-width="${1.4 * scale}" />`;
+      const line = `<line x1="${c.anchorPx.x}" y1="${c.anchorPx.y}" x2="${badgeSvgEp.x}" y2="${badgeSvgEp.y}" stroke="${leaderColor}" stroke-width="${1.4 * scale}" />`;
       const chipRect = `<rect x="${c.left}" y="${c.top}" width="${chipW}" height="${c.height}" rx="${6 * scale}" fill="${c.badgeColor || '#d97706'}" />`;
       const labelRect = `<rect x="${c.left + chipW}" y="${c.top}" width="${labelW}" height="${c.height}" rx="${6 * scale}" fill="${c.style?.background || '#ffffff'}" />`;
       const chipText = `<text x="${c.left + chipW / 2}" y="${midY}" text-anchor="middle" dominant-baseline="middle" fill="#ffffff" font-family="${calloutFont}" font-size="${12 * scale}" font-weight="700">${escapeXml(c.badgeValue || '—')}</text>`;
@@ -1231,7 +1243,8 @@ function renderCalloutsSvg(scene, scale) {
       return `<g>${line}${dot}${chipRect}${labelRect}${chipText}${labelText}</g>`;
     }
 
-    const line = c.type === 'leader' || c.type === 'boxed' ? `<line x1="${c.anchorPx.x}" y1="${c.anchorPx.y}" x2="${c.left + 10 * scale}" y2="${c.top + c.height / 2}" stroke="${leaderColor}" stroke-width="${1.4 * scale}" ${c.type === 'leader' ? `stroke-dasharray="${5 * scale} ${3 * scale}"` : ''} />` : '';
+    const svgEp = leaderEndpoint(c.anchorPx, c);
+    const line = c.type === 'leader' || c.type === 'boxed' ? `<line x1="${c.anchorPx.x}" y1="${c.anchorPx.y}" x2="${svgEp.x}" y2="${svgEp.y}" stroke="${leaderColor}" stroke-width="${1.4 * scale}" ${c.type === 'leader' ? `stroke-dasharray="${5 * scale} ${3 * scale}"` : ''} />` : '';
     const boxFill = c.style?.background || 'rgba(255,255,255,0.97)';
     const boxStroke = c.style?.border || '#17304f';
     const box = c.type !== 'plain' ? `<rect x="${c.left}" y="${c.top}" width="${c.width}" height="${c.height}" rx="${6 * scale}" fill="${boxFill}" stroke="${boxStroke}" />` : '';

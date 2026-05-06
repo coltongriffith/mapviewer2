@@ -55,6 +55,7 @@ function detectGeomType(geojson) {
 export default function MapCanvas({ onReady, project, template, onFeatureClick, onMapClick, annotationToolRef }) {
   const mapRef = useRef(null);
   const onMapClickRef = useRef(onMapClick);
+  const onFeatureClickRef = useRef(onFeatureClick);
   const mapElRef = useRef(null);
   const baseLayerRef = useRef(null);
   const overlayGroupRef = useRef(null);
@@ -62,9 +63,8 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
   const referenceRefs = useRef({});
   const svgRendererRefs = useRef([]);
 
-  useEffect(() => {
-    onMapClickRef.current = onMapClick;
-  }, [onMapClick]);
+  useEffect(() => { onMapClickRef.current = onMapClick; }, [onMapClick]);
+  useEffect(() => { onFeatureClickRef.current = onFeatureClick; }, [onFeatureClick]);
 
   useEffect(() => {
     if (mapRef.current || !mapElRef.current) return;
@@ -229,14 +229,14 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
             marker.on('click', (e) => {
               if (annotationToolRef?.current) return;
               L.DomEvent.stopPropagation(e);
-              onFeatureClick?.({ layerId: layer.id, feature, latlng });
+              onFeatureClickRef.current?.({ layerId: layer.id, feature, latlng });
             });
             marker.bindTooltip('Click to edit callout', { direction: 'top', offset: [0, -10], opacity: 0.9, sticky: true });
           } else {
             marker.on('click', (e) => {
               if (annotationToolRef?.current) return;
               L.DomEvent.stopPropagation(e);
-              onFeatureClick?.({ layerId: layer.id, feature: null, latlng: null, isLayerSelect: true });
+              onFeatureClickRef.current?.({ layerId: layer.id, feature: null, latlng: null, isLayerSelect: true });
             });
           }
 
@@ -246,7 +246,7 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
           featureLayer.on('click', (e) => {
             if (annotationToolRef?.current) return;
             L.DomEvent.stopPropagation(e);
-            onFeatureClick?.({ layerId: layer.id, feature: null, latlng: null, isLayerSelect: true });
+            onFeatureClickRef.current?.({ layerId: layer.id, feature: null, latlng: null, isLayerSelect: true });
           });
         },
       });
@@ -297,7 +297,7 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
         geoLayer.bringToFront();
       }
     });
-  }, [project?.layers, template, onFeatureClick]);
+  }, [project?.layers, template]);
 
   return <div ref={mapElRef} className="leaflet-map-canvas" />;
 }
