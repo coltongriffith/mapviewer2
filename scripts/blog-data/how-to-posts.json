@@ -377,5 +377,272 @@
       }
     ],
     "relatedSlugs": ["how-to-make-a-mining-claims-map", "how-to-export-mining-map-pdf", "how-to-create-exploration-map-investor-presentation"]
+  },
+  {
+    "slug": "how-to-create-target-generation-map",
+    "mapTypeId": "target-generation-map",
+    "title": "How to Create a Target Generation Map",
+    "metaDescription": "Step-by-step guide to creating a target generation map for exploration programs. Show anomalies, structural features, and priority targets for investor and technical presentations.",
+    "directAnswer": "To create a target generation map, import your target polygon outlines as GeoJSON, assign the Target Areas role, add anomaly and structural layers, apply outside shading to focus attention on priority zones, label each target, and export at high resolution for technical presentations.",
+    "sections": [
+      {
+        "h2": "What You Need Before You Start",
+        "body": "Gather the following before building your target generation map:",
+        "items": [
+          "Target polygon outlines as GeoJSON (digitized from geophysics interpretation or structural mapping)",
+          "Anomaly extents as a separate GeoJSON layer (if available)",
+          "Fault and structural linework as GeoJSON",
+          "Property claims boundary GeoJSON",
+          "Company logo and project name"
+        ]
+      },
+      {
+        "h2": "Step 1: Import Target Polygon Data",
+        "body": "Open Exploration Maps and click the import button. Select your target outlines GeoJSON — each polygon should represent a discrete exploration target. The layer is added and the map fits to your data extent automatically. If you have multiple target tiers (e.g., Priority 1, Priority 2), import each as a separate layer so you can style them independently."
+      },
+      {
+        "h2": "Step 2: Assign the Target Areas Role",
+        "body": "Expand the layer card and select 'Target Areas' from the Role dropdown. This applies a warm orange stroke with a light fill — the conventional styling for exploration targets. For your highest-priority targets, switch the fill to a more saturated colour and increase the stroke weight to 2–3 px. For lower-priority targets, reduce opacity to 40–60% so the hierarchy is visually clear at a glance."
+      },
+      {
+        "h2": "Step 3: Add Anomaly and Structural Layers",
+        "body": "Import your geophysical anomaly extents and fault or structural linework as separate GeoJSON layers. Assign anomaly polygons a high-contrast fill (magenta or gold works well at low opacity) to communicate the extent of the geophysical signal. Assign fault lines a dashed dark stroke. Reducing the opacity on both to 50–70% keeps these layers readable without overwhelming the target polygons in the foreground."
+      },
+      {
+        "h2": "Step 4: Apply Outside Shade to Focus Attention",
+        "body": "In the Design section, enable the Outside Shade effect on your priority target layers. This darkens the map area outside the target polygon, drawing the viewer's eye directly to the area of interest. Use it selectively — applying it to too many layers simultaneously reduces the effect. Outside Shade is particularly effective when presenting a single high-priority target to investors or JV partners."
+      },
+      {
+        "h2": "Step 5: Label Each Target",
+        "body": "Click on each target polygon to open the inline feature editor. Enter the target name (e.g., 'Zone A', 'North Anomaly', 'Western Shear') as the label. For targets with associated geochemical peak values or historical resource estimates, add a brief subtext note. Labels anchor to the polygon centroid automatically — drag them to adjust positioning if polygons overlap."
+      },
+      {
+        "h2": "Step 6: Export for Technical Presentations",
+        "body": "Target generation maps are typically shown in technical investor presentations and JV partner packages, so the 16:9 Landscape ratio is standard. Select the Satellite basemap to provide terrain and vegetation context. Apply the Technical — Sharp Borders or Modern — Dark Indigo theme. Export at 3× resolution (PNG) for high-resolution display on large screens and in printed technical documents."
+      }
+    ],
+    "faqs": [
+      {
+        "q": "What data format do I need for target polygon outlines?",
+        "a": "GeoJSON is the required format. If your target outlines are in a GIS package (QGIS, ArcGIS, or MapInfo), export the layer as GeoJSON with CRS set to EPSG:4326 (WGS84). If you've sketched targets in a PDF interpretation, you'll need to digitize them in QGIS first — draw your polygon outlines, then export as GeoJSON."
+      },
+      {
+        "q": "How do I show multiple priority levels (Priority 1, Priority 2, Priority 3) on the same map?",
+        "a": "Import each priority tier as a separate GeoJSON layer. Style Priority 1 targets with a fully saturated colour and 100% opacity. Apply 60% opacity to Priority 2 and 30–40% opacity to Priority 3. This creates a clear visual hierarchy that communicates target ranking without requiring a written legend explanation."
+      },
+      {
+        "q": "Can I show geophysical anomaly extents (magnetic, IP) alongside the target polygons?",
+        "a": "Yes. Import your anomaly extents as a separate GeoJSON polygon layer. Use a semi-transparent fill (20–30% opacity) in a contrasting colour — gold or magenta works well against a satellite basemap. Place the anomaly layer below the target layer in the layer stack so the target outlines render on top."
+      },
+      {
+        "q": "What export resolution is needed for investor technical presentations?",
+        "a": "Export at 3× (PNG) for technical presentations intended for display at full screen on a projector or large monitor. This produces a PNG at approximately 5760 × 3240 pixels for a 16:9 export, which is sufficient for any current display and prints cleanly to A3 or tabloid size."
+      },
+      {
+        "q": "Should I use a satellite or topographic basemap for a target generation map?",
+        "a": "Satellite is the preferred basemap for target generation maps — it communicates terrain, vegetation cover, and outcrop distribution in a single layer, all of which are relevant to the geological story. Use Topographic if your property is in a heavily forested area where satellite imagery doesn't show ground features clearly, or if the structural linework is the primary focus and needs a clean background."
+      }
+    ],
+    "relatedSlugs": ["how-to-make-a-mining-claims-map", "how-to-create-exploration-map-investor-presentation", "how-to-make-a-drill-results-map"]
+  },
+  {
+    "slug": "how-to-create-infrastructure-map",
+    "mapTypeId": "infrastructure-map",
+    "title": "How to Create an Infrastructure Map for a Mining Property",
+    "metaDescription": "Step-by-step guide to creating a mining property infrastructure map showing road access, power, water, and logistics. Used in permitting applications, feasibility studies, and investor presentations.",
+    "directAnswer": "To create an infrastructure map, import road network and water body GeoJSON, assign Roads and Rivers roles, enable the topographic basemap, add labels for key infrastructure points (airstrip, camp, power line, nearest town), include a scale bar, and export as PDF for permitting packages.",
+    "sections": [
+      {
+        "h2": "What You Need Before You Start",
+        "body": "Prepare the following before building your infrastructure map:",
+        "items": [
+          "Road network GeoJSON (from OpenStreetMap export or your GIS package)",
+          "Water bodies and rivers GeoJSON",
+          "Property boundary GeoJSON",
+          "Coordinates of key infrastructure points: airstrip, camp, power line corridor, nearest service community",
+          "Company logo"
+        ]
+      },
+      {
+        "h2": "Step 1: Import Road and Access Data",
+        "body": "Click the import button and select your road network GeoJSON. Assign the Roads role — this applies a medium-weight grey stroke appropriate for showing access routes. If you have multiple road types (paved highway vs. gravel access road vs. exploration track), import each as a separate layer and differentiate by stroke weight: 3 px for highways, 2 px for gravel roads, 1 px dashed for exploration tracks."
+      },
+      {
+        "h2": "Step 2: Add Water Bodies and Rivers",
+        "body": "Import your water body and river GeoJSON and assign the Rivers role. Water features are a critical component of infrastructure maps for permitting — they show watercourse crossings, proximity to water licences, and drainage basin context. Enable the Context overlay in the Design section as a supplemental water layer if your imported data has gaps."
+      },
+      {
+        "h2": "Step 3: Import the Property Boundary",
+        "body": "Import your claims boundary as a GeoJSON and assign the Claims role. Reduce the fill opacity to 15–20% so the property boundary is visible without obscuring the infrastructure layers beneath it. The Claims boundary establishes the relationship between your property extent and the surrounding infrastructure — the core message of this map type."
+      },
+      {
+        "h2": "Step 4: Configure the Topographic Basemap",
+        "body": "In the Design section, select the Topographic basemap. For infrastructure maps, topography is more informative than satellite imagery — contour lines communicate the terrain challenges (ridge crossings, valley floors, slope angles) that determine infrastructure routing and access costs. Apply the Terrain — Earthy & Warm or Technical — Sharp Borders theme, both of which are calibrated for topographic basemaps."
+      },
+      {
+        "h2": "Step 5: Add Infrastructure Labels",
+        "body": "Click on the map at each key infrastructure point to add a label. Common labels for infrastructure maps: nearest town and distance (e.g., 'Stewart, BC — 45 km'), port or railhead, airstrip or helicopter pad, power line, diesel fuel depot. For linear infrastructure (roads, power lines), use the route label type which places the label along the line rather than at a point. Keep label text concise — infrastructure maps are read quickly and need to communicate logistics at a glance."
+      },
+      {
+        "h2": "Step 6: Export for Permitting Packages",
+        "body": "Infrastructure maps submitted with permitting applications (environmental assessments, mine permits, reclamation plans) should be exported as PDF in Letter Landscape or A3 format. Enable the scale bar — distance accuracy is particularly important on infrastructure maps where reviewers need to verify road distances and setbacks from watercourses. Enable the North Arrow. Export at print-ready quality for formal submissions."
+      }
+    ],
+    "faqs": [
+      {
+        "q": "What file format do I need for road network data?",
+        "a": "GeoJSON is required. You can export road data from OpenStreetMap using the Overpass Turbo tool (overpass-turbo.eu) — filter for highway types and export as GeoJSON. If you have road data in a shapefile from a government dataset, convert it to GeoJSON using QGIS (right-click layer → Export → Save Features As → GeoJSON, CRS: EPSG:4326)."
+      },
+      {
+        "q": "Does the map need a scale bar for permitting submissions?",
+        "a": "Yes — a scale bar is a standard requirement for maps submitted with permitting applications, environmental assessments, and reclamation plan documents. Toggle it on in the Design section. The scale bar in Exploration Maps updates automatically as you zoom, so it always reflects the current display scale accurately."
+      },
+      {
+        "q": "What basemap is best for infrastructure maps?",
+        "a": "Topographic is the best basemap for infrastructure maps — it shows terrain context and contour lines that are directly relevant to road and infrastructure routing. Satellite is a good alternative in areas with sparse vegetation where ground features are visible from imagery. For formal permitting documents, Topographic is the more accepted convention."
+      },
+      {
+        "q": "How do I show distance to the nearest highway or service community?",
+        "a": "Add a distance ring centred on your property boundary or camp location — this visually communicates the radius to nearby infrastructure. Alternatively, add a point label at the nearest town or highway junction with the approximate road distance in kilometres in the label subtext. Both approaches are commonly used in investor and permitting documentation."
+      },
+      {
+        "q": "Can I show a power line corridor and camp location on the same map?",
+        "a": "Yes. Import your power line corridor as a line GeoJSON layer and style it with a dashed orange stroke — the conventional mapping symbol for power lines. Add a point label at the camp location. If you don't have a GeoJSON for the power line, you can digitize it by exporting a manually drawn line from QGIS or Google Earth Pro as GeoJSON and importing it into Exploration Maps."
+      }
+    ],
+    "relatedSlugs": ["how-to-make-a-mining-claims-map", "how-to-create-exploration-map-investor-presentation", "how-to-create-target-generation-map"]
+  },
+  {
+    "slug": "how-to-import-csv-data-mining-map",
+    "title": "How to Import CSV Data into a Mining Map",
+    "metaDescription": "Step-by-step guide to importing CSV drill collar data, soil sample results, and other point data into Exploration Maps using the Column Mapper.",
+    "directAnswer": "To import CSV data into a mining map, click the import button and select your CSV file. The Column Mapper opens automatically — assign your latitude and longitude columns, then click Import. Your points render on the map immediately and all data columns are preserved as feature properties you can use for labels.",
+    "sections": [
+      {
+        "h2": "What CSV Data Works with Exploration Maps",
+        "body": "Exploration Maps imports any CSV file that contains coordinate columns. The most common use cases are:",
+        "items": [
+          "Drill collar data: Hole ID, Latitude, Longitude, Total Depth, Best Intercept, Grade",
+          "Soil geochemistry: Sample ID, Latitude, Longitude, Au (ppb), As (ppm), other elements",
+          "Rock sample locations: Sample ID, Latitude, Longitude, Rock Type, Grade",
+          "Prospect and showing locations: Name, Latitude, Longitude, Type, Notes",
+          "Historical workings: Name, Latitude, Longitude, Type (shaft, adit, open cut)"
+        ]
+      },
+      {
+        "h2": "Step 1: Prepare Your CSV File",
+        "body": "Your CSV needs at minimum two columns containing geographic coordinates — latitude and longitude in decimal degrees (e.g., 49.2827, -123.1207). If your data is in UTM coordinates (Easting, Northing), convert to decimal degrees first using QGIS (Reproject Layer tool) or an online converter. Column names do not need to match any specific format — you will assign them in the Column Mapper. Make sure there are no blank rows at the top of the file and that the first row contains column headers."
+      },
+      {
+        "h2": "Step 2: Import the CSV and Open the Column Mapper",
+        "body": "Click the import button in the Layers section of the sidebar and select your CSV file. The Column Mapper opens automatically whenever a CSV is imported. It shows all the column names detected in your file and provides dropdown selectors to assign each column to the correct role."
+      },
+      {
+        "h2": "Step 3: Assign Latitude and Longitude Columns",
+        "body": "In the Column Mapper, use the Latitude and Longitude dropdowns to assign the correct columns. If your columns are named 'Lat', 'Latitude', 'Long', 'Longitude', 'Y', or 'X', they are auto-detected and pre-assigned. For other naming conventions ('Northing', 'Easting', 'POINT_Y', 'POINT_X'), assign them manually from the dropdowns. Click Import — your points render on the map immediately."
+      },
+      {
+        "h2": "Step 4: Set the Layer Role and Style",
+        "body": "Expand the layer card and assign a role appropriate to your data type: Drillholes for drill collars, Anomalies for geochemical results, or leave as Default for general point data. Each role applies a preset marker style. You can override the marker colour, size, and shape in the layer styling controls. For soil sample data, consider sizing markers by grade value — larger circles for higher-grade samples — to communicate spatial grade distribution at a glance."
+      },
+      {
+        "h2": "Step 5: Use Your Data Columns for Labels",
+        "body": "Click on any point on the map to open the inline feature editor. All columns from your CSV are available as properties — Hole ID, Depth, Grade, Sample Number, and any other columns you imported. Enter the Hole ID or Sample ID in the label field to label the point on the map. For drill holes, enter the best intercept in the subtext field (e.g., '15.2m @ 4.8 g/t Au'). This data is already in your CSV — you just need to copy it into the label."
+      },
+      {
+        "h2": "Common CSV Issues and How to Fix Them",
+        "body": "If your CSV does not import correctly, check the following: (1) Coordinates in UTM — convert to decimal degrees first using QGIS. (2) Comma in a data field causing column misalignment — wrap text fields containing commas in double quotes in your spreadsheet. (3) Blank rows at the top of the file — delete any empty rows above the header row. (4) Coordinates in degrees-minutes-seconds format — convert to decimal degrees (DD = D + M/60 + S/3600). (5) Longitude outside expected range — verify longitude is negative for western hemisphere locations (e.g., -123.1 not 123.1)."
+      }
+    ],
+    "faqs": [
+      {
+        "q": "What column names does Exploration Maps recognize automatically?",
+        "a": "The Column Mapper auto-detects the following column names for latitude: Lat, Latitude, lat, latitude, Y, POINT_Y. For longitude: Long, Longitude, lon, long, longitude, X, POINT_X. All other column names require manual assignment in the Column Mapper dropdowns."
+      },
+      {
+        "q": "My drill collar data uses UTM coordinates, not latitude and longitude. Can I import it?",
+        "a": "Not directly — Exploration Maps requires decimal degrees (WGS84). Convert your UTM coordinates to decimal degrees before importing. The easiest method is to open your CSV in QGIS, set the layer CRS to your UTM zone (e.g., EPSG:32610 for UTM Zone 10N), then export as GeoJSON with CRS set to EPSG:4326. Alternatively, use an online UTM-to-decimal converter for small datasets."
+      },
+      {
+        "q": "Can I import a CSV with both drill collar locations and soil sample locations?",
+        "a": "You can only import one layer per CSV. If you have both data types in a single file, split it into two separate CSVs before importing. Importing each type as a separate layer is recommended — it lets you control the styling and roles independently."
+      },
+      {
+        "q": "What happens to my extra data columns (Grade, Depth, Hole ID) after import?",
+        "a": "All columns from your CSV are preserved as feature properties on each point. They are not displayed on the map by default, but are accessible when you click on a point — the feature editor shows all properties. Copy any value into the label or subtext fields to display it on the map."
+      },
+      {
+        "q": "Can I import a CSV exported from Leapfrog, GEMS, or a mine planning system?",
+        "a": "Yes, as long as the export includes decimal degree coordinate columns. Most mine planning and geological software can export to CSV. The key requirement is that coordinates are in WGS84 decimal degrees — if your system uses a local coordinate system or UTM, reproject using QGIS before importing."
+      }
+    ],
+    "relatedSlugs": ["how-to-make-a-mining-claims-map", "how-to-make-a-drill-results-map", "how-to-import-geojson-mining-map"]
+  },
+  {
+    "slug": "how-to-create-ni-43-101-compliant-map",
+    "title": "How to Create an NI 43-101 Compliant Map",
+    "metaDescription": "Step-by-step guide to creating map figures that meet NI 43-101 technical report standards. Covers required map elements, export quality, title block fields, and QP review requirements.",
+    "directAnswer": "To create an NI 43-101 compliant map, enable the title block with project name, date, and projection reference, add a scale bar and north arrow, configure the legend, apply the Technical theme, and export as a high-resolution PDF. Exploration Maps includes all required map elements and applies industry-standard NI 43-101 styling by default.",
+    "sections": [
+      {
+        "h2": "What NI 43-101 Requires for Map Figures",
+        "body": "National Instrument 43-101 (Standards of Disclosure for Mineral Projects) does not prescribe a rigid cartographic standard, but QPs (Qualified Persons) and securities regulators expect map figures in technical reports to contain:",
+        "items": [
+          "Title block: project name, property name, company name, map date, and figure number",
+          "North arrow",
+          "Scale bar with distance in kilometres or metres appropriate to the map scale",
+          "Legend explaining all symbols and colours used",
+          "Datum and projection reference (e.g., NAD83 / UTM Zone 10N or WGS84)",
+          "Map type label (e.g., Property Location Map, Mineral Claims Map, Drill Hole Location Map)"
+        ]
+      },
+      {
+        "h2": "Step 1: Choose the Right Export Ratio and Page Size",
+        "body": "NI 43-101 technical reports are submitted as PDFs, typically formatted to Letter or A4 paper size. Maps are embedded as figures — either full-page (Letter Landscape) or half-page figures within text. In Exploration Maps, select the Letter Portrait or Letter Landscape export ratio in the Export section. Letter Landscape is standard for full-page map figures. For maps intended to sit alongside descriptive text, Letter Portrait with the map occupying the upper portion of the page is common."
+      },
+      {
+        "h2": "Step 2: Enable the Title Block with Required Fields",
+        "body": "Click the title text on the map to edit it inline. Enter the project name as the main title and the map type (e.g., 'Property Location Map') as the subtitle. In Design → Text & Metadata, fill in: Map Date (the date the data was compiled, not the export date), Company Name, and Figure Number if applicable. Upload the company logo using the logo uploader in the Layers section. The QP often requires the coordinate system in the title block — add this in the Map Notes field."
+      },
+      {
+        "h2": "Step 3: Add Scale Bar and North Arrow",
+        "body": "Toggle on both the Scale Bar and North Arrow in the Design section. These are mandatory elements in every NI 43-101 map figure. The scale bar calculates the displayed distance automatically from the current zoom level and updates if you pan or zoom — always set your final map frame before exporting so the scale bar reflects the correct distance. The north arrow is placed automatically in the corner of the map frame."
+      },
+      {
+        "h2": "Step 4: Configure the Legend",
+        "body": "The legend is generated automatically from your layer names and styles. Rename each layer in the layer card to a descriptive name that will appear in the legend — 'Mineral Claims' rather than 'layer_1', 'Drill Collars — 2024 Program' rather than 'drills_q3.csv'. For NI 43-101 maps, every symbol and colour used on the map must be identified in the legend. If you have multiple claim blocks with different colours, each should be a separate named layer."
+      },
+      {
+        "h2": "Step 5: Apply the Technical Theme",
+        "body": "In the Design section, select the Technical — Sharp Borders theme. This theme is calibrated to the visual conventions used in Canadian technical reports: clean line weights, a light background, high-contrast claim boundaries, and a neutral colour palette that reproduces clearly when printed. The Investor — Navy & White theme is acceptable for investor-facing technical reports but is less conventional in formal regulatory submissions."
+      },
+      {
+        "h2": "Step 6: Export at Submission Quality",
+        "body": "Export as PDF for formal NI 43-101 technical report submission. PDFs from Exploration Maps are vector-quality — lines, labels, and boundaries remain crisp at any zoom level when viewed in a PDF reader or printed. For PNG exports, use the 2× or 3× setting for sufficient resolution at the figure's intended print size. A Letter Landscape PNG at 3× is approximately 3300 × 2550 px — suitable for printing at 300 DPI on Letter paper."
+      }
+    ],
+    "faqs": [
+      {
+        "q": "What map elements are required in an NI 43-101 technical report?",
+        "a": "The QP is responsible for ensuring figures meet the technical standards required under NI 43-101 and Form 43-101F1. Standard required elements are: title block (project name, company, date, figure number), north arrow, scale bar, legend, and a datum/projection reference. The exact figure list depends on the report type — a resource estimate report will require different maps than a preliminary economic assessment."
+      },
+      {
+        "q": "What resolution does a QP require for map figures?",
+        "a": "There is no mandated resolution in NI 43-101, but industry practice is that map figures should be legible at the print size at which they will appear in the report. For PNG exports, 300 DPI at the intended print size is the accepted standard. Exploration Maps PDF exports are vector-quality and resolution-independent. PNG exports should use the 2× or 3× setting."
+      },
+      {
+        "q": "Does Exploration Maps support the coordinate system references required in NI 43-101?",
+        "a": "All data in Exploration Maps is handled in WGS84 (EPSG:4326). If your QP requires a specific projection reference in the title block (e.g., NAD83 / UTM Zone 10N), add this as a manual note in the Map Notes field in Design → Text & Metadata. The underlying geographic accuracy is WGS84 — the projection statement is a labelling requirement for standard investor-facing map figures."
+      },
+      {
+        "q": "What colour conventions are expected for mineral claims in NI 43-101 maps?",
+        "a": "The conventional colour for mineral claims in Canadian NI 43-101 reports is blue — a medium blue stroke with a light blue semi-transparent fill at 20–25% opacity. This is applied automatically when you assign the Claims role in Exploration Maps, and it matches the convention recognized by QPs, securities lawyers, and regulators across the industry."
+      },
+      {
+        "q": "Can I include multiple map figures from the same project in one Exploration Maps session?",
+        "a": "Yes. Create multiple maps for the same project by adjusting the zoom level, visible layers, and export ratio for each figure. Common NI 43-101 figure sets include: a regional location map (zoomed out to show the province or state), a property location map (showing the claims boundary and surrounding area), and a detailed drill hole location map. Export each figure separately as a numbered PDF for insertion into the report document."
+      }
+    ],
+    "relatedSlugs": ["how-to-make-a-mining-claims-map", "how-to-export-mining-map-pdf", "how-to-create-exploration-map-investor-presentation"]
   }
 ]

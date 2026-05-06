@@ -5,13 +5,20 @@ function requireSupabase() {
   return supabase;
 }
 
+async function currentUser() {
+  const { data: { user } } = await requireSupabase().auth.getUser();
+  if (!user) throw new Error('Not authenticated');
+  return user;
+}
+
 // ── Projects ─────────────────────────────────────────────────────────────────
 
 export async function listCloudProjects() {
-  const sb = requireSupabase();
-  const { data, error } = await sb
+  const user = await currentUser();
+  const { data, error } = await requireSupabase()
     .from('projects')
     .select('id, name, updated_at')
+    .eq('user_id', user.id)
     .order('updated_at', { ascending: false });
   if (error) throw error;
   return (data || []).map((r) => ({
@@ -22,8 +29,7 @@ export async function listCloudProjects() {
 }
 
 export async function saveCloudProject({ id, name, payload }) {
-  const { data: { user } } = await requireSupabase().auth.getUser();
-  if (!user) throw new Error('Not authenticated');
+  const user = await currentUser();
 
   const now = new Date().toISOString();
   const record = { name: name || payload?.layout?.title || 'Untitled map', payload, updated_at: now };
@@ -31,8 +37,9 @@ export async function saveCloudProject({ id, name, payload }) {
   if (id) {
     const { error } = await requireSupabase()
       .from('projects')
-      .upsert({ id, user_id: user.id, ...record })
-      .eq('id', id);
+      .update(record)
+      .eq('id', id)
+      .eq('user_id', user.id);
     if (error) throw error;
     return id;
   } else {
@@ -47,42 +54,52 @@ export async function saveCloudProject({ id, name, payload }) {
 }
 
 export async function loadCloudProject(id) {
+  const user = await currentUser();
   const { data, error } = await requireSupabase()
     .from('projects')
     .select('*')
     .eq('id', id)
+    .eq('user_id', user.id)
     .single();
   if (error) throw error;
   return data;
 }
 
 export async function deleteCloudProject(id) {
-  const { error } = await requireSupabase().from('projects').delete().eq('id', id);
+  const user = await currentUser();
+  const { error } = await requireSupabase()
+    .from('projects')
+    .delete()
+    .eq('id', id)
+    .eq('user_id', user.id);
   if (error) throw error;
 }
 
 export async function renameCloudProject(id, name) {
+  const user = await currentUser();
   const { error } = await requireSupabase()
     .from('projects')
     .update({ name, updated_at: new Date().toISOString() })
-    .eq('id', id);
+    .eq('id', id)
+    .eq('user_id', user.id);
   if (error) throw error;
 }
 
 // ── Templates ─────────────────────────────────────────────────────────────────
 
 export async function listTemplates() {
+  const user = await currentUser();
   const { data, error } = await requireSupabase()
     .from('templates')
     .select('*')
+    .eq('user_id', user.id)
     .order('created_at', { ascending: true });
   if (error) throw error;
   return data || [];
 }
 
 export async function saveTemplate({ name, config, isDefault = false }) {
-  const { data: { user } } = await requireSupabase().auth.getUser();
-  if (!user) throw new Error('Not authenticated');
+  const user = await currentUser();
 
   if (isDefault) {
     await requireSupabase()
@@ -101,30 +118,45 @@ export async function saveTemplate({ name, config, isDefault = false }) {
 }
 
 export async function updateTemplate(id, updates) {
+  const user = await currentUser();
   const { error } = await requireSupabase()
     .from('templates')
     .update({ ...updates, updated_at: new Date().toISOString() })
-    .eq('id', id);
+    .eq('id', id)
+    .eq('user_id', user.id);
   if (error) throw error;
 }
 
 export async function setDefaultTemplate(id) {
-  const { data: { user } } = await requireSupabase().auth.getUser();
-  if (!user) throw new Error('Not authenticated');
-  await requireSupabase().from('templates').update({ is_default: false }).eq('user_id', user.id);
-  const { error } = await requireSupabase().from('templates').update({ is_default: true }).eq('id', id);
+  const user = await currentUser();
+  await requireSupabase()
+    .from('templates')
+    .update({ is_default: false })
+    .eq('user_id', user.id);
+  const { error } = await requireSupabase()
+    .from('templates')
+    .update({ is_default: true })
+    .eq('id', id)
+    .eq('user_id', user.id);
   if (error) throw error;
 }
 
 export async function deleteTemplate(id) {
-  const { error } = await requireSupabase().from('templates').delete().eq('id', id);
+  const user = await currentUser();
+  const { error } = await requireSupabase()
+    .from('templates')
+    .delete()
+    .eq('id', id)
+    .eq('user_id', user.id);
   if (error) throw error;
 }
 
 export async function getDefaultTemplate() {
+  const user = await currentUser();
   const { data, error } = await requireSupabase()
     .from('templates')
     .select('*')
+    .eq('user_id', user.id)
     .eq('is_default', true)
     .maybeSingle();
   if (error) throw error;

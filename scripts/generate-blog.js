@@ -183,15 +183,13 @@ ${schema ? `<script type="application/ld+json">${JSON.stringify(schema, null, 0)
 ${body}
 <footer class="site-footer">
   <div class="site-footer-links">
-    <a href="/blog/how-to/">How-to Guides</a>
+    <a href="/">Home</a>
     <span class="site-footer-sep">·</span>
-    <a href="/blog/comparisons/">Comparisons</a>
+    <a href="/about/">About</a>
     <span class="site-footer-sep">·</span>
-    <a href="/blog/locations/">By Region</a>
+    <a href="/blog/">Guides</a>
     <span class="site-footer-sep">·</span>
-    <a href="/blog/">All Guides</a>
-    <span class="site-footer-sep">·</span>
-    <a href="/">Open Map Editor</a>
+    <a href="/privacy/">Privacy</a>
   </div>
   <p>© ${new Date().getFullYear()} ${esc(SITE_NAME)}</p>
 </footer>
@@ -416,7 +414,9 @@ function buildLocationPage(location, mapType) {
   const pageSlug = `${mapType.slug}-${location.slug}`;
   const url = `${SITE}/blog/${pageSlug}/`;
   const title = `${mapType.name} — ${location.name}`;
-  const description = `Create a professional ${mapType.primaryKeyword} for ${location.name}. Step-by-step guide for ${location.country === 'Canada' ? 'Canadian' : 'US'} exploration companies using Exploration Maps.`;
+  const adjective = location.adjective || (location.country === 'Canada' ? 'Canadian' : 'US');
+  const reportingStandard = location.reportingStandard || 'NI 43-101';
+  const description = `Create a professional ${mapType.primaryKeyword} for ${location.name}. Step-by-step guide for ${adjective} exploration companies using Exploration Maps.`;
 
   const mineralList = location.minerals.slice(0, 4).join(', ');
   const depositList = location.famousDeposits.slice(0, 3).join(', ');
@@ -440,8 +440,8 @@ function buildLocationPage(location, mapType) {
       a: `${location.name} is known for its ${mineralList} deposits. Key producing and exploration-stage properties include ${depositList}. The main mining districts are ${districtList}.`,
     },
     {
-      q: `Can I export a ${location.name} ${mapType.primaryKeyword} for an NI 43-101 report?`,
-      a: `Yes. Exploration Maps exports PNG and PDF at 2–3× pixel ratio, suitable for inclusion in NI 43-101 technical reports as required figures. The export includes north arrow, scale bar, legend, and title block — all elements required for NI 43-101 compliance.`,
+      q: `Can I export a ${location.name} ${mapType.primaryKeyword} for a ${reportingStandard} report?`,
+      a: `Yes. Exploration Maps exports PNG and PDF at 2–3× pixel ratio, suitable for inclusion in ${reportingStandard} technical reports as required figures. The export includes north arrow, scale bar, legend, and title block — all standard map elements required for ${reportingStandard} compliance.`,
     },
   ];
 
@@ -509,7 +509,7 @@ function buildLocationPage(location, mapType) {
       <ul>
         <li><strong>Basemap:</strong> ${esc(mapType.recommendedBasemap)}</li>
         <li><strong>Design theme:</strong> ${esc(mapType.recommendedTheme)}</li>
-        <li><strong>Export format:</strong> PNG at 2× for investor presentations, PDF (Letter or A4) for NI 43-101 reports</li>
+        <li><strong>Export format:</strong> PNG at 2× for investor presentations, PDF (Letter or A4) for ${esc(reportingStandard)} reports</li>
         <li><strong>Coordinate system:</strong> Ensure source data is in WGS84 (EPSG:4326)</li>
       </ul>
 
@@ -621,6 +621,12 @@ function buildBlogIndex(allUrls) {
 
 function buildSitemap(allUrls) {
   const today = new Date().toISOString().split('T')[0];
+  const blogEntries = allUrls.map(u => `  <url><loc>${esc(u)}</loc><lastmod>${today}</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>`).join('\n');
+  const staticEntries = [
+    `  <url><loc>${SITE}/about/</loc><lastmod>${today}</lastmod><changefreq>monthly</changefreq><priority>0.6</priority></url>`,
+    `  <url><loc>${SITE}/contact/</loc><lastmod>${today}</lastmod><changefreq>yearly</changefreq><priority>0.5</priority></url>`,
+  ].join('\n');
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${blogEntries}\n${staticEntries}\n</urlset>`;
   const homepage = `  <url><loc>${SITE}/</loc><lastmod>${today}</lastmod><changefreq>weekly</changefreq><priority>1.0</priority></url>`;
   const entries = allUrls.map(u => {
     const isBlogIndex = u === `${SITE}/blog/`;

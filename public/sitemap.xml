@@ -10,9 +10,14 @@
   <url><loc>https://www.explorationmaps.com/blog/how-to-export-mining-map-pdf/</loc><lastmod>2026-05-05</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
   <url><loc>https://www.explorationmaps.com/blog/how-to-add-distance-ring-mining-map/</loc><lastmod>2026-05-05</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
   <url><loc>https://www.explorationmaps.com/blog/how-to-add-scale-bar-north-arrow/</loc><lastmod>2026-05-05</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://www.explorationmaps.com/blog/how-to-create-target-generation-map/</loc><lastmod>2026-05-05</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://www.explorationmaps.com/blog/how-to-create-infrastructure-map/</loc><lastmod>2026-05-05</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://www.explorationmaps.com/blog/how-to-import-csv-data-mining-map/</loc><lastmod>2026-05-05</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://www.explorationmaps.com/blog/how-to-create-ni-43-101-compliant-map/</loc><lastmod>2026-05-05</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
   <url><loc>https://www.explorationmaps.com/blog/exploration-maps-vs-arcgis/</loc><lastmod>2026-05-05</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
   <url><loc>https://www.explorationmaps.com/blog/exploration-maps-vs-qgis/</loc><lastmod>2026-05-05</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
   <url><loc>https://www.explorationmaps.com/blog/best-mining-map-software-junior-exploration/</loc><lastmod>2026-05-05</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://www.explorationmaps.com/blog/exploration-maps-vs-mapinfo/</loc><lastmod>2026-05-05</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
   <url><loc>https://www.explorationmaps.com/blog/mining-claims-map-british-columbia/</loc><lastmod>2026-05-05</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
   <url><loc>https://www.explorationmaps.com/blog/drill-results-map-british-columbia/</loc><lastmod>2026-05-05</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
   <url><loc>https://www.explorationmaps.com/blog/location-map-british-columbia/</loc><lastmod>2026-05-05</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
@@ -123,6 +128,41 @@
   <url><loc>https://www.explorationmaps.com/blog/location-map-california/</loc><lastmod>2026-05-05</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
   <url><loc>https://www.explorationmaps.com/blog/target-generation-map-california/</loc><lastmod>2026-05-05</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
   <url><loc>https://www.explorationmaps.com/blog/infrastructure-map-california/</loc><lastmod>2026-05-05</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://www.explorationmaps.com/blog/mining-claims-map-western-australia/</loc><lastmod>2026-05-05</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://www.explorationmaps.com/blog/drill-results-map-western-australia/</loc><lastmod>2026-05-05</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://www.explorationmaps.com/blog/location-map-western-australia/</loc><lastmod>2026-05-05</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://www.explorationmaps.com/blog/target-generation-map-western-australia/</loc><lastmod>2026-05-05</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://www.explorationmaps.com/blog/infrastructure-map-western-australia/</loc><lastmod>2026-05-05</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://www.explorationmaps.com/blog/mining-claims-map-chile/</loc><lastmod>2026-05-05</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://www.explorationmaps.com/blog/drill-results-map-chile/</loc><lastmod>2026-05-05</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://www.explorationmaps.com/blog/location-map-chile/</loc><lastmod>2026-05-05</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://www.explorationmaps.com/blog/target-generation-map-chile/</loc><lastmod>2026-05-05</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://www.explorationmaps.com/blog/infrastructure-map-chile/</loc><lastmod>2026-05-05</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://www.explorationmaps.com/blog/mining-claims-map-peru/</loc><lastmod>2026-05-05</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://www.explorationmaps.com/blog/drill-results-map-peru/</loc><lastmod>2026-05-05</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://www.explorationmaps.com/blog/location-map-peru/</loc><lastmod>2026-05-05</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://www.explorationmaps.com/blog/target-generation-map-peru/</loc><lastmod>2026-05-05</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://www.explorationmaps.com/blog/infrastructure-map-peru/</loc><lastmod>2026-05-05</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://www.explorationmaps.com/blog/mining-claims-map-mexico/</loc><lastmod>2026-05-05</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://www.explorationmaps.com/blog/drill-results-map-mexico/</loc><lastmod>2026-05-05</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://www.explorationmaps.com/blog/location-map-mexico/</loc><lastmod>2026-05-05</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://www.explorationmaps.com/blog/target-generation-map-mexico/</loc><lastmod>2026-05-05</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://www.explorationmaps.com/blog/infrastructure-map-mexico/</loc><lastmod>2026-05-05</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://www.explorationmaps.com/blog/mining-claims-map-south-africa/</loc><lastmod>2026-05-05</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://www.explorationmaps.com/blog/drill-results-map-south-africa/</loc><lastmod>2026-05-05</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://www.explorationmaps.com/blog/location-map-south-africa/</loc><lastmod>2026-05-05</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://www.explorationmaps.com/blog/target-generation-map-south-africa/</loc><lastmod>2026-05-05</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://www.explorationmaps.com/blog/infrastructure-map-south-africa/</loc><lastmod>2026-05-05</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://www.explorationmaps.com/blog/mining-claims-map-ghana/</loc><lastmod>2026-05-05</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://www.explorationmaps.com/blog/drill-results-map-ghana/</loc><lastmod>2026-05-05</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://www.explorationmaps.com/blog/location-map-ghana/</loc><lastmod>2026-05-05</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://www.explorationmaps.com/blog/target-generation-map-ghana/</loc><lastmod>2026-05-05</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://www.explorationmaps.com/blog/infrastructure-map-ghana/</loc><lastmod>2026-05-05</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://www.explorationmaps.com/blog/how-to/</loc><lastmod>2026-05-05</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://www.explorationmaps.com/blog/comparisons/</loc><lastmod>2026-05-05</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://www.explorationmaps.com/blog/locations/</loc><lastmod>2026-05-05</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://www.explorationmaps.com/about/</loc><lastmod>2026-05-05</lastmod><changefreq>monthly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://www.explorationmaps.com/contact/</loc><lastmod>2026-05-05</lastmod><changefreq>yearly</changefreq><priority>0.5</priority></url>
   <url><loc>https://www.explorationmaps.com/blog/how-to/</loc><lastmod>2026-05-05</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>
   <url><loc>https://www.explorationmaps.com/blog/comparisons/</loc><lastmod>2026-05-05</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>
   <url><loc>https://www.explorationmaps.com/blog/locations/</loc><lastmod>2026-05-05</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>
