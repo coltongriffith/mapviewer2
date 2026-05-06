@@ -82,7 +82,7 @@ export default function CalloutsOverlay({ map, callouts, selectedCalloutId, onSe
             key={callout.id}
             className={`map-callout ${callout.type} ${selectedCalloutId === callout.id ? 'selected' : ''}`}
             style={{
-              position: 'relative',
+              position: 'absolute',
               left: callout.left,
               top: callout.top,
               width: callout.width,
