@@ -89,20 +89,24 @@ function detectColumn(headers, role) {
   return idx;
 }
 
-function parseCsvText(text) {
+async function parseCsvText(text) {
   const lines = text.split(/\r?\n/);
   if (!lines.length) return { headers: [], rows: [] };
-  // Auto-detect delimiter: tab or comma
   const delim = lines[0].includes('\t') ? '\t' : ',';
   const headers = lines[0].split(delim).map((h) => h.trim().replace(/^["']|["']$/g, ''));
   const rows = [];
-  for (let i = 1; i < lines.length; i++) {
-    const line = lines[i].trim();
-    if (!line) continue;
-    const parts = line.split(delim).map((v) => v.trim().replace(/^["']|["']$/g, ''));
-    const row = {};
-    headers.forEach((h, j) => { row[h] = parts[j] ?? ''; });
-    rows.push(row);
+  const CHUNK = 2000;
+  for (let i = 1; i < lines.length; i += CHUNK) {
+    const end = Math.min(i + CHUNK, lines.length);
+    for (let j = i; j < end; j++) {
+      const line = lines[j].trim();
+      if (!line) continue;
+      const parts = line.split(delim).map((v) => v.trim().replace(/^["']|["']$/g, ''));
+      const row = {};
+      headers.forEach((h, k) => { row[h] = parts[k] ?? ''; });
+      rows.push(row);
+    }
+    if (i + CHUNK < lines.length) await new Promise((resolve) => setTimeout(resolve, 0));
   }
   return { headers, rows };
 }
@@ -134,7 +138,7 @@ export async function loadCSV(file) {
   }
 
   const text = await file.text();
-  const { headers, rows } = parseCsvText(text);
+  const { headers, rows } = await parseCsvText(text);
   if (!headers.length) throw new Error("CSV file appears to be empty.");
 
   const xIdx = detectColumn(headers, 'x');
