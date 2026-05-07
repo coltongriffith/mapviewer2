@@ -217,8 +217,13 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
           opacity: (style.opacity ?? 1) * lo,
         }),
         pointToLayer: (feature, latlng) => {
-          const markerShape = style.markerShape;
-          const markerColor = style.markerColor || style.stroke || '#111111';
+          const fKey = feature?.id != null ? String(feature.id)
+            : feature?.properties?.hole_id || feature?.properties?.holeid
+            || feature?.properties?.id || feature?.properties?.name
+            || JSON.stringify(feature?.geometry?.coordinates);
+          const featureOverride = layer.featureOverrides?.[fKey] || {};
+          const markerShape = featureOverride.markerShape ?? style.markerShape;
+          const markerColor = featureOverride.markerColor ?? style.markerColor ?? style.stroke ?? '#111111';
           const markerSize = style.markerSize ?? 10;
 
           let marker;
