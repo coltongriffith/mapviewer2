@@ -1,25 +1,25 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import MapCanvas from './components/MapCanvas';
 import RatioSwitcher from './components/RatioSwitcher';
 import Sidebar from './components/Sidebar';
 import LayerList from './components/LayerList';
 import LocatorInset from './components/LocatorInset';
 import CalloutsOverlay from './components/CalloutsOverlay';
 import LandingPage from './components/LandingPage';
-import ExportHDModal from './components/ExportHDModal';
 import UploadPanel from './components/UploadPanel';
 import AnnotationOverlay from './components/AnnotationOverlay';
 import ShadeOverlay from './components/ShadeOverlay';
-import ColumnMapperModal from './components/ColumnMapperModal';
-import HowToUseModal from './components/HowToUseModal';
+
+const MapCanvas = React.lazy(() => import('./components/MapCanvas'));
+const ExportHDModal = React.lazy(() => import('./components/ExportHDModal'));
+const HowToUseModal = React.lazy(() => import('./components/HowToUseModal'));
+const ColumnMapperModal = React.lazy(() => import('./components/ColumnMapperModal'));
 import { loadGeoJSON, loadCSV } from './utils/importers';
 import sampleClaims from './assets/sampleClaims.json';
 import sampleDrillholes from './assets/sampleDrillholes.json';
 import { buildScene } from './export/buildScene';
 import { exportPNG } from './export/exportPNG';
 import { exportSVG } from './export/exportSVG';
-import { exportPDF } from './export/exportPDF';
 import { getExportWarnings } from './export/renderScene';
 import {
   CALLOUT_TYPES,
@@ -1395,6 +1395,7 @@ export default function App() {
       } else if (format === 'svg') {
         await exportSVG(scene, opts);
       } else if (format === 'pdf') {
+        const { exportPDF } = await import('./export/exportPDF');
         await exportPDF(scene, opts);
       }
       const warnings = getExportWarnings();
@@ -1585,7 +1586,7 @@ export default function App() {
           onOpenProject={(entry) => { openProjectFromRecent(entry); setScreen('editor'); }}
           onShowHelp={() => setShowHelpModal(true)}
         />
-        {showHelpModal && <HowToUseModal onClose={() => setShowHelpModal(false)} />}
+        {showHelpModal && <React.Suspense fallback={null}><HowToUseModal onClose={() => setShowHelpModal(false)} /></React.Suspense>}
       </>
     );
   }
@@ -2589,7 +2590,9 @@ export default function App() {
               '--font-footer': `${project.layout.fonts?.footer || 'Inter'}, sans-serif`,
             }}
           >
-        <MapCanvas onReady={onMapReady} project={project} template={template} onFeatureClick={handleFeatureClick} onMapClick={handleMapClick} annotationToolRef={annotationToolRef} />
+        <React.Suspense fallback={null}>
+          <MapCanvas onReady={onMapReady} project={project} template={template} onFeatureClick={handleFeatureClick} onMapClick={handleMapClick} annotationToolRef={annotationToolRef} />
+        </React.Suspense>
         {mapReady && (
           <>
             <AnnotationOverlay
@@ -2965,18 +2968,19 @@ export default function App() {
           onClose={() => setShowRecentProjects(false)}
         />
       ) : null}
-      {showExportModal ? (
-        <ExportHDModal
-          format={pendingExportFormat}
-          activeRatio={activeRatio}
-          onConfirm={handleExportModalConfirm}
-          onWithWatermark={handleExportModalWithWatermark}
-          onClose={() => setShowExportModal(false)}
-        />
-      ) : null}
-      {showHelpModal && <HowToUseModal onClose={() => setShowHelpModal(false)} />}
-      {csvMappingData ? (
-        <ColumnMapperModal
+      <React.Suspense fallback={null}>
+        {showExportModal ? (
+          <ExportHDModal
+            format={pendingExportFormat}
+            activeRatio={activeRatio}
+            onConfirm={handleExportModalConfirm}
+            onWithWatermark={handleExportModalWithWatermark}
+            onClose={() => setShowExportModal(false)}
+          />
+        ) : null}
+        {showHelpModal && <HowToUseModal onClose={() => setShowHelpModal(false)} />}
+        {csvMappingData ? (
+          <ColumnMapperModal
           headers={csvMappingData.headers}
           rows={csvMappingData.rows}
           filename={csvMappingData.filename}
@@ -2991,7 +2995,8 @@ export default function App() {
           }}
           onClose={() => setCsvMappingData(null)}
         />
-      ) : null}
+        ) : null}
+      </React.Suspense>
     </div>
   );
 }

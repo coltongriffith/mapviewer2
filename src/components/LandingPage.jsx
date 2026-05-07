@@ -50,6 +50,7 @@ export default function LandingPage({ onOpenEditor, onLoadSample, recentProjects
         </div>
       </nav>
 
+      <main>
       <div className="landing-hero">
         <div className="landing-card modern">
           <div className="landing-copy">
@@ -272,6 +273,7 @@ export default function LandingPage({ onOpenEditor, onLoadSample, recentProjects
         </div>
       )}
 
+      </main>
       <footer className="landing-footer">
         <div className="landing-footer-links">
           <a href="/" className="landing-footer-link">Home</a>

@@ -1,4 +1,3 @@
-import { jsPDF } from "jspdf";
 import { renderSceneToCanvas } from "./renderScene";
 
 // Page size presets in inches [width, height]
@@ -20,6 +19,7 @@ export async function exportPDF(scene, options = {}) {
   const size = PDF_SIZES[sizeKey] || PDF_SIZES.letter_landscape;
   const orientation = size.w >= size.h ? 'landscape' : 'portrait';
 
+  const { jsPDF } = await import('jspdf');
   const pdf = new jsPDF({ orientation, unit: 'in', format: [size.w, size.h] });
   const canvas = await renderSceneToCanvas(scene, options);
   const imgData = canvas.toDataURL('image/jpeg', 0.93);
