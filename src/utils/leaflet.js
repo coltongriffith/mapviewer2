@@ -17,6 +17,12 @@ export function makeMarkerIcon(type, color, size = 14) {
     inner = `<polygon points="${h},1 ${s - 1},${s - 1} 1,${s - 1}" fill="${color}" stroke="#fff" stroke-width="1"/>`;
   } else if (type === 'cross') {
     inner = `<line x1="${h}" y1="1" x2="${h}" y2="${s - 1}" stroke="${color}" stroke-width="2"/><line x1="1" y1="${h}" x2="${s - 1}" y2="${h}" stroke="${color}" stroke-width="2"/>`;
+  } else if (type === 'triangle_down') {
+    inner = `<polygon points="${h},${s - 1} 1,1 ${s - 1},1" fill="${color}" stroke="#fff" stroke-width="1"/>`;
+  } else if (type === 'star') {
+    const r1 = h - 1; const r2 = (h - 1) * 0.45;
+    const pts = Array.from({ length: 10 }, (_, i) => { const a = (i * Math.PI) / 5 - Math.PI / 2; const r = i % 2 === 0 ? r1 : r2; return `${h + r * Math.cos(a)},${h + r * Math.sin(a)}`; }).join(' ');
+    inner = `<polygon points="${pts}" fill="${color}" stroke="#fff" stroke-width="1"/>`;
   }
 
   return L.icon({
@@ -46,6 +52,12 @@ export function markerSvgUrl(type, color, size = 16) {
     inner = `<polygon points="${h},1 ${s - 1},${s - 1} 1,${s - 1}" fill="${color}" stroke="#444" stroke-width="1"/>`;
   } else if (type === 'cross') {
     inner = `<line x1="${h}" y1="1" x2="${h}" y2="${s - 1}" stroke="${color}" stroke-width="2"/><line x1="1" y1="${h}" x2="${s - 1}" y2="${h}" stroke="${color}" stroke-width="2"/>`;
+  } else if (type === 'triangle_down') {
+    inner = `<polygon points="${h},${s - 1} 1,1 ${s - 1},1" fill="${color}" stroke="#444" stroke-width="1"/>`;
+  } else if (type === 'star') {
+    const r1 = h - 1; const r2 = (h - 1) * 0.45;
+    const pts = Array.from({ length: 10 }, (_, i) => { const a = (i * Math.PI) / 5 - Math.PI / 2; const r = i % 2 === 0 ? r1 : r2; return `${h + r * Math.cos(a)},${h + r * Math.sin(a)}`; }).join(' ');
+    inner = `<polygon points="${pts}" fill="${color}" stroke="#444" stroke-width="1"/>`;
   }
 
   return `data:image/svg+xml;base64,${btoa(

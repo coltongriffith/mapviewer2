@@ -1683,13 +1683,40 @@ export default function App() {
                 </div>
               </div>
               {isPointStyledLayer(selectedLayer) ? (
-                <div className="control-row inline-2">
-                  <div>
-                    <label>Point Size</label>
-                    <input type="range" min="6" max="24" step="1" value={selectedLayer.style?.markerSize ?? 12} onChange={(e) => updateLayer(selectedLayer.id, { style: { markerSize: Number(e.target.value) } })} />
+                <>
+                  <div className="control-row inline-2">
+                    <div>
+                      <label>Point Size</label>
+                      <input type="range" min="6" max="24" step="1" value={selectedLayer.style?.markerSize ?? 12} onChange={(e) => updateLayer(selectedLayer.id, { style: { markerSize: Number(e.target.value) } })} />
+                    </div>
+                    <div className="range-value">{selectedLayer.style?.markerSize ?? 12}px</div>
                   </div>
-                  <div className="range-value">{selectedLayer.style?.markerSize ?? 12}px</div>
-                </div>
+                  <div className="control-row">
+                    <label>Marker Shape</label>
+                    <div className="marker-shape-picker">
+                      {[
+                        ['circle', 'Circle'],
+                        ['triangle_down', 'Tri ▼'],
+                        ['triangle', 'Tri ▲'],
+                        ['square', 'Square'],
+                        ['diamond', 'Diamond'],
+                        ['cross', 'Cross'],
+                        ['drillhole', 'DH Pin'],
+                        ['star', 'Star'],
+                      ].map(([val, label]) => (
+                        <button
+                          key={val}
+                          type="button"
+                          className={`shape-btn${(selectedLayer.style?.markerShape || 'circle') === val ? ' active' : ''}`}
+                          onClick={() => updateLayer(selectedLayer.id, { style: { markerShape: val } })}
+                          title={label}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </>
               ) : (
                 <>
                   <div className="control-row inline-2">
@@ -1846,6 +1873,37 @@ export default function App() {
                             <input type="color" value={callout.badgeColor || '#d97706'} onChange={(e) => updateCallout(callout.id, { badgeColor: e.target.value })} />
                           </div>
                         </div>
+                      )}
+                      {callout.type !== 'plain' && (
+                        <>
+                          <div className="control-row inline-2">
+                            <div>
+                              <label>Background</label>
+                              <input type="color" value={callout.style?.background || '#ffffff'} onChange={(e) => updateCallout(callout.id, { style: { ...(callout.style || {}), background: e.target.value } })} />
+                            </div>
+                            <div>
+                              <label>Border / Line</label>
+                              <input type="color" value={callout.style?.border || '#102640'} onChange={(e) => updateCallout(callout.id, { style: { ...(callout.style || {}), border: e.target.value } })} />
+                            </div>
+                          </div>
+                          <div className="control-row inline-2">
+                            <div>
+                              <label>Text Color</label>
+                              <input type="color" value={callout.style?.textColor || '#0f172a'} onChange={(e) => updateCallout(callout.id, { style: { ...(callout.style || {}), textColor: e.target.value } })} />
+                            </div>
+                            <div>
+                              <label>Subtext Color</label>
+                              <input type="color" value={callout.style?.subtextColor || '#475569'} onChange={(e) => updateCallout(callout.id, { style: { ...(callout.style || {}), subtextColor: e.target.value } })} />
+                            </div>
+                          </div>
+                          <div className="control-row inline-2">
+                            <div>
+                              <label>Font Size</label>
+                              <input type="range" min="9" max="18" step="1" value={callout.style?.fontSize || 12} onChange={(e) => updateCallout(callout.id, { style: { ...(callout.style || {}), fontSize: Number(e.target.value) } })} />
+                            </div>
+                            <div className="range-value">{callout.style?.fontSize || 12}px</div>
+                          </div>
+                        </>
                       )}
                       <div className="control-label">Nudge</div>
                       <div className="nudge-grid">
