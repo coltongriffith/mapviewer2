@@ -26,6 +26,7 @@ import {
   createInitialProjectState,
   FONT_OPTIONS,
   ROLE_LABELS,
+  POINT_ROLES,
   TEMPLATE_MODES,
   TEMPLATE_THEMES,
 } from './projectState';
@@ -218,7 +219,7 @@ function applyModeToProject(project, template, mode) {
     ...project,
     layers: project.layers.map((layer) => ({
       ...layer,
-      visible: layer.userStyled ? layer.visible : (preset.visibleRoles ? (preset.visibleRoles.includes(layer.role) || layer.role === 'drillholes') : layer.visible),
+      visible: layer.userStyled ? layer.visible : (preset.visibleRoles ? (preset.visibleRoles.includes(layer.role) || POINT_ROLES.has(layer.role)) : layer.visible),
     })),
     layout: {
       ...project.layout,
@@ -357,7 +358,7 @@ function getFeatureLabel(feature, layer) {
 }
 
 function isPointStyledLayer(layer) {
-  return layer?.type === 'points' || layer?.role === 'drillholes';
+  return layer?.type === 'points' || POINT_ROLES.has(layer?.role);
 }
 
 function selectValue(options, value, fallback = 'Inter') {
@@ -870,7 +871,7 @@ export default function App() {
         if (layer.role === 'target_areas' || layer.role === 'anomalies') {
           return { ...layer, style: { ...layer.style, stroke: targetsStroke, fill: targetsFill } };
         }
-        if (layer.role === 'drillholes') {
+        if (POINT_ROLES.has(layer.role)) {
           return { ...layer, style: { ...layer.style, markerColor: drillColor, markerFill: '#ffffff' } };
         }
         return layer;
@@ -1077,7 +1078,7 @@ export default function App() {
     if (!center) return;
     addCalloutAtAnchor({
       text: selectedLayer.displayName || selectedLayer.legend?.label || selectedLayer.name,
-      type: selectedLayer.role === 'drillholes' ? 'leader' : 'boxed',
+      type: POINT_ROLES.has(selectedLayer.role) ? 'leader' : 'boxed',
       anchor: { lat: center.lat, lng: center.lng },
       layerId: selectedLayer.id,
     });

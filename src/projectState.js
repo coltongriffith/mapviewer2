@@ -1,6 +1,12 @@
 export const ROLE_LABELS = {
   claims: 'Claims',
   drillholes: 'Drillholes',
+  rock_samples: 'Rock Samples',
+  soil_samples: 'Soil Samples',
+  stream_sediments: 'Stream Sediments',
+  trench_samples: 'Trench Samples',
+  geophysics: 'Geophysics Points',
+  vegetation_samples: 'Vegetation Samples',
   target_areas: 'Target Areas',
   anomalies: 'Anomalies',
   faults_structures: 'Faults / Structures',
@@ -8,6 +14,16 @@ export const ROLE_LABELS = {
   rivers_water: 'Rivers / Water',
   labels: 'Labels',
 };
+
+export const POINT_ROLES = new Set([
+  'drillholes',
+  'rock_samples',
+  'soil_samples',
+  'stream_sediments',
+  'trench_samples',
+  'geophysics',
+  'vegetation_samples',
+]);
 
 export const TEMPLATE_MODES = {
   project_overview: 'Regional Location Map',

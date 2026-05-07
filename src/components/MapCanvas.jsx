@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { makeMarkerIcon } from '../utils/leaflet';
+import { POINT_ROLES } from '../projectState';
 import regionsNA from '../assets/regionsNA.json';
 
 const BASEMAPS = {
@@ -193,7 +194,7 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
       const baseStyle = template?.roleStyles?.[layer.role] || template?.roleStyles?.other || {};
       const style = { ...baseStyle, ...(layer.style || {}) };
       const geomType = detectGeomType(layer.geojson);
-      const isDrillholes = layer.role === 'drillholes' || layer.type === 'points';
+      const isDrillholes = POINT_ROLES.has(layer.role) || layer.type === 'points';
 
       const lo = style.layerOpacity ?? 1;
       const hasPattern = style.fillPattern && style.fillPattern !== 'none' && geomType !== 'line';
