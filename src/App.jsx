@@ -953,6 +953,18 @@ export default function App() {
     updateLayer(layerId, { visible: layer.visible === false });
   };
 
+  const removeLayer = (layerId) => {
+    setProject((prev) => ({
+      ...prev,
+      layers: prev.layers.filter((layer) => layer.id !== layerId),
+      layout: {
+        ...prev.layout,
+        primaryLayerId: prev.layout.primaryLayerId === layerId ? null : prev.layout.primaryLayerId,
+      },
+    }));
+    setSelectedLayerId((prev) => (prev === layerId ? null : prev));
+  };
+
   const changeLayerRole = (layerId, role) => {
     setProject((prev) => ({
       ...prev,
@@ -1640,7 +1652,7 @@ export default function App() {
 
         <section className="control-section cs-collapsible" ref={layersSectionRef}>
           <h2>Layers</h2>
-          <LayerList layers={project.layers} selectedLayerId={selectedLayerId} onSelect={setSelectedLayerId} onToggleVisible={toggleLayerVisible} />
+          <LayerList layers={project.layers} selectedLayerId={selectedLayerId} onSelect={setSelectedLayerId} onToggleVisible={toggleLayerVisible} onRemove={removeLayer} />
           {selectedLayer ? (
             <div className="control-grid" style={{ marginTop: 10 }}>
               <div className="control-row">
