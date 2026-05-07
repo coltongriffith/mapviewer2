@@ -70,7 +70,6 @@ export default function CalloutsOverlay({ map, callouts, selectedCalloutId, onSe
                   />
                 );
               })() : null}
-              <circle cx={callout.anchorPx.x} cy={callout.anchorPx.y} r="4" fill={style.border || '#102640'} />
             </React.Fragment>
           );
         })}

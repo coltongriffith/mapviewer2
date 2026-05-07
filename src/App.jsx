@@ -966,6 +966,31 @@ export default function App() {
     setSelectedLayerId((prev) => (prev === layerId ? null : prev));
   };
 
+  const featureKey = (feature) => {
+    if (!feature) return null;
+    return feature.id != null ? String(feature.id)
+      : feature.properties?.hole_id || feature.properties?.holeid
+      || feature.properties?.id || feature.properties?.name
+      || JSON.stringify(feature.geometry?.coordinates);
+  };
+
+  const setFeatureOverride = (layerId, key, overrides) => {
+    if (!key) return;
+    setProject((prev) => ({
+      ...prev,
+      layers: prev.layers.map((layer) => {
+        if (layer.id !== layerId) return layer;
+        return {
+          ...layer,
+          featureOverrides: {
+            ...(layer.featureOverrides || {}),
+            [key]: { ...(layer.featureOverrides?.[key] || {}), ...overrides },
+          },
+        };
+      }),
+    }));
+  };
+
   const changeLayerRole = (layerId, role) => {
     setProject((prev) => ({
       ...prev,
@@ -2878,7 +2903,37 @@ export default function App() {
                 <input type="color" value={selectedFeature.style?.textColor || '#0f172a'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, style: { ...(prev.style || {}), textColor: e.target.value } }))} />
               </div>
             </div>
-            <button className="btn primary" style={{ width: '100%' }} type="button" onClick={addCalloutFromSelectedFeature}>Add Callout</button>
+            <div className="control-row" style={{ marginTop: 6 }}>
+              <label>Marker Shape</label>
+              <div className="marker-shape-picker">
+                {(() => {
+                  const fKey = featureKey(selectedFeature.feature);
+                  const featureLayer = project.layers.find((l) => l.id === selectedFeature.layerId);
+                  const currentShape = featureLayer?.featureOverrides?.[fKey]?.markerShape ?? featureLayer?.style?.markerShape ?? 'circle';
+                  return [
+                    ['circle', 'Circle'],
+                    ['triangle_down', 'Tri ▼'],
+                    ['triangle', 'Tri ▲'],
+                    ['square', 'Square'],
+                    ['diamond', 'Diamond'],
+                    ['cross', 'Cross'],
+                    ['drillhole', 'DH Pin'],
+                    ['star', 'Star'],
+                  ].map(([val, label]) => (
+                    <button
+                      key={val}
+                      type="button"
+                      className={`shape-btn${currentShape === val ? ' active' : ''}`}
+                      onClick={() => setFeatureOverride(selectedFeature.layerId, fKey, { markerShape: val })}
+                      title={label}
+                    >
+                      {label}
+                    </button>
+                  ));
+                })()}
+              </div>
+            </div>
+            <button className="btn primary" style={{ width: '100%', marginTop: 8 }} type="button" onClick={addCalloutFromSelectedFeature}>Add Callout</button>
           </div>
         ) : null}
           </div>
