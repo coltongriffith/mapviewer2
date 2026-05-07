@@ -1,7 +1,7 @@
 import React from 'react';
 import { ROLE_LABELS } from '../projectState';
 
-export default function LayerList({ layers, selectedLayerId, onSelect, onToggleVisible }) {
+export default function LayerList({ layers, selectedLayerId, onSelect, onToggleVisible, onRemove }) {
   return (
     <div className="layer-list">
       {layers.map((layer) => (
@@ -34,6 +34,18 @@ export default function LayerList({ layers, selectedLayerId, onSelect, onToggleV
             aria-label={`${layer.displayName || layer.name || 'Layer'} visibility`}
           >
             {layer.visible === false ? 'Hidden' : 'Visible'}
+          </button>
+          <button
+            type="button"
+            className="layer-remove"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemove?.(layer.id);
+            }}
+            aria-label={`Remove ${layer.displayName || layer.name || 'Layer'}`}
+            title="Remove layer"
+          >
+            ✕
           </button>
         </div>
       ))}

@@ -26,6 +26,7 @@ import {
   createInitialProjectState,
   FONT_OPTIONS,
   ROLE_LABELS,
+  POINT_ROLES,
   TEMPLATE_MODES,
   TEMPLATE_THEMES,
 } from './projectState';
@@ -218,7 +219,7 @@ function applyModeToProject(project, template, mode) {
     ...project,
     layers: project.layers.map((layer) => ({
       ...layer,
-      visible: layer.userStyled ? layer.visible : (preset.visibleRoles ? (preset.visibleRoles.includes(layer.role) || layer.role === 'drillholes') : layer.visible),
+      visible: layer.userStyled ? layer.visible : (preset.visibleRoles ? (preset.visibleRoles.includes(layer.role) || POINT_ROLES.has(layer.role)) : layer.visible),
     })),
     layout: {
       ...project.layout,
@@ -357,7 +358,7 @@ function getFeatureLabel(feature, layer) {
 }
 
 function isPointStyledLayer(layer) {
-  return layer?.type === 'points' || layer?.role === 'drillholes';
+  return layer?.type === 'points' || POINT_ROLES.has(layer?.role);
 }
 
 function selectValue(options, value, fallback = 'Inter') {
@@ -870,7 +871,7 @@ export default function App() {
         if (layer.role === 'target_areas' || layer.role === 'anomalies') {
           return { ...layer, style: { ...layer.style, stroke: targetsStroke, fill: targetsFill } };
         }
-        if (layer.role === 'drillholes') {
+        if (POINT_ROLES.has(layer.role)) {
           return { ...layer, style: { ...layer.style, markerColor: drillColor, markerFill: '#ffffff' } };
         }
         return layer;
@@ -951,6 +952,18 @@ export default function App() {
     const layer = project.layers.find((item) => item.id === layerId);
     if (!layer) return;
     updateLayer(layerId, { visible: layer.visible === false });
+  };
+
+  const removeLayer = (layerId) => {
+    setProject((prev) => ({
+      ...prev,
+      layers: prev.layers.filter((layer) => layer.id !== layerId),
+      layout: {
+        ...prev.layout,
+        primaryLayerId: prev.layout.primaryLayerId === layerId ? null : prev.layout.primaryLayerId,
+      },
+    }));
+    setSelectedLayerId((prev) => (prev === layerId ? null : prev));
   };
 
   const changeLayerRole = (layerId, role) => {
@@ -1065,7 +1078,7 @@ export default function App() {
     if (!center) return;
     addCalloutAtAnchor({
       text: selectedLayer.displayName || selectedLayer.legend?.label || selectedLayer.name,
-      type: selectedLayer.role === 'drillholes' ? 'leader' : 'boxed',
+      type: POINT_ROLES.has(selectedLayer.role) ? 'leader' : 'boxed',
       anchor: { lat: center.lat, lng: center.lng },
       layerId: selectedLayer.id,
     });
@@ -1640,7 +1653,7 @@ export default function App() {
 
         <section className="control-section cs-collapsible" ref={layersSectionRef}>
           <h2>Layers</h2>
-          <LayerList layers={project.layers} selectedLayerId={selectedLayerId} onSelect={setSelectedLayerId} onToggleVisible={toggleLayerVisible} />
+          <LayerList layers={project.layers} selectedLayerId={selectedLayerId} onSelect={setSelectedLayerId} onToggleVisible={toggleLayerVisible} onRemove={removeLayer} />
           {selectedLayer ? (
             <div className="control-grid" style={{ marginTop: 10 }}>
               <div className="control-row">
@@ -1671,13 +1684,40 @@ export default function App() {
                 </div>
               </div>
               {isPointStyledLayer(selectedLayer) ? (
-                <div className="control-row inline-2">
-                  <div>
-                    <label>Point Size</label>
-                    <input type="range" min="6" max="24" step="1" value={selectedLayer.style?.markerSize ?? 12} onChange={(e) => updateLayer(selectedLayer.id, { style: { markerSize: Number(e.target.value) } })} />
+                <>
+                  <div className="control-row inline-2">
+                    <div>
+                      <label>Point Size</label>
+                      <input type="range" min="6" max="24" step="1" value={selectedLayer.style?.markerSize ?? 12} onChange={(e) => updateLayer(selectedLayer.id, { style: { markerSize: Number(e.target.value) } })} />
+                    </div>
+                    <div className="range-value">{selectedLayer.style?.markerSize ?? 12}px</div>
                   </div>
-                  <div className="range-value">{selectedLayer.style?.markerSize ?? 12}px</div>
-                </div>
+                  <div className="control-row">
+                    <label>Marker Shape</label>
+                    <div className="marker-shape-picker">
+                      {[
+                        ['circle', 'Circle'],
+                        ['triangle_down', 'Tri ▼'],
+                        ['triangle', 'Tri ▲'],
+                        ['square', 'Square'],
+                        ['diamond', 'Diamond'],
+                        ['cross', 'Cross'],
+                        ['drillhole', 'DH Pin'],
+                        ['star', 'Star'],
+                      ].map(([val, label]) => (
+                        <button
+                          key={val}
+                          type="button"
+                          className={`shape-btn${(selectedLayer.style?.markerShape || 'circle') === val ? ' active' : ''}`}
+                          onClick={() => updateLayer(selectedLayer.id, { style: { markerShape: val } })}
+                          title={label}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </>
               ) : (
                 <>
                   <div className="control-row inline-2">
@@ -1834,6 +1874,37 @@ export default function App() {
                             <input type="color" value={callout.badgeColor || '#d97706'} onChange={(e) => updateCallout(callout.id, { badgeColor: e.target.value })} />
                           </div>
                         </div>
+                      )}
+                      {callout.type !== 'plain' && (
+                        <>
+                          <div className="control-row inline-2">
+                            <div>
+                              <label>Background</label>
+                              <input type="color" value={callout.style?.background || '#ffffff'} onChange={(e) => updateCallout(callout.id, { style: { ...(callout.style || {}), background: e.target.value } })} />
+                            </div>
+                            <div>
+                              <label>Border / Line</label>
+                              <input type="color" value={callout.style?.border || '#102640'} onChange={(e) => updateCallout(callout.id, { style: { ...(callout.style || {}), border: e.target.value } })} />
+                            </div>
+                          </div>
+                          <div className="control-row inline-2">
+                            <div>
+                              <label>Text Color</label>
+                              <input type="color" value={callout.style?.textColor || '#0f172a'} onChange={(e) => updateCallout(callout.id, { style: { ...(callout.style || {}), textColor: e.target.value } })} />
+                            </div>
+                            <div>
+                              <label>Subtext Color</label>
+                              <input type="color" value={callout.style?.subtextColor || '#475569'} onChange={(e) => updateCallout(callout.id, { style: { ...(callout.style || {}), subtextColor: e.target.value } })} />
+                            </div>
+                          </div>
+                          <div className="control-row inline-2">
+                            <div>
+                              <label>Font Size</label>
+                              <input type="range" min="9" max="18" step="1" value={callout.style?.fontSize || 12} onChange={(e) => updateCallout(callout.id, { style: { ...(callout.style || {}), fontSize: Number(e.target.value) } })} />
+                            </div>
+                            <div className="range-value">{callout.style?.fontSize || 12}px</div>
+                          </div>
+                        </>
                       )}
                       <div className="control-label">Nudge</div>
                       <div className="nudge-grid">
