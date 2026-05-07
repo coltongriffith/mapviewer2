@@ -53,6 +53,18 @@ function getTemplateStyle(template, layer) {
   const base = template?.roleStyles?.[layer?.role] || template?.roleStyles?.other || {};
   return { ...base, ...(layer?.style || {}) };
 }
+function featureKeyExport(feature) {
+  if (!feature) return null;
+  if (feature.id != null) return String(feature.id);
+  const p = feature.properties || {};
+  return p.hole_id || p.holeid || p.id || p.name || JSON.stringify(feature.geometry?.coordinates);
+}
+function getFeatureStyle(template, layer, feature) {
+  const base = getTemplateStyle(template, layer);
+  const key = featureKeyExport(feature);
+  const override = key ? (layer.featureOverrides?.[key] || {}) : {};
+  return { ...base, ...override };
+}
 function projectCoordinate(map, coord, scale) { return clonePoint(map.latLngToContainerPoint(toLatLng(coord)), scale); }
 function projectRing(map, ring, scale) { return ring.map((coord) => projectCoordinate(map, coord, scale)).filter(isFinitePoint); }
 function projectLine(map, coords, scale) { return coords.map((coord) => projectCoordinate(map, coord, scale)).filter(isFinitePoint); }
@@ -155,6 +167,41 @@ function setCanvasFill(ctx, style) {
     ctx.fillStyle = rgba(style.fill || style.markerFill || style.markerColor || '#111111', style.fillOpacity ?? 0.2);
   }
 }
+function drawCanvasMarkerShape(ctx, shape, cx, cy, r) {
+  ctx.beginPath();
+  if (shape === 'triangle_down') {
+    ctx.moveTo(cx - r, cy - r); ctx.lineTo(cx + r, cy - r); ctx.lineTo(cx, cy + r); ctx.closePath();
+  } else if (shape === 'triangle') {
+    ctx.moveTo(cx, cy - r); ctx.lineTo(cx + r, cy + r); ctx.lineTo(cx - r, cy + r); ctx.closePath();
+  } else if (shape === 'square') {
+    ctx.rect(cx - r, cy - r, r * 2, r * 2);
+  } else if (shape === 'diamond') {
+    ctx.moveTo(cx, cy - r); ctx.lineTo(cx + r, cy); ctx.lineTo(cx, cy + r); ctx.lineTo(cx - r, cy); ctx.closePath();
+  } else if (shape === 'star') {
+    const r2 = r * 0.45;
+    for (let i = 0; i < 10; i++) { const a = (i * Math.PI) / 5 - Math.PI / 2; const ri = i % 2 === 0 ? r : r2; if (i === 0) ctx.moveTo(cx + ri * Math.cos(a), cy + ri * Math.sin(a)); else ctx.lineTo(cx + ri * Math.cos(a), cy + ri * Math.sin(a)); }
+    ctx.closePath();
+  } else if (shape === 'cross') {
+    ctx.moveTo(cx, cy - r); ctx.lineTo(cx, cy + r); ctx.moveTo(cx - r, cy); ctx.lineTo(cx + r, cy);
+  } else if (shape === 'drillhole') {
+    ctx.moveTo(cx, cy - r); ctx.lineTo(cx + r, cy + r * 0.5); ctx.lineTo(cx - r, cy + r * 0.5); ctx.closePath();
+    ctx.moveTo(cx, cy + r * 0.5); ctx.lineTo(cx, cy + r);
+  } else {
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  }
+}
+function svgMarkerShape(shape, cx, cy, r, fill, stroke, sw, opacity) {
+  const op = ` opacity="${opacity}"`;
+  const sf = ` fill="${fill}" stroke="${stroke}" stroke-width="${sw}"`;
+  if (shape === 'triangle_down') return `<polygon points="${cx - r},${cy - r} ${cx + r},${cy - r} ${cx},${cy + r}"${sf}${op} />`;
+  if (shape === 'triangle') return `<polygon points="${cx},${cy - r} ${cx + r},${cy + r} ${cx - r},${cy + r}"${sf}${op} />`;
+  if (shape === 'square') return `<rect x="${cx - r}" y="${cy - r}" width="${r * 2}" height="${r * 2}"${sf}${op} />`;
+  if (shape === 'diamond') return `<polygon points="${cx},${cy - r} ${cx + r},${cy} ${cx},${cy + r} ${cx - r},${cy}"${sf}${op} />`;
+  if (shape === 'star') { const r2 = r * 0.45; const pts = Array.from({ length: 10 }, (_, i) => { const a = (i * Math.PI) / 5 - Math.PI / 2; const ri = i % 2 === 0 ? r : r2; return `${(cx + ri * Math.cos(a)).toFixed(2)},${(cy + ri * Math.sin(a)).toFixed(2)}`; }).join(' '); return `<polygon points="${pts}"${sf}${op} />`; }
+  if (shape === 'cross') return `<line x1="${cx}" y1="${cy - r}" x2="${cx}" y2="${cy + r}" stroke="${stroke}" stroke-width="${sw}"${op} /><line x1="${cx - r}" y1="${cy}" x2="${cx + r}" y2="${cy}" stroke="${stroke}" stroke-width="${sw}"${op} />`;
+  if (shape === 'drillhole') return `<polygon points="${cx},${cy - r} ${cx + r},${cy + r * 0.5} ${cx - r},${cy + r * 0.5}"${sf}${op} /><line x1="${cx}" y1="${cy + r * 0.5}" x2="${cx}" y2="${cy + r}" stroke="${stroke}" stroke-width="${sw}"${op} />`;
+  return `<circle cx="${cx.toFixed(2)}" cy="${cy.toFixed(2)}" r="${r.toFixed(2)}"${sf}${op} />`;
+}
 function drawCanvasGeometry(ctx, map, feature, style, scale) {
   const type = getLayerGeometryType(feature); const coords = feature?.geometry?.coordinates; if (!coords) return;
   const baseOpacity = Math.max(0, Math.min(1, style.opacity ?? 1));
@@ -164,7 +211,7 @@ function drawCanvasGeometry(ctx, map, feature, style, scale) {
   if (type === 'MultiPolygon') { ctx.beginPath(); coords.forEach((polygon) => polygon.forEach((ring) => drawCanvasPath(ctx, projectRing(map, ring, scale), true))); setCanvasFill(ctx, style); ctx.fill('evenodd'); setCanvasStroke(ctx, style, scale); ctx.stroke(); ctx.restore(); return; }
   if (type === 'LineString') { ctx.beginPath(); drawCanvasPath(ctx, projectLine(map, coords, scale), false); setCanvasStroke(ctx, style, scale); ctx.stroke(); ctx.restore(); return; }
   if (type === 'MultiLineString') { ctx.beginPath(); coords.forEach((line) => drawCanvasPath(ctx, projectLine(map, line, scale), false)); setCanvasStroke(ctx, style, scale); ctx.stroke(); ctx.restore(); return; }
-  if (type === 'Point') { const pt = projectCoordinate(map, coords, scale); const radius = (style.markerSize ?? 8) * scale * 0.5; ctx.beginPath(); ctx.arc(pt.x, pt.y, radius, 0, Math.PI * 2); ctx.fillStyle = style.markerFill || style.markerColor || '#ffffff'; ctx.fill(); ctx.lineWidth = (style.strokeWidth ?? 1.5) * scale; ctx.strokeStyle = style.markerColor || style.stroke || '#111111'; ctx.stroke(); ctx.restore(); return; }
+  if (type === 'Point') { const pt = projectCoordinate(map, coords, scale); const radius = (style.markerSize ?? 8) * scale * 0.5; const shape = style.markerShape || 'circle'; drawCanvasMarkerShape(ctx, shape, pt.x, pt.y, radius); ctx.fillStyle = style.markerFill || style.markerColor || '#ffffff'; ctx.fill(); ctx.lineWidth = (style.strokeWidth ?? 1.5) * scale; ctx.strokeStyle = style.markerColor || style.stroke || '#111111'; ctx.stroke(); ctx.restore(); return; }
   if (type === 'MultiPoint') { coords.forEach((coord) => drawCanvasGeometry(ctx, map, { geometry: { type: 'Point', coordinates: coord } }, style, scale)); ctx.restore(); return; }
   ctx.restore();
 }
@@ -205,7 +252,7 @@ function geometryToSvg(map, feature, style, scale) {
   if (type === 'MultiPolygon') return `${patternDef}<path d="${coords.flatMap((polygon) => polygon.map((ring) => pathFromPoints(projectRing(map, ring, scale), true))).filter(Boolean).join(' ')}" ${fillAttr} stroke="${stroke}" stroke-width="${strokeWidth}"${dash} fill-rule="evenodd" stroke-opacity="${opacity}" />`;
   if (type === 'LineString') return `<path d="${pathFromPoints(projectLine(map, coords, scale), false)}" fill="none" stroke="${stroke}" stroke-width="${strokeWidth}"${dash} stroke-linecap="round" stroke-linejoin="round" stroke-opacity="${opacity}" />`;
   if (type === 'MultiLineString') return `<path d="${coords.map((line) => pathFromPoints(projectLine(map, line, scale), false)).filter(Boolean).join(' ')}" fill="none" stroke="${stroke}" stroke-width="${strokeWidth}"${dash} stroke-linecap="round" stroke-linejoin="round" stroke-opacity="${opacity}" />`;
-  if (type === 'Point') { const pt = projectCoordinate(map, coords, scale); const radius = (style.markerSize ?? 8) * scale * 0.5; return `<circle cx="${pt.x.toFixed(2)}" cy="${pt.y.toFixed(2)}" r="${radius.toFixed(2)}" fill="${safeColor(style.markerFill || fill)}" stroke="${safeColor(style.markerColor || stroke)}" stroke-width="${Math.max(scale, strokeWidth * 0.4).toFixed(2)}" opacity="${opacity}" />`; }
+  if (type === 'Point') { const pt = projectCoordinate(map, coords, scale); const radius = (style.markerSize ?? 8) * scale * 0.5; const shape = style.markerShape || 'circle'; return svgMarkerShape(shape, pt.x, pt.y, radius, safeColor(style.markerFill || fill), safeColor(style.markerColor || stroke), Math.max(scale, strokeWidth * 0.4).toFixed(2), opacity); }
   if (type === 'MultiPoint') return coords.map((coord) => geometryToSvg(map, { geometry: { type: 'Point', coordinates: coord } }, style, scale)).join('');
   return '';
 }
@@ -944,7 +991,7 @@ function drawVectorsCanvas(ctx, scene, scale) {
   (scene.project.layers || []).filter((layer) => layer.visible !== false && layer.geojson).forEach((layer) => {
     const lo = layer.style?.layerOpacity ?? 1;
     ctx.save(); ctx.globalAlpha = lo;
-    featureCollectionFeatures(layer.geojson).forEach((feature) => drawCanvasGeometry(ctx, scene.map, feature, getTemplateStyle(scene.template, layer), scale));
+    featureCollectionFeatures(layer.geojson).forEach((feature) => drawCanvasGeometry(ctx, scene.map, feature, getFeatureStyle(scene.template, layer, feature), scale));
     ctx.restore();
   });
 }
@@ -1025,7 +1072,7 @@ function renderRegionHighlightsSvg(scene, scale) {
 function renderVectorsSvg(scene, scale) {
   return (scene.project.layers || []).filter((layer) => layer.visible !== false && layer.geojson).map((layer) => {
     const lo = layer.style?.layerOpacity ?? 1;
-    const paths = featureCollectionFeatures(layer.geojson).map((feature) => geometryToSvg(scene.map, feature, getTemplateStyle(scene.template, layer), scale)).join('\n');
+    const paths = featureCollectionFeatures(layer.geojson).map((feature) => geometryToSvg(scene.map, feature, getFeatureStyle(scene.template, layer, feature), scale)).join('\n');
     return lo < 1 ? `<g opacity="${lo}">${paths}</g>` : paths;
   }).join('\n');
 }
