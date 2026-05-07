@@ -15,5 +15,18 @@ export default defineConfig({
   ],
   build: {
     sourcemap: false,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules/leaflet')) return 'vendor-leaflet';
+          if (id.includes('node_modules/jspdf') || id.includes('node_modules/fflate')) return 'vendor-export';
+          if (id.includes('node_modules/jszip')) return 'vendor-export';
+          if (id.includes('node_modules/@supabase')) return 'vendor-supabase';
+          if (id.includes('node_modules/shpjs')) return 'vendor-geo';
+          if (id.includes('node_modules/react-dom')) return 'vendor-react';
+          if (id.includes('node_modules/react/')) return 'vendor-react';
+        },
+      },
+    },
   },
 });

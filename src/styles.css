@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Lato:wght@400;700&family=Montserrat:wght@500;600;700&family=Open+Sans:wght@400;600;700&family=Roboto:wght@400;500;700&display=swap');
+/* Google Fonts loaded non-blocking via <link> in index.html */
 
 :root {
   font-family: Inter, Arial, Helvetica, sans-serif;
@@ -420,7 +420,7 @@ button, input, select, textarea { font: inherit; }
 .mock-inset { position: absolute; top: 14px; right: 14px; width: 112px; height: 88px; border-radius: 14px; border: 1px solid #dbe4ee; background: linear-gradient(180deg, #ffffff 0%, #f5f9ff 100%); }
 .landing-mini-grid { grid-template-columns: repeat(3, 1fr); }
 .landing-mini-card { border: 1px solid #dbe4ee; background: #ffffff; border-radius: 16px; padding: 14px; min-height: 96px; }
-.mini-title { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: #6c7b90; font-weight: 700; margin-bottom: 10px; }
+.mini-title { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: #475569; font-weight: 700; margin-bottom: 10px; }
 .mini-line { height: 10px; border-radius: 999px; background: #e5edf7; margin-bottom: 8px; }
 .mini-line.short { width: 60%; }
 .mini-color-row { display: flex; gap: 8px; }

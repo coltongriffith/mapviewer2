@@ -1,6 +1,4 @@
-import shp from "shpjs";
 import * as toGeoJSON from "@tmcw/togeojson";
-import JSZip from "jszip";
 
 const MAX_UPLOAD_SIZE = 50 * 1024 * 1024; // 50 MB
 
@@ -24,6 +22,7 @@ export async function loadGeoJSON(file) {
 
   if (name.endsWith(".zip")) {
     const buffer = await file.arrayBuffer();
+    const { default: shp } = await import('shpjs');
     const result = await shp(buffer);
     if (Array.isArray(result)) {
       return {
@@ -53,6 +52,7 @@ export async function loadGeoJSON(file) {
     const buffer = await file.arrayBuffer();
     let zip;
     try {
+      const { default: JSZip } = await import('jszip');
       zip = await JSZip.loadAsync(buffer);
     } catch {
       throw new Error("Could not open KMZ file — it may be corrupt.");
