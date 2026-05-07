@@ -23,30 +23,32 @@ export default function LayerList({ layers, selectedLayerId, onSelect, onToggleV
             <div className="layer-role">{ROLE_LABELS[layer.role] || 'Layer'}</div>
             {layer.sourceName ? <div className="layer-source">{layer.sourceName}</div> : null}
           </div>
-          <button
-            type="button"
-            className={`layer-visibility ${layer.visible === false ? 'off' : 'on'}`}
-            onClick={(e) => {
-              e.stopPropagation();
-              onToggleVisible?.(layer.id);
-            }}
-            aria-pressed={layer.visible !== false}
-            aria-label={`${layer.displayName || layer.name || 'Layer'} visibility`}
-          >
-            {layer.visible === false ? 'Hidden' : 'Visible'}
-          </button>
-          <button
-            type="button"
-            className="layer-remove"
-            onClick={(e) => {
-              e.stopPropagation();
-              onRemove?.(layer.id);
-            }}
-            aria-label={`Remove ${layer.displayName || layer.name || 'Layer'}`}
-            title="Remove layer"
-          >
-            ✕
-          </button>
+          <div className="layer-item-actions">
+            <button
+              type="button"
+              className={`layer-visibility ${layer.visible === false ? 'off' : 'on'}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleVisible?.(layer.id);
+              }}
+              aria-pressed={layer.visible !== false}
+              aria-label={`${layer.displayName || layer.name || 'Layer'} visibility`}
+            >
+              {layer.visible === false ? 'Hidden' : 'Visible'}
+            </button>
+            <button
+              type="button"
+              className="layer-remove"
+              onClick={(e) => {
+                e.stopPropagation();
+                onRemove?.(layer.id);
+              }}
+              aria-label={`Remove ${layer.displayName || layer.name || 'Layer'}`}
+              title="Remove layer"
+            >
+              ✕
+            </button>
+          </div>
         </div>
       ))}
     </div>

@@ -2878,7 +2878,35 @@ export default function App() {
                 <input type="color" value={selectedFeature.style?.textColor || '#0f172a'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, style: { ...(prev.style || {}), textColor: e.target.value } }))} />
               </div>
             </div>
-            <button className="btn primary" style={{ width: '100%' }} type="button" onClick={addCalloutFromSelectedFeature}>Add Callout</button>
+            <div className="control-row" style={{ marginTop: 6 }}>
+              <label>Marker Shape</label>
+              <div className="marker-shape-picker">
+                {[
+                  ['circle', 'Circle'],
+                  ['triangle_down', 'Tri ▼'],
+                  ['triangle', 'Tri ▲'],
+                  ['square', 'Square'],
+                  ['diamond', 'Diamond'],
+                  ['cross', 'Cross'],
+                  ['drillhole', 'DH Pin'],
+                  ['star', 'Star'],
+                ].map(([val, label]) => {
+                  const layerShape = project.layers.find((l) => l.id === selectedFeature.layerId)?.style?.markerShape || 'circle';
+                  return (
+                    <button
+                      key={val}
+                      type="button"
+                      className={`shape-btn${layerShape === val ? ' active' : ''}`}
+                      onClick={() => updateLayer(selectedFeature.layerId, { style: { markerShape: val } })}
+                      title={label}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <button className="btn primary" style={{ width: '100%', marginTop: 8 }} type="button" onClick={addCalloutFromSelectedFeature}>Add Callout</button>
           </div>
         ) : null}
           </div>
