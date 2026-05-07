@@ -350,7 +350,15 @@ function groupLegendItems(items, layout) {
 
 function legendSwatchSvg(item, x, y, scale) {
   const style = item.style || {};
-  if (item.type === 'points') return `<circle cx="${(x + 8 * scale).toFixed(2)}" cy="${(y + 8 * scale).toFixed(2)}" r="${(5 * scale).toFixed(2)}" fill="${style.markerFill || style.markerColor || '#ffffff'}" stroke="${style.markerColor || '#111111'}" stroke-width="${Math.max(1, scale).toFixed(2)}" />`;
+  if (item.type === 'points') {
+    const shape = item.markerShape || style.markerShape || 'circle';
+    const cx = x + 8 * scale; const cy = y + 8 * scale; const r = 5 * scale;
+    const fill = safeColor(style.markerFill || style.markerColor, '#ffffff');
+    const stroke = safeColor(style.markerColor, '#111111');
+    const sw = Math.max(1, scale).toFixed(2);
+    return svgMarkerShape(shape, cx, cy, r, fill, stroke, sw, 1);
+  }
+  if (item.type === 'line') return `<line x1="${x.toFixed(2)}" y1="${(y + 8 * scale).toFixed(2)}" x2="${(x + 18 * scale).toFixed(2)}" y2="${(y + 8 * scale).toFixed(2)}" stroke="${style.stroke || '#3b82f6'}" stroke-width="${Math.max(scale, (style.strokeWidth ?? 2) * 0.6).toFixed(2)}" stroke-dasharray="${style.dashArray || ''}" />`;
   return `<rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${(18 * scale).toFixed(2)}" height="${(12 * scale).toFixed(2)}" fill="${style.fill || '#72a0ff'}" fill-opacity="${style.fillOpacity ?? 0.22}" stroke="${style.stroke || '#3b82f6'}" stroke-width="${Math.max(1, scale).toFixed(2)}" />`;
 }
 function drawLegendCanvas(ctx, scene, scale) {
@@ -368,7 +376,16 @@ function drawLegendCanvas(ctx, scene, scale) {
     if (group.heading) { ctx.fillStyle = theme.mutedText; ctx.font = `700 ${11 * scale}px ${legendFont}`; ctx.fillText(group.heading.toUpperCase(), x + lp, rowY); rowY += 18 * scale; }
     group.items.forEach((item) => {
       if (item.type === 'points') {
-        ctx.beginPath(); ctx.arc(x + lp + 8 * scale, rowY + 9 * scale, 5 * scale, 0, Math.PI * 2); ctx.fillStyle = item.style.markerFill || item.style.markerColor || '#ffffff'; ctx.fill(); ctx.strokeStyle = item.style.markerColor || '#111111'; ctx.lineWidth = Math.max(1, scale); ctx.stroke();
+        const shape = item.markerShape || item.style?.markerShape || 'circle';
+        const cx = x + lp + 8 * scale; const cy = rowY + 9 * scale; const r = 5 * scale;
+        ctx.save();
+        drawCanvasMarkerShape(ctx, shape, cx, cy, r);
+        ctx.fillStyle = item.style.markerFill || item.style.markerColor || '#ffffff';
+        ctx.fill();
+        ctx.strokeStyle = item.style.markerColor || '#111111';
+        ctx.lineWidth = Math.max(1, scale);
+        ctx.stroke();
+        ctx.restore();
       } else {
         ctx.fillStyle = rgba(item.style.fill || '#93c5fd', item.style.fillOpacity ?? 0.22); ctx.fillRect(x + lp, rowY + 2 * scale, 18 * scale, 12 * scale); ctx.strokeStyle = item.style.stroke || '#3b82f6'; ctx.lineWidth = Math.max(1, scale); ctx.strokeRect(x + lp, rowY + 2 * scale, 18 * scale, 12 * scale);
       }

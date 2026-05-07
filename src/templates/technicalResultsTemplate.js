@@ -1,4 +1,4 @@
-import { ROLE_LABELS } from '../projectState';
+import { ROLE_LABELS, POINT_ROLES } from '../projectState';
 
 const BASE_ZONES = {
   title: { top: 22, left: 22, width: 520, height: 92 },
@@ -226,6 +226,21 @@ function buildOverlayLegendItems(layout) {
   return items;
 }
 
+const SHAPE_DISPLAY = {
+  circle: 'Circle', triangle_down: 'Tri ▼', triangle: 'Tri ▲',
+  square: 'Square', diamond: 'Diamond', cross: 'Cross',
+  drillhole: 'DH Pin', star: 'Star',
+};
+
+function distinctShapesForLayer(layer) {
+  const def = layer.style?.markerShape || 'circle';
+  const seen = new Set([def]);
+  for (const ov of Object.values(layer.featureOverrides || {})) {
+    if (ov.markerShape) seen.add(ov.markerShape);
+  }
+  return [...seen];
+}
+
 export function buildLegendItems(template, layers, layout = {}) {
   const visible = layers.filter((layer) => layer.visible !== false && layer.legend?.enabled !== false);
   const byRole = new Map((template.roleOrder || []).map((role, idx) => [role, idx]));
@@ -233,17 +248,37 @@ export function buildLegendItems(template, layers, layout = {}) {
   const layerItems = visible
     .slice()
     .sort((a, b) => (byRole.get(a.role) ?? 999) - (byRole.get(b.role) ?? 999))
-    .map((layer) => ({
-      id: layer.id,
-      role: layer.role,
-      group: template.roleGroups?.[layer.role] || 'Map Data',
-      label: layer.displayName || layer.legend?.label || layer.name || ROLE_LABELS[layer.role] || 'Layer',
-      type: layer.type,
-      style: {
+    .flatMap((layer) => {
+      const baseStyle = {
         ...(template.roleStyles?.[layer.role] || template.roleStyles?.other || {}),
         ...(layer.style || {}),
-      },
-    }));
+      };
+      const baseLabel = layer.displayName || layer.legend?.label || layer.name || ROLE_LABELS[layer.role] || 'Layer';
+      const isPoint = POINT_ROLES.has(layer.role) || layer.type === 'points';
+
+      if (isPoint) {
+        const shapes = distinctShapesForLayer(layer);
+        return shapes.map((shape) => ({
+          id: shapes.length === 1 ? layer.id : `${layer.id}::${shape}`,
+          role: layer.role,
+          group: template.roleGroups?.[layer.role] || 'Map Data',
+          label: layer.legend?.shapeLabels?.[shape]
+            || (shapes.length === 1 ? baseLabel : `${baseLabel} (${SHAPE_DISPLAY[shape] || shape})`),
+          type: 'points',
+          markerShape: shape,
+          style: { ...baseStyle, markerShape: shape },
+        }));
+      }
+
+      return [{
+        id: layer.id,
+        role: layer.role,
+        group: template.roleGroups?.[layer.role] || 'Map Data',
+        label: baseLabel,
+        type: layer.type,
+        style: baseStyle,
+      }];
+    });
 
   return [...layerItems, ...buildOverlayLegendItems(layout)];
 }

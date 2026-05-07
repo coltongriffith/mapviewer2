@@ -266,6 +266,25 @@ function LegendLabelEditable({ label, onSave }) {
   );
 }
 
+function LegendPointSwatch({ style }) {
+  const shape = style?.markerShape || 'circle';
+  const fill = style?.markerFill || style?.markerColor || '#ffffff';
+  const stroke = style?.markerColor || '#111111';
+  const sw = 1.5;
+  let inner;
+  if (shape === 'triangle_down') inner = <polygon points="6,11 1,1 11,1" fill={fill} stroke={stroke} strokeWidth={sw} />;
+  else if (shape === 'triangle') inner = <polygon points="6,1 11,11 1,11" fill={fill} stroke={stroke} strokeWidth={sw} />;
+  else if (shape === 'square') inner = <rect x="1" y="1" width="10" height="10" fill={fill} stroke={stroke} strokeWidth={sw} />;
+  else if (shape === 'diamond') inner = <polygon points="6,1 11,6 6,11 1,6" fill={fill} stroke={stroke} strokeWidth={sw} />;
+  else if (shape === 'cross') inner = <><line x1="6" y1="1" x2="6" y2="11" stroke={stroke} strokeWidth={2} /><line x1="1" y1="6" x2="11" y2="6" stroke={stroke} strokeWidth={2} /></>;
+  else if (shape === 'drillhole') inner = <><polygon points="6,1 11,7 1,7" fill={fill} stroke={stroke} strokeWidth={sw} /><line x1="6" y1="7" x2="6" y2="11" stroke={stroke} strokeWidth={sw} /></>;
+  else if (shape === 'star') {
+    const pts = Array.from({ length: 10 }, (_, i) => { const a = (i * Math.PI) / 5 - Math.PI / 2; const r = i % 2 === 0 ? 5 : 2.2; return `${(6 + r * Math.cos(a)).toFixed(2)},${(6 + r * Math.sin(a)).toFixed(2)}`; }).join(' ');
+    inner = <polygon points={pts} fill={fill} stroke={stroke} strokeWidth={sw} />;
+  } else inner = <circle cx="6" cy="6" r="5" fill={fill} stroke={stroke} strokeWidth={sw} />;
+  return <svg width="14" height="14" viewBox="0 0 12 12" style={{ flexShrink: 0, overflow: 'visible' }} aria-hidden="true">{inner}</svg>;
+}
+
 function ProjectNameInput({ initialValue, onSave, onCancel }) {
   const [value, setValue] = useState(initialValue);
   return (
@@ -1007,8 +1026,21 @@ export default function App() {
   };
 
 
-  const setDisplayLabel = (layerId, value) => {
-    updateLayer(layerId, { displayName: value, legend: { label: value } });
+  const setDisplayLabel = (itemId, value) => {
+    if (itemId.includes('::')) {
+      const sep = itemId.lastIndexOf('::');
+      const layerId = itemId.slice(0, sep);
+      const shape = itemId.slice(sep + 2);
+      setProject((prev) => ({
+        ...prev,
+        layers: prev.layers.map((layer) => layer.id !== layerId ? layer : {
+          ...layer,
+          legend: { ...(layer.legend || {}), shapeLabels: { ...(layer.legend?.shapeLabels || {}), [shape]: value } },
+        }),
+      }));
+      return;
+    }
+    updateLayer(itemId, { displayName: value, legend: { label: value } });
   };
 
   const setFramingLayer = (layerId) => {
@@ -2746,10 +2778,10 @@ export default function App() {
                       <div
                         key={item.id}
                         className="legend-item legend-item-clickable"
-                        onClick={() => { setSelectedLayerId(item.id); }}
+                        onClick={() => { const lid = item.id.includes('::') ? item.id.slice(0, item.id.lastIndexOf('::')) : item.id; setSelectedLayerId(lid); }}
                       >
                         {item.type === 'points' ? (
-                          <span className="legend-point" style={{ borderColor: item.style.markerColor || '#111', background: item.style.markerFill || '#fff' }} />
+                          <LegendPointSwatch style={item.style} />
                         ) : item.type === 'line' ? (
                           <svg className="legend-line-svg" width="22" height="12" aria-hidden="true" style={{ flexShrink: 0 }}>
                             <line x1="0" y1="6" x2="22" y2="6"
