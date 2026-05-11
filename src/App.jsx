@@ -34,6 +34,7 @@ import { EXPORT_RATIOS } from './constants';
 import { applyRoleToLayer, inferRoleFromLayer } from './mapPresets';
 import { getTemplate } from './templates';
 import { buildLegendItems, resolveTemplateZones } from './templates/technicalResultsTemplate';
+import { resolveNI43101Zones } from './templates/technicalReportTemplate';
 import { geojsonBounds, geojsonCenter, unionBounds } from './utils/geometry';
 import { detectRegion } from './utils/detectRegion';
 import { cleanLayerName } from './utils/cleanLayerName';
@@ -467,7 +468,12 @@ export default function App() {
   const selectedPolygon = useMemo(() => project.polygons?.find((poly) => poly.id === selectedPolygonId) || null, [project.polygons, selectedPolygonId]);
   const legendItems = useMemo(() => buildLegendItems(template, project.layers, project.layout), [template, project.layers, project.layout]);
   const legendGroups = useMemo(() => renderLegendGroups(legendItems, project.layout), [legendItems, project.layout]);
-  const resolvedZones = useMemo(() => resolveTemplateZones(template, project.layout, mapSize, legendItems), [template, project.layout, mapSize, legendItems]);
+  const resolvedZones = useMemo(() => {
+    if (project.layout?.templateId === 'ni_43101_technical') {
+      return resolveNI43101Zones(template, project.layout, mapSize);
+    }
+    return resolveTemplateZones(template, project.layout, mapSize, legendItems);
+  }, [template, project.layout, mapSize, legendItems]);
   // Keep a ref so the framing effect can read the current zones without them being a reactive trigger
   const resolvedZonesRef = useRef(resolvedZones);
   useEffect(() => { resolvedZonesRef.current = resolvedZones; }, [resolvedZones]);
@@ -2728,7 +2734,62 @@ export default function App() {
           polygons={project.polygons || []}
         />
 
-        <div className="template-zone" style={zoneStyle(resolvedZones.title)}>
+        {project.layout.templateId === 'ni_43101_technical' && (() => {
+          const STRIP_H = 72, TICK_M = 28;
+          const stripPos = project.layout.titleStripPosition || 'bottom';
+          const stageH = mapSize?.height || 600;
+          const stageW = mapSize?.width || 1000;
+          const stripY = stripPos === 'bottom' ? stageH - STRIP_H : 0;
+          const mapTop = TICK_M + (stripPos === 'top' ? STRIP_H : 0);
+          const mapBottom = stageH - TICK_M - (stripPos === 'bottom' ? STRIP_H : 0);
+          const mapLeft = TICK_M;
+          const mapRight = stageW - TICK_M;
+          const monoFont = "'Courier New', Courier, monospace";
+          const cell1 = Math.round(stageW * 0.45);
+          const cell2 = Math.round(stageW * 0.65);
+          const cell3 = Math.round(stageW * 0.85);
+          return (
+            <>
+              {/* Tick margin overlays */}
+              <div style={{ position: 'absolute', top: mapTop, left: 0, width: mapLeft, height: mapBottom - mapTop, background: '#fff', borderRight: '1.5px solid #000', zIndex: 390, pointerEvents: 'none' }} />
+              <div style={{ position: 'absolute', top: mapTop, left: mapRight, width: stageW - mapRight, height: mapBottom - mapTop, background: '#fff', borderLeft: '1.5px solid #000', zIndex: 390, pointerEvents: 'none' }} />
+              <div style={{ position: 'absolute', top: 0, left: 0, width: stageW, height: mapTop, background: '#fff', borderBottom: '1.5px solid #000', zIndex: 390, pointerEvents: 'none' }} />
+              <div style={{ position: 'absolute', top: mapBottom, left: 0, width: stageW, height: stageH - mapBottom - STRIP_H, background: '#fff', borderTop: '1.5px solid #000', zIndex: 390, pointerEvents: 'none' }} />
+              {/* Title strip */}
+              <div style={{ position: 'absolute', left: 0, top: stripY, width: stageW, height: STRIP_H, background: '#fff', border: '1.5px solid #000', boxSizing: 'border-box', zIndex: 410, display: 'flex', fontFamily: monoFont }}>
+                {/* Cell 0: Title */}
+                <div style={{ flex: '0 0 45%', borderRight: '1px solid #000', padding: '6px 8px', overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                  <div style={{ fontSize: 8, fontWeight: 700, color: '#000', marginBottom: 2 }}>TITLE</div>
+                  <div style={{ fontSize: 14, fontWeight: 700, fontFamily: 'Arial, sans-serif', color: '#000', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{project.layout.title || 'Project Map'}</div>
+                  {project.layout.subtitle && <div style={{ fontSize: 9, fontFamily: 'Arial, sans-serif', color: '#222', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{project.layout.subtitle}</div>}
+                </div>
+                {/* Cell 1: Scale / Projection */}
+                <div style={{ flex: '0 0 20%', borderRight: '1px solid #000', padding: '6px 8px', overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                  <div style={{ fontSize: 7, fontWeight: 700, color: '#000', marginBottom: 1 }}>SCALE</div>
+                  <div style={{ fontSize: 10, color: '#000', marginBottom: 4 }}>—</div>
+                  <div style={{ fontSize: 7, fontWeight: 700, color: '#000', marginBottom: 1 }}>PROJECTION</div>
+                  <div style={{ fontSize: 8, color: '#000' }}>{project.layout.projectionName || 'WGS84'}</div>
+                </div>
+                {/* Cell 2: QP */}
+                <div style={{ flex: '0 0 20%', borderRight: '1px solid #000', padding: '6px 8px', overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                  <div style={{ fontSize: 7, fontWeight: 700, color: '#000', marginBottom: 1 }}>QUALIFIED PERSON</div>
+                  <div style={{ fontSize: 10, color: '#000', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{project.layout.qpName || '—'}</div>
+                  {project.layout.qpCredentials && <div style={{ fontSize: 8, color: '#000' }}>{project.layout.qpCredentials}</div>}
+                  {project.layout.companyName && <div style={{ fontSize: 7, color: '#444', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{project.layout.companyName}</div>}
+                </div>
+                {/* Cell 3: Figure */}
+                <div style={{ flex: '0 0 15%', padding: '6px 8px', overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                  <div style={{ fontSize: 7, fontWeight: 700, color: '#000', marginBottom: 1 }}>FIGURE</div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: '#000' }}>{project.layout.figureNumber || '—'}</div>
+                  {project.layout.figureRevision && <div style={{ fontSize: 8, color: '#000' }}>{project.layout.figureRevision}</div>}
+                  {project.layout.mapDate && <div style={{ fontSize: 7, color: '#444' }}>{project.layout.mapDate}</div>}
+                </div>
+              </div>
+            </>
+          );
+        })()}
+
+        {project.layout.templateId !== 'ni_43101_technical' && <div className="template-zone" style={zoneStyle(resolvedZones.title)}>
           <div className={`template-card title-card${project.layout.titleTransparent ? ' panel--transparent' : ''}`}>
             {editingTitleField === 'title' ? (
               <input
@@ -2821,7 +2882,7 @@ export default function App() {
               document.addEventListener('mouseup', onUp);
             }}
           />
-        </div>
+        </div>}
 
         {legendItems.length ? (
           <div className="template-zone" style={zoneStyle(resolvedZones.legend)}>
@@ -2937,9 +2998,9 @@ export default function App() {
             <div className="panel-resize-handle panel-resize-handle--corner" title="Drag corner to resize inset" onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); const map = leafletMapRef.current; if (map) map.dragging.disable(); const startX = e.clientX; const startY = e.clientY; const startW = project.layout.insetWidthPx ?? 244; const startH = project.layout.insetHeightPx ?? 190; const onMove = (me) => { setProject((p) => ({ ...p, layout: { ...p.layout, insetWidthPx: Math.max(100, Math.min(600, Math.round(startW + me.clientX - startX))), insetHeightPx: Math.max(80, Math.min(500, Math.round(startH + me.clientY - startY))) } })); }; const onUp = () => { if (map) map.dragging.enable(); document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); }; document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp); }} />
           </div>
         ) : null}
-        {project.layout.showScaleBar !== false && <div className="template-zone" style={zoneStyle(resolvedZones.scaleBar)}><ScaleBar map={leafletMapRef.current} /></div>}
-        {project.layout.footerText && project.layout.footerEnabled !== false ? <div className="template-zone" style={zoneStyle(resolvedZones.footer)}><div className="template-card footer-card">{project.layout.footerText}</div></div> : null}
-        {project.layout.logo ? (
+        {project.layout.templateId !== 'ni_43101_technical' && project.layout.showScaleBar !== false && <div className="template-zone" style={zoneStyle(resolvedZones.scaleBar)}><ScaleBar map={leafletMapRef.current} /></div>}
+        {project.layout.templateId !== 'ni_43101_technical' && project.layout.footerText && project.layout.footerEnabled !== false ? <div className="template-zone" style={zoneStyle(resolvedZones.footer)}><div className="template-card footer-card">{project.layout.footerText}</div></div> : null}
+        {project.layout.templateId !== 'ni_43101_technical' && project.layout.logo ? (
           <div className="template-zone" style={zoneStyle(resolvedZones.logo)}>
             <div className={`template-card logo-card${project.layout.logoTransparent ? ' panel--transparent' : ''}`}><img src={project.layout.logo} alt="Logo" /></div>
             <div className="panel-resize-handle panel-resize-handle--right" title="Drag to resize logo width" onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); const map = leafletMapRef.current; if (map) map.dragging.disable(); const startX = e.clientX; const startW = project.layout.logoWidthPx ?? 168; const onMove = (me) => { setProject((p) => ({ ...p, layout: { ...p.layout, logoWidthPx: Math.max(40, Math.min(400, Math.round(startW + me.clientX - startX))) } })); }; const onUp = () => { if (map) map.dragging.enable(); document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); }; document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp); }} />
