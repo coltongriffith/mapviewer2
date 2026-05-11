@@ -163,12 +163,38 @@ export async function getDefaultTemplate() {
   return data || null;
 }
 
+export const TEMPLATE_SAVEABLE_KEYS = [
+  // Style & theme
+  'themeId', 'accentColor', 'titleBgColor', 'titleFgColor', 'panelBgColor', 'panelFgColor', 'templateId',
+  // Logo
+  'logo', 'logoScale', 'logoCorner', 'logoWidthPx', 'logoHeightPx', 'logoTransparent',
+  // Title panel
+  'titleCorner', 'titleWidthPx', 'titleHeightPx', 'titleTransparent', 'titleSize', 'titleWidth',
+  // Legend
+  'legendMode', 'legendTitle', 'legendCorner', 'legendWidthPx', 'legendHeightPx', 'legendTransparent', 'legendWidth',
+  // Inset
+  'insetEnabled', 'insetSize', 'insetMode', 'insetCorner', 'insetTitle', 'insetWidthPx', 'insetHeightPx',
+  // Navigation elements
+  'showNorthArrow', 'northArrowCorner', 'showScaleBar', 'scaleBarCorner',
+  // Footer
+  'footerEnabled', 'footerText',
+  // Display & composition
+  'mode', 'compositionPreset', 'referenceOverlays', 'referenceOpacity', 'safeMargins',
+  // Export defaults
+  'exportSettings',
+  // NI 43-101 fields
+  'titleStripPosition', 'stripFontScale', 'qpName', 'qpCredentials', 'companyName', 'projectionName',
+  // Marker/zone defaults
+  'markerDefaults', 'zoneDefaults',
+];
+
 export function applyTemplateConfig(config, currentLayout) {
   if (!config) return currentLayout;
-  const allowed = ['themeId', 'accentColor', 'titleBgColor', 'titleFgColor', 'panelBgColor', 'panelFgColor', 'logo', 'logoScale', 'mode', 'fonts'];
   const patch = {};
-  for (const key of allowed) {
+  for (const key of TEMPLATE_SAVEABLE_KEYS) {
     if (config[key] !== undefined) patch[key] = config[key];
   }
+  // Merge fonts instead of overwriting so per-slot overrides are preserved
+  if (config.fonts) patch.fonts = { ...currentLayout.fonts, ...config.fonts };
   return { ...currentLayout, ...patch };
 }

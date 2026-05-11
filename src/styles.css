@@ -1308,6 +1308,9 @@ button, input, select, textarea { font: inherit; }
 .template-default-star.active { color: #f59e0b; }
 .template-default-star:hover { color: #f59e0b; }
 .btn.compact, .secondary-btn.compact { padding: 4px 10px; font-size: 12px; border-radius: 6px; }
+.template-save-row { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+.template-name-input { flex: 1; font-size: 12px; padding: 4px 8px; border: 1px solid #cbd5e1; border-radius: 6px; outline: none; min-width: 0; }
+.template-name-input:focus { border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59,130,246,0.15); }
 
 /* ── How To Use modal ── */
 .howto-overlay { position: fixed; inset: 0; z-index: 2050; display: grid; place-items: center; background: rgba(2,6,23,0.55); backdrop-filter: blur(3px); }
