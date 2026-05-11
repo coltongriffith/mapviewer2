@@ -192,6 +192,7 @@ export function resolveNI43101Zones(template, layout, mapSize) {
   const northArrowCorner = layout?.northArrowCorner || 'br';
   const scaleBarCorner = layout?.scaleBarCorner || 'bl';
   const legendCorner = layout?.legendCorner || 'bl';
+  const logoCorner = layout?.logoCorner || 'tl';
 
   const vOffset = { tl: 0, tr: 0, bl: 0, br: 0 };
 
@@ -203,6 +204,11 @@ export function resolveNI43101Zones(template, layout, mapSize) {
       case 'tl': default: return { top: safe.top + vOffset.tl, left: safe.left };
     }
   }
+
+  const logoW = layout?.logoWidthPx ? Math.max(40, Math.min(400, layout.logoWidthPx)) : 168;
+  const logoH = layout?.logoHeightPx ? Math.max(20, Math.min(300, layout.logoHeightPx)) : 74;
+  const logoZone = clampZone({ ...anchorAt(logoCorner), width: logoW, height: logoH }, safe, width, height);
+  if (layout?.logo) vOffset[logoCorner] += logoH + 10;
 
   const insetZone = layout?.insetEnabled === false
     ? { top: safe.top, left: width - safe.right, width: 0, height: 0 }
@@ -216,7 +222,7 @@ export function resolveNI43101Zones(template, layout, mapSize) {
 
   return {
     title: { left: 0, top: 0, width: 0, height: 0 },
-    logo: { left: 0, top: 0, width: 0, height: 0 },
+    logo: logoZone,
     footer: { left: 0, top: 0, width: 0, height: 0 },
     scaleBar: { left: 0, top: 0, width: 0, height: 0 },
     inset: insetZone,

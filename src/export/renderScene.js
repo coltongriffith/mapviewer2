@@ -1359,8 +1359,8 @@ export async function renderSceneToCanvas(scene, options = {}) {
   ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
   const isNI = scene.template?.id === 'ni_43101_technical';
   await drawTilesCanvas(ctx, scene, scale); drawRegionHighlightsCanvas(ctx, scene, scale); drawVectorsCanvas(ctx, scene, scale); drawEllipsesCanvas(ctx, scene, scale); drawPolygonsCanvas(ctx, scene, scale); await drawMarkersCanvas(ctx, scene, scale); drawCalloutsCanvas(ctx, scene, scale);
-  if (!isNI) { drawTitleBlockCanvas(ctx, scene, scale); drawScaleBarCanvas(ctx, scene, scale); drawFooterCanvas(ctx, scene, scale); await drawLogoCanvas(ctx, scene, scale); }
-  drawLegendCanvas(ctx, scene, scale); drawNorthArrowCanvas(ctx, scene, scale); await drawInsetCanvas(ctx, scene, scale);
+  if (!isNI) { drawTitleBlockCanvas(ctx, scene, scale); drawScaleBarCanvas(ctx, scene, scale); drawFooterCanvas(ctx, scene, scale); }
+  drawLegendCanvas(ctx, scene, scale); drawNorthArrowCanvas(ctx, scene, scale); await drawInsetCanvas(ctx, scene, scale); await drawLogoCanvas(ctx, scene, scale);
   if (isNI) { drawDistanceTicksCanvas(ctx, scene, scale); drawTitleStripCanvas(ctx, scene, scale); }
   if (!options.noWatermark) {
     const niFrame = isNI ? getNI43101MapFrame(scene, scale) : null;
@@ -1745,7 +1745,7 @@ export async function renderSceneToSvg(scene, options = {}) {
     const wmX = niFrame.mapRight - 8 * scale;
     const wmY = niFrame.mapBottom - 5 * scale;
     const watermark = options.noWatermark ? '' : `<text x="${wmX}" y="${wmY}" font-family="Arial,sans-serif" font-size="${9 * scale}" font-weight="bold" fill="rgba(100,116,139,0.72)" text-anchor="end" dominant-baseline="auto" paint-order="stroke" stroke="rgba(255,255,255,0.55)" stroke-width="2.5" stroke-linejoin="round">explorationmaps.com</text>`;
-    mapContent = `${clipDef}${clipped}${renderLegendSvg(scene, scale)}${renderNorthArrowSvg(scene, scale)}${renderInsetSvg(scene, scale)}${renderDistanceTicksSvg(scene, scale)}${renderTitleStripSvg(scene, scale)}${watermark}`;
+    mapContent = `${clipDef}${clipped}${renderLegendSvg(scene, scale)}${renderNorthArrowSvg(scene, scale)}${renderInsetSvg(scene, scale)}${renderLogoSvg(scene, scale)}${renderDistanceTicksSvg(scene, scale)}${renderTitleStripSvg(scene, scale)}${watermark}`;
   } else {
     const watermark = options.noWatermark ? '' : `<text x="${width - 8}" y="${height - 5}" font-family="Arial,sans-serif" font-size="9" font-weight="bold" fill="rgba(100,116,139,0.72)" text-anchor="end" paint-order="stroke" stroke="rgba(255,255,255,0.55)" stroke-width="2.5" stroke-linejoin="round">explorationmaps.com</text>`;
     mapContent = `${basemapImage}${renderRegionHighlightsSvg(scene, scale)}${renderVectorsSvg(scene, scale)}${renderEllipsesSvg(scene, scale)}${renderPolygonsSvg(scene, scale)}${renderMarkersSvg(scene, scale)}${renderCalloutsSvg(scene, scale)}${renderTitleSvg(scene, scale)}${renderLegendSvg(scene, scale)}${renderNorthArrowSvg(scene, scale)}${renderInsetSvg(scene, scale)}${renderScaleBarSvg(scene, scale)}${renderFooterSvg(scene, scale)}${renderLogoSvg(scene, scale)}${watermark}`;

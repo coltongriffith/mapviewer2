@@ -1801,12 +1801,7 @@ export default function App() {
               <select
                 value={project.layout.templateId || 'technical_results_v2'}
                 onChange={(e) => {
-                  const tid = e.target.value;
-                  const updates = { templateId: tid, stripTitle: '', stripSubtitle: '' };
-                  if (tid === 'ni_43101_technical' && !project.layout._themeOverridden) {
-                    updates.themeId = 'ni_43101';
-                  }
-                  updateLayout(updates);
+                  updateLayout({ templateId: e.target.value, stripTitle: '', stripSubtitle: '' });
                 }}
               >
                 <option value="technical_results_v2">Technical Results v2</option>
@@ -2375,7 +2370,7 @@ export default function App() {
             </div>
             <div className="control-row">
               <label>Design Theme</label>
-              <select value={project.layout.themeId || 'investor_clean'} onChange={(e) => updateLayout({ themeId: e.target.value, _themeOverridden: true })}>
+              <select value={project.layout.themeId || 'investor_clean'} onChange={(e) => updateLayout({ themeId: e.target.value })}>
                 {Object.entries(TEMPLATE_THEMES).map(([value, label]) => (
                   <option key={value} value={value}>{label}</option>
                 ))}
@@ -3132,7 +3127,7 @@ export default function App() {
         ) : null}
         {project.layout.templateId !== 'ni_43101_technical' && project.layout.showScaleBar !== false && <div className="template-zone" style={zoneStyle(resolvedZones.scaleBar)}><ScaleBar map={leafletMapRef.current} /></div>}
         {project.layout.templateId !== 'ni_43101_technical' && project.layout.footerText && project.layout.footerEnabled !== false ? <div className="template-zone" style={zoneStyle(resolvedZones.footer)}><div className="template-card footer-card">{project.layout.footerText}</div></div> : null}
-        {project.layout.templateId !== 'ni_43101_technical' && project.layout.logo ? (
+        {project.layout.logo ? (
           <div className="template-zone" style={zoneStyle(resolvedZones.logo)}>
             <div className={`template-card logo-card${project.layout.logoTransparent ? ' panel--transparent' : ''}`}><img src={project.layout.logo} alt="Logo" /></div>
             <div className="panel-resize-handle panel-resize-handle--right" title="Drag to resize logo width" onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); const map = leafletMapRef.current; if (map) map.dragging.disable(); const startX = e.clientX; const startW = project.layout.logoWidthPx ?? 168; const onMove = (me) => { setProject((p) => ({ ...p, layout: { ...p.layout, logoWidthPx: Math.max(40, Math.min(400, Math.round(startW + me.clientX - startX))) } })); }; const onUp = () => { if (map) map.dragging.enable(); document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); }; document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp); }} />
