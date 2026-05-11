@@ -49,11 +49,12 @@ export const CALLOUT_TYPES = {
 
 
 export const TEMPLATE_THEMES = {
-  investor_clean:      'Investor — Navy & White',
-  technical_sharp:     'Technical — Sharp Borders',
-  modern_dark:         'Modern — Dark Indigo',
-  warm_terrain:        'Terrain — Earthy & Warm',
-  midnight_blueprint:  'Blueprint — Midnight Cyan',
+  investor_clean:  'Investor',
+  technical_sharp: 'Technical',
+  modern_dark:     'Dark Mode',
+  warm_terrain:    'Terrain',
+  forest_dark:     'Forest',
+  ni_43101:        'NI 43-101',
 };
 
 export const FONT_OPTIONS = {

@@ -1,7 +1,5 @@
 export const THEME_TOKENS = {
-  // ─── Clean Investor Style ───────────────────────────────────────────────────
-  // Premium presentation deck: deep navy title block, white panels, soft shadows.
-  // No accent bar — the dark title block IS the accent.
+  // Investor — deep navy title block, white panels, soft shadows
   investor_clean: {
     panelRadius: 10,
     panelFill: 'rgba(255,255,255,0.98)',
@@ -35,10 +33,7 @@ export const THEME_TOKENS = {
     panelAccentLeft: null,
   },
 
-  // ─── Technical Style ────────────────────────────────────────────────────────
-  // Survey/engineering feel: zero radius, thick black borders, no shadows.
-  // Title block is WHITE with a bold navy LEFT-SIDE accent bar — distinctive.
-  // All panels get a matching left accent stripe.
+  // Technical — white panels, hard black borders, zero radius, navy left accent
   technical_sharp: {
     panelRadius: 0,
     panelFill: 'rgba(255,255,255,1.0)',
@@ -72,9 +67,7 @@ export const THEME_TOKENS = {
     panelAccentLeft: '#1a3a6b',
   },
 
-  // ─── Dark Modern Style ───────────────────────────────────────────────────────
-  // Data visualization / social: deep indigo panels, sky-blue accents, high contrast.
-  // Panels glow with a subtle blue border edge.
+  // Dark Mode — deep indigo panels, sky-blue accents, high contrast
   modern_dark: {
     panelRadius: 9,
     panelFill: 'rgba(22,33,62,0.97)',
@@ -108,10 +101,7 @@ export const THEME_TOKENS = {
     panelAccentLeft: null,
   },
 
-  // ─── Warm Terrain Style ──────────────────────────────────────────────────────
-  // Field / geology / environmental: warm cream panels, earthy brown borders,
-  // rich chocolate title block with burnt-sienna accent bar. Ideal for
-  // environmental assessment, mining, ecology, or natural-history maps.
+  // Terrain — warm cream panels, earthy brown borders, chocolate title
   warm_terrain: {
     panelRadius: 6,
     panelFill: 'rgba(255,251,240,1.0)',
@@ -145,49 +135,81 @@ export const THEME_TOKENS = {
     panelAccentLeft: '#b85c1a',
   },
 
-  // ─── Midnight Blueprint Style ────────────────────────────────────────────────
-  // Precision engineering / technical drawings: near-black steel-blue panels,
-  // crisp cyan accent bars, white text. Evokes a drafting board or
-  // scientific data-viz — distinct from modern_dark's purple/indigo palette.
-  midnight_blueprint: {
-    panelRadius: 2,
-    panelFill: 'rgba(10,24,48,0.97)',
-    panelBorder: 'rgba(0,190,215,0.38)',
-    panelShadow: '0 4px 24px rgba(0,0,0,0.65)',
-    titleRadius: 2,
-    titleFill: 'rgba(5,14,32,1.0)',
-    titleBorder: 'rgba(0,190,215,0.50)',
-    titleAccent: '#00bed7',
+  // Forest — deep forest green panels, gold accents — on-brand for exploration
+  forest_dark: {
+    panelRadius: 8,
+    panelFill: 'rgba(14,28,14,0.97)',
+    panelBorder: 'rgba(80,160,80,0.22)',
+    panelShadow: '0 4px 24px rgba(0,0,0,0.55)',
+    titleRadius: 8,
+    titleFill: 'rgba(8,18,8,0.99)',
+    titleBorder: 'rgba(80,160,80,0.28)',
+    titleAccent: '#c9a227',
     titleAccentStyle: 'left',
-    titleText: '#e0f8ff',
-    subtitleText: 'rgba(180,240,255,0.72)',
-    panelTitle: '#7edff2',
-    bodyText: '#c8eaf5',
-    mutedText: '#5a9ab0',
-    footerFill: 'rgba(5,14,32,1.0)',
-    footerText: '#5a9ab0',
-    calloutFill: 'rgba(10,24,48,0.97)',
-    calloutBorder: '#00bed7',
-    calloutText: '#e0f8ff',
-    northArrowFill: 'rgba(10,24,48,0.97)',
-    northArrowText: '#e0f8ff',
-    scaleFill: 'rgba(10,24,48,0.97)',
-    scaleStroke: '#e0f8ff',
-    insetFill: 'rgba(10,24,48,0.97)',
-    insetBorder: 'rgba(0,190,215,0.38)',
-    insetTitle: '#7edff2',
-    insetMuted: '#5a9ab0',
-    logoFill: 'rgba(10,24,48,0.97)',
-    logoBorder: 'rgba(0,190,215,0.38)',
-    panelAccentLeft: '#00bed7',
+    titleText: '#f0f7e8',
+    subtitleText: 'rgba(196,228,164,0.80)',
+    panelTitle: '#c4e4a0',
+    bodyText: '#d4ecb8',
+    mutedText: '#6e9e50',
+    footerFill: 'rgba(8,18,8,0.99)',
+    footerText: '#6e9e50',
+    calloutFill: 'rgba(14,28,14,0.97)',
+    calloutBorder: '#c9a227',
+    calloutText: '#f0f7e8',
+    northArrowFill: 'rgba(14,28,14,0.97)',
+    northArrowText: '#f0f7e8',
+    scaleFill: 'rgba(14,28,14,0.97)',
+    scaleStroke: '#d4ecb8',
+    insetFill: 'rgba(14,28,14,0.97)',
+    insetBorder: 'rgba(80,160,80,0.22)',
+    insetTitle: '#c4e4a0',
+    insetMuted: '#6e9e50',
+    logoFill: 'rgba(14,28,14,0.97)',
+    logoBorder: 'rgba(80,160,80,0.22)',
+    panelAccentLeft: '#c9a227',
   },
 };
 
-// Fallback aliases — kept so old stored project themeIds still render
-THEME_TOKENS.modern_rounded    = THEME_TOKENS.investor_clean;
-THEME_TOKENS.clean_corporate   = THEME_TOKENS.investor_clean;
-THEME_TOKENS.technical_science = THEME_TOKENS.technical_sharp;
-THEME_TOKENS.government_report = THEME_TOKENS.technical_sharp;
+THEME_TOKENS.ni_43101 = {
+  panelRadius: 0,
+  panelFill: 'rgba(255,255,255,1.0)',
+  panelBorder: 'rgba(0,0,0,0.85)',
+  panelShadow: 'none',
+  titleRadius: 0,
+  titleFill: 'rgba(255,255,255,1.0)',
+  titleBorder: 'rgba(0,0,0,0.85)',
+  titleAccent: null,
+  titleAccentStyle: null,
+  titleText: '#000000',
+  subtitleText: '#222222',
+  panelTitle: '#000000',
+  bodyText: '#111111',
+  mutedText: '#444444',
+  footerFill: 'rgba(255,255,255,1.0)',
+  footerText: '#222222',
+  calloutFill: 'rgba(255,255,255,1.0)',
+  calloutBorder: '#000000',
+  calloutText: '#000000',
+  northArrowFill: 'rgba(255,255,255,1.0)',
+  northArrowText: '#000000',
+  scaleFill: 'rgba(255,255,255,1.0)',
+  scaleStroke: '#000000',
+  insetFill: 'rgba(255,255,255,1.0)',
+  insetBorder: 'rgba(0,0,0,0.85)',
+  insetTitle: '#000000',
+  insetMuted: '#444444',
+  logoFill: 'rgba(255,255,255,1.0)',
+  logoBorder: 'rgba(0,0,0,0.85)',
+  panelAccentLeft: null,
+};
+
+// Fallback aliases — keep old stored themeIds rendering correctly
+THEME_TOKENS.technical_report   = THEME_TOKENS.ni_43101;
+THEME_TOKENS.midnight_blueprint = THEME_TOKENS.forest_dark;
+THEME_TOKENS.modern_rounded     = THEME_TOKENS.investor_clean;
+THEME_TOKENS.clean_corporate    = THEME_TOKENS.investor_clean;
+THEME_TOKENS.technical_science  = THEME_TOKENS.technical_sharp;
+THEME_TOKENS.government_report  = THEME_TOKENS.technical_sharp;
 THEME_TOKENS.investor_clean_old = THEME_TOKENS.investor_clean;
 
 export function getThemeTokens(themeId) {

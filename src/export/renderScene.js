@@ -1,6 +1,7 @@
 import { escapeXml, downloadBlob } from '../utils/svg';
 import { geojsonBounds, unionBounds } from '../utils/geometry';
 import { resolveTemplateZones } from '../templates/technicalResultsTemplate';
+import { resolveNI43101Zones } from '../templates/technicalReportTemplate';
 import { getThemeTokens } from '../utils/themeTokens';
 import { MARKER_ICON_PATHS, markerIconSvgFragment, drawMarkerIconCanvas } from '../utils/markerIcons.jsx';
 import { safeColor } from '../utils/colorUtils.js';
@@ -257,6 +258,10 @@ function geometryToSvg(map, feature, style, scale) {
   return '';
 }
 function getOverlayMetrics(scene) {
+  const id = scene.template?.id || scene.project.layout?.templateId;
+  if (id === 'ni_43101_technical') {
+    return resolveNI43101Zones(scene.template, scene.project.layout || {}, { width: scene.width, height: scene.height });
+  }
   return resolveTemplateZones(scene.template, scene.project.layout || {}, { width: scene.width, height: scene.height });
 }
 function drawRoundedRect(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
@@ -962,23 +967,426 @@ function drawPolygonsCanvas(ctx, scene, scale) {
   });
 }
 
+// ─── NI 43-101 Template helpers ────────────────────────────────────────────
+
+function haversineMeters(lat1, lng1, lat2, lng2) {
+  const R = 6371000;
+  const toRad = (d) => d * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function getNI43101MapFrame(scene, scale) {
+  const TICK_MARGIN = 28, STRIP_H = 72;
+  const stripPos = scene.project.layout?.titleStripPosition || 'bottom';
+  return {
+    mapLeft: TICK_MARGIN * scale,
+    mapTop: (TICK_MARGIN + (stripPos === 'top' ? STRIP_H : 0)) * scale,
+    mapRight: (scene.width - TICK_MARGIN) * scale,
+    mapBottom: (scene.height - TICK_MARGIN - (stripPos === 'bottom' ? STRIP_H : 0)) * scale,
+  };
+}
+
+function calcMapScaleDenom(scene) {
+  const map = scene.map;
+  if (!map) return null;
+  try {
+    const size = map.getSize();
+    const pt1 = map.containerPointToLatLng([0, size.y / 2]);
+    const pt2 = map.containerPointToLatLng([100, size.y / 2]);
+    const meters = haversineMeters(pt1.lat, pt1.lng, pt2.lat, pt2.lng);
+    const rawDenom = meters / 100; // 100 container pixels = X meters in reality → scale 1:rawDenom
+    const mag = Math.pow(10, Math.floor(Math.log10(rawDenom)));
+    const candidates = [1, 2, 2.5, 5, 10].map((c) => c * mag);
+    const rounded = candidates.reduce((best, c) => Math.abs(c - rawDenom) < Math.abs(best - rawDenom) ? c : best);
+    return Math.round(rounded);
+  } catch {
+    return null;
+  }
+}
+
+function formatScaleDenom(denom) {
+  if (!denom) return '';
+  return `1:${denom.toLocaleString('en-US')}`;
+}
+
+function pickNITickInterval(totalMeters, targetTicks = 6) {
+  const steps = [100, 200, 250, 500, 1000, 2000, 2500, 5000, 10000, 25000, 50000];
+  const ideal = totalMeters / targetTicks;
+  return steps.reduce((best, s) => Math.abs(s - ideal) < Math.abs(best - ideal) ? s : best, steps[0]);
+}
+
+function formatTickLabel(meters) {
+  if (meters === 0) return '0';
+  if (meters >= 1000) return `${(meters / 1000).toLocaleString('en-US')} km`;
+  return `${meters.toLocaleString('en-US')} m`;
+}
+
+function displaceLng(lat, lng, meters) {
+  return lng + meters / (111320 * Math.cos(lat * Math.PI / 180));
+}
+function displaceLat(lat, meters) {
+  return lat - meters / 111320;
+}
+
+function drawTitleStripCanvas(ctx, scene, scale) {
+  const layout = scene.project.layout || {};
+  const stripPos = layout.titleStripPosition || 'bottom';
+  const canvasW = Math.round(scene.width * scale);
+  const canvasH = Math.round(scene.height * scale);
+  const stripH = 72 * scale;
+  const stripY = stripPos === 'bottom' ? canvasH - stripH : 0;
+
+  // Background + outer border
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, stripY, canvasW, stripH);
+  ctx.strokeStyle = '#000000';
+  ctx.lineWidth = 1.5 * scale;
+  ctx.strokeRect(0, stripY, canvasW, stripH);
+
+  // Cell proportions: title 45%, scale/proj 20%, qp 20%, fignum 15%
+  const cell0 = 0;
+  const cell1 = Math.round(canvasW * 0.45);
+  const cell2 = Math.round(canvasW * 0.65);
+  const cell3 = Math.round(canvasW * 0.85);
+
+  // Vertical dividers
+  ctx.lineWidth = 1 * scale;
+  [cell1, cell2, cell3].forEach((x) => {
+    ctx.beginPath();
+    ctx.moveTo(x, stripY);
+    ctx.lineTo(x, stripY + stripH);
+    ctx.stroke();
+  });
+
+  const fs = Math.max(0.7, Math.min(1.4, Number(layout.stripFontScale || 1)));
+  const monoFont = `'Courier New', Courier, monospace`;
+  const labelSize = 8 * scale * fs;
+  const valueSize = 11 * scale * fs;
+  const titleSize = 16 * scale * fs;
+  const pad = 8 * scale;
+  const labelY = stripY + 14 * scale;
+  const valueY = stripY + 30 * scale;
+
+  ctx.fillStyle = '#000000';
+  ctx.textBaseline = 'middle';
+
+  // Cell 0: Figure title (uses stripTitle/stripSubtitle, not main title)
+  ctx.font = `700 ${labelSize}px ${monoFont}`;
+  ctx.fillText('TITLE', pad, labelY);
+  const stripTitle = layout.stripTitle || '';
+  if (stripTitle) {
+    ctx.font = `700 ${titleSize}px Arial, sans-serif`;
+    ctx.fillText(stripTitle, pad, valueY + 4 * scale);
+  }
+  const stripSubtitle = layout.stripSubtitle || '';
+  if (stripSubtitle) {
+    ctx.font = `${(labelSize) + 1 * scale}px Arial, sans-serif`;
+    ctx.fillText(stripSubtitle, pad, valueY + (stripTitle ? 20 : 4) * scale);
+  }
+
+  // Cell 1: Scale / Projection
+  ctx.font = `700 ${labelSize}px ${monoFont}`;
+  ctx.fillText('SCALE', cell1 + pad, labelY);
+  ctx.font = `${valueSize}px ${monoFont}`;
+  const manualDenom = layout.manualScaleDenom ? parseInt(layout.manualScaleDenom.replace(/[^0-9]/g, ''), 10) : null;
+  const scaleDenom = manualDenom || calcMapScaleDenom(scene);
+  ctx.fillText(formatScaleDenom(scaleDenom) || '—', cell1 + pad, valueY);
+  ctx.font = `700 ${labelSize}px ${monoFont}`;
+  ctx.fillText('PROJECTION', cell1 + pad, valueY + 20 * scale);
+  ctx.font = `${labelSize}px ${monoFont}`;
+  ctx.fillText(layout.projectionName || 'WGS84', cell1 + pad, valueY + 34 * scale);
+
+  // Cell 2: QP / Author
+  ctx.font = `700 ${labelSize}px ${monoFont}`;
+  ctx.fillText('QUALIFIED PERSON', cell2 + pad, labelY);
+  ctx.font = `${valueSize}px ${monoFont}`;
+  ctx.fillText(layout.qpName || '—', cell2 + pad, valueY);
+  if (layout.qpCredentials) {
+    ctx.font = `${labelSize}px ${monoFont}`;
+    ctx.fillText(layout.qpCredentials, cell2 + pad, valueY + 18 * scale);
+  }
+  if (layout.companyName) {
+    ctx.font = `${labelSize}px ${monoFont}`;
+    ctx.fillText(layout.companyName, cell2 + pad, valueY + 32 * scale);
+  }
+
+  // Cell 3: Figure number / date
+  ctx.font = `700 ${labelSize}px ${monoFont}`;
+  ctx.fillText('FIGURE', cell3 + pad, labelY);
+  ctx.font = `700 ${valueSize + 2 * scale}px ${monoFont}`;
+  ctx.fillText(layout.figureNumber || '—', cell3 + pad, valueY);
+  if (layout.figureRevision) {
+    ctx.font = `${labelSize}px ${monoFont}`;
+    ctx.fillText(layout.figureRevision, cell3 + pad, valueY + 18 * scale);
+  }
+  if (layout.mapDate) {
+    ctx.font = `${labelSize}px ${monoFont}`;
+    ctx.fillText(layout.mapDate, cell3 + pad, valueY + 32 * scale);
+  }
+}
+
+function renderTitleStripSvg(scene, scale) {
+  const layout = scene.project.layout || {};
+  const stripPos = layout.titleStripPosition || 'bottom';
+  const canvasW = Math.round(scene.width * scale);
+  const canvasH = Math.round(scene.height * scale);
+  const stripH = 72 * scale;
+  const stripY = stripPos === 'bottom' ? canvasH - stripH : 0;
+
+  const cell1 = Math.round(canvasW * 0.45);
+  const cell2 = Math.round(canvasW * 0.65);
+  const cell3 = Math.round(canvasW * 0.85);
+
+  const fs = Math.max(0.7, Math.min(1.4, Number(layout.stripFontScale || 1)));
+  const monoFont = `'Courier New', Courier, monospace`;
+  const pad = 8 * scale;
+  const labelY = stripY + 14 * scale;
+  const valueY = stripY + 30 * scale;
+  const ls = 8 * scale * fs;
+  const vs = 11 * scale * fs;
+  const ts = 16 * scale * fs;
+
+  const dividers = [cell1, cell2, cell3].map((x) =>
+    `<line x1="${x}" y1="${stripY}" x2="${x}" y2="${stripY + stripH}" stroke="#000" stroke-width="${scale}" />`
+  ).join('');
+
+  const manualDenom = layout.manualScaleDenom
+    ? parseInt(String(layout.manualScaleDenom).replace(/[^0-9]/g, ''), 10) || null
+    : null;
+  const scaleDenom = manualDenom || calcMapScaleDenom(scene);
+  const stripTitle = layout.stripTitle || '';
+  const stripSubtitle = layout.stripSubtitle || '';
+
+  return `<g>
+<rect x="0" y="${stripY}" width="${canvasW}" height="${stripH}" fill="#ffffff" stroke="#000000" stroke-width="${1.5 * scale}" />
+${dividers}
+<text x="${pad}" y="${labelY}" font-family="${monoFont}" font-size="${ls}" font-weight="700" fill="#000" dominant-baseline="middle">TITLE</text>
+${stripTitle ? `<text x="${pad}" y="${valueY + 4 * scale}" font-family="Arial,sans-serif" font-size="${ts}" font-weight="700" fill="#000" dominant-baseline="middle">${escapeXml(stripTitle)}</text>` : ''}
+${stripSubtitle ? `<text x="${pad}" y="${valueY + 20 * scale}" font-family="Arial,sans-serif" font-size="${ls + scale}" fill="#000" dominant-baseline="middle">${escapeXml(stripSubtitle)}</text>` : ''}
+<text x="${cell1 + pad}" y="${labelY}" font-family="${monoFont}" font-size="${ls}" font-weight="700" fill="#000" dominant-baseline="middle">SCALE</text>
+<text x="${cell1 + pad}" y="${valueY}" font-family="${monoFont}" font-size="${vs}" fill="#000" dominant-baseline="middle">${escapeXml(formatScaleDenom(scaleDenom) || '—')}</text>
+<text x="${cell1 + pad}" y="${valueY + 20 * scale}" font-family="${monoFont}" font-size="${ls}" font-weight="700" fill="#000" dominant-baseline="middle">PROJECTION</text>
+<text x="${cell1 + pad}" y="${valueY + 34 * scale}" font-family="${monoFont}" font-size="${ls}" fill="#000" dominant-baseline="middle">${escapeXml(layout.projectionName || 'WGS84')}</text>
+<text x="${cell2 + pad}" y="${labelY}" font-family="${monoFont}" font-size="${ls}" font-weight="700" fill="#000" dominant-baseline="middle">QUALIFIED PERSON</text>
+<text x="${cell2 + pad}" y="${valueY}" font-family="${monoFont}" font-size="${vs}" fill="#000" dominant-baseline="middle">${escapeXml(layout.qpName || '—')}</text>
+${layout.qpCredentials ? `<text x="${cell2 + pad}" y="${valueY + 18 * scale}" font-family="${monoFont}" font-size="${ls}" fill="#000" dominant-baseline="middle">${escapeXml(layout.qpCredentials)}</text>` : ''}
+${layout.companyName ? `<text x="${cell2 + pad}" y="${valueY + 32 * scale}" font-family="${monoFont}" font-size="${ls}" fill="#000" dominant-baseline="middle">${escapeXml(layout.companyName)}</text>` : ''}
+<text x="${cell3 + pad}" y="${labelY}" font-family="${monoFont}" font-size="${ls}" font-weight="700" fill="#000" dominant-baseline="middle">FIGURE</text>
+<text x="${cell3 + pad}" y="${valueY}" font-family="${monoFont}" font-size="${vs + 2 * fs}" font-weight="700" fill="#000" dominant-baseline="middle">${escapeXml(layout.figureNumber || '—')}</text>
+${layout.figureRevision ? `<text x="${cell3 + pad}" y="${valueY + 18 * scale}" font-family="${monoFont}" font-size="${ls}" fill="#000" dominant-baseline="middle">${escapeXml(layout.figureRevision)}</text>` : ''}
+${layout.mapDate ? `<text x="${cell3 + pad}" y="${valueY + 32 * scale}" font-family="${monoFont}" font-size="${ls}" fill="#000" dominant-baseline="middle">${escapeXml(layout.mapDate)}</text>` : ''}
+</g>`;
+}
+
+function drawDistanceTicksCanvas(ctx, scene, scale) {
+  const map = scene.map;
+  if (!map) return;
+  const frame = getNI43101MapFrame(scene, scale);
+  const { mapLeft, mapTop, mapRight, mapBottom } = frame;
+  const mapW = mapRight - mapLeft;
+  const mapH = mapBottom - mapTop;
+
+  // Fill margin areas with white
+  const cw = Math.round(scene.width * scale);
+  const ch = Math.round(scene.height * scale);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, mapLeft, ch);
+  ctx.fillRect(mapRight, 0, cw - mapRight, ch);
+  ctx.fillRect(mapLeft, 0, mapW, mapTop);
+  ctx.fillRect(mapLeft, mapBottom, mapW, ch - mapBottom);
+
+  // Map frame border
+  ctx.strokeStyle = '#000000';
+  ctx.lineWidth = 1.5 * scale;
+  ctx.strokeRect(mapLeft, mapTop, mapW, mapH);
+
+  const size = map.getSize();
+  const centerY = size.y / 2;
+  const centerX = size.x / 2;
+
+  // X-axis: measure map width in meters
+  const leftLL = map.containerPointToLatLng([0, centerY]);
+  const rightLL = map.containerPointToLatLng([size.x, centerY]);
+  const totalWidthM = haversineMeters(leftLL.lat, leftLL.lng, rightLL.lat, rightLL.lng);
+  const xInterval = pickNITickInterval(totalWidthM, 6);
+
+  // Y-axis: measure map height in meters
+  const topLL = map.containerPointToLatLng([centerX, 0]);
+  const botLL = map.containerPointToLatLng([centerX, size.y]);
+  const totalHeightM = haversineMeters(topLL.lat, topLL.lng, botLL.lat, botLL.lng);
+  const yInterval = pickNITickInterval(totalHeightM, 5);
+
+  const tickLen = 10 * scale;
+  const monoFont = `'Courier New', Courier, monospace`;
+  ctx.fillStyle = '#000000';
+  ctx.font = `${9 * scale}px ${monoFont}`;
+  ctx.lineWidth = scale;
+  ctx.strokeStyle = '#000000';
+
+  // X ticks (top and bottom edges)
+  for (let i = 0; ; i++) {
+    const distM = i * xInterval;
+    const newLng = displaceLng(leftLL.lat, leftLL.lng, distM);
+    const pt = map.latLngToContainerPoint([leftLL.lat, newLng]);
+    const px = pt.x * scale + mapLeft;
+    if (px > mapRight + 1) break;
+    const label = formatTickLabel(distM);
+
+    ctx.beginPath();
+    ctx.moveTo(px, mapTop);
+    ctx.lineTo(px, mapTop - tickLen);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(px, mapBottom);
+    ctx.lineTo(px, mapBottom + tickLen);
+    ctx.stroke();
+
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText(label, px, mapTop - tickLen - 2 * scale);
+    ctx.textBaseline = 'top';
+    ctx.fillText(label, px, mapBottom + tickLen + 2 * scale);
+  }
+
+  // Y ticks (left and right edges)
+  for (let i = 0; ; i++) {
+    const distM = i * yInterval;
+    const newLat = displaceLat(topLL.lat, distM);
+    const pt = map.latLngToContainerPoint([newLat, topLL.lng]);
+    const py = pt.y * scale + mapTop;
+    if (py > mapBottom + 1) break;
+    const label = formatTickLabel(distM);
+
+    ctx.beginPath();
+    ctx.moveTo(mapLeft, py);
+    ctx.lineTo(mapLeft - tickLen, py);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(mapRight, py);
+    ctx.lineTo(mapRight + tickLen, py);
+    ctx.stroke();
+
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, mapLeft - tickLen - 2 * scale, py);
+    ctx.textAlign = 'left';
+    ctx.fillText(label, mapRight + tickLen + 2 * scale, py);
+  }
+
+  ctx.textAlign = 'left';
+}
+
+function renderDistanceTicksSvg(scene, scale) {
+  const map = scene.map;
+  if (!map) return '';
+  const frame = getNI43101MapFrame(scene, scale);
+  const { mapLeft, mapTop, mapRight, mapBottom } = frame;
+  const mapW = mapRight - mapLeft;
+  const mapH = mapBottom - mapTop;
+  const cw = Math.round(scene.width * scale);
+  const ch = Math.round(scene.height * scale);
+
+  const size = map.getSize();
+  const centerY = size.y / 2;
+  const centerX = size.x / 2;
+
+  const leftLL = map.containerPointToLatLng([0, centerY]);
+  const rightLL = map.containerPointToLatLng([size.x, centerY]);
+  const totalWidthM = haversineMeters(leftLL.lat, leftLL.lng, rightLL.lat, rightLL.lng);
+  const xInterval = pickNITickInterval(totalWidthM, 6);
+
+  const topLL = map.containerPointToLatLng([centerX, 0]);
+  const botLL = map.containerPointToLatLng([centerX, size.y]);
+  const totalHeightM = haversineMeters(topLL.lat, topLL.lng, botLL.lat, botLL.lng);
+  const yInterval = pickNITickInterval(totalHeightM, 5);
+
+  const tickLen = 10 * scale;
+  const monoFont = `'Courier New', Courier, monospace`;
+  const fontSize = 9 * scale;
+  const parts = [];
+
+  // White margin fills
+  parts.push(
+    `<rect x="0" y="0" width="${mapLeft}" height="${ch}" fill="#ffffff" />`,
+    `<rect x="${mapRight}" y="0" width="${cw - mapRight}" height="${ch}" fill="#ffffff" />`,
+    `<rect x="${mapLeft}" y="0" width="${mapW}" height="${mapTop}" fill="#ffffff" />`,
+    `<rect x="${mapLeft}" y="${mapBottom}" width="${mapW}" height="${ch - mapBottom}" fill="#ffffff" />`,
+    `<rect x="${mapLeft}" y="${mapTop}" width="${mapW}" height="${mapH}" fill="none" stroke="#000000" stroke-width="${1.5 * scale}" />`,
+  );
+
+  // X ticks
+  for (let i = 0; ; i++) {
+    const distM = i * xInterval;
+    const newLng = displaceLng(leftLL.lat, leftLL.lng, distM);
+    const pt = map.latLngToContainerPoint([leftLL.lat, newLng]);
+    const px = pt.x * scale + mapLeft;
+    if (px > mapRight + 1) break;
+    const label = escapeXml(formatTickLabel(distM));
+    parts.push(
+      `<line x1="${px}" y1="${mapTop}" x2="${px}" y2="${mapTop - tickLen}" stroke="#000" stroke-width="${scale}" />`,
+      `<line x1="${px}" y1="${mapBottom}" x2="${px}" y2="${mapBottom + tickLen}" stroke="#000" stroke-width="${scale}" />`,
+      `<text x="${px}" y="${mapTop - tickLen - 2 * scale}" text-anchor="middle" dominant-baseline="auto" font-family="${monoFont}" font-size="${fontSize}" fill="#000">${label}</text>`,
+      `<text x="${px}" y="${mapBottom + tickLen + 2 * scale}" text-anchor="middle" dominant-baseline="hanging" font-family="${monoFont}" font-size="${fontSize}" fill="#000">${label}</text>`,
+    );
+  }
+
+  // Y ticks
+  for (let i = 0; ; i++) {
+    const distM = i * yInterval;
+    const newLat = displaceLat(topLL.lat, distM);
+    const pt = map.latLngToContainerPoint([newLat, topLL.lng]);
+    const py = pt.y * scale + mapTop;
+    if (py > mapBottom + 1) break;
+    const label = escapeXml(formatTickLabel(distM));
+    parts.push(
+      `<line x1="${mapLeft}" y1="${py}" x2="${mapLeft - tickLen}" y2="${py}" stroke="#000" stroke-width="${scale}" />`,
+      `<line x1="${mapRight}" y1="${py}" x2="${mapRight + tickLen}" y2="${py}" stroke="#000" stroke-width="${scale}" />`,
+      `<text x="${mapLeft - tickLen - 2 * scale}" y="${py}" text-anchor="end" dominant-baseline="middle" font-family="${monoFont}" font-size="${fontSize}" fill="#000">${label}</text>`,
+      `<text x="${mapRight + tickLen + 2 * scale}" y="${py}" text-anchor="start" dominant-baseline="middle" font-family="${monoFont}" font-size="${fontSize}" fill="#000">${label}</text>`,
+    );
+  }
+
+  return `<g>${parts.join('')}</g>`;
+}
+
 export async function renderSceneToCanvas(scene, options = {}) {
   _exportWarnings = [];
   const scale = Number(options.pixelRatio || scene.project.layout?.exportSettings?.pixelRatio || 2);
   const canvas = document.createElement('canvas'); canvas.width = Math.round(scene.width * scale); canvas.height = Math.round(scene.height * scale); const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-  await drawTilesCanvas(ctx, scene, scale); drawRegionHighlightsCanvas(ctx, scene, scale); drawVectorsCanvas(ctx, scene, scale); drawEllipsesCanvas(ctx, scene, scale); drawPolygonsCanvas(ctx, scene, scale); await drawMarkersCanvas(ctx, scene, scale); drawCalloutsCanvas(ctx, scene, scale); drawTitleBlockCanvas(ctx, scene, scale); drawLegendCanvas(ctx, scene, scale); drawNorthArrowCanvas(ctx, scene, scale); await drawInsetCanvas(ctx, scene, scale); drawScaleBarCanvas(ctx, scene, scale); drawFooterCanvas(ctx, scene, scale); await drawLogoCanvas(ctx, scene, scale);
-  if (!options.noWatermark) { ctx.save(); ctx.font = `bold ${9 * scale}px Arial, sans-serif`; ctx.fillStyle = 'rgba(100,116,139,0.72)'; ctx.textAlign = 'right'; ctx.textBaseline = 'bottom'; ctx.shadowColor = 'rgba(255,255,255,0.6)'; ctx.shadowBlur = 3 * scale; ctx.fillText('explorationmaps.com', canvas.width - 8 * scale, canvas.height - 5 * scale); ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.restore(); }
+  const isNI = scene.template?.id === 'ni_43101_technical';
+  await drawTilesCanvas(ctx, scene, scale); drawRegionHighlightsCanvas(ctx, scene, scale); drawVectorsCanvas(ctx, scene, scale); drawEllipsesCanvas(ctx, scene, scale); drawPolygonsCanvas(ctx, scene, scale); await drawMarkersCanvas(ctx, scene, scale); drawCalloutsCanvas(ctx, scene, scale);
+  if (!isNI) { drawTitleBlockCanvas(ctx, scene, scale); drawScaleBarCanvas(ctx, scene, scale); drawFooterCanvas(ctx, scene, scale); }
+  drawLegendCanvas(ctx, scene, scale); drawNorthArrowCanvas(ctx, scene, scale); await drawInsetCanvas(ctx, scene, scale); await drawLogoCanvas(ctx, scene, scale);
+  if (isNI) { drawDistanceTicksCanvas(ctx, scene, scale); drawTitleStripCanvas(ctx, scene, scale); }
+  if (!options.noWatermark) {
+    const niFrame = isNI ? getNI43101MapFrame(scene, scale) : null;
+    const wmX = niFrame ? niFrame.mapRight - 8 * scale : canvas.width - 8 * scale;
+    const wmY = niFrame ? niFrame.mapBottom - 5 * scale : canvas.height - 5 * scale;
+    ctx.save(); ctx.font = `bold ${9 * scale}px Arial, sans-serif`; ctx.fillStyle = 'rgba(100,116,139,0.72)'; ctx.textAlign = 'right'; ctx.textBaseline = 'bottom'; ctx.shadowColor = 'rgba(255,255,255,0.6)'; ctx.shadowBlur = 3 * scale; ctx.fillText('explorationmaps.com', wmX, wmY); ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.restore();
+  }
   return canvas;
 }
 
 async function drawTilesCanvas(ctx, scene, scale) {
+  const isNI = scene.template?.id === 'ni_43101_technical';
+  if (isNI) {
+    const f = getNI43101MapFrame(scene, scale);
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(f.mapLeft, f.mapTop, f.mapRight - f.mapLeft, f.mapBottom - f.mapTop);
+    ctx.clip();
+  }
   const tiles = getTileImages(scene.container);
   for (const tile of tiles) {
     const img = await loadImage(tile.href, 'anonymous').catch(() => null);
     if (!img) continue;
     ctx.save(); ctx.globalAlpha = tile.opacity; ctx.drawImage(img, tile.x * scale, tile.y * scale, tile.width * scale, tile.height * scale); ctx.restore();
   }
+  if (isNI) ctx.restore();
 }
 function drawRegionHighlightsCanvas(ctx, scene, scale) {
   const highlights = scene.project.layout?.regionHighlights || [];
@@ -1324,9 +1732,26 @@ function renderCalloutsSvg(scene, scale) {
 export async function renderSceneToSvg(scene, options = {}) {
   _exportWarnings = [];
   const scale = Number(options.pixelRatio || scene.project.layout?.exportSettings?.pixelRatio || 2); const width = Math.round(scene.width * scale), height = Math.round(scene.height * scale);
+  const isNI = scene.template?.id === 'ni_43101_technical';
   const basemapImage = await renderBasemapImageSvg(scene, scale);
-  const watermark = options.noWatermark ? '' : `<text x="${width - 8}" y="${height - 5}" font-family="Arial,sans-serif" font-size="9" font-weight="bold" fill="rgba(100,116,139,0.72)" text-anchor="end" paint-order="stroke" stroke="rgba(255,255,255,0.55)" stroke-width="2.5" stroke-linejoin="round">explorationmaps.com</text>`;
-  return `<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="100%" height="100%" fill="#ffffff" />${basemapImage}${renderRegionHighlightsSvg(scene, scale)}${renderVectorsSvg(scene, scale)}${renderEllipsesSvg(scene, scale)}${renderPolygonsSvg(scene, scale)}${renderMarkersSvg(scene, scale)}${renderCalloutsSvg(scene, scale)}${renderTitleSvg(scene, scale)}${renderLegendSvg(scene, scale)}${renderNorthArrowSvg(scene, scale)}${renderInsetSvg(scene, scale)}${renderScaleBarSvg(scene, scale)}${renderFooterSvg(scene, scale)}${renderLogoSvg(scene, scale)}${watermark}</svg>`;
+
+  let mapContent;
+  if (isNI) {
+    const f = getNI43101MapFrame(scene, scale);
+    const clipId = 'ni-mapframe-clip';
+    const clipDef = `<defs><clipPath id="${clipId}"><rect x="${f.mapLeft}" y="${f.mapTop}" width="${f.mapRight - f.mapLeft}" height="${f.mapBottom - f.mapTop}" /></clipPath></defs>`;
+    const clipped = `<g clip-path="url(#${clipId})">${basemapImage}${renderRegionHighlightsSvg(scene, scale)}${renderVectorsSvg(scene, scale)}${renderEllipsesSvg(scene, scale)}${renderPolygonsSvg(scene, scale)}${renderMarkersSvg(scene, scale)}${renderCalloutsSvg(scene, scale)}</g>`;
+    const niFrame = getNI43101MapFrame(scene, scale);
+    const wmX = niFrame.mapRight - 8 * scale;
+    const wmY = niFrame.mapBottom - 5 * scale;
+    const watermark = options.noWatermark ? '' : `<text x="${wmX}" y="${wmY}" font-family="Arial,sans-serif" font-size="${9 * scale}" font-weight="bold" fill="rgba(100,116,139,0.72)" text-anchor="end" dominant-baseline="auto" paint-order="stroke" stroke="rgba(255,255,255,0.55)" stroke-width="2.5" stroke-linejoin="round">explorationmaps.com</text>`;
+    mapContent = `${clipDef}${clipped}${renderLegendSvg(scene, scale)}${renderNorthArrowSvg(scene, scale)}${renderInsetSvg(scene, scale)}${renderLogoSvg(scene, scale)}${renderDistanceTicksSvg(scene, scale)}${renderTitleStripSvg(scene, scale)}${watermark}`;
+  } else {
+    const watermark = options.noWatermark ? '' : `<text x="${width - 8}" y="${height - 5}" font-family="Arial,sans-serif" font-size="9" font-weight="bold" fill="rgba(100,116,139,0.72)" text-anchor="end" paint-order="stroke" stroke="rgba(255,255,255,0.55)" stroke-width="2.5" stroke-linejoin="round">explorationmaps.com</text>`;
+    mapContent = `${basemapImage}${renderRegionHighlightsSvg(scene, scale)}${renderVectorsSvg(scene, scale)}${renderEllipsesSvg(scene, scale)}${renderPolygonsSvg(scene, scale)}${renderMarkersSvg(scene, scale)}${renderCalloutsSvg(scene, scale)}${renderTitleSvg(scene, scale)}${renderLegendSvg(scene, scale)}${renderNorthArrowSvg(scene, scale)}${renderInsetSvg(scene, scale)}${renderScaleBarSvg(scene, scale)}${renderFooterSvg(scene, scale)}${renderLogoSvg(scene, scale)}${watermark}`;
+  }
+
+  return `<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="100%" height="100%" fill="#ffffff" />${mapContent}</svg>`;
 }
 export function downloadCanvas(filename, canvas) {
   canvas.toBlob((blob) => {

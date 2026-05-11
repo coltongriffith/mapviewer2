@@ -34,6 +34,7 @@ import { EXPORT_RATIOS } from './constants';
 import { applyRoleToLayer, inferRoleFromLayer } from './mapPresets';
 import { getTemplate } from './templates';
 import { buildLegendItems, resolveTemplateZones } from './templates/technicalResultsTemplate';
+import { resolveNI43101Zones } from './templates/technicalReportTemplate';
 import { geojsonBounds, geojsonCenter, unionBounds } from './utils/geometry';
 import { detectRegion } from './utils/detectRegion';
 import { cleanLayerName } from './utils/cleanLayerName';
@@ -64,7 +65,9 @@ import {
   saveCloudProject,
   saveTemplate,
   setDefaultTemplate,
+  updateTemplate,
   applyTemplateConfig,
+  TEMPLATE_SAVEABLE_KEYS,
 } from './utils/cloudStorage';
 import { useAuth } from './hooks/useAuth';
 import UserMenu from './components/UserMenu';
@@ -397,6 +400,117 @@ function initialWorkspaceState() {
   return resolveInitialWorkspace(fallback);
 }
 
+// ─── NI 43-101 live tick overlay ────────────────────────────────────────────
+
+function _haversineM(lat1, lng1, lat2, lng2) {
+  const R = 6371000;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+function _displaceLng(lat, lng, meters) {
+  return lng + (meters / (Math.cos(lat * Math.PI / 180) * 111319.9));
+}
+function _displaceLat(lat, meters) {
+  return lat + meters / 111132;
+}
+function _pickNIInterval(totalM, count) {
+  const steps = [100, 200, 250, 500, 1000, 2000, 2500, 5000, 10000, 25000, 50000, 100000];
+  const target = totalM / count;
+  return steps.find((s) => s >= target) || steps[steps.length - 1];
+}
+function _fmtTick(m) {
+  if (m === 0) return '0';
+  if (m >= 1000) return (m / 1000) + ' km';
+  return m + ' m';
+}
+
+function NIMapOverlay({ map, mapSize, layout }) {
+  const [, setV] = React.useState(0);
+  React.useEffect(() => {
+    if (!map) return;
+    const bump = () => setV((v) => v + 1);
+    map.on('moveend zoomend', bump);
+    return () => map.off('moveend zoomend', bump);
+  }, [map]);
+
+  if (!map || !mapSize) return null;
+
+  const STRIP_H = 72;
+  const TICK_M = 28;
+  const stageW = mapSize.width || 1000;
+  const stageH = mapSize.height || 600;
+  const stripPos = layout.titleStripPosition || 'bottom';
+  const mapTop = TICK_M + (stripPos === 'top' ? STRIP_H : 0);
+  const mapBottom = stageH - TICK_M - (stripPos === 'bottom' ? STRIP_H : 0);
+  const mapLeft = TICK_M;
+  const mapRight = stageW - TICK_M;
+  const mapW = mapRight - mapLeft;
+  const mapH = mapBottom - mapTop;
+
+  const size = map.getSize();
+  if (!size || size.x === 0 || size.y === 0) return null;
+
+  const cy = size.y / 2;
+  const cx = size.x / 2;
+  const leftLL = map.containerPointToLatLng([0, cy]);
+  const rightLL = map.containerPointToLatLng([size.x, cy]);
+  const topLL = map.containerPointToLatLng([cx, 0]);
+  const botLL = map.containerPointToLatLng([cx, size.y]);
+  const totalW = _haversineM(leftLL.lat, leftLL.lng, rightLL.lat, rightLL.lng);
+  const totalH = _haversineM(topLL.lat, topLL.lng, botLL.lat, botLL.lng);
+  const xInt = _pickNIInterval(totalW, 6);
+  const yInt = _pickNIInterval(totalH, 5);
+
+  const tickLen = 8;
+  const monoFont = "'Courier New', Courier, monospace";
+  const fontSize = 9;
+
+  const xTicks = [];
+  for (let i = 0; ; i++) {
+    const distM = i * xInt;
+    const newLng = _displaceLng(leftLL.lat, leftLL.lng, distM);
+    const pt = map.latLngToContainerPoint([leftLL.lat, newLng]);
+    const px = Math.round(pt.x * (mapW / size.x)) + mapLeft;
+    if (px > mapRight + 1) break;
+    const lbl = _fmtTick(distM);
+    xTicks.push(
+      <g key={i}>
+        <line x1={px} y1={mapTop} x2={px} y2={mapTop - tickLen} stroke="#000" strokeWidth="1" />
+        <line x1={px} y1={mapBottom} x2={px} y2={mapBottom + tickLen} stroke="#000" strokeWidth="1" />
+        <text x={px} y={mapTop - tickLen - 2} textAnchor="middle" dominantBaseline="auto" fontFamily={monoFont} fontSize={fontSize} fill="#000">{lbl}</text>
+        <text x={px} y={mapBottom + tickLen + 2} textAnchor="middle" dominantBaseline="hanging" fontFamily={monoFont} fontSize={fontSize} fill="#000">{lbl}</text>
+      </g>
+    );
+  }
+
+  const yTicks = [];
+  for (let i = 0; ; i++) {
+    const distM = i * yInt;
+    const newLat = _displaceLat(topLL.lat, -distM);
+    const pt = map.latLngToContainerPoint([newLat, topLL.lng]);
+    const py = Math.round(pt.y * (mapH / size.y)) + mapTop;
+    if (py > mapBottom + 1) break;
+    const lbl = _fmtTick(distM);
+    yTicks.push(
+      <g key={i}>
+        <line x1={mapLeft} y1={py} x2={mapLeft - tickLen} y2={py} stroke="#000" strokeWidth="1" />
+        <line x1={mapRight} y1={py} x2={mapRight + tickLen} y2={py} stroke="#000" strokeWidth="1" />
+        <text x={mapLeft - tickLen - 2} y={py} textAnchor="end" dominantBaseline="middle" fontFamily={monoFont} fontSize={fontSize} fill="#000">{lbl}</text>
+        <text x={mapRight + tickLen + 2} y={py} textAnchor="start" dominantBaseline="middle" fontFamily={monoFont} fontSize={fontSize} fill="#000">{lbl}</text>
+      </g>
+    );
+  }
+
+  return (
+    <svg style={{ position: 'absolute', top: 0, left: 0, width: stageW, height: stageH, pointerEvents: 'none', zIndex: 391 }}>
+      {xTicks}
+      {yTicks}
+    </svg>
+  );
+}
+
 export default function App() {
   const mapContainerRef = useRef(null);
   const mapViewportRef = useRef(null);
@@ -410,6 +524,9 @@ export default function App() {
   const [showTemplateManager, setShowTemplateManager] = useState(false);
   const [cloudTemplates, setCloudTemplates] = useState([]);
   const [savingTemplate, setSavingTemplate] = useState(false);
+  const [savingTemplateName, setSavingTemplateName] = useState(null);
+  const [renamingTemplateId, setRenamingTemplateId] = useState(null);
+  const [renamingTemplateName, setRenamingTemplateName] = useState('');
 
   const [screen, setScreen] = useState('landing');
   const initialWorkspace = useMemo(() => initialWorkspaceState(), []);
@@ -467,7 +584,12 @@ export default function App() {
   const selectedPolygon = useMemo(() => project.polygons?.find((poly) => poly.id === selectedPolygonId) || null, [project.polygons, selectedPolygonId]);
   const legendItems = useMemo(() => buildLegendItems(template, project.layers, project.layout), [template, project.layers, project.layout]);
   const legendGroups = useMemo(() => renderLegendGroups(legendItems, project.layout), [legendItems, project.layout]);
-  const resolvedZones = useMemo(() => resolveTemplateZones(template, project.layout, mapSize, legendItems), [template, project.layout, mapSize, legendItems]);
+  const resolvedZones = useMemo(() => {
+    if (project.layout?.templateId === 'ni_43101_technical') {
+      return resolveNI43101Zones(template, project.layout, mapSize, legendItems);
+    }
+    return resolveTemplateZones(template, project.layout, mapSize, legendItems);
+  }, [template, project.layout, mapSize, legendItems]);
   // Keep a ref so the framing effect can read the current zones without them being a reactive trigger
   const resolvedZonesRef = useRef(resolvedZones);
   useEffect(() => { resolvedZonesRef.current = resolvedZones; }, [resolvedZones]);
@@ -1679,6 +1801,19 @@ export default function App() {
         <section className="control-section">
           <h2>Content</h2>
           <div className="control-grid">
+            <div className="control-row">
+              <label>Template</label>
+              <select
+                value={project.layout.templateId || 'technical_results_v2'}
+                onChange={(e) => {
+                  updateLayout({ templateId: e.target.value, stripTitle: '', stripSubtitle: '' });
+                }}
+              >
+                <option value="technical_results_v2">Technical Results v2</option>
+                <option value="ni_43101_technical">NI 43-101 Technical</option>
+              </select>
+            </div>
+            <hr style={{ margin: '4px 0 8px', border: 'none', borderTop: '1px solid #e8eef6' }} />
             <div className="control-row"><label>Title</label><input value={localTitle} onChange={(e) => {
               const val = e.target.value;
               setLocalTitle(val);
@@ -1703,6 +1838,7 @@ export default function App() {
             <div className="element-visibility-row">
               <label className="toggle-row"><input type="checkbox" checked={project.layout.showNorthArrow !== false} onChange={(e) => updateLayout({ showNorthArrow: e.target.checked })} /><span>North Arrow</span></label>
               <label className="toggle-row"><input type="checkbox" checked={project.layout.showScaleBar !== false} onChange={(e) => updateLayout({ showScaleBar: e.target.checked })} /><span>Scale Bar</span></label>
+              <label className="toggle-row"><input type="checkbox" checked={project.layout.showLegend !== false} onChange={(e) => updateLayout({ showLegend: e.target.checked })} /><span>Legend</span></label>
               <label className="toggle-row"><input type="checkbox" checked={project.layout.footerEnabled !== false} onChange={(e) => updateLayout({ footerEnabled: e.target.checked })} /><span>Footer</span></label>
               <label className="toggle-row"><input type="checkbox" checked={project.layout.insetEnabled !== false} onChange={(e) => updateLayout({ insetEnabled: e.target.checked })} /><span>Inset Map</span></label>
             </div>
@@ -2309,6 +2445,63 @@ export default function App() {
               </div>
             </details>
 
+            {/* NI 43-101 Title Strip fields */}
+            {project.layout.templateId === 'ni_43101_technical' && (
+              <details className="sub-details" open>
+                <summary>NI 43-101 Title Strip</summary>
+                <div className="sub-details-body">
+                  <div className="control-row">
+                    <label>Figure Title</label>
+                    <input type="text" value={project.layout.stripTitle || ''} placeholder="(leave blank to hide)" onChange={(e) => updateLayout({ stripTitle: e.target.value })} />
+                  </div>
+                  <div className="control-row">
+                    <label>Subtitle / Property</label>
+                    <input type="text" value={project.layout.stripSubtitle || ''} placeholder="(optional)" onChange={(e) => updateLayout({ stripSubtitle: e.target.value })} />
+                  </div>
+                  <div className="control-row">
+                    <label>Strip Position</label>
+                    <select value={project.layout.titleStripPosition || 'bottom'} onChange={(e) => updateLayout({ titleStripPosition: e.target.value })}>
+                      <option value="bottom">Bottom</option>
+                      <option value="top">Top</option>
+                    </select>
+                  </div>
+                  <div className="control-row">
+                    <label>Scale Override</label>
+                    <input type="text" value={project.layout.manualScaleDenom || ''} placeholder="e.g. 25000 (auto if blank)" onChange={(e) => updateLayout({ manualScaleDenom: e.target.value })} />
+                  </div>
+                  <div className="control-row" style={{ alignItems: 'center' }}>
+                    <label>Text Size</label>
+                    <input type="range" min="0.7" max="1.4" step="0.05" value={project.layout.stripFontScale || 1} onChange={(e) => updateLayout({ stripFontScale: parseFloat(e.target.value) })} style={{ flex: 1 }} />
+                    <span style={{ fontSize: 11, marginLeft: 6, minWidth: 32 }}>{Math.round((project.layout.stripFontScale || 1) * 100)}%</span>
+                  </div>
+                  <div className="control-row">
+                    <label>Qualified Person</label>
+                    <input type="text" value={project.layout.qpName || ''} placeholder="Name, P.Geo." onChange={(e) => updateLayout({ qpName: e.target.value })} />
+                  </div>
+                  <div className="control-row">
+                    <label>QP Credentials</label>
+                    <input type="text" value={project.layout.qpCredentials || ''} placeholder="P.Geo., M.Sc." onChange={(e) => updateLayout({ qpCredentials: e.target.value })} />
+                  </div>
+                  <div className="control-row">
+                    <label>Company</label>
+                    <input type="text" value={project.layout.companyName || ''} placeholder="Company Name" onChange={(e) => updateLayout({ companyName: e.target.value })} />
+                  </div>
+                  <div className="control-row">
+                    <label>Figure No.</label>
+                    <input type="text" value={project.layout.figureNumber || ''} placeholder="Fig. 3-2" onChange={(e) => updateLayout({ figureNumber: e.target.value })} />
+                  </div>
+                  <div className="control-row">
+                    <label>Revision</label>
+                    <input type="text" value={project.layout.figureRevision || ''} placeholder="Rev. A" onChange={(e) => updateLayout({ figureRevision: e.target.value })} />
+                  </div>
+                  <div className="control-row">
+                    <label>Projection</label>
+                    <input type="text" value={project.layout.projectionName || ''} placeholder="NAD83 / UTM Zone 10N" onChange={(e) => updateLayout({ projectionName: e.target.value })} />
+                  </div>
+                </div>
+              </details>
+            )}
+
             {/* Panel box visibility */}
             <details className="sub-details">
               <summary>Panel Boxes</summary>
@@ -2359,58 +2552,82 @@ export default function App() {
               </div>
             </details>
 
-            {/* Company Templates */}
+            {/* Saved Templates */}
             <div className="template-manager-block">
               <div className="template-manager-header">
-                <span className="template-manager-label">Company Templates</span>
-                {user && (
+                <span className="template-manager-label">Saved Templates</span>
+                {user && savingTemplateName === null && (
                   <button
                     className="btn compact"
                     type="button"
-                    disabled={savingTemplate}
-                    onClick={async () => {
-                      const name = window.prompt('Template name', projectName || 'My Template');
-                      if (!name) return;
+                    onClick={() => setSavingTemplateName(projectName || '')}
+                  >+ Save Template</button>
+                )}
+              </div>
+              <p className="small-note" style={{ marginBottom: 8 }}>Save your logo, colours, layout, and brand settings to reuse across projects.</p>
+              {user && savingTemplateName !== null && (
+                <div className="template-save-row">
+                  <input
+                    autoFocus
+                    className="template-name-input"
+                    placeholder="Template name…"
+                    value={savingTemplateName}
+                    onChange={(e) => setSavingTemplateName(e.target.value)}
+                    onKeyDown={async (e) => {
+                      if (e.key === 'Escape') { setSavingTemplateName(null); return; }
+                      if (e.key !== 'Enter' || !savingTemplateName.trim() || savingTemplate) return;
                       setSavingTemplate(true);
+                      const name = savingTemplateName.trim();
                       try {
-                        const config = {
-                          themeId: project.layout.themeId,
-                          accentColor: project.layout.accentColor,
-                          titleBgColor: project.layout.titleBgColor,
-                          titleFgColor: project.layout.titleFgColor,
-                          panelBgColor: project.layout.panelBgColor,
-                          panelFgColor: project.layout.panelFgColor,
-                          logo: project.layout.logo,
-                          logoScale: project.layout.logoScale,
-                          mode: project.layout.mode,
-                          fonts: project.layout.fonts,
-                        };
+                        const config = Object.fromEntries(TEMPLATE_SAVEABLE_KEYS.filter(k => project.layout[k] !== undefined).map(k => [k, project.layout[k]]));
                         await saveTemplate({ name, config });
                         const updated = await listTemplates();
                         setCloudTemplates(updated);
                         setUploadStatus({ type: 'success', message: `Template "${name}" saved.` });
+                        setSavingTemplateName(null);
                       } catch (err) {
                         setUploadStatus({ type: 'error', message: `Failed to save template: ${err.message}` });
                       } finally {
                         setSavingTemplate(false);
                       }
                     }}
-                  >
-                    + Save
-                  </button>
-                )}
-              </div>
+                  />
+                  <button
+                    className="btn compact"
+                    type="button"
+                    disabled={!savingTemplateName.trim() || savingTemplate}
+                    onClick={async () => {
+                      if (!savingTemplateName.trim() || savingTemplate) return;
+                      setSavingTemplate(true);
+                      const name = savingTemplateName.trim();
+                      try {
+                        const config = Object.fromEntries(TEMPLATE_SAVEABLE_KEYS.filter(k => project.layout[k] !== undefined).map(k => [k, project.layout[k]]));
+                        await saveTemplate({ name, config });
+                        const updated = await listTemplates();
+                        setCloudTemplates(updated);
+                        setUploadStatus({ type: 'success', message: `Template "${name}" saved.` });
+                        setSavingTemplateName(null);
+                      } catch (err) {
+                        setUploadStatus({ type: 'error', message: `Failed to save template: ${err.message}` });
+                      } finally {
+                        setSavingTemplate(false);
+                      }
+                    }}
+                  >{savingTemplate ? '…' : 'Save'}</button>
+                  <button className="secondary-btn compact" type="button" onClick={() => setSavingTemplateName(null)}>Cancel</button>
+                </div>
+              )}
               {!user ? (
-                <p className="template-manager-hint">Sign in to save and apply company templates.</p>
-              ) : cloudTemplates.length === 0 ? (
-                <p className="template-manager-hint">No templates yet. Save one above.</p>
-              ) : (
+                <p className="template-manager-hint">Sign in to save and apply templates.</p>
+              ) : cloudTemplates.length === 0 && savingTemplateName === null ? (
+                <p className="template-manager-hint">No templates yet — set up your brand look and save it above.</p>
+              ) : cloudTemplates.length > 0 && (
                 <ul className="template-manager-list">
                   {cloudTemplates.map((tmpl) => (
                     <li key={tmpl.id} className="template-manager-row">
                       <button
                         className={`template-default-star${tmpl.is_default ? ' active' : ''}`}
-                        title={tmpl.is_default ? 'Default template' : 'Set as default'}
+                        title={tmpl.is_default ? 'Default — applied on login' : 'Set as default'}
                         onClick={async () => {
                           try {
                             await setDefaultTemplate(tmpl.id);
@@ -2421,33 +2638,75 @@ export default function App() {
                           }
                         }}
                       >★</button>
-                      <span className="template-name">{tmpl.name}</span>
-                      <button
-                        className="btn compact"
-                        type="button"
-                        onClick={() => {
-                          const cfg = tmpl.config || {};
-                          const keys = ['themeId','accentColor','titleBgColor','titleFgColor','panelBgColor','panelFgColor','logo','logoScale','mode'];
-                          const patch = Object.fromEntries(keys.filter(k => cfg[k] !== undefined).map(k => [k, cfg[k]]));
-                          if (cfg.fonts) patch.fonts = { ...project.layout.fonts, ...cfg.fonts };
-                          if (Object.keys(patch).length) updateLayout(patch);
-                          setUploadStatus({ type: 'success', message: `Applied template "${tmpl.name}".` });
-                        }}
-                      >Apply</button>
-                      <button
-                        className="secondary-btn compact"
-                        type="button"
-                        onClick={async () => {
-                          if (!window.confirm(`Delete template "${tmpl.name}"?`)) return;
-                          try {
-                            await deleteTemplate(tmpl.id);
-                            const updated = await listTemplates();
-                            setCloudTemplates(updated);
-                          } catch (err) {
-                            setUploadStatus({ type: 'error', message: err.message });
-                          }
-                        }}
-                      >✕</button>
+                      {renamingTemplateId === tmpl.id ? (
+                        <>
+                          <input
+                            autoFocus
+                            className="template-name-input"
+                            value={renamingTemplateName}
+                            onChange={(e) => setRenamingTemplateName(e.target.value)}
+                            onKeyDown={async (e) => {
+                              if (e.key === 'Escape') { setRenamingTemplateId(null); return; }
+                              if (e.key !== 'Enter' || !renamingTemplateName.trim()) return;
+                              try {
+                                await updateTemplate(tmpl.id, { name: renamingTemplateName.trim() });
+                                const updated = await listTemplates();
+                                setCloudTemplates(updated);
+                                setRenamingTemplateId(null);
+                              } catch (err) {
+                                setUploadStatus({ type: 'error', message: err.message });
+                              }
+                            }}
+                          />
+                          <button className="btn compact" type="button" onClick={async () => {
+                            if (!renamingTemplateName.trim()) return;
+                            try {
+                              await updateTemplate(tmpl.id, { name: renamingTemplateName.trim() });
+                              const updated = await listTemplates();
+                              setCloudTemplates(updated);
+                              setRenamingTemplateId(null);
+                            } catch (err) {
+                              setUploadStatus({ type: 'error', message: err.message });
+                            }
+                          }}>✓</button>
+                          <button className="secondary-btn compact" type="button" onClick={() => setRenamingTemplateId(null)}>✗</button>
+                        </>
+                      ) : (
+                        <>
+                          <span className="template-name">{tmpl.name}</span>
+                          <button
+                            className="secondary-btn compact"
+                            type="button"
+                            title="Rename"
+                            onClick={() => { setRenamingTemplateId(tmpl.id); setRenamingTemplateName(tmpl.name); }}
+                          >✎</button>
+                          <button
+                            className="btn compact"
+                            type="button"
+                            title="Apply theme, logo, layout and NI fields to current project"
+                            onClick={() => {
+                              const newLayout = applyTemplateConfig(tmpl.config || {}, project.layout);
+                              updateLayout(Object.fromEntries(Object.entries(newLayout).filter(([k]) => newLayout[k] !== project.layout[k])));
+                              setUploadStatus({ type: 'success', message: `"${tmpl.name}" applied — upload your layers to get started.` });
+                            }}
+                          >Apply</button>
+                          <button
+                            className="secondary-btn compact"
+                            type="button"
+                            title="Delete template"
+                            onClick={async () => {
+                              if (!window.confirm(`Delete template "${tmpl.name}"?`)) return;
+                              try {
+                                await deleteTemplate(tmpl.id);
+                                const updated = await listTemplates();
+                                setCloudTemplates(updated);
+                              } catch (err) {
+                                setUploadStatus({ type: 'error', message: err.message });
+                              }
+                            }}
+                          >✕</button>
+                        </>
+                      )}
                     </li>
                   ))}
                 </ul>
@@ -2671,7 +2930,65 @@ export default function App() {
           polygons={project.polygons || []}
         />
 
-        <div className="template-zone" style={zoneStyle(resolvedZones.title)}>
+        {project.layout.templateId === 'ni_43101_technical' && (() => {
+          const STRIP_H = 72, TICK_M = 28;
+          const stripPos = project.layout.titleStripPosition || 'bottom';
+          const stageH = mapSize?.height || 600;
+          const stageW = mapSize?.width || 1000;
+          const stripY = stripPos === 'bottom' ? stageH - STRIP_H : 0;
+          const mapTop = TICK_M + (stripPos === 'top' ? STRIP_H : 0);
+          const mapBottom = stageH - TICK_M - (stripPos === 'bottom' ? STRIP_H : 0);
+          const mapLeft = TICK_M;
+          const mapRight = stageW - TICK_M;
+          const monoFont = "'Courier New', Courier, monospace";
+          const fs = Math.max(0.7, Math.min(1.4, Number(project.layout.stripFontScale || 1)));
+          const scaleDisplay = project.layout.manualScaleDenom
+            ? '1:' + Number(String(project.layout.manualScaleDenom).replace(/[^0-9]/g, '')).toLocaleString()
+            : 'Auto';
+          return (
+            <>
+              {/* Tick margin overlays */}
+              <div style={{ position: 'absolute', top: mapTop, left: 0, width: mapLeft, height: mapBottom - mapTop, background: '#fff', borderRight: '1.5px solid #000', zIndex: 390, pointerEvents: 'none' }} />
+              <div style={{ position: 'absolute', top: mapTop, left: mapRight, width: stageW - mapRight, height: mapBottom - mapTop, background: '#fff', borderLeft: '1.5px solid #000', zIndex: 390, pointerEvents: 'none' }} />
+              <div style={{ position: 'absolute', top: 0, left: 0, width: stageW, height: mapTop, background: '#fff', borderBottom: '1.5px solid #000', zIndex: 390, pointerEvents: 'none' }} />
+              <div style={{ position: 'absolute', top: mapBottom, left: 0, width: stageW, height: stageH - mapBottom - STRIP_H, background: '#fff', borderTop: '1.5px solid #000', zIndex: 390, pointerEvents: 'none' }} />
+              {/* Live tick marks */}
+              <NIMapOverlay map={leafletMapRef.current} mapSize={mapSize} layout={project.layout} />
+              {/* Title strip */}
+              <div style={{ position: 'absolute', left: 0, top: stripY, width: stageW, height: STRIP_H, background: '#fff', border: '1.5px solid #000', boxSizing: 'border-box', zIndex: 410, display: 'flex', fontFamily: monoFont }}>
+                {/* Cell 0: Title */}
+                <div style={{ flex: '0 0 45%', borderRight: '1px solid #000', padding: '6px 8px', overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                  <div style={{ fontSize: 8 * fs, fontWeight: 700, color: '#000', marginBottom: 2 }}>TITLE</div>
+                  {project.layout.stripTitle && <div style={{ fontSize: 14 * fs, fontWeight: 700, fontFamily: 'Arial, sans-serif', color: '#000', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{project.layout.stripTitle}</div>}
+                  {project.layout.stripSubtitle && <div style={{ fontSize: 9 * fs, fontFamily: 'Arial, sans-serif', color: '#222', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{project.layout.stripSubtitle}</div>}
+                </div>
+                {/* Cell 1: Scale / Projection */}
+                <div style={{ flex: '0 0 20%', borderRight: '1px solid #000', padding: '6px 8px', overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                  <div style={{ fontSize: 7 * fs, fontWeight: 700, color: '#000', marginBottom: 1 }}>SCALE</div>
+                  <div style={{ fontSize: 10 * fs, color: '#000', marginBottom: 4 }}>{scaleDisplay}</div>
+                  <div style={{ fontSize: 7 * fs, fontWeight: 700, color: '#000', marginBottom: 1 }}>PROJECTION</div>
+                  <div style={{ fontSize: 8 * fs, color: '#000' }}>{project.layout.projectionName || 'WGS84'}</div>
+                </div>
+                {/* Cell 2: QP */}
+                <div style={{ flex: '0 0 20%', borderRight: '1px solid #000', padding: '6px 8px', overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                  <div style={{ fontSize: 7 * fs, fontWeight: 700, color: '#000', marginBottom: 1 }}>QUALIFIED PERSON</div>
+                  <div style={{ fontSize: 10 * fs, color: '#000', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{project.layout.qpName || '—'}</div>
+                  {project.layout.qpCredentials && <div style={{ fontSize: 8 * fs, color: '#000' }}>{project.layout.qpCredentials}</div>}
+                  {project.layout.companyName && <div style={{ fontSize: 7 * fs, color: '#444', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{project.layout.companyName}</div>}
+                </div>
+                {/* Cell 3: Figure */}
+                <div style={{ flex: '0 0 15%', padding: '6px 8px', overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                  <div style={{ fontSize: 7 * fs, fontWeight: 700, color: '#000', marginBottom: 1 }}>FIGURE</div>
+                  <div style={{ fontSize: 12 * fs, fontWeight: 700, color: '#000' }}>{project.layout.figureNumber || '—'}</div>
+                  {project.layout.figureRevision && <div style={{ fontSize: 8 * fs, color: '#000' }}>{project.layout.figureRevision}</div>}
+                  {project.layout.mapDate && <div style={{ fontSize: 7 * fs, color: '#444' }}>{project.layout.mapDate}</div>}
+                </div>
+              </div>
+            </>
+          );
+        })()}
+
+        {project.layout.templateId !== 'ni_43101_technical' && <div className="template-zone" style={zoneStyle(resolvedZones.title)}>
           <div className={`template-card title-card${project.layout.titleTransparent ? ' panel--transparent' : ''}`}>
             {editingTitleField === 'title' ? (
               <input
@@ -2764,10 +3081,11 @@ export default function App() {
               document.addEventListener('mouseup', onUp);
             }}
           />
-        </div>
+        </div>}
 
-        {legendItems.length ? (
+        {legendItems.length && project.layout.showLegend !== false ? (
           <div className="template-zone" style={zoneStyle(resolvedZones.legend)}>
+            <button className="panel-delete-btn" title="Hide legend" onClick={() => updateLayout({ showLegend: false })}>×</button>
             <div className={`template-card legend-card${project.layout.legendTransparent ? ' panel--transparent' : ''}`}>
               <div className="legend-header"><h3>Legend</h3></div>
               <div className="legend-list">
@@ -2880,11 +3198,24 @@ export default function App() {
             <div className="panel-resize-handle panel-resize-handle--corner" title="Drag corner to resize inset" onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); const map = leafletMapRef.current; if (map) map.dragging.disable(); const startX = e.clientX; const startY = e.clientY; const startW = project.layout.insetWidthPx ?? 244; const startH = project.layout.insetHeightPx ?? 190; const onMove = (me) => { setProject((p) => ({ ...p, layout: { ...p.layout, insetWidthPx: Math.max(100, Math.min(600, Math.round(startW + me.clientX - startX))), insetHeightPx: Math.max(80, Math.min(500, Math.round(startH + me.clientY - startY))) } })); }; const onUp = () => { if (map) map.dragging.enable(); document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); }; document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp); }} />
           </div>
         ) : null}
-        {project.layout.showScaleBar !== false && <div className="template-zone" style={zoneStyle(resolvedZones.scaleBar)}><ScaleBar map={leafletMapRef.current} /></div>}
-        {project.layout.footerText && project.layout.footerEnabled !== false ? <div className="template-zone" style={zoneStyle(resolvedZones.footer)}><div className="template-card footer-card">{project.layout.footerText}</div></div> : null}
+        {project.layout.templateId !== 'ni_43101_technical' && project.layout.showScaleBar !== false && (
+          <div className="template-zone" style={{ ...zoneStyle(resolvedZones.scaleBar), width: project.layout.scaleBarWidthPx || resolvedZones.scaleBar?.width }}>
+            <ScaleBar map={leafletMapRef.current} />
+            <button className="panel-delete-btn" title="Hide scale bar" onClick={() => updateLayout({ showScaleBar: false })}>×</button>
+            <div className="panel-resize-handle panel-resize-handle--right" title="Drag to resize scale bar width" onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); const map = leafletMapRef.current; if (map) map.dragging.disable(); const startX = e.clientX; const startW = project.layout.scaleBarWidthPx || resolvedZones.scaleBar?.width || 160; const onMove = (me) => { setProject((p) => ({ ...p, layout: { ...p.layout, scaleBarWidthPx: Math.max(80, Math.min(400, Math.round(startW + me.clientX - startX))) } })); }; const onUp = () => { if (map) map.dragging.enable(); document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); }; document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp); }} />
+          </div>
+        )}
+        {project.layout.templateId !== 'ni_43101_technical' && project.layout.footerText && project.layout.footerEnabled !== false ? (
+          <div className="template-zone" style={{ ...zoneStyle(resolvedZones.footer), height: project.layout.footerHeightPx || resolvedZones.footer?.height }}>
+            <div className="template-card footer-card">{project.layout.footerText}</div>
+            <button className="panel-delete-btn" title="Hide disclaimer" onClick={() => updateLayout({ footerEnabled: false })}>×</button>
+            <div className="panel-resize-handle panel-resize-handle--bottom" title="Drag to resize disclaimer height" onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); const map = leafletMapRef.current; if (map) map.dragging.disable(); const startY = e.clientY; const startH = project.layout.footerHeightPx || resolvedZones.footer?.height || 36; const onMove = (me) => { setProject((p) => ({ ...p, layout: { ...p.layout, footerHeightPx: Math.max(24, Math.min(120, Math.round(startH + me.clientY - startY))) } })); }; const onUp = () => { if (map) map.dragging.enable(); document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); }; document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp); }} />
+          </div>
+        ) : null}
         {project.layout.logo ? (
           <div className="template-zone" style={zoneStyle(resolvedZones.logo)}>
             <div className={`template-card logo-card${project.layout.logoTransparent ? ' panel--transparent' : ''}`}><img src={project.layout.logo} alt="Logo" /></div>
+            <button className="panel-delete-btn" title="Remove logo" onClick={() => updateLayout({ logo: null })}>×</button>
             <div className="panel-resize-handle panel-resize-handle--right" title="Drag to resize logo width" onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); const map = leafletMapRef.current; if (map) map.dragging.disable(); const startX = e.clientX; const startW = project.layout.logoWidthPx ?? 168; const onMove = (me) => { setProject((p) => ({ ...p, layout: { ...p.layout, logoWidthPx: Math.max(40, Math.min(400, Math.round(startW + me.clientX - startX))) } })); }; const onUp = () => { if (map) map.dragging.enable(); document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); }; document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp); }} />
             <div className="panel-resize-handle panel-resize-handle--bottom" title="Drag to resize logo height" onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); const map = leafletMapRef.current; if (map) map.dragging.disable(); const startY = e.clientY; const startH = project.layout.logoHeightPx ?? 74; const onMove = (me) => { setProject((p) => ({ ...p, layout: { ...p.layout, logoHeightPx: Math.max(20, Math.min(300, Math.round(startH + me.clientY - startY))) } })); }; const onUp = () => { if (map) map.dragging.enable(); document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); }; document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp); }} />
             <div className="panel-resize-handle panel-resize-handle--corner" title="Drag corner to resize logo" onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); const map = leafletMapRef.current; if (map) map.dragging.disable(); const startX = e.clientX; const startY = e.clientY; const startW = project.layout.logoWidthPx ?? 168; const startH = project.layout.logoHeightPx ?? 74; const onMove = (me) => { setProject((p) => ({ ...p, layout: { ...p.layout, logoWidthPx: Math.max(40, Math.min(400, Math.round(startW + me.clientX - startX))), logoHeightPx: Math.max(20, Math.min(300, Math.round(startH + me.clientY - startY))) } })); }; const onUp = () => { if (map) map.dragging.enable(); document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); }; document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp); }} />
