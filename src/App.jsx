@@ -581,7 +581,7 @@ export default function App() {
   const legendGroups = useMemo(() => renderLegendGroups(legendItems, project.layout), [legendItems, project.layout]);
   const resolvedZones = useMemo(() => {
     if (project.layout?.templateId === 'ni_43101_technical') {
-      return resolveNI43101Zones(template, project.layout, mapSize);
+      return resolveNI43101Zones(template, project.layout, mapSize, legendItems);
     }
     return resolveTemplateZones(template, project.layout, mapSize, legendItems);
   }, [template, project.layout, mapSize, legendItems]);

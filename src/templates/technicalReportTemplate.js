@@ -153,7 +153,7 @@ function clampZone(zone, safe, width, height) {
   return next;
 }
 
-export function resolveNI43101Zones(template, layout, mapSize) {
+export function resolveNI43101Zones(template, layout, mapSize, legendItems) {
   const width = mapSize?.width || 1600;
   const height = mapSize?.height || 1000;
 
@@ -162,13 +162,11 @@ export function resolveNI43101Zones(template, layout, mapSize) {
   const mapFrameBottom = height - TICK_MARGIN - (stripPos === 'bottom' ? STRIP_H : 0);
   const mapFrameLeft = TICK_MARGIN;
   const mapFrameRight = width - TICK_MARGIN;
-  const mapFrameW = mapFrameRight - mapFrameLeft;
-  const mapFrameH = mapFrameBottom - mapFrameTop;
 
   // Safe margins are relative to the inset map frame
   const safe = { top: mapFrameTop + 16, bottom: height - mapFrameBottom + 16, left: mapFrameLeft + 16, right: width - mapFrameRight + 16 };
 
-  const resolvedLegendItems = layout?.legendItems || [];
+  const resolvedLegendItems = legendItems || layout?.legendItems || [];
   const legendCount = resolvedLegendItems.length;
   const groupCount = new Set(resolvedLegendItems.map((item) => item.group).filter(Boolean)).size;
   const legendHeight = layout?.legendHeightPx != null
