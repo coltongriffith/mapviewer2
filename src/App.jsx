@@ -2239,8 +2239,25 @@ export default function App() {
               </select>
             </div>
             <div className="control-row">
+              <label>Template</label>
+              <select
+                value={project.layout.templateId || 'technical_results_v2'}
+                onChange={(e) => {
+                  const tid = e.target.value;
+                  const updates = { templateId: tid };
+                  if (tid === 'ni_43101_technical' && !project.layout._themeOverridden) {
+                    updates.themeId = 'ni_43101';
+                  }
+                  updateLayout(updates);
+                }}
+              >
+                <option value="technical_results_v2">Technical Results v2</option>
+                <option value="ni_43101_technical">NI 43-101 Technical</option>
+              </select>
+            </div>
+            <div className="control-row">
               <label>Design Theme</label>
-              <select value={project.layout.themeId || 'investor_clean'} onChange={(e) => updateLayout({ themeId: e.target.value })}>
+              <select value={project.layout.themeId || 'investor_clean'} onChange={(e) => updateLayout({ themeId: e.target.value, _themeOverridden: true })}>
                 {Object.entries(TEMPLATE_THEMES).map(([value, label]) => (
                   <option key={value} value={value}>{label}</option>
                 ))}
@@ -2308,6 +2325,46 @@ export default function App() {
                 </div>
               </div>
             </details>
+
+            {/* NI 43-101 Title Strip fields */}
+            {project.layout.templateId === 'ni_43101_technical' && (
+              <details className="sub-details" open>
+                <summary>NI 43-101 Title Strip</summary>
+                <div className="sub-details-body">
+                  <div className="control-row">
+                    <label>Strip Position</label>
+                    <select value={project.layout.titleStripPosition || 'bottom'} onChange={(e) => updateLayout({ titleStripPosition: e.target.value })}>
+                      <option value="bottom">Bottom</option>
+                      <option value="top">Top</option>
+                    </select>
+                  </div>
+                  <div className="control-row">
+                    <label>Qualified Person</label>
+                    <input type="text" value={project.layout.qpName || ''} placeholder="Name, P.Geo." onChange={(e) => updateLayout({ qpName: e.target.value })} />
+                  </div>
+                  <div className="control-row">
+                    <label>QP Credentials</label>
+                    <input type="text" value={project.layout.qpCredentials || ''} placeholder="P.Geo., M.Sc." onChange={(e) => updateLayout({ qpCredentials: e.target.value })} />
+                  </div>
+                  <div className="control-row">
+                    <label>Company</label>
+                    <input type="text" value={project.layout.companyName || ''} placeholder="Company Name" onChange={(e) => updateLayout({ companyName: e.target.value })} />
+                  </div>
+                  <div className="control-row">
+                    <label>Figure No.</label>
+                    <input type="text" value={project.layout.figureNumber || ''} placeholder="Fig. 3-2" onChange={(e) => updateLayout({ figureNumber: e.target.value })} />
+                  </div>
+                  <div className="control-row">
+                    <label>Revision</label>
+                    <input type="text" value={project.layout.figureRevision || ''} placeholder="Rev. A" onChange={(e) => updateLayout({ figureRevision: e.target.value })} />
+                  </div>
+                  <div className="control-row">
+                    <label>Projection</label>
+                    <input type="text" value={project.layout.projectionName || ''} placeholder="NAD83 / UTM Zone 10N" onChange={(e) => updateLayout({ projectionName: e.target.value })} />
+                  </div>
+                </div>
+              </details>
+            )}
 
             {/* Panel box visibility */}
             <details className="sub-details">

@@ -54,6 +54,7 @@ export const TEMPLATE_THEMES = {
   modern_dark:         'Modern — Dark Indigo',
   warm_terrain:        'Terrain — Earthy & Warm',
   midnight_blueprint:  'Blueprint — Midnight Cyan',
+  ni_43101:            'NI 43-101 — Technical Report',
 };
 
 export const FONT_OPTIONS = {

@@ -183,6 +183,40 @@ export const THEME_TOKENS = {
   },
 };
 
+THEME_TOKENS.ni_43101 = {
+  panelRadius: 0,
+  panelFill: 'rgba(255,255,255,1.0)',
+  panelBorder: 'rgba(0,0,0,0.85)',
+  panelShadow: 'none',
+  titleRadius: 0,
+  titleFill: 'rgba(255,255,255,1.0)',
+  titleBorder: 'rgba(0,0,0,0.85)',
+  titleAccent: null,
+  titleAccentStyle: null,
+  titleText: '#000000',
+  subtitleText: '#222222',
+  panelTitle: '#000000',
+  bodyText: '#111111',
+  mutedText: '#444444',
+  footerFill: 'rgba(255,255,255,1.0)',
+  footerText: '#222222',
+  calloutFill: 'rgba(255,255,255,1.0)',
+  calloutBorder: '#000000',
+  calloutText: '#000000',
+  northArrowFill: 'rgba(255,255,255,1.0)',
+  northArrowText: '#000000',
+  scaleFill: 'rgba(255,255,255,1.0)',
+  scaleStroke: '#000000',
+  insetFill: 'rgba(255,255,255,1.0)',
+  insetBorder: 'rgba(0,0,0,0.85)',
+  insetTitle: '#000000',
+  insetMuted: '#444444',
+  logoFill: 'rgba(255,255,255,1.0)',
+  logoBorder: 'rgba(0,0,0,0.85)',
+  panelAccentLeft: null,
+};
+THEME_TOKENS.technical_report = THEME_TOKENS.ni_43101;
+
 // Fallback aliases — kept so old stored project themeIds still render
 THEME_TOKENS.modern_rounded    = THEME_TOKENS.investor_clean;
 THEME_TOKENS.clean_corporate   = THEME_TOKENS.investor_clean;
