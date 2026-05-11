@@ -1061,10 +1061,11 @@ function drawTitleStripCanvas(ctx, scene, scale) {
     ctx.stroke();
   });
 
+  const fs = Math.max(0.7, Math.min(1.4, Number(layout.stripFontScale || 1)));
   const monoFont = `'Courier New', Courier, monospace`;
-  const labelSize = 8 * scale;
-  const valueSize = 11 * scale;
-  const titleSize = 16 * scale;
+  const labelSize = 8 * scale * fs;
+  const valueSize = 11 * scale * fs;
+  const titleSize = 16 * scale * fs;
   const pad = 8 * scale;
   const labelY = stripY + 14 * scale;
   const valueY = stripY + 30 * scale;
@@ -1072,21 +1073,26 @@ function drawTitleStripCanvas(ctx, scene, scale) {
   ctx.fillStyle = '#000000';
   ctx.textBaseline = 'middle';
 
-  // Cell 0: Figure title
+  // Cell 0: Figure title (uses stripTitle/stripSubtitle, not main title)
   ctx.font = `700 ${labelSize}px ${monoFont}`;
-  ctx.fillText('TITLE', cell0 + pad, labelY);
-  ctx.font = `700 ${titleSize}px Arial, sans-serif`;
-  ctx.fillText(layout.title || 'Project Map', cell0 + pad, valueY + 4 * scale);
-  if (layout.subtitle) {
-    ctx.font = `${labelSize + 1}px Arial, sans-serif`;
-    ctx.fillText(layout.subtitle, cell0 + pad, valueY + 20 * scale);
+  ctx.fillText('TITLE', pad, labelY);
+  const stripTitle = layout.stripTitle || '';
+  if (stripTitle) {
+    ctx.font = `700 ${titleSize}px Arial, sans-serif`;
+    ctx.fillText(stripTitle, pad, valueY + 4 * scale);
+  }
+  const stripSubtitle = layout.stripSubtitle || '';
+  if (stripSubtitle) {
+    ctx.font = `${(labelSize) + 1 * scale}px Arial, sans-serif`;
+    ctx.fillText(stripSubtitle, pad, valueY + (stripTitle ? 20 : 4) * scale);
   }
 
   // Cell 1: Scale / Projection
   ctx.font = `700 ${labelSize}px ${monoFont}`;
   ctx.fillText('SCALE', cell1 + pad, labelY);
   ctx.font = `${valueSize}px ${monoFont}`;
-  const scaleDenom = calcMapScaleDenom(scene);
+  const manualDenom = layout.manualScaleDenom ? parseInt(layout.manualScaleDenom.replace(/[^0-9]/g, ''), 10) : null;
+  const scaleDenom = manualDenom || calcMapScaleDenom(scene);
   ctx.fillText(formatScaleDenom(scaleDenom) || '—', cell1 + pad, valueY);
   ctx.font = `700 ${labelSize}px ${monoFont}`;
   ctx.fillText('PROJECTION', cell1 + pad, valueY + 20 * scale);
@@ -1110,7 +1116,7 @@ function drawTitleStripCanvas(ctx, scene, scale) {
   // Cell 3: Figure number / date
   ctx.font = `700 ${labelSize}px ${monoFont}`;
   ctx.fillText('FIGURE', cell3 + pad, labelY);
-  ctx.font = `700 ${valueSize + 2}px ${monoFont}`;
+  ctx.font = `700 ${valueSize + 2 * scale}px ${monoFont}`;
   ctx.fillText(layout.figureNumber || '—', cell3 + pad, valueY);
   if (layout.figureRevision) {
     ctx.font = `${labelSize}px ${monoFont}`;
@@ -1134,25 +1140,32 @@ function renderTitleStripSvg(scene, scale) {
   const cell2 = Math.round(canvasW * 0.65);
   const cell3 = Math.round(canvasW * 0.85);
 
+  const fs = Math.max(0.7, Math.min(1.4, Number(layout.stripFontScale || 1)));
   const monoFont = `'Courier New', Courier, monospace`;
   const pad = 8 * scale;
   const labelY = stripY + 14 * scale;
   const valueY = stripY + 30 * scale;
-  const ls = 8 * scale;
-  const vs = 11 * scale;
+  const ls = 8 * scale * fs;
+  const vs = 11 * scale * fs;
+  const ts = 16 * scale * fs;
 
   const dividers = [cell1, cell2, cell3].map((x) =>
     `<line x1="${x}" y1="${stripY}" x2="${x}" y2="${stripY + stripH}" stroke="#000" stroke-width="${scale}" />`
   ).join('');
 
-  const scaleDenom = calcMapScaleDenom(scene);
+  const manualDenom = layout.manualScaleDenom
+    ? parseInt(String(layout.manualScaleDenom).replace(/[^0-9]/g, ''), 10) || null
+    : null;
+  const scaleDenom = manualDenom || calcMapScaleDenom(scene);
+  const stripTitle = layout.stripTitle || '';
+  const stripSubtitle = layout.stripSubtitle || '';
 
   return `<g>
 <rect x="0" y="${stripY}" width="${canvasW}" height="${stripH}" fill="#ffffff" stroke="#000000" stroke-width="${1.5 * scale}" />
 ${dividers}
 <text x="${pad}" y="${labelY}" font-family="${monoFont}" font-size="${ls}" font-weight="700" fill="#000" dominant-baseline="middle">TITLE</text>
-<text x="${pad}" y="${valueY + 4 * scale}" font-family="Arial,sans-serif" font-size="${16 * scale}" font-weight="700" fill="#000" dominant-baseline="middle">${escapeXml(layout.title || 'Project Map')}</text>
-${layout.subtitle ? `<text x="${pad}" y="${valueY + 20 * scale}" font-family="Arial,sans-serif" font-size="${ls + 1}" fill="#000" dominant-baseline="middle">${escapeXml(layout.subtitle)}</text>` : ''}
+${stripTitle ? `<text x="${pad}" y="${valueY + 4 * scale}" font-family="Arial,sans-serif" font-size="${ts}" font-weight="700" fill="#000" dominant-baseline="middle">${escapeXml(stripTitle)}</text>` : ''}
+${stripSubtitle ? `<text x="${pad}" y="${valueY + 20 * scale}" font-family="Arial,sans-serif" font-size="${ls + scale}" fill="#000" dominant-baseline="middle">${escapeXml(stripSubtitle)}</text>` : ''}
 <text x="${cell1 + pad}" y="${labelY}" font-family="${monoFont}" font-size="${ls}" font-weight="700" fill="#000" dominant-baseline="middle">SCALE</text>
 <text x="${cell1 + pad}" y="${valueY}" font-family="${monoFont}" font-size="${vs}" fill="#000" dominant-baseline="middle">${escapeXml(formatScaleDenom(scaleDenom) || '—')}</text>
 <text x="${cell1 + pad}" y="${valueY + 20 * scale}" font-family="${monoFont}" font-size="${ls}" font-weight="700" fill="#000" dominant-baseline="middle">PROJECTION</text>
@@ -1162,7 +1175,7 @@ ${layout.subtitle ? `<text x="${pad}" y="${valueY + 20 * scale}" font-family="Ar
 ${layout.qpCredentials ? `<text x="${cell2 + pad}" y="${valueY + 18 * scale}" font-family="${monoFont}" font-size="${ls}" fill="#000" dominant-baseline="middle">${escapeXml(layout.qpCredentials)}</text>` : ''}
 ${layout.companyName ? `<text x="${cell2 + pad}" y="${valueY + 32 * scale}" font-family="${monoFont}" font-size="${ls}" fill="#000" dominant-baseline="middle">${escapeXml(layout.companyName)}</text>` : ''}
 <text x="${cell3 + pad}" y="${labelY}" font-family="${monoFont}" font-size="${ls}" font-weight="700" fill="#000" dominant-baseline="middle">FIGURE</text>
-<text x="${cell3 + pad}" y="${valueY}" font-family="${monoFont}" font-size="${vs + 2}" font-weight="700" fill="#000" dominant-baseline="middle">${escapeXml(layout.figureNumber || '—')}</text>
+<text x="${cell3 + pad}" y="${valueY}" font-family="${monoFont}" font-size="${vs + 2 * fs}" font-weight="700" fill="#000" dominant-baseline="middle">${escapeXml(layout.figureNumber || '—')}</text>
 ${layout.figureRevision ? `<text x="${cell3 + pad}" y="${valueY + 18 * scale}" font-family="${monoFont}" font-size="${ls}" fill="#000" dominant-baseline="middle">${escapeXml(layout.figureRevision)}</text>` : ''}
 ${layout.mapDate ? `<text x="${cell3 + pad}" y="${valueY + 32 * scale}" font-family="${monoFont}" font-size="${ls}" fill="#000" dominant-baseline="middle">${escapeXml(layout.mapDate)}</text>` : ''}
 </g>`;

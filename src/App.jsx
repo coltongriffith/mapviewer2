@@ -398,6 +398,117 @@ function initialWorkspaceState() {
   return resolveInitialWorkspace(fallback);
 }
 
+// ─── NI 43-101 live tick overlay ────────────────────────────────────────────
+
+function _haversineM(lat1, lng1, lat2, lng2) {
+  const R = 6371000;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+function _displaceLng(lat, lng, meters) {
+  return lng + (meters / (Math.cos(lat * Math.PI / 180) * 111319.9));
+}
+function _displaceLat(lat, meters) {
+  return lat + meters / 111132;
+}
+function _pickNIInterval(totalM, count) {
+  const steps = [100, 200, 250, 500, 1000, 2000, 2500, 5000, 10000, 25000, 50000, 100000];
+  const target = totalM / count;
+  return steps.find((s) => s >= target) || steps[steps.length - 1];
+}
+function _fmtTick(m) {
+  if (m === 0) return '0';
+  if (m >= 1000) return (m / 1000) + ' km';
+  return m + ' m';
+}
+
+function NIMapOverlay({ map, mapSize, layout }) {
+  const [, setV] = React.useState(0);
+  React.useEffect(() => {
+    if (!map) return;
+    const bump = () => setV((v) => v + 1);
+    map.on('moveend zoomend', bump);
+    return () => map.off('moveend zoomend', bump);
+  }, [map]);
+
+  if (!map || !mapSize) return null;
+
+  const STRIP_H = 72;
+  const TICK_M = 28;
+  const stageW = mapSize.width || 1000;
+  const stageH = mapSize.height || 600;
+  const stripPos = layout.titleStripPosition || 'bottom';
+  const mapTop = TICK_M + (stripPos === 'top' ? STRIP_H : 0);
+  const mapBottom = stageH - TICK_M - (stripPos === 'bottom' ? STRIP_H : 0);
+  const mapLeft = TICK_M;
+  const mapRight = stageW - TICK_M;
+  const mapW = mapRight - mapLeft;
+  const mapH = mapBottom - mapTop;
+
+  const size = map.getSize();
+  if (!size || size.x === 0 || size.y === 0) return null;
+
+  const cy = size.y / 2;
+  const cx = size.x / 2;
+  const leftLL = map.containerPointToLatLng([0, cy]);
+  const rightLL = map.containerPointToLatLng([size.x, cy]);
+  const topLL = map.containerPointToLatLng([cx, 0]);
+  const botLL = map.containerPointToLatLng([cx, size.y]);
+  const totalW = _haversineM(leftLL.lat, leftLL.lng, rightLL.lat, rightLL.lng);
+  const totalH = _haversineM(topLL.lat, topLL.lng, botLL.lat, botLL.lng);
+  const xInt = _pickNIInterval(totalW, 6);
+  const yInt = _pickNIInterval(totalH, 5);
+
+  const tickLen = 8;
+  const monoFont = "'Courier New', Courier, monospace";
+  const fontSize = 9;
+
+  const xTicks = [];
+  for (let i = 0; ; i++) {
+    const distM = i * xInt;
+    const newLng = _displaceLng(leftLL.lat, leftLL.lng, distM);
+    const pt = map.latLngToContainerPoint([leftLL.lat, newLng]);
+    const px = Math.round(pt.x * (mapW / size.x)) + mapLeft;
+    if (px > mapRight + 1) break;
+    const lbl = _fmtTick(distM);
+    xTicks.push(
+      <g key={i}>
+        <line x1={px} y1={mapTop} x2={px} y2={mapTop - tickLen} stroke="#000" strokeWidth="1" />
+        <line x1={px} y1={mapBottom} x2={px} y2={mapBottom + tickLen} stroke="#000" strokeWidth="1" />
+        <text x={px} y={mapTop - tickLen - 2} textAnchor="middle" dominantBaseline="auto" fontFamily={monoFont} fontSize={fontSize} fill="#000">{lbl}</text>
+        <text x={px} y={mapBottom + tickLen + 2} textAnchor="middle" dominantBaseline="hanging" fontFamily={monoFont} fontSize={fontSize} fill="#000">{lbl}</text>
+      </g>
+    );
+  }
+
+  const yTicks = [];
+  for (let i = 0; ; i++) {
+    const distM = i * yInt;
+    const newLat = _displaceLat(topLL.lat, -distM);
+    const pt = map.latLngToContainerPoint([newLat, topLL.lng]);
+    const py = Math.round(pt.y * (mapH / size.y)) + mapTop;
+    if (py > mapBottom + 1) break;
+    const lbl = _fmtTick(distM);
+    yTicks.push(
+      <g key={i}>
+        <line x1={mapLeft} y1={py} x2={mapLeft - tickLen} y2={py} stroke="#000" strokeWidth="1" />
+        <line x1={mapRight} y1={py} x2={mapRight + tickLen} y2={py} stroke="#000" strokeWidth="1" />
+        <text x={mapLeft - tickLen - 2} y={py} textAnchor="end" dominantBaseline="middle" fontFamily={monoFont} fontSize={fontSize} fill="#000">{lbl}</text>
+        <text x={mapRight + tickLen + 2} y={py} textAnchor="start" dominantBaseline="middle" fontFamily={monoFont} fontSize={fontSize} fill="#000">{lbl}</text>
+      </g>
+    );
+  }
+
+  return (
+    <svg style={{ position: 'absolute', top: 0, left: 0, width: stageW, height: stageH, pointerEvents: 'none', zIndex: 391 }}>
+      {xTicks}
+      {yTicks}
+    </svg>
+  );
+}
+
 export default function App() {
   const mapContainerRef = useRef(null);
   const mapViewportRef = useRef(null);
@@ -1685,6 +1796,24 @@ export default function App() {
         <section className="control-section">
           <h2>Content</h2>
           <div className="control-grid">
+            <div className="control-row">
+              <label>Template</label>
+              <select
+                value={project.layout.templateId || 'technical_results_v2'}
+                onChange={(e) => {
+                  const tid = e.target.value;
+                  const updates = { templateId: tid, stripTitle: '', stripSubtitle: '' };
+                  if (tid === 'ni_43101_technical' && !project.layout._themeOverridden) {
+                    updates.themeId = 'ni_43101';
+                  }
+                  updateLayout(updates);
+                }}
+              >
+                <option value="technical_results_v2">Technical Results v2</option>
+                <option value="ni_43101_technical">NI 43-101 Technical</option>
+              </select>
+            </div>
+            <hr style={{ margin: '4px 0 8px', border: 'none', borderTop: '1px solid #e8eef6' }} />
             <div className="control-row"><label>Title</label><input value={localTitle} onChange={(e) => {
               const val = e.target.value;
               setLocalTitle(val);
@@ -2245,23 +2374,6 @@ export default function App() {
               </select>
             </div>
             <div className="control-row">
-              <label>Template</label>
-              <select
-                value={project.layout.templateId || 'technical_results_v2'}
-                onChange={(e) => {
-                  const tid = e.target.value;
-                  const updates = { templateId: tid };
-                  if (tid === 'ni_43101_technical' && !project.layout._themeOverridden) {
-                    updates.themeId = 'ni_43101';
-                  }
-                  updateLayout(updates);
-                }}
-              >
-                <option value="technical_results_v2">Technical Results v2</option>
-                <option value="ni_43101_technical">NI 43-101 Technical</option>
-              </select>
-            </div>
-            <div className="control-row">
               <label>Design Theme</label>
               <select value={project.layout.themeId || 'investor_clean'} onChange={(e) => updateLayout({ themeId: e.target.value, _themeOverridden: true })}>
                 {Object.entries(TEMPLATE_THEMES).map(([value, label]) => (
@@ -2338,11 +2450,28 @@ export default function App() {
                 <summary>NI 43-101 Title Strip</summary>
                 <div className="sub-details-body">
                   <div className="control-row">
+                    <label>Figure Title</label>
+                    <input type="text" value={project.layout.stripTitle || ''} placeholder="(leave blank to hide)" onChange={(e) => updateLayout({ stripTitle: e.target.value })} />
+                  </div>
+                  <div className="control-row">
+                    <label>Subtitle / Property</label>
+                    <input type="text" value={project.layout.stripSubtitle || ''} placeholder="(optional)" onChange={(e) => updateLayout({ stripSubtitle: e.target.value })} />
+                  </div>
+                  <div className="control-row">
                     <label>Strip Position</label>
                     <select value={project.layout.titleStripPosition || 'bottom'} onChange={(e) => updateLayout({ titleStripPosition: e.target.value })}>
                       <option value="bottom">Bottom</option>
                       <option value="top">Top</option>
                     </select>
+                  </div>
+                  <div className="control-row">
+                    <label>Scale Override</label>
+                    <input type="text" value={project.layout.manualScaleDenom || ''} placeholder="e.g. 25000 (auto if blank)" onChange={(e) => updateLayout({ manualScaleDenom: e.target.value })} />
+                  </div>
+                  <div className="control-row" style={{ alignItems: 'center' }}>
+                    <label>Text Size</label>
+                    <input type="range" min="0.7" max="1.4" step="0.05" value={project.layout.stripFontScale || 1} onChange={(e) => updateLayout({ stripFontScale: parseFloat(e.target.value) })} style={{ flex: 1 }} />
+                    <span style={{ fontSize: 11, marginLeft: 6, minWidth: 32 }}>{Math.round((project.layout.stripFontScale || 1) * 100)}%</span>
                   </div>
                   <div className="control-row">
                     <label>Qualified Person</label>
@@ -2745,9 +2874,10 @@ export default function App() {
           const mapLeft = TICK_M;
           const mapRight = stageW - TICK_M;
           const monoFont = "'Courier New', Courier, monospace";
-          const cell1 = Math.round(stageW * 0.45);
-          const cell2 = Math.round(stageW * 0.65);
-          const cell3 = Math.round(stageW * 0.85);
+          const fs = Math.max(0.7, Math.min(1.4, Number(project.layout.stripFontScale || 1)));
+          const scaleDisplay = project.layout.manualScaleDenom
+            ? '1:' + Number(String(project.layout.manualScaleDenom).replace(/[^0-9]/g, '')).toLocaleString()
+            : 'Auto';
           return (
             <>
               {/* Tick margin overlays */}
@@ -2755,34 +2885,36 @@ export default function App() {
               <div style={{ position: 'absolute', top: mapTop, left: mapRight, width: stageW - mapRight, height: mapBottom - mapTop, background: '#fff', borderLeft: '1.5px solid #000', zIndex: 390, pointerEvents: 'none' }} />
               <div style={{ position: 'absolute', top: 0, left: 0, width: stageW, height: mapTop, background: '#fff', borderBottom: '1.5px solid #000', zIndex: 390, pointerEvents: 'none' }} />
               <div style={{ position: 'absolute', top: mapBottom, left: 0, width: stageW, height: stageH - mapBottom - STRIP_H, background: '#fff', borderTop: '1.5px solid #000', zIndex: 390, pointerEvents: 'none' }} />
+              {/* Live tick marks */}
+              <NIMapOverlay map={leafletMapRef.current} mapSize={mapSize} layout={project.layout} />
               {/* Title strip */}
               <div style={{ position: 'absolute', left: 0, top: stripY, width: stageW, height: STRIP_H, background: '#fff', border: '1.5px solid #000', boxSizing: 'border-box', zIndex: 410, display: 'flex', fontFamily: monoFont }}>
                 {/* Cell 0: Title */}
                 <div style={{ flex: '0 0 45%', borderRight: '1px solid #000', padding: '6px 8px', overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                  <div style={{ fontSize: 8, fontWeight: 700, color: '#000', marginBottom: 2 }}>TITLE</div>
-                  <div style={{ fontSize: 14, fontWeight: 700, fontFamily: 'Arial, sans-serif', color: '#000', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{project.layout.title || 'Project Map'}</div>
-                  {project.layout.subtitle && <div style={{ fontSize: 9, fontFamily: 'Arial, sans-serif', color: '#222', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{project.layout.subtitle}</div>}
+                  <div style={{ fontSize: 8 * fs, fontWeight: 700, color: '#000', marginBottom: 2 }}>TITLE</div>
+                  {project.layout.stripTitle && <div style={{ fontSize: 14 * fs, fontWeight: 700, fontFamily: 'Arial, sans-serif', color: '#000', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{project.layout.stripTitle}</div>}
+                  {project.layout.stripSubtitle && <div style={{ fontSize: 9 * fs, fontFamily: 'Arial, sans-serif', color: '#222', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{project.layout.stripSubtitle}</div>}
                 </div>
                 {/* Cell 1: Scale / Projection */}
                 <div style={{ flex: '0 0 20%', borderRight: '1px solid #000', padding: '6px 8px', overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                  <div style={{ fontSize: 7, fontWeight: 700, color: '#000', marginBottom: 1 }}>SCALE</div>
-                  <div style={{ fontSize: 10, color: '#000', marginBottom: 4 }}>—</div>
-                  <div style={{ fontSize: 7, fontWeight: 700, color: '#000', marginBottom: 1 }}>PROJECTION</div>
-                  <div style={{ fontSize: 8, color: '#000' }}>{project.layout.projectionName || 'WGS84'}</div>
+                  <div style={{ fontSize: 7 * fs, fontWeight: 700, color: '#000', marginBottom: 1 }}>SCALE</div>
+                  <div style={{ fontSize: 10 * fs, color: '#000', marginBottom: 4 }}>{scaleDisplay}</div>
+                  <div style={{ fontSize: 7 * fs, fontWeight: 700, color: '#000', marginBottom: 1 }}>PROJECTION</div>
+                  <div style={{ fontSize: 8 * fs, color: '#000' }}>{project.layout.projectionName || 'WGS84'}</div>
                 </div>
                 {/* Cell 2: QP */}
                 <div style={{ flex: '0 0 20%', borderRight: '1px solid #000', padding: '6px 8px', overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                  <div style={{ fontSize: 7, fontWeight: 700, color: '#000', marginBottom: 1 }}>QUALIFIED PERSON</div>
-                  <div style={{ fontSize: 10, color: '#000', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{project.layout.qpName || '—'}</div>
-                  {project.layout.qpCredentials && <div style={{ fontSize: 8, color: '#000' }}>{project.layout.qpCredentials}</div>}
-                  {project.layout.companyName && <div style={{ fontSize: 7, color: '#444', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{project.layout.companyName}</div>}
+                  <div style={{ fontSize: 7 * fs, fontWeight: 700, color: '#000', marginBottom: 1 }}>QUALIFIED PERSON</div>
+                  <div style={{ fontSize: 10 * fs, color: '#000', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{project.layout.qpName || '—'}</div>
+                  {project.layout.qpCredentials && <div style={{ fontSize: 8 * fs, color: '#000' }}>{project.layout.qpCredentials}</div>}
+                  {project.layout.companyName && <div style={{ fontSize: 7 * fs, color: '#444', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{project.layout.companyName}</div>}
                 </div>
                 {/* Cell 3: Figure */}
                 <div style={{ flex: '0 0 15%', padding: '6px 8px', overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                  <div style={{ fontSize: 7, fontWeight: 700, color: '#000', marginBottom: 1 }}>FIGURE</div>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: '#000' }}>{project.layout.figureNumber || '—'}</div>
-                  {project.layout.figureRevision && <div style={{ fontSize: 8, color: '#000' }}>{project.layout.figureRevision}</div>}
-                  {project.layout.mapDate && <div style={{ fontSize: 7, color: '#444' }}>{project.layout.mapDate}</div>}
+                  <div style={{ fontSize: 7 * fs, fontWeight: 700, color: '#000', marginBottom: 1 }}>FIGURE</div>
+                  <div style={{ fontSize: 12 * fs, fontWeight: 700, color: '#000' }}>{project.layout.figureNumber || '—'}</div>
+                  {project.layout.figureRevision && <div style={{ fontSize: 8 * fs, color: '#000' }}>{project.layout.figureRevision}</div>}
+                  {project.layout.mapDate && <div style={{ fontSize: 7 * fs, color: '#444' }}>{project.layout.mapDate}</div>}
                 </div>
               </div>
             </>
