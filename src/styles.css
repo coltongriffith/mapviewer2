@@ -887,6 +887,30 @@ button, input, select, textarea { font: inherit; }
 .export-hd-skip:hover { background: #f1f5f9; border-color: #94a3b8; color: #1e293b; }
 
 /* ── Panel drag-resize handles ── */
+.panel-delete-btn {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(239,68,68,0.88);
+  border: none;
+  color: #fff;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s;
+  z-index: 601;
+  pointer-events: auto;
+  padding: 0;
+}
+.template-zone:hover .panel-delete-btn { opacity: 1; }
+.panel-delete-btn:hover { background: rgba(220,38,38,1); }
 .panel-resize-handle {
   position: absolute;
   z-index: 600;
