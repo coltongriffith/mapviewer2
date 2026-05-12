@@ -914,6 +914,40 @@ button, input, select, textarea { font: inherit; }
 }
 .template-zone:hover .panel-delete-btn { opacity: 1; }
 .panel-delete-btn:hover { background: rgba(220,38,38,1); }
+/* Selection outline on hover */
+.template-zone:hover { outline: 1.5px solid rgba(37, 99, 235, 0.4); outline-offset: 1px; }
+
+/* New unified resize handles (.prh) */
+.prh {
+  position: absolute;
+  z-index: 600;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.template-zone:hover .prh { opacity: 1; }
+.prh-corner {
+  width: 12px;
+  height: 12px;
+  background: #2563eb;
+  border: 2px solid #fff;
+  border-radius: 3px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+}
+.prh-edge {
+  width: 8px;
+  height: 8px;
+  background: #2563eb;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+}
+.prh:hover { opacity: 1 !important; background: #1d4ed8; }
+
+/* Alignment guide lines shown during resize */
+.resize-guide--v { position: absolute; top: 0; bottom: 0; width: 1px; background: #f43f5e; z-index: 9999; pointer-events: none; }
+.resize-guide--h { position: absolute; left: 0; right: 0; height: 1px; background: #f43f5e; z-index: 9999; pointer-events: none; }
+
+/* Legacy resize handles (footer still uses these) */
 .panel-resize-handle {
   position: absolute;
   z-index: 600;
@@ -922,60 +956,14 @@ button, input, select, textarea { font: inherit; }
 }
 .template-zone:hover .panel-resize-handle { opacity: 1; }
 .panel-resize-handle--bottom {
-  left: 12px;
-  right: 12px;
-  bottom: -5px;
-  height: 10px;
-  cursor: ns-resize;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  left: 12px; right: 12px; bottom: -5px; height: 10px;
+  cursor: ns-resize; display: flex; align-items: center; justify-content: center;
 }
-.panel-resize-handle--right {
-  top: 12px;
-  bottom: 12px;
-  right: -5px;
-  width: 10px;
-  cursor: ew-resize;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-/* Visible grip stripe */
 .panel-resize-handle--bottom::after {
-  content: '';
-  display: block;
-  width: 40px;
-  height: 4px;
-  border-radius: 2px;
-  background: rgba(59, 130, 246, 0.7);
-  box-shadow: 0 0 0 1px rgba(255,255,255,0.4);
+  content: ''; display: block; width: 40px; height: 4px;
+  border-radius: 2px; background: rgba(59,130,246,0.7); box-shadow: 0 0 0 1px rgba(255,255,255,0.4);
 }
-.panel-resize-handle--right::after {
-  content: '';
-  display: block;
-  height: 40px;
-  width: 4px;
-  border-radius: 2px;
-  background: rgba(59, 130, 246, 0.7);
-  box-shadow: 0 0 0 1px rgba(255,255,255,0.4);
-}
-.panel-resize-handle:hover::after,
-.panel-resize-handle:active::after { background: rgba(37, 99, 235, 0.9); }
-
-.panel-resize-handle--corner {
-  position: absolute;
-  bottom: -6px;
-  right: -6px;
-  width: 14px;
-  height: 14px;
-  cursor: nwse-resize;
-  background: rgba(59, 130, 246, 0.8);
-  border-radius: 3px;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.5);
-}
-.panel-resize-handle--corner:hover,
-.panel-resize-handle--corner:active { background: rgba(37, 99, 235, 0.95); }
+.panel-resize-handle:hover::after, .panel-resize-handle:active::after { background: rgba(37,99,235,0.9); }
 
 /* ── Transparent panel (no box) ── */
 .panel--transparent {
