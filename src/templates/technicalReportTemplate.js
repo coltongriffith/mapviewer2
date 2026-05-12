@@ -205,32 +205,52 @@ export function resolveNI43101Zones(template, layout, mapSize, legendItems) {
 
   const logoW = layout?.logoWidthPx ? Math.max(40, Math.min(400, layout.logoWidthPx)) : 168;
   const logoH = layout?.logoHeightPx ? Math.max(20, Math.min(300, layout.logoHeightPx)) : 74;
-  const logoZone = clampZone({ ...anchorAt(logoCorner), width: logoW, height: logoH }, safe, width, height);
-  if (layout?.logo) vOffset[logoCorner] += logoH + 10;
 
-  const insetZone = layout?.insetEnabled === false
-    ? { top: safe.top, left: width - safe.right, width: 0, height: 0 }
-    : clampZone({ ...anchorAt(insetCorner), width: insetWidth, height: insetHeight }, safe, width, height);
-  if (layout?.insetEnabled !== false) vOffset[insetCorner] += insetHeight + 10;
+  // Placement order is user-controlled via cornerOrder; elements sharing a corner stack in list order
+  const cornerOrder = layout?.cornerOrder || ['logo', 'inset', 'northArrow', 'scaleBar', 'legend'];
+  const zones = {};
 
-  const northArrowZone = clampZone({ ...anchorAt(northArrowCorner), width: 74, height: 100 }, safe, width, height);
-  vOffset[northArrowCorner] += 100 + 10;
+  const placers = {
+    logo: () => {
+      const z = clampZone({ ...anchorAt(logoCorner), width: logoW, height: logoH }, safe, width, height);
+      if (layout?.logo) vOffset[logoCorner] += logoH + 10;
+      return z;
+    },
+    inset: () => {
+      if (layout?.insetEnabled === false) return { top: safe.top, left: width - safe.right, width: 0, height: 0 };
+      const z = clampZone({ ...anchorAt(insetCorner), width: insetWidth, height: insetHeight }, safe, width, height);
+      vOffset[insetCorner] += insetHeight + 10;
+      return z;
+    },
+    northArrow: () => {
+      const z = clampZone({ ...anchorAt(northArrowCorner), width: 74, height: 100 }, safe, width, height);
+      vOffset[northArrowCorner] += 100 + 10;
+      return z;
+    },
+    scaleBar: () => {
+      if (layout?.showScaleBar === false) return { left: 0, top: 0, width: 0, height: 0 };
+      const z = clampZone({ ...anchorAt(scaleBarCorner), width: 180, height: 60 }, safe, width, height);
+      vOffset[scaleBarCorner] += 60 + 8;
+      return z;
+    },
+    legend: () => clampZone({ ...anchorAt(legendCorner), width: legendWidth, height: legendHeight }, safe, width, height),
+  };
 
-  const scaleBarZone = layout?.showScaleBar === false
-    ? { left: 0, top: 0, width: 0, height: 0 }
-    : clampZone({ ...anchorAt(scaleBarCorner), width: 180, height: 60 }, safe, width, height);
-  if (layout?.showScaleBar !== false) vOffset[scaleBarCorner] += 60 + 8;
-
-  const legendZone = clampZone({ ...anchorAt(legendCorner), width: legendWidth, height: legendHeight }, safe, width, height);
+  for (const elem of cornerOrder) {
+    if (placers[elem]) zones[elem] = placers[elem]();
+  }
+  for (const [elem, placer] of Object.entries(placers)) {
+    if (!zones[elem]) zones[elem] = placer();
+  }
 
   return {
     title: { left: 0, top: 0, width: 0, height: 0 },
-    logo: logoZone,
+    logo: zones.logo,
     footer: { left: 0, top: 0, width: 0, height: 0 },
-    scaleBar: scaleBarZone,
-    inset: insetZone,
-    northArrow: northArrowZone,
-    legend: legendZone,
+    scaleBar: zones.scaleBar,
+    inset: zones.inset,
+    northArrow: zones.northArrow,
+    legend: zones.legend,
   };
 }
 

@@ -2686,25 +2686,54 @@ export default function App() {
               <div><label>Inset Title</label><input value={project.layout.insetTitle ?? 'Project Locator'} onChange={(e) => updateLayout({ insetTitle: e.target.value })} placeholder="Project Locator" /></div>
               <div><label>Inset Label</label><input value={project.layout.insetLabel ?? ''} onChange={(e) => updateLayout({ insetLabel: e.target.value })} placeholder={project.layout.autoInsetRegion?.name || 'Province / State'} /></div>
             </div>
-            <div className="corner-pickers">
-              {[
-                { label: 'Title',       key: 'titleCorner',      def: 'tl' },
-                { label: 'Logo',        key: 'logoCorner',       def: 'tl' },
-                { label: 'Inset',       key: 'insetCorner',      def: 'tr' },
-                { label: 'Legend',      key: 'legendCorner',     def: 'bl' },
-                { label: 'Scale bar',   key: 'scaleBarCorner',   def: 'bl' },
-                { label: 'North arrow', key: 'northArrowCorner', def: 'br' },
-              ].map(({ label, key, def }) => (
-                <div key={key} className="corner-picker-row">
-                  <span className="corner-picker-label">{label}</span>
-                  <div className="corner-picker">
-                    {['tl', 'tr', 'bl', 'br'].map((c) => (
-                      <button key={c} type="button" className={`corner-btn corner-btn-${c}${(project.layout[key] || def) === c ? ' active' : ''}`} title={{ tl: 'Top Left', tr: 'Top Right', bl: 'Bottom Left', br: 'Bottom Right' }[c]} onClick={() => updateLayout({ [key]: c })} />
-                    ))}
+            {(() => {
+              const ELEM_DEFS = {
+                title:      { label: 'Title',       key: 'titleCorner',      def: 'tl' },
+                logo:       { label: 'Logo',        key: 'logoCorner',       def: 'tl' },
+                inset:      { label: 'Inset',       key: 'insetCorner',      def: 'tr' },
+                legend:     { label: 'Legend',      key: 'legendCorner',     def: 'bl' },
+                scaleBar:   { label: 'Scale bar',   key: 'scaleBarCorner',   def: 'bl' },
+                northArrow: { label: 'North arrow', key: 'northArrowCorner', def: 'br' },
+              };
+              const defaultOrder = ['title', 'logo', 'inset', 'northArrow', 'scaleBar', 'legend'];
+              const cornerOrder = project.layout.cornerOrder || defaultOrder;
+              const isNI = project.layout.templateId === 'ni_43101_technical';
+              const orderedElems = cornerOrder.filter((id) => ELEM_DEFS[id] && !(isNI && id === 'title'));
+              const moveElem = (idx, dir) => {
+                const next = [...cornerOrder];
+                const swapIdx = idx + dir;
+                if (swapIdx < 0 || swapIdx >= next.length) return;
+                [next[idx], next[swapIdx]] = [next[swapIdx], next[idx]];
+                updateLayout({ cornerOrder: next });
+              };
+              return (
+                <div className="corner-pickers">
+                  <div className="corner-pickers-header">
+                    <span>Element</span>
+                    <span>Corner</span>
+                    <span title="Elements in the same corner stack in this order (top = closest to corner edge)">Stack order</span>
                   </div>
+                  {orderedElems.map((id, idx) => {
+                    const { label, key, def } = ELEM_DEFS[id];
+                    const globalIdx = cornerOrder.indexOf(id);
+                    return (
+                      <div key={id} className="corner-picker-row">
+                        <span className="corner-picker-label">{label}</span>
+                        <div className="corner-picker">
+                          {['tl', 'tr', 'bl', 'br'].map((c) => (
+                            <button key={c} type="button" className={`corner-btn corner-btn-${c}${(project.layout[key] || def) === c ? ' active' : ''}`} title={{ tl: 'Top Left', tr: 'Top Right', bl: 'Bottom Left', br: 'Bottom Right' }[c]} onClick={() => updateLayout({ [key]: c })} />
+                          ))}
+                        </div>
+                        <div className="corner-order-btns">
+                          <button type="button" className="corner-order-btn" disabled={idx === 0} title="Place earlier (closer to corner edge)" onClick={() => moveElem(globalIdx, -1)}>▲</button>
+                          <button type="button" className="corner-order-btn" disabled={idx === orderedElems.length - 1} title="Place later (further from corner edge)" onClick={() => moveElem(globalIdx, 1)}>▼</button>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-              ))}
-            </div>
+              );
+            })()}
             <input ref={insetInputRef} type="file" accept="image/*" onChange={handleInsetImageChange} hidden />
           </div>}
         </section>
