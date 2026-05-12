@@ -71,7 +71,7 @@ import {
 } from './utils/cloudStorage';
 import { useAuth } from './hooks/useAuth';
 import UserMenu from './components/UserMenu';
-import { ELEMENT_DEFS, CORNER_KEY, getCornerLayout, findElement, moveRowUp, moveRowDown, toggleBeside, moveToCorner, besideEnabled, besideActive } from './utils/cornerLayout';
+import { CORNER_KEY, getCornerLayout, moveToCorner } from './utils/cornerLayout';
 
 const SAMPLE_LOGO_SVG = [
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 56" width="220" height="56">',
@@ -599,6 +599,7 @@ export default function App() {
   const [annotationTool, setAnnotationTool] = useState(null);
   const [uploadStatus, setUploadStatus] = useState({ type: 'info', message: 'Open the editor, then upload your first file from the left panel.' });
   const [exporting, setExporting] = useState(false);
+  const [dragging, setDragging] = useState(null); // { id, hoverCorner, ghostX, ghostY, ghostW, ghostH }
   const [exportError, setExportError] = useState('');
   const [mapSize, setMapSize] = useState({ width: 1600, height: 1000 });
   const [saveFlash, setSaveFlash] = useState(false);
@@ -871,6 +872,43 @@ export default function App() {
         exportSettings: patch.exportSettings ? { ...(prev.layout?.exportSettings || {}), ...patch.exportSettings } : prev.layout?.exportSettings,
       },
     }));
+  };
+
+  const makeDragHandler = (id, ghostW, ghostH) => (e) => {
+    if (e.target.closest('.panel-resize-handle') || e.target.closest('.panel-delete-btn')) return;
+    e.preventDefault();
+    const map = leafletMapRef.current;
+    if (map) map.dragging.disable();
+    const layoutSnapshot = project.layout;
+    let currentHoverCorner = null;
+    setDragging({ id, hoverCorner: null, ghostX: e.clientX, ghostY: e.clientY, ghostW, ghostH });
+    const onMove = (me) => {
+      const rect = mapContainerRef.current?.getBoundingClientRect();
+      let hc = null;
+      if (rect) {
+        const relX = me.clientX - rect.left;
+        const relY = me.clientY - rect.top;
+        if (relX >= 0 && relX <= rect.width && relY >= 0 && relY <= rect.height) {
+          hc = relX < rect.width / 2
+            ? (relY < rect.height / 2 ? 'tl' : 'bl')
+            : (relY < rect.height / 2 ? 'tr' : 'br');
+        }
+      }
+      currentHoverCorner = hc;
+      setDragging((d) => d ? { ...d, ghostX: me.clientX, ghostY: me.clientY, hoverCorner: hc } : null);
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      if (map) map.dragging.enable();
+      if (currentHoverCorner) {
+        const newCl = moveToCorner(getCornerLayout(layoutSnapshot), id, currentHoverCorner);
+        updateLayout({ cornerLayout: newCl, [CORNER_KEY[id]]: currentHoverCorner });
+      }
+      setDragging(null);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
   };
 
   const updateLayer = (layerId, patch) => {
@@ -2568,23 +2606,12 @@ export default function App() {
                   </div>
                   <div className="control-row">
                     <label>Projection</label>
-                    <div style={{ display: 'flex', gap: 4 }}>
-                      <input
-                        style={{ flex: 1 }}
-                        type="text"
-                        value={project.layout.projectionName || ''}
-                        placeholder={(() => {
-                          try {
-                            const c = leafletMapRef.current?.getCenter();
-                            if (!c) return 'e.g. NAD83 / UTM Zone 10N';
-                            const z = Math.floor((c.lng + 180) / 6) + 1;
-                            return `WGS84 / UTM Zone ${z}${c.lat >= 0 ? 'N' : 'S'} (auto)`;
-                          } catch { return 'e.g. NAD83 / UTM Zone 10N'; }
-                        })()}
-                        onChange={(e) => updateLayout({ projectionName: e.target.value })}
-                      />
-                      <button type="button" className="btn" style={{ padding: '0 8px', fontSize: 11, whiteSpace: 'nowrap' }} onClick={() => { try { const c = leafletMapRef.current?.getCenter(); if (!c) return; const z = Math.floor((c.lng + 180) / 6) + 1; updateLayout({ projectionName: `WGS84 / UTM Zone ${z}${c.lat >= 0 ? 'N' : 'S'}` }); } catch {} }}>Auto</button>
-                    </div>
+                    <input
+                      type="text"
+                      value={project.layout.projectionName || ''}
+                      placeholder="e.g. NAD83 / UTM Zone 10N"
+                      onChange={(e) => updateLayout({ projectionName: e.target.value })}
+                    />
                   </div>
                 </div>
               </details>
@@ -2696,56 +2723,6 @@ export default function App() {
               <div><label>Inset Title</label><input value={project.layout.insetTitle ?? 'Project Locator'} onChange={(e) => updateLayout({ insetTitle: e.target.value })} placeholder="Project Locator" /></div>
               <div><label>Inset Label</label><input value={project.layout.insetLabel ?? ''} onChange={(e) => updateLayout({ insetLabel: e.target.value })} placeholder={project.layout.autoInsetRegion?.name || 'Province / State'} /></div>
             </div>
-            {(() => {
-              const isNI = project.layout.templateId === 'ni_43101_technical';
-              const cl = getCornerLayout(project.layout);
-              const setLayout = (newCl, extraLayout = {}) => updateLayout({ cornerLayout: newCl, ...extraLayout });
-              // Flat ordered list of elements from cornerLayout rows
-              const orderedElems = ['tl','tr','bl','br'].flatMap((corner) =>
-                (cl[corner] || []).flatMap((row) => row)
-              ).filter((id) => !(isNI && id === 'title'));
-              return (
-                <div className="corner-pickers">
-                  <div className="corner-pickers-header">
-                    <span>Element</span>
-                    <span>Corner</span>
-                    <span title="Elements in the same corner stack in this order; ⊞ places beside the element above">Order / Beside</span>
-                  </div>
-                  {orderedElems.map((id) => {
-                    const def = ELEMENT_DEFS.find((d) => d.id === id);
-                    if (!def) return null;
-                    const cornerKey = CORNER_KEY[id];
-                    const pos = findElement(cl, id);
-                    const currentCorner = pos?.corner || def.defaultCorner;
-                    const rowIdx = pos?.rowIndex ?? 0;
-                    const cornerRows = cl[currentCorner] || [];
-                    const isFirst = rowIdx === 0;
-                    const isLast = rowIdx === cornerRows.length - 1;
-                    const bEnabled = besideEnabled(cl, id);
-                    const bActive = besideActive(cl, id);
-                    return (
-                      <div key={id} className="corner-picker-row">
-                        <span className="corner-picker-label">{def.label}</span>
-                        <div className="corner-picker">
-                          {['tl', 'tr', 'bl', 'br'].map((c) => (
-                            <button key={c} type="button"
-                              className={`corner-btn corner-btn-${c}${currentCorner === c ? ' active' : ''}`}
-                              title={{ tl: 'Top Left', tr: 'Top Right', bl: 'Bottom Left', br: 'Bottom Right' }[c]}
-                              onClick={() => { const newCl = moveToCorner(cl, id, c); setLayout(newCl, { [cornerKey]: c }); }}
-                            />
-                          ))}
-                        </div>
-                        <div className="corner-order-btns">
-                          <button type="button" className="corner-order-btn" disabled={isFirst} title="Move up in stack" onClick={() => setLayout(moveRowUp(cl, id))}>▲</button>
-                          <button type="button" className="corner-order-btn" disabled={isLast} title="Move down in stack" onClick={() => setLayout(moveRowDown(cl, id))}>▼</button>
-                          <button type="button" className={`corner-order-btn cl-beside-btn${bActive ? ' active' : ''}`} disabled={!bEnabled} title={bActive ? 'Separate from above' : 'Place beside element above'} onClick={() => setLayout(toggleBeside(cl, id))}>⊞</button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              );
-            })()}
             <input ref={insetInputRef} type="file" accept="image/*" onChange={handleInsetImageChange} hidden />
           </div>}
         </section>
@@ -2988,7 +2965,7 @@ export default function App() {
           );
         })()}
 
-        {project.layout.templateId !== 'ni_43101_technical' && <div className="template-zone" style={zoneStyle(resolvedZones.title)}>
+        {project.layout.templateId !== 'ni_43101_technical' && <div className="template-zone" style={{ ...zoneStyle(resolvedZones.title), opacity: dragging?.id === 'title' ? 0.3 : 1, cursor: 'grab' }} onMouseDown={makeDragHandler('title', project.layout.titleWidthPx ?? 520, project.layout.titleHeightPx ?? 92)}>
           <div className={`template-card title-card${project.layout.titleTransparent ? ' panel--transparent' : ''}`}>
             {editingTitleField === 'title' ? (
               <input
@@ -3084,7 +3061,7 @@ export default function App() {
         </div>}
 
         {legendItems.length && project.layout.showLegend !== false ? (
-          <div className="template-zone" style={zoneStyle(resolvedZones.legend)}>
+          <div className="template-zone" style={{ ...zoneStyle(resolvedZones.legend), opacity: dragging?.id === 'legend' ? 0.3 : 1, cursor: 'grab' }} onMouseDown={makeDragHandler('legend', project.layout.legendWidthPx ?? 300, project.layout.legendHeightPx ?? resolvedZones.legend?.height ?? 168)}>
             <button className="panel-delete-btn" title="Hide legend" onClick={() => updateLayout({ showLegend: false })}>×</button>
             <div className={`template-card legend-card${project.layout.legendTransparent ? ' panel--transparent' : ''}`}>
               <div className="legend-header"><h3>Legend</h3></div>
@@ -3190,13 +3167,13 @@ export default function App() {
         ) : null}
 
         {project.layout.showNorthArrow !== false && resolvedZones.northArrow?.width > 0 && (
-          <div className="template-zone" style={zoneStyle(resolvedZones.northArrow)}>
+          <div className="template-zone" style={{ ...zoneStyle(resolvedZones.northArrow), opacity: dragging?.id === 'northArrow' ? 0.3 : 1, cursor: 'grab' }} onMouseDown={makeDragHandler('northArrow', resolvedZones.northArrow?.width ?? 80, project.layout.northArrowHeightPx ?? 100)}>
             <NorthArrow scale={project.layout.northArrowHeightPx ?? 100} />
             <div className="panel-resize-handle panel-resize-handle--corner" title="Drag to resize north arrow" onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); const map = leafletMapRef.current; if (map) map.dragging.disable(); const startY = e.clientY; const startH = project.layout.northArrowHeightPx ?? 100; const onMove = (me) => { setProject((p) => ({ ...p, layout: { ...p.layout, northArrowHeightPx: Math.max(50, Math.min(200, Math.round(startH + me.clientY - startY))) } })); }; const onUp = () => { if (map) map.dragging.enable(); document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); }; document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp); }} />
           </div>
         )}
         {project.layout.insetEnabled !== false && resolvedZones.inset?.width ? (
-          <div className="template-zone" style={zoneStyle(resolvedZones.inset)}>
+          <div className="template-zone" style={{ ...zoneStyle(resolvedZones.inset), opacity: dragging?.id === 'inset' ? 0.3 : 1, cursor: 'grab' }} onMouseDown={makeDragHandler('inset', project.layout.insetWidthPx ?? 244, project.layout.insetHeightPx ?? 190)}>
             <LocatorInset layers={project.layers} insetMode={project.layout.insetMode} insetImage={project.layout.insetImage} autoInsetRegion={project.layout.autoInsetRegion} insetTitle={project.layout.insetTitle} insetLabel={project.layout.insetLabel} mode={project.layout.mode} zone={{ width: '100%', height: '100%' }} />
             <div className="panel-resize-handle panel-resize-handle--right" title="Drag to resize inset width" onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); const map = leafletMapRef.current; if (map) map.dragging.disable(); const startX = e.clientX; const startW = project.layout.insetWidthPx ?? 244; const onMove = (me) => { setProject((p) => ({ ...p, layout: { ...p.layout, insetWidthPx: Math.max(100, Math.min(600, Math.round(startW + me.clientX - startX))) } })); }; const onUp = () => { if (map) map.dragging.enable(); document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); }; document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp); }} />
             <div className="panel-resize-handle panel-resize-handle--bottom" title="Drag to resize inset height" onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); const map = leafletMapRef.current; if (map) map.dragging.disable(); const startY = e.clientY; const startH = project.layout.insetHeightPx ?? 190; const onMove = (me) => { setProject((p) => ({ ...p, layout: { ...p.layout, insetHeightPx: Math.max(80, Math.min(500, Math.round(startH + me.clientY - startY))) } })); }; const onUp = () => { if (map) map.dragging.enable(); document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); }; document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp); }} />
@@ -3204,7 +3181,7 @@ export default function App() {
           </div>
         ) : null}
         {project.layout.showScaleBar !== false && (
-          <div className="template-zone" style={{ ...zoneStyle(resolvedZones.scaleBar), width: project.layout.scaleBarWidthPx || resolvedZones.scaleBar?.width }}>
+          <div className="template-zone" style={{ ...zoneStyle(resolvedZones.scaleBar), width: project.layout.scaleBarWidthPx || resolvedZones.scaleBar?.width, opacity: dragging?.id === 'scaleBar' ? 0.3 : 1, cursor: 'grab' }} onMouseDown={makeDragHandler('scaleBar', project.layout.scaleBarWidthPx || resolvedZones.scaleBar?.width || 160, resolvedZones.scaleBar?.height || 40)}>
             <ScaleBar map={leafletMapRef.current} />
             <button className="panel-delete-btn" title="Hide scale bar" onClick={() => updateLayout({ showScaleBar: false })}>×</button>
             <div className="panel-resize-handle panel-resize-handle--right" title="Drag to resize scale bar width" onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); const map = leafletMapRef.current; if (map) map.dragging.disable(); const startX = e.clientX; const startW = project.layout.scaleBarWidthPx || resolvedZones.scaleBar?.width || 160; const onMove = (me) => { setProject((p) => ({ ...p, layout: { ...p.layout, scaleBarWidthPx: Math.max(80, Math.min(400, Math.round(startW + me.clientX - startX))) } })); }; const onUp = () => { if (map) map.dragging.enable(); document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); }; document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp); }} />
@@ -3218,7 +3195,7 @@ export default function App() {
           </div>
         ) : null}
         {project.layout.logo ? (
-          <div className="template-zone" style={zoneStyle(resolvedZones.logo)}>
+          <div className="template-zone" style={{ ...zoneStyle(resolvedZones.logo), opacity: dragging?.id === 'logo' ? 0.3 : 1, cursor: 'grab' }} onMouseDown={makeDragHandler('logo', project.layout.logoWidthPx ?? 168, project.layout.logoHeightPx ?? 74)}>
             <div className={`template-card logo-card${project.layout.logoTransparent ? ' panel--transparent' : ''}`}><img src={project.layout.logo} alt="Logo" /></div>
             <button className="panel-delete-btn" title="Remove logo" onClick={() => updateLayout({ logo: null })}>×</button>
             <div className="panel-resize-handle panel-resize-handle--right" title="Drag to resize logo width" onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); const map = leafletMapRef.current; if (map) map.dragging.disable(); const startX = e.clientX; const startW = project.layout.logoWidthPx ?? 168; const onMove = (me) => { setProject((p) => ({ ...p, layout: { ...p.layout, logoWidthPx: Math.max(40, Math.min(400, Math.round(startW + me.clientX - startX))) } })); }; const onUp = () => { if (map) map.dragging.enable(); document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); }; document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp); }} />
@@ -3307,9 +3284,23 @@ export default function App() {
             <button className="btn primary" style={{ width: '100%', marginTop: 8 }} type="button" onClick={addCalloutFromSelectedFeature}>Add Callout</button>
           </div>
         ) : null}
+        {dragging && ['tl','tr','bl','br'].map((corner) => (
+          <div
+            key={corner}
+            className={`drop-zone-corner drop-zone-corner--${corner}${dragging.hoverCorner === corner ? ' drop-zone-corner--hover' : ''}`}
+          />
+        ))}
           </div>
         </div>
       </div>
+      {dragging && (
+        <div className="drag-ghost" style={{
+          left: dragging.ghostX,
+          top: dragging.ghostY,
+          width: dragging.ghostW,
+          height: dragging.ghostH,
+        }} />
+      )}
       {/* Template Manager Modal */}
       {showTemplateManager && (
         <div className="modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) setShowTemplateManager(false); }}>
