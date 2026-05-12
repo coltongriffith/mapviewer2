@@ -175,7 +175,9 @@ export const TEMPLATE_SAVEABLE_KEYS = [
   // Inset
   'insetEnabled', 'insetSize', 'insetMode', 'insetCorner', 'insetTitle', 'insetWidthPx', 'insetHeightPx',
   // Navigation elements
-  'showNorthArrow', 'northArrowCorner', 'showScaleBar', 'scaleBarCorner',
+  'showNorthArrow', 'northArrowCorner', 'northArrowHeightPx', 'showScaleBar', 'scaleBarCorner',
+  // Element layout & stacking order
+  'cornerLayout', 'cornerOrder',
   // Footer
   'footerEnabled', 'footerText',
   // Display & composition

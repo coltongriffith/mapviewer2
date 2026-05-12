@@ -1,4 +1,5 @@
 import { ROLE_LABELS, POINT_ROLES } from '../projectState';
+import { getCornerLayout } from '../utils/cornerLayout';
 
 const BASE_ZONES = {
   title: { top: 22, left: 22, width: 520, height: 92 },
@@ -101,6 +102,8 @@ function legendHeightFor(layout, itemCount, groupCount = 0) {
 
 function clampZone(zone, safe, width, height) {
   const next = { ...zone };
+  next.width = Math.min(next.width, width - safe.left - safe.right);
+  next.height = Math.min(next.height, height - safe.top - safe.bottom);
   if (next.right != null && next.left == null) next.left = width - next.right - next.width;
   if (next.bottom != null && next.top == null) next.top = height - next.bottom - next.height;
   next.left = Math.max(safe.left, Math.min(width - safe.right - next.width, next.left));
@@ -163,47 +166,50 @@ export function resolveTemplateZones(template, layout, mapSize, legendItems) {
 
   const logoW = layout?.logoWidthPx ? Math.max(40, Math.min(400, layout.logoWidthPx)) : Math.round(BASE_ZONES.logo.width * logoScale);
   const logoH = layout?.logoHeightPx ? Math.max(20, Math.min(300, layout.logoHeightPx)) : Math.round(BASE_ZONES.logo.height * logoScale);
+  const naH = layout?.northArrowHeightPx ?? BASE_ZONES.northArrow.height;
+  const naW = Math.round(naH * 0.74);
 
-  // Placement order is user-controlled via cornerOrder; elements sharing a corner are stacked in list order
-  const cornerOrder = layout?.cornerOrder || ['title', 'logo', 'inset', 'northArrow', 'scaleBar', 'legend'];
+  function sizeOf(id) {
+    switch (id) {
+      case 'title':      return [titleWidth, titleHeight];
+      case 'logo':       return [logoW, logoH];
+      case 'inset':      return layout?.insetEnabled === false ? [0, 0] : [insetWidth, insetHeight];
+      case 'northArrow': return [naW, naH];
+      case 'scaleBar':   return [BASE_ZONES.scaleBar.width, BASE_ZONES.scaleBar.height];
+      case 'legend':     return [legendWidth, legendHeight];
+      default:           return [0, 0];
+    }
+  }
+
+  // cornerLayout rows: each corner has ordered rows of 1-2 element IDs
+  // Elements within the same row are placed side-by-side; rows stack in corner order
+  const cl = getCornerLayout(layout);
   const zones = {};
 
-  const placers = {
-    title: () => {
-      const z = clampZone({ ...anchorAt(titleCorner), width: titleWidth, height: titleHeight }, safe, width, height);
-      vOffset[titleCorner] += titleHeight + 10;
-      return z;
-    },
-    logo: () => {
-      const z = clampZone({ ...anchorAt(logoCorner), width: logoW, height: logoH }, safe, width, height);
-      vOffset[logoCorner] += logoH + 10;
-      return z;
-    },
-    inset: () => {
-      if (layout?.insetEnabled === false) return { top: safe.top, left: width - safe.right, width: 0, height: 0 };
-      const z = clampZone({ ...anchorAt(insetCorner), width: insetWidth, height: insetHeight }, safe, width, height);
-      vOffset[insetCorner] += insetHeight + 10;
-      return z;
-    },
-    northArrow: () => {
-      const z = clampZone({ ...anchorAt(northArrowCorner), width: BASE_ZONES.northArrow.width, height: BASE_ZONES.northArrow.height }, safe, width, height);
-      vOffset[northArrowCorner] += BASE_ZONES.northArrow.height + 10;
-      return z;
-    },
-    scaleBar: () => {
-      const z = clampZone({ ...anchorAt(scaleBarCorner), width: BASE_ZONES.scaleBar.width, height: BASE_ZONES.scaleBar.height }, safe, width, height);
-      vOffset[scaleBarCorner] += BASE_ZONES.scaleBar.height + 10;
-      return z;
-    },
-    legend: () => clampZone({ ...anchorAt(legendCorner), width: legendWidth, height: legendHeight }, safe, width, height),
-  };
-
-  for (const elem of cornerOrder) {
-    if (placers[elem]) zones[elem] = placers[elem]();
+  for (const corner of ['tl', 'tr', 'bl', 'br']) {
+    const rows = cl[corner] || [];
+    for (const row of rows) {
+      let rowH = 0;
+      let hCursor = 0;
+      for (const id of row) {
+        const [w, h] = sizeOf(id);
+        if (w === 0 && h === 0) { zones[id] = { top: 0, left: 0, width: 0, height: 0 }; continue; }
+        let anchor;
+        if (corner === 'tl') anchor = { top: safe.top + vOffset.tl, left: safe.left + hCursor };
+        else if (corner === 'tr') anchor = { top: safe.top + vOffset.tr, right: safe.right + hCursor };
+        else if (corner === 'bl') anchor = { bottom: safe.bottom + vOffset.bl, left: safe.left + hCursor };
+        else anchor = { bottom: safe.bottom + vOffset.br, right: safe.right + hCursor };
+        zones[id] = clampZone({ ...anchor, width: w, height: h }, safe, width, height);
+        hCursor += w + 8;
+        rowH = Math.max(rowH, h);
+      }
+      vOffset[corner] += rowH + 10;
+    }
   }
-  // Ensure all zones exist even if cornerOrder is partial
-  for (const [elem, placer] of Object.entries(placers)) {
-    if (!zones[elem]) zones[elem] = placer();
+
+  // Fallback: ensure every element has a zone even if missing from cornerLayout
+  for (const id of ['title', 'logo', 'inset', 'northArrow', 'scaleBar', 'legend']) {
+    if (!zones[id]) zones[id] = { top: 0, left: 0, width: 0, height: 0 };
   }
 
   const { title: titleZone, logo: logoZone, inset: insetZone, northArrow: northArrowZone, scaleBar: scaleBarZone, legend: legendZone } = zones;

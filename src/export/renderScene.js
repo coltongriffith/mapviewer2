@@ -1276,8 +1276,10 @@ function drawDistanceTicksCanvas(ctx, scene, scale) {
   ctx.strokeStyle = '#000000';
 
   // X ticks: constant UTM easting lines (top and bottom)
-  const startE = Math.ceil(leftUTM.easting / xInterval) * xInterval;
-  for (let e = startE; e <= rightUTM.easting + xInterval * 0.1; e += xInterval) {
+  const leftE_cz  = 500000 + k0 * N_ref * Math.cos(refLatR) * (leftLL.lng  - cm) * (Math.PI / 180);
+  const rightE_cz = 500000 + k0 * N_ref * Math.cos(refLatR) * (rightLL.lng - cm) * (Math.PI / 180);
+  const startE = Math.ceil(leftE_cz / xInterval) * xInterval;
+  for (let e = startE; e <= rightE_cz + xInterval * 0.1; e += xInterval) {
     const dE = e - 500000;
     const lng = cm + (dE / (k0 * N_ref * Math.cos(refLatR))) * (180 / Math.PI);
     const pt = map.latLngToContainerPoint([centerLL.lat, lng]);
@@ -1379,8 +1381,10 @@ function renderDistanceTicksSvg(scene, scale) {
   );
 
   // X ticks: constant UTM easting lines
-  const startE = Math.ceil(leftUTM.easting / xInterval) * xInterval;
-  for (let e = startE; e <= rightUTM.easting + xInterval * 0.1; e += xInterval) {
+  const leftE_cz  = 500000 + k0 * N_ref * Math.cos(refLatR) * (leftLL.lng  - cm) * (Math.PI / 180);
+  const rightE_cz = 500000 + k0 * N_ref * Math.cos(refLatR) * (rightLL.lng - cm) * (Math.PI / 180);
+  const startE = Math.ceil(leftE_cz / xInterval) * xInterval;
+  for (let e = startE; e <= rightE_cz + xInterval * 0.1; e += xInterval) {
     const dE = e - 500000;
     const lng = cm + (dE / (k0 * N_ref * Math.cos(refLatR))) * (180 / Math.PI);
     const pt = map.latLngToContainerPoint([centerLL.lat, lng]);

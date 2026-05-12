@@ -71,6 +71,7 @@ import {
 } from './utils/cloudStorage';
 import { useAuth } from './hooks/useAuth';
 import UserMenu from './components/UserMenu';
+import { ELEMENT_DEFS, CORNER_KEY, getCornerLayout, findElement, moveRowUp, moveRowDown, toggleBeside, moveToCorner, besideEnabled, besideActive } from './utils/cornerLayout';
 
 const SAMPLE_LOGO_SVG = [
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 56" width="220" height="56">',
@@ -168,9 +169,10 @@ function zoneStyle(zone) {
   };
 }
 
-function NorthArrow() {
+function NorthArrow({ scale = 100 }) {
+  const s = scale / 100;
   return (
-    <div className="template-card north-arrow-card">
+    <div className="template-card north-arrow-card" style={{ transform: `scale(${s})`, transformOrigin: 'center top' }}>
       <div className="north-arrow-label">N</div>
       <div className="north-arrow-icon">▲</div>
       <div className="north-arrow-stem" />
@@ -511,8 +513,11 @@ function NIMapOverlay({ map, mapSize, layout }) {
 
   // X ticks: vertical lines at constant UTM easting
   const xTicks = [];
-  const startE = Math.ceil(leftUTM.easting / xInt) * xInt;
-  for (let e = startE; e <= rightUTM.easting + xInt * 0.1; e += xInt) {
+  // Compute edge eastings in the center zone to avoid cross-zone mismatch near 6° boundaries
+  const leftE_cz  = 500000 + k0 * N_ref * Math.cos(refLatR) * (leftLL.lng  - cm) * (Math.PI / 180);
+  const rightE_cz = 500000 + k0 * N_ref * Math.cos(refLatR) * (rightLL.lng - cm) * (Math.PI / 180);
+  const startE = Math.ceil(leftE_cz / xInt) * xInt;
+  for (let e = startE; e <= rightE_cz + xInt * 0.1; e += xInt) {
     const dE = e - 500000;
     const lng = cm + (dE / (k0 * N_ref * Math.cos(refLatR))) * (180 / Math.PI);
     const pt = map.latLngToContainerPoint([centerLL.lat, lng]);
@@ -2107,6 +2112,7 @@ export default function App() {
                   {isOpen && (
                     <div className="control-grid">
                       <div className="control-row"><label>Text</label><input autoFocus value={callout.text} onChange={(e) => updateCallout(callout.id, { text: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter') setSelectedCalloutId(null); }} /></div>
+                      <div className="control-row"><label>Subtext</label><input value={callout.subtext || ''} placeholder="Details / result…" onChange={(e) => updateCallout(callout.id, { subtext: e.target.value })} /></div>
                       <div className="control-row inline-2">
                         <div>
                           <label>Type</label>
@@ -2562,19 +2568,23 @@ export default function App() {
                   </div>
                   <div className="control-row">
                     <label>Projection</label>
-                    <input
-                      type="text"
-                      value={project.layout.projectionName || ''}
-                      placeholder={(() => {
-                        try {
-                          const c = leafletMapRef.current?.getCenter();
-                          if (!c) return 'e.g. NAD83 / UTM Zone 10N';
-                          const z = Math.floor((c.lng + 180) / 6) + 1;
-                          return `WGS84 / UTM Zone ${z}${c.lat >= 0 ? 'N' : 'S'} (auto)`;
-                        } catch { return 'e.g. NAD83 / UTM Zone 10N'; }
-                      })()}
-                      onChange={(e) => updateLayout({ projectionName: e.target.value })}
-                    />
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      <input
+                        style={{ flex: 1 }}
+                        type="text"
+                        value={project.layout.projectionName || ''}
+                        placeholder={(() => {
+                          try {
+                            const c = leafletMapRef.current?.getCenter();
+                            if (!c) return 'e.g. NAD83 / UTM Zone 10N';
+                            const z = Math.floor((c.lng + 180) / 6) + 1;
+                            return `WGS84 / UTM Zone ${z}${c.lat >= 0 ? 'N' : 'S'} (auto)`;
+                          } catch { return 'e.g. NAD83 / UTM Zone 10N'; }
+                        })()}
+                        onChange={(e) => updateLayout({ projectionName: e.target.value })}
+                      />
+                      <button type="button" className="btn" style={{ padding: '0 8px', fontSize: 11, whiteSpace: 'nowrap' }} onClick={() => { try { const c = leafletMapRef.current?.getCenter(); if (!c) return; const z = Math.floor((c.lng + 180) / 6) + 1; updateLayout({ projectionName: `WGS84 / UTM Zone ${z}${c.lat >= 0 ? 'N' : 'S'}` }); } catch {} }}>Auto</button>
+                    </div>
                   </div>
                 </div>
               </details>
@@ -2687,46 +2697,48 @@ export default function App() {
               <div><label>Inset Label</label><input value={project.layout.insetLabel ?? ''} onChange={(e) => updateLayout({ insetLabel: e.target.value })} placeholder={project.layout.autoInsetRegion?.name || 'Province / State'} /></div>
             </div>
             {(() => {
-              const ELEM_DEFS = {
-                title:      { label: 'Title',       key: 'titleCorner',      def: 'tl' },
-                logo:       { label: 'Logo',        key: 'logoCorner',       def: 'tl' },
-                inset:      { label: 'Inset',       key: 'insetCorner',      def: 'tr' },
-                legend:     { label: 'Legend',      key: 'legendCorner',     def: 'bl' },
-                scaleBar:   { label: 'Scale bar',   key: 'scaleBarCorner',   def: 'bl' },
-                northArrow: { label: 'North arrow', key: 'northArrowCorner', def: 'br' },
-              };
-              const defaultOrder = ['title', 'logo', 'inset', 'northArrow', 'scaleBar', 'legend'];
-              const cornerOrder = project.layout.cornerOrder || defaultOrder;
               const isNI = project.layout.templateId === 'ni_43101_technical';
-              const orderedElems = cornerOrder.filter((id) => ELEM_DEFS[id] && !(isNI && id === 'title'));
-              const moveElem = (idx, dir) => {
-                const next = [...cornerOrder];
-                const swapIdx = idx + dir;
-                if (swapIdx < 0 || swapIdx >= next.length) return;
-                [next[idx], next[swapIdx]] = [next[swapIdx], next[idx]];
-                updateLayout({ cornerOrder: next });
-              };
+              const cl = getCornerLayout(project.layout);
+              const setLayout = (newCl, extraLayout = {}) => updateLayout({ cornerLayout: newCl, ...extraLayout });
+              // Flat ordered list of elements from cornerLayout rows
+              const orderedElems = ['tl','tr','bl','br'].flatMap((corner) =>
+                (cl[corner] || []).flatMap((row) => row)
+              ).filter((id) => !(isNI && id === 'title'));
               return (
                 <div className="corner-pickers">
                   <div className="corner-pickers-header">
                     <span>Element</span>
                     <span>Corner</span>
-                    <span title="Elements in the same corner stack in this order (top = closest to corner edge)">Stack order</span>
+                    <span title="Elements in the same corner stack in this order; ⊞ places beside the element above">Order / Beside</span>
                   </div>
-                  {orderedElems.map((id, idx) => {
-                    const { label, key, def } = ELEM_DEFS[id];
-                    const globalIdx = cornerOrder.indexOf(id);
+                  {orderedElems.map((id) => {
+                    const def = ELEMENT_DEFS.find((d) => d.id === id);
+                    if (!def) return null;
+                    const cornerKey = CORNER_KEY[id];
+                    const pos = findElement(cl, id);
+                    const currentCorner = pos?.corner || def.defaultCorner;
+                    const rowIdx = pos?.rowIndex ?? 0;
+                    const cornerRows = cl[currentCorner] || [];
+                    const isFirst = rowIdx === 0;
+                    const isLast = rowIdx === cornerRows.length - 1;
+                    const bEnabled = besideEnabled(cl, id);
+                    const bActive = besideActive(cl, id);
                     return (
                       <div key={id} className="corner-picker-row">
-                        <span className="corner-picker-label">{label}</span>
+                        <span className="corner-picker-label">{def.label}</span>
                         <div className="corner-picker">
                           {['tl', 'tr', 'bl', 'br'].map((c) => (
-                            <button key={c} type="button" className={`corner-btn corner-btn-${c}${(project.layout[key] || def) === c ? ' active' : ''}`} title={{ tl: 'Top Left', tr: 'Top Right', bl: 'Bottom Left', br: 'Bottom Right' }[c]} onClick={() => updateLayout({ [key]: c })} />
+                            <button key={c} type="button"
+                              className={`corner-btn corner-btn-${c}${currentCorner === c ? ' active' : ''}`}
+                              title={{ tl: 'Top Left', tr: 'Top Right', bl: 'Bottom Left', br: 'Bottom Right' }[c]}
+                              onClick={() => { const newCl = moveToCorner(cl, id, c); setLayout(newCl, { [cornerKey]: c }); }}
+                            />
                           ))}
                         </div>
                         <div className="corner-order-btns">
-                          <button type="button" className="corner-order-btn" disabled={idx === 0} title="Place earlier (closer to corner edge)" onClick={() => moveElem(globalIdx, -1)}>▲</button>
-                          <button type="button" className="corner-order-btn" disabled={idx === orderedElems.length - 1} title="Place later (further from corner edge)" onClick={() => moveElem(globalIdx, 1)}>▼</button>
+                          <button type="button" className="corner-order-btn" disabled={isFirst} title="Move up in stack" onClick={() => setLayout(moveRowUp(cl, id))}>▲</button>
+                          <button type="button" className="corner-order-btn" disabled={isLast} title="Move down in stack" onClick={() => setLayout(moveRowDown(cl, id))}>▼</button>
+                          <button type="button" className={`corner-order-btn cl-beside-btn${bActive ? ' active' : ''}`} disabled={!bEnabled} title={bActive ? 'Separate from above' : 'Place beside element above'} onClick={() => setLayout(toggleBeside(cl, id))}>⊞</button>
                         </div>
                       </div>
                     );
@@ -3177,7 +3189,12 @@ export default function App() {
           </div>
         ) : null}
 
-        {project.layout.showNorthArrow !== false && <div className="template-zone" style={zoneStyle(resolvedZones.northArrow)}><NorthArrow /></div>}
+        {project.layout.showNorthArrow !== false && resolvedZones.northArrow?.width > 0 && (
+          <div className="template-zone" style={zoneStyle(resolvedZones.northArrow)}>
+            <NorthArrow scale={project.layout.northArrowHeightPx ?? 100} />
+            <div className="panel-resize-handle panel-resize-handle--corner" title="Drag to resize north arrow" onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); const map = leafletMapRef.current; if (map) map.dragging.disable(); const startY = e.clientY; const startH = project.layout.northArrowHeightPx ?? 100; const onMove = (me) => { setProject((p) => ({ ...p, layout: { ...p.layout, northArrowHeightPx: Math.max(50, Math.min(200, Math.round(startH + me.clientY - startY))) } })); }; const onUp = () => { if (map) map.dragging.enable(); document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); }; document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp); }} />
+          </div>
+        )}
         {project.layout.insetEnabled !== false && resolvedZones.inset?.width ? (
           <div className="template-zone" style={zoneStyle(resolvedZones.inset)}>
             <LocatorInset layers={project.layers} insetMode={project.layout.insetMode} insetImage={project.layout.insetImage} autoInsetRegion={project.layout.autoInsetRegion} insetTitle={project.layout.insetTitle} insetLabel={project.layout.insetLabel} mode={project.layout.mode} zone={{ width: '100%', height: '100%' }} />

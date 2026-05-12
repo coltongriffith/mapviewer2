@@ -1,4 +1,5 @@
 import { ROLE_LABELS, POINT_ROLES } from '../projectState';
+import { getCornerLayout } from '../utils/cornerLayout';
 
 const STRIP_H = 72;
 const TICK_MARGIN = 28;
@@ -146,6 +147,8 @@ function legendHeightFor(layout, itemCount, groupCount = 0) {
 
 function clampZone(zone, safe, width, height) {
   const next = { ...zone };
+  next.width = Math.min(next.width, width - safe.left - safe.right);
+  next.height = Math.min(next.height, height - safe.top - safe.bottom);
   if (next.right != null && next.left == null) next.left = width - next.right - next.width;
   if (next.bottom != null && next.top == null) next.top = height - next.bottom - next.height;
   next.left = Math.max(safe.left, Math.min(width - safe.right - next.width, next.left));
@@ -205,42 +208,52 @@ export function resolveNI43101Zones(template, layout, mapSize, legendItems) {
 
   const logoW = layout?.logoWidthPx ? Math.max(40, Math.min(400, layout.logoWidthPx)) : 168;
   const logoH = layout?.logoHeightPx ? Math.max(20, Math.min(300, layout.logoHeightPx)) : 74;
+  const naH = layout?.northArrowHeightPx ?? 100;
+  const naW = Math.round(naH * 0.74);
 
-  // Placement order is user-controlled via cornerOrder; elements sharing a corner stack in list order
-  const cornerOrder = layout?.cornerOrder || ['logo', 'inset', 'northArrow', 'scaleBar', 'legend'];
-  const zones = {};
-
-  const placers = {
-    logo: () => {
-      const z = clampZone({ ...anchorAt(logoCorner), width: logoW, height: logoH }, safe, width, height);
-      if (layout?.logo) vOffset[logoCorner] += logoH + 10;
-      return z;
-    },
-    inset: () => {
-      if (layout?.insetEnabled === false) return { top: safe.top, left: width - safe.right, width: 0, height: 0 };
-      const z = clampZone({ ...anchorAt(insetCorner), width: insetWidth, height: insetHeight }, safe, width, height);
-      vOffset[insetCorner] += insetHeight + 10;
-      return z;
-    },
-    northArrow: () => {
-      const z = clampZone({ ...anchorAt(northArrowCorner), width: 74, height: 100 }, safe, width, height);
-      vOffset[northArrowCorner] += 100 + 10;
-      return z;
-    },
-    scaleBar: () => {
-      if (layout?.showScaleBar === false) return { left: 0, top: 0, width: 0, height: 0 };
-      const z = clampZone({ ...anchorAt(scaleBarCorner), width: 180, height: 60 }, safe, width, height);
-      vOffset[scaleBarCorner] += 60 + 8;
-      return z;
-    },
-    legend: () => clampZone({ ...anchorAt(legendCorner), width: legendWidth, height: legendHeight }, safe, width, height),
-  };
-
-  for (const elem of cornerOrder) {
-    if (placers[elem]) zones[elem] = placers[elem]();
+  function sizeOf(id) {
+    switch (id) {
+      case 'logo':       return [logoW, logoH];
+      case 'inset':      return layout?.insetEnabled === false ? [0, 0] : [insetWidth, insetHeight];
+      case 'northArrow': return [naW, naH];
+      case 'scaleBar':   return layout?.showScaleBar === false ? [0, 0] : [180, 60];
+      case 'legend':     return [legendWidth, legendHeight];
+      default:           return [0, 0];
+    }
   }
-  for (const [elem, placer] of Object.entries(placers)) {
-    if (!zones[elem]) zones[elem] = placer();
+
+  // Override cornerLayout for NI: only these elements apply (no title)
+  const rawCl = getCornerLayout(layout);
+  // Strip title from NI layout (it lives in the fixed strip, not a corner)
+  const cl = {};
+  for (const corner of ['tl', 'tr', 'bl', 'br']) {
+    cl[corner] = (rawCl[corner] || []).map((row) => row.filter((id) => id !== 'title')).filter((row) => row.length > 0);
+  }
+
+  const zones = {};
+  for (const corner of ['tl', 'tr', 'bl', 'br']) {
+    const rows = cl[corner] || [];
+    for (const row of rows) {
+      let rowH = 0;
+      let hCursor = 0;
+      for (const id of row) {
+        const [w, h] = sizeOf(id);
+        if (w === 0 && h === 0) { zones[id] = { top: 0, left: 0, width: 0, height: 0 }; continue; }
+        let anchor;
+        if (corner === 'tl') anchor = { top: safe.top + vOffset.tl, left: safe.left + hCursor };
+        else if (corner === 'tr') anchor = { top: safe.top + vOffset.tr, right: safe.right + hCursor };
+        else if (corner === 'bl') anchor = { bottom: safe.bottom + vOffset.bl, left: safe.left + hCursor };
+        else anchor = { bottom: safe.bottom + vOffset.br, right: safe.right + hCursor };
+        zones[id] = clampZone({ ...anchor, width: w, height: h }, safe, width, height);
+        hCursor += w + 8;
+        rowH = Math.max(rowH, h);
+      }
+      vOffset[corner] += rowH + 10;
+    }
+  }
+
+  for (const id of ['logo', 'inset', 'northArrow', 'scaleBar', 'legend']) {
+    if (!zones[id]) zones[id] = { top: 0, left: 0, width: 0, height: 0 };
   }
 
   return {
