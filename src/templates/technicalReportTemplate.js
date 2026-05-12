@@ -216,13 +216,18 @@ export function resolveNI43101Zones(template, layout, mapSize, legendItems) {
   const northArrowZone = clampZone({ ...anchorAt(northArrowCorner), width: 74, height: 100 }, safe, width, height);
   vOffset[northArrowCorner] += 100 + 10;
 
+  const scaleBarZone = layout?.showScaleBar === false
+    ? { left: 0, top: 0, width: 0, height: 0 }
+    : clampZone({ ...anchorAt(scaleBarCorner), width: 180, height: 60 }, safe, width, height);
+  if (layout?.showScaleBar !== false) vOffset[scaleBarCorner] += 60 + 8;
+
   const legendZone = clampZone({ ...anchorAt(legendCorner), width: legendWidth, height: legendHeight }, safe, width, height);
 
   return {
     title: { left: 0, top: 0, width: 0, height: 0 },
     logo: logoZone,
     footer: { left: 0, top: 0, width: 0, height: 0 },
-    scaleBar: { left: 0, top: 0, width: 0, height: 0 },
+    scaleBar: scaleBarZone,
     inset: insetZone,
     northArrow: northArrowZone,
     legend: legendZone,

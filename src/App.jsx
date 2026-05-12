@@ -415,15 +415,41 @@ function _displaceLng(lat, lng, meters) {
 function _displaceLat(lat, meters) {
   return lat + meters / 111132;
 }
-function _pickNIInterval(totalM, count) {
-  const steps = [100, 200, 250, 500, 1000, 2000, 2500, 5000, 10000, 25000, 50000, 100000];
+function _latlngToUTM(lat, lng) {
+  const zone = Math.floor((lng + 180) / 6) + 1;
+  const cm = (zone - 1) * 6 - 180 + 3;
+  const a = 6378137, f = 1 / 298.257223563;
+  const e2 = 2 * f - f * f;
+  const k0 = 0.9996;
+  const latR = lat * Math.PI / 180;
+  const dLng = (lng - cm) * Math.PI / 180;
+  const N = a / Math.sqrt(1 - e2 * Math.sin(latR) ** 2);
+  const T = Math.tan(latR) ** 2;
+  const C = e2 / (1 - e2) * Math.cos(latR) ** 2;
+  const A = dLng * Math.cos(latR);
+  const e1sq = e2 / (1 - e2);
+  const M = a * (
+    (1 - e2/4 - 3*e2**2/64 - 5*e2**3/256) * latR
+    - (3*e2/8 + 3*e2**2/32 + 45*e2**3/1024) * Math.sin(2*latR)
+    + (15*e2**2/256 + 45*e2**3/1024) * Math.sin(4*latR)
+    - (35*e2**3/3072) * Math.sin(6*latR));
+  const easting = k0 * N * (A + (1-T+C)*A**3/6 + (5-18*T+T**2+72*C-58*e1sq)*A**5/120) + 500000;
+  const northing = k0 * (M + N*Math.tan(latR)*(A**2/2 + (5-T+9*C+4*C**2)*A**4/24 + (61-58*T+T**2+600*C-330*e1sq)*A**6/720)) + (lat < 0 ? 10000000 : 0);
+  return { easting, northing, zone, hemisphere: lat >= 0 ? 'N' : 'S' };
+}
+function _pickUTMInterval(totalM, count) {
+  const steps = [500, 1000, 2000, 5000, 10000, 25000, 50000, 100000];
   const target = totalM / count;
   return steps.find((s) => s >= target) || steps[steps.length - 1];
 }
-function _fmtTick(m) {
-  if (m === 0) return '0';
-  if (m >= 1000) return (m / 1000) + ' km';
-  return m + ' m';
+function _fmtUTMEasting(e) {
+  const s = Math.round(e).toString().padStart(6, '0');
+  return s.slice(0, -3) + ' ' + s.slice(-3) + 'E';
+}
+function _fmtUTMNorthing(n) {
+  const s = Math.round(n).toString();
+  if (s.length <= 6) return s.slice(0, -3) + ' ' + s.slice(-3) + 'N';
+  return s.slice(0, -6) + ' ' + s.slice(-6, -3) + ' ' + s.slice(-3) + 'N';
 }
 
 function NIMapOverlay({ map, mapSize, layout }) {
@@ -454,29 +480,47 @@ function NIMapOverlay({ map, mapSize, layout }) {
 
   const cy = size.y / 2;
   const cx = size.x / 2;
+  const centerLL = map.getCenter();
   const leftLL = map.containerPointToLatLng([0, cy]);
   const rightLL = map.containerPointToLatLng([size.x, cy]);
   const topLL = map.containerPointToLatLng([cx, 0]);
   const botLL = map.containerPointToLatLng([cx, size.y]);
   const totalW = _haversineM(leftLL.lat, leftLL.lng, rightLL.lat, rightLL.lng);
   const totalH = _haversineM(topLL.lat, topLL.lng, botLL.lat, botLL.lng);
-  const xInt = _pickNIInterval(totalW, 6);
-  const yInt = _pickNIInterval(totalH, 5);
+  const xInt = _pickUTMInterval(totalW, 6);
+  const yInt = _pickUTMInterval(totalH, 5);
+
+  // UTM parameters based on map center zone
+  const centerUTM = _latlngToUTM(centerLL.lat, centerLL.lng);
+  const { zone } = centerUTM;
+  const cm = (zone - 1) * 6 - 180 + 3;
+  const a = 6378137, f = 1 / 298.257223563;
+  const e2 = 2 * f - f * f;
+  const k0 = 0.9996;
+  const refLatR = centerLL.lat * Math.PI / 180;
+  const N_ref = a / Math.sqrt(1 - e2 * Math.sin(refLatR) ** 2);
+
+  const leftUTM = _latlngToUTM(leftLL.lat, leftLL.lng);
+  const rightUTM = _latlngToUTM(rightLL.lat, rightLL.lng);
+  const topUTM = _latlngToUTM(topLL.lat, topLL.lng);
+  const botUTM = _latlngToUTM(botLL.lat, botLL.lng);
 
   const tickLen = 8;
   const monoFont = "'Courier New', Courier, monospace";
   const fontSize = 9;
 
+  // X ticks: vertical lines at constant UTM easting
   const xTicks = [];
-  for (let i = 0; ; i++) {
-    const distM = i * xInt;
-    const newLng = _displaceLng(leftLL.lat, leftLL.lng, distM);
-    const pt = map.latLngToContainerPoint([leftLL.lat, newLng]);
+  const startE = Math.ceil(leftUTM.easting / xInt) * xInt;
+  for (let e = startE; e <= rightUTM.easting + xInt * 0.1; e += xInt) {
+    const dE = e - 500000;
+    const lng = cm + (dE / (k0 * N_ref * Math.cos(refLatR))) * (180 / Math.PI);
+    const pt = map.latLngToContainerPoint([centerLL.lat, lng]);
     const px = Math.round(pt.x * (mapW / size.x)) + mapLeft;
-    if (px > mapRight + 1) break;
-    const lbl = _fmtTick(distM);
+    if (px < mapLeft - 1 || px > mapRight + 1) continue;
+    const lbl = _fmtUTMEasting(e);
     xTicks.push(
-      <g key={i}>
+      <g key={e}>
         <line x1={px} y1={mapTop} x2={px} y2={mapTop - tickLen} stroke="#000" strokeWidth="1" />
         <line x1={px} y1={mapBottom} x2={px} y2={mapBottom + tickLen} stroke="#000" strokeWidth="1" />
         <text x={px} y={mapTop - tickLen - 2} textAnchor="middle" dominantBaseline="auto" fontFamily={monoFont} fontSize={fontSize} fill="#000">{lbl}</text>
@@ -485,20 +529,21 @@ function NIMapOverlay({ map, mapSize, layout }) {
     );
   }
 
+  // Y ticks: horizontal lines at constant UTM northing (labels rotated 90° to fit margin)
   const yTicks = [];
-  for (let i = 0; ; i++) {
-    const distM = i * yInt;
-    const newLat = _displaceLat(topLL.lat, -distM);
-    const pt = map.latLngToContainerPoint([newLat, topLL.lng]);
+  const startN = Math.floor(topUTM.northing / yInt) * yInt;
+  for (let n = startN; n >= botUTM.northing - yInt * 0.1; n -= yInt) {
+    const lat = centerLL.lat + (n - centerUTM.northing) / 111132;
+    const pt = map.latLngToContainerPoint([lat, centerLL.lng]);
     const py = Math.round(pt.y * (mapH / size.y)) + mapTop;
-    if (py > mapBottom + 1) break;
-    const lbl = _fmtTick(distM);
+    if (py < mapTop - 1 || py > mapBottom + 1) continue;
+    const lbl = _fmtUTMNorthing(n);
     yTicks.push(
-      <g key={i}>
+      <g key={n}>
         <line x1={mapLeft} y1={py} x2={mapLeft - tickLen} y2={py} stroke="#000" strokeWidth="1" />
         <line x1={mapRight} y1={py} x2={mapRight + tickLen} y2={py} stroke="#000" strokeWidth="1" />
-        <text x={mapLeft - tickLen - 2} y={py} textAnchor="end" dominantBaseline="middle" fontFamily={monoFont} fontSize={fontSize} fill="#000">{lbl}</text>
-        <text x={mapRight + tickLen + 2} y={py} textAnchor="start" dominantBaseline="middle" fontFamily={monoFont} fontSize={fontSize} fill="#000">{lbl}</text>
+        <text textAnchor="middle" dominantBaseline="auto" fontFamily={monoFont} fontSize={fontSize} fill="#000" transform={`translate(${mapLeft - tickLen - 2},${py}) rotate(-90)`}>{lbl}</text>
+        <text textAnchor="middle" dominantBaseline="auto" fontFamily={monoFont} fontSize={fontSize} fill="#000" transform={`translate(${mapRight + tickLen + 2},${py}) rotate(90)`}>{lbl}</text>
       </g>
     );
   }
@@ -2515,6 +2560,22 @@ export default function App() {
                     <label>Revision</label>
                     <input type="text" value={project.layout.figureRevision || ''} placeholder="Rev. A" onChange={(e) => updateLayout({ figureRevision: e.target.value })} />
                   </div>
+                  <div className="control-row">
+                    <label>Projection</label>
+                    <input
+                      type="text"
+                      value={project.layout.projectionName || ''}
+                      placeholder={(() => {
+                        try {
+                          const c = leafletMapRef.current?.getCenter();
+                          if (!c) return 'e.g. NAD83 / UTM Zone 10N';
+                          const z = Math.floor((c.lng + 180) / 6) + 1;
+                          return `WGS84 / UTM Zone ${z}${c.lat >= 0 ? 'N' : 'S'} (auto)`;
+                        } catch { return 'e.g. NAD83 / UTM Zone 10N'; }
+                      })()}
+                      onChange={(e) => updateLayout({ projectionName: e.target.value })}
+                    />
+                  </div>
                 </div>
               </details>
             )}
@@ -2858,7 +2919,14 @@ export default function App() {
                   <div style={{ fontSize: 7 * fs, fontWeight: 700, color: '#000', marginBottom: 1 }}>SCALE</div>
                   <div style={{ fontSize: 10 * fs, color: '#000', marginBottom: 4 }}>{scaleDisplay}</div>
                   <div style={{ fontSize: 7 * fs, fontWeight: 700, color: '#000', marginBottom: 1 }}>PROJECTION</div>
-                  <div style={{ fontSize: 8 * fs, color: '#000' }}>{project.layout.projectionName || 'WGS84'}</div>
+                  <div style={{ fontSize: 8 * fs, color: '#000' }}>{project.layout.projectionName || (() => {
+                    try {
+                      const c = leafletMapRef.current?.getCenter();
+                      if (!c) return 'WGS84';
+                      const z = Math.floor((c.lng + 180) / 6) + 1;
+                      return `WGS84 / UTM Zone ${z}${c.lat >= 0 ? 'N' : 'S'}`;
+                    } catch { return 'WGS84'; }
+                  })()}</div>
                 </div>
                 {/* Cell 2: QP */}
                 <div style={{ flex: '0 0 20%', borderRight: '1px solid #000', padding: '6px 8px', overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
@@ -3089,7 +3157,7 @@ export default function App() {
             <div className="panel-resize-handle panel-resize-handle--corner" title="Drag corner to resize inset" onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); const map = leafletMapRef.current; if (map) map.dragging.disable(); const startX = e.clientX; const startY = e.clientY; const startW = project.layout.insetWidthPx ?? 244; const startH = project.layout.insetHeightPx ?? 190; const onMove = (me) => { setProject((p) => ({ ...p, layout: { ...p.layout, insetWidthPx: Math.max(100, Math.min(600, Math.round(startW + me.clientX - startX))), insetHeightPx: Math.max(80, Math.min(500, Math.round(startH + me.clientY - startY))) } })); }; const onUp = () => { if (map) map.dragging.enable(); document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); }; document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp); }} />
           </div>
         ) : null}
-        {project.layout.templateId !== 'ni_43101_technical' && project.layout.showScaleBar !== false && (
+        {project.layout.showScaleBar !== false && (
           <div className="template-zone" style={{ ...zoneStyle(resolvedZones.scaleBar), width: project.layout.scaleBarWidthPx || resolvedZones.scaleBar?.width }}>
             <ScaleBar map={leafletMapRef.current} />
             <button className="panel-delete-btn" title="Hide scale bar" onClick={() => updateLayout({ showScaleBar: false })}>×</button>
