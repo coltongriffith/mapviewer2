@@ -28,7 +28,9 @@ button, input, select, textarea { font: inherit; }
 .sidebar-scroll {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 16px;
+  min-width: 0;
 }
 .sidebar-footer {
   flex-shrink: 0;
@@ -70,6 +72,8 @@ button, input, select, textarea { font: inherit; }
   padding: 12px;
   margin-bottom: 12px;
   box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04);
+  min-width: 0;
+  overflow: hidden;
 }
 .control-section h2 { margin: 0 0 10px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: #64748b; font-weight: 700; }
 .section-toggle-btn { cursor: pointer; display: flex; justify-content: space-between; align-items: center; margin: 0; user-select: none; }
@@ -1335,6 +1339,71 @@ button, input, select, textarea { font: inherit; }
 .template-save-row { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
 .template-name-input { flex: 1; font-size: 12px; padding: 4px 8px; border: 1px solid #cbd5e1; border-radius: 6px; outline: none; min-width: 0; }
 .template-name-input:focus { border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59,130,246,0.15); }
+
+/* ── Template Manager Modal ─────────────────────────────────────────────────── */
+.tmgr-panel {
+  width: 92vw;
+  max-width: 520px;
+  padding: 28px 24px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  max-height: 85vh;
+  overflow: hidden;
+}
+.tmgr-header { margin-bottom: 16px; }
+.tmgr-title { margin: 0 0 4px; font-size: 18px; font-weight: 800; color: #0f172a; padding-right: 32px; }
+.tmgr-subtitle { margin: 0; font-size: 13px; color: #64748b; }
+.tmgr-save-section { border-bottom: 1px solid #e2e8f0; padding-bottom: 14px; margin-bottom: 14px; }
+.tmgr-save-row { display: flex; align-items: center; gap: 6px; }
+.tmgr-name-input { flex: 1; font-size: 13px; padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 7px; outline: none; min-width: 0; }
+.tmgr-name-input:focus { border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59,130,246,0.15); }
+.tmgr-empty { margin: 12px 0 0; font-size: 13px; color: #94a3b8; text-align: center; padding: 24px 0; }
+.tmgr-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; overflow-y: auto; max-height: 50vh; }
+.tmgr-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid #e8edf3;
+  border-radius: 10px;
+  background: #f8fafc;
+  transition: border-color 0.12s;
+}
+.tmgr-row:hover { border-color: #cbd5e1; background: #fff; }
+.tmgr-star {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 18px;
+  color: #cbd5e1;
+  padding: 0;
+  line-height: 1;
+  flex-shrink: 0;
+  transition: color 0.12s;
+}
+.tmgr-star.active { color: #f59e0b; }
+.tmgr-star:hover { color: #f59e0b; }
+.tmgr-name-block { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; }
+.tmgr-name { font-size: 14px; font-weight: 600; color: #1e293b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tmgr-badge { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #d97706; background: #fef3c7; border: 1px solid #fde68a; padding: 1px 5px; border-radius: 4px; flex-shrink: 0; }
+.tmgr-rename-row { display: flex; align-items: center; gap: 4px; flex: 1; min-width: 0; }
+.tmgr-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.tmgr-icon-btn {
+  background: none;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  color: #64748b;
+  padding: 3px 7px;
+  line-height: 1;
+  transition: all 0.12s;
+}
+.tmgr-icon-btn:hover { background: #f1f5f9; color: #1e293b; border-color: #cbd5e1; }
+.tmgr-icon-btn.muted { color: #94a3b8; }
+.tmgr-icon-btn.muted:hover { color: #475569; }
+.tmgr-icon-btn.danger:hover { background: #fee2e2; color: #dc2626; border-color: #fca5a5; }
 
 /* ── How To Use modal ── */
 .howto-overlay { position: fixed; inset: 0; z-index: 2050; display: grid; place-items: center; background: rgba(2,6,23,0.55); backdrop-filter: blur(3px); }

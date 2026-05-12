@@ -1652,6 +1652,27 @@ export default function App() {
     }
   };
 
+  const doSaveTemplate = async () => {
+    const name = (savingTemplateName || '').trim();
+    if (!name || savingTemplate) return;
+    setSavingTemplate(true);
+    try {
+      const config = Object.fromEntries(
+        TEMPLATE_SAVEABLE_KEYS
+          .filter((k) => project.layout[k] !== undefined)
+          .map((k) => [k, project.layout[k]])
+      );
+      if (project.layout.fonts) config.fonts = project.layout.fonts;
+      await saveTemplate({ name, config });
+      listTemplates().then(setCloudTemplates).catch(() => {});
+      setSavingTemplateName(null);
+    } catch (err) {
+      setUploadStatus({ type: 'error', message: `Could not save template: ${err.message}` });
+    } finally {
+      setSavingTemplate(false);
+    }
+  };
+
   const openProjectFromRecent = async (entry) => {
     let payload = entry.payload;
     if (!payload && user) {
@@ -2494,10 +2515,6 @@ export default function App() {
                     <label>Revision</label>
                     <input type="text" value={project.layout.figureRevision || ''} placeholder="Rev. A" onChange={(e) => updateLayout({ figureRevision: e.target.value })} />
                   </div>
-                  <div className="control-row">
-                    <label>Projection</label>
-                    <input type="text" value={project.layout.projectionName || ''} placeholder="NAD83 / UTM Zone 10N" onChange={(e) => updateLayout({ projectionName: e.target.value })} />
-                  </div>
                 </div>
               </details>
             )}
@@ -2556,157 +2573,31 @@ export default function App() {
             <div className="template-manager-block">
               <div className="template-manager-header">
                 <span className="template-manager-label">Saved Templates</span>
-                {user && savingTemplateName === null && (
-                  <button
-                    className="btn compact"
-                    type="button"
-                    onClick={() => setSavingTemplateName(projectName || '')}
-                  >+ Save Template</button>
+                {user && (
+                  <button className="btn compact" type="button" onClick={() => setShowTemplateManager(true)}>
+                    {cloudTemplates.length > 0 ? `Manage (${cloudTemplates.length})` : '+ Save Template'}
+                  </button>
                 )}
               </div>
-              <p className="small-note" style={{ marginBottom: 8 }}>Save your logo, colours, layout, and brand settings to reuse across projects.</p>
-              {user && savingTemplateName !== null && (
-                <div className="template-save-row">
-                  <input
-                    autoFocus
-                    className="template-name-input"
-                    placeholder="Template name…"
-                    value={savingTemplateName}
-                    onChange={(e) => setSavingTemplateName(e.target.value)}
-                    onKeyDown={async (e) => {
-                      if (e.key === 'Escape') { setSavingTemplateName(null); return; }
-                      if (e.key !== 'Enter' || !savingTemplateName.trim() || savingTemplate) return;
-                      setSavingTemplate(true);
-                      const name = savingTemplateName.trim();
-                      try {
-                        const config = Object.fromEntries(TEMPLATE_SAVEABLE_KEYS.filter(k => project.layout[k] !== undefined).map(k => [k, project.layout[k]]));
-                        await saveTemplate({ name, config });
-                        const updated = await listTemplates();
-                        setCloudTemplates(updated);
-                        setUploadStatus({ type: 'success', message: `Template "${name}" saved.` });
-                        setSavingTemplateName(null);
-                      } catch (err) {
-                        setUploadStatus({ type: 'error', message: `Failed to save template: ${err.message}` });
-                      } finally {
-                        setSavingTemplate(false);
-                      }
-                    }}
-                  />
-                  <button
-                    className="btn compact"
-                    type="button"
-                    disabled={!savingTemplateName.trim() || savingTemplate}
-                    onClick={async () => {
-                      if (!savingTemplateName.trim() || savingTemplate) return;
-                      setSavingTemplate(true);
-                      const name = savingTemplateName.trim();
-                      try {
-                        const config = Object.fromEntries(TEMPLATE_SAVEABLE_KEYS.filter(k => project.layout[k] !== undefined).map(k => [k, project.layout[k]]));
-                        await saveTemplate({ name, config });
-                        const updated = await listTemplates();
-                        setCloudTemplates(updated);
-                        setUploadStatus({ type: 'success', message: `Template "${name}" saved.` });
-                        setSavingTemplateName(null);
-                      } catch (err) {
-                        setUploadStatus({ type: 'error', message: `Failed to save template: ${err.message}` });
-                      } finally {
-                        setSavingTemplate(false);
-                      }
-                    }}
-                  >{savingTemplate ? '…' : 'Save'}</button>
-                  <button className="secondary-btn compact" type="button" onClick={() => setSavingTemplateName(null)}>Cancel</button>
-                </div>
-              )}
               {!user ? (
-                <p className="template-manager-hint">Sign in to save and apply templates.</p>
-              ) : cloudTemplates.length === 0 && savingTemplateName === null ? (
-                <p className="template-manager-hint">No templates yet — set up your brand look and save it above.</p>
-              ) : cloudTemplates.length > 0 && (
+                <p className="template-manager-hint">Sign in to save and apply company templates.</p>
+              ) : cloudTemplates.length === 0 ? (
+                <p className="template-manager-hint">No templates yet — save your brand look to reuse across projects.</p>
+              ) : (
                 <ul className="template-manager-list">
                   {cloudTemplates.map((tmpl) => (
                     <li key={tmpl.id} className="template-manager-row">
+                      {tmpl.is_default && <span className="template-default-star active" title="Default">★</span>}
+                      <span className="template-name">{tmpl.name}</span>
                       <button
-                        className={`template-default-star${tmpl.is_default ? ' active' : ''}`}
-                        title={tmpl.is_default ? 'Default — applied on login' : 'Set as default'}
-                        onClick={async () => {
-                          try {
-                            await setDefaultTemplate(tmpl.id);
-                            const updated = await listTemplates();
-                            setCloudTemplates(updated);
-                          } catch (err) {
-                            setUploadStatus({ type: 'error', message: err.message });
-                          }
+                        className="btn compact"
+                        type="button"
+                        onClick={() => {
+                          const newLayout = applyTemplateConfig(tmpl.config || {}, project.layout);
+                          updateLayout(Object.fromEntries(Object.entries(newLayout).filter(([k]) => newLayout[k] !== project.layout[k])));
+                          setUploadStatus({ type: 'success', message: `"${tmpl.name}" applied — upload your layers to get started.` });
                         }}
-                      >★</button>
-                      {renamingTemplateId === tmpl.id ? (
-                        <>
-                          <input
-                            autoFocus
-                            className="template-name-input"
-                            value={renamingTemplateName}
-                            onChange={(e) => setRenamingTemplateName(e.target.value)}
-                            onKeyDown={async (e) => {
-                              if (e.key === 'Escape') { setRenamingTemplateId(null); return; }
-                              if (e.key !== 'Enter' || !renamingTemplateName.trim()) return;
-                              try {
-                                await updateTemplate(tmpl.id, { name: renamingTemplateName.trim() });
-                                const updated = await listTemplates();
-                                setCloudTemplates(updated);
-                                setRenamingTemplateId(null);
-                              } catch (err) {
-                                setUploadStatus({ type: 'error', message: err.message });
-                              }
-                            }}
-                          />
-                          <button className="btn compact" type="button" onClick={async () => {
-                            if (!renamingTemplateName.trim()) return;
-                            try {
-                              await updateTemplate(tmpl.id, { name: renamingTemplateName.trim() });
-                              const updated = await listTemplates();
-                              setCloudTemplates(updated);
-                              setRenamingTemplateId(null);
-                            } catch (err) {
-                              setUploadStatus({ type: 'error', message: err.message });
-                            }
-                          }}>✓</button>
-                          <button className="secondary-btn compact" type="button" onClick={() => setRenamingTemplateId(null)}>✗</button>
-                        </>
-                      ) : (
-                        <>
-                          <span className="template-name">{tmpl.name}</span>
-                          <button
-                            className="secondary-btn compact"
-                            type="button"
-                            title="Rename"
-                            onClick={() => { setRenamingTemplateId(tmpl.id); setRenamingTemplateName(tmpl.name); }}
-                          >✎</button>
-                          <button
-                            className="btn compact"
-                            type="button"
-                            title="Apply theme, logo, layout and NI fields to current project"
-                            onClick={() => {
-                              const newLayout = applyTemplateConfig(tmpl.config || {}, project.layout);
-                              updateLayout(Object.fromEntries(Object.entries(newLayout).filter(([k]) => newLayout[k] !== project.layout[k])));
-                              setUploadStatus({ type: 'success', message: `"${tmpl.name}" applied — upload your layers to get started.` });
-                            }}
-                          >Apply</button>
-                          <button
-                            className="secondary-btn compact"
-                            type="button"
-                            title="Delete template"
-                            onClick={async () => {
-                              if (!window.confirm(`Delete template "${tmpl.name}"?`)) return;
-                              try {
-                                await deleteTemplate(tmpl.id);
-                                const updated = await listTemplates();
-                                setCloudTemplates(updated);
-                              } catch (err) {
-                                setUploadStatus({ type: 'error', message: err.message });
-                              }
-                            }}
-                          >✕</button>
-                        </>
-                      )}
+                      >Apply</button>
                     </li>
                   ))}
                 </ul>
@@ -3305,6 +3196,123 @@ export default function App() {
           </div>
         </div>
       </div>
+      {/* Template Manager Modal */}
+      {showTemplateManager && (
+        <div className="modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) setShowTemplateManager(false); }}>
+          <div className="modal-panel tmgr-panel">
+            <button className="modal-close-btn" onClick={() => setShowTemplateManager(false)}>×</button>
+            <div className="tmgr-header">
+              <h2 className="tmgr-title">Saved Templates</h2>
+              <p className="tmgr-subtitle">Save your brand look once, apply to any project.</p>
+            </div>
+
+            {/* Save new template form */}
+            <div className="tmgr-save-section">
+              {savingTemplateName !== null ? (
+                <div className="tmgr-save-row">
+                  <input
+                    autoFocus
+                    className="tmgr-name-input"
+                    placeholder="Template name…"
+                    value={savingTemplateName}
+                    onChange={(e) => setSavingTemplateName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') doSaveTemplate();
+                      if (e.key === 'Escape') setSavingTemplateName(null);
+                    }}
+                  />
+                  <button
+                    className="btn compact"
+                    type="button"
+                    disabled={!savingTemplateName.trim() || savingTemplate}
+                    onClick={doSaveTemplate}
+                  >{savingTemplate ? 'Saving…' : 'Save'}</button>
+                  <button className="btn compact secondary" type="button" onClick={() => setSavingTemplateName(null)}>Cancel</button>
+                </div>
+              ) : (
+                <button className="btn compact" type="button" onClick={() => setSavingTemplateName(projectName || '')}>+ Save Current Settings as Template</button>
+              )}
+            </div>
+
+            {/* Template list */}
+            {cloudTemplates.length === 0 ? (
+              <p className="tmgr-empty">No templates saved yet.</p>
+            ) : (
+              <ul className="tmgr-list">
+                {cloudTemplates.map((tmpl) => (
+                  <li key={tmpl.id} className="tmgr-row">
+                    <button
+                      className={`tmgr-star${tmpl.is_default ? ' active' : ''}`}
+                      title={tmpl.is_default ? 'Default template' : 'Set as default'}
+                      onClick={async () => {
+                        if (tmpl.is_default) return;
+                        await setDefaultTemplate(tmpl.id);
+                        listTemplates().then(setCloudTemplates).catch(() => {});
+                      }}
+                    >★</button>
+                    <div className="tmgr-name-block">
+                      {renamingTemplateId === tmpl.id ? (
+                        <div className="tmgr-rename-row">
+                          <input
+                            autoFocus
+                            className="tmgr-name-input"
+                            value={renamingTemplateName}
+                            onChange={(e) => setRenamingTemplateName(e.target.value)}
+                            onKeyDown={async (e) => {
+                              if (e.key === 'Enter') {
+                                await updateTemplate(tmpl.id, { name: renamingTemplateName.trim() || tmpl.name });
+                                listTemplates().then(setCloudTemplates).catch(() => {});
+                                setRenamingTemplateId(null);
+                              }
+                              if (e.key === 'Escape') setRenamingTemplateId(null);
+                            }}
+                          />
+                          <button className="tmgr-icon-btn" title="Confirm" onClick={async () => {
+                            await updateTemplate(tmpl.id, { name: renamingTemplateName.trim() || tmpl.name });
+                            listTemplates().then(setCloudTemplates).catch(() => {});
+                            setRenamingTemplateId(null);
+                          }}>✓</button>
+                          <button className="tmgr-icon-btn muted" title="Cancel" onClick={() => setRenamingTemplateId(null)}>✗</button>
+                        </div>
+                      ) : (
+                        <span className="tmgr-name">{tmpl.name}</span>
+                      )}
+                      {tmpl.is_default && <span className="tmgr-badge">Default</span>}
+                    </div>
+                    <div className="tmgr-actions">
+                      <button
+                        className="btn compact"
+                        type="button"
+                        onClick={() => {
+                          const newLayout = applyTemplateConfig(tmpl.config || {}, project.layout);
+                          updateLayout(Object.fromEntries(Object.entries(newLayout).filter(([k]) => newLayout[k] !== project.layout[k])));
+                          setShowTemplateManager(false);
+                          setUploadStatus({ type: 'success', message: `"${tmpl.name}" applied — upload your layers to get started.` });
+                        }}
+                      >Apply</button>
+                      <button
+                        className="tmgr-icon-btn"
+                        title="Rename"
+                        onClick={() => { setRenamingTemplateId(tmpl.id); setRenamingTemplateName(tmpl.name); }}
+                      >✎</button>
+                      <button
+                        className="tmgr-icon-btn danger"
+                        title="Delete"
+                        onClick={async () => {
+                          if (!window.confirm(`Delete template "${tmpl.name}"?`)) return;
+                          await deleteTemplate(tmpl.id);
+                          listTemplates().then(setCloudTemplates).catch(() => {});
+                        }}
+                      >✕</button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
+
       {showRecentProjects ? (
         <RecentProjectsModal
           entries={recentProjects}
