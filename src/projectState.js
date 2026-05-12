@@ -118,6 +118,7 @@ export function createInitialProjectState() {
       titleCorner: 'tl',
       scaleBarCorner: 'bl',
       northArrowCorner: 'br',
+      cornerOrder: ['title', 'logo', 'inset', 'northArrow', 'scaleBar', 'legend'],
       insetAspectRatio: null,
       safeMargins: { top: 18, right: 18, bottom: 18, left: 18 },
       markerDefaults: { type: 'circle', color: '#d97706', size: 18, label: '' },

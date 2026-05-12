@@ -1012,16 +1012,53 @@ function formatScaleDenom(denom) {
   return `1:${denom.toLocaleString('en-US')}`;
 }
 
-function pickNITickInterval(totalMeters, targetTicks = 6) {
-  const steps = [100, 200, 250, 500, 1000, 2000, 2500, 5000, 10000, 25000, 50000];
-  const ideal = totalMeters / targetTicks;
-  return steps.reduce((best, s) => Math.abs(s - ideal) < Math.abs(best - ideal) ? s : best, steps[0]);
+function pickUTMInterval(totalMeters, targetTicks = 6) {
+  const steps = [500, 1000, 2000, 5000, 10000, 25000, 50000, 100000];
+  const target = totalMeters / targetTicks;
+  return steps.find((s) => s >= target) || steps[steps.length - 1];
 }
 
-function formatTickLabel(meters) {
-  if (meters === 0) return '0';
-  if (meters >= 1000) return `${(meters / 1000).toLocaleString('en-US')} km`;
-  return `${meters.toLocaleString('en-US')} m`;
+function latlngToUTM(lat, lng) {
+  const zone = Math.floor((lng + 180) / 6) + 1;
+  const cm = (zone - 1) * 6 - 180 + 3;
+  const a = 6378137, f = 1 / 298.257223563;
+  const e2 = 2 * f - f * f;
+  const k0 = 0.9996;
+  const latR = lat * Math.PI / 180;
+  const dLng = (lng - cm) * Math.PI / 180;
+  const N = a / Math.sqrt(1 - e2 * Math.sin(latR) ** 2);
+  const T = Math.tan(latR) ** 2;
+  const C = e2 / (1 - e2) * Math.cos(latR) ** 2;
+  const A = dLng * Math.cos(latR);
+  const e1sq = e2 / (1 - e2);
+  const M = a * (
+    (1 - e2/4 - 3*e2**2/64 - 5*e2**3/256) * latR
+    - (3*e2/8 + 3*e2**2/32 + 45*e2**3/1024) * Math.sin(2*latR)
+    + (15*e2**2/256 + 45*e2**3/1024) * Math.sin(4*latR)
+    - (35*e2**3/3072) * Math.sin(6*latR));
+  const easting = k0 * N * (A + (1-T+C)*A**3/6 + (5-18*T+T**2+72*C-58*e1sq)*A**5/120) + 500000;
+  const northing = k0 * (M + N*Math.tan(latR)*(A**2/2 + (5-T+9*C+4*C**2)*A**4/24 + (61-58*T+T**2+600*C-330*e1sq)*A**6/720)) + (lat < 0 ? 10000000 : 0);
+  return { easting, northing, zone, hemisphere: lat >= 0 ? 'N' : 'S' };
+}
+
+function fmtUTMEasting(e) {
+  const s = Math.round(e).toString().padStart(6, '0');
+  return s.slice(0, -3) + ' ' + s.slice(-3) + 'E';
+}
+
+function fmtUTMNorthing(n) {
+  const s = Math.round(n).toString();
+  if (s.length <= 6) return s.slice(0, -3) + ' ' + s.slice(-3) + 'N';
+  return s.slice(0, -6) + ' ' + s.slice(-6, -3) + ' ' + s.slice(-3) + 'N';
+}
+
+function autoProjectionName(map) {
+  try {
+    const c = map?.getCenter();
+    if (!c) return 'WGS84';
+    const zone = Math.floor((c.lng + 180) / 6) + 1;
+    return `WGS84 / UTM Zone ${zone}${c.lat >= 0 ? 'N' : 'S'}`;
+  } catch { return 'WGS84'; }
 }
 
 function displaceLng(lat, lng, meters) {
@@ -1097,7 +1134,7 @@ function drawTitleStripCanvas(ctx, scene, scale) {
   ctx.font = `700 ${labelSize}px ${monoFont}`;
   ctx.fillText('PROJECTION', cell1 + pad, valueY + 20 * scale);
   ctx.font = `${labelSize}px ${monoFont}`;
-  ctx.fillText(layout.projectionName || 'WGS84', cell1 + pad, valueY + 34 * scale);
+  ctx.fillText(layout.projectionName || autoProjectionName(scene.map), cell1 + pad, valueY + 34 * scale);
 
   // Cell 2: QP / Author
   ctx.font = `700 ${labelSize}px ${monoFont}`;
@@ -1169,7 +1206,7 @@ ${stripSubtitle ? `<text x="${pad}" y="${valueY + 20 * scale}" font-family="Aria
 <text x="${cell1 + pad}" y="${labelY}" font-family="${monoFont}" font-size="${ls}" font-weight="700" fill="#000" dominant-baseline="middle">SCALE</text>
 <text x="${cell1 + pad}" y="${valueY}" font-family="${monoFont}" font-size="${vs}" fill="#000" dominant-baseline="middle">${escapeXml(formatScaleDenom(scaleDenom) || '—')}</text>
 <text x="${cell1 + pad}" y="${valueY + 20 * scale}" font-family="${monoFont}" font-size="${ls}" font-weight="700" fill="#000" dominant-baseline="middle">PROJECTION</text>
-<text x="${cell1 + pad}" y="${valueY + 34 * scale}" font-family="${monoFont}" font-size="${ls}" fill="#000" dominant-baseline="middle">${escapeXml(layout.projectionName || 'WGS84')}</text>
+<text x="${cell1 + pad}" y="${valueY + 34 * scale}" font-family="${monoFont}" font-size="${ls}" fill="#000" dominant-baseline="middle">${escapeXml(layout.projectionName || autoProjectionName(scene.map))}</text>
 <text x="${cell2 + pad}" y="${labelY}" font-family="${monoFont}" font-size="${ls}" font-weight="700" fill="#000" dominant-baseline="middle">QUALIFIED PERSON</text>
 <text x="${cell2 + pad}" y="${valueY}" font-family="${monoFont}" font-size="${vs}" fill="#000" dominant-baseline="middle">${escapeXml(layout.qpName || '—')}</text>
 ${layout.qpCredentials ? `<text x="${cell2 + pad}" y="${valueY + 18 * scale}" font-family="${monoFont}" font-size="${ls}" fill="#000" dominant-baseline="middle">${escapeXml(layout.qpCredentials)}</text>` : ''}
@@ -1207,17 +1244,29 @@ function drawDistanceTicksCanvas(ctx, scene, scale) {
   const centerY = size.y / 2;
   const centerX = size.x / 2;
 
-  // X-axis: measure map width in meters
+  const centerLL = map.containerPointToLatLng([centerX, centerY]);
   const leftLL = map.containerPointToLatLng([0, centerY]);
   const rightLL = map.containerPointToLatLng([size.x, centerY]);
-  const totalWidthM = haversineMeters(leftLL.lat, leftLL.lng, rightLL.lat, rightLL.lng);
-  const xInterval = pickNITickInterval(totalWidthM, 6);
-
-  // Y-axis: measure map height in meters
   const topLL = map.containerPointToLatLng([centerX, 0]);
   const botLL = map.containerPointToLatLng([centerX, size.y]);
+  const totalWidthM = haversineMeters(leftLL.lat, leftLL.lng, rightLL.lat, rightLL.lng);
   const totalHeightM = haversineMeters(topLL.lat, topLL.lng, botLL.lat, botLL.lng);
-  const yInterval = pickNITickInterval(totalHeightM, 5);
+  const xInterval = pickUTMInterval(totalWidthM, 6);
+  const yInterval = pickUTMInterval(totalHeightM, 5);
+
+  // UTM parameters based on center zone
+  const centerUTM = latlngToUTM(centerLL.lat, centerLL.lng);
+  const { zone } = centerUTM;
+  const cm = (zone - 1) * 6 - 180 + 3;
+  const a = 6378137, f = 1 / 298.257223563;
+  const e2 = 2 * f - f * f;
+  const k0 = 0.9996;
+  const refLatR = centerLL.lat * Math.PI / 180;
+  const N_ref = a / Math.sqrt(1 - e2 * Math.sin(refLatR) ** 2);
+  const leftUTM = latlngToUTM(leftLL.lat, leftLL.lng);
+  const rightUTM = latlngToUTM(rightLL.lat, rightLL.lng);
+  const topUTM = latlngToUTM(topLL.lat, topLL.lng);
+  const botUTM = latlngToUTM(botLL.lat, botLL.lng);
 
   const tickLen = 10 * scale;
   const monoFont = `'Courier New', Courier, monospace`;
@@ -1226,24 +1275,18 @@ function drawDistanceTicksCanvas(ctx, scene, scale) {
   ctx.lineWidth = scale;
   ctx.strokeStyle = '#000000';
 
-  // X ticks (top and bottom edges)
-  for (let i = 0; ; i++) {
-    const distM = i * xInterval;
-    const newLng = displaceLng(leftLL.lat, leftLL.lng, distM);
-    const pt = map.latLngToContainerPoint([leftLL.lat, newLng]);
+  // X ticks: constant UTM easting lines (top and bottom)
+  const startE = Math.ceil(leftUTM.easting / xInterval) * xInterval;
+  for (let e = startE; e <= rightUTM.easting + xInterval * 0.1; e += xInterval) {
+    const dE = e - 500000;
+    const lng = cm + (dE / (k0 * N_ref * Math.cos(refLatR))) * (180 / Math.PI);
+    const pt = map.latLngToContainerPoint([centerLL.lat, lng]);
     const px = pt.x * scale + mapLeft;
-    if (px > mapRight + 1) break;
-    const label = formatTickLabel(distM);
+    if (px < mapLeft - 1 || px > mapRight + 1) continue;
+    const label = fmtUTMEasting(e);
 
-    ctx.beginPath();
-    ctx.moveTo(px, mapTop);
-    ctx.lineTo(px, mapTop - tickLen);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(px, mapBottom);
-    ctx.lineTo(px, mapBottom + tickLen);
-    ctx.stroke();
-
+    ctx.beginPath(); ctx.moveTo(px, mapTop); ctx.lineTo(px, mapTop - tickLen); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(px, mapBottom); ctx.lineTo(px, mapBottom + tickLen); ctx.stroke();
     ctx.textAlign = 'center';
     ctx.textBaseline = 'bottom';
     ctx.fillText(label, px, mapTop - tickLen - 2 * scale);
@@ -1251,29 +1294,33 @@ function drawDistanceTicksCanvas(ctx, scene, scale) {
     ctx.fillText(label, px, mapBottom + tickLen + 2 * scale);
   }
 
-  // Y ticks (left and right edges)
-  for (let i = 0; ; i++) {
-    const distM = i * yInterval;
-    const newLat = displaceLat(topLL.lat, distM);
-    const pt = map.latLngToContainerPoint([newLat, topLL.lng]);
+  // Y ticks: constant UTM northing lines (left and right, labels rotated 90°)
+  const startN = Math.floor(topUTM.northing / yInterval) * yInterval;
+  for (let n = startN; n >= botUTM.northing - yInterval * 0.1; n -= yInterval) {
+    const lat = centerLL.lat + (n - centerUTM.northing) / 111132;
+    const pt = map.latLngToContainerPoint([lat, centerLL.lng]);
     const py = pt.y * scale + mapTop;
-    if (py > mapBottom + 1) break;
-    const label = formatTickLabel(distM);
+    if (py < mapTop - 1 || py > mapBottom + 1) continue;
+    const label = fmtUTMNorthing(n);
 
-    ctx.beginPath();
-    ctx.moveTo(mapLeft, py);
-    ctx.lineTo(mapLeft - tickLen, py);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(mapRight, py);
-    ctx.lineTo(mapRight + tickLen, py);
-    ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(mapLeft, py); ctx.lineTo(mapLeft - tickLen, py); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(mapRight, py); ctx.lineTo(mapRight + tickLen, py); ctx.stroke();
 
-    ctx.textAlign = 'right';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(label, mapLeft - tickLen - 2 * scale, py);
-    ctx.textAlign = 'left';
-    ctx.fillText(label, mapRight + tickLen + 2 * scale, py);
+    ctx.save();
+    ctx.translate(mapLeft - tickLen - 2 * scale, py);
+    ctx.rotate(-Math.PI / 2);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText(label, 0, 0);
+    ctx.restore();
+
+    ctx.save();
+    ctx.translate(mapRight + tickLen + 2 * scale, py);
+    ctx.rotate(Math.PI / 2);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText(label, 0, 0);
+    ctx.restore();
   }
 
   ctx.textAlign = 'left';
@@ -1293,22 +1340,36 @@ function renderDistanceTicksSvg(scene, scale) {
   const centerY = size.y / 2;
   const centerX = size.x / 2;
 
+  const centerLL = map.containerPointToLatLng([centerX, centerY]);
   const leftLL = map.containerPointToLatLng([0, centerY]);
   const rightLL = map.containerPointToLatLng([size.x, centerY]);
-  const totalWidthM = haversineMeters(leftLL.lat, leftLL.lng, rightLL.lat, rightLL.lng);
-  const xInterval = pickNITickInterval(totalWidthM, 6);
-
   const topLL = map.containerPointToLatLng([centerX, 0]);
   const botLL = map.containerPointToLatLng([centerX, size.y]);
+  const totalWidthM = haversineMeters(leftLL.lat, leftLL.lng, rightLL.lat, rightLL.lng);
   const totalHeightM = haversineMeters(topLL.lat, topLL.lng, botLL.lat, botLL.lng);
-  const yInterval = pickNITickInterval(totalHeightM, 5);
+  const xInterval = pickUTMInterval(totalWidthM, 6);
+  const yInterval = pickUTMInterval(totalHeightM, 5);
+
+  // UTM parameters based on center zone
+  const centerUTM = latlngToUTM(centerLL.lat, centerLL.lng);
+  const { zone } = centerUTM;
+  const cm = (zone - 1) * 6 - 180 + 3;
+  const a = 6378137, f = 1 / 298.257223563;
+  const e2 = 2 * f - f * f;
+  const k0 = 0.9996;
+  const refLatR = centerLL.lat * Math.PI / 180;
+  const N_ref = a / Math.sqrt(1 - e2 * Math.sin(refLatR) ** 2);
+  const leftUTM = latlngToUTM(leftLL.lat, leftLL.lng);
+  const rightUTM = latlngToUTM(rightLL.lat, rightLL.lng);
+  const topUTM = latlngToUTM(topLL.lat, topLL.lng);
+  const botUTM = latlngToUTM(botLL.lat, botLL.lng);
 
   const tickLen = 10 * scale;
   const monoFont = `'Courier New', Courier, monospace`;
   const fontSize = 9 * scale;
   const parts = [];
 
-  // White margin fills
+  // White margin fills + map frame border
   parts.push(
     `<rect x="0" y="0" width="${mapLeft}" height="${ch}" fill="#ffffff" />`,
     `<rect x="${mapRight}" y="0" width="${cw - mapRight}" height="${ch}" fill="#ffffff" />`,
@@ -1317,14 +1378,15 @@ function renderDistanceTicksSvg(scene, scale) {
     `<rect x="${mapLeft}" y="${mapTop}" width="${mapW}" height="${mapH}" fill="none" stroke="#000000" stroke-width="${1.5 * scale}" />`,
   );
 
-  // X ticks
-  for (let i = 0; ; i++) {
-    const distM = i * xInterval;
-    const newLng = displaceLng(leftLL.lat, leftLL.lng, distM);
-    const pt = map.latLngToContainerPoint([leftLL.lat, newLng]);
+  // X ticks: constant UTM easting lines
+  const startE = Math.ceil(leftUTM.easting / xInterval) * xInterval;
+  for (let e = startE; e <= rightUTM.easting + xInterval * 0.1; e += xInterval) {
+    const dE = e - 500000;
+    const lng = cm + (dE / (k0 * N_ref * Math.cos(refLatR))) * (180 / Math.PI);
+    const pt = map.latLngToContainerPoint([centerLL.lat, lng]);
     const px = pt.x * scale + mapLeft;
-    if (px > mapRight + 1) break;
-    const label = escapeXml(formatTickLabel(distM));
+    if (px < mapLeft - 1 || px > mapRight + 1) continue;
+    const label = escapeXml(fmtUTMEasting(e));
     parts.push(
       `<line x1="${px}" y1="${mapTop}" x2="${px}" y2="${mapTop - tickLen}" stroke="#000" stroke-width="${scale}" />`,
       `<line x1="${px}" y1="${mapBottom}" x2="${px}" y2="${mapBottom + tickLen}" stroke="#000" stroke-width="${scale}" />`,
@@ -1333,19 +1395,21 @@ function renderDistanceTicksSvg(scene, scale) {
     );
   }
 
-  // Y ticks
-  for (let i = 0; ; i++) {
-    const distM = i * yInterval;
-    const newLat = displaceLat(topLL.lat, distM);
-    const pt = map.latLngToContainerPoint([newLat, topLL.lng]);
+  // Y ticks: constant UTM northing lines (labels rotated 90° to fit margin)
+  const startN = Math.floor(topUTM.northing / yInterval) * yInterval;
+  for (let n = startN; n >= botUTM.northing - yInterval * 0.1; n -= yInterval) {
+    const lat = centerLL.lat + (n - centerUTM.northing) / 111132;
+    const pt = map.latLngToContainerPoint([lat, centerLL.lng]);
     const py = pt.y * scale + mapTop;
-    if (py > mapBottom + 1) break;
-    const label = escapeXml(formatTickLabel(distM));
+    if (py < mapTop - 1 || py > mapBottom + 1) continue;
+    const label = escapeXml(fmtUTMNorthing(n));
+    const lx = mapLeft - tickLen - 2 * scale;
+    const rx = mapRight + tickLen + 2 * scale;
     parts.push(
       `<line x1="${mapLeft}" y1="${py}" x2="${mapLeft - tickLen}" y2="${py}" stroke="#000" stroke-width="${scale}" />`,
       `<line x1="${mapRight}" y1="${py}" x2="${mapRight + tickLen}" y2="${py}" stroke="#000" stroke-width="${scale}" />`,
-      `<text x="${mapLeft - tickLen - 2 * scale}" y="${py}" text-anchor="end" dominant-baseline="middle" font-family="${monoFont}" font-size="${fontSize}" fill="#000">${label}</text>`,
-      `<text x="${mapRight + tickLen + 2 * scale}" y="${py}" text-anchor="start" dominant-baseline="middle" font-family="${monoFont}" font-size="${fontSize}" fill="#000">${label}</text>`,
+      `<text text-anchor="middle" dominant-baseline="auto" font-family="${monoFont}" font-size="${fontSize}" fill="#000" transform="translate(${lx},${py}) rotate(-90)">${label}</text>`,
+      `<text text-anchor="middle" dominant-baseline="auto" font-family="${monoFont}" font-size="${fontSize}" fill="#000" transform="translate(${rx},${py}) rotate(90)">${label}</text>`,
     );
   }
 
@@ -1359,7 +1423,8 @@ export async function renderSceneToCanvas(scene, options = {}) {
   ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
   const isNI = scene.template?.id === 'ni_43101_technical';
   await drawTilesCanvas(ctx, scene, scale); drawRegionHighlightsCanvas(ctx, scene, scale); drawVectorsCanvas(ctx, scene, scale); drawEllipsesCanvas(ctx, scene, scale); drawPolygonsCanvas(ctx, scene, scale); await drawMarkersCanvas(ctx, scene, scale); drawCalloutsCanvas(ctx, scene, scale);
-  if (!isNI) { drawTitleBlockCanvas(ctx, scene, scale); drawScaleBarCanvas(ctx, scene, scale); drawFooterCanvas(ctx, scene, scale); }
+  if (!isNI) { drawTitleBlockCanvas(ctx, scene, scale); drawFooterCanvas(ctx, scene, scale); }
+  drawScaleBarCanvas(ctx, scene, scale);
   drawLegendCanvas(ctx, scene, scale); drawNorthArrowCanvas(ctx, scene, scale); await drawInsetCanvas(ctx, scene, scale); await drawLogoCanvas(ctx, scene, scale);
   if (isNI) { drawDistanceTicksCanvas(ctx, scene, scale); drawTitleStripCanvas(ctx, scene, scale); }
   if (!options.noWatermark) {
@@ -1745,7 +1810,7 @@ export async function renderSceneToSvg(scene, options = {}) {
     const wmX = niFrame.mapRight - 8 * scale;
     const wmY = niFrame.mapBottom - 5 * scale;
     const watermark = options.noWatermark ? '' : `<text x="${wmX}" y="${wmY}" font-family="Arial,sans-serif" font-size="${9 * scale}" font-weight="bold" fill="rgba(100,116,139,0.72)" text-anchor="end" dominant-baseline="auto" paint-order="stroke" stroke="rgba(255,255,255,0.55)" stroke-width="2.5" stroke-linejoin="round">explorationmaps.com</text>`;
-    mapContent = `${clipDef}${clipped}${renderLegendSvg(scene, scale)}${renderNorthArrowSvg(scene, scale)}${renderInsetSvg(scene, scale)}${renderLogoSvg(scene, scale)}${renderDistanceTicksSvg(scene, scale)}${renderTitleStripSvg(scene, scale)}${watermark}`;
+    mapContent = `${clipDef}${clipped}${renderLegendSvg(scene, scale)}${renderNorthArrowSvg(scene, scale)}${renderInsetSvg(scene, scale)}${renderLogoSvg(scene, scale)}${renderScaleBarSvg(scene, scale)}${renderDistanceTicksSvg(scene, scale)}${renderTitleStripSvg(scene, scale)}${watermark}`;
   } else {
     const watermark = options.noWatermark ? '' : `<text x="${width - 8}" y="${height - 5}" font-family="Arial,sans-serif" font-size="9" font-weight="bold" fill="rgba(100,116,139,0.72)" text-anchor="end" paint-order="stroke" stroke="rgba(255,255,255,0.55)" stroke-width="2.5" stroke-linejoin="round">explorationmaps.com</text>`;
     mapContent = `${basemapImage}${renderRegionHighlightsSvg(scene, scale)}${renderVectorsSvg(scene, scale)}${renderEllipsesSvg(scene, scale)}${renderPolygonsSvg(scene, scale)}${renderMarkersSvg(scene, scale)}${renderCalloutsSvg(scene, scale)}${renderTitleSvg(scene, scale)}${renderLegendSvg(scene, scale)}${renderNorthArrowSvg(scene, scale)}${renderInsetSvg(scene, scale)}${renderScaleBarSvg(scene, scale)}${renderFooterSvg(scene, scale)}${renderLogoSvg(scene, scale)}${watermark}`;
