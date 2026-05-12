@@ -71,7 +71,7 @@ import {
 } from './utils/cloudStorage';
 import { useAuth } from './hooks/useAuth';
 import UserMenu from './components/UserMenu';
-import { CORNER_KEY, getCornerLayout, moveToCorner } from './utils/cornerLayout';
+import { CORNER_KEY, getCornerLayout, moveToCorner, moveToCornerFirst, moveToCornerBeside } from './utils/cornerLayout';
 
 const SAMPLE_LOGO_SVG = [
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 56" width="220" height="56">',
@@ -880,30 +880,26 @@ export default function App() {
     const map = leafletMapRef.current;
     if (map) map.dragging.disable();
     const layoutSnapshot = project.layout;
-    let currentHoverCorner = null;
-    setDragging({ id, hoverCorner: null, ghostX: e.clientX, ghostY: e.clientY, ghostW, ghostH });
+    let currentHoverZone = null;
+    setDragging({ id, hoverZone: null, ghostX: e.clientX, ghostY: e.clientY, ghostW, ghostH });
     const onMove = (me) => {
-      const rect = mapContainerRef.current?.getBoundingClientRect();
-      let hc = null;
-      if (rect) {
-        const relX = me.clientX - rect.left;
-        const relY = me.clientY - rect.top;
-        if (relX >= 0 && relX <= rect.width && relY >= 0 && relY <= rect.height) {
-          hc = relX < rect.width / 2
-            ? (relY < rect.height / 2 ? 'tl' : 'bl')
-            : (relY < rect.height / 2 ? 'tr' : 'br');
-        }
-      }
-      currentHoverCorner = hc;
-      setDragging((d) => d ? { ...d, ghostX: me.clientX, ghostY: me.clientY, hoverCorner: hc } : null);
+      const el = document.elementFromPoint(me.clientX, me.clientY);
+      const zoneEl = el?.closest('[data-slot]');
+      const hz = zoneEl ? { corner: zoneEl.dataset.corner, slot: zoneEl.dataset.slot } : null;
+      currentHoverZone = hz;
+      setDragging((d) => d ? { ...d, ghostX: me.clientX, ghostY: me.clientY, hoverZone: hz } : null);
     };
     const onUp = () => {
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
       if (map) map.dragging.enable();
-      if (currentHoverCorner) {
-        const newCl = moveToCorner(getCornerLayout(layoutSnapshot), id, currentHoverCorner);
-        updateLayout({ cornerLayout: newCl, [CORNER_KEY[id]]: currentHoverCorner });
+      if (currentHoverZone) {
+        const { corner, slot } = currentHoverZone;
+        const cl = getCornerLayout(layoutSnapshot);
+        const newCl = slot === 'first' ? moveToCornerFirst(cl, id, corner)
+          : slot === 'beside' ? moveToCornerBeside(cl, id, corner)
+          : moveToCorner(cl, id, corner);
+        updateLayout({ cornerLayout: newCl, [CORNER_KEY[id]]: corner });
       }
       setDragging(null);
     };
@@ -3284,12 +3280,30 @@ export default function App() {
             <button className="btn primary" style={{ width: '100%', marginTop: 8 }} type="button" onClick={addCalloutFromSelectedFeature}>Add Callout</button>
           </div>
         ) : null}
-        {dragging && ['tl','tr','bl','br'].map((corner) => (
-          <div
-            key={corner}
-            className={`drop-zone-corner drop-zone-corner--${corner}${dragging.hoverCorner === corner ? ' drop-zone-corner--hover' : ''}`}
-          />
-        ))}
+        {dragging && ['tl','tr','bl','br'].map((corner) => {
+          const isTop = corner[0] === 't';
+          const isLeft = corner[1] === 'l';
+          const hz = dragging.hoverZone;
+          const isHov = (slot) => hz?.corner === corner && hz?.slot === slot;
+          const firstLabel = isLeft ? '◤ Corner' : 'Corner ◥';
+          const stackLabel = isTop ? '↓ Stack' : '↑ Stack';
+          const firstCell = (
+            <div key="first" className={`dzs dzs-first${isHov('first') ? ' dzs--hover' : ''}`} data-corner={corner} data-slot="first">{firstLabel}</div>
+          );
+          const besideCell = (
+            <div key="beside" className={`dzs dzs-beside${isHov('beside') ? ' dzs--hover' : ''}`} data-corner={corner} data-slot="beside">⊞ Beside</div>
+          );
+          const stackCell = (
+            <div key="last" className={`dzs dzs-last${isHov('last') ? ' dzs--hover' : ''}`} data-corner={corner} data-slot="last">{stackLabel}</div>
+          );
+          const topRow = <div className="dzs-row">{isLeft ? [firstCell, besideCell] : [besideCell, firstCell]}</div>;
+          const bottomRow = <div className="dzs-row">{stackCell}</div>;
+          return (
+            <div key={corner} className={`drop-zone-cluster drop-zone-cluster--${corner}`}>
+              {isTop ? <>{topRow}{bottomRow}</> : <>{bottomRow}{topRow}</>}
+            </div>
+          );
+        })}
           </div>
         </div>
       </div>

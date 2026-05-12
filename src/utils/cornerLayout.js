@@ -183,6 +183,21 @@ export function toggleBeside(cornerLayout, id) {
   return { ...cornerLayout, [corner]: newRows };
 }
 
+/** Remove an element from wherever it is, returning cleaned rows for its old corner. */
+function removeFromCornerLayout(cornerLayout, id) {
+  const pos = findElement(cornerLayout, id);
+  if (!pos) return cornerLayout;
+  const { corner: oldCorner, rowIndex, colIndex } = pos;
+  const oldRows = [...cornerLayout[oldCorner]];
+  const thisRow = oldRows[rowIndex];
+  if (thisRow.length === 1) {
+    oldRows.splice(rowIndex, 1);
+  } else {
+    oldRows[rowIndex] = thisRow.filter((_, i) => i !== colIndex);
+  }
+  return { ...cornerLayout, [oldCorner]: oldRows };
+}
+
 /**
  * Move an element to a new corner.
  * Places it as a new single-element row at the end of the target corner.
@@ -211,6 +226,37 @@ export function moveToCorner(cornerLayout, id, newCorner) {
     [oldCorner]: rows,
     [newCorner]: targetRows,
   };
+}
+
+/**
+ * Move an element to a new corner, inserting it as the FIRST row (row 0).
+ * This places it closest to the corner edge.
+ */
+export function moveToCornerFirst(cornerLayout, id, newCorner) {
+  const cleaned = removeFromCornerLayout(cornerLayout, id);
+  const targetRows = [[id], ...(cleaned[newCorner] || [])];
+  return { ...cleaned, [newCorner]: targetRows };
+}
+
+/**
+ * Move an element to a new corner, placing it beside the last element
+ * already in that corner (joining its last row). Falls back to a new row
+ * if the last row is already full.
+ */
+export function moveToCornerBeside(cornerLayout, id, newCorner) {
+  const cleaned = removeFromCornerLayout(cornerLayout, id);
+  const targetRows = [...(cleaned[newCorner] || [])];
+  if (targetRows.length === 0) {
+    targetRows.push([id]);
+  } else {
+    const lastRow = targetRows[targetRows.length - 1];
+    if (lastRow.length < 2) {
+      targetRows[targetRows.length - 1] = [...lastRow, id];
+    } else {
+      targetRows.push([id]);
+    }
+  }
+  return { ...cleaned, [newCorner]: targetRows };
 }
 
 /**

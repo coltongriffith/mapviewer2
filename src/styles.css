@@ -47,12 +47,17 @@ button, input, select, textarea { font: inherit; }
 .sample-data-link { background: none; border: none; padding: 0; color: #2563eb; font-size: 13px; cursor: pointer; text-align: left; margin-top: 12px; font-family: inherit; display: block; }
 .sample-data-link:hover { text-decoration: underline; }
 .drag-ghost { position: fixed; pointer-events: none; background: rgba(37, 99, 235, 0.15); border: 2px dashed #2563eb; border-radius: 8px; z-index: 9999; transform: translate(-50%, -50%); }
-.drop-zone-corner { position: absolute; width: 40%; height: 40%; z-index: 399; border: 2.5px dashed #93c5fd; border-radius: 12px; background: rgba(219, 234, 254, 0.35); transition: background 0.1s, border-color 0.1s; pointer-events: none; }
-.drop-zone-corner--tl { top: 12px; left: 12px; }
-.drop-zone-corner--tr { top: 12px; right: 12px; }
-.drop-zone-corner--bl { bottom: 12px; left: 12px; }
-.drop-zone-corner--br { bottom: 12px; right: 12px; }
-.drop-zone-corner--hover { background: rgba(147, 197, 253, 0.55); border-color: #2563eb; border-style: solid; }
+.drop-zone-cluster { position: absolute; z-index: 9000; display: flex; flex-direction: column; gap: 4px; pointer-events: none; }
+.drop-zone-cluster--tl { top: 12px; left: 12px; }
+.drop-zone-cluster--tr { top: 12px; right: 12px; }
+.drop-zone-cluster--bl { bottom: 12px; left: 12px; }
+.drop-zone-cluster--br { bottom: 12px; right: 12px; }
+.dzs-row { display: flex; gap: 4px; }
+.dzs { pointer-events: auto; border: 2px dashed #93c5fd; border-radius: 6px; background: rgba(219, 234, 254, 0.6); color: #1d4ed8; font-size: 11px; font-weight: 600; font-family: system-ui, sans-serif; display: flex; align-items: center; justify-content: center; height: 34px; white-space: nowrap; transition: background 0.1s, border-color 0.1s; user-select: none; cursor: default; backdrop-filter: blur(2px); }
+.dzs-first { width: 80px; }
+.dzs-beside { width: 80px; }
+.dzs-last { width: 164px; }
+.dzs--hover { background: rgba(37, 99, 235, 0.22); border-color: #2563eb; border-style: solid; color: #1e3a8a; }
 .onboarding-card { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 12px 14px; margin-bottom: 12px; }
 .onboarding-title { font-size: 13px; font-weight: 600; color: #1d4ed8; margin-bottom: 8px; }
 .onboarding-steps { margin: 0; padding-left: 18px; display: grid; gap: 5px; }
