@@ -2769,7 +2769,7 @@ export default function App() {
         </section>
 
         <section className="control-section cs-collapsible">
-          <h2 className="section-toggle-btn" onClick={() => toggleSection('elements')}>Elements <span className={`section-chevron${collapsedSections.elements ? '' : ' open'}`}>›</span></h2>
+          <h2 className="section-toggle-btn" onClick={() => toggleSection('elements')}>Inset <span className={`section-chevron${collapsedSections.elements ? '' : ' open'}`}>›</span></h2>
           {!collapsedSections.elements && <div className="control-grid">
             <div className="button-row three">
               <button className="btn" type="button" onClick={() => insetInputRef.current?.click()}>Upload Inset</button>

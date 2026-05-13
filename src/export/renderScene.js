@@ -649,8 +649,9 @@ function drawCalloutsCanvas(ctx, scene, scale) {
       // Anchor dot
       ctx.beginPath(); ctx.arc(c.anchorPx.x, c.anchorPx.y, 4 * scale, 0, Math.PI * 2);
       ctx.fillStyle = c.style?.border || '#102640'; ctx.fill();
+      const cFontSz = (c.style?.fontSize || 12) * scale;
       // Chip text
-      ctx.textBaseline = 'middle'; ctx.font = `700 ${12 * scale}px ${calloutFont}`;
+      ctx.textBaseline = 'middle'; ctx.font = `700 ${cFontSz}px ${calloutFont}`;
       ctx.fillStyle = '#ffffff'; ctx.textAlign = 'center';
       ctx.fillText(fitText(ctx, c.badgeValue || '—', chipW - 8 * scale), c.left + chipW / 2, c.top + c.height / 2);
       // Label text
@@ -664,16 +665,20 @@ function drawCalloutsCanvas(ctx, scene, scale) {
       ctx.beginPath(); ctx.moveTo(c.anchorPx.x, c.anchorPx.y); ctx.lineTo(ep.x, ep.y);
       ctx.strokeStyle = c.style?.border || '#102640'; ctx.lineWidth = 1.4 * scale; ctx.setLineDash(c.type === 'leader' ? [5 * scale, 3 * scale] : []); ctx.stroke();
     }
+    const fontSize = (c.style?.fontSize || 12) * scale;
+    const subtextSize = Math.max(9, (c.style?.fontSize || 12) - 2) * scale;
     ctx.setLineDash([]);
     if (c.type !== 'plain') { drawRoundedRect(ctx, c.left, c.top, c.width, c.height, radius); ctx.fillStyle = c.style?.background || theme.calloutFill; ctx.fill(); ctx.strokeStyle = c.style?.border || theme.calloutBorder; ctx.lineWidth = 1 * scale; ctx.stroke(); }
-    const textX = c.left + (c.type === 'plain' ? 0 : 10 * scale);
-    const textY = c.top + (c.type === 'plain' ? 10 * scale : c.subtext ? c.height / 2 - 9 * scale : c.height / 2);
-    const maxTextW = c.width - (c.type === 'plain' ? 0 : 20 * scale);
-    ctx.fillStyle = c.style?.textColor || theme.calloutText; ctx.font = `700 ${12 * scale}px ${calloutFont}`; ctx.textBaseline = 'middle'; ctx.textAlign = 'left'; ctx.fillText(fitText(ctx, c.text || '', maxTextW), textX, textY);
+    const paddingX = (c.style?.paddingX || 10) * scale;
+    const textX = c.left + (c.type === 'plain' ? 0 : paddingX);
+    const subtextOffset = (c.subtext ? fontSize * 0.75 + 4 * scale : 0);
+    const textY = c.top + (c.type === 'plain' ? fontSize : c.height / 2 - subtextOffset / 2);
+    const maxTextW = c.width - (c.type === 'plain' ? 0 : paddingX * 2);
+    ctx.fillStyle = c.style?.textColor || theme.calloutText; ctx.font = `700 ${fontSize}px ${calloutFont}`; ctx.textBaseline = 'middle'; ctx.textAlign = 'left'; ctx.fillText(fitText(ctx, c.text || '', maxTextW), textX, textY);
     if (c.subtext) {
       ctx.fillStyle = c.style?.subtextColor || '#475569';
-      ctx.font = `${10 * scale}px ${calloutFont}`;
-      ctx.fillText(fitText(ctx, c.subtext, maxTextW), textX, textY + 16 * scale);
+      ctx.font = `${subtextSize}px ${calloutFont}`;
+      ctx.fillText(fitText(ctx, c.subtext, maxTextW), textX, textY + subtextOffset);
     }
   });
 }
@@ -1779,8 +1784,9 @@ function renderCalloutsSvg(scene, scale) {
       const line = `<line x1="${c.anchorPx.x}" y1="${c.anchorPx.y}" x2="${badgeSvgEp.x}" y2="${badgeSvgEp.y}" stroke="${leaderColor}" stroke-width="${1.4 * scale}" />`;
       const chipRect = `<rect x="${c.left}" y="${c.top}" width="${chipW}" height="${c.height}" rx="${6 * scale}" fill="${c.badgeColor || '#d97706'}" />`;
       const labelRect = `<rect x="${c.left + chipW}" y="${c.top}" width="${labelW}" height="${c.height}" rx="${6 * scale}" fill="${c.style?.background || '#ffffff'}" />`;
-      const chipText = `<text x="${c.left + chipW / 2}" y="${midY}" text-anchor="middle" dominant-baseline="middle" fill="#ffffff" font-family="${calloutFont}" font-size="${12 * scale}" font-weight="700">${escapeXml(c.badgeValue || '—')}</text>`;
-      const labelText = `<text x="${c.left + chipW + 8 * scale}" y="${midY}" dominant-baseline="middle" fill="${c.style?.textColor || '#0f172a'}" font-family="${calloutFont}" font-size="${12 * scale}" font-weight="600">${escapeXml(c.text || '')}</text>`;
+      const bFontSz = (c.style?.fontSize || 12) * scale;
+      const chipText = `<text x="${c.left + chipW / 2}" y="${midY}" text-anchor="middle" dominant-baseline="middle" fill="#ffffff" font-family="${calloutFont}" font-size="${bFontSz}" font-weight="700">${escapeXml(c.badgeValue || '—')}</text>`;
+      const labelText = `<text x="${c.left + chipW + 8 * scale}" y="${midY}" dominant-baseline="middle" fill="${c.style?.textColor || '#0f172a'}" font-family="${calloutFont}" font-size="${bFontSz}" font-weight="600">${escapeXml(c.text || '')}</text>`;
       return `<g>${line}${dot}${chipRect}${labelRect}${chipText}${labelText}</g>`;
     }
 
@@ -1790,10 +1796,14 @@ function renderCalloutsSvg(scene, scale) {
     const boxStroke = c.style?.border || '#17304f';
     const box = c.type !== 'plain' ? `<rect x="${c.left}" y="${c.top}" width="${c.width}" height="${c.height}" rx="${6 * scale}" fill="${boxFill}" stroke="${boxStroke}" />` : '';
     const textFill = c.style?.textColor || '#102640';
-    const textX = c.left + (c.type === 'plain' ? 0 : 10 * scale);
-    const textY = c.top + (c.type === 'plain' ? 10 * scale : c.subtext ? c.height / 2 - 9 * scale : c.height / 2);
-    const mainText = `<text x="${textX}" y="${textY}" dominant-baseline="middle" fill="${textFill}" font-family="${calloutFont}" font-size="${12 * scale}" font-weight="700">${escapeXml(c.text || '')}</text>`;
-    const subtextEl = c.subtext ? `<text x="${textX}" y="${textY + 16 * scale}" dominant-baseline="middle" fill="${c.style?.subtextColor || '#475569'}" font-family="${calloutFont}" font-size="${10 * scale}">${escapeXml(c.subtext)}</text>` : '';
+    const svgPadX = (c.style?.paddingX || 10) * scale;
+    const textX = c.left + (c.type === 'plain' ? 0 : svgPadX);
+    const svgFontSz = (c.style?.fontSize || 12) * scale;
+    const svgSubOff = c.subtext ? svgFontSz * 0.75 + 4 * scale : 0;
+    const textY = c.top + (c.type === 'plain' ? svgFontSz : c.height / 2 - svgSubOff / 2);
+    const svgSubFontSz = Math.max(9, (c.style?.fontSize || 12) - 2) * scale;
+    const mainText = `<text x="${textX}" y="${textY}" dominant-baseline="middle" fill="${textFill}" font-family="${calloutFont}" font-size="${svgFontSz}" font-weight="700">${escapeXml(c.text || '')}</text>`;
+    const subtextEl = c.subtext ? `<text x="${textX}" y="${textY + svgFontSz * 1.5 + 4 * scale}" dominant-baseline="middle" fill="${c.style?.subtextColor || '#475569'}" font-family="${calloutFont}" font-size="${svgSubFontSz}">${escapeXml(c.subtext)}</text>` : '';
     return `<g>${line}${dot}${box}${mainText}${subtextEl}</g>`;
   }).join('\n');
 }
