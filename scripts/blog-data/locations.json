@@ -9,10 +9,33 @@
     "area": "944,735 km²",
     "regulatoryBody": "BC Energy Regulator",
     "claimsPortal": "BC Mineral Titles Online (MTO)",
-    "minerals": ["gold", "copper", "silver", "molybdenum", "coal", "zinc"],
-    "famousDeposits": ["Brucejack", "Red Chris", "Mount Polley", "Highland Valley Copper"],
-    "miningDistricts": ["Golden Triangle", "Cariboo", "Omineca", "Kootenay"],
-    "description": "British Columbia is Canada's most active junior mining jurisdiction, home to the Golden Triangle — one of the world's richest mineral belts for gold and copper-gold porphyry deposits."
+    "minerals": [
+      "gold",
+      "copper",
+      "silver",
+      "molybdenum",
+      "coal",
+      "zinc"
+    ],
+    "famousDeposits": [
+      "Brucejack",
+      "Red Chris",
+      "Mount Polley",
+      "Highland Valley Copper"
+    ],
+    "miningDistricts": [
+      "Golden Triangle",
+      "Cariboo",
+      "Omineca",
+      "Kootenay"
+    ],
+    "description": "British Columbia is Canada's most active junior mining jurisdiction, home to the Golden Triangle — one of the world's richest mineral belts for gold and copper-gold porphyry deposits.",
+    "publishedDate": "2025-11-03",
+    "contextLine": "home to the world-class Golden Triangle, Canada's most active junior mining jurisdiction",
+    "dataSourceUrl": "https://www2.gov.bc.ca/gov/content/industry/mineral-exploration-mining/mineral-titles",
+    "dataFormats": "Shapefile (SHP), KML",
+    "dataNote": "BC Mineral Titles Online exports shapefiles in BC Albers (EPSG:3005). Convert to WGS84 (EPSG:4326) using QGIS or mapshaper.org before importing into Exploration Maps.",
+    "workflowTip": "Golden Triangle properties often span multiple NTS 1:50,000 map sheets — confirm your GeoJSON covers the full tenure area and check for boundary gaps before placing callout labels on key drill holes."
   },
   {
     "name": "Ontario",
@@ -24,10 +47,33 @@
     "area": "1,076,395 km²",
     "regulatoryBody": "Ontario Ministry of Mines",
     "claimsPortal": "Ontario Mineral Lands Administration System (MLAS)",
-    "minerals": ["gold", "nickel", "copper", "zinc", "silver", "platinum group elements"],
-    "famousDeposits": ["Detour Lake", "Macassa", "Timmins Gold Camp", "Sudbury Basin"],
-    "miningDistricts": ["Timmins-Porcupine", "Kirkland Lake", "Red Lake", "Abitibi Greenstone Belt"],
-    "description": "Ontario is the largest gold producer in Canada and hosts the prolific Abitibi Greenstone Belt, one of the most mineralized geological terranes on Earth."
+    "minerals": [
+      "gold",
+      "nickel",
+      "copper",
+      "zinc",
+      "silver",
+      "platinum group elements"
+    ],
+    "famousDeposits": [
+      "Detour Lake",
+      "Macassa",
+      "Timmins Gold Camp",
+      "Sudbury Basin"
+    ],
+    "miningDistricts": [
+      "Timmins-Porcupine",
+      "Kirkland Lake",
+      "Red Lake",
+      "Abitibi Greenstone Belt"
+    ],
+    "description": "Ontario is the largest gold producer in Canada and hosts the prolific Abitibi Greenstone Belt, one of the most mineralized geological terranes on Earth.",
+    "publishedDate": "2025-11-05",
+    "contextLine": "hosting the prolific Abitibi Greenstone Belt and Canada's largest gold output",
+    "dataSourceUrl": "https://www.ontario.ca/page/mineral-lands-administration-system-mlas",
+    "dataFormats": "Shapefile, CSV, KML",
+    "dataNote": "MLAS exports use NAD83 UTM Zone 17N (EPSG:32617) for most of Ontario. Convert to WGS84 before importing, or verify your data's coordinate system when the imported layer appears offset from the basemap.",
+    "workflowTip": "The Abitibi Greenstone Belt straddles the Ontario–Quebec border — if your property spans both provinces, import the two provincial claim files as separate layers and keep them distinct for regulatory clarity."
   },
   {
     "name": "Quebec",
@@ -39,10 +85,33 @@
     "area": "1,542,056 km²",
     "regulatoryBody": "Ministère des Ressources naturelles et des Forêts",
     "claimsPortal": "GESTIM Plus",
-    "minerals": ["gold", "copper", "zinc", "lithium", "graphite", "iron"],
-    "famousDeposits": ["Canadian Malartic", "Osisko", "Raglan", "Éléonore"],
-    "miningDistricts": ["Abitibi", "James Bay", "Nunavik", "Laurentides"],
-    "description": "Quebec is a tier-one mining jurisdiction with a long history of gold and base metal production in the Abitibi region, and growing critical mineral development in the James Bay lowlands."
+    "minerals": [
+      "gold",
+      "copper",
+      "zinc",
+      "lithium",
+      "graphite",
+      "iron"
+    ],
+    "famousDeposits": [
+      "Canadian Malartic",
+      "Osisko",
+      "Raglan",
+      "Éléonore"
+    ],
+    "miningDistricts": [
+      "Abitibi",
+      "James Bay",
+      "Nunavik",
+      "Laurentides"
+    ],
+    "description": "Quebec is a tier-one mining jurisdiction with a long history of gold and base metal production in the Abitibi region, and growing critical mineral development in the James Bay lowlands.",
+    "publishedDate": "2025-11-10",
+    "contextLine": "home to the prolific Abitibi region and Canada's fastest-growing critical minerals sector",
+    "dataSourceUrl": "https://gestim.mines.gouv.qc.ca/",
+    "dataFormats": "Shapefile, KML",
+    "dataNote": "GESTIM Plus exports in the Quebec Lambert Conformal Conic projection (EPSG:32198). Convert to WGS84 before importing. French-language column headers are standard — use the Column Mapper to assign latitude/longitude fields manually.",
+    "workflowTip": "Many Abitibi projects share similar property names — include the NTS map sheet number (e.g., 32C/02) in your title block subtitle to differentiate adjacent properties along the same belt segment."
   },
   {
     "name": "Alberta",
@@ -54,10 +123,31 @@
     "area": "661,848 km²",
     "regulatoryBody": "Alberta Energy Regulator",
     "claimsPortal": "Alberta Mineral Rights",
-    "minerals": ["coal", "oil sands", "potash", "salt", "silica", "gold"],
-    "famousDeposits": ["Athabasca Oil Sands", "Grande Cache Coal", "Kananaskis Gold"],
-    "miningDistricts": ["Peace River", "Foothills", "Rocky Mountain"],
-    "description": "Alberta is best known for its oil sands but hosts significant coal, potash, and emerging gold exploration in the Rocky Mountain foothills."
+    "minerals": [
+      "coal",
+      "oil sands",
+      "potash",
+      "salt",
+      "silica",
+      "gold"
+    ],
+    "famousDeposits": [
+      "Athabasca Oil Sands",
+      "Grande Cache Coal",
+      "Kananaskis Gold"
+    ],
+    "miningDistricts": [
+      "Peace River",
+      "Foothills",
+      "Rocky Mountain"
+    ],
+    "description": "Alberta is best known for its oil sands but hosts significant coal, potash, and emerging gold exploration in the Rocky Mountain foothills.",
+    "publishedDate": "2025-11-12",
+    "contextLine": "an emerging gold and critical minerals jurisdiction with world-scale oil sands infrastructure",
+    "dataSourceUrl": "https://www.alberta.ca/mineral-surface-disposition",
+    "dataFormats": "Shapefile, CSV",
+    "dataNote": "Alberta mineral disposition data uses NAD83 geographic coordinates. Boundaries in many older records are described in Dominion Land Survey (DLS) legal format — confirm your GeoJSON is correctly projected before importing to avoid east-west offset errors.",
+    "workflowTip": "Alberta's Rocky Mountain foothills gold properties are typically compact — use a 1:25,000 to 1:50,000 scale with the Topographic basemap to show the ridgeline terrain that defines drill access and the regional infrastructure context investors expect."
   },
   {
     "name": "Saskatchewan",
@@ -69,10 +159,32 @@
     "area": "651,036 km²",
     "regulatoryBody": "Saskatchewan Mineral Assessment Database",
     "claimsPortal": "Saskatchewan Mineral Assessment Database",
-    "minerals": ["uranium", "potash", "gold", "copper", "nickel", "lithium"],
-    "famousDeposits": ["Cigar Lake", "McArthur River", "Key Lake", "Roughrider"],
-    "miningDistricts": ["Athabasca Basin", "La Ronge", "Flin Flon"],
-    "description": "Saskatchewan's Athabasca Basin is the world's richest uranium district, while the province also hosts world-class potash deposits and growing gold exploration."
+    "minerals": [
+      "uranium",
+      "potash",
+      "gold",
+      "copper",
+      "nickel",
+      "lithium"
+    ],
+    "famousDeposits": [
+      "Cigar Lake",
+      "McArthur River",
+      "Key Lake",
+      "Roughrider"
+    ],
+    "miningDistricts": [
+      "Athabasca Basin",
+      "La Ronge",
+      "Flin Flon"
+    ],
+    "description": "Saskatchewan's Athabasca Basin is the world's richest uranium district, while the province also hosts world-class potash deposits and growing gold exploration.",
+    "publishedDate": "2025-11-17",
+    "contextLine": "home to the Athabasca Basin, the world's richest high-grade uranium district",
+    "dataSourceUrl": "https://applications.saskatchewan.ca/mineral/",
+    "dataFormats": "Shapefile, KML, PDF",
+    "dataNote": "Saskatchewan's mineral claims system exports in Saskatchewan Transverse Mercator (EPSG:3400). Use QGIS or mapshaper.org to reproject to WGS84 before importing. Some older claim maps are only available as PDFs — digitize outlines manually or contact the Ministry for shapefile data.",
+    "workflowTip": "Athabasca Basin uranium properties are typically remote and accessible only by floatplane — use the Satellite basemap to show the lake-dotted Shield terrain, and add a distance ring from the nearest community (Uranium City, La Loche) to communicate logistics immediately."
   },
   {
     "name": "Manitoba",
@@ -84,10 +196,33 @@
     "area": "647,797 km²",
     "regulatoryBody": "Manitoba Mining and Petroleum",
     "claimsPortal": "Manitoba Mineral Titles Online",
-    "minerals": ["nickel", "copper", "zinc", "gold", "lithium", "cesium"],
-    "famousDeposits": ["Thompson Nickel Belt", "Flin Flon VMS", "Snow Lake", "Tanco"],
-    "miningDistricts": ["Thompson", "Flin Flon", "Snow Lake", "Lynn Lake"],
-    "description": "Manitoba hosts the Thompson Nickel Belt — one of the world's largest nickel deposits — as well as significant VMS (volcanogenic massive sulphide) gold-zinc deposits."
+    "minerals": [
+      "nickel",
+      "copper",
+      "zinc",
+      "gold",
+      "lithium",
+      "cesium"
+    ],
+    "famousDeposits": [
+      "Thompson Nickel Belt",
+      "Flin Flon VMS",
+      "Snow Lake",
+      "Tanco"
+    ],
+    "miningDistricts": [
+      "Thompson",
+      "Flin Flon",
+      "Snow Lake",
+      "Lynn Lake"
+    ],
+    "description": "Manitoba hosts the Thompson Nickel Belt — one of the world's largest nickel deposits — as well as significant VMS (volcanogenic massive sulphide) gold-zinc deposits.",
+    "publishedDate": "2025-11-19",
+    "contextLine": "home to the Thompson Nickel Belt, one of the world's great nickel-copper camps",
+    "dataSourceUrl": "https://web2.gov.mb.ca/mineral/mmto.php",
+    "dataFormats": "Shapefile, KML",
+    "dataNote": "Manitoba Mineral Titles Online uses NAD83 geographic coordinates and allows polygon export directly from the map interface. Download your claim group as a Shapefile and convert if needed, though NAD83 and WGS84 are functionally equivalent for most Manitoba locations.",
+    "workflowTip": "Thompson Nickel Belt drill programs often target deep sulphide zones — label your drill collar map clearly as showing surface collar positions, and note the target depth range in the title block to avoid confusion with the surface expression of the deposit."
   },
   {
     "name": "Nova Scotia",
@@ -99,10 +234,31 @@
     "area": "55,284 km²",
     "regulatoryBody": "Nova Scotia Department of Natural Resources",
     "claimsPortal": "Nova Scotia Mineral Rights",
-    "minerals": ["gold", "gypsum", "salt", "barite", "tin", "tungsten"],
-    "famousDeposits": ["Moose River", "Touquoy", "Atlantic Gold", "Meguma Gold Belt"],
-    "miningDistricts": ["Meguma Terrane", "Antigonish Highlands"],
-    "description": "Nova Scotia's Meguma Terrane is a gold-rich geological belt that has produced millions of ounces of gold and is seeing renewed exploration interest."
+    "minerals": [
+      "gold",
+      "gypsum",
+      "salt",
+      "barite",
+      "tin",
+      "tungsten"
+    ],
+    "famousDeposits": [
+      "Moose River",
+      "Touquoy",
+      "Atlantic Gold",
+      "Meguma Gold Belt"
+    ],
+    "miningDistricts": [
+      "Meguma Terrane",
+      "Antigonish Highlands"
+    ],
+    "description": "Nova Scotia's Meguma Terrane is a gold-rich geological belt that has produced millions of ounces of gold and is seeing renewed exploration interest.",
+    "publishedDate": "2025-11-24",
+    "contextLine": "home to the Meguma Terrane, a gold belt experiencing its biggest exploration revival in decades",
+    "dataSourceUrl": "https://novascotia.ca/natr/meb/data/",
+    "dataFormats": "Shapefile, CSV, KML",
+    "dataNote": "Nova Scotia exports claim data in NAD83 geographic or UTM Zone 20N (EPSG:32620). Download 'Active Mineral Claims' from the provincial GIS portal. The Meguma Terrane claims are well-documented with extensive historical workings data available in the provincial mineral assessment database.",
+    "workflowTip": "Nova Scotia properties are typically compact and near the coast — a satellite basemap showing ocean proximity and forested terrain helps investors immediately recognize the accessible, infrastructure-friendly setting typical of Meguma Terrane projects."
   },
   {
     "name": "Newfoundland and Labrador",
@@ -114,10 +270,32 @@
     "area": "405,212 km²",
     "regulatoryBody": "Newfoundland and Labrador Department of Industry, Energy and Technology",
     "claimsPortal": "NL GeoAtlas",
-    "minerals": ["iron ore", "nickel", "copper", "cobalt", "gold", "fluorspar"],
-    "famousDeposits": ["Voisey's Bay", "Labrador Iron Ore", "Julienne Lake", "Pine Cove"],
-    "miningDistricts": ["Labrador Trough", "Central Newfoundland", "Northern Peninsula"],
-    "description": "Newfoundland and Labrador is experiencing a gold exploration renaissance in central Newfoundland, while Labrador hosts world-class iron ore and base metal deposits."
+    "minerals": [
+      "iron ore",
+      "nickel",
+      "copper",
+      "cobalt",
+      "gold",
+      "fluorspar"
+    ],
+    "famousDeposits": [
+      "Voisey's Bay",
+      "Labrador Iron Ore",
+      "Julienne Lake",
+      "Pine Cove"
+    ],
+    "miningDistricts": [
+      "Labrador Trough",
+      "Central Newfoundland",
+      "Northern Peninsula"
+    ],
+    "description": "Newfoundland and Labrador is experiencing a gold exploration renaissance in central Newfoundland, while Labrador hosts world-class iron ore and base metal deposits.",
+    "publishedDate": "2025-11-26",
+    "contextLine": "experiencing a gold exploration renaissance in the underexplored Exploits Subzone",
+    "dataSourceUrl": "https://geoatlas.gov.nl.ca/",
+    "dataFormats": "Shapefile, KML",
+    "dataNote": "NL GeoAtlas provides mineral claim data as NAD83 geographic coordinates. Download the 'Active Mining Claims' layer from the geospatial data portal. Labrador properties may cross the Quebec boundary — verify both provincial claim databases if your tenure straddles the border.",
+    "workflowTip": "Central Newfoundland's gold exploration district is active and growing — include a regional inset showing the Exploits Subzone and the locations of nearby past-producing mines (Nugget Pond, Hammerdown) to give investors the geological context that makes junior projects compelling."
   },
   {
     "name": "Yukon",
@@ -129,10 +307,33 @@
     "area": "482,443 km²",
     "regulatoryBody": "Yukon Energy, Mines and Resources",
     "claimsPortal": "Yukon MapBrowser",
-    "minerals": ["gold", "silver", "lead", "zinc", "copper", "tungsten"],
-    "famousDeposits": ["Coffee Gold", "Casino", "Minto", "Klondike Placer"],
-    "miningDistricts": ["Dawson", "Mayo", "Kluane", "White Pass"],
-    "description": "Yukon is one of Canada's most exciting frontier mining jurisdictions, with multiple large-scale gold, copper-gold, and polymetallic projects at various stages of development."
+    "minerals": [
+      "gold",
+      "silver",
+      "lead",
+      "zinc",
+      "copper",
+      "tungsten"
+    ],
+    "famousDeposits": [
+      "Coffee Gold",
+      "Casino",
+      "Minto",
+      "Klondike Placer"
+    ],
+    "miningDistricts": [
+      "Dawson",
+      "Mayo",
+      "Kluane",
+      "White Pass"
+    ],
+    "description": "Yukon is one of Canada's most exciting frontier mining jurisdictions, with multiple large-scale gold, copper-gold, and polymetallic projects at various stages of development.",
+    "publishedDate": "2025-12-01",
+    "contextLine": "one of Canada's most exciting frontier jurisdictions for large-scale gold and copper-gold discovery",
+    "dataSourceUrl": "https://mapbrowser.gov.yk.ca/",
+    "dataFormats": "Shapefile, KML",
+    "dataNote": "Yukon MapBrowser exports claim boundaries in NAD83 geographic coordinates. The territory is vast — properties are often referenced on NTS 1:250,000 map sheets. Include the NTS sheet number in your title block to help regulatory reviewers locate your property.",
+    "workflowTip": "Yukon frontier properties often lack nearby infrastructure — add a distance ring or annotation showing the distance to the nearest highway or Whitehorse to immediately communicate the fly-in or road-access context that investors need to assess project logistics."
   },
   {
     "name": "Northwest Territories",
@@ -144,10 +345,32 @@
     "area": "1,346,106 km²",
     "regulatoryBody": "Northwest Territories Department of Industry, Tourism and Investment",
     "claimsPortal": "NWT Mining Recorder",
-    "minerals": ["diamonds", "gold", "tungsten", "lead", "zinc", "lithium"],
-    "famousDeposits": ["Ekati", "Diavik", "Giant Mine", "Con Mine"],
-    "miningDistricts": ["Yellowknife", "Mackenzie", "Slave Geological Province"],
-    "description": "The Northwest Territories hosts Canada's diamond industry and the historic Yellowknife gold camp, with extensive underexplored terrain across the Slave Geological Province."
+    "minerals": [
+      "diamonds",
+      "gold",
+      "tungsten",
+      "lead",
+      "zinc",
+      "lithium"
+    ],
+    "famousDeposits": [
+      "Ekati",
+      "Diavik",
+      "Giant Mine",
+      "Con Mine"
+    ],
+    "miningDistricts": [
+      "Yellowknife",
+      "Mackenzie",
+      "Slave Geological Province"
+    ],
+    "description": "The Northwest Territories hosts Canada's diamond industry and the historic Yellowknife gold camp, with extensive underexplored terrain across the Slave Geological Province.",
+    "publishedDate": "2025-12-03",
+    "contextLine": "home to Canada's diamond industry and the largely underexplored Slave Geological Province",
+    "dataSourceUrl": "https://www.iti.gov.nt.ca/en/services/mining-recorder",
+    "dataFormats": "Shapefile, PDF",
+    "dataNote": "NWT claim data is administered through the Mining Recorder in Yellowknife. Most datasets are provided in NAD83 UTM Zone 11N or 12N depending on location west or east of 102°W — verify the correct zone for your property before converting to WGS84.",
+    "workflowTip": "Slave Province properties often cover large areas of Shield terrain — zoom to a scale that shows several named lakes as landmarks, which helps investors orient to maps of remote terrain where towns and roads are absent."
   },
   {
     "name": "Nevada",
@@ -159,10 +382,34 @@
     "area": "286,380 km²",
     "regulatoryBody": "Nevada Division of Minerals",
     "claimsPortal": "BLM Land and Mineral Legacy Rehost (LR2000)",
-    "minerals": ["gold", "silver", "copper", "lithium", "barite", "diatomite"],
-    "famousDeposits": ["Carlin Trend", "Cortez", "Goldstrike", "Turquoise Ridge", "Thacker Pass"],
-    "miningDistricts": ["Carlin Trend", "Battle Mountain", "Elko County", "Humboldt"],
-    "description": "Nevada is the largest gold-producing state in the United States and hosts the Carlin Trend — one of the most productive gold districts in the world — alongside world-class lithium deposits."
+    "minerals": [
+      "gold",
+      "silver",
+      "copper",
+      "lithium",
+      "barite",
+      "diatomite"
+    ],
+    "famousDeposits": [
+      "Carlin Trend",
+      "Cortez",
+      "Goldstrike",
+      "Turquoise Ridge",
+      "Thacker Pass"
+    ],
+    "miningDistricts": [
+      "Carlin Trend",
+      "Battle Mountain",
+      "Elko County",
+      "Humboldt"
+    ],
+    "description": "Nevada is the largest gold-producing state in the United States and hosts the Carlin Trend — one of the most productive gold districts in the world — alongside world-class lithium deposits.",
+    "publishedDate": "2025-12-08",
+    "contextLine": "the largest gold-producing state in the US and home to the world-class Carlin Trend",
+    "dataSourceUrl": "https://www.blm.gov/services/land-records/mining-claims",
+    "dataFormats": "CSV (LR2000 extract)",
+    "dataNote": "BLM LR2000 provides mining claim data as CSV with MTR (Meridian/Township/Range) legal descriptions, not as polygon GeoJSON. Use a tool like ClaimMapper, MineralFile, or ESRI's BLM data service to convert claim lists into importable GeoJSON polygons.",
+    "workflowTip": "Carlin Trend claim blocks are often composed of dozens of overlapping or adjacent unpatented lode claims — use different fill opacity settings per claim group to show stacking clearly, and label your AMC (Amended Mining Claim) numbers in the legend for due-diligence readers."
   },
   {
     "name": "Colorado",
@@ -174,10 +421,33 @@
     "area": "269,601 km²",
     "regulatoryBody": "Colorado Division of Reclamation, Mining and Safety",
     "claimsPortal": "BLM LR2000",
-    "minerals": ["gold", "silver", "molybdenum", "lead", "zinc", "vanadium"],
-    "famousDeposits": ["Climax Molybdenum", "Henderson Mine", "Cripple Creek", "Summitville"],
-    "miningDistricts": ["San Juan Mountains", "Leadville", "Teller County", "Clear Creek"],
-    "description": "Colorado has one of the richest mining histories in North America, with significant gold, silver, and molybdenum production from its Rocky Mountain ranges."
+    "minerals": [
+      "gold",
+      "silver",
+      "molybdenum",
+      "lead",
+      "zinc",
+      "vanadium"
+    ],
+    "famousDeposits": [
+      "Climax Molybdenum",
+      "Henderson Mine",
+      "Cripple Creek",
+      "Summitville"
+    ],
+    "miningDistricts": [
+      "San Juan Mountains",
+      "Leadville",
+      "Teller County",
+      "Clear Creek"
+    ],
+    "description": "Colorado has one of the richest mining histories in North America, with significant gold, silver, and molybdenum production from its Rocky Mountain ranges.",
+    "publishedDate": "2025-12-10",
+    "contextLine": "one of North America's richest mining states, home to Climax Molybdenum and the Cripple Creek gold district",
+    "dataSourceUrl": "https://www.blm.gov/services/land-records/mining-claims",
+    "dataFormats": "CSV (LR2000 extract)",
+    "dataNote": "Colorado BLM mining claims use UTM Zone 13N (EPSG:32613). The state spans two BLM field offices — check both the Colorado State Office and Leadville Field Office LR2000 databases to ensure complete claim coverage for your property.",
+    "workflowTip": "Colorado's San Juan Mountains have dramatic relief above 4,000 m — use the Topographic basemap with a Terrain theme to show the steep terrain that defines drill access logistics, and set your scale bar at 2–5 km to reflect the typical property footprint in high-alpine terrain."
   },
   {
     "name": "Alaska",
@@ -189,10 +459,34 @@
     "area": "1,723,337 km²",
     "regulatoryBody": "Alaska Department of Natural Resources",
     "claimsPortal": "Alaska DNR Online Mapping",
-    "minerals": ["gold", "copper", "zinc", "silver", "coal", "platinum"],
-    "famousDeposits": ["Pebble", "Fort Knox", "Donlin Gold", "Greens Creek", "Red Dog"],
-    "miningDistricts": ["Fairbanks", "Juneau", "Nome", "Seward Peninsula"],
-    "description": "Alaska hosts some of the largest undeveloped mineral deposits in the world, including Donlin Gold and Pebble, alongside active gold, zinc, and copper producers."
+    "minerals": [
+      "gold",
+      "copper",
+      "zinc",
+      "silver",
+      "coal",
+      "platinum"
+    ],
+    "famousDeposits": [
+      "Pebble",
+      "Fort Knox",
+      "Donlin Gold",
+      "Greens Creek",
+      "Red Dog"
+    ],
+    "miningDistricts": [
+      "Fairbanks",
+      "Juneau",
+      "Nome",
+      "Seward Peninsula"
+    ],
+    "description": "Alaska hosts some of the largest undeveloped mineral deposits in the world, including Donlin Gold and Pebble, alongside active gold, zinc, and copper producers.",
+    "publishedDate": "2025-12-15",
+    "contextLine": "home to some of the world's largest undeveloped gold, copper, and zinc deposits",
+    "dataSourceUrl": "https://dnr.alaska.gov/Mapper/",
+    "dataFormats": "Shapefile, KML",
+    "dataNote": "Alaska DNR uses NAD83 geographic coordinates. The Mining Claims portal allows polygon export by claim group. Alaska spans UTM Zones 5–9 — ensure all boundary layers use the same coordinate reference system before merging, as zone mismatches cause significant positional errors across the state's vast extent.",
+    "workflowTip": "Large Alaska deposits like Donlin Gold and Pebble span many tens of square kilometres — zoom out to show the full project outline and use a regional inset showing the nearest hub community (Bethel, Fairbanks) and access route to communicate the remote, fly-in logistics immediately."
   },
   {
     "name": "Arizona",
@@ -204,10 +498,32 @@
     "area": "295,234 km²",
     "regulatoryBody": "Arizona State Mine Inspector",
     "claimsPortal": "BLM LR2000",
-    "minerals": ["copper", "gold", "silver", "molybdenum", "zinc"],
-    "famousDeposits": ["Morenci", "Resolution Copper", "Bisbee", "Globe-Miami District"],
-    "miningDistricts": ["Globe-Miami", "Bagdad", "Safford", "Ajo"],
-    "description": "Arizona is the largest copper-producing state in the United States, with major porphyry copper deposits at Morenci (the largest copper mine in North America) and a strong gold exploration sector."
+    "minerals": [
+      "copper",
+      "gold",
+      "silver",
+      "molybdenum",
+      "zinc"
+    ],
+    "famousDeposits": [
+      "Morenci",
+      "Resolution Copper",
+      "Bisbee",
+      "Globe-Miami District"
+    ],
+    "miningDistricts": [
+      "Globe-Miami",
+      "Bagdad",
+      "Safford",
+      "Ajo"
+    ],
+    "description": "Arizona is the largest copper-producing state in the United States, with major porphyry copper deposits at Morenci (the largest copper mine in North America) and a strong gold exploration sector.",
+    "publishedDate": "2025-12-17",
+    "contextLine": "the top copper-producing state in the US and home to the massive Morenci open-pit copper mine",
+    "dataSourceUrl": "https://www.blm.gov/services/land-records/mining-claims",
+    "dataFormats": "CSV (LR2000 extract)",
+    "dataNote": "Arizona BLM mining claims use UTM Zone 12N (EPSG:32612). The Arizona State Mine Inspector maintains a separate database for state-land mineral permits — if your property spans both federal BLM land and Arizona State Trust Land, you need two separate data exports and should label each tenure type distinctly.",
+    "workflowTip": "Arizona copper porphyry projects often have large, compound footprints in semi-arid mountain terrain — use a high-altitude satellite view and include regional infrastructure (Highway 60, Globe-Miami townsite) to help investors recognize the established mining corridor context that de-risks capital investment."
   },
   {
     "name": "Montana",
@@ -219,10 +535,33 @@
     "area": "380,831 km²",
     "regulatoryBody": "Montana Department of Environmental Quality",
     "claimsPortal": "BLM LR2000",
-    "minerals": ["gold", "silver", "copper", "palladium", "platinum", "coal"],
-    "famousDeposits": ["Stillwater", "East Boulder", "Butte", "Golden Sunlight"],
-    "miningDistricts": ["Stillwater Complex", "Butte", "Beaverhead", "Lincoln"],
-    "description": "Montana hosts the Stillwater Complex, the only primary platinum-palladium mine in the United States, along with significant gold, silver, and copper production."
+    "minerals": [
+      "gold",
+      "silver",
+      "copper",
+      "palladium",
+      "platinum",
+      "coal"
+    ],
+    "famousDeposits": [
+      "Stillwater",
+      "East Boulder",
+      "Butte",
+      "Golden Sunlight"
+    ],
+    "miningDistricts": [
+      "Stillwater Complex",
+      "Butte",
+      "Beaverhead",
+      "Lincoln"
+    ],
+    "description": "Montana hosts the Stillwater Complex, the only primary platinum-palladium mine in the United States, along with significant gold, silver, and copper production.",
+    "publishedDate": "2025-12-22",
+    "contextLine": "home to the only primary platinum-palladium mine in the United States",
+    "dataSourceUrl": "https://www.blm.gov/services/land-records/mining-claims",
+    "dataFormats": "CSV (LR2000 extract)",
+    "dataNote": "Montana BLM claims use UTM Zone 12N for western Montana and Zone 13N for eastern properties. The dividing line is approximately 108°W longitude. Confirm your property's zone before converting to WGS84 to avoid east-west coordinate offset errors that appear as a systematic shift on the basemap.",
+    "workflowTip": "The Stillwater Complex trends roughly east-west for 50 km — a standard landscape (16:9) frame works well for the complex, but a portrait orientation may show the full Complex better. Use the Topographic basemap to show the Beartooth Range backdrop that characterises this world-class PGE camp."
   },
   {
     "name": "Idaho",
@@ -234,10 +573,33 @@
     "area": "216,443 km²",
     "regulatoryBody": "Idaho Department of Lands",
     "claimsPortal": "BLM LR2000",
-    "minerals": ["silver", "gold", "lead", "zinc", "cobalt", "phosphate"],
-    "famousDeposits": ["Coeur d'Alene District", "Bunker Hill", "Lucky Friday", "Blackbird"],
-    "miningDistricts": ["Coeur d'Alene", "Salmon River", "Cobalt", "Lemhi Pass"],
-    "description": "Idaho's Coeur d'Alene Mining District is one of the world's richest silver districts, producing over one billion ounces of silver historically, with active mines still operating today."
+    "minerals": [
+      "silver",
+      "gold",
+      "lead",
+      "zinc",
+      "cobalt",
+      "phosphate"
+    ],
+    "famousDeposits": [
+      "Coeur d'Alene District",
+      "Bunker Hill",
+      "Lucky Friday",
+      "Blackbird"
+    ],
+    "miningDistricts": [
+      "Coeur d'Alene",
+      "Salmon River",
+      "Cobalt",
+      "Lemhi Pass"
+    ],
+    "description": "Idaho's Coeur d'Alene Mining District is one of the world's richest silver districts, producing over one billion ounces of silver historically, with active mines still operating today.",
+    "publishedDate": "2026-01-05",
+    "contextLine": "home to the world-famous Coeur d'Alene silver district, with over one billion ounces of historical production",
+    "dataSourceUrl": "https://www.blm.gov/services/land-records/mining-claims",
+    "dataFormats": "CSV (LR2000 extract)",
+    "dataNote": "Idaho straddles UTM Zones 11N and 12N — Coeur d'Alene District properties are in Zone 11N (EPSG:32611), while Boise and south Idaho use Zone 12N. Always check which zone your claim coordinates were exported in before converting to WGS84, as mixing zones causes a visible east-west shift on the map.",
+    "workflowTip": "The Coeur d'Alene district has over a century of overlapping claim filings — show your current active claims as a clearly filled polygon and historical workings (adits, shafts) as a separate point layer with distinct symbols, making the distinction explicit in the legend for technical reviewers."
   },
   {
     "name": "Utah",
@@ -249,10 +611,33 @@
     "area": "219,882 km²",
     "regulatoryBody": "Utah Division of Oil, Gas and Mining",
     "claimsPortal": "BLM LR2000",
-    "minerals": ["copper", "gold", "silver", "molybdenum", "coal", "potash"],
-    "famousDeposits": ["Bingham Canyon", "Copperton", "Park City", "Mercur"],
-    "miningDistricts": ["Bingham Canyon", "Oquirrh Mountains", "Park City", "San Juan"],
-    "description": "Utah is home to Bingham Canyon — the world's largest man-made excavation and one of the largest copper mines in the world — as well as a long history of gold and silver production."
+    "minerals": [
+      "copper",
+      "gold",
+      "silver",
+      "molybdenum",
+      "coal",
+      "potash"
+    ],
+    "famousDeposits": [
+      "Bingham Canyon",
+      "Copperton",
+      "Park City",
+      "Mercur"
+    ],
+    "miningDistricts": [
+      "Bingham Canyon",
+      "Oquirrh Mountains",
+      "Park City",
+      "San Juan"
+    ],
+    "description": "Utah is home to Bingham Canyon — the world's largest man-made excavation and one of the largest copper mines in the world — as well as a long history of gold and silver production.",
+    "publishedDate": "2026-01-07",
+    "contextLine": "home to Bingham Canyon, the world's largest man-made excavation and a premier copper-gold producer",
+    "dataSourceUrl": "https://www.blm.gov/services/land-records/mining-claims",
+    "dataFormats": "CSV (LR2000 extract)",
+    "dataNote": "Utah BLM mining claims use UTM Zone 12N (EPSG:32612). The Utah Division of Oil, Gas and Mining also administers coal and industrial mineral leases under a separate system — hardrock unpatented mining claims are the BLM LR2000 domain. Verify your commodity type to use the correct database.",
+    "workflowTip": "If your property is in the Oquirrh Mountains near Bingham Canyon, zoom out enough to include the recognizable open pit as a landmark — investors immediately understand the geological context and infrastructure setting of properties within sight of an operating world-class mine."
   },
   {
     "name": "Wyoming",
@@ -264,10 +649,30 @@
     "area": "253,335 km²",
     "regulatoryBody": "Wyoming Department of Environmental Quality",
     "claimsPortal": "BLM LR2000",
-    "minerals": ["coal", "trona", "uranium", "gold", "bentonite"],
-    "famousDeposits": ["Powder River Basin Coal", "Green River Trona", "Gas Hills Uranium"],
-    "miningDistricts": ["Powder River Basin", "Green River Basin", "Sweetwater"],
-    "description": "Wyoming is the largest coal-producing state in the United States and hosts major trona and uranium deposits, with growing gold exploration in its mountain ranges."
+    "minerals": [
+      "coal",
+      "trona",
+      "uranium",
+      "gold",
+      "bentonite"
+    ],
+    "famousDeposits": [
+      "Powder River Basin Coal",
+      "Green River Trona",
+      "Gas Hills Uranium"
+    ],
+    "miningDistricts": [
+      "Powder River Basin",
+      "Green River Basin",
+      "Sweetwater"
+    ],
+    "description": "Wyoming is the largest coal-producing state in the United States and hosts major trona and uranium deposits, with growing gold exploration in its mountain ranges.",
+    "publishedDate": "2026-01-12",
+    "contextLine": "the largest US coal producer and a key state for uranium exploration and trona mining",
+    "dataSourceUrl": "https://www.blm.gov/services/land-records/mining-claims",
+    "dataFormats": "CSV (LR2000 extract)",
+    "dataNote": "Wyoming BLM hardrock mining claims use UTM Zone 13N (EPSG:32613). Powder River Basin coal leases are managed separately through BLM's coal leasing program and are not in LR2000 — contact the BLM Wyoming State Office for coal lease spatial data.",
+    "workflowTip": "Wyoming uranium in-situ recovery (ISR) properties use a network of widely-spaced wellfields — show production wells and monitoring wells as distinct point symbol layers, and add a polygon outline of the licensed wellfield boundary area so the full project footprint is clear to regulatory reviewers."
   },
   {
     "name": "New Mexico",
@@ -279,10 +684,33 @@
     "area": "314,914 km²",
     "regulatoryBody": "New Mexico Mining and Minerals Division",
     "claimsPortal": "BLM LR2000",
-    "minerals": ["copper", "gold", "silver", "potash", "uranium", "coal"],
-    "famousDeposits": ["Chino", "Tyrone", "Cobre", "Pinos Altos"],
-    "miningDistricts": ["Grant County", "Socorro", "Mogollon", "Lordsburg"],
-    "description": "New Mexico has a significant copper mining history in its southwestern ranges, with major open-pit porphyry copper mines and renewed gold and silver exploration."
+    "minerals": [
+      "copper",
+      "gold",
+      "silver",
+      "potash",
+      "uranium",
+      "coal"
+    ],
+    "famousDeposits": [
+      "Chino",
+      "Tyrone",
+      "Cobre",
+      "Pinos Altos"
+    ],
+    "miningDistricts": [
+      "Grant County",
+      "Socorro",
+      "Mogollon",
+      "Lordsburg"
+    ],
+    "description": "New Mexico has a significant copper mining history in its southwestern ranges, with major open-pit porphyry copper mines and renewed gold and silver exploration.",
+    "publishedDate": "2026-01-14",
+    "contextLine": "home to major porphyry copper deposits in the Mogollon-Datil volcanic field",
+    "dataSourceUrl": "https://www.blm.gov/services/land-records/mining-claims",
+    "dataFormats": "CSV (LR2000 extract)",
+    "dataNote": "New Mexico BLM mining claims use UTM Zone 13N (EPSG:32613). The New Mexico Mining and Minerals Division administers state-land mineral permits on a separate system — check both BLM and NMMMD databases if your property spans mixed federal and state ownership.",
+    "workflowTip": "New Mexico's southwestern copper porphyry properties sit in remote desert mountain terrain — use the Topographic basemap to show the basin-and-range landscape, add major roads (US-180, NM-90) as a context layer, and set a 10 km scale bar to give investors a sense of the property's scale and remoteness."
   },
   {
     "name": "Washington",
@@ -294,10 +722,31 @@
     "area": "184,827 km²",
     "regulatoryBody": "Washington Department of Natural Resources",
     "claimsPortal": "BLM LR2000",
-    "minerals": ["gold", "silver", "copper", "zinc", "lead", "magnesite"],
-    "famousDeposits": ["Buckhorn Gold", "Republic", "Holden Mine"],
-    "miningDistricts": ["Republic", "Okanogan", "Stevens County"],
-    "description": "Washington State hosts the Buckhorn gold mine in the Okanogan Highlands and has multiple advanced-stage gold exploration projects in its northeastern Cascade ranges."
+    "minerals": [
+      "gold",
+      "silver",
+      "copper",
+      "zinc",
+      "lead",
+      "magnesite"
+    ],
+    "famousDeposits": [
+      "Buckhorn Gold",
+      "Republic",
+      "Holden Mine"
+    ],
+    "miningDistricts": [
+      "Republic",
+      "Okanogan",
+      "Stevens County"
+    ],
+    "description": "Washington State hosts the Buckhorn gold mine in the Okanogan Highlands and has multiple advanced-stage gold exploration projects in its northeastern Cascade ranges.",
+    "publishedDate": "2026-01-19",
+    "contextLine": "an emerging gold jurisdiction in the Okanogan Highlands, with geological continuity into BC's Similkameen belt",
+    "dataSourceUrl": "https://www.blm.gov/services/land-records/mining-claims",
+    "dataFormats": "CSV (LR2000 extract)",
+    "dataNote": "Washington State BLM mining claims primarily fall in UTM Zone 10N (EPSG:32610). The Washington DNR manages state-land mineral rights on a separate system. Properties in the Okanogan Highlands (northeast corner) are adjacent to BC's Similkameen district — consider noting cross-border geological context in your title block.",
+    "workflowTip": "Okanogan Highlands properties benefit from showing the cross-border geological context with BC's Similkameen belt — include a simple regional inset or label indicating the proximity to established BC producers to position your project within a recognized mineralized corridor."
   },
   {
     "name": "Oregon",
@@ -309,10 +758,30 @@
     "area": "254,806 km²",
     "regulatoryBody": "Oregon Department of Geology and Mineral Industries",
     "claimsPortal": "BLM LR2000",
-    "minerals": ["gold", "nickel", "chromite", "mercury", "silver"],
-    "famousDeposits": ["Haines Gold", "Cornucopia", "Jacksonville"],
-    "miningDistricts": ["Baker County", "Grant County", "Jackson County"],
-    "description": "Oregon has a rich placer and lode gold history in its eastern ranges, with several advanced exploration projects being developed in Baker and Grant counties."
+    "minerals": [
+      "gold",
+      "nickel",
+      "chromite",
+      "mercury",
+      "silver"
+    ],
+    "famousDeposits": [
+      "Haines Gold",
+      "Cornucopia",
+      "Jacksonville"
+    ],
+    "miningDistricts": [
+      "Baker County",
+      "Grant County",
+      "Jackson County"
+    ],
+    "description": "Oregon has a rich placer and lode gold history in its eastern ranges, with several advanced exploration projects being developed in Baker and Grant counties.",
+    "publishedDate": "2026-01-21",
+    "contextLine": "home to historic gold-mining districts in its eastern ranges, with active exploration in Baker and Grant counties",
+    "dataSourceUrl": "https://www.blm.gov/services/land-records/mining-claims",
+    "dataFormats": "CSV (LR2000 extract)",
+    "dataNote": "Oregon BLM claims use UTM Zone 10N (EPSG:32610) in the western part of the state and Zone 11N in the eastern exploration districts (Baker, Grant, Harney counties). Baker County gold properties — the primary exploration area — are in Zone 11N (EPSG:32611).",
+    "workflowTip": "Oregon's Baker County gold properties sit in steep Elkhorn Mountains terrain — the Topographic basemap shows elevation contours that help investors understand the mountainous setting and typical elevation of 1,500–2,500 m where most advanced projects are located."
   },
   {
     "name": "California",
@@ -324,10 +793,33 @@
     "area": "423,970 km²",
     "regulatoryBody": "California Department of Conservation",
     "claimsPortal": "BLM LR2000",
-    "minerals": ["gold", "silver", "boron", "tungsten", "chromite", "rare earth elements"],
-    "famousDeposits": ["Motherlode", "Grass Valley", "Mountain Pass REE", "Randsburg"],
-    "miningDistricts": ["Mother Lode", "Grass Valley-Nevada City", "Death Valley", "Mojave"],
-    "description": "California's Mother Lode district ignited the 1849 Gold Rush and continues to host active gold exploration and production, alongside the Mountain Pass rare earth mine — the only REE producer in the United States."
+    "minerals": [
+      "gold",
+      "silver",
+      "boron",
+      "tungsten",
+      "chromite",
+      "rare earth elements"
+    ],
+    "famousDeposits": [
+      "Motherlode",
+      "Grass Valley",
+      "Mountain Pass REE",
+      "Randsburg"
+    ],
+    "miningDistricts": [
+      "Mother Lode",
+      "Grass Valley-Nevada City",
+      "Death Valley",
+      "Mojave"
+    ],
+    "description": "California's Mother Lode district ignited the 1849 Gold Rush and continues to host active gold exploration and production, alongside the Mountain Pass rare earth mine — the only REE producer in the United States.",
+    "publishedDate": "2026-01-26",
+    "contextLine": "birthplace of the 1849 Gold Rush and home to the Mountain Pass rare earth mine, the only REE producer in the US",
+    "dataSourceUrl": "https://www.blm.gov/services/land-records/mining-claims",
+    "dataFormats": "CSV (LR2000 extract)",
+    "dataNote": "California BLM claims use UTM Zone 10N (EPSG:32610) for most of the state; southeastern desert properties (Death Valley, Mojave) fall in Zone 11N. California's CEQA environmental review process is a key permitting consideration — note permit status in your title block subtitle where relevant for regulatory filings.",
+    "workflowTip": "The Mother Lode Belt runs 200 km north-south through the Sierra Nevada foothills — a regional inset showing the full belt extent and your property's position within it gives investors the scale and geological context that makes a Mother Lode project compelling."
   },
   {
     "name": "Western Australia",
@@ -341,10 +833,33 @@
     "area": "2,529,875 km²",
     "regulatoryBody": "Department of Energy, Mines, Industry Regulation and Safety (DEMIRS)",
     "claimsPortal": "MyMinesOnline",
-    "minerals": ["gold", "iron ore", "lithium", "nickel", "copper", "rare earth elements"],
-    "famousDeposits": ["Super Pit (Kalgoorlie)", "Greenbushes Lithium", "Nova-Bollinger Nickel", "Pilbara Iron Ore"],
-    "miningDistricts": ["Kalgoorlie-Boulder Goldfields", "Pilbara", "Murchison", "Goldfields-Esperance"],
-    "description": "Western Australia is the world's largest mining jurisdiction by output value, producing more than 20% of global iron ore and significant proportions of global gold, lithium, and nickel. The Yilgarn Craton hosts some of the world's richest goldfields, including the Kalgoorlie-Boulder Super Pit, and the Pilbara region is the backbone of global iron ore supply."
+    "minerals": [
+      "gold",
+      "iron ore",
+      "lithium",
+      "nickel",
+      "copper",
+      "rare earth elements"
+    ],
+    "famousDeposits": [
+      "Super Pit (Kalgoorlie)",
+      "Greenbushes Lithium",
+      "Nova-Bollinger Nickel",
+      "Pilbara Iron Ore"
+    ],
+    "miningDistricts": [
+      "Kalgoorlie-Boulder Goldfields",
+      "Pilbara",
+      "Murchison",
+      "Goldfields-Esperance"
+    ],
+    "description": "Western Australia is the world's largest mining jurisdiction by output value, producing more than 20% of global iron ore and significant proportions of global gold, lithium, and nickel. The Yilgarn Craton hosts some of the world's richest goldfields, including the Kalgoorlie-Boulder Super Pit, and the Pilbara region is the backbone of global iron ore supply.",
+    "publishedDate": "2026-02-02",
+    "contextLine": "the world's largest mining jurisdiction by output value, with major gold, iron ore, and lithium production",
+    "dataSourceUrl": "https://www.dmp.wa.gov.au/Minerals/Mining-Tenements-1454.aspx",
+    "dataFormats": "Shapefile, GeoJSON, KML",
+    "dataNote": "Western Australia's MyMinesOnline portal allows direct GeoJSON export of tenement boundaries — this is the fastest path to Exploration Maps with no coordinate conversion needed. Tenements use GDA2020 (essentially WGS84-compatible for mapping purposes).",
+    "workflowTip": "WA tenement maps typically show multiple tenure types (Exploration Licence, Mining Licence, Prospecting Licence) — use separate GeoJSON layers with distinct colors per tenure type to show the exploration-to-production progression that JORC Code reports require to be clearly distinguished."
   },
   {
     "name": "Chile",
@@ -358,10 +873,33 @@
     "area": "756,102 km²",
     "regulatoryBody": "Servicio Nacional de Geología y Minería (SERNAGEOMIN)",
     "claimsPortal": "SERNAGEOMIN Mining Cadastre",
-    "minerals": ["copper", "lithium", "gold", "silver", "molybdenum", "iron"],
-    "famousDeposits": ["Escondida", "Collahuasi", "Chuquicamata", "Atacama Lithium Brine"],
-    "miningDistricts": ["Atacama Desert", "Antofagasta Region", "Maricunga Belt", "Coastal Cordillera"],
-    "description": "Chile is the world's largest copper producer, responsible for approximately 27% of global copper output, and holds the largest lithium reserves on Earth in the Atacama Desert salt flats. The country is a top-tier destination for exploration capital targeting critical minerals essential to the energy transition."
+    "minerals": [
+      "copper",
+      "lithium",
+      "gold",
+      "silver",
+      "molybdenum",
+      "iron"
+    ],
+    "famousDeposits": [
+      "Escondida",
+      "Collahuasi",
+      "Chuquicamata",
+      "Atacama Lithium Brine"
+    ],
+    "miningDistricts": [
+      "Atacama Desert",
+      "Antofagasta Region",
+      "Maricunga Belt",
+      "Coastal Cordillera"
+    ],
+    "description": "Chile is the world's largest copper producer, responsible for approximately 27% of global copper output, and holds the largest lithium reserves on Earth in the Atacama Desert salt flats. The country is a top-tier destination for exploration capital targeting critical minerals essential to the energy transition.",
+    "publishedDate": "2026-02-09",
+    "contextLine": "the world's largest copper producer, holding 27% of global copper output and the largest lithium reserves on Earth",
+    "dataSourceUrl": "https://www.sernageomin.cl/catastro-minero/",
+    "dataFormats": "Shapefile, KML",
+    "dataNote": "SERNAGEOMIN's Mining Cadastre exports concession polygons in UTM Zone 19S (EPSG:32719) for most of Chile. Chile's extreme north-south geography means some large properties span zones — confirm the UTM zone for your specific property latitude before converting.",
+    "workflowTip": "Chilean porphyry copper and lithium brine properties are frequently at high altitude (3,000–5,000 m) in the Atacama Desert — add an elevation note to your title block and use the Satellite basemap to show the stark, high-altitude desert terrain that immediately communicates the project's physical setting to international investors."
   },
   {
     "name": "Peru",
@@ -375,10 +913,33 @@
     "area": "1,285,216 km²",
     "regulatoryBody": "Ministry of Energy and Mines (MINEM)",
     "claimsPortal": "INGEMMET Mining Cadastre",
-    "minerals": ["copper", "gold", "silver", "zinc", "lead", "molybdenum"],
-    "famousDeposits": ["Las Bambas", "Cerro Verde", "Antamina", "Yanacocha"],
-    "miningDistricts": ["Southern Andes", "Central Andes", "Cajamarca", "Arequipa"],
-    "description": "Peru consistently ranks among the world's top five producers of copper, gold, zinc, silver, lead, and molybdenum. The Andes host world-class polymetallic deposits and the country attracts significant junior exploration investment, particularly in copper-gold porphyry targets across the southern and central Andes."
+    "minerals": [
+      "copper",
+      "gold",
+      "silver",
+      "zinc",
+      "lead",
+      "molybdenum"
+    ],
+    "famousDeposits": [
+      "Las Bambas",
+      "Cerro Verde",
+      "Antamina",
+      "Yanacocha"
+    ],
+    "miningDistricts": [
+      "Southern Andes",
+      "Central Andes",
+      "Cajamarca",
+      "Arequipa"
+    ],
+    "description": "Peru consistently ranks among the world's top five producers of copper, gold, zinc, silver, lead, and molybdenum. The Andes host world-class polymetallic deposits and the country attracts significant junior exploration investment, particularly in copper-gold porphyry targets across the southern and central Andes.",
+    "publishedDate": "2026-02-16",
+    "contextLine": "a top-five global producer of copper, gold, zinc, and silver, with world-class polymetallic deposits in the Andes",
+    "dataSourceUrl": "https://geocatmin.ingemmet.gob.pe/",
+    "dataFormats": "Shapefile, KML",
+    "dataNote": "INGEMMET Geocatmin exports concession data in UTM Zone 17S, 18S, or 19S depending on longitude. Peru's central and southern Andes — the most active exploration regions — primarily use Zone 18S (EPSG:32718). Verify the UTM zone for your property's longitude before converting to WGS84.",
+    "workflowTip": "Peruvian Andes polymetallic properties often contain multiple commodity targets (copper, gold, zinc) within the same concession — use distinct colored polygon fill or point symbols per target type and include a simple legend that links each color to the mineralization style shown in your NI 43-101 or JORC technical report."
   },
   {
     "name": "Mexico",
@@ -392,10 +953,33 @@
     "area": "1,964,375 km²",
     "regulatoryBody": "Secretaría de Economía — Dirección General de Minas",
     "claimsPortal": "Sistema Integral de Administración Minera (SIAM)",
-    "minerals": ["silver", "gold", "copper", "zinc", "lead", "iron"],
-    "famousDeposits": ["Peñasquito", "Herradura", "Fresnillo", "La Ciénega"],
-    "miningDistricts": ["Sierra Madre Occidental", "Sonora", "Chihuahua", "Guerrero Gold Belt"],
-    "description": "Mexico is the world's largest silver producer and a top-ten gold and copper producer. The Sierra Madre Occidental hosts hundreds of high-grade silver-gold epithermal deposits. Many Canadian and US junior companies hold Mexico exploration properties, making NI 43-101 the standard reporting framework for projects listed on Canadian exchanges."
+    "minerals": [
+      "silver",
+      "gold",
+      "copper",
+      "zinc",
+      "lead",
+      "iron"
+    ],
+    "famousDeposits": [
+      "Peñasquito",
+      "Herradura",
+      "Fresnillo",
+      "La Ciénega"
+    ],
+    "miningDistricts": [
+      "Sierra Madre Occidental",
+      "Sonora",
+      "Chihuahua",
+      "Guerrero Gold Belt"
+    ],
+    "description": "Mexico is the world's largest silver producer and a top-ten gold and copper producer. The Sierra Madre Occidental hosts hundreds of high-grade silver-gold epithermal deposits. Many Canadian and US junior companies hold Mexico exploration properties, making NI 43-101 the standard reporting framework for projects listed on Canadian exchanges.",
+    "publishedDate": "2026-02-23",
+    "contextLine": "the world's largest silver producer, with hundreds of high-grade epithermal deposits in the Sierra Madre Occidental",
+    "dataSourceUrl": "https://www.gob.mx/se/acciones-y-programas/siam-sistema-integral-de-administracion-minera",
+    "dataFormats": "Shapefile, KML",
+    "dataNote": "Mexico's SIAM (Sistema Integral de Administración Minera) exports concession polygons in ITRF2008, which is functionally equivalent to WGS84 for mapping purposes. Spanish-language column headers are standard — use the Column Mapper in Exploration Maps to manually assign the latitude and longitude fields.",
+    "workflowTip": "Sierra Madre Occidental silver-gold properties frequently involve multiple overlapping or adjacent concession polygons — show each concession as a separately labeled polygon (not merged) because individual concession numbers and areas appear in NI 43-101 property descriptions and must be individually identifiable."
   },
   {
     "name": "South Africa",
@@ -409,10 +993,33 @@
     "area": "1,219,090 km²",
     "regulatoryBody": "Department of Mineral and Petroleum Resources (DMPR)",
     "claimsPortal": "South African Mineral Resources Administration System (SAMRAD)",
-    "minerals": ["gold", "platinum group elements", "chrome", "manganese", "iron ore", "diamonds"],
-    "famousDeposits": ["Witwatersrand Gold Basin", "Bushveld Complex", "Venetia Diamond Mine", "Sishen Iron Mine"],
-    "miningDistricts": ["Witwatersrand", "Bushveld Complex", "Northern Cape", "Limpopo"],
-    "description": "South Africa holds the world's largest known gold reserves and produces more than 70% of global platinum group elements. The Witwatersrand Basin is the world's largest gold deposit by historical production, and the Bushveld Complex is the world's largest layered igneous intrusion, hosting the majority of the world's platinum, palladium, and chrome resources."
+    "minerals": [
+      "gold",
+      "platinum group elements",
+      "chrome",
+      "manganese",
+      "iron ore",
+      "diamonds"
+    ],
+    "famousDeposits": [
+      "Witwatersrand Gold Basin",
+      "Bushveld Complex",
+      "Venetia Diamond Mine",
+      "Sishen Iron Mine"
+    ],
+    "miningDistricts": [
+      "Witwatersrand",
+      "Bushveld Complex",
+      "Northern Cape",
+      "Limpopo"
+    ],
+    "description": "South Africa holds the world's largest known gold reserves and produces more than 70% of global platinum group elements. The Witwatersrand Basin is the world's largest gold deposit by historical production, and the Bushveld Complex is the world's largest layered igneous intrusion, hosting the majority of the world's platinum, palladium, and chrome resources.",
+    "publishedDate": "2026-03-02",
+    "contextLine": "home to the Witwatersrand gold basin and the Bushveld platinum complex, the world's greatest mineral concentrations",
+    "dataSourceUrl": "https://www.samrad.dmr.gov.za/",
+    "dataFormats": "Shapefile",
+    "dataNote": "SAMRAD (South African Mineral Resources Administration System) exports mining right boundaries in WGS84 geographic coordinates — no reprojection needed. Note that SAMREC/SAMVAL reporting standards apply for JSE-listed companies; indicate the applicable standard in your title block subtitle.",
+    "workflowTip": "Witwatersrand Basin properties cover a large area surrounding Johannesburg — include a regional inset showing the full basin extent with your property's position within it. Most international investors recognize the Witwatersrand name, so positioning your project within this iconic geological framework adds immediate investor recognition value."
   },
   {
     "name": "Ghana",
@@ -426,9 +1033,32 @@
     "area": "238,533 km²",
     "regulatoryBody": "Minerals Commission of Ghana",
     "claimsPortal": "Minerals Commission Mining Cadastre",
-    "minerals": ["gold", "bauxite", "manganese", "diamonds", "iron ore", "lithium"],
-    "famousDeposits": ["Obuasi", "Ahafo", "Akyem", "Asanko"],
-    "miningDistricts": ["Ashanti Gold Belt", "Birimian Greenstone Belt", "Western Region", "Brong-Ahafo"],
-    "description": "Ghana is Africa's largest gold producer and consistently ranks among the world's top ten gold-producing countries. The Birimian Greenstone Belt hosts several multi-million-ounce gold deposits with geological similarities to the Abitibi Belt in Canada, and the country's established regulatory framework attracts significant international junior exploration investment."
+    "minerals": [
+      "gold",
+      "bauxite",
+      "manganese",
+      "diamonds",
+      "iron ore",
+      "lithium"
+    ],
+    "famousDeposits": [
+      "Obuasi",
+      "Ahafo",
+      "Akyem",
+      "Asanko"
+    ],
+    "miningDistricts": [
+      "Ashanti Gold Belt",
+      "Birimian Greenstone Belt",
+      "Western Region",
+      "Brong-Ahafo"
+    ],
+    "description": "Ghana is Africa's largest gold producer and consistently ranks among the world's top ten gold-producing countries. The Birimian Greenstone Belt hosts several multi-million-ounce gold deposits with geological similarities to the Abitibi Belt in Canada, and the country's established regulatory framework attracts significant international junior exploration investment.",
+    "publishedDate": "2026-03-09",
+    "contextLine": "Africa's largest gold producer, with the Birimian Greenstone Belt hosting multi-million-ounce deposits comparable to Canada's Abitibi",
+    "dataSourceUrl": "https://www.mincomgh.org/cadastre/",
+    "dataFormats": "Shapefile",
+    "dataNote": "Ghana's Minerals Commission Cadastre exports concession boundaries in UTM Zone 30N (EPSG:32630). Ghana's mining rights framework distinguishes between Reconnaissance Licences, Prospecting Licences, and Mining Leases — label each tenure type with a distinct color and include all types in your legend.",
+    "workflowTip": "The Birimian Greenstone Belt is a recognized geological unit to international gold investors — add a label or annotation showing the distance from your property to the nearest major producer (Obuasi, Ahafo, Asanko) to establish geological proximity context that junior investors find compelling when evaluating exploration-stage projects."
   }
 ]

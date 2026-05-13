@@ -63,7 +63,12 @@
         "a": "For NI 43-101 reports and most regulatory submissions, yes — a north arrow and scale bar are standard requirements. Toggle them on in the Design section. The scale bar calculates the displayed distance automatically from the current zoom level."
       }
     ],
-    "relatedSlugs": ["how-to-create-exploration-map-investor-presentation", "how-to-export-mining-map-pdf", "how-to-import-geojson-mining-map"]
+    "relatedSlugs": [
+      "how-to-create-exploration-map-investor-presentation",
+      "how-to-export-mining-map-pdf",
+      "how-to-import-geojson-mining-map"
+    ],
+    "publishedDate": "2025-10-20"
   },
   {
     "slug": "how-to-make-a-drill-results-map",
@@ -125,7 +130,12 @@
         "a": "Yes — import them as separate layers and style them differently. Use filled dark markers for current holes and hollow or lighter markers for historical holes. Name the layers accordingly so they appear as separate legend entries."
       }
     ],
-    "relatedSlugs": ["how-to-make-a-mining-claims-map", "how-to-create-exploration-map-investor-presentation", "how-to-export-mining-map-pdf"]
+    "relatedSlugs": [
+      "how-to-make-a-mining-claims-map",
+      "how-to-create-exploration-map-investor-presentation",
+      "how-to-export-mining-map-pdf"
+    ],
+    "publishedDate": "2025-10-22"
   },
   {
     "slug": "how-to-create-exploration-map-investor-presentation",
@@ -173,7 +183,12 @@
         "a": "Yes, particularly for maps shared outside of a controlled presentation environment — news releases, website downloads, and email attachments. For slides in a branded presentation deck, the logo on the slide template may be sufficient, but having it on the map itself protects the asset when it's extracted from the deck."
       }
     ],
-    "relatedSlugs": ["how-to-make-a-mining-claims-map", "how-to-make-a-drill-results-map", "how-to-export-mining-map-pdf"]
+    "relatedSlugs": [
+      "how-to-make-a-mining-claims-map",
+      "how-to-make-a-drill-results-map",
+      "how-to-export-mining-map-pdf"
+    ],
+    "publishedDate": "2025-10-27"
   },
   {
     "slug": "how-to-import-geojson-mining-map",
@@ -216,7 +231,12 @@
         "a": "Yes — import as many files as needed. Each file becomes a separate layer in the Layers list. You can toggle visibility, reorder layers (drag to change draw order), and style each layer independently."
       }
     ],
-    "relatedSlugs": ["how-to-make-a-mining-claims-map", "how-to-make-a-drill-results-map", "how-to-choose-basemap-mining-map"]
+    "relatedSlugs": [
+      "how-to-make-a-mining-claims-map",
+      "how-to-make-a-drill-results-map",
+      "how-to-choose-basemap-mining-map"
+    ],
+    "publishedDate": "2025-11-03"
   },
   {
     "slug": "how-to-choose-basemap-mining-map",
@@ -263,7 +283,12 @@
         "a": "The Satellite basemap is most commonly used for regional location maps — it helps investors immediately understand the property's physical setting and surrounding terrain. The Topographic basemap is also effective for mountainous or complex terrain."
       }
     ],
-    "relatedSlugs": ["how-to-make-a-mining-claims-map", "how-to-create-exploration-map-investor-presentation", "how-to-export-mining-map-pdf"]
+    "relatedSlugs": [
+      "how-to-make-a-mining-claims-map",
+      "how-to-create-exploration-map-investor-presentation",
+      "how-to-export-mining-map-pdf"
+    ],
+    "publishedDate": "2025-11-10"
   },
   {
     "slug": "how-to-export-mining-map-pdf",
@@ -306,7 +331,12 @@
         "a": "PDFs from Exploration Maps contain a raster image at the resolution set by your Pixel Ratio setting. At 2× ratio and Letter Portrait size, the embedded image is approximately 200 DPI — suitable for most professional printing. At 3×, it approaches 300 DPI — the standard for high-quality print."
       }
     ],
-    "relatedSlugs": ["how-to-make-a-mining-claims-map", "how-to-create-exploration-map-investor-presentation", "how-to-choose-basemap-mining-map"]
+    "relatedSlugs": [
+      "how-to-make-a-mining-claims-map",
+      "how-to-create-exploration-map-investor-presentation",
+      "how-to-choose-basemap-mining-map"
+    ],
+    "publishedDate": "2025-11-17"
   },
   {
     "slug": "how-to-add-distance-ring-mining-map",
@@ -341,7 +371,12 @@
         "a": "Yes — click 'Draw Distance Ring' multiple times to place multiple rings. Each ring is independently configurable with its own radius, color, and label."
       }
     ],
-    "relatedSlugs": ["how-to-make-a-mining-claims-map", "how-to-create-exploration-map-investor-presentation", "how-to-add-scale-bar-north-arrow"]
+    "relatedSlugs": [
+      "how-to-make-a-mining-claims-map",
+      "how-to-create-exploration-map-investor-presentation",
+      "how-to-add-scale-bar-north-arrow"
+    ],
+    "publishedDate": "2025-11-24"
   },
   {
     "slug": "how-to-add-scale-bar-north-arrow",
@@ -376,7 +411,12 @@
         "a": "Yes. The scale bar calculates the distance it represents based on the current zoom level and map projection. If you zoom in, the scale bar shows a shorter distance; zoom out and it shows a longer distance. This means you should set your final zoom level before exporting."
       }
     ],
-    "relatedSlugs": ["how-to-make-a-mining-claims-map", "how-to-export-mining-map-pdf", "how-to-create-exploration-map-investor-presentation"]
+    "relatedSlugs": [
+      "how-to-make-a-mining-claims-map",
+      "how-to-export-mining-map-pdf",
+      "how-to-create-exploration-map-investor-presentation"
+    ],
+    "publishedDate": "2025-12-01"
   },
   {
     "slug": "how-to-create-target-generation-map",
@@ -443,7 +483,12 @@
         "a": "Satellite is the preferred basemap for target generation maps — it communicates terrain, vegetation cover, and outcrop distribution in a single layer, all of which are relevant to the geological story. Use Topographic if your property is in a heavily forested area where satellite imagery doesn't show ground features clearly, or if the structural linework is the primary focus and needs a clean background."
       }
     ],
-    "relatedSlugs": ["how-to-make-a-mining-claims-map", "how-to-create-exploration-map-investor-presentation", "how-to-make-a-drill-results-map"]
+    "relatedSlugs": [
+      "how-to-make-a-mining-claims-map",
+      "how-to-create-exploration-map-investor-presentation",
+      "how-to-make-a-drill-results-map"
+    ],
+    "publishedDate": "2025-12-08"
   },
   {
     "slug": "how-to-create-infrastructure-map",
@@ -510,7 +555,12 @@
         "a": "Yes. Import your power line corridor as a line GeoJSON layer and style it with a dashed orange stroke — the conventional mapping symbol for power lines. Add a point label at the camp location. If you don't have a GeoJSON for the power line, you can digitize it by exporting a manually drawn line from QGIS or Google Earth Pro as GeoJSON and importing it into Exploration Maps."
       }
     ],
-    "relatedSlugs": ["how-to-make-a-mining-claims-map", "how-to-create-exploration-map-investor-presentation", "how-to-create-target-generation-map"]
+    "relatedSlugs": [
+      "how-to-make-a-mining-claims-map",
+      "how-to-create-exploration-map-investor-presentation",
+      "how-to-create-target-generation-map"
+    ],
+    "publishedDate": "2025-12-15"
   },
   {
     "slug": "how-to-import-csv-data-mining-map",
@@ -576,7 +626,12 @@
         "a": "Yes, as long as the export includes decimal degree coordinate columns. Most mine planning and geological software can export to CSV. The key requirement is that coordinates are in WGS84 decimal degrees — if your system uses a local coordinate system or UTM, reproject using QGIS before importing."
       }
     ],
-    "relatedSlugs": ["how-to-make-a-mining-claims-map", "how-to-make-a-drill-results-map", "how-to-import-geojson-mining-map"]
+    "relatedSlugs": [
+      "how-to-make-a-mining-claims-map",
+      "how-to-make-a-drill-results-map",
+      "how-to-import-geojson-mining-map"
+    ],
+    "publishedDate": "2025-12-22"
   },
   {
     "slug": "how-to-create-ni-43-101-compliant-map",
@@ -643,6 +698,11 @@
         "a": "Yes. Create multiple maps for the same project by adjusting the zoom level, visible layers, and export ratio for each figure. Common NI 43-101 figure sets include: a regional location map (zoomed out to show the province or state), a property location map (showing the claims boundary and surrounding area), and a detailed drill hole location map. Export each figure separately as a numbered PDF for insertion into the report document."
       }
     ],
-    "relatedSlugs": ["how-to-make-a-mining-claims-map", "how-to-export-mining-map-pdf", "how-to-create-exploration-map-investor-presentation"]
+    "relatedSlugs": [
+      "how-to-make-a-mining-claims-map",
+      "how-to-export-mining-map-pdf",
+      "how-to-create-exploration-map-investor-presentation"
+    ],
+    "publishedDate": "2026-01-05"
   }
 ]
