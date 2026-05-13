@@ -135,6 +135,15 @@ article strong{color:#0f172a}
 .hub-card h3{font-size:0.95rem;font-weight:700;color:#0f172a}
 .hub-card p{font-size:13px;color:#64748b;line-height:1.55;flex:1}
 .hub-card a{font-size:13px;font-weight:600;color:#2563eb}
+/* Tip box */
+.tip-box{background:#f0fdf4;border-left:4px solid #16a34a;padding:12px 16px;border-radius:0 8px 8px 0;margin:16px 0;color:#374151;line-height:1.7}
+/* Data sources table */
+.data-table{width:100%;border-collapse:collapse;font-size:13px;margin:12px 0 20px}
+.data-table th{background:#f1f5f9;text-align:left;padding:8px 12px;font-weight:700;color:#374151;border:1px solid #e2e8f0}
+.data-table td{padding:7px 12px;border:1px solid #e2e8f0;color:#475569;vertical-align:top}
+.data-table tr:nth-child(even) td{background:#f8fafc}
+/* Post date */
+.post-date{color:#94a3b8;font-size:12px}
 /* Footer */
 .site-footer{border-top:1px solid #e2e8f0;padding:28px 24px;text-align:center;font-size:13px;color:#94a3b8;margin-top:40px}
 .site-footer-links{margin-bottom:8px;display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:6px}
@@ -254,17 +263,23 @@ function renderSections(sections) {
 
 // ─── Article schema builder ───────────────────────────────────────────────────
 
-function articleSchema(title, description, url) {
+function articleSchema(title, description, url, publishedDate) {
   return {
     '@type': 'Article',
     headline: title,
     description,
     url,
-    datePublished: TODAY,
+    datePublished: publishedDate || TODAY,
     dateModified: TODAY,
     author: { '@type': 'Organization', name: SITE_NAME, url: SITE },
     publisher: { '@type': 'Organization', name: SITE_NAME, url: SITE },
   };
+}
+
+function formatDate(isoDate) {
+  if (!isoDate) return '';
+  const d = new Date(isoDate + 'T00:00:00Z');
+  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' });
 }
 
 function faqSchema(faqs) {
@@ -315,7 +330,7 @@ function buildHowToPage(post, allPosts) {
   const schema = {
     '@context': 'https://schema.org',
     '@graph': [
-      articleSchema(post.title, post.metaDescription, url),
+      articleSchema(post.title, post.metaDescription, url, post.publishedDate),
       {
         '@type': 'HowTo',
         name: post.title,
@@ -323,7 +338,7 @@ function buildHowToPage(post, allPosts) {
         step: (post.sections || []).map((s, i) => ({
           '@type': 'HowToStep',
           position: i + 1,
-          name: s.h2,
+          name: `Step ${i + 1}`,
           text: s.body || (s.items || []).join('. '),
         })),
       },
@@ -332,11 +347,13 @@ function buildHowToPage(post, allPosts) {
     ],
   };
 
+  const pubDate = post.publishedDate ? `<span class="post-date">· <time datetime="${esc(post.publishedDate)}">${formatDate(post.publishedDate)}</time></span>` : '';
+
   const body = `
 <div class="page-wrap">
   <div class="blog-layout">
     <article>
-      <p class="breadcrumb"><a href="/">Home</a><span>›</span><a href="/blog/">Blog</a><span>›</span><a href="/blog/how-to/">How-to Guides</a><span>›</span>${esc(post.title)}</p>
+      <p class="breadcrumb"><a href="/">Home</a><span>›</span><a href="/blog/">Blog</a><span>›</span><a href="/blog/how-to/">How-to Guides</a><span>›</span>${esc(post.title)} ${pubDate}</p>
       <h1>${esc(post.title)}</h1>
       <p class="direct-answer">${esc(post.directAnswer)}</p>
       ${renderSections(post.sections || [])}
@@ -375,7 +392,7 @@ function buildCompPage(post, allPosts) {
   const schema = {
     '@context': 'https://schema.org',
     '@graph': [
-      articleSchema(post.title, post.metaDescription, url),
+      articleSchema(post.title, post.metaDescription, url, post.publishedDate),
       ...(post.faqs?.length ? [faqSchema(post.faqs)] : []),
       breadcrumbSchema(post.title, url),
     ],
@@ -390,11 +407,13 @@ function buildCompPage(post, allPosts) {
 </table>
 </div>` : '';
 
+  const compPubDate = post.publishedDate ? `<span class="post-date">· <time datetime="${esc(post.publishedDate)}">${formatDate(post.publishedDate)}</time></span>` : '';
+
   const body = `
 <div class="page-wrap">
   <div class="blog-layout">
     <article>
-      <p class="breadcrumb"><a href="/">Home</a><span>›</span><a href="/blog/">Blog</a><span>›</span><a href="/blog/comparisons/">Comparisons</a><span>›</span>${esc(post.title)}</p>
+      <p class="breadcrumb"><a href="/">Home</a><span>›</span><a href="/blog/">Blog</a><span>›</span><a href="/blog/comparisons/">Comparisons</a><span>›</span>${esc(post.title)} ${compPubDate}</p>
       <h1>${esc(post.title)}</h1>
       <p class="direct-answer">${esc(post.directAnswer)}</p>
       ${renderSections(post.sections || [])}
@@ -414,15 +433,18 @@ function buildLocationPage(location, mapType) {
   const pageSlug = `${mapType.slug}-${location.slug}`;
   const url = `${SITE}/blog/${pageSlug}/`;
   const title = `${mapType.name} — ${location.name}`;
-  const adjective = location.adjective || (location.country === 'Canada' ? 'Canadian' : 'US');
   const reportingStandard = location.reportingStandard || 'NI 43-101';
-  const description = `Create a professional ${mapType.primaryKeyword} for ${location.name}. Step-by-step guide for ${adjective} exploration companies using Exploration Maps.`;
+
+  const description = location.country === 'Canada'
+    ? `Create a ${mapType.primaryKeyword} for ${location.name} — includes ${reportingStandard} compliance, step-by-step data import, and export guide. No GIS experience needed.`
+    : `Professional ${mapType.primaryKeyword} for ${location.name} exploration projects. Import CSV or GeoJSON, style automatically, export presentation-ready PNG or PDF.`;
 
   const mineralList = location.minerals.slice(0, 4).join(', ');
   const depositList = location.famousDeposits.slice(0, 3).join(', ');
   const districtList = location.miningDistricts.slice(0, 3).join(', ');
 
-  const directAnswer = `To create a ${mapType.primaryKeyword} for ${location.name}, import your ${location.abbreviation} claims or data as GeoJSON, assign the appropriate layer role for automatic styling, set the ${mapType.recommendedBasemap} basemap, and export as PNG or PDF. The entire process takes 15–30 minutes with no GIS experience required.`;
+  const contextLine = location.contextLine || `one of the most active junior mining jurisdictions`;
+  const directAnswer = `${location.name} — ${contextLine} — is a prime target for junior exploration companies. Here's how to create a professional ${mapType.primaryKeyword} using Exploration Maps in 15–30 minutes.`;
 
   const steps = mapType.steps.map(step => `<li>${esc(step)}</li>`).join('');
 
@@ -448,7 +470,7 @@ function buildLocationPage(location, mapType) {
   const schema = {
     '@context': 'https://schema.org',
     '@graph': [
-      articleSchema(title, description, url),
+      articleSchema(title, description, url, location.publishedDate),
       {
         '@type': 'HowTo',
         name: `How to Create a ${mapType.name} for ${location.name}`,
@@ -456,7 +478,7 @@ function buildLocationPage(location, mapType) {
         step: mapType.steps.map((step, i) => ({
           '@type': 'HowToStep',
           position: i + 1,
-          name: step,
+          name: `Step ${i + 1}`,
           text: step,
         })),
       },
@@ -486,11 +508,32 @@ function buildLocationPage(location, mapType) {
     ? `<li><a href="/blog/${mapType.howToSlug}/">How to Make a ${esc(mapType.name)}</a></li>`
     : '';
 
+  // Data sources section
+  const dataSourcesHtml = location.dataSourceUrl ? `
+      <h2>Getting Mining Data for ${esc(location.name)}</h2>
+      <div style="overflow-x:auto">
+      <table class="data-table">
+        <thead><tr><th>Portal</th><th>Formats</th><th>Notes</th></tr></thead>
+        <tbody><tr>
+          <td><a href="${esc(location.dataSourceUrl)}" rel="noopener noreferrer" target="_blank">${esc(location.claimsPortal)}</a></td>
+          <td>${esc(location.dataFormats || 'Shapefile, KML')}</td>
+          <td>${esc(location.dataNote || 'Convert to WGS84 (EPSG:4326) before importing into Exploration Maps.')}</td>
+        </tr></tbody>
+      </table>
+      </div>` : '';
+
+  // Workflow tip
+  const tipHtml = location.workflowTip
+    ? `<p class="tip-box"><strong>Tip for ${esc(location.name)}:</strong> ${esc(location.workflowTip)}</p>`
+    : '';
+
+  const locPubDate = location.publishedDate ? `<span class="post-date">· <time datetime="${esc(location.publishedDate)}">${formatDate(location.publishedDate)}</time></span>` : '';
+
   const body = `
 <div class="page-wrap">
   <div class="blog-layout">
     <article>
-      <p class="breadcrumb"><a href="/">Home</a><span>›</span><a href="/blog/">Blog</a><span>›</span><a href="/blog/locations/">By Region</a><span>›</span>${esc(title)}</p>
+      <p class="breadcrumb"><a href="/">Home</a><span>›</span><a href="/blog/">Blog</a><span>›</span><a href="/blog/locations/">By Region</a><span>›</span>${esc(title)} ${locPubDate}</p>
       <h1>${esc(title)}</h1>
       <p class="direct-answer">${esc(directAnswer)}</p>
 
@@ -499,11 +542,12 @@ function buildLocationPage(location, mapType) {
       <p><strong>Key minerals:</strong> ${esc(location.minerals.join(', '))}. <strong>Notable deposits:</strong> ${esc(location.famousDeposits.join(', '))}. <strong>Mining districts:</strong> ${esc(location.miningDistricts.join(', '))}.</p>
       <p>The ${esc(location.regulatoryBody)} administers mineral rights in ${esc(location.name)}. Claim data is accessible through ${esc(location.claimsPortal)}.</p>
 
-      <h2>What is a ${esc(mapType.name)}?</h2>
-      <p>${esc(mapType.intro)}</p>
+      ${dataSourcesHtml}
 
       <h2>How to Create a ${esc(mapType.name)} for ${esc(location.name)}</h2>
+      <p>For a full step-by-step guide to ${esc(mapType.name.toLowerCase())}s, see <a href="/blog/${esc(mapType.howToSlug)}/">How to Make a ${esc(mapType.name)}</a>.</p>
       <ol class="steps-list">${steps}</ol>
+      ${tipHtml}
 
       <h2>Recommended Settings for ${esc(location.name)}</h2>
       <ul>

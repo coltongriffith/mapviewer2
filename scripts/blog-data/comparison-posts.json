@@ -29,16 +29,52 @@
       }
     ],
     "comparisonTable": {
-      "headers": ["Feature", "Exploration Maps", "ArcGIS Pro"],
+      "headers": [
+        "Feature",
+        "Exploration Maps",
+        "ArcGIS Pro"
+      ],
       "rows": [
-        ["Learning curve", "Minutes", "Months"],
-        ["Time to polished map", "15–30 min", "2–4 hours"],
-        ["Annual cost", "Low", "$1,500+ USD"],
-        ["GIS analysis", "Basic", "Full-featured"],
-        ["Investor-ready themes", "Built-in (5 themes)", "Manual setup required"],
-        ["Browser-based", "Yes", "No (desktop app)"],
-        ["NI 43-101 export", "PNG, SVG, PDF", "PDF, various"],
-        ["No GIS training needed", "Yes", "No"]
+        [
+          "Learning curve",
+          "Minutes",
+          "Months"
+        ],
+        [
+          "Time to polished map",
+          "15–30 min",
+          "2–4 hours"
+        ],
+        [
+          "Annual cost",
+          "Low",
+          "$1,500+ USD"
+        ],
+        [
+          "GIS analysis",
+          "Basic",
+          "Full-featured"
+        ],
+        [
+          "Investor-ready themes",
+          "Built-in (5 themes)",
+          "Manual setup required"
+        ],
+        [
+          "Browser-based",
+          "Yes",
+          "No (desktop app)"
+        ],
+        [
+          "NI 43-101 export",
+          "PNG, SVG, PDF",
+          "PDF, various"
+        ],
+        [
+          "No GIS training needed",
+          "Yes",
+          "No"
+        ]
       ]
     },
     "faqs": [
@@ -55,7 +91,12 @@
         "a": "Yes. Exploration Maps can produce all required map elements for NI 43-101 reports: north arrow, scale bar, legend, title block with project name and date, and company logo. Exports are available as high-resolution PNG and PDF suitable for inclusion in technical report documents."
       }
     ],
-    "relatedSlugs": ["exploration-maps-vs-qgis", "best-mining-map-software-junior-exploration", "how-to-make-a-mining-claims-map"]
+    "relatedSlugs": [
+      "exploration-maps-vs-qgis",
+      "best-mining-map-software-junior-exploration",
+      "how-to-make-a-mining-claims-map"
+    ],
+    "publishedDate": "2026-01-12"
   },
   {
     "slug": "exploration-maps-vs-qgis",
@@ -83,16 +124,52 @@
       }
     ],
     "comparisonTable": {
-      "headers": ["Feature", "Exploration Maps", "QGIS"],
+      "headers": [
+        "Feature",
+        "Exploration Maps",
+        "QGIS"
+      ],
       "rows": [
-        ["Cost", "Low", "Free"],
-        ["Setup required", "None", "Installation + plugins"],
-        ["Learning curve", "Minutes", "Hours to days"],
-        ["Time to polished map", "15–30 min", "1–3 hours"],
-        ["Spatial analysis", "Basic", "Full-featured"],
-        ["Investor-ready themes", "Built-in", "Manual layout config"],
-        ["Browser-based", "Yes", "No (desktop)"],
-        ["Best for", "Presentation maps", "Data analysis + maps"]
+        [
+          "Cost",
+          "Low",
+          "Free"
+        ],
+        [
+          "Setup required",
+          "None",
+          "Installation + plugins"
+        ],
+        [
+          "Learning curve",
+          "Minutes",
+          "Hours to days"
+        ],
+        [
+          "Time to polished map",
+          "15–30 min",
+          "1–3 hours"
+        ],
+        [
+          "Spatial analysis",
+          "Basic",
+          "Full-featured"
+        ],
+        [
+          "Investor-ready themes",
+          "Built-in",
+          "Manual layout config"
+        ],
+        [
+          "Browser-based",
+          "Yes",
+          "No (desktop)"
+        ],
+        [
+          "Best for",
+          "Presentation maps",
+          "Data analysis + maps"
+        ]
       ]
     },
     "faqs": [
@@ -105,7 +182,12 @@
         "a": "QGIS's Print Layout can produce very high-quality maps given enough time and expertise. For standard investor presentation maps, NI 43-101 figures, and news release maps, Exploration Maps produces output that is equivalent or superior in presentation quality — in a fraction of the time."
       }
     ],
-    "relatedSlugs": ["exploration-maps-vs-arcgis", "how-to-import-geojson-mining-map", "best-mining-map-software-junior-exploration"]
+    "relatedSlugs": [
+      "exploration-maps-vs-arcgis",
+      "how-to-import-geojson-mining-map",
+      "best-mining-map-software-junior-exploration"
+    ],
+    "publishedDate": "2026-01-19"
   },
   {
     "slug": "best-mining-map-software-junior-exploration",
@@ -140,13 +222,49 @@
       }
     ],
     "comparisonTable": {
-      "headers": ["Tool", "Cost", "Learning Curve", "Time to Map", "Best For"],
+      "headers": [
+        "Tool",
+        "Cost",
+        "Learning Curve",
+        "Time to Map",
+        "Best For"
+      ],
       "rows": [
-        ["Exploration Maps", "Low", "Minutes", "15–30 min", "Investor & NI 43-101 maps"],
-        ["QGIS", "Free", "Days", "1–3 hours", "Analysis + cartography"],
-        ["ArcGIS", "$1,500+/yr", "Weeks", "2–4 hours", "Enterprise GIS"],
-        ["MapInfo", "Enterprise", "Days", "2–4 hours", "Legacy enterprise"],
-        ["Adobe Illustrator", "~$600/yr", "Days", "Hours (finishing only)", "Custom polished design"]
+        [
+          "Exploration Maps",
+          "Low",
+          "Minutes",
+          "15–30 min",
+          "Investor & NI 43-101 maps"
+        ],
+        [
+          "QGIS",
+          "Free",
+          "Days",
+          "1–3 hours",
+          "Analysis + cartography"
+        ],
+        [
+          "ArcGIS",
+          "$1,500+/yr",
+          "Weeks",
+          "2–4 hours",
+          "Enterprise GIS"
+        ],
+        [
+          "MapInfo",
+          "Enterprise",
+          "Days",
+          "2–4 hours",
+          "Legacy enterprise"
+        ],
+        [
+          "Adobe Illustrator",
+          "~$600/yr",
+          "Days",
+          "Hours (finishing only)",
+          "Custom polished design"
+        ]
       ]
     },
     "faqs": [
@@ -159,7 +277,12 @@
         "a": "Not for creating investor presentation maps, news release figures, or NI 43-101 map figures. If you need to process raw survey data, transform coordinate systems, or run spatial analysis, you will still need QGIS or ArcGIS for those preparatory steps. Export the results as GeoJSON and import into Exploration Maps."
       }
     ],
-    "relatedSlugs": ["exploration-maps-vs-arcgis", "exploration-maps-vs-qgis", "how-to-make-a-mining-claims-map"]
+    "relatedSlugs": [
+      "exploration-maps-vs-arcgis",
+      "exploration-maps-vs-qgis",
+      "how-to-make-a-mining-claims-map"
+    ],
+    "publishedDate": "2026-01-26"
   },
   {
     "slug": "exploration-maps-vs-mapinfo",
@@ -191,17 +314,57 @@
       }
     ],
     "comparisonTable": {
-      "headers": ["Feature", "Exploration Maps", "MapInfo Pro"],
+      "headers": [
+        "Feature",
+        "Exploration Maps",
+        "MapInfo Pro"
+      ],
       "rows": [
-        ["Annual cost", "Low", "~$1,500–$3,000 USD"],
-        ["Learning curve", "Minutes", "Days to weeks"],
-        ["Time to polished map", "15–30 min", "1–3 hours"],
-        ["Installation required", "No (browser-based)", "Yes (Windows desktop)"],
-        ["Investor-ready themes", "Built-in (5 themes)", "Manual layout required"],
-        ["TAB file support", "No (GeoJSON/CSV)", "Native format"],
-        ["NI 43-101 export", "PNG, SVG, PDF", "PDF, various"],
-        ["Spatial analysis", "Basic", "Full-featured"],
-        ["No GIS training needed", "Yes", "No"]
+        [
+          "Annual cost",
+          "Low",
+          "~$1,500–$3,000 USD"
+        ],
+        [
+          "Learning curve",
+          "Minutes",
+          "Days to weeks"
+        ],
+        [
+          "Time to polished map",
+          "15–30 min",
+          "1–3 hours"
+        ],
+        [
+          "Installation required",
+          "No (browser-based)",
+          "Yes (Windows desktop)"
+        ],
+        [
+          "Investor-ready themes",
+          "Built-in (5 themes)",
+          "Manual layout required"
+        ],
+        [
+          "TAB file support",
+          "No (GeoJSON/CSV)",
+          "Native format"
+        ],
+        [
+          "NI 43-101 export",
+          "PNG, SVG, PDF",
+          "PDF, various"
+        ],
+        [
+          "Spatial analysis",
+          "Basic",
+          "Full-featured"
+        ],
+        [
+          "No GIS training needed",
+          "Yes",
+          "No"
+        ]
       ]
     },
     "faqs": [
@@ -222,6 +385,11 @@
         "a": "Some government bodies and regulatory agencies in Canada and Australia request or accept MapInfo TAB or MIF/MID format for GIS data submissions. These are data deliverables (the underlying geospatial data), not map figures. Exploration Maps produces map figures (PNG, PDF) — if you need to deliver raw GIS data in TAB format, you will still need MapInfo or QGIS with the appropriate export plugin for that specific requirement."
       }
     ],
-    "relatedSlugs": ["exploration-maps-vs-arcgis", "best-mining-map-software-junior-exploration", "how-to-make-a-mining-claims-map"]
+    "relatedSlugs": [
+      "exploration-maps-vs-arcgis",
+      "best-mining-map-software-junior-exploration",
+      "how-to-make-a-mining-claims-map"
+    ],
+    "publishedDate": "2026-02-02"
   }
 ]
