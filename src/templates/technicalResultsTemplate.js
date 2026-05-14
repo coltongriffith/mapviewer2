@@ -58,35 +58,35 @@ export const technicalResultsTemplate = {
       insetMode: 'province_state',
       framing: 'balanced',
       visibleRoles: ['claims', 'drillholes', 'target_areas', 'anomalies', 'roads_access', 'rivers_water'],
-      referenceOverlays: { context: false, labels: false, rail: false },
+      referenceOverlays: { context: false, labels: false, rail: false, contours: false, power: false },
     },
     regional_claims: {
       basemap: 'light',
       insetMode: 'country',
       framing: 'regional',
       visibleRoles: ['claims', 'roads_access', 'rivers_water', 'labels'],
-      referenceOverlays: { context: false, labels: true, rail: false },
+      referenceOverlays: { context: false, labels: true, rail: false, contours: false, power: false },
     },
     drill_plan: {
       basemap: 'light',
       insetMode: 'secondary_zoom',
       framing: 'tight',
       visibleRoles: ['claims', 'drillholes', 'target_areas', 'roads_access'],
-      referenceOverlays: { context: false, labels: true, rail: false },
+      referenceOverlays: { context: false, labels: true, rail: false, contours: true, power: false },
     },
     target_anomaly: {
       basemap: 'satellite',
       insetMode: 'regional_district',
       framing: 'tight',
       visibleRoles: ['claims', 'target_areas', 'anomalies', 'faults_structures', 'drillholes'],
-      referenceOverlays: { context: false, labels: false, rail: false },
+      referenceOverlays: { context: false, labels: false, rail: false, contours: false, power: false },
     },
     access_location: {
       basemap: 'topo',
       insetMode: 'country',
       framing: 'access',
       visibleRoles: ['claims', 'roads_access', 'rivers_water', 'labels'],
-      referenceOverlays: { context: false, labels: true, rail: true },
+      referenceOverlays: { context: false, labels: true, rail: true, contours: true, power: true },
     },
   },
 };
@@ -234,6 +234,16 @@ export function resolveTemplateZones(template, layout, mapSize, legendItems) {
 
 function buildOverlayLegendItems(layout) {
   const items = [];
+  if (layout?.referenceOverlays?.contours) {
+    items.push({
+      id: 'overlay-contours',
+      role: 'faults_structures',
+      group: 'Topography',
+      label: 'Elevation Contours',
+      type: 'line',
+      style: { stroke: '#8B7355', fill: '#8B7355', fillOpacity: 0, strokeWidth: 1.2 },
+    });
+  }
   if (layout?.referenceOverlays?.rail) {
     items.push({
       id: 'overlay-rail',
@@ -242,6 +252,16 @@ function buildOverlayLegendItems(layout) {
       label: 'Railway Network',
       type: 'line',
       style: { stroke: '#b04020', fill: '#b04020', fillOpacity: 0, strokeWidth: 2 },
+    });
+  }
+  if (layout?.referenceOverlays?.power) {
+    items.push({
+      id: 'overlay-power',
+      role: 'roads_access',
+      group: 'Infrastructure',
+      label: 'Power Transmission',
+      type: 'line',
+      style: { stroke: '#f59e0b', fill: '#f59e0b', fillOpacity: 0, strokeWidth: 1.5 },
     });
   }
   if (layout?.referenceOverlays?.labels) {

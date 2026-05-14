@@ -26,11 +26,25 @@ const BASEMAPS = {
 };
 
 const REFERENCE_OVERLAYS = {
+  contours: {
+    url: 'https://tiles.opensnowmap.org/contours/{z}/{x}/{y}.png',
+    attribution: '&copy; OpenSnowMap contributors, SRTM',
+    opacityFactor: 0.85,
+    zIndex: 340,
+    maxZoom: 18,
+  },
   context: {
     url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
     attribution: '&copy; OpenStreetMap &copy; CARTO',
     opacityFactor: 0.95,
     zIndex: 350,
+  },
+  power: {
+    url: 'https://tiles.openinframap.org/power/{z}/{x}/{y}.png',
+    attribution: '&copy; OpenInfraMap contributors, OpenStreetMap',
+    opacityFactor: 0.9,
+    zIndex: 355,
+    maxZoom: 17,
   },
   labels: {
     url: 'https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png',
@@ -147,7 +161,7 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
       if (active && !existing) {
         referenceRefs.current[key] = L.tileLayer(cfg.url, {
           attribution: cfg.attribution,
-          maxZoom: 20,
+          maxZoom: cfg.maxZoom || 20,
           crossOrigin: true,
           updateWhenIdle: true,
           keepBuffer: 3,
