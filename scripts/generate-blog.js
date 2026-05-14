@@ -515,7 +515,7 @@ function buildLocationPage(location, mapType) {
       <table class="data-table">
         <thead><tr><th>Portal</th><th>Formats</th><th>Notes</th></tr></thead>
         <tbody><tr>
-          <td><a href="${esc(location.dataSourceUrl)}" rel="noopener noreferrer" target="_blank">${esc(location.claimsPortal)}</a></td>
+          <td><a href="${esc(location.dataSourceUrl)}" rel="nofollow noopener noreferrer" target="_blank">${esc(location.claimsPortal)}</a></td>
           <td>${esc(location.dataFormats || 'Shapefile, KML')}</td>
           <td>${esc(location.dataNote || 'Convert to WGS84 (EPSG:4326) before importing into Exploration Maps.')}</td>
         </tr></tbody>
