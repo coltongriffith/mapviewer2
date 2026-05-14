@@ -565,6 +565,7 @@ export default function App() {
   const mapContainerRef = useRef(null);
   const mapViewportRef = useRef(null);
   const leafletMapRef = useRef(null);
+  const skipAutoFitRef = useRef(false);
   const logoInputRef = useRef(null);
   const insetInputRef = useRef(null);
   const uploadInputRef = useRef(null);
@@ -800,6 +801,23 @@ export default function App() {
     if (!map || project.layers.length === 0) return;
     // Use the ref so cosmetic layout changes (title, logo size, opacity…) don't
     // trigger a map reframe. Only the explicit deps below cause refitting.
+    if (skipAutoFitRef.current) {
+      skipAutoFitRef.current = false;
+      const saved = project.mapView;
+      if (saved?.center) {
+        map.setView([saved.center.lat, saved.center.lng], saved.zoom, { animate: false });
+      } else {
+        // No saved view — fit to focus layers (claims/drillholes) rather than all layers
+        fitProjectToTemplate(
+          project,
+          map,
+          { ...template, zones: resolvedZonesRef.current },
+          project.layout.compositionPreset || template.modePresets?.[project.layout.mode]?.framing || 'balanced',
+          { focusRoles: true }
+        );
+      }
+      return;
+    }
     fitProjectToTemplate(
       project,
       map,
@@ -815,6 +833,22 @@ export default function App() {
     const rerender = () => setFeatureEditorTick((value) => value + 1);
     map.on('move zoom zoomend moveend resize', rerender);
     return () => map.off('move zoom zoomend moveend resize', rerender);
+  }, [mapReady]);
+
+  useEffect(() => {
+    const map = leafletMapRef.current;
+    if (!map) return undefined;
+    let saveTimer;
+    const handleMoveEnd = () => {
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(() => {
+        const center = map.getCenter();
+        const zoom = map.getZoom();
+        setProject((p) => ({ ...p, mapView: { center: { lat: center.lat, lng: center.lng }, zoom } }));
+      }, 600);
+    };
+    map.on('moveend', handleMoveEnd);
+    return () => { map.off('moveend', handleMoveEnd); clearTimeout(saveTimer); };
   }, [mapReady]);
 
   // Keyboard deletion of selected overlay elements
@@ -1837,6 +1871,7 @@ export default function App() {
       }
     }
     if (!payload) return;
+    skipAutoFitRef.current = true;
     setProject(payload);
     setProjectId(entry.id);
     setProjectName(entry.name);

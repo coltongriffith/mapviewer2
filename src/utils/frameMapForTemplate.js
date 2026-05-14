@@ -1,5 +1,7 @@
 import L from 'leaflet';
 
+const FOCUS_ROLES = new Set(['claims', 'drillholes', 'target_areas', 'anomalies']);
+
 function getVisibleLayers(project) {
   return (project?.layers || []).filter((layer) => layer.visible !== false && layer.geojson);
 }
@@ -10,14 +12,20 @@ function buildBounds(layers) {
   return bounds?.isValid?.() ? bounds : null;
 }
 
-export function fitProjectToTemplate(project, map, template, mode = 'balanced') {
+export function fitProjectToTemplate(project, map, template, mode = 'balanced', opts = {}) {
   if (!map) return;
   const visibleLayers = getVisibleLayers(project);
   if (!visibleLayers.length) return;
 
-  const targetLayers = project?.layout?.primaryLayerId
-    ? visibleLayers.filter((layer) => layer.id === project.layout.primaryLayerId)
-    : visibleLayers;
+  let targetLayers;
+  if (project?.layout?.primaryLayerId) {
+    targetLayers = visibleLayers.filter((layer) => layer.id === project.layout.primaryLayerId);
+  } else if (opts.focusRoles) {
+    const focus = visibleLayers.filter((l) => FOCUS_ROLES.has(l.role));
+    targetLayers = focus.length ? focus : visibleLayers;
+  } else {
+    targetLayers = visibleLayers;
+  }
 
   const bounds = buildBounds(targetLayers.length ? targetLayers : visibleLayers);
   if (!bounds) return;

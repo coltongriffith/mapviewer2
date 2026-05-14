@@ -157,5 +157,6 @@ export function createInitialProjectState() {
     ellipses: [],
     polygons: [],
     ratioMapStates: {},
+    mapView: null,
   };
 }
