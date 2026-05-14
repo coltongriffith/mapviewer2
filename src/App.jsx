@@ -840,6 +840,7 @@ export default function App() {
     if (!map) return undefined;
     let saveTimer;
     const handleMoveEnd = () => {
+      if (activeRatioRef.current) return;
       clearTimeout(saveTimer);
       saveTimer = setTimeout(() => {
         const center = map.getCenter();
