@@ -2794,9 +2794,21 @@ export default function App() {
         <section className="control-section cs-collapsible">
           <h2 className="section-toggle-btn" onClick={() => toggleSection('refoverlays')}>Reference Overlays <span className={`section-chevron${collapsedSections.refoverlays ? '' : ' open'}`}>›</span></h2>
           {!collapsedSections.refoverlays && <div className="toggle-grid">
-            <label className="toggle-row"><input type="checkbox" checked={referenceOverlays.context} onChange={(e) => updateLayout({ referenceOverlays: { context: e.target.checked } })} /> <span>Roads / Water / Towns</span></label>
-            <label className="toggle-row"><input type="checkbox" checked={referenceOverlays.labels} onChange={(e) => updateLayout({ referenceOverlays: { labels: e.target.checked } })} /> <span>Reference Labels</span></label>
-            <label className="toggle-row"><input type="checkbox" checked={referenceOverlays.rail} onChange={(e) => updateLayout({ referenceOverlays: { rail: e.target.checked } })} /> <span>Railways</span></label>
+            <div className="control-row inline-2">
+              <div>
+                <label>Overlay Opacity</label>
+                <input type="range" min="0.2" max="1" step="0.05" value={project.layout.referenceOpacity ?? 0.65} onChange={(e) => updateLayout({ referenceOpacity: Number(e.target.value) })} />
+              </div>
+              <div className="range-value">{Math.round((project.layout.referenceOpacity ?? 0.65) * 100)}%</div>
+            </div>
+            <p className="control-section-subheader">Topography</p>
+            <label className="toggle-row"><input type="checkbox" checked={!!referenceOverlays.contours} onChange={(e) => updateLayout({ referenceOverlays: { contours: e.target.checked } })} /> <span>Contour Lines</span></label>
+            <p className="control-section-subheader">Context</p>
+            <label className="toggle-row"><input type="checkbox" checked={!!referenceOverlays.context} onChange={(e) => updateLayout({ referenceOverlays: { context: e.target.checked } })} /> <span>Roads + Settlements</span></label>
+            <label className="toggle-row"><input type="checkbox" checked={!!referenceOverlays.labels} onChange={(e) => updateLayout({ referenceOverlays: { labels: e.target.checked } })} /> <span>Reference Labels</span></label>
+            <p className="control-section-subheader">Infrastructure</p>
+            <label className="toggle-row"><input type="checkbox" checked={!!referenceOverlays.rail} onChange={(e) => updateLayout({ referenceOverlays: { rail: e.target.checked } })} /> <span>Railways</span></label>
+            <label className="toggle-row"><input type="checkbox" checked={!!referenceOverlays.power} onChange={(e) => updateLayout({ referenceOverlays: { power: e.target.checked } })} /> <span>Power Lines</span></label>
           </div>}
         </section>
 
