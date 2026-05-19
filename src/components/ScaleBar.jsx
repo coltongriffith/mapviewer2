@@ -4,7 +4,8 @@ function clamp(v, min, max) {
   return Math.max(min, Math.min(max, v));
 }
 
-const STEPS = [50, 100, 200, 250, 500, 1000, 2000, 2500, 5000, 10000, 20000, 50000, 100000];
+const STEPS = [10, 20, 50, 100, 200, 250, 500, 1000, 2000, 2500, 5000, 10000, 20000, 25000, 50000, 100000, 200000, 500000, 1000000];
+const TARGET = 120;
 
 export default function ScaleBar({ map }) {
   const [state, setState] = useState({ label: "1 km", width: 100 });
@@ -14,16 +15,17 @@ export default function ScaleBar({ map }) {
 
     const update = () => {
       const size = map.getSize();
-      const latlng1 = map.containerPointToLatLng([20, size.y - 40]);
-      const latlng2 = map.containerPointToLatLng([150, size.y - 40]);
-      const meters = latlng1.distanceTo(latlng2);
+      const cy = size.y / 2;
+      const latlng1 = map.containerPointToLatLng([0, cy]);
+      const latlng2 = map.containerPointToLatLng([200, cy]);
+      const metersPerPx = latlng1.distanceTo(latlng2) / 200;
       const nice = STEPS.reduce((best, n) =>
-        Math.abs(n - meters) < Math.abs(best - meters) ? n : best,
+        Math.abs(n / metersPerPx - TARGET) < Math.abs(best / metersPerPx - TARGET) ? n : best,
       STEPS[0]);
 
       setState({
         label: nice >= 1000 ? `${nice / 1000} km` : `${nice} m`,
-        width: clamp(Math.round((130 * nice) / meters), 70, 220),
+        width: clamp(Math.round(nice / metersPerPx), 40, 220),
       });
     };
 

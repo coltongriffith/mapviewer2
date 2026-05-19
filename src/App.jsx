@@ -188,14 +188,15 @@ function ScaleBar({ map }) {
     const update = () => {
       try {
         const size = map.getSize();
-        const latlng1 = map.containerPointToLatLng([20, size.y - 40]);
-        const latlng2 = map.containerPointToLatLng([150, size.y - 40]);
-        const meters = latlng1.distanceTo(latlng2);
-        const steps = [50, 100, 200, 250, 500, 1000, 2000, 2500, 5000, 10000, 20000, 25000, 50000, 100000];
-        const nice = steps.reduce((best, n) => (Math.abs(n - meters) < Math.abs(best - meters) ? n : best), steps[0]);
+        const cy = size.y / 2;
+        const latlng1 = map.containerPointToLatLng([0, cy]);
+        const latlng2 = map.containerPointToLatLng([200, cy]);
+        const metersPerPx = latlng1.distanceTo(latlng2) / 200;
+        const steps = [10, 20, 50, 100, 200, 250, 500, 1000, 2000, 2500, 5000, 10000, 20000, 25000, 50000, 100000, 200000, 500000, 1000000];
+        const nice = steps.reduce((best, n) => (Math.abs(n / metersPerPx - 120) < Math.abs(best / metersPerPx - 120) ? n : best), steps[0]);
         setState({
           label: nice >= 1000 ? `${nice / 1000} km` : `${nice} m`,
-          width: Math.max(70, Math.min(180, Math.round((130 * nice) / Math.max(meters, 1)))),
+          width: Math.max(40, Math.min(220, Math.round(nice / metersPerPx))),
         });
       } catch {
         // noop
