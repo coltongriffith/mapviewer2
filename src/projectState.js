@@ -103,8 +103,6 @@ export function createInitialProjectState() {
         context: false,
         labels: false,
         rail: false,
-        contours: false,
-        power: false,
       },
       referenceOpacity: 0.65,
       zoomPercent: 100,
