@@ -424,12 +424,16 @@ function drawNorthArrowCanvas(ctx, scene, scale) {
 
 function pickScaleLabel(map) {
   const size = map.getSize();
-  const latlng1 = map.containerPointToLatLng([20, size.y - 40]);
-  const latlng2 = map.containerPointToLatLng([150, size.y - 40]);
-  const meters = latlng1.distanceTo(latlng2);
-  const steps = [50, 100, 200, 250, 500, 1000, 2000, 2500, 5000, 10000, 20000, 25000, 50000, 100000];
-  const nice = steps.reduce((best, n) => (Math.abs(n - meters) < Math.abs(best - meters) ? n : best), steps[0]);
-  return { label: nice >= 1000 ? `${nice / 1000} km` : `${nice} m`, widthPx: Math.max(70, Math.min(180, Math.round((130 * nice) / meters))) };
+  const cy = size.y / 2;
+  const latlng1 = map.containerPointToLatLng([0, cy]);
+  const latlng2 = map.containerPointToLatLng([200, cy]);
+  const metersPerPx = latlng1.distanceTo(latlng2) / 200;
+  const steps = [10, 20, 50, 100, 200, 250, 500, 1000, 2000, 2500, 5000, 10000, 20000, 25000, 50000, 100000, 200000, 500000, 1000000];
+  const TARGET = 120;
+  const nice = steps.reduce((best, n) =>
+    Math.abs(n / metersPerPx - TARGET) < Math.abs(best / metersPerPx - TARGET) ? n : best,
+  steps[0]);
+  return { label: nice >= 1000 ? `${nice / 1000} km` : `${nice} m`, widthPx: Math.max(40, Math.min(220, Math.round(nice / metersPerPx))) };
 }
 function drawScaleBarCanvas(ctx, scene, scale) {
   if (scene.project.layout?.showScaleBar === false) return;
