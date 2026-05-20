@@ -959,8 +959,10 @@ export default function App() {
     if (map) map.dragging.disable();
     const sx = e.clientX, sy = e.clientY;
     const initZone = resolvedZonesRef.current?.[elemId] || {};
-    const zLeft = initZone.left ?? 0;
-    const zTop = initZone.top ?? 0;
+    const zLeft = initZone.left != null ? initZone.left
+      : initZone.right != null ? mapSize.width - initZone.right - startW : 0;
+    const zTop = initZone.top != null ? initZone.top
+      : initZone.bottom != null ? mapSize.height - initZone.bottom - startH : 0;
     const onMove = (me) => {
       const dx = me.clientX - sx, dy = me.clientY - sy;
       let newW = null, newH = null;
@@ -973,16 +975,20 @@ export default function App() {
       const SNAP = 7;
       for (const [zid, z] of Object.entries(allZ)) {
         if (zid === elemId || !(z?.width > 0)) continue;
-        if (newW !== null) {
+        const zl = z.left != null ? z.left
+          : z.right != null ? mapSize.width - z.right - z.width : null;
+        const zt = z.top != null ? z.top
+          : z.bottom != null ? mapSize.height - z.bottom - z.height : null;
+        if (newW !== null && zl != null) {
           const re = zLeft + newW;
-          for (const tx of [z.left, (z.left ?? 0) + z.width]) {
+          for (const tx of [zl, zl + z.width]) {
             if (Math.abs(re - tx) <= SNAP) { newW = Math.max(minW, Math.round(tx - zLeft)); guides.push({ type: 'v', pos: tx }); break; }
           }
           if (!guides.find(g => g.type === 'v') && Math.abs(newW - z.width) <= SNAP) { newW = z.width; guides.push({ type: 'v', pos: zLeft + z.width }); }
         }
-        if (newH !== null) {
+        if (newH !== null && zt != null) {
           const be = zTop + newH;
-          for (const ty of [z.top, (z.top ?? 0) + z.height]) {
+          for (const ty of [zt, zt + z.height]) {
             if (Math.abs(be - ty) <= SNAP) { newH = Math.max(minH, Math.round(ty - zTop)); guides.push({ type: 'h', pos: ty }); break; }
           }
           if (!guides.find(g => g.type === 'h') && Math.abs(newH - z.height) <= SNAP) { newH = z.height; guides.push({ type: 'h', pos: zTop + z.height }); }
@@ -3092,7 +3098,7 @@ export default function App() {
                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === 'Escape') e.target.blur(); }}
               />
             ) : (
-              <h2 style={{ cursor: 'text' }} title="Click to edit" onClick={() => setEditingTitleField('title')}>{project.layout.title}</h2>
+              <h2 style={{ cursor: 'text', fontSize: Math.round(22 * (project.layout.titleFontScale ?? 1)) + 'px' }} title="Click to edit" onClick={() => setEditingTitleField('title')}>{project.layout.title}</h2>
             )}
             {editingTitleField === 'subtitle' ? (
               <input
@@ -3103,8 +3109,13 @@ export default function App() {
                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === 'Escape') e.target.blur(); }}
               />
             ) : (
-              <p style={{ cursor: 'text' }} title="Click to edit" onClick={() => setEditingTitleField('subtitle')}>{project.layout.subtitle}</p>
+              <p style={{ cursor: 'text', fontSize: Math.round(12 * (project.layout.titleFontScale ?? 1)) + 'px' }} title="Click to edit" onClick={() => setEditingTitleField('subtitle')}>{project.layout.subtitle}</p>
             )}
+          </div>
+          <div className="zone-font-scale-row" onMouseDown={(e) => e.stopPropagation()}>
+            <span>Text</span>
+            <input type="range" min="0.6" max="1.5" step="0.05" value={project.layout.titleFontScale ?? 1} onChange={(e) => updateLayout({ titleFontScale: parseFloat(e.target.value) })} />
+            <span>{Math.round((project.layout.titleFontScale ?? 1) * 100)}%</span>
           </div>
           {makeResizeHandles(project.layout.titleCorner || 'tl', {
             elemId: 'title', startW: project.layout.titleWidthPx ?? 520, startH: project.layout.titleHeightPx ?? 92,
@@ -3117,8 +3128,8 @@ export default function App() {
           <div className="template-zone" style={{ ...zoneStyle(resolvedZones.legend), opacity: dragging?.id === 'legend' ? 0.3 : 1, cursor: 'grab' }} onMouseDown={makeDragHandler('legend', project.layout.legendWidthPx ?? 300, project.layout.legendHeightPx ?? resolvedZones.legend?.height ?? 168)}>
             <button className="panel-delete-btn" title="Hide legend" onClick={() => updateLayout({ showLegend: false })}>×</button>
             <div className={`template-card legend-card${project.layout.legendTransparent ? ' panel--transparent' : ''}`}>
-              <div className="legend-header"><h3>Legend</h3></div>
-              <div className="legend-list">
+              <div className="legend-header"><h3 style={{ fontSize: Math.round(15 * (project.layout.legendFontScale ?? 1)) + 'px' }}>Legend</h3></div>
+              <div className="legend-list" style={{ fontSize: Math.round(13 * (project.layout.legendFontScale ?? 1)) + 'px' }}>
                 {legendGroups.map((group) => (
                   <div key={group.heading || 'all'} className="legend-group">
                     {group.heading ? <div className="legend-group-title">{group.heading}</div> : null}
@@ -3147,6 +3158,11 @@ export default function App() {
                   </div>
                 ))}
               </div>
+            </div>
+            <div className="zone-font-scale-row" onMouseDown={(e) => e.stopPropagation()}>
+              <span>Text</span>
+              <input type="range" min="0.6" max="1.5" step="0.05" value={project.layout.legendFontScale ?? 1} onChange={(e) => updateLayout({ legendFontScale: parseFloat(e.target.value) })} />
+              <span>{Math.round((project.layout.legendFontScale ?? 1) * 100)}%</span>
             </div>
             {makeResizeHandles(project.layout.legendCorner || 'bl', {
               elemId: 'legend', startW: project.layout.legendWidthPx ?? 300, startH: project.layout.legendHeightPx ?? resolvedZones.legend?.height ?? 168,

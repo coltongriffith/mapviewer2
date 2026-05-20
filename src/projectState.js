@@ -132,6 +132,8 @@ export function createInitialProjectState() {
         label: 'Inter',
         footer: 'Inter',
       },
+      legendFontScale: 1,
+      titleFontScale: 1,
       titleSize: 'standard',
       titleHeightPx: 92,
       titleWidthPx: 520,
