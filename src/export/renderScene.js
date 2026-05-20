@@ -333,14 +333,15 @@ function drawTitleBlockCanvas(ctx, scene, scale) {
     else { ctx.fillRect(x, y, w, 5 * scale); }
   }
   const titleFont = `${layout.fonts?.title || 'Inter'}, Arial, sans-serif`;
+  const tfs = layout.titleFontScale ?? 1;
   const textX = (x + (leftBar ? 22 : 18) * scale);
   const topOff = (theme.titleAccent && !leftBar) ? 20 : 16;
-  ctx.fillStyle = theme.titleText; ctx.font = `700 ${26 * scale}px ${titleFont}`; ctx.textBaseline = 'top'; ctx.fillText(layout.title || 'Project Map', textX, y + topOff * scale);
-  ctx.fillStyle = theme.subtitleText; ctx.font = `${14 * scale}px ${titleFont}`; ctx.fillText(layout.subtitle || '', textX, y + (topOff + 34) * scale);
+  ctx.fillStyle = theme.titleText; ctx.font = `700 ${26 * scale * tfs}px ${titleFont}`; ctx.textBaseline = 'top'; ctx.fillText(layout.title || 'Project Map', textX, y + topOff * scale);
+  ctx.fillStyle = theme.subtitleText; ctx.font = `${14 * scale * tfs}px ${titleFont}`; ctx.fillText(layout.subtitle || '', textX, y + (topOff + 34) * scale);
   // Metadata rows (date / project # / scale note) — right-aligned in title block
   const metaItems = [layout.mapDate, layout.projectNumber, layout.mapScaleNote].filter(Boolean);
   if (metaItems.length) {
-    const metaFont = `${10 * scale}px ${titleFont}`;
+    const metaFont = `${10 * scale * tfs}px ${titleFont}`;
     ctx.font = metaFont; ctx.textBaseline = 'top';
     ctx.fillStyle = theme.subtitleText;
     const rightX = x + w - 12 * scale;
@@ -380,16 +381,17 @@ function legendSwatchSvg(item, x, y, scale) {
 function drawLegendCanvas(ctx, scene, scale) {
   const theme = getTheme(scene);
   const legendFont = `${scene.project.layout?.fonts?.legend || 'Inter'}, Arial, sans-serif`;
+  const lfs = scene.project.layout?.legendFontScale ?? 1;
   const { legend } = getOverlayMetrics(scene); const items = scene.project.layout?.legendItems || []; if (!items.length || !legend?.width || !legend?.height) return;
   const x = legend.left * scale, y = legend.top * scale, w = legend.width * scale, h = legend.height * scale;
   if (!scene.project.layout?.legendTransparent) drawPanelRect(ctx, x, y, w, h, (theme.panelRadius ?? 10) * scale, theme.panelFill, theme.panelBorder, scale);
   drawPanelAccentLeft(ctx, x, y, h, theme, scale);
   const leftPad = theme.panelAccentLeft ? 20 : 16;
-  ctx.fillStyle = theme.panelTitle; ctx.font = `700 ${15 * scale}px ${legendFont}`; ctx.textBaseline = 'top'; ctx.fillText(scene.project.layout?.legendTitle || 'Legend', x + leftPad * scale, y + 14 * scale);
+  ctx.fillStyle = theme.panelTitle; ctx.font = `700 ${15 * scale * lfs}px ${legendFont}`; ctx.textBaseline = 'top'; ctx.fillText(scene.project.layout?.legendTitle || 'Legend', x + leftPad * scale, y + 14 * scale);
   const lp = (theme.panelAccentLeft ? 20 : 16) * scale;
   let rowY = y + 40 * scale;
   groupLegendItems(items, scene.project.layout).forEach((group) => {
-    if (group.heading) { ctx.fillStyle = theme.mutedText; ctx.font = `700 ${11 * scale}px ${legendFont}`; ctx.fillText(group.heading.toUpperCase(), x + lp, rowY); rowY += 18 * scale; }
+    if (group.heading) { ctx.fillStyle = theme.mutedText; ctx.font = `700 ${11 * scale * lfs}px ${legendFont}`; ctx.fillText(group.heading.toUpperCase(), x + lp, rowY); rowY += 18 * scale; }
     group.items.forEach((item) => {
       if (item.type === 'points') {
         const shape = item.markerShape || item.style?.markerShape || 'circle';
@@ -405,7 +407,7 @@ function drawLegendCanvas(ctx, scene, scale) {
       } else {
         ctx.fillStyle = rgba(item.style.fill || '#93c5fd', item.style.fillOpacity ?? 0.22); ctx.fillRect(x + lp, rowY + 2 * scale, 18 * scale, 12 * scale); ctx.strokeStyle = item.style.stroke || '#3b82f6'; ctx.lineWidth = Math.max(1, scale); ctx.strokeRect(x + lp, rowY + 2 * scale, 18 * scale, 12 * scale);
       }
-      ctx.fillStyle = theme.bodyText; ctx.font = `${13 * scale}px ${legendFont}`; ctx.textBaseline = 'middle'; ctx.fillText(item.label || 'Layer', x + lp + 30 * scale, rowY + 9 * scale); rowY += 24 * scale;
+      ctx.fillStyle = theme.bodyText; ctx.font = `${13 * scale * lfs}px ${legendFont}`; ctx.textBaseline = 'middle'; ctx.fillText(item.label || 'Layer', x + lp + 30 * scale, rowY + 9 * scale); rowY += 24 * scale;
     });
     rowY += 6 * scale;
   });
@@ -1727,11 +1729,12 @@ function renderTitleSvg(scene, scale) {
     : '';
   const textX = x + (leftBar ? 22 : 18) * scale;
   const topOff = (theme.titleAccent && !leftBar) ? 46 : 42;
+  const tfs = layout.titleFontScale ?? 1;
   const metaItems = [layout.mapDate, layout.projectNumber, layout.mapScaleNote].filter(Boolean);
   const metaSvg = metaItems.map((item, i) =>
-    `<text x="${x + w - 12 * scale}" y="${y + (topOff - 22 + i * 14) * scale}" text-anchor="end" fill="${theme.subtitleText}" font-family="Arial" font-size="${10 * scale}">${escapeXml(item)}</text>`
+    `<text x="${x + w - 12 * scale}" y="${y + (topOff - 22 + i * 14) * scale}" text-anchor="end" fill="${theme.subtitleText}" font-family="Arial" font-size="${10 * scale * tfs}">${escapeXml(item)}</text>`
   ).join('');
-  return `<g id="em-title" class="em-panel">${svgRect(x, y, w, h, (theme.titleRadius ?? theme.panelRadius ?? 10) * scale, theme.titleFill, theme.titleBorder, scale)}${accent}<text x="${textX}" y="${y + topOff * scale}" fill="${theme.titleText}" font-family="Arial" font-size="${26 * scale}" font-weight="700">${escapeXml(layout.title || 'Project Map')}</text><text x="${textX}" y="${y + (topOff + 22) * scale}" fill="${theme.subtitleText}" font-family="Arial" font-size="${14 * scale}">${escapeXml(layout.subtitle || '')}</text>${metaSvg}</g>`;
+  return `<g id="em-title" class="em-panel">${svgRect(x, y, w, h, (theme.titleRadius ?? theme.panelRadius ?? 10) * scale, theme.titleFill, theme.titleBorder, scale)}${accent}<text x="${textX}" y="${y + topOff * scale}" fill="${theme.titleText}" font-family="Arial" font-size="${26 * scale * tfs}" font-weight="700">${escapeXml(layout.title || 'Project Map')}</text><text x="${textX}" y="${y + (topOff + 22) * scale}" fill="${theme.subtitleText}" font-family="Arial" font-size="${14 * scale * tfs}">${escapeXml(layout.subtitle || '')}</text>${metaSvg}</g>`;
 }
 function svgPanelAccentLeft(x, y, h, theme, scale) {
   if (!theme.panelAccentLeft) return '';
@@ -1741,9 +1744,10 @@ function renderLegendSvg(scene, scale) {
   const { legend } = getOverlayMetrics(scene); const items = scene.project.layout?.legendItems || []; if (!items.length) return '';
   const x = legend.left * scale, y = legend.top * scale, w = legend.width * scale, h = legend.height * scale;
   const theme = getTheme(scene);
+  const lfs = scene.project.layout?.legendFontScale ?? 1;
   const lp = (theme.panelAccentLeft ? 20 : 16) * scale;
-  const rows = items.map((item, index) => { const rowY = y + (40 + index * 24) * scale; return `<g id="em-legend-item-${index}" class="em-legend-item">${legendSwatchSvg(item, x + lp, rowY + 1 * scale, scale)}<text x="${x + lp + 30 * scale}" y="${rowY + 12 * scale}" fill="${theme.bodyText}" font-family="Arial" font-size="${13 * scale}">${escapeXml(item.label || 'Layer')}</text></g>`; }).join('\n');
-  return `<g id="em-legend" class="em-panel">${svgRect(x, y, w, h, (theme.panelRadius ?? 10) * scale, theme.panelFill, theme.panelBorder, scale)}${svgPanelAccentLeft(x, y, h, theme, scale)}<text x="${x + lp}" y="${y + 24 * scale}" fill="${theme.panelTitle}" font-family="Arial" font-size="${15 * scale}" font-weight="700">${escapeXml(scene.project.layout?.legendTitle || 'Legend')}</text>${rows}</g>`;
+  const rows = items.map((item, index) => { const rowY = y + (40 + index * 24) * scale; return `<g id="em-legend-item-${index}" class="em-legend-item">${legendSwatchSvg(item, x + lp, rowY + 1 * scale, scale)}<text x="${x + lp + 30 * scale}" y="${rowY + 12 * scale}" fill="${theme.bodyText}" font-family="Arial" font-size="${13 * scale * lfs}">${escapeXml(item.label || 'Layer')}</text></g>`; }).join('\n');
+  return `<g id="em-legend" class="em-panel">${svgRect(x, y, w, h, (theme.panelRadius ?? 10) * scale, theme.panelFill, theme.panelBorder, scale)}${svgPanelAccentLeft(x, y, h, theme, scale)}<text x="${x + lp}" y="${y + 24 * scale}" fill="${theme.panelTitle}" font-family="Arial" font-size="${15 * scale * lfs}" font-weight="700">${escapeXml(scene.project.layout?.legendTitle || 'Legend')}</text>${rows}</g>`;
 }
 function renderNorthArrowSvg(scene, scale) {
   if (scene.project.layout?.showNorthArrow === false) return '';
