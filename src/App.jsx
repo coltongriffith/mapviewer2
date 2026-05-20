@@ -2050,6 +2050,11 @@ export default function App() {
               clearTimeout(subtitleDebounceRef.current);
               subtitleDebounceRef.current = setTimeout(() => updateLayout({ subtitle: val }), 300);
             }} /></div>
+            <div className="control-row" style={{ alignItems: 'center' }}>
+              <label>Title Size</label>
+              <input type="range" min="0.6" max="1.5" step="0.05" value={project.layout.titleFontScale ?? 1} onChange={(e) => updateLayout({ titleFontScale: parseFloat(e.target.value) })} style={{ flex: 1 }} />
+              <span style={{ fontSize: 11, marginLeft: 6, minWidth: 32 }}>{Math.round((project.layout.titleFontScale ?? 1) * 100)}%</span>
+            </div>
             <div className="control-row">
               <label>Basemap</label>
               <select value={project.layout.basemap} onChange={(e) => updateLayout({ basemap: e.target.value })}>
@@ -2748,6 +2753,11 @@ export default function App() {
               <summary>Text & Metadata</summary>
               <div className="sub-details-body">
                 <div className="control-row"><label>Legend Title</label><input value={project.layout.legendTitle ?? 'Legend'} onChange={(e) => updateLayout({ legendTitle: e.target.value })} placeholder="Legend" /></div>
+                <div className="control-row" style={{ alignItems: 'center' }}>
+                  <label>Text Size</label>
+                  <input type="range" min="0.6" max="1.5" step="0.05" value={project.layout.legendFontScale ?? 1} onChange={(e) => updateLayout({ legendFontScale: parseFloat(e.target.value) })} style={{ flex: 1 }} />
+                  <span style={{ fontSize: 11, marginLeft: 6, minWidth: 32 }}>{Math.round((project.layout.legendFontScale ?? 1) * 100)}%</span>
+                </div>
                 <div className="control-row"><label>Footer / Disclaimer</label><input value={project.layout.footerText || ''} onChange={(e) => updateLayout({ footerText: e.target.value })} placeholder="e.g. For internal use only" /></div>
                 <div className="control-row inline-2">
                   <div><label>Map Date</label><input value={project.layout.mapDate || ''} onChange={(e) => updateLayout({ mapDate: e.target.value })} placeholder="e.g. April 2025" /></div>
@@ -3112,11 +3122,6 @@ export default function App() {
               <p style={{ cursor: 'text', fontSize: Math.round(12 * (project.layout.titleFontScale ?? 1)) + 'px' }} title="Click to edit" onClick={() => setEditingTitleField('subtitle')}>{project.layout.subtitle}</p>
             )}
           </div>
-          <div className="zone-font-scale-row" onMouseDown={(e) => e.stopPropagation()}>
-            <button className="secondary-btn zone-font-btn" onClick={() => updateLayout({ titleFontScale: Math.max(0.6, Math.round(((project.layout.titleFontScale ?? 1) - 0.1) * 10) / 10) })}>A−</button>
-            <span className="zone-font-pct">{Math.round((project.layout.titleFontScale ?? 1) * 100)}%</span>
-            <button className="secondary-btn zone-font-btn" onClick={() => updateLayout({ titleFontScale: Math.min(1.5, Math.round(((project.layout.titleFontScale ?? 1) + 0.1) * 10) / 10) })}>A+</button>
-          </div>
           {makeResizeHandles(project.layout.titleCorner || 'tl', {
             elemId: 'title', startW: project.layout.titleWidthPx ?? 520, startH: project.layout.titleHeightPx ?? 92,
             minW: 300, maxW: 800, minH: 60, maxH: 180,
@@ -3158,11 +3163,6 @@ export default function App() {
                   </div>
                 ))}
               </div>
-            </div>
-            <div className="zone-font-scale-row" onMouseDown={(e) => e.stopPropagation()}>
-              <button className="secondary-btn zone-font-btn" onClick={() => updateLayout({ legendFontScale: Math.max(0.6, Math.round(((project.layout.legendFontScale ?? 1) - 0.1) * 10) / 10) })}>A−</button>
-              <span className="zone-font-pct">{Math.round((project.layout.legendFontScale ?? 1) * 100)}%</span>
-              <button className="secondary-btn zone-font-btn" onClick={() => updateLayout({ legendFontScale: Math.min(1.5, Math.round(((project.layout.legendFontScale ?? 1) + 0.1) * 10) / 10) })}>A+</button>
             </div>
             {makeResizeHandles(project.layout.legendCorner || 'bl', {
               elemId: 'legend', startW: project.layout.legendWidthPx ?? 300, startH: project.layout.legendHeightPx ?? resolvedZones.legend?.height ?? 168,
