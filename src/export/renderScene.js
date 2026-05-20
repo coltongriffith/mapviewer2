@@ -346,7 +346,7 @@ function drawTitleBlockCanvas(ctx, scene, scale) {
     ctx.fillStyle = theme.subtitleText;
     const rightX = x + w - 12 * scale;
     const savedAlign = ctx.textAlign; ctx.textAlign = 'right';
-    metaItems.forEach((item, i) => { ctx.fillText(item, rightX, y + (topOff + 2 + i * 14 * tfs) * scale); });
+    metaItems.forEach((item, i) => { ctx.fillText(item, rightX, y + (topOff + 2 + i * 14) * scale); });
     ctx.textAlign = savedAlign;
   }
 }
@@ -1732,7 +1732,7 @@ function renderTitleSvg(scene, scale) {
   const tfs = layout.titleFontScale ?? 1;
   const metaItems = [layout.mapDate, layout.projectNumber, layout.mapScaleNote].filter(Boolean);
   const metaSvg = metaItems.map((item, i) =>
-    `<text x="${x + w - 12 * scale}" y="${y + (topOff - 22 + i * 14 * tfs) * scale}" text-anchor="end" fill="${theme.subtitleText}" font-family="Arial" font-size="${10 * scale * tfs}">${escapeXml(item)}</text>`
+    `<text x="${x + w - 12 * scale}" y="${y + (topOff - 22 + i * 14) * scale}" text-anchor="end" fill="${theme.subtitleText}" font-family="Arial" font-size="${10 * scale * tfs}">${escapeXml(item)}</text>`
   ).join('');
   return `<g id="em-title" class="em-panel">${svgRect(x, y, w, h, (theme.titleRadius ?? theme.panelRadius ?? 10) * scale, theme.titleFill, theme.titleBorder, scale)}${accent}<text x="${textX}" y="${y + topOff * scale}" fill="${theme.titleText}" font-family="Arial" font-size="${26 * scale * tfs}" font-weight="700">${escapeXml(layout.title || 'Project Map')}</text><text x="${textX}" y="${y + (topOff + 22 * tfs) * scale}" fill="${theme.subtitleText}" font-family="Arial" font-size="${14 * scale * tfs}">${escapeXml(layout.subtitle || '')}</text>${metaSvg}</g>`;
 }
