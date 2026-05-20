@@ -207,7 +207,7 @@ button, input, select, textarea { font: inherit; }
 .legend-list { display: grid; gap: 10px; }
 .legend-group { display: grid; gap: 8px; }
 .legend-group-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted-text, #6c7b90); font-weight: 700; }
-.legend-item { display: flex; align-items: center; gap: 12px; color: var(--body-text, #1d2b3d); font-size: 12px; }
+.legend-item { display: flex; align-items: center; gap: 12px; color: var(--body-text, #1d2b3d); }
 .legend-swatch { width: 18px; height: 12px; border-radius: 2px; border: 1px solid #3b82f6; flex: 0 0 auto; }
 .legend-point { width: 12px; height: 12px; border-radius: 999px; border: 1px solid #111; background: #fff; flex: 0 0 auto; }
 .legend-line-svg { display: block; flex: 0 0 auto; overflow: visible; }
@@ -964,6 +964,28 @@ button, input, select, textarea { font: inherit; }
   border-radius: 2px; background: rgba(59,130,246,0.7); box-shadow: 0 0 0 1px rgba(255,255,255,0.4);
 }
 .panel-resize-handle:hover::after, .panel-resize-handle:active::after { background: rgba(37,99,235,0.9); }
+
+/* ── Zone font scale buttons ── */
+.zone-font-scale-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 4px 8px 6px;
+}
+.zone-font-btn {
+  font-size: 11px !important;
+  padding: 2px 8px !important;
+  line-height: 1.4;
+  min-width: unset;
+}
+.zone-font-pct {
+  font-size: 11px;
+  color: #475569;
+  min-width: 34px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
 
 /* ── Transparent panel (no box) ── */
 .panel--transparent {

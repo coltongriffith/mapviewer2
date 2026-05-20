@@ -3113,9 +3113,9 @@ export default function App() {
             )}
           </div>
           <div className="zone-font-scale-row" onMouseDown={(e) => e.stopPropagation()}>
-            <span>Text</span>
-            <input type="range" min="0.6" max="1.5" step="0.05" value={project.layout.titleFontScale ?? 1} onChange={(e) => updateLayout({ titleFontScale: parseFloat(e.target.value) })} />
-            <span>{Math.round((project.layout.titleFontScale ?? 1) * 100)}%</span>
+            <button className="secondary-btn zone-font-btn" onClick={() => updateLayout({ titleFontScale: Math.max(0.6, Math.round(((project.layout.titleFontScale ?? 1) - 0.1) * 10) / 10) })}>A−</button>
+            <span className="zone-font-pct">{Math.round((project.layout.titleFontScale ?? 1) * 100)}%</span>
+            <button className="secondary-btn zone-font-btn" onClick={() => updateLayout({ titleFontScale: Math.min(1.5, Math.round(((project.layout.titleFontScale ?? 1) + 0.1) * 10) / 10) })}>A+</button>
           </div>
           {makeResizeHandles(project.layout.titleCorner || 'tl', {
             elemId: 'title', startW: project.layout.titleWidthPx ?? 520, startH: project.layout.titleHeightPx ?? 92,
@@ -3160,9 +3160,9 @@ export default function App() {
               </div>
             </div>
             <div className="zone-font-scale-row" onMouseDown={(e) => e.stopPropagation()}>
-              <span>Text</span>
-              <input type="range" min="0.6" max="1.5" step="0.05" value={project.layout.legendFontScale ?? 1} onChange={(e) => updateLayout({ legendFontScale: parseFloat(e.target.value) })} />
-              <span>{Math.round((project.layout.legendFontScale ?? 1) * 100)}%</span>
+              <button className="secondary-btn zone-font-btn" onClick={() => updateLayout({ legendFontScale: Math.max(0.6, Math.round(((project.layout.legendFontScale ?? 1) - 0.1) * 10) / 10) })}>A−</button>
+              <span className="zone-font-pct">{Math.round((project.layout.legendFontScale ?? 1) * 100)}%</span>
+              <button className="secondary-btn zone-font-btn" onClick={() => updateLayout({ legendFontScale: Math.min(1.5, Math.round(((project.layout.legendFontScale ?? 1) + 0.1) * 10) / 10) })}>A+</button>
             </div>
             {makeResizeHandles(project.layout.legendCorner || 'bl', {
               elemId: 'legend', startW: project.layout.legendWidthPx ?? 300, startH: project.layout.legendHeightPx ?? resolvedZones.legend?.height ?? 168,
