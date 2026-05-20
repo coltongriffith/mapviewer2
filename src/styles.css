@@ -965,28 +965,6 @@ button, input, select, textarea { font: inherit; }
 }
 .panel-resize-handle:hover::after, .panel-resize-handle:active::after { background: rgba(37,99,235,0.9); }
 
-/* ── Zone font scale buttons ── */
-.zone-font-scale-row {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 4px 8px 6px;
-}
-.zone-font-btn {
-  font-size: 11px !important;
-  padding: 2px 8px !important;
-  line-height: 1.4;
-  min-width: unset;
-}
-.zone-font-pct {
-  font-size: 11px;
-  color: #475569;
-  min-width: 34px;
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-}
-
 /* ── Transparent panel (no box) ── */
 .panel--transparent {
   background: transparent !important;
