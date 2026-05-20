@@ -17,10 +17,6 @@ const ColumnMapperModal = React.lazy(() => import('./components/ColumnMapperModa
 import { loadGeoJSON, loadCSV } from './utils/importers';
 import sampleClaims from './assets/sampleClaims.json';
 import sampleDrillholes from './assets/sampleDrillholes.json';
-import { buildScene } from './export/buildScene';
-import { exportPNG } from './export/exportPNG';
-import { exportSVG } from './export/exportSVG';
-import { getExportWarnings } from './export/renderScene';
 import {
   CALLOUT_TYPES,
   createInitialProjectState,
@@ -618,8 +614,18 @@ export default function App() {
   // Local state for title/subtitle so every keystroke doesn't write to project (stops flicker)
   const [localTitle, setLocalTitle] = useState(project.layout.title || '');
   const [localSubtitle, setLocalSubtitle] = useState(project.layout.subtitle || '');
+  const [localLegendTitle, setLocalLegendTitle] = useState(project.layout.legendTitle ?? 'Legend');
+  const [localFooterText, setLocalFooterText] = useState(project.layout.footerText || '');
+  const [localMapDate, setLocalMapDate] = useState(project.layout.mapDate || '');
+  const [localProjectNumber, setLocalProjectNumber] = useState(project.layout.projectNumber || '');
+  const [localMapScaleNote, setLocalMapScaleNote] = useState(project.layout.mapScaleNote || '');
   const titleDebounceRef = useRef(null);
   const subtitleDebounceRef = useRef(null);
+  const legendTitleDebounceRef = useRef(null);
+  const footerTextDebounceRef = useRef(null);
+  const mapDateDebounceRef = useRef(null);
+  const projectNumberDebounceRef = useRef(null);
+  const mapScaleNoteDebounceRef = useRef(null);
   const annotationToolRef = useRef(null);
   const [editingTitleField, setEditingTitleField] = useState(null);
   const [csvMappingData, setCsvMappingData] = useState(null); // { headers, rows, filename } for ColumnMapperModal
@@ -720,10 +726,15 @@ export default function App() {
   // Show storage warning banner for anonymous users when local storage is getting full
   const showStorageWarning = !user && !storageWarningDismissed && estimateStorageUsedBytes() > 3_500_000;
 
-  // Sync local title/subtitle when project changes from an external action (open, duplicate, new)
+  // Sync local fields when project changes from an external action (open, duplicate, new)
   useEffect(() => {
     setLocalTitle(project.layout.title || '');
     setLocalSubtitle(project.layout.subtitle || '');
+    setLocalLegendTitle(project.layout.legendTitle ?? 'Legend');
+    setLocalFooterText(project.layout.footerText || '');
+    setLocalMapDate(project.layout.mapDate || '');
+    setLocalProjectNumber(project.layout.projectNumber || '');
+    setLocalMapScaleNote(project.layout.mapScaleNote || '');
   }, [projectId]);
 
   useEffect(() => {
@@ -761,6 +772,43 @@ export default function App() {
     }
     return { width: availW, height: Math.round(availW / config.ratio) };
   }, [activeRatio, viewportSize]);
+
+  const mapStageStyle = useMemo(() => ({
+    ...(constrainedStageSize || {}),
+    '--template-radius': `${themeTokens.panelRadius}px`,
+    '--title-radius': `${themeTokens.titleRadius}px`,
+    '--panel-bg': themeTokens.panelFill,
+    '--panel-border': themeTokens.panelBorder,
+    '--panel-shadow': themeTokens.panelShadow,
+    '--title-bg': themeTokens.titleFill,
+    '--title-border': themeTokens.titleBorder,
+    '--title-accent': themeTokens.titleAccent || 'transparent',
+    '--title-fg': themeTokens.titleText,
+    '--subtitle-fg': themeTokens.subtitleText,
+    '--panel-title': themeTokens.panelTitle,
+    '--body-text': themeTokens.bodyText,
+    '--muted-text': themeTokens.mutedText,
+    '--footer-bg': themeTokens.footerFill,
+    '--footer-fg': themeTokens.footerText,
+    '--callout-bg': themeTokens.calloutFill,
+    '--callout-border': themeTokens.calloutBorder,
+    '--callout-fg': themeTokens.calloutText,
+    '--north-fill': themeTokens.northArrowFill,
+    '--north-fg': themeTokens.northArrowText,
+    '--scale-bg': themeTokens.scaleFill,
+    '--scale-stroke': themeTokens.scaleStroke,
+    '--inset-bg': themeTokens.insetFill,
+    '--inset-border': themeTokens.insetBorder,
+    '--inset-title': themeTokens.insetTitle,
+    '--inset-muted': themeTokens.insetMuted,
+    '--logo-bg': themeTokens.logoFill,
+    '--logo-border': themeTokens.logoBorder,
+    '--font-title': `${project.layout.fonts?.title || 'Inter'}, sans-serif`,
+    '--font-legend': `${project.layout.fonts?.legend || 'Inter'}, sans-serif`,
+    '--font-label': `${project.layout.fonts?.label || 'Inter'}, sans-serif`,
+    '--font-callout': `${project.layout.fonts?.callout || 'Inter'}, sans-serif`,
+    '--font-footer': `${project.layout.fonts?.footer || 'Inter'}, sans-serif`,
+  }), [themeTokens, constrainedStageSize, project.layout.fonts]);
 
   const handleRatioChange = useCallback((newRatio) => {
     const map = leafletMapRef.current;
@@ -840,8 +888,8 @@ export default function App() {
     const map = leafletMapRef.current;
     if (!map) return undefined;
     const rerender = () => setFeatureEditorTick((value) => value + 1);
-    map.on('move zoom zoomend moveend resize', rerender);
-    return () => map.off('move zoom zoomend moveend resize', rerender);
+    map.on('moveend zoomend resize', rerender);
+    return () => map.off('moveend zoomend resize', rerender);
   }, [mapReady]);
 
   useEffect(() => {
@@ -1744,6 +1792,12 @@ export default function App() {
     }
     setExporting(true);
     try {
+      const [{ buildScene }, { exportPNG }, { exportSVG }, { getExportWarnings }] = await Promise.all([
+        import('./export/buildScene'),
+        import('./export/exportPNG'),
+        import('./export/exportSVG'),
+        import('./export/renderScene'),
+      ]);
       const scene = buildScene(mapContainerRef.current, { ...project, layout: { ...project.layout, legendItems } }, leafletMapRef.current);
       const opts = { ...(project.layout?.exportSettings || {}), ...extraOptions };
       if (format === 'png') {
@@ -2752,18 +2806,18 @@ export default function App() {
             <details className="sub-details">
               <summary>Text & Metadata</summary>
               <div className="sub-details-body">
-                <div className="control-row"><label>Legend Title</label><input value={project.layout.legendTitle ?? 'Legend'} onChange={(e) => updateLayout({ legendTitle: e.target.value })} placeholder="Legend" /></div>
+                <div className="control-row"><label>Legend Title</label><input value={localLegendTitle} onChange={(e) => { const val = e.target.value; setLocalLegendTitle(val); clearTimeout(legendTitleDebounceRef.current); legendTitleDebounceRef.current = setTimeout(() => updateLayout({ legendTitle: val }), 300); }} placeholder="Legend" /></div>
                 <div className="control-row" style={{ alignItems: 'center' }}>
                   <label>Text Size</label>
                   <input type="range" min="0.6" max="1.5" step="0.05" value={project.layout.legendFontScale ?? 1} onChange={(e) => updateLayout({ legendFontScale: parseFloat(e.target.value) })} style={{ flex: 1 }} />
                   <span style={{ fontSize: 11, marginLeft: 6, minWidth: 32 }}>{Math.round((project.layout.legendFontScale ?? 1) * 100)}%</span>
                 </div>
-                <div className="control-row"><label>Footer / Disclaimer</label><input value={project.layout.footerText || ''} onChange={(e) => updateLayout({ footerText: e.target.value })} placeholder="e.g. For internal use only" /></div>
+                <div className="control-row"><label>Footer / Disclaimer</label><input value={localFooterText} onChange={(e) => { const val = e.target.value; setLocalFooterText(val); clearTimeout(footerTextDebounceRef.current); footerTextDebounceRef.current = setTimeout(() => updateLayout({ footerText: val }), 300); }} placeholder="e.g. For internal use only" /></div>
                 <div className="control-row inline-2">
-                  <div><label>Map Date</label><input value={project.layout.mapDate || ''} onChange={(e) => updateLayout({ mapDate: e.target.value })} placeholder="e.g. April 2025" /></div>
-                  <div><label>Project #</label><input value={project.layout.projectNumber || ''} onChange={(e) => updateLayout({ projectNumber: e.target.value })} placeholder="e.g. P-2024-01" /></div>
+                  <div><label>Map Date</label><input value={localMapDate} onChange={(e) => { const val = e.target.value; setLocalMapDate(val); clearTimeout(mapDateDebounceRef.current); mapDateDebounceRef.current = setTimeout(() => updateLayout({ mapDate: val }), 300); }} placeholder="e.g. April 2025" /></div>
+                  <div><label>Project #</label><input value={localProjectNumber} onChange={(e) => { const val = e.target.value; setLocalProjectNumber(val); clearTimeout(projectNumberDebounceRef.current); projectNumberDebounceRef.current = setTimeout(() => updateLayout({ projectNumber: val }), 300); }} placeholder="e.g. P-2024-01" /></div>
                 </div>
-                <div className="control-row"><label>Scale Note</label><input value={project.layout.mapScaleNote || ''} onChange={(e) => updateLayout({ mapScaleNote: e.target.value })} placeholder="e.g. 1:50,000" /></div>
+                <div className="control-row"><label>Scale Note</label><input value={localMapScaleNote} onChange={(e) => { const val = e.target.value; setLocalMapScaleNote(val); clearTimeout(mapScaleNoteDebounceRef.current); mapScaleNoteDebounceRef.current = setTimeout(() => updateLayout({ mapScaleNote: val }), 300); }} placeholder="e.g. 1:50,000" /></div>
               </div>
             </details>
 
@@ -2946,42 +3000,7 @@ export default function App() {
             data-theme={project.layout.themeId || 'modern_rounded'}
             data-title-accent-style={themeTokens.titleAccentStyle || 'top'}
             data-annotation-tool={annotationTool || ''}
-            style={{
-              ...(constrainedStageSize || {}),
-              '--template-radius': `${themeTokens.panelRadius}px`,
-              '--title-radius': `${themeTokens.titleRadius}px`,
-              '--panel-bg': themeTokens.panelFill,
-              '--panel-border': themeTokens.panelBorder,
-              '--panel-shadow': themeTokens.panelShadow,
-              '--title-bg': themeTokens.titleFill,
-              '--title-border': themeTokens.titleBorder,
-              '--title-accent': themeTokens.titleAccent || 'transparent',
-              '--title-fg': themeTokens.titleText,
-              '--subtitle-fg': themeTokens.subtitleText,
-              '--panel-title': themeTokens.panelTitle,
-              '--body-text': themeTokens.bodyText,
-              '--muted-text': themeTokens.mutedText,
-              '--footer-bg': themeTokens.footerFill,
-              '--footer-fg': themeTokens.footerText,
-              '--callout-bg': themeTokens.calloutFill,
-              '--callout-border': themeTokens.calloutBorder,
-              '--callout-fg': themeTokens.calloutText,
-              '--north-fill': themeTokens.northArrowFill,
-              '--north-fg': themeTokens.northArrowText,
-              '--scale-bg': themeTokens.scaleFill,
-              '--scale-stroke': themeTokens.scaleStroke,
-              '--inset-bg': themeTokens.insetFill,
-              '--inset-border': themeTokens.insetBorder,
-              '--inset-title': themeTokens.insetTitle,
-              '--inset-muted': themeTokens.insetMuted,
-              '--logo-bg': themeTokens.logoFill,
-              '--logo-border': themeTokens.logoBorder,
-              '--font-title': `${project.layout.fonts?.title || 'Inter'}, sans-serif`,
-              '--font-legend': `${project.layout.fonts?.legend || 'Inter'}, sans-serif`,
-              '--font-label': `${project.layout.fonts?.label || 'Inter'}, sans-serif`,
-              '--font-callout': `${project.layout.fonts?.callout || 'Inter'}, sans-serif`,
-              '--font-footer': `${project.layout.fonts?.footer || 'Inter'}, sans-serif`,
-            }}
+            style={mapStageStyle}
           >
         <React.Suspense fallback={null}>
           <MapCanvas onReady={onMapReady} project={project} template={template} onFeatureClick={handleFeatureClick} onMapClick={handleMapClick} annotationToolRef={annotationToolRef} />
