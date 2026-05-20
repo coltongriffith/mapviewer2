@@ -567,6 +567,7 @@ export default function App() {
   const mapViewportRef = useRef(null);
   const leafletMapRef = useRef(null);
   const skipAutoFitRef = useRef(false);
+  const mapSizeRef = useRef({ width: 1600, height: 1000 });
   const logoInputRef = useRef(null);
   const insetInputRef = useRef(null);
   const uploadInputRef = useRef(null);
@@ -728,7 +729,11 @@ export default function App() {
   useEffect(() => {
     const container = mapContainerRef.current;
     if (!container) return undefined;
-    const update = () => setMapSize({ width: container.clientWidth, height: container.clientHeight });
+    const update = () => {
+      const s = { width: container.clientWidth, height: container.clientHeight };
+      setMapSize(s);
+      mapSizeRef.current = s;
+    };
     update();
     const ro = new ResizeObserver(update);
     ro.observe(container);
@@ -805,10 +810,13 @@ export default function App() {
     if (skipAutoFitRef.current) {
       skipAutoFitRef.current = false;
       const saved = project.mapView;
-      if (saved?.center) {
+      const screenMatch = saved?.screenW
+        ? Math.abs(saved.screenW - mapSizeRef.current.width) / saved.screenW < 0.15
+        : false;
+      if (saved?.center && screenMatch) {
         map.setView([saved.center.lat, saved.center.lng], saved.zoom, { animate: false });
       } else {
-        // No saved view — fit to focus layers (claims/drillholes) rather than all layers
+        // No saved view, or different screen size — fit to focus layers for this screen
         fitProjectToTemplate(
           project,
           map,
@@ -846,7 +854,7 @@ export default function App() {
       saveTimer = setTimeout(() => {
         const center = map.getCenter();
         const zoom = map.getZoom();
-        setProject((p) => ({ ...p, mapView: { center: { lat: center.lat, lng: center.lng }, zoom } }));
+        setProject((p) => ({ ...p, mapView: { center: { lat: center.lat, lng: center.lng }, zoom, screenW: mapSizeRef.current.width, screenH: mapSizeRef.current.height } }));
       }, 600);
     };
     map.on('moveend', handleMoveEnd);
@@ -2897,8 +2905,8 @@ export default function App() {
             </div>
             <div className="topbar-divider" />
             <div className="topbar-btn-group">
-              <button className="topbar-btn" type="button" aria-label="Zoom out" onClick={() => leafletMapRef.current?.zoomOut(1)}>−</button>
-              <button className="topbar-btn" type="button" aria-label="Zoom in" onClick={() => leafletMapRef.current?.zoomIn(1)}>+</button>
+              <button className="topbar-btn" type="button" aria-label="Zoom out" onClick={() => leafletMapRef.current?.zoomOut(0.5)}>−</button>
+              <button className="topbar-btn" type="button" aria-label="Zoom in" onClick={() => leafletMapRef.current?.zoomIn(0.5)}>+</button>
             </div>
             <div className="topbar-divider" />
             <button className="help-icon-btn" type="button" title="How to use Exploration Maps" onClick={() => setShowHelpModal(true)}>?</button>

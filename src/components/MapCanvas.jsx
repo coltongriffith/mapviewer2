@@ -76,9 +76,9 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
       zoom: 5,
       zoomControl: false,
       preferCanvas: true,
-      zoomSnap: 0.5,
-      zoomDelta: 1,
-      wheelPxPerZoomLevel: 80,
+      zoomSnap: 0.25,
+      zoomDelta: 0.5,
+      wheelPxPerZoomLevel: 120,
     });
 
     map.dragging.enable();
