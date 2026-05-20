@@ -7,7 +7,7 @@ const BASE_ZONES = {
   inset: { top: 22, right: 22, width: 244, height: 190 },
   legend: { bottom: 102, left: 22, width: 300, height: 168 },
   scaleBar: { bottom: 22, left: 22, width: 230, height: 64 },
-  northArrow: { bottom: 22, right: 22, width: 74, height: 100 },
+  northArrow: { bottom: 22, right: 22, width: 90, height: 100 },
   footer: { bottom: 22, left: 270, width: 440, height: 42 },
 };
 
@@ -167,7 +167,7 @@ export function resolveTemplateZones(template, layout, mapSize, legendItems) {
   const logoW = layout?.logoWidthPx ? Math.max(40, Math.min(400, layout.logoWidthPx)) : Math.round(BASE_ZONES.logo.width * logoScale);
   const logoH = layout?.logoHeightPx ? Math.max(20, Math.min(300, layout.logoHeightPx)) : Math.round(BASE_ZONES.logo.height * logoScale);
   const naH = layout?.northArrowHeightPx ?? BASE_ZONES.northArrow.height;
-  const naW = Math.round(naH * 0.74);
+  const naW = Math.round(naH * 0.90);
 
   function sizeOf(id) {
     switch (id) {

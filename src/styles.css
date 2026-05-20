@@ -211,10 +211,7 @@ button, input, select, textarea { font: inherit; }
 .legend-swatch { width: 18px; height: 12px; border-radius: 2px; border: 1px solid #3b82f6; flex: 0 0 auto; }
 .legend-point { width: 12px; height: 12px; border-radius: 999px; border: 1px solid #111; background: #fff; flex: 0 0 auto; }
 .legend-line-svg { display: block; flex: 0 0 auto; overflow: visible; }
-.north-arrow-card { display: flex; align-items: center; justify-content: center; flex-direction: column; background: var(--north-fill, var(--panel-bg, rgba(255,255,255,0.95))); }
-.north-arrow-label { font-weight: 700; font-size: 22px; color: var(--north-fg, #122033); margin-top: 10px; }
-.north-arrow-icon { color: var(--north-fg, #122033); font-size: 44px; line-height: 1; margin-top: 2px; }
-.north-arrow-stem { width: 6px; height: 30px; background: var(--north-fg, #122033); border-radius: 999px; margin-top: -6px; margin-bottom: 16px; }
+.north-arrow-card { background: var(--north-fill, var(--panel-bg, rgba(255,255,255,0.95))); }
 .scale-card { padding: 16px; background: var(--scale-bg, var(--panel-bg, rgba(255,255,255,0.95))); }
 .scale-bar-track { display: flex; height: 12px; border: 1px solid var(--scale-stroke, #122033); }
 .scale-bar-fill { background: var(--scale-stroke, #122033); width: 50%; }

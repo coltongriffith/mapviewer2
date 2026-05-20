@@ -416,12 +416,33 @@ function drawLegendCanvas(ctx, scene, scale) {
 function drawNorthArrowCanvas(ctx, scene, scale) {
   if (scene.project.layout?.showNorthArrow === false) return;
   const theme = getTheme(scene);
-  const { northArrow } = getOverlayMetrics(scene); const x = northArrow.left * scale, y = northArrow.top * scale, w = northArrow.width * scale, h = northArrow.height * scale, cx = x + w / 2;
+  const { northArrow } = getOverlayMetrics(scene);
+  const x = northArrow.left * scale, y = northArrow.top * scale, w = northArrow.width * scale, h = northArrow.height * scale;
   drawPanelRect(ctx, x, y, w, h, (theme.panelRadius ?? 10) * scale, theme.northArrowFill, theme.panelBorder, scale);
   drawPanelAccentLeft(ctx, x, y, h, theme, scale);
-  ctx.fillStyle = theme.northArrowText; ctx.font = `700 ${14 * scale}px Arial`; ctx.textAlign = 'center'; ctx.textBaseline = 'top'; ctx.fillText('N', cx, y + 12 * scale);
-  ctx.beginPath(); ctx.moveTo(cx, y + 28 * scale); ctx.lineTo(cx - 12 * scale, y + 62 * scale); ctx.lineTo(cx - 3 * scale, y + 62 * scale); ctx.lineTo(cx - 3 * scale, y + 88 * scale); ctx.lineTo(cx + 3 * scale, y + 88 * scale); ctx.lineTo(cx + 3 * scale, y + 62 * scale); ctx.lineTo(cx + 12 * scale, y + 62 * scale); ctx.closePath(); ctx.fill();
-  ctx.textAlign = 'left';
+  const cx = x + w / 2;
+  const cy = y + h * 0.56;
+  const R = h * 0.27, Re = R * 0.71, rn = h * 0.09, r45 = rn * 0.707;
+  const fg = theme.northArrowText;
+  const drawPoint = (tipX, tipY, p1x, p1y, p2x, p2y, alpha) => {
+    ctx.save(); ctx.globalAlpha = alpha;
+    ctx.beginPath(); ctx.moveTo(tipX, tipY); ctx.lineTo(p1x, p1y); ctx.lineTo(cx, cy); ctx.lineTo(p2x, p2y); ctx.closePath();
+    ctx.fillStyle = fg; ctx.fill(); ctx.restore();
+  };
+  drawPoint(cx, cy - R, cx + r45, cy - r45, cx - r45, cy - r45, 1.0);
+  drawPoint(cx, cy + R, cx - r45, cy + r45, cx + r45, cy + r45, 0.55);
+  drawPoint(cx + Re, cy, cx + r45, cy + r45, cx + r45, cy - r45, 0.35);
+  drawPoint(cx - Re, cy, cx - r45, cy - r45, cx - r45, cy + r45, 0.35);
+  ctx.save(); ctx.globalAlpha = 0.2;
+  ctx.beginPath(); ctx.arc(cx, cy, R + rn * 0.5, 0, Math.PI * 2);
+  ctx.strokeStyle = fg; ctx.lineWidth = h * 0.012; ctx.stroke(); ctx.restore();
+  ctx.beginPath(); ctx.arc(cx, cy, h * 0.044, 0, Math.PI * 2);
+  ctx.fillStyle = theme.northArrowFill; ctx.fill();
+  ctx.strokeStyle = fg; ctx.lineWidth = h * 0.018; ctx.stroke();
+  ctx.fillStyle = fg; ctx.font = `700 ${h * 0.16}px Arial`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('N', cx, y + h * 0.14);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
 }
 
 function pickScaleLabel(map) {
@@ -1751,8 +1772,18 @@ function renderLegendSvg(scene, scale) {
 }
 function renderNorthArrowSvg(scene, scale) {
   if (scene.project.layout?.showNorthArrow === false) return '';
-  const theme = getTheme(scene); const { northArrow } = getOverlayMetrics(scene); const x = northArrow.left * scale, y = northArrow.top * scale, w = northArrow.width * scale, h = northArrow.height * scale, cx = x + w / 2;
-  return `<g id="em-north-arrow" class="em-panel">${svgRect(x, y, w, h, (theme.panelRadius ?? 10) * scale, theme.northArrowFill, theme.panelBorder, scale)}${svgPanelAccentLeft(x, y, h, theme, scale)}<text x="${cx}" y="${y + 24 * scale}" text-anchor="middle" fill="${theme.northArrowText}" font-family="Arial" font-size="${14 * scale}" font-weight="700">N</text><path d="M ${cx} ${y + 28 * scale} L ${cx - 12 * scale} ${y + 62 * scale} L ${cx - 3 * scale} ${y + 62 * scale} L ${cx - 3 * scale} ${y + 88 * scale} L ${cx + 3 * scale} ${y + 88 * scale} L ${cx + 3 * scale} ${y + 62 * scale} L ${cx + 12 * scale} ${y + 62 * scale} Z" fill="${theme.northArrowText}" /></g>`;
+  const theme = getTheme(scene);
+  const { northArrow } = getOverlayMetrics(scene);
+  const x = northArrow.left * scale, y = northArrow.top * scale, w = northArrow.width * scale, h = northArrow.height * scale;
+  const cx = x + w / 2;
+  const cy = y + h * 0.56;
+  const R = h * 0.27, Re = R * 0.71, rn = h * 0.09, r45 = rn * 0.707;
+  const fg = theme.northArrowText, bg = theme.northArrowFill;
+  const nx = cx, ny = cy - R, sx = cx, sy = cy + R, ex = cx + Re, ey = cy, wx = cx - Re, wy = cy;
+  const ne_x = cx + r45, ne_y = cy - r45, se_x = cx + r45, se_y = cy + r45, sw_x = cx - r45, sw_y = cy + r45, nw_x = cx - r45, nw_y = cy - r45;
+  const panel = `${svgRect(x, y, w, h, (theme.panelRadius ?? 10) * scale, bg, theme.panelBorder, scale)}${svgPanelAccentLeft(x, y, h, theme, scale)}`;
+  const rose = `<path d="M ${nx} ${ny} L ${ne_x} ${ne_y} L ${cx} ${cy} L ${nw_x} ${nw_y} Z" fill="${fg}" /><path d="M ${sx} ${sy} L ${sw_x} ${sw_y} L ${cx} ${cy} L ${se_x} ${se_y} Z" fill="${fg}" fill-opacity="0.55" /><path d="M ${ex} ${ey} L ${se_x} ${se_y} L ${cx} ${cy} L ${ne_x} ${ne_y} Z" fill="${fg}" fill-opacity="0.35" /><path d="M ${wx} ${wy} L ${nw_x} ${nw_y} L ${cx} ${cy} L ${sw_x} ${sw_y} Z" fill="${fg}" fill-opacity="0.35" /><circle cx="${cx}" cy="${cy}" r="${R + rn * 0.5}" fill="none" stroke="${fg}" stroke-opacity="0.2" stroke-width="${h * 0.012}" /><circle cx="${cx}" cy="${cy}" r="${h * 0.044}" fill="${bg}" stroke="${fg}" stroke-width="${h * 0.018}" /><text x="${cx}" y="${y + h * 0.14}" text-anchor="middle" dominant-baseline="middle" fill="${fg}" font-family="Arial" font-size="${h * 0.16}" font-weight="700">N</text>`;
+  return `<g id="em-north-arrow" class="em-panel">${panel}${rose}</g>`;
 }
 function renderScaleBarSvg(scene, scale) {
   if (scene.project.layout?.showScaleBar === false) return '';

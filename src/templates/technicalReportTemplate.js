@@ -209,7 +209,7 @@ export function resolveNI43101Zones(template, layout, mapSize, legendItems) {
   const logoW = layout?.logoWidthPx ? Math.max(40, Math.min(400, layout.logoWidthPx)) : 168;
   const logoH = layout?.logoHeightPx ? Math.max(20, Math.min(300, layout.logoHeightPx)) : 74;
   const naH = layout?.northArrowHeightPx ?? 100;
-  const naW = Math.round(naH * 0.74);
+  const naW = Math.round(naH * 0.90);
 
   function sizeOf(id) {
     switch (id) {
