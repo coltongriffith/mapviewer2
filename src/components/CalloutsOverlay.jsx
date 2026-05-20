@@ -1,9 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { resolveCalloutBoxes, leaderEndpoint } from '../utils/calloutLayout';
+import { computeSnap } from '../utils/layout';
 
 export default function CalloutsOverlay({ map, callouts, selectedCalloutId, onSelect, onMove, onUpdate, fontFamily }) {
   const [tick, setTick] = useState(0);
   const [editingField, setEditingField] = useState(null);
+  const [snapGuides, setSnapGuides] = useState([]);
   const dragRef = useRef(null);
 
   useEffect(() => { setEditingField(null); }, [selectedCalloutId]);
@@ -18,7 +20,7 @@ export default function CalloutsOverlay({ map, callouts, selectedCalloutId, onSe
   useEffect(() => {
     const handleMove = (event) => {
       if (!dragRef.current) return;
-      const { startX, startY, startOffset, startWidth, id, kind, pointerId } = dragRef.current;
+      const { startX, startY, startOffset, startWidth, startAbsX, startAbsY, boxW, boxH, snapEls, containerW, containerH, id, kind, pointerId } = dragRef.current;
       if (pointerId != null && event.pointerId !== pointerId) return;
       const dx = event.clientX - startX;
 
@@ -29,12 +31,19 @@ export default function CalloutsOverlay({ map, callouts, selectedCalloutId, onSe
       }
 
       const dy = event.clientY - startY;
-      onMove?.(id, { x: startOffset.x + dx, y: startOffset.y + dy, isManualPosition: true });
+      const newAbsX = startAbsX + dx;
+      const newAbsY = startAbsY + dy;
+      const snap = computeSnap(newAbsX, newAbsY, boxW, boxH, snapEls, containerW, containerH, id);
+      const snapDx = snap.x - newAbsX;
+      const snapDy = snap.y - newAbsY;
+      setSnapGuides(snap.guides);
+      onMove?.(id, { x: startOffset.x + dx + snapDx, y: startOffset.y + dy + snapDy, isManualPosition: true });
     };
 
     const handleUp = (event) => {
       if (dragRef.current?.pointerId != null && event.pointerId !== dragRef.current.pointerId) return;
       dragRef.current = null;
+      setSnapGuides([]);
     };
 
     window.addEventListener('pointermove', handleMove);
@@ -45,12 +54,15 @@ export default function CalloutsOverlay({ map, callouts, selectedCalloutId, onSe
       window.removeEventListener('pointerup', handleUp);
       window.removeEventListener('pointercancel', handleUp);
     };
-  }, [onMove]);
+  }, [onMove, onUpdate]);
 
   const placed = useMemo(() => resolveCalloutBoxes(callouts, map), [callouts, map, tick]);
 
   return (
     <div className="callouts-overlay">
+      {snapGuides.map((g, i) => (
+        <div key={i} style={{ position: 'absolute', pointerEvents: 'none', zIndex: 9999, background: 'rgba(80,180,255,0.7)', ...(g.type === 'v' ? { left: g.pos, top: 0, width: 1, height: '100%' } : { top: g.pos, left: 0, height: 1, width: '100%' }) }} />
+      ))}
       <svg className="callout-leader-svg">
         {placed.map((callout) => {
           const style = callout.style || {};
@@ -105,11 +117,21 @@ export default function CalloutsOverlay({ map, callouts, selectedCalloutId, onSe
               event.preventDefault();
               event.stopPropagation();
               onSelect?.(callout.id);
+              const size = map?.getSize() || { x: 1200, y: 800 };
               dragRef.current = {
                 id: callout.id,
                 startX: event.clientX,
                 startY: event.clientY,
                 startOffset: callout.offset || { x: 0, y: 0 },
+                startAbsX: callout.left,
+                startAbsY: callout.top,
+                boxW: callout.width || 160,
+                boxH: callout.height || 40,
+                snapEls: placed
+                  .filter((c) => c.id !== callout.id)
+                  .map((c) => ({ id: c.id, x: c.left, y: c.top, w: c.width || 160, h: c.height || 40 })),
+                containerW: size.x,
+                containerH: size.y,
                 pointerId: event.pointerId,
               };
             }}
