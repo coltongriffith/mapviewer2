@@ -626,6 +626,8 @@ export default function App() {
   const mapDateDebounceRef = useRef(null);
   const projectNumberDebounceRef = useRef(null);
   const mapScaleNoteDebounceRef = useRef(null);
+  // Tracks which metadata fields have unsaved user input (debounce pending)
+  const metaDirtyRef = useRef({ legendTitle: false, footerText: false, mapDate: false, projectNumber: false, mapScaleNote: false });
   const annotationToolRef = useRef(null);
   const [editingTitleField, setEditingTitleField] = useState(null);
   const [csvMappingData, setCsvMappingData] = useState(null); // { headers, rows, filename } for ColumnMapperModal
@@ -726,8 +728,15 @@ export default function App() {
   // Show storage warning banner for anonymous users when local storage is getting full
   const showStorageWarning = !user && !storageWarningDismissed && estimateStorageUsedBytes() > 3_500_000;
 
-  // Sync local fields when project changes from an external action (open, duplicate, new)
+  // Sync local fields when project changes from an external action (open, duplicate, new).
+  // Cancel pending debounce timers first to prevent cross-project writes.
   useEffect(() => {
+    clearTimeout(legendTitleDebounceRef.current);
+    clearTimeout(footerTextDebounceRef.current);
+    clearTimeout(mapDateDebounceRef.current);
+    clearTimeout(projectNumberDebounceRef.current);
+    clearTimeout(mapScaleNoteDebounceRef.current);
+    metaDirtyRef.current = { legendTitle: false, footerText: false, mapDate: false, projectNumber: false, mapScaleNote: false };
     setLocalTitle(project.layout.title || '');
     setLocalSubtitle(project.layout.subtitle || '');
     setLocalLegendTitle(project.layout.legendTitle ?? 'Legend');
@@ -736,6 +745,14 @@ export default function App() {
     setLocalProjectNumber(project.layout.projectNumber || '');
     setLocalMapScaleNote(project.layout.mapScaleNote || '');
   }, [projectId]);
+
+  // Resync individual metadata fields when layout changes externally (e.g. template applied),
+  // but not while the user is actively editing that field.
+  useEffect(() => { if (!metaDirtyRef.current.legendTitle) setLocalLegendTitle(project.layout.legendTitle ?? 'Legend'); }, [project.layout.legendTitle]);
+  useEffect(() => { if (!metaDirtyRef.current.footerText) setLocalFooterText(project.layout.footerText || ''); }, [project.layout.footerText]);
+  useEffect(() => { if (!metaDirtyRef.current.mapDate) setLocalMapDate(project.layout.mapDate || ''); }, [project.layout.mapDate]);
+  useEffect(() => { if (!metaDirtyRef.current.projectNumber) setLocalProjectNumber(project.layout.projectNumber || ''); }, [project.layout.projectNumber]);
+  useEffect(() => { if (!metaDirtyRef.current.mapScaleNote) setLocalMapScaleNote(project.layout.mapScaleNote || ''); }, [project.layout.mapScaleNote]);
 
   useEffect(() => {
     const container = mapContainerRef.current;
@@ -2806,18 +2823,18 @@ export default function App() {
             <details className="sub-details">
               <summary>Text & Metadata</summary>
               <div className="sub-details-body">
-                <div className="control-row"><label>Legend Title</label><input value={localLegendTitle} onChange={(e) => { const val = e.target.value; setLocalLegendTitle(val); clearTimeout(legendTitleDebounceRef.current); legendTitleDebounceRef.current = setTimeout(() => updateLayout({ legendTitle: val }), 300); }} placeholder="Legend" /></div>
+                <div className="control-row"><label>Legend Title</label><input value={localLegendTitle} onChange={(e) => { const val = e.target.value; setLocalLegendTitle(val); metaDirtyRef.current.legendTitle = true; clearTimeout(legendTitleDebounceRef.current); legendTitleDebounceRef.current = setTimeout(() => { updateLayout({ legendTitle: val }); metaDirtyRef.current.legendTitle = false; }, 300); }} placeholder="Legend" /></div>
                 <div className="control-row" style={{ alignItems: 'center' }}>
                   <label>Text Size</label>
                   <input type="range" min="0.6" max="1.5" step="0.05" value={project.layout.legendFontScale ?? 1} onChange={(e) => updateLayout({ legendFontScale: parseFloat(e.target.value) })} style={{ flex: 1 }} />
                   <span style={{ fontSize: 11, marginLeft: 6, minWidth: 32 }}>{Math.round((project.layout.legendFontScale ?? 1) * 100)}%</span>
                 </div>
-                <div className="control-row"><label>Footer / Disclaimer</label><input value={localFooterText} onChange={(e) => { const val = e.target.value; setLocalFooterText(val); clearTimeout(footerTextDebounceRef.current); footerTextDebounceRef.current = setTimeout(() => updateLayout({ footerText: val }), 300); }} placeholder="e.g. For internal use only" /></div>
+                <div className="control-row"><label>Footer / Disclaimer</label><input value={localFooterText} onChange={(e) => { const val = e.target.value; setLocalFooterText(val); metaDirtyRef.current.footerText = true; clearTimeout(footerTextDebounceRef.current); footerTextDebounceRef.current = setTimeout(() => { updateLayout({ footerText: val }); metaDirtyRef.current.footerText = false; }, 300); }} placeholder="e.g. For internal use only" /></div>
                 <div className="control-row inline-2">
-                  <div><label>Map Date</label><input value={localMapDate} onChange={(e) => { const val = e.target.value; setLocalMapDate(val); clearTimeout(mapDateDebounceRef.current); mapDateDebounceRef.current = setTimeout(() => updateLayout({ mapDate: val }), 300); }} placeholder="e.g. April 2025" /></div>
-                  <div><label>Project #</label><input value={localProjectNumber} onChange={(e) => { const val = e.target.value; setLocalProjectNumber(val); clearTimeout(projectNumberDebounceRef.current); projectNumberDebounceRef.current = setTimeout(() => updateLayout({ projectNumber: val }), 300); }} placeholder="e.g. P-2024-01" /></div>
+                  <div><label>Map Date</label><input value={localMapDate} onChange={(e) => { const val = e.target.value; setLocalMapDate(val); metaDirtyRef.current.mapDate = true; clearTimeout(mapDateDebounceRef.current); mapDateDebounceRef.current = setTimeout(() => { updateLayout({ mapDate: val }); metaDirtyRef.current.mapDate = false; }, 300); }} placeholder="e.g. April 2025" /></div>
+                  <div><label>Project #</label><input value={localProjectNumber} onChange={(e) => { const val = e.target.value; setLocalProjectNumber(val); metaDirtyRef.current.projectNumber = true; clearTimeout(projectNumberDebounceRef.current); projectNumberDebounceRef.current = setTimeout(() => { updateLayout({ projectNumber: val }); metaDirtyRef.current.projectNumber = false; }, 300); }} placeholder="e.g. P-2024-01" /></div>
                 </div>
-                <div className="control-row"><label>Scale Note</label><input value={localMapScaleNote} onChange={(e) => { const val = e.target.value; setLocalMapScaleNote(val); clearTimeout(mapScaleNoteDebounceRef.current); mapScaleNoteDebounceRef.current = setTimeout(() => updateLayout({ mapScaleNote: val }), 300); }} placeholder="e.g. 1:50,000" /></div>
+                <div className="control-row"><label>Scale Note</label><input value={localMapScaleNote} onChange={(e) => { const val = e.target.value; setLocalMapScaleNote(val); metaDirtyRef.current.mapScaleNote = true; clearTimeout(mapScaleNoteDebounceRef.current); mapScaleNoteDebounceRef.current = setTimeout(() => { updateLayout({ mapScaleNote: val }); metaDirtyRef.current.mapScaleNote = false; }, 300); }} placeholder="e.g. 1:50,000" /></div>
               </div>
             </details>
 
