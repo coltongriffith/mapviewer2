@@ -648,6 +648,7 @@ export default function App() {
   const mapDateDebounceRef = useRef(null);
   const projectNumberDebounceRef = useRef(null);
   const mapScaleNoteDebounceRef = useRef(null);
+  const layerStyleDebounceRef = useRef(null);
   // Tracks which metadata fields have unsaved user input (debounce pending)
   const metaDirtyRef = useRef({ legendTitle: false, footerText: false, mapDate: false, projectNumber: false, mapScaleNote: false });
   const annotationToolRef = useRef(null);
@@ -812,6 +813,14 @@ export default function App() {
     return { width: availW, height: Math.round(availW / config.ratio) };
   }, [activeRatio, viewportSize]);
 
+  // Stable key for the auto-fit effect — changes only for fit-relevant layer events
+  // (add/remove, visibility toggle, role change, GeoJSON data arrives).
+  // Style-only changes (color, opacity) do NOT change this key, preventing unwanted re-fits.
+  const layerFitKey = useMemo(
+    () => project.layers.map(l => `${l.id}:${l.visible ? 1 : 0}:${l.role || ''}:${l.geojson ? 1 : 0}`).join('|'),
+    [project.layers]
+  );
+
   const mapStageStyle = useMemo(() => ({
     ...(constrainedStageSize || {}),
     '--template-radius': `${themeTokens.panelRadius}px`,
@@ -921,7 +930,7 @@ export default function App() {
       project.layout.compositionPreset || template.modePresets?.[project.layout.mode]?.framing || 'balanced'
     );
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [template, project.layout.frameVersion, project.layout.primaryLayerId, project.layout.compositionPreset, project.layers]);
+  }, [template, project.layout.frameVersion, project.layout.primaryLayerId, project.layout.compositionPreset, layerFitKey]);
 
   useEffect(() => {
     const map = leafletMapRef.current;
@@ -2192,11 +2201,11 @@ export default function App() {
               <div className="control-row inline-2">
                 <div>
                   <label>{isPointStyledLayer(selectedLayer) ? 'Point Border' : 'Outline Color'}</label>
-                  <input type="color" value={selectedLayer.style?.stroke || selectedLayer.style?.markerColor || '#2563eb'} onChange={(e) => updateLayer(selectedLayer.id, { style: { stroke: e.target.value, markerColor: e.target.value } })} />
+                  <input type="color" value={selectedLayer.style?.stroke || selectedLayer.style?.markerColor || '#2563eb'} onChange={(e) => { const id = selectedLayer.id, val = e.target.value; clearTimeout(layerStyleDebounceRef.current); layerStyleDebounceRef.current = setTimeout(() => updateLayer(id, { style: { stroke: val, markerColor: val } }), 50); }} />
                 </div>
                 <div>
                   <label>{isPointStyledLayer(selectedLayer) ? 'Point Fill' : 'Fill Color'}</label>
-                  <input type="color" value={selectedLayer.style?.fill || selectedLayer.style?.markerFill || '#93c5fd'} onChange={(e) => updateLayer(selectedLayer.id, { style: { fill: e.target.value, markerFill: e.target.value } })} />
+                  <input type="color" value={selectedLayer.style?.fill || selectedLayer.style?.markerFill || '#93c5fd'} onChange={(e) => { const id = selectedLayer.id, val = e.target.value; clearTimeout(layerStyleDebounceRef.current); layerStyleDebounceRef.current = setTimeout(() => updateLayer(id, { style: { fill: val, markerFill: val } }), 50); }} />
                 </div>
               </div>
               {isPointStyledLayer(selectedLayer) ? (
@@ -2239,14 +2248,14 @@ export default function App() {
                   <div className="control-row inline-2">
                     <div>
                       <label>Fill Opacity</label>
-                      <input type="range" min="0" max="1" step="0.05" value={selectedLayer.style?.fillOpacity ?? 0.22} onChange={(e) => updateLayer(selectedLayer.id, { style: { fillOpacity: Number(e.target.value) } })} />
+                      <input type="range" min="0" max="1" step="0.05" value={selectedLayer.style?.fillOpacity ?? 0.22} onChange={(e) => { const id = selectedLayer.id, val = Number(e.target.value); clearTimeout(layerStyleDebounceRef.current); layerStyleDebounceRef.current = setTimeout(() => updateLayer(id, { style: { fillOpacity: val } }), 50); }} />
                     </div>
                     <div className="range-value">{Math.round((selectedLayer.style?.fillOpacity ?? 0.22) * 100)}%</div>
                   </div>
                   <div className="control-row inline-2">
                     <div>
                       <label>Layer Opacity</label>
-                      <input type="range" min="0" max="1" step="0.05" value={selectedLayer.style?.layerOpacity ?? 1} onChange={(e) => updateLayer(selectedLayer.id, { style: { layerOpacity: Number(e.target.value) } })} />
+                      <input type="range" min="0" max="1" step="0.05" value={selectedLayer.style?.layerOpacity ?? 1} onChange={(e) => { const id = selectedLayer.id, val = Number(e.target.value); clearTimeout(layerStyleDebounceRef.current); layerStyleDebounceRef.current = setTimeout(() => updateLayer(id, { style: { layerOpacity: val } }), 50); }} />
                     </div>
                     <div className="range-value">{Math.round((selectedLayer.style?.layerOpacity ?? 1) * 100)}%</div>
                   </div>

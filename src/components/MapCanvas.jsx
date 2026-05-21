@@ -64,6 +64,8 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
   const regionHighlightGroupRef = useRef(null);
   const referenceRefs = useRef({});
   const svgRendererRefs = useRef([]);
+  const prevLayersRef = useRef([]);
+  const leafletLayerRefsMap = useRef(new Map());
 
   useEffect(() => { onMapClickRef.current = onMapClick; }, [onMapClick]);
   useEffect(() => { onFeatureClickRef.current = onFeatureClick; }, [onFeatureClick]);
@@ -183,12 +185,49 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
     const group = overlayGroupRef.current;
     if (!map || !group) return;
 
+    const newLayers = project?.layers || [];
+    const oldLayers = prevLayersRef.current;
+
+    // Style-only fast path: if no layer was added/removed, no GeoJSON changed, no visibility
+    // changed, and no fill pattern changed, skip the full rebuild and just update styles.
+    const isStyleOnly =
+      newLayers.length === oldLayers.length &&
+      leafletLayerRefsMap.current.size > 0 &&
+      newLayers.every((nl, i) => {
+        const ol = oldLayers[i];
+        return ol && nl.id === ol.id && nl.geojson === ol.geojson &&
+               nl.visible === ol.visible && nl.type !== 'point' &&
+               (nl.style?.fillPattern || 'none') === (ol.style?.fillPattern || 'none');
+      });
+
+    if (isStyleOnly) {
+      newLayers.forEach((layer) => {
+        if (layer.visible === false || !layer.geojson) return;
+        const geoLayer = leafletLayerRefsMap.current.get(layer.id);
+        if (!geoLayer) return;
+        const baseStyle = template?.roleStyles?.[layer.role] || template?.roleStyles?.other || {};
+        const style = { ...baseStyle, ...(layer.style || {}) };
+        const lo = style.layerOpacity ?? 1;
+        geoLayer.setStyle({
+          color: style.stroke || '#54a6ff',
+          weight: style.strokeWidth ?? 2,
+          fillColor: style.fill || '#54a6ff',
+          fillOpacity: (style.fillOpacity ?? 0.22) * lo,
+          dashArray: style.dashArray || '',
+          opacity: (style.opacity ?? 1) * lo,
+        });
+      });
+      prevLayersRef.current = newLayers;
+      return;
+    }
+
     group.clearLayers();
     // Remove stale SVG renderers from previous render to prevent pattern ID conflicts
     svgRendererRefs.current.forEach((r) => { try { r.remove(); } catch (_) {} });
     svgRendererRefs.current = [];
+    leafletLayerRefsMap.current.clear();
 
-    (project?.layers || []).forEach((layer) => {
+    newLayers.forEach((layer) => {
       if (layer.visible === false || !layer.geojson) return;
 
       const baseStyle = template?.roleStyles?.[layer.role] || template?.roleStyles?.other || {};
@@ -270,6 +309,7 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
       });
 
       geoLayer.addTo(group);
+      leafletLayerRefsMap.current.set(layer.id, geoLayer);
 
       if (hasPattern && svgRenderer) {
         const fillColor = style.fill || '#54a6ff';
@@ -315,6 +355,7 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
         geoLayer.bringToFront();
       }
     });
+    prevLayersRef.current = newLayers;
   }, [project?.layers, template]);
 
   return <div ref={mapElRef} className="leaflet-map-canvas" />;
