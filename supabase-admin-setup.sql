@@ -43,7 +43,7 @@ as $$
   select exists (
     select 1 from auth.users
     where id = auth.uid()
-    and email = current_setting('app.admin_email', true)
+    and email = 'coltongriffith@live.ca'
   );
 $$;
 
@@ -90,8 +90,7 @@ as $$
   limit 200;
 $$;
 
--- 5. Set your admin email (replace if different)
-alter database postgres set app.admin_email = 'colton.griffith1616@gmail.com';
+-- (no alter database needed — email is hardcoded in is_admin() above)
 
 -- 6. Recent exports feed (add this after running the initial setup)
 create or replace function admin_get_recent_exports()
