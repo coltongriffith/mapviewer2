@@ -92,3 +92,27 @@ $$;
 
 -- 5. Set your admin email (replace if different)
 alter database postgres set app.admin_email = 'colton.griffith1616@gmail.com';
+
+-- 6. Recent exports feed (add this after running the initial setup)
+create or replace function admin_get_recent_exports()
+returns table (
+  format text,
+  project_name text,
+  user_email text,
+  no_watermark boolean,
+  created_at timestamptz
+)
+language sql security definer stable
+as $$
+  select
+    e.format,
+    e.project_name,
+    u.email as user_email,
+    e."noWatermark" as no_watermark,
+    e.created_at
+  from public.export_events e
+  left join auth.users u on u.id = e.user_id
+  where is_admin()
+  order by e.created_at desc
+  limit 50;
+$$;
