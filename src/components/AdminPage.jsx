@@ -38,6 +38,7 @@ export default function AdminPage({ onExit }) {
   const [exportStats, setExportStats] = useState(null);
   const [leads, setLeads] = useState(null);
   const [recentExports, setRecentExports] = useState(null);
+  const [dailyVisitors, setDailyVisitors] = useState(null);
   const [dataLoading, setDataLoading] = useState(false);
   const [dataError, setDataError] = useState('');
 
@@ -57,12 +58,14 @@ export default function AdminPage({ onExit }) {
       supabase.rpc('admin_get_export_stats'),
       supabase.rpc('admin_get_leads'),
       supabase.rpc('admin_get_recent_exports'),
-    ]).then(([u, e, l, re]) => {
+      supabase.rpc('admin_get_daily_visitors'),
+    ]).then(([u, e, l, re, dv]) => {
       if (u.error) { setDataError(u.error.message); return; }
       setUsers(u.data || []);
       setExportStats(e.data || []);
       setLeads(l.data || []);
       setRecentExports(re.data || []);
+      setDailyVisitors(dv.data || []);
       setDataLoading(false);
     });
   }, [isAdmin]);
@@ -193,8 +196,43 @@ export default function AdminPage({ onExit }) {
                   .join(' · ')
               }
             />
+            <StatCard
+              label="Visitors (30 days)"
+              value={dailyVisitors ? dailyVisitors.reduce((s, r) => s + Number(r.sessions || 0), 0) : undefined}
+              sub={dailyVisitors?.length ? `${dailyVisitors[0]?.visit_date}: ${dailyVisitors[0]?.sessions} sessions` : undefined}
+            />
             <StatCard label="Email Leads" value={leads?.length} />
           </div>
+        )}
+
+        {/* Daily visitors chart */}
+        {dailyVisitors && dailyVisitors.length > 0 && (
+          <section className="admin-section">
+            <h2 className="admin-section-title">Daily Visitors <span className="admin-section-count">(last 30 days)</span></h2>
+            <div className="admin-visitor-chart">
+              {(() => {
+                const max = Math.max(...dailyVisitors.map((r) => Number(r.sessions)));
+                return dailyVisitors.map((r) => (
+                  <div key={r.visit_date} className="admin-visitor-bar-wrap" title={`${r.visit_date}: ${r.sessions} sessions`}>
+                    <div className="admin-visitor-bar" style={{ height: `${Math.max(4, Math.round((Number(r.sessions) / max) * 80))}px` }} />
+                    <div className="admin-visitor-label">{String(r.sessions)}</div>
+                  </div>
+                ));
+              })()}
+            </div>
+            <table className="admin-table" style={{ marginTop: 16 }}>
+              <thead><tr><th>Date</th><th>Sessions</th><th>Logged-in Users</th></tr></thead>
+              <tbody>
+                {dailyVisitors.map((r) => (
+                  <tr key={r.visit_date}>
+                    <td className="admin-cell-muted">{r.visit_date}</td>
+                    <td>{r.sessions}</td>
+                    <td className="admin-cell-muted">{r.logged_in_sessions ?? 0}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
         )}
 
         {/* Export breakdown */}

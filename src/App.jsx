@@ -732,6 +732,16 @@ export default function App() {
     }
   }, [user, projectId, isDirty]);
 
+  // Track unique visitor sessions (once per browser session, fire-and-forget)
+  useEffect(() => {
+    if (!supabase || sessionStorage.getItem('em_visited')) return;
+    sessionStorage.setItem('em_visited', '1');
+    supabase.from('page_views').insert({
+      user_id: user?.id ?? null,
+      path: window.location.pathname,
+    }).then(() => {});
+  }, [user]);
+
   // When user logs in, apply their default template to the current (unsaved) project
   useEffect(() => {
     if (!user) return;
@@ -1879,7 +1889,7 @@ export default function App() {
           user_id: user?.id ?? null,
           format,
           project_name: project.layout?.title || projectName || 'Untitled',
-          no_watermark: Boolean(extraOptions.noWatermark),
+          noWatermark: Boolean(extraOptions.noWatermark),
         }).then(() => {});
       }
     } catch (err) {

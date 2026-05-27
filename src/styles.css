@@ -1550,3 +1550,21 @@ button, input, select, textarea { font: inherit; }
 
 /* Error */
 .admin-error { color: #dc2626; font-size: 13px; margin: 8px 0; }
+
+/* Visitor chart */
+.admin-visitor-chart {
+  display: flex; align-items: flex-end; gap: 4px;
+  height: 100px; padding: 8px 0 0;
+  border-bottom: 2px solid #e2e8f0;
+}
+.admin-visitor-bar-wrap {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 4px; flex: 1; min-width: 0;
+}
+.admin-visitor-bar {
+  width: 100%; background: #3b82f6; border-radius: 3px 3px 0 0;
+  transition: height 0.2s;
+}
+.admin-visitor-label {
+  font-size: 10px; color: #64748b;
+}
