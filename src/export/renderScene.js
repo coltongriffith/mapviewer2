@@ -322,6 +322,7 @@ function toSvgFill(color, def = '#ffffff') {
 
 
 function drawTitleBlockCanvas(ctx, scene, scale) {
+  if (scene.project.layout?.showTitle === false) return;
   const theme = getTheme(scene);
   const layout = scene.project.layout || {};
   const { title } = getOverlayMetrics(scene); const x = title.left * scale, y = title.top * scale, w = title.width * scale, h = title.height * scale;
@@ -379,6 +380,7 @@ function legendSwatchSvg(item, x, y, scale) {
   return `<rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${(18 * scale).toFixed(2)}" height="${(12 * scale).toFixed(2)}" fill="${style.fill || '#72a0ff'}" fill-opacity="${style.fillOpacity ?? 0.22}" stroke="${style.stroke || '#3b82f6'}" stroke-width="${Math.max(1, scale).toFixed(2)}" />`;
 }
 function drawLegendCanvas(ctx, scene, scale) {
+  if (scene.project.layout?.showLegend === false) return;
   const theme = getTheme(scene);
   const legendFont = `${scene.project.layout?.fonts?.legend || 'Inter'}, Arial, sans-serif`;
   const lfs = scene.project.layout?.legendFontScale ?? 1;
@@ -1112,6 +1114,7 @@ function displaceLat(lat, meters) {
 }
 
 function drawTitleStripCanvas(ctx, scene, scale) {
+  if (scene.project.layout?.showTitle === false) return;
   const layout = scene.project.layout || {};
   const stripPos = layout.titleStripPosition || 'bottom';
   const canvasW = Math.round(scene.width * scale);
@@ -1209,6 +1212,7 @@ function drawTitleStripCanvas(ctx, scene, scale) {
 }
 
 function renderTitleStripSvg(scene, scale) {
+  if (scene.project.layout?.showTitle === false) return '';
   const layout = scene.project.layout || {};
   const stripPos = layout.titleStripPosition || 'bottom';
   const canvasW = Math.round(scene.width * scale);
@@ -1738,6 +1742,7 @@ function renderEllipsesSvg(scene, scale, svgDefs) {
   }).join('\n');
 }
 function renderTitleSvg(scene, scale) {
+  if (scene.project.layout?.showTitle === false) return '';
   const theme = getTheme(scene);
   const layout = scene.project.layout || {};
   const { title } = getOverlayMetrics(scene);
@@ -1762,6 +1767,7 @@ function svgPanelAccentLeft(x, y, h, theme, scale) {
   return `<rect x="${x}" y="${y}" width="${4 * scale}" height="${h}" fill="${theme.panelAccentLeft}" />`;
 }
 function renderLegendSvg(scene, scale) {
+  if (scene.project.layout?.showLegend === false) return '';
   const { legend } = getOverlayMetrics(scene); const items = scene.project.layout?.legendItems || []; if (!items.length) return '';
   const x = legend.left * scale, y = legend.top * scale, w = legend.width * scale, h = legend.height * scale;
   const theme = getTheme(scene);
