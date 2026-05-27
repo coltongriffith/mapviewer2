@@ -1,3 +1,5 @@
+import { supabase } from '../lib/supabase';
+
 const LEAD_KEY = 'mapviewer.hdLeadCaptures';
 
 /**
@@ -18,6 +20,14 @@ export function saveLead({ email, projectTitle = '' }) {
     localStorage.setItem(LEAD_KEY, JSON.stringify(existing));
   } catch {
     // localStorage quota exceeded or unavailable — fail silently
+  }
+  // Mirror to Supabase for admin dashboard visibility (fire-and-forget)
+  if (supabase) {
+    supabase.from('leads').insert({
+      email: entry.email,
+      project_title: entry.projectTitle || null,
+      captured_at: entry.capturedAt,
+    }).then(() => {});
   }
   return entry;
 }

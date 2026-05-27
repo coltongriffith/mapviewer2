@@ -6,6 +6,7 @@ import LayerList from './components/LayerList';
 import LocatorInset from './components/LocatorInset';
 import CalloutsOverlay from './components/CalloutsOverlay';
 import LandingPage from './components/LandingPage';
+import AdminPage from './components/AdminPage';
 import UploadPanel from './components/UploadPanel';
 import AnnotationOverlay from './components/AnnotationOverlay';
 import ShadeOverlay from './components/ShadeOverlay';
@@ -66,6 +67,7 @@ import {
   TEMPLATE_SAVEABLE_KEYS,
 } from './utils/cloudStorage';
 import { useAuth } from './hooks/useAuth';
+import { supabase } from './lib/supabase';
 import UserMenu from './components/UserMenu';
 import { CORNER_KEY, getCornerLayout, moveToCorner, moveToCornerFirst, moveToCornerBeside } from './utils/cornerLayout';
 
@@ -599,7 +601,9 @@ export default function App() {
   const [renamingTemplateId, setRenamingTemplateId] = useState(null);
   const [renamingTemplateName, setRenamingTemplateName] = useState('');
 
-  const [screen, setScreen] = useState('landing');
+  const [screen, setScreen] = useState(() =>
+    window.location.pathname === '/admin' ? 'admin' : 'landing'
+  );
   const initialWorkspace = useMemo(() => initialWorkspaceState(), []);
   const [project, setProject] = useState(initialWorkspace.project);
   const [projectId, setProjectId] = useState(initialWorkspace.projectId);
@@ -799,6 +803,15 @@ export default function App() {
     const ro = new ResizeObserver(update);
     ro.observe(viewport);
     return () => ro.disconnect();
+  }, [screen]);
+
+  // Sync URL bar with screen state
+  useEffect(() => {
+    if (screen === 'admin') {
+      if (window.location.pathname !== '/admin') window.history.replaceState({}, '', '/admin');
+    } else if (window.location.pathname === '/admin') {
+      window.history.replaceState({}, '', '/');
+    }
   }, [screen]);
 
   const constrainedStageSize = useMemo(() => {
@@ -1860,6 +1873,15 @@ export default function App() {
       if (warnings.length > 0) {
         setUploadStatus({ type: 'info', message: `Export complete — note: ${warnings.join('; ')}.` });
       }
+      // Track export event (fire-and-forget — doesn't block export)
+      if (supabase) {
+        supabase.from('export_events').insert({
+          user_id: user?.id ?? null,
+          format,
+          project_name: project.layout?.title || projectName || 'Untitled',
+          no_watermark: Boolean(extraOptions.noWatermark),
+        }).then(() => {});
+      }
     } catch (err) {
       setExportError(`Export failed: ${err.message}`);
       setUploadStatus({ type: 'error', message: `Export failed: ${err.message}` });
@@ -2055,6 +2077,10 @@ export default function App() {
   };
 
   const referenceOverlays = project.layout.referenceOverlays || {};
+
+  if (screen === 'admin') {
+    return <AdminPage onExit={() => setScreen('landing')} />;
+  }
 
   if (screen === 'landing') {
     return (
