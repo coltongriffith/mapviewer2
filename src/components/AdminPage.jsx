@@ -39,6 +39,9 @@ export default function AdminPage({ onExit }) {
   const [leads, setLeads] = useState(null);
   const [recentExports, setRecentExports] = useState(null);
   const [dailyVisitors, setDailyVisitors] = useState(null);
+  const [referrerStats, setReferrerStats] = useState(null);
+  const [deviceStats, setDeviceStats] = useState(null);
+  const [exportsByUser, setExportsByUser] = useState(null);
   const [dataLoading, setDataLoading] = useState(false);
   const [dataError, setDataError] = useState('');
 
@@ -59,13 +62,19 @@ export default function AdminPage({ onExit }) {
       supabase.rpc('admin_get_leads'),
       supabase.rpc('admin_get_recent_exports'),
       supabase.rpc('admin_get_daily_visitors'),
-    ]).then(([u, e, l, re, dv]) => {
+      supabase.rpc('admin_get_referrer_stats'),
+      supabase.rpc('admin_get_device_stats'),
+      supabase.rpc('admin_get_exports_by_user'),
+    ]).then(([u, e, l, re, dv, ref, dev, ebu]) => {
       if (u.error) { setDataError(u.error.message); return; }
       setUsers(u.data || []);
       setExportStats(e.data || []);
       setLeads(l.data || []);
       setRecentExports(re.data || []);
       setDailyVisitors(dv.data || []);
+      setReferrerStats(ref.data || []);
+      setDeviceStats(dev.data || []);
+      setExportsByUser(ebu.data || []);
       setDataLoading(false);
     });
   }, [isAdmin]);
@@ -205,29 +214,96 @@ export default function AdminPage({ onExit }) {
           </div>
         )}
 
-        {/* Daily visitors chart */}
-        {dailyVisitors && dailyVisitors.length > 0 && (
+        {/* Traffic overview — visitors + referrers + devices */}
+        {dailyVisitors && (
           <section className="admin-section">
-            <h2 className="admin-section-title">Daily Visitors <span className="admin-section-count">(last 30 days)</span></h2>
-            <div className="admin-visitor-chart">
-              {(() => {
-                const max = Math.max(...dailyVisitors.map((r) => Number(r.sessions)));
-                return dailyVisitors.map((r) => (
-                  <div key={r.visit_date} className="admin-visitor-bar-wrap" title={`${r.visit_date}: ${r.sessions} sessions`}>
-                    <div className="admin-visitor-bar" style={{ height: `${Math.max(4, Math.round((Number(r.sessions) / max) * 80))}px` }} />
-                    <div className="admin-visitor-label">{String(r.sessions)}</div>
+            <h2 className="admin-section-title">Traffic <span className="admin-section-count">(last 30 days)</span></h2>
+            <div className="admin-traffic-grid">
+
+              {/* Bar chart */}
+              <div className="admin-traffic-chart-wrap">
+                <div className="admin-chart-label">Daily Sessions</div>
+                {dailyVisitors.length > 0 ? (
+                  <div className="admin-bar-chart">
+                    {(() => {
+                      // Show last 30 days, oldest→newest left to right
+                      const sorted = [...dailyVisitors].reverse();
+                      const max = Math.max(...sorted.map((r) => Number(r.sessions)), 1);
+                      return sorted.map((r) => {
+                        const pct = Math.max(4, Math.round((Number(r.sessions) / max) * 100));
+                        const label = r.visit_date?.slice(5); // MM-DD
+                        return (
+                          <div key={r.visit_date} className="admin-bar-col" title={`${r.visit_date}: ${r.sessions} sessions (${r.logged_in_sessions ?? 0} logged in)`}>
+                            <div className="admin-bar-inner">
+                              <div className="admin-bar-fill" style={{ height: `${pct}%` }} />
+                            </div>
+                            {sorted.length <= 14 && <div className="admin-bar-date">{label}</div>}
+                          </div>
+                        );
+                      });
+                    })()}
                   </div>
-                ));
-              })()}
+                ) : <p className="admin-cell-muted" style={{ paddingTop: 16 }}>No visits recorded yet.</p>}
+                <div className="admin-chart-legend">
+                  <span className="admin-legend-dot" style={{ background: '#3b82f6' }} /> Sessions
+                </div>
+              </div>
+
+              {/* Referrers */}
+              <div className="admin-traffic-side">
+                <div className="admin-chart-label">Top Referrers</div>
+                {referrerStats && referrerStats.length > 0 ? (
+                  <div className="admin-ref-list">
+                    {referrerStats.slice(0, 8).map((r) => {
+                      const total = referrerStats.reduce((s, x) => s + Number(x.sessions), 0);
+                      const pct = Math.round((Number(r.sessions) / total) * 100);
+                      return (
+                        <div key={r.referrer || 'direct'} className="admin-ref-row">
+                          <div className="admin-ref-name">{r.referrer || 'Direct / Unknown'}</div>
+                          <div className="admin-ref-bar-wrap">
+                            <div className="admin-ref-bar" style={{ width: `${pct}%` }} />
+                          </div>
+                          <div className="admin-ref-count">{r.sessions}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : <p className="admin-cell-muted" style={{ fontSize: 12, paddingTop: 8 }}>No referrer data yet.</p>}
+
+                <div className="admin-chart-label" style={{ marginTop: 20 }}>Device Split</div>
+                {deviceStats && deviceStats.length > 0 ? (
+                  <div className="admin-device-row">
+                    {deviceStats.map((r) => (
+                      <div key={r.device} className="admin-device-chip">
+                        <span>{r.device === 'mobile' ? '📱' : '🖥️'}</span>
+                        <span className="admin-device-label">{r.device}</span>
+                        <span className="admin-device-count">{r.sessions}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
             </div>
-            <table className="admin-table" style={{ marginTop: 16 }}>
-              <thead><tr><th>Date</th><th>Sessions</th><th>Logged-in Users</th></tr></thead>
+          </section>
+        )}
+
+        {/* Exports per user */}
+        {exportsByUser && exportsByUser.length > 0 && (
+          <section className="admin-section">
+            <h2 className="admin-section-title">Exports by User</h2>
+            <table className="admin-table">
+              <thead>
+                <tr><th>User</th><th>PNG</th><th>SVG</th><th>PDF</th><th>Total</th><th>Last Export</th></tr>
+              </thead>
               <tbody>
-                {dailyVisitors.map((r) => (
-                  <tr key={r.visit_date}>
-                    <td className="admin-cell-muted">{r.visit_date}</td>
-                    <td>{r.sessions}</td>
-                    <td className="admin-cell-muted">{r.logged_in_sessions ?? 0}</td>
+                {exportsByUser.map((r, i) => (
+                  <tr key={i}>
+                    <td className="admin-email">{r.user_email || <span className="admin-cell-muted">Anonymous</span>}</td>
+                    <td>{r.png_count ?? 0}</td>
+                    <td>{r.svg_count ?? 0}</td>
+                    <td>{r.pdf_count ?? 0}</td>
+                    <td><strong>{r.total_exports}</strong></td>
+                    <td className="admin-cell-muted">{formatDate(r.last_export)}</td>
                   </tr>
                 ))}
               </tbody>

@@ -736,9 +736,17 @@ export default function App() {
   useEffect(() => {
     if (!supabase || sessionStorage.getItem('em_visited')) return;
     sessionStorage.setItem('em_visited', '1');
+    const params = new URLSearchParams(window.location.search);
+    const ref = document.referrer || null;
+    const refDomain = ref ? (() => { try { return new URL(ref).hostname; } catch { return ref; } })() : null;
     supabase.from('page_views').insert({
       user_id: user?.id ?? null,
       path: window.location.pathname,
+      referrer: refDomain,
+      utm_source: params.get('utm_source') || null,
+      utm_medium: params.get('utm_medium') || null,
+      utm_campaign: params.get('utm_campaign') || null,
+      device: /Mobi|Android/i.test(navigator.userAgent) ? 'mobile' : 'desktop',
     }).then(() => {});
   }, [user]);
 
