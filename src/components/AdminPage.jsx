@@ -4,58 +4,131 @@ import { useAuth } from '../hooks/useAuth';
 
 const ADMIN_EMAIL = import.meta.env.VITE_ADMIN_EMAIL;
 
-function StatCard({ label, value, sub }) {
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function fmt(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+function fmtTime(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return d.toLocaleDateString('en-CA', { month: 'short', day: 'numeric' }) + ' ' +
+    d.toLocaleTimeString('en-CA', { hour: '2-digit', minute: '2-digit' });
+}
+function fmtNum(n) {
+  if (n == null) return '—';
+  return Number(n).toLocaleString();
+}
+
+// ── Sub-components ────────────────────────────────────────────────────────────
+
+function KPI({ label, value, detail, accent }) {
   return (
-    <div className="admin-stat-card">
-      <div className="admin-stat-value">{value ?? '—'}</div>
-      <div className="admin-stat-label">{label}</div>
-      {sub && <div className="admin-stat-sub">{sub}</div>}
+    <div className="adm-kpi" style={accent ? { borderTop: `3px solid ${accent}` } : {}}>
+      <div className="adm-kpi-value">{value ?? <span className="adm-skeleton">···</span>}</div>
+      <div className="adm-kpi-label">{label}</div>
+      {detail && <div className="adm-kpi-detail">{detail}</div>}
     </div>
   );
 }
 
-function formatDate(iso) {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('en-CA', { year: 'numeric', month: 'short', day: 'numeric' });
+function SectionHeader({ title, count }) {
+  return (
+    <div className="adm-section-header">
+      <h2 className="adm-section-title">{title}</h2>
+      {count != null && <span className="adm-pill">{count}</span>}
+    </div>
+  );
 }
 
-function formatDateTime(iso) {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleString('en-CA', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+function Empty({ message }) {
+  return <p className="adm-empty">{message}</p>;
 }
+
+function BarChart({ data }) {
+  if (!data || data.length === 0) return <Empty message="No visit data yet — sessions will appear here once users visit the app." />;
+
+  const sorted = [...data].reverse(); // oldest → newest
+  const max = Math.max(...sorted.map((r) => Number(r.sessions)), 1);
+  const gridLines = [0.25, 0.5, 0.75, 1];
+
+  // Show date label every N bars
+  const labelEvery = sorted.length > 20 ? 7 : sorted.length > 10 ? 5 : 1;
+
+  return (
+    <div className="adm-chart-wrap">
+      {/* Y-axis */}
+      <div className="adm-y-axis">
+        {[...gridLines].reverse().map((f) => (
+          <div key={f} className="adm-y-label">{Math.round(max * f)}</div>
+        ))}
+        <div className="adm-y-label">0</div>
+      </div>
+      {/* Chart area */}
+      <div className="adm-chart-area">
+        {/* Grid lines */}
+        {gridLines.map((f) => (
+          <div key={f} className="adm-grid-line" style={{ bottom: `${f * 100}%` }} />
+        ))}
+        {/* Bars */}
+        <div className="adm-bars">
+          {sorted.map((r, i) => {
+            const pct = Math.max(2, (Number(r.sessions) / max) * 100);
+            const showLabel = i % labelEvery === 0 || i === sorted.length - 1;
+            const label = r.visit_date?.slice(5); // MM-DD
+            return (
+              <div key={r.visit_date} className="adm-bar-col" title={`${r.visit_date}\n${r.sessions} sessions · ${r.logged_in_sessions ?? 0} logged in`}>
+                <div className="adm-bar-fill" style={{ height: `${pct}%` }}>
+                  <span className="adm-bar-tip">{r.sessions}</span>
+                </div>
+                {showLabel && <div className="adm-bar-label">{label}</div>}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FormatBadge({ format }) {
+  const colors = { png: '#0ea5e9', svg: '#8b5cf6', pdf: '#f59e0b' };
+  const bg = colors[format?.toLowerCase()] || '#64748b';
+  return (
+    <span className="adm-format-badge" style={{ background: bg + '20', color: bg }}>
+      {format?.toUpperCase()}
+    </span>
+  );
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
 
 export default function AdminPage({ onExit }) {
   const { user, loading: authLoading, signIn, signOut } = useAuth();
 
-  // Login form state
-  const [email, setEmail] = useState('');
+  const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
-  const [loggingIn, setLoggingIn] = useState(false);
+  const [loggingIn, setLoggingIn]   = useState(false);
 
-  // Dashboard data
-  const [users, setUsers] = useState(null);
-  const [exportStats, setExportStats] = useState(null);
-  const [leads, setLeads] = useState(null);
+  const [users, setUsers]               = useState(null);
+  const [exportStats, setExportStats]   = useState(null);
+  const [leads, setLeads]               = useState(null);
   const [recentExports, setRecentExports] = useState(null);
   const [dailyVisitors, setDailyVisitors] = useState(null);
   const [referrerStats, setReferrerStats] = useState(null);
-  const [deviceStats, setDeviceStats] = useState(null);
+  const [deviceStats, setDeviceStats]   = useState(null);
   const [exportsByUser, setExportsByUser] = useState(null);
-  const [dataLoading, setDataLoading] = useState(false);
-  const [dataError, setDataError] = useState('');
-
-  // User edit modal
-  const [editingUser, setEditingUser] = useState(null);
+  const [dataLoading, setDataLoading]   = useState(false);
+  const [dataError, setDataError]       = useState('');
+  const [editingUser, setEditingUser]   = useState(null);
 
   const isAdmin = !!ADMIN_EMAIL && user?.email === ADMIN_EMAIL;
 
-  // Load dashboard data when admin is confirmed
   useEffect(() => {
     if (!isAdmin || !supabase) return;
     setDataLoading(true);
-    setDataError('');
-
     Promise.all([
       supabase.rpc('admin_get_users'),
       supabase.rpc('admin_get_export_stats'),
@@ -66,7 +139,7 @@ export default function AdminPage({ onExit }) {
       supabase.rpc('admin_get_device_stats'),
       supabase.rpc('admin_get_exports_by_user'),
     ]).then(([u, e, l, re, dv, ref, dev, ebu]) => {
-      if (u.error) { setDataError(u.error.message); return; }
+      if (u.error) { setDataError(u.error.message); setDataLoading(false); return; }
       setUsers(u.data || []);
       setExportStats(e.data || []);
       setLeads(l.data || []);
@@ -79,397 +152,277 @@ export default function AdminPage({ onExit }) {
     });
   }, [isAdmin]);
 
-  // ── Login form ────────────────────────────────────────────────────────────
   async function handleLogin(e) {
     e.preventDefault();
     setLoginError('');
     setLoggingIn(true);
-    try {
-      await signIn(email, password);
-      // After signIn, user state updates via onAuthStateChange.
-      // If the email doesn't match ADMIN_EMAIL we'll show the "not admin" message.
-    } catch (err) {
-      setLoginError(err.message || 'Login failed');
-    } finally {
-      setLoggingIn(false);
-    }
+    try { await signIn(email, password); }
+    catch (err) { setLoginError(err.message || 'Login failed'); }
+    finally { setLoggingIn(false); }
   }
 
-  // ── Not configured ────────────────────────────────────────────────────────
-  if (!supabase) {
-    return (
-      <div className="admin-shell">
-        <div className="admin-login-card">
-          <h2>Admin Dashboard</h2>
-          <p className="admin-error">Supabase is not configured. Add <code>VITE_SUPABASE_URL</code> and <code>VITE_SUPABASE_ANON_KEY</code> to your environment.</p>
-          <button className="btn" onClick={onExit}>← Back to App</button>
+  // ── Pre-auth screens ──────────────────────────────────────────────────────
+  if (!supabase) return (
+    <div className="adm-shell">
+      <div className="adm-login-card">
+        <div className="adm-login-logo">🗺️</div>
+        <h2>Supabase not configured</h2>
+        <p className="adm-muted">Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.</p>
+        <button className="adm-btn adm-btn-ghost" onClick={onExit}>← Back</button>
+      </div>
+    </div>
+  );
+
+  if (authLoading) return (
+    <div className="adm-shell"><div className="adm-login-card"><div className="adm-spinner" /></div></div>
+  );
+
+  if (!user) return (
+    <div className="adm-shell">
+      <div className="adm-login-card">
+        <div className="adm-login-logo">🗺️</div>
+        <h2>Admin</h2>
+        <p className="adm-muted">Exploration Maps dashboard</p>
+        <form onSubmit={handleLogin} className="adm-login-form">
+          <input type="email" placeholder="Email" value={email}
+            onChange={(e) => setEmail(e.target.value)} required autoFocus />
+          <input type="password" placeholder="Password" value={password}
+            onChange={(e) => setPassword(e.target.value)} required />
+          {loginError && <p className="adm-error">{loginError}</p>}
+          <button type="submit" className="adm-btn adm-btn-primary" disabled={loggingIn}>
+            {loggingIn ? 'Signing in…' : 'Sign In'}
+          </button>
+        </form>
+        <button className="adm-back-link" onClick={onExit}>← Back to app</button>
+      </div>
+    </div>
+  );
+
+  if (!isAdmin) return (
+    <div className="adm-shell">
+      <div className="adm-login-card">
+        <h2>Access denied</h2>
+        <p className="adm-muted">Signed in as <strong>{user.email}</strong></p>
+        <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+          <button className="adm-btn adm-btn-ghost" onClick={() => signOut()}>Sign Out</button>
+          <button className="adm-btn adm-btn-ghost" onClick={onExit}>← Back</button>
         </div>
       </div>
-    );
-  }
+    </div>
+  );
 
-  // ── Loading auth ──────────────────────────────────────────────────────────
-  if (authLoading) {
-    return (
-      <div className="admin-shell">
-        <div className="admin-login-card"><p>Loading…</p></div>
-      </div>
-    );
-  }
+  // ── Derived values ────────────────────────────────────────────────────────
+  const totalExports  = (exportStats || []).reduce((s, r) => s + Number(r.total || 0), 0);
+  const exports30d    = (exportStats || []).reduce((s, r) => s + Number(r.last_30_days || 0), 0);
+  const visitors30d   = (dailyVisitors || []).reduce((s, r) => s + Number(r.sessions || 0), 0);
+  const exportBreakdown = (exportStats || []).map((r) => `${r.format?.toUpperCase()} ${r.last_30_days}`).join(' · ');
 
-  // ── Not logged in ─────────────────────────────────────────────────────────
-  if (!user) {
-    return (
-      <div className="admin-shell">
-        <div className="admin-login-card">
-          <div className="admin-login-logo">🗺️</div>
-          <h2>Admin Login</h2>
-          <p className="admin-login-hint">explorationmaps.com admin panel</p>
-          <form onSubmit={handleLogin} className="admin-login-form">
-            <input
-              type="email"
-              placeholder="Email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              autoFocus
-            />
-            <input
-              type="password"
-              placeholder="Password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-            {loginError && <p className="admin-error">{loginError}</p>}
-            <button type="submit" className="btn primary" disabled={loggingIn}>
-              {loggingIn ? 'Signing in…' : 'Sign In'}
-            </button>
-          </form>
-          <button className="admin-back-link" onClick={onExit}>← Back to App</button>
-        </div>
-      </div>
-    );
-  }
-
-  // ── Logged in but not admin ───────────────────────────────────────────────
-  if (!isAdmin) {
-    return (
-      <div className="admin-shell">
-        <div className="admin-login-card">
-          <h2>Access Denied</h2>
-          <p>Signed in as <strong>{user.email}</strong> — this account doesn't have admin access.</p>
-          <div style={{ display: 'flex', gap: 12, marginTop: 20 }}>
-            <button className="btn" onClick={() => signOut()}>Sign Out</button>
-            <button className="btn" onClick={onExit}>← Back to App</button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // ── Admin dashboard ───────────────────────────────────────────────────────
-  const totalExports = (exportStats || []).reduce((s, r) => s + Number(r.total || 0), 0);
-  const exports30d = (exportStats || []).reduce((s, r) => s + Number(r.last_30_days || 0), 0);
-
+  // ── Dashboard ─────────────────────────────────────────────────────────────
   return (
-    <div className="admin-shell admin-dashboard">
+    <div className="adm-shell">
       {/* Header */}
-      <div className="admin-header">
-        <div className="admin-header-left">
-          <span className="admin-wordmark">🗺️ Exploration Maps</span>
-          <span className="admin-badge">Admin</span>
+      <header className="adm-header">
+        <div className="adm-header-left">
+          <span className="adm-logo">🗺️</span>
+          <span className="adm-header-title">Exploration Maps</span>
+          <span className="adm-tag">Admin</span>
         </div>
-        <div className="admin-header-right">
-          <span className="admin-user-chip">{user.email}</span>
-          <button className="secondary-btn" onClick={() => signOut()}>Sign Out</button>
-          <button className="secondary-btn" onClick={onExit}>← App</button>
+        <div className="adm-header-right">
+          <span className="adm-header-email">{user.email}</span>
+          <button className="adm-btn adm-btn-ghost adm-btn-sm" onClick={() => signOut()}>Sign out</button>
+          <button className="adm-btn adm-btn-ghost adm-btn-sm" onClick={onExit}>← App</button>
         </div>
-      </div>
+      </header>
 
-      <div className="admin-body">
-        {dataLoading && <p className="admin-loading">Loading dashboard data…</p>}
-        {dataError && <p className="admin-error">Error: {dataError}</p>}
+      <main className="adm-body">
+        {dataError && <div className="adm-error-bar">⚠ {dataError}</div>}
 
-        {/* Stat cards */}
-        {!dataLoading && (
-          <div className="admin-stats-row">
-            <StatCard label="Total Users" value={users?.length} />
-            <StatCard label="Total Exports" value={totalExports} />
-            <StatCard
-              label="Exports (30 days)"
-              value={exports30d}
-              sub={
-                (exportStats || [])
-                  .map((r) => `${r.format?.toUpperCase()}: ${r.last_30_days}`)
-                  .join(' · ')
-              }
-            />
-            <StatCard
-              label="Visitors (30 days)"
-              value={dailyVisitors ? dailyVisitors.reduce((s, r) => s + Number(r.sessions || 0), 0) : undefined}
-              sub={dailyVisitors?.length ? `${dailyVisitors[0]?.visit_date}: ${dailyVisitors[0]?.sessions} sessions` : undefined}
-            />
-            <StatCard label="Email Leads" value={leads?.length} />
-          </div>
-        )}
+        {/* KPI row */}
+        <div className="adm-kpi-row">
+          <KPI label="Visitors (30 days)" value={dataLoading ? null : fmtNum(visitors30d)} accent="#3b82f6" />
+          <KPI label="Exports (30 days)" value={dataLoading ? null : fmtNum(exports30d)} detail={exportBreakdown || null} accent="#8b5cf6" />
+          <KPI label="Total exports" value={dataLoading ? null : fmtNum(totalExports)} accent="#0ea5e9" />
+          <KPI label="Registered users" value={dataLoading ? null : fmtNum(users?.length)} accent="#10b981" />
+          <KPI label="Email leads" value={dataLoading ? null : fmtNum(leads?.length)} accent="#f59e0b" />
+        </div>
 
-        {/* Traffic overview — visitors + referrers + devices */}
-        {dailyVisitors && (
-          <section className="admin-section">
-            <h2 className="admin-section-title">Traffic <span className="admin-section-count">(last 30 days)</span></h2>
-            <div className="admin-traffic-grid">
-
-              {/* Bar chart */}
-              <div className="admin-traffic-chart-wrap">
-                <div className="admin-chart-label">Daily Sessions</div>
-                {dailyVisitors.length > 0 ? (
-                  <div className="admin-bar-chart">
-                    {(() => {
-                      // Show last 30 days, oldest→newest left to right
-                      const sorted = [...dailyVisitors].reverse();
-                      const max = Math.max(...sorted.map((r) => Number(r.sessions)), 1);
-                      return sorted.map((r) => {
-                        const pct = Math.max(4, Math.round((Number(r.sessions) / max) * 100));
-                        const label = r.visit_date?.slice(5); // MM-DD
-                        return (
-                          <div key={r.visit_date} className="admin-bar-col" title={`${r.visit_date}: ${r.sessions} sessions (${r.logged_in_sessions ?? 0} logged in)`}>
-                            <div className="admin-bar-inner">
-                              <div className="admin-bar-fill" style={{ height: `${pct}%` }} />
-                            </div>
-                            {sorted.length <= 14 && <div className="admin-bar-date">{label}</div>}
-                          </div>
-                        );
-                      });
-                    })()}
-                  </div>
-                ) : <p className="admin-cell-muted" style={{ paddingTop: 16 }}>No visits recorded yet.</p>}
-                <div className="admin-chart-legend">
-                  <span className="admin-legend-dot" style={{ background: '#3b82f6' }} /> Sessions
-                </div>
-              </div>
-
-              {/* Referrers */}
-              <div className="admin-traffic-side">
-                <div className="admin-chart-label">Top Referrers</div>
-                {referrerStats && referrerStats.length > 0 ? (
-                  <div className="admin-ref-list">
-                    {referrerStats.slice(0, 8).map((r) => {
-                      const total = referrerStats.reduce((s, x) => s + Number(x.sessions), 0);
+        {/* Traffic */}
+        <div className="adm-card">
+          <SectionHeader title="Traffic" />
+          <div className="adm-traffic-layout">
+            {/* Chart */}
+            <div className="adm-chart-col">
+              <p className="adm-chart-eyebrow">Daily sessions — last 30 days</p>
+              <BarChart data={dailyVisitors} />
+            </div>
+            {/* Sources + devices */}
+            <div className="adm-sources-col">
+              <p className="adm-chart-eyebrow">Top sources</p>
+              {referrerStats && referrerStats.length > 0 ? (
+                <div className="adm-source-list">
+                  {(() => {
+                    const total = referrerStats.reduce((s, r) => s + Number(r.sessions), 0);
+                    return referrerStats.slice(0, 7).map((r) => {
                       const pct = Math.round((Number(r.sessions) / total) * 100);
                       return (
-                        <div key={r.referrer || 'direct'} className="admin-ref-row">
-                          <div className="admin-ref-name">{r.referrer || 'Direct / Unknown'}</div>
-                          <div className="admin-ref-bar-wrap">
-                            <div className="admin-ref-bar" style={{ width: `${pct}%` }} />
+                        <div key={r.referrer || 'direct'} className="adm-source-row">
+                          <div className="adm-source-name" title={r.referrer || 'Direct / Unknown'}>
+                            {r.referrer || 'Direct / Unknown'}
                           </div>
-                          <div className="admin-ref-count">{r.sessions}</div>
+                          <div className="adm-source-track">
+                            <div className="adm-source-fill" style={{ width: `${pct}%` }} />
+                          </div>
+                          <div className="adm-source-num">{r.sessions}</div>
                         </div>
                       );
-                    })}
-                  </div>
-                ) : <p className="admin-cell-muted" style={{ fontSize: 12, paddingTop: 8 }}>No referrer data yet.</p>}
+                    });
+                  })()}
+                </div>
+              ) : <Empty message="No referrer data yet." />}
 
-                <div className="admin-chart-label" style={{ marginTop: 20 }}>Device Split</div>
-                {deviceStats && deviceStats.length > 0 ? (
-                  <div className="admin-device-row">
-                    {deviceStats.map((r) => (
-                      <div key={r.device} className="admin-device-chip">
-                        <span>{r.device === 'mobile' ? '📱' : '🖥️'}</span>
-                        <span className="admin-device-label">{r.device}</span>
-                        <span className="admin-device-count">{r.sessions}</span>
-                      </div>
-                    ))}
+              <p className="adm-chart-eyebrow" style={{ marginTop: 24 }}>Devices</p>
+              <div className="adm-device-row">
+                {(deviceStats || []).map((r) => (
+                  <div key={r.device} className="adm-device-chip">
+                    <span className="adm-device-icon">{r.device === 'mobile' ? '📱' : '🖥️'}</span>
+                    <div>
+                      <div className="adm-device-name">{r.device || 'desktop'}</div>
+                      <div className="adm-device-num">{fmtNum(r.sessions)} sessions</div>
+                    </div>
                   </div>
-                ) : null}
+                ))}
+                {(!deviceStats || deviceStats.length === 0) && <Empty message="No data yet." />}
               </div>
             </div>
-          </section>
-        )}
+          </div>
+        </div>
 
-        {/* Exports per user */}
-        {exportsByUser && exportsByUser.length > 0 && (
-          <section className="admin-section">
-            <h2 className="admin-section-title">Exports by User</h2>
-            <table className="admin-table">
-              <thead>
-                <tr><th>User</th><th>PNG</th><th>SVG</th><th>PDF</th><th>Total</th><th>Last Export</th></tr>
-              </thead>
-              <tbody>
-                {exportsByUser.map((r, i) => (
-                  <tr key={i}>
-                    <td className="admin-email">{r.user_email || <span className="admin-cell-muted">Anonymous</span>}</td>
-                    <td>{r.png_count ?? 0}</td>
-                    <td>{r.svg_count ?? 0}</td>
-                    <td>{r.pdf_count ?? 0}</td>
-                    <td><strong>{r.total_exports}</strong></td>
-                    <td className="admin-cell-muted">{formatDate(r.last_export)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </section>
-        )}
+        {/* Two-column row: Exports by user + Recent exports */}
+        <div className="adm-two-col">
+          {/* Exports by user */}
+          <div className="adm-card">
+            <SectionHeader title="Exports by user" count={exportsByUser?.length} />
+            {exportsByUser && exportsByUser.length > 0 ? (
+              <table className="adm-table">
+                <thead>
+                  <tr><th>User</th><th>PNG</th><th>SVG</th><th>PDF</th><th>Total</th><th>Last</th></tr>
+                </thead>
+                <tbody>
+                  {exportsByUser.map((r, i) => (
+                    <tr key={i}>
+                      <td className="adm-mono">{r.user_email || <span className="adm-muted">Anon</span>}</td>
+                      <td>{r.png_count ?? 0}</td>
+                      <td>{r.svg_count ?? 0}</td>
+                      <td>{r.pdf_count ?? 0}</td>
+                      <td><strong>{r.total_exports}</strong></td>
+                      <td className="adm-muted">{fmt(r.last_export)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : <Empty message="No exports tracked yet." />}
+          </div>
 
-        {/* Export breakdown */}
-        {exportStats && exportStats.length > 0 && (
-          <section className="admin-section">
-            <h2 className="admin-section-title">Exports by Format</h2>
-            <table className="admin-table">
-              <thead>
-                <tr>
-                  <th>Format</th>
-                  <th>All Time</th>
-                  <th>Last 30 Days</th>
-                </tr>
-              </thead>
-              <tbody>
-                {exportStats.map((r) => (
-                  <tr key={r.format}>
-                    <td><span className="admin-format-badge">{r.format?.toUpperCase()}</span></td>
-                    <td>{r.total}</td>
-                    <td>{r.last_30_days}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </section>
-        )}
+          {/* Recent exports feed */}
+          <div className="adm-card">
+            <SectionHeader title="Recent exports" count={recentExports?.length} />
+            {recentExports && recentExports.length > 0 ? (
+              <table className="adm-table">
+                <thead>
+                  <tr><th>Format</th><th>Project</th><th>User</th><th>When</th></tr>
+                </thead>
+                <tbody>
+                  {recentExports.map((r, i) => (
+                    <tr key={i}>
+                      <td><FormatBadge format={r.format} /></td>
+                      <td className="adm-muted adm-truncate">{r.project_name || '—'}</td>
+                      <td className="adm-muted adm-truncate">{r.user_email || 'Anonymous'}</td>
+                      <td className="adm-muted" style={{ whiteSpace: 'nowrap' }}>{fmtTime(r.created_at)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : <Empty message="No exports yet." />}
+          </div>
+        </div>
 
-        {/* Recent exports */}
-        {recentExports && recentExports.length > 0 && (
-          <section className="admin-section">
-            <h2 className="admin-section-title">Recent Exports <span className="admin-section-count">({recentExports.length})</span></h2>
-            <table className="admin-table">
+        {/* Users */}
+        <div className="adm-card">
+          <SectionHeader title="Users" count={users?.length} />
+          {users && users.length > 0 ? (
+            <table className="adm-table">
               <thead>
-                <tr>
-                  <th>Format</th>
-                  <th>Project</th>
-                  <th>User</th>
-                  <th>Watermark</th>
-                  <th>When</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentExports.map((r, i) => (
-                  <tr key={i}>
-                    <td><span className="admin-format-badge">{r.format?.toUpperCase()}</span></td>
-                    <td className="admin-cell-muted">{r.project_name || '—'}</td>
-                    <td className="admin-cell-muted">{r.user_email || 'Anonymous'}</td>
-                    <td>{r.no_watermark ? '✓ No watermark' : <span className="admin-cell-muted">Watermarked</span>}</td>
-                    <td className="admin-cell-muted">{formatDateTime(r.created_at)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </section>
-        )}
-
-        {/* Users table */}
-        {users && (
-          <section className="admin-section">
-            <h2 className="admin-section-title">Users <span className="admin-section-count">({users.length})</span></h2>
-            <table className="admin-table">
-              <thead>
-                <tr>
-                  <th>Email</th>
-                  <th>Joined</th>
-                  <th>Last Login</th>
-                  <th>Projects</th>
-                  <th></th>
-                </tr>
+                <tr><th>Email</th><th>Joined</th><th>Last login</th><th>Projects</th><th></th></tr>
               </thead>
               <tbody>
                 {users.map((u) => (
-                  <tr key={u.id} className={editingUser?.id === u.id ? 'admin-row-active' : ''}>
-                    <td>
-                      <span className="admin-email">{u.email}</span>
-                      {u.email === ADMIN_EMAIL && <span className="admin-badge admin-badge-sm">Admin</span>}
-                    </td>
-                    <td className="admin-cell-muted">{formatDate(u.created_at)}</td>
-                    <td className="admin-cell-muted">{formatDate(u.last_sign_in_at)}</td>
-                    <td>{u.project_count ?? 0}</td>
-                    <td>
-                      <button
-                        className="secondary-btn admin-edit-btn"
-                        onClick={() => setEditingUser(editingUser?.id === u.id ? null : u)}
-                      >
-                        {editingUser?.id === u.id ? 'Close' : 'Details'}
-                      </button>
-                    </td>
-                  </tr>
+                  <React.Fragment key={u.id}>
+                    <tr className={editingUser?.id === u.id ? 'adm-row-active' : ''}>
+                      <td>
+                        <span className="adm-mono">{u.email}</span>
+                        {u.email === ADMIN_EMAIL && <span className="adm-tag adm-tag-blue" style={{ marginLeft: 8 }}>you</span>}
+                      </td>
+                      <td className="adm-muted">{fmt(u.created_at)}</td>
+                      <td className="adm-muted">{fmt(u.last_sign_in_at)}</td>
+                      <td>{u.project_count ?? 0}</td>
+                      <td>
+                        <button className="adm-btn adm-btn-ghost adm-btn-sm"
+                          onClick={() => setEditingUser(editingUser?.id === u.id ? null : u)}>
+                          {editingUser?.id === u.id ? 'Close' : 'Details'}
+                        </button>
+                      </td>
+                    </tr>
+                    {editingUser?.id === u.id && (
+                      <tr className="adm-row-active">
+                        <td colSpan={5} style={{ padding: '12px 16px 16px' }}>
+                          <div className="adm-user-detail">
+                            <div className="adm-detail-grid">
+                              <span className="adm-detail-label">User ID</span>
+                              <code className="adm-detail-val">{u.id}</code>
+                              <span className="adm-detail-label">Joined</span>
+                              <span className="adm-detail-val">{fmtTime(u.created_at)}</span>
+                              <span className="adm-detail-label">Last login</span>
+                              <span className="adm-detail-val">{fmtTime(u.last_sign_in_at)}</span>
+                              <span className="adm-detail-label">Projects</span>
+                              <span className="adm-detail-val">{u.project_count ?? 0}</span>
+                            </div>
+                            <p className="adm-detail-note">
+                              To reset password or disable account →{' '}
+                              <a href="https://supabase.com/dashboard" target="_blank" rel="noopener noreferrer">
+                                Supabase Dashboard → Authentication → Users
+                              </a>
+                            </p>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
                 ))}
               </tbody>
             </table>
-          </section>
-        )}
+          ) : <Empty message="No users yet." />}
+        </div>
 
-        {/* User detail panel */}
-        {editingUser && (
-          <div className="admin-user-detail">
-            <div className="admin-user-detail-header">
-              <h3>{editingUser.email}</h3>
-              <button className="secondary-btn" onClick={() => setEditingUser(null)}>✕</button>
-            </div>
-            <div className="admin-user-detail-body">
-              <div className="admin-detail-row">
-                <span className="admin-detail-label">User ID</span>
-                <code className="admin-detail-value">{editingUser.id}</code>
-              </div>
-              <div className="admin-detail-row">
-                <span className="admin-detail-label">Joined</span>
-                <span className="admin-detail-value">{formatDateTime(editingUser.created_at)}</span>
-              </div>
-              <div className="admin-detail-row">
-                <span className="admin-detail-label">Last Sign In</span>
-                <span className="admin-detail-value">{formatDateTime(editingUser.last_sign_in_at)}</span>
-              </div>
-              <div className="admin-detail-row">
-                <span className="admin-detail-label">Projects</span>
-                <span className="admin-detail-value">{editingUser.project_count ?? 0}</span>
-              </div>
-              <p className="admin-detail-note">
-                To reset this user's password or disable their account, use the{' '}
-                <a href="https://supabase.com/dashboard" target="_blank" rel="noopener noreferrer">
-                  Supabase Dashboard → Authentication → Users
-                </a>.
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* Leads table */}
-        {leads && leads.length > 0 && (
-          <section className="admin-section">
-            <h2 className="admin-section-title">Email Leads <span className="admin-section-count">({leads.length})</span></h2>
-            <table className="admin-table">
-              <thead>
-                <tr>
-                  <th>Email</th>
-                  <th>Project</th>
-                  <th>Captured</th>
-                </tr>
-              </thead>
+        {/* Leads */}
+        <div className="adm-card">
+          <SectionHeader title="Email leads" count={leads?.length} />
+          {leads && leads.length > 0 ? (
+            <table className="adm-table">
+              <thead><tr><th>Email</th><th>Project</th><th>Captured</th></tr></thead>
               <tbody>
                 {leads.map((l, i) => (
                   <tr key={i}>
-                    <td className="admin-email">{l.email}</td>
-                    <td className="admin-cell-muted">{l.project_title || '—'}</td>
-                    <td className="admin-cell-muted">{formatDateTime(l.captured_at)}</td>
+                    <td className="adm-mono">{l.email}</td>
+                    <td className="adm-muted">{l.project_title || '—'}</td>
+                    <td className="adm-muted" style={{ whiteSpace: 'nowrap' }}>{fmtTime(l.captured_at)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
-          </section>
-        )}
+          ) : <Empty message="No leads yet — they appear when users enter their email in the export modal." />}
+        </div>
 
-        {leads && leads.length === 0 && !dataLoading && (
-          <section className="admin-section">
-            <h2 className="admin-section-title">Email Leads</h2>
-            <p className="admin-cell-muted">No leads captured yet. Leads appear when users enter their email in the export modal.</p>
-          </section>
-        )}
-      </div>
+      </main>
     </div>
   );
 }
