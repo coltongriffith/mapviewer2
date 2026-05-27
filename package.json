@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "node scripts/generate-blog.js && vite build"
+    "build": "node scripts/generate-blog.js && vite build && mkdir -p dist/admin && cp dist/index.html dist/admin/index.html"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.104.1",
