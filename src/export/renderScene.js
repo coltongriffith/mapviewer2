@@ -2,6 +2,7 @@ import { escapeXml, downloadBlob } from '../utils/svg';
 import { geojsonBounds, unionBounds } from '../utils/geometry';
 import { resolveTemplateZones } from '../templates/technicalResultsTemplate';
 import { resolveNI43101Zones } from '../templates/technicalReportTemplate';
+import { resolveSidePanelZones } from '../templates/sidePanelTemplate';
 import { getThemeTokens } from '../utils/themeTokens';
 import { MARKER_ICON_PATHS, markerIconSvgFragment, drawMarkerIconCanvas } from '../utils/markerIcons.jsx';
 import { safeColor } from '../utils/colorUtils.js';
@@ -268,7 +269,28 @@ function getOverlayMetrics(scene) {
   if (id === 'ni_43101_technical') {
     return resolveNI43101Zones(scene.template, scene.project.layout || {}, { width: scene.width, height: scene.height });
   }
+  if (id === 'side_panel') {
+    return resolveSidePanelZones(scene.template, scene.project.layout || {}, { width: scene.width, height: scene.height });
+  }
   return resolveTemplateZones(scene.template, scene.project.layout || {}, { width: scene.width, height: scene.height });
+}
+
+function drawSidebarPanelCanvas(ctx, scene, scale) {
+  if ((scene.template?.id || scene.project.layout?.templateId) !== 'side_panel') return;
+  const zones = getOverlayMetrics(scene);
+  const sb = zones.sidebar;
+  if (!sb?.width) return;
+  const theme = getTheme(scene);
+  // White sidebar background
+  ctx.fillStyle = theme.panelFill || '#ffffff';
+  ctx.fillRect(sb.left * scale, sb.top * scale, sb.width * scale, sb.height * scale);
+  // Left border line
+  ctx.strokeStyle = theme.panelBorder || '#d4deea';
+  ctx.lineWidth = 1.5 * scale;
+  ctx.beginPath();
+  ctx.moveTo(sb.left * scale, 0);
+  ctx.lineTo(sb.left * scale, sb.height * scale);
+  ctx.stroke();
 }
 function drawRoundedRect(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
 
@@ -1493,13 +1515,50 @@ function renderDistanceTicksSvg(scene, scale) {
   return `<g>${parts.join('')}</g>`;
 }
 
+function drawDistanceLinesCanvas(ctx, scene, scale) {
+  const lines = scene.project.distanceLines || [];
+  if (!lines.length || !scene.map) return;
+  const map = scene.map;
+  lines.forEach(line => {
+    const p1 = map.latLngToContainerPoint([line.p1.lat, line.p1.lng]);
+    const p2 = map.latLngToContainerPoint([line.p2.lat, line.p2.lng]);
+    const x1 = p1.x * scale, y1 = p1.y * scale;
+    const x2 = p2.x * scale, y2 = p2.y * scale;
+    ctx.save();
+    ctx.strokeStyle = line.color || '#e11d48';
+    ctx.lineWidth = 2 * scale;
+    ctx.setLineDash([8 * scale, 4 * scale]);
+    ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = line.color || '#e11d48';
+    ctx.beginPath(); ctx.arc(x1, y1, 4 * scale, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x2, y2, 4 * scale, 0, Math.PI * 2); ctx.fill();
+    const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+    const km = haversineMeters(line.p1.lat, line.p1.lng, line.p2.lat, line.p2.lng) / 1000;
+    const label = line.units === 'mi' ? `${(km * 0.621371).toFixed(1)} mi` : km >= 1 ? `${km.toFixed(1)} km` : `${Math.round(km * 1000)} m`;
+    const font = `700 ${11 * scale}px ${scene.project.layout?.fonts?.callout || 'Inter'}, Arial, sans-serif`;
+    ctx.font = font;
+    const tw = ctx.measureText(label).width;
+    const pad = 5 * scale, lh = 17 * scale;
+    ctx.fillStyle = 'rgba(255,255,255,0.93)';
+    drawRoundedRect(ctx, mx - tw / 2 - pad, my - lh / 2, tw + pad * 2, lh, 3 * scale); ctx.fill();
+    ctx.fillStyle = line.color || '#e11d48';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(label, mx, my);
+    ctx.restore();
+  });
+}
+
 export async function renderSceneToCanvas(scene, options = {}) {
   _exportWarnings = [];
   const scale = Number(options.pixelRatio || scene.project.layout?.exportSettings?.pixelRatio || 2);
   const canvas = document.createElement('canvas'); canvas.width = Math.round(scene.width * scale); canvas.height = Math.round(scene.height * scale); const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
   const isNI = scene.template?.id === 'ni_43101_technical';
-  await drawTilesCanvas(ctx, scene, scale); drawRegionHighlightsCanvas(ctx, scene, scale); await drawVectorsCanvas(ctx, scene, scale); drawEllipsesCanvas(ctx, scene, scale); drawPolygonsCanvas(ctx, scene, scale); await drawMarkersCanvas(ctx, scene, scale); drawCalloutsCanvas(ctx, scene, scale);
+  const isSP = scene.template?.id === 'side_panel';
+  await drawTilesCanvas(ctx, scene, scale); drawRegionHighlightsCanvas(ctx, scene, scale); await drawVectorsCanvas(ctx, scene, scale); drawEllipsesCanvas(ctx, scene, scale); drawPolygonsCanvas(ctx, scene, scale); await drawMarkersCanvas(ctx, scene, scale); drawCalloutsCanvas(ctx, scene, scale); drawDistanceLinesCanvas(ctx, scene, scale);
+  if (isSP) { drawSidebarPanelCanvas(ctx, scene, scale); }
   if (!isNI) { drawTitleBlockCanvas(ctx, scene, scale); drawFooterCanvas(ctx, scene, scale); }
   drawScaleBarCanvas(ctx, scene, scale);
   drawLegendCanvas(ctx, scene, scale); drawNorthArrowCanvas(ctx, scene, scale); await drawInsetCanvas(ctx, scene, scale); await drawLogoCanvas(ctx, scene, scale);
@@ -1737,6 +1796,34 @@ function renderPolygonsSvg(scene, scale) {
   }).join('\n');
 }
 
+function renderDistanceLinesSvg(scene, scale) {
+  const lines = scene.project.distanceLines || [];
+  if (!lines.length || !scene.map) return '';
+  const map = scene.map;
+  const calloutFont = escapeXml(scene.project.layout?.fonts?.callout || 'Inter');
+  return lines.map(line => {
+    const p1 = map.latLngToContainerPoint([line.p1.lat, line.p1.lng]);
+    const p2 = map.latLngToContainerPoint([line.p2.lat, line.p2.lng]);
+    const x1 = p1.x * scale, y1 = p1.y * scale;
+    const x2 = p2.x * scale, y2 = p2.y * scale;
+    const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+    const km = haversineMeters(line.p1.lat, line.p1.lng, line.p2.lat, line.p2.lng) / 1000;
+    const label = line.units === 'mi' ? `${(km * 0.621371).toFixed(1)} mi` : km >= 1 ? `${km.toFixed(1)} km` : `${Math.round(km * 1000)} m`;
+    const color = safeColor(line.color, '#e11d48');
+    const fs = 11 * scale;
+    const tw = label.length * fs * 0.6;
+    const pad = 5 * scale, lh = 17 * scale;
+    const rx = mx - tw / 2 - pad, ry = my - lh / 2;
+    return `<g>` +
+      `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${color}" stroke-width="${2 * scale}" stroke-dasharray="${8 * scale} ${4 * scale}" stroke-linecap="round" />` +
+      `<circle cx="${x1}" cy="${y1}" r="${4 * scale}" fill="${color}" />` +
+      `<circle cx="${x2}" cy="${y2}" r="${4 * scale}" fill="${color}" />` +
+      `<rect x="${rx}" y="${ry}" width="${tw + pad * 2}" height="${lh}" rx="${3 * scale}" fill="rgba(255,255,255,0.93)" />` +
+      `<text x="${mx}" y="${my}" text-anchor="middle" dominant-baseline="middle" font-size="${fs}" font-weight="700" fill="${color}" font-family="${calloutFont}, Arial, sans-serif">${escapeXml(label)}</text>` +
+      `</g>`;
+  }).join('\n');
+}
+
 function renderEllipsesSvg(scene, scale, svgDefs) {
   const labelFontFamily = escapeXml(scene.project.layout?.fonts?.label || 'Inter');
   return (scene.project.ellipses || []).map((ellipse) => {
@@ -1921,7 +2008,7 @@ export async function renderSceneToSvg(scene, options = {}) {
     const f = getNI43101MapFrame(scene, scale);
     const clipId = 'ni-mapframe-clip';
     svgDefs.push(`<clipPath id="${clipId}"><rect x="${f.mapLeft}" y="${f.mapTop}" width="${f.mapRight - f.mapLeft}" height="${f.mapBottom - f.mapTop}" /></clipPath>`);
-    const clipped = `<g id="em-map-content" clip-path="url(#${clipId})">${basemapImage}${renderRegionHighlightsSvg(scene, scale)}${renderVectorsSvg(scene, scale)}${renderEllipsesSvg(scene, scale, svgDefs)}${renderPolygonsSvg(scene, scale)}${renderMarkersSvg(scene, scale)}${renderCalloutsSvg(scene, scale)}</g>`;
+    const clipped = `<g id="em-map-content" clip-path="url(#${clipId})">${basemapImage}${renderRegionHighlightsSvg(scene, scale)}${renderVectorsSvg(scene, scale)}${renderEllipsesSvg(scene, scale, svgDefs)}${renderPolygonsSvg(scene, scale)}${renderMarkersSvg(scene, scale)}${renderCalloutsSvg(scene, scale)}${renderDistanceLinesSvg(scene, scale)}</g>`;
     const niFrame = getNI43101MapFrame(scene, scale);
     const wmX = niFrame.mapRight - 8 * scale;
     const wmY = niFrame.mapBottom - 5 * scale;
@@ -1930,7 +2017,7 @@ export async function renderSceneToSvg(scene, options = {}) {
     mapContent = `${clipped}${panels}${watermark}`;
   } else {
     const watermark = options.noWatermark ? '' : `<text x="${width - 8}" y="${height - 5}" font-family="Arial,sans-serif" font-size="9" font-weight="bold" fill="#64748b" fill-opacity="0.72" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-opacity="0.55" stroke-width="2.5" stroke-linejoin="round">explorationmaps.com</text>`;
-    const mapLayers = `<g id="em-map-content">${basemapImage}${renderRegionHighlightsSvg(scene, scale)}${renderVectorsSvg(scene, scale)}${renderEllipsesSvg(scene, scale, svgDefs)}${renderPolygonsSvg(scene, scale)}${renderMarkersSvg(scene, scale)}${renderCalloutsSvg(scene, scale)}</g>`;
+    const mapLayers = `<g id="em-map-content">${basemapImage}${renderRegionHighlightsSvg(scene, scale)}${renderVectorsSvg(scene, scale)}${renderEllipsesSvg(scene, scale, svgDefs)}${renderPolygonsSvg(scene, scale)}${renderMarkersSvg(scene, scale)}${renderCalloutsSvg(scene, scale)}${renderDistanceLinesSvg(scene, scale)}</g>`;
     const panels = `<g id="em-overlay-panels">${renderTitleSvg(scene, scale)}${renderLegendSvg(scene, scale)}${renderNorthArrowSvg(scene, scale)}${renderInsetSvg(scene, scale, svgDefs)}${renderScaleBarSvg(scene, scale)}${renderFooterSvg(scene, scale)}${renderLogoSvg(scene, scale)}</g>`;
     mapContent = `${mapLayers}${panels}${watermark}`;
   }

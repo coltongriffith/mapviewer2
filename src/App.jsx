@@ -32,6 +32,7 @@ import { applyRoleToLayer, inferRoleFromLayer } from './mapPresets';
 import { getTemplate } from './templates';
 import { buildLegendItems, resolveTemplateZones } from './templates/technicalResultsTemplate';
 import { resolveNI43101Zones } from './templates/technicalReportTemplate';
+import { resolveSidePanelZones } from './templates/sidePanelTemplate';
 import { geojsonBounds, geojsonCenter, unionBounds } from './utils/geometry';
 import { markerSvgUrl } from './utils/leaflet';
 import { detectRegion } from './utils/detectRegion';
@@ -636,6 +637,8 @@ export default function App() {
   const [selectedEllipseId, setSelectedEllipseId] = useState(null);
   const [selectedPolygonId, setSelectedPolygonId] = useState(null);
   const [pendingPolygonPoints, setPendingPolygonPoints] = useState([]);
+  const [pendingDistanceP1, setPendingDistanceP1] = useState(null);
+  const [selectedDistanceLineId, setSelectedDistanceLineId] = useState(null);
   const [annotationTool, setAnnotationTool] = useState(null);
   const [uploadStatus, setUploadStatus] = useState({ type: 'info', message: 'Open the editor, then upload your first file from the left panel.' });
   const [exporting, setExporting] = useState(false);
@@ -692,6 +695,9 @@ export default function App() {
   const resolvedZones = useMemo(() => {
     if (project.layout?.templateId === 'ni_43101_technical') {
       return resolveNI43101Zones(template, project.layout, mapSize, legendItems);
+    }
+    if (project.layout?.templateId === 'side_panel') {
+      return resolveSidePanelZones(template, project.layout, mapSize, legendItems);
     }
     return resolveTemplateZones(template, project.layout, mapSize, legendItems);
   }, [template, project.layout, mapSize, legendItems]);
@@ -1784,6 +1790,22 @@ export default function App() {
     setSelectedCalloutId(null);
   };
 
+  const addDistanceLine = (p1, p2) => {
+    const id = crypto.randomUUID();
+    setProject(prev => ({
+      ...prev,
+      distanceLines: [...(prev.distanceLines || []), { id, p1, p2, color: '#e11d48', units: 'km' }],
+    }));
+    setSelectedDistanceLineId(id);
+  };
+  const removeDistanceLine = (id) => {
+    setProject(prev => ({ ...prev, distanceLines: (prev.distanceLines || []).filter(d => d.id !== id) }));
+    if (selectedDistanceLineId === id) setSelectedDistanceLineId(null);
+  };
+  const updateDistanceLine = (id, patch) => {
+    setProject(prev => ({ ...prev, distanceLines: (prev.distanceLines || []).map(d => d.id === id ? { ...d, ...patch } : d) }));
+  };
+
   const handleMapClick = (latlng) => {
     if (annotationTool === 'marker') {
       addMarkerAt(latlng);
@@ -1813,6 +1835,15 @@ export default function App() {
         }
       }
       setPendingPolygonPoints((prev) => [...prev, { lat: latlng.lat, lng: latlng.lng }]);
+    } else if (annotationTool === 'distanceLine') {
+      if (!pendingDistanceP1) {
+        setPendingDistanceP1({ lat: latlng.lat, lng: latlng.lng });
+      } else {
+        addDistanceLine(pendingDistanceP1, { lat: latlng.lat, lng: latlng.lng });
+        setPendingDistanceP1(null);
+        setAnnotationTool(null);
+        annotationToolRef.current = null;
+      }
     }
   };
 
@@ -2219,6 +2250,7 @@ export default function App() {
               >
                 <option value="technical_results_v2">Technical Results v2</option>
                 <option value="ni_43101_technical">NI 43-101 Technical</option>
+                <option value="side_panel">Side Panel</option>
               </select>
             </div>
             <hr style={{ margin: '4px 0 8px', border: 'none', borderTop: '1px solid #e8eef6' }} />
@@ -2570,6 +2602,10 @@ export default function App() {
             <button className={`secondary-btn ${annotationTool === 'ring' ? 'active-toggle' : ''}`} type="button" onClick={() => { const next = annotationTool === 'ring' ? null : 'ring'; setAnnotationTool(next); annotationToolRef.current = next; setSelectedFeature(null); }}>Draw Distance Ring</button>
             <button className={`secondary-btn ${annotationTool === 'maplabel' ? 'active-toggle' : ''}`} type="button" onClick={() => { const next = annotationTool === 'maplabel' ? null : 'maplabel'; setAnnotationTool(next); annotationToolRef.current = next; setSelectedFeature(null); }}>Place Map Label</button>
             <button className={`secondary-btn ${annotationTool === 'polygon' ? 'active-toggle' : ''}`} type="button" onClick={() => { const next = annotationTool === 'polygon' ? null : 'polygon'; setAnnotationTool(next); annotationToolRef.current = next; setPendingPolygonPoints([]); setSelectedFeature(null); }}>Draw Boundary</button>
+            <button className={`secondary-btn ${annotationTool === 'distanceLine' ? 'active-toggle' : ''}`} type="button"
+              onClick={() => { const next = annotationTool === 'distanceLine' ? null : 'distanceLine'; setAnnotationTool(next); annotationToolRef.current = next; setPendingDistanceP1(null); setSelectedFeature(null); }}>
+              Measure Distance
+            </button>
           </div>
           {annotationTool === 'polygon' && (
             <div className="polygon-drawing-status">
@@ -2818,6 +2854,34 @@ export default function App() {
               <button className="secondary-btn" type="button" onClick={() => removePolygon(selectedPolygon.id)}>Remove Boundary</button>
             </div>
           ) : null}
+
+          {selectedDistanceLineId && (() => {
+            const dl = (project.distanceLines || []).find(d => d.id === selectedDistanceLineId);
+            if (!dl) return null;
+            return (
+              <div className="control-section">
+                <div className="control-section-title">Distance Line</div>
+                <div className="control-row">
+                  <label>Color</label>
+                  <input type="color" value={dl.color || '#e11d48'}
+                    onChange={(e) => updateDistanceLine(dl.id, { color: e.target.value })} />
+                </div>
+                <div className="control-row">
+                  <label>Units</label>
+                  <div className="unit-toggle-row">
+                    {['km', 'mi'].map(u => (
+                      <button key={u} className={`unit-toggle-btn${(dl.units || 'km') === u ? ' active' : ''}`}
+                        onClick={() => updateDistanceLine(dl.id, { units: u })}>{u}</button>
+                    ))}
+                  </div>
+                </div>
+                <div className="control-row">
+                  <button className="secondary-btn" style={{ color: '#ef4444' }}
+                    onClick={() => removeDistanceLine(dl.id)}>Delete Distance Line</button>
+                </div>
+              </div>
+            );
+          })()}
         </section>
 
         <section className="control-section cs-collapsible">
@@ -3207,6 +3271,11 @@ export default function App() {
                 }
               }}
               labelFont={project.layout.fonts?.label}
+              pendingDistanceP1={pendingDistanceP1}
+              distanceLines={project.distanceLines || []}
+              selectedDistanceLineId={selectedDistanceLineId}
+              onSelectDistanceLine={setSelectedDistanceLineId}
+              onRemoveDistanceLine={removeDistanceLine}
             />
             <CalloutsOverlay
               map={leafletMapRef.current}
@@ -3290,6 +3359,20 @@ export default function App() {
             </>
           );
         })()}
+
+        {project.layout.templateId === 'side_panel' && resolvedZones.sidebar?.width > 0 && (
+          <div style={{
+            position: 'absolute',
+            top: resolvedZones.sidebar.top,
+            left: resolvedZones.sidebar.left,
+            width: resolvedZones.sidebar.width,
+            height: resolvedZones.sidebar.height,
+            background: 'var(--panel-fill, #ffffff)',
+            borderLeft: '1.5px solid var(--panel-border, #d4deea)',
+            zIndex: 4,
+            pointerEvents: 'none',
+          }} />
+        )}
 
         {project.layout.templateId !== 'ni_43101_technical' && project.layout.showTitle !== false && <div className="template-zone" style={{ ...zoneStyle(resolvedZones.title), opacity: dragging?.id === 'title' ? 0.3 : 1, cursor: 'grab' }} onMouseDown={makeDragHandler('title', project.layout.titleWidthPx ?? 520, project.layout.titleHeightPx ?? 92)}>
           <button className="panel-delete-btn" title="Hide title" onClick={() => updateLayout({ showTitle: false })}>×</button>
