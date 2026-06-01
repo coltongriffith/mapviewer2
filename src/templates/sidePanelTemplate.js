@@ -86,20 +86,25 @@ export function resolveSidePanelZones(template, layout, mapSize, legendItems) {
     : Math.round(H * 0.22);
   const insetW = innerW;
 
+  const sp = layout?.sidePanelPositions || {};
+
   // --- Stack from TOP ---
   let topY = margin;
 
-  const insetZone = insetEnabled
+  let insetZone = insetEnabled
     ? { top: topY, left: sbLeft + margin, width: insetW, height: insetH }
     : { top: 0, left: 0, width: 0, height: 0 };
+  if (sp.inset?.top != null && insetEnabled) insetZone = { ...insetZone, top: sp.inset.top };
   if (insetEnabled) topY += insetH + gap;
 
-  const legendZone = { top: topY, left: sbLeft + margin, width: innerW, height: legendHeight };
+  let legendZone = { top: topY, left: sbLeft + margin, width: innerW, height: legendHeight };
+  if (sp.legend?.top != null) legendZone = { ...legendZone, top: sp.legend.top };
   topY += legendHeight + gap;
 
-  const logoZone = layout?.logo
+  let logoZone = layout?.logo
     ? { top: topY, left: sbLeft + margin, width: logoW, height: logoH }
     : { top: 0, left: 0, width: 0, height: 0 };
+  if (sp.logo?.top != null && layout?.logo) logoZone = { ...logoZone, top: sp.logo.top };
 
   // --- Stack from BOTTOM ---
   let bottomY = H - margin;
@@ -110,35 +115,30 @@ export function resolveSidePanelZones(template, layout, mapSize, legendItems) {
     : { top: 0, left: 0, width: 0, height: 0 };
   if (layout?.footerEnabled && layout?.footerText) bottomY -= footerH + 6;
 
-  const titleZone = { top: bottomY - titleHeight, left: sbLeft + margin, width: innerW, height: titleHeight };
+  let titleZone = { top: bottomY - titleHeight, left: sbLeft + margin, width: innerW, height: titleHeight };
+  if (sp.title?.top != null) titleZone = { ...titleZone, top: sp.title.top };
   bottomY -= titleHeight + gap;
 
   // North arrow left-aligned, scale bar to its right
   const naRow = Math.max(naH, scaleBarH);
-  const northArrowZone = {
+  let northArrowZone = {
     top: bottomY - naRow + (naRow - naH) / 2,
     left: sbLeft + margin,
     width: naW,
     height: naH,
   };
-  const scaleBarZone = {
+  if (sp.northArrow?.top != null) northArrowZone = { ...northArrowZone, top: sp.northArrow.top };
+
+  let scaleBarZone = {
     top: bottomY - naRow,
     left: sbLeft + margin + naW + gap,
     width: Math.max(60, innerW - naW - gap),
     height: scaleBarH,
   };
+  if (sp.scaleBar?.top != null) scaleBarZone = { ...scaleBarZone, top: sp.scaleBar.top };
 
   // Sidebar background — full height right panel
   const sidebarZone = { top: 0, left: sbLeft, width: sbW, height: H };
-
-  // Apply any manually stored positions (user-dragged overrides)
-  const sp = layout?.sidePanelPositions || {};
-  if (sp.inset?.top != null && insetEnabled) insetZone = { ...insetZone, top: sp.inset.top };
-  if (sp.legend?.top != null) legendZone = { ...legendZone, top: sp.legend.top };
-  if (sp.logo?.top != null && layout?.logo) logoZone = { ...logoZone, top: sp.logo.top };
-  if (sp.title?.top != null) titleZone = { ...titleZone, top: sp.title.top };
-  if (sp.northArrow?.top != null) northArrowZone = { ...northArrowZone, top: sp.northArrow.top };
-  if (sp.scaleBar?.top != null) scaleBarZone = { ...scaleBarZone, top: sp.scaleBar.top };
 
   return {
     sidebar: sidebarZone,
