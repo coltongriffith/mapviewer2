@@ -131,6 +131,15 @@ export function resolveSidePanelZones(template, layout, mapSize, legendItems) {
   // Sidebar background — full height right panel
   const sidebarZone = { top: 0, left: sbLeft, width: sbW, height: H };
 
+  // Apply any manually stored positions (user-dragged overrides)
+  const sp = layout?.sidePanelPositions || {};
+  if (sp.inset?.top != null && insetEnabled) insetZone = { ...insetZone, top: sp.inset.top };
+  if (sp.legend?.top != null) legendZone = { ...legendZone, top: sp.legend.top };
+  if (sp.logo?.top != null && layout?.logo) logoZone = { ...logoZone, top: sp.logo.top };
+  if (sp.title?.top != null) titleZone = { ...titleZone, top: sp.title.top };
+  if (sp.northArrow?.top != null) northArrowZone = { ...northArrowZone, top: sp.northArrow.top };
+  if (sp.scaleBar?.top != null) scaleBarZone = { ...scaleBarZone, top: sp.scaleBar.top };
+
   return {
     sidebar: sidebarZone,
     inset: insetZone,

@@ -1072,10 +1072,18 @@ export default function App() {
     e.preventDefault();
     const map = leafletMapRef.current;
     if (map) map.dragging.disable();
+    const isSidePanel = project.layout.templateId === 'side_panel';
     const layoutSnapshot = project.layout;
     let currentHoverZone = null;
+    let finalClientX = e.clientX, finalClientY = e.clientY;
     setDragging({ id, hoverZone: null, ghostX: e.clientX, ghostY: e.clientY, ghostW, ghostH });
     const onMove = (me) => {
+      finalClientX = me.clientX;
+      finalClientY = me.clientY;
+      if (isSidePanel) {
+        setDragging((d) => d ? { ...d, ghostX: me.clientX, ghostY: me.clientY } : null);
+        return;
+      }
       const el = document.elementFromPoint(me.clientX, me.clientY);
       const zoneEl = el?.closest('[data-slot]');
       const hz = zoneEl ? { corner: zoneEl.dataset.corner, slot: zoneEl.dataset.slot } : null;
@@ -1086,7 +1094,25 @@ export default function App() {
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
       if (map) map.dragging.enable();
-      if (currentHoverZone) {
+      if (isSidePanel) {
+        const container = mapContainerRef.current;
+        if (container) {
+          const rect = container.getBoundingClientRect();
+          const sidebar = resolvedZonesRef.current?.sidebar;
+          const zH = ghostH || 80;
+          const minTop = sidebar ? sidebar.top + 8 : 8;
+          const maxTop = sidebar ? sidebar.top + sidebar.height - zH - 8 : (mapSize.height - zH - 8);
+          const rawY = Math.round(finalClientY - rect.top - zH / 2);
+          const clampedTop = Math.max(minTop, Math.min(maxTop, rawY));
+          setProject((p) => ({
+            ...p,
+            layout: {
+              ...p.layout,
+              sidePanelPositions: { ...(p.layout.sidePanelPositions || {}), [id]: { top: clampedTop } },
+            },
+          }));
+        }
+      } else if (currentHoverZone) {
         const { corner, slot } = currentHoverZone;
         const cl = getCornerLayout(layoutSnapshot);
         const newCl = slot === 'first' ? moveToCornerFirst(cl, id, corner)
@@ -2245,7 +2271,20 @@ export default function App() {
               <select
                 value={project.layout.templateId || 'technical_results_v2'}
                 onChange={(e) => {
-                  updateLayout({ templateId: e.target.value, stripTitle: '', stripSubtitle: '' });
+                  const tid = e.target.value;
+                  const themeMap = {
+                    'technical_results_v2': 'investor_clean',
+                    'ni_43101_technical': 'ni_43101',
+                    'side_panel': 'technical_sharp',
+                  };
+                  const extra = tid === 'side_panel' ? {
+                    sidePanelPositions: {},
+                    insetEnabled: true,
+                    insetHeightPx: null,
+                    legendHeightPx: null,
+                    titleHeightPx: 108,
+                  } : {};
+                  updateLayout({ templateId: tid, themeId: themeMap[tid] || 'investor_clean', stripTitle: '', stripSubtitle: '', ...extra });
                 }}
               >
                 <option value="technical_results_v2">Standard</option>
@@ -2253,6 +2292,13 @@ export default function App() {
                 <option value="side_panel">Technical</option>
               </select>
             </div>
+            {project.layout.templateId === 'side_panel' && Object.keys(project.layout.sidePanelPositions || {}).length > 0 && (
+              <div style={{ padding: '4px 0 6px' }}>
+                <button className="secondary-btn" style={{ width: '100%', fontSize: 12 }} onClick={() => updateLayout({ sidePanelPositions: {} })}>
+                  Reset Panel Layout
+                </button>
+              </div>
+            )}
             <hr style={{ margin: '4px 0 8px', border: 'none', borderTop: '1px solid #e8eef6' }} />
             <div className="control-row"><label>Title</label><input value={localTitle} onChange={(e) => {
               const val = e.target.value;

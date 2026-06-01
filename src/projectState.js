@@ -49,12 +49,10 @@ export const CALLOUT_TYPES = {
 
 
 export const TEMPLATE_THEMES = {
-  investor_clean:  'Investor',
+  investor_clean:  'Clean',
   technical_sharp: 'Technical',
-  modern_dark:     'Dark Mode',
-  warm_terrain:    'Terrain',
-  forest_dark:     'Forest',
-  ni_43101:        'NI 43-101',
+  modern_dark:     'Dark',
+  warm_terrain:    'Warm',
 };
 
 export const FONT_OPTIONS = {
@@ -120,6 +118,7 @@ export function createInitialProjectState() {
       northArrowCorner: 'br',
       cornerOrder: ['title', 'logo', 'inset', 'northArrow', 'scaleBar', 'legend'],
       cornerLayout: null,
+      sidePanelPositions: {},
       northArrowHeightPx: 100,
       insetAspectRatio: null,
       safeMargins: { top: 18, right: 18, bottom: 18, left: 18 },
