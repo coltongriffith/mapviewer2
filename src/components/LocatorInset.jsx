@@ -43,12 +43,17 @@ function buildBackdrop() {
 }
 
 // Project geographic [lng, lat] coordinates to SVG viewport [x, y]
+function mercY(lat) {
+  return Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360));
+}
+
 function projectToSvg(lng, lat, refBbox, svgW, svgH, pad) {
   const [minLng, minLat, maxLng, maxLat] = refBbox;
   const rangeW = maxLng - minLng || 1;
-  const rangeH = maxLat - minLat || 1;
+  const minMY = mercY(minLat), maxMY = mercY(maxLat);
+  const rangeH = maxMY - minMY || 1;
   const x = pad + ((lng - minLng) / rangeW) * (svgW - pad * 2);
-  const y = (svgH - pad) - ((lat - minLat) / rangeH) * (svgH - pad * 2); // invert Y
+  const y = (svgH - pad) - ((mercY(lat) - minMY) / rangeH) * (svgH - pad * 2);
   return [x, y];
 }
 

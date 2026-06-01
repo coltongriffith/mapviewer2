@@ -15,7 +15,7 @@ const MapCanvas = React.lazy(() => import('./components/MapCanvas'));
 const ExportHDModal = React.lazy(() => import('./components/ExportHDModal'));
 const HowToUseModal = React.lazy(() => import('./components/HowToUseModal'));
 const ColumnMapperModal = React.lazy(() => import('./components/ColumnMapperModal'));
-import { loadGeoJSON, loadCSV } from './utils/importers';
+import { loadGeoJSON, loadCSV, loadShapefileSet } from './utils/importers';
 import sampleClaims from './assets/sampleClaims.json';
 import sampleDrillholes from './assets/sampleDrillholes.json';
 import {
@@ -32,7 +32,9 @@ import { applyRoleToLayer, inferRoleFromLayer } from './mapPresets';
 import { getTemplate } from './templates';
 import { buildLegendItems, resolveTemplateZones } from './templates/technicalResultsTemplate';
 import { resolveNI43101Zones } from './templates/technicalReportTemplate';
+import { resolveSidePanelZones } from './templates/sidePanelTemplate';
 import { geojsonBounds, geojsonCenter, unionBounds } from './utils/geometry';
+import { markerSvgUrl } from './utils/leaflet';
 import { detectRegion } from './utils/detectRegion';
 import { cleanLayerName } from './utils/cleanLayerName';
 import regionsNA from './assets/regionsNA.json';
@@ -84,13 +86,27 @@ const SAMPLE_LOGO_SVG = [
 const SAMPLE_LOGO_URL = `data:image/svg+xml,${encodeURIComponent(SAMPLE_LOGO_SVG)}`;
 const SAMPLE_ACCENT = '#b87333';
 
+const BASEMAP_OPTIONS = [
+  { key: 'light',    label: 'Light',     bg: '#dde8f0', water: '#a8c8e8' },
+  { key: 'streets',  label: 'Streets',   bg: '#f5f0e8', water: '#c8dff0' },
+  { key: 'dark',     label: 'Dark',      bg: '#1a2535', water: '#0f1a28' },
+  { key: 'topo',     label: 'Topo',      bg: '#d4c89a', water: '#9ab8d0' },
+  { key: 'terrain',  label: 'Terrain',   bg: '#ccd8b0', water: '#9ab8d0' },
+  { key: 'satellite',label: 'Satellite', bg: '#2d4a3e', water: '#1a3050' },
+  { key: 'blank',    label: 'Blank',     bg: '#ffffff', water: '#e8f0f8' },
+];
+
 const MARKER_TYPES = {
   circle: 'Circle',
   square: 'Square',
   triangle: 'Triangle',
-  pickaxe: 'Pickaxe',
-  shovel: 'Shovel',
+  triangle_down: 'Tri ▼',
+  diamond: 'Diamond',
+  cross: 'Cross',
   star: 'Star',
+  hexagon: 'Hexagon',
+  pin: 'Pin',
+  drillhole: 'DH Pin',
 };
 
 function detectLayerKind(geojson) {
@@ -621,6 +637,8 @@ export default function App() {
   const [selectedEllipseId, setSelectedEllipseId] = useState(null);
   const [selectedPolygonId, setSelectedPolygonId] = useState(null);
   const [pendingPolygonPoints, setPendingPolygonPoints] = useState([]);
+  const [pendingDistanceP1, setPendingDistanceP1] = useState(null);
+  const [selectedDistanceLineId, setSelectedDistanceLineId] = useState(null);
   const [annotationTool, setAnnotationTool] = useState(null);
   const [uploadStatus, setUploadStatus] = useState({ type: 'info', message: 'Open the editor, then upload your first file from the left panel.' });
   const [exporting, setExporting] = useState(false);
@@ -677,6 +695,9 @@ export default function App() {
   const resolvedZones = useMemo(() => {
     if (project.layout?.templateId === 'ni_43101_technical') {
       return resolveNI43101Zones(template, project.layout, mapSize, legendItems);
+    }
+    if (project.layout?.templateId === 'side_panel') {
+      return resolveSidePanelZones(template, project.layout, mapSize, legendItems);
     }
     return resolveTemplateZones(template, project.layout, mapSize, legendItems);
   }, [template, project.layout, mapSize, legendItems]);
@@ -1051,10 +1072,18 @@ export default function App() {
     e.preventDefault();
     const map = leafletMapRef.current;
     if (map) map.dragging.disable();
+    const isSidePanel = project.layout.templateId === 'side_panel';
     const layoutSnapshot = project.layout;
     let currentHoverZone = null;
+    let finalClientX = e.clientX, finalClientY = e.clientY;
     setDragging({ id, hoverZone: null, ghostX: e.clientX, ghostY: e.clientY, ghostW, ghostH });
     const onMove = (me) => {
+      finalClientX = me.clientX;
+      finalClientY = me.clientY;
+      if (isSidePanel) {
+        setDragging((d) => d ? { ...d, ghostX: me.clientX, ghostY: me.clientY } : null);
+        return;
+      }
       const el = document.elementFromPoint(me.clientX, me.clientY);
       const zoneEl = el?.closest('[data-slot]');
       const hz = zoneEl ? { corner: zoneEl.dataset.corner, slot: zoneEl.dataset.slot } : null;
@@ -1065,7 +1094,25 @@ export default function App() {
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
       if (map) map.dragging.enable();
-      if (currentHoverZone) {
+      if (isSidePanel) {
+        const container = mapContainerRef.current;
+        if (container) {
+          const rect = container.getBoundingClientRect();
+          const sidebar = resolvedZonesRef.current?.sidebar;
+          const zH = ghostH || 80;
+          const minTop = sidebar ? sidebar.top + 8 : 8;
+          const maxTop = sidebar ? sidebar.top + sidebar.height - zH - 8 : (mapSize.height - zH - 8);
+          const rawY = Math.round(finalClientY - rect.top - zH / 2);
+          const clampedTop = Math.max(minTop, Math.min(maxTop, rawY));
+          setProject((p) => ({
+            ...p,
+            layout: {
+              ...p.layout,
+              sidePanelPositions: { ...(p.layout.sidePanelPositions || {}), [id]: { top: clampedTop } },
+            },
+          }));
+        }
+      } else if (currentHoverZone) {
         const { corner, slot } = currentHoverZone;
         const cl = getCornerLayout(layoutSnapshot);
         const newCl = slot === 'first' ? moveToCornerFirst(cl, id, corner)
@@ -1260,12 +1307,33 @@ export default function App() {
     }
   };
 
-  const loadSampleData = async () => {
+  const handleUploadFiles = async (files) => {
+    try {
+      const shpName = files.find((f) => f.name.toLowerCase().endsWith('.shp'))?.name || 'shapefile';
+      const geojson = await loadShapefileSet(files);
+      await addGeoJSONAsLayer(geojson, shpName);
+      if (screen !== 'editor') setScreen('editor');
+    } catch (err) {
+      setUploadStatus({ type: 'error', message: `Import failed: ${err.message}` });
+    }
+  };
+
+  const SAMPLE_STYLE_PRESETS = {
+    drill_plan:     { basemap: 'satellite', mode: 'drill_plan' },
+    claims:         { basemap: 'light',     mode: 'regional_claims' },
+    target:         { basemap: 'light',     mode: 'target_anomaly' },
+    regional:       { basemap: 'terrain',   mode: 'project_overview' },
+    infrastructure: { basemap: 'streets',   mode: 'access_location' },
+    dark:           { basemap: 'dark',      mode: 'drill_plan' },
+  };
+
+  const loadSampleData = async (styleId) => {
     const makeFile = (json, name) => new File([JSON.stringify(json)], name, { type: 'application/json' });
     setProject(createInitialProjectState());
     try {
       await addGeoJSONLayer(makeFile(sampleClaims, 'Sample Claims.geojson'));
       await addGeoJSONLayer(makeFile(sampleDrillholes, 'Sample Drillholes.geojson'));
+      const styleOverride = styleId ? (SAMPLE_STYLE_PRESETS[styleId] || {}) : {};
       updateLayout({
         logo: SAMPLE_LOGO_URL,
         accentColor: SAMPLE_ACCENT,
@@ -1274,6 +1342,7 @@ export default function App() {
         footerText: 'Buckhorn Creek Mining Corp. | Cariboo Region, BC | For internal use only',
         footerEnabled: true,
         exportSettings: { filename: 'buckhorn-creek-property', pixelRatio: 2 },
+        ...styleOverride,
       });
       applyBrandPaletteToLayers(SAMPLE_ACCENT);
       setScreen('editor');
@@ -1747,6 +1816,22 @@ export default function App() {
     setSelectedCalloutId(null);
   };
 
+  const addDistanceLine = (p1, p2) => {
+    const id = crypto.randomUUID();
+    setProject(prev => ({
+      ...prev,
+      distanceLines: [...(prev.distanceLines || []), { id, p1, p2, color: '#e11d48', units: 'km' }],
+    }));
+    setSelectedDistanceLineId(id);
+  };
+  const removeDistanceLine = (id) => {
+    setProject(prev => ({ ...prev, distanceLines: (prev.distanceLines || []).filter(d => d.id !== id) }));
+    if (selectedDistanceLineId === id) setSelectedDistanceLineId(null);
+  };
+  const updateDistanceLine = (id, patch) => {
+    setProject(prev => ({ ...prev, distanceLines: (prev.distanceLines || []).map(d => d.id === id ? { ...d, ...patch } : d) }));
+  };
+
   const handleMapClick = (latlng) => {
     if (annotationTool === 'marker') {
       addMarkerAt(latlng);
@@ -1776,6 +1861,15 @@ export default function App() {
         }
       }
       setPendingPolygonPoints((prev) => [...prev, { lat: latlng.lat, lng: latlng.lng }]);
+    } else if (annotationTool === 'distanceLine') {
+      if (!pendingDistanceP1) {
+        setPendingDistanceP1({ lat: latlng.lat, lng: latlng.lng });
+      } else {
+        addDistanceLine(pendingDistanceP1, { lat: latlng.lat, lng: latlng.lng });
+        setPendingDistanceP1(null);
+        setAnnotationTool(null);
+        annotationToolRef.current = null;
+      }
     }
   };
 
@@ -1881,8 +1975,8 @@ export default function App() {
       const opts = { ...(project.layout?.exportSettings || {}), ...extraOptions };
       if (format === 'png') {
         await exportPNG(scene, opts);
-      } else if (format === 'svg') {
-        await exportSVG(scene, opts);
+      } else if (format === 'svg' || format === 'svg_ai') {
+        await exportSVG(scene, { ...opts, illustratorMode: format === 'svg_ai' });
       } else if (format === 'pdf') {
         const { exportPDF } = await import('./export/exportPDF');
         await exportPDF(scene, opts);
@@ -2106,6 +2200,7 @@ export default function App() {
         <LandingPage
           onOpenEditor={() => setScreen('editor')}
           onLoadSample={loadSampleData}
+          onLoadSampleStyle={(styleId) => loadSampleData(styleId)}
           recentProjects={recentProjects}
           onOpenProject={(entry) => { openProjectFromRecent(entry); setScreen('editor'); }}
           onShowHelp={() => setShowHelpModal(true)}
@@ -2143,7 +2238,7 @@ export default function App() {
           </div>
         ) : null}
 
-        <UploadPanel onUploadFile={handleUploadFile} inputRef={uploadInputRef} status={uploadStatus} layers={project.layers} />
+        <UploadPanel onUploadFile={handleUploadFile} onUploadFiles={handleUploadFiles} inputRef={uploadInputRef} status={uploadStatus} layers={project.layers} />
 
         <div className={`logo-upload-card${project.layout.logo ? ' has-logo' : ''}`}>
           {project.layout.logo ? (
@@ -2176,13 +2271,34 @@ export default function App() {
               <select
                 value={project.layout.templateId || 'technical_results_v2'}
                 onChange={(e) => {
-                  updateLayout({ templateId: e.target.value, stripTitle: '', stripSubtitle: '' });
+                  const tid = e.target.value;
+                  const themeMap = {
+                    'technical_results_v2': 'investor_clean',
+                    'ni_43101_technical': 'ni_43101',
+                    'side_panel': 'technical_sharp',
+                  };
+                  const extra = tid === 'side_panel' ? {
+                    sidePanelPositions: {},
+                    insetEnabled: true,
+                    insetHeightPx: null,
+                    legendHeightPx: null,
+                    titleHeightPx: 108,
+                  } : {};
+                  updateLayout({ templateId: tid, themeId: themeMap[tid] || 'investor_clean', stripTitle: '', stripSubtitle: '', ...extra });
                 }}
               >
-                <option value="technical_results_v2">Technical Results v2</option>
-                <option value="ni_43101_technical">NI 43-101 Technical</option>
+                <option value="technical_results_v2">Standard</option>
+                <option value="ni_43101_technical">NI 43-101</option>
+                <option value="side_panel">Technical</option>
               </select>
             </div>
+            {project.layout.templateId === 'side_panel' && Object.keys(project.layout.sidePanelPositions || {}).length > 0 && (
+              <div style={{ padding: '4px 0 6px' }}>
+                <button className="secondary-btn" style={{ width: '100%', fontSize: 12 }} onClick={() => updateLayout({ sidePanelPositions: {} })}>
+                  Reset Panel Layout
+                </button>
+              </div>
+            )}
             <hr style={{ margin: '4px 0 8px', border: 'none', borderTop: '1px solid #e8eef6' }} />
             <div className="control-row"><label>Title</label><input value={localTitle} onChange={(e) => {
               const val = e.target.value;
@@ -2201,14 +2317,24 @@ export default function App() {
               <input type="range" min="0.6" max="1.5" step="0.05" value={project.layout.titleFontScale ?? 1} onChange={(e) => updateLayout({ titleFontScale: parseFloat(e.target.value) })} style={{ flex: 1 }} />
               <span style={{ fontSize: 11, marginLeft: 6, minWidth: 32 }}>{Math.round((project.layout.titleFontScale ?? 1) * 100)}%</span>
             </div>
-            <div className="control-row">
+            <div className="control-row-stack">
               <label>Basemap</label>
-              <select value={project.layout.basemap} onChange={(e) => updateLayout({ basemap: e.target.value })}>
-                <option value="light">Light</option>
-                <option value="satellite">Satellite</option>
-                <option value="topo">Topo</option>
-                <option value="dark">Dark</option>
-              </select>
+              <div className="basemap-picker">
+                {BASEMAP_OPTIONS.map(({ key, label, bg, water }) => (
+                  <button
+                    key={key}
+                    type="button"
+                    className={`basemap-thumb${(project.layout.basemap || 'light') === key ? ' active' : ''}`}
+                    onClick={() => updateLayout({ basemap: key })}
+                    title={label}
+                  >
+                    <div className="basemap-thumb-swatch" style={{ background: bg }}>
+                      <div className="basemap-thumb-water" style={{ background: water }} />
+                    </div>
+                    <span className="basemap-thumb-label">{label}</span>
+                  </button>
+                ))}
+              </div>
             </div>
             <div className="element-visibility-row">
               <label className="toggle-row"><input type="checkbox" checked={project.layout.showTitle !== false} onChange={(e) => updateLayout({ showTitle: e.target.checked })} /><span>Title</span></label>
@@ -2264,27 +2390,47 @@ export default function App() {
                   </div>
                   <div className="control-row">
                     <label>Marker Shape</label>
-                    <div className="marker-shape-picker">
+                    <div className="marker-shape-picker-visual">
                       {[
-                        ['circle', 'Circle'],
-                        ['triangle_down', 'Tri ▼'],
-                        ['triangle', 'Tri ▲'],
-                        ['square', 'Square'],
-                        ['diamond', 'Diamond'],
-                        ['cross', 'Cross'],
-                        ['drillhole', 'DH Pin'],
-                        ['star', 'Star'],
-                      ].map(([val, label]) => (
-                        <button
-                          key={val}
-                          type="button"
-                          className={`shape-btn${(selectedLayer.style?.markerShape || 'circle') === val ? ' active' : ''}`}
-                          onClick={() => updateLayer(selectedLayer.id, { style: { markerShape: val } })}
-                          title={label}
-                        >
-                          {label}
-                        </button>
-                      ))}
+                        ['circle', 'Circle'], ['square', 'Square'], ['triangle', 'Tri ▲'], ['triangle_down', 'Tri ▼'],
+                        ['diamond', 'Diamond'], ['cross', 'Cross'], ['star', 'Star'], ['hexagon', 'Hexagon'],
+                        ['pin', 'Pin'], ['drillhole', 'DH Pin'],
+                      ].map(([val, label]) => {
+                        const color = selectedLayer.style?.markerColor || '#2563eb';
+                        const isActive = (selectedLayer.style?.markerShape || 'circle') === val;
+                        return (
+                          <button key={val} type="button" className={`shape-visual-btn${isActive ? ' active' : ''}`}
+                            onClick={() => updateLayer(selectedLayer.id, { style: { markerShape: val } })} title={label}>
+                            <img src={markerSvgUrl(val, isActive ? '#ffffff' : color, 18)} alt={label} width="18" height="18" />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div className="control-row">
+                    <label>Custom Icon</label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      {selectedLayer.style?.customMarkerDataUri && (
+                        <img src={selectedLayer.style.customMarkerDataUri} alt="custom icon" style={{ width: 24, height: 24, objectFit: 'contain', border: '1px solid #d4deea', borderRadius: 4 }} />
+                      )}
+                      <button type="button" className="secondary-btn" style={{ flex: 1 }}
+                        onClick={() => {
+                          const input = document.createElement('input');
+                          input.type = 'file'; input.accept = 'image/png,image/svg+xml,image/jpeg,image/gif';
+                          input.onchange = (e) => {
+                            const file = e.target.files?.[0]; if (!file) return;
+                            const reader = new FileReader();
+                            reader.onload = (ev) => updateLayer(selectedLayer.id, { style: { customMarkerDataUri: ev.target.result } });
+                            reader.readAsDataURL(file);
+                          };
+                          input.click();
+                        }}>
+                        {selectedLayer.style?.customMarkerDataUri ? 'Change Icon' : 'Upload Icon'}
+                      </button>
+                      {selectedLayer.style?.customMarkerDataUri && (
+                        <button type="button" className="secondary-btn" style={{ flexShrink: 0 }}
+                          onClick={() => updateLayer(selectedLayer.id, { style: { customMarkerDataUri: null } })}>✕</button>
+                      )}
                     </div>
                   </div>
                 </>
@@ -2502,6 +2648,10 @@ export default function App() {
             <button className={`secondary-btn ${annotationTool === 'ring' ? 'active-toggle' : ''}`} type="button" onClick={() => { const next = annotationTool === 'ring' ? null : 'ring'; setAnnotationTool(next); annotationToolRef.current = next; setSelectedFeature(null); }}>Draw Distance Ring</button>
             <button className={`secondary-btn ${annotationTool === 'maplabel' ? 'active-toggle' : ''}`} type="button" onClick={() => { const next = annotationTool === 'maplabel' ? null : 'maplabel'; setAnnotationTool(next); annotationToolRef.current = next; setSelectedFeature(null); }}>Place Map Label</button>
             <button className={`secondary-btn ${annotationTool === 'polygon' ? 'active-toggle' : ''}`} type="button" onClick={() => { const next = annotationTool === 'polygon' ? null : 'polygon'; setAnnotationTool(next); annotationToolRef.current = next; setPendingPolygonPoints([]); setSelectedFeature(null); }}>Draw Boundary</button>
+            <button className={`secondary-btn ${annotationTool === 'distanceLine' ? 'active-toggle' : ''}`} type="button"
+              onClick={() => { const next = annotationTool === 'distanceLine' ? null : 'distanceLine'; setAnnotationTool(next); annotationToolRef.current = next; setPendingDistanceP1(null); setSelectedFeature(null); }}>
+              Measure Distance
+            </button>
           </div>
           {annotationTool === 'polygon' && (
             <div className="polygon-drawing-status">
@@ -2574,17 +2724,29 @@ export default function App() {
           {selectedEllipse ? (
             <div className="control-grid" style={{ marginTop: 10 }}>
               <div className="selected-note">{selectedEllipse.isRing ? 'Selected distance ring' : 'Selected highlight area'}</div>
-              <div className="control-row"><label>Label</label><input value={selectedEllipse.label || ''} onChange={(e) => updateEllipse(selectedEllipse.id, { label: e.target.value })} placeholder={selectedEllipse.isRing ? `${selectedEllipse.radiusKm} km` : ''} /></div>
+              <div className="control-row"><label>Label</label><input value={selectedEllipse.label || ''} onChange={(e) => updateEllipse(selectedEllipse.id, { label: e.target.value })} placeholder={selectedEllipse.isRing ? (selectedEllipse.units === 'mi' ? `${(selectedEllipse.radiusKm * 0.621371).toFixed(1)} mi` : `${selectedEllipse.radiusKm} km`) : ''} /></div>
               {selectedEllipse.isRing ? (
                 <>
                   <div className="control-row inline-2">
                     <div>
-                      <label>Radius (km)</label>
-                      <input type="number" min="1" max="5000" step="1" value={selectedEllipse.radiusKm ?? 50} onChange={(e) => updateEllipse(selectedEllipse.id, { radiusKm: Number(e.target.value) })} />
+                      <label>Radius ({selectedEllipse.units === 'mi' ? 'mi' : 'km'})</label>
+                      <input type="number" min="0.1" max="5000" step={selectedEllipse.units === 'mi' ? '0.1' : '1'}
+                        value={selectedEllipse.units === 'mi' ? Math.round((selectedEllipse.radiusKm ?? 50) * 0.621371 * 10) / 10 : (selectedEllipse.radiusKm ?? 50)}
+                        onChange={(e) => {
+                          const v = Number(e.target.value);
+                          updateEllipse(selectedEllipse.id, { radiusKm: selectedEllipse.units === 'mi' ? v / 0.621371 : v });
+                        }} />
                     </div>
                     <div>
                       <label>Ring Color</label>
                       <input type="color" value={selectedEllipse.color || '#dc2626'} onChange={(e) => updateEllipse(selectedEllipse.id, { color: e.target.value })} />
+                    </div>
+                  </div>
+                  <div className="control-row">
+                    <label>Units</label>
+                    <div className="unit-toggle-row">
+                      <button type="button" className={`unit-toggle-btn${!selectedEllipse.units || selectedEllipse.units === 'km' ? ' active' : ''}`} onClick={() => updateEllipse(selectedEllipse.id, { units: 'km' })}>km</button>
+                      <button type="button" className={`unit-toggle-btn${selectedEllipse.units === 'mi' ? ' active' : ''}`} onClick={() => updateEllipse(selectedEllipse.id, { units: 'mi' })}>mi</button>
                     </div>
                   </div>
                   <div className="control-row inline-2">
@@ -2738,6 +2900,34 @@ export default function App() {
               <button className="secondary-btn" type="button" onClick={() => removePolygon(selectedPolygon.id)}>Remove Boundary</button>
             </div>
           ) : null}
+
+          {selectedDistanceLineId && (() => {
+            const dl = (project.distanceLines || []).find(d => d.id === selectedDistanceLineId);
+            if (!dl) return null;
+            return (
+              <div className="control-section">
+                <div className="control-section-title">Distance Line</div>
+                <div className="control-row">
+                  <label>Color</label>
+                  <input type="color" value={dl.color || '#e11d48'}
+                    onChange={(e) => updateDistanceLine(dl.id, { color: e.target.value })} />
+                </div>
+                <div className="control-row">
+                  <label>Units</label>
+                  <div className="unit-toggle-row">
+                    {['km', 'mi'].map(u => (
+                      <button key={u} className={`unit-toggle-btn${(dl.units || 'km') === u ? ' active' : ''}`}
+                        onClick={() => updateDistanceLine(dl.id, { units: u })}>{u}</button>
+                    ))}
+                  </div>
+                </div>
+                <div className="control-row">
+                  <button className="secondary-btn" style={{ color: '#ef4444' }}
+                    onClick={() => removeDistanceLine(dl.id)}>Delete Distance Line</button>
+                </div>
+              </div>
+            );
+          })()}
         </section>
 
         <section className="control-section cs-collapsible">
@@ -3036,6 +3226,7 @@ export default function App() {
             <div className="button-row">
               <button className={`btn primary${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('png'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export PNG'}</button>
               <button className={`btn${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('svg'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export SVG'}</button>
+              <button className={`btn${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('svg_ai'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title="SVG bundled with separate basemap PNG — opens correctly in Adobe Illustrator">{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'SVG (Illustrator)'}</button>
               <button className={`btn${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('pdf'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export PDF'}</button>
             </div>
             {exportError && <div className="export-error-msg">{exportError}</div>}
@@ -3076,6 +3267,7 @@ export default function App() {
             <div className="topbar-btn-group">
               <button className={`topbar-btn primary${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('png'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing…' : ''}>{exporting ? 'Exporting…' : 'PNG'}</button>
               <button className={`topbar-btn${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('svg'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting}>SVG</button>
+              <button className={`topbar-btn${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('svg_ai'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title="SVG for Illustrator (ZIP with separate basemap)">AI</button>
               <button className={`topbar-btn${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('pdf'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting}>PDF</button>
             </div>
             {exportError && <div className="export-error-msg">{exportError}</div>}
@@ -3125,6 +3317,11 @@ export default function App() {
                 }
               }}
               labelFont={project.layout.fonts?.label}
+              pendingDistanceP1={pendingDistanceP1}
+              distanceLines={project.distanceLines || []}
+              selectedDistanceLineId={selectedDistanceLineId}
+              onSelectDistanceLine={setSelectedDistanceLineId}
+              onRemoveDistanceLine={removeDistanceLine}
             />
             <CalloutsOverlay
               map={leafletMapRef.current}
@@ -3208,6 +3405,20 @@ export default function App() {
             </>
           );
         })()}
+
+        {project.layout.templateId === 'side_panel' && resolvedZones.sidebar?.width > 0 && (
+          <div style={{
+            position: 'absolute',
+            top: resolvedZones.sidebar.top,
+            left: resolvedZones.sidebar.left,
+            width: resolvedZones.sidebar.width,
+            height: resolvedZones.sidebar.height,
+            background: 'var(--panel-fill, #ffffff)',
+            borderLeft: '1.5px solid var(--panel-border, #d4deea)',
+            zIndex: 4,
+            pointerEvents: 'none',
+          }} />
+        )}
 
         {project.layout.templateId !== 'ni_43101_technical' && project.layout.showTitle !== false && <div className="template-zone" style={{ ...zoneStyle(resolvedZones.title), opacity: dragging?.id === 'title' ? 0.3 : 1, cursor: 'grab' }} onMouseDown={makeDragHandler('title', project.layout.titleWidthPx ?? 520, project.layout.titleHeightPx ?? 92)}>
           <button className="panel-delete-btn" title="Hide title" onClick={() => updateLayout({ showTitle: false })}>×</button>

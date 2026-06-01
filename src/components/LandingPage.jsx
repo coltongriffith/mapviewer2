@@ -1,4 +1,13 @@
 import React, { useState } from 'react';
+
+const GALLERY_STYLES = [
+  { id: 'drill_plan',   label: 'Drill Results',    desc: 'Collars, assays & target rings',        accent: '#2563eb', bg: '#1a2535', water: '#0f172a' },
+  { id: 'claims',       label: 'Claims Overview',  desc: 'Mineral tenures & land packages',       accent: '#16a34a', bg: '#f0fdf4', water: '#dcfce7' },
+  { id: 'target',       label: 'Target Generation',desc: 'Anomaly areas & priority zones',        accent: '#dc2626', bg: '#fef2f2', water: '#fee2e2' },
+  { id: 'regional',     label: 'Regional Location',desc: 'Project context in the district',       accent: '#b87333', bg: '#fef9ee', water: '#fde68a' },
+  { id: 'infrastructure', label: 'Infrastructure', desc: 'Roads, power lines & access routes',    accent: '#7c3aed', bg: '#f5f3ff', water: '#ede9fe' },
+  { id: 'dark',         label: 'Dark Satellite',   desc: 'Satellite basemap, high contrast',      accent: '#60a5fa', bg: '#0f172a', water: '#1e3a5f' },
+];
 import { useAuth } from '../hooks/useAuth.jsx';
 import AuthModal from './AuthModal';
 
@@ -13,9 +22,10 @@ function formatRelativeDate(iso) {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-export default function LandingPage({ onOpenEditor, onLoadSample, recentProjects = [], onOpenProject, onShowHelp }) {
+export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleStyle, recentProjects = [], onOpenProject, onShowHelp }) {
   const { user } = useAuth();
   const [showAuth, setShowAuth] = useState(false);
+  const [dataSourcesOpen, setDataSourcesOpen] = useState(false);
 
   return (
     <div className="landing-shell">
@@ -251,6 +261,86 @@ export default function LandingPage({ onOpenEditor, onLoadSample, recentProjects
             <div className="landing-feature-desc">Draw geo-accurate distance rings from a target, highlight provinces, and layer on reference roads, labels, and railways.</div>
           </div>
         </div>
+      </section>
+
+      {/* Example map gallery */}
+      <section className="landing-gallery">
+        <div className="landing-gallery-heading">See what you can make</div>
+        <p className="landing-gallery-sub">Click any style to open the editor with sample mining data pre-loaded.</p>
+        <div className="landing-gallery-grid">
+          {GALLERY_STYLES.map((style) => (
+            <button
+              key={style.id}
+              type="button"
+              className="landing-gallery-card"
+              onClick={() => onLoadSampleStyle ? onLoadSampleStyle(style.id) : onLoadSample?.()}
+            >
+              <div className="landing-gallery-mock" style={{ background: style.bg }}>
+                <div className="landing-gallery-mock-claim" style={{ borderColor: style.accent }} />
+                <div className="landing-gallery-mock-ring" style={{ borderColor: style.accent }} />
+                <div className="landing-gallery-mock-dot" style={{ background: style.accent }} />
+                <div className="landing-gallery-mock-title" style={{ background: style.accent + '22', borderLeft: `3px solid ${style.accent}` }} />
+              </div>
+              <div className="landing-gallery-card-body">
+                <div className="landing-gallery-card-label">{style.label}</div>
+                <div className="landing-gallery-card-desc">{style.desc}</div>
+                <div className="landing-gallery-card-cta" style={{ color: style.accent }}>Try this style →</div>
+              </div>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      {/* Data sources guide */}
+      <section className="landing-data-sources">
+        <button
+          type="button"
+          className="landing-ds-toggle"
+          onClick={() => setDataSourcesOpen((o) => !o)}
+          aria-expanded={dataSourcesOpen}
+        >
+          <span>Where to find mining map data</span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ transform: dataSourcesOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
+            <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </button>
+        {dataSourcesOpen && (
+          <div className="landing-ds-body">
+            <div className="landing-ds-intro">
+              Exploration Maps accepts <strong>GeoJSON</strong>, <strong>Shapefile (.zip or .shp+.dbf)</strong>, <strong>KML/KMZ</strong>, and <strong>CSV</strong> drillhole tables. Here are the best free sources by jurisdiction.
+            </div>
+            <div className="landing-ds-grid">
+              <div className="landing-ds-region">
+                <div className="landing-ds-region-name">🇨🇦 Canada</div>
+                <ul className="landing-ds-list">
+                  <li><strong>BC Mineral Titles Online (MTO)</strong> — mineral claims, coal licenses. Export as Shapefile. <a href="https://www.mtonline.gov.bc.ca" target="_blank" rel="noopener noreferrer">mtonline.gov.bc.ca</a></li>
+                  <li><strong>NRCan Open Government</strong> — geology, roads, boundaries. <a href="https://open.canada.ca/en/open-data" target="_blank" rel="noopener noreferrer">open.canada.ca</a></li>
+                  <li><strong>BC Data Catalogue</strong> — roads, water, administrative. <a href="https://catalogue.data.gov.bc.ca" target="_blank" rel="noopener noreferrer">catalogue.data.gov.bc.ca</a></li>
+                  <li><strong>MNDM Ontario</strong> — mining claims, geology. <a href="https://www.mndm.gov.on.ca" target="_blank" rel="noopener noreferrer">mndm.gov.on.ca</a></li>
+                </ul>
+              </div>
+              <div className="landing-ds-region">
+                <div className="landing-ds-region-name">🇦🇺 Australia</div>
+                <ul className="landing-ds-list">
+                  <li><strong>Geoscience Australia</strong> — national geology, mineral deposits. <a href="https://www.ga.gov.au" target="_blank" rel="noopener noreferrer">ga.gov.au</a></li>
+                  <li><strong>MineralMap.ga.gov.au</strong> — interactive, export GeoJSON.</li>
+                  <li><strong>State Surveys</strong> — GSWA (WA), DPIR (NT), GSNSW (NSW) each have open-data portals for tenements and geology.</li>
+                </ul>
+              </div>
+              <div className="landing-ds-region">
+                <div className="landing-ds-region-name">🌍 Global / Other</div>
+                <ul className="landing-ds-list">
+                  <li><strong>OpenStreetMap</strong> via <a href="https://overpass-turbo.eu" target="_blank" rel="noopener noreferrer">Overpass Turbo</a> — roads, settlements, railways as GeoJSON.</li>
+                  <li><strong>USGS National Map</strong> — US geology, boundaries. <a href="https://nationalmap.gov" target="_blank" rel="noopener noreferrer">nationalmap.gov</a></li>
+                  <li><strong>Natural Earth</strong> — country/province boundaries, rivers, roads. <a href="https://naturalearthdata.com" target="_blank" rel="noopener noreferrer">naturalearthdata.com</a></li>
+                </ul>
+              </div>
+            </div>
+            <div className="landing-ds-tip">
+              <strong>Pro tip:</strong> Export claims as Shapefile, then drag all 4 files (<code>.shp</code>, <code>.dbf</code>, <code>.prj</code>, <code>.shx</code>) onto the upload area at once — no zipping needed.
+            </div>
+          </div>
+        )}
       </section>
 
       {recentProjects.length > 0 && (

@@ -36,6 +36,14 @@ function getPointAtFraction(pts, fraction) {
   return { x: pts[0].x, y: pts[0].y, angle: 0 };
 }
 
+function haversineKm(lat1, lng1, lat2, lng2) {
+  const R = 6371;
+  const toR = d => d * Math.PI / 180;
+  const dLat = toR(lat2 - lat1), dLng = toR(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toR(lat1)) * Math.cos(toR(lat2)) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 function ellipseLabelPlacement(ellipse) {
   const anchorX = ellipse.x + ellipse.width * 0.34;
   const anchorY = ellipse.y - ellipse.height * 0.24;
@@ -94,6 +102,11 @@ export default function AnnotationOverlay({
   onMoveEllipseLabelAngle,
   onMovePolygonLabel,
   labelFont,
+  pendingDistanceP1,
+  distanceLines,
+  selectedDistanceLineId,
+  onSelectDistanceLine,
+  onRemoveDistanceLine,
 }) {
   const [tick, setTick] = useState(0);
   const dragRef = useRef(null);
@@ -169,6 +182,22 @@ export default function AnnotationOverlay({
 
   const placedMarkers = useMemo(() => resolvePositions(markers, map, 'marker'), [markers, map, tick]);
   const placedEllipses = useMemo(() => resolvePositions(ellipses, map, 'ellipse'), [ellipses, map, tick]);
+
+  // Distance lines: compute pixel coords for both endpoints
+  const placedDistanceLines = useMemo(() => {
+    if (!map || !distanceLines?.length) return [];
+    return distanceLines.map((dl) => {
+      const p1 = map.latLngToContainerPoint([dl.p1.lat, dl.p1.lng]);
+      const p2 = map.latLngToContainerPoint([dl.p2.lat, dl.p2.lng]);
+      return { ...dl, x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y };
+    });
+  }, [distanceLines, map, tick]);
+
+  const pendingDistanceP1Screen = useMemo(() => {
+    if (!map || !pendingDistanceP1) return null;
+    const pt = map.latLngToContainerPoint([pendingDistanceP1.lat, pendingDistanceP1.lng]);
+    return { x: pt.x, y: pt.y };
+  }, [pendingDistanceP1, map, tick]);
 
   // Polygon screen points (computed fresh on each tick/zoom/pan)
   const polygonScreenPts = useMemo(() => {
@@ -303,11 +332,85 @@ export default function AnnotationOverlay({
           );
         })()}
 
+        {/* Distance measurement lines */}
+        {placedDistanceLines.map((dl) => {
+          const mx = (dl.x1 + dl.x2) / 2;
+          const my = (dl.y1 + dl.y2) / 2;
+          const km = haversineKm(dl.p1.lat, dl.p1.lng, dl.p2.lat, dl.p2.lng);
+          const label = dl.units === 'mi'
+            ? `${(km * 0.621371).toFixed(1)} mi`
+            : km >= 1 ? `${km.toFixed(1)} km` : `${Math.round(km * 1000)} m`;
+          const color = dl.color || '#e11d48';
+          const isSelected = selectedDistanceLineId === dl.id;
+          return (
+            <g key={`dl-${dl.id}`} style={{ pointerEvents: 'auto' }}>
+              {/* Wide invisible hit area */}
+              <line
+                x1={dl.x1} y1={dl.y1} x2={dl.x2} y2={dl.y2}
+                stroke="transparent" strokeWidth={18}
+                style={{ cursor: 'pointer', pointerEvents: 'stroke' }}
+                onClick={(e) => { e.stopPropagation(); onSelectDistanceLine?.(dl.id); }}
+              />
+              {/* Selection highlight */}
+              {isSelected && (
+                <line x1={dl.x1} y1={dl.y1} x2={dl.x2} y2={dl.y2}
+                  stroke="rgba(59,130,246,0.5)" strokeWidth={5} style={{ pointerEvents: 'none' }} />
+              )}
+              {/* Visible dashed line */}
+              <line
+                x1={dl.x1} y1={dl.y1} x2={dl.x2} y2={dl.y2}
+                stroke={color} strokeWidth={2} strokeDasharray="8 4" strokeLinecap="round"
+                style={{ pointerEvents: 'none' }}
+              />
+              {/* Endpoint dots */}
+              <circle cx={dl.x1} cy={dl.y1} r={4} fill={color} style={{ pointerEvents: 'none' }} />
+              <circle cx={dl.x2} cy={dl.y2} r={4} fill={color} style={{ pointerEvents: 'none' }} />
+              {/* Midpoint label background */}
+              <rect
+                x={mx - 28} y={my - 9} width={56} height={18} rx={3}
+                fill="rgba(255,255,255,0.93)"
+                style={{ pointerEvents: 'none' }}
+              />
+              {/* Midpoint label text */}
+              <text
+                x={mx} y={my}
+                textAnchor="middle" dominantBaseline="middle"
+                fontSize={11} fontWeight="700" fill={color}
+                fontFamily="Inter, Arial, sans-serif"
+                style={{ pointerEvents: 'none', userSelect: 'none' }}
+              >
+                {label}
+              </text>
+              {/* Delete button when selected */}
+              {isSelected && (
+                <g
+                  style={{ cursor: 'pointer', pointerEvents: 'auto' }}
+                  onClick={(e) => { e.stopPropagation(); onRemoveDistanceLine?.(dl.id); }}
+                >
+                  <circle cx={mx + 32} cy={my - 9} r={8} fill="#ef4444" />
+                  <text x={mx + 32} y={my - 9} textAnchor="middle" dominantBaseline="middle"
+                    fontSize={11} fontWeight="700" fill="#ffffff"
+                    style={{ userSelect: 'none', pointerEvents: 'none' }}>×</text>
+                </g>
+              )}
+            </g>
+          );
+        })}
+
+        {/* Pending distance line first point indicator */}
+        {pendingDistanceP1Screen && (
+          <g style={{ pointerEvents: 'none' }}>
+            <circle cx={pendingDistanceP1Screen.x} cy={pendingDistanceP1Screen.y} r={8}
+              fill="rgba(225,29,72,0.25)" stroke="#e11d48" strokeWidth={1.5} />
+            <circle cx={pendingDistanceP1Screen.x} cy={pendingDistanceP1Screen.y} r={3} fill="#e11d48" />
+          </g>
+        )}
+
         {/* Distance rings */}
         {placedEllipses.filter((e) => e.isRing).map((ellipse) => {
           const r = ellipse.width / 2;
           const isSelected = selectedEllipseId === ellipse.id;
-          const displayLabel = ellipse.label || `${ellipse.radiusKm} km`;
+          const displayLabel = ellipse.label || (ellipse.units === 'mi' ? `${(ellipse.radiusKm * 0.621371).toFixed(1)} mi` : `${ellipse.radiusKm} km`);
           const labelFontSize = ellipse.labelFontSize || 11;
           const labelColor = ellipse.labelColor || ellipse.color || '#dc2626';
 
@@ -440,7 +543,7 @@ export default function AnnotationOverlay({
 
       {/* Ellipse labels (non-arc, draggable) */}
       {placedEllipses.filter((ellipse) => (ellipse.label || ellipse.isRing) && !ellipse.labelArc).map((ellipse) => {
-        const displayLabel = ellipse.label || (ellipse.isRing ? `${ellipse.radiusKm} km` : null);
+        const displayLabel = ellipse.label || (ellipse.isRing ? (ellipse.units === 'mi' ? `${(ellipse.radiusKm * 0.621371).toFixed(1)} mi` : `${ellipse.radiusKm} km`) : null);
         if (!displayLabel) return null;
         const pos = ellipseLabelPlacement(ellipse);
         const finalX = pos.labelX + (ellipse.labelOffsetX || 0);

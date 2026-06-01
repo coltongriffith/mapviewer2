@@ -1,19 +1,35 @@
 import React, { useMemo, useState } from 'react';
 
-function formatAccepted() {
-  return '.zip, .geojson, .json, .kml, .kmz, .csv';
-}
+const SINGLE_ACCEPT = '.zip,.geojson,.json,.kml,.kmz,.csv';
+const MULTI_ACCEPT = '.zip,.shp,.dbf,.prj,.shx,.geojson,.json,.kml,.kmz,.csv';
 
-export default function UploadPanel({ onUploadFile, inputRef, status, layers }) {
+export default function UploadPanel({ onUploadFile, onUploadFiles, inputRef, status, layers }) {
   const [dragging, setDragging] = useState(false);
-  const accepted = useMemo(() => formatAccepted(), []);
 
   const handleDrop = async (event) => {
     event.preventDefault();
     setDragging(false);
-    const file = event.dataTransfer?.files?.[0];
-    if (file) {
-      await onUploadFile(file);
+    const files = Array.from(event.dataTransfer?.files || []);
+    if (!files.length) return;
+
+    const hasShp = files.some((f) => f.name.toLowerCase().endsWith('.shp'));
+    if (files.length > 1 && hasShp && onUploadFiles) {
+      await onUploadFiles(files);
+    } else {
+      await onUploadFile(files[0]);
+    }
+  };
+
+  const handleChange = async (event) => {
+    const files = Array.from(event.target.files || []);
+    event.target.value = '';
+    if (!files.length) return;
+
+    const hasShp = files.some((f) => f.name.toLowerCase().endsWith('.shp'));
+    if (files.length > 1 && hasShp && onUploadFiles) {
+      await onUploadFiles(files);
+    } else {
+      await onUploadFile(files[0]);
     }
   };
 
@@ -22,26 +38,17 @@ export default function UploadPanel({ onUploadFile, inputRef, status, layers }) 
       <div className="upload-header-row">
         <h2>Upload</h2>
         <div className="hover-help">
-          <button className="hover-help-trigger" type="button" aria-label="What is a shapefile?">i</button>
+          <button className="hover-help-trigger" type="button" aria-label="What file formats are supported?">i</button>
           <div className="hover-help-tooltip">
-            A shapefile usually comes as multiple files used together. Upload one <code>.zip</code> that contains the main parts like <code>.shp</code>, <code>.shx</code>, <code>.dbf</code>, and often <code>.prj</code>. You can also upload <code>.geojson</code>, <code>.json</code>, <code>.kml</code>, or <code>.kmz</code> directly. For drillhole collar tables, upload a <code>.csv</code> file with lat/lon or easting/northing columns.
+            Drop a <code>.zip</code> containing your shapefile, or drop all shapefile parts together (<code>.shp</code>, <code>.dbf</code>, <code>.prj</code>, <code>.shx</code>) without zipping. Also accepts <code>.geojson</code>, <code>.json</code>, <code>.kml</code>, <code>.kmz</code>, and <code>.csv</code> for drillhole collar tables.
           </div>
         </div>
       </div>
       <div
         className={`upload-dropzone ${dragging ? 'dragging' : ''}`}
-        onDragEnter={(event) => {
-          event.preventDefault();
-          setDragging(true);
-        }}
-        onDragOver={(event) => {
-          event.preventDefault();
-          if (!dragging) setDragging(true);
-        }}
-        onDragLeave={(event) => {
-          event.preventDefault();
-          if (event.currentTarget === event.target) setDragging(false);
-        }}
+        onDragEnter={(event) => { event.preventDefault(); setDragging(true); }}
+        onDragOver={(event) => { event.preventDefault(); if (!dragging) setDragging(true); }}
+        onDragLeave={(event) => { event.preventDefault(); if (event.currentTarget === event.target) setDragging(false); }}
         onDrop={handleDrop}
         role="button"
         tabIndex={0}
@@ -55,18 +62,15 @@ export default function UploadPanel({ onUploadFile, inputRef, status, layers }) 
       >
         <strong>Drag and drop a map file here</strong>
         <span>or click to browse</span>
-        <small>Accepted: {accepted}</small>
+        <small>.zip · .shp+.dbf · .geojson · .kml · .kmz · .csv</small>
       </div>
       <input
         ref={inputRef}
         type="file"
-        accept={accepted}
+        accept={MULTI_ACCEPT}
+        multiple
         hidden
-        onChange={async (event) => {
-          const file = event.target.files?.[0];
-          if (file) await onUploadFile(file);
-          event.target.value = '';
-        }}
+        onChange={handleChange}
       />
 
       {status?.message ? (

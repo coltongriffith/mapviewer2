@@ -2,6 +2,7 @@ import { escapeXml, downloadBlob } from '../utils/svg';
 import { geojsonBounds, unionBounds } from '../utils/geometry';
 import { resolveTemplateZones } from '../templates/technicalResultsTemplate';
 import { resolveNI43101Zones } from '../templates/technicalReportTemplate';
+import { resolveSidePanelZones } from '../templates/sidePanelTemplate';
 import { getThemeTokens } from '../utils/themeTokens';
 import { MARKER_ICON_PATHS, markerIconSvgFragment, drawMarkerIconCanvas } from '../utils/markerIcons.jsx';
 import { safeColor } from '../utils/colorUtils.js';
@@ -187,6 +188,10 @@ function drawCanvasMarkerShape(ctx, shape, cx, cy, r) {
   } else if (shape === 'drillhole') {
     ctx.moveTo(cx, cy - r); ctx.lineTo(cx + r, cy + r * 0.5); ctx.lineTo(cx - r, cy + r * 0.5); ctx.closePath();
     ctx.moveTo(cx, cy + r * 0.5); ctx.lineTo(cx, cy + r);
+  } else if (shape === 'hexagon') {
+    for (let i = 0; i < 6; i++) { const a = (i * Math.PI) / 3 - Math.PI / 2; const x = cx + r * Math.cos(a); const y = cy + r * Math.sin(a); if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); } ctx.closePath();
+  } else if (shape === 'pin') {
+    const cr = r * 0.58; const py = cy - r * 0.28; ctx.arc(cx, py, cr, 0, Math.PI * 2); ctx.closePath(); ctx.moveTo(cx - cr * 0.55, py + cr * 0.4); ctx.lineTo(cx + cr * 0.55, py + cr * 0.4); ctx.lineTo(cx, cy + r); ctx.closePath();
   } else {
     ctx.arc(cx, cy, r, 0, Math.PI * 2);
   }
@@ -201,6 +206,8 @@ function svgMarkerShape(shape, cx, cy, r, fill, stroke, sw, opacity) {
   if (shape === 'star') { const r2 = r * 0.45; const pts = Array.from({ length: 10 }, (_, i) => { const a = (i * Math.PI) / 5 - Math.PI / 2; const ri = i % 2 === 0 ? r : r2; return `${(cx + ri * Math.cos(a)).toFixed(2)},${(cy + ri * Math.sin(a)).toFixed(2)}`; }).join(' '); return `<polygon points="${pts}"${sf}${op} />`; }
   if (shape === 'cross') return `<line x1="${cx}" y1="${cy - r}" x2="${cx}" y2="${cy + r}" stroke="${stroke}" stroke-width="${sw}"${op} /><line x1="${cx - r}" y1="${cy}" x2="${cx + r}" y2="${cy}" stroke="${stroke}" stroke-width="${sw}"${op} />`;
   if (shape === 'drillhole') return `<polygon points="${cx},${cy - r} ${cx + r},${cy + r * 0.5} ${cx - r},${cy + r * 0.5}"${sf}${op} /><line x1="${cx}" y1="${cy + r * 0.5}" x2="${cx}" y2="${cy + r}" stroke="${stroke}" stroke-width="${sw}"${op} />`;
+  if (shape === 'hexagon') { const pts = Array.from({ length: 6 }, (_, i) => { const a = (i * Math.PI) / 3 - Math.PI / 2; return `${(cx + r * Math.cos(a)).toFixed(2)},${(cy + r * Math.sin(a)).toFixed(2)}`; }).join(' '); return `<polygon points="${pts}"${sf}${op} />`; }
+  if (shape === 'pin') { const cr = r * 0.58; const py = cy - r * 0.28; return `<circle cx="${cx}" cy="${py.toFixed(2)}" r="${cr.toFixed(2)}"${sf}${op} /><polygon points="${(cx - cr * 0.55).toFixed(2)},${(py + cr * 0.4).toFixed(2)} ${(cx + cr * 0.55).toFixed(2)},${(py + cr * 0.4).toFixed(2)} ${cx},${(cy + r).toFixed(2)}"${sf}${op} />`; }
   return `<circle cx="${cx.toFixed(2)}" cy="${cy.toFixed(2)}" r="${r.toFixed(2)}"${sf}${op} />`;
 }
 function drawCanvasGeometry(ctx, map, feature, style, scale) {
@@ -212,7 +219,7 @@ function drawCanvasGeometry(ctx, map, feature, style, scale) {
   if (type === 'MultiPolygon') { ctx.beginPath(); coords.forEach((polygon) => polygon.forEach((ring) => drawCanvasPath(ctx, projectRing(map, ring, scale), true))); setCanvasFill(ctx, style); ctx.fill('evenodd'); setCanvasStroke(ctx, style, scale); ctx.stroke(); ctx.restore(); return; }
   if (type === 'LineString') { ctx.beginPath(); drawCanvasPath(ctx, projectLine(map, coords, scale), false); setCanvasStroke(ctx, style, scale); ctx.stroke(); ctx.restore(); return; }
   if (type === 'MultiLineString') { ctx.beginPath(); coords.forEach((line) => drawCanvasPath(ctx, projectLine(map, line, scale), false)); setCanvasStroke(ctx, style, scale); ctx.stroke(); ctx.restore(); return; }
-  if (type === 'Point') { const pt = projectCoordinate(map, coords, scale); const radius = (style.markerSize ?? 8) * scale * 0.5; const shape = style.markerShape || 'circle'; drawCanvasMarkerShape(ctx, shape, pt.x, pt.y, radius); ctx.fillStyle = style.markerFill || style.markerColor || '#ffffff'; ctx.fill(); ctx.lineWidth = (style.strokeWidth ?? 1.5) * scale; ctx.strokeStyle = style.markerColor || style.stroke || '#111111'; ctx.stroke(); ctx.restore(); return; }
+  if (type === 'Point') { const pt = projectCoordinate(map, coords, scale); const radius = (style.markerSize ?? 8) * scale * 0.5; if (style._customIconImg) { const s = radius * 2; ctx.drawImage(style._customIconImg, pt.x - s / 2, pt.y - s / 2, s, s); ctx.restore(); return; } const shape = style.markerShape || 'circle'; drawCanvasMarkerShape(ctx, shape, pt.x, pt.y, radius); ctx.fillStyle = style.markerFill || style.markerColor || '#ffffff'; ctx.fill(); ctx.lineWidth = (style.strokeWidth ?? 1.5) * scale; ctx.strokeStyle = style.markerColor || style.stroke || '#111111'; ctx.stroke(); ctx.restore(); return; }
   if (type === 'MultiPoint') { coords.forEach((coord) => drawCanvasGeometry(ctx, map, { geometry: { type: 'Point', coordinates: coord } }, style, scale)); ctx.restore(); return; }
   ctx.restore();
 }
@@ -253,7 +260,7 @@ function geometryToSvg(map, feature, style, scale) {
   if (type === 'MultiPolygon') return `${patternDef}<path d="${coords.flatMap((polygon) => polygon.map((ring) => pathFromPoints(projectRing(map, ring, scale), true))).filter(Boolean).join(' ')}" ${fillAttr} stroke="${stroke}" stroke-width="${strokeWidth}"${dash} fill-rule="evenodd" stroke-opacity="${opacity}" />`;
   if (type === 'LineString') return `<path d="${pathFromPoints(projectLine(map, coords, scale), false)}" fill="none" stroke="${stroke}" stroke-width="${strokeWidth}"${dash} stroke-linecap="round" stroke-linejoin="round" stroke-opacity="${opacity}" />`;
   if (type === 'MultiLineString') return `<path d="${coords.map((line) => pathFromPoints(projectLine(map, line, scale), false)).filter(Boolean).join(' ')}" fill="none" stroke="${stroke}" stroke-width="${strokeWidth}"${dash} stroke-linecap="round" stroke-linejoin="round" stroke-opacity="${opacity}" />`;
-  if (type === 'Point') { const pt = projectCoordinate(map, coords, scale); const radius = (style.markerSize ?? 8) * scale * 0.5; const shape = style.markerShape || 'circle'; return svgMarkerShape(shape, pt.x, pt.y, radius, safeColor(style.markerFill || fill), safeColor(style.markerColor || stroke), Math.max(scale, strokeWidth * 0.4).toFixed(2), opacity); }
+  if (type === 'Point') { const pt = projectCoordinate(map, coords, scale); const radius = (style.markerSize ?? 8) * scale * 0.5; if (style.customMarkerDataUri) { const s = radius * 2; return `<image href="${escapeXml(style.customMarkerDataUri)}" x="${(pt.x - s / 2).toFixed(2)}" y="${(pt.y - s / 2).toFixed(2)}" width="${s.toFixed(2)}" height="${s.toFixed(2)}" opacity="${opacity}" />`; } const shape = style.markerShape || 'circle'; return svgMarkerShape(shape, pt.x, pt.y, radius, safeColor(style.markerFill || fill), safeColor(style.markerColor || stroke), Math.max(scale, strokeWidth * 0.4).toFixed(2), opacity); }
   if (type === 'MultiPoint') return coords.map((coord) => geometryToSvg(map, { geometry: { type: 'Point', coordinates: coord } }, style, scale)).join('');
   return '';
 }
@@ -262,7 +269,28 @@ function getOverlayMetrics(scene) {
   if (id === 'ni_43101_technical') {
     return resolveNI43101Zones(scene.template, scene.project.layout || {}, { width: scene.width, height: scene.height });
   }
+  if (id === 'side_panel') {
+    return resolveSidePanelZones(scene.template, scene.project.layout || {}, { width: scene.width, height: scene.height });
+  }
   return resolveTemplateZones(scene.template, scene.project.layout || {}, { width: scene.width, height: scene.height });
+}
+
+function drawSidebarPanelCanvas(ctx, scene, scale) {
+  if ((scene.template?.id || scene.project.layout?.templateId) !== 'side_panel') return;
+  const zones = getOverlayMetrics(scene);
+  const sb = zones.sidebar;
+  if (!sb?.width) return;
+  const theme = getTheme(scene);
+  // White sidebar background
+  ctx.fillStyle = theme.panelFill || '#ffffff';
+  ctx.fillRect(sb.left * scale, sb.top * scale, sb.width * scale, sb.height * scale);
+  // Left border line
+  ctx.strokeStyle = theme.panelBorder || '#d4deea';
+  ctx.lineWidth = 1.5 * scale;
+  ctx.beginPath();
+  ctx.moveTo(sb.left * scale, 0);
+  ctx.lineTo(sb.left * scale, sb.height * scale);
+  ctx.stroke();
 }
 function drawRoundedRect(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
 
@@ -488,12 +516,18 @@ function normalizeInset(visibleBounds, referenceBounds) {
     h: ((visibleBounds.maxLat - visibleBounds.minLat) / height) * (100 - pad * 2),
   };
 }
+function mercY(lat) {
+  return Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360));
+}
+
 function projectToCanvas(lng, lat, refBbox, x, y, w, h, pad) {
   const [minLng, minLat, maxLng, maxLat] = refBbox;
-  const rngW = maxLng - minLng || 1, rngH = maxLat - minLat || 1;
+  const rngW = maxLng - minLng || 1;
+  const minMY = mercY(minLat), maxMY = mercY(maxLat);
+  const rngH = maxMY - minMY || 1;
   return [
     x + pad + ((lng - minLng) / rngW) * (w - pad * 2),
-    (y + h - pad) - ((lat - minLat) / rngH) * (h - pad * 2),
+    (y + h - pad) - ((mercY(lat) - minMY) / rngH) * (h - pad * 2),
   ];
 }
 
@@ -504,9 +538,19 @@ function getAutoInsetRefBbox(region) {
   return [minLng - dLng, minLat - dLat, maxLng + dLng, maxLat + dLat];
 }
 
+function fitRect(srcW, srcH, dstW, dstH) {
+  const s = Math.min(dstW / srcW, dstH / srcH);
+  const w = srcW * s, h = srcH * s;
+  return { x: (dstW - w) / 2, y: (dstH - h) / 2, w, h };
+}
+
 function drawAutoInsetCanvas(ctx, innerX, innerY, innerW, innerH, scale, region, visibleBounds) {
   const pad = 6 * scale;
   const refBbox = getAutoInsetRefBbox(region);
+  const [minLng, minLat, maxLng, maxLat] = refBbox;
+  // Convert lng to radians to match Mercator Y units, then letterbox
+  const lb = fitRect((maxLng - minLng) * Math.PI / 180, mercY(maxLat) - mercY(minLat), innerW, innerH);
+  const lbX = innerX + lb.x, lbY = innerY + lb.y, lbW = lb.w, lbH = lb.h;
 
   // Background
   ctx.fillStyle = '#f0f4f8';
@@ -520,7 +564,7 @@ function drawAutoInsetCanvas(ctx, innerX, innerY, innerW, innerH, scale, region,
     if (ring.length < 2) return;
     ctx.beginPath();
     ring.forEach(([lng, lat], i) => {
-      const [px, py] = projectToCanvas(lng, lat, refBbox, innerX, innerY, innerW, innerH, pad);
+      const [px, py] = projectToCanvas(lng, lat, refBbox, lbX, lbY, lbW, lbH, pad);
       if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
     });
     ctx.closePath();
@@ -530,19 +574,19 @@ function drawAutoInsetCanvas(ctx, innerX, innerY, innerW, innerH, scale, region,
 
   // Project location marker
   if (visibleBounds) {
-    const [mx1, my1] = projectToCanvas(visibleBounds.minLng, visibleBounds.maxLat, refBbox, innerX, innerY, innerW, innerH, pad);
-    const [mx2, my2] = projectToCanvas(visibleBounds.maxLng, visibleBounds.minLat, refBbox, innerX, innerY, innerW, innerH, pad);
+    const [mx1, my1] = projectToCanvas(visibleBounds.minLng, visibleBounds.maxLat, refBbox, lbX, lbY, lbW, lbH, pad);
+    const [mx2, my2] = projectToCanvas(visibleBounds.maxLng, visibleBounds.minLat, refBbox, lbX, lbY, lbW, lbH, pad);
     const rx = Math.min(mx1, mx2), ry = Math.min(my1, my2);
     const rw = Math.max(4 * scale, Math.abs(mx2 - mx1)), rh = Math.max(4 * scale, Math.abs(my2 - my1));
     ctx.fillStyle = 'rgba(96,165,250,0.25)';
     ctx.strokeStyle = '#2563eb';
     ctx.lineWidth = 1.2 * scale;
     ctx.beginPath();
-    ctx.rect(Math.max(innerX + pad, rx), Math.max(innerY + pad, ry), rw, rh);
+    ctx.rect(Math.max(lbX + pad, rx), Math.max(lbY + pad, ry), rw, rh);
     ctx.fill();
     ctx.stroke();
-    const dotX = Math.max(innerX + pad + 3 * scale, Math.min(innerX + innerW - pad - 3 * scale, rx + rw / 2));
-    const dotY = Math.max(innerY + pad + 3 * scale, Math.min(innerY + innerH - pad - 3 * scale, ry + rh / 2));
+    const dotX = Math.max(lbX + pad + 3 * scale, Math.min(lbX + lbW - pad - 3 * scale, rx + rw / 2));
+    const dotY = Math.max(lbY + pad + 3 * scale, Math.min(lbY + lbH - pad - 3 * scale, ry + rh / 2));
     ctx.beginPath();
     ctx.arc(dotX, dotY, 3.5 * scale, 0, Math.PI * 2);
     ctx.fillStyle = '#1d4ed8';
@@ -556,7 +600,11 @@ function drawAutoInsetCanvas(ctx, innerX, innerY, innerW, innerH, scale, region,
 function autoInsetSvg(innerX, innerY, innerW, innerH, scale, region, visibleBounds) {
   const pad = 6 * scale;
   const refBbox = getAutoInsetRefBbox(region);
-  const project = (lng, lat) => projectToCanvas(lng, lat, refBbox, innerX, innerY, innerW, innerH, pad);
+  const [minLng, minLat, maxLng, maxLat] = refBbox;
+  // Convert lng to radians to match Mercator Y units, then letterbox
+  const lb = fitRect((maxLng - minLng) * Math.PI / 180, mercY(maxLat) - mercY(minLat), innerW, innerH);
+  const lbX = innerX + lb.x, lbY = innerY + lb.y, lbW = lb.w, lbH = lb.h;
+  const project = (lng, lat) => projectToCanvas(lng, lat, refBbox, lbX, lbY, lbW, lbH, pad);
 
   const paths = region.coordinates.map(ring => {
     if (ring.length < 2) return '';
@@ -568,12 +616,12 @@ function autoInsetSvg(innerX, innerY, innerW, innerH, scale, region, visibleBoun
   if (visibleBounds) {
     const [mx1, my1] = project(visibleBounds.minLng, visibleBounds.maxLat);
     const [mx2, my2] = project(visibleBounds.maxLng, visibleBounds.minLat);
-    const rx = Math.max(innerX + pad, Math.min(mx1, mx2));
-    const ry = Math.max(innerY + pad, Math.min(my1, my2));
+    const rx = Math.max(lbX + pad, Math.min(mx1, mx2));
+    const ry = Math.max(lbY + pad, Math.min(my1, my2));
     const rw = Math.max(4 * scale, Math.abs(mx2 - mx1));
     const rh = Math.max(4 * scale, Math.abs(my2 - my1));
-    const dotX = Math.max(innerX + pad + 3 * scale, Math.min(innerX + innerW - pad - 3 * scale, rx + rw / 2));
-    const dotY = Math.max(innerY + pad + 3 * scale, Math.min(innerY + innerH - pad - 3 * scale, ry + rh / 2));
+    const dotX = Math.max(lbX + pad + 3 * scale, Math.min(lbX + lbW - pad - 3 * scale, rx + rw / 2));
+    const dotY = Math.max(lbY + pad + 3 * scale, Math.min(lbY + lbH - pad - 3 * scale, ry + rh / 2));
     markerSvg = `<rect x="${rx}" y="${ry}" width="${rw}" height="${rh}" fill="#60a5fa" fill-opacity="0.25" stroke="#2563eb" stroke-width="${1.2 * scale}" /><circle cx="${dotX}" cy="${dotY}" r="${3.5 * scale}" fill="#1d4ed8" stroke="#ffffff" stroke-width="${1.2 * scale}" />`;
   }
 
@@ -608,7 +656,7 @@ async function drawInsetCanvas(ctx, scene, scale) {
   const customInset = insetMode === 'custom_image' && insetImage;
   if (customInset) {
     const img = await new Promise((resolve, reject) => { const el = new Image(); el.onload = () => resolve(el); el.onerror = reject; el.src = insetImage; }).catch(() => { _exportWarnings.push('inset image could not be embedded'); return null; });
-    if (img) { ctx.save(); drawRoundedRect(ctx, innerX, innerY, innerW, innerH, 8 * scale); ctx.clip(); ctx.drawImage(img, innerX, innerY, innerW, innerH); ctx.restore(); }
+    if (img) { ctx.save(); drawRoundedRect(ctx, innerX, innerY, innerW, innerH, 8 * scale); ctx.clip(); const lb = fitRect(img.naturalWidth || innerW, img.naturalHeight || innerH, innerW, innerH); ctx.drawImage(img, innerX + lb.x, innerY + lb.y, lb.w, lb.h); ctx.restore(); }
     return;
   }
   const visible = (scene.project.layers || []).filter((layer) => layer.visible !== false && layer.geojson);
@@ -933,7 +981,7 @@ function drawEllipsesCanvas(ctx, scene, scale) {
     ctx.setLineDash(ellipse.dashed === false ? [] : [6 * scale, 4 * scale]);
     ctx.stroke();
     ctx.restore();
-    const label = ellipse.isRing && !ellipse.label ? `${ellipse.radiusKm} km` : ellipse.label;
+    const label = ellipse.isRing && !ellipse.label ? (ellipse.units === 'mi' ? `${(ellipse.radiusKm * 0.621371).toFixed(1)} mi` : `${ellipse.radiusKm} km`) : ellipse.label;
     drawEllipseLabelCanvas(ctx, scene, { ...ellipse, label }, center, width, height, rotation, scale);
   });
 }
@@ -1467,13 +1515,50 @@ function renderDistanceTicksSvg(scene, scale) {
   return `<g>${parts.join('')}</g>`;
 }
 
+function drawDistanceLinesCanvas(ctx, scene, scale) {
+  const lines = scene.project.distanceLines || [];
+  if (!lines.length || !scene.map) return;
+  const map = scene.map;
+  lines.forEach(line => {
+    const p1 = map.latLngToContainerPoint([line.p1.lat, line.p1.lng]);
+    const p2 = map.latLngToContainerPoint([line.p2.lat, line.p2.lng]);
+    const x1 = p1.x * scale, y1 = p1.y * scale;
+    const x2 = p2.x * scale, y2 = p2.y * scale;
+    ctx.save();
+    ctx.strokeStyle = line.color || '#e11d48';
+    ctx.lineWidth = 2 * scale;
+    ctx.setLineDash([8 * scale, 4 * scale]);
+    ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = line.color || '#e11d48';
+    ctx.beginPath(); ctx.arc(x1, y1, 4 * scale, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x2, y2, 4 * scale, 0, Math.PI * 2); ctx.fill();
+    const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+    const km = haversineMeters(line.p1.lat, line.p1.lng, line.p2.lat, line.p2.lng) / 1000;
+    const label = line.units === 'mi' ? `${(km * 0.621371).toFixed(1)} mi` : km >= 1 ? `${km.toFixed(1)} km` : `${Math.round(km * 1000)} m`;
+    const font = `700 ${11 * scale}px ${scene.project.layout?.fonts?.callout || 'Inter'}, Arial, sans-serif`;
+    ctx.font = font;
+    const tw = ctx.measureText(label).width;
+    const pad = 5 * scale, lh = 17 * scale;
+    ctx.fillStyle = 'rgba(255,255,255,0.93)';
+    drawRoundedRect(ctx, mx - tw / 2 - pad, my - lh / 2, tw + pad * 2, lh, 3 * scale); ctx.fill();
+    ctx.fillStyle = line.color || '#e11d48';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(label, mx, my);
+    ctx.restore();
+  });
+}
+
 export async function renderSceneToCanvas(scene, options = {}) {
   _exportWarnings = [];
   const scale = Number(options.pixelRatio || scene.project.layout?.exportSettings?.pixelRatio || 2);
   const canvas = document.createElement('canvas'); canvas.width = Math.round(scene.width * scale); canvas.height = Math.round(scene.height * scale); const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
   const isNI = scene.template?.id === 'ni_43101_technical';
-  await drawTilesCanvas(ctx, scene, scale); drawRegionHighlightsCanvas(ctx, scene, scale); drawVectorsCanvas(ctx, scene, scale); drawEllipsesCanvas(ctx, scene, scale); drawPolygonsCanvas(ctx, scene, scale); await drawMarkersCanvas(ctx, scene, scale); drawCalloutsCanvas(ctx, scene, scale);
+  const isSP = scene.template?.id === 'side_panel';
+  await drawTilesCanvas(ctx, scene, scale); drawRegionHighlightsCanvas(ctx, scene, scale); await drawVectorsCanvas(ctx, scene, scale); drawEllipsesCanvas(ctx, scene, scale); drawPolygonsCanvas(ctx, scene, scale); await drawMarkersCanvas(ctx, scene, scale); drawCalloutsCanvas(ctx, scene, scale); drawDistanceLinesCanvas(ctx, scene, scale);
+  if (isSP) { drawSidebarPanelCanvas(ctx, scene, scale); }
   if (!isNI) { drawTitleBlockCanvas(ctx, scene, scale); drawFooterCanvas(ctx, scene, scale); }
   drawScaleBarCanvas(ctx, scene, scale);
   drawLegendCanvas(ctx, scene, scale); drawNorthArrowCanvas(ctx, scene, scale); await drawInsetCanvas(ctx, scene, scale); await drawLogoCanvas(ctx, scene, scale);
@@ -1528,11 +1613,23 @@ function drawRegionHighlightsCanvas(ctx, scene, scale) {
   });
 }
 
-function drawVectorsCanvas(ctx, scene, scale) {
+async function drawVectorsCanvas(ctx, scene, scale) {
+  // Pre-load custom marker icons (only for layers that have one)
+  const iconCache = new Map();
+  for (const layer of (scene.project.layers || [])) {
+    const uri = layer.style?.customMarkerDataUri;
+    if (uri && !iconCache.has(uri)) {
+      iconCache.set(uri, await loadImage(uri).catch(() => null));
+    }
+  }
   (scene.project.layers || []).filter((layer) => layer.visible !== false && layer.geojson).forEach((layer) => {
     const lo = layer.style?.layerOpacity ?? 1;
+    const customImg = iconCache.get(layer.style?.customMarkerDataUri) || null;
     ctx.save(); ctx.globalAlpha = lo;
-    featureCollectionFeatures(layer.geojson).forEach((feature) => drawCanvasGeometry(ctx, scene.map, feature, getFeatureStyle(scene.template, layer, feature), scale));
+    featureCollectionFeatures(layer.geojson).forEach((feature) => {
+      const style = getFeatureStyle(scene.template, layer, feature);
+      drawCanvasGeometry(ctx, scene.map, feature, customImg ? { ...style, _customIconImg: customImg } : style, scale);
+    });
     ctx.restore();
   });
 }
@@ -1699,11 +1796,39 @@ function renderPolygonsSvg(scene, scale) {
   }).join('\n');
 }
 
+function renderDistanceLinesSvg(scene, scale) {
+  const lines = scene.project.distanceLines || [];
+  if (!lines.length || !scene.map) return '';
+  const map = scene.map;
+  const calloutFont = escapeXml(scene.project.layout?.fonts?.callout || 'Inter');
+  return lines.map(line => {
+    const p1 = map.latLngToContainerPoint([line.p1.lat, line.p1.lng]);
+    const p2 = map.latLngToContainerPoint([line.p2.lat, line.p2.lng]);
+    const x1 = p1.x * scale, y1 = p1.y * scale;
+    const x2 = p2.x * scale, y2 = p2.y * scale;
+    const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+    const km = haversineMeters(line.p1.lat, line.p1.lng, line.p2.lat, line.p2.lng) / 1000;
+    const label = line.units === 'mi' ? `${(km * 0.621371).toFixed(1)} mi` : km >= 1 ? `${km.toFixed(1)} km` : `${Math.round(km * 1000)} m`;
+    const color = safeColor(line.color, '#e11d48');
+    const fs = 11 * scale;
+    const tw = label.length * fs * 0.6;
+    const pad = 5 * scale, lh = 17 * scale;
+    const rx = mx - tw / 2 - pad, ry = my - lh / 2;
+    return `<g>` +
+      `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${color}" stroke-width="${2 * scale}" stroke-dasharray="${8 * scale} ${4 * scale}" stroke-linecap="round" />` +
+      `<circle cx="${x1}" cy="${y1}" r="${4 * scale}" fill="${color}" />` +
+      `<circle cx="${x2}" cy="${y2}" r="${4 * scale}" fill="${color}" />` +
+      `<rect x="${rx}" y="${ry}" width="${tw + pad * 2}" height="${lh}" rx="${3 * scale}" fill="rgba(255,255,255,0.93)" />` +
+      `<text x="${mx}" y="${my}" text-anchor="middle" dominant-baseline="middle" font-size="${fs}" font-weight="700" fill="${color}" font-family="${calloutFont}, Arial, sans-serif">${escapeXml(label)}</text>` +
+      `</g>`;
+  }).join('\n');
+}
+
 function renderEllipsesSvg(scene, scale, svgDefs) {
   const labelFontFamily = escapeXml(scene.project.layout?.fonts?.label || 'Inter');
   return (scene.project.ellipses || []).map((ellipse) => {
     const { center, width, height, rotation } = resolveEllipseDimensions(ellipse, scene.map, scale);
-    const effectiveLabel = ellipse.isRing && !ellipse.label ? `${ellipse.radiusKm} km` : ellipse.label;
+    const effectiveLabel = ellipse.isRing && !ellipse.label ? (ellipse.units === 'mi' ? `${(ellipse.radiusKm * 0.621371).toFixed(1)} mi` : `${ellipse.radiusKm} km`) : ellipse.label;
     const dash = ellipse.dashed === false ? '' : ` stroke-dasharray="${6 * scale} ${4 * scale}"`;
     const color = safeColor(ellipse.color, '#dc2626');
     const labelColor = safeColor(ellipse.labelColor || ellipse.color, '#dc2626');
@@ -1883,7 +2008,7 @@ export async function renderSceneToSvg(scene, options = {}) {
     const f = getNI43101MapFrame(scene, scale);
     const clipId = 'ni-mapframe-clip';
     svgDefs.push(`<clipPath id="${clipId}"><rect x="${f.mapLeft}" y="${f.mapTop}" width="${f.mapRight - f.mapLeft}" height="${f.mapBottom - f.mapTop}" /></clipPath>`);
-    const clipped = `<g id="em-map-content" clip-path="url(#${clipId})">${basemapImage}${renderRegionHighlightsSvg(scene, scale)}${renderVectorsSvg(scene, scale)}${renderEllipsesSvg(scene, scale, svgDefs)}${renderPolygonsSvg(scene, scale)}${renderMarkersSvg(scene, scale)}${renderCalloutsSvg(scene, scale)}</g>`;
+    const clipped = `<g id="em-map-content" clip-path="url(#${clipId})">${basemapImage}${renderRegionHighlightsSvg(scene, scale)}${renderVectorsSvg(scene, scale)}${renderEllipsesSvg(scene, scale, svgDefs)}${renderPolygonsSvg(scene, scale)}${renderMarkersSvg(scene, scale)}${renderCalloutsSvg(scene, scale)}${renderDistanceLinesSvg(scene, scale)}</g>`;
     const niFrame = getNI43101MapFrame(scene, scale);
     const wmX = niFrame.mapRight - 8 * scale;
     const wmY = niFrame.mapBottom - 5 * scale;
@@ -1892,7 +2017,7 @@ export async function renderSceneToSvg(scene, options = {}) {
     mapContent = `${clipped}${panels}${watermark}`;
   } else {
     const watermark = options.noWatermark ? '' : `<text x="${width - 8}" y="${height - 5}" font-family="Arial,sans-serif" font-size="9" font-weight="bold" fill="#64748b" fill-opacity="0.72" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-opacity="0.55" stroke-width="2.5" stroke-linejoin="round">explorationmaps.com</text>`;
-    const mapLayers = `<g id="em-map-content">${basemapImage}${renderRegionHighlightsSvg(scene, scale)}${renderVectorsSvg(scene, scale)}${renderEllipsesSvg(scene, scale, svgDefs)}${renderPolygonsSvg(scene, scale)}${renderMarkersSvg(scene, scale)}${renderCalloutsSvg(scene, scale)}</g>`;
+    const mapLayers = `<g id="em-map-content">${basemapImage}${renderRegionHighlightsSvg(scene, scale)}${renderVectorsSvg(scene, scale)}${renderEllipsesSvg(scene, scale, svgDefs)}${renderPolygonsSvg(scene, scale)}${renderMarkersSvg(scene, scale)}${renderCalloutsSvg(scene, scale)}${renderDistanceLinesSvg(scene, scale)}</g>`;
     const panels = `<g id="em-overlay-panels">${renderTitleSvg(scene, scale)}${renderLegendSvg(scene, scale)}${renderNorthArrowSvg(scene, scale)}${renderInsetSvg(scene, scale, svgDefs)}${renderScaleBarSvg(scene, scale)}${renderFooterSvg(scene, scale)}${renderLogoSvg(scene, scale)}</g>`;
     mapContent = `${mapLayers}${panels}${watermark}`;
   }

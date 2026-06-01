@@ -11,6 +11,10 @@ const BASEMAPS = {
     url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png',
     attribution: '&copy; OpenStreetMap &copy; CARTO',
   },
+  streets: {
+    url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+    attribution: '&copy; OpenStreetMap &copy; CARTO',
+  },
   dark: {
     url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
     attribution: '&copy; OpenStreetMap &copy; CARTO',
@@ -19,9 +23,17 @@ const BASEMAPS = {
     url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
     attribution: '&copy; OpenTopoMap contributors',
   },
+  terrain: {
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
+    attribution: '&copy; Esri',
+  },
   satellite: {
     url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
     attribution: '&copy; Esri',
+  },
+  blank: {
+    url: '',
+    attribution: '',
   },
 };
 
@@ -117,7 +129,10 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
 
     if (baseLayerRef.current) {
       map.removeLayer(baseLayerRef.current);
+      baseLayerRef.current = null;
     }
+
+    if (!cfg.url) return; // blank basemap — no tile layer
 
     baseLayerRef.current = L.tileLayer(cfg.url, {
       attribution: cfg.attribution,
@@ -196,7 +211,10 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
       newLayers.every((nl, i) => {
         const ol = oldLayers[i];
         return ol && nl.id === ol.id && nl.geojson === ol.geojson &&
-               nl.visible === ol.visible && nl.type !== 'point' &&
+               nl.visible === ol.visible && nl.type !== 'points' &&
+               nl.style?.markerShape === ol.style?.markerShape &&
+               nl.style?.markerSize === ol.style?.markerSize &&
+               nl.style?.customMarkerDataUri === ol.style?.customMarkerDataUri &&
                (nl.style?.fillPattern || 'none') === (ol.style?.fillPattern || 'none');
       });
 
@@ -266,7 +284,12 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
           const markerSize = style.markerSize ?? 10;
 
           let marker;
-          if (markerShape && markerShape !== 'circle') {
+          const customUri = style.customMarkerDataUri;
+          if (customUri) {
+            const s = Math.max(8, markerSize);
+            const icon = L.icon({ iconUrl: customUri, iconSize: [s, s], iconAnchor: [s / 2, s / 2], popupAnchor: [0, -s / 2 - 2] });
+            marker = L.marker(latlng, { icon });
+          } else if (markerShape && markerShape !== 'circle') {
             const markerFill = featureOverride.markerFill ?? style.markerFill ?? style.fill ?? '#ffffff';
             const icon = makeMarkerIcon(markerShape, markerColor, Math.max(8, markerSize), markerFill);
             marker = L.marker(latlng, { icon });
