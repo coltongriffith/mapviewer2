@@ -84,6 +84,16 @@ const SAMPLE_LOGO_SVG = [
 const SAMPLE_LOGO_URL = `data:image/svg+xml,${encodeURIComponent(SAMPLE_LOGO_SVG)}`;
 const SAMPLE_ACCENT = '#b87333';
 
+const BASEMAP_OPTIONS = [
+  { key: 'light',    label: 'Light',     bg: '#dde8f0', water: '#a8c8e8' },
+  { key: 'streets',  label: 'Streets',   bg: '#f5f0e8', water: '#c8dff0' },
+  { key: 'dark',     label: 'Dark',      bg: '#1a2535', water: '#0f1a28' },
+  { key: 'topo',     label: 'Topo',      bg: '#d4c89a', water: '#9ab8d0' },
+  { key: 'terrain',  label: 'Terrain',   bg: '#ccd8b0', water: '#9ab8d0' },
+  { key: 'satellite',label: 'Satellite', bg: '#2d4a3e', water: '#1a3050' },
+  { key: 'blank',    label: 'Blank',     bg: '#ffffff', water: '#e8f0f8' },
+];
+
 const MARKER_TYPES = {
   circle: 'Circle',
   square: 'Square',
@@ -2212,14 +2222,24 @@ export default function App() {
               <input type="range" min="0.6" max="1.5" step="0.05" value={project.layout.titleFontScale ?? 1} onChange={(e) => updateLayout({ titleFontScale: parseFloat(e.target.value) })} style={{ flex: 1 }} />
               <span style={{ fontSize: 11, marginLeft: 6, minWidth: 32 }}>{Math.round((project.layout.titleFontScale ?? 1) * 100)}%</span>
             </div>
-            <div className="control-row">
+            <div className="control-row-stack">
               <label>Basemap</label>
-              <select value={project.layout.basemap} onChange={(e) => updateLayout({ basemap: e.target.value })}>
-                <option value="light">Light</option>
-                <option value="satellite">Satellite</option>
-                <option value="topo">Topo</option>
-                <option value="dark">Dark</option>
-              </select>
+              <div className="basemap-picker">
+                {BASEMAP_OPTIONS.map(({ key, label, bg, water }) => (
+                  <button
+                    key={key}
+                    type="button"
+                    className={`basemap-thumb${(project.layout.basemap || 'light') === key ? ' active' : ''}`}
+                    onClick={() => updateLayout({ basemap: key })}
+                    title={label}
+                  >
+                    <div className="basemap-thumb-swatch" style={{ background: bg }}>
+                      <div className="basemap-thumb-water" style={{ background: water }} />
+                    </div>
+                    <span className="basemap-thumb-label">{label}</span>
+                  </button>
+                ))}
+              </div>
             </div>
             <div className="element-visibility-row">
               <label className="toggle-row"><input type="checkbox" checked={project.layout.showTitle !== false} onChange={(e) => updateLayout({ showTitle: e.target.checked })} /><span>Title</span></label>
@@ -2585,17 +2605,29 @@ export default function App() {
           {selectedEllipse ? (
             <div className="control-grid" style={{ marginTop: 10 }}>
               <div className="selected-note">{selectedEllipse.isRing ? 'Selected distance ring' : 'Selected highlight area'}</div>
-              <div className="control-row"><label>Label</label><input value={selectedEllipse.label || ''} onChange={(e) => updateEllipse(selectedEllipse.id, { label: e.target.value })} placeholder={selectedEllipse.isRing ? `${selectedEllipse.radiusKm} km` : ''} /></div>
+              <div className="control-row"><label>Label</label><input value={selectedEllipse.label || ''} onChange={(e) => updateEllipse(selectedEllipse.id, { label: e.target.value })} placeholder={selectedEllipse.isRing ? (selectedEllipse.units === 'mi' ? `${(selectedEllipse.radiusKm * 0.621371).toFixed(1)} mi` : `${selectedEllipse.radiusKm} km`) : ''} /></div>
               {selectedEllipse.isRing ? (
                 <>
                   <div className="control-row inline-2">
                     <div>
-                      <label>Radius (km)</label>
-                      <input type="number" min="1" max="5000" step="1" value={selectedEllipse.radiusKm ?? 50} onChange={(e) => updateEllipse(selectedEllipse.id, { radiusKm: Number(e.target.value) })} />
+                      <label>Radius ({selectedEllipse.units === 'mi' ? 'mi' : 'km'})</label>
+                      <input type="number" min="0.1" max="5000" step={selectedEllipse.units === 'mi' ? '0.1' : '1'}
+                        value={selectedEllipse.units === 'mi' ? Math.round((selectedEllipse.radiusKm ?? 50) * 0.621371 * 10) / 10 : (selectedEllipse.radiusKm ?? 50)}
+                        onChange={(e) => {
+                          const v = Number(e.target.value);
+                          updateEllipse(selectedEllipse.id, { radiusKm: selectedEllipse.units === 'mi' ? v / 0.621371 : v });
+                        }} />
                     </div>
                     <div>
                       <label>Ring Color</label>
                       <input type="color" value={selectedEllipse.color || '#dc2626'} onChange={(e) => updateEllipse(selectedEllipse.id, { color: e.target.value })} />
+                    </div>
+                  </div>
+                  <div className="control-row">
+                    <label>Units</label>
+                    <div className="unit-toggle-row">
+                      <button type="button" className={`unit-toggle-btn${!selectedEllipse.units || selectedEllipse.units === 'km' ? ' active' : ''}`} onClick={() => updateEllipse(selectedEllipse.id, { units: 'km' })}>km</button>
+                      <button type="button" className={`unit-toggle-btn${selectedEllipse.units === 'mi' ? ' active' : ''}`} onClick={() => updateEllipse(selectedEllipse.id, { units: 'mi' })}>mi</button>
                     </div>
                   </div>
                   <div className="control-row inline-2">

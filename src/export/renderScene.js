@@ -947,7 +947,7 @@ function drawEllipsesCanvas(ctx, scene, scale) {
     ctx.setLineDash(ellipse.dashed === false ? [] : [6 * scale, 4 * scale]);
     ctx.stroke();
     ctx.restore();
-    const label = ellipse.isRing && !ellipse.label ? `${ellipse.radiusKm} km` : ellipse.label;
+    const label = ellipse.isRing && !ellipse.label ? (ellipse.units === 'mi' ? `${(ellipse.radiusKm * 0.621371).toFixed(1)} mi` : `${ellipse.radiusKm} km`) : ellipse.label;
     drawEllipseLabelCanvas(ctx, scene, { ...ellipse, label }, center, width, height, rotation, scale);
   });
 }
@@ -1717,7 +1717,7 @@ function renderEllipsesSvg(scene, scale, svgDefs) {
   const labelFontFamily = escapeXml(scene.project.layout?.fonts?.label || 'Inter');
   return (scene.project.ellipses || []).map((ellipse) => {
     const { center, width, height, rotation } = resolveEllipseDimensions(ellipse, scene.map, scale);
-    const effectiveLabel = ellipse.isRing && !ellipse.label ? `${ellipse.radiusKm} km` : ellipse.label;
+    const effectiveLabel = ellipse.isRing && !ellipse.label ? (ellipse.units === 'mi' ? `${(ellipse.radiusKm * 0.621371).toFixed(1)} mi` : `${ellipse.radiusKm} km`) : ellipse.label;
     const dash = ellipse.dashed === false ? '' : ` stroke-dasharray="${6 * scale} ${4 * scale}"`;
     const color = safeColor(ellipse.color, '#dc2626');
     const labelColor = safeColor(ellipse.labelColor || ellipse.color, '#dc2626');

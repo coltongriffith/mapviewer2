@@ -307,7 +307,7 @@ export default function AnnotationOverlay({
         {placedEllipses.filter((e) => e.isRing).map((ellipse) => {
           const r = ellipse.width / 2;
           const isSelected = selectedEllipseId === ellipse.id;
-          const displayLabel = ellipse.label || `${ellipse.radiusKm} km`;
+          const displayLabel = ellipse.label || (ellipse.units === 'mi' ? `${(ellipse.radiusKm * 0.621371).toFixed(1)} mi` : `${ellipse.radiusKm} km`);
           const labelFontSize = ellipse.labelFontSize || 11;
           const labelColor = ellipse.labelColor || ellipse.color || '#dc2626';
 
@@ -440,7 +440,7 @@ export default function AnnotationOverlay({
 
       {/* Ellipse labels (non-arc, draggable) */}
       {placedEllipses.filter((ellipse) => (ellipse.label || ellipse.isRing) && !ellipse.labelArc).map((ellipse) => {
-        const displayLabel = ellipse.label || (ellipse.isRing ? `${ellipse.radiusKm} km` : null);
+        const displayLabel = ellipse.label || (ellipse.isRing ? (ellipse.units === 'mi' ? `${(ellipse.radiusKm * 0.621371).toFixed(1)} mi` : `${ellipse.radiusKm} km`) : null);
         if (!displayLabel) return null;
         const pos = ellipseLabelPlacement(ellipse);
         const finalX = pos.labelX + (ellipse.labelOffsetX || 0);
