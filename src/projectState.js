@@ -156,6 +156,7 @@ export function createInitialProjectState() {
     markers: [],
     ellipses: [],
     polygons: [],
+    distanceLines: [],
     ratioMapStates: {},
     mapView: null,
   };
