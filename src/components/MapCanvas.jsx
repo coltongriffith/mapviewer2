@@ -211,7 +211,10 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
       newLayers.every((nl, i) => {
         const ol = oldLayers[i];
         return ol && nl.id === ol.id && nl.geojson === ol.geojson &&
-               nl.visible === ol.visible && nl.type !== 'point' &&
+               nl.visible === ol.visible && nl.type !== 'points' &&
+               nl.style?.markerShape === ol.style?.markerShape &&
+               nl.style?.markerSize === ol.style?.markerSize &&
+               nl.style?.customMarkerDataUri === ol.style?.customMarkerDataUri &&
                (nl.style?.fillPattern || 'none') === (ol.style?.fillPattern || 'none');
       });
 
