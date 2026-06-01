@@ -494,12 +494,18 @@ function normalizeInset(visibleBounds, referenceBounds) {
     h: ((visibleBounds.maxLat - visibleBounds.minLat) / height) * (100 - pad * 2),
   };
 }
+function mercY(lat) {
+  return Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360));
+}
+
 function projectToCanvas(lng, lat, refBbox, x, y, w, h, pad) {
   const [minLng, minLat, maxLng, maxLat] = refBbox;
-  const rngW = maxLng - minLng || 1, rngH = maxLat - minLat || 1;
+  const rngW = maxLng - minLng || 1;
+  const minMY = mercY(minLat), maxMY = mercY(maxLat);
+  const rngH = maxMY - minMY || 1;
   return [
     x + pad + ((lng - minLng) / rngW) * (w - pad * 2),
-    (y + h - pad) - ((lat - minLat) / rngH) * (h - pad * 2),
+    (y + h - pad) - ((mercY(lat) - minMY) / rngH) * (h - pad * 2),
   ];
 }
 
@@ -520,8 +526,8 @@ function drawAutoInsetCanvas(ctx, innerX, innerY, innerW, innerH, scale, region,
   const pad = 6 * scale;
   const refBbox = getAutoInsetRefBbox(region);
   const [minLng, minLat, maxLng, maxLat] = refBbox;
-  // Letterbox the draw area to preserve geographic aspect ratio — prevents province silhouette from stretching
-  const lb = fitRect(maxLng - minLng, maxLat - minLat, innerW, innerH);
+  // Convert lng to radians to match Mercator Y units, then letterbox
+  const lb = fitRect((maxLng - minLng) * Math.PI / 180, mercY(maxLat) - mercY(minLat), innerW, innerH);
   const lbX = innerX + lb.x, lbY = innerY + lb.y, lbW = lb.w, lbH = lb.h;
 
   // Background
@@ -573,8 +579,8 @@ function autoInsetSvg(innerX, innerY, innerW, innerH, scale, region, visibleBoun
   const pad = 6 * scale;
   const refBbox = getAutoInsetRefBbox(region);
   const [minLng, minLat, maxLng, maxLat] = refBbox;
-  // Letterbox to preserve geographic aspect ratio
-  const lb = fitRect(maxLng - minLng, maxLat - minLat, innerW, innerH);
+  // Convert lng to radians to match Mercator Y units, then letterbox
+  const lb = fitRect((maxLng - minLng) * Math.PI / 180, mercY(maxLat) - mercY(minLat), innerW, innerH);
   const lbX = innerX + lb.x, lbY = innerY + lb.y, lbW = lb.w, lbH = lb.h;
   const project = (lng, lat) => projectToCanvas(lng, lat, refBbox, lbX, lbY, lbW, lbH, pad);
 
