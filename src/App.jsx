@@ -1286,12 +1286,22 @@ export default function App() {
     }
   };
 
-  const loadSampleData = async () => {
+  const SAMPLE_STYLE_PRESETS = {
+    drill_plan:     { basemap: 'satellite', mode: 'drill_plan' },
+    claims:         { basemap: 'light',     mode: 'regional_claims' },
+    target:         { basemap: 'light',     mode: 'target_anomaly' },
+    regional:       { basemap: 'terrain',   mode: 'project_overview' },
+    infrastructure: { basemap: 'streets',   mode: 'access_location' },
+    dark:           { basemap: 'dark',      mode: 'drill_plan' },
+  };
+
+  const loadSampleData = async (styleId) => {
     const makeFile = (json, name) => new File([JSON.stringify(json)], name, { type: 'application/json' });
     setProject(createInitialProjectState());
     try {
       await addGeoJSONLayer(makeFile(sampleClaims, 'Sample Claims.geojson'));
       await addGeoJSONLayer(makeFile(sampleDrillholes, 'Sample Drillholes.geojson'));
+      const styleOverride = styleId ? (SAMPLE_STYLE_PRESETS[styleId] || {}) : {};
       updateLayout({
         logo: SAMPLE_LOGO_URL,
         accentColor: SAMPLE_ACCENT,
@@ -1300,6 +1310,7 @@ export default function App() {
         footerText: 'Buckhorn Creek Mining Corp. | Cariboo Region, BC | For internal use only',
         footerEnabled: true,
         exportSettings: { filename: 'buckhorn-creek-property', pixelRatio: 2 },
+        ...styleOverride,
       });
       applyBrandPaletteToLayers(SAMPLE_ACCENT);
       setScreen('editor');
@@ -2132,6 +2143,7 @@ export default function App() {
         <LandingPage
           onOpenEditor={() => setScreen('editor')}
           onLoadSample={loadSampleData}
+          onLoadSampleStyle={(styleId) => loadSampleData(styleId)}
           recentProjects={recentProjects}
           onOpenProject={(entry) => { openProjectFromRecent(entry); setScreen('editor'); }}
           onShowHelp={() => setShowHelpModal(true)}
