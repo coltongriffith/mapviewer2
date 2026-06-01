@@ -504,9 +504,19 @@ function getAutoInsetRefBbox(region) {
   return [minLng - dLng, minLat - dLat, maxLng + dLng, maxLat + dLat];
 }
 
+function fitRect(srcW, srcH, dstW, dstH) {
+  const s = Math.min(dstW / srcW, dstH / srcH);
+  const w = srcW * s, h = srcH * s;
+  return { x: (dstW - w) / 2, y: (dstH - h) / 2, w, h };
+}
+
 function drawAutoInsetCanvas(ctx, innerX, innerY, innerW, innerH, scale, region, visibleBounds) {
   const pad = 6 * scale;
   const refBbox = getAutoInsetRefBbox(region);
+  const [minLng, minLat, maxLng, maxLat] = refBbox;
+  // Letterbox the draw area to preserve geographic aspect ratio — prevents province silhouette from stretching
+  const lb = fitRect(maxLng - minLng, maxLat - minLat, innerW, innerH);
+  const lbX = innerX + lb.x, lbY = innerY + lb.y, lbW = lb.w, lbH = lb.h;
 
   // Background
   ctx.fillStyle = '#f0f4f8';
@@ -520,7 +530,7 @@ function drawAutoInsetCanvas(ctx, innerX, innerY, innerW, innerH, scale, region,
     if (ring.length < 2) return;
     ctx.beginPath();
     ring.forEach(([lng, lat], i) => {
-      const [px, py] = projectToCanvas(lng, lat, refBbox, innerX, innerY, innerW, innerH, pad);
+      const [px, py] = projectToCanvas(lng, lat, refBbox, lbX, lbY, lbW, lbH, pad);
       if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
     });
     ctx.closePath();
@@ -530,19 +540,19 @@ function drawAutoInsetCanvas(ctx, innerX, innerY, innerW, innerH, scale, region,
 
   // Project location marker
   if (visibleBounds) {
-    const [mx1, my1] = projectToCanvas(visibleBounds.minLng, visibleBounds.maxLat, refBbox, innerX, innerY, innerW, innerH, pad);
-    const [mx2, my2] = projectToCanvas(visibleBounds.maxLng, visibleBounds.minLat, refBbox, innerX, innerY, innerW, innerH, pad);
+    const [mx1, my1] = projectToCanvas(visibleBounds.minLng, visibleBounds.maxLat, refBbox, lbX, lbY, lbW, lbH, pad);
+    const [mx2, my2] = projectToCanvas(visibleBounds.maxLng, visibleBounds.minLat, refBbox, lbX, lbY, lbW, lbH, pad);
     const rx = Math.min(mx1, mx2), ry = Math.min(my1, my2);
     const rw = Math.max(4 * scale, Math.abs(mx2 - mx1)), rh = Math.max(4 * scale, Math.abs(my2 - my1));
     ctx.fillStyle = 'rgba(96,165,250,0.25)';
     ctx.strokeStyle = '#2563eb';
     ctx.lineWidth = 1.2 * scale;
     ctx.beginPath();
-    ctx.rect(Math.max(innerX + pad, rx), Math.max(innerY + pad, ry), rw, rh);
+    ctx.rect(Math.max(lbX + pad, rx), Math.max(lbY + pad, ry), rw, rh);
     ctx.fill();
     ctx.stroke();
-    const dotX = Math.max(innerX + pad + 3 * scale, Math.min(innerX + innerW - pad - 3 * scale, rx + rw / 2));
-    const dotY = Math.max(innerY + pad + 3 * scale, Math.min(innerY + innerH - pad - 3 * scale, ry + rh / 2));
+    const dotX = Math.max(lbX + pad + 3 * scale, Math.min(lbX + lbW - pad - 3 * scale, rx + rw / 2));
+    const dotY = Math.max(lbY + pad + 3 * scale, Math.min(lbY + lbH - pad - 3 * scale, ry + rh / 2));
     ctx.beginPath();
     ctx.arc(dotX, dotY, 3.5 * scale, 0, Math.PI * 2);
     ctx.fillStyle = '#1d4ed8';
@@ -556,7 +566,11 @@ function drawAutoInsetCanvas(ctx, innerX, innerY, innerW, innerH, scale, region,
 function autoInsetSvg(innerX, innerY, innerW, innerH, scale, region, visibleBounds) {
   const pad = 6 * scale;
   const refBbox = getAutoInsetRefBbox(region);
-  const project = (lng, lat) => projectToCanvas(lng, lat, refBbox, innerX, innerY, innerW, innerH, pad);
+  const [minLng, minLat, maxLng, maxLat] = refBbox;
+  // Letterbox to preserve geographic aspect ratio
+  const lb = fitRect(maxLng - minLng, maxLat - minLat, innerW, innerH);
+  const lbX = innerX + lb.x, lbY = innerY + lb.y, lbW = lb.w, lbH = lb.h;
+  const project = (lng, lat) => projectToCanvas(lng, lat, refBbox, lbX, lbY, lbW, lbH, pad);
 
   const paths = region.coordinates.map(ring => {
     if (ring.length < 2) return '';
@@ -568,12 +582,12 @@ function autoInsetSvg(innerX, innerY, innerW, innerH, scale, region, visibleBoun
   if (visibleBounds) {
     const [mx1, my1] = project(visibleBounds.minLng, visibleBounds.maxLat);
     const [mx2, my2] = project(visibleBounds.maxLng, visibleBounds.minLat);
-    const rx = Math.max(innerX + pad, Math.min(mx1, mx2));
-    const ry = Math.max(innerY + pad, Math.min(my1, my2));
+    const rx = Math.max(lbX + pad, Math.min(mx1, mx2));
+    const ry = Math.max(lbY + pad, Math.min(my1, my2));
     const rw = Math.max(4 * scale, Math.abs(mx2 - mx1));
     const rh = Math.max(4 * scale, Math.abs(my2 - my1));
-    const dotX = Math.max(innerX + pad + 3 * scale, Math.min(innerX + innerW - pad - 3 * scale, rx + rw / 2));
-    const dotY = Math.max(innerY + pad + 3 * scale, Math.min(innerY + innerH - pad - 3 * scale, ry + rh / 2));
+    const dotX = Math.max(lbX + pad + 3 * scale, Math.min(lbX + lbW - pad - 3 * scale, rx + rw / 2));
+    const dotY = Math.max(lbY + pad + 3 * scale, Math.min(lbY + lbH - pad - 3 * scale, ry + rh / 2));
     markerSvg = `<rect x="${rx}" y="${ry}" width="${rw}" height="${rh}" fill="#60a5fa" fill-opacity="0.25" stroke="#2563eb" stroke-width="${1.2 * scale}" /><circle cx="${dotX}" cy="${dotY}" r="${3.5 * scale}" fill="#1d4ed8" stroke="#ffffff" stroke-width="${1.2 * scale}" />`;
   }
 
@@ -608,7 +622,7 @@ async function drawInsetCanvas(ctx, scene, scale) {
   const customInset = insetMode === 'custom_image' && insetImage;
   if (customInset) {
     const img = await new Promise((resolve, reject) => { const el = new Image(); el.onload = () => resolve(el); el.onerror = reject; el.src = insetImage; }).catch(() => { _exportWarnings.push('inset image could not be embedded'); return null; });
-    if (img) { ctx.save(); drawRoundedRect(ctx, innerX, innerY, innerW, innerH, 8 * scale); ctx.clip(); ctx.drawImage(img, innerX, innerY, innerW, innerH); ctx.restore(); }
+    if (img) { ctx.save(); drawRoundedRect(ctx, innerX, innerY, innerW, innerH, 8 * scale); ctx.clip(); const lb = fitRect(img.naturalWidth || innerW, img.naturalHeight || innerH, innerW, innerH); ctx.drawImage(img, innerX + lb.x, innerY + lb.y, lb.w, lb.h); ctx.restore(); }
     return;
   }
   const visible = (scene.project.layers || []).filter((layer) => layer.visible !== false && layer.geojson);

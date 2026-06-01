@@ -77,7 +77,49 @@ export async function loadGeoJSON(file) {
     return data;
   }
 
-  throw new Error("Unsupported file type. Use .zip (shapefile), .geojson, .json, .kml, or .kmz");
+  if (name.endsWith(".shp")) {
+    // Single .shp dropped without its companions — load geometry only
+    const buffer = await file.arrayBuffer();
+    const { default: shp } = await import('shpjs');
+    const geoms = shp.parseShp(buffer);
+    if (!geoms?.length) throw new Error("Shapefile contained no geometry.");
+    return {
+      type: "FeatureCollection",
+      features: geoms.map((g) => ({ type: "Feature", geometry: g, properties: {} })),
+    };
+  }
+
+  throw new Error("Unsupported file type. Use .zip (shapefile), .shp/.dbf (dropped together), .geojson, .json, .kml, or .kmz");
+}
+
+// --- Multi-file shapefile import (.shp + .dbf + optional .prj/.shx) ---
+
+export async function loadShapefileSet(files) {
+  const byExt = {};
+  for (const f of files) {
+    const ext = f.name.toLowerCase().split('.').pop();
+    byExt[ext] = f;
+  }
+  if (!byExt.shp) throw new Error("No .shp file found. Drop all shapefile parts together (.shp, .dbf, .prj, .shx).");
+
+  const { default: shp } = await import('shpjs');
+  const shpBuf = await byExt.shp.arrayBuffer();
+  const geoms = shp.parseShp(shpBuf);
+
+  if (byExt.dbf) {
+    const dbfBuf = await byExt.dbf.arrayBuffer();
+    const rows = shp.parseDbf(dbfBuf);
+    const result = shp.combine([geoms, rows]);
+    if (!result?.features?.length) throw new Error("Shapefile contained no features.");
+    return result;
+  }
+
+  // No .dbf — geometry only, no attributes
+  if (!geoms?.length) throw new Error("Shapefile contained no geometry.");
+  return {
+    type: "FeatureCollection",
+    features: geoms.map((g) => ({ type: "Feature", geometry: g, properties: {} })),
+  };
 }
 
 // --- CSV drillhole import ---

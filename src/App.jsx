@@ -15,7 +15,7 @@ const MapCanvas = React.lazy(() => import('./components/MapCanvas'));
 const ExportHDModal = React.lazy(() => import('./components/ExportHDModal'));
 const HowToUseModal = React.lazy(() => import('./components/HowToUseModal'));
 const ColumnMapperModal = React.lazy(() => import('./components/ColumnMapperModal'));
-import { loadGeoJSON, loadCSV } from './utils/importers';
+import { loadGeoJSON, loadCSV, loadShapefileSet } from './utils/importers';
 import sampleClaims from './assets/sampleClaims.json';
 import sampleDrillholes from './assets/sampleDrillholes.json';
 import {
@@ -1260,6 +1260,17 @@ export default function App() {
     }
   };
 
+  const handleUploadFiles = async (files) => {
+    try {
+      const shpName = files.find((f) => f.name.toLowerCase().endsWith('.shp'))?.name || 'shapefile';
+      const geojson = await loadShapefileSet(files);
+      await addGeoJSONAsLayer(geojson, shpName);
+      if (screen !== 'editor') setScreen('editor');
+    } catch (err) {
+      setUploadStatus({ type: 'error', message: `Import failed: ${err.message}` });
+    }
+  };
+
   const loadSampleData = async () => {
     const makeFile = (json, name) => new File([JSON.stringify(json)], name, { type: 'application/json' });
     setProject(createInitialProjectState());
@@ -1881,8 +1892,8 @@ export default function App() {
       const opts = { ...(project.layout?.exportSettings || {}), ...extraOptions };
       if (format === 'png') {
         await exportPNG(scene, opts);
-      } else if (format === 'svg') {
-        await exportSVG(scene, opts);
+      } else if (format === 'svg' || format === 'svg_ai') {
+        await exportSVG(scene, { ...opts, illustratorMode: format === 'svg_ai' });
       } else if (format === 'pdf') {
         const { exportPDF } = await import('./export/exportPDF');
         await exportPDF(scene, opts);
@@ -2143,7 +2154,7 @@ export default function App() {
           </div>
         ) : null}
 
-        <UploadPanel onUploadFile={handleUploadFile} inputRef={uploadInputRef} status={uploadStatus} layers={project.layers} />
+        <UploadPanel onUploadFile={handleUploadFile} onUploadFiles={handleUploadFiles} inputRef={uploadInputRef} status={uploadStatus} layers={project.layers} />
 
         <div className={`logo-upload-card${project.layout.logo ? ' has-logo' : ''}`}>
           {project.layout.logo ? (
@@ -3036,6 +3047,7 @@ export default function App() {
             <div className="button-row">
               <button className={`btn primary${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('png'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export PNG'}</button>
               <button className={`btn${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('svg'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export SVG'}</button>
+              <button className={`btn${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('svg_ai'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title="SVG bundled with separate basemap PNG — opens correctly in Adobe Illustrator">{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'SVG (Illustrator)'}</button>
               <button className={`btn${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('pdf'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export PDF'}</button>
             </div>
             {exportError && <div className="export-error-msg">{exportError}</div>}
@@ -3076,6 +3088,7 @@ export default function App() {
             <div className="topbar-btn-group">
               <button className={`topbar-btn primary${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('png'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing…' : ''}>{exporting ? 'Exporting…' : 'PNG'}</button>
               <button className={`topbar-btn${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('svg'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting}>SVG</button>
+              <button className={`topbar-btn${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('svg_ai'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title="SVG for Illustrator (ZIP with separate basemap)">AI</button>
               <button className={`topbar-btn${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('pdf'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting}>PDF</button>
             </div>
             {exportError && <div className="export-error-msg">{exportError}</div>}
