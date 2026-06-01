@@ -1688,3 +1688,13 @@ button, input, select, textarea { font: inherit; }
   transition: background 0.1s, color 0.1s;
 }
 .unit-toggle-btn.active { background: #2563eb; color: #ffffff; border-color: #2563eb; }
+
+/* Visual marker shape picker */
+.marker-shape-picker-visual { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; }
+.shape-visual-btn {
+  display: flex; align-items: center; justify-content: center;
+  padding: 6px 0; border-radius: 8px; border: 1.5px solid #d4deea;
+  background: #f8fafc; cursor: pointer; transition: background 0.1s, border-color 0.1s;
+}
+.shape-visual-btn:hover { border-color: #94b4d0; background: #eef4fb; }
+.shape-visual-btn.active { background: #2563eb; border-color: #2563eb; }

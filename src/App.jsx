@@ -33,6 +33,7 @@ import { getTemplate } from './templates';
 import { buildLegendItems, resolveTemplateZones } from './templates/technicalResultsTemplate';
 import { resolveNI43101Zones } from './templates/technicalReportTemplate';
 import { geojsonBounds, geojsonCenter, unionBounds } from './utils/geometry';
+import { markerSvgUrl } from './utils/leaflet';
 import { detectRegion } from './utils/detectRegion';
 import { cleanLayerName } from './utils/cleanLayerName';
 import regionsNA from './assets/regionsNA.json';
@@ -98,9 +99,13 @@ const MARKER_TYPES = {
   circle: 'Circle',
   square: 'Square',
   triangle: 'Triangle',
-  pickaxe: 'Pickaxe',
-  shovel: 'Shovel',
+  triangle_down: 'Tri ▼',
+  diamond: 'Diamond',
+  cross: 'Cross',
   star: 'Star',
+  hexagon: 'Hexagon',
+  pin: 'Pin',
+  drillhole: 'DH Pin',
 };
 
 function detectLayerKind(geojson) {
@@ -2295,27 +2300,47 @@ export default function App() {
                   </div>
                   <div className="control-row">
                     <label>Marker Shape</label>
-                    <div className="marker-shape-picker">
+                    <div className="marker-shape-picker-visual">
                       {[
-                        ['circle', 'Circle'],
-                        ['triangle_down', 'Tri ▼'],
-                        ['triangle', 'Tri ▲'],
-                        ['square', 'Square'],
-                        ['diamond', 'Diamond'],
-                        ['cross', 'Cross'],
-                        ['drillhole', 'DH Pin'],
-                        ['star', 'Star'],
-                      ].map(([val, label]) => (
-                        <button
-                          key={val}
-                          type="button"
-                          className={`shape-btn${(selectedLayer.style?.markerShape || 'circle') === val ? ' active' : ''}`}
-                          onClick={() => updateLayer(selectedLayer.id, { style: { markerShape: val } })}
-                          title={label}
-                        >
-                          {label}
-                        </button>
-                      ))}
+                        ['circle', 'Circle'], ['square', 'Square'], ['triangle', 'Tri ▲'], ['triangle_down', 'Tri ▼'],
+                        ['diamond', 'Diamond'], ['cross', 'Cross'], ['star', 'Star'], ['hexagon', 'Hexagon'],
+                        ['pin', 'Pin'], ['drillhole', 'DH Pin'],
+                      ].map(([val, label]) => {
+                        const color = selectedLayer.style?.markerColor || '#2563eb';
+                        const isActive = (selectedLayer.style?.markerShape || 'circle') === val;
+                        return (
+                          <button key={val} type="button" className={`shape-visual-btn${isActive ? ' active' : ''}`}
+                            onClick={() => updateLayer(selectedLayer.id, { style: { markerShape: val } })} title={label}>
+                            <img src={markerSvgUrl(val, isActive ? '#ffffff' : color, 18)} alt={label} width="18" height="18" />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div className="control-row">
+                    <label>Custom Icon</label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      {selectedLayer.style?.customMarkerDataUri && (
+                        <img src={selectedLayer.style.customMarkerDataUri} alt="custom icon" style={{ width: 24, height: 24, objectFit: 'contain', border: '1px solid #d4deea', borderRadius: 4 }} />
+                      )}
+                      <button type="button" className="secondary-btn" style={{ flex: 1 }}
+                        onClick={() => {
+                          const input = document.createElement('input');
+                          input.type = 'file'; input.accept = 'image/png,image/svg+xml,image/jpeg,image/gif';
+                          input.onchange = (e) => {
+                            const file = e.target.files?.[0]; if (!file) return;
+                            const reader = new FileReader();
+                            reader.onload = (ev) => updateLayer(selectedLayer.id, { style: { customMarkerDataUri: ev.target.result } });
+                            reader.readAsDataURL(file);
+                          };
+                          input.click();
+                        }}>
+                        {selectedLayer.style?.customMarkerDataUri ? 'Change Icon' : 'Upload Icon'}
+                      </button>
+                      {selectedLayer.style?.customMarkerDataUri && (
+                        <button type="button" className="secondary-btn" style={{ flexShrink: 0 }}
+                          onClick={() => updateLayer(selectedLayer.id, { style: { customMarkerDataUri: null } })}>✕</button>
+                      )}
                     </div>
                   </div>
                 </>

@@ -187,6 +187,10 @@ function drawCanvasMarkerShape(ctx, shape, cx, cy, r) {
   } else if (shape === 'drillhole') {
     ctx.moveTo(cx, cy - r); ctx.lineTo(cx + r, cy + r * 0.5); ctx.lineTo(cx - r, cy + r * 0.5); ctx.closePath();
     ctx.moveTo(cx, cy + r * 0.5); ctx.lineTo(cx, cy + r);
+  } else if (shape === 'hexagon') {
+    for (let i = 0; i < 6; i++) { const a = (i * Math.PI) / 3 - Math.PI / 2; const x = cx + r * Math.cos(a); const y = cy + r * Math.sin(a); if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); } ctx.closePath();
+  } else if (shape === 'pin') {
+    const cr = r * 0.58; const py = cy - r * 0.28; ctx.arc(cx, py, cr, 0, Math.PI * 2); ctx.closePath(); ctx.moveTo(cx - cr * 0.55, py + cr * 0.4); ctx.lineTo(cx + cr * 0.55, py + cr * 0.4); ctx.lineTo(cx, cy + r); ctx.closePath();
   } else {
     ctx.arc(cx, cy, r, 0, Math.PI * 2);
   }
@@ -201,6 +205,8 @@ function svgMarkerShape(shape, cx, cy, r, fill, stroke, sw, opacity) {
   if (shape === 'star') { const r2 = r * 0.45; const pts = Array.from({ length: 10 }, (_, i) => { const a = (i * Math.PI) / 5 - Math.PI / 2; const ri = i % 2 === 0 ? r : r2; return `${(cx + ri * Math.cos(a)).toFixed(2)},${(cy + ri * Math.sin(a)).toFixed(2)}`; }).join(' '); return `<polygon points="${pts}"${sf}${op} />`; }
   if (shape === 'cross') return `<line x1="${cx}" y1="${cy - r}" x2="${cx}" y2="${cy + r}" stroke="${stroke}" stroke-width="${sw}"${op} /><line x1="${cx - r}" y1="${cy}" x2="${cx + r}" y2="${cy}" stroke="${stroke}" stroke-width="${sw}"${op} />`;
   if (shape === 'drillhole') return `<polygon points="${cx},${cy - r} ${cx + r},${cy + r * 0.5} ${cx - r},${cy + r * 0.5}"${sf}${op} /><line x1="${cx}" y1="${cy + r * 0.5}" x2="${cx}" y2="${cy + r}" stroke="${stroke}" stroke-width="${sw}"${op} />`;
+  if (shape === 'hexagon') { const pts = Array.from({ length: 6 }, (_, i) => { const a = (i * Math.PI) / 3 - Math.PI / 2; return `${(cx + r * Math.cos(a)).toFixed(2)},${(cy + r * Math.sin(a)).toFixed(2)}`; }).join(' '); return `<polygon points="${pts}"${sf}${op} />`; }
+  if (shape === 'pin') { const cr = r * 0.58; const py = cy - r * 0.28; return `<circle cx="${cx}" cy="${py.toFixed(2)}" r="${cr.toFixed(2)}"${sf}${op} /><polygon points="${(cx - cr * 0.55).toFixed(2)},${(py + cr * 0.4).toFixed(2)} ${(cx + cr * 0.55).toFixed(2)},${(py + cr * 0.4).toFixed(2)} ${cx},${(cy + r).toFixed(2)}"${sf}${op} />`; }
   return `<circle cx="${cx.toFixed(2)}" cy="${cy.toFixed(2)}" r="${r.toFixed(2)}"${sf}${op} />`;
 }
 function drawCanvasGeometry(ctx, map, feature, style, scale) {
@@ -212,7 +218,7 @@ function drawCanvasGeometry(ctx, map, feature, style, scale) {
   if (type === 'MultiPolygon') { ctx.beginPath(); coords.forEach((polygon) => polygon.forEach((ring) => drawCanvasPath(ctx, projectRing(map, ring, scale), true))); setCanvasFill(ctx, style); ctx.fill('evenodd'); setCanvasStroke(ctx, style, scale); ctx.stroke(); ctx.restore(); return; }
   if (type === 'LineString') { ctx.beginPath(); drawCanvasPath(ctx, projectLine(map, coords, scale), false); setCanvasStroke(ctx, style, scale); ctx.stroke(); ctx.restore(); return; }
   if (type === 'MultiLineString') { ctx.beginPath(); coords.forEach((line) => drawCanvasPath(ctx, projectLine(map, line, scale), false)); setCanvasStroke(ctx, style, scale); ctx.stroke(); ctx.restore(); return; }
-  if (type === 'Point') { const pt = projectCoordinate(map, coords, scale); const radius = (style.markerSize ?? 8) * scale * 0.5; const shape = style.markerShape || 'circle'; drawCanvasMarkerShape(ctx, shape, pt.x, pt.y, radius); ctx.fillStyle = style.markerFill || style.markerColor || '#ffffff'; ctx.fill(); ctx.lineWidth = (style.strokeWidth ?? 1.5) * scale; ctx.strokeStyle = style.markerColor || style.stroke || '#111111'; ctx.stroke(); ctx.restore(); return; }
+  if (type === 'Point') { const pt = projectCoordinate(map, coords, scale); const radius = (style.markerSize ?? 8) * scale * 0.5; if (style._customIconImg) { const s = radius * 2; ctx.drawImage(style._customIconImg, pt.x - s / 2, pt.y - s / 2, s, s); ctx.restore(); return; } const shape = style.markerShape || 'circle'; drawCanvasMarkerShape(ctx, shape, pt.x, pt.y, radius); ctx.fillStyle = style.markerFill || style.markerColor || '#ffffff'; ctx.fill(); ctx.lineWidth = (style.strokeWidth ?? 1.5) * scale; ctx.strokeStyle = style.markerColor || style.stroke || '#111111'; ctx.stroke(); ctx.restore(); return; }
   if (type === 'MultiPoint') { coords.forEach((coord) => drawCanvasGeometry(ctx, map, { geometry: { type: 'Point', coordinates: coord } }, style, scale)); ctx.restore(); return; }
   ctx.restore();
 }
@@ -253,7 +259,7 @@ function geometryToSvg(map, feature, style, scale) {
   if (type === 'MultiPolygon') return `${patternDef}<path d="${coords.flatMap((polygon) => polygon.map((ring) => pathFromPoints(projectRing(map, ring, scale), true))).filter(Boolean).join(' ')}" ${fillAttr} stroke="${stroke}" stroke-width="${strokeWidth}"${dash} fill-rule="evenodd" stroke-opacity="${opacity}" />`;
   if (type === 'LineString') return `<path d="${pathFromPoints(projectLine(map, coords, scale), false)}" fill="none" stroke="${stroke}" stroke-width="${strokeWidth}"${dash} stroke-linecap="round" stroke-linejoin="round" stroke-opacity="${opacity}" />`;
   if (type === 'MultiLineString') return `<path d="${coords.map((line) => pathFromPoints(projectLine(map, line, scale), false)).filter(Boolean).join(' ')}" fill="none" stroke="${stroke}" stroke-width="${strokeWidth}"${dash} stroke-linecap="round" stroke-linejoin="round" stroke-opacity="${opacity}" />`;
-  if (type === 'Point') { const pt = projectCoordinate(map, coords, scale); const radius = (style.markerSize ?? 8) * scale * 0.5; const shape = style.markerShape || 'circle'; return svgMarkerShape(shape, pt.x, pt.y, radius, safeColor(style.markerFill || fill), safeColor(style.markerColor || stroke), Math.max(scale, strokeWidth * 0.4).toFixed(2), opacity); }
+  if (type === 'Point') { const pt = projectCoordinate(map, coords, scale); const radius = (style.markerSize ?? 8) * scale * 0.5; if (style.customMarkerDataUri) { const s = radius * 2; return `<image href="${escapeXml(style.customMarkerDataUri)}" x="${(pt.x - s / 2).toFixed(2)}" y="${(pt.y - s / 2).toFixed(2)}" width="${s.toFixed(2)}" height="${s.toFixed(2)}" opacity="${opacity}" />`; } const shape = style.markerShape || 'circle'; return svgMarkerShape(shape, pt.x, pt.y, radius, safeColor(style.markerFill || fill), safeColor(style.markerColor || stroke), Math.max(scale, strokeWidth * 0.4).toFixed(2), opacity); }
   if (type === 'MultiPoint') return coords.map((coord) => geometryToSvg(map, { geometry: { type: 'Point', coordinates: coord } }, style, scale)).join('');
   return '';
 }
@@ -1487,7 +1493,7 @@ export async function renderSceneToCanvas(scene, options = {}) {
   const canvas = document.createElement('canvas'); canvas.width = Math.round(scene.width * scale); canvas.height = Math.round(scene.height * scale); const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
   const isNI = scene.template?.id === 'ni_43101_technical';
-  await drawTilesCanvas(ctx, scene, scale); drawRegionHighlightsCanvas(ctx, scene, scale); drawVectorsCanvas(ctx, scene, scale); drawEllipsesCanvas(ctx, scene, scale); drawPolygonsCanvas(ctx, scene, scale); await drawMarkersCanvas(ctx, scene, scale); drawCalloutsCanvas(ctx, scene, scale);
+  await drawTilesCanvas(ctx, scene, scale); drawRegionHighlightsCanvas(ctx, scene, scale); await drawVectorsCanvas(ctx, scene, scale); drawEllipsesCanvas(ctx, scene, scale); drawPolygonsCanvas(ctx, scene, scale); await drawMarkersCanvas(ctx, scene, scale); drawCalloutsCanvas(ctx, scene, scale);
   if (!isNI) { drawTitleBlockCanvas(ctx, scene, scale); drawFooterCanvas(ctx, scene, scale); }
   drawScaleBarCanvas(ctx, scene, scale);
   drawLegendCanvas(ctx, scene, scale); drawNorthArrowCanvas(ctx, scene, scale); await drawInsetCanvas(ctx, scene, scale); await drawLogoCanvas(ctx, scene, scale);
@@ -1542,11 +1548,23 @@ function drawRegionHighlightsCanvas(ctx, scene, scale) {
   });
 }
 
-function drawVectorsCanvas(ctx, scene, scale) {
+async function drawVectorsCanvas(ctx, scene, scale) {
+  // Pre-load custom marker icons (only for layers that have one)
+  const iconCache = new Map();
+  for (const layer of (scene.project.layers || [])) {
+    const uri = layer.style?.customMarkerDataUri;
+    if (uri && !iconCache.has(uri)) {
+      iconCache.set(uri, await loadImage(uri).catch(() => null));
+    }
+  }
   (scene.project.layers || []).filter((layer) => layer.visible !== false && layer.geojson).forEach((layer) => {
     const lo = layer.style?.layerOpacity ?? 1;
+    const customImg = iconCache.get(layer.style?.customMarkerDataUri) || null;
     ctx.save(); ctx.globalAlpha = lo;
-    featureCollectionFeatures(layer.geojson).forEach((feature) => drawCanvasGeometry(ctx, scene.map, feature, getFeatureStyle(scene.template, layer, feature), scale));
+    featureCollectionFeatures(layer.geojson).forEach((feature) => {
+      const style = getFeatureStyle(scene.template, layer, feature);
+      drawCanvasGeometry(ctx, scene.map, feature, customImg ? { ...style, _customIconImg: customImg } : style, scale);
+    });
     ctx.restore();
   });
 }

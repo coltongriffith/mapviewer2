@@ -281,7 +281,12 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
           const markerSize = style.markerSize ?? 10;
 
           let marker;
-          if (markerShape && markerShape !== 'circle') {
+          const customUri = style.customMarkerDataUri;
+          if (customUri) {
+            const s = Math.max(8, markerSize);
+            const icon = L.icon({ iconUrl: customUri, iconSize: [s, s], iconAnchor: [s / 2, s / 2], popupAnchor: [0, -s / 2 - 2] });
+            marker = L.marker(latlng, { icon });
+          } else if (markerShape && markerShape !== 'circle') {
             const markerFill = featureOverride.markerFill ?? style.markerFill ?? style.fill ?? '#ffffff';
             const icon = makeMarkerIcon(markerShape, markerColor, Math.max(8, markerSize), markerFill);
             marker = L.marker(latlng, { icon });
