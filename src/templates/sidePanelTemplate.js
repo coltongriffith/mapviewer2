@@ -6,14 +6,14 @@ function legendHeightFor(layout, itemCount, groupCount) {
   const lfs = layout?.legendFontScale ?? 1;
   const rowH = Math.round(28 * lfs);
   const groupPx = groupCount * 18;
-  return Math.max(80, Math.min(500, 44 + itemCount * rowH + groupPx));
+  return Math.max(60, Math.min(400, 44 + itemCount * rowH + groupPx));
 }
 
 export const sidePanelTemplate = {
   id: 'side_panel',
-  label: 'Side Panel',
+  label: 'Technical',
   sidebarFrac: SIDEBAR_FRAC,
-  frame: { margin: 18, panelRadius: 0 },
+  frame: { margin: 0, panelRadius: 0 },
   zones: {},
   roleOrder: [
     'claims', 'target_areas', 'anomalies', 'faults_structures',
@@ -41,6 +41,11 @@ export const sidePanelTemplate = {
       visibleRoles: ['claims', 'drillholes', 'target_areas', 'anomalies', 'roads_access'],
       referenceOverlays: { context: false, labels: false, rail: false },
     },
+    regional_claims: {
+      basemap: 'terrain', insetMode: 'country', framing: 'regional',
+      visibleRoles: ['claims', 'roads_access', 'rivers_water', 'labels'],
+      referenceOverlays: { context: false, labels: true, rail: false },
+    },
     drill_plan: {
       basemap: 'light', insetMode: 'secondary_zoom', framing: 'tight',
       visibleRoles: ['claims', 'drillholes', 'target_areas', 'roads_access'],
@@ -54,70 +59,87 @@ export function resolveSidePanelZones(template, layout, mapSize, legendItems) {
   const H = mapSize?.height || 1000;
   const sbLeft = Math.round(W * (1 - SIDEBAR_FRAC));
   const sbW = W - sbLeft;
-  const margin = 18;
+  const margin = 16;
   const innerW = sbW - margin * 2;
+  const gap = 10;
 
+  // --- Element heights ---
   const resolvedItems = legendItems || layout?.legendItems || [];
   const itemCount = resolvedItems.length;
   const groupCount = new Set(resolvedItems.map(i => i.group).filter(Boolean)).size;
   const legendHeight = layout?.legendHeightPx != null
-    ? Math.max(60, Math.min(H - 260, layout.legendHeightPx))
+    ? Math.max(60, Math.min(H - 320, layout.legendHeightPx))
     : legendHeightFor(layout, itemCount, groupCount);
-  const legendWidth = innerW;
 
-  const titleHeight = Math.max(60, Math.min(160, layout?.titleHeightPx ?? 92));
+  const titleHeight = Math.max(72, Math.min(180, layout?.titleHeightPx ?? 108));
   const logoScale = Math.max(0.7, Math.min(1.2, Number(layout?.logoScale || 1)));
-  const logoH = layout?.logoHeightPx ? Math.max(20, Math.min(200, layout.logoHeightPx)) : Math.round(56 * logoScale);
-  const logoW = layout?.logoWidthPx ? Math.max(40, Math.min(innerW, layout.logoWidthPx)) : Math.min(innerW, Math.round(168 * logoScale));
-
-  const naH = layout?.northArrowHeightPx ?? 80;
+  const logoH = layout?.logo ? (layout?.logoHeightPx ? Math.max(20, Math.min(160, layout.logoHeightPx)) : Math.round(52 * logoScale)) : 0;
+  const logoW = layout?.logoWidthPx ? Math.max(40, Math.min(innerW, layout.logoWidthPx)) : Math.min(innerW, Math.round(innerW * 0.75));
+  const naH = layout?.northArrowHeightPx ?? 72;
   const naW = Math.round(naH * 0.9);
-  const scaleBarH = 52;
-  const scaleBarW = innerW - naW - 8;
+  const scaleBarH = 48;
 
-  // Stack top→bottom with margin gaps
-  let y = margin;
+  // Inset: full inner width, height = 22% of canvas or user-set
+  const insetEnabled = layout?.insetEnabled !== false;
+  const insetH = layout?.insetHeightPx
+    ? Math.max(80, Math.min(300, layout.insetHeightPx))
+    : Math.round(H * 0.22);
+  const insetW = innerW;
 
-  const titleZone = { top: y, left: sbLeft + margin, width: innerW, height: titleHeight };
-  y += titleHeight + 12;
+  // --- Stack from TOP ---
+  let topY = margin;
+
+  const insetZone = insetEnabled
+    ? { top: topY, left: sbLeft + margin, width: insetW, height: insetH }
+    : { top: 0, left: 0, width: 0, height: 0 };
+  if (insetEnabled) topY += insetH + gap;
+
+  const legendZone = { top: topY, left: sbLeft + margin, width: innerW, height: legendHeight };
+  topY += legendHeight + gap;
 
   const logoZone = layout?.logo
-    ? { top: y, left: sbLeft + margin, width: logoW, height: logoH }
-    : { top: y, left: sbLeft + margin, width: 0, height: 0 };
-  if (layout?.logo) y += logoH + 12;
-
-  const legendZone = { top: y, left: sbLeft + margin, width: legendWidth, height: legendHeight };
-  y += legendHeight + 12;
-
-  // North arrow + scale bar at bottom, above margin
-  const bottomY = H - margin - Math.max(naH, scaleBarH);
-  const northArrowZone = { top: bottomY + (Math.max(naH, scaleBarH) - naH) / 2, left: sbLeft + margin, width: naW, height: naH };
-  const scaleBarZone = { top: bottomY, left: sbLeft + margin + naW + 8, width: Math.max(60, scaleBarW), height: scaleBarH };
-
-  // Footer: just above north arrow
-  const footerZone = y < bottomY - 24
-    ? { top: bottomY - 30, left: sbLeft + margin, width: innerW, height: 26 }
+    ? { top: topY, left: sbLeft + margin, width: logoW, height: logoH }
     : { top: 0, left: 0, width: 0, height: 0 };
 
-  // Inset: stays on map area, lower-left
-  const insetW = layout?.insetWidthPx ? Math.max(100, Math.min(400, layout.insetWidthPx)) : 220;
-  const insetH = layout?.insetHeightPx ? Math.max(80, Math.min(320, layout.insetHeightPx)) : 170;
-  const insetZone = layout?.insetEnabled === false
-    ? { top: 0, left: 0, width: 0, height: 0 }
-    : { top: H - margin - insetH, left: margin, width: insetW, height: insetH };
+  // --- Stack from BOTTOM ---
+  let bottomY = H - margin;
 
-  // Sidebar background zone — full height right panel
+  const footerH = 22;
+  const footerZone = layout?.footerEnabled && layout?.footerText
+    ? { top: bottomY - footerH, left: sbLeft + margin, width: innerW, height: footerH }
+    : { top: 0, left: 0, width: 0, height: 0 };
+  if (layout?.footerEnabled && layout?.footerText) bottomY -= footerH + 6;
+
+  const titleZone = { top: bottomY - titleHeight, left: sbLeft + margin, width: innerW, height: titleHeight };
+  bottomY -= titleHeight + gap;
+
+  // North arrow left-aligned, scale bar to its right
+  const naRow = Math.max(naH, scaleBarH);
+  const northArrowZone = {
+    top: bottomY - naRow + (naRow - naH) / 2,
+    left: sbLeft + margin,
+    width: naW,
+    height: naH,
+  };
+  const scaleBarZone = {
+    top: bottomY - naRow,
+    left: sbLeft + margin + naW + gap,
+    width: Math.max(60, innerW - naW - gap),
+    height: scaleBarH,
+  };
+
+  // Sidebar background — full height right panel
   const sidebarZone = { top: 0, left: sbLeft, width: sbW, height: H };
 
   return {
     sidebar: sidebarZone,
-    title: titleZone,
-    logo: logoZone,
+    inset: insetZone,
     legend: legendZone,
+    logo: logoZone,
     northArrow: northArrowZone,
     scaleBar: scaleBarZone,
+    title: titleZone,
     footer: footerZone,
-    inset: insetZone,
   };
 }
 

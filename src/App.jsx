@@ -2248,9 +2248,9 @@ export default function App() {
                   updateLayout({ templateId: e.target.value, stripTitle: '', stripSubtitle: '' });
                 }}
               >
-                <option value="technical_results_v2">Technical Results v2</option>
-                <option value="ni_43101_technical">NI 43-101 Technical</option>
-                <option value="side_panel">Side Panel</option>
+                <option value="technical_results_v2">Standard</option>
+                <option value="ni_43101_technical">NI 43-101</option>
+                <option value="side_panel">Technical</option>
               </select>
             </div>
             <hr style={{ margin: '4px 0 8px', border: 'none', borderTop: '1px solid #e8eef6' }} />

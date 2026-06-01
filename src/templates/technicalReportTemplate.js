@@ -17,7 +17,7 @@ const ROLE_GROUPS = {
 
 export const technicalReportTemplate = {
   id: 'ni_43101_technical',
-  label: 'NI 43-101 Technical',
+  label: 'NI 43-101',
   frame: {
     margin: 0,
     panelRadius: 0,

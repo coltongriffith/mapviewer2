@@ -24,7 +24,7 @@ const ROLE_GROUPS = {
 
 export const technicalResultsTemplate = {
   id: 'technical_results_v2',
-  label: 'Technical Results v2',
+  label: 'Standard',
   frame: {
     margin: 18,
     panelRadius: 12,
