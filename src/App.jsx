@@ -1073,27 +1073,38 @@ export default function App() {
     const map = leafletMapRef.current;
     if (map) map.dragging.disable();
     const isSidePanel = project.layout.templateId === 'side_panel';
+    // In side panel mode, these elements live in the sidebar column; others stay on the map
+    const SIDEBAR_ELEMENTS = ['inset', 'legend', 'logo', 'title'];
+    const isInSidebar = isSidePanel && SIDEBAR_ELEMENTS.includes(id);
+    const isMapInSidePanel = isSidePanel && !SIDEBAR_ELEMENTS.includes(id);
     const layoutSnapshot = project.layout;
     let currentHoverZone = null;
     let finalClientX = e.clientX, finalClientY = e.clientY;
-    const effectiveGhostW = isSidePanel
+    const effectiveGhostW = isInSidebar
       ? Math.max(ghostW, (resolvedZonesRef.current?.sidebar?.width ?? 0) - 32)
       : ghostW;
     setDragging({ id, hoverZone: null, ghostX: e.clientX, ghostY: e.clientY, ghostW: effectiveGhostW, ghostH });
     const onMove = (me) => {
       finalClientX = me.clientX;
       finalClientY = me.clientY;
-      if (isSidePanel) {
+      if (isInSidebar) {
         setDragging((d) => d ? { ...d, ghostX: me.clientX, ghostY: me.clientY } : null);
         // Compute alignment guides from other sidebar zones
         const guides = [];
         for (const [zid, z] of Object.entries(resolvedZonesRef.current || {})) {
           if (zid === id || zid === 'sidebar' || !(z?.height > 0 && z?.top > 0)) continue;
-          guides.push({ type: 'h', pos: z.top });
-          guides.push({ type: 'h', pos: z.top + Math.round(z.height / 2) });
-          guides.push({ type: 'h', pos: z.top + z.height });
+          // Only guide lines from sidebar elements (left edge in sidebar)
+          if (z.left >= (resolvedZonesRef.current?.sidebar?.left ?? Infinity) - 20) {
+            guides.push({ type: 'h', pos: z.top });
+            guides.push({ type: 'h', pos: z.top + Math.round(z.height / 2) });
+            guides.push({ type: 'h', pos: z.top + z.height });
+          }
         }
         setResizeGuides(guides);
+        return;
+      }
+      if (isMapInSidePanel) {
+        setDragging((d) => d ? { ...d, ghostX: me.clientX, ghostY: me.clientY } : null);
         return;
       }
       const el = document.elementFromPoint(me.clientX, me.clientY);
@@ -1106,7 +1117,7 @@ export default function App() {
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
       if (map) map.dragging.enable();
-      if (isSidePanel) {
+      if (isInSidebar) {
         setResizeGuides([]);
         const container = mapContainerRef.current;
         if (container) {
@@ -1117,11 +1128,13 @@ export default function App() {
           const maxTop = sidebar ? sidebar.top + sidebar.height - zH - 8 : (mapSize.height - zH - 8);
           const rawY = Math.round(finalClientY - rect.top - zH / 2);
           let clampedTop = Math.max(minTop, Math.min(maxTop, rawY));
-          // Snap to nearest guide
+          // Snap to nearest sidebar guide
           const guides = [];
           for (const [zid, z] of Object.entries(resolvedZonesRef.current || {})) {
             if (zid === id || zid === 'sidebar' || !(z?.height > 0 && z?.top > 0)) continue;
-            guides.push(z.top, z.top + Math.round(z.height / 2), z.top + z.height);
+            if (z.left >= (resolvedZonesRef.current?.sidebar?.left ?? Infinity) - 20) {
+              guides.push(z.top, z.top + Math.round(z.height / 2), z.top + z.height);
+            }
           }
           for (const g of guides) {
             if (Math.abs(clampedTop - g) <= SNAP_THRESHOLD) { clampedTop = g; break; }
@@ -1131,6 +1144,24 @@ export default function App() {
             layout: {
               ...p.layout,
               sidePanelPositions: { ...(p.layout.sidePanelPositions || {}), [id]: { top: clampedTop } },
+            },
+          }));
+        }
+      } else if (isMapInSidePanel) {
+        // Free-drag on map area — save both x and y
+        const container = mapContainerRef.current;
+        if (container) {
+          const rect = container.getBoundingClientRect();
+          const zW = ghostW || 80, zH = ghostH || 48;
+          const rawX = Math.round(finalClientX - rect.left - zW / 2);
+          const rawY = Math.round(finalClientY - rect.top - zH / 2);
+          const clampedLeft = Math.max(8, Math.min(mapSize.width - zW - 8, rawX));
+          const clampedTop = Math.max(8, Math.min(mapSize.height - zH - 8, rawY));
+          setProject((p) => ({
+            ...p,
+            layout: {
+              ...p.layout,
+              sidePanelPositions: { ...(p.layout.sidePanelPositions || {}), [id]: { top: clampedTop, left: clampedLeft } },
             },
           }));
         }

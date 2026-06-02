@@ -117,25 +117,29 @@ export function resolveSidePanelZones(template, layout, mapSize, legendItems) {
 
   let titleZone = { top: bottomY - titleHeight, left: sbLeft + margin, width: innerW, height: titleHeight };
   if (sp.title?.top != null) titleZone = { ...titleZone, top: sp.title.top };
-  bottomY -= titleHeight + gap;
 
-  // North arrow left-aligned, scale bar to its right
-  const naRow = Math.max(naH, scaleBarH);
+  // North arrow and scale bar live on the MAP area (left portion), not in the sidebar
+  const mapW = sbLeft;
+  const scaleBarW = layout?.scaleBarWidthPx || 160;
+  const scaleBarActualH = layout?.scaleBarHeightPx ?? 48;
+
   let northArrowZone = {
-    top: bottomY - naRow + (naRow - naH) / 2,
-    left: sbLeft + margin,
+    top: H - margin - naH,
+    left: mapW - margin - naW,
     width: naW,
     height: naH,
   };
   if (sp.northArrow?.top != null) northArrowZone = { ...northArrowZone, top: sp.northArrow.top };
+  if (sp.northArrow?.left != null) northArrowZone = { ...northArrowZone, left: sp.northArrow.left };
 
   let scaleBarZone = {
-    top: bottomY - naRow,
-    left: sbLeft + margin + naW + gap,
-    width: Math.max(60, innerW - naW - gap),
-    height: scaleBarH,
+    top: H - margin - scaleBarActualH,
+    left: margin,
+    width: scaleBarW,
+    height: scaleBarActualH,
   };
   if (sp.scaleBar?.top != null) scaleBarZone = { ...scaleBarZone, top: sp.scaleBar.top };
+  if (sp.scaleBar?.left != null) scaleBarZone = { ...scaleBarZone, left: sp.scaleBar.left };
 
   // Sidebar background — full height right panel
   const sidebarZone = { top: 0, left: sbLeft, width: sbW, height: H };
