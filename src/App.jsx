@@ -27,7 +27,7 @@ import {
   TEMPLATE_MODES,
   TEMPLATE_THEMES,
 } from './projectState';
-import { EXPORT_RATIOS } from './constants';
+import { EXPORT_RATIOS, SNAP_THRESHOLD } from './constants';
 import { applyRoleToLayer, inferRoleFromLayer } from './mapPresets';
 import { getTemplate } from './templates';
 import { buildLegendItems, resolveTemplateZones } from './templates/technicalResultsTemplate';
@@ -1076,12 +1076,24 @@ export default function App() {
     const layoutSnapshot = project.layout;
     let currentHoverZone = null;
     let finalClientX = e.clientX, finalClientY = e.clientY;
-    setDragging({ id, hoverZone: null, ghostX: e.clientX, ghostY: e.clientY, ghostW, ghostH });
+    const effectiveGhostW = isSidePanel
+      ? Math.max(ghostW, (resolvedZonesRef.current?.sidebar?.width ?? 0) - 32)
+      : ghostW;
+    setDragging({ id, hoverZone: null, ghostX: e.clientX, ghostY: e.clientY, ghostW: effectiveGhostW, ghostH });
     const onMove = (me) => {
       finalClientX = me.clientX;
       finalClientY = me.clientY;
       if (isSidePanel) {
         setDragging((d) => d ? { ...d, ghostX: me.clientX, ghostY: me.clientY } : null);
+        // Compute alignment guides from other sidebar zones
+        const guides = [];
+        for (const [zid, z] of Object.entries(resolvedZonesRef.current || {})) {
+          if (zid === id || zid === 'sidebar' || !(z?.height > 0 && z?.top > 0)) continue;
+          guides.push({ type: 'h', pos: z.top });
+          guides.push({ type: 'h', pos: z.top + Math.round(z.height / 2) });
+          guides.push({ type: 'h', pos: z.top + z.height });
+        }
+        setResizeGuides(guides);
         return;
       }
       const el = document.elementFromPoint(me.clientX, me.clientY);
@@ -1095,6 +1107,7 @@ export default function App() {
       document.removeEventListener('mouseup', onUp);
       if (map) map.dragging.enable();
       if (isSidePanel) {
+        setResizeGuides([]);
         const container = mapContainerRef.current;
         if (container) {
           const rect = container.getBoundingClientRect();
@@ -1103,7 +1116,16 @@ export default function App() {
           const minTop = sidebar ? sidebar.top + 8 : 8;
           const maxTop = sidebar ? sidebar.top + sidebar.height - zH - 8 : (mapSize.height - zH - 8);
           const rawY = Math.round(finalClientY - rect.top - zH / 2);
-          const clampedTop = Math.max(minTop, Math.min(maxTop, rawY));
+          let clampedTop = Math.max(minTop, Math.min(maxTop, rawY));
+          // Snap to nearest guide
+          const guides = [];
+          for (const [zid, z] of Object.entries(resolvedZonesRef.current || {})) {
+            if (zid === id || zid === 'sidebar' || !(z?.height > 0 && z?.top > 0)) continue;
+            guides.push(z.top, z.top + Math.round(z.height / 2), z.top + z.height);
+          }
+          for (const g of guides) {
+            if (Math.abs(clampedTop - g) <= SNAP_THRESHOLD) { clampedTop = g; break; }
+          }
           setProject((p) => ({
             ...p,
             layout: {
@@ -3185,6 +3207,22 @@ export default function App() {
               <div><label>Inset Title</label><input value={project.layout.insetTitle ?? 'Project Locator'} onChange={(e) => updateLayout({ insetTitle: e.target.value })} placeholder="Project Locator" /></div>
               <div><label>Inset Label</label><input value={project.layout.insetLabel ?? ''} onChange={(e) => updateLayout({ insetLabel: e.target.value })} placeholder={project.layout.autoInsetRegion?.name || 'Province / State'} /></div>
             </div>
+            {project.layout.autoInsetRegion && !project.layout.insetImage && (
+              <div className="control-row inline-2" style={{ flexWrap: 'wrap', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <label style={{ marginBottom: 0 }}>Region</label>
+                  <input type="color" value={project.layout.insetRegionFill || '#dce8f5'} onChange={(e) => updateLayout({ insetRegionFill: e.target.value })} title="Region fill" />
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <label style={{ marginBottom: 0 }}>Background</label>
+                  <input type="color" value={project.layout.insetBgFill || '#f0f4f8'} onChange={(e) => updateLayout({ insetBgFill: e.target.value })} title="Background" />
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <label style={{ marginBottom: 0 }}>Marker</label>
+                  <input type="color" value={project.layout.insetMarkerColor || '#2563eb'} onChange={(e) => updateLayout({ insetMarkerColor: e.target.value })} title="Marker color" />
+                </div>
+              </div>
+            )}
             <input ref={insetInputRef} type="file" accept="image/*" onChange={handleInsetImageChange} hidden />
           </div>}
         </section>
@@ -3510,7 +3548,7 @@ export default function App() {
         {project.layout.insetEnabled !== false && resolvedZones.inset?.width ? (
           <div className="template-zone" style={{ ...zoneStyle(resolvedZones.inset), opacity: dragging?.id === 'inset' ? 0.3 : 1, cursor: 'grab' }} onMouseDown={makeDragHandler('inset', project.layout.insetWidthPx ?? 244, project.layout.insetHeightPx ?? 190)}>
             <button className="panel-delete-btn" title="Hide inset map" onClick={() => updateLayout({ insetEnabled: false })}>×</button>
-            <LocatorInset layers={project.layers} insetMode={project.layout.insetMode} insetImage={project.layout.insetImage} autoInsetRegion={project.layout.autoInsetRegion} insetTitle={project.layout.insetTitle} insetLabel={project.layout.insetLabel} mode={project.layout.mode} zone={{ width: '100%', height: '100%' }} />
+            <LocatorInset layers={project.layers} insetMode={project.layout.insetMode} insetImage={project.layout.insetImage} autoInsetRegion={project.layout.autoInsetRegion} insetTitle={project.layout.insetTitle} insetLabel={project.layout.insetLabel} mode={project.layout.mode} zone={{ width: '100%', height: '100%' }} regionFill={project.layout.insetRegionFill} regionStroke={project.layout.insetRegionStroke} bgFill={project.layout.insetBgFill} markerColor={project.layout.insetMarkerColor} />
             {makeResizeHandles(project.layout.insetCorner || 'tr', {
               elemId: 'inset', startW: project.layout.insetWidthPx ?? 244, startH: project.layout.insetHeightPx ?? 190,
               minW: 100, maxW: 600, minH: 80, maxH: 500,
@@ -3519,13 +3557,13 @@ export default function App() {
           </div>
         ) : null}
         {project.layout.showScaleBar !== false && (
-          <div className="template-zone" style={{ ...zoneStyle(resolvedZones.scaleBar), width: project.layout.scaleBarWidthPx || resolvedZones.scaleBar?.width, opacity: dragging?.id === 'scaleBar' ? 0.3 : 1, cursor: 'grab' }} onMouseDown={makeDragHandler('scaleBar', project.layout.scaleBarWidthPx || resolvedZones.scaleBar?.width || 160, resolvedZones.scaleBar?.height || 40)}>
-            <ScaleBar map={leafletMapRef.current} />
+          <div className="template-zone" style={{ ...zoneStyle(resolvedZones.scaleBar), width: project.layout.scaleBarWidthPx || resolvedZones.scaleBar?.width, opacity: dragging?.id === 'scaleBar' ? 0.3 : 1, cursor: 'grab' }} onMouseDown={makeDragHandler('scaleBar', project.layout.scaleBarWidthPx || resolvedZones.scaleBar?.width || 160, project.layout.scaleBarHeightPx ?? 48)}>
+            <ScaleBar map={leafletMapRef.current} height={project.layout.scaleBarHeightPx ?? 48} />
             <button className="panel-delete-btn" title="Hide scale bar" onClick={() => updateLayout({ showScaleBar: false })}>×</button>
             {makeResizeHandles(project.layout.scaleBarCorner || 'bl', {
-              elemId: 'scaleBar', startW: project.layout.scaleBarWidthPx || resolvedZones.scaleBar?.width || 160, startH: resolvedZones.scaleBar?.height || 40,
-              minW: 80, maxW: 400, minH: 30, maxH: 80,
-              applyW: (w) => updateLayout({ scaleBarWidthPx: w }), applyH: null,
+              elemId: 'scaleBar', startW: project.layout.scaleBarWidthPx || resolvedZones.scaleBar?.width || 160, startH: project.layout.scaleBarHeightPx ?? 48,
+              minW: 80, maxW: 400, minH: 30, maxH: 100,
+              applyW: (w) => updateLayout({ scaleBarWidthPx: w }), applyH: (h) => updateLayout({ scaleBarHeightPx: h }),
             })}
           </div>
         )}
