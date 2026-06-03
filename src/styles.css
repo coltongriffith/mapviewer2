@@ -923,8 +923,11 @@ button, input, select, textarea { font: inherit; }
 }
 .template-zone:hover .panel-delete-btn { opacity: 1; }
 .panel-delete-btn:hover { background: rgba(220,38,38,1); }
-/* Selection outline on hover */
-.template-zone:hover { outline: 1.5px solid rgba(37, 99, 235, 0.4); outline-offset: 1px; }
+/* Selection outline + grab cursor on hover */
+.template-zone { cursor: grab; }
+.template-zone:hover { outline: 2px solid rgba(37, 99, 235, 0.55); outline-offset: 2px; }
+body.is-dragging { cursor: grabbing !important; user-select: none; }
+body.is-dragging * { cursor: grabbing !important; }
 
 /* New unified resize handles (.prh) */
 .prh {

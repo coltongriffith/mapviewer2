@@ -189,24 +189,20 @@ export function resolveSidePanelZones(template, layout, mapSize, legendItems) {
 
 // ─── Map area slot system (for north arrow / scale bar) ─────────────────────
 
-/** Map area slots: [xFrac, yFrac] within the left (map) portion of the canvas */
-export const MAP_SLOT_DEFS = {
-  'map-tl': [0.03, 0.04],
-  'map-tc': [0.40, 0.04],
-  'map-tr': [0.76, 0.04],
-  'map-bl': [0.03, 0.88],
-  'map-bc': [0.40, 0.88],
-  'map-br': [0.76, 0.88],
-};
-
-/** Returns pixel {left, top} for each map slot. mapAreaW = sbLeft. */
-export function mapSlotPositions(mapAreaW, mapH) {
-  return Object.fromEntries(
-    Object.entries(MAP_SLOT_DEFS).map(([key, [xf, yf]]) => [
-      key,
-      { left: Math.round(xf * mapAreaW), top: Math.round(yf * mapH) },
-    ])
-  );
+/** Returns pixel {left, top} for each map slot. Right/bottom slots snap to actual canvas edge. */
+export function mapSlotPositions(mapAreaW, mapH, elemW = 80, elemH = 80) {
+  const m = 14; // edge margin
+  const cx = Math.round((mapAreaW - elemW) / 2);
+  const rx = mapAreaW - m - elemW;
+  const by = mapH - m - elemH;
+  return {
+    'map-tl': { left: m,  top: m },
+    'map-tc': { left: cx, top: m },
+    'map-tr': { left: rx, top: m },
+    'map-bl': { left: m,  top: by },
+    'map-bc': { left: cx, top: by },
+    'map-br': { left: rx, top: by },
+  };
 }
 
 export function buildSidePanelLegendItems(layers, layout) {

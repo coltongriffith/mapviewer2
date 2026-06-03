@@ -1089,10 +1089,11 @@ export default function App() {
 
     const getMapSlots = () => {
       const sbLeft = resolvedZonesRef.current?.sidebar?.left ?? Math.round(mapSize.width * 0.72);
-      return Object.entries(mapSlotPositions(sbLeft, mapSize.height)).map(([key, pos]) => ({ id: key, ...pos }));
+      return Object.entries(mapSlotPositions(sbLeft, mapSize.height, ghostW || 80, ghostH || 80)).map(([key, pos]) => ({ id: key, ...pos }));
     };
 
     setDragging({ id, hoverZone: null, ghostX: e.clientX, ghostY: e.clientY, ghostW: effectiveGhostW, ghostH });
+    document.body.classList.add('is-dragging');
 
     const onMove = (me) => {
       finalClientX = me.clientX;
@@ -1175,9 +1176,29 @@ export default function App() {
     const onUp = () => {
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
+      document.body.classList.remove('is-dragging');
       if (map) map.dragging.enable();
 
       if (isInSidebar) {
+        // Title uses free Y positioning (sp.title.top), not sidePanelOrder
+        if (id === 'title') {
+          const container = mapContainerRef.current;
+          if (container) {
+            const rect = container.getBoundingClientRect();
+            const rawTop = finalClientY - rect.top - ghostH / 2;
+            const clampedTop = Math.max(0, Math.min(mapSize.height - ghostH, rawTop));
+            setProject((p) => ({
+              ...p,
+              layout: {
+                ...p.layout,
+                sidePanelPositions: { ...(p.layout.sidePanelPositions || {}), title: { top: clampedTop } },
+              },
+            }));
+          }
+          setDragging(null);
+          return;
+        }
+
         // Helper: remove id from order (handles string items and [id1,id2] arrays)
         const removeFromOrder = (ord, removeId) =>
           ord.reduce((acc, item) => {
