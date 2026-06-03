@@ -1107,6 +1107,9 @@ export default function App() {
       return Object.entries(mapSlotPositions(sl, mapSize.height, ghostW || 80, ghostH || 80)).map(([key, pos]) => ({ id: key, ...pos }));
     };
 
+    // Capture container rect ONCE at drag start — prevents forced reflow on every mousemove (shaking fix)
+    const containerRect = mapContainerRef.current?.getBoundingClientRect() ?? { left: 0, top: 0, width: 0, height: 0 };
+
     setDragging({ id, hoverZone: null, ghostX: e.clientX, ghostY: e.clientY, ghostW: effectiveGhostW, ghostH });
     document.body.classList.add('is-dragging');
 
@@ -1115,24 +1118,20 @@ export default function App() {
       finalClientY = me.clientY;
 
       if (isInSidebar || (isSidePanel && SP_SIDEBAR_ELEMENTS.includes(id))) {
-        const container = mapContainerRef.current;
-        const rect = container?.getBoundingClientRect();
-        if (!rect) return;
-
-        // Compute grid slot from cursor position (using snapshot — no live ref reads)
-        const cursorX = me.clientX - rect.left - sbLeft - 16;
-        const cursorY = me.clientY - rect.top - 16;
+        // Use captured rect — no getBoundingClientRect() on mousemove
+        const cursorX = me.clientX - containerRect.left - sbLeft - 16;
+        const cursorY = me.clientY - containerRect.top - 16;
         const row = Math.max(0, Math.min(4, Math.floor(cursorY / (rowH + 6))));
         const col = cursorX < colW + 4 ? 0 : 1;
         currentGridSlot = { row, col };
 
         let newMapSlot = null;
         // northArrow/scaleBar can also drop to map area
-        if (['northArrow', 'scaleBar'].includes(id) && (me.clientX - rect.left) < sbLeft) {
+        if (['northArrow', 'scaleBar'].includes(id) && (me.clientX - containerRect.left) < sbLeft) {
           const zW = ghostW || 80, zH = ghostH || 48;
           const slots = getMapSlots();
-          const cx = me.clientX - rect.left;
-          const cy = me.clientY - rect.top;
+          const cx = me.clientX - containerRect.left;
+          const cy = me.clientY - containerRect.top;
           let bestKey = null, bestDist = Infinity;
           slots.forEach((s) => {
             const d = Math.hypot(cx - (s.left + zW / 2), cy - (s.top + zH / 2));
@@ -1148,11 +1147,8 @@ export default function App() {
       }
 
       if (isMapInSidePanel) {
-        const container = mapContainerRef.current;
-        const rect = container?.getBoundingClientRect();
-        if (!rect) return;
-        const cursorX = me.clientX - rect.left;
-        const cursorY = me.clientY - rect.top;
+        const cursorX = me.clientX - containerRect.left;
+        const cursorY = me.clientY - containerRect.top;
         const zW = ghostW || 80, zH = ghostH || 48;
         const slots = getMapSlots();
         let bestKey = null, bestDist = Infinity;
@@ -1243,19 +1239,18 @@ export default function App() {
             }
           }
 
-          // Clean up nulls, limit to 5 rows
-          grid = grid.filter(Boolean).slice(0, 5);
+          // Keep nulls (they represent empty spacer rows), limit to 5 rows, trim trailing nulls
+          grid = grid.slice(0, 5);
+          while (grid.length > 0 && !grid[grid.length - 1]) grid.pop();
           updateLayout({ sidePanelGrid: grid });
         }
       } else if (isMapInSidePanel) {
-        const container = mapContainerRef.current;
-        if (container) {
-          const rect = container.getBoundingClientRect();
+        {
           const zW = ghostW || 80, zH = ghostH || 48;
           const slots = getMapSlots();
           let sp = slots.find(s => s.id === currentMapSlot);
           if (!sp) {
-            const cursorX = finalClientX - rect.left, cursorY = finalClientY - rect.top;
+            const cursorX = finalClientX - containerRect.left, cursorY = finalClientY - containerRect.top;
             let bestDist = Infinity;
             slots.forEach(s => { const d = Math.hypot(cursorX - s.left, cursorY - s.top); if (d < bestDist) { bestDist = d; sp = s; } });
           }

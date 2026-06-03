@@ -125,8 +125,15 @@ export function resolveSidePanelZones(template, layout, mapSize, legendItems) {
   };
 
   // --- Stack from TOP in configurable grid order ---
+  // Null/undefined rows act as empty spacer rows contributing a fixed height
+  const emptyRowH = Math.floor((H - margin * 2) / 5);
   let stackY = margin;
   for (const item of grid) {
+    if (!item) {
+      // Empty spacer row
+      stackY += emptyRowH + gap;
+      continue;
+    }
     if (Array.isArray(item)) {
       // Two elements side by side (column split)
       const [id1, id2] = item;
