@@ -603,6 +603,8 @@ export default function App() {
   const mapViewportRef = useRef(null);
   const leafletMapRef = useRef(null);
   const skipAutoFitRef = useRef(false);
+  const ghostDomRef = useRef(null);       // direct DOM ref for drag ghost — avoids React re-renders on mousemove
+  const dragHoverRef = useRef({});        // tracks last hover state so setDragging only fires on zone changes
   const mapSizeRef = useRef({ width: 1600, height: 1000 });
   const logoInputRef = useRef(null);
   const insetInputRef = useRef(null);
@@ -1110,6 +1112,7 @@ export default function App() {
     // Capture container rect ONCE at drag start — prevents forced reflow on every mousemove (shaking fix)
     const containerRect = mapContainerRef.current?.getBoundingClientRect() ?? { left: 0, top: 0, width: 0, height: 0 };
 
+    dragHoverRef.current = {};
     setDragging({ id, hoverZone: null, ghostX: e.clientX, ghostY: e.clientY, ghostW: effectiveGhostW, ghostH });
     document.body.classList.add('is-dragging');
 
@@ -1117,8 +1120,13 @@ export default function App() {
       finalClientX = me.clientX;
       finalClientY = me.clientY;
 
+      // Move ghost via direct DOM — zero React re-renders on mousemove
+      if (ghostDomRef.current) {
+        ghostDomRef.current.style.left = me.clientX + 'px';
+        ghostDomRef.current.style.top = me.clientY + 'px';
+      }
+
       if (isInSidebar || (isSidePanel && SP_SIDEBAR_ELEMENTS.includes(id))) {
-        // Use captured rect — no getBoundingClientRect() on mousemove
         const cursorX = me.clientX - containerRect.left - sbLeft - 16;
         const cursorY = me.clientY - containerRect.top - 16;
         const row = Math.max(0, Math.min(4, Math.floor(cursorY / (rowH + 6))));
@@ -1142,7 +1150,14 @@ export default function App() {
         }
         currentMapSlot = newMapSlot;
 
-        setDragging((d) => d ? { ...d, ghostX: me.clientX, ghostY: me.clientY, hoverGridSlot: currentGridSlot, hoverMapSlot: currentMapSlot } : null);
+        // Only update React state when hover slot actually changes (not every pixel)
+        const prev = dragHoverRef.current;
+        const rowChanged = currentGridSlot?.row !== prev.row || currentGridSlot?.col !== prev.col;
+        const mapSlotChanged = currentMapSlot !== prev.mapSlot;
+        if (rowChanged || mapSlotChanged) {
+          dragHoverRef.current = { row: currentGridSlot?.row, col: currentGridSlot?.col, mapSlot: currentMapSlot };
+          setDragging((d) => d ? { ...d, hoverGridSlot: currentGridSlot, hoverMapSlot: currentMapSlot } : null);
+        }
         return;
       }
 
@@ -1157,7 +1172,11 @@ export default function App() {
           if (d < bestDist) { bestDist = d; bestKey = s.id; }
         });
         currentMapSlot = bestKey;
-        setDragging((d) => d ? { ...d, ghostX: me.clientX, ghostY: me.clientY, hoverMapSlot: bestKey } : null);
+        // Only update state when map slot changes
+        if (bestKey !== dragHoverRef.current.mapSlot) {
+          dragHoverRef.current = { mapSlot: bestKey };
+          setDragging((d) => d ? { ...d, hoverMapSlot: bestKey } : null);
+        }
         return;
       }
 
@@ -1166,7 +1185,12 @@ export default function App() {
       const zoneEl = el?.closest('[data-slot]');
       const hz = zoneEl ? { corner: zoneEl.dataset.corner, slot: zoneEl.dataset.slot } : null;
       currentHoverZone = hz;
-      setDragging((d) => d ? { ...d, ghostX: me.clientX, ghostY: me.clientY, hoverZone: hz } : null);
+      // Only update state when hover zone changes
+      const prev = dragHoverRef.current;
+      if (hz?.corner !== prev.hzCorner || hz?.slot !== prev.hzSlot) {
+        dragHoverRef.current = { hzCorner: hz?.corner, hzSlot: hz?.slot };
+        setDragging((d) => d ? { ...d, hoverZone: hz } : null);
+      }
     };
 
     const onUp = () => {
@@ -3891,7 +3915,7 @@ export default function App() {
         </div>
       </div>
       {dragging && (
-        <div className="drag-ghost" style={{
+        <div ref={ghostDomRef} className="drag-ghost" style={{
           left: dragging.ghostX,
           top: dragging.ghostY,
           width: dragging.ghostW,
