@@ -94,19 +94,36 @@ export function resolveSidePanelZones(template, layout, mapSize, legendItems) {
   let legendZone = { top: margin, left: sbLeft + margin, width: innerW, height: legendHeight };
   let logoZone = { top: 0, left: 0, width: 0, height: 0 };
 
+  const getElemH = (eid) => {
+    if (eid === 'inset') return insetEnabled ? insetH : 0;
+    if (eid === 'legend') return legendHeight;
+    if (eid === 'logo') return layout?.logo ? logoH : 0;
+    return 0;
+  };
+  const setElemZone = (eid, top, left, width, height) => {
+    if (eid === 'inset') insetZone = { top, left, width, height };
+    else if (eid === 'legend') legendZone = { top, left, width, height };
+    else if (eid === 'logo') logoZone = { top, left, width, height };
+  };
+
   let stackY = margin;
-  for (const id of order) {
-    if (id === 'inset') {
-      if (!insetEnabled) continue;
-      insetZone = { top: stackY, left: sbLeft + margin, width: insetW, height: insetH };
-      stackY += insetH + gap;
-    } else if (id === 'legend') {
-      legendZone = { top: stackY, left: sbLeft + margin, width: innerW, height: legendHeight };
-      stackY += legendHeight + gap;
-    } else if (id === 'logo') {
-      if (!layout?.logo) continue;
-      logoZone = { top: stackY, left: sbLeft + margin, width: logoW, height: logoH };
-      stackY += logoH + gap;
+  for (const item of order) {
+    if (Array.isArray(item)) {
+      // Two elements side by side (column split)
+      const [id1, id2] = item;
+      const colW = Math.floor((innerW - gap) / 2);
+      const h1 = getElemH(id1);
+      const h2 = getElemH(id2);
+      if (h1 > 0) setElemZone(id1, stackY, sbLeft + margin, colW, h1);
+      if (h2 > 0) setElemZone(id2, stackY, sbLeft + margin + colW + gap, colW, h2);
+      const rowH = Math.max(h1, h2);
+      if (rowH > 0) stackY += rowH + gap;
+    } else {
+      // Full width
+      const h = getElemH(item);
+      if (h === 0) continue;
+      setElemZone(item, stackY, sbLeft + margin, innerW, h);
+      stackY += h + gap;
     }
   }
 

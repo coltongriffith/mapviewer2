@@ -1080,6 +1080,7 @@ export default function App() {
     const layoutSnapshot = project.layout;
     let currentHoverZone = null;
     let currentInsertIdx = 0;
+    let currentSplitTarget = null;
     let currentMapSlot = null;
     let finalClientX = e.clientX, finalClientY = e.clientY;
     const effectiveGhostW = isInSidebar
@@ -1098,20 +1099,47 @@ export default function App() {
       finalClientY = me.clientY;
 
       if (isInSidebar) {
-        // Reorder: find which gap the cursor is in
         const container = mapContainerRef.current;
         const rect = container?.getBoundingClientRect();
         if (!rect) return;
         const cursorY = me.clientY - rect.top;
         const order = layoutSnapshot.sidePanelOrder || ['inset', 'legend', 'logo'];
-        const otherIds = order.filter(eid => eid !== id);
-        let insertIdx = 0;
-        for (let i = 0; i < otherIds.length; i++) {
-          const z = resolvedZonesRef.current?.[otherIds[i]];
-          if (z?.height > 0 && cursorY > z.top + z.height / 2) insertIdx = i + 1;
+
+        // Flatten non-dragged element IDs
+        const flatOtherIds = order
+          .flatMap(item => Array.isArray(item) ? item : [item])
+          .filter(eid => eid !== id);
+
+        // Check if cursor is within a full-width element (split intent)
+        let splitId = null;
+        for (const eid of flatOtherIds) {
+          const z = resolvedZonesRef.current?.[eid];
+          if (!z?.height || z.top <= 0) continue;
+          // Only full-width elements (not already in a column pair)
+          const inColumn = order.some(item => Array.isArray(item) && item.includes(eid));
+          if (!inColumn && cursorY >= z.top && cursorY <= z.top + z.height) {
+            splitId = eid;
+            break;
+          }
         }
-        currentInsertIdx = insertIdx;
-        setDragging((d) => d ? { ...d, ghostX: me.clientX, ghostY: me.clientY, hoverInsertIdx: insertIdx } : null);
+        currentSplitTarget = splitId;
+
+        if (splitId) {
+          setDragging((d) => d ? { ...d, ghostX: me.clientX, ghostY: me.clientY, hoverInsertIdx: null, hoverSplitId: splitId } : null);
+        } else {
+          // Compute row-level insert index from the order (treating arrays as single rows)
+          const rowOrder = order.filter(item =>
+            Array.isArray(item) ? !item.includes(id) : item !== id
+          );
+          let insertIdx = 0;
+          rowOrder.forEach((item, i) => {
+            const firstId = Array.isArray(item) ? item[0] : item;
+            const z = resolvedZonesRef.current?.[firstId];
+            if (z?.height > 0 && z?.top > 0 && cursorY > z.top + z.height / 2) insertIdx = i + 1;
+          });
+          currentInsertIdx = insertIdx;
+          setDragging((d) => d ? { ...d, ghostX: me.clientX, ghostY: me.clientY, hoverInsertIdx: insertIdx, hoverSplitId: null } : null);
+        }
         return;
       }
 
@@ -1150,15 +1178,33 @@ export default function App() {
       if (map) map.dragging.enable();
 
       if (isInSidebar) {
-        // Reorder sidebar elements
-        const order = [...(layoutSnapshot.sidePanelOrder || ['inset', 'legend', 'logo'])];
-        const from = order.indexOf(id);
-        if (from !== -1) {
-          order.splice(from, 1);
-          const insertAt = currentInsertIdx > from ? currentInsertIdx - 1 : currentInsertIdx;
-          order.splice(Math.max(0, Math.min(order.length, insertAt)), 0, id);
+        // Helper: remove id from order (handles string items and [id1,id2] arrays)
+        const removeFromOrder = (ord, removeId) =>
+          ord.reduce((acc, item) => {
+            if (Array.isArray(item)) {
+              const filtered = item.filter(x => x !== removeId);
+              if (filtered.length === 2) acc.push(item);
+              else if (filtered.length === 1) acc.push(filtered[0]);
+            } else if (item !== removeId) {
+              acc.push(item);
+            }
+            return acc;
+          }, []);
+
+        let order = removeFromOrder(
+          layoutSnapshot.sidePanelOrder || ['inset', 'legend', 'logo'],
+          id
+        );
+
+        if (currentSplitTarget) {
+          // Pair with split target as a column
+          order = order.map(item =>
+            item === currentSplitTarget ? [currentSplitTarget, id] : item
+          );
         } else {
-          // id not in order (e.g. title) — just drop into slot, no reorder needed
+          // Insert as full-width row
+          const insertAt = Math.max(0, Math.min(order.length, currentInsertIdx));
+          order.splice(insertAt, 0, id);
         }
         updateLayout({ sidePanelOrder: order });
       } else if (isMapInSidePanel) {
@@ -3728,22 +3774,31 @@ export default function App() {
             <div className="canvas-drag-guide-h" />
             {['tl','tr','bl','br'].map((corner) => {
               const isTop = corner[0] === 't';
-              const isLeft = corner[1] === 'l';
               const hz = dragging.hoverZone;
               const isHov = (slot) => hz?.corner === corner && hz?.slot === slot;
+              const slots = isTop
+                ? [
+                    { slot: 'first', label: '① First position' },
+                    { slot: 'beside', label: '② Side by side' },
+                    { slot: 'last',  label: '③ Stack further out' },
+                  ]
+                : [
+                    { slot: 'last',  label: '③ Stack further out' },
+                    { slot: 'beside', label: '② Side by side' },
+                    { slot: 'first', label: '① First position' },
+                  ];
               return (
                 <div key={corner} className={`drop-zone-cluster drop-zone-cluster--${corner}`}>
-                  <div className="dzs-row">
-                    <div className={`dzs dzs-first${isHov('first') ? ' dzs--hover' : ''}`} data-corner={corner} data-slot="first">
-                      {isLeft ? '◤ Corner' : 'Corner ◥'}
+                  {slots.map(({ slot, label }) => (
+                    <div
+                      key={slot}
+                      className={`dzs dzs-${slot}${isHov(slot) ? ' dzs--hover' : ''}`}
+                      data-corner={corner}
+                      data-slot={slot}
+                    >
+                      {label}
                     </div>
-                    <div className={`dzs dzs-beside${isHov('beside') ? ' dzs--hover' : ''}`} data-corner={corner} data-slot="beside">⊞ Side by side</div>
-                  </div>
-                  <div className="dzs-row">
-                    <div className={`dzs dzs-last${isHov('last') ? ' dzs--hover' : ''}`} data-corner={corner} data-slot="last">
-                      {isTop ? '↓ Stack below' : '↑ Stack above'}
-                    </div>
-                  </div>
+                  ))}
                 </div>
               );
             })}
@@ -3756,19 +3811,41 @@ export default function App() {
           const sbW = sidebar?.width ?? Math.round(mapSize.width * 0.28);
           const isSbEl = SP_SIDEBAR_ELEMENTS.includes(dragging.id);
           if (isSbEl) {
-            const order = (project.layout.sidePanelOrder || ['inset', 'legend', 'logo']).filter(eid => eid !== dragging.id);
-            const insertPositions = [];
-            // Position before first element
+            const order = project.layout.sidePanelOrder || ['inset', 'legend', 'logo'];
+            const rowOrder = order.filter(item =>
+              Array.isArray(item) ? !item.includes(dragging.id) : item !== dragging.id
+            );
+
+            // Insert divider positions (between rows)
             const sbTop = sidebar?.top ?? 0;
-            insertPositions.push(sbTop + 8);
-            order.forEach(eid => {
-              const z = resolvedZonesRef.current?.[eid];
+            const insertPositions = [sbTop + 8];
+            rowOrder.forEach(item => {
+              const firstId = Array.isArray(item) ? item[0] : item;
+              const z = resolvedZonesRef.current?.[firstId];
               if (z?.height > 0 && z?.top > 0) insertPositions.push(z.top + z.height + 5);
             });
-            return insertPositions.map((pos, i) => (
-              <div key={i} className={`sp-insert-divider${dragging.hoverInsertIdx === i ? ' sp-insert-divider--active' : ''}`}
-                style={{ top: pos, left: sbLeft, width: sbW }} />
-            ));
+
+            // Full-width elements eligible for split
+            const splitTargets = order.filter(item =>
+              typeof item === 'string' && item !== dragging.id
+            );
+
+            return [
+              ...insertPositions.map((pos, i) => (
+                <div key={`ins-${i}`}
+                  className={`sp-insert-divider${dragging.hoverInsertIdx === i ? ' sp-insert-divider--active' : ''}`}
+                  style={{ top: pos, left: sbLeft, width: sbW }} />
+              )),
+              ...splitTargets.map(eid => {
+                const z = resolvedZonesRef.current?.[eid];
+                if (!z?.height) return null;
+                return (
+                  <div key={`split-${eid}`}
+                    className={`sp-split-line${dragging.hoverSplitId === eid ? ' sp-split-line--active' : ''}`}
+                    style={{ top: z.top, left: sbLeft + Math.floor(sbW / 2) - 1, height: z.height }} />
+                );
+              }),
+            ];
           } else {
             const slots = Object.entries(mapSlotPositions(sbLeft, mapSize.height)).map(([key, pos]) => ({ id: key, ...pos }));
             const zW = dragging.ghostW || 80, zH = dragging.ghostH || 48;

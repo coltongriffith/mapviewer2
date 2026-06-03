@@ -48,16 +48,12 @@ button, input, select, textarea { font: inherit; }
 .sample-data-link:hover { text-decoration: underline; }
 .drag-ghost { position: fixed; pointer-events: none; background: rgba(37, 99, 235, 0.15); border: 2px dashed #2563eb; border-radius: 8px; z-index: 9999; transform: translate(-50%, -50%); }
 /* ── Standard template: corner drop zone clusters ── */
-.drop-zone-cluster { position: absolute; z-index: 9000; display: flex; flex-direction: column; gap: 5px; pointer-events: none; }
+.drop-zone-cluster { position: absolute; z-index: 9000; display: flex; flex-direction: column; gap: 4px; pointer-events: none; width: 180px; }
 .drop-zone-cluster--tl { top: 12px; left: 12px; }
 .drop-zone-cluster--tr { top: 12px; right: 12px; }
 .drop-zone-cluster--bl { bottom: 12px; left: 12px; }
 .drop-zone-cluster--br { bottom: 12px; right: 12px; }
-.dzs-row { display: flex; gap: 5px; }
-.dzs { pointer-events: auto; border: 2px dashed #93c5fd; border-radius: 6px; background: rgba(219,234,254,0.72); color: #1d4ed8; font-size: 11px; font-weight: 600; font-family: system-ui, sans-serif; display: flex; align-items: center; justify-content: center; height: 36px; white-space: nowrap; transition: background 0.1s, border-color 0.1s; user-select: none; cursor: default; backdrop-filter: blur(3px); }
-.dzs-first { width: 100px; }
-.dzs-beside { width: 108px; }
-.dzs-last { width: 212px; }
+.dzs { width: 100%; pointer-events: auto; border: 2px dashed #93c5fd; border-radius: 6px; background: rgba(219,234,254,0.72); color: #1d4ed8; font-size: 11px; font-weight: 600; font-family: system-ui, sans-serif; display: flex; align-items: center; justify-content: center; height: 36px; white-space: nowrap; transition: background 0.1s, border-color 0.1s; user-select: none; cursor: default; backdrop-filter: blur(3px); }
 .dzs--hover { background: rgba(37,99,235,0.22); border-color: #2563eb; border-style: solid; color: #1e3a8a; }
 .canvas-drag-guide-v { position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: rgba(147,197,253,0.45); pointer-events: none; z-index: 8400; }
 .canvas-drag-guide-h { position: absolute; top: 50%; left: 0; right: 0; height: 1px; background: rgba(147,197,253,0.45); pointer-events: none; z-index: 8400; }
@@ -65,6 +61,9 @@ button, input, select, textarea { font: inherit; }
 /* ── Side panel template: sidebar insert dividers (reorder drag) ── */
 .sp-insert-divider { position: absolute; z-index: 8600; height: 3px; background: rgba(147,197,253,0.5); border-radius: 2px; pointer-events: none; transition: height 0.1s, background 0.1s; }
 .sp-insert-divider--active { height: 6px; margin-top: -1.5px; background: #2563eb; border-radius: 3px; box-shadow: 0 0 0 3px rgba(37,99,235,0.15); }
+/* Sidebar column split indicator (vertical dashed line shown on full-width elements during drag) */
+.sp-split-line { position: absolute; z-index: 8700; width: 3px; background: rgba(147,197,253,0.45); border-radius: 2px; pointer-events: none; transition: background 0.1s, width 0.1s; }
+.sp-split-line--active { width: 5px; background: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,0.12); border-radius: 3px; }
 
 /* ── Side panel template: map area slot targets ── */
 .sp-map-slot { position: absolute; z-index: 8600; border: 2px dashed rgba(37,99,235,0.4); border-radius: 5px; background: rgba(219,234,254,0.22); pointer-events: none; transition: background 0.1s, border-color 0.1s; }
