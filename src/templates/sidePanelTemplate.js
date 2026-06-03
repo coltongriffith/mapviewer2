@@ -88,23 +88,27 @@ export function resolveSidePanelZones(template, layout, mapSize, legendItems) {
 
   const sp = layout?.sidePanelPositions || {};
 
-  // --- Stack from TOP ---
-  let topY = margin;
+  // --- Stack from TOP in configurable order ---
+  const order = layout?.sidePanelOrder || ['inset', 'legend', 'logo'];
+  let insetZone = { top: 0, left: 0, width: 0, height: 0 };
+  let legendZone = { top: margin, left: sbLeft + margin, width: innerW, height: legendHeight };
+  let logoZone = { top: 0, left: 0, width: 0, height: 0 };
 
-  let insetZone = insetEnabled
-    ? { top: topY, left: sbLeft + margin, width: insetW, height: insetH }
-    : { top: 0, left: 0, width: 0, height: 0 };
-  if (sp.inset?.top != null && insetEnabled) insetZone = { ...insetZone, top: sp.inset.top };
-  if (insetEnabled) topY += insetH + gap;
-
-  let legendZone = { top: topY, left: sbLeft + margin, width: innerW, height: legendHeight };
-  if (sp.legend?.top != null) legendZone = { ...legendZone, top: sp.legend.top };
-  topY += legendHeight + gap;
-
-  let logoZone = layout?.logo
-    ? { top: topY, left: sbLeft + margin, width: logoW, height: logoH }
-    : { top: 0, left: 0, width: 0, height: 0 };
-  if (sp.logo?.top != null && layout?.logo) logoZone = { ...logoZone, top: sp.logo.top };
+  let stackY = margin;
+  for (const id of order) {
+    if (id === 'inset') {
+      if (!insetEnabled) continue;
+      insetZone = { top: stackY, left: sbLeft + margin, width: insetW, height: insetH };
+      stackY += insetH + gap;
+    } else if (id === 'legend') {
+      legendZone = { top: stackY, left: sbLeft + margin, width: innerW, height: legendHeight };
+      stackY += legendHeight + gap;
+    } else if (id === 'logo') {
+      if (!layout?.logo) continue;
+      logoZone = { top: stackY, left: sbLeft + margin, width: logoW, height: logoH };
+      stackY += logoH + gap;
+    }
+  }
 
   // --- Stack from BOTTOM ---
   let bottomY = H - margin;
@@ -156,12 +160,7 @@ export function resolveSidePanelZones(template, layout, mapSize, legendItems) {
   };
 }
 
-// ─── Grid slot system ───────────────────────────────────────────────────────
-
-/** Fractional Y positions within sidebar height for the 5 sidebar slots */
-export const SIDEBAR_SLOT_FRACS = [0.04, 0.22, 0.42, 0.60, 0.76];
-export const SIDEBAR_SLOT_NAMES = ['slot-a', 'slot-b', 'slot-c', 'slot-d', 'slot-e'];
-export const SIDEBAR_SLOT_LABELS = ['Top', 'Upper', 'Middle', 'Lower', 'Bottom'];
+// ─── Map area slot system (for north arrow / scale bar) ─────────────────────
 
 /** Map area slots: [xFrac, yFrac] within the left (map) portion of the canvas */
 export const MAP_SLOT_DEFS = {
@@ -173,20 +172,7 @@ export const MAP_SLOT_DEFS = {
   'map-br': [0.76, 0.88],
 };
 
-/**
- * Returns the 5 sidebar slot Y positions (absolute canvas pixels).
- * sbTop: top edge of sidebar in canvas coords
- * sbH: height of sidebar
- */
-export function sidebarSlotTops(sbTop, sbH) {
-  return SIDEBAR_SLOT_FRACS.map(f => Math.round(sbTop + f * sbH));
-}
-
-/**
- * Returns pixel {left, top} for each map slot, sized to the element being dragged.
- * mapAreaW: width of the left map area (= sbLeft)
- * mapH: full canvas height
- */
+/** Returns pixel {left, top} for each map slot. mapAreaW = sbLeft. */
 export function mapSlotPositions(mapAreaW, mapH) {
   return Object.fromEntries(
     Object.entries(MAP_SLOT_DEFS).map(([key, [xf, yf]]) => [

@@ -32,7 +32,7 @@ import { applyRoleToLayer, inferRoleFromLayer } from './mapPresets';
 import { getTemplate } from './templates';
 import { buildLegendItems, resolveTemplateZones } from './templates/technicalResultsTemplate';
 import { resolveNI43101Zones } from './templates/technicalReportTemplate';
-import { resolveSidePanelZones, sidebarSlotTops, mapSlotPositions, SIDEBAR_SLOT_NAMES, SIDEBAR_SLOT_LABELS } from './templates/sidePanelTemplate';
+import { resolveSidePanelZones, mapSlotPositions } from './templates/sidePanelTemplate';
 import { geojsonBounds, geojsonCenter, unionBounds } from './utils/geometry';
 import { markerSvgUrl } from './utils/leaflet';
 import { detectRegion } from './utils/detectRegion';
@@ -1079,21 +1079,13 @@ export default function App() {
     const isMapInSidePanel = isSidePanel && !SP_SIDEBAR_ELEMENTS.includes(id);
     const layoutSnapshot = project.layout;
     let currentHoverZone = null;
-    let currentSidebarSlot = null;
+    let currentInsertIdx = 0;
     let currentMapSlot = null;
     let finalClientX = e.clientX, finalClientY = e.clientY;
     const effectiveGhostW = isInSidebar
       ? Math.max(ghostW, (resolvedZonesRef.current?.sidebar?.width ?? 0) - 32)
       : ghostW;
 
-    // Pre-compute slot arrays from current resolved zones
-    const getSidebarSlots = () => {
-      const sidebar = resolvedZonesRef.current?.sidebar;
-      if (!sidebar) return [];
-      return sidebarSlotTops(sidebar.top, sidebar.height).map((top, i) => ({
-        id: SIDEBAR_SLOT_NAMES[i], label: SIDEBAR_SLOT_LABELS[i], top,
-      }));
-    };
     const getMapSlots = () => {
       const sbLeft = resolvedZonesRef.current?.sidebar?.left ?? Math.round(mapSize.width * 0.72);
       return Object.entries(mapSlotPositions(sbLeft, mapSize.height)).map(([key, pos]) => ({ id: key, ...pos }));
@@ -1106,17 +1098,20 @@ export default function App() {
       finalClientY = me.clientY;
 
       if (isInSidebar) {
+        // Reorder: find which gap the cursor is in
         const container = mapContainerRef.current;
         const rect = container?.getBoundingClientRect();
         if (!rect) return;
         const cursorY = me.clientY - rect.top;
-        const slots = getSidebarSlots();
-        let bestIdx = 0, bestDist = Infinity;
-        slots.forEach((s, i) => { const d = Math.abs(cursorY - s.top); if (d < bestDist) { bestDist = d; bestIdx = i; } });
-        currentSidebarSlot = slots[bestIdx]?.id ?? null;
-        // Snap ghost Y to slot top + half element height
-        const snappedClientY = slots[bestIdx] ? rect.top + slots[bestIdx].top + (ghostH || 80) / 2 : me.clientY;
-        setDragging((d) => d ? { ...d, ghostX: me.clientX, ghostY: snappedClientY, hoverSlot: currentSidebarSlot } : null);
+        const order = layoutSnapshot.sidePanelOrder || ['inset', 'legend', 'logo'];
+        const otherIds = order.filter(eid => eid !== id);
+        let insertIdx = 0;
+        for (let i = 0; i < otherIds.length; i++) {
+          const z = resolvedZonesRef.current?.[otherIds[i]];
+          if (z?.height > 0 && cursorY > z.top + z.height / 2) insertIdx = i + 1;
+        }
+        currentInsertIdx = insertIdx;
+        setDragging((d) => d ? { ...d, ghostX: me.clientX, ghostY: me.clientY, hoverInsertIdx: insertIdx } : null);
         return;
       }
 
@@ -1155,49 +1150,40 @@ export default function App() {
       if (map) map.dragging.enable();
 
       if (isInSidebar) {
-        setResizeGuides([]);
-        const container = mapContainerRef.current;
-        if (container) {
-          const slots = getSidebarSlots();
-          const slotIdx = SIDEBAR_SLOT_NAMES.indexOf(currentSidebarSlot);
-          const snappedTop = slotIdx >= 0 ? slots[slotIdx].top : (() => {
-            // Fallback: nearest slot to raw cursor position
-            const rect = container.getBoundingClientRect();
-            const cursorY = finalClientY - rect.top;
-            let best = slots[0], bestDist = Infinity;
-            slots.forEach(s => { const d = Math.abs(cursorY - s.top); if (d < bestDist) { bestDist = d; best = s; } });
-            return best?.top ?? 0;
-          })();
-          setProject((p) => ({
-            ...p,
-            layout: {
-              ...p.layout,
-              sidePanelPositions: { ...(p.layout.sidePanelPositions || {}), [id]: { top: snappedTop } },
-            },
-          }));
+        // Reorder sidebar elements
+        const order = [...(layoutSnapshot.sidePanelOrder || ['inset', 'legend', 'logo'])];
+        const from = order.indexOf(id);
+        if (from !== -1) {
+          order.splice(from, 1);
+          const insertAt = currentInsertIdx > from ? currentInsertIdx - 1 : currentInsertIdx;
+          order.splice(Math.max(0, Math.min(order.length, insertAt)), 0, id);
+        } else {
+          // id not in order (e.g. title) — just drop into slot, no reorder needed
         }
+        updateLayout({ sidePanelOrder: order });
       } else if (isMapInSidePanel) {
         const container = mapContainerRef.current;
         if (container) {
           const rect = container.getBoundingClientRect();
           const zW = ghostW || 80, zH = ghostH || 48;
           const slots = getMapSlots();
-          const sp = slots.find(s => s.id === currentMapSlot) || (() => {
-            // Fallback: nearest slot to raw cursor position
+          let sp = slots.find(s => s.id === currentMapSlot);
+          if (!sp) {
             const cursorX = finalClientX - rect.left, cursorY = finalClientY - rect.top;
-            let best = slots[0], bestDist = Infinity;
-            slots.forEach(s => { const d = Math.hypot(cursorX - s.left, cursorY - s.top); if (d < bestDist) { bestDist = d; best = s; } });
-            return best;
-          })();
-          const clampedLeft = Math.max(8, Math.min(mapSize.width - zW - 8, sp.left));
-          const clampedTop = Math.max(8, Math.min(mapSize.height - zH - 8, sp.top));
-          setProject((p) => ({
-            ...p,
-            layout: {
-              ...p.layout,
-              sidePanelPositions: { ...(p.layout.sidePanelPositions || {}), [id]: { top: clampedTop, left: clampedLeft } },
-            },
-          }));
+            let bestDist = Infinity;
+            slots.forEach(s => { const d = Math.hypot(cursorX - s.left, cursorY - s.top); if (d < bestDist) { bestDist = d; sp = s; } });
+          }
+          if (sp) {
+            const clampedLeft = Math.max(8, Math.min(mapSize.width - zW - 8, sp.left));
+            const clampedTop = Math.max(8, Math.min(mapSize.height - zH - 8, sp.top));
+            setProject((p) => ({
+              ...p,
+              layout: {
+                ...p.layout,
+                sidePanelPositions: { ...(p.layout.sidePanelPositions || {}), [id]: { top: clampedTop, left: clampedLeft } },
+              },
+            }));
+          }
         }
       } else if (currentHoverZone) {
         const { corner, slot } = currentHoverZone;
@@ -3735,47 +3721,53 @@ export default function App() {
         {resizeGuides.map((g, i) => (
           <div key={i} className={`resize-guide resize-guide--${g.type}`} style={g.type === 'v' ? { left: g.pos } : { top: g.pos }} />
         ))}
-        {/* Standard template: quadrant grid overlay + corner drop zones */}
-        {dragging && project.layout.templateId !== 'side_panel' && (() => {
-          const hz = dragging.hoverZone;
-          return (
-            <>
-              <div className="canvas-drag-guide-v" />
-              <div className="canvas-drag-guide-h" />
-              {['tl','tr','bl','br'].map((corner) => {
-                const isTop = corner[0] === 't';
-                const isLeft = corner[1] === 'l';
-                const isHov = (slot) => hz?.corner === corner && hz?.slot === slot;
-                const firstLabel = isLeft ? '◤ Corner' : 'Corner ◥';
-                const stackLabel = isTop ? '↓ Stack below' : '↑ Stack above';
-                return (
-                  <div key={corner} className={`canvas-quadrant canvas-quadrant--${corner}${hz?.corner === corner ? ' canvas-quadrant--active' : ''}`}>
-                    <div className="canvas-quadrant-inner">
-                      <div className={`dzs dzs-first${isHov('first') ? ' dzs--hover' : ''}`} data-corner={corner} data-slot="first">{firstLabel}</div>
-                      <div className={`dzs dzs-beside${isHov('beside') ? ' dzs--hover' : ''}`} data-corner={corner} data-slot="beside">⊞ Side by side</div>
-                      <div className={`dzs dzs-last${isHov('last') ? ' dzs--hover' : ''}`} data-corner={corner} data-slot="last">{stackLabel}</div>
+        {/* Standard template: corner drop zone clusters + center crosshair guides */}
+        {dragging && project.layout.templateId !== 'side_panel' && (
+          <>
+            <div className="canvas-drag-guide-v" />
+            <div className="canvas-drag-guide-h" />
+            {['tl','tr','bl','br'].map((corner) => {
+              const isTop = corner[0] === 't';
+              const isLeft = corner[1] === 'l';
+              const hz = dragging.hoverZone;
+              const isHov = (slot) => hz?.corner === corner && hz?.slot === slot;
+              return (
+                <div key={corner} className={`drop-zone-cluster drop-zone-cluster--${corner}`}>
+                  <div className="dzs-row">
+                    <div className={`dzs dzs-first${isHov('first') ? ' dzs--hover' : ''}`} data-corner={corner} data-slot="first">
+                      {isLeft ? '◤ Corner' : 'Corner ◥'}
+                    </div>
+                    <div className={`dzs dzs-beside${isHov('beside') ? ' dzs--hover' : ''}`} data-corner={corner} data-slot="beside">⊞ Side by side</div>
+                  </div>
+                  <div className="dzs-row">
+                    <div className={`dzs dzs-last${isHov('last') ? ' dzs--hover' : ''}`} data-corner={corner} data-slot="last">
+                      {isTop ? '↓ Stack below' : '↑ Stack above'}
                     </div>
                   </div>
-                );
-              })}
-            </>
-          );
-        })()}
-        {/* Side panel template: sidebar slot strips + map area slot targets */}
+                </div>
+              );
+            })}
+          </>
+        )}
+        {/* Side panel template: sidebar insert dividers + map area slot targets */}
         {dragging && project.layout.templateId === 'side_panel' && (() => {
           const sidebar = resolvedZonesRef.current?.sidebar;
           const sbLeft = sidebar?.left ?? Math.round(mapSize.width * 0.72);
           const sbW = sidebar?.width ?? Math.round(mapSize.width * 0.28);
-          const sbTop = sidebar?.top ?? 0;
-          const sbH = sidebar?.height ?? mapSize.height;
           const isSbEl = SP_SIDEBAR_ELEMENTS.includes(dragging.id);
           if (isSbEl) {
-            const slots = sidebarSlotTops(sbTop, sbH).map((top, i) => ({ id: SIDEBAR_SLOT_NAMES[i], label: SIDEBAR_SLOT_LABELS[i], top }));
-            return slots.map(s => (
-              <div key={s.id} className={`sp-slot-strip${dragging.hoverSlot === s.id ? ' sp-slot-strip--active' : ''}`}
-                style={{ top: s.top, left: sbLeft, width: sbW }}>
-                <span className="sp-slot-label">{s.label}</span>
-              </div>
+            const order = (project.layout.sidePanelOrder || ['inset', 'legend', 'logo']).filter(eid => eid !== dragging.id);
+            const insertPositions = [];
+            // Position before first element
+            const sbTop = sidebar?.top ?? 0;
+            insertPositions.push(sbTop + 8);
+            order.forEach(eid => {
+              const z = resolvedZonesRef.current?.[eid];
+              if (z?.height > 0 && z?.top > 0) insertPositions.push(z.top + z.height + 5);
+            });
+            return insertPositions.map((pos, i) => (
+              <div key={i} className={`sp-insert-divider${dragging.hoverInsertIdx === i ? ' sp-insert-divider--active' : ''}`}
+                style={{ top: pos, left: sbLeft, width: sbW }} />
             ));
           } else {
             const slots = Object.entries(mapSlotPositions(sbLeft, mapSize.height)).map(([key, pos]) => ({ id: key, ...pos }));

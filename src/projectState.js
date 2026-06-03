@@ -119,6 +119,7 @@ export function createInitialProjectState() {
       cornerOrder: ['title', 'logo', 'inset', 'northArrow', 'scaleBar', 'legend'],
       cornerLayout: null,
       sidePanelPositions: {},
+      sidePanelOrder: ['inset', 'legend', 'logo'],
       scaleBarHeightPx: 48,
       insetRegionFill: null,
       insetRegionStroke: null,
