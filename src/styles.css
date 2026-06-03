@@ -58,12 +58,18 @@ button, input, select, textarea { font: inherit; }
 .canvas-drag-guide-v { position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: rgba(147,197,253,0.45); pointer-events: none; z-index: 8400; }
 .canvas-drag-guide-h { position: absolute; top: 50%; left: 0; right: 0; height: 1px; background: rgba(147,197,253,0.45); pointer-events: none; z-index: 8400; }
 
-/* ── Side panel template: sidebar insert dividers (reorder drag) ── */
-.sp-insert-divider { position: absolute; z-index: 8600; height: 3px; background: rgba(147,197,253,0.5); border-radius: 2px; pointer-events: none; transition: height 0.1s, background 0.1s; }
-.sp-insert-divider--active { height: 6px; margin-top: -1.5px; background: #2563eb; border-radius: 3px; box-shadow: 0 0 0 3px rgba(37,99,235,0.15); }
-/* Sidebar column split indicator (vertical dashed line shown on full-width elements during drag) */
-.sp-split-line { position: absolute; z-index: 8700; width: 3px; background: rgba(147,197,253,0.45); border-radius: 2px; pointer-events: none; transition: background 0.1s, width 0.1s; }
-.sp-split-line--active { width: 5px; background: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,0.12); border-radius: 3px; }
+/* ── Side panel template: sidebar grid cells (shown during drag) ── */
+.sp-grid-cell {
+  position: absolute; z-index: 8600; pointer-events: none;
+  border: 1.5px dashed rgba(147,197,253,0.5); border-radius: 5px;
+  background: rgba(219,234,254,0.06);
+  transition: background 0.08s, border-color 0.08s;
+}
+.sp-grid-cell--active {
+  border-color: #2563eb; border-style: solid;
+  background: rgba(37,99,235,0.13);
+  box-shadow: 0 0 0 2px rgba(37,99,235,0.12);
+}
 
 /* ── Side panel template: map area slot targets ── */
 .sp-map-slot { position: absolute; z-index: 8600; border: 2px dashed rgba(37,99,235,0.4); border-radius: 5px; background: rgba(219,234,254,0.22); pointer-events: none; transition: background 0.1s, border-color 0.1s; }

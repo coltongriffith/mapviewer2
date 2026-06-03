@@ -1067,29 +1067,44 @@ export default function App() {
     }));
   };
 
-  const SP_SIDEBAR_ELEMENTS = ['inset', 'legend', 'logo', 'title', 'footer'];
+  const SP_SIDEBAR_ELEMENTS = ['inset', 'legend', 'logo', 'title', 'footer', 'northArrow', 'scaleBar'];
 
   const makeDragHandler = (id, ghostW, ghostH) => (e) => {
     if (e.target.closest('.panel-resize-handle') || e.target.closest('.panel-delete-btn')) return;
     e.preventDefault();
     const map = leafletMapRef.current;
     if (map) map.dragging.disable();
+    // Capture snapshot at drag start to prevent shaking (live ref reads cause jitter)
+    const zonesSnapshot = resolvedZonesRef.current ? { ...resolvedZonesRef.current } : {};
     const isSidePanel = project.layout.templateId === 'side_panel';
-    const isInSidebar = isSidePanel && SP_SIDEBAR_ELEMENTS.includes(id);
-    const isMapInSidePanel = isSidePanel && !SP_SIDEBAR_ELEMENTS.includes(id);
     const layoutSnapshot = project.layout;
+
+    // For northArrow/scaleBar: check if currently in the sidebar grid
+    const _grid = layoutSnapshot.sidePanelGrid || layoutSnapshot.sidePanelOrder || [];
+    const _inGrid = (eid) => _grid.some(item => Array.isArray(item) ? item.includes(eid) : item === eid);
+    const alwaysSidebar = ['inset', 'legend', 'logo', 'title', 'footer'];
+    const isInSidebar = isSidePanel && (alwaysSidebar.includes(id) || _inGrid(id));
+    const isMapInSidePanel = isSidePanel && !alwaysSidebar.includes(id) && !_inGrid(id);
+
     let currentHoverZone = null;
-    let currentInsertIdx = 0;
-    let currentSplitTarget = null;
+    let currentGridSlot = null;
     let currentMapSlot = null;
     let finalClientX = e.clientX, finalClientY = e.clientY;
+
+    const sb = zonesSnapshot.sidebar || {};
+    const sbLeft = sb.left ?? Math.round(mapSize.width * 0.72);
+    const sbW = sb.width ?? Math.round(mapSize.width * 0.28);
+    const innerW = sbW - 32;
+    const colW = Math.floor((innerW - 8) / 2);
+    const rowH = Math.floor((mapSize.height - 32) / 5);
+
     const effectiveGhostW = isInSidebar
-      ? Math.max(ghostW, (resolvedZonesRef.current?.sidebar?.width ?? 0) - 32)
+      ? Math.max(ghostW, (zonesSnapshot.sidebar?.width ?? 0) - 32)
       : ghostW;
 
     const getMapSlots = () => {
-      const sbLeft = resolvedZonesRef.current?.sidebar?.left ?? Math.round(mapSize.width * 0.72);
-      return Object.entries(mapSlotPositions(sbLeft, mapSize.height, ghostW || 80, ghostH || 80)).map(([key, pos]) => ({ id: key, ...pos }));
+      const sl = zonesSnapshot.sidebar?.left ?? Math.round(mapSize.width * 0.72);
+      return Object.entries(mapSlotPositions(sl, mapSize.height, ghostW || 80, ghostH || 80)).map(([key, pos]) => ({ id: key, ...pos }));
     };
 
     setDragging({ id, hoverZone: null, ghostX: e.clientX, ghostY: e.clientY, ghostW: effectiveGhostW, ghostH });
@@ -1099,48 +1114,36 @@ export default function App() {
       finalClientX = me.clientX;
       finalClientY = me.clientY;
 
-      if (isInSidebar) {
+      if (isInSidebar || (isSidePanel && SP_SIDEBAR_ELEMENTS.includes(id))) {
         const container = mapContainerRef.current;
         const rect = container?.getBoundingClientRect();
         if (!rect) return;
-        const cursorY = me.clientY - rect.top;
-        const order = layoutSnapshot.sidePanelOrder || ['inset', 'legend', 'logo'];
 
-        // Flatten non-dragged element IDs
-        const flatOtherIds = order
-          .flatMap(item => Array.isArray(item) ? item : [item])
-          .filter(eid => eid !== id);
+        // Compute grid slot from cursor position (using snapshot — no live ref reads)
+        const cursorX = me.clientX - rect.left - sbLeft - 16;
+        const cursorY = me.clientY - rect.top - 16;
+        const row = Math.max(0, Math.min(4, Math.floor(cursorY / (rowH + 6))));
+        const col = cursorX < colW + 4 ? 0 : 1;
+        currentGridSlot = { row, col };
 
-        // Check if cursor is within a full-width element (split intent)
-        let splitId = null;
-        for (const eid of flatOtherIds) {
-          const z = resolvedZonesRef.current?.[eid];
-          if (!z?.height || z.top <= 0) continue;
-          // Only full-width elements (not already in a column pair)
-          const inColumn = order.some(item => Array.isArray(item) && item.includes(eid));
-          if (!inColumn && cursorY >= z.top && cursorY <= z.top + z.height) {
-            splitId = eid;
-            break;
-          }
-        }
-        currentSplitTarget = splitId;
-
-        if (splitId) {
-          setDragging((d) => d ? { ...d, ghostX: me.clientX, ghostY: me.clientY, hoverInsertIdx: null, hoverSplitId: splitId } : null);
-        } else {
-          // Compute row-level insert index from the order (treating arrays as single rows)
-          const rowOrder = order.filter(item =>
-            Array.isArray(item) ? !item.includes(id) : item !== id
-          );
-          let insertIdx = 0;
-          rowOrder.forEach((item, i) => {
-            const firstId = Array.isArray(item) ? item[0] : item;
-            const z = resolvedZonesRef.current?.[firstId];
-            if (z?.height > 0 && z?.top > 0 && cursorY > z.top + z.height / 2) insertIdx = i + 1;
+        let newMapSlot = null;
+        // northArrow/scaleBar can also drop to map area
+        if (['northArrow', 'scaleBar'].includes(id) && (me.clientX - rect.left) < sbLeft) {
+          const zW = ghostW || 80, zH = ghostH || 48;
+          const slots = getMapSlots();
+          const cx = me.clientX - rect.left;
+          const cy = me.clientY - rect.top;
+          let bestKey = null, bestDist = Infinity;
+          slots.forEach((s) => {
+            const d = Math.hypot(cx - (s.left + zW / 2), cy - (s.top + zH / 2));
+            if (d < bestDist) { bestDist = d; bestKey = s.id; }
           });
-          currentInsertIdx = insertIdx;
-          setDragging((d) => d ? { ...d, ghostX: me.clientX, ghostY: me.clientY, hoverInsertIdx: insertIdx, hoverSplitId: null } : null);
+          newMapSlot = bestKey;
+          currentGridSlot = null;
         }
+        currentMapSlot = newMapSlot;
+
+        setDragging((d) => d ? { ...d, ghostX: me.clientX, ghostY: me.clientY, hoverGridSlot: currentGridSlot, hoverMapSlot: currentMapSlot } : null);
         return;
       }
 
@@ -1176,19 +1179,37 @@ export default function App() {
       document.body.classList.remove('is-dragging');
       if (map) map.dragging.enable();
 
-      if (isInSidebar) {
-        // Title and footer use free Y positioning via sp.[id].top, not sidePanelOrder
-        if (id === 'title' || id === 'footer') {
-          const container = mapContainerRef.current;
-          if (container) {
-            const rect = container.getBoundingClientRect();
-            const rawTop = finalClientY - rect.top - ghostH / 2;
-            const clampedTop = Math.max(0, Math.min(mapSize.height - ghostH, rawTop));
+      // Helper: remove id from grid (handles string items and [id1,id2] arrays)
+      const removeFromGrid = (grid, removeId) =>
+        grid.reduce((acc, row) => {
+          if (Array.isArray(row)) {
+            const f = row.filter(x => x !== removeId);
+            if (f.length === 2) acc.push(row);
+            else if (f.length === 1) acc.push(f[0]);
+          } else if (row !== removeId) {
+            acc.push(row);
+          }
+          return acc;
+        }, []);
+
+      if (isInSidebar || (isSidePanel && SP_SIDEBAR_ELEMENTS.includes(id) && currentGridSlot !== null)) {
+        const baseGrid = layoutSnapshot.sidePanelGrid || layoutSnapshot.sidePanelOrder || ['inset', 'legend', 'logo'];
+
+        // northArrow/scaleBar dropping to map area
+        if (['northArrow', 'scaleBar'].includes(id) && currentMapSlot) {
+          const slots = getMapSlots();
+          const sp = slots.find(s => s.id === currentMapSlot);
+          if (sp) {
+            const zW = ghostW || 80, zH = ghostH || 48;
+            const clampedLeft = Math.max(8, Math.min(mapSize.width - zW - 8, sp.left));
+            const clampedTop = Math.max(8, Math.min(mapSize.height - zH - 8, sp.top));
+            const grid = removeFromGrid(baseGrid, id);
             setProject((p) => ({
               ...p,
               layout: {
                 ...p.layout,
-                sidePanelPositions: { ...(p.layout.sidePanelPositions || {}), [id]: { top: clampedTop } },
+                sidePanelGrid: grid,
+                sidePanelPositions: { ...(p.layout.sidePanelPositions || {}), [id]: { top: clampedTop, left: clampedLeft } },
               },
             }));
           }
@@ -1196,35 +1217,36 @@ export default function App() {
           return;
         }
 
-        // Helper: remove id from order (handles string items and [id1,id2] arrays)
-        const removeFromOrder = (ord, removeId) =>
-          ord.reduce((acc, item) => {
-            if (Array.isArray(item)) {
-              const filtered = item.filter(x => x !== removeId);
-              if (filtered.length === 2) acc.push(item);
-              else if (filtered.length === 1) acc.push(filtered[0]);
-            } else if (item !== removeId) {
-              acc.push(item);
+        if (currentGridSlot) {
+          let grid = removeFromGrid(baseGrid, id);
+          const { row, col } = currentGridSlot;
+
+          // Ensure grid has enough rows
+          while (grid.length <= row) grid.push(null);
+
+          const existingRow = grid[row];
+          if (col === 0) {
+            if (Array.isArray(existingRow)) {
+              grid[row] = [id, existingRow[1]];
+            } else if (existingRow && existingRow !== id) {
+              grid[row] = [id, existingRow];
+            } else {
+              grid[row] = id;
             }
-            return acc;
-          }, []);
+          } else {
+            if (Array.isArray(existingRow)) {
+              grid[row] = [existingRow[0], id];
+            } else if (existingRow && existingRow !== id) {
+              grid[row] = [existingRow, id];
+            } else {
+              grid[row] = id;
+            }
+          }
 
-        let order = removeFromOrder(
-          layoutSnapshot.sidePanelOrder || ['inset', 'legend', 'logo'],
-          id
-        );
-
-        if (currentSplitTarget) {
-          // Pair with split target as a column
-          order = order.map(item =>
-            item === currentSplitTarget ? [currentSplitTarget, id] : item
-          );
-        } else {
-          // Insert as full-width row
-          const insertAt = Math.max(0, Math.min(order.length, currentInsertIdx));
-          order.splice(insertAt, 0, id);
+          // Clean up nulls, limit to 5 rows
+          grid = grid.filter(Boolean).slice(0, 5);
+          updateLayout({ sidePanelGrid: grid });
         }
-        updateLayout({ sidePanelOrder: order });
       } else if (isMapInSidePanel) {
         const container = mapContainerRef.current;
         if (container) {
@@ -3826,56 +3848,49 @@ export default function App() {
             })}
           </>
         )}
-        {/* Side panel template: sidebar insert dividers + map area slot targets */}
+        {/* Side panel template: grid cells + map area slot targets */}
         {dragging && project.layout.templateId === 'side_panel' && (() => {
-          const sidebar = resolvedZonesRef.current?.sidebar;
-          const sbLeft = sidebar?.left ?? Math.round(mapSize.width * 0.72);
-          const sbW = sidebar?.width ?? Math.round(mapSize.width * 0.28);
-          const isSbEl = SP_SIDEBAR_ELEMENTS.includes(dragging.id);
-          if (isSbEl) {
-            const order = project.layout.sidePanelOrder || ['inset', 'legend', 'logo'];
-            const rowOrder = order.filter(item =>
-              Array.isArray(item) ? !item.includes(dragging.id) : item !== dragging.id
-            );
+          const sb = resolvedZonesRef.current?.sidebar || {};
+          const sbLeft = sb.left ?? Math.round(mapSize.width * 0.72);
+          const sbW = sb.width ?? Math.round(mapSize.width * 0.28);
+          const innerW = sbW - 32;
+          const colW = Math.floor((innerW - 8) / 2);
+          const rowH = Math.floor((mapSize.height - 32) / 5);
+          const elements = [];
 
-            // Insert divider positions (between rows)
-            const sbTop = sidebar?.top ?? 0;
-            const insertPositions = [sbTop + 8];
-            rowOrder.forEach(item => {
-              const firstId = Array.isArray(item) ? item[0] : item;
-              const z = resolvedZonesRef.current?.[firstId];
-              if (z?.height > 0 && z?.top > 0) insertPositions.push(z.top + z.height + 5);
-            });
-
-            // Full-width elements eligible for split
-            const splitTargets = order.filter(item =>
-              typeof item === 'string' && item !== dragging.id
-            );
-
-            return [
-              ...insertPositions.map((pos, i) => (
-                <div key={`ins-${i}`}
-                  className={`sp-insert-divider${dragging.hoverInsertIdx === i ? ' sp-insert-divider--active' : ''}`}
-                  style={{ top: pos, left: sbLeft, width: sbW }} />
-              )),
-              ...splitTargets.map(eid => {
-                const z = resolvedZonesRef.current?.[eid];
-                if (!z?.height) return null;
-                return (
-                  <div key={`split-${eid}`}
-                    className={`sp-split-line${dragging.hoverSplitId === eid ? ' sp-split-line--active' : ''}`}
-                    style={{ top: z.top, left: sbLeft + Math.floor(sbW / 2) - 1, height: z.height }} />
+          // Sidebar grid cells (shown for all SP_SIDEBAR_ELEMENTS drags)
+          if (SP_SIDEBAR_ELEMENTS.includes(dragging.id)) {
+            for (let r = 0; r < 5; r++) {
+              for (let c = 0; c < 2; c++) {
+                const isHov = dragging.hoverGridSlot?.row === r && dragging.hoverGridSlot?.col === c;
+                elements.push(
+                  <div key={`cell-${r}-${c}`}
+                    className={`sp-grid-cell${isHov ? ' sp-grid-cell--active' : ''}`}
+                    style={{
+                      left: sbLeft + 16 + c * (colW + 8),
+                      top: 16 + r * (rowH + 6),
+                      width: colW,
+                      height: rowH,
+                    }} />
                 );
-              }),
-            ];
-          } else {
+              }
+            }
+          }
+
+          // Map area slots (for northArrow/scaleBar, and for non-sidebar SP elements)
+          const showMapSlots = ['northArrow', 'scaleBar'].includes(dragging.id) || !SP_SIDEBAR_ELEMENTS.includes(dragging.id);
+          if (showMapSlots) {
             const slots = Object.entries(mapSlotPositions(sbLeft, mapSize.height)).map(([key, pos]) => ({ id: key, ...pos }));
             const zW = dragging.ghostW || 80, zH = dragging.ghostH || 48;
-            return slots.map(s => (
-              <div key={s.id} className={`sp-map-slot${dragging.hoverMapSlot === s.id ? ' sp-map-slot--active' : ''}`}
-                style={{ left: s.left, top: s.top, width: zW, height: zH }} />
-            ));
+            slots.forEach(s => {
+              elements.push(
+                <div key={s.id} className={`sp-map-slot${dragging.hoverMapSlot === s.id ? ' sp-map-slot--active' : ''}`}
+                  style={{ left: s.left, top: s.top, width: zW, height: zH }} />
+              );
+            });
           }
+
+          return elements;
         })()}
           </div>
         </div>
