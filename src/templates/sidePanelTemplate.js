@@ -145,6 +145,16 @@ export function resolveSidePanelZones(template, layout, mapSize, legendItems) {
   if (sp.scaleBar?.top != null) scaleBarZone = { ...scaleBarZone, top: sp.scaleBar.top };
   if (sp.scaleBar?.left != null) scaleBarZone = { ...scaleBarZone, left: sp.scaleBar.left };
 
+  // Resolve overlap: if northArrow and scaleBar zones intersect, stack scaleBar below northArrow
+  const naR = northArrowZone.left + northArrowZone.width;
+  const sbR = scaleBarZone.left + scaleBarZone.width;
+  const xOverlap = northArrowZone.left < sbR && scaleBarZone.left < naR;
+  const yOverlap = northArrowZone.top < scaleBarZone.top + scaleBarZone.height &&
+                   scaleBarZone.top < northArrowZone.top + northArrowZone.height;
+  if (xOverlap && yOverlap) {
+    scaleBarZone = { ...scaleBarZone, top: northArrowZone.top + northArrowZone.height + gap };
+  }
+
   // Sidebar background — full height right panel
   const sidebarZone = { top: 0, left: sbLeft, width: sbW, height: H };
 
