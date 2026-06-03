@@ -1067,7 +1067,7 @@ export default function App() {
     }));
   };
 
-  const SP_SIDEBAR_ELEMENTS = ['inset', 'legend', 'logo', 'title'];
+  const SP_SIDEBAR_ELEMENTS = ['inset', 'legend', 'logo', 'title', 'footer'];
 
   const makeDragHandler = (id, ghostW, ghostH) => (e) => {
     if (e.target.closest('.panel-resize-handle') || e.target.closest('.panel-delete-btn')) return;
@@ -1158,10 +1158,7 @@ export default function App() {
           if (d < bestDist) { bestDist = d; bestKey = s.id; }
         });
         currentMapSlot = bestKey;
-        const sp = slots.find(s => s.id === bestKey);
-        const snappedClientX = sp ? rect.left + sp.left + zW / 2 : me.clientX;
-        const snappedClientY = sp ? rect.top + sp.top + zH / 2 : me.clientY;
-        setDragging((d) => d ? { ...d, ghostX: snappedClientX, ghostY: snappedClientY, hoverMapSlot: bestKey } : null);
+        setDragging((d) => d ? { ...d, ghostX: me.clientX, ghostY: me.clientY, hoverMapSlot: bestKey } : null);
         return;
       }
 
@@ -1180,8 +1177,8 @@ export default function App() {
       if (map) map.dragging.enable();
 
       if (isInSidebar) {
-        // Title uses free Y positioning (sp.title.top), not sidePanelOrder
-        if (id === 'title') {
+        // Title and footer use free Y positioning via sp.[id].top, not sidePanelOrder
+        if (id === 'title' || id === 'footer') {
           const container = mapContainerRef.current;
           if (container) {
             const rect = container.getBoundingClientRect();
@@ -1191,7 +1188,7 @@ export default function App() {
               ...p,
               layout: {
                 ...p.layout,
-                sidePanelPositions: { ...(p.layout.sidePanelPositions || {}), title: { top: clampedTop } },
+                sidePanelPositions: { ...(p.layout.sidePanelPositions || {}), [id]: { top: clampedTop } },
               },
             }));
           }
@@ -3577,7 +3574,7 @@ export default function App() {
           }} />
         )}
 
-        {project.layout.templateId !== 'ni_43101_technical' && project.layout.showTitle !== false && <div className="template-zone" style={{ ...zoneStyle(resolvedZones.title), opacity: dragging?.id === 'title' ? 0.3 : 1, cursor: 'grab' }} onMouseDown={makeDragHandler('title', project.layout.titleWidthPx ?? 520, project.layout.titleHeightPx ?? 92)}>
+        {project.layout.templateId !== 'ni_43101_technical' && project.layout.showTitle !== false && <div className="template-zone" style={{ ...zoneStyle(resolvedZones.title), zIndex: 410, opacity: dragging?.id === 'title' ? 0.3 : 1, cursor: 'grab' }} onMouseDown={makeDragHandler('title', project.layout.titleWidthPx ?? 520, project.layout.titleHeightPx ?? 92)}>
           <button className="panel-delete-btn" title="Hide title" onClick={() => updateLayout({ showTitle: false })}>×</button>
           <div className={`template-card title-card${project.layout.titleTransparent ? ' panel--transparent' : ''}`}>
             {editingTitleField === 'title' ? (
@@ -3687,10 +3684,14 @@ export default function App() {
           </div>
         )}
         {project.layout.templateId !== 'ni_43101_technical' && project.layout.footerText && project.layout.footerEnabled !== false ? (
-          <div className="template-zone" style={{ ...zoneStyle(resolvedZones.footer), height: project.layout.footerHeightPx || resolvedZones.footer?.height }}>
+          <div className="template-zone" style={{ ...zoneStyle(resolvedZones.footer), zIndex: 408, height: project.layout.footerHeightPx || resolvedZones.footer?.height, opacity: dragging?.id === 'footer' ? 0.3 : 1 }} onMouseDown={makeDragHandler('footer', resolvedZones.footer?.width ?? 260, project.layout.footerHeightPx || resolvedZones.footer?.height || 28)}>
             <div className="template-card footer-card">{project.layout.footerText}</div>
             <button className="panel-delete-btn" title="Hide disclaimer" onClick={() => updateLayout({ footerEnabled: false })}>×</button>
-            <div className="panel-resize-handle panel-resize-handle--bottom" title="Drag to resize disclaimer height" onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); const map = leafletMapRef.current; if (map) map.dragging.disable(); const startY = e.clientY; const startH = project.layout.footerHeightPx || resolvedZones.footer?.height || 36; const onMove = (me) => { setProject((p) => ({ ...p, layout: { ...p.layout, footerHeightPx: Math.max(24, Math.min(120, Math.round(startH + me.clientY - startY))) } })); }; const onUp = () => { if (map) map.dragging.enable(); document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); }; document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp); }} />
+            {makeResizeHandles('bl', {
+              elemId: 'footer', startW: resolvedZones.footer?.width ?? 260, startH: project.layout.footerHeightPx || resolvedZones.footer?.height || 28,
+              minW: 80, maxW: 600, minH: 22, maxH: 200,
+              applyW: null, applyH: (h) => updateLayout({ footerHeightPx: h }),
+            })}
           </div>
         ) : null}
         {project.layout.logo ? (

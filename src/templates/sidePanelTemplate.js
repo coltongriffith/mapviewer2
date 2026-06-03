@@ -130,10 +130,12 @@ export function resolveSidePanelZones(template, layout, mapSize, legendItems) {
   // --- Stack from BOTTOM ---
   let bottomY = H - margin;
 
-  const footerH = 22;
-  const footerZone = layout?.footerEnabled && layout?.footerText
+  const footerH = layout?.footerHeightPx ? Math.max(22, Math.min(200, layout.footerHeightPx)) : 28;
+  let footerZone = layout?.footerEnabled && layout?.footerText
     ? { top: bottomY - footerH, left: sbLeft + margin, width: innerW, height: footerH }
     : { top: 0, left: 0, width: 0, height: 0 };
+  if (sp.footer?.top != null && layout?.footerEnabled && layout?.footerText)
+    footerZone = { ...footerZone, top: sp.footer.top };
   if (layout?.footerEnabled && layout?.footerText) bottomY -= footerH + 6;
 
   let titleZone = { top: bottomY - titleHeight, left: sbLeft + margin, width: innerW, height: titleHeight };

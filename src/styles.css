@@ -925,7 +925,7 @@ button, input, select, textarea { font: inherit; }
 .panel-delete-btn:hover { background: rgba(220,38,38,1); }
 /* Selection outline + grab cursor on hover */
 .template-zone { cursor: grab; }
-.template-zone:hover { outline: 2px solid rgba(37, 99, 235, 0.55); outline-offset: 2px; }
+.template-zone:hover { outline: 2px solid rgba(37, 99, 235, 0.55); outline-offset: 2px; z-index: 420 !important; }
 body.is-dragging { cursor: grabbing !important; user-select: none; }
 body.is-dragging * { cursor: grabbing !important; }
 
