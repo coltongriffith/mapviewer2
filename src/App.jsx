@@ -32,7 +32,7 @@ import { applyRoleToLayer, inferRoleFromLayer } from './mapPresets';
 import { getTemplate } from './templates';
 import { buildLegendItems, resolveTemplateZones } from './templates/technicalResultsTemplate';
 import { resolveNI43101Zones } from './templates/technicalReportTemplate';
-import { resolveSidePanelZones } from './templates/sidePanelTemplate';
+import { resolveSidePanelZones, sidebarSlotTops, mapSlotPositions, SIDEBAR_SLOT_NAMES, SIDEBAR_SLOT_LABELS } from './templates/sidePanelTemplate';
 import { geojsonBounds, geojsonCenter, unionBounds } from './utils/geometry';
 import { markerSvgUrl } from './utils/leaflet';
 import { detectRegion } from './utils/detectRegion';
@@ -1067,96 +1067,130 @@ export default function App() {
     }));
   };
 
+  const SP_SIDEBAR_ELEMENTS = ['inset', 'legend', 'logo', 'title'];
+
   const makeDragHandler = (id, ghostW, ghostH) => (e) => {
     if (e.target.closest('.panel-resize-handle') || e.target.closest('.panel-delete-btn')) return;
     e.preventDefault();
     const map = leafletMapRef.current;
     if (map) map.dragging.disable();
     const isSidePanel = project.layout.templateId === 'side_panel';
-    // In side panel mode, these elements live in the sidebar column; others stay on the map
-    const SIDEBAR_ELEMENTS = ['inset', 'legend', 'logo', 'title'];
-    const isInSidebar = isSidePanel && SIDEBAR_ELEMENTS.includes(id);
-    const isMapInSidePanel = isSidePanel && !SIDEBAR_ELEMENTS.includes(id);
+    const isInSidebar = isSidePanel && SP_SIDEBAR_ELEMENTS.includes(id);
+    const isMapInSidePanel = isSidePanel && !SP_SIDEBAR_ELEMENTS.includes(id);
     const layoutSnapshot = project.layout;
     let currentHoverZone = null;
+    let currentSidebarSlot = null;
+    let currentMapSlot = null;
     let finalClientX = e.clientX, finalClientY = e.clientY;
     const effectiveGhostW = isInSidebar
       ? Math.max(ghostW, (resolvedZonesRef.current?.sidebar?.width ?? 0) - 32)
       : ghostW;
+
+    // Pre-compute slot arrays from current resolved zones
+    const getSidebarSlots = () => {
+      const sidebar = resolvedZonesRef.current?.sidebar;
+      if (!sidebar) return [];
+      return sidebarSlotTops(sidebar.top, sidebar.height).map((top, i) => ({
+        id: SIDEBAR_SLOT_NAMES[i], label: SIDEBAR_SLOT_LABELS[i], top,
+      }));
+    };
+    const getMapSlots = () => {
+      const sbLeft = resolvedZonesRef.current?.sidebar?.left ?? Math.round(mapSize.width * 0.72);
+      return Object.entries(mapSlotPositions(sbLeft, mapSize.height)).map(([key, pos]) => ({ id: key, ...pos }));
+    };
+
     setDragging({ id, hoverZone: null, ghostX: e.clientX, ghostY: e.clientY, ghostW: effectiveGhostW, ghostH });
+
     const onMove = (me) => {
       finalClientX = me.clientX;
       finalClientY = me.clientY;
+
       if (isInSidebar) {
-        setDragging((d) => d ? { ...d, ghostX: me.clientX, ghostY: me.clientY } : null);
-        // Compute alignment guides from other sidebar zones
-        const guides = [];
-        for (const [zid, z] of Object.entries(resolvedZonesRef.current || {})) {
-          if (zid === id || zid === 'sidebar' || !(z?.height > 0 && z?.top > 0)) continue;
-          // Only guide lines from sidebar elements (left edge in sidebar)
-          if (z.left >= (resolvedZonesRef.current?.sidebar?.left ?? Infinity) - 20) {
-            guides.push({ type: 'h', pos: z.top });
-            guides.push({ type: 'h', pos: z.top + Math.round(z.height / 2) });
-            guides.push({ type: 'h', pos: z.top + z.height });
-          }
-        }
-        setResizeGuides(guides);
+        const container = mapContainerRef.current;
+        const rect = container?.getBoundingClientRect();
+        if (!rect) return;
+        const cursorY = me.clientY - rect.top;
+        const slots = getSidebarSlots();
+        let bestIdx = 0, bestDist = Infinity;
+        slots.forEach((s, i) => { const d = Math.abs(cursorY - s.top); if (d < bestDist) { bestDist = d; bestIdx = i; } });
+        currentSidebarSlot = slots[bestIdx]?.id ?? null;
+        // Snap ghost Y to slot top + half element height
+        const snappedClientY = slots[bestIdx] ? rect.top + slots[bestIdx].top + (ghostH || 80) / 2 : me.clientY;
+        setDragging((d) => d ? { ...d, ghostX: me.clientX, ghostY: snappedClientY, hoverSlot: currentSidebarSlot } : null);
         return;
       }
+
       if (isMapInSidePanel) {
-        setDragging((d) => d ? { ...d, ghostX: me.clientX, ghostY: me.clientY } : null);
+        const container = mapContainerRef.current;
+        const rect = container?.getBoundingClientRect();
+        if (!rect) return;
+        const cursorX = me.clientX - rect.left;
+        const cursorY = me.clientY - rect.top;
+        const zW = ghostW || 80, zH = ghostH || 48;
+        const slots = getMapSlots();
+        let bestKey = null, bestDist = Infinity;
+        slots.forEach((s) => {
+          const d = Math.hypot(cursorX - (s.left + zW / 2), cursorY - (s.top + zH / 2));
+          if (d < bestDist) { bestDist = d; bestKey = s.id; }
+        });
+        currentMapSlot = bestKey;
+        const sp = slots.find(s => s.id === bestKey);
+        const snappedClientX = sp ? rect.left + sp.left + zW / 2 : me.clientX;
+        const snappedClientY = sp ? rect.top + sp.top + zH / 2 : me.clientY;
+        setDragging((d) => d ? { ...d, ghostX: snappedClientX, ghostY: snappedClientY, hoverMapSlot: bestKey } : null);
         return;
       }
+
+      // Standard template: detect drop zone hover via data-slot elements
       const el = document.elementFromPoint(me.clientX, me.clientY);
       const zoneEl = el?.closest('[data-slot]');
       const hz = zoneEl ? { corner: zoneEl.dataset.corner, slot: zoneEl.dataset.slot } : null;
       currentHoverZone = hz;
       setDragging((d) => d ? { ...d, ghostX: me.clientX, ghostY: me.clientY, hoverZone: hz } : null);
     };
+
     const onUp = () => {
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
       if (map) map.dragging.enable();
+
       if (isInSidebar) {
         setResizeGuides([]);
         const container = mapContainerRef.current;
         if (container) {
-          const rect = container.getBoundingClientRect();
-          const sidebar = resolvedZonesRef.current?.sidebar;
-          const zH = ghostH || 80;
-          const minTop = sidebar ? sidebar.top + 8 : 8;
-          const maxTop = sidebar ? sidebar.top + sidebar.height - zH - 8 : (mapSize.height - zH - 8);
-          const rawY = Math.round(finalClientY - rect.top - zH / 2);
-          let clampedTop = Math.max(minTop, Math.min(maxTop, rawY));
-          // Snap to nearest sidebar guide
-          const guides = [];
-          for (const [zid, z] of Object.entries(resolvedZonesRef.current || {})) {
-            if (zid === id || zid === 'sidebar' || !(z?.height > 0 && z?.top > 0)) continue;
-            if (z.left >= (resolvedZonesRef.current?.sidebar?.left ?? Infinity) - 20) {
-              guides.push(z.top, z.top + Math.round(z.height / 2), z.top + z.height);
-            }
-          }
-          for (const g of guides) {
-            if (Math.abs(clampedTop - g) <= SNAP_THRESHOLD) { clampedTop = g; break; }
-          }
+          const slots = getSidebarSlots();
+          const slotIdx = SIDEBAR_SLOT_NAMES.indexOf(currentSidebarSlot);
+          const snappedTop = slotIdx >= 0 ? slots[slotIdx].top : (() => {
+            // Fallback: nearest slot to raw cursor position
+            const rect = container.getBoundingClientRect();
+            const cursorY = finalClientY - rect.top;
+            let best = slots[0], bestDist = Infinity;
+            slots.forEach(s => { const d = Math.abs(cursorY - s.top); if (d < bestDist) { bestDist = d; best = s; } });
+            return best?.top ?? 0;
+          })();
           setProject((p) => ({
             ...p,
             layout: {
               ...p.layout,
-              sidePanelPositions: { ...(p.layout.sidePanelPositions || {}), [id]: { top: clampedTop } },
+              sidePanelPositions: { ...(p.layout.sidePanelPositions || {}), [id]: { top: snappedTop } },
             },
           }));
         }
       } else if (isMapInSidePanel) {
-        // Free-drag on map area — save both x and y
         const container = mapContainerRef.current;
         if (container) {
           const rect = container.getBoundingClientRect();
           const zW = ghostW || 80, zH = ghostH || 48;
-          const rawX = Math.round(finalClientX - rect.left - zW / 2);
-          const rawY = Math.round(finalClientY - rect.top - zH / 2);
-          const clampedLeft = Math.max(8, Math.min(mapSize.width - zW - 8, rawX));
-          const clampedTop = Math.max(8, Math.min(mapSize.height - zH - 8, rawY));
+          const slots = getMapSlots();
+          const sp = slots.find(s => s.id === currentMapSlot) || (() => {
+            // Fallback: nearest slot to raw cursor position
+            const cursorX = finalClientX - rect.left, cursorY = finalClientY - rect.top;
+            let best = slots[0], bestDist = Infinity;
+            slots.forEach(s => { const d = Math.hypot(cursorX - s.left, cursorY - s.top); if (d < bestDist) { bestDist = d; best = s; } });
+            return best;
+          })();
+          const clampedLeft = Math.max(8, Math.min(mapSize.width - zW - 8, sp.left));
+          const clampedTop = Math.max(8, Math.min(mapSize.height - zH - 8, sp.top));
           setProject((p) => ({
             ...p,
             layout: {
@@ -1175,6 +1209,7 @@ export default function App() {
       }
       setDragging(null);
     };
+
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);
   };
@@ -3700,30 +3735,57 @@ export default function App() {
         {resizeGuides.map((g, i) => (
           <div key={i} className={`resize-guide resize-guide--${g.type}`} style={g.type === 'v' ? { left: g.pos } : { top: g.pos }} />
         ))}
-        {dragging && ['tl','tr','bl','br'].map((corner) => {
-          const isTop = corner[0] === 't';
-          const isLeft = corner[1] === 'l';
+        {/* Standard template: quadrant grid overlay + corner drop zones */}
+        {dragging && project.layout.templateId !== 'side_panel' && (() => {
           const hz = dragging.hoverZone;
-          const isHov = (slot) => hz?.corner === corner && hz?.slot === slot;
-          const firstLabel = isLeft ? '◤ Corner' : 'Corner ◥';
-          const stackLabel = isTop ? '↓ Stack' : '↑ Stack';
-          const firstCell = (
-            <div key="first" className={`dzs dzs-first${isHov('first') ? ' dzs--hover' : ''}`} data-corner={corner} data-slot="first">{firstLabel}</div>
-          );
-          const besideCell = (
-            <div key="beside" className={`dzs dzs-beside${isHov('beside') ? ' dzs--hover' : ''}`} data-corner={corner} data-slot="beside">⊞ Beside</div>
-          );
-          const stackCell = (
-            <div key="last" className={`dzs dzs-last${isHov('last') ? ' dzs--hover' : ''}`} data-corner={corner} data-slot="last">{stackLabel}</div>
-          );
-          const topRow = <div className="dzs-row">{isLeft ? [firstCell, besideCell] : [besideCell, firstCell]}</div>;
-          const bottomRow = <div className="dzs-row">{stackCell}</div>;
           return (
-            <div key={corner} className={`drop-zone-cluster drop-zone-cluster--${corner}`}>
-              {isTop ? <>{topRow}{bottomRow}</> : <>{bottomRow}{topRow}</>}
-            </div>
+            <>
+              <div className="canvas-drag-guide-v" />
+              <div className="canvas-drag-guide-h" />
+              {['tl','tr','bl','br'].map((corner) => {
+                const isTop = corner[0] === 't';
+                const isLeft = corner[1] === 'l';
+                const isHov = (slot) => hz?.corner === corner && hz?.slot === slot;
+                const firstLabel = isLeft ? '◤ Corner' : 'Corner ◥';
+                const stackLabel = isTop ? '↓ Stack below' : '↑ Stack above';
+                return (
+                  <div key={corner} className={`canvas-quadrant canvas-quadrant--${corner}${hz?.corner === corner ? ' canvas-quadrant--active' : ''}`}>
+                    <div className="canvas-quadrant-inner">
+                      <div className={`dzs dzs-first${isHov('first') ? ' dzs--hover' : ''}`} data-corner={corner} data-slot="first">{firstLabel}</div>
+                      <div className={`dzs dzs-beside${isHov('beside') ? ' dzs--hover' : ''}`} data-corner={corner} data-slot="beside">⊞ Side by side</div>
+                      <div className={`dzs dzs-last${isHov('last') ? ' dzs--hover' : ''}`} data-corner={corner} data-slot="last">{stackLabel}</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </>
           );
-        })}
+        })()}
+        {/* Side panel template: sidebar slot strips + map area slot targets */}
+        {dragging && project.layout.templateId === 'side_panel' && (() => {
+          const sidebar = resolvedZonesRef.current?.sidebar;
+          const sbLeft = sidebar?.left ?? Math.round(mapSize.width * 0.72);
+          const sbW = sidebar?.width ?? Math.round(mapSize.width * 0.28);
+          const sbTop = sidebar?.top ?? 0;
+          const sbH = sidebar?.height ?? mapSize.height;
+          const isSbEl = SP_SIDEBAR_ELEMENTS.includes(dragging.id);
+          if (isSbEl) {
+            const slots = sidebarSlotTops(sbTop, sbH).map((top, i) => ({ id: SIDEBAR_SLOT_NAMES[i], label: SIDEBAR_SLOT_LABELS[i], top }));
+            return slots.map(s => (
+              <div key={s.id} className={`sp-slot-strip${dragging.hoverSlot === s.id ? ' sp-slot-strip--active' : ''}`}
+                style={{ top: s.top, left: sbLeft, width: sbW }}>
+                <span className="sp-slot-label">{s.label}</span>
+              </div>
+            ));
+          } else {
+            const slots = Object.entries(mapSlotPositions(sbLeft, mapSize.height)).map(([key, pos]) => ({ id: key, ...pos }));
+            const zW = dragging.ghostW || 80, zH = dragging.ghostH || 48;
+            return slots.map(s => (
+              <div key={s.id} className={`sp-map-slot${dragging.hoverMapSlot === s.id ? ' sp-map-slot--active' : ''}`}
+                style={{ left: s.left, top: s.top, width: zW, height: zH }} />
+            ));
+          }
+        })()}
           </div>
         </div>
       </div>

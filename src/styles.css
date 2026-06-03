@@ -58,6 +58,36 @@ button, input, select, textarea { font: inherit; }
 .dzs-beside { width: 80px; }
 .dzs-last { width: 164px; }
 .dzs--hover { background: rgba(37, 99, 235, 0.22); border-color: #2563eb; border-style: solid; color: #1e3a8a; }
+
+/* ── Standard template: quadrant grid overlay ── */
+.canvas-quadrant { position: absolute; z-index: 8500; pointer-events: none; border: 1px dashed rgba(147,197,253,0.4); transition: background 0.12s, border-color 0.12s; }
+.canvas-quadrant--tl { top: 0; left: 0; width: 50%; height: 50%; }
+.canvas-quadrant--tr { top: 0; right: 0; width: 50%; height: 50%; }
+.canvas-quadrant--bl { bottom: 0; left: 0; width: 50%; height: 50%; }
+.canvas-quadrant--br { bottom: 0; right: 0; width: 50%; height: 50%; }
+.canvas-quadrant--active { background: rgba(219,234,254,0.15); border-color: #93c5fd; border-style: solid; }
+.canvas-quadrant-inner { position: absolute; display: flex; flex-direction: column; gap: 5px; pointer-events: auto; padding: 10px; }
+.canvas-quadrant--tl .canvas-quadrant-inner { top: 10px; left: 10px; }
+.canvas-quadrant--tr .canvas-quadrant-inner { top: 10px; right: 10px; align-items: flex-end; }
+.canvas-quadrant--bl .canvas-quadrant-inner { bottom: 10px; left: 10px; }
+.canvas-quadrant--br .canvas-quadrant-inner { bottom: 10px; right: 10px; align-items: flex-end; }
+.canvas-quadrant .dzs { height: 38px; font-size: 12px; }
+.canvas-quadrant .dzs-first { width: 116px; }
+.canvas-quadrant .dzs-beside { width: 116px; }
+.canvas-quadrant .dzs-last { width: 210px; }
+.canvas-drag-guide-v { position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: rgba(147,197,253,0.45); pointer-events: none; z-index: 8400; }
+.canvas-drag-guide-h { position: absolute; top: 50%; left: 0; right: 0; height: 1px; background: rgba(147,197,253,0.45); pointer-events: none; z-index: 8400; }
+
+/* ── Side panel template: sidebar slot strips ── */
+.sp-slot-strip { position: absolute; z-index: 8600; height: 36px; transform: translateY(-18px); border: 2px dashed rgba(37,99,235,0.35); border-radius: 6px; background: rgba(219,234,254,0.22); pointer-events: none; display: flex; align-items: center; padding-left: 10px; transition: background 0.1s, border-color 0.1s; }
+.sp-slot-strip--active { border-color: #2563eb; border-style: solid; background: rgba(37,99,235,0.13); }
+.sp-slot-label { font-size: 10px; font-weight: 700; color: rgba(29,78,216,0.65); text-transform: uppercase; letter-spacing: 0.07em; font-family: system-ui, sans-serif; user-select: none; }
+.sp-slot-strip--active .sp-slot-label { color: #1d4ed8; }
+
+/* ── Side panel template: map area slot targets ── */
+.sp-map-slot { position: absolute; z-index: 8600; border: 2px dashed rgba(37,99,235,0.4); border-radius: 5px; background: rgba(219,234,254,0.22); pointer-events: none; transition: background 0.1s, border-color 0.1s; }
+.sp-map-slot--active { border-color: #2563eb; border-style: solid; background: rgba(37,99,235,0.16); box-shadow: 0 0 0 3px rgba(37,99,235,0.10); }
+
 .onboarding-card { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 12px 14px; margin-bottom: 12px; }
 .onboarding-title { font-size: 13px; font-weight: 600; color: #1d4ed8; margin-bottom: 8px; }
 .onboarding-steps { margin: 0; padding-left: 18px; display: grid; gap: 5px; }

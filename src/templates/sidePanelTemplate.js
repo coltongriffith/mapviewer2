@@ -156,6 +156,46 @@ export function resolveSidePanelZones(template, layout, mapSize, legendItems) {
   };
 }
 
+// ─── Grid slot system ───────────────────────────────────────────────────────
+
+/** Fractional Y positions within sidebar height for the 5 sidebar slots */
+export const SIDEBAR_SLOT_FRACS = [0.04, 0.22, 0.42, 0.60, 0.76];
+export const SIDEBAR_SLOT_NAMES = ['slot-a', 'slot-b', 'slot-c', 'slot-d', 'slot-e'];
+export const SIDEBAR_SLOT_LABELS = ['Top', 'Upper', 'Middle', 'Lower', 'Bottom'];
+
+/** Map area slots: [xFrac, yFrac] within the left (map) portion of the canvas */
+export const MAP_SLOT_DEFS = {
+  'map-tl': [0.03, 0.04],
+  'map-tc': [0.40, 0.04],
+  'map-tr': [0.76, 0.04],
+  'map-bl': [0.03, 0.88],
+  'map-bc': [0.40, 0.88],
+  'map-br': [0.76, 0.88],
+};
+
+/**
+ * Returns the 5 sidebar slot Y positions (absolute canvas pixels).
+ * sbTop: top edge of sidebar in canvas coords
+ * sbH: height of sidebar
+ */
+export function sidebarSlotTops(sbTop, sbH) {
+  return SIDEBAR_SLOT_FRACS.map(f => Math.round(sbTop + f * sbH));
+}
+
+/**
+ * Returns pixel {left, top} for each map slot, sized to the element being dragged.
+ * mapAreaW: width of the left map area (= sbLeft)
+ * mapH: full canvas height
+ */
+export function mapSlotPositions(mapAreaW, mapH) {
+  return Object.fromEntries(
+    Object.entries(MAP_SLOT_DEFS).map(([key, [xf, yf]]) => [
+      key,
+      { left: Math.round(xf * mapAreaW), top: Math.round(yf * mapH) },
+    ])
+  );
+}
+
 export function buildSidePanelLegendItems(layers, layout) {
   const items = [];
   for (const layer of (layers || [])) {
