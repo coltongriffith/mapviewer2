@@ -77,7 +77,9 @@ export function resolveSidePanelZones(template, layout, mapSize, legendItems) {
   const logoW = layout?.logoWidthPx ? Math.max(40, Math.min(innerW, layout.logoWidthPx)) : Math.min(innerW, Math.round(innerW * 0.75));
   const naH = layout?.northArrowHeightPx ?? 72;
   const naW = Math.round(naH * 0.9);
-  const scaleBarH = 48;
+  const footerH = layout?.footerHeightPx ? Math.max(22, Math.min(200, layout.footerHeightPx)) : 28;
+  const scaleBarW = layout?.scaleBarWidthPx || 160;
+  const scaleBarActualH = layout?.scaleBarHeightPx ?? 48;
 
   // Inset: full inner width, height = 22% of canvas or user-set
   const insetEnabled = layout?.insetEnabled !== false;
@@ -86,28 +88,45 @@ export function resolveSidePanelZones(template, layout, mapSize, legendItems) {
     : Math.round(H * 0.22);
   const insetW = innerW;
 
-  const sp = layout?.sidePanelPositions || {};
+  // Determine which elements are in the sidebar grid
+  const grid = layout?.sidePanelGrid || layout?.sidePanelOrder || ['inset', 'legend', 'logo'];
+  const gridHas = (eid) => grid.some(item => Array.isArray(item) ? item.includes(eid) : item === eid);
+  const northArrowInGrid = gridHas('northArrow');
+  const scaleBarInGrid = gridHas('scaleBar');
 
-  // --- Stack from TOP in configurable order ---
-  const order = layout?.sidePanelOrder || ['inset', 'legend', 'logo'];
+  // --- Zone accumulators ---
   let insetZone = { top: 0, left: 0, width: 0, height: 0 };
-  let legendZone = { top: margin, left: sbLeft + margin, width: innerW, height: legendHeight };
+  let legendZone = { top: 0, left: 0, width: 0, height: 0 };
   let logoZone = { top: 0, left: 0, width: 0, height: 0 };
+  let titleZone = { top: 0, left: 0, width: 0, height: 0 };
+  let footerZone = { top: 0, left: 0, width: 0, height: 0 };
+  let northArrowZone = { top: 0, left: 0, width: 0, height: 0 };
+  let scaleBarZone = { top: 0, left: 0, width: 0, height: 0 };
 
   const getElemH = (eid) => {
     if (eid === 'inset') return insetEnabled ? insetH : 0;
     if (eid === 'legend') return legendHeight;
     if (eid === 'logo') return layout?.logo ? logoH : 0;
+    if (eid === 'title') return titleHeight;
+    if (eid === 'footer') return layout?.footerEnabled && layout?.footerText ? footerH : 0;
+    if (eid === 'northArrow') return naH;
+    if (eid === 'scaleBar') return scaleBarActualH;
     return 0;
   };
   const setElemZone = (eid, top, left, width, height) => {
-    if (eid === 'inset') insetZone = { top, left, width, height };
-    else if (eid === 'legend') legendZone = { top, left, width, height };
-    else if (eid === 'logo') logoZone = { top, left, width, height };
+    const z = { top, left, width, height };
+    if (eid === 'inset') insetZone = z;
+    else if (eid === 'legend') legendZone = z;
+    else if (eid === 'logo') logoZone = z;
+    else if (eid === 'title') titleZone = z;
+    else if (eid === 'footer') footerZone = z;
+    else if (eid === 'northArrow') northArrowZone = z;
+    else if (eid === 'scaleBar') scaleBarZone = z;
   };
 
+  // --- Stack from TOP in configurable grid order ---
   let stackY = margin;
-  for (const item of order) {
+  for (const item of grid) {
     if (Array.isArray(item)) {
       // Two elements side by side (column split)
       const [id1, id2] = item;
@@ -127,51 +146,43 @@ export function resolveSidePanelZones(template, layout, mapSize, legendItems) {
     }
   }
 
-  // --- Stack from BOTTOM ---
-  let bottomY = H - margin;
-
-  const footerH = layout?.footerHeightPx ? Math.max(22, Math.min(200, layout.footerHeightPx)) : 28;
-  let footerZone = layout?.footerEnabled && layout?.footerText
-    ? { top: bottomY - footerH, left: sbLeft + margin, width: innerW, height: footerH }
-    : { top: 0, left: 0, width: 0, height: 0 };
-  if (sp.footer?.top != null && layout?.footerEnabled && layout?.footerText)
-    footerZone = { ...footerZone, top: sp.footer.top };
-  if (layout?.footerEnabled && layout?.footerText) bottomY -= footerH + 6;
-
-  let titleZone = { top: bottomY - titleHeight, left: sbLeft + margin, width: innerW, height: titleHeight };
-  if (sp.title?.top != null) titleZone = { ...titleZone, top: sp.title.top };
-
-  // North arrow and scale bar live on the MAP area (left portion), not in the sidebar
+  // --- North arrow and scale bar in MAP area (when not in grid) ---
   const mapW = sbLeft;
-  const scaleBarW = layout?.scaleBarWidthPx || 160;
-  const scaleBarActualH = layout?.scaleBarHeightPx ?? 48;
 
-  let northArrowZone = {
-    top: H - margin - naH,
-    left: mapW - margin - naW,
-    width: naW,
-    height: naH,
-  };
-  if (sp.northArrow?.top != null) northArrowZone = { ...northArrowZone, top: sp.northArrow.top };
-  if (sp.northArrow?.left != null) northArrowZone = { ...northArrowZone, left: sp.northArrow.left };
+  if (!northArrowInGrid) {
+    const sp = layout?.sidePanelPositions || {};
+    northArrowZone = {
+      top: H - margin - naH,
+      left: mapW - margin - naW,
+      width: naW,
+      height: naH,
+    };
+    if (sp.northArrow?.top != null) northArrowZone = { ...northArrowZone, top: sp.northArrow.top };
+    if (sp.northArrow?.left != null) northArrowZone = { ...northArrowZone, left: sp.northArrow.left };
+  }
 
-  let scaleBarZone = {
-    top: H - margin - scaleBarActualH,
-    left: margin,
-    width: scaleBarW,
-    height: scaleBarActualH,
-  };
-  if (sp.scaleBar?.top != null) scaleBarZone = { ...scaleBarZone, top: sp.scaleBar.top };
-  if (sp.scaleBar?.left != null) scaleBarZone = { ...scaleBarZone, left: sp.scaleBar.left };
+  if (!scaleBarInGrid) {
+    const sp = layout?.sidePanelPositions || {};
+    scaleBarZone = {
+      top: H - margin - scaleBarActualH,
+      left: margin,
+      width: scaleBarW,
+      height: scaleBarActualH,
+    };
+    if (sp.scaleBar?.top != null) scaleBarZone = { ...scaleBarZone, top: sp.scaleBar.top };
+    if (sp.scaleBar?.left != null) scaleBarZone = { ...scaleBarZone, left: sp.scaleBar.left };
+  }
 
-  // Resolve overlap: if northArrow and scaleBar zones intersect, stack scaleBar below northArrow
-  const naR = northArrowZone.left + northArrowZone.width;
-  const sbR = scaleBarZone.left + scaleBarZone.width;
-  const xOverlap = northArrowZone.left < sbR && scaleBarZone.left < naR;
-  const yOverlap = northArrowZone.top < scaleBarZone.top + scaleBarZone.height &&
-                   scaleBarZone.top < northArrowZone.top + northArrowZone.height;
-  if (xOverlap && yOverlap) {
-    scaleBarZone = { ...scaleBarZone, top: northArrowZone.top + northArrowZone.height + gap };
+  // Resolve overlap: if northArrow and scaleBar are both in map area and intersect, push scaleBar below northArrow
+  if (!northArrowInGrid && !scaleBarInGrid) {
+    const naR = northArrowZone.left + northArrowZone.width;
+    const sbR2 = scaleBarZone.left + scaleBarZone.width;
+    const xOverlap = northArrowZone.left < sbR2 && scaleBarZone.left < naR;
+    const yOverlap = northArrowZone.top < scaleBarZone.top + scaleBarZone.height &&
+                     scaleBarZone.top < northArrowZone.top + northArrowZone.height;
+    if (xOverlap && yOverlap) {
+      scaleBarZone = { ...scaleBarZone, top: northArrowZone.top + northArrowZone.height + gap };
+    }
   }
 
   // Sidebar background — full height right panel

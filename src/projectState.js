@@ -120,6 +120,13 @@ export function createInitialProjectState() {
       cornerLayout: null,
       sidePanelPositions: {},
       sidePanelOrder: ['inset', 'legend', 'logo'],
+      sidePanelGrid: [
+        'inset',
+        'legend',
+        'logo',
+        'title',
+        'footer',
+      ],
       scaleBarHeightPx: 48,
       insetRegionFill: null,
       insetRegionStroke: null,
