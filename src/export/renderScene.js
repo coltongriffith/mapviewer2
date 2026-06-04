@@ -354,6 +354,7 @@ function drawTitleBlockCanvas(ctx, scene, scale) {
   const theme = getTheme(scene);
   const layout = scene.project.layout || {};
   const { title } = getOverlayMetrics(scene); const x = title.left * scale, y = title.top * scale, w = title.width * scale, h = title.height * scale;
+  if (!w || !h) return;
   if (!layout.titleTransparent) drawPanelRect(ctx, x, y, w, h, (theme.titleRadius ?? theme.panelRadius ?? 10) * scale, theme.titleFill, theme.titleBorder, scale);
   const leftBar = theme.titleAccent && theme.titleAccentStyle === 'left';
   if (theme.titleAccent) {
@@ -365,6 +366,9 @@ function drawTitleBlockCanvas(ctx, scene, scale) {
   const tfs = layout.titleFontScale ?? 1;
   const textX = (x + (leftBar ? 22 : 18) * scale);
   const topOff = (theme.titleAccent && !leftBar) ? 20 : 16;
+  // Clip text to title zone bounds — matches CSS overflow:hidden in live preview
+  ctx.save();
+  ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
   ctx.fillStyle = theme.titleText; ctx.font = `700 ${26 * scale * tfs}px ${titleFont}`; ctx.textBaseline = 'top'; ctx.fillText(layout.title || 'Project Map', textX, y + topOff * scale);
   ctx.fillStyle = theme.subtitleText; ctx.font = `${14 * scale * tfs}px ${titleFont}`; ctx.fillText(layout.subtitle || '', textX, y + (topOff + 34 * tfs) * scale);
   // Metadata rows (date / project # / scale note) — right-aligned in title block
@@ -378,6 +382,7 @@ function drawTitleBlockCanvas(ctx, scene, scale) {
     metaItems.forEach((item, i) => { ctx.fillText(item, rightX, y + (topOff + 2 + i * 14 * tfs) * scale); });
     ctx.textAlign = savedAlign;
   }
+  ctx.restore();
 }
 
 function groupLegendItems(items, layout) {
@@ -417,6 +422,9 @@ function drawLegendCanvas(ctx, scene, scale) {
   if (!scene.project.layout?.legendTransparent) drawPanelRect(ctx, x, y, w, h, (theme.panelRadius ?? 10) * scale, theme.panelFill, theme.panelBorder, scale);
   drawPanelAccentLeft(ctx, x, y, h, theme, scale);
   const leftPad = theme.panelAccentLeft ? 20 : 16;
+  // Clip legend content to zone bounds — matches CSS overflow:hidden in live preview
+  ctx.save();
+  ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
   ctx.fillStyle = theme.panelTitle; ctx.font = `700 ${15 * scale * lfs}px ${legendFont}`; ctx.textBaseline = 'top'; ctx.fillText(scene.project.layout?.legendTitle || 'Legend', x + leftPad * scale, y + 14 * scale);
   const lp = (theme.panelAccentLeft ? 20 : 16) * scale;
   let rowY = y + 40 * scale;
@@ -441,6 +449,7 @@ function drawLegendCanvas(ctx, scene, scale) {
     });
     rowY += 6 * scale;
   });
+  ctx.restore();
 }
 
 function drawNorthArrowCanvas(ctx, scene, scale) {
