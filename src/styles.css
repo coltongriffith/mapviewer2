@@ -46,18 +46,35 @@ button, input, select, textarea { font: inherit; }
 .sidebar-home-link:hover { color: #2563eb; }
 .sample-data-link { background: none; border: none; padding: 0; color: #2563eb; font-size: 13px; cursor: pointer; text-align: left; margin-top: 12px; font-family: inherit; display: block; }
 .sample-data-link:hover { text-decoration: underline; }
-.drag-ghost { position: fixed; pointer-events: none; background: rgba(37, 99, 235, 0.15); border: 2px dashed #2563eb; border-radius: 8px; z-index: 9999; transform: translate(-50%, -50%); }
-.drop-zone-cluster { position: absolute; z-index: 9000; display: flex; flex-direction: column; gap: 4px; pointer-events: none; }
+.drag-ghost { position: fixed; left: var(--ghost-x, -9999px); top: var(--ghost-y, -9999px); pointer-events: none; background: rgba(37, 99, 235, 0.15); border: 2px dashed #2563eb; border-radius: 8px; z-index: 9999; transform: translate(-50%, -50%); }
+/* ── Standard template: corner drop zone clusters ── */
+.drop-zone-cluster { position: absolute; z-index: 9000; display: flex; flex-direction: column; gap: 4px; pointer-events: none; width: 180px; }
 .drop-zone-cluster--tl { top: 12px; left: 12px; }
 .drop-zone-cluster--tr { top: 12px; right: 12px; }
 .drop-zone-cluster--bl { bottom: 12px; left: 12px; }
 .drop-zone-cluster--br { bottom: 12px; right: 12px; }
-.dzs-row { display: flex; gap: 4px; }
-.dzs { pointer-events: auto; border: 2px dashed #93c5fd; border-radius: 6px; background: rgba(219, 234, 254, 0.6); color: #1d4ed8; font-size: 11px; font-weight: 600; font-family: system-ui, sans-serif; display: flex; align-items: center; justify-content: center; height: 34px; white-space: nowrap; transition: background 0.1s, border-color 0.1s; user-select: none; cursor: default; backdrop-filter: blur(2px); }
-.dzs-first { width: 80px; }
-.dzs-beside { width: 80px; }
-.dzs-last { width: 164px; }
-.dzs--hover { background: rgba(37, 99, 235, 0.22); border-color: #2563eb; border-style: solid; color: #1e3a8a; }
+.dzs { width: 100%; pointer-events: auto; border: 2px dashed #93c5fd; border-radius: 6px; background: rgba(219,234,254,0.72); color: #1d4ed8; font-size: 11px; font-weight: 600; font-family: system-ui, sans-serif; display: flex; align-items: center; justify-content: center; height: 36px; white-space: nowrap; transition: background 0.1s, border-color 0.1s; user-select: none; cursor: default; backdrop-filter: blur(3px); }
+.dzs--hover { background: rgba(37,99,235,0.22); border-color: #2563eb; border-style: solid; color: #1e3a8a; }
+.canvas-drag-guide-v { position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: rgba(147,197,253,0.45); pointer-events: none; z-index: 8400; }
+.canvas-drag-guide-h { position: absolute; top: 50%; left: 0; right: 0; height: 1px; background: rgba(147,197,253,0.45); pointer-events: none; z-index: 8400; }
+
+/* ── Side panel template: sidebar grid cells (shown during drag) ── */
+.sp-grid-cell {
+  position: absolute; z-index: 8600; pointer-events: none;
+  border: 1.5px dashed rgba(147,197,253,0.5); border-radius: 5px;
+  background: rgba(219,234,254,0.06);
+  transition: background 0.08s, border-color 0.08s;
+}
+.sp-grid-cell--active {
+  border-color: #2563eb; border-style: solid;
+  background: rgba(37,99,235,0.13);
+  box-shadow: 0 0 0 2px rgba(37,99,235,0.12);
+}
+
+/* ── Side panel template: map area slot targets ── */
+.sp-map-slot { position: absolute; z-index: 8600; border: 2px dashed rgba(37,99,235,0.4); border-radius: 5px; background: rgba(219,234,254,0.22); pointer-events: none; transition: background 0.1s, border-color 0.1s; }
+.sp-map-slot--active { border-color: #2563eb; border-style: solid; background: rgba(37,99,235,0.16); box-shadow: 0 0 0 3px rgba(37,99,235,0.10); }
+
 .onboarding-card { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 12px 14px; margin-bottom: 12px; }
 .onboarding-title { font-size: 13px; font-weight: 600; color: #1d4ed8; margin-bottom: 8px; }
 .onboarding-steps { margin: 0; padding-left: 18px; display: grid; gap: 5px; }
@@ -217,7 +234,7 @@ button, input, select, textarea { font: inherit; }
 .scale-bar-track { display: flex; height: 12px; border: 1px solid var(--scale-stroke, #122033); }
 .scale-bar-fill { background: var(--scale-stroke, #122033); width: 50%; }
 .scale-bar-fill.light { background: #fff; }
-.scale-bar-label { color: var(--body-text, #1d2b3d); margin-top: 10px; font-size: 12px; }
+.scale-bar-label { color: var(--body-text, #1d2b3d); margin-top: 4px; font-size: 12px; }
 .logo-card { display: flex; align-items: center; justify-content: center; padding: 10px; background: var(--logo-bg, var(--panel-bg, rgba(255,255,255,0.95))); border-color: var(--logo-border, var(--panel-border, rgba(18,30,48,0.18))); }
 .logo-card img { max-width: 100%; max-height: 100%; object-fit: contain; }
 .footer-card { display: flex; align-items: center; padding: 0 14px; color: var(--footer-fg, #334155); font-size: 12px; background: var(--footer-bg, rgba(255,255,255,0.93)); font-family: var(--font-footer); }
@@ -912,8 +929,11 @@ button, input, select, textarea { font: inherit; }
 }
 .template-zone:hover .panel-delete-btn { opacity: 1; }
 .panel-delete-btn:hover { background: rgba(220,38,38,1); }
-/* Selection outline on hover */
-.template-zone:hover { outline: 1.5px solid rgba(37, 99, 235, 0.4); outline-offset: 1px; }
+/* Selection outline + grab cursor on hover */
+.template-zone { cursor: grab; }
+.template-zone:hover { outline: 2px solid rgba(37, 99, 235, 0.55); outline-offset: 2px; z-index: 420 !important; }
+body.is-dragging { cursor: grabbing !important; user-select: none; }
+body.is-dragging * { cursor: grabbing !important; }
 
 /* New unified resize handles (.prh) */
 .prh {

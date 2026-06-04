@@ -77,7 +77,9 @@ export function resolveSidePanelZones(template, layout, mapSize, legendItems) {
   const logoW = layout?.logoWidthPx ? Math.max(40, Math.min(innerW, layout.logoWidthPx)) : Math.min(innerW, Math.round(innerW * 0.75));
   const naH = layout?.northArrowHeightPx ?? 72;
   const naW = Math.round(naH * 0.9);
-  const scaleBarH = 48;
+  const footerH = layout?.footerHeightPx ? Math.max(22, Math.min(200, layout.footerHeightPx)) : 28;
+  const scaleBarW = layout?.scaleBarWidthPx || 160;
+  const scaleBarActualH = layout?.scaleBarHeightPx ?? 48;
 
   // Inset: full inner width, height = 22% of canvas or user-set
   const insetEnabled = layout?.insetEnabled !== false;
@@ -86,56 +88,109 @@ export function resolveSidePanelZones(template, layout, mapSize, legendItems) {
     : Math.round(H * 0.22);
   const insetW = innerW;
 
-  const sp = layout?.sidePanelPositions || {};
+  // Determine which elements are in the sidebar grid
+  const grid = layout?.sidePanelGrid || layout?.sidePanelOrder || ['inset', 'legend', 'logo'];
+  const gridHas = (eid) => grid.some(item => Array.isArray(item) ? item.includes(eid) : item === eid);
+  const northArrowInGrid = gridHas('northArrow');
+  const scaleBarInGrid = gridHas('scaleBar');
 
-  // --- Stack from TOP ---
-  let topY = margin;
+  // --- Zone accumulators ---
+  let insetZone = { top: 0, left: 0, width: 0, height: 0 };
+  let legendZone = { top: 0, left: 0, width: 0, height: 0 };
+  let logoZone = { top: 0, left: 0, width: 0, height: 0 };
+  let titleZone = { top: 0, left: 0, width: 0, height: 0 };
+  let footerZone = { top: 0, left: 0, width: 0, height: 0 };
+  let northArrowZone = { top: 0, left: 0, width: 0, height: 0 };
+  let scaleBarZone = { top: 0, left: 0, width: 0, height: 0 };
 
-  let insetZone = insetEnabled
-    ? { top: topY, left: sbLeft + margin, width: insetW, height: insetH }
-    : { top: 0, left: 0, width: 0, height: 0 };
-  if (sp.inset?.top != null && insetEnabled) insetZone = { ...insetZone, top: sp.inset.top };
-  if (insetEnabled) topY += insetH + gap;
-
-  let legendZone = { top: topY, left: sbLeft + margin, width: innerW, height: legendHeight };
-  if (sp.legend?.top != null) legendZone = { ...legendZone, top: sp.legend.top };
-  topY += legendHeight + gap;
-
-  let logoZone = layout?.logo
-    ? { top: topY, left: sbLeft + margin, width: logoW, height: logoH }
-    : { top: 0, left: 0, width: 0, height: 0 };
-  if (sp.logo?.top != null && layout?.logo) logoZone = { ...logoZone, top: sp.logo.top };
-
-  // --- Stack from BOTTOM ---
-  let bottomY = H - margin;
-
-  const footerH = 22;
-  const footerZone = layout?.footerEnabled && layout?.footerText
-    ? { top: bottomY - footerH, left: sbLeft + margin, width: innerW, height: footerH }
-    : { top: 0, left: 0, width: 0, height: 0 };
-  if (layout?.footerEnabled && layout?.footerText) bottomY -= footerH + 6;
-
-  let titleZone = { top: bottomY - titleHeight, left: sbLeft + margin, width: innerW, height: titleHeight };
-  if (sp.title?.top != null) titleZone = { ...titleZone, top: sp.title.top };
-  bottomY -= titleHeight + gap;
-
-  // North arrow left-aligned, scale bar to its right
-  const naRow = Math.max(naH, scaleBarH);
-  let northArrowZone = {
-    top: bottomY - naRow + (naRow - naH) / 2,
-    left: sbLeft + margin,
-    width: naW,
-    height: naH,
+  const getElemH = (eid) => {
+    if (eid === 'inset') return insetEnabled ? insetH : 0;
+    if (eid === 'legend') return legendHeight;
+    if (eid === 'logo') return layout?.logo ? logoH : 0;
+    if (eid === 'title') return titleHeight;
+    if (eid === 'footer') return layout?.footerEnabled && layout?.footerText ? footerH : 0;
+    if (eid === 'northArrow') return naH;
+    if (eid === 'scaleBar') return scaleBarActualH;
+    return 0;
   };
-  if (sp.northArrow?.top != null) northArrowZone = { ...northArrowZone, top: sp.northArrow.top };
-
-  let scaleBarZone = {
-    top: bottomY - naRow,
-    left: sbLeft + margin + naW + gap,
-    width: Math.max(60, innerW - naW - gap),
-    height: scaleBarH,
+  const setElemZone = (eid, top, left, width, height) => {
+    const z = { top, left, width, height };
+    if (eid === 'inset') insetZone = z;
+    else if (eid === 'legend') legendZone = z;
+    else if (eid === 'logo') logoZone = z;
+    else if (eid === 'title') titleZone = z;
+    else if (eid === 'footer') footerZone = z;
+    else if (eid === 'northArrow') northArrowZone = z;
+    else if (eid === 'scaleBar') scaleBarZone = z;
   };
-  if (sp.scaleBar?.top != null) scaleBarZone = { ...scaleBarZone, top: sp.scaleBar.top };
+
+  // --- Stack from TOP in configurable grid order ---
+  // Null/undefined rows act as empty spacer rows contributing a fixed height
+  const emptyRowH = Math.floor((H - margin * 2) / 5);
+  let stackY = margin;
+  for (const item of grid) {
+    if (!item) {
+      // Empty spacer row
+      stackY += emptyRowH + gap;
+      continue;
+    }
+    if (Array.isArray(item)) {
+      // Two elements side by side (column split)
+      const [id1, id2] = item;
+      const colW = Math.floor((innerW - gap) / 2);
+      const h1 = getElemH(id1);
+      const h2 = getElemH(id2);
+      if (h1 > 0) setElemZone(id1, stackY, sbLeft + margin, colW, h1);
+      if (h2 > 0) setElemZone(id2, stackY, sbLeft + margin + colW + gap, colW, h2);
+      const rowH = Math.max(h1, h2);
+      if (rowH > 0) stackY += rowH + gap;
+    } else {
+      // Full width
+      const h = getElemH(item);
+      if (h === 0) continue;
+      setElemZone(item, stackY, sbLeft + margin, innerW, h);
+      stackY += h + gap;
+    }
+  }
+
+  // --- North arrow and scale bar in MAP area (when not in grid) ---
+  const mapW = sbLeft;
+
+  if (!northArrowInGrid) {
+    const sp = layout?.sidePanelPositions || {};
+    northArrowZone = {
+      top: H - margin - naH,
+      left: mapW - margin - naW,
+      width: naW,
+      height: naH,
+    };
+    if (sp.northArrow?.top != null) northArrowZone = { ...northArrowZone, top: sp.northArrow.top };
+    if (sp.northArrow?.left != null) northArrowZone = { ...northArrowZone, left: sp.northArrow.left };
+  }
+
+  if (!scaleBarInGrid) {
+    const sp = layout?.sidePanelPositions || {};
+    scaleBarZone = {
+      top: H - margin - scaleBarActualH,
+      left: margin,
+      width: scaleBarW,
+      height: scaleBarActualH,
+    };
+    if (sp.scaleBar?.top != null) scaleBarZone = { ...scaleBarZone, top: sp.scaleBar.top };
+    if (sp.scaleBar?.left != null) scaleBarZone = { ...scaleBarZone, left: sp.scaleBar.left };
+  }
+
+  // Resolve overlap: if northArrow and scaleBar are both in map area and intersect, push scaleBar below northArrow
+  if (!northArrowInGrid && !scaleBarInGrid) {
+    const naR = northArrowZone.left + northArrowZone.width;
+    const sbR2 = scaleBarZone.left + scaleBarZone.width;
+    const xOverlap = northArrowZone.left < sbR2 && scaleBarZone.left < naR;
+    const yOverlap = northArrowZone.top < scaleBarZone.top + scaleBarZone.height &&
+                     scaleBarZone.top < northArrowZone.top + northArrowZone.height;
+    if (xOverlap && yOverlap) {
+      scaleBarZone = { ...scaleBarZone, top: northArrowZone.top + northArrowZone.height + gap };
+    }
+  }
 
   // Sidebar background — full height right panel
   const sidebarZone = { top: 0, left: sbLeft, width: sbW, height: H };
@@ -149,6 +204,24 @@ export function resolveSidePanelZones(template, layout, mapSize, legendItems) {
     scaleBar: scaleBarZone,
     title: titleZone,
     footer: footerZone,
+  };
+}
+
+// ─── Map area slot system (for north arrow / scale bar) ─────────────────────
+
+/** Returns pixel {left, top} for each map slot. Right/bottom slots snap to actual canvas edge. */
+export function mapSlotPositions(mapAreaW, mapH, elemW = 80, elemH = 80) {
+  const m = 14; // edge margin
+  const cx = Math.round((mapAreaW - elemW) / 2);
+  const rx = mapAreaW - m - elemW;
+  const by = mapH - m - elemH;
+  return {
+    'map-tl': { left: m,  top: m },
+    'map-tc': { left: cx, top: m },
+    'map-tr': { left: rx, top: m },
+    'map-bl': { left: m,  top: by },
+    'map-bc': { left: cx, top: by },
+    'map-br': { left: rx, top: by },
   };
 }
 

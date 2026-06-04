@@ -90,7 +90,7 @@ function buildAutoSvg(region, visibleBounds) {
   return { paths, markerEl };
 }
 
-export default function LocatorInset({ layers, insetMode, mode, insetImage, autoInsetRegion, insetTitle, insetLabel, zone }) {
+export default function LocatorInset({ layers, insetMode, mode, insetImage, autoInsetRegion, insetTitle, insetLabel, zone, regionFill, regionStroke, bgFill, markerColor }) {
   const { visibleBounds, referenceBounds } = useMemo(() => {
     const visible = (layers || []).filter((layer) => layer.visible !== false);
     const visibleBounds = unionBounds(visible.map((layer) => geojsonBounds(layer.geojson)).filter(Boolean));
@@ -121,9 +121,9 @@ export default function LocatorInset({ layers, insetMode, mode, insetImage, auto
         </div>
       ) : showAuto ? (
         <svg viewBox="0 0 100 100" className="inset-svg" preserveAspectRatio="xMidYMid meet">
-          <rect x="0" y="0" width="100" height="100" fill="#f0f4f8" />
+          <rect x="0" y="0" width="100" height="100" fill={bgFill || '#f0f4f8'} />
           {autoSvg.paths.map((d, i) => (
-            <path key={i} d={d} fill="#dce8f5" stroke="#8aabcf" strokeWidth="0.8" />
+            <path key={i} d={d} fill={regionFill || '#dce8f5'} stroke={regionStroke || '#8aabcf'} strokeWidth="0.8" />
           ))}
           {autoSvg.markerEl && (
             <>
@@ -132,8 +132,8 @@ export default function LocatorInset({ layers, insetMode, mode, insetImage, auto
                 y={autoSvg.markerEl.my}
                 width={autoSvg.markerEl.mw}
                 height={autoSvg.markerEl.mh}
-                fill="rgba(96,165,250,0.25)"
-                stroke="#2563eb"
+                fill={`${markerColor || '#2563eb'}40`}
+                stroke={markerColor || '#2563eb'}
                 strokeWidth="1.2"
                 rx="1.5"
               />
@@ -141,7 +141,7 @@ export default function LocatorInset({ layers, insetMode, mode, insetImage, auto
                 cx={autoSvg.markerEl.cx}
                 cy={autoSvg.markerEl.cy}
                 r="3.5"
-                fill="#1d4ed8"
+                fill={markerColor || '#1d4ed8'}
                 stroke="#ffffff"
                 strokeWidth="1.2"
               />

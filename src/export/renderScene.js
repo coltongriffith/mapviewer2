@@ -544,21 +544,25 @@ function fitRect(srcW, srcH, dstW, dstH) {
   return { x: (dstW - w) / 2, y: (dstH - h) / 2, w, h };
 }
 
-function drawAutoInsetCanvas(ctx, innerX, innerY, innerW, innerH, scale, region, visibleBounds) {
+function drawAutoInsetCanvas(ctx, innerX, innerY, innerW, innerH, scale, region, visibleBounds, colors = {}) {
   const pad = 6 * scale;
   const refBbox = getAutoInsetRefBbox(region);
   const [minLng, minLat, maxLng, maxLat] = refBbox;
   // Convert lng to radians to match Mercator Y units, then letterbox
   const lb = fitRect((maxLng - minLng) * Math.PI / 180, mercY(maxLat) - mercY(minLat), innerW, innerH);
   const lbX = innerX + lb.x, lbY = innerY + lb.y, lbW = lb.w, lbH = lb.h;
+  const cBg = colors.bgFill || '#f0f4f8';
+  const cRegion = colors.regionFill || '#dce8f5';
+  const cStroke = colors.regionStroke || '#8aabcf';
+  const cMarker = colors.markerColor || '#2563eb';
 
   // Background
-  ctx.fillStyle = '#f0f4f8';
+  ctx.fillStyle = cBg;
   ctx.fillRect(innerX, innerY, innerW, innerH);
 
   // Province/state silhouette
-  ctx.fillStyle = '#dce8f5';
-  ctx.strokeStyle = '#8aabcf';
+  ctx.fillStyle = cRegion;
+  ctx.strokeStyle = cStroke;
   ctx.lineWidth = 0.8 * scale;
   region.coordinates.forEach(ring => {
     if (ring.length < 2) return;
@@ -578,8 +582,8 @@ function drawAutoInsetCanvas(ctx, innerX, innerY, innerW, innerH, scale, region,
     const [mx2, my2] = projectToCanvas(visibleBounds.maxLng, visibleBounds.minLat, refBbox, lbX, lbY, lbW, lbH, pad);
     const rx = Math.min(mx1, mx2), ry = Math.min(my1, my2);
     const rw = Math.max(4 * scale, Math.abs(mx2 - mx1)), rh = Math.max(4 * scale, Math.abs(my2 - my1));
-    ctx.fillStyle = 'rgba(96,165,250,0.25)';
-    ctx.strokeStyle = '#2563eb';
+    ctx.fillStyle = cMarker + '40';
+    ctx.strokeStyle = cMarker;
     ctx.lineWidth = 1.2 * scale;
     ctx.beginPath();
     ctx.rect(Math.max(lbX + pad, rx), Math.max(lbY + pad, ry), rw, rh);
@@ -589,7 +593,7 @@ function drawAutoInsetCanvas(ctx, innerX, innerY, innerW, innerH, scale, region,
     const dotY = Math.max(lbY + pad + 3 * scale, Math.min(lbY + lbH - pad - 3 * scale, ry + rh / 2));
     ctx.beginPath();
     ctx.arc(dotX, dotY, 3.5 * scale, 0, Math.PI * 2);
-    ctx.fillStyle = '#1d4ed8';
+    ctx.fillStyle = cMarker;
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 1.2 * scale;
     ctx.fill();
@@ -597,7 +601,7 @@ function drawAutoInsetCanvas(ctx, innerX, innerY, innerW, innerH, scale, region,
   }
 }
 
-function autoInsetSvg(innerX, innerY, innerW, innerH, scale, region, visibleBounds) {
+function autoInsetSvg(innerX, innerY, innerW, innerH, scale, region, visibleBounds, colors = {}) {
   const pad = 6 * scale;
   const refBbox = getAutoInsetRefBbox(region);
   const [minLng, minLat, maxLng, maxLat] = refBbox;
@@ -605,11 +609,15 @@ function autoInsetSvg(innerX, innerY, innerW, innerH, scale, region, visibleBoun
   const lb = fitRect((maxLng - minLng) * Math.PI / 180, mercY(maxLat) - mercY(minLat), innerW, innerH);
   const lbX = innerX + lb.x, lbY = innerY + lb.y, lbW = lb.w, lbH = lb.h;
   const project = (lng, lat) => projectToCanvas(lng, lat, refBbox, lbX, lbY, lbW, lbH, pad);
+  const cBg = colors.bgFill || '#f0f4f8';
+  const cRegion = colors.regionFill || '#dce8f5';
+  const cStroke = colors.regionStroke || '#8aabcf';
+  const cMarker = colors.markerColor || '#2563eb';
 
   const paths = region.coordinates.map(ring => {
     if (ring.length < 2) return '';
     const pts = ring.map(([lng, lat]) => { const [px, py] = project(lng, lat); return `${px.toFixed(1)},${py.toFixed(1)}`; });
-    return `<path d="M ${pts.join(' L ')} Z" fill="#dce8f5" stroke="#8aabcf" stroke-width="${0.8 * scale}" />`;
+    return `<path d="M ${pts.join(' L ')} Z" fill="${cRegion}" stroke="${cStroke}" stroke-width="${0.8 * scale}" />`;
   }).join('');
 
   let markerSvg = '';
@@ -622,10 +630,10 @@ function autoInsetSvg(innerX, innerY, innerW, innerH, scale, region, visibleBoun
     const rh = Math.max(4 * scale, Math.abs(my2 - my1));
     const dotX = Math.max(lbX + pad + 3 * scale, Math.min(lbX + lbW - pad - 3 * scale, rx + rw / 2));
     const dotY = Math.max(lbY + pad + 3 * scale, Math.min(lbY + lbH - pad - 3 * scale, ry + rh / 2));
-    markerSvg = `<rect x="${rx}" y="${ry}" width="${rw}" height="${rh}" fill="#60a5fa" fill-opacity="0.25" stroke="#2563eb" stroke-width="${1.2 * scale}" /><circle cx="${dotX}" cy="${dotY}" r="${3.5 * scale}" fill="#1d4ed8" stroke="#ffffff" stroke-width="${1.2 * scale}" />`;
+    markerSvg = `<rect x="${rx}" y="${ry}" width="${rw}" height="${rh}" fill="${cMarker}" fill-opacity="0.25" stroke="${cMarker}" stroke-width="${1.2 * scale}" /><circle cx="${dotX}" cy="${dotY}" r="${3.5 * scale}" fill="${cMarker}" stroke="#ffffff" stroke-width="${1.2 * scale}" />`;
   }
 
-  return `<rect x="${innerX}" y="${innerY}" width="${innerW}" height="${innerH}" fill="#f0f4f8" />${paths}${markerSvg}`;
+  return `<rect x="${innerX}" y="${innerY}" width="${innerW}" height="${innerH}" fill="${cBg}" />${paths}${markerSvg}`;
 }
 
 function drawInsetBackdropCanvas(ctx, x, y, w, h, scale) {
@@ -662,7 +670,8 @@ async function drawInsetCanvas(ctx, scene, scale) {
   const visible = (scene.project.layers || []).filter((layer) => layer.visible !== false && layer.geojson);
   const bounds = unionBounds(visible.map((layer) => geojsonBounds(layer.geojson)).filter(Boolean));
   if (autoInsetRegion) {
-    drawAutoInsetCanvas(ctx, innerX, innerY, innerW, innerH, scale, autoInsetRegion, bounds);
+    const insetColors = { bgFill: scene.project.layout?.insetBgFill, regionFill: scene.project.layout?.insetRegionFill, regionStroke: scene.project.layout?.insetRegionStroke, markerColor: scene.project.layout?.insetMarkerColor };
+    drawAutoInsetCanvas(ctx, innerX, innerY, innerW, innerH, scale, autoInsetRegion, bounds, insetColors);
     ctx.fillStyle = theme.insetMuted; ctx.font = `${11 * scale}px Arial`; ctx.textBaseline = 'alphabetic'; ctx.fillText(insetLabel || autoInsetRegion.name, x + 12 * scale, y + h - 10 * scale);
     return;
   }
@@ -1947,7 +1956,8 @@ function renderInsetSvg(scene, scale, svgDefs) {
   const visible = (scene.project.layers || []).filter((layer) => layer.visible !== false && layer.geojson);
   const bounds = unionBounds(visible.map((layer) => geojsonBounds(layer.geojson)).filter(Boolean));
   if (autoInsetRegion) {
-    const innerSvg = autoInsetSvg(innerX, innerY, innerW, innerH, scale, autoInsetRegion, bounds);
+    const insetColors = { bgFill: scene.project.layout?.insetBgFill, regionFill: scene.project.layout?.insetRegionFill, regionStroke: scene.project.layout?.insetRegionStroke, markerColor: scene.project.layout?.insetMarkerColor };
+    const innerSvg = autoInsetSvg(innerX, innerY, innerW, innerH, scale, autoInsetRegion, bounds, insetColors);
     const labelSvg = `<text x="${x + 12 * scale}" y="${y + h - 10 * scale}" fill="${theme.insetMuted}" font-family="Arial" font-size="${11 * scale}">${escapeXml(insetLabel || autoInsetRegion.name)}</text>`;
     return `<g id="em-inset" class="em-panel">${panelSvg}${titleSvg}${innerSvg}${labelSvg}</g>`;
   }

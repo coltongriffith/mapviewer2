@@ -64,7 +64,7 @@ export const THEME_TOKENS = {
     insetMuted: '#374151',
     logoFill: 'rgba(255,255,255,1.0)',
     logoBorder: 'rgba(0,0,0,0.72)',
-    panelAccentLeft: '#1a3a6b',
+    panelAccentLeft: null,
   },
 
   // Dark Mode — deep indigo panels, sky-blue accents, high contrast
@@ -132,7 +132,7 @@ export const THEME_TOKENS = {
     insetMuted: '#8b6e55',
     logoFill: 'rgba(255,251,240,1.0)',
     logoBorder: 'rgba(160,110,60,0.40)',
-    panelAccentLeft: '#b85c1a',
+    panelAccentLeft: null,
   },
 
   // Forest — deep forest green panels, gold accents — on-brand for exploration
@@ -166,7 +166,7 @@ export const THEME_TOKENS = {
     insetMuted: '#6e9e50',
     logoFill: 'rgba(14,28,14,0.97)',
     logoBorder: 'rgba(80,160,80,0.22)',
-    panelAccentLeft: '#c9a227',
+    panelAccentLeft: null,
   },
 };
 

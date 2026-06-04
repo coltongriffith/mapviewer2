@@ -7,7 +7,7 @@ function clamp(v, min, max) {
 const STEPS = [10, 20, 50, 100, 200, 250, 500, 1000, 2000, 2500, 5000, 10000, 20000, 25000, 50000, 100000, 200000, 500000, 1000000];
 const TARGET = 120;
 
-export default function ScaleBar({ map }) {
+export default function ScaleBar({ map, height }) {
   const [state, setState] = useState({ label: "1 km", width: 100 });
 
   useEffect(() => {
@@ -35,7 +35,7 @@ export default function ScaleBar({ map }) {
   }, [map]);
 
   return (
-    <div className="scale-bar">
+    <div className="scale-bar" style={height ? { minHeight: `${height}px` } : undefined}>
       <div className="scale-bar-track" style={{ width: state.width }} />
       <div className="scale-bar-label">{state.label}</div>
     </div>

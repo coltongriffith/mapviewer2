@@ -27,12 +27,12 @@ import {
   TEMPLATE_MODES,
   TEMPLATE_THEMES,
 } from './projectState';
-import { EXPORT_RATIOS } from './constants';
+import { EXPORT_RATIOS, SNAP_THRESHOLD } from './constants';
 import { applyRoleToLayer, inferRoleFromLayer } from './mapPresets';
 import { getTemplate } from './templates';
 import { buildLegendItems, resolveTemplateZones } from './templates/technicalResultsTemplate';
 import { resolveNI43101Zones } from './templates/technicalReportTemplate';
-import { resolveSidePanelZones } from './templates/sidePanelTemplate';
+import { resolveSidePanelZones, mapSlotPositions } from './templates/sidePanelTemplate';
 import { geojsonBounds, geojsonCenter, unionBounds } from './utils/geometry';
 import { markerSvgUrl } from './utils/leaflet';
 import { detectRegion } from './utils/detectRegion';
@@ -603,6 +603,8 @@ export default function App() {
   const mapViewportRef = useRef(null);
   const leafletMapRef = useRef(null);
   const skipAutoFitRef = useRef(false);
+  const ghostDomRef = useRef(null);       // direct DOM ref for drag ghost — avoids React re-renders on mousemove
+  const dragHoverRef = useRef({});        // tracks last hover state so setDragging only fires on zone changes
   const mapSizeRef = useRef({ width: 1600, height: 1000 });
   const logoInputRef = useRef(null);
   const insetInputRef = useRef(null);
@@ -1067,50 +1069,229 @@ export default function App() {
     }));
   };
 
+  const SP_SIDEBAR_ELEMENTS = ['inset', 'legend', 'logo', 'title', 'footer', 'northArrow', 'scaleBar'];
+
   const makeDragHandler = (id, ghostW, ghostH) => (e) => {
     if (e.target.closest('.panel-resize-handle') || e.target.closest('.panel-delete-btn')) return;
     e.preventDefault();
     const map = leafletMapRef.current;
     if (map) map.dragging.disable();
+    // Capture snapshot at drag start to prevent shaking (live ref reads cause jitter)
+    const zonesSnapshot = resolvedZonesRef.current ? { ...resolvedZonesRef.current } : {};
     const isSidePanel = project.layout.templateId === 'side_panel';
     const layoutSnapshot = project.layout;
+
+    // For northArrow/scaleBar: check if currently in the sidebar grid
+    const _grid = layoutSnapshot.sidePanelGrid || layoutSnapshot.sidePanelOrder || [];
+    const _inGrid = (eid) => _grid.some(item => Array.isArray(item) ? item.includes(eid) : item === eid);
+    const alwaysSidebar = ['inset', 'legend', 'logo', 'title', 'footer'];
+    const isInSidebar = isSidePanel && (alwaysSidebar.includes(id) || _inGrid(id));
+    const isMapInSidePanel = isSidePanel && !alwaysSidebar.includes(id) && !_inGrid(id);
+
     let currentHoverZone = null;
+    let currentGridSlot = null;
+    let currentMapSlot = null;
     let finalClientX = e.clientX, finalClientY = e.clientY;
-    setDragging({ id, hoverZone: null, ghostX: e.clientX, ghostY: e.clientY, ghostW, ghostH });
+
+    const sb = zonesSnapshot.sidebar || {};
+    const sbLeft = sb.left ?? Math.round(mapSize.width * 0.72);
+    const sbW = sb.width ?? Math.round(mapSize.width * 0.28);
+    const innerW = sbW - 32;
+    const colW = Math.floor((innerW - 8) / 2);
+    const rowH = Math.floor((mapSize.height - 32) / 5);
+
+    const effectiveGhostW = isInSidebar
+      ? Math.max(ghostW, (zonesSnapshot.sidebar?.width ?? 0) - 32)
+      : ghostW;
+
+    const getMapSlots = () => {
+      const sl = zonesSnapshot.sidebar?.left ?? Math.round(mapSize.width * 0.72);
+      return Object.entries(mapSlotPositions(sl, mapSize.height, ghostW || 80, ghostH || 80)).map(([key, pos]) => ({ id: key, ...pos }));
+    };
+
+    // Capture container rect ONCE at drag start — prevents forced reflow on every mousemove (shaking fix)
+    const containerRect = mapContainerRef.current?.getBoundingClientRect() ?? { left: 0, top: 0, width: 0, height: 0 };
+
+    dragHoverRef.current = {};
+    // Set ghost position via CSS custom property — React can never overwrite this on re-render
+    document.documentElement.style.setProperty('--ghost-x', e.clientX + 'px');
+    document.documentElement.style.setProperty('--ghost-y', e.clientY + 'px');
+    setDragging({ id, hoverZone: null, ghostX: e.clientX, ghostY: e.clientY, ghostW: effectiveGhostW, ghostH });
+    document.body.classList.add('is-dragging');
+
     const onMove = (me) => {
       finalClientX = me.clientX;
       finalClientY = me.clientY;
-      if (isSidePanel) {
-        setDragging((d) => d ? { ...d, ghostX: me.clientX, ghostY: me.clientY } : null);
+
+      // Update ghost via CSS custom property — bypasses React entirely, no re-renders, no snap-back
+      document.documentElement.style.setProperty('--ghost-x', me.clientX + 'px');
+      document.documentElement.style.setProperty('--ghost-y', me.clientY + 'px');
+
+      if (isInSidebar || (isSidePanel && SP_SIDEBAR_ELEMENTS.includes(id))) {
+        const cursorX = me.clientX - containerRect.left - sbLeft - 16;
+        const cursorY = me.clientY - containerRect.top - 16;
+        const row = Math.max(0, Math.min(4, Math.floor(cursorY / (rowH + 6))));
+        const col = cursorX < colW + 4 ? 0 : 1;
+        currentGridSlot = { row, col };
+
+        let newMapSlot = null;
+        // northArrow/scaleBar can also drop to map area
+        if (['northArrow', 'scaleBar'].includes(id) && (me.clientX - containerRect.left) < sbLeft) {
+          const zW = ghostW || 80, zH = ghostH || 48;
+          const slots = getMapSlots();
+          const cx = me.clientX - containerRect.left;
+          const cy = me.clientY - containerRect.top;
+          let bestKey = null, bestDist = Infinity;
+          slots.forEach((s) => {
+            const d = Math.hypot(cx - (s.left + zW / 2), cy - (s.top + zH / 2));
+            if (d < bestDist) { bestDist = d; bestKey = s.id; }
+          });
+          newMapSlot = bestKey;
+          currentGridSlot = null;
+        }
+        currentMapSlot = newMapSlot;
+
+        // Only update React state when hover slot actually changes (not every pixel)
+        const prev = dragHoverRef.current;
+        const rowChanged = currentGridSlot?.row !== prev.row || currentGridSlot?.col !== prev.col;
+        const mapSlotChanged = currentMapSlot !== prev.mapSlot;
+        if (rowChanged || mapSlotChanged) {
+          dragHoverRef.current = { row: currentGridSlot?.row, col: currentGridSlot?.col, mapSlot: currentMapSlot };
+          setDragging((d) => d ? { ...d, hoverGridSlot: currentGridSlot, hoverMapSlot: currentMapSlot } : null);
+        }
         return;
       }
+
+      if (isMapInSidePanel) {
+        const cursorX = me.clientX - containerRect.left;
+        const cursorY = me.clientY - containerRect.top;
+        const zW = ghostW || 80, zH = ghostH || 48;
+        const slots = getMapSlots();
+        let bestKey = null, bestDist = Infinity;
+        slots.forEach((s) => {
+          const d = Math.hypot(cursorX - (s.left + zW / 2), cursorY - (s.top + zH / 2));
+          if (d < bestDist) { bestDist = d; bestKey = s.id; }
+        });
+        currentMapSlot = bestKey;
+        // Only update state when map slot changes
+        if (bestKey !== dragHoverRef.current.mapSlot) {
+          dragHoverRef.current = { mapSlot: bestKey };
+          setDragging((d) => d ? { ...d, hoverMapSlot: bestKey } : null);
+        }
+        return;
+      }
+
+      // Standard template: detect drop zone hover via data-slot elements
       const el = document.elementFromPoint(me.clientX, me.clientY);
       const zoneEl = el?.closest('[data-slot]');
       const hz = zoneEl ? { corner: zoneEl.dataset.corner, slot: zoneEl.dataset.slot } : null;
       currentHoverZone = hz;
-      setDragging((d) => d ? { ...d, ghostX: me.clientX, ghostY: me.clientY, hoverZone: hz } : null);
+      // Only update state when hover zone changes
+      const prev = dragHoverRef.current;
+      if (hz?.corner !== prev.hzCorner || hz?.slot !== prev.hzSlot) {
+        dragHoverRef.current = { hzCorner: hz?.corner, hzSlot: hz?.slot };
+        setDragging((d) => d ? { ...d, hoverZone: hz } : null);
+      }
     };
+
     const onUp = () => {
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
+      document.body.classList.remove('is-dragging');
+      document.documentElement.style.removeProperty('--ghost-x');
+      document.documentElement.style.removeProperty('--ghost-y');
       if (map) map.dragging.enable();
-      if (isSidePanel) {
-        const container = mapContainerRef.current;
-        if (container) {
-          const rect = container.getBoundingClientRect();
-          const sidebar = resolvedZonesRef.current?.sidebar;
-          const zH = ghostH || 80;
-          const minTop = sidebar ? sidebar.top + 8 : 8;
-          const maxTop = sidebar ? sidebar.top + sidebar.height - zH - 8 : (mapSize.height - zH - 8);
-          const rawY = Math.round(finalClientY - rect.top - zH / 2);
-          const clampedTop = Math.max(minTop, Math.min(maxTop, rawY));
-          setProject((p) => ({
-            ...p,
-            layout: {
-              ...p.layout,
-              sidePanelPositions: { ...(p.layout.sidePanelPositions || {}), [id]: { top: clampedTop } },
-            },
-          }));
+
+      // Helper: remove id from grid (handles string items and [id1,id2] arrays)
+      const removeFromGrid = (grid, removeId) =>
+        grid.reduce((acc, row) => {
+          if (Array.isArray(row)) {
+            const f = row.filter(x => x !== removeId);
+            if (f.length === 2) acc.push(row);
+            else if (f.length === 1) acc.push(f[0]);
+          } else if (row !== removeId) {
+            acc.push(row);
+          }
+          return acc;
+        }, []);
+
+      if (isInSidebar || (isSidePanel && SP_SIDEBAR_ELEMENTS.includes(id) && currentGridSlot !== null)) {
+        const baseGrid = layoutSnapshot.sidePanelGrid || layoutSnapshot.sidePanelOrder || ['inset', 'legend', 'logo'];
+
+        // northArrow/scaleBar dropping to map area
+        if (['northArrow', 'scaleBar'].includes(id) && currentMapSlot) {
+          const slots = getMapSlots();
+          const sp = slots.find(s => s.id === currentMapSlot);
+          if (sp) {
+            const zW = ghostW || 80, zH = ghostH || 48;
+            const clampedLeft = Math.max(8, Math.min(mapSize.width - zW - 8, sp.left));
+            const clampedTop = Math.max(8, Math.min(mapSize.height - zH - 8, sp.top));
+            const grid = removeFromGrid(baseGrid, id);
+            setProject((p) => ({
+              ...p,
+              layout: {
+                ...p.layout,
+                sidePanelGrid: grid,
+                sidePanelPositions: { ...(p.layout.sidePanelPositions || {}), [id]: { top: clampedTop, left: clampedLeft } },
+              },
+            }));
+          }
+          setDragging(null);
+          return;
+        }
+
+        if (currentGridSlot) {
+          let grid = removeFromGrid(baseGrid, id);
+          const { row, col } = currentGridSlot;
+
+          // Ensure grid has enough rows
+          while (grid.length <= row) grid.push(null);
+
+          const existingRow = grid[row];
+          if (col === 0) {
+            if (Array.isArray(existingRow)) {
+              grid[row] = [id, existingRow[1]];
+            } else if (existingRow && existingRow !== id) {
+              grid[row] = [id, existingRow];
+            } else {
+              grid[row] = id;
+            }
+          } else {
+            if (Array.isArray(existingRow)) {
+              grid[row] = [existingRow[0], id];
+            } else if (existingRow && existingRow !== id) {
+              grid[row] = [existingRow, id];
+            } else {
+              grid[row] = id;
+            }
+          }
+
+          // Keep nulls (they represent empty spacer rows), limit to 5 rows, trim trailing nulls
+          grid = grid.slice(0, 5);
+          while (grid.length > 0 && !grid[grid.length - 1]) grid.pop();
+          updateLayout({ sidePanelGrid: grid });
+        }
+      } else if (isMapInSidePanel) {
+        {
+          const zW = ghostW || 80, zH = ghostH || 48;
+          const slots = getMapSlots();
+          let sp = slots.find(s => s.id === currentMapSlot);
+          if (!sp) {
+            const cursorX = finalClientX - containerRect.left, cursorY = finalClientY - containerRect.top;
+            let bestDist = Infinity;
+            slots.forEach(s => { const d = Math.hypot(cursorX - s.left, cursorY - s.top); if (d < bestDist) { bestDist = d; sp = s; } });
+          }
+          if (sp) {
+            const clampedLeft = Math.max(8, Math.min(mapSize.width - zW - 8, sp.left));
+            const clampedTop = Math.max(8, Math.min(mapSize.height - zH - 8, sp.top));
+            setProject((p) => ({
+              ...p,
+              layout: {
+                ...p.layout,
+                sidePanelPositions: { ...(p.layout.sidePanelPositions || {}), [id]: { top: clampedTop, left: clampedLeft } },
+              },
+            }));
+          }
         }
       } else if (currentHoverZone) {
         const { corner, slot } = currentHoverZone;
@@ -1122,6 +1303,7 @@ export default function App() {
       }
       setDragging(null);
     };
+
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);
   };
@@ -3185,6 +3367,22 @@ export default function App() {
               <div><label>Inset Title</label><input value={project.layout.insetTitle ?? 'Project Locator'} onChange={(e) => updateLayout({ insetTitle: e.target.value })} placeholder="Project Locator" /></div>
               <div><label>Inset Label</label><input value={project.layout.insetLabel ?? ''} onChange={(e) => updateLayout({ insetLabel: e.target.value })} placeholder={project.layout.autoInsetRegion?.name || 'Province / State'} /></div>
             </div>
+            {project.layout.autoInsetRegion && !project.layout.insetImage && (
+              <div className="control-row inline-2" style={{ flexWrap: 'wrap', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <label style={{ marginBottom: 0 }}>Region</label>
+                  <input type="color" value={project.layout.insetRegionFill || '#dce8f5'} onChange={(e) => updateLayout({ insetRegionFill: e.target.value })} title="Region fill" />
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <label style={{ marginBottom: 0 }}>Background</label>
+                  <input type="color" value={project.layout.insetBgFill || '#f0f4f8'} onChange={(e) => updateLayout({ insetBgFill: e.target.value })} title="Background" />
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <label style={{ marginBottom: 0 }}>Marker</label>
+                  <input type="color" value={project.layout.insetMarkerColor || '#2563eb'} onChange={(e) => updateLayout({ insetMarkerColor: e.target.value })} title="Marker color" />
+                </div>
+              </div>
+            )}
             <input ref={insetInputRef} type="file" accept="image/*" onChange={handleInsetImageChange} hidden />
           </div>}
         </section>
@@ -3420,7 +3618,7 @@ export default function App() {
           }} />
         )}
 
-        {project.layout.templateId !== 'ni_43101_technical' && project.layout.showTitle !== false && <div className="template-zone" style={{ ...zoneStyle(resolvedZones.title), opacity: dragging?.id === 'title' ? 0.3 : 1, cursor: 'grab' }} onMouseDown={makeDragHandler('title', project.layout.titleWidthPx ?? 520, project.layout.titleHeightPx ?? 92)}>
+        {project.layout.templateId !== 'ni_43101_technical' && project.layout.showTitle !== false && <div className="template-zone" style={{ ...zoneStyle(resolvedZones.title), zIndex: 410, opacity: dragging?.id === 'title' ? 0.3 : 1, cursor: 'grab' }} onMouseDown={makeDragHandler('title', project.layout.titleWidthPx ?? 520, project.layout.titleHeightPx ?? 92)}>
           <button className="panel-delete-btn" title="Hide title" onClick={() => updateLayout({ showTitle: false })}>×</button>
           <div className={`template-card title-card${project.layout.titleTransparent ? ' panel--transparent' : ''}`}>
             {editingTitleField === 'title' ? (
@@ -3510,7 +3708,7 @@ export default function App() {
         {project.layout.insetEnabled !== false && resolvedZones.inset?.width ? (
           <div className="template-zone" style={{ ...zoneStyle(resolvedZones.inset), opacity: dragging?.id === 'inset' ? 0.3 : 1, cursor: 'grab' }} onMouseDown={makeDragHandler('inset', project.layout.insetWidthPx ?? 244, project.layout.insetHeightPx ?? 190)}>
             <button className="panel-delete-btn" title="Hide inset map" onClick={() => updateLayout({ insetEnabled: false })}>×</button>
-            <LocatorInset layers={project.layers} insetMode={project.layout.insetMode} insetImage={project.layout.insetImage} autoInsetRegion={project.layout.autoInsetRegion} insetTitle={project.layout.insetTitle} insetLabel={project.layout.insetLabel} mode={project.layout.mode} zone={{ width: '100%', height: '100%' }} />
+            <LocatorInset layers={project.layers} insetMode={project.layout.insetMode} insetImage={project.layout.insetImage} autoInsetRegion={project.layout.autoInsetRegion} insetTitle={project.layout.insetTitle} insetLabel={project.layout.insetLabel} mode={project.layout.mode} zone={{ width: '100%', height: '100%' }} regionFill={project.layout.insetRegionFill} regionStroke={project.layout.insetRegionStroke} bgFill={project.layout.insetBgFill} markerColor={project.layout.insetMarkerColor} />
             {makeResizeHandles(project.layout.insetCorner || 'tr', {
               elemId: 'inset', startW: project.layout.insetWidthPx ?? 244, startH: project.layout.insetHeightPx ?? 190,
               minW: 100, maxW: 600, minH: 80, maxH: 500,
@@ -3519,21 +3717,25 @@ export default function App() {
           </div>
         ) : null}
         {project.layout.showScaleBar !== false && (
-          <div className="template-zone" style={{ ...zoneStyle(resolvedZones.scaleBar), width: project.layout.scaleBarWidthPx || resolvedZones.scaleBar?.width, opacity: dragging?.id === 'scaleBar' ? 0.3 : 1, cursor: 'grab' }} onMouseDown={makeDragHandler('scaleBar', project.layout.scaleBarWidthPx || resolvedZones.scaleBar?.width || 160, resolvedZones.scaleBar?.height || 40)}>
-            <ScaleBar map={leafletMapRef.current} />
+          <div className="template-zone" style={{ ...zoneStyle(resolvedZones.scaleBar), width: project.layout.scaleBarWidthPx || resolvedZones.scaleBar?.width, opacity: dragging?.id === 'scaleBar' ? 0.3 : 1, cursor: 'grab' }} onMouseDown={makeDragHandler('scaleBar', project.layout.scaleBarWidthPx || resolvedZones.scaleBar?.width || 160, project.layout.scaleBarHeightPx ?? 48)}>
+            <ScaleBar map={leafletMapRef.current} height={project.layout.scaleBarHeightPx ?? 48} />
             <button className="panel-delete-btn" title="Hide scale bar" onClick={() => updateLayout({ showScaleBar: false })}>×</button>
             {makeResizeHandles(project.layout.scaleBarCorner || 'bl', {
-              elemId: 'scaleBar', startW: project.layout.scaleBarWidthPx || resolvedZones.scaleBar?.width || 160, startH: resolvedZones.scaleBar?.height || 40,
-              minW: 80, maxW: 400, minH: 30, maxH: 80,
-              applyW: (w) => updateLayout({ scaleBarWidthPx: w }), applyH: null,
+              elemId: 'scaleBar', startW: project.layout.scaleBarWidthPx || resolvedZones.scaleBar?.width || 160, startH: project.layout.scaleBarHeightPx ?? 48,
+              minW: 80, maxW: 400, minH: 30, maxH: 100,
+              applyW: (w) => updateLayout({ scaleBarWidthPx: w }), applyH: (h) => updateLayout({ scaleBarHeightPx: h }),
             })}
           </div>
         )}
         {project.layout.templateId !== 'ni_43101_technical' && project.layout.footerText && project.layout.footerEnabled !== false ? (
-          <div className="template-zone" style={{ ...zoneStyle(resolvedZones.footer), height: project.layout.footerHeightPx || resolvedZones.footer?.height }}>
+          <div className="template-zone" style={{ ...zoneStyle(resolvedZones.footer), zIndex: 408, height: project.layout.footerHeightPx || resolvedZones.footer?.height, opacity: dragging?.id === 'footer' ? 0.3 : 1 }} onMouseDown={makeDragHandler('footer', resolvedZones.footer?.width ?? 260, project.layout.footerHeightPx || resolvedZones.footer?.height || 28)}>
             <div className="template-card footer-card">{project.layout.footerText}</div>
             <button className="panel-delete-btn" title="Hide disclaimer" onClick={() => updateLayout({ footerEnabled: false })}>×</button>
-            <div className="panel-resize-handle panel-resize-handle--bottom" title="Drag to resize disclaimer height" onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); const map = leafletMapRef.current; if (map) map.dragging.disable(); const startY = e.clientY; const startH = project.layout.footerHeightPx || resolvedZones.footer?.height || 36; const onMove = (me) => { setProject((p) => ({ ...p, layout: { ...p.layout, footerHeightPx: Math.max(24, Math.min(120, Math.round(startH + me.clientY - startY))) } })); }; const onUp = () => { if (map) map.dragging.enable(); document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); }; document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp); }} />
+            {makeResizeHandles('bl', {
+              elemId: 'footer', startW: resolvedZones.footer?.width ?? 260, startH: project.layout.footerHeightPx || resolvedZones.footer?.height || 28,
+              minW: 80, maxW: 600, minH: 22, maxH: 200,
+              applyW: null, applyH: (h) => updateLayout({ footerHeightPx: h }),
+            })}
           </div>
         ) : null}
         {project.layout.logo ? (
@@ -3631,37 +3833,92 @@ export default function App() {
         {resizeGuides.map((g, i) => (
           <div key={i} className={`resize-guide resize-guide--${g.type}`} style={g.type === 'v' ? { left: g.pos } : { top: g.pos }} />
         ))}
-        {dragging && ['tl','tr','bl','br'].map((corner) => {
-          const isTop = corner[0] === 't';
-          const isLeft = corner[1] === 'l';
-          const hz = dragging.hoverZone;
-          const isHov = (slot) => hz?.corner === corner && hz?.slot === slot;
-          const firstLabel = isLeft ? '◤ Corner' : 'Corner ◥';
-          const stackLabel = isTop ? '↓ Stack' : '↑ Stack';
-          const firstCell = (
-            <div key="first" className={`dzs dzs-first${isHov('first') ? ' dzs--hover' : ''}`} data-corner={corner} data-slot="first">{firstLabel}</div>
-          );
-          const besideCell = (
-            <div key="beside" className={`dzs dzs-beside${isHov('beside') ? ' dzs--hover' : ''}`} data-corner={corner} data-slot="beside">⊞ Beside</div>
-          );
-          const stackCell = (
-            <div key="last" className={`dzs dzs-last${isHov('last') ? ' dzs--hover' : ''}`} data-corner={corner} data-slot="last">{stackLabel}</div>
-          );
-          const topRow = <div className="dzs-row">{isLeft ? [firstCell, besideCell] : [besideCell, firstCell]}</div>;
-          const bottomRow = <div className="dzs-row">{stackCell}</div>;
-          return (
-            <div key={corner} className={`drop-zone-cluster drop-zone-cluster--${corner}`}>
-              {isTop ? <>{topRow}{bottomRow}</> : <>{bottomRow}{topRow}</>}
-            </div>
-          );
-        })}
+        {/* Standard template: corner drop zone clusters + center crosshair guides */}
+        {dragging && project.layout.templateId !== 'side_panel' && (
+          <>
+            <div className="canvas-drag-guide-v" />
+            <div className="canvas-drag-guide-h" />
+            {['tl','tr','bl','br'].map((corner) => {
+              const isTop = corner[0] === 't';
+              const hz = dragging.hoverZone;
+              const isHov = (slot) => hz?.corner === corner && hz?.slot === slot;
+              const slots = isTop
+                ? [
+                    { slot: 'first', label: '① First position' },
+                    { slot: 'beside', label: '② Side by side' },
+                    { slot: 'last',  label: '③ Stack further out' },
+                  ]
+                : [
+                    { slot: 'last',  label: '③ Stack further out' },
+                    { slot: 'beside', label: '② Side by side' },
+                    { slot: 'first', label: '① First position' },
+                  ];
+              return (
+                <div key={corner} className={`drop-zone-cluster drop-zone-cluster--${corner}`}>
+                  {slots.map(({ slot, label }) => (
+                    <div
+                      key={slot}
+                      className={`dzs dzs-${slot}${isHov(slot) ? ' dzs--hover' : ''}`}
+                      data-corner={corner}
+                      data-slot={slot}
+                    >
+                      {label}
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
+          </>
+        )}
+        {/* Side panel template: grid cells + map area slot targets */}
+        {dragging && project.layout.templateId === 'side_panel' && (() => {
+          const sb = resolvedZonesRef.current?.sidebar || {};
+          const sbLeft = sb.left ?? Math.round(mapSize.width * 0.72);
+          const sbW = sb.width ?? Math.round(mapSize.width * 0.28);
+          const innerW = sbW - 32;
+          const colW = Math.floor((innerW - 8) / 2);
+          const rowH = Math.floor((mapSize.height - 32) / 5);
+          const elements = [];
+
+          // Sidebar grid cells (shown for all SP_SIDEBAR_ELEMENTS drags)
+          if (SP_SIDEBAR_ELEMENTS.includes(dragging.id)) {
+            for (let r = 0; r < 5; r++) {
+              for (let c = 0; c < 2; c++) {
+                const isHov = dragging.hoverGridSlot?.row === r && dragging.hoverGridSlot?.col === c;
+                elements.push(
+                  <div key={`cell-${r}-${c}`}
+                    className={`sp-grid-cell${isHov ? ' sp-grid-cell--active' : ''}`}
+                    style={{
+                      left: sbLeft + 16 + c * (colW + 8),
+                      top: 16 + r * (rowH + 6),
+                      width: colW,
+                      height: rowH,
+                    }} />
+                );
+              }
+            }
+          }
+
+          // Map area slots (for northArrow/scaleBar, and for non-sidebar SP elements)
+          const showMapSlots = ['northArrow', 'scaleBar'].includes(dragging.id) || !SP_SIDEBAR_ELEMENTS.includes(dragging.id);
+          if (showMapSlots) {
+            const slots = Object.entries(mapSlotPositions(sbLeft, mapSize.height)).map(([key, pos]) => ({ id: key, ...pos }));
+            const zW = dragging.ghostW || 80, zH = dragging.ghostH || 48;
+            slots.forEach(s => {
+              elements.push(
+                <div key={s.id} className={`sp-map-slot${dragging.hoverMapSlot === s.id ? ' sp-map-slot--active' : ''}`}
+                  style={{ left: s.left, top: s.top, width: zW, height: zH }} />
+              );
+            });
+          }
+
+          return elements;
+        })()}
           </div>
         </div>
       </div>
       {dragging && (
         <div className="drag-ghost" style={{
-          left: dragging.ghostX,
-          top: dragging.ghostY,
           width: dragging.ghostW,
           height: dragging.ghostH,
         }} />
