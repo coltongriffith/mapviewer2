@@ -934,6 +934,10 @@ button, input, select, textarea { font: inherit; }
 .template-zone:hover { outline: 2px solid rgba(37, 99, 235, 0.55); outline-offset: 2px; z-index: 420 !important; }
 body.is-dragging { cursor: grabbing !important; user-select: none; }
 body.is-dragging * { cursor: grabbing !important; }
+body.is-dragging .template-zone { pointer-events: none; outline: none !important; }
+body.is-dragging .template-zone .prh { opacity: 0 !important; }
+body.is-dragging .template-zone .panel-resize-handle { opacity: 0 !important; }
+body.is-dragging .template-zone .panel-delete-btn { opacity: 0 !important; }
 
 /* New unified resize handles (.prh) */
 .prh {
