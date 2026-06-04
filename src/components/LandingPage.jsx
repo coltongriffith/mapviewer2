@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 
 const GALLERY_STYLES = [
-  { id: 'drill_plan',   label: 'Drill Results',    desc: 'Collars, assays & target rings',        accent: '#2563eb', bg: '#1a2535', water: '#0f172a' },
+  { id: 'drill_plan',   label: 'Drill Results',    desc: 'Collars, assays & target rings',        accent: '#2563eb', bg: '#1a2535', water: '#0f172a', img: '/gallery/drill-results.png' },
   { id: 'claims',       label: 'Claims Overview',  desc: 'Mineral tenures & land packages',       accent: '#16a34a', bg: '#f0fdf4', water: '#dcfce7' },
   { id: 'target',       label: 'Target Generation',desc: 'Anomaly areas & priority zones',        accent: '#dc2626', bg: '#fef2f2', water: '#fee2e2' },
   { id: 'regional',     label: 'Regional Location',desc: 'Project context in the district',       accent: '#b87333', bg: '#fef9ee', water: '#fde68a' },
@@ -275,11 +275,16 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
               className="landing-gallery-card"
               onClick={() => onLoadSampleStyle ? onLoadSampleStyle(style.id) : onLoadSample?.()}
             >
-              <div className="landing-gallery-mock" style={{ background: style.bg }}>
-                <div className="landing-gallery-mock-claim" style={{ borderColor: style.accent }} />
-                <div className="landing-gallery-mock-ring" style={{ borderColor: style.accent }} />
-                <div className="landing-gallery-mock-dot" style={{ background: style.accent }} />
-                <div className="landing-gallery-mock-title" style={{ background: style.accent + '22', borderLeft: `3px solid ${style.accent}` }} />
+              <div className="landing-gallery-mock" style={style.img ? undefined : { background: style.bg }}>
+                {style.img
+                  ? <img src={style.img} alt={style.label} className="landing-gallery-preview-img" />
+                  : <>
+                      <div className="landing-gallery-mock-claim" style={{ borderColor: style.accent }} />
+                      <div className="landing-gallery-mock-ring" style={{ borderColor: style.accent }} />
+                      <div className="landing-gallery-mock-dot" style={{ background: style.accent }} />
+                      <div className="landing-gallery-mock-title" style={{ background: style.accent + '22', borderLeft: `3px solid ${style.accent}` }} />
+                    </>
+                }
               </div>
               <div className="landing-gallery-card-body">
                 <div className="landing-gallery-card-label">{style.label}</div>

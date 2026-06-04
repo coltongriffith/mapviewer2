@@ -1740,6 +1740,7 @@ body.is-dragging .template-zone .panel-delete-btn { opacity: 0 !important; }
   height: 120px; position: relative; overflow: hidden;
   display: flex; align-items: center; justify-content: center;
 }
+.landing-gallery-preview-img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .landing-gallery-mock-claim {
   position: absolute; left: 20%; top: 20%; width: 45%; height: 52%;
   border: 2px solid; border-radius: 3px; opacity: 0.6;
