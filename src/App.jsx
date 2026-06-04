@@ -606,6 +606,7 @@ export default function App() {
   const ghostDomRef = useRef(null);       // direct DOM ref for drag ghost — avoids React re-renders on mousemove
   const dragHoverRef = useRef({});        // tracks last hover state so setDragging only fires on zone changes
   const mapSizeRef = useRef({ width: 1600, height: 1000 });
+  const draggingActiveRef = useRef(false); // true while a template-zone drag is in progress; freezes ResizeObserver updates
   const logoInputRef = useRef(null);
   const insetInputRef = useRef(null);
   const uploadInputRef = useRef(null);
@@ -826,6 +827,7 @@ export default function App() {
     const container = mapContainerRef.current;
     if (!container) return undefined;
     const update = () => {
+      if (draggingActiveRef.current) return; // freeze during template-zone drag — prevents resolvedZones from jumping
       const s = { width: container.clientWidth, height: container.clientHeight };
       setMapSize(s);
       mapSizeRef.current = s;
@@ -1113,6 +1115,7 @@ export default function App() {
     const containerRect = mapContainerRef.current?.getBoundingClientRect() ?? { left: 0, top: 0, width: 0, height: 0 };
 
     dragHoverRef.current = {};
+    draggingActiveRef.current = true; // freeze ResizeObserver so mapSize can't change during drag
     // Set ghost position via CSS custom property — React can never overwrite this on re-render
     document.documentElement.style.setProperty('--ghost-x', e.clientX + 'px');
     document.documentElement.style.setProperty('--ghost-y', e.clientY + 'px');
@@ -1201,6 +1204,15 @@ export default function App() {
       document.documentElement.style.removeProperty('--ghost-x');
       document.documentElement.style.removeProperty('--ghost-y');
       if (map) map.dragging.enable();
+      // Unfreeze ResizeObserver and flush any pending size measurement
+      draggingActiveRef.current = false;
+      if (mapContainerRef.current) {
+        const s = { width: mapContainerRef.current.clientWidth, height: mapContainerRef.current.clientHeight };
+        if (s.width !== mapSizeRef.current.width || s.height !== mapSizeRef.current.height) {
+          setMapSize(s);
+          mapSizeRef.current = s;
+        }
+      }
 
       // Helper: remove id from grid (handles string items and [id1,id2] arrays)
       const removeFromGrid = (grid, removeId) =>

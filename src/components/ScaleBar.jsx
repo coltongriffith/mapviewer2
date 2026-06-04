@@ -30,8 +30,8 @@ export default function ScaleBar({ map, height }) {
     };
 
     update();
-    map.on("moveend zoomend resize", update);
-    return () => map.off("moveend zoomend resize", update);
+    map.on("moveend zoomend", update);
+    return () => map.off("moveend zoomend", update);
   }, [map]);
 
   return (
