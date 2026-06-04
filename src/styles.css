@@ -215,6 +215,7 @@ button, input, select, textarea { font: inherit; }
 .panel--transparent::before { display: none !important; }
 .title-card h2 { margin: 0; font-size: 28px; color: var(--title-fg, #fff); font-family: var(--font-title); }
 .title-card p { margin: 8px 0 0; font-size: 14px; color: var(--subtitle-fg, rgba(255,255,255,0.86)); font-family: var(--font-title); }
+.title-meta-row { margin: 6px 0 0; font-size: 10px; color: var(--subtitle-fg, rgba(255,255,255,0.65)); font-family: var(--font-title); letter-spacing: 0.03em; opacity: 0.8; }
 .title-inline-input { display: block; width: 100%; margin: 0; font-size: 28px; font-family: var(--font-title); color: var(--title-fg, #fff); background: rgba(255,255,255,0.12); border: none; border-bottom: 2px solid rgba(255,255,255,0.5); outline: none; padding: 0 2px; }
 .subtitle-inline-input { font-size: 14px; color: var(--subtitle-fg, rgba(255,255,255,0.86)); margin-top: 8px; }
 .legend-card { padding: 14px 16px; font-family: var(--font-legend); overflow-y: auto; max-height: 100%; }

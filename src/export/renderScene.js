@@ -369,18 +369,18 @@ function drawTitleBlockCanvas(ctx, scene, scale) {
   // Clip text to title zone bounds — matches CSS overflow:hidden in live preview
   ctx.save();
   ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
-  ctx.fillStyle = theme.titleText; ctx.font = `700 ${26 * scale * tfs}px ${titleFont}`; ctx.textBaseline = 'top'; ctx.fillText(layout.title || 'Project Map', textX, y + topOff * scale);
-  ctx.fillStyle = theme.subtitleText; ctx.font = `${14 * scale * tfs}px ${titleFont}`; ctx.fillText(layout.subtitle || '', textX, y + (topOff + 34 * tfs) * scale);
-  // Metadata rows (date / project # / scale note) — right-aligned in title block
+  // Title (22px matches live preview inline font-size)
+  ctx.fillStyle = theme.titleText; ctx.font = `700 ${22 * scale * tfs}px ${titleFont}`; ctx.textBaseline = 'top'; ctx.fillText(layout.title || 'Project Map', textX, y + topOff * scale);
+  // Subtitle below title (~22*1.3 line height ≈ 29px)
+  const subtitleY = y + (topOff + 29 * tfs) * scale;
+  ctx.fillStyle = theme.subtitleText; ctx.font = `${12 * scale * tfs}px ${titleFont}`; ctx.fillText(layout.subtitle || '', textX, subtitleY);
+  // Metadata (date · project# · scale) below subtitle, small and subtle
   const metaItems = [layout.mapDate, layout.projectNumber, layout.mapScaleNote].filter(Boolean);
   if (metaItems.length) {
-    const metaFont = `${10 * scale * tfs}px ${titleFont}`;
-    ctx.font = metaFont; ctx.textBaseline = 'top';
-    ctx.fillStyle = theme.subtitleText;
-    const rightX = x + w - 12 * scale;
-    const savedAlign = ctx.textAlign; ctx.textAlign = 'right';
-    metaItems.forEach((item, i) => { ctx.fillText(item, rightX, y + (topOff + 2 + i * 14 * tfs) * scale); });
-    ctx.textAlign = savedAlign;
+    const metaY = subtitleY + (layout.subtitle ? 16 * tfs : 0) * scale;
+    ctx.fillStyle = theme.subtitleText; ctx.font = `${10 * scale * tfs}px ${titleFont}`; ctx.globalAlpha = 0.75;
+    ctx.fillText(metaItems.join('  ·  '), textX, metaY + (layout.subtitle ? 0 : 4 * scale));
+    ctx.globalAlpha = 1;
   }
   ctx.restore();
 }

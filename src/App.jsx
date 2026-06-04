@@ -3678,6 +3678,10 @@ export default function App() {
             ) : (
               <p style={{ cursor: 'text', fontSize: Math.round(12 * (project.layout.titleFontScale ?? 1)) + 'px' }} title="Click to edit" onClick={() => setEditingTitleField('subtitle')}>{project.layout.subtitle}</p>
             )}
+            {(() => {
+              const meta = [project.layout.mapDate, project.layout.projectNumber, project.layout.mapScaleNote].filter(Boolean);
+              return meta.length ? <div className="title-meta-row" style={{ fontSize: Math.round(10 * (project.layout.titleFontScale ?? 1)) + 'px' }}>{meta.join('  ·  ')}</div> : null;
+            })()}
           </div>
           {makeResizeHandles(project.layout.titleCorner || 'tl', {
             elemId: 'title', startW: project.layout.titleWidthPx ?? 520, startH: project.layout.titleHeightPx ?? 92,
