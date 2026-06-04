@@ -1113,6 +1113,9 @@ export default function App() {
     const containerRect = mapContainerRef.current?.getBoundingClientRect() ?? { left: 0, top: 0, width: 0, height: 0 };
 
     dragHoverRef.current = {};
+    // Set ghost position via CSS custom property — React can never overwrite this on re-render
+    document.documentElement.style.setProperty('--ghost-x', e.clientX + 'px');
+    document.documentElement.style.setProperty('--ghost-y', e.clientY + 'px');
     setDragging({ id, hoverZone: null, ghostX: e.clientX, ghostY: e.clientY, ghostW: effectiveGhostW, ghostH });
     document.body.classList.add('is-dragging');
 
@@ -1120,11 +1123,9 @@ export default function App() {
       finalClientX = me.clientX;
       finalClientY = me.clientY;
 
-      // Move ghost via direct DOM — zero React re-renders on mousemove
-      if (ghostDomRef.current) {
-        ghostDomRef.current.style.left = me.clientX + 'px';
-        ghostDomRef.current.style.top = me.clientY + 'px';
-      }
+      // Update ghost via CSS custom property — bypasses React entirely, no re-renders, no snap-back
+      document.documentElement.style.setProperty('--ghost-x', me.clientX + 'px');
+      document.documentElement.style.setProperty('--ghost-y', me.clientY + 'px');
 
       if (isInSidebar || (isSidePanel && SP_SIDEBAR_ELEMENTS.includes(id))) {
         const cursorX = me.clientX - containerRect.left - sbLeft - 16;
@@ -1197,6 +1198,8 @@ export default function App() {
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
       document.body.classList.remove('is-dragging');
+      document.documentElement.style.removeProperty('--ghost-x');
+      document.documentElement.style.removeProperty('--ghost-y');
       if (map) map.dragging.enable();
 
       // Helper: remove id from grid (handles string items and [id1,id2] arrays)
@@ -3915,9 +3918,7 @@ export default function App() {
         </div>
       </div>
       {dragging && (
-        <div ref={ghostDomRef} className="drag-ghost" style={{
-          left: dragging.ghostX,
-          top: dragging.ghostY,
+        <div className="drag-ghost" style={{
           width: dragging.ghostW,
           height: dragging.ghostH,
         }} />

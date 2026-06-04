@@ -46,7 +46,7 @@ button, input, select, textarea { font: inherit; }
 .sidebar-home-link:hover { color: #2563eb; }
 .sample-data-link { background: none; border: none; padding: 0; color: #2563eb; font-size: 13px; cursor: pointer; text-align: left; margin-top: 12px; font-family: inherit; display: block; }
 .sample-data-link:hover { text-decoration: underline; }
-.drag-ghost { position: fixed; pointer-events: none; background: rgba(37, 99, 235, 0.15); border: 2px dashed #2563eb; border-radius: 8px; z-index: 9999; transform: translate(-50%, -50%); }
+.drag-ghost { position: fixed; left: var(--ghost-x, -9999px); top: var(--ghost-y, -9999px); pointer-events: none; background: rgba(37, 99, 235, 0.15); border: 2px dashed #2563eb; border-radius: 8px; z-index: 9999; transform: translate(-50%, -50%); }
 /* ── Standard template: corner drop zone clusters ── */
 .drop-zone-cluster { position: absolute; z-index: 9000; display: flex; flex-direction: column; gap: 4px; pointer-events: none; width: 180px; }
 .drop-zone-cluster--tl { top: 12px; left: 12px; }
