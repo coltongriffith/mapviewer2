@@ -71,7 +71,7 @@ import {
 import { useAuth } from './hooks/useAuth';
 import { supabase } from './lib/supabase';
 import UserMenu from './components/UserMenu';
-import { CORNER_KEY, getCornerLayout, moveToCorner, moveToCornerFirst, moveToCornerBeside } from './utils/cornerLayout';
+import { CORNER_KEY, getCornerLayout, moveToCorner, moveToCornerFirst, moveToCornerBeside, findElement } from './utils/cornerLayout';
 
 const SAMPLE_LOGO_SVG = [
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 56" width="220" height="56">',
@@ -1318,8 +1318,12 @@ export default function App() {
           const canvasCenterX = containerRect.left + mapSize.width / 2;
           const canvasCenterY = containerRect.top + mapSize.height / 2;
           const inferredCorner = (finalClientY < canvasCenterY ? 't' : 'b') + (finalClientX < canvasCenterX ? 'l' : 'r');
-          const newCl = moveToCorner(cl, id, inferredCorner);
-          updateLayout({ cornerLayout: newCl, [CORNER_KEY[id]]: inferredCorner });
+          const currentPos = findElement(cl, id);
+          // Only move if inferred corner differs — same-corner drop is a no-op to preserve ordering
+          if (currentPos?.corner !== inferredCorner) {
+            const newCl = moveToCorner(cl, id, inferredCorner);
+            updateLayout({ cornerLayout: newCl, [CORNER_KEY[id]]: inferredCorner });
+          }
         }
       }
       setDragging(null);
@@ -2482,6 +2486,7 @@ export default function App() {
                   };
                   const extra = tid === 'side_panel' ? {
                     sidePanelPositions: {},
+                    sidePanelGrid: ['inset', 'legend', 'logo', 'title', 'footer'],
                     insetEnabled: true,
                     insetHeightPx: null,
                     legendHeightPx: null,

@@ -89,8 +89,11 @@ export function resolveSidePanelZones(template, layout, mapSize, legendItems) {
   const insetW = innerW;
 
   // Determine which elements are in the sidebar grid
-  const grid = layout?.sidePanelGrid || layout?.sidePanelOrder || ['inset', 'legend', 'logo'];
-  const gridHas = (eid) => grid.some(item => Array.isArray(item) ? item.includes(eid) : item === eid);
+  const rawGrid = layout?.sidePanelGrid || layout?.sidePanelOrder || ['inset', 'legend', 'logo'];
+  // Migrate old saves that predate 'title' being included — always ensure it's present
+  const gridHasId = (g, eid) => g.some(item => Array.isArray(item) ? item.includes(eid) : item === eid);
+  const grid = gridHasId(rawGrid, 'title') ? rawGrid : [...rawGrid, 'title'];
+  const gridHas = (eid) => gridHasId(grid, eid);
   const northArrowInGrid = gridHas('northArrow');
   const scaleBarInGrid = gridHas('scaleBar');
 
