@@ -2,11 +2,11 @@ import React, { useState } from 'react';
 
 const GALLERY_STYLES = [
   { id: 'drill_plan',   label: 'Drill Results',    desc: 'Collars, assays & target rings',        accent: '#2563eb', bg: '#1a2535', water: '#0f172a', img: '/gallery/drill-results.png' },
-  { id: 'claims',       label: 'Claims Overview',  desc: 'Mineral tenures & land packages',       accent: '#16a34a', bg: '#f0fdf4', water: '#dcfce7' },
-  { id: 'target',       label: 'Target Generation',desc: 'Anomaly areas & priority zones',        accent: '#dc2626', bg: '#fef2f2', water: '#fee2e2' },
-  { id: 'regional',     label: 'Regional Location',desc: 'Project context in the district',       accent: '#b87333', bg: '#fef9ee', water: '#fde68a' },
-  { id: 'infrastructure', label: 'Infrastructure', desc: 'Roads, power lines & access routes',    accent: '#7c3aed', bg: '#f5f3ff', water: '#ede9fe' },
-  { id: 'dark',         label: 'Dark Satellite',   desc: 'Satellite basemap, high contrast',      accent: '#60a5fa', bg: '#0f172a', water: '#1e3a5f' },
+  { id: 'claims',       label: 'Claims Overview',  desc: 'Mineral tenures & land packages',       accent: '#16a34a', bg: '#f0fdf4', water: '#dcfce7', img: '/gallery/claims.png' },
+  { id: 'target',       label: 'Target Generation',desc: 'Anomaly areas & priority zones',        accent: '#dc2626', bg: '#fef2f2', water: '#fee2e2', img: '/gallery/target.png' },
+  { id: 'regional',     label: 'Regional Location',desc: 'Project context in the district',       accent: '#b87333', bg: '#fef9ee', water: '#fde68a', img: '/gallery/regional.png' },
+  { id: 'infrastructure', label: 'Infrastructure', desc: 'Roads, power lines & access routes',    accent: '#7c3aed', bg: '#f5f3ff', water: '#ede9fe', img: '/gallery/infrastructure.png' },
+  { id: 'dark',         label: 'Dark Satellite',   desc: 'Satellite basemap, high contrast',      accent: '#60a5fa', bg: '#0f172a', water: '#1e3a5f', img: '/gallery/dark.png' },
 ];
 import { useAuth } from '../hooks/useAuth.jsx';
 import AuthModal from './AuthModal';
