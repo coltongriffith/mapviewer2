@@ -1305,13 +1305,22 @@ export default function App() {
             }));
           }
         }
-      } else if (currentHoverZone) {
-        const { corner, slot } = currentHoverZone;
+      } else {
         const cl = getCornerLayout(layoutSnapshot);
-        const newCl = slot === 'first' ? moveToCornerFirst(cl, id, corner)
-          : slot === 'beside' ? moveToCornerBeside(cl, id, corner)
-          : moveToCorner(cl, id, corner);
-        updateLayout({ cornerLayout: newCl, [CORNER_KEY[id]]: corner });
+        if (currentHoverZone) {
+          const { corner, slot } = currentHoverZone;
+          const newCl = slot === 'first' ? moveToCornerFirst(cl, id, corner)
+            : slot === 'beside' ? moveToCornerBeside(cl, id, corner)
+            : moveToCorner(cl, id, corner);
+          updateLayout({ cornerLayout: newCl, [CORNER_KEY[id]]: corner });
+        } else {
+          // Dropped on blank canvas — snap to nearest corner based on which quadrant the cursor is in
+          const canvasCenterX = containerRect.left + mapSize.width / 2;
+          const canvasCenterY = containerRect.top + mapSize.height / 2;
+          const inferredCorner = (finalClientY < canvasCenterY ? 't' : 'b') + (finalClientX < canvasCenterX ? 'l' : 'r');
+          const newCl = moveToCorner(cl, id, inferredCorner);
+          updateLayout({ cornerLayout: newCl, [CORNER_KEY[id]]: inferredCorner });
+        }
       }
       setDragging(null);
     };
@@ -2538,6 +2547,15 @@ export default function App() {
               <label className="toggle-row"><input type="checkbox" checked={project.layout.footerEnabled !== false} onChange={(e) => updateLayout({ footerEnabled: e.target.checked })} /><span>Footer</span></label>
               <label className="toggle-row"><input type="checkbox" checked={project.layout.insetEnabled !== false} onChange={(e) => updateLayout({ insetEnabled: e.target.checked })} /><span>Inset Map</span></label>
             </div>
+            <button
+              type="button"
+              className="secondary-btn"
+              style={{ width: '100%', marginTop: 6, fontSize: 12 }}
+              onClick={() => updateLayout({ cornerLayout: null, titleCorner: 'tl', logoCorner: 'tl', insetCorner: 'tr', northArrowCorner: 'br', scaleBarCorner: 'bl', legendCorner: 'bl' })}
+              title="Move all elements back to their default corner positions"
+            >
+              Reset Element Positions
+            </button>
           </div>
         </section>
 

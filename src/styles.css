@@ -921,7 +921,7 @@ button, input, select, textarea { font: inherit; }
   display: flex;
   align-items: center;
   justify-content: center;
-  opacity: 0;
+  opacity: 0.25;
   transition: opacity 0.15s;
   z-index: 601;
   pointer-events: auto;
