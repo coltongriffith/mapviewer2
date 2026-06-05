@@ -2013,16 +2013,19 @@ body.is-dragging .template-zone .panel-delete-btn { opacity: 0 !important; }
 .adm-pagination-pages { color: #64748b; min-width: 50px; text-align: center; }
 
 /* ── Admin heatmap ─────────────────────────────────────────────────────────── */
-.adm-heatmap-legend { font-size: 11px; color: #94a3b8; margin-top: 6px; }
+.adm-heatmap-section { padding: 0 0 48px; }
+.adm-heatmap-outer { width: 100%; }
+.adm-heatmap-legend { font-size: 11px; color: #94a3b8; margin-top: 8px; padding: 0 24px; }
 .adm-heatmap-canvas {
-  position: relative; width: 100%;
-  border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;
+  position: relative; width: 100%; overflow: hidden;
+  border-top: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0;
 }
-.adm-heatmap-bg {
-  display: block; width: 100%; height: auto; pointer-events: none; user-select: none;
+.adm-heatmap-iframe {
+  display: block; position: absolute; top: 0; left: 0; height: 2339px;
+  border: none; pointer-events: none; transform-origin: top left;
 }
 .adm-heatmap-dot {
-  position: absolute; width: 18px; height: 18px; border-radius: 50%;
+  position: absolute; width: 20px; height: 20px; border-radius: 50%;
   background: #ef4444; transform-origin: center; pointer-events: none; z-index: 10;
-  box-shadow: 0 0 6px 2px rgba(239,68,68,0.4);
+  box-shadow: 0 0 8px 3px rgba(239,68,68,0.45);
 }

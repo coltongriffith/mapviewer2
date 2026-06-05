@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 
@@ -127,43 +127,61 @@ function FormatBadge({ format }) {
 
 // ── Landing heatmap ───────────────────────────────────────────────────────────
 
-// Must match the actual screenshot dimensions (retake if landing page layout changes)
-const SCREENSHOT_W = 1440;
-const SCREENSHOT_H = 2339;
+// The iframe is rendered at exactly this width so click percentages are 1:1 accurate.
+const IFRAME_REF_W = 1440;
 
 function LandingHeatmap({ data }) {
+  const wrapRef = useRef(null);
+  const [scale, setScale] = useState(null);
+
+  useEffect(() => {
+    if (!wrapRef.current) return;
+    const ro = new ResizeObserver(([e]) => {
+      setScale(e.contentRect.width / IFRAME_REF_W);
+    });
+    ro.observe(wrapRef.current);
+    return () => ro.disconnect();
+  }, []);
+
   const maxCount = Math.max(...data.map(d => Number(d.count)), 1);
+
   return (
-    <div>
-      <div className="adm-heatmap-canvas">
-        <img
-          src="/admin/landing-preview.png"
-          alt="Landing page preview"
-          className="adm-heatmap-bg"
-          draggable={false}
-        />
-        {data.map((pt, i) => {
-          const x = Math.min(99, Math.max(1, Number(pt.x_pct)));
-          const y = Math.min(99, Math.max(1, Number(pt.y_pct)));
-          const weight = Number(pt.count) / maxCount;
-          return (
-            <div
-              key={i}
-              className="adm-heatmap-dot"
-              title={`${pt.count} click${Number(pt.count) === 1 ? '' : 's'}`}
-              style={{
-                left: `${x}%`,
-                top: `${y}%`,
-                opacity: Math.min(1, 0.4 + weight * 0.6),
-                transform: `translate(-50%,-50%) scale(${0.7 + weight * 1.3})`,
-              }}
-            />
-          );
-        })}
-      </div>
+    <div ref={wrapRef} className="adm-heatmap-outer">
+      {scale !== null && (
+        <div
+          className="adm-heatmap-canvas"
+          style={{ height: Math.round(scale * 2339) }} // 2339 = landing page height at 1440px
+        >
+          <iframe
+            src="/"
+            title="Landing page"
+            scrolling="no"
+            tabIndex={-1}
+            className="adm-heatmap-iframe"
+            style={{ width: IFRAME_REF_W, transform: `scale(${scale})` }}
+          />
+          {data.map((pt, i) => {
+            const x = Math.min(99, Math.max(1, Number(pt.x_pct)));
+            const y = Math.min(99, Math.max(1, Number(pt.y_pct)));
+            const weight = Number(pt.count) / maxCount;
+            return (
+              <div
+                key={i}
+                className="adm-heatmap-dot"
+                title={`${pt.count} click${Number(pt.count) === 1 ? '' : 's'}`}
+                style={{
+                  left: `${x}%`,
+                  top: `${y}%`,
+                  opacity: Math.min(1, 0.4 + weight * 0.6),
+                  transform: `translate(-50%,-50%) scale(${0.7 + weight * 1.3})`,
+                }}
+              />
+            );
+          })}
+        </div>
+      )}
       <p className="adm-heatmap-legend">
-        Desktop clicks only (≥1024px) · Normalized to {SCREENSHOT_W}×{SCREENSHOT_H}px reference ·
-        Dot size = relative frequency · Run SQL migration to activate normalization
+        Live preview · iframe rendered at {IFRAME_REF_W}px so dot positions are exact
       </p>
     </div>
   );
@@ -528,17 +546,22 @@ export default function AdminPage({ onExit }) {
           ) : <Empty message="No leads yet — they appear when users enter their email in the export modal." />}
         </div>
 
-        {/* Landing page heatmap */}
-        <div className="adm-card">
-          <SectionHeader title="Landing page clicks" count={heatmapData?.reduce((s, d) => s + Number(d.count), 0)} />
-          {heatmapData && heatmapData.length > 0 ? (
-            <LandingHeatmap data={heatmapData} />
-          ) : (
-            <Empty message="No click data yet — visit the landing page a few times to populate this." />
-          )}
-        </div>
-
       </main>
+
+      {/* Landing page heatmap — full shell width so iframe renders large enough to read */}
+      <div className="adm-heatmap-section">
+        <div className="adm-section-header" style={{ padding: '0 24px 12px' }}>
+          <h2 className="adm-section-title">Landing page clicks</h2>
+          {heatmapData && <span className="adm-pill">{heatmapData.reduce((s, d) => s + Number(d.count), 0)} total</span>}
+        </div>
+        {heatmapData && heatmapData.length > 0 ? (
+          <LandingHeatmap data={heatmapData} />
+        ) : (
+          <div style={{ padding: '0 24px 40px' }}>
+            <Empty message="No click data yet — visit the landing page a few times to populate this." />
+          </div>
+        )}
+      </div>
     </div>
   );
 }
