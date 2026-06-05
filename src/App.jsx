@@ -16,6 +16,7 @@ const MapCanvas = React.lazy(() => import('./components/MapCanvas'));
 const ExportHDModal = React.lazy(() => import('./components/ExportHDModal'));
 const HowToUseModal = React.lazy(() => import('./components/HowToUseModal'));
 const ColumnMapperModal = React.lazy(() => import('./components/ColumnMapperModal'));
+const AddClaimsModal = React.lazy(() => import('./components/AddClaimsModal'));
 import { loadGeoJSON, loadCSV, loadShapefileSet } from './utils/importers';
 import sampleClaims from './assets/sampleClaims.json';
 import sampleDrillholes from './assets/sampleDrillholes.json';
@@ -640,6 +641,7 @@ export default function App() {
   const [showExportModal, setShowExportModal] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
+  const [showAddClaimsModal, setShowAddClaimsModal] = useState(false);
   const [shareUrl, setShareUrl] = useState(null);
   const [shareLoading, setShareLoading] = useState(false);
   const [pendingExportFormat, setPendingExportFormat] = useState(null);
@@ -2463,6 +2465,19 @@ export default function App() {
         ) : null}
 
         <UploadPanel onUploadFile={handleUploadFile} onUploadFiles={handleUploadFiles} inputRef={uploadInputRef} status={uploadStatus} layers={project.layers} />
+        <div className="add-claims-sidebar-btn-wrap">
+          <button
+            className="topbar-btn add-claims-sidebar-btn"
+            type="button"
+            onClick={() => setShowAddClaimsModal(true)}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0 }}>
+              <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+              <rect x="3" y="14" width="7" height="7" rx="1"/><path d="M17.5 14v6M14.5 17h6"/>
+            </svg>
+            Add BC Claims
+          </button>
+        </div>
 
         <div className={`logo-upload-card${project.layout.logo ? ' has-logo' : ''}`}>
           {project.layout.logo ? (
@@ -4130,6 +4145,15 @@ export default function App() {
         />
       ) : null}
       <React.Suspense fallback={null}>
+        {showAddClaimsModal && (
+          <AddClaimsModal
+            onClose={() => setShowAddClaimsModal(false)}
+            onImport={(geojson, name) => {
+              addGeoJSONAsLayer(geojson, `${name}.geojson`);
+              if (screen !== 'editor') setScreen('editor');
+            }}
+          />
+        )}
         {showExportModal ? (
           <ExportHDModal
             format={pendingExportFormat}

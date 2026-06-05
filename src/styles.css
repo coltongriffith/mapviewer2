@@ -1786,6 +1786,83 @@ body.is-dragging .template-zone .panel-delete-btn { opacity: 0 !important; }
 }
 .landing-ds-tip code { background: rgba(0,0,0,0.06); padding: 1px 4px; border-radius: 3px; font-family: monospace; font-size: 12px; }
 
+/* ── Add Claims sidebar button ─────────────────────────────────────────────── */
+.add-claims-sidebar-btn-wrap { padding: 2px 14px 10px; }
+.add-claims-sidebar-btn {
+  width: 100%; display: flex; align-items: center; justify-content: center; gap: 7px;
+  background: #1d4ed8 !important; color: #fff !important; border-color: #1d4ed8 !important;
+  border-radius: 9px !important; font-size: 13px !important; padding: 9px 14px !important;
+}
+.add-claims-sidebar-btn:hover { background: #1e40af !important; border-color: #1e40af !important; }
+
+/* ── Add Claims modal ──────────────────────────────────────────────────────── */
+.claims-modal-card {
+  width: min(520px, 94vw); background: #fff; border-radius: 18px;
+  border: 1px solid #dbe4ee; box-shadow: 0 28px 60px rgba(15, 23, 42, 0.22);
+  padding: 32px 28px 28px; display: grid; gap: 14px; position: relative;
+  max-height: 90vh; overflow-y: auto;
+}
+/* Path chooser */
+.claims-path-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.claims-path-btn {
+  display: flex; flex-direction: column; align-items: center; gap: 7px; padding: 22px 12px;
+  border: 2px solid #dbe4ee; border-radius: 14px; background: #f8faff;
+  cursor: pointer; text-align: center; transition: border-color 0.15s, background 0.15s;
+}
+.claims-path-btn:hover { border-color: #4d86d5; background: #eef4ff; }
+.claims-path-icon { font-size: 30px; line-height: 1; }
+.claims-path-btn strong { display: block; font-size: 14px; font-weight: 700; color: #1e293b; }
+.claims-path-btn span { font-size: 12px; color: #64748b; }
+/* Search */
+.claims-search-row { display: flex; gap: 8px; }
+.claims-search-input { flex: 1; min-width: 0; }
+.claims-list-header {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 12px; color: #64748b; padding: 2px 0;
+}
+.claims-select-all { display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
+.claims-count-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  background: #e2e8f0; border-radius: 999px; font-size: 11px;
+  font-weight: 700; color: #475569; padding: 1px 7px;
+}
+.claims-selection-summary { font-size: 12px; color: #2563eb; font-weight: 600; }
+.claims-results-list {
+  max-height: 260px; overflow-y: auto; display: grid; gap: 2px;
+  border: 1px solid #e2e8f0; border-radius: 10px; padding: 4px;
+}
+.claims-result-row {
+  display: flex; align-items: flex-start; gap: 10px; padding: 8px 10px;
+  border-radius: 7px; cursor: pointer; transition: background 0.08s;
+}
+.claims-result-row:hover { background: #f1f5f9; }
+.claims-result-row.selected { background: #eff6ff; }
+.claims-result-info { display: grid; gap: 2px; flex: 1; min-width: 0; }
+.claims-result-top { display: flex; align-items: baseline; gap: 8px; }
+.claims-result-number { font-size: 13px; font-weight: 700; color: #1e293b; }
+.claims-result-type { font-size: 11px; color: #2563eb; font-weight: 600; }
+.claims-result-holder { font-size: 12px; color: #475569; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.claims-result-meta { font-size: 11px; color: #94a3b8; }
+/* File upload */
+.claims-dropzone {
+  border: 2px dashed #c7d9f8; border-radius: 12px; padding: 32px 20px;
+  text-align: center; cursor: pointer; color: #475569; font-size: 14px;
+  background: #f8fbff; transition: border-color 0.15s, background 0.15s;
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  user-select: none;
+}
+.claims-dropzone:hover { border-color: #4d86d5; background: #eef4ff; }
+.claims-dropzone.drag-over { border-color: #2563eb; background: #dbeafe; }
+.claims-dropzone-hint { font-size: 12px; color: #94a3b8; }
+.claims-dropzone-spinner {
+  width: 22px; height: 22px; border: 2.5px solid #c7d9f8; border-top-color: #2563eb;
+  border-radius: 50%; animation: spin 0.7s linear infinite; flex-shrink: 0;
+}
+.claims-preview-block { display: grid; gap: 10px; }
+.claims-preview-count { font-size: 14px; color: #16a34a; font-weight: 600; margin: 0; }
+.claims-error { margin: 0; font-size: 13px; color: #dc2626; }
+.claims-empty { margin: 0; font-size: 13px; color: #64748b; font-style: italic; }
+
 /* ── Share modal ───────────────────────────────────────────────────────────── */
 .share-modal {
   width: min(440px, 92vw);
