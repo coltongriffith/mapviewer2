@@ -163,8 +163,7 @@ export default function AdminPage({ onExit }) {
       supabase.rpc('admin_get_referrer_stats'),
       supabase.rpc('admin_get_device_stats'),
       supabase.rpc('admin_get_exports_by_user'),
-      supabase.rpc('admin_get_landing_clicks').catch(() => ({ data: [] })),
-    ]).then(([u, e, l, re, dv, ref, dev, ebu, hc]) => {
+    ]).then(([u, e, l, re, dv, ref, dev, ebu]) => {
       if (u.error) { setDataError(u.error.message); setDataLoading(false); return; }
       setUsers(u.data || []);
       setExportStats(e.data || []);
@@ -174,7 +173,13 @@ export default function AdminPage({ onExit }) {
       setReferrerStats(ref.data || []);
       setDeviceStats(dev.data || []);
       setExportsByUser(ebu.data || []);
-      setHeatmapData(hc.data || []);
+      setDataLoading(false);
+      // Fetch heatmap data separately so a missing RPC doesn't break the dashboard
+      supabase.rpc('admin_get_landing_clicks').then(({ data }) => {
+        setHeatmapData(data || []);
+      }).catch(() => {});
+    }).catch((err) => {
+      setDataError(err.message || 'Failed to load dashboard data');
       setDataLoading(false);
     });
   }, [isAdmin]);
