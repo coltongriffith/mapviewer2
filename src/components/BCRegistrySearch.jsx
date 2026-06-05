@@ -71,7 +71,7 @@ function clusterFeatures(features, thresholdKm = 50) {
       const avgLng = ctrs.reduce((s, c) => s + c[0], 0) / ctrs.length;
       const avgLat = ctrs.reduce((s, c) => s + c[1], 0) / ctrs.length;
       const totalHa = feats.reduce((s, f) => s + (Number(f.properties?.AREA_IN_HECTARES) || 0), 0);
-      const expiries = feats.map(f => f.properties?.EXPIRY_DATE).filter(Boolean).sort();
+      const expiries = feats.map(f => f.properties?.GOOD_TO_DATE).filter(Boolean).sort();
       return {
         features: feats,
         centroid: [avgLng, avgLat],
@@ -137,7 +137,7 @@ export default function BCRegistrySearch({ onImport, onBack }) {
   function handleAdd() {
     const items = [...selectedGroups].sort((a, b) => a - b).map(i => {
       const g = groups[i];
-      const holder = g.features[0]?.properties?.TENURE_HOLDER || query;
+      const holder = g.features[0]?.properties?.OWNER_NAME || query;
       return {
         geojson: { type: 'FeatureCollection', features: g.features },
         name: groups.length > 1 ? `${holder} – ${g.label}` : `${holder} Claims`,
@@ -234,11 +234,11 @@ export default function BCRegistrySearch({ onImport, onBack }) {
                         const p = f.properties || {};
                         return (
                           <div key={fi} className="claims-subrow">
-                            <span className="claims-result-number">{p.TENURE_NUMBER || '—'}</span>
-                            <span className="claims-result-type">{p.TITLE_TYPE || ''}</span>
+                            <span className="claims-result-number">{p.TAG_NUMBER || p.TENURE_NUMBER_ID || '—'}</span>
+                            <span className="claims-result-type">{p.TITLE_TYPE_DESCRIPTION || ''}</span>
                             <span className="claims-result-meta">
                               {p.AREA_IN_HECTARES ? `${Number(p.AREA_IN_HECTARES).toFixed(1)} ha` : ''}
-                              {p.EXPIRY_DATE ? ` · ${String(p.EXPIRY_DATE).slice(0, 10)}` : ''}
+                              {p.GOOD_TO_DATE ? ` · ${String(p.GOOD_TO_DATE).slice(0, 10)}` : ''}
                             </span>
                           </div>
                         );
