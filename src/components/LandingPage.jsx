@@ -31,11 +31,26 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
 
   function handleLandingClick(e) {
     const now = Date.now();
-    if (now - clickThrottleRef.current < 500) return; // throttle to 2/sec max
+    if (now - clickThrottleRef.current < 500) return;
     clickThrottleRef.current = now;
     if (!supabase) return;
-    const el = e.target.closest('button, a, [data-track]');
-    const element = el ? (el.dataset.track || el.textContent?.trim().slice(0, 40) || el.tagName.toLowerCase()) : null;
+    // Prefer explicit data-track label; fall back to button/link text; then section name
+    const tracked = e.target.closest('[data-track]');
+    const interactive = e.target.closest('button, a');
+    let element = null;
+    if (tracked) {
+      element = tracked.dataset.track;
+    } else if (interactive) {
+      // Use aria-label or first meaningful child text (first strong/span child)
+      const firstStrong = interactive.querySelector('strong');
+      element = interactive.getAttribute('aria-label')
+        || (firstStrong ? firstStrong.textContent.trim() : null)
+        || interactive.textContent.trim().slice(0, 50);
+    } else {
+      // Record the landing section so background clicks still have context
+      const section = e.target.closest('[data-section]');
+      element = section ? section.dataset.section : null;
+    }
     const x_pct = Math.round((e.clientX / window.innerWidth) * 100);
     const y_pct = Math.round(((e.clientY + window.scrollY) / Math.max(document.body.scrollHeight, 1)) * 100);
     const viewport_w = window.innerWidth;
@@ -56,7 +71,7 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
         </div>
         <div className="landing-nav-actions">
           {onShowHelp && (
-            <button className="landing-how-to-link" type="button" onClick={onShowHelp}>
+            <button className="landing-how-to-link" type="button" onClick={onShowHelp} data-track="Nav: How to use">
               How to use →
             </button>
           )}
@@ -66,11 +81,11 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
               {user.email}
             </span>
           ) : (
-            <button className="landing-nav-signin" type="button" onClick={() => setShowAuth(true)}>
+            <button className="landing-nav-signin" type="button" onClick={() => setShowAuth(true)} data-track="Nav: Sign in">
               Sign in
             </button>
           )}
-          <button className="btn primary" type="button" onClick={onOpenEditor}>
+          <button className="btn primary" type="button" onClick={onOpenEditor} data-track="Nav: Open Editor">
             Open Editor
           </button>
         </div>
@@ -87,9 +102,9 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
               PNG, SVG, or PDF — in minutes, not an afternoon.
             </p>
 
-            <div className="landing-hero-ctas">
+            <div className="landing-hero-ctas" data-section="hero-ctas">
               {onSearchBCClaims && (
-                <button className="landing-cta-btn landing-cta-primary" type="button" onClick={onSearchBCClaims}>
+                <button className="landing-cta-btn landing-cta-primary" type="button" onClick={onSearchBCClaims} data-track="CTA: Search BC Registry">
                   <span className="landing-cta-icon">🔍</span>
                   <span>
                     <strong>Search BC Registry</strong>
@@ -98,7 +113,7 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
                 </button>
               )}
               {onUploadFile && (
-                <button className="landing-cta-btn" type="button" onClick={onUploadFile}>
+                <button className="landing-cta-btn" type="button" onClick={onUploadFile} data-track="CTA: Upload a File">
                   <span className="landing-cta-icon">📁</span>
                   <span>
                     <strong>Upload a File</strong>
@@ -106,7 +121,7 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
                   </span>
                 </button>
               )}
-              <button className="landing-cta-btn landing-cta-ghost" type="button" onClick={onOpenEditor}>
+              <button className="landing-cta-btn landing-cta-ghost" type="button" onClick={onOpenEditor} data-track="CTA: Open Editor">
                 Open Editor →
               </button>
             </div>
@@ -303,6 +318,7 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
               type="button"
               className="landing-gallery-card"
               onClick={() => onLoadSampleStyle ? onLoadSampleStyle(style.id) : onLoadSample?.()}
+              data-track={`Gallery: ${style.label}`}
             >
               <div className="landing-gallery-mock" style={style.img ? undefined : { background: style.bg }}>
                 {style.img
