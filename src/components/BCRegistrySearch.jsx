@@ -130,7 +130,7 @@ export default function BCRegistrySearch({ onImport, onBack }) {
 
   function handleSearch(e) {
     e.preventDefault();
-    if (query.trim().length < 2) return;
+    if (query.trim().length < 3) return;
     setSelectedOwner(null);
     setSelectedGroups(new Set());
     setExpandedGroups(new Set());
@@ -207,7 +207,7 @@ export default function BCRegistrySearch({ onImport, onBack }) {
           <button
             className="topbar-btn primary"
             type="submit"
-            disabled={loading || query.trim().length < 2}
+            disabled={loading || query.trim().length < 3}
             style={{ whiteSpace: 'nowrap' }}
           >
             {loading ? '…' : 'Search'}
@@ -219,6 +219,10 @@ export default function BCRegistrySearch({ onImport, onBack }) {
 
       {results && allFeatures.length === 0 && (
         <p className="claims-empty">No active claims found for "{query}". Try a shorter name or check spelling.</p>
+      )}
+
+      {allFeatures.length >= 500 && (
+        <p className="claims-limit-warning">⚠ Showing first 500 results — try a more specific name if your company is missing.</p>
       )}
 
       {/* Step 2: Owner picker — shown when multiple distinct owners match */}

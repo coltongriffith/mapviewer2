@@ -1,21 +1,6 @@
 import { useState, useCallback } from 'react';
 
-const WFS_BASE = 'https://openmaps.gov.bc.ca/geo/pub/wfs';
 const PROXY = '/api/bc-claims';
-const LAYER = 'pub:WHSE_MINERAL_TENURE.MTA_ACQUIRED_TENURE_SVW';
-
-function buildWfsUrl(company) {
-  const u = new URL(WFS_BASE);
-  u.searchParams.set('SERVICE', 'WFS');
-  u.searchParams.set('VERSION', '2.0.0');
-  u.searchParams.set('REQUEST', 'GetFeature');
-  u.searchParams.set('outputFormat', 'application/json');
-  u.searchParams.set('typeNames', LAYER);
-  u.searchParams.set('SRSNAME', 'EPSG:4326');
-  u.searchParams.set('CQL_FILTER', `OWNER_NAME ILIKE '%${company.trim().replace(/'/g, "''")}%'`);
-  u.searchParams.set('count', '500');
-  return u.toString();
-}
 
 export function useBCClaims() {
   const [results, setResults] = useState(null);
@@ -27,27 +12,13 @@ export function useBCClaims() {
     setError(null);
     setResults(null);
     try {
-      let data;
-      // 1. Try direct fetch (CORS may block; if so, fall through to proxy)
-      try {
-        const res = await fetch(buildWfsUrl(company), {
-          signal: AbortSignal.timeout(8000),
-        });
-        if (!res.ok) throw new Error(`WFS ${res.status}`);
-        data = await res.json();
-      } catch {
-        // 2. Fall back to Vercel serverless proxy
-        const res = await fetch(`${PROXY}?company=${encodeURIComponent(company.trim())}`);
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({}));
-          throw new Error(body.detail ? `${body.error}: ${body.detail}` : body.error || `Request failed (${res.status})`);
-        }
-        data = await res.json();
+      const res = await fetch(`${PROXY}?company=${encodeURIComponent(company.trim())}`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.detail ? `${body.error}: ${body.detail}` : body.error || `Request failed (${res.status})`);
       }
-
-      if (!data?.features) {
-        throw new Error('Unexpected response format from BC WFS');
-      }
+      const data = await res.json();
+      if (!data?.features) throw new Error('Unexpected response format from BC WFS');
       setResults(data);
     } catch (e) {
       setError(e.message || 'Search failed');

@@ -167,7 +167,7 @@ export async function getDefaultTemplate() {
 
 export async function shareMap(project, userId = null) {
   const sb = requireSupabase();
-  const id = crypto.randomUUID().replace(/-/g, '').slice(0, 10);
+  const id = crypto.randomUUID().replace(/-/g, '');
   const { error } = await sb.from('shared_maps').insert({
     id,
     state: project,
