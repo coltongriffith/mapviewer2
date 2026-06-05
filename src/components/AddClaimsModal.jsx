@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import BCRegistrySearch from './BCRegistrySearch';
 import ClaimsFileUpload from './ClaimsFileUpload';
 
-export default function AddClaimsModal({ onClose, onImport }) {
-  const [path, setPath] = useState(null); // null | 'registry' | 'upload'
+export default function AddClaimsModal({ onClose, onImport, defaultPath = null }) {
+  const [path, setPath] = useState(defaultPath); // null | 'registry' | 'upload'
 
   function handleBackdropClick(e) {
     if (e.target === e.currentTarget) onClose();
