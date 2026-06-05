@@ -85,8 +85,8 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
               Sign in
             </button>
           )}
-          <button className="btn primary" type="button" onClick={onOpenEditor} data-track="Nav: Open Editor">
-            Open Editor
+          <button className="btn primary" type="button" onClick={onOpenEditor} data-track="Nav: Try for Free">
+            Try for Free
           </button>
         </div>
       </nav>
@@ -96,34 +96,35 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
         <div className="landing-card modern">
           <div className="landing-copy">
             <div className="landing-badge">Built for junior mining &amp; exploration</div>
-            <h1>Investor-ready exploration maps — without the GIS headache</h1>
+            <h1>Professional mining maps in minutes — no GIS software required</h1>
             <p>
-              Upload your claims, drillholes, and targets. Pick a template. Export a polished
-              PNG, SVG, or PDF — in minutes, not an afternoon.
+              Import a shapefile, search BC Registry claims, or start with sample data. Pick a template.
+              Export a print-ready PNG, SVG, or PDF — completely free, no account required.
             </p>
 
             <div className="landing-hero-ctas" data-section="hero-ctas">
               {onSearchBCClaims && (
-                <button className="landing-cta-btn landing-cta-primary" type="button" onClick={onSearchBCClaims} data-track="CTA: Search BC Registry">
+                <button className="landing-cta-btn landing-cta-primary landing-cta-dominant" type="button" onClick={onSearchBCClaims} data-track="CTA: Search BC Registry">
                   <span className="landing-cta-icon">🔍</span>
                   <span>
-                    <strong>Search BC Registry</strong>
-                    <span className="landing-cta-sub">Find mineral claims by company name</span>
+                    <strong>Search BC Registry Claims</strong>
+                    <span className="landing-cta-sub">Find your mineral claims — free, no signup</span>
                   </span>
                 </button>
               )}
-              {onUploadFile && (
-                <button className="landing-cta-btn" type="button" onClick={onUploadFile} data-track="CTA: Upload a File">
-                  <span className="landing-cta-icon">📁</span>
-                  <span>
-                    <strong>Upload a File</strong>
-                    <span className="landing-cta-sub">GeoJSON, KML, KMZ, or Shapefile</span>
-                  </span>
+              <div className="landing-cta-secondary-row">
+                {onUploadFile && (
+                  <button className="landing-cta-btn" type="button" onClick={onUploadFile} data-track="CTA: Upload a File">
+                    <span className="landing-cta-icon">📁</span>
+                    <span><strong>Upload a File</strong></span>
+                  </button>
+                )}
+                <button className="landing-cta-btn" type="button" onClick={() => { if (onLoadSampleStyle) onLoadSampleStyle('drill_plan'); else onOpenEditor(); }} data-track="CTA: Try sample">
+                  <span className="landing-cta-icon">▶</span>
+                  <span><strong>Try with sample data</strong></span>
                 </button>
-              )}
-              <button className="landing-cta-btn landing-cta-ghost" type="button" onClick={onOpenEditor} data-track="CTA: Open Editor">
-                Open Editor →
-              </button>
+              </div>
+              <p className="landing-trust-strip">Free to use · No account required · Works in your browser · Export PNG, SVG, PDF</p>
             </div>
 
             <div className="landing-pain-grid">
@@ -159,74 +160,63 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
                 <span />
                 <div className="landing-window-url">explorationmaps.com</div>
               </div>
-              <div className="landing-map-mock">
-                <div className="mock-sidebar">
-                  <div className="mock-sb-logo" />
-                  <div className="mock-sb-line" />
-                  <div className="mock-sb-line short" />
-                  <div className="mock-sb-divider" />
-                  <div className="mock-sb-line" />
-                  <div className="mock-sb-line med" />
-                  <div className="mock-sb-line short" />
-                  <div className="mock-sb-divider" />
-                  <div className="mock-sb-line med" />
-                  <div className="mock-sb-line short" />
-                </div>
-                <div className="mock-map-area">
-                  <div className="mock-claim claim-a" />
-                  <div className="mock-claim claim-b" />
-                  <div className="mock-ellipse" />
-                  <div className="mock-drillhole dh-a" />
-                  <div className="mock-drillhole dh-b" />
-                  <div className="mock-drillhole dh-c" />
-                  <div className="mock-drillhole dh-d" />
-                  <div className="mock-callout mock-callout-a">Target Area</div>
-                  <div className="mock-badge-callout">
-                    <span className="mock-badge-chip">Au 4.2</span>
-                    <span className="mock-badge-text">Hole DH-07</span>
-                  </div>
-                  <div className="mock-inset" />
-                  <div className="mock-north-arrow">N</div>
-                  <div className="mock-title-block">
-                    <div className="mock-tb-line title" />
-                    <div className="mock-tb-line subtitle" />
-                  </div>
-                  <div className="mock-legend">
-                    <div className="mock-legend-row">
-                      <span className="mock-legend-swatch claims" />
-                      <span className="mock-legend-label" />
-                    </div>
-                    <div className="mock-legend-row">
-                      <span className="mock-legend-swatch drillholes" />
-                      <span className="mock-legend-label short" />
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <img
+                src="/gallery/drill-results.png"
+                alt="Drill results map with callouts and target rings — made with Exploration Maps"
+                className="landing-hero-screenshot"
+              />
             </div>
 
-            <div className="landing-mini-grid">
-              <div className="landing-mini-card">
-                <div className="mini-title">5 Templates</div>
-                <div className="mini-line" />
-                <div className="mini-line short" />
-              </div>
-              <div className="landing-mini-card">
-                <div className="mini-title">Badge Callouts</div>
-                <div className="mini-color-row">
-                  <span />
-                  <span />
-                  <span />
-                </div>
-              </div>
-              <div className="landing-mini-card">
-                <div className="mini-title">PDF Export</div>
-                <div className="mini-button" />
-              </div>
+            <div className="landing-gallery-thumbs">
+              {['claims', 'target', 'dark'].map(id => {
+                const s = GALLERY_STYLES.find(g => g.id === id);
+                return (
+                  <button key={id} type="button" className="landing-thumb-btn"
+                    onClick={() => onLoadSampleStyle?.(id)}
+                    data-track={`Hero thumb: ${s.label}`}>
+                    <img src={s.img} alt={s.label} className="landing-thumb-img" />
+                    <span className="landing-thumb-label">{s.label}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
       </div>
+
+      {/* Example map gallery — moved above "How it works" */}
+      <section className="landing-gallery">
+        <div className="landing-gallery-heading">Real maps made with Exploration Maps</div>
+        <p className="landing-gallery-sub">Click any style to try it free — no account needed.</p>
+        <div className="landing-gallery-grid">
+          {GALLERY_STYLES.map((style) => (
+            <button
+              key={style.id}
+              type="button"
+              className="landing-gallery-card"
+              onClick={() => onLoadSampleStyle ? onLoadSampleStyle(style.id) : onLoadSample?.()}
+              data-track={`Gallery: ${style.label}`}
+            >
+              <div className="landing-gallery-mock" style={style.img ? undefined : { background: style.bg }}>
+                {style.img
+                  ? <img src={style.img} alt={style.label} className="landing-gallery-preview-img" />
+                  : <>
+                      <div className="landing-gallery-mock-claim" style={{ borderColor: style.accent }} />
+                      <div className="landing-gallery-mock-ring" style={{ borderColor: style.accent }} />
+                      <div className="landing-gallery-mock-dot" style={{ background: style.accent }} />
+                      <div className="landing-gallery-mock-title" style={{ background: style.accent + '22', borderLeft: `3px solid ${style.accent}` }} />
+                    </>
+                }
+              </div>
+              <div className="landing-gallery-card-body">
+                <div className="landing-gallery-card-label">{style.label}</div>
+                <div className="landing-gallery-card-desc">{style.desc}</div>
+                <div className="landing-gallery-card-cta" style={{ color: style.accent }}>Try this style →</div>
+              </div>
+            </button>
+          ))}
+        </div>
+      </section>
 
       {/* How it works */}
       <section className="landing-steps">
@@ -253,7 +243,7 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 4v12m0 0l-4-4m4 4l4-4" stroke="#2563eb" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/><path d="M4 20h16" stroke="#2563eb" strokeWidth="2" strokeLinecap="round"/></svg>
             </div>
             <div className="landing-step-title">3 · Export</div>
-            <div className="landing-step-desc">Export PNG, SVG, or PDF at up to 3× resolution. Deck-ready in one click — no post-processing in Illustrator.</div>
+            <div className="landing-step-desc">Export PNG, SVG, or PDF at up to 3× resolution. Watermark-free exports ask for your email — no password, no subscription, remembered for next time.</div>
           </div>
         </div>
       </section>
@@ -304,40 +294,6 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
             <div className="landing-feature-title">Distance Rings &amp; Regions</div>
             <div className="landing-feature-desc">Draw geo-accurate distance rings from a target, highlight provinces, and layer on reference roads, labels, and railways.</div>
           </div>
-        </div>
-      </section>
-
-      {/* Example map gallery */}
-      <section className="landing-gallery">
-        <div className="landing-gallery-heading">See what you can make</div>
-        <p className="landing-gallery-sub">Click any style to open the editor with sample mining data pre-loaded.</p>
-        <div className="landing-gallery-grid">
-          {GALLERY_STYLES.map((style) => (
-            <button
-              key={style.id}
-              type="button"
-              className="landing-gallery-card"
-              onClick={() => onLoadSampleStyle ? onLoadSampleStyle(style.id) : onLoadSample?.()}
-              data-track={`Gallery: ${style.label}`}
-            >
-              <div className="landing-gallery-mock" style={style.img ? undefined : { background: style.bg }}>
-                {style.img
-                  ? <img src={style.img} alt={style.label} className="landing-gallery-preview-img" />
-                  : <>
-                      <div className="landing-gallery-mock-claim" style={{ borderColor: style.accent }} />
-                      <div className="landing-gallery-mock-ring" style={{ borderColor: style.accent }} />
-                      <div className="landing-gallery-mock-dot" style={{ background: style.accent }} />
-                      <div className="landing-gallery-mock-title" style={{ background: style.accent + '22', borderLeft: `3px solid ${style.accent}` }} />
-                    </>
-                }
-              </div>
-              <div className="landing-gallery-card-body">
-                <div className="landing-gallery-card-label">{style.label}</div>
-                <div className="landing-gallery-card-desc">{style.desc}</div>
-                <div className="landing-gallery-card-cta" style={{ color: style.accent }}>Try this style →</div>
-              </div>
-            </button>
-          ))}
         </div>
       </section>
 
@@ -412,6 +368,23 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
           </div>
         </div>
       )}
+
+      <section className="landing-bottom-cta" data-section="bottom-cta">
+        <div className="landing-bottom-cta-inner">
+          <div className="landing-bottom-cta-headline">Ready to make your first map?</div>
+          <div className="landing-bottom-cta-sub">Free · No account required · Works in your browser</div>
+          <div className="landing-bottom-cta-actions">
+            {onSearchBCClaims && (
+              <button className="landing-bottom-primary" onClick={onSearchBCClaims} data-track="Bottom CTA: Search BC">
+                Search BC Registry Claims
+              </button>
+            )}
+            <button className="landing-bottom-ghost" onClick={onOpenEditor} data-track="Bottom CTA: Open Editor">
+              Open Editor with Sample Data →
+            </button>
+          </div>
+        </div>
+      </section>
 
       </main>
       <footer className="landing-footer">
