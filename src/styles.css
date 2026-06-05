@@ -1848,6 +1848,24 @@ body.is-dragging .template-zone .panel-delete-btn { opacity: 0 !important; }
   transition: color 0.1s, background 0.1s;
 }
 .claims-group-expand:hover { color: #475569; background: #f1f5f9; }
+/* Owner picker */
+.claims-owner-hint { margin: 0; font-size: 13px; color: #475569; }
+.claims-owner-list { display: grid; gap: 6px; max-height: 320px; overflow-y: auto; }
+.claims-owner-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 10px 14px; border: 1.5px solid #e2e8f0; border-radius: 10px;
+  background: #f8faff; cursor: pointer; text-align: left;
+  transition: border-color 0.12s, background 0.12s;
+}
+.claims-owner-row:hover { border-color: #4d86d5; background: #eef4ff; }
+.claims-owner-name { font-size: 13px; font-weight: 600; color: #1e293b; }
+.claims-owner-meta { font-size: 11px; color: #64748b; white-space: nowrap; }
+.claims-owner-back {
+  display: inline-flex; align-items: center; gap: 4px; font-size: 12px;
+  color: #2563eb; background: #eff6ff; border: 1px solid #bfdbfe;
+  border-radius: 6px; padding: 4px 10px; cursor: pointer; font-weight: 500;
+}
+.claims-owner-back:hover { background: #dbeafe; }
 /* Expanded individual claims */
 .claims-group-items {
   border-top: 1px solid #e2e8f0; background: #f8faff;
