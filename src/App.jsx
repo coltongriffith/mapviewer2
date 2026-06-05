@@ -3514,7 +3514,13 @@ export default function App() {
             </div>
             <div className="topbar-divider" />
             <button className="help-icon-btn" type="button" title="How to use Exploration Maps" onClick={() => setShowHelpModal(true)}>?</button>
-            <button className="topbar-btn topbar-share-btn" type="button" title="Share map" onClick={() => { setShareUrl(null); setShowShareModal(true); }}>⬡ Share</button>
+            <button className="topbar-btn primary topbar-share-btn" type="button" title="Share map" onClick={() => { setShareUrl(null); setShowShareModal(true); }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{marginRight:5,verticalAlign:'middle',marginTop:-1}}>
+                <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+              </svg>
+              Share
+            </button>
             <div className="topbar-btn-group">
               <button className={`topbar-btn primary${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('png'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing…' : ''}>{exporting ? 'Exporting…' : 'PNG'}</button>
               <button className={`topbar-btn${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('svg'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting}>SVG</button>
@@ -4138,13 +4144,19 @@ export default function App() {
       {showShareModal && (
         <div className="modal-backdrop" onClick={() => setShowShareModal(false)}>
           <div className="share-modal" onClick={e => e.stopPropagation()}>
-            <button className="modal-close-btn" onClick={() => setShowShareModal(false)}>✕</button>
+            <button className="export-hd-close" onClick={() => setShowShareModal(false)}>✕</button>
+            <div className="share-modal-icon-wrap">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+              </svg>
+            </div>
             <h3 className="share-modal-title">Share Map</h3>
             {!shareUrl ? (
               <>
-                <p className="share-modal-desc">Generate a public read-only link anyone can view — no account needed.</p>
+                <p className="share-modal-desc">Create a public read-only link — anyone can view your map without an account.</p>
                 <button
-                  className="primary-btn share-generate-btn"
+                  className="share-generate-btn"
                   disabled={shareLoading}
                   onClick={async () => {
                     setShareLoading(true);
@@ -4168,11 +4180,11 @@ export default function App() {
                 <div className="share-url-row">
                   <input readOnly value={shareUrl} className="share-url-input" onFocus={e => e.target.select()} />
                   <button
-                    className="topbar-btn"
+                    className="share-copy-btn"
                     onClick={() => navigator.clipboard.writeText(shareUrl).then(() => {}).catch(() => {})}
                   >Copy</button>
                 </div>
-                <p className="share-note">Link is permanent. Viewers see the map as it exists right now.</p>
+                <p className="share-note">This link is permanent. Viewers see the map exactly as it is now.</p>
               </>
             )}
           </div>

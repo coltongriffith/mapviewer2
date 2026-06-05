@@ -1786,26 +1786,48 @@ body.is-dragging .template-zone .panel-delete-btn { opacity: 0 !important; }
 }
 .landing-ds-tip code { background: rgba(0,0,0,0.06); padding: 1px 4px; border-radius: 3px; font-family: monospace; font-size: 12px; }
 
-/* ── Share button ──────────────────────────────────────────────────────────── */
-.topbar-share-btn { background: #0ea5e9 !important; color: #fff !important; border-color: #0284c7 !important; }
-.topbar-share-btn:hover { background: #0284c7 !important; }
-
 /* ── Share modal ───────────────────────────────────────────────────────────── */
 .share-modal {
-  background: #fff; border-radius: 12px; padding: 28px 28px 24px;
-  width: 440px; max-width: 92vw; position: relative;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.28);
+  width: min(440px, 92vw);
+  background: #ffffff;
+  border-radius: 18px;
+  border: 1px solid #dbe4ee;
+  box-shadow: 0 28px 60px rgba(15, 23, 42, 0.22);
+  padding: 32px 28px 28px;
+  display: grid;
+  gap: 12px;
+  position: relative;
 }
-.share-modal-title { margin: 0 0 10px; font-size: 17px; font-weight: 700; color: #1e293b; }
-.share-modal-desc { margin: 0 0 18px; font-size: 13px; color: #475569; line-height: 1.5; }
-.share-generate-btn { width: 100%; justify-content: center; }
-.share-url-row { display: flex; gap: 8px; margin-bottom: 10px; }
+.share-modal-icon-wrap {
+  width: 44px; height: 44px; border-radius: 12px;
+  background: linear-gradient(135deg, #e8f0ff 0%, #dbeafe 100%);
+  border: 1px solid #c7d9f8;
+  display: flex; align-items: center; justify-content: center;
+  color: #1d4ed8; font-size: 20px;
+}
+.share-modal-title { margin: 0; font-size: 20px; font-weight: 800; color: #0f1f38; line-height: 1.2; }
+.share-modal-desc { margin: 0; font-size: 14px; color: #475569; line-height: 1.55; }
+.share-generate-btn {
+  width: 100%; padding: 13px; font-size: 15px; font-weight: 700;
+  border-radius: 12px; background: #1d4ed8; color: #fff; border: none;
+  cursor: pointer; transition: background 0.15s;
+}
+.share-generate-btn:hover { background: #1e40af; }
+.share-generate-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.share-url-row { display: flex; gap: 8px; }
 .share-url-input {
-  flex: 1; padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 6px;
-  font-size: 12px; background: #f8fafc; color: #334155; font-family: monospace;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  flex: 1; padding: 11px 13px; border: 1px solid #d4deea; border-radius: 10px;
+  font-size: 13px; background: #f8fbff; color: #334155; font-family: monospace;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; outline: none;
 }
-.share-note { margin: 0; font-size: 11px; color: #94a3b8; }
+.share-url-input:focus { border-color: #4d86d5; box-shadow: 0 0 0 3px rgba(77,134,213,0.14); }
+.share-copy-btn {
+  padding: 11px 18px; font-size: 13px; font-weight: 700; border-radius: 10px;
+  background: #f1f5f9; border: 1px solid #d1dae5; color: #1e293b;
+  cursor: pointer; white-space: nowrap; transition: background 0.1s;
+}
+.share-copy-btn:hover { background: #e2e8f0; }
+.share-note { margin: 0; font-size: 12px; color: #94a3b8; line-height: 1.5; }
 
 /* ── Shared map viewer ─────────────────────────────────────────────────────── */
 .shared-map-viewer { display: flex; flex-direction: column; height: 100vh; background: #0f172a; }
