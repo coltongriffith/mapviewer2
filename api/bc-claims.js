@@ -4,18 +4,21 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'company param required (min 2 chars)' });
   }
 
-  const url = new URL('https://openmaps.gov.bc.ca/geo/pub/wfs');
-  url.searchParams.set('SERVICE', 'WFS');
-  url.searchParams.set('VERSION', '2.0.0');
-  url.searchParams.set('REQUEST', 'GetFeature');
-  url.searchParams.set('outputFormat', 'application/json');
-  url.searchParams.set('typeNames', 'pub:WHSE_MINERAL_TENURE.MTA_ACQUIRED_TENURE_SVW');
-  url.searchParams.set('SRSNAME', 'EPSG:4326');
-  url.searchParams.set('CQL_FILTER', `TENURE_HOLDER ILIKE '%${company.trim().replace(/'/g, "''")}%'`);
-  url.searchParams.set('count', '500');
+  const cqlFilter = `TENURE_HOLDER ILIKE '%${company.trim().replace(/'/g, "''")}%'`;
+  const wfsUrl = [
+    'https://openmaps.gov.bc.ca/geo/pub/wfs',
+    '?SERVICE=WFS',
+    '&VERSION=2.0.0',
+    '&REQUEST=GetFeature',
+    '&outputFormat=application/json',
+    '&typeNames=pub:WHSE_MINERAL_TENURE.MTA_ACQUIRED_TENURE_SVW',
+    '&SRSNAME=EPSG:4326',
+    `&CQL_FILTER=${encodeURIComponent(cqlFilter)}`,
+    '&count=500',
+  ].join('');
 
   try {
-    const response = await fetch(url.toString(), {
+    const response = await fetch(wfsUrl, {
       headers: {
         Accept: 'application/json',
         'User-Agent': 'Mozilla/5.0 (compatible; ExplorationMaps/1.0; +https://explorationmaps.com)',
@@ -26,7 +29,7 @@ export default async function handler(req, res) {
     });
     if (!response.ok) {
       const body = await response.text().catch(() => '');
-      return res.status(502).json({ error: `WFS returned ${response.status}`, detail: body.slice(0, 400) });
+      return res.status(502).json({ error: `WFS returned ${response.status}`, detail: body.slice(0, 2000) });
     }
     const data = await response.json();
     res.setHeader('Access-Control-Allow-Origin', '*');
