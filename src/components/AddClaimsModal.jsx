@@ -38,7 +38,11 @@ export default function AddClaimsModal({ onClose, onImport }) {
 
         {path === 'registry' && (
           <BCRegistrySearch
-            onImport={(geojson, name) => { onImport(geojson, name); onClose(); }}
+            onImport={(items) => {
+              // items is [{geojson, name}, ...] — one entry per geographic group
+              items.forEach(({ geojson, name }) => onImport(geojson, name));
+              onClose();
+            }}
             onBack={() => setPath(null)}
           />
         )}
