@@ -2012,17 +2012,11 @@ body.is-dragging .template-zone .panel-delete-btn { opacity: 0 !important; }
 .adm-pagination-info { color: #94a3b8; flex: 1; }
 .adm-pagination-pages { color: #64748b; min-width: 50px; text-align: center; }
 
-/* ── Admin heatmap ─────────────────────────────────────────────────────────── */
-.adm-heatmap-legend { font-size: 11px; color: #94a3b8; margin-top: 6px; }
-.adm-heatmap-canvas {
-  position: relative; width: 100%;
-  border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;
-}
-.adm-heatmap-bg {
-  display: block; width: 100%; height: auto; pointer-events: none; user-select: none;
-}
-.adm-heatmap-dot {
-  position: absolute; width: 18px; height: 18px; border-radius: 50%;
-  background: #ef4444; transform-origin: center; pointer-events: none; z-index: 10;
-  box-shadow: 0 0 6px 2px rgba(239,68,68,0.4);
-}
+/* ── Admin landing click chart ───────────────────────────────────────────────── */
+.adm-click-chart { display: grid; gap: 6px; }
+.adm-click-row { display: grid; grid-template-columns: 200px 1fr 48px 40px; align-items: center; gap: 10px; }
+.adm-click-label { font-size: 13px; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.adm-click-track { background: #f1f5f9; border-radius: 4px; height: 8px; overflow: hidden; }
+.adm-click-fill { height: 100%; background: #3b82f6; border-radius: 4px; transition: width 0.3s; }
+.adm-click-count { font-size: 13px; font-weight: 600; color: #1e293b; text-align: right; }
+.adm-click-pct { font-size: 12px; color: #94a3b8; text-align: right; }
