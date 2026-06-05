@@ -18,11 +18,18 @@ export function fitProjectToTemplate(project, map, template, mode = 'balanced', 
   if (!visibleLayers.length) return;
 
   let targetLayers;
-  if (project?.layout?.primaryLayerId) {
-    targetLayers = visibleLayers.filter((layer) => layer.id === project.layout.primaryLayerId);
-  } else if (opts.focusRoles) {
+  if (opts.focusRoles) {
+    // Always prefer focus-role layers (claims, drillholes, targets) when they exist
     const focus = visibleLayers.filter((l) => FOCUS_ROLES.has(l.role));
-    targetLayers = focus.length ? focus : visibleLayers;
+    if (focus.length) {
+      targetLayers = focus;
+    } else if (project?.layout?.primaryLayerId) {
+      targetLayers = visibleLayers.filter((l) => l.id === project.layout.primaryLayerId);
+    } else {
+      targetLayers = visibleLayers;
+    }
+  } else if (project?.layout?.primaryLayerId) {
+    targetLayers = visibleLayers.filter((layer) => layer.id === project.layout.primaryLayerId);
   } else {
     targetLayers = visibleLayers;
   }

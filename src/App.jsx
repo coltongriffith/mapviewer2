@@ -1001,7 +1001,8 @@ export default function App() {
       project,
       map,
       { ...template, zones: resolvedZonesRef.current },
-      project.layout.compositionPreset || template.modePresets?.[project.layout.mode]?.framing || 'balanced'
+      project.layout.compositionPreset || template.modePresets?.[project.layout.mode]?.framing || 'balanced',
+      { focusRoles: true }
     );
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [template, project.layout.frameVersion, project.layout.primaryLayerId, project.layout.compositionPreset, layerFitKey]);
@@ -1544,12 +1545,12 @@ export default function App() {
   };
 
   const SAMPLE_STYLE_PRESETS = {
-    drill_plan:     { basemap: 'satellite', mode: 'drill_plan' },
-    claims:         { basemap: 'light',     mode: 'regional_claims' },
-    target:         { basemap: 'light',     mode: 'target_anomaly' },
-    regional:       { basemap: 'terrain',   mode: 'project_overview' },
-    infrastructure: { basemap: 'streets',   mode: 'access_location' },
-    dark:           { basemap: 'dark',      mode: 'drill_plan' },
+    drill_plan:     { basemap: 'satellite', mode: 'drill_plan',        accent: '#2563eb' },
+    claims:         { basemap: 'light',     mode: 'regional_claims',   accent: '#16a34a' },
+    target:         { basemap: 'light',     mode: 'target_anomaly',    accent: '#dc2626' },
+    regional:       { basemap: 'terrain',   mode: 'project_overview',  accent: '#b87333' },
+    infrastructure: { basemap: 'streets',   mode: 'access_location',   accent: '#7c3aed' },
+    dark:           { basemap: 'dark',      mode: 'drill_plan',        accent: '#60a5fa' },
   };
 
   const loadSampleData = async (styleId) => {
@@ -1558,10 +1559,12 @@ export default function App() {
     try {
       await addGeoJSONLayer(makeFile(sampleClaims, 'Sample Claims.geojson'));
       await addGeoJSONLayer(makeFile(sampleDrillholes, 'Sample Drillholes.geojson'));
-      const styleOverride = styleId ? (SAMPLE_STYLE_PRESETS[styleId] || {}) : {};
+      const preset = styleId ? (SAMPLE_STYLE_PRESETS[styleId] || {}) : {};
+      const accent = preset.accent || SAMPLE_ACCENT;
+      const { accent: _a, ...styleOverride } = preset;
       updateLayout({
         logo: SAMPLE_LOGO_URL,
-        accentColor: SAMPLE_ACCENT,
+        accentColor: accent,
         title: 'Buckhorn Creek Property',
         subtitle: 'Cariboo Region, British Columbia',
         footerText: 'Buckhorn Creek Mining Corp. | Cariboo Region, BC | For internal use only',
@@ -1569,7 +1572,7 @@ export default function App() {
         exportSettings: { filename: 'buckhorn-creek-property', pixelRatio: 2 },
         ...styleOverride,
       });
-      applyBrandPaletteToLayers(SAMPLE_ACCENT);
+      applyBrandPaletteToLayers(accent);
       setScreen('editor');
       setUploadStatus({ type: 'success', message: 'Sample data loaded. Explore the editor and export to try it out.' });
     } catch (err) {
