@@ -2013,13 +2013,17 @@ body.is-dragging .template-zone .panel-delete-btn { opacity: 0 !important; }
 .adm-pagination-pages { color: #64748b; min-width: 50px; text-align: center; }
 
 /* ── Admin heatmap ─────────────────────────────────────────────────────────── */
-.adm-heatmap-wrap { display: grid; gap: 8px; }
-.adm-heatmap-legend { font-size: 11px; color: #94a3b8; }
+.adm-heatmap-legend { font-size: 11px; color: #94a3b8; margin-top: 6px; }
 .adm-heatmap-canvas {
-  position: relative; height: 200px; background: #f8fafc;
+  position: relative; width: 100%; background: #f8fafc;
   border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;
 }
+.adm-heatmap-iframe {
+  position: absolute; top: 0; left: 0;
+  border: none; pointer-events: none;
+  transform-origin: top left;
+}
 .adm-heatmap-dot {
-  position: absolute; width: 16px; height: 16px; border-radius: 50%;
-  background: #ef4444; transform-origin: center;
+  position: absolute; width: 18px; height: 18px; border-radius: 50%;
+  background: #ef4444; transform-origin: center; pointer-events: none; z-index: 10;
 }
