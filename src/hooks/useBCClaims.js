@@ -13,7 +13,7 @@ function buildWfsUrl(company) {
   u.searchParams.set('typeNames', LAYER);
   u.searchParams.set('SRSNAME', 'EPSG:4326');
   u.searchParams.set('CQL_FILTER', `TENURE_HOLDER ILIKE '%${company.trim().replace(/'/g, "''")}%'`);
-  u.searchParams.set('count', '2000');
+  u.searchParams.set('count', '1000');
   return u.toString();
 }
 
