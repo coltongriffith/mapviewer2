@@ -9,7 +9,7 @@ export default async function handler(req, res) {
   url.searchParams.set('VERSION', '2.0.0');
   url.searchParams.set('REQUEST', 'GetFeature');
   url.searchParams.set('outputFormat', 'application/json');
-  url.searchParams.set('typeName', 'WHSE_MINERAL_TENURE.MTA_ACQUIRED_TENURE_SVW');
+  url.searchParams.set('typeNames', 'pub:WHSE_MINERAL_TENURE.MTA_ACQUIRED_TENURE_SVW');
   url.searchParams.set('SRSNAME', 'EPSG:4326');
   url.searchParams.set('CQL_FILTER', `TENURE_HOLDER ILIKE '%${company.trim().replace(/'/g, "''")}%'`);
   url.searchParams.set('count', '500');
@@ -20,7 +20,8 @@ export default async function handler(req, res) {
       signal: AbortSignal.timeout(15000),
     });
     if (!response.ok) {
-      return res.status(502).json({ error: `WFS returned ${response.status}` });
+      const body = await response.text().catch(() => '');
+      return res.status(502).json({ error: `WFS returned ${response.status}`, detail: body.slice(0, 400) });
     }
     const data = await response.json();
     res.setHeader('Access-Control-Allow-Origin', '*');

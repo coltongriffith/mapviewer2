@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 
 const WFS_BASE = 'https://openmaps.gov.bc.ca/geo/pub/wfs';
 const PROXY = '/api/bc-claims';
-const LAYER = 'WHSE_MINERAL_TENURE.MTA_ACQUIRED_TENURE_SVW';
+const LAYER = 'pub:WHSE_MINERAL_TENURE.MTA_ACQUIRED_TENURE_SVW';
 
 function buildWfsUrl(company) {
   const u = new URL(WFS_BASE);
@@ -10,7 +10,7 @@ function buildWfsUrl(company) {
   u.searchParams.set('VERSION', '2.0.0');
   u.searchParams.set('REQUEST', 'GetFeature');
   u.searchParams.set('outputFormat', 'application/json');
-  u.searchParams.set('typeName', LAYER);
+  u.searchParams.set('typeNames', LAYER);
   u.searchParams.set('SRSNAME', 'EPSG:4326');
   u.searchParams.set('CQL_FILTER', `TENURE_HOLDER ILIKE '%${company.trim().replace(/'/g, "''")}%'`);
   u.searchParams.set('count', '500');
