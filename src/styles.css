@@ -2015,15 +2015,14 @@ body.is-dragging .template-zone .panel-delete-btn { opacity: 0 !important; }
 /* ── Admin heatmap ─────────────────────────────────────────────────────────── */
 .adm-heatmap-legend { font-size: 11px; color: #94a3b8; margin-top: 6px; }
 .adm-heatmap-canvas {
-  position: relative; width: 100%; background: #f8fafc;
+  position: relative; width: 100%;
   border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;
 }
-.adm-heatmap-iframe {
-  position: absolute; top: 0; left: 0;
-  border: none; pointer-events: none;
-  transform-origin: top left;
+.adm-heatmap-bg {
+  display: block; width: 100%; height: auto; pointer-events: none; user-select: none;
 }
 .adm-heatmap-dot {
   position: absolute; width: 18px; height: 18px; border-radius: 50%;
   background: #ef4444; transform-origin: center; pointer-events: none; z-index: 10;
+  box-shadow: 0 0 6px 2px rgba(239,68,68,0.4);
 }
