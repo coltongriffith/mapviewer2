@@ -610,6 +610,7 @@ export default function App() {
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [showAddClaimsModal, setShowAddClaimsModal] = useState(false);
+  const [addClaimsModalPath, setAddClaimsModalPath] = useState(null);
   const [shareUrl, setShareUrl] = useState(null);
   const [shareLoading, setShareLoading] = useState(false);
   const [shareElapsed, setShareElapsed] = useState(0);
@@ -2398,6 +2399,8 @@ export default function App() {
           recentProjects={recentProjects}
           onOpenProject={(entry) => { openProjectFromRecent(entry); setScreen('editor'); }}
           onShowHelp={() => setShowHelpModal(true)}
+          onSearchBCClaims={() => { setScreen('editor'); setAddClaimsModalPath('registry'); setShowAddClaimsModal(true); }}
+          onUploadFile={() => { setScreen('editor'); setAddClaimsModalPath('upload'); setShowAddClaimsModal(true); }}
         />
         {showHelpModal && <React.Suspense fallback={null}><HowToUseModal onClose={() => setShowHelpModal(false)} /></React.Suspense>}
       </>
@@ -2437,7 +2440,7 @@ export default function App() {
           <button
             className="topbar-btn add-claims-sidebar-btn"
             type="button"
-            onClick={() => setShowAddClaimsModal(true)}
+            onClick={() => { setAddClaimsModalPath(null); setShowAddClaimsModal(true); }}
           >
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0 }}>
               <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
@@ -4115,9 +4118,12 @@ export default function App() {
       <React.Suspense fallback={null}>
         {showAddClaimsModal && (
           <AddClaimsModal
-            onClose={() => setShowAddClaimsModal(false)}
+            defaultPath={addClaimsModalPath}
+            onClose={() => { setShowAddClaimsModal(false); setAddClaimsModalPath(null); }}
             onImport={(geojson, name) => {
               addGeoJSONAsLayer(geojson, `${name}.geojson`);
+              setShowAddClaimsModal(false);
+              setAddClaimsModalPath(null);
               if (screen !== 'editor') setScreen('editor');
             }}
           />

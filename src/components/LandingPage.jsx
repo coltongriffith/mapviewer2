@@ -22,7 +22,7 @@ function formatRelativeDate(iso) {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleStyle, recentProjects = [], onOpenProject, onShowHelp }) {
+export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleStyle, recentProjects = [], onOpenProject, onShowHelp, onSearchBCClaims, onUploadFile }) {
   const { user } = useAuth();
   const [showAuth, setShowAuth] = useState(false);
   const [dataSourcesOpen, setDataSourcesOpen] = useState(false);
@@ -71,15 +71,28 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
               PNG, SVG, or PDF — in minutes, not an afternoon.
             </p>
 
-            <div className="landing-actions landing-actions-sticky">
-              <button className="btn primary large" type="button" onClick={onOpenEditor}>
-                Open Map Editor
-              </button>
-              {onLoadSample && (
-                <button className="btn sample-btn" type="button" onClick={onLoadSample}>
-                  Try with sample data →
+            <div className="landing-hero-ctas">
+              {onSearchBCClaims && (
+                <button className="landing-cta-btn landing-cta-primary" type="button" onClick={onSearchBCClaims}>
+                  <span className="landing-cta-icon">🔍</span>
+                  <span>
+                    <strong>Search BC Registry</strong>
+                    <span className="landing-cta-sub">Find mineral claims by company name</span>
+                  </span>
                 </button>
               )}
+              {onUploadFile && (
+                <button className="landing-cta-btn" type="button" onClick={onUploadFile}>
+                  <span className="landing-cta-icon">📁</span>
+                  <span>
+                    <strong>Upload a File</strong>
+                    <span className="landing-cta-sub">GeoJSON, KML, KMZ, or Shapefile</span>
+                  </span>
+                </button>
+              )}
+              <button className="landing-cta-btn landing-cta-ghost" type="button" onClick={onOpenEditor}>
+                Open Editor →
+              </button>
             </div>
 
             <div className="landing-pain-grid">
