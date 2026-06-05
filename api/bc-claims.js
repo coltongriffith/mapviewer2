@@ -12,7 +12,7 @@ export default async function handler(req, res) {
   url.searchParams.set('typeNames', 'pub:WHSE_MINERAL_TENURE.MTA_ACQUIRED_TENURE_SVW');
   url.searchParams.set('SRSNAME', 'EPSG:4326');
   url.searchParams.set('CQL_FILTER', `TENURE_HOLDER ILIKE '%${company.trim().replace(/'/g, "''")}%'`);
-  url.searchParams.set('count', '2000');
+  url.searchParams.set('count', '1000');
 
   try {
     const response = await fetch(url.toString(), {
