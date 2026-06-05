@@ -1,15 +1,12 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState } from 'react';
 import { loadSharedMap } from '../utils/cloudStorage';
-import { getTemplate } from '../templates';
-import { fitProjectToTemplate } from '../utils/frameMapForTemplate';
 
-const MapCanvas = React.lazy(() => import('./MapCanvas'));
+const ReadOnlyMapStage = React.lazy(() => import('./ReadOnlyMapStage'));
 
 export default function SharedMapViewer({ mapId, onExit }) {
   const [project, setProject] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [mapInstance, setMapInstance] = useState(null);
 
   useEffect(() => {
     if (!mapId) { setError('No map ID provided'); setLoading(false); return; }
@@ -21,17 +18,6 @@ export default function SharedMapViewer({ mapId, onExit }) {
       })
       .catch(e => { setError(e.message); setLoading(false); });
   }, [mapId]);
-
-  const template = useMemo(() => {
-    if (!project) return null;
-    return getTemplate(project.layout?.templateId || 'technical_results_v2');
-  }, [project]);
-
-  // Fit to claims/focus layers once both map and project data are available
-  useEffect(() => {
-    if (!mapInstance || !project || !template) return;
-    fitProjectToTemplate(project, mapInstance, { ...template }, 'balanced', { focusRoles: true });
-  }, [mapInstance, project, template]);
 
   if (loading) {
     return (
@@ -56,15 +42,8 @@ export default function SharedMapViewer({ mapId, onExit }) {
   return (
     <div className="shared-map-viewer">
       <div className="shared-map-canvas-wrap">
-        <React.Suspense fallback={null}>
-          <MapCanvas
-            onReady={(m) => setMapInstance(m)}
-            project={project}
-            template={template}
-            onFeatureClick={null}
-            onMapClick={null}
-            annotationToolRef={{ current: null }}
-          />
+        <React.Suspense fallback={<div className="shared-map-loading"><div className="shared-map-spinner" />Loading map…</div>}>
+          <ReadOnlyMapStage project={project} />
         </React.Suspense>
       </div>
       <div className="shared-map-bar">
