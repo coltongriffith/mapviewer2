@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
+import { supabase } from '../lib/supabase';
 
 const GALLERY_STYLES = [
   { id: 'drill_plan',   label: 'Drill Results',    desc: 'Collars, assays & target rings',        accent: '#2563eb', bg: '#1a2535', water: '#0f172a', img: '/gallery/drill-results.png' },
@@ -26,9 +27,22 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
   const { user } = useAuth();
   const [showAuth, setShowAuth] = useState(false);
   const [dataSourcesOpen, setDataSourcesOpen] = useState(false);
+  const clickThrottleRef = useRef(0);
+
+  function handleLandingClick(e) {
+    const now = Date.now();
+    if (now - clickThrottleRef.current < 500) return; // throttle to 2/sec max
+    clickThrottleRef.current = now;
+    if (!supabase) return;
+    const el = e.target.closest('button, a, [data-track]');
+    const element = el ? (el.dataset.track || el.textContent?.trim().slice(0, 40) || el.tagName.toLowerCase()) : null;
+    const x_pct = Math.round((e.clientX / window.innerWidth) * 100);
+    const y_pct = Math.round(((e.clientY + window.scrollY) / Math.max(document.body.scrollHeight, 1)) * 100);
+    supabase.from('landing_clicks').insert({ x_pct, y_pct, element }).then(() => {});
+  }
 
   return (
-    <div className="landing-shell">
+    <div className="landing-shell" onClick={handleLandingClick}>
       {showAuth && <AuthModal onClose={() => setShowAuth(false)} />}
 
       <nav className="landing-nav">
