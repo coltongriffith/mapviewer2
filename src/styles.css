@@ -1986,3 +1986,40 @@ body.is-dragging .template-zone .panel-delete-btn { opacity: 0 !important; }
 .shared-map-error-icon { font-size: 40px; }
 .shared-map-error h2 { margin: 0; font-size: 20px; color: #e2e8f0; }
 .shared-map-error p { margin: 0; font-size: 14px; color: #64748b; text-align: center; max-width: 320px; }
+
+/* ── Landing hero CTAs ─────────────────────────────────────────────────────── */
+.landing-hero-ctas { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+.landing-cta-btn {
+  display: flex; align-items: center; gap: 14px; padding: 14px 18px;
+  border: 2px solid #dbe4ee; border-radius: 14px; background: #f8faff;
+  cursor: pointer; text-align: left; transition: border-color 0.15s, background 0.15s; width: 100%;
+  font-size: 14px;
+}
+.landing-cta-btn:hover { border-color: #4d86d5; background: #eef4ff; }
+.landing-cta-primary { border-color: #2563eb; background: #eff6ff; }
+.landing-cta-primary:hover { background: #dbeafe; border-color: #1d4ed8; }
+.landing-cta-ghost { border-color: #e2e8f0; background: transparent; color: #475569; font-size: 13px; justify-content: center; }
+.landing-cta-ghost:hover { background: #f1f5f9; }
+.landing-cta-icon { font-size: 22px; flex-shrink: 0; }
+.landing-cta-btn strong { display: block; font-weight: 700; color: #1e293b; }
+.landing-cta-sub { display: block; font-size: 12px; color: #64748b; margin-top: 1px; }
+
+/* ── Admin pagination ──────────────────────────────────────────────────────── */
+.adm-pagination {
+  display: flex; align-items: center; gap: 10px; padding: 10px 0 0;
+  border-top: 1px solid #f1f5f9; margin-top: 8px; font-size: 12px;
+}
+.adm-pagination-info { color: #94a3b8; flex: 1; }
+.adm-pagination-pages { color: #64748b; min-width: 50px; text-align: center; }
+
+/* ── Admin heatmap ─────────────────────────────────────────────────────────── */
+.adm-heatmap-wrap { display: grid; gap: 8px; }
+.adm-heatmap-legend { font-size: 11px; color: #94a3b8; }
+.adm-heatmap-canvas {
+  position: relative; height: 200px; background: #f8fafc;
+  border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;
+}
+.adm-heatmap-dot {
+  position: absolute; width: 16px; height: 16px; border-radius: 50%;
+  background: #ef4444; transform-origin: center;
+}
