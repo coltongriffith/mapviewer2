@@ -127,6 +127,10 @@ function FormatBadge({ format }) {
 
 // ── Landing heatmap ───────────────────────────────────────────────────────────
 
+// Must match the actual screenshot dimensions (retake if landing page layout changes)
+const SCREENSHOT_W = 1440;
+const SCREENSHOT_H = 2339;
+
 function LandingHeatmap({ data }) {
   const maxCount = Math.max(...data.map(d => Number(d.count)), 1);
   return (
@@ -138,22 +142,28 @@ function LandingHeatmap({ data }) {
           className="adm-heatmap-bg"
           draggable={false}
         />
-        {data.map((pt, i) => (
-          <div
-            key={i}
-            className="adm-heatmap-dot"
-            title={`${pt.count} click${Number(pt.count) === 1 ? '' : 's'}`}
-            style={{
-              left: `${Math.min(98, Math.max(2, pt.x_pct))}%`,
-              top: `${Math.min(98, Math.max(2, pt.y_pct))}%`,
-              opacity: Math.min(1, 0.35 + (Number(pt.count) / maxCount) * 0.65),
-              transform: `translate(-50%,-50%) scale(${0.6 + (Number(pt.count) / maxCount) * 1.4})`,
-            }}
-          />
-        ))}
+        {data.map((pt, i) => {
+          const x = Math.min(99, Math.max(1, Number(pt.x_pct)));
+          const y = Math.min(99, Math.max(1, Number(pt.y_pct)));
+          const weight = Number(pt.count) / maxCount;
+          return (
+            <div
+              key={i}
+              className="adm-heatmap-dot"
+              title={`${pt.count} click${Number(pt.count) === 1 ? '' : 's'}`}
+              style={{
+                left: `${x}%`,
+                top: `${y}%`,
+                opacity: Math.min(1, 0.4 + weight * 0.6),
+                transform: `translate(-50%,-50%) scale(${0.7 + weight * 1.3})`,
+              }}
+            />
+          );
+        })}
       </div>
       <p className="adm-heatmap-legend">
-        Dot size &amp; opacity = relative click frequency · Screenshot updated on deploy
+        Desktop clicks only (≥1024px) · Normalized to {SCREENSHOT_W}×{SCREENSHOT_H}px reference ·
+        Dot size = relative frequency · Run SQL migration to activate normalization
       </p>
     </div>
   );

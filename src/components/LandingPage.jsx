@@ -38,7 +38,9 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
     const element = el ? (el.dataset.track || el.textContent?.trim().slice(0, 40) || el.tagName.toLowerCase()) : null;
     const x_pct = Math.round((e.clientX / window.innerWidth) * 100);
     const y_pct = Math.round(((e.clientY + window.scrollY) / Math.max(document.body.scrollHeight, 1)) * 100);
-    supabase.from('landing_clicks').insert({ x_pct, y_pct, element }).then(() => {});
+    const viewport_w = window.innerWidth;
+    const page_h = document.body.scrollHeight;
+    supabase.from('landing_clicks').insert({ x_pct, y_pct, element, viewport_w, page_h }).then(() => {});
   }
 
   return (
