@@ -31,7 +31,7 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'company param required (min 2 chars)' });
   }
 
-  const cqlFilter = `TENURE_HOLDER ILIKE '%${company.trim().replace(/'/g, "''")}%'`;
+  const cqlFilter = `OWNER_NAME ILIKE '%${company.trim().replace(/'/g, "''")}%'`;
   const wfsUrl = [
     'https://openmaps.gov.bc.ca/geo/pub/wfs',
     '?SERVICE=WFS',
