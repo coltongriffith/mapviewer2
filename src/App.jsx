@@ -7,6 +7,7 @@ import LocatorInset from './components/LocatorInset';
 import CalloutsOverlay from './components/CalloutsOverlay';
 import LandingPage from './components/LandingPage';
 import AdminPage from './components/AdminPage';
+import SharedMapViewer from './components/SharedMapViewer';
 import UploadPanel from './components/UploadPanel';
 import AnnotationOverlay from './components/AnnotationOverlay';
 import ShadeOverlay from './components/ShadeOverlay';
@@ -67,6 +68,7 @@ import {
   updateTemplate,
   applyTemplateConfig,
   TEMPLATE_SAVEABLE_KEYS,
+  shareMap,
 } from './utils/cloudStorage';
 import { useAuth } from './hooks/useAuth';
 import { supabase } from './lib/supabase';
@@ -620,9 +622,15 @@ export default function App() {
   const [renamingTemplateId, setRenamingTemplateId] = useState(null);
   const [renamingTemplateName, setRenamingTemplateName] = useState('');
 
-  const [screen, setScreen] = useState(() =>
-    window.location.pathname === '/admin' ? 'admin' : 'landing'
-  );
+  const [screen, setScreen] = useState(() => {
+    if (window.location.pathname === '/admin') return 'admin';
+    if (window.location.pathname.startsWith('/map/')) return 'shared_view';
+    return 'landing';
+  });
+  const [sharedMapId] = useState(() => {
+    const m = window.location.pathname.match(/^\/map\/([^/]+)/);
+    return m ? m[1] : null;
+  });
   const initialWorkspace = useMemo(() => initialWorkspaceState(), []);
   const [project, setProject] = useState(initialWorkspace.project);
   const [projectId, setProjectId] = useState(initialWorkspace.projectId);
@@ -631,6 +639,9 @@ export default function App() {
   const [showRecentProjects, setShowRecentProjects] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [shareUrl, setShareUrl] = useState(null);
+  const [shareLoading, setShareLoading] = useState(false);
   const [pendingExportFormat, setPendingExportFormat] = useState(null);
   const [isDirty, setIsDirty] = useState(false);
   const [selectedLayerId, setSelectedLayerId] = useState(null);
@@ -852,10 +863,12 @@ export default function App() {
   useEffect(() => {
     if (screen === 'admin') {
       if (window.location.pathname !== '/admin') window.history.replaceState({}, '', '/admin');
-    } else if (window.location.pathname === '/admin') {
+    } else if (screen === 'shared_view' && sharedMapId) {
+      window.history.replaceState({}, '', `/map/${sharedMapId}`);
+    } else if (window.location.pathname === '/admin' || window.location.pathname.startsWith('/map/')) {
       window.history.replaceState({}, '', '/');
     }
-  }, [screen]);
+  }, [screen, sharedMapId]);
 
   const constrainedStageSize = useMemo(() => {
     if (!activeRatio) return null;
@@ -2401,6 +2414,10 @@ export default function App() {
     return <AdminPage onExit={() => setScreen('landing')} />;
   }
 
+  if (screen === 'shared_view') {
+    return <SharedMapViewer mapId={sharedMapId} onExit={() => { window.location.href = '/'; }} />;
+  }
+
   if (screen === 'landing') {
     return (
       <>
@@ -3497,6 +3514,7 @@ export default function App() {
             </div>
             <div className="topbar-divider" />
             <button className="help-icon-btn" type="button" title="How to use Exploration Maps" onClick={() => setShowHelpModal(true)}>?</button>
+            <button className="topbar-btn topbar-share-btn" type="button" title="Share map" onClick={() => { setShareUrl(null); setShowShareModal(true); }}>⬡ Share</button>
             <div className="topbar-btn-group">
               <button className={`topbar-btn primary${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('png'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing…' : ''}>{exporting ? 'Exporting…' : 'PNG'}</button>
               <button className={`topbar-btn${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('svg'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting}>SVG</button>
@@ -4116,22 +4134,67 @@ export default function App() {
           />
         ) : null}
         {showHelpModal && <HowToUseModal onClose={() => setShowHelpModal(false)} />}
+      </React.Suspense>
+      {showShareModal && (
+        <div className="modal-backdrop" onClick={() => setShowShareModal(false)}>
+          <div className="share-modal" onClick={e => e.stopPropagation()}>
+            <button className="modal-close-btn" onClick={() => setShowShareModal(false)}>✕</button>
+            <h3 className="share-modal-title">Share Map</h3>
+            {!shareUrl ? (
+              <>
+                <p className="share-modal-desc">Generate a public read-only link anyone can view — no account needed.</p>
+                <button
+                  className="primary-btn share-generate-btn"
+                  disabled={shareLoading}
+                  onClick={async () => {
+                    setShareLoading(true);
+                    try {
+                      const id = await shareMap(project, user?.id ?? null);
+                      const base = window.location.origin;
+                      setShareUrl(`${base}/map/${id}`);
+                    } catch (e) {
+                      alert('Failed to create share link: ' + e.message);
+                    } finally {
+                      setShareLoading(false);
+                    }
+                  }}
+                >
+                  {shareLoading ? 'Creating link…' : 'Generate Share Link'}
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="share-modal-desc">Anyone with this link can view your map (read-only).</p>
+                <div className="share-url-row">
+                  <input readOnly value={shareUrl} className="share-url-input" onFocus={e => e.target.select()} />
+                  <button
+                    className="topbar-btn"
+                    onClick={() => navigator.clipboard.writeText(shareUrl).then(() => {}).catch(() => {})}
+                  >Copy</button>
+                </div>
+                <p className="share-note">Link is permanent. Viewers see the map as it exists right now.</p>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+      <React.Suspense fallback={null}>
         {csvMappingData ? (
           <ColumnMapperModal
-          headers={csvMappingData.headers}
-          rows={csvMappingData.rows}
-          filename={csvMappingData.filename}
-          onImport={async (geojson) => {
-            setCsvMappingData(null);
-            try {
-              await addGeoJSONAsLayer(geojson, csvMappingData.filename);
-              if (screen !== 'editor') setScreen('editor');
-            } catch (err) {
-              setUploadStatus({ type: 'error', message: `Import failed: ${err.message}` });
-            }
-          }}
-          onClose={() => setCsvMappingData(null)}
-        />
+            headers={csvMappingData.headers}
+            rows={csvMappingData.rows}
+            filename={csvMappingData.filename}
+            onImport={async (geojson) => {
+              setCsvMappingData(null);
+              try {
+                await addGeoJSONAsLayer(geojson, csvMappingData.filename);
+                if (screen !== 'editor') setScreen('editor');
+              } catch (err) {
+                setUploadStatus({ type: 'error', message: `Import failed: ${err.message}` });
+              }
+            }}
+            onClose={() => setCsvMappingData(null)}
+          />
         ) : null}
       </React.Suspense>
     </div>
