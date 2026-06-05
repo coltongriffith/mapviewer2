@@ -349,11 +349,32 @@ function toSvgFill(color, def = '#ffffff') {
 }
 
 
+/** Word-wrap text to fit within maxWidth px, returns array of line strings */
+function wrapText(ctx, text, maxWidth) {
+  if (!text) return [];
+  const words = text.split(' ');
+  const lines = [];
+  let line = '';
+  for (const word of words) {
+    const test = line ? line + ' ' + word : word;
+    if (ctx.measureText(test).width > maxWidth && line) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = test;
+    }
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
 function drawTitleBlockCanvas(ctx, scene, scale) {
   if (scene.project.layout?.showTitle === false) return;
   const theme = getTheme(scene);
   const layout = scene.project.layout || {};
-  const { title } = getOverlayMetrics(scene); const x = title.left * scale, y = title.top * scale, w = title.width * scale, h = title.height * scale;
+  const { title } = getOverlayMetrics(scene);
+  const x = title.left * scale, y = title.top * scale, w = title.width * scale, h = title.height * scale;
+  if (!w || !h) return;
   if (!layout.titleTransparent) drawPanelRect(ctx, x, y, w, h, (theme.titleRadius ?? theme.panelRadius ?? 10) * scale, theme.titleFill, theme.titleBorder, scale);
   const leftBar = theme.titleAccent && theme.titleAccentStyle === 'left';
   if (theme.titleAccent) {
@@ -363,21 +384,47 @@ function drawTitleBlockCanvas(ctx, scene, scale) {
   }
   const titleFont = `${layout.fonts?.title || 'Inter'}, Arial, sans-serif`;
   const tfs = layout.titleFontScale ?? 1;
-  const textX = (x + (leftBar ? 22 : 18) * scale);
+  const padLeft = (leftBar ? 22 : 18) * scale;
+  const padRight = 12 * scale;
+  const textX = x + padLeft;
+  const availW = w - padLeft - padRight;
   const topOff = (theme.titleAccent && !leftBar) ? 20 : 16;
-  ctx.fillStyle = theme.titleText; ctx.font = `700 ${26 * scale * tfs}px ${titleFont}`; ctx.textBaseline = 'top'; ctx.fillText(layout.title || 'Project Map', textX, y + topOff * scale);
-  ctx.fillStyle = theme.subtitleText; ctx.font = `${14 * scale * tfs}px ${titleFont}`; ctx.fillText(layout.subtitle || '', textX, y + (topOff + 34 * tfs) * scale);
-  // Metadata rows (date / project # / scale note) — right-aligned in title block
+  const titleSize = 22 * scale * tfs;
+  const titleLineH = titleSize * 1.25;
+  const subtitleSize = 12 * scale * tfs;
+  const metaSize = 10 * scale * tfs;
+
+  // Clip to zone so long text never bleeds past the panel edge
+  ctx.save();
+  ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
+  ctx.textBaseline = 'top';
+
+  // Title — word-wrapped to fit within available width
+  ctx.fillStyle = theme.titleText;
+  ctx.font = `700 ${titleSize}px ${titleFont}`;
+  const titleLines = wrapText(ctx, layout.title || 'Project Map', availW);
+  let curY = y + topOff * scale;
+  titleLines.forEach((line) => { ctx.fillText(line, textX, curY); curY += titleLineH; });
+
+  // Subtitle
+  if (layout.subtitle) {
+    ctx.fillStyle = theme.subtitleText;
+    ctx.font = `${subtitleSize}px ${titleFont}`;
+    const subLines = wrapText(ctx, layout.subtitle, availW);
+    subLines.forEach((line) => { ctx.fillText(line, textX, curY); curY += subtitleSize * 1.4; });
+  }
+
+  // Metadata (date · project# · scale) — small, below subtitle
   const metaItems = [layout.mapDate, layout.projectNumber, layout.mapScaleNote].filter(Boolean);
   if (metaItems.length) {
-    const metaFont = `${10 * scale * tfs}px ${titleFont}`;
-    ctx.font = metaFont; ctx.textBaseline = 'top';
     ctx.fillStyle = theme.subtitleText;
-    const rightX = x + w - 12 * scale;
-    const savedAlign = ctx.textAlign; ctx.textAlign = 'right';
-    metaItems.forEach((item, i) => { ctx.fillText(item, rightX, y + (topOff + 2 + i * 14 * tfs) * scale); });
-    ctx.textAlign = savedAlign;
+    ctx.font = `${metaSize}px ${titleFont}`;
+    ctx.globalAlpha = 0.75;
+    ctx.fillText(metaItems.join('  ·  '), textX, curY + (layout.subtitle ? 2 : 4) * scale);
+    ctx.globalAlpha = 1;
   }
+
+  ctx.restore();
 }
 
 function groupLegendItems(items, layout) {
@@ -417,6 +464,9 @@ function drawLegendCanvas(ctx, scene, scale) {
   if (!scene.project.layout?.legendTransparent) drawPanelRect(ctx, x, y, w, h, (theme.panelRadius ?? 10) * scale, theme.panelFill, theme.panelBorder, scale);
   drawPanelAccentLeft(ctx, x, y, h, theme, scale);
   const leftPad = theme.panelAccentLeft ? 20 : 16;
+  // Clip legend content to zone bounds — matches CSS overflow:hidden in live preview
+  ctx.save();
+  ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
   ctx.fillStyle = theme.panelTitle; ctx.font = `700 ${15 * scale * lfs}px ${legendFont}`; ctx.textBaseline = 'top'; ctx.fillText(scene.project.layout?.legendTitle || 'Legend', x + leftPad * scale, y + 14 * scale);
   const lp = (theme.panelAccentLeft ? 20 : 16) * scale;
   let rowY = y + 40 * scale;
@@ -441,6 +491,7 @@ function drawLegendCanvas(ctx, scene, scale) {
     });
     rowY += 6 * scale;
   });
+  ctx.restore();
 }
 
 function drawNorthArrowCanvas(ctx, scene, scale) {

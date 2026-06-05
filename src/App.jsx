@@ -7,6 +7,7 @@ import LocatorInset from './components/LocatorInset';
 import CalloutsOverlay from './components/CalloutsOverlay';
 import LandingPage from './components/LandingPage';
 import AdminPage from './components/AdminPage';
+import SharedMapViewer from './components/SharedMapViewer';
 import UploadPanel from './components/UploadPanel';
 import AnnotationOverlay from './components/AnnotationOverlay';
 import ShadeOverlay from './components/ShadeOverlay';
@@ -15,6 +16,7 @@ const MapCanvas = React.lazy(() => import('./components/MapCanvas'));
 const ExportHDModal = React.lazy(() => import('./components/ExportHDModal'));
 const HowToUseModal = React.lazy(() => import('./components/HowToUseModal'));
 const ColumnMapperModal = React.lazy(() => import('./components/ColumnMapperModal'));
+const AddClaimsModal = React.lazy(() => import('./components/AddClaimsModal'));
 import { loadGeoJSON, loadCSV, loadShapefileSet } from './utils/importers';
 import sampleClaims from './assets/sampleClaims.json';
 import sampleDrillholes from './assets/sampleDrillholes.json';
@@ -67,11 +69,12 @@ import {
   updateTemplate,
   applyTemplateConfig,
   TEMPLATE_SAVEABLE_KEYS,
+  shareMap,
 } from './utils/cloudStorage';
 import { useAuth } from './hooks/useAuth';
 import { supabase } from './lib/supabase';
 import UserMenu from './components/UserMenu';
-import { CORNER_KEY, getCornerLayout, moveToCorner, moveToCornerFirst, moveToCornerBeside } from './utils/cornerLayout';
+import { CORNER_KEY, getCornerLayout, moveToCorner, moveToCornerFirst, moveToCornerBeside, findElement } from './utils/cornerLayout';
 
 const SAMPLE_LOGO_SVG = [
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 56" width="220" height="56">',
@@ -620,9 +623,15 @@ export default function App() {
   const [renamingTemplateId, setRenamingTemplateId] = useState(null);
   const [renamingTemplateName, setRenamingTemplateName] = useState('');
 
-  const [screen, setScreen] = useState(() =>
-    window.location.pathname === '/admin' ? 'admin' : 'landing'
-  );
+  const [screen, setScreen] = useState(() => {
+    if (window.location.pathname === '/admin') return 'admin';
+    if (window.location.pathname.startsWith('/map/')) return 'shared_view';
+    return 'landing';
+  });
+  const [sharedMapId] = useState(() => {
+    const m = window.location.pathname.match(/^\/map\/([^/]+)/);
+    return m ? m[1] : null;
+  });
   const initialWorkspace = useMemo(() => initialWorkspaceState(), []);
   const [project, setProject] = useState(initialWorkspace.project);
   const [projectId, setProjectId] = useState(initialWorkspace.projectId);
@@ -631,6 +640,13 @@ export default function App() {
   const [showRecentProjects, setShowRecentProjects] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [showAddClaimsModal, setShowAddClaimsModal] = useState(false);
+  const [shareUrl, setShareUrl] = useState(null);
+  const [shareLoading, setShareLoading] = useState(false);
+  const [shareElapsed, setShareElapsed] = useState(0);
+  const [linkCopied, setLinkCopied] = useState(false);
+  const shareElapsedRef = useRef(null);
   const [pendingExportFormat, setPendingExportFormat] = useState(null);
   const [isDirty, setIsDirty] = useState(false);
   const [selectedLayerId, setSelectedLayerId] = useState(null);
@@ -852,10 +868,12 @@ export default function App() {
   useEffect(() => {
     if (screen === 'admin') {
       if (window.location.pathname !== '/admin') window.history.replaceState({}, '', '/admin');
-    } else if (window.location.pathname === '/admin') {
+    } else if (screen === 'shared_view' && sharedMapId) {
+      window.history.replaceState({}, '', `/map/${sharedMapId}`);
+    } else if (window.location.pathname === '/admin' || window.location.pathname.startsWith('/map/')) {
       window.history.replaceState({}, '', '/');
     }
-  }, [screen]);
+  }, [screen, sharedMapId]);
 
   const constrainedStageSize = useMemo(() => {
     if (!activeRatio) return null;
@@ -1305,13 +1323,26 @@ export default function App() {
             }));
           }
         }
-      } else if (currentHoverZone) {
-        const { corner, slot } = currentHoverZone;
+      } else {
         const cl = getCornerLayout(layoutSnapshot);
-        const newCl = slot === 'first' ? moveToCornerFirst(cl, id, corner)
-          : slot === 'beside' ? moveToCornerBeside(cl, id, corner)
-          : moveToCorner(cl, id, corner);
-        updateLayout({ cornerLayout: newCl, [CORNER_KEY[id]]: corner });
+        if (currentHoverZone) {
+          const { corner, slot } = currentHoverZone;
+          const newCl = slot === 'first' ? moveToCornerFirst(cl, id, corner)
+            : slot === 'beside' ? moveToCornerBeside(cl, id, corner)
+            : moveToCorner(cl, id, corner);
+          updateLayout({ cornerLayout: newCl, [CORNER_KEY[id]]: corner });
+        } else {
+          // Dropped on blank canvas — snap to nearest corner based on which quadrant the cursor is in
+          const canvasCenterX = containerRect.left + mapSize.width / 2;
+          const canvasCenterY = containerRect.top + mapSize.height / 2;
+          const inferredCorner = (finalClientY < canvasCenterY ? 't' : 'b') + (finalClientX < canvasCenterX ? 'l' : 'r');
+          const currentPos = findElement(cl, id);
+          // Only move if inferred corner differs — same-corner drop is a no-op to preserve ordering
+          if (currentPos?.corner !== inferredCorner) {
+            const newCl = moveToCorner(cl, id, inferredCorner);
+            updateLayout({ cornerLayout: newCl, [CORNER_KEY[id]]: inferredCorner });
+          }
+        }
       }
       setDragging(null);
     };
@@ -2388,6 +2419,10 @@ export default function App() {
     return <AdminPage onExit={() => setScreen('landing')} />;
   }
 
+  if (screen === 'shared_view') {
+    return <SharedMapViewer mapId={sharedMapId} onExit={() => { window.location.href = '/'; }} />;
+  }
+
   if (screen === 'landing') {
     return (
       <>
@@ -2433,6 +2468,19 @@ export default function App() {
         ) : null}
 
         <UploadPanel onUploadFile={handleUploadFile} onUploadFiles={handleUploadFiles} inputRef={uploadInputRef} status={uploadStatus} layers={project.layers} />
+        <div className="add-claims-sidebar-btn-wrap">
+          <button
+            className="topbar-btn add-claims-sidebar-btn"
+            type="button"
+            onClick={() => setShowAddClaimsModal(true)}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0 }}>
+              <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+              <rect x="3" y="14" width="7" height="7" rx="1"/><path d="M17.5 14v6M14.5 17h6"/>
+            </svg>
+            Add BC Claims
+          </button>
+        </div>
 
         <div className={`logo-upload-card${project.layout.logo ? ' has-logo' : ''}`}>
           {project.layout.logo ? (
@@ -2473,6 +2521,7 @@ export default function App() {
                   };
                   const extra = tid === 'side_panel' ? {
                     sidePanelPositions: {},
+                    sidePanelGrid: ['inset', 'legend', 'logo', 'title', 'footer'],
                     insetEnabled: true,
                     insetHeightPx: null,
                     legendHeightPx: null,
@@ -2538,6 +2587,15 @@ export default function App() {
               <label className="toggle-row"><input type="checkbox" checked={project.layout.footerEnabled !== false} onChange={(e) => updateLayout({ footerEnabled: e.target.checked })} /><span>Footer</span></label>
               <label className="toggle-row"><input type="checkbox" checked={project.layout.insetEnabled !== false} onChange={(e) => updateLayout({ insetEnabled: e.target.checked })} /><span>Inset Map</span></label>
             </div>
+            <button
+              type="button"
+              className="secondary-btn"
+              style={{ width: '100%', marginTop: 6, fontSize: 12 }}
+              onClick={() => updateLayout({ cornerLayout: null, titleCorner: 'tl', logoCorner: 'tl', insetCorner: 'tr', northArrowCorner: 'br', scaleBarCorner: 'bl', legendCorner: 'bl' })}
+              title="Move all elements back to their default corner positions"
+            >
+              Reset Element Positions
+            </button>
           </div>
         </section>
 
@@ -3474,6 +3532,13 @@ export default function App() {
             </div>
             <div className="topbar-divider" />
             <button className="help-icon-btn" type="button" title="How to use Exploration Maps" onClick={() => setShowHelpModal(true)}>?</button>
+            <button className="topbar-btn primary topbar-share-btn" type="button" title="Share map" onClick={() => { setShareUrl(null); setShowShareModal(true); }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{marginRight:5,verticalAlign:'middle',marginTop:-1}}>
+                <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+              </svg>
+              Share
+            </button>
             <div className="topbar-btn-group">
               <button className={`topbar-btn primary${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('png'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing…' : ''}>{exporting ? 'Exporting…' : 'PNG'}</button>
               <button className={`topbar-btn${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('svg'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting}>SVG</button>
@@ -3655,6 +3720,10 @@ export default function App() {
             ) : (
               <p style={{ cursor: 'text', fontSize: Math.round(12 * (project.layout.titleFontScale ?? 1)) + 'px' }} title="Click to edit" onClick={() => setEditingTitleField('subtitle')}>{project.layout.subtitle}</p>
             )}
+            {(() => {
+              const meta = [project.layout.mapDate, project.layout.projectNumber, project.layout.mapScaleNote].filter(Boolean);
+              return meta.length ? <div className="title-meta-row" style={{ fontSize: Math.round(10 * (project.layout.titleFontScale ?? 1)) + 'px' }}>{meta.join('  ·  ')}</div> : null;
+            })()}
           </div>
           {makeResizeHandles(project.layout.titleCorner || 'tl', {
             elemId: 'title', startW: project.layout.titleWidthPx ?? 520, startH: project.layout.titleHeightPx ?? 92,
@@ -4079,6 +4148,15 @@ export default function App() {
         />
       ) : null}
       <React.Suspense fallback={null}>
+        {showAddClaimsModal && (
+          <AddClaimsModal
+            onClose={() => setShowAddClaimsModal(false)}
+            onImport={(geojson, name) => {
+              addGeoJSONAsLayer(geojson, `${name}.geojson`);
+              if (screen !== 'editor') setScreen('editor');
+            }}
+          />
+        )}
         {showExportModal ? (
           <ExportHDModal
             format={pendingExportFormat}
@@ -4089,22 +4167,84 @@ export default function App() {
           />
         ) : null}
         {showHelpModal && <HowToUseModal onClose={() => setShowHelpModal(false)} />}
+      </React.Suspense>
+      {showShareModal && (
+        <div className="modal-backdrop" onClick={() => setShowShareModal(false)}>
+          <div className="share-modal" onClick={e => e.stopPropagation()}>
+            <button className="export-hd-close" onClick={() => setShowShareModal(false)}>✕</button>
+            <div className="share-modal-icon-wrap">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+              </svg>
+            </div>
+            <h3 className="share-modal-title">Share Map</h3>
+            {!shareUrl ? (
+              <>
+                <p className="share-modal-desc">Create a public read-only link — anyone can view your map without an account.</p>
+                <button
+                  className="share-generate-btn"
+                  disabled={shareLoading}
+                  onClick={async () => {
+                    setShareLoading(true);
+                    setShareElapsed(0);
+                    shareElapsedRef.current = setInterval(() => setShareElapsed(s => s + 1), 1000);
+                    try {
+                      const id = await shareMap(project, user?.id ?? null);
+                      const base = window.location.origin;
+                      setShareUrl(`${base}/map/${id}`);
+                    } catch (e) {
+                      alert('Failed to create share link: ' + e.message);
+                    } finally {
+                      clearInterval(shareElapsedRef.current);
+                      setShareLoading(false);
+                    }
+                  }}
+                >
+                  {shareLoading ? (
+                    <span className="share-loading-state">
+                      <span className="share-spinner" />
+                      <span>Creating link… {shareElapsed > 0 ? `${shareElapsed}s` : ''}</span>
+                    </span>
+                  ) : 'Generate Share Link'}
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="share-modal-desc">Anyone with this link can view your map (read-only).</p>
+                <div className="share-url-row">
+                  <input readOnly value={shareUrl} className="share-url-input" onFocus={e => e.target.select()} />
+                  <button
+                    className={`share-copy-btn${linkCopied ? ' copied' : ''}`}
+                    onClick={() => navigator.clipboard.writeText(shareUrl).then(() => {
+                      setLinkCopied(true);
+                      setTimeout(() => setLinkCopied(false), 2000);
+                    }).catch(() => {})}
+                  >{linkCopied ? '✓ Copied!' : 'Copy'}</button>
+                </div>
+                <p className="share-note">This link is permanent. Viewers see the map exactly as it is now.</p>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+      <React.Suspense fallback={null}>
         {csvMappingData ? (
           <ColumnMapperModal
-          headers={csvMappingData.headers}
-          rows={csvMappingData.rows}
-          filename={csvMappingData.filename}
-          onImport={async (geojson) => {
-            setCsvMappingData(null);
-            try {
-              await addGeoJSONAsLayer(geojson, csvMappingData.filename);
-              if (screen !== 'editor') setScreen('editor');
-            } catch (err) {
-              setUploadStatus({ type: 'error', message: `Import failed: ${err.message}` });
-            }
-          }}
-          onClose={() => setCsvMappingData(null)}
-        />
+            headers={csvMappingData.headers}
+            rows={csvMappingData.rows}
+            filename={csvMappingData.filename}
+            onImport={async (geojson) => {
+              setCsvMappingData(null);
+              try {
+                await addGeoJSONAsLayer(geojson, csvMappingData.filename);
+                if (screen !== 'editor') setScreen('editor');
+              } catch (err) {
+                setUploadStatus({ type: 'error', message: `Import failed: ${err.message}` });
+              }
+            }}
+            onClose={() => setCsvMappingData(null)}
+          />
         ) : null}
       </React.Suspense>
     </div>

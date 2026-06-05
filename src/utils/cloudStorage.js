@@ -163,6 +163,33 @@ export async function getDefaultTemplate() {
   return data || null;
 }
 
+// ── Shared Maps ──────────────────────────────────────────────────────────────
+
+export async function shareMap(project, userId = null) {
+  const sb = requireSupabase();
+  const id = crypto.randomUUID().replace(/-/g, '').slice(0, 10);
+  const { error } = await sb.from('shared_maps').insert({
+    id,
+    state: project,
+    user_id: userId ?? null,
+  });
+  if (error) throw error;
+  return id;
+}
+
+export async function loadSharedMap(id) {
+  const sb = requireSupabase();
+  const { data, error } = await sb
+    .from('shared_maps')
+    .select('state')
+    .eq('id', id)
+    .single();
+  if (error || !data) return null;
+  // Increment view count in the background (fire-and-forget)
+  sb.rpc('increment_shared_map_view', { map_id: id }).then(() => {});
+  return data.state;
+}
+
 export const TEMPLATE_SAVEABLE_KEYS = [
   // Style & theme
   'themeId', 'accentColor', 'titleBgColor', 'titleFgColor', 'panelBgColor', 'panelFgColor', 'templateId',
