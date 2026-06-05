@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 
@@ -127,41 +127,22 @@ function FormatBadge({ format }) {
 
 // ── Landing heatmap ───────────────────────────────────────────────────────────
 
-const IFRAME_W = 1440;  // reference desktop viewport width
-const IFRAME_H = 3800;  // generous estimate of full landing page scroll height
-
 function LandingHeatmap({ data }) {
-  const wrapRef = useRef(null);
-  const [scale, setScale] = useState(0.3);
-
-  useEffect(() => {
-    if (!wrapRef.current) return;
-    const ro = new ResizeObserver(([entry]) => {
-      setScale(entry.contentRect.width / IFRAME_W);
-    });
-    ro.observe(wrapRef.current);
-    return () => ro.disconnect();
-  }, []);
-
-  const canvasH = Math.round(IFRAME_H * scale);
   const maxCount = Math.max(...data.map(d => Number(d.count)), 1);
-
   return (
-    <div ref={wrapRef} style={{ width: '100%' }}>
-      <div className="adm-heatmap-canvas" style={{ height: canvasH }}>
-        <iframe
-          src="/"
-          className="adm-heatmap-iframe"
-          title="Landing page preview"
-          scrolling="no"
-          tabIndex={-1}
-          style={{ width: IFRAME_W, height: IFRAME_H, transform: `scale(${scale})` }}
+    <div>
+      <div className="adm-heatmap-canvas">
+        <img
+          src="/admin/landing-preview.png"
+          alt="Landing page preview"
+          className="adm-heatmap-bg"
+          draggable={false}
         />
         {data.map((pt, i) => (
           <div
             key={i}
             className="adm-heatmap-dot"
-            title={`${pt.count} click${pt.count === 1 ? '' : 's'}`}
+            title={`${pt.count} click${Number(pt.count) === 1 ? '' : 's'}`}
             style={{
               left: `${Math.min(98, Math.max(2, pt.x_pct))}%`,
               top: `${Math.min(98, Math.max(2, pt.y_pct))}%`,
@@ -172,7 +153,7 @@ function LandingHeatmap({ data }) {
         ))}
       </div>
       <p className="adm-heatmap-legend">
-        Scaled live preview of the landing page · Dot size &amp; opacity = relative click frequency
+        Dot size &amp; opacity = relative click frequency · Screenshot updated on deploy
       </p>
     </div>
   );
