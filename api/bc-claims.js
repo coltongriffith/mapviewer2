@@ -12,12 +12,17 @@ export default async function handler(req, res) {
   url.searchParams.set('typeNames', 'pub:WHSE_MINERAL_TENURE.MTA_ACQUIRED_TENURE_SVW');
   url.searchParams.set('SRSNAME', 'EPSG:4326');
   url.searchParams.set('CQL_FILTER', `TENURE_HOLDER ILIKE '%${company.trim().replace(/'/g, "''")}%'`);
-  url.searchParams.set('count', '500');
+  url.searchParams.set('count', '2000');
 
   try {
     const response = await fetch(url.toString(), {
-      headers: { Accept: 'application/json' },
-      signal: AbortSignal.timeout(15000),
+      headers: {
+        Accept: 'application/json',
+        'User-Agent': 'Mozilla/5.0 (compatible; ExplorationMaps/1.0; +https://explorationmaps.com)',
+        'Referer': 'https://explorationmaps.com/',
+        'Origin': 'https://explorationmaps.com',
+      },
+      signal: AbortSignal.timeout(20000),
     });
     if (!response.ok) {
       const body = await response.text().catch(() => '');
