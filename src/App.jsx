@@ -644,6 +644,9 @@ export default function App() {
   const [showAddClaimsModal, setShowAddClaimsModal] = useState(false);
   const [shareUrl, setShareUrl] = useState(null);
   const [shareLoading, setShareLoading] = useState(false);
+  const [shareElapsed, setShareElapsed] = useState(0);
+  const [linkCopied, setLinkCopied] = useState(false);
+  const shareElapsedRef = useRef(null);
   const [pendingExportFormat, setPendingExportFormat] = useState(null);
   const [isDirty, setIsDirty] = useState(false);
   const [selectedLayerId, setSelectedLayerId] = useState(null);
@@ -4184,6 +4187,8 @@ export default function App() {
                   disabled={shareLoading}
                   onClick={async () => {
                     setShareLoading(true);
+                    setShareElapsed(0);
+                    shareElapsedRef.current = setInterval(() => setShareElapsed(s => s + 1), 1000);
                     try {
                       const id = await shareMap(project, user?.id ?? null);
                       const base = window.location.origin;
@@ -4191,11 +4196,17 @@ export default function App() {
                     } catch (e) {
                       alert('Failed to create share link: ' + e.message);
                     } finally {
+                      clearInterval(shareElapsedRef.current);
                       setShareLoading(false);
                     }
                   }}
                 >
-                  {shareLoading ? 'Creating link…' : 'Generate Share Link'}
+                  {shareLoading ? (
+                    <span className="share-loading-state">
+                      <span className="share-spinner" />
+                      <span>Creating link… {shareElapsed > 0 ? `${shareElapsed}s` : ''}</span>
+                    </span>
+                  ) : 'Generate Share Link'}
                 </button>
               </>
             ) : (
@@ -4204,9 +4215,12 @@ export default function App() {
                 <div className="share-url-row">
                   <input readOnly value={shareUrl} className="share-url-input" onFocus={e => e.target.select()} />
                   <button
-                    className="share-copy-btn"
-                    onClick={() => navigator.clipboard.writeText(shareUrl).then(() => {}).catch(() => {})}
-                  >Copy</button>
+                    className={`share-copy-btn${linkCopied ? ' copied' : ''}`}
+                    onClick={() => navigator.clipboard.writeText(shareUrl).then(() => {
+                      setLinkCopied(true);
+                      setTimeout(() => setLinkCopied(false), 2000);
+                    }).catch(() => {})}
+                  >{linkCopied ? '✓ Copied!' : 'Copy'}</button>
                 </div>
                 <p className="share-note">This link is permanent. Viewers see the map exactly as it is now.</p>
               </>
