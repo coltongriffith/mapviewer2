@@ -13,7 +13,7 @@ function buildWfsUrl(company) {
   u.searchParams.set('typeNames', LAYER);
   u.searchParams.set('SRSNAME', 'EPSG:4326');
   u.searchParams.set('CQL_FILTER', `TENURE_HOLDER ILIKE '%${company.trim().replace(/'/g, "''")}%'`);
-  u.searchParams.set('count', '1000');
+  u.searchParams.set('count', '500');
   return u.toString();
 }
 
@@ -40,7 +40,7 @@ export function useBCClaims() {
         const res = await fetch(`${PROXY}?company=${encodeURIComponent(company.trim())}`);
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
-          throw new Error(body.error || `Request failed (${res.status})`);
+          throw new Error(body.detail ? `${body.error}: ${body.detail}` : body.error || `Request failed (${res.status})`);
         }
         data = await res.json();
       }
