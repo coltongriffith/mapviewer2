@@ -7,12 +7,14 @@ export function useBCClaims() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  const search = useCallback(async (company) => {
+  // type: 'company' | 'number' | 'map'
+  const search = useCallback(async (query, type = 'company') => {
     setLoading(true);
     setError(null);
     setResults(null);
     try {
-      const res = await fetch(`${PROXY}?company=${encodeURIComponent(company.trim())}`);
+      const params = new URLSearchParams({ q: query.trim(), type });
+      const res = await fetch(`${PROXY}?${params}`);
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.detail ? `${body.error}: ${body.detail}` : body.error || `Request failed (${res.status})`);

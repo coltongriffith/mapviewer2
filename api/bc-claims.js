@@ -1,5 +1,7 @@
 export default async function handler(req, res) {
-  const { company, schema } = req.query;
+  const { q, company, type, schema } = req.query;
+  // Accept either `q` (new) or `company` (legacy) as the search term
+  const term = q || company;
 
   // Schema discovery mode: return field names from a sample feature
   if (schema === '1') {
@@ -27,12 +29,20 @@ export default async function handler(req, res) {
     }
   }
 
-  if (!company || company.trim().length < 2) {
-    return res.status(400).json({ error: 'company param required (min 2 chars)' });
+  if (!term || term.trim().length < 2) {
+    return res.status(400).json({ error: 'q param required (min 2 chars)' });
   }
 
-  const safeTerm = company.trim().replace(/'/g, "''").replace(/%/g, '\\%').replace(/_/g, '\\_');
-  const cqlFilter = `OWNER_NAME ILIKE '%${safeTerm}%'`;
+  const safeTerm = term.trim().replace(/'/g, "''").replace(/%/g, '\\%').replace(/_/g, '\\_');
+
+  let cqlFilter;
+  if (type === 'number') {
+    cqlFilter = `TAG_NUMBER = '${safeTerm}'`;
+  } else if (type === 'map') {
+    cqlFilter = `MAP_UNIT_NO ILIKE '${safeTerm}%'`;
+  } else {
+    cqlFilter = `OWNER_NAME ILIKE '%${safeTerm}%'`;
+  }
   const wfsUrl = [
     'https://openmaps.gov.bc.ca/geo/pub/wfs',
     '?SERVICE=WFS',
