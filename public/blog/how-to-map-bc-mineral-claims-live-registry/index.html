@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to Map BC Mineral Claims from the Live Registry | Exploration Maps</title>
+<meta name="description" content="Search BC's live Mineral Titles Online registry directly inside Exploration Maps. Find claims by company, claim number, or map sheet — then turn them into a professional investor-ready map in minutes.">
+<link rel="canonical" href="https://www.explorationmaps.com/blog/how-to-map-bc-mineral-claims-live-registry/">
+
+<meta property="og:title" content="How to Map BC Mineral Claims from the Live Registry">
+<meta property="og:description" content="Search BC's live Mineral Titles Online registry directly inside Exploration Maps. Find claims by company, claim number, or map sheet — then turn them into a professional map in minutes.">
+<meta property="og:url" content="https://www.explorationmaps.com/blog/how-to-map-bc-mineral-claims-live-registry/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Exploration Maps">
+<meta property="og:image" content="https://www.explorationmaps.com/og-image.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="How to Map BC Mineral Claims from the Live Registry">
+<meta name="twitter:description" content="Search BC's live Mineral Titles Online registry directly inside Exploration Maps. Find claims by company, claim number, or map sheet — then turn them into a professional map in minutes.">
+<meta name="twitter:image" content="https://www.explorationmaps.com/og-image.png">
+
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"How to Map BC Mineral Claims from the Live Registry","description":"Search BC's live Mineral Titles Online registry directly inside Exploration Maps. Find claims by company, claim number, or map sheet — then turn them into a professional investor-ready map in minutes.","url":"https://www.explorationmaps.com/blog/how-to-map-bc-mineral-claims-live-registry/","datePublished":"2026-06-08","dateModified":"2026-06-08","author":{"@type":"Organization","name":"Exploration Maps","url":"https://www.explorationmaps.com"},"publisher":{"@type":"Organization","name":"Exploration Maps","url":"https://www.explorationmaps.com"}},{"@type":"HowTo","name":"How to Map BC Mineral Claims from the Live Registry","description":"To map BC mineral claims, open the Add Claims tool in Exploration Maps, search the live BC Registry by company name, claim number, or map sheet, select the claims you want, and add them to a map design. No GIS software or file downloads needed.","step":[{"@type":"HowToStep","position":1,"name":"Step 1","text":"Open Exploration Maps and click 'Search BC Registry Claims' on the landing page, or click '+ Add BC Claims' in the editor sidebar. The Add Claims dialog opens with two paths: Search BC Registry or Upload File."},{"@type":"HowToStep","position":2,"name":"Step 2","text":"Choose 'Search BC Registry.' You'll see a search panel with three mode tabs: Company, Claim #, and Map Sheet. Type the company name — for example 'Teck Resources' — and press Search. Results pull in real-time from BC's public WFS (Web Feature Service) endpoint."},{"@type":"HowToStep","position":3,"name":"Step 3","text":"If the company holds claims in multiple regions of BC, the results are automatically grouped by geography using spatial clustering. You'll see groups named by region — 'Highland Valley Area,' 'East Kootenay,' etc. — each showing the claim count and total hectares. Click a group to expand it and see individual claim numbers, type, and expiry date."},{"@type":"HowToStep","position":4,"name":"Step 4","text":"Select the claims you want to include. Use 'Select All' to grab every claim in a group, or check individual rows. The running total of selected claims and hectares updates as you check boxes. Click 'Add N claims to map' when ready."},{"@type":"HowToStep","position":5,"name":"Step 5","text":"The claims load as a new layer with automatic Claims styling — blue stroke, semi-transparent fill. The map fits to the claim boundaries. From here, add a title, turn on the roads and labels reference overlay, choose a basemap, and export as PNG or PDF."}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Does Exploration Maps connect directly to BC Mineral Titles Online?","acceptedAnswer":{"@type":"Answer","text":"Yes. Exploration Maps queries BC's public WFS (Web Feature Service) endpoint at openmaps.gov.bc.ca in real time. The data is the same source used by BC's online MTO viewer — active mineral claims, cell claims, and legacy licences. No downloading, converting, or manual import required."}},{"@type":"Question","name":"Can I search by claim number instead of company name?","acceptedAnswer":{"@type":"Answer","text":"Yes. Switch to the 'Claim #' tab in the search panel and type the TAG_NUMBER (e.g. 1034521). The search returns that specific claim. The tool auto-detects claim number format — if you type a string of digits, it switches to Claim # mode automatically."}},{"@type":"Question","name":"Can I search by NTS map sheet?","acceptedAnswer":{"@type":"Answer","text":"Yes. Use the 'Map Sheet' tab and type an NTS sheet code like 082F or 093B. All active claims within that map sheet are returned. This is useful when you know the geographic area but not the specific company or claim number."}},{"@type":"Question","name":"How current is the BC mineral claims data?","acceptedAnswer":{"@type":"Answer","text":"The data is live — each search queries BC's WFS directly. Expired claims are not returned. Good-to-date (expiry) information is shown for each claim in the results list."}},{"@type":"Question","name":"Can I add claims from multiple companies to one map?","acceptedAnswer":{"@type":"Answer","text":"Yes. Search for the first company, add their claims, then search for the second company and add those claims. Each import creates a separate layer. You can rename layers, change colours, and control which ones appear in the legend independently."}},{"@type":"Question","name":"What if I already have a shapefile of BC claims?","acceptedAnswer":{"@type":"Answer","text":"Use the 'Upload File' path in the Add Claims dialog instead. Drop a .zip shapefile, GeoJSON, KML, or KMZ file — the tool parses it and adds it as a layer. If the shapefile uses BC Albers projection (EPSG:3005), coordinates are automatically reprojected to WGS84."}},{"@type":"Question","name":"Is this feature free to use?","acceptedAnswer":{"@type":"Answer","text":"Yes. Searching the BC registry and adding claims to a map is completely free. Watermark-free PNG, SVG, and PDF exports ask for your email — no subscription or password needed."}}],"speakable":{"@type":"SpeakableSpecification","cssSelector":[".direct-answer",".faq-a"]}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://www.explorationmaps.com"},{"@type":"ListItem","position":2,"name":"Blog","item":"https://www.explorationmaps.com/blog/"},{"@type":"ListItem","position":3,"name":"How to Map BC Mineral Claims from the Live Registry","item":"https://www.explorationmaps.com/blog/how-to-map-bc-mineral-claims-live-registry/"}]}]}</script>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{font-size:16px;-webkit-text-size-adjust:100%}
+body{font-family:'Inter',system-ui,-apple-system,sans-serif;color:#1e293b;background:#fff;line-height:1.6}
+a{color:#2563eb;text-decoration:none}a:hover{text-decoration:underline}
+img{max-width:100%;height:auto}
+.nav{display:flex;align-items:center;justify-content:space-between;padding:0 24px;height:56px;border-bottom:1px solid #e2e8f0;background:#fff;position:sticky;top:0;z-index:100}
+.nav-brand{display:flex;align-items:center;gap:8px;font-size:15px;font-weight:700;color:#0f172a;text-decoration:none}
+.nav-brand svg{flex-shrink:0}
+.nav-cta{background:#2563eb;color:#fff;padding:7px 16px;border-radius:8px;font-size:13px;font-weight:600;white-space:nowrap}
+.nav-cta:hover{background:#1d4ed8;text-decoration:none}
+.page-wrap{max-width:1100px;margin:0 auto;padding:0 24px}
+.blog-layout{display:grid;grid-template-columns:1fr 280px;gap:48px;padding:48px 0 80px;align-items:start}
+@media(max-width:768px){.blog-layout{grid-template-columns:1fr;padding:32px 0 60px}}
+article h1{font-size:2rem;font-weight:800;line-height:1.2;color:#0f172a;margin-bottom:16px}
+@media(max-width:600px){article h1{font-size:1.5rem}}
+.direct-answer{font-size:1.05rem;color:#334155;background:#f0f9ff;border-left:4px solid #2563eb;padding:14px 18px;border-radius:0 8px 8px 0;margin-bottom:32px;line-height:1.65}
+.breadcrumb{font-size:13px;color:#64748b;margin-bottom:20px}
+.breadcrumb a{color:#64748b}
+.breadcrumb span{margin:0 6px}
+article h2{font-size:1.35rem;font-weight:700;color:#0f172a;margin:40px 0 12px;padding-bottom:8px;border-bottom:2px solid #e8edf3}
+article h2:first-of-type{margin-top:0}
+article h3{font-size:1.05rem;font-weight:700;color:#1e293b;margin:28px 0 8px}
+article p{margin-bottom:16px;color:#374151;line-height:1.75}
+article ul,article ol{padding-left:22px;margin-bottom:16px}
+article li{margin-bottom:8px;color:#374151;line-height:1.65}
+article strong{color:#0f172a}
+.steps-list{list-style:none;padding:0;counter-reset:step}
+.steps-list li{counter-increment:step;display:flex;gap:14px;margin-bottom:20px;align-items:flex-start}
+.steps-list li::before{content:counter(step);display:flex;align-items:center;justify-content:center;width:28px;height:28px;min-width:28px;background:#2563eb;color:#fff;border-radius:50%;font-size:13px;font-weight:700;margin-top:2px}
+.step-content{flex:1}
+.step-content strong{display:block;margin-bottom:4px;font-size:0.97rem;color:#0f172a}
+.step-content p{margin-bottom:8px}
+.step-img{width:100%;border-radius:10px;border:1px solid #e2e8f0;margin:12px 0;box-shadow:0 2px 12px rgba(0,0,0,0.08)}
+.mode-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:20px 0 28px}
+@media(max-width:520px){.mode-cards{grid-template-columns:1fr}}
+.mode-card{border:1.5px solid #dbe4ee;border-radius:10px;padding:14px 16px;background:#f8fbff}
+.mode-card-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:#2563eb;margin-bottom:4px}
+.mode-card h4{font-size:0.9rem;font-weight:700;color:#0f172a;margin-bottom:4px}
+.mode-card p{font-size:12px;color:#64748b;margin:0;line-height:1.5}
+.tip-box{background:#f0fdf4;border-left:4px solid #16a34a;padding:14px 18px;border-radius:0 8px 8px 0;margin:20px 0;color:#374151;line-height:1.7;font-size:0.95rem}
+.tip-box strong{color:#15803d}
+.callout-box{background:#fffbeb;border-left:4px solid #f59e0b;padding:14px 18px;border-radius:0 8px 8px 0;margin:20px 0;color:#374151;line-height:1.7;font-size:0.95rem}
+.comparison-table{width:100%;border-collapse:collapse;margin:20px 0;font-size:14px}
+.comparison-table th{background:#1e3a5f;color:#fff;padding:10px 14px;text-align:left;font-weight:600}
+.comparison-table td{padding:9px 14px;border-bottom:1px solid #e2e8f0;vertical-align:top}
+.comparison-table tr:nth-child(even) td{background:#f8fafc}
+.faq-section{margin:48px 0 0}
+.faq-section h2{font-size:1.35rem;font-weight:700;color:#0f172a;margin-bottom:20px;padding-bottom:8px;border-bottom:2px solid #e8edf3}
+.faq-item{border:1px solid #e2e8f0;border-radius:10px;margin-bottom:12px;overflow:hidden}
+.faq-q{font-weight:700;color:#0f172a;padding:14px 18px;font-size:0.95rem;background:#f8fafc}
+.faq-a{padding:12px 18px;color:#374151;font-size:0.9rem;line-height:1.7;border-top:1px solid #e2e8f0}
+.sidebar-card{background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:24px;margin-bottom:24px}
+.sidebar-card h3{font-size:14px;font-weight:700;color:#0f172a;margin-bottom:12px;text-transform:uppercase;letter-spacing:0.05em}
+.sidebar-card ul{list-style:none;padding:0}
+.sidebar-card li{margin-bottom:8px;font-size:14px}
+.sidebar-card a{color:#2563eb}
+.cta-card{background:linear-gradient(135deg,#1e3a5f 0%,#2563eb 100%);border-radius:12px;padding:28px 24px;color:#fff;text-align:center;margin-bottom:24px}
+.cta-card h3{font-size:1.1rem;font-weight:700;margin-bottom:10px;color:#fff}
+.cta-card p{font-size:13px;color:#bfdbfe;margin-bottom:18px;line-height:1.6}
+.cta-btn{display:inline-block;background:#fff;color:#1e3a5f;padding:10px 22px;border-radius:8px;font-weight:700;font-size:14px;text-decoration:none}
+.cta-btn:hover{background:#dbeafe;text-decoration:none}
+.post-date{color:#94a3b8;font-size:12px}
+.workflow-badge{display:inline-flex;align-items:center;gap:6px;background:#dbeafe;color:#1d4ed8;font-size:11px;font-weight:700;padding:3px 10px;border-radius:999px;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:16px}
+.site-footer{border-top:1px solid #e2e8f0;padding:28px 24px;text-align:center;font-size:13px;color:#94a3b8;margin-top:40px}
+.site-footer-links{margin-bottom:8px;display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:6px}
+.site-footer a{color:#64748b}
+.site-footer-sep{color:#cbd5e1}
+/* Mock UI screenshots */
+.mock-ui{border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;margin:20px 0;box-shadow:0 4px 20px rgba(0,0,0,0.08)}
+.mock-ui-bar{background:#f1f5f9;padding:8px 16px;font-size:12px;color:#64748b;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;gap:8px}
+.mock-ui-dot{width:10px;height:10px;border-radius:50%;background:#e2e8f0}
+.mock-ui-body{padding:20px 24px;background:#fff}
+.mock-search-row{display:flex;gap:8px;margin-bottom:12px}
+.mock-input{flex:1;border:1.5px solid #2563eb;border-radius:8px;padding:9px 14px;font-size:14px;color:#0f172a;font-family:inherit}
+.mock-btn{background:#2563eb;color:#fff;border:none;border-radius:8px;padding:9px 18px;font-size:14px;font-weight:600;font-family:inherit;cursor:default}
+.mock-tabs{display:flex;gap:0;border-bottom:1px solid #e2e8f0;margin-bottom:16px}
+.mock-tab{flex:1;padding:7px;text-align:center;font-size:12px;font-weight:600;color:#64748b;border-bottom:2px solid transparent}
+.mock-tab.active{color:#2563eb;border-bottom-color:#2563eb}
+.mock-result-group{border:1px solid #e2e8f0;border-radius:8px;margin-bottom:8px;overflow:hidden}
+.mock-result-group-hd{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#f8fafc;border-bottom:1px solid #e2e8f0;font-size:13px}
+.mock-result-group-hd strong{color:#0f172a;font-weight:700}
+.mock-result-group-hd span{color:#64748b;font-size:12px}
+.mock-result-row{display:flex;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid #f1f5f9;font-size:12px}
+.mock-result-row:last-child{border-bottom:none}
+.mock-result-row input[type=checkbox]{width:14px;height:14px;accent-color:#2563eb}
+.mock-claim-no{font-weight:700;color:#0f172a;min-width:80px}
+.mock-claim-type{color:#2563eb;min-width:60px}
+.mock-claim-meta{color:#94a3b8;flex:1}
+.mock-ha{color:#475569;text-align:right;min-width:60px}
+.mock-add-btn{width:100%;background:#2563eb;color:#fff;border:none;border-radius:8px;padding:11px;font-size:14px;font-weight:700;margin-top:14px;font-family:inherit;cursor:default}
+</style>
+</head>
+<body>
+<nav class="nav">
+  <a class="nav-brand" href="/">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" fill="#2563eb"/>
+    </svg>
+    Exploration Maps
+  </a>
+  <a class="nav-cta" href="/">Search BC Registry Free →</a>
+</nav>
+
+<div class="page-wrap">
+  <div class="blog-layout">
+    <article>
+      <p class="breadcrumb"><a href="/">Home</a><span>›</span><a href="/blog/">Blog</a><span>›</span>BC Registry Claims Search</p>
+      <div class="workflow-badge">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="#1d4ed8"/></svg>
+        Feature Walkthrough
+      </div>
+      <h1>How to Map BC Mineral Claims from the Live Registry — No Download Required</h1>
+      <p class="post-date">Published June 8, 2026 · 8 min read</p>
+
+      <p class="direct-answer">You can now search BC's live Mineral Titles Online (MTO) registry directly inside Exploration Maps — by company name, claim number, or NTS map sheet. Select the claims you want, click <strong>Add to map</strong>, and your claim boundaries load instantly with automatic styling. The full workflow from search to export takes under five minutes.</p>
+
+      <p>British Columbia has over 100,000 active mineral claims held by everyone from major producers like <strong>Teck Resources</strong> and <strong>First Quantum Minerals</strong> to junior explorers with a single cell claim. Getting those boundaries onto a professional-looking map used to mean downloading a shapefile from MTO, converting it in QGIS, and manually importing it. That process is gone. Here's exactly how the new BC Registry search works.</p>
+
+      <h2>The Three Ways to Search</h2>
+
+      <p>The BC claims search panel gives you three search modes. You can switch between them using the tabs at the top of the search panel, or just start typing — the tool auto-detects which mode applies based on what you enter.</p>
+
+      <div class="mode-cards">
+        <div class="mode-card">
+          <div class="mode-card-label">Tab 1</div>
+          <h4>Company Name</h4>
+          <p>Search by the registered holder name. Works for any company in BC's mineral tenure registry. Auto-selected by default.</p>
+        </div>
+        <div class="mode-card">
+          <div class="mode-card-label">Tab 2</div>
+          <h4>Claim #</h4>
+          <p>Enter a specific TAG_NUMBER (e.g. 1034521). Returns that exact claim. Auto-detected when you type digits only.</p>
+        </div>
+        <div class="mode-card">
+          <div class="mode-card-label">Tab 3</div>
+          <h4>Map Sheet</h4>
+          <p>Enter an NTS map sheet code (e.g. 093A, 082F). Returns all active claims on that sheet. Auto-detected by the NTS pattern.</p>
+        </div>
+      </div>
+
+      <div class="tip-box">
+        <strong>Auto-detection:</strong> If you type <code>1034521</code> (all digits), the tool auto-switches to Claim # mode. If you type <code>093A</code> (an NTS code), it switches to Map Sheet. For anything else, it stays on Company name. You can always override by clicking a tab manually.
+      </div>
+
+      <h2>Full Workflow: Teck Resources Claims in BC</h2>
+
+      <p>Teck Resources is Canada's largest diversified mining company, headquartered in Vancouver. They hold active mineral claims across multiple regions of BC — including the Highland Valley area (home to one of the world's largest open-pit copper mines), the East Kootenay, and parts of the Golden Triangle in the northwest. Here's the complete workflow using Teck as the example.</p>
+
+      <ol class="steps-list">
+        <li>
+          <div class="step-content">
+            <strong>Open the Add Claims tool</strong>
+            <p>From the landing page, click the <strong>Search BC Registry Claims</strong> button. If you're already in the editor, click <strong>+ Add BC Claims</strong> in the left sidebar. A modal opens with two options: <em>Search BC Registry</em> and <em>Upload File</em>. Click <strong>Search BC Registry</strong>.</p>
+          </div>
+        </li>
+        <li>
+          <div class="step-content">
+            <strong>Type "Teck" and search</strong>
+            <p>The search panel opens with three mode tabs at the top. The <em>Company</em> tab is active by default. Type <strong>Teck</strong> (or "Teck Resources") in the search field and press Enter or click Search. The tool queries BC's live WFS endpoint at <code>openmaps.gov.bc.ca</code> — the same data source powering the official MTO viewer.</p>
+
+            <!-- Mock UI: search panel -->
+            <div class="mock-ui">
+              <div class="mock-ui-bar">
+                <div class="mock-ui-dot"></div>
+                <div class="mock-ui-dot"></div>
+                <div class="mock-ui-dot"></div>
+                <span style="margin-left:4px">BC Registry Search</span>
+              </div>
+              <div class="mock-ui-body">
+                <div class="mock-tabs">
+                  <div class="mock-tab active">Company</div>
+                  <div class="mock-tab">Claim #</div>
+                  <div class="mock-tab">Map Sheet</div>
+                </div>
+                <div class="mock-search-row">
+                  <input class="mock-input" value="Teck Resources" readonly>
+                  <button class="mock-btn">Search</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </li>
+        <li>
+          <div class="step-content">
+            <strong>Review the spatially-clustered results</strong>
+            <p>Results come back grouped by geography. Teck's claims in BC span several distinct regions — the tool uses spatial clustering (union-find with 50 km radius) to automatically form sensible groups, so you're not staring at a flat list of 400 individual claim numbers.</p>
+            <p>Each group shows the <strong>region name</strong> (derived from latitude/longitude), the <strong>claim count</strong>, <strong>total hectares</strong>, and the expiry date range. Click any group to expand it and see individual claim numbers, tenure type (Cell Claim, Placer Claim, etc.), area in hectares, and good-to date.</p>
+
+            <!-- Mock UI: results grouped -->
+            <div class="mock-ui">
+              <div class="mock-ui-bar">
+                <div class="mock-ui-dot"></div>
+                <div class="mock-ui-dot"></div>
+                <div class="mock-ui-dot"></div>
+                <span style="margin-left:4px">Results — Teck Resources · 312 claims found</span>
+              </div>
+              <div class="mock-ui-body">
+                <div style="font-size:12px;color:#64748b;margin-bottom:10px">3 geographic groups · 312 claims · 98,450 ha total</div>
+                <div class="mock-result-group">
+                  <div class="mock-result-group-hd">
+                    <div><strong>Highland Valley Area</strong> <span style="margin-left:8px;color:#2563eb;font-size:11px;font-weight:700">Thompson–Okanagan</span></div>
+                    <span>184 claims · 61,200 ha · exp. 2027–2031</span>
+                  </div>
+                  <div class="mock-result-row">
+                    <input type="checkbox" checked readonly>
+                    <span class="mock-claim-no">1034521</span>
+                    <span class="mock-claim-type">Cell Claim</span>
+                    <span class="mock-claim-meta">expires 2028-11-30</span>
+                    <span class="mock-ha">329 ha</span>
+                  </div>
+                  <div class="mock-result-row">
+                    <input type="checkbox" checked readonly>
+                    <span class="mock-claim-no">1034522</span>
+                    <span class="mock-claim-type">Cell Claim</span>
+                    <span class="mock-claim-meta">expires 2028-11-30</span>
+                    <span class="mock-ha">329 ha</span>
+                  </div>
+                  <div class="mock-result-row" style="color:#94a3b8;font-style:italic;font-size:11px">
+                    <span style="padding-left:24px">+ 182 more claims in this group</span>
+                  </div>
+                </div>
+                <div class="mock-result-group">
+                  <div class="mock-result-group-hd">
+                    <div><strong>East Kootenay</strong></div>
+                    <span>98 claims · 28,900 ha · exp. 2026–2030</span>
+                  </div>
+                </div>
+                <div class="mock-result-group">
+                  <div class="mock-result-group-hd">
+                    <div><strong>Northwest BC</strong></div>
+                    <span>30 claims · 8,350 ha · exp. 2027–2029</span>
+                  </div>
+                </div>
+                <button class="mock-add-btn" disabled style="opacity:0.5;cursor:default">Select claims to add</button>
+              </div>
+            </div>
+          </div>
+        </li>
+        <li>
+          <div class="step-content">
+            <strong>Select the claims you need</strong>
+            <p>For most investor presentations and project maps, you only want claims for a specific property — not every claim the company holds across BC. Expand the relevant group and use the checkboxes to select individual claims, or tick <strong>Select All</strong> within a group to grab them all. The total selected count and hectares updates in the header bar as you check boxes.</p>
+            <p>For a Highland Valley project map, expand that group and Select All. For a regional claims overview, select all three groups. The choice is yours — only what you select gets added to the map.</p>
+
+            <!-- Mock UI: selection made -->
+            <div class="mock-ui">
+              <div class="mock-ui-bar">
+                <div class="mock-ui-dot"></div><div class="mock-ui-dot"></div><div class="mock-ui-dot"></div>
+                <span style="margin-left:4px">Highland Valley Area — 184 claims</span>
+              </div>
+              <div class="mock-ui-body">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;font-size:13px">
+                  <label style="display:flex;align-items:center;gap:6px;font-weight:600"><input type="checkbox" checked readonly style="accent-color:#2563eb"> Select All</label>
+                  <span style="color:#64748b">184 selected · 61,200 ha</span>
+                </div>
+                <div class="mock-result-row">
+                  <input type="checkbox" checked readonly><span class="mock-claim-no">1034521</span><span class="mock-claim-type">Cell Claim</span><span class="mock-claim-meta">expires 2028-11-30</span><span class="mock-ha">329 ha</span>
+                </div>
+                <div class="mock-result-row">
+                  <input type="checkbox" checked readonly><span class="mock-claim-no">1034522</span><span class="mock-claim-type">Cell Claim</span><span class="mock-claim-meta">expires 2028-11-30</span><span class="mock-ha">329 ha</span>
+                </div>
+                <div class="mock-result-row">
+                  <input type="checkbox" checked readonly><span class="mock-claim-no">1034523</span><span class="mock-claim-type">Cell Claim</span><span class="mock-claim-meta">expires 2029-03-15</span><span class="mock-ha">329 ha</span>
+                </div>
+                <button class="mock-add-btn">Add 184 claims to map</button>
+              </div>
+            </div>
+          </div>
+        </li>
+        <li>
+          <div class="step-content">
+            <strong>Claims load as a styled layer — map fits automatically</strong>
+            <p>Click <strong>Add 184 claims to map</strong>. The modal closes, the claim polygons appear on the map as a new layer named "Teck Resources — Highland Valley Area Claims," and the map fits to the claim boundaries. The layer is automatically styled with a blue stroke and semi-transparent blue fill — the conventional claims styling used in NI 43-101 technical reports.</p>
+            <p>The layer appears in the Layers panel in the sidebar. You can rename it, change the fill and stroke colour, adjust opacity, and toggle it on or off in the legend independently of other layers.</p>
+          </div>
+        </li>
+        <li>
+          <div class="step-content">
+            <strong>Build the map design around your claims</strong>
+            <p>With the claims layer on the map, building a finished investor presentation or technical figure takes a few more clicks:</p>
+            <ul>
+              <li><strong>Basemap:</strong> Choose <em>Satellite</em> for regional context, or <em>Light</em> for a clean technical report look.</li>
+              <li><strong>Reference overlays:</strong> Turn on <em>Roads &amp; Settlements</em> so viewers can orient themselves. Reduce opacity to 50% so roads don't compete with your claim boundaries.</li>
+              <li><strong>Title:</strong> Click the title block and enter your project name — e.g. "Highland Valley Copper — Mineral Claims." Add the map date and project number.</li>
+              <li><strong>Distance ring:</strong> If you want to show proximity to infrastructure, click the ring tool and draw a 10 km or 25 km radius from a key point (mine site, highway, power line).</li>
+              <li><strong>Callouts:</strong> Click the annotation tool to add a text label pointing to a specific claim block or geographic feature.</li>
+              <li><strong>North arrow &amp; scale bar:</strong> Toggle both on in the Design section — required for NI 43-101 maps.</li>
+            </ul>
+          </div>
+        </li>
+        <li>
+          <div class="step-content">
+            <strong>Export the finished map</strong>
+            <p>Click <strong>PNG</strong> for PowerPoint slides, news releases, and web use. Click <strong>PDF</strong> for print-quality technical reports and regulatory filings. Click <strong>SVG</strong> to get an editable vector file you can bring into Illustrator or Inkscape for final production work.</p>
+            <p>Watermark-free exports prompt for your email — no password, no subscription, no credit card. The email is saved locally so you're not asked again.</p>
+          </div>
+        </li>
+      </ol>
+
+      <div class="tip-box">
+        <strong>Tip for multi-company comparisons:</strong> Search for Teck, add their claims, then search for an adjacent junior explorer and add their claims as a second layer in a different colour. This creates a competitive landscape map showing claim positions relative to each other — a common slide in project presentation decks.
+      </div>
+
+      <h2>What Data Does the Search Return?</h2>
+
+      <p>Every result comes directly from the BC government's public WFS endpoint (<code>WHSE_MINERAL_TENURE.MTA_ACQUIRED_TENURE_SVW</code>). This is the same dataset behind BC's official MTO viewer. For each claim, you get:</p>
+
+      <table class="comparison-table">
+        <thead>
+          <tr><th>Field</th><th>What It Is</th><th>Shown In</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>TAG_NUMBER</td><td>The unique claim identifier (e.g. 1034521)</td><td>Results list, layer tooltip</td></tr>
+          <tr><td>OWNER_NAME</td><td>Registered holder of the claim</td><td>Group header, used in search</td></tr>
+          <tr><td>TITLE_TYPE_DESCRIPTION</td><td>Cell Claim, Placer Claim, Crown Grant, etc.</td><td>Results list badge</td></tr>
+          <tr><td>AREA_IN_HECTARES</td><td>Area of the claim polygon</td><td>Results list, group totals</td></tr>
+          <tr><td>GOOD_TO_DATE</td><td>Expiry date of the claim</td><td>Results list, group summary</td></tr>
+          <tr><td>MAP_UNIT_NO</td><td>NTS map sheet and cell identifier</td><td>Used for Map Sheet search mode</td></tr>
+          <tr><td>geometry</td><td>Polygon coordinates (WGS84)</td><td>Drawn on the map</td></tr>
+        </tbody>
+      </table>
+
+      <h2>Searching by Claim Number or Map Sheet</h2>
+
+      <h3>Claim number search</h3>
+      <p>If you have a specific claim number from a news release, technical report, or MTO portal, switch to the <strong>Claim #</strong> tab and enter it directly. You can also just type the number — if it's all digits, the tool auto-detects and switches to claim number mode. This is useful for quickly pulling up a specific claim referenced in an NI 43-101 report or a competitor's news release.</p>
+
+      <h3>Map sheet search</h3>
+      <p>BC's mineral claims system uses the National Topographic System (NTS) grid. Every claim is assigned to a 1:50,000 or 1:250,000 map sheet. If you're working in a specific area — say the Toodoggone district (104H) or the Cariboo gold belt (093A) — switch to <strong>Map Sheet</strong> and enter the sheet code. The search returns all active claims on that sheet, regardless of who holds them, giving you a full picture of the competitive claim landscape in that area.</p>
+
+      <div class="callout-box">
+        <strong>NTS code format:</strong> A primary sheet is three digits + letter, e.g. <code>093A</code> or <code>082F</code>. You can also enter a more specific subsection (e.g. <code>093A056</code>) to get a tighter area. If you're not sure of the sheet code for an area, look it up at <a href="https://maps.canada.ca/czs/index-en.html" target="_blank" rel="noopener">maps.canada.ca</a> or use the MTO portal to find the map sheet number for a specific coordinate.
+      </div>
+
+      <h2>Uploading a Shapefile Instead</h2>
+
+      <p>The live registry search is fastest for finding claims by name, number, or area. But if you've already downloaded claims data from MTO, Natural Earth, or another source, the <strong>Upload File</strong> path in the Add Claims dialog accepts:</p>
+      <ul>
+        <li><strong>.zip shapefile</strong> — all four components (.shp, .dbf, .prj, .shx) zipped together, or dropped individually</li>
+        <li><strong>GeoJSON / JSON</strong></li>
+        <li><strong>KML / KMZ</strong></li>
+      </ul>
+      <p>If the shapefile uses BC Albers projection (EPSG:3005 — the default CRS for BC government shapefiles), the tool automatically detects the projected coordinates and reprojects them to WGS84 before adding them to the map. No QGIS step needed.</p>
+
+      <h2>Common Use Cases</h2>
+
+      <ul>
+        <li><strong>News release figures:</strong> Search by your company name, select your active claims, export a 16:9 PNG for a press release.</li>
+        <li><strong>NI 43-101 property maps:</strong> Search for the property's claim block, add roads and scale bar, export PDF at Letter or A3 size.</li>
+        <li><strong>Competitive landscape slides:</strong> Search for your company + two competitors, layer three differently-coloured claim sets on one map, add a legend.</li>
+        <li><strong>New claim acquisition:</strong> Search by map sheet to see what's already claimed in an area before you apply for new cells.</li>
+        <li><strong>Due diligence:</strong> Quickly visualize a target company's claim position before a meeting — search by their name, see total hectares, geographic spread, and expiry profile at a glance.</li>
+      </ul>
+
+      <div class="faq-section">
+        <h2>Frequently Asked Questions</h2>
+
+        <div class="faq-item">
+          <div class="faq-q">Does Exploration Maps connect directly to BC Mineral Titles Online?</div>
+          <div class="faq-a">Yes. The search queries BC's public WFS endpoint at <code>openmaps.gov.bc.ca</code> in real time — the same data source that powers the official MTO viewer. Active mineral claims, cell claims, and legacy licences are all included. Expired claims are not returned. No download or conversion step is needed.</div>
+        </div>
+
+        <div class="faq-item">
+          <div class="faq-q">Can I search for claims from the Yukon or Ontario in the same tool?</div>
+          <div class="faq-a">The current BC Registry search is specific to British Columbia's provincial WFS. Claims from other jurisdictions need to be imported as shapefiles or GeoJSON — which you can get from each province's or territory's mineral lands portal (e.g. Ontario's MLAS, Yukon's ADAM, Alberta's Mineral Rights Viewer).</div>
+        </div>
+
+        <div class="faq-item">
+          <div class="faq-q">How current is the BC mineral claims data?</div>
+          <div class="faq-a">It's live — each search queries the WFS directly. Newly granted claims typically appear within 24–48 hours of registration. Expired claims are excluded from results automatically based on the GOOD_TO_DATE field.</div>
+        </div>
+
+        <div class="faq-item">
+          <div class="faq-q">Can I add claims from multiple companies to one map?</div>
+          <div class="faq-a">Yes. Each search adds a separate layer. Search for Teck, add their claims (Layer 1, blue), then search for a junior explorer and add theirs (Layer 2, red). Both layers appear in the legend with independent colour controls. This is the fastest way to build a competitive landscape map.</div>
+        </div>
+
+        <div class="faq-item">
+          <div class="faq-q">What if the company holds claims under a subsidiary name?</div>
+          <div class="faq-a">Mineral claims in BC are registered under the legal entity name that holds the mineral title, which is often a subsidiary, not the parent company. If a search for "Teck" doesn't return what you expect, try searching for specific operating subsidiaries like "Teck Coal" or "Highland Valley Copper." You can also use Map Sheet search to find all claims in the geographic area regardless of holder.</div>
+        </div>
+
+        <div class="faq-item">
+          <div class="faq-q">Is this feature free?</div>
+          <div class="faq-a">Yes. Searching the BC registry and adding claims to a map is completely free — no account required. Watermark-free exports (PNG, SVG, PDF) ask for your email address. No subscription or password is needed.</div>
+        </div>
+
+        <div class="faq-item">
+          <div class="faq-q">Can I style the claims layer after importing?</div>
+          <div class="faq-a">Yes. Click the layer in the Layers panel to expand its style controls. You can change the fill colour, stroke colour, opacity, and stroke weight. You can also rename the layer — the name appears in the legend. If you have multiple claim layers, give each a descriptive name like "Company A — Option Claims" so the legend reads clearly on the exported map.</div>
+        </div>
+      </div>
+    </article>
+
+    <aside>
+      <div class="cta-card">
+        <h3>Search BC Claims Now</h3>
+        <p>Type a company name and get claim boundaries on a map in seconds. Free, no account needed.</p>
+        <a class="cta-btn" href="/">Search BC Registry →</a>
+      </div>
+
+      <div class="sidebar-card">
+        <h3>Related Guides</h3>
+        <ul>
+          <li><a href="/blog/how-to-make-a-mining-claims-map/">How to Make a Mining Claims Map</a></li>
+          <li><a href="/blog/how-to-create-ni-43-101-compliant-map/">NI 43-101 Compliant Map Guide</a></li>
+          <li><a href="/blog/how-to-import-geojson-mining-map/">How to Import GeoJSON</a></li>
+          <li><a href="/blog/how-to-create-exploration-map-investor-presentation/">Maps for Investor Presentations</a></li>
+          <li><a href="/blog/mining-claims-map-british-columbia/">BC Mining Claims Map Guide</a></li>
+        </ul>
+      </div>
+
+      <div class="sidebar-card">
+        <h3>Data Sources for BC</h3>
+        <ul>
+          <li><a href="https://www.bcmineraltenure.gov.bc.ca/" target="_blank" rel="noopener">BC Mineral Titles Online (MTO)</a></li>
+          <li><a href="https://openmaps.gov.bc.ca/" target="_blank" rel="noopener">BC Open Maps WFS</a></li>
+          <li><a href="https://catalogue.data.gov.bc.ca/" target="_blank" rel="noopener">BC Data Catalogue</a></li>
+          <li><a href="https://maps.canada.ca/czs/index-en.html" target="_blank" rel="noopener">NTS Map Sheet Finder</a></li>
+        </ul>
+      </div>
+
+      <div class="sidebar-card">
+        <h3>Search Modes Quick Reference</h3>
+        <ul>
+          <li><strong>Company:</strong> "Teck Resources"</li>
+          <li><strong>Claim #:</strong> "1034521" (digits only)</li>
+          <li><strong>Map Sheet:</strong> "093A" or "082F056"</li>
+        </ul>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<footer class="site-footer">
+  <div class="site-footer-links">
+    <a href="/">Exploration Maps</a><span class="site-footer-sep">·</span>
+    <a href="/blog/">Blog</a><span class="site-footer-sep">·</span>
+    <a href="/blog/how-to-make-a-mining-claims-map/">Mining Claims Map Guide</a><span class="site-footer-sep">·</span>
+    <a href="/blog/how-to-create-ni-43-101-compliant-map/">NI 43-101 Maps</a>
+  </div>
+  <div>© 2026 Exploration Maps. Professional mining maps, no GIS required.</div>
+</footer>
+</body>
+</html>
