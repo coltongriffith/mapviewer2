@@ -127,7 +127,7 @@ export const technicalReportTemplate = {
       referenceOverlays: { context: false, labels: false, rail: false },
     },
     access_location: {
-      basemap: 'topo',
+      basemap: 'terrain',
       insetMode: 'country',
       framing: 'access',
       visibleRoles: ['claims', 'roads_access', 'rivers_water', 'labels'],

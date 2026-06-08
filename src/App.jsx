@@ -1511,7 +1511,7 @@ export default function App() {
     claims:         { basemap: 'light',     mode: 'regional_claims',   accent: '#16a34a' },
     target:         { basemap: 'light',     mode: 'target_anomaly',    accent: '#dc2626' },
     regional:       { basemap: 'terrain',   mode: 'project_overview',  accent: '#b87333' },
-    infrastructure: { basemap: 'streets',   mode: 'access_location',   accent: '#7c3aed' },
+    infrastructure: { basemap: 'light',     mode: 'access_location',   accent: '#7c3aed' },
     dark:           { basemap: 'dark',      mode: 'drill_plan',        accent: '#60a5fa' },
   };
 
