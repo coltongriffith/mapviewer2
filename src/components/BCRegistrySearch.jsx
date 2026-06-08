@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { useBCClaims } from '../hooks/useBCClaims';
 
 // ── Spatial clustering helpers ─────────────────────────────────────────────
@@ -84,20 +84,44 @@ function clusterFeatures(features, thresholdKm = 50) {
     .sort((a, b) => b.features.length - a.features.length);
 }
 
+// ── Search mode config ─────────────────────────────────────────────────────
+
+const SEARCH_MODES = [
+  { value: 'company', label: 'Company', placeholder: 'e.g. Teck Resources' },
+  { value: 'number', label: 'Claim #', placeholder: 'e.g. 1012345' },
+  { value: 'map',    label: 'Map Sheet', placeholder: 'e.g. 082F056' },
+];
+
+function autoDetectMode(q) {
+  if (!q) return 'company';
+  if (/^\d+$/.test(q.trim())) return 'number';
+  if (/^\d{3}[A-Za-z]/.test(q.trim())) return 'map';
+  return 'company';
+}
+
 // ── Component ──────────────────────────────────────────────────────────────
 
 export default function BCRegistrySearch({ onImport, onBack }) {
   const [query, setQuery] = useState('');
+  const [mode, setMode] = useState('company');
+  const [manualMode, setManualMode] = useState(false);
   const [selectedOwner, setSelectedOwner] = useState(null);
   const [selectedGroups, setSelectedGroups] = useState(new Set());
   const [expandedGroups, setExpandedGroups] = useState(new Set());
+  const [selectedFlat, setSelectedFlat] = useState(new Set());
   const { results, loading, error, search, reset } = useBCClaims();
 
+  // Auto-detect mode from query (unless user manually picked)
+  useEffect(() => {
+    if (!manualMode) setMode(autoDetectMode(query));
+  }, [query, manualMode]);
+
+  const currentMode = SEARCH_MODES.find(m => m.value === mode) || SEARCH_MODES[0];
   const allFeatures = results?.features || [];
 
-  // Distinct owner names sorted by claim count descending
+  // ── Company mode: owner picker + clustering ──
   const owners = useMemo(() => {
-    if (!allFeatures.length) return [];
+    if (!allFeatures.length || mode !== 'company') return [];
     const counts = new Map();
     const hectares = new Map();
     allFeatures.forEach(f => {
@@ -108,16 +132,14 @@ export default function BCRegistrySearch({ onImport, onBack }) {
     return [...counts.entries()]
       .map(([name, count]) => ({ name, count, totalHa: hectares.get(name) || 0 }))
       .sort((a, b) => b.count - a.count);
-  }, [allFeatures]);
+  }, [allFeatures, mode]);
 
-  // Features for the active owner (or all if only one owner)
   const activeOwner = selectedOwner || (owners.length === 1 ? owners[0].name : null);
-  const features = useMemo(
+  const companyFeatures = useMemo(
     () => activeOwner ? allFeatures.filter(f => f.properties?.OWNER_NAME === activeOwner) : [],
     [allFeatures, activeOwner]
   );
-
-  const groups = useMemo(() => clusterFeatures(features), [features]);
+  const groups = useMemo(() => clusterFeatures(companyFeatures), [companyFeatures]);
 
   const totalSelectedClaims = useMemo(
     () => [...selectedGroups].reduce((s, i) => s + (groups[i]?.features.length || 0), 0),
@@ -128,13 +150,39 @@ export default function BCRegistrySearch({ onImport, onBack }) {
     [selectedGroups, groups]
   );
 
+  // ── Flat mode (claim # or map sheet): simple flat list ──
+  const flatSelectedHa = useMemo(
+    () => [...selectedFlat].reduce((s, i) => s + (Number(allFeatures[i]?.properties?.AREA_IN_HECTARES) || 0), 0),
+    [selectedFlat, allFeatures]
+  );
+
   function handleSearch(e) {
     e.preventDefault();
-    if (query.trim().length < 3) return;
+    if (query.trim().length < 2) return;
     setSelectedOwner(null);
     setSelectedGroups(new Set());
     setExpandedGroups(new Set());
-    search(query.trim());
+    setSelectedFlat(new Set());
+    search(query.trim(), mode);
+  }
+
+  function handleQueryChange(val) {
+    setQuery(val);
+    if (results || error) {
+      reset();
+      setSelectedOwner(null);
+      setSelectedFlat(new Set());
+    }
+  }
+
+  function handleModeChange(newMode) {
+    setMode(newMode);
+    setManualMode(true);
+    if (results || error) {
+      reset();
+      setSelectedOwner(null);
+      setSelectedFlat(new Set());
+    }
   }
 
   function handleOwnerSelect(ownerName) {
@@ -150,28 +198,28 @@ export default function BCRegistrySearch({ onImport, onBack }) {
   }
 
   function toggleGroup(i) {
-    setSelectedGroups(prev => {
-      const s = new Set(prev);
-      s.has(i) ? s.delete(i) : s.add(i);
-      return s;
-    });
+    setSelectedGroups(prev => { const s = new Set(prev); s.has(i) ? s.delete(i) : s.add(i); return s; });
   }
 
   function toggleExpand(i, e) {
     e.preventDefault();
     e.stopPropagation();
-    setExpandedGroups(prev => {
-      const s = new Set(prev);
-      s.has(i) ? s.delete(i) : s.add(i);
-      return s;
-    });
+    setExpandedGroups(prev => { const s = new Set(prev); s.has(i) ? s.delete(i) : s.add(i); return s; });
+  }
+
+  function toggleFlat(i) {
+    setSelectedFlat(prev => { const s = new Set(prev); s.has(i) ? s.delete(i) : s.add(i); return s; });
   }
 
   function handleSelectAll(checked) {
     setSelectedGroups(checked ? new Set(groups.map((_, i) => i)) : new Set());
   }
 
-  function handleAdd() {
+  function handleSelectAllFlat(checked) {
+    setSelectedFlat(checked ? new Set(allFeatures.map((_, i) => i)) : new Set());
+  }
+
+  function handleAddGroups() {
     const items = [...selectedGroups].sort((a, b) => a - b).map(i => {
       const g = groups[i];
       const holder = activeOwner || g.features[0]?.properties?.OWNER_NAME || query;
@@ -183,31 +231,52 @@ export default function BCRegistrySearch({ onImport, onBack }) {
     onImport(items);
   }
 
-  const allSelected = groups.length > 0 && selectedGroups.size === groups.length;
+  function handleAddFlat() {
+    const features = [...selectedFlat].sort((a, b) => a - b).map(i => allFeatures[i]);
+    const holder = features[0]?.properties?.OWNER_NAME || query;
+    onImport([{
+      geojson: { type: 'FeatureCollection', features },
+      name: mode === 'number' ? `Claim ${query}` : `${holder} Claims`,
+    }]);
+  }
 
-  // Showing owner picker: results loaded, multiple owners, none selected yet
-  const showOwnerPicker = results && owners.length > 1 && !activeOwner;
-  // Showing claim groups: an owner is active
-  const showGroups = !!activeOwner;
+  const allGroupsSelected = groups.length > 0 && selectedGroups.size === groups.length;
+  const allFlatSelected = allFeatures.length > 0 && selectedFlat.size === allFeatures.length;
+  const showOwnerPicker = mode === 'company' && results && owners.length > 1 && !activeOwner;
+  const showGroups = mode === 'company' && !!activeOwner;
+  const showFlatList = mode !== 'company' && results && allFeatures.length > 0;
 
   return (
     <>
       <h3 className="export-hd-title">BC Registry Search</h3>
-      <p className="export-hd-desc">Search BC's live mineral tenure registry by company name.</p>
+
+      {/* Search mode tabs */}
+      <div className="claims-mode-tabs">
+        {SEARCH_MODES.map(m => (
+          <button
+            key={m.value}
+            type="button"
+            className={`claims-mode-tab${mode === m.value ? ' active' : ''}`}
+            onClick={() => handleModeChange(m.value)}
+          >
+            {m.label}
+          </button>
+        ))}
+      </div>
 
       <form onSubmit={handleSearch}>
         <div className="claims-search-row">
           <input
             className="export-hd-input claims-search-input"
-            placeholder="Company name… e.g. Zimtu Capital"
+            placeholder={currentMode.placeholder}
             value={query}
-            onChange={e => { setQuery(e.target.value); if (results || error) { reset(); setSelectedOwner(null); } }}
+            onChange={e => handleQueryChange(e.target.value)}
             autoFocus
           />
           <button
             className="topbar-btn primary"
             type="submit"
-            disabled={loading || query.trim().length < 3}
+            disabled={loading || query.trim().length < 2}
             style={{ whiteSpace: 'nowrap' }}
           >
             {loading ? '…' : 'Search'}
@@ -222,10 +291,10 @@ export default function BCRegistrySearch({ onImport, onBack }) {
       )}
 
       {allFeatures.length >= 500 && (
-        <p className="claims-limit-warning">⚠ Showing first 500 results — try a more specific name if your company is missing.</p>
+        <p className="claims-limit-warning">⚠ Showing first 500 results — try a more specific search if your target is missing.</p>
       )}
 
-      {/* Step 2: Owner picker — shown when multiple distinct owners match */}
+      {/* Company mode: owner picker */}
       {showOwnerPicker && (
         <>
           <p className="claims-owner-hint">
@@ -233,11 +302,7 @@ export default function BCRegistrySearch({ onImport, onBack }) {
           </p>
           <div className="claims-owner-list">
             {owners.map(({ name, count, totalHa }) => (
-              <button
-                key={name}
-                className="claims-owner-row"
-                onClick={() => handleOwnerSelect(name)}
-              >
+              <button key={name} className="claims-owner-row" onClick={() => handleOwnerSelect(name)}>
                 <span className="claims-owner-name">{name}</span>
                 <span className="claims-owner-meta">
                   {count} claim{count !== 1 ? 's' : ''} · {totalHa.toFixed(0)} ha
@@ -248,7 +313,7 @@ export default function BCRegistrySearch({ onImport, onBack }) {
         </>
       )}
 
-      {/* Step 3: Claim groups for the selected owner */}
+      {/* Company mode: claim groups */}
       {showGroups && (
         <>
           {owners.length > 1 && (
@@ -257,20 +322,14 @@ export default function BCRegistrySearch({ onImport, onBack }) {
             </button>
           )}
 
-          {groups.length === 0 && (
-            <p className="claims-empty">No active claims found for this owner.</p>
-          )}
+          {groups.length === 0 && <p className="claims-empty">No active claims found for this owner.</p>}
 
           {groups.length > 0 && (
             <>
               <div className="claims-list-header">
                 <label className="claims-select-all">
-                  <input
-                    type="checkbox"
-                    checked={allSelected}
-                    onChange={e => handleSelectAll(e.target.checked)}
-                  />
-                  {allSelected ? 'Deselect All' : 'Select All'}
+                  <input type="checkbox" checked={allGroupsSelected} onChange={e => handleSelectAll(e.target.checked)} />
+                  {allGroupsSelected ? 'Deselect All' : 'Select All'}
                   <span className="claims-count-badge">{groups.length} area{groups.length !== 1 ? 's' : ''}</span>
                 </label>
                 {selectedGroups.size > 0 && (
@@ -287,12 +346,7 @@ export default function BCRegistrySearch({ onImport, onBack }) {
                   return (
                     <div key={gi} className={`claims-group${isSel ? ' selected' : ''}`}>
                       <div className="claims-group-header">
-                        <input
-                          type="checkbox"
-                          checked={isSel}
-                          onChange={() => toggleGroup(gi)}
-                          className="claims-group-check"
-                        />
+                        <input type="checkbox" checked={isSel} onChange={() => toggleGroup(gi)} className="claims-group-check" />
                         <div className="claims-group-info" onClick={() => toggleGroup(gi)}>
                           <span className="claims-group-label">{group.label}</span>
                           <span className="claims-group-meta">
@@ -300,12 +354,7 @@ export default function BCRegistrySearch({ onImport, onBack }) {
                             {group.earliestExpiry ? ` · exp. ${group.latestExpiry}` : ''}
                           </span>
                         </div>
-                        <button
-                          className="claims-group-expand"
-                          type="button"
-                          onClick={e => toggleExpand(gi, e)}
-                          title={isExp ? 'Collapse' : 'Expand claims'}
-                        >
+                        <button className="claims-group-expand" type="button" onClick={e => toggleExpand(gi, e)} title={isExp ? 'Collapse' : 'Expand claims'}>
                           {isExp ? '▲' : '▼'}
                         </button>
                       </div>
@@ -332,11 +381,7 @@ export default function BCRegistrySearch({ onImport, onBack }) {
                 })}
               </div>
 
-              <button
-                className="share-generate-btn"
-                disabled={selectedGroups.size === 0}
-                onClick={handleAdd}
-              >
+              <button className="share-generate-btn" disabled={selectedGroups.size === 0} onClick={handleAddGroups}>
                 {selectedGroups.size === 0
                   ? 'Select areas to add'
                   : selectedGroups.size === 1
@@ -345,6 +390,48 @@ export default function BCRegistrySearch({ onImport, onBack }) {
               </button>
             </>
           )}
+        </>
+      )}
+
+      {/* Flat list for claim # and map sheet searches */}
+      {showFlatList && (
+        <>
+          <div className="claims-list-header">
+            <label className="claims-select-all">
+              <input type="checkbox" checked={allFlatSelected} onChange={e => handleSelectAllFlat(e.target.checked)} />
+              {allFlatSelected ? 'Deselect All' : 'Select All'}
+              <span className="claims-count-badge">{allFeatures.length} claim{allFeatures.length !== 1 ? 's' : ''}</span>
+            </label>
+            {selectedFlat.size > 0 && (
+              <span className="claims-selection-summary">{selectedFlat.size} selected · {flatSelectedHa.toFixed(0)} ha</span>
+            )}
+          </div>
+
+          <div className="claims-results-list">
+            {allFeatures.map((f, i) => {
+              const p = f.properties || {};
+              const isSel = selectedFlat.has(i);
+              return (
+                <label key={i} className={`claims-result-row${isSel ? ' selected' : ''}`}>
+                  <input type="checkbox" checked={isSel} onChange={() => toggleFlat(i)} />
+                  <div className="claims-result-info">
+                    <span className="claims-result-number">{p.TAG_NUMBER || p.TENURE_NUMBER_ID || '—'}</span>
+                    <span className="claims-result-holder">{p.OWNER_NAME || '—'}</span>
+                    <span className="claims-result-meta">
+                      {p.TITLE_TYPE_DESCRIPTION || ''} · {p.AREA_IN_HECTARES ? `${Number(p.AREA_IN_HECTARES).toFixed(1)} ha` : ''}
+                      {p.GOOD_TO_DATE ? ` · exp. ${String(p.GOOD_TO_DATE).slice(0, 10)}` : ''}
+                    </span>
+                  </div>
+                </label>
+              );
+            })}
+          </div>
+
+          <button className="share-generate-btn" disabled={selectedFlat.size === 0} onClick={handleAddFlat}>
+            {selectedFlat.size === 0
+              ? 'Select claims to add'
+              : `Add ${selectedFlat.size} claim${selectedFlat.size !== 1 ? 's' : ''} to map`}
+          </button>
         </>
       )}
 
