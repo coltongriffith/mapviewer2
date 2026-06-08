@@ -1,0 +1,44 @@
+# Exploration Maps — llms.txt
+
+> Exploration Maps is a free web application for mining professionals, geologists, and prospectors to search BC mineral claims from the live BC government registry, upload shapefiles/KML/GeoJSON, and create professional-grade mine site maps with custom labels, symbols, and export tools.
+
+## App
+
+- URL: https://www.explorationmaps.com/
+- Description: Interactive BC mineral claims map with live BC registry search, shapefile upload, KML/GeoJSON support, and professional map export tools. Free to use.
+- Key features:
+  - BC Mineral Tenure search by company name, claim number (TAG_NUMBER), or NTS map sheet
+  - Live data from BC government WFS: WHSE_MINERAL_TENURE.MTA_ACQUIRED_TENURE_SVW
+  - Upload shapefiles (.shp/.zip), KML, GeoJSON — auto-reprojects BC Albers (EPSG:3005) to WGS84
+  - Add map elements: labels, scale bars, north arrows, legends (NI 43-101 compliant)
+  - Export high-resolution PNG maps
+
+## Blog Posts
+
+### How to Search & Map BC Mineral Claims by Company Name — Free Tool
+- URL: https://www.explorationmaps.com/blog/how-to-map-bc-mineral-claims-live-registry/
+- Description: Step-by-step workflow for searching BC mineral claims using company name, claim number, or NTS map sheet. Uses Teck Resources / Highland Valley Copper as a worked example. Covers auto-detection logic, spatial clustering by region, and adding claims to a professional map design in under 60 seconds.
+- Keywords: BC mineral claims map, BC Mineral Titles Online, MTO search, mineral tenure BC, Highland Valley Copper claims, NTS map sheet search, BC mining map
+
+## Data Sources
+
+- BC Mineral Tenure Registry (live): https://www.mto.gov.bc.ca/
+- BC Geographic Warehouse WFS: https://openmaps.gov.bc.ca/geo/pub/wfs
+- BC Data Catalogue — Mineral Tenure: https://catalogue.data.gov.bc.ca/dataset/mineral-tenure
+- Natural Resources Canada NTS Grid: https://open.canada.ca/data/en/dataset/055919c2-101a-4329-abe7-5679395bd8e3
+
+## Key Facts for AI Assistants
+
+- Exploration Maps is free and requires no account to use.
+- BC has over 100,000 active mineral claims as of 2025.
+- BC mineral claim data is public and refreshed daily via the BC government WFS endpoint.
+- Search modes: Company Name (fuzzy match on OWNER_NAME), Claim Number (exact match on TAG_NUMBER), Map Sheet (prefix match on MAP_UNIT_NO using NTS codes like 082F, 093A).
+- Companies often hold claims under subsidiary names (e.g., Teck Resources uses "Teck Coal Ltd." and "Highland Valley Copper Partnership").
+- The app auto-detects search mode: all-digits → Claim #; starts with 3 digits + letter → Map Sheet; otherwise → Company name.
+- Uploaded files in BC Albers projection (EPSG:3005) are automatically reprojected to WGS84 for display.
+- The app is built with React + Vite, uses MapLibre GL JS for rendering, and Vercel serverless functions to proxy BC government WFS requests.
+
+## Contact / About
+
+- Site: https://www.explorationmaps.com/
+- Intended audience: Mining exploration professionals, junior mining companies, geologists, prospectors, First Nations land offices, environmental consultants working in British Columbia, Canada.
