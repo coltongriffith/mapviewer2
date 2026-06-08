@@ -11,17 +11,9 @@ const BASEMAPS = {
     url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png',
     attribution: '&copy; OpenStreetMap &copy; CARTO',
   },
-  streets: {
-    url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-    attribution: '&copy; OpenStreetMap &copy; CARTO',
-  },
   dark: {
     url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
     attribution: '&copy; OpenStreetMap &copy; CARTO',
-  },
-  topo: {
-    url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
-    attribution: '&copy; OpenTopoMap contributors',
   },
   terrain: {
     url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
@@ -30,6 +22,10 @@ const BASEMAPS = {
   satellite: {
     url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
     attribution: '&copy; Esri',
+  },
+  natgeo: {
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/NatGeo_World_Map/MapServer/tile/{z}/{y}/{x}',
+    attribution: '&copy; Esri, National Geographic Society',
   },
   blank: {
     url: '',
@@ -132,6 +128,9 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
       baseLayerRef.current = null;
     }
 
+    // Apply background color to the map container (only meaningful for blank basemap)
+    map.getContainer().style.backgroundColor = cfg.url ? '' : (project?.layout?.blankBg || '#ffffff');
+
     if (!cfg.url) return; // blank basemap — no tile layer
 
     baseLayerRef.current = L.tileLayer(cfg.url, {
@@ -142,7 +141,7 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
       keepBuffer: 4,
       zIndex: 200,
     }).addTo(map);
-  }, [project?.layout?.basemap]);
+  }, [project?.layout?.basemap, project?.layout?.blankBg]);
 
   useEffect(() => {
     const map = mapRef.current;

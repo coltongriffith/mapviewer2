@@ -91,13 +91,12 @@ const SAMPLE_LOGO_URL = `data:image/svg+xml,${encodeURIComponent(SAMPLE_LOGO_SVG
 const SAMPLE_ACCENT = '#b87333';
 
 const BASEMAP_OPTIONS = [
-  { key: 'light',    label: 'Light',     bg: '#dde8f0', water: '#a8c8e8' },
-  { key: 'streets',  label: 'Streets',   bg: '#f5f0e8', water: '#c8dff0' },
-  { key: 'dark',     label: 'Dark',      bg: '#1a2535', water: '#0f1a28' },
-  { key: 'topo',     label: 'Topo',      bg: '#d4c89a', water: '#9ab8d0' },
-  { key: 'terrain',  label: 'Terrain',   bg: '#ccd8b0', water: '#9ab8d0' },
-  { key: 'satellite',label: 'Satellite', bg: '#2d4a3e', water: '#1a3050' },
-  { key: 'blank',    label: 'Blank',     bg: '#ffffff', water: '#e8f0f8' },
+  { key: 'light',     label: 'Light',     thumb: 'https://a.basemaps.cartocdn.com/rastertiles/voyager_nolabels/4/2/5.png' },
+  { key: 'dark',      label: 'Dark',      thumb: 'https://a.basemaps.cartocdn.com/dark_all/4/2/5.png' },
+  { key: 'terrain',   label: 'Terrain',   thumb: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/4/5/2' },
+  { key: 'satellite', label: 'Satellite', thumb: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/4/5/2' },
+  { key: 'natgeo',    label: 'NatGeo',    thumb: 'https://server.arcgisonline.com/ArcGIS/rest/services/NatGeo_World_Map/MapServer/tile/4/5/2' },
+  { key: 'blank',     label: 'Blank',     thumb: null },
 ];
 
 const MARKER_TYPES = {
@@ -2531,7 +2530,7 @@ export default function App() {
             <div className="control-row-stack">
               <label>Basemap</label>
               <div className="basemap-picker">
-                {BASEMAP_OPTIONS.map(({ key, label, bg, water }) => (
+                {BASEMAP_OPTIONS.map(({ key, label, thumb }) => (
                   <button
                     key={key}
                     type="button"
@@ -2539,13 +2538,22 @@ export default function App() {
                     onClick={() => updateLayout({ basemap: key })}
                     title={label}
                   >
-                    <div className="basemap-thumb-swatch" style={{ background: bg }}>
-                      <div className="basemap-thumb-water" style={{ background: water }} />
+                    <div className="basemap-thumb-swatch">
+                      {thumb
+                        ? <img src={thumb} alt={label} loading="lazy" draggable={false} />
+                        : <div className="basemap-thumb-blank" style={{ background: project.layout.blankBg || '#ffffff' }} />
+                      }
                     </div>
                     <span className="basemap-thumb-label">{label}</span>
                   </button>
                 ))}
               </div>
+              {(project.layout.basemap === 'blank') && (
+                <div className="control-row inline-2" style={{ marginTop: 8 }}>
+                  <label>Background Color</label>
+                  <input type="color" value={project.layout.blankBg || '#ffffff'} onChange={(e) => updateLayout({ blankBg: e.target.value })} />
+                </div>
+              )}
             </div>
             <div className="element-visibility-row">
               <label className="toggle-row"><input type="checkbox" checked={project.layout.showTitle !== false} onChange={(e) => updateLayout({ showTitle: e.target.checked })} /><span>Title</span></label>

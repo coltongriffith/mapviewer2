@@ -70,6 +70,7 @@ export function createInitialProjectState() {
       title: 'Project Map',
       subtitle: 'Technical Results',
       basemap: 'light',
+      blankBg: '#ffffff',
       templateId: 'technical_results_v2',
       themeId: 'investor_clean',
       mode: 'project_overview',
