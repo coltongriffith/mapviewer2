@@ -96,7 +96,6 @@ const BASEMAP_OPTIONS = [
   { key: 'terrain',   label: 'Terrain',   thumb: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/4/5/2' },
   { key: 'satellite', label: 'Satellite', thumb: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/4/5/2' },
   { key: 'natgeo',    label: 'NatGeo',    thumb: 'https://server.arcgisonline.com/ArcGIS/rest/services/NatGeo_World_Map/MapServer/tile/4/5/2' },
-  { key: 'ocean',     label: 'Ocean',     thumb: 'https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/4/5/2' },
   { key: 'blank',     label: 'Blank',     thumb: null },
 ];
 
@@ -2542,13 +2541,19 @@ export default function App() {
                     <div className="basemap-thumb-swatch">
                       {thumb
                         ? <img src={thumb} alt={label} loading="lazy" draggable={false} />
-                        : <div className="basemap-thumb-blank" />
+                        : <div className="basemap-thumb-blank" style={{ background: project.layout.blankBg || '#ffffff' }} />
                       }
                     </div>
                     <span className="basemap-thumb-label">{label}</span>
                   </button>
                 ))}
               </div>
+              {(project.layout.basemap === 'blank') && (
+                <div className="control-row inline-2" style={{ marginTop: 8 }}>
+                  <label>Background Color</label>
+                  <input type="color" value={project.layout.blankBg || '#ffffff'} onChange={(e) => updateLayout({ blankBg: e.target.value })} />
+                </div>
+              )}
             </div>
             <div className="element-visibility-row">
               <label className="toggle-row"><input type="checkbox" checked={project.layout.showTitle !== false} onChange={(e) => updateLayout({ showTitle: e.target.checked })} /><span>Title</span></label>
@@ -3441,8 +3446,6 @@ export default function App() {
             <label className="toggle-row"><input type="checkbox" checked={!!referenceOverlays.context} onChange={(e) => updateLayout({ referenceOverlays: { context: e.target.checked } })} /> <span>Roads + Settlements</span></label>
             <label className="toggle-row"><input type="checkbox" checked={!!referenceOverlays.labels} onChange={(e) => updateLayout({ referenceOverlays: { labels: e.target.checked } })} /> <span>Reference Labels</span></label>
             <label className="toggle-row"><input type="checkbox" checked={!!referenceOverlays.rail} onChange={(e) => updateLayout({ referenceOverlays: { rail: e.target.checked } })} /> <span>Railways</span></label>
-            <label className="toggle-row"><input type="checkbox" checked={!!referenceOverlays.boundaries} onChange={(e) => updateLayout({ referenceOverlays: { boundaries: e.target.checked } })} /> <span>Admin Boundaries</span></label>
-            <label className="toggle-row"><input type="checkbox" checked={!!referenceOverlays.rivers} onChange={(e) => updateLayout({ referenceOverlays: { rivers: e.target.checked } })} /> <span>Rivers</span></label>
           </div>}
         </section>
 
