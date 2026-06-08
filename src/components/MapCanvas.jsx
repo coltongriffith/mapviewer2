@@ -11,17 +11,9 @@ const BASEMAPS = {
     url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png',
     attribution: '&copy; OpenStreetMap &copy; CARTO',
   },
-  streets: {
-    url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-    attribution: '&copy; OpenStreetMap &copy; CARTO',
-  },
   dark: {
     url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
     attribution: '&copy; OpenStreetMap &copy; CARTO',
-  },
-  topo: {
-    url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
-    attribution: '&copy; OpenTopoMap contributors',
   },
   terrain: {
     url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
@@ -29,6 +21,14 @@ const BASEMAPS = {
   },
   satellite: {
     url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    attribution: '&copy; Esri',
+  },
+  natgeo: {
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/NatGeo_World_Map/MapServer/tile/{z}/{y}/{x}',
+    attribution: '&copy; Esri, National Geographic Society',
+  },
+  ocean: {
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}',
     attribution: '&copy; Esri',
   },
   blank: {
@@ -55,6 +55,18 @@ const REFERENCE_OVERLAYS = {
     attribution: '&copy; OpenRailwayMap',
     opacityFactor: 0.9,
     zIndex: 365,
+  },
+  boundaries: {
+    url: 'https://services.arcgisonline.com/arcgis/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+    attribution: '&copy; Esri',
+    opacityFactor: 0.85,
+    zIndex: 355,
+  },
+  rivers: {
+    url: 'https://tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png',
+    attribution: '&copy; OpenStreetMap contributors',
+    opacityFactor: 0.6,
+    zIndex: 345,
   },
 };
 
