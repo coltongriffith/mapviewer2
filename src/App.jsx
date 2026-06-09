@@ -1511,7 +1511,7 @@ export default function App() {
     claims:         { basemap: 'light',     mode: 'regional_claims',   accent: '#16a34a' },
     target:         { basemap: 'light',     mode: 'target_anomaly',    accent: '#dc2626' },
     regional:       { basemap: 'terrain',   mode: 'project_overview',  accent: '#b87333' },
-    infrastructure: { basemap: 'streets',   mode: 'access_location',   accent: '#7c3aed' },
+    infrastructure: { basemap: 'light',     mode: 'access_location',   accent: '#7c3aed' },
     dark:           { basemap: 'dark',      mode: 'drill_plan',        accent: '#60a5fa' },
   };
 
@@ -2445,7 +2445,7 @@ export default function App() {
               <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
               <rect x="3" y="14" width="7" height="7" rx="1"/><path d="M17.5 14v6M14.5 17h6"/>
             </svg>
-            Add BC Claims
+            Add Claims
           </button>
         </div>
 

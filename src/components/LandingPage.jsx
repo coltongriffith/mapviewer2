@@ -98,17 +98,17 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
             <div className="landing-badge">Built for junior mining &amp; exploration</div>
             <h1>Professional mining maps in minutes — no GIS software required</h1>
             <p>
-              Import a shapefile, search BC Registry claims, or start with sample data. Pick a template.
+              Import a shapefile, search live claims registries across Canada, or start with sample data. Pick a template.
               Export a print-ready PNG, SVG, or PDF — completely free, no account required.
             </p>
 
             <div className="landing-hero-ctas" data-section="hero-ctas">
               {onSearchBCClaims && (
-                <button className="landing-cta-btn landing-cta-primary landing-cta-dominant" type="button" onClick={onSearchBCClaims} data-track="CTA: Search BC Registry">
+                <button className="landing-cta-btn landing-cta-primary landing-cta-dominant" type="button" onClick={onSearchBCClaims} data-track="CTA: Search Claims Registry">
                   <span className="landing-cta-icon">🔍</span>
                   <span>
-                    <strong>Search BC Registry Claims</strong>
-                    <span className="landing-cta-sub">Find your mineral claims — free, no signup</span>
+                    <strong>Search Mineral Claims Registries</strong>
+                    <span className="landing-cta-sub">BC · Ontario · Saskatchewan · Yukon — free, no signup</span>
                   </span>
                 </button>
               )}
@@ -320,9 +320,10 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
                 <div className="landing-ds-region-name">🇨🇦 Canada</div>
                 <ul className="landing-ds-list">
                   <li><strong>BC Mineral Titles Online (MTO)</strong> — mineral claims, coal licenses. Export as Shapefile. <a href="https://www.mtonline.gov.bc.ca" target="_blank" rel="noopener noreferrer">mtonline.gov.bc.ca</a></li>
+                  <li><strong>Ontario MLAS</strong> — mining claims, mining lands. <a href="https://www.ontario.ca/page/mining-lands-administration-system" target="_blank" rel="noopener noreferrer">ontario.ca/MLAS</a></li>
+                  <li><strong>Saskatchewan MARS</strong> — mineral dispositions. <a href="https://mars.isc.ca" target="_blank" rel="noopener noreferrer">mars.isc.ca</a></li>
+                  <li><strong>GeoYukon</strong> — quartz &amp; placer claims. <a href="https://mapservices.gov.yk.ca/GeoYukon/" target="_blank" rel="noopener noreferrer">mapservices.gov.yk.ca</a></li>
                   <li><strong>NRCan Open Government</strong> — geology, roads, boundaries. <a href="https://open.canada.ca/en/open-data" target="_blank" rel="noopener noreferrer">open.canada.ca</a></li>
-                  <li><strong>BC Data Catalogue</strong> — roads, water, administrative. <a href="https://catalogue.data.gov.bc.ca" target="_blank" rel="noopener noreferrer">catalogue.data.gov.bc.ca</a></li>
-                  <li><strong>MNDM Ontario</strong> — mining claims, geology. <a href="https://www.mndm.gov.on.ca" target="_blank" rel="noopener noreferrer">mndm.gov.on.ca</a></li>
                 </ul>
               </div>
               <div className="landing-ds-region">
@@ -375,8 +376,8 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
           <div className="landing-bottom-cta-sub">Free · No account required · Works in your browser</div>
           <div className="landing-bottom-cta-actions">
             {onSearchBCClaims && (
-              <button className="landing-bottom-primary" onClick={onSearchBCClaims} data-track="Bottom CTA: Search BC">
-                Search BC Registry Claims
+              <button className="landing-bottom-primary" onClick={onSearchBCClaims} data-track="Bottom CTA: Search Claims">
+                Search Mineral Claims Registries
               </button>
             )}
             <button className="landing-bottom-ghost" onClick={onOpenEditor} data-track="Bottom CTA: Open Editor">

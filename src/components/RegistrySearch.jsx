@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { useBCClaims } from '../hooks/useBCClaims';
+import { useClaims } from '../hooks/useClaims';
 
 // ── Spatial clustering helpers ─────────────────────────────────────────────
 
@@ -34,6 +34,32 @@ function bcRegionLabel([lng, lat]) {
   if (lat > 52) return lng < -124 ? 'Cariboo / Chilcotin' : 'Rocky Mountains';
   if (lat > 50) return lng < -121 ? 'Thompson–Okanagan' : 'East Kootenay';
   return lng < -123 ? 'Vancouver Island Area' : 'West Kootenay';
+}
+
+// Compass-style labels relative to the spread of all clusters, for provinces
+// without hand-tuned region names.
+function compassLabels(clusters) {
+  if (clusters.length <= 1) return clusters.map(() => 'Claim Area');
+  const lngs = clusters.map(c => c.centroid[0]);
+  const lats = clusters.map(c => c.centroid[1]);
+  const minLng = Math.min(...lngs), maxLng = Math.max(...lngs);
+  const minLat = Math.min(...lats), maxLat = Math.max(...lats);
+  const third = (v, min, max) => (max - min < 1e-6 ? 1 : Math.min(2, Math.floor(((v - min) / (max - min)) * 3)));
+  const GRID = [
+    ['Southwest Group', 'Southern Group', 'Southeast Group'],
+    ['Western Group', 'Central Group', 'Eastern Group'],
+    ['Northwest Group', 'Northern Group', 'Northeast Group'],
+  ];
+  const labels = clusters.map(c => GRID[third(c.centroid[1], minLat, maxLat)][third(c.centroid[0], minLng, maxLng)]);
+  // De-duplicate repeated labels with a counter
+  const totals = labels.reduce((m, l) => m.set(l, (m.get(l) || 0) + 1), new Map());
+  const seen = new Map();
+  return labels.map(l => {
+    if ((totals.get(l) || 0) <= 1) return l;
+    const n = (seen.get(l) || 0) + 1;
+    seen.set(l, n);
+    return `${l} ${n}`;
+  });
 }
 
 function clusterFeatures(features, thresholdKm = 50) {
@@ -76,7 +102,6 @@ function clusterFeatures(features, thresholdKm = 50) {
         features: feats,
         centroid: [avgLng, avgLat],
         totalHa,
-        label: bcRegionLabel([avgLng, avgLat]),
         earliestExpiry: expiries[0]?.slice(0, 10),
         latestExpiry: expiries[expiries.length - 1]?.slice(0, 10),
       };
@@ -84,24 +109,49 @@ function clusterFeatures(features, thresholdKm = 50) {
     .sort((a, b) => b.features.length - a.features.length);
 }
 
-// ── Search mode config ─────────────────────────────────────────────────────
+// ── Province + search mode config ──────────────────────────────────────────
 
-const SEARCH_MODES = [
-  { value: 'company', label: 'Company', placeholder: 'e.g. Teck Resources' },
-  { value: 'number', label: 'Claim #', placeholder: 'e.g. 1012345' },
-  { value: 'map',    label: 'Map Sheet', placeholder: 'e.g. 082F056' },
+const PROVINCES = [
+  {
+    value: 'bc', label: 'British Columbia', registry: 'Mineral Titles Online',
+    modes: ['company', 'number', 'map'],
+    placeholders: { company: 'e.g. Teck Resources', number: 'e.g. 1012345', map: 'e.g. 082F056' },
+  },
+  {
+    value: 'on', label: 'Ontario', registry: 'MLAS',
+    modes: ['company', 'number'],
+    placeholders: { company: 'e.g. Glencore', number: 'e.g. 123456' },
+  },
+  {
+    value: 'sk', label: 'Saskatchewan', registry: 'MARS',
+    modes: ['company', 'number'],
+    placeholders: { company: 'e.g. Cameco', number: 'e.g. MC00001234' },
+  },
+  {
+    value: 'yt', label: 'Yukon', registry: 'Quartz Claims',
+    modes: ['company', 'number'],
+    placeholders: { company: 'e.g. claim or owner name', number: 'e.g. YA12345' },
+  },
 ];
 
-function autoDetectMode(q) {
+const MODE_LABELS = {
+  company: 'Company',
+  number: 'Claim #',
+  map: 'Map Sheet',
+};
+
+function autoDetectMode(q, allowedModes) {
   if (!q) return 'company';
-  if (/^\d+$/.test(q.trim())) return 'number';
-  if (/^\d{3}[A-Za-z]/.test(q.trim())) return 'map';
+  const t = q.trim();
+  if (/^\d+$/.test(t) && allowedModes.includes('number')) return 'number';
+  if (/^\d{3}[A-Za-z]/.test(t) && allowedModes.includes('map')) return 'map';
   return 'company';
 }
 
 // ── Component ──────────────────────────────────────────────────────────────
 
-export default function BCRegistrySearch({ onImport, onBack }) {
+export default function RegistrySearch({ onImport, onBack }) {
+  const [province, setProvince] = useState('bc');
   const [query, setQuery] = useState('');
   const [mode, setMode] = useState('company');
   const [manualMode, setManualMode] = useState(false);
@@ -109,14 +159,15 @@ export default function BCRegistrySearch({ onImport, onBack }) {
   const [selectedGroups, setSelectedGroups] = useState(new Set());
   const [expandedGroups, setExpandedGroups] = useState(new Set());
   const [selectedFlat, setSelectedFlat] = useState(new Set());
-  const { results, loading, error, search, reset } = useBCClaims();
+  const { results, loading, error, search, reset } = useClaims();
+
+  const provinceCfg = PROVINCES.find(p => p.value === province) || PROVINCES[0];
 
   // Auto-detect mode from query (unless user manually picked)
   useEffect(() => {
-    if (!manualMode) setMode(autoDetectMode(query));
-  }, [query, manualMode]);
+    if (!manualMode) setMode(autoDetectMode(query, provinceCfg.modes));
+  }, [query, manualMode, provinceCfg]);
 
-  const currentMode = SEARCH_MODES.find(m => m.value === mode) || SEARCH_MODES[0];
   const allFeatures = results?.features || [];
 
   // ── Company mode: owner picker + clustering ──
@@ -139,7 +190,13 @@ export default function BCRegistrySearch({ onImport, onBack }) {
     () => activeOwner ? allFeatures.filter(f => f.properties?.OWNER_NAME === activeOwner) : [],
     [allFeatures, activeOwner]
   );
-  const groups = useMemo(() => clusterFeatures(companyFeatures), [companyFeatures]);
+  const groups = useMemo(() => {
+    const clusters = clusterFeatures(companyFeatures);
+    const labels = province === 'bc'
+      ? clusters.map(c => bcRegionLabel(c.centroid))
+      : compassLabels(clusters);
+    return clusters.map((c, i) => ({ ...c, label: labels[i] }));
+  }, [companyFeatures, province]);
 
   const totalSelectedClaims = useMemo(
     () => [...selectedGroups].reduce((s, i) => s + (groups[i]?.features.length || 0), 0),
@@ -156,23 +213,35 @@ export default function BCRegistrySearch({ onImport, onBack }) {
     [selectedFlat, allFeatures]
   );
 
-  function handleSearch(e) {
-    e.preventDefault();
-    if (query.trim().length < 2) return;
+  function clearSelections() {
     setSelectedOwner(null);
     setSelectedGroups(new Set());
     setExpandedGroups(new Set());
     setSelectedFlat(new Set());
-    search(query.trim(), mode);
+  }
+
+  function handleSearch(e) {
+    e.preventDefault();
+    if (query.trim().length < 2) return;
+    clearSelections();
+    search(query.trim(), mode, province);
   }
 
   function handleQueryChange(val) {
     setQuery(val);
     if (results || error) {
       reset();
-      setSelectedOwner(null);
-      setSelectedFlat(new Set());
+      clearSelections();
     }
+  }
+
+  function handleProvinceChange(val) {
+    setProvince(val);
+    setManualMode(false);
+    const cfg = PROVINCES.find(p => p.value === val) || PROVINCES[0];
+    setMode(autoDetectMode(query, cfg.modes));
+    reset();
+    clearSelections();
   }
 
   function handleModeChange(newMode) {
@@ -180,8 +249,7 @@ export default function BCRegistrySearch({ onImport, onBack }) {
     setManualMode(true);
     if (results || error) {
       reset();
-      setSelectedOwner(null);
-      setSelectedFlat(new Set());
+      clearSelections();
     }
   }
 
@@ -248,18 +316,31 @@ export default function BCRegistrySearch({ onImport, onBack }) {
 
   return (
     <>
-      <h3 className="export-hd-title">BC Registry Search</h3>
+      <h3 className="export-hd-title">Claims Registry Search</h3>
+
+      {/* Province selector */}
+      <div className="claims-province-row">
+        <select
+          className="export-hd-input claims-province-select"
+          value={province}
+          onChange={e => handleProvinceChange(e.target.value)}
+        >
+          {PROVINCES.map(p => (
+            <option key={p.value} value={p.value}>{p.label} — {p.registry}</option>
+          ))}
+        </select>
+      </div>
 
       {/* Search mode tabs */}
       <div className="claims-mode-tabs">
-        {SEARCH_MODES.map(m => (
+        {provinceCfg.modes.map(m => (
           <button
-            key={m.value}
+            key={m}
             type="button"
-            className={`claims-mode-tab${mode === m.value ? ' active' : ''}`}
-            onClick={() => handleModeChange(m.value)}
+            className={`claims-mode-tab${mode === m ? ' active' : ''}`}
+            onClick={() => handleModeChange(m)}
           >
-            {m.label}
+            {MODE_LABELS[m]}
           </button>
         ))}
       </div>
@@ -268,7 +349,7 @@ export default function BCRegistrySearch({ onImport, onBack }) {
         <div className="claims-search-row">
           <input
             className="export-hd-input claims-search-input"
-            placeholder={currentMode.placeholder}
+            placeholder={provinceCfg.placeholders[mode] || provinceCfg.placeholders.company}
             value={query}
             onChange={e => handleQueryChange(e.target.value)}
             autoFocus
@@ -287,7 +368,7 @@ export default function BCRegistrySearch({ onImport, onBack }) {
       {error && <p className="claims-error">⚠ {error}</p>}
 
       {results && allFeatures.length === 0 && (
-        <p className="claims-empty">No active claims found for "{query}". Try a shorter name or check spelling.</p>
+        <p className="claims-empty">No active claims found for "{query}" in {provinceCfg.label}. Try a shorter name or check spelling.</p>
       )}
 
       {allFeatures.length >= 500 && (
@@ -305,7 +386,7 @@ export default function BCRegistrySearch({ onImport, onBack }) {
               <button key={name} className="claims-owner-row" onClick={() => handleOwnerSelect(name)}>
                 <span className="claims-owner-name">{name}</span>
                 <span className="claims-owner-meta">
-                  {count} claim{count !== 1 ? 's' : ''} · {totalHa.toFixed(0)} ha
+                  {count} claim{count !== 1 ? 's' : ''}{totalHa > 0 ? ` · ${totalHa.toFixed(0)} ha` : ''}
                 </span>
               </button>
             ))}
@@ -334,7 +415,7 @@ export default function BCRegistrySearch({ onImport, onBack }) {
                 </label>
                 {selectedGroups.size > 0 && (
                   <span className="claims-selection-summary">
-                    {totalSelectedClaims} claims · {totalSelectedHa.toFixed(0)} ha
+                    {totalSelectedClaims} claims{totalSelectedHa > 0 ? ` · ${totalSelectedHa.toFixed(0)} ha` : ''}
                   </span>
                 )}
               </div>
@@ -403,7 +484,7 @@ export default function BCRegistrySearch({ onImport, onBack }) {
               <span className="claims-count-badge">{allFeatures.length} claim{allFeatures.length !== 1 ? 's' : ''}</span>
             </label>
             {selectedFlat.size > 0 && (
-              <span className="claims-selection-summary">{selectedFlat.size} selected · {flatSelectedHa.toFixed(0)} ha</span>
+              <span className="claims-selection-summary">{selectedFlat.size} selected{flatSelectedHa > 0 ? ` · ${flatSelectedHa.toFixed(0)} ha` : ''}</span>
             )}
           </div>
 
