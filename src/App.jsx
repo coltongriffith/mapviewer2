@@ -2445,7 +2445,7 @@ export default function App() {
               <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
               <rect x="3" y="14" width="7" height="7" rx="1"/><path d="M17.5 14v6M14.5 17h6"/>
             </svg>
-            Add BC Claims
+            Add Claims
           </button>
         </div>
 

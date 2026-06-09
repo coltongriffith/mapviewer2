@@ -1886,6 +1886,9 @@ body.is-dragging .template-zone .panel-delete-btn { opacity: 0 !important; }
 .claims-result-type { font-size: 11px; color: #2563eb; font-weight: 600; }
 .claims-result-holder { font-size: 12px; color: #475569; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .claims-result-meta { font-size: 11px; color: #94a3b8; }
+/* Province selector */
+.claims-province-row { margin-bottom: 10px; }
+.claims-province-select { width: 100%; cursor: pointer; font-size: 13px; color: #1e293b; }
 /* Search mode tabs */
 .claims-mode-tabs { display: flex; gap: 4px; border-bottom: 1px solid #e2e8f0; margin-bottom: 12px; }
 .claims-mode-tab { flex: 1; padding: 7px 6px; border: none; border-bottom: 2px solid transparent; background: none; color: #64748b; font-size: 13px; font-weight: 500; cursor: pointer; border-radius: 6px 6px 0 0; transition: color 0.15s, border-color 0.15s; }

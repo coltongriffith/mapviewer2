@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import BCRegistrySearch from './BCRegistrySearch';
+import RegistrySearch from './RegistrySearch';
 import ClaimsFileUpload from './ClaimsFileUpload';
 
 export default function AddClaimsModal({ onClose, onImport, defaultPath = null }) {
@@ -19,13 +19,13 @@ export default function AddClaimsModal({ onClose, onImport, defaultPath = null }
             <div className="share-modal-icon-wrap" style={{ fontSize: 22 }}>🗺</div>
             <h3 className="export-hd-title">Add Claims</h3>
             <p className="export-hd-desc">
-              Load BC mineral claim boundaries onto your map — search the live registry or upload a file.
+              Load mineral claim boundaries onto your map — search a live provincial registry or upload a file.
             </p>
             <div className="claims-path-row">
               <button className="claims-path-btn" onClick={() => setPath('registry')}>
                 <span className="claims-path-icon">🔍</span>
-                <strong>Search BC Registry</strong>
-                <span>Find claims by company name</span>
+                <strong>Search Claims Registry</strong>
+                <span>BC · Ontario · Saskatchewan · Yukon</span>
               </button>
               <button className="claims-path-btn" onClick={() => setPath('upload')}>
                 <span className="claims-path-icon">📁</span>
@@ -37,7 +37,7 @@ export default function AddClaimsModal({ onClose, onImport, defaultPath = null }
         )}
 
         {path === 'registry' && (
-          <BCRegistrySearch
+          <RegistrySearch
             onImport={(items) => {
               // items is [{geojson, name}, ...] — one entry per geographic group
               items.forEach(({ geojson, name }) => onImport(geojson, name));
