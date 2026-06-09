@@ -87,19 +87,22 @@ async function listCandidateLayers(cfg) {
 
 // Some services expose several layers with similar names (e.g. GeoYukon has
 // multiple "Quartz Claims" layers at different scales, some with only an ID
-// field). Try each name match until one has a usable search field.
-async function resolveLayerAndFields(cfg) {
-  const cacheKey = `resolved:${cfg.service}:${cfg.layerMatch || cfg.layerId}`;
+// field, and owner vs. number fields may live on different layers). Resolve
+// against the field list for the *requested* search type so a layer that only
+// has the owner field is never cached for a number search, and vice versa.
+// Cached separately per search type for the same reason.
+async function resolveLayerAndFields(cfg, type) {
+  const wanted = type === 'number' ? cfg.numberFields : cfg.ownerFields;
+  const cacheKey = `resolved:${cfg.service}:${cfg.layerMatch || cfg.layerId}:${type === 'number' ? 'number' : 'owner'}`;
   if (metaCache.has(cacheKey)) return metaCache.get(cacheKey);
   const candidates = await listCandidateLayers(cfg);
-  const searchable = [...cfg.ownerFields, ...cfg.numberFields];
   let fallback = null;
   for (const layer of candidates.slice(0, 6)) {
     const layerUrl = `${cfg.service}/${layer.id}`;
     let fields;
     try { fields = await resolveFields(layerUrl); } catch { continue; }
     const resolved = { layerUrl, layerName: layer.name, fields };
-    if (pickField(searchable, fields)) {
+    if (pickField(wanted, fields)) {
       metaCache.set(cacheKey, resolved);
       return resolved;
     }
@@ -171,7 +174,7 @@ function normalizeProps(props) {
 }
 
 async function searchArcgis(cfg, term, type, res) {
-  const { layerUrl, fields } = await resolveLayerAndFields(cfg);
+  const { layerUrl, fields } = await resolveLayerAndFields(cfg, type);
 
   const candidates = type === 'number' ? cfg.numberFields : cfg.ownerFields;
   const field = pickField(candidates, fields);
@@ -246,14 +249,23 @@ export default async function handler(req, res) {
     try {
       const cfg = ARCGIS_PROVINCES[province];
       const candidates = await listCandidateLayers(cfg);
-      const { layerUrl, layerName, fields } = await resolveLayerAndFields(cfg);
+      // Owner and number fields may resolve to different layers
+      const ownerResolved = await resolveLayerAndFields(cfg, 'company');
+      const numberResolved = await resolveLayerAndFields(cfg, 'number');
       return res.status(200).json({
-        layerUrl,
-        layerName,
         candidateLayers: candidates.map((l) => `${l.id}: ${l.name}`),
-        fields: fields.map((f) => `${f.name} (${f.type})`),
-        ownerField: pickField(cfg.ownerFields, fields)?.name || null,
-        numberField: pickField(cfg.numberFields, fields)?.name || null,
+        company: {
+          layerUrl: ownerResolved.layerUrl,
+          layerName: ownerResolved.layerName,
+          fields: ownerResolved.fields.map((f) => `${f.name} (${f.type})`),
+          ownerField: pickField(cfg.ownerFields, ownerResolved.fields)?.name || null,
+        },
+        number: {
+          layerUrl: numberResolved.layerUrl,
+          layerName: numberResolved.layerName,
+          fields: numberResolved.fields.map((f) => `${f.name} (${f.type})`),
+          numberField: pickField(cfg.numberFields, numberResolved.fields)?.name || null,
+        },
       });
     } catch (e) {
       return res.status(502).json({ error: e.message });
