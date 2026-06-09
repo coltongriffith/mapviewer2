@@ -34,8 +34,10 @@ const ARCGIS_PROVINCES = {
   sk: {
     service: 'https://gis.saskatchewan.ca/arcgis/rest/services/Economy/P_Mineral_Tenure_Crown_Dispositions/MapServer',
     layerId: 0,
-    ownerFields: ['HOLDER', 'HOLDER_NAME', 'DISPOSITION_HOLDER', 'OWNER_NAME', 'OWNER', 'CLIENT_NAME'],
-    numberFields: ['DISPOSITION_NUMBER', 'DISPOSITION_NUM', 'DISP_NUM', 'DISPNUM', 'CLAIM_NUMBER'],
+    // Verified post-deploy: shapefile-truncated names — OWNERS (string),
+    // DISPOSIT_1 (string disposition number), GOODSTANDI (good standing date)
+    ownerFields: ['OWNERS', 'HOLDER', 'HOLDER_NAME', 'DISPOSITION_HOLDER', 'OWNER_NAME', 'OWNER', 'CLIENT_NAME'],
+    numberFields: ['DISPOSIT_1', 'DISPOSITIO', 'DISPOSITION_NUMBER', 'DISPOSITION_NUM', 'DISP_NUM', 'CLAIM_NUMBER'],
   },
   yt: {
     service: 'https://mapservices.gov.yk.ca/arcgis/rest/services/GeoYukon/GY_Mining/MapServer',
@@ -64,20 +66,6 @@ async function fetchJson(url) {
   return r.json();
 }
 
-async function resolveLayerUrl(cfg) {
-  if (cfg.layerId != null) return `${cfg.service}/${cfg.layerId}`;
-  const cacheKey = `layer:${cfg.service}`;
-  if (metaCache.has(cacheKey)) return metaCache.get(cacheKey);
-  const svc = await fetchJson(`${cfg.service}?f=json`);
-  const layers = svc?.layers || [];
-  const match = layers.find((l) => cfg.layerMatch.test(l.name || '') && l.subLayerIds == null)
-    || layers.find((l) => cfg.layerMatch.test(l.name || ''));
-  if (!match) throw new Error(`No layer matching ${cfg.layerMatch} in service`);
-  const url = `${cfg.service}/${match.id}`;
-  metaCache.set(cacheKey, url);
-  return url;
-}
-
 async function resolveFields(layerUrl) {
   const cacheKey = `fields:${layerUrl}`;
   if (metaCache.has(cacheKey)) return metaCache.get(cacheKey);
@@ -86,6 +74,42 @@ async function resolveFields(layerUrl) {
   if (!fields.length) throw new Error('Layer has no queryable fields');
   metaCache.set(cacheKey, fields);
   return fields;
+}
+
+async function listCandidateLayers(cfg) {
+  if (cfg.layerId != null) return [{ id: cfg.layerId, name: `layer ${cfg.layerId}` }];
+  const svc = await fetchJson(`${cfg.service}?f=json`);
+  const matches = (svc?.layers || []).filter((l) => cfg.layerMatch.test(l.name || ''));
+  if (!matches.length) throw new Error(`No layer matching ${cfg.layerMatch} in service`);
+  // Prefer leaf layers over group layers
+  return matches.sort((a, b) => (a.subLayerIds ? 1 : 0) - (b.subLayerIds ? 1 : 0));
+}
+
+// Some services expose several layers with similar names (e.g. GeoYukon has
+// multiple "Quartz Claims" layers at different scales, some with only an ID
+// field). Try each name match until one has a usable search field.
+async function resolveLayerAndFields(cfg) {
+  const cacheKey = `resolved:${cfg.service}:${cfg.layerMatch || cfg.layerId}`;
+  if (metaCache.has(cacheKey)) return metaCache.get(cacheKey);
+  const candidates = await listCandidateLayers(cfg);
+  const searchable = [...cfg.ownerFields, ...cfg.numberFields];
+  let fallback = null;
+  for (const layer of candidates.slice(0, 6)) {
+    const layerUrl = `${cfg.service}/${layer.id}`;
+    let fields;
+    try { fields = await resolveFields(layerUrl); } catch { continue; }
+    const resolved = { layerUrl, layerName: layer.name, fields };
+    if (pickField(searchable, fields)) {
+      metaCache.set(cacheKey, resolved);
+      return resolved;
+    }
+    if (!fallback) fallback = resolved;
+  }
+  if (fallback) {
+    metaCache.set(cacheKey, fallback);
+    return fallback;
+  }
+  throw new Error('No usable claims layer found in service');
 }
 
 function pickField(candidates, fields) {
@@ -116,8 +140,9 @@ function normalizeProps(props) {
     if (k) out.OWNER_NAME = props[k];
   }
   if (out.TAG_NUMBER == null) {
-    const k = findKey(/TAG_NUMBER|GRANT_NUM|DISPOSITION_NUM|CLAIM_NUM|TENURE_NUM/i)
-      || findKey(/NUMBER/i);
+    // DISPOSIT_1 is Saskatchewan's string disposition number (truncated name)
+    const k = findKey(/TAG_NUMBER|GRANT_NUM|DISPOSITION_NUM|CLAIM_NUM|TENURE_NUM|DISPOSIT_1/i)
+      || findKey(/NUMBER|DISPOSIT/i);
     if (k) out.TAG_NUMBER = props[k];
   }
   if (out.AREA_IN_HECTARES == null) {
@@ -125,7 +150,8 @@ function normalizeProps(props) {
     if (k && Number.isFinite(Number(props[k]))) out.AREA_IN_HECTARES = Number(props[k]);
   }
   if (out.GOOD_TO_DATE == null) {
-    const k = findKey(/GOOD_TO|EXPIR|END_DATE|ANNIVERS/i);
+    // GOODSTANDI is Saskatchewan's good-standing date (truncated name)
+    const k = findKey(/GOOD_TO|GOODSTAND|EXPIR|END_DATE|ANNIVERS/i);
     if (k && props[k] != null) {
       const v = props[k];
       // ArcGIS GeoJSON emits dates as epoch milliseconds
@@ -145,8 +171,7 @@ function normalizeProps(props) {
 }
 
 async function searchArcgis(cfg, term, type, res) {
-  const layerUrl = await resolveLayerUrl(cfg);
-  const fields = await resolveFields(layerUrl);
+  const { layerUrl, fields } = await resolveLayerAndFields(cfg);
 
   const candidates = type === 'number' ? cfg.numberFields : cfg.ownerFields;
   const field = pickField(candidates, fields);
@@ -220,10 +245,12 @@ export default async function handler(req, res) {
   if (schema === '1' && ARCGIS_PROVINCES[province]) {
     try {
       const cfg = ARCGIS_PROVINCES[province];
-      const layerUrl = await resolveLayerUrl(cfg);
-      const fields = await resolveFields(layerUrl);
+      const candidates = await listCandidateLayers(cfg);
+      const { layerUrl, layerName, fields } = await resolveLayerAndFields(cfg);
       return res.status(200).json({
         layerUrl,
+        layerName,
+        candidateLayers: candidates.map((l) => `${l.id}: ${l.name}`),
         fields: fields.map((f) => `${f.name} (${f.type})`),
         ownerField: pickField(cfg.ownerFields, fields)?.name || null,
         numberField: pickField(cfg.numberFields, fields)?.name || null,
