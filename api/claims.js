@@ -27,8 +27,9 @@ const ARCGIS_PROVINCES = {
   on: {
     service: 'https://ws.lioservices.lrc.gov.on.ca/arcgis2/rest/services/MLAS/mlas_op/MapServer',
     layerMatch: /mining\s*claim/i,
-    ownerFields: ['CLAIM_HOLDER', 'RECORDED_HOLDER', 'HOLDER_NAME', 'HOLDER', 'OWNER_NAME', 'OWNER', 'CLIENT_NAME', 'PERCENTAGE_OWNERSHIP_DESC'],
-    numberFields: ['CLAIM_NUMBER', 'CLAIMNUM', 'CLAIM_NUM', 'TENURE_NUMBER', 'CLAIM_ID', 'CELL_CLAIM_NUMBER'],
+    // Verified post-deploy: layer 1, fields HOLDER + TENURE_NUMBER_ID
+    ownerFields: ['HOLDER', 'CLAIM_HOLDER', 'RECORDED_HOLDER', 'HOLDER_NAME', 'OWNER_NAME', 'OWNER', 'CLIENT_NAME'],
+    numberFields: ['TENURE_NUMBER_ID', 'CLAIM_NUMBER', 'CLAIMNUM', 'CLAIM_NUM', 'TENURE_NUMBER', 'CLAIM_ID', 'CELL_CLAIM_NUMBER'],
   },
   sk: {
     service: 'https://gis.saskatchewan.ca/arcgis/rest/services/Economy/P_Mineral_Tenure_Crown_Dispositions/MapServer',
@@ -134,7 +135,10 @@ function normalizeProps(props) {
     }
   }
   if (out.TITLE_TYPE_DESCRIPTION == null) {
-    const k = findKey(/TENURE_TYPE|DISPOSITION_TYPE|CLAIM_TYPE|TITLE_TYPE|_TYPE$|^TYPE$/i, true);
+    // Prefer human-readable *_DESC fields over *_CODE fields (e.g. Ontario
+    // has both TITLE_TYPE_CODE and TITLE_TYPE_DESC)
+    const k = findKey(/TYPE_DESC/i, true)
+      || findKey(/TENURE_TYPE|DISPOSITION_TYPE|CLAIM_TYPE|TITLE_TYPE|_TYPE$|^TYPE$/i, true);
     if (k) out.TITLE_TYPE_DESCRIPTION = props[k];
   }
   return out;
