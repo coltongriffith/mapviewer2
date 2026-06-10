@@ -168,6 +168,14 @@ export default function RegistrySearch({ onImport, onBack }) {
     if (!manualMode) setMode(autoDetectMode(query, provinceCfg.modes));
   }, [query, manualMode, provinceCfg]);
 
+  // Selections are index-based — never let them survive a results change
+  useEffect(() => {
+    setSelectedOwner(null);
+    setSelectedGroups(new Set());
+    setExpandedGroups(new Set());
+    setSelectedFlat(new Set());
+  }, [results]);
+
   const allFeatures = results?.features || [];
 
   // ── Company mode: owner picker + clustering ──

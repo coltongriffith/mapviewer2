@@ -191,10 +191,12 @@ export default function HowToUseModal({ onClose }) {
             <h2>Choosing a Basemap</h2>
             <h3>Basemap options</h3>
             <ul>
-              <li><strong>Light</strong> — neutral light gray. Best for technical and investor maps where your data layers should be the primary visual focus.</li>
-              <li><strong>Satellite</strong> — aerial imagery. Best for showing terrain, vegetation, access, and physical infrastructure context.</li>
-              <li><strong>Topographic</strong> — contour lines and terrain shading. Best for geological, environmental, and fieldwork maps.</li>
+              <li><strong>Light</strong> — neutral light style. Best for technical and investor maps where your data layers should be the primary visual focus.</li>
               <li><strong>Dark</strong> — dark background. Best for modern digital presentations, dashboards, and social media.</li>
+              <li><strong>Terrain</strong> — contour lines and terrain shading. Best for geological, environmental, and fieldwork maps.</li>
+              <li><strong>Satellite</strong> — aerial imagery. Best for showing terrain, vegetation, access, and physical infrastructure context.</li>
+              <li><strong>NatGeo</strong> — classic National Geographic cartography. Distinctive look for regional and overview maps.</li>
+              <li><strong>Blank</strong> — no basemap, with a custom background color. Best for clean figures in technical reports.</li>
             </ul>
             <p>Switch basemap from the <strong>Design</strong> section in the sidebar. Template modes also pre-select the most appropriate basemap for each map type.</p>
             <h3>Reference overlays</h3>
@@ -241,7 +243,7 @@ export default function HowToUseModal({ onClose }) {
               <li><strong>Claims Map</strong> — light basemap, claims + roads + rivers, country inset</li>
               <li><strong>Drill Results Map</strong> — light basemap, drillholes + targets, secondary zoom inset</li>
               <li><strong>Target Generation Map</strong> — satellite basemap, targets + anomalies + faults, regional inset</li>
-              <li><strong>Infrastructure Map</strong> — topo basemap, roads + rivers + labels, country inset</li>
+              <li><strong>Infrastructure Map</strong> — terrain basemap, roads + rivers + labels, country inset</li>
             </ul>
             <p>After applying a template mode, everything is still fully adjustable — template modes are a starting point, not a lock.</p>
 

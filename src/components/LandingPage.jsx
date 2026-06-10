@@ -107,8 +107,8 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
                 <button className="landing-cta-btn landing-cta-primary landing-cta-dominant" type="button" onClick={onSearchBCClaims} data-track="CTA: Search Claims Registry">
                   <span className="landing-cta-icon">🔍</span>
                   <span>
-                    <strong>Search Mineral Claims Registries</strong>
-                    <span className="landing-cta-sub">BC · Ontario · Saskatchewan · Yukon — free, no signup</span>
+                    <strong>Find &amp; Map Your Mineral Claims</strong>
+                    <span className="landing-cta-sub">Live registry data — BC · Ontario · Saskatchewan · Yukon · free, no signup</span>
                   </span>
                 </button>
               )}
@@ -121,7 +121,7 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
                 )}
                 <button className="landing-cta-btn" type="button" onClick={() => { if (onLoadSampleStyle) onLoadSampleStyle('drill_plan'); else onOpenEditor(); }} data-track="CTA: Try sample">
                   <span className="landing-cta-icon">▶</span>
-                  <span><strong>Try with sample data</strong></span>
+                  <span><strong>See it in action</strong></span>
                 </button>
               </div>
               <p className="landing-trust-strip">Free to use · No account required · Works in your browser · Export PNG, SVG, PDF</p>
@@ -147,7 +147,7 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5" stroke="#2563eb" strokeWidth="2"/><rect x="14" y="3" width="7" height="7" rx="1.5" stroke="#2563eb" strokeWidth="2"/><rect x="3" y="14" width="7" height="7" rx="1.5" stroke="#2563eb" strokeWidth="2"/><rect x="14" y="14" width="7" height="7" rx="1.5" stroke="#2563eb" strokeWidth="2"/></svg>
                 </div>
                 <strong>Looks right the first time</strong>
-                <span>5 mining-specific templates and themes designed for investor decks and technical reports.</span>
+                <span>Six ready-made map styles designed for investor decks and technical reports.</span>
               </div>
             </div>
           </div>
@@ -256,8 +256,8 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
             <div className="landing-feature-icon">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3" stroke="#2563eb" strokeWidth="2"/><path d="M3 9h18M9 21V9" stroke="#2563eb" strokeWidth="2"/></svg>
             </div>
-            <div className="landing-feature-title">5 Mining Templates</div>
-            <div className="landing-feature-desc">Regional Location, Claims, Drill Results, Target Generation, and Infrastructure — ready to go out of the box.</div>
+            <div className="landing-feature-title">6 Ready-Made Map Styles</div>
+            <div className="landing-feature-desc">Regional Location, Claims, Drill Results, Target Generation, Infrastructure, and Dark Satellite — ready to go out of the box.</div>
           </div>
           <div className="landing-feature-card">
             <div className="landing-feature-icon">
@@ -293,6 +293,29 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
             </div>
             <div className="landing-feature-title">Distance Rings &amp; Regions</div>
             <div className="landing-feature-desc">Draw geo-accurate distance rings from a target, highlight provinces, and layer on reference roads, labels, and railways.</div>
+          </div>
+        </div>
+      </section>
+
+      {/* FAQ — objection handling */}
+      <section className="landing-faq" data-section="faq">
+        <div className="landing-faq-heading">Common questions</div>
+        <div className="landing-faq-grid">
+          <div className="landing-faq-item">
+            <strong>Is it really free?</strong>
+            <span>Yes. Searching registries, styling maps, and exporting PNG, SVG, or PDF are all free. Watermark-free exports just ask for your email — no password, no credit card, no subscription.</span>
+          </div>
+          <div className="landing-faq-item">
+            <strong>Do I need an account?</strong>
+            <span>No. Everything works without signing in. Create an account only if you want cloud-saved projects and a reusable company template.</span>
+          </div>
+          <div className="landing-faq-item">
+            <strong>Where does the claims data come from?</strong>
+            <span>Live from each government registry — BC Mineral Titles, Ontario MLAS, Saskatchewan MARS, and GeoYukon — at the moment you search. Nothing is cached or out of date.</span>
+          </div>
+          <div className="landing-faq-item">
+            <strong>Will my uploaded data stay private?</strong>
+            <span>Uploaded files are processed in your browser and never leave your device unless you choose to save to the cloud or share a map link.</span>
           </div>
         </div>
       </section>
@@ -377,11 +400,11 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
           <div className="landing-bottom-cta-actions">
             {onSearchBCClaims && (
               <button className="landing-bottom-primary" onClick={onSearchBCClaims} data-track="Bottom CTA: Search Claims">
-                Search Mineral Claims Registries
+                Find &amp; Map Your Mineral Claims →
               </button>
             )}
             <button className="landing-bottom-ghost" onClick={onOpenEditor} data-track="Bottom CTA: Open Editor">
-              Open Editor with Sample Data →
+              Open Editor with Sample Data
             </button>
           </div>
         </div>

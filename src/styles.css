@@ -531,6 +531,15 @@ button, input, select, textarea { font: inherit; }
 .landing-feature-title { font-size: 14px; font-weight: 800; color: #10243c; line-height: 1.3; }
 .landing-feature-desc { font-size: 13px; color: #516173; line-height: 1.5; }
 
+/* FAQ */
+.landing-faq { max-width: 1236px; margin: 0 auto; width: 100%; padding: 0 28px 40px; box-sizing: border-box; }
+.landing-faq-heading { font-size: 20px; font-weight: 800; color: #10243c; margin-bottom: 18px; letter-spacing: -0.01em; }
+.landing-faq-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+.landing-faq-item { background: rgba(255,255,255,0.92); border: 1px solid #dbe4ee; border-radius: 18px; padding: 18px 20px; display: flex; flex-direction: column; gap: 6px; }
+.landing-faq-item strong { font-size: 14px; font-weight: 800; color: #10243c; }
+.landing-faq-item span { font-size: 13px; color: #516173; line-height: 1.5; }
+@media (max-width: 700px) { .landing-faq-grid { grid-template-columns: 1fr; } }
+
 @media (max-width: 900px) { .landing-features-grid { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 820px) {
   .landing-steps-row { flex-direction: column; gap: 12px; }

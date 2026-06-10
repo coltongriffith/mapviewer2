@@ -13,12 +13,24 @@ export default function InsetMap({ mainMap, basemap }) {
   const elRef = useRef(null);
   const mapRef = useRef(null);
   const rectRef = useRef(null);
+  const tileRef = useRef(null);
 
   useEffect(() => {
     if (!elRef.current || mapRef.current) return;
     const map = L.map(elRef.current, { zoomControl: false, attributionControl: false, dragging: false });
     mapRef.current = map;
-    L.tileLayer(BASEMAPS[basemap] || BASEMAPS.light, { crossOrigin: true }).addTo(map);
+  }, []);
+
+  // Swap the tile layer whenever the basemap changes ('blank' falls back to
+  // light so the inset still gives geographic context)
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (tileRef.current) {
+      map.removeLayer(tileRef.current);
+      tileRef.current = null;
+    }
+    tileRef.current = L.tileLayer(BASEMAPS[basemap] || BASEMAPS.light, { crossOrigin: true }).addTo(map);
   }, [basemap]);
 
   useEffect(() => {
