@@ -553,27 +553,8 @@ button, input, select, textarea { font: inherit; }
 .landing-ba-tag-after { background: #16a34a; }
 .landing-ba-arrow { display: flex; align-items: center; justify-content: center; }
 
-/* Before = ugly default GIS export: graticule, random unstyled polygons, bare dots */
-.landing-ba-badmap { position: absolute; inset: 0; overflow: hidden;
-  background-color: #d8dcd2;
-  background-image:
-    linear-gradient(rgba(110,120,108,0.18) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(110,120,108,0.18) 1px, transparent 1px);
-  background-size: 34px 34px;
-}
-.landing-ba-badmap-poly { position: absolute; border: 1px solid #1b1b1b; }
-.landing-ba-badmap-poly.bm1 { left: 8%; top: 16%; width: 40%; height: 46%; background: rgba(0,200,200,0.38); transform: rotate(-4deg); }
-.landing-ba-badmap-poly.bm2 { left: 40%; top: 34%; width: 34%; height: 44%; background: rgba(220,40,200,0.30); transform: rotate(6deg); }
-.landing-ba-badmap-poly.bm3 { left: 56%; top: 10%; width: 30%; height: 34%; background: rgba(232,222,30,0.42); transform: rotate(-2deg); }
-.landing-ba-dot { position: absolute; width: 7px; height: 7px; border-radius: 999px; background: #111; box-shadow: 0 0 0 1px rgba(255,255,255,0.4); }
-.landing-ba-dot.d1 { left: 24%; top: 36%; }
-.landing-ba-dot.d2 { left: 31%; top: 46%; }
-.landing-ba-dot.d3 { left: 39%; top: 39%; }
-.landing-ba-dot.d4 { left: 53%; top: 53%; }
-.landing-ba-dot.d5 { left: 61%; top: 45%; }
-.landing-ba-badmap-coord { position: absolute; bottom: 10px; left: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; color: #5a6158; background: rgba(216,220,210,0.85); padding: 2px 6px; border: 1px solid #aeb4a8; }
+.landing-ba-img { width: 100%; height: 100%; min-height: 300px; object-fit: cover; object-position: top; display: block; }
 .landing-ba-map-btn { display: block; width: 100%; height: 100%; padding: 0; border: none; background: none; cursor: pointer; }
-.landing-ba-map-img { width: 100%; height: 100%; min-height: 300px; object-fit: cover; object-position: top; display: block; }
 @media (max-width: 860px) {
   .landing-ba { grid-template-columns: 1fr; }
   .landing-ba-arrow { transform: rotate(90deg); padding: 2px 0; }
