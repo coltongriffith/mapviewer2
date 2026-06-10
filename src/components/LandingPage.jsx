@@ -124,18 +124,7 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
       <div className="landing-ba" data-section="before-after">
         <div className="landing-ba-panel landing-ba-before">
           <div className="landing-ba-tag">Raw export</div>
-          <div className="landing-ba-badmap">
-            <div className="landing-ba-grid" />
-            <div className="landing-ba-badmap-poly bm1" />
-            <div className="landing-ba-badmap-poly bm2" />
-            <div className="landing-ba-badmap-poly bm3" />
-            <span className="landing-ba-dot d1" />
-            <span className="landing-ba-dot d2" />
-            <span className="landing-ba-dot d3" />
-            <span className="landing-ba-dot d4" />
-            <span className="landing-ba-dot d5" />
-            <div className="landing-ba-badmap-coord">Default style · no layout</div>
-          </div>
+          <img src="/gallery/ba-before.png" alt="Raw GIS export — unstyled claims outline on topo basemap" className="landing-ba-img" />
         </div>
 
         <div className="landing-ba-arrow" aria-hidden="true">
@@ -146,12 +135,8 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
 
         <div className="landing-ba-panel landing-ba-after">
           <div className="landing-ba-tag landing-ba-tag-after">Investor map</div>
-          <button type="button" className="landing-ba-map-btn" onClick={() => onLoadSampleStyle?.('drill_plan')} data-track="Before/After: open sample">
-            <img
-              src="/gallery/drill-results.png"
-              alt="Professional investor map with intercept callouts, legend, and scale bar"
-              className="landing-ba-img"
-            />
+          <button type="button" className="landing-ba-map-btn" onClick={() => onLoadSampleStyle?.('claims')} data-track="Before/After: open sample">
+            <img src="/gallery/ba-after.png" alt="Cedar Ridge Project — professional investor map with logo, callouts, and legend" className="landing-ba-img" />
           </button>
         </div>
       </div>
