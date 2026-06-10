@@ -531,6 +531,11 @@ button, input, select, textarea { font: inherit; }
 .landing-feature-title { font-size: 14px; font-weight: 800; color: #10243c; line-height: 1.3; }
 .landing-feature-desc { font-size: 13px; color: #516173; line-height: 1.5; }
 
+/* Personas strip */
+.landing-personas { max-width: 1236px; margin: 0 auto; width: 100%; padding: 0 28px 28px; box-sizing: border-box; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.landing-personas-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: #8096aa; margin-right: 4px; }
+.landing-personas-item { font-size: 12px; font-weight: 600; color: #516173; background: rgba(255,255,255,0.85); border: 1px solid #dbe4ee; border-radius: 999px; padding: 4px 12px; }
+
 /* FAQ */
 .landing-faq { max-width: 1236px; margin: 0 auto; width: 100%; padding: 0 28px 40px; box-sizing: border-box; }
 .landing-faq-heading { font-size: 20px; font-weight: 800; color: #10243c; margin-bottom: 18px; letter-spacing: -0.01em; }
