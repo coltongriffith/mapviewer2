@@ -102,8 +102,8 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
         <div className="landing-hero2-ctas" data-section="hero-ctas">
           {onSearchBCClaims && (
             <button className="landing-hero2-primary" type="button" onClick={onSearchBCClaims} data-track="CTA: Search Claims Registry">
-              Search Claims by Company Name
-              <span className="landing-hero2-primary-sub">BC · Ontario · Saskatchewan · Yukon — live registry data</span>
+              Search the Claims Registry
+              <span className="landing-hero2-primary-sub">By name or claim number · BC · Ontario · Saskatchewan · Yukon</span>
             </button>
           )}
           <div className="landing-hero2-secondary-row">
@@ -123,26 +123,17 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
       {/* Before / After */}
       <div className="landing-ba" data-section="before-after">
         <div className="landing-ba-panel landing-ba-before">
-          <div className="landing-ba-tag">Raw data</div>
-          <div className="landing-ba-raw">
-            <div className="landing-ba-files">
-              <span>claims_export_final_v3.shp</span>
-              <span>tenure_2026.dbf</span>
-              <span>collars.csv</span>
-              <span>targets.kml</span>
-            </div>
-            <div className="landing-ba-table">
-              <div className="landing-ba-table-row landing-ba-table-head"><span>TENURE_ID</span><span>OWNER</span><span>GOOD_TO</span></div>
-              <div className="landing-ba-table-row"><span>1081244</span><span>EXAMPLE RES…</span><span>2027-03-14</span></div>
-              <div className="landing-ba-table-row"><span>1081245</span><span>EXAMPLE RES…</span><span>2027-03-14</span></div>
-              <div className="landing-ba-table-row"><span>1081246</span><span>EXAMPLE RES…</span><span>2026-11-02</span></div>
-              <div className="landing-ba-table-row"><span>1081247</span><span>EXAMPLE RES…</span><span>2026-11-02</span></div>
-            </div>
-            <div className="landing-ba-mess">
-              <div className="landing-ba-poly p1" />
-              <div className="landing-ba-poly p2" />
-              <div className="landing-ba-poly p3" />
-            </div>
+          <div className="landing-ba-tag">Raw export</div>
+          <div className="landing-ba-badmap">
+            <div className="landing-ba-badmap-poly bm1" />
+            <div className="landing-ba-badmap-poly bm2" />
+            <div className="landing-ba-badmap-poly bm3" />
+            <span className="landing-ba-dot d1" />
+            <span className="landing-ba-dot d2" />
+            <span className="landing-ba-dot d3" />
+            <span className="landing-ba-dot d4" />
+            <span className="landing-ba-dot d5" />
+            <div className="landing-ba-badmap-coord">UTM 09N · default style</div>
           </div>
         </div>
 
@@ -171,7 +162,7 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
           <div className="landing-flow-item">
             <span className="landing-flow-num">1</span>
             <strong>Find</strong>
-            <span>Search claims by company name, or upload your own files.</span>
+            <span>Search claims by name or claim number, or upload your own files.</span>
           </div>
           <div className="landing-flow-item">
             <span className="landing-flow-num">2</span>
@@ -344,7 +335,7 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
           <div className="landing-bottom-cta-actions">
             {onSearchBCClaims && (
               <button className="landing-bottom-primary" onClick={onSearchBCClaims} data-track="Bottom CTA: Search Claims">
-                Search Claims by Company Name →
+                Search the Claims Registry →
               </button>
             )}
             <button className="landing-bottom-ghost" onClick={onOpenEditor} data-track="Bottom CTA: Open Editor">

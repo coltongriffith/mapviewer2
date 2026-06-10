@@ -547,22 +547,31 @@ button, input, select, textarea { font: inherit; }
 /* Before / After */
 .landing-ba { max-width: 1060px; margin: 0 auto; padding: 8px 28px 44px; display: grid; grid-template-columns: 1fr auto 1.15fr; gap: 18px; align-items: stretch; box-sizing: border-box; width: 100%; }
 .landing-ba-panel { position: relative; border-radius: 18px; overflow: hidden; min-height: 300px; }
-.landing-ba-before { background: #f1f3f6; border: 1.5px dashed #b9c4d2; }
+.landing-ba-before { background: #d8dcd2; border: 1.5px solid #b6bcb2; }
 .landing-ba-after { border: 1.5px solid #cdddf2; box-shadow: 0 18px 44px rgba(15,23,42,0.13); }
 .landing-ba-tag { position: absolute; top: 12px; left: 12px; z-index: 2; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.07em; padding: 4px 12px; border-radius: 999px; background: #64748b; color: #fff; }
 .landing-ba-tag-after { background: #16a34a; }
 .landing-ba-arrow { display: flex; align-items: center; justify-content: center; }
-.landing-ba-raw { padding: 46px 16px 16px; display: flex; flex-direction: column; gap: 12px; height: 100%; box-sizing: border-box; }
-.landing-ba-files { display: flex; flex-wrap: wrap; gap: 6px; }
-.landing-ba-files span { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; color: #475569; background: #fff; border: 1px solid #d4dce6; border-radius: 6px; padding: 3px 8px; }
-.landing-ba-table { background: #fff; border: 1px solid #d4dce6; border-radius: 8px; overflow: hidden; }
-.landing-ba-table-row { display: grid; grid-template-columns: 1fr 1.3fr 1fr; gap: 8px; padding: 5px 10px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10.5px; color: #64748b; border-top: 1px solid #eef2f6; }
-.landing-ba-table-head { background: #f8fafc; font-weight: 700; color: #475569; border-top: none; }
-.landing-ba-mess { position: relative; flex: 1; min-height: 70px; }
-.landing-ba-poly { position: absolute; border: 2px solid rgba(100,116,139,0.55); background: rgba(148,163,184,0.18); }
-.landing-ba-poly.p1 { left: 6%; top: 12%; width: 38%; height: 58%; transform: rotate(-7deg); }
-.landing-ba-poly.p2 { left: 34%; top: 30%; width: 30%; height: 52%; transform: rotate(11deg); border-style: dashed; }
-.landing-ba-poly.p3 { left: 60%; top: 8%; width: 32%; height: 48%; transform: rotate(-3deg); }
+
+/* Before = ugly default GIS export: graticule, random unstyled polygons, bare dots */
+.landing-ba-badmap { position: absolute; inset: 0; overflow: hidden;
+  background-color: #d8dcd2;
+  background-image:
+    linear-gradient(rgba(110,120,108,0.18) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(110,120,108,0.18) 1px, transparent 1px);
+  background-size: 34px 34px;
+}
+.landing-ba-badmap-poly { position: absolute; border: 1px solid #1b1b1b; }
+.landing-ba-badmap-poly.bm1 { left: 8%; top: 16%; width: 40%; height: 46%; background: rgba(0,200,200,0.38); transform: rotate(-4deg); }
+.landing-ba-badmap-poly.bm2 { left: 40%; top: 34%; width: 34%; height: 44%; background: rgba(220,40,200,0.30); transform: rotate(6deg); }
+.landing-ba-badmap-poly.bm3 { left: 56%; top: 10%; width: 30%; height: 34%; background: rgba(232,222,30,0.42); transform: rotate(-2deg); }
+.landing-ba-dot { position: absolute; width: 7px; height: 7px; border-radius: 999px; background: #111; box-shadow: 0 0 0 1px rgba(255,255,255,0.4); }
+.landing-ba-dot.d1 { left: 24%; top: 36%; }
+.landing-ba-dot.d2 { left: 31%; top: 46%; }
+.landing-ba-dot.d3 { left: 39%; top: 39%; }
+.landing-ba-dot.d4 { left: 53%; top: 53%; }
+.landing-ba-dot.d5 { left: 61%; top: 45%; }
+.landing-ba-badmap-coord { position: absolute; bottom: 10px; left: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; color: #5a6158; background: rgba(216,220,210,0.85); padding: 2px 6px; border: 1px solid #aeb4a8; }
 .landing-ba-map-btn { display: block; width: 100%; height: 100%; padding: 0; border: none; background: none; cursor: pointer; }
 .landing-ba-map-img { width: 100%; height: 100%; min-height: 300px; object-fit: cover; object-position: top; display: block; }
 @media (max-width: 860px) {
