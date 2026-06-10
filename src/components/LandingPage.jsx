@@ -95,8 +95,8 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
         <div className="landing-hero2-tagline">Raw data in. Investor map out.</div>
         <h1 className="landing-hero2-h1">Turn raw exploration data into clean investor maps.</h1>
         <p className="landing-hero2-sub">
-          Import claims, drillholes, and project boundaries — or search them straight from the registry.
-          Export presentation-ready maps without rebuilding layouts in GIS.
+          Search the registry or import your files, then export a presentation-ready map
+          in under five minutes — no GIS required.
         </p>
 
         <div className="landing-hero2-ctas" data-section="hero-ctas">
@@ -165,21 +165,24 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
       </div>
 
       {/* Three steps, one line each */}
-      <section className="landing-flow" data-section="flow">
-        <div className="landing-flow-item">
-          <span className="landing-flow-num">1</span>
-          <strong>Find</strong>
-          <span>Search claims by company name, or upload your own files.</span>
-        </div>
-        <div className="landing-flow-item">
-          <span className="landing-flow-num">2</span>
-          <strong>Style</strong>
-          <span>Pick a template. Add callouts, rings, and your logo.</span>
-        </div>
-        <div className="landing-flow-item">
-          <span className="landing-flow-num">3</span>
-          <strong>Export</strong>
-          <span>PNG, SVG, or PDF — ready for the deck or the report.</span>
+      <section className="landing-flow-section" data-section="flow">
+        <div className="landing-flow-heading">Three steps. Under five minutes.</div>
+        <div className="landing-flow">
+          <div className="landing-flow-item">
+            <span className="landing-flow-num">1</span>
+            <strong>Find</strong>
+            <span>Search claims by company name, or upload your own files.</span>
+          </div>
+          <div className="landing-flow-item">
+            <span className="landing-flow-num">2</span>
+            <strong>Style</strong>
+            <span>Pick a template. Add callouts, rings, and your logo.</span>
+          </div>
+          <div className="landing-flow-item">
+            <span className="landing-flow-num">3</span>
+            <strong>Export</strong>
+            <span>PNG, SVG, or PDF — ready for the deck or the report.</span>
+          </div>
         </div>
       </section>
 
