@@ -560,6 +560,20 @@ button, input, select, textarea { font: inherit; }
 
 .landing-ba-img { width: 100%; height: 100%; min-height: 300px; object-fit: cover; object-position: top; display: block; }
 .landing-ba-map-btn { display: block; width: 100%; height: 100%; padding: 0; border: none; background: none; cursor: pointer; }
+/* Before = ugly default GIS map mock */
+.landing-ba-badmap { position: absolute; inset: 0; overflow: hidden; background: #d8dcd2; }
+.landing-ba-grid { position: absolute; inset: 0;
+  background-image: linear-gradient(rgba(90,100,88,0.16) 1px, transparent 1px), linear-gradient(90deg, rgba(90,100,88,0.16) 1px, transparent 1px);
+  background-size: 32px 32px; }
+.landing-ba-badmap-poly { position: absolute; border: 1.5px solid #111; }
+.landing-ba-badmap-poly.bm1 { left: 8%; top: 16%; width: 40%; height: 46%; background: rgba(0,210,210,0.35); transform: rotate(-4deg); }
+.landing-ba-badmap-poly.bm2 { left: 40%; top: 34%; width: 34%; height: 42%; background: rgba(230,40,210,0.28); transform: rotate(6deg); }
+.landing-ba-badmap-poly.bm3 { left: 56%; top: 10%; width: 30%; height: 34%; background: rgba(230,220,20,0.40); transform: rotate(-2deg); }
+.landing-ba-dot { position: absolute; width: 7px; height: 7px; border-radius: 999px; background: #111; }
+.landing-ba-dot.d1 { left: 24%; top: 36%; } .landing-ba-dot.d2 { left: 31%; top: 46%; }
+.landing-ba-dot.d3 { left: 39%; top: 39%; } .landing-ba-dot.d4 { left: 53%; top: 53%; }
+.landing-ba-dot.d5 { left: 61%; top: 45%; }
+.landing-ba-badmap-coord { position: absolute; bottom: 10px; left: 12px; font-family: ui-monospace, monospace; font-size: 10px; color: #4a5048; background: rgba(210,214,208,0.88); padding: 2px 7px; border: 1px solid #a8b0a4; }
 @media (max-width: 860px) {
   .landing-ba { grid-template-columns: 1fr; }
   .landing-ba-arrow { transform: rotate(90deg); padding: 2px 0; }
