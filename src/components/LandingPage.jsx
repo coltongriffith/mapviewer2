@@ -89,116 +89,112 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
       </nav>
 
       <main>
-      <div className="landing-hero">
-        <div className="landing-card modern">
-          <div className="landing-copy">
-            <div className="landing-badge">BC · Ontario · Saskatchewan · Yukon · live tenure data</div>
-            <h1>From registry search to report-ready map — before the meeting.</h1>
-            <p>
-              Search live mineral tenure across four provinces, import your shapefiles, add drillhole callouts with assay data, and export a watermark-free PNG, SVG, or PDF.
-              Free, no account required. Works in your browser.
-            </p>
 
-            <div className="landing-hero-ctas" data-section="hero-ctas">
-              {onSearchBCClaims && (
-                <button className="landing-cta-btn landing-cta-primary landing-cta-dominant" type="button" onClick={onSearchBCClaims} data-track="CTA: Search Claims Registry">
-                  <span className="landing-cta-icon">🔍</span>
-                  <span>
-                    <strong>Search Mineral Tenure Registries</strong>
-                    <span className="landing-cta-sub">Live data — BC · Ontario · Saskatchewan · Yukon · free, no signup</span>
-                  </span>
-                </button>
-              )}
-              <div className="landing-cta-secondary-row">
-                {onUploadFile && (
-                  <button className="landing-cta-btn" type="button" onClick={onUploadFile} data-track="CTA: Upload a File">
-                    <span className="landing-cta-icon">📁</span>
-                    <span><strong>Upload a Shapefile</strong></span>
-                  </button>
-                )}
-                <button className="landing-cta-btn" type="button" onClick={() => { if (onLoadSampleStyle) onLoadSampleStyle('drill_plan'); else onOpenEditor(); }} data-track="CTA: Try sample">
-                  <span className="landing-cta-icon">▶</span>
-                  <span><strong>See it in action</strong></span>
-                </button>
-              </div>
-              <p className="landing-trust-strip">Free to use · No account required · Works in your browser · Export PNG, SVG, PDF</p>
-            </div>
+      {/* Hero — centered, simple */}
+      <div className="landing-hero2" data-section="hero">
+        <div className="landing-hero2-tagline">Raw data in. Investor map out.</div>
+        <h1 className="landing-hero2-h1">Turn raw exploration data into clean investor maps.</h1>
+        <p className="landing-hero2-sub">
+          Import claims, drillholes, and project boundaries — or search them straight from the registry.
+          Export presentation-ready maps without rebuilding layouts in GIS.
+        </p>
 
-            <div className="landing-pain-grid">
-              <div className="landing-pain-card">
-                <div className="landing-pain-icon">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="#2563eb" strokeWidth="2"/><path d="M16.5 16.5l4 4" stroke="#2563eb" strokeWidth="2" strokeLinecap="round"/></svg>
-                </div>
-                <strong>Open ground spotted in seconds</strong>
-                <span>Search by company name or claim number across live Canadian registries — no login to MTO, no CSV downloads. See gaps in the tenure around your target before the call.</span>
-              </div>
-              <div className="landing-pain-card">
-                <div className="landing-pain-icon">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 12l2 2 4-4" stroke="#2563eb" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><rect x="3" y="3" width="18" height="18" rx="3" stroke="#2563eb" strokeWidth="2"/></svg>
-                </div>
-                <strong>43-101 figures without Illustrator</strong>
-                <span>Title block, north arrow, scale bar, and legend are built in. Click a collar, type the best intercept — "Au 4.2 g/t · 18m" — and the callout drops in exactly as it should look in the report.</span>
-              </div>
-              <div className="landing-pain-card">
-                <div className="landing-pain-icon">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 4v12m0 0l-4-4m4 4l4-4" stroke="#2563eb" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/><path d="M4 20h16" stroke="#2563eb" strokeWidth="2" strokeLinecap="round"/></svg>
-                </div>
-                <strong>Updated data, same layout</strong>
-                <span>Drop in a revised shapefile the morning before PDAC. The title block, callouts, inset, and branding all stay in place. New figure in under five minutes.</span>
-              </div>
-            </div>
+        <div className="landing-hero2-ctas" data-section="hero-ctas">
+          {onSearchBCClaims && (
+            <button className="landing-hero2-primary" type="button" onClick={onSearchBCClaims} data-track="CTA: Search Claims Registry">
+              Search Claims by Company Name
+              <span className="landing-hero2-primary-sub">BC · Ontario · Saskatchewan · Yukon — live registry data</span>
+            </button>
+          )}
+          <div className="landing-hero2-secondary-row">
+            {onUploadFile && (
+              <button className="landing-hero2-secondary" type="button" onClick={onUploadFile} data-track="CTA: Upload a File">
+                Upload a Shapefile
+              </button>
+            )}
+            <button className="landing-hero2-secondary" type="button" onClick={() => { if (onLoadSampleStyle) onLoadSampleStyle('drill_plan'); else onOpenEditor(); }} data-track="CTA: Try sample">
+              See an Example
+            </button>
           </div>
-
-          <div className="landing-visuals">
-            <div className="landing-window main">
-              <div className="landing-window-bar">
-                <span />
-                <span />
-                <span />
-                <div className="landing-window-url">explorationmaps.com</div>
-              </div>
-              <img
-                src="/gallery/drill-results.png"
-                alt="Drill results map with intercept callouts — made with Exploration Maps"
-                className="landing-hero-screenshot"
-              />
-            </div>
-
-            <div className="landing-gallery-thumbs">
-              {['claims', 'target', 'dark'].map(id => {
-                const s = GALLERY_STYLES.find(g => g.id === id);
-                return (
-                  <button key={id} type="button" className="landing-thumb-btn"
-                    onClick={() => onLoadSampleStyle?.(id)}
-                    data-track={`Hero thumb: ${s.label}`}>
-                    <img src={s.img} alt={s.label} className="landing-thumb-img" />
-                    <span className="landing-thumb-label">{s.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+          <p className="landing-trust-strip">Free · No account · Works in your browser</p>
         </div>
       </div>
 
-      {/* Persona strip — who it's built for */}
-      <div className="landing-personas" data-section="personas">
-        <span className="landing-personas-label">Built for</span>
-        {[
-          'Exploration geologists',
-          'Junior mining companies',
-          'Investor relations teams',
-          'Project generators',
-          'Qualified persons in the field',
-        ].map(p => (
-          <span key={p} className="landing-personas-item">{p}</span>
-        ))}
+      {/* Before / After */}
+      <div className="landing-ba" data-section="before-after">
+        <div className="landing-ba-panel landing-ba-before">
+          <div className="landing-ba-tag">Raw data</div>
+          <div className="landing-ba-raw">
+            <div className="landing-ba-files">
+              <span>claims_export_final_v3.shp</span>
+              <span>tenure_2026.dbf</span>
+              <span>collars.csv</span>
+              <span>targets.kml</span>
+            </div>
+            <div className="landing-ba-table">
+              <div className="landing-ba-table-row landing-ba-table-head"><span>TENURE_ID</span><span>OWNER</span><span>GOOD_TO</span></div>
+              <div className="landing-ba-table-row"><span>1081244</span><span>EXAMPLE RES…</span><span>2027-03-14</span></div>
+              <div className="landing-ba-table-row"><span>1081245</span><span>EXAMPLE RES…</span><span>2027-03-14</span></div>
+              <div className="landing-ba-table-row"><span>1081246</span><span>EXAMPLE RES…</span><span>2026-11-02</span></div>
+              <div className="landing-ba-table-row"><span>1081247</span><span>EXAMPLE RES…</span><span>2026-11-02</span></div>
+            </div>
+            <div className="landing-ba-mess">
+              <div className="landing-ba-poly p1" />
+              <div className="landing-ba-poly p2" />
+              <div className="landing-ba-poly p3" />
+            </div>
+          </div>
+        </div>
+
+        <div className="landing-ba-arrow" aria-hidden="true">
+          <svg width="34" height="34" viewBox="0 0 24 24" fill="none">
+            <path d="M5 12h14m0 0l-5-5m5 5l-5 5" stroke="#2563eb" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </div>
+
+        <div className="landing-ba-panel landing-ba-after">
+          <div className="landing-ba-tag landing-ba-tag-after">Investor map</div>
+          <button type="button" className="landing-ba-map-btn" onClick={() => onLoadSampleStyle?.('drill_plan')} data-track="Before/After: open sample">
+            <img
+              src="/gallery/drill-results.png"
+              alt="Clean drill results map with intercept callouts — made with Exploration Maps"
+              className="landing-ba-map-img"
+            />
+          </button>
+        </div>
       </div>
+
+      {/* Three steps, one line each */}
+      <section className="landing-flow" data-section="flow">
+        <div className="landing-flow-item">
+          <span className="landing-flow-num">1</span>
+          <strong>Find</strong>
+          <span>Search claims by company name, or upload your own files.</span>
+        </div>
+        <div className="landing-flow-item">
+          <span className="landing-flow-num">2</span>
+          <strong>Style</strong>
+          <span>Pick a template. Add callouts, rings, and your logo.</span>
+        </div>
+        <div className="landing-flow-item">
+          <span className="landing-flow-num">3</span>
+          <strong>Export</strong>
+          <span>PNG, SVG, or PDF — ready for the deck or the report.</span>
+        </div>
+      </section>
+
+      {/* Who it's for */}
+      <section className="landing-who" data-section="who">
+        <p>
+          Built for <strong>geologists</strong>, <strong>IR teams</strong>, and <strong>consultants</strong> who
+          need a clean map today — not another GIS project.
+        </p>
+      </section>
 
       {/* Map gallery */}
       <section className="landing-gallery">
-        <div className="landing-gallery-heading">The maps that end up in technical reports and investor decks</div>
-        <p className="landing-gallery-sub">Click any style to try it with live sample data — no account needed.</p>
+        <div className="landing-gallery-heading">Six map styles. One click.</div>
+        <p className="landing-gallery-sub">Click any style to try it with sample data.</p>
         <div className="landing-gallery-grid">
           {GALLERY_STYLES.map((style) => (
             <button
@@ -229,104 +225,38 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
         </div>
       </section>
 
-      {/* Field-to-figure workflow */}
-      <section className="landing-steps">
-        <div className="landing-steps-heading">The field-to-figure workflow</div>
-        <div className="landing-steps-row">
-          <div className="landing-step">
-            <div className="landing-step-num">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="#2563eb" strokeWidth="2"/><path d="M16.5 16.5l4 4" stroke="#2563eb" strokeWidth="2" strokeLinecap="round"/></svg>
-            </div>
-            <div className="landing-step-title">1 · Find or import your data</div>
-            <div className="landing-step-desc">Search live tenure registries for BC, Ontario, Saskatchewan, or Yukon — by company name or claim number. Or drop in a shapefile: claims boundaries, collar locations, fault traces, access roads. Everything renders and auto-styles on import.</div>
-          </div>
-          <div className="landing-step-connector" />
-          <div className="landing-step">
-            <div className="landing-step-num">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3a9 9 0 100 18A9 9 0 0012 3z" stroke="#2563eb" strokeWidth="2"/><path d="M8 12h8M12 8v8" stroke="#2563eb" strokeWidth="2" strokeLinecap="round"/></svg>
-            </div>
-            <div className="landing-step-title">2 · Layer on the story</div>
-            <div className="landing-step-desc">Click any drill collar to add a leader-line callout with your best intercept. Draw geo-accurate distance rings from the target hole. Toggle reference roads, labels, and railways. Your company logo, title block, and inset map update automatically.</div>
-          </div>
-          <div className="landing-step-connector" />
-          <div className="landing-step">
-            <div className="landing-step-num">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 4v12m0 0l-4-4m4 4l4-4" stroke="#2563eb" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/><path d="M4 20h16" stroke="#2563eb" strokeWidth="2" strokeLinecap="round"/></svg>
-            </div>
-            <div className="landing-step-title">3 · Export for the deck or the report</div>
-            <div className="landing-step-desc">PNG, SVG, or PDF at up to 3× resolution. Print-quality for a 43-101 figure, vector-clean for a PDAC poster, or screen-sharp for a term sheet. Watermark-free exports just ask for an email — no password, no subscription.</div>
-          </div>
-        </div>
+      {/* What's included — compact checklist */}
+      <section className="landing-included" data-section="included">
+        <div className="landing-included-heading">What's included</div>
+        <ul className="landing-included-list">
+          <li>Live claim search — BC, Ontario, Saskatchewan, Yukon</li>
+          <li>Shapefile, GeoJSON, KML &amp; CSV import</li>
+          <li>Drillhole callouts with assay labels</li>
+          <li>Distance rings, inset map, scale bar, north arrow</li>
+          <li>Your logo and colors on every map</li>
+          <li>PNG, SVG &amp; PDF export up to 3× resolution</li>
+        </ul>
       </section>
 
-      {/* Feature grid */}
-      <section className="landing-features">
-        <div className="landing-features-heading">What geologists actually need</div>
-        <div className="landing-features-grid">
-          <div className="landing-feature-card">
-            <div className="landing-feature-icon">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3" stroke="#2563eb" strokeWidth="2"/><path d="M3 9h18M9 21V9" stroke="#2563eb" strokeWidth="2"/></svg>
-            </div>
-            <div className="landing-feature-title">Six map styles for mining reports</div>
-            <div className="landing-feature-desc">Drill Results, Claims Package, Target Generation, Regional Context, Infrastructure, and Dark Satellite — the figures that show up in every NI 43-101 and investor deck, ready to load with one click.</div>
-          </div>
-          <div className="landing-feature-card">
-            <div className="landing-feature-icon">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" fill="#2563eb"/></svg>
-            </div>
-            <div className="landing-feature-title">Intercept callouts</div>
-            <div className="landing-feature-desc">Click any drill collar, type your best intercept — "Au 4.2 g/t · 18m" — and a leader-line callout or badge drops in exactly as it should look in the deck. Drag to reposition. No Illustrator required.</div>
-          </div>
-          <div className="landing-feature-card">
-            <div className="landing-feature-icon">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="#2563eb" strokeWidth="2"/><path d="M16.5 16.5l4 4" stroke="#2563eb" strokeWidth="2" strokeLinecap="round"/></svg>
-            </div>
-            <div className="landing-feature-title">Live tenure across four provinces</div>
-            <div className="landing-feature-desc">Search BC Mineral Titles, Ontario MLAS, Saskatchewan MARS, and GeoYukon directly — by holder name or claim number. Data is live from each registry, not cached. See good-to dates and acreage on the map immediately.</div>
-          </div>
-          <div className="landing-feature-card">
-            <div className="landing-feature-icon">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 4v12m0 0l-4-4m4 4l4-4" stroke="#2563eb" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/><path d="M4 20h16" stroke="#2563eb" strokeWidth="2" strokeLinecap="round"/></svg>
-            </div>
-            <div className="landing-feature-title">Print-ready export</div>
-            <div className="landing-feature-desc">PNG, vector SVG, and PDF at 1×, 2×, or 3× resolution. Print-quality for a 43-101 figure or pixel-perfect for an investor deck. No watermark with your email — no subscription, no commitment.</div>
-          </div>
-          <div className="landing-feature-card">
-            <div className="landing-feature-icon">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2" stroke="#2563eb" strokeWidth="2"/><path d="M3 9h18" stroke="#2563eb" strokeWidth="2"/></svg>
-            </div>
-            <div className="landing-feature-title">Company branding, once</div>
-            <div className="landing-feature-desc">Upload your logo once and it auto-populates on every map you make. Set your brand colors and every new project starts on-brand — useful for IR teams putting together packages under a deadline.</div>
-          </div>
-          <div className="landing-feature-card">
-            <div className="landing-feature-icon">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="4" stroke="#2563eb" strokeWidth="2"/><circle cx="12" cy="12" r="9" stroke="#2563eb" strokeWidth="1.5" strokeDasharray="4 3"/></svg>
-            </div>
-            <div className="landing-feature-title">Distance rings &amp; regional context</div>
-            <div className="landing-feature-desc">Draw geo-accurate rings at 5, 10, or 25 km from your target — standard for showing nearby producers and past-producing mines. Add the locator inset and the district comes through on the first look.</div>
-          </div>
-        </div>
-      </section>
-
-      {/* FAQ — objection handling */}
+      {/* FAQ */}
       <section className="landing-faq" data-section="faq">
         <div className="landing-faq-heading">Common questions</div>
         <div className="landing-faq-grid">
           <div className="landing-faq-item">
-            <strong>Is it really free?</strong>
-            <span>Yes. Searching tenure registries, styling maps, and exporting PNG, SVG, or PDF are all free. Watermark-free exports just ask for your email — no password, no credit card, no subscription.</span>
+            <strong>Is it free?</strong>
+            <span>Yes. Search, style, and export — all free. Watermark-free exports just ask for your email.</span>
           </div>
           <div className="landing-faq-item">
             <strong>Do I need an account?</strong>
-            <span>No. Everything works without signing in. Create an account only if you want cloud-saved projects and a reusable company template that pre-populates your logo and branding on every new map.</span>
+            <span>No. Sign in only if you want cloud saves and a reusable company template.</span>
           </div>
           <div className="landing-faq-item">
-            <strong>Where does the tenure data come from?</strong>
-            <span>Live from each government registry at the moment you search — BC Mineral Titles Online, Ontario MLAS, Saskatchewan MARS, and GeoYukon. Nothing is cached or pre-downloaded. Good-to dates and acreage are exactly what the registry shows right now.</span>
+            <strong>Where does the claims data come from?</strong>
+            <span>Live from each government registry the moment you search. Nothing cached or out of date.</span>
           </div>
           <div className="landing-faq-item">
-            <strong>Will my uploaded data stay private?</strong>
-            <span>Uploaded files are processed in your browser and never leave your device unless you choose to save to the cloud or share a map link. Your drill data stays on your machine.</span>
+            <strong>Is my data private?</strong>
+            <span>Uploaded files stay in your browser unless you choose to save to the cloud.</span>
           </div>
         </div>
       </section>
@@ -406,16 +336,16 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
 
       <section className="landing-bottom-cta" data-section="bottom-cta">
         <div className="landing-bottom-cta-inner">
-          <div className="landing-bottom-cta-headline">Your next investor deck starts here.</div>
-          <div className="landing-bottom-cta-sub">Search live tenure · style your package · export before the call</div>
+          <div className="landing-bottom-cta-headline">Raw data in. Investor map out.</div>
+          <div className="landing-bottom-cta-sub">Free · No account · Works in your browser</div>
           <div className="landing-bottom-cta-actions">
             {onSearchBCClaims && (
               <button className="landing-bottom-primary" onClick={onSearchBCClaims} data-track="Bottom CTA: Search Claims">
-                Search Mineral Tenure Registries →
+                Search Claims by Company Name →
               </button>
             )}
             <button className="landing-bottom-ghost" onClick={onOpenEditor} data-track="Bottom CTA: Open Editor">
-              Open Editor with Sample Data
+              Open the Editor
             </button>
           </div>
         </div>
