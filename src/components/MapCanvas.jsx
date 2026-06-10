@@ -4,6 +4,7 @@ import 'leaflet/dist/leaflet.css';
 import { makeMarkerIcon } from '../utils/leaflet';
 import { POINT_ROLES } from '../projectState';
 import regionsNA from '../assets/regionsNA.json';
+import dissolveGeo from '@turf/dissolve';
 
 const BASEMAPS = {
   light: {
@@ -214,7 +215,8 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
                nl.style?.markerShape === ol.style?.markerShape &&
                nl.style?.markerSize === ol.style?.markerSize &&
                nl.style?.customMarkerDataUri === ol.style?.customMarkerDataUri &&
-               (nl.style?.fillPattern || 'none') === (ol.style?.fillPattern || 'none');
+               (nl.style?.fillPattern || 'none') === (ol.style?.fillPattern || 'none') &&
+               !!nl.style?.dissolve === !!ol.style?.dissolve;
       });
 
     if (isStyleOnly) {
@@ -262,7 +264,19 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
       const drillholeRenderer = isDrillholes ? L.svg({ padding: 0 }) : undefined;
       if (drillholeRenderer) svgRendererRefs.current.push(drillholeRenderer);
 
-      const geoLayer = L.geoJSON(layer.geojson, {
+      // Dissolve adjacent polygons to remove internal shared borders
+      let geojsonData = layer.geojson;
+      if (style.dissolve && geomType !== 'line' && !isDrillholes) {
+        try {
+          const fc = geojsonData.type === 'FeatureCollection'
+            ? geojsonData
+            : { type: 'FeatureCollection', features: geojsonData.type === 'Feature' ? [geojsonData] : [{ type: 'Feature', geometry: geojsonData, properties: {} }] };
+          const dissolved = dissolveGeo(fc);
+          if (dissolved?.features?.length) geojsonData = dissolved;
+        } catch (_) { /* dissolve failed — use original */ }
+      }
+
+      const geoLayer = L.geoJSON(geojsonData, {
         renderer: svgRenderer,
         style: () => ({
           color: style.stroke || '#54a6ff',

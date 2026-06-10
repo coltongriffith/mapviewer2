@@ -134,6 +134,8 @@ export function createInitialProjectState() {
       insetBgFill: null,
       insetMarkerColor: null,
       northArrowHeightPx: 100,
+      northArrowStyle: 'classic',
+      cornerRadius: null,
       insetAspectRatio: null,
       safeMargins: { top: 18, right: 18, bottom: 18, left: 18 },
       markerDefaults: { type: 'circle', color: '#d97706', size: 18, label: '' },

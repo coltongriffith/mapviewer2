@@ -11,7 +11,7 @@ import SharedMapViewer from './components/SharedMapViewer';
 import UploadPanel from './components/UploadPanel';
 import AnnotationOverlay from './components/AnnotationOverlay';
 import ShadeOverlay from './components/ShadeOverlay';
-import NorthArrow from './components/NorthArrow';
+import NorthArrow, { NORTH_ARROW_STYLES } from './components/NorthArrow';
 
 const MapCanvas = React.lazy(() => import('./components/MapCanvas'));
 const ExportHDModal = React.lazy(() => import('./components/ExportHDModal'));
@@ -865,8 +865,8 @@ export default function App() {
 
   const mapStageStyle = useMemo(() => ({
     ...(constrainedStageSize || {}),
-    '--template-radius': `${themeTokens.panelRadius}px`,
-    '--title-radius': `${themeTokens.titleRadius}px`,
+    '--template-radius': project.layout.cornerRadius != null ? `${project.layout.cornerRadius}px` : `${themeTokens.panelRadius}px`,
+    '--title-radius': project.layout.cornerRadius != null ? `${project.layout.cornerRadius}px` : `${themeTokens.titleRadius}px`,
     '--panel-bg': themeTokens.panelFill,
     '--panel-border': themeTokens.panelBorder,
     '--panel-shadow': themeTokens.panelShadow,
@@ -898,7 +898,7 @@ export default function App() {
     '--font-label': `${project.layout.fonts?.label || 'Inter'}, sans-serif`,
     '--font-callout': `${project.layout.fonts?.callout || 'Inter'}, sans-serif`,
     '--font-footer': `${project.layout.fonts?.footer || 'Inter'}, sans-serif`,
-  }), [themeTokens, constrainedStageSize, project.layout.fonts]);
+  }), [themeTokens, constrainedStageSize, project.layout.fonts, project.layout.cornerRadius]);
 
   const handleRatioChange = useCallback((newRatio) => {
     const map = leafletMapRef.current;
@@ -2563,6 +2563,41 @@ export default function App() {
               <label className="toggle-row"><input type="checkbox" checked={project.layout.footerEnabled !== false} onChange={(e) => updateLayout({ footerEnabled: e.target.checked })} /><span>Footer</span></label>
               <label className="toggle-row"><input type="checkbox" checked={project.layout.insetEnabled !== false} onChange={(e) => updateLayout({ insetEnabled: e.target.checked })} /><span>Inset Map</span></label>
             </div>
+            {/* North arrow style picker */}
+            {project.layout.showNorthArrow !== false && (
+              <div className="control-row" style={{ marginTop: 10 }}>
+                <label>Compass Style</label>
+                <div className="north-arrow-style-picker">
+                  {NORTH_ARROW_STYLES.map(({ key, label }) => (
+                    <button key={key} type="button"
+                      className={`north-arrow-style-btn${(project.layout.northArrowStyle || 'classic') === key ? ' active' : ''}`}
+                      onClick={() => updateLayout({ northArrowStyle: key })}
+                      title={label}>
+                      <NorthArrow scale={40} style={key} />
+                      <span>{label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Corner radius */}
+            <div className="control-row inline-2" style={{ marginTop: 10 }}>
+              <div>
+                <label>Panel Corners</label>
+                <input type="range" min="0" max="24" step="1"
+                  value={project.layout.cornerRadius ?? themeTokens.panelRadius ?? 10}
+                  onChange={(e) => updateLayout({ cornerRadius: Number(e.target.value) })} />
+              </div>
+              <div className="range-value" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                <span>{project.layout.cornerRadius ?? themeTokens.panelRadius ?? 10}px</span>
+                {project.layout.cornerRadius != null && (
+                  <button type="button" style={{ fontSize: 10, padding: '1px 5px', background: 'none', border: '1px solid #cbd5e1', borderRadius: 4, cursor: 'pointer', color: '#64748b' }}
+                    onClick={() => updateLayout({ cornerRadius: null })} title="Reset to theme default">↺</button>
+                )}
+              </div>
+            </div>
+
             <button
               type="button"
               className="secondary-btn"
@@ -2678,6 +2713,11 @@ export default function App() {
                     </div>
                     <div className="range-value">{Math.round((selectedLayer.style?.layerOpacity ?? 1) * 100)}%</div>
                   </div>
+                  <label className="toggle-row" style={{ marginTop: 4 }}>
+                    <input type="checkbox" checked={!!selectedLayer.style?.dissolve}
+                      onChange={(e) => updateLayer(selectedLayer.id, { style: { dissolve: e.target.checked } })} />
+                    <span>Dissolve inner borders</span>
+                  </label>
                   <div className="control-row">
                     <label>Fill Pattern</label>
                     <div className="fill-pattern-picker">
@@ -3754,7 +3794,7 @@ export default function App() {
         {project.layout.showNorthArrow !== false && resolvedZones.northArrow?.width > 0 && (
           <div className="template-zone" style={{ ...zoneStyle(resolvedZones.northArrow), opacity: dragging?.id === 'northArrow' ? 0.3 : 1, cursor: 'grab' }} onMouseDown={makeDragHandler('northArrow', resolvedZones.northArrow?.width ?? 80, project.layout.northArrowHeightPx ?? 100)}>
             <button className="panel-delete-btn" title="Hide compass rose" onClick={() => updateLayout({ showNorthArrow: false })}>×</button>
-            <NorthArrow scale={project.layout.northArrowHeightPx ?? 100} />
+            <NorthArrow scale={project.layout.northArrowHeightPx ?? 100} style={project.layout.northArrowStyle || 'classic'} />
             {makeResizeHandles(project.layout.northArrowCorner || 'br', {
               elemId: 'northArrow', startW: resolvedZones.northArrow?.width ?? 80, startH: project.layout.northArrowHeightPx ?? 100,
               minW: 40, maxW: 200, minH: 50, maxH: 200,

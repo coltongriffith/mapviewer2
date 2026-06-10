@@ -322,6 +322,11 @@ button, input, select, textarea { font: inherit; }
 .badge-chip { padding: 0 10px; display: flex; align-items: center; font-size: 12px; font-weight: 700; color: #fff; white-space: nowrap; flex-shrink: 0; }
 .badge-label { padding: 0 10px; display: flex; align-items: center; font-size: 12px; font-weight: 600; flex: 1; white-space: nowrap; overflow: hidden; }
 .fill-pattern-picker { display: flex; gap: 6px; }
+.north-arrow-style-picker { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 4px; }
+.north-arrow-style-btn { display: flex; flex-direction: column; align-items: center; gap: 3px; background: #f8fafc; border: 1.5px solid #dbe4ee; border-radius: 10px; padding: 6px 4px 5px; cursor: pointer; font-family: inherit; font-size: 10px; color: #516173; font-weight: 600; transition: border-color 0.12s; }
+.north-arrow-style-btn:hover { border-color: #93c5fd; background: #f0f7ff; }
+.north-arrow-style-btn.active { border-color: #2563eb; background: #eff6ff; color: #1d4ed8; }
+.north-arrow-style-btn .template-card { pointer-events: none; box-shadow: none; border: none; background: none; padding: 0; margin: 0; width: 40px; height: 40px; }
 .pattern-btn { background: #f8fafc; border: 1.5px solid #dbe4ee; border-radius: 6px; cursor: pointer; padding: 3px; display: flex; align-items: center; justify-content: center; transition: border-color 0.12s, background 0.12s; }
 .pattern-btn:hover { border-color: #93c5fd; background: #eff6ff; }
 .pattern-btn.active { border-color: #3b82f6; background: #eff6ff; box-shadow: 0 0 0 2px rgba(59,130,246,0.18); }
