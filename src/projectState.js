@@ -135,6 +135,7 @@ export function createInitialProjectState() {
       insetMarkerColor: null,
       northArrowHeightPx: 100,
       northArrowStyle: 'classic',
+      northArrowTransparent: false,
       cornerRadius: null,
       insetAspectRatio: null,
       safeMargins: { top: 18, right: 18, bottom: 18, left: 18 },

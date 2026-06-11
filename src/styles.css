@@ -1089,6 +1089,11 @@ body.is-dragging .template-zone .panel-delete-btn { opacity: 0 !important; }
   border: none !important;
   box-shadow: none !important;
 }
+.panel--transparent .north-arrow-card {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
 
 /* ── Outside shade presets ── */
 .shade-presets {
@@ -2154,3 +2159,15 @@ body.is-dragging .template-zone .panel-delete-btn { opacity: 0 !important; }
 .adm-click-fill { height: 100%; background: #3b82f6; border-radius: 4px; transition: width 0.3s; }
 .adm-click-count { font-size: 13px; font-weight: 600; color: #1e293b; text-align: right; }
 .adm-click-pct { font-size: 12px; color: #94a3b8; text-align: right; }
+
+/* ── Nearby Claims Overlay ───────────────────────────────────────────────── */
+.area-claims-status { font-size: 12px; color: #64748b; padding: 4px 0; }
+.area-claims-status.error { color: #dc2626; }
+.area-claims-legend { display: flex; flex-direction: column; gap: 4px; margin: 4px 0; max-height: 180px; overflow-y: auto; }
+.acl-row { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.acl-swatch { flex-shrink: 0; width: 12px; height: 12px; border-radius: 2px; }
+.acl-label { color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; }
+.acl-more { color: #94a3b8; font-style: italic; }
+.area-claims-tooltip { font-size: 12px; }
+.area-claims-popup .acp-owner { font-weight: 700; font-size: 13px; margin-bottom: 4px; }
+.area-claims-popup .acp-row { font-size: 12px; color: #374151; }
