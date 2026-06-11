@@ -1,7 +1,48 @@
 export default async function handler(req, res) {
-  const { q, company, type, schema } = req.query;
+  const { q, company, type, schema, bbox } = req.query;
   // Accept either `q` (new) or `company` (legacy) as the search term
   const term = q || company;
+
+  // BBOX mode: fetch all tenures within a lng/lat bounding box (nearby claims overlay)
+  if (bbox) {
+    const parts = String(bbox).split(',').map(Number);
+    if (parts.length !== 4 || parts.some((n) => !Number.isFinite(n))) {
+      return res.status(400).json({ error: 'bbox must be minLng,minLat,maxLng,maxLat' });
+    }
+    const [minLng, minLat, maxLng, maxLat] = parts;
+    const bboxUrl = [
+      'https://openmaps.gov.bc.ca/geo/pub/wfs',
+      '?SERVICE=WFS',
+      '&VERSION=2.0.0',
+      '&REQUEST=GetFeature',
+      '&outputFormat=application/json',
+      '&typeNames=pub:WHSE_MINERAL_TENURE.MTA_ACQUIRED_TENURE_SVW',
+      '&SRSNAME=EPSG:4326',
+      `&BBOX=${minLat},${minLng},${maxLat},${maxLng},EPSG:4326`,
+      '&count=2000',
+    ].join('');
+    try {
+      const r = await fetch(bboxUrl, {
+        headers: {
+          Accept: 'application/json',
+          'User-Agent': 'Mozilla/5.0 (compatible; ExplorationMaps/1.0; +https://explorationmaps.com)',
+          'Referer': 'https://explorationmaps.com/',
+          'Origin': 'https://explorationmaps.com',
+        },
+        signal: AbortSignal.timeout(30000),
+      });
+      if (!r.ok) {
+        const b = await r.text().catch(() => '');
+        return res.status(502).json({ error: `WFS returned ${r.status}`, detail: b.slice(0, 2000) });
+      }
+      const data = await r.json();
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Cache-Control', 'no-store');
+      return res.status(200).json(data);
+    } catch (e) {
+      return res.status(502).json({ error: e.message || 'Failed to reach BC WFS' });
+    }
+  }
 
   // Schema discovery mode: return field names from a sample feature
   if (schema === '1') {
