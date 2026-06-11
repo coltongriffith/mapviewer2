@@ -575,8 +575,16 @@ button, input, select, textarea { font: inherit; }
 .landing-ba-dot.d5 { left: 61%; top: 45%; }
 .landing-ba-badmap-coord { position: absolute; bottom: 10px; left: 12px; font-family: ui-monospace, monospace; font-size: 10px; color: #4a5048; background: rgba(210,214,208,0.88); padding: 2px 7px; border: 1px solid #a8b0a4; }
 @media (max-width: 860px) {
-  .landing-ba { grid-template-columns: 1fr; }
-  .landing-ba-arrow { transform: rotate(90deg); padding: 2px 0; }
+  .landing-ba { padding: 8px 14px 36px; gap: 10px; }
+  .landing-ba-panel { min-height: 200px; border-radius: 12px; }
+  .landing-ba-img { min-height: 200px; }
+  .landing-ba-tag { font-size: 9px; padding: 3px 8px; top: 8px; left: 8px; }
+  .landing-ba-arrow svg { width: 22px; height: 22px; }
+}
+@media (max-width: 480px) {
+  .landing-ba-panel { min-height: 150px; }
+  .landing-ba-img { min-height: 150px; }
+  .landing-ba-tag { display: none; }
 }
 
 /* Flow — 3 one-line steps */
