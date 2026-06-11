@@ -39,6 +39,7 @@ import { resolveNI43101Zones } from './templates/technicalReportTemplate';
 import { resolveSidePanelZones, mapSlotPositions } from './templates/sidePanelTemplate';
 import { geojsonBounds, geojsonCenter, unionBounds } from './utils/geometry';
 import { markerSvgUrl } from './utils/leaflet';
+import L from 'leaflet';
 import { detectRegion } from './utils/detectRegion';
 import { cleanLayerName } from './utils/cleanLayerName';
 import regionsNA from './assets/regionsNA.json';
@@ -669,6 +670,8 @@ export default function App() {
   const [viewportSize, setViewportSize] = useState({ width: 1600, height: 1000 });
   const [featureEditorTick, setFeatureEditorTick] = useState(0);
   const [mapReady, setMapReady] = useState(false);
+  const [areaClaims, setAreaClaims] = useState(null);
+  const areaClaimsLayerRef = useRef(null);
   const bootstrappedRef = useRef(false);
   const lastSavedSnapshotRef = useRef(JSON.stringify(project));
   // Local state for title/subtitle so every keystroke doesn't write to project (stops flicker)
@@ -1445,6 +1448,106 @@ export default function App() {
     leafletMapRef.current = map;
     setMapReady(true);
   }, []);
+
+  const AREA_CLAIMS_COLORS = [
+    '#e63946','#457b9d','#2a9d8f','#e9c46a','#f4a261','#264653','#a8dadc','#6a4c93',
+    '#1982c4','#8ac926','#ff595e','#ffca3a','#6a4c93','#c77dff','#48cae4','#e76f51',
+    '#0096c7','#52b788','#fb8500','#b5838d',
+  ];
+
+  const loadAreaClaims = async (radiusKm) => {
+    setAreaClaims({ status: 'loading', radius: radiusKm, visible: true, features: [], ownerColors: {}, message: 'Searching for nearby claims…' });
+
+    try {
+      // Find centroid of the primary claims layer
+      const claimsLayer = project.layers.find((l) => l.role === 'claims' || l.role === 'property') || project.layers[0];
+      if (!claimsLayer?.geojson) {
+        setAreaClaims((prev) => ({ ...prev, status: 'error', message: 'No claims layer found to center the search.' }));
+        return;
+      }
+
+      const bounds = geojsonBounds(claimsLayer.geojson);
+      if (!bounds) { setAreaClaims((prev) => ({ ...prev, status: 'error', message: 'Could not compute layer bounds.' })); return; }
+
+      const centerLat = (bounds.minLat + bounds.maxLat) / 2;
+      const centerLng = (bounds.minLng + bounds.maxLng) / 2;
+      const KM_PER_DEG_LAT = 111.32;
+      const KM_PER_DEG_LNG = KM_PER_DEG_LAT * Math.cos((centerLat * Math.PI) / 180);
+      const dLat = radiusKm / KM_PER_DEG_LAT;
+      const dLng = radiusKm / KM_PER_DEG_LNG;
+      const bbox = `${centerLng - dLng},${centerLat - dLat},${centerLng + dLng},${centerLat + dLat}`;
+
+      // BC DataBC WFS endpoint for mineral tenures (public, no auth required)
+      const wfsUrl = `https://openmaps.gov.bc.ca/geo/pub/WHSE_MINERAL_TENURE.MTA_ACQUIRED_TENURE_SVW/ows?service=WFS&version=2.0.0&request=GetFeature&typeName=WHSE_MINERAL_TENURE.MTA_ACQUIRED_TENURE_SVW&outputFormat=application%2Fjson&srsName=EPSG%3A4326&count=2000&bbox=${bbox},EPSG:4326`;
+
+      const resp = await fetch(wfsUrl, { signal: AbortSignal.timeout(30000) });
+      if (!resp.ok) throw new Error(`WFS request failed: ${resp.status}`);
+      const data = await resp.json();
+
+      const features = (data.features || []).filter((f) => f.geometry);
+      if (features.length === 0) {
+        setAreaClaims((prev) => ({ ...prev, status: 'loaded', features: [], message: `No claims found within ${radiusKm} km.` }));
+        return;
+      }
+
+      // Assign per-owner colors
+      const ownerField = features[0]?.properties?.TENURE_HOLDER_NAME !== undefined
+        ? 'TENURE_HOLDER_NAME' : features[0]?.properties?.OWNER_NAME !== undefined
+        ? 'OWNER_NAME' : Object.keys(features[0]?.properties || {}).find((k) => k.toLowerCase().includes('owner') || k.toLowerCase().includes('holder') || k.toLowerCase().includes('client')) || null;
+
+      const owners = [...new Set(features.map((f) => (ownerField ? f.properties?.[ownerField] : null) || 'Unknown'))];
+      const ownerColors = {};
+      owners.forEach((owner, i) => { ownerColors[owner] = AREA_CLAIMS_COLORS[i % AREA_CLAIMS_COLORS.length]; });
+
+      setAreaClaims({ status: 'loaded', radius: radiusKm, visible: true, features, ownerColors, ownerField, center: { lat: centerLat, lng: centerLng }, message: `${features.length} claims found within ${radiusKm} km` });
+    } catch (err) {
+      setAreaClaims((prev) => ({
+        ...prev, status: 'error',
+        message: err.name === 'TimeoutError' ? 'Request timed out. Try a smaller radius.' : `Failed to load: ${err.message}`,
+      }));
+    }
+  };
+
+  // Sync areaClaims overlay to Leaflet map
+  useEffect(() => {
+    if (!mapReady || !leafletMapRef.current) return;
+
+    if (areaClaimsLayerRef.current) {
+      areaClaimsLayerRef.current.remove();
+      areaClaimsLayerRef.current = null;
+    }
+
+    if (!areaClaims?.visible || !areaClaims.features?.length) return;
+
+    const { features, ownerColors, ownerField } = areaClaims;
+    const group = L.layerGroup();
+
+    features.forEach((feature) => {
+      const owner = (ownerField ? feature.properties?.[ownerField] : null) || 'Unknown';
+      const color = ownerColors[owner] || '#888888';
+      const layer = L.geoJSON(feature, {
+        style: { fillColor: color, color, weight: 1, fillOpacity: 0.22, opacity: 0.7 },
+        onEachFeature: (feat, lyr) => {
+          const props = feat.properties || {};
+          const name = props.TENURE_NUMBER_ID || props.TENURE_ID || props.TENURE_NO || props.ID || '—';
+          const holder = (ownerField && props[ownerField]) || 'Unknown';
+          const status = props.TENURE_STATUS || props.STATUS || '';
+          const type = props.TENURE_TYPE || props.TENURE_SUBTYPE || '';
+          lyr.bindTooltip(`<strong>${holder}</strong><br/>${name}${type ? ` · ${type}` : ''}`, { sticky: true, className: 'area-claims-tooltip' });
+          lyr.bindPopup(`<div class="area-claims-popup"><div class="acp-owner">${holder}</div><div class="acp-row"><b>Tenure:</b> ${name}</div>${status ? `<div class="acp-row"><b>Status:</b> ${status}</div>` : ''}${type ? `<div class="acp-row"><b>Type:</b> ${type}</div>` : ''}</div>`);
+        },
+      });
+      layer.addTo(group);
+    });
+
+    group.addTo(leafletMapRef.current);
+    areaClaimsLayerRef.current = group;
+
+    return () => {
+      group.remove();
+      areaClaimsLayerRef.current = null;
+    };
+  }, [mapReady, areaClaims]);
 
   const addGeoJSONAsLayer = async (geojson, fileName) => {
     const id = crypto.randomUUID();
@@ -2677,6 +2780,10 @@ export default function App() {
                     </button>
                   ))}
                 </div>
+                <label className="toggle-row" style={{ marginTop: 6 }}>
+                  <input type="checkbox" checked={!project.layout.northArrowTransparent} onChange={(e) => updateLayout({ northArrowTransparent: !e.target.checked })} />
+                  <span>Show panel box</span>
+                </label>
               </div>
             )}
 
@@ -2840,6 +2947,64 @@ export default function App() {
               )}
             </div>
           ) : <p className="small-note">Select a layer to edit its display label, role, order, and colors.</p>}
+        </section>
+
+        {/* ── Nearby Claims Overlay ── */}
+        <section className="control-section cs-collapsible">
+          <h2 className="section-toggle-btn" onClick={() => toggleSection('areaClaims')}>Nearby Claims <span className={`section-chevron${collapsedSections.areaClaims ? '' : ' open'}`}>›</span></h2>
+          {!collapsedSections.areaClaims && (
+            <div className="control-grid">
+              <p className="small-note">Load mineral tenure claims from BC DataBC within a radius of your project area. Each claim owner is shown in a distinct colour.</p>
+              <div className="control-row inline-2">
+                <div>
+                  <label>Search Radius</label>
+                  <select
+                    value={areaClaims?.radius ?? 25}
+                    onChange={(e) => setAreaClaims((prev) => ({ ...(prev || {}), radius: Number(e.target.value) }))}
+                  >
+                    {[10, 25, 50, 100].map((r) => <option key={r} value={r}>{r} km</option>)}
+                  </select>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+                  <button
+                    className="btn primary"
+                    type="button"
+                    disabled={!mapReady || areaClaims?.status === 'loading'}
+                    onClick={() => loadAreaClaims(areaClaims?.radius ?? 25)}
+                  >
+                    {areaClaims?.status === 'loading' ? 'Loading…' : 'Load Claims'}
+                  </button>
+                </div>
+              </div>
+              {areaClaims && (
+                <>
+                  <div className={`area-claims-status${areaClaims.status === 'error' ? ' error' : ''}`}>
+                    {areaClaims.message}
+                  </div>
+                  {areaClaims.status === 'loaded' && areaClaims.features.length > 0 && (
+                    <>
+                      <label className="toggle-row">
+                        <input type="checkbox" checked={!!areaClaims.visible} onChange={(e) => setAreaClaims((prev) => ({ ...prev, visible: e.target.checked }))} />
+                        <span>Show on map</span>
+                      </label>
+                      <div className="area-claims-legend">
+                        {Object.entries(areaClaims.ownerColors).slice(0, 12).map(([owner, color]) => (
+                          <div key={owner} className="acl-row">
+                            <span className="acl-swatch" style={{ background: color }} />
+                            <span className="acl-label" title={owner}>{owner}</span>
+                          </div>
+                        ))}
+                        {Object.keys(areaClaims.ownerColors).length > 12 && (
+                          <div className="acl-row acl-more">+{Object.keys(areaClaims.ownerColors).length - 12} more owners</div>
+                        )}
+                      </div>
+                      <button className="secondary-btn" type="button" onClick={() => { setAreaClaims(null); }}>Clear</button>
+                    </>
+                  )}
+                </>
+              )}
+            </div>
+          )}
         </section>
 
         <section className="control-section cs-collapsible" ref={drillholeSectionRef}>
@@ -3891,7 +4056,7 @@ export default function App() {
         ) : null}
 
         {project.layout.showNorthArrow !== false && resolvedZones.northArrow?.width > 0 && (
-          <div className="template-zone" style={{ ...zoneStyle(resolvedZones.northArrow), opacity: dragging?.id === 'northArrow' ? 0.3 : 1, cursor: 'grab' }} onMouseDown={makeDragHandler('northArrow', resolvedZones.northArrow?.width ?? 80, project.layout.northArrowHeightPx ?? 100)}>
+          <div className={`template-zone${project.layout.northArrowTransparent ? ' panel--transparent' : ''}`} style={{ ...zoneStyle(resolvedZones.northArrow), opacity: dragging?.id === 'northArrow' ? 0.3 : 1, cursor: 'grab' }} onMouseDown={makeDragHandler('northArrow', resolvedZones.northArrow?.width ?? 80, project.layout.northArrowHeightPx ?? 100)}>
             <button className="panel-delete-btn" title="Hide compass rose" onClick={() => updateLayout({ showNorthArrow: false })}>×</button>
             <NorthArrow scale={project.layout.northArrowHeightPx ?? 100} style={project.layout.northArrowStyle || 'classic'} />
             {makeResizeHandles(project.layout.northArrowCorner || 'br', {
