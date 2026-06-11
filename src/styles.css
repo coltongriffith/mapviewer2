@@ -560,7 +560,16 @@ button, input, select, textarea { font: inherit; }
 
 /* Images keep their natural aspect ratio — never cropped, so legends/titles stay visible */
 .landing-ba-img { width: 100%; height: auto; object-fit: contain; display: block; }
-.landing-ba-map-btn { display: block; width: 100%; padding: 0; border: none; background: none; cursor: pointer; }
+.landing-ba-map-btn { display: block; width: 100%; padding: 0; border: none; background: none; cursor: pointer; position: relative; }
+.landing-ba-map-btn:hover .landing-ba-demo-hint { opacity: 1; }
+.landing-ba-demo-hint {
+  position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%);
+  background: rgba(11,53,51,0.88); color: #c8a84b;
+  font-size: 12px; font-weight: 600; letter-spacing: 0.06em;
+  padding: 5px 14px; border-radius: 20px; pointer-events: none;
+  white-space: nowrap; opacity: 0; transition: opacity 0.2s;
+  border: 1px solid rgba(200,168,75,0.45);
+}
 /* Before = ugly default GIS map mock */
 .landing-ba-badmap { position: absolute; inset: 0; overflow: hidden; background: #d8dcd2; }
 .landing-ba-grid { position: absolute; inset: 0;

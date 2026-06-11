@@ -135,8 +135,9 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
 
         <div className="landing-ba-panel landing-ba-after">
           <div className="landing-ba-tag landing-ba-tag-after">Investor map</div>
-          <button type="button" className="landing-ba-map-btn" onClick={() => onLoadSampleStyle?.('claims')} data-track="Before/After: open sample">
+          <button type="button" className="landing-ba-map-btn" onClick={() => onLoadSampleStyle?.('aurora_demo')} data-track="Before/After: open Aurora demo">
             <img src="/gallery/ba-after.png" alt="Cedar Ridge Project — professional investor map with logo, callouts, and legend" className="landing-ba-img" />
+            <div className="landing-ba-demo-hint">Open live demo</div>
           </button>
         </div>
       </div>

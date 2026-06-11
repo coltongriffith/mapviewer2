@@ -90,6 +90,25 @@ const SAMPLE_LOGO_SVG = [
 const SAMPLE_LOGO_URL = `data:image/svg+xml,${encodeURIComponent(SAMPLE_LOGO_SVG)}`;
 const SAMPLE_ACCENT = '#b87333';
 
+// Aurora Ridge Minerals demo logo — dark teal bg, mountain range, gold star, white text
+const AURORA_LOGO_SVG = [
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 60" width="240" height="60">',
+  '<rect width="240" height="60" rx="4" fill="#0b3533"/>',
+  // mountain silhouettes
+  '<polygon points="4,52 18,28 32,42 42,22 56,52" fill="#1a5c58"/>',
+  '<polygon points="20,52 36,30 52,52" fill="#1e6b66"/>',
+  '<polygon points="34,52 42,22 56,38 66,18 80,52" fill="#145450"/>',
+  // gold star above peak
+  '<polygon points="66,13 67.8,18.5 73.5,18.5 69,21.8 70.8,27.3 66,24 61.2,27.3 63,21.8 58.5,18.5 64.2,18.5" fill="#c8a84b"/>',
+  // company name
+  '<text x="90" y="23" font-family="Arial,sans-serif" font-size="12" font-weight="700" fill="#ffffff" letter-spacing="1.2">AURORA RIDGE</text>',
+  '<text x="90" y="37" font-family="Arial,sans-serif" font-size="8.5" font-weight="400" fill="#c8a84b" letter-spacing="2.5">MINERALS</text>',
+  '<text x="90" y="51" font-family="Arial,sans-serif" font-size="7.5" fill="#7ab8b4" letter-spacing="0.3">Northwestern British Columbia</text>',
+  '</svg>',
+].join('');
+const AURORA_LOGO_URL = `data:image/svg+xml,${encodeURIComponent(AURORA_LOGO_SVG)}`;
+const AURORA_ACCENT = '#c8a84b';
+
 const BASEMAP_OPTIONS = [
   { key: 'light',     label: 'Light',     thumb: 'https://a.basemaps.cartocdn.com/rastertiles/voyager_nolabels/4/2/5.png' },
   { key: 'dark',      label: 'Dark',      thumb: 'https://a.basemaps.cartocdn.com/dark_all/4/2/5.png' },
@@ -973,7 +992,7 @@ export default function App() {
       { focusRoles: true }
     );
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [template, project.layout.frameVersion, project.layout.primaryLayerId, project.layout.compositionPreset, layerFitKey]);
+  }, [mapReady, template, project.layout.frameVersion, project.layout.primaryLayerId, project.layout.compositionPreset, layerFitKey]);
 
   useEffect(() => {
     const map = leafletMapRef.current;
@@ -1513,6 +1532,7 @@ export default function App() {
     regional:       { basemap: 'terrain',   mode: 'project_overview',  accent: '#b87333' },
     infrastructure: { basemap: 'light',     mode: 'access_location',   accent: '#7c3aed' },
     dark:           { basemap: 'dark',      mode: 'drill_plan',        accent: '#60a5fa' },
+    aurora_demo:    { basemap: 'terrain',   mode: 'regional_claims',   accent: AURORA_ACCENT, _aurora: true },
   };
 
   const loadSampleData = async (styleId) => {
@@ -1522,21 +1542,38 @@ export default function App() {
       await addGeoJSONLayer(makeFile(sampleClaims, 'Sample Claims.geojson'));
       await addGeoJSONLayer(makeFile(sampleDrillholes, 'Sample Drillholes.geojson'));
       const preset = styleId ? (SAMPLE_STYLE_PRESETS[styleId] || {}) : {};
+      const isAurora = !!preset._aurora;
       const accent = preset.accent || SAMPLE_ACCENT;
-      const { accent: _a, ...styleOverride } = preset;
-      updateLayout({
-        logo: SAMPLE_LOGO_URL,
-        accentColor: accent,
-        title: 'Buckhorn Creek Property',
-        subtitle: 'Cariboo Region, British Columbia',
-        footerText: 'Buckhorn Creek Mining Corp. | Cariboo Region, BC | For internal use only',
-        footerEnabled: true,
-        exportSettings: { filename: 'buckhorn-creek-property', pixelRatio: 2 },
-        ...styleOverride,
-      });
-      applyBrandPaletteToLayers(accent);
+      const { accent: _a, _aurora, ...styleOverride } = preset;
+      if (isAurora) {
+        updateLayout({
+          logo: AURORA_LOGO_URL,
+          accentColor: AURORA_ACCENT,
+          title: 'Cedar Ridge Project',
+          subtitle: 'Northwestern British Columbia',
+          footerText: 'Aurora Ridge Minerals Corp. | NW British Columbia | For investor use only',
+          footerEnabled: true,
+          northArrowStyle: 'decorative',
+          cornerRadius: 8,
+          insetEnabled: true,
+          exportSettings: { filename: 'aurora-ridge-cedar-ridge', pixelRatio: 2 },
+          ...styleOverride,
+        });
+      } else {
+        updateLayout({
+          logo: SAMPLE_LOGO_URL,
+          accentColor: accent,
+          title: 'Buckhorn Creek Property',
+          subtitle: 'Cariboo Region, British Columbia',
+          footerText: 'Buckhorn Creek Mining Corp. | Cariboo Region, BC | For internal use only',
+          footerEnabled: true,
+          exportSettings: { filename: 'buckhorn-creek-property', pixelRatio: 2 },
+          ...styleOverride,
+        });
+      }
+      applyBrandPaletteToLayers(isAurora ? AURORA_ACCENT : accent);
       setScreen('editor');
-      setUploadStatus({ type: 'success', message: 'Sample data loaded. Explore the editor and export to try it out.' });
+      setUploadStatus({ type: 'success', message: isAurora ? 'Aurora Ridge Minerals demo loaded.' : 'Sample data loaded. Explore the editor and export to try it out.' });
     } catch (err) {
       setUploadStatus({ type: 'error', message: `Sample data error: ${err.message}` });
     }
