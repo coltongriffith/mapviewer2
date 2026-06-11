@@ -21,6 +21,7 @@ const AddClaimsModal = React.lazy(() => import('./components/AddClaimsModal'));
 import { loadGeoJSON, loadCSV, loadShapefileSet } from './utils/importers';
 import sampleClaims from './assets/sampleClaims.json';
 import sampleDrillholes from './assets/sampleDrillholes.json';
+import { auroraClaims, auroraDrillholes, auroraTargets, auroraCallouts } from './assets/auroraDemo';
 import {
   CALLOUT_TYPES,
   createInitialProjectState,
@@ -108,6 +109,15 @@ const AURORA_LOGO_SVG = [
 ].join('');
 const AURORA_LOGO_URL = `data:image/svg+xml,${encodeURIComponent(AURORA_LOGO_SVG)}`;
 const AURORA_ACCENT = '#c8a84b';
+
+// Legend swatch fill: keep the border visible even when the layer has no fill
+const legendFillRgba = (hex, alpha) => {
+  if (typeof hex !== 'string' || !/^#[0-9a-f]{6}$/i.test(hex)) return hex;
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+};
 
 const BASEMAP_OPTIONS = [
   { key: 'light',     label: 'Light',     thumb: 'https://a.basemaps.cartocdn.com/rastertiles/voyager_nolabels/4/2/5.png' },
@@ -1532,51 +1542,103 @@ export default function App() {
     regional:       { basemap: 'terrain',   mode: 'project_overview',  accent: '#b87333' },
     infrastructure: { basemap: 'light',     mode: 'access_location',   accent: '#7c3aed' },
     dark:           { basemap: 'dark',      mode: 'drill_plan',        accent: '#60a5fa' },
-    aurora_demo:    { basemap: 'terrain',   mode: 'regional_claims',   accent: AURORA_ACCENT, _aurora: true },
+    aurora_demo:    { basemap: 'satellite', mode: 'target_anomaly',    accent: AURORA_ACCENT, _aurora: true },
   };
 
   const loadSampleData = async (styleId) => {
     const makeFile = (json, name) => new File([JSON.stringify(json)], name, { type: 'application/json' });
     setProject(createInitialProjectState());
     try {
+      const preset = styleId ? (SAMPLE_STYLE_PRESETS[styleId] || {}) : {};
+      if (preset._aurora) {
+        await loadAuroraDemo();
+        return;
+      }
       await addGeoJSONLayer(makeFile(sampleClaims, 'Sample Claims.geojson'));
       await addGeoJSONLayer(makeFile(sampleDrillholes, 'Sample Drillholes.geojson'));
-      const preset = styleId ? (SAMPLE_STYLE_PRESETS[styleId] || {}) : {};
-      const isAurora = !!preset._aurora;
       const accent = preset.accent || SAMPLE_ACCENT;
       const { accent: _a, _aurora, ...styleOverride } = preset;
-      if (isAurora) {
-        updateLayout({
-          logo: AURORA_LOGO_URL,
-          accentColor: AURORA_ACCENT,
-          title: 'Cedar Ridge Project',
-          subtitle: 'Northwestern British Columbia',
-          footerText: 'Aurora Ridge Minerals Corp. | NW British Columbia | For investor use only',
-          footerEnabled: true,
-          northArrowStyle: 'decorative',
-          cornerRadius: 8,
-          insetEnabled: true,
-          exportSettings: { filename: 'aurora-ridge-cedar-ridge', pixelRatio: 2 },
-          ...styleOverride,
-        });
-      } else {
-        updateLayout({
-          logo: SAMPLE_LOGO_URL,
-          accentColor: accent,
-          title: 'Buckhorn Creek Property',
-          subtitle: 'Cariboo Region, British Columbia',
-          footerText: 'Buckhorn Creek Mining Corp. | Cariboo Region, BC | For internal use only',
-          footerEnabled: true,
-          exportSettings: { filename: 'buckhorn-creek-property', pixelRatio: 2 },
-          ...styleOverride,
-        });
-      }
-      applyBrandPaletteToLayers(isAurora ? AURORA_ACCENT : accent);
+      updateLayout({
+        logo: SAMPLE_LOGO_URL,
+        accentColor: accent,
+        title: 'Buckhorn Creek Property',
+        subtitle: 'Cariboo Region, British Columbia',
+        footerText: 'Buckhorn Creek Mining Corp. | Cariboo Region, BC | For internal use only',
+        footerEnabled: true,
+        exportSettings: { filename: 'buckhorn-creek-property', pixelRatio: 2 },
+        ...styleOverride,
+      });
+      applyBrandPaletteToLayers(accent);
       setScreen('editor');
-      setUploadStatus({ type: 'success', message: isAurora ? 'Aurora Ridge Minerals demo loaded.' : 'Sample data loaded. Explore the editor and export to try it out.' });
+      setUploadStatus({ type: 'success', message: 'Sample data loaded. Explore the editor and export to try it out.' });
     } catch (err) {
       setUploadStatus({ type: 'error', message: `Sample data error: ${err.message}` });
     }
+  };
+
+  // Aurora Ridge Minerals "Cedar Ridge Project" demo — a live recreation of the
+  // landing page investor map: dissolved teal claims on satellite, drill
+  // collars, gold dashed target areas, and intercept callouts.
+  const loadAuroraDemo = async () => {
+    await addGeoJSONAsLayer(auroraClaims, 'Claims.geojson');
+    await addGeoJSONAsLayer(auroraDrillholes, 'Drill Collars.geojson');
+    await addGeoJSONAsLayer(auroraTargets, 'Target Areas.geojson');
+    setProject((prev) => ({
+      ...prev,
+      layers: prev.layers.map((layer) => {
+        if (layer.role === 'claims') {
+          return {
+            ...layer,
+            displayName: 'Claims',
+            style: { ...layer.style, stroke: '#ffffff', fill: '#117a68', fillOpacity: 0.55, strokeWidth: 2.5, dissolve: true },
+            legend: { enabled: true, label: 'Claims' },
+          };
+        }
+        if (layer.role === 'drillholes') {
+          return {
+            ...layer,
+            displayName: 'Drill Collars',
+            style: { ...layer.style, markerColor: '#0b3533', markerFill: '#ffffff', markerSize: 12 },
+            legend: { enabled: true, label: 'Drill Collars' },
+          };
+        }
+        if (layer.role === 'target_areas') {
+          return {
+            ...layer,
+            displayName: 'Target Areas',
+            style: { ...layer.style, stroke: '#d4a72c', fill: '#d4a72c', fillOpacity: 0, strokeWidth: 2.5, dashArray: '8 6' },
+            legend: { enabled: true, label: 'Target Areas' },
+          };
+        }
+        return layer;
+      }),
+      callouts: auroraCallouts.map((callout) => ({
+        ...callout,
+        id: crypto.randomUUID(),
+        featureId: null,
+        layerId: null,
+      })),
+    }));
+    updateLayout({
+      logo: AURORA_LOGO_URL,
+      accentColor: AURORA_ACCENT,
+      title: 'Cedar Ridge Project',
+      subtitle: 'Investor Map',
+      basemap: 'satellite',
+      mode: 'target_anomaly',
+      titleBgColor: '#0b3533',
+      titleFgColor: '#ffffff',
+      insetEnabled: true,
+      insetMode: 'province_state',
+      insetTitle: 'Location Map',
+      legendTitle: 'Legend',
+      footerEnabled: false,
+      northArrowStyle: 'arrow',
+      cornerRadius: 10,
+      exportSettings: { filename: 'cedar-ridge-investor-map', pixelRatio: 2 },
+    });
+    setScreen('editor');
+    setUploadStatus({ type: 'success', message: 'Aurora Ridge Minerals demo loaded — explore the live investor map.' });
   };
 
   const hexToHsl = (hex) => {
@@ -3811,7 +3873,7 @@ export default function App() {
                             />
                           </svg>
                         ) : (
-                          <span className="legend-swatch" style={{ borderColor: item.style.stroke || '#3b82f6', background: item.style.fill || '#93c5fd', opacity: item.style.fillOpacity ?? 1 }} />
+                          <span className="legend-swatch" style={{ borderColor: item.style.stroke || '#3b82f6', borderStyle: item.style.dashArray ? 'dashed' : 'solid', background: legendFillRgba(item.style.fill || '#93c5fd', item.style.fillOpacity ?? 1) }} />
                         )}
                         <LegendLabelEditable label={item.label} onSave={(val) => setDisplayLabel(item.id, val)} />
                       </div>
