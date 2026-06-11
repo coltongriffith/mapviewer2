@@ -1,13 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { MarkerSvgIcon, MARKER_ICON_PATHS } from '../utils/markerIcons.jsx';
-
-function shapeClass(type) {
-  return ['circle', 'square', 'triangle'].includes(type) ? type : 'icon';
-}
-
-function isVectorIcon(type) {
-  return type in MARKER_ICON_PATHS;
-}
+import { MarkerSvgIcon } from '../utils/markerIcons.jsx';
 
 function getPointAtFraction(pts, fraction) {
   const n = pts.length;
@@ -643,20 +635,7 @@ export default function AnnotationOverlay({
               dragRef.current = { id: marker.id, kind: 'marker', startX: e.clientX, startY: e.clientY, startPoint: { x: marker.x, y: marker.y }, pointerId: e.pointerId };
             }}
           >
-            {isVectorIcon(marker.type) ? (
-              <MarkerSvgIcon type={marker.type} size={size} color={color} />
-            ) : (
-              <div
-                className={`free-marker-symbol ${shapeClass(marker.type)}`}
-                style={{
-                  width: size,
-                  height: size,
-                  color,
-                  borderColor: color,
-                  background: ['circle', 'square', 'triangle'].includes(marker.type) ? color : 'transparent',
-                }}
-              />
-            )}
+            <MarkerSvgIcon type={marker.type} size={size} color={color} />
 
             {marker.label ? (
               <div

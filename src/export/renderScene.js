@@ -4,7 +4,7 @@ import { resolveTemplateZones } from '../templates/technicalResultsTemplate';
 import { resolveNI43101Zones } from '../templates/technicalReportTemplate';
 import { resolveSidePanelZones } from '../templates/sidePanelTemplate';
 import { getThemeTokens } from '../utils/themeTokens';
-import { MARKER_ICON_PATHS, markerIconSvgFragment, drawMarkerIconCanvas } from '../utils/markerIcons.jsx';
+import { markerIconSvgFragment, drawMarkerIconCanvas } from '../utils/markerIcons.jsx';
 import { safeColor } from '../utils/colorUtils.js';
 import regionsNA from '../assets/regionsNA.json';
 import { estimateBox, intersects as intersectsCallout, leaderEndpoint } from '../utils/calloutLayout';
@@ -839,9 +839,6 @@ function markerIsShape(type) {
   return ['circle', 'square', 'triangle'].includes(type);
 }
 
-function markerIsVectorIcon(type) {
-  return type in MARKER_ICON_PATHS;
-}
 
 function drawMarkerLabelCanvas(ctx, scene, marker, point, scale) {
   if (!marker.label) return;
@@ -889,37 +886,8 @@ async function drawMarkersCanvas(ctx, scene, scale) {
       continue;
     }
 
-    if (markerIsVectorIcon(marker.type)) {
-      // Render via SVG-to-image for crisp, consistent icon export
-      await drawMarkerIconCanvas(ctx, marker.type, point.x, point.y, size, color);
-    } else {
-      ctx.save();
-      ctx.translate(point.x, point.y);
-      ctx.strokeStyle = color;
-      ctx.fillStyle = color;
-      ctx.lineWidth = 2 * scale;
-
-      if (marker.type === 'triangle') {
-        ctx.beginPath();
-        ctx.moveTo(0, -size * 0.55);
-        ctx.lineTo(-size * 0.5, size * 0.45);
-        ctx.lineTo(size * 0.5, size * 0.45);
-        ctx.closePath();
-        ctx.fill();
-      } else if (marker.type === 'circle') {
-        ctx.beginPath();
-        ctx.arc(0, 0, size / 2, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-      } else {
-        // square (default fallback)
-        ctx.beginPath();
-        ctx.rect(-size / 2, -size / 2, size, size);
-        ctx.fill();
-        ctx.stroke();
-      }
-      ctx.restore();
-    }
+    // drawMarkerIconCanvas handles all types — path icons via SVG image, shapes via canvas API
+    await drawMarkerIconCanvas(ctx, marker.type, point.x, point.y, size, color);
 
     drawMarkerLabelCanvas(ctx, scene, marker, point, scale);
   }
@@ -1795,20 +1763,8 @@ function renderMarkersSvg(scene, scale) {
       return `<text x="${point.x}" y="${point.y}" text-anchor="middle" dominant-baseline="middle" fill="${safeColor(marker.color, '#1e293b')}" fill-opacity="${marker.opacity ?? 0.35}" font-size="${(marker.size || 28) * scale}" font-weight="${marker.bold !== false ? '700' : '400'}" font-family="${labelFont}, Arial, sans-serif" letter-spacing="${(marker.tracking ?? 0.12)}em"${rotate}>${escapeXml((marker.label || '').toUpperCase())}</text>`;
     }
 
-    let symbol = '';
-    if (markerIsVectorIcon(marker.type)) {
-      // Use the shared SVG path data — same source as the editor, guaranteed consistent
-      symbol = markerIconSvgFragment(marker.type, point.x, point.y, size, color);
-    } else if (marker.type === 'triangle') {
-      symbol = `<path d="M ${point.x} ${point.y - size * 0.55} L ${point.x - size * 0.5} ${point.y + size * 0.45} L ${point.x + size * 0.5} ${point.y + size * 0.45} Z" fill="${color}" />`;
-    } else if (marker.type === 'circle') {
-      symbol = `<circle cx="${point.x}" cy="${point.y}" r="${size / 2}" fill="${color}" stroke="${color}" stroke-width="${2 * scale}" />`;
-    } else if (marker.type === 'square') {
-      symbol = `<rect x="${point.x - size / 2}" y="${point.y - size / 2}" width="${size}" height="${size}" fill="${color}" stroke="${color}" stroke-width="${2 * scale}" />`;
-    } else {
-      // Fallback bullet
-      symbol = `<circle cx="${point.x}" cy="${point.y}" r="${size / 2}" fill="${color}" />`;
-    }
+    // markerIconSvgFragment handles all types — path icons and geometric shapes
+    const symbol = markerIconSvgFragment(marker.type, point.x, point.y, size, color);
     return `<g>${symbol}${renderMarkerLabelSvg(scene, marker, point, scale)}</g>`;
   }).join('\n');
 }
