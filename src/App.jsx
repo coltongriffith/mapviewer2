@@ -11,7 +11,7 @@ import SharedMapViewer from './components/SharedMapViewer';
 import UploadPanel from './components/UploadPanel';
 import AnnotationOverlay from './components/AnnotationOverlay';
 import ShadeOverlay from './components/ShadeOverlay';
-import NorthArrow from './components/NorthArrow';
+import NorthArrow, { NORTH_ARROW_STYLES } from './components/NorthArrow';
 
 const MapCanvas = React.lazy(() => import('./components/MapCanvas'));
 const ExportHDModal = React.lazy(() => import('./components/ExportHDModal'));
@@ -21,6 +21,7 @@ const AddClaimsModal = React.lazy(() => import('./components/AddClaimsModal'));
 import { loadGeoJSON, loadCSV, loadShapefileSet } from './utils/importers';
 import sampleClaims from './assets/sampleClaims.json';
 import sampleDrillholes from './assets/sampleDrillholes.json';
+import { auroraClaims, auroraDrillholes, auroraTargets, auroraCallouts } from './assets/auroraDemo';
 import {
   CALLOUT_TYPES,
   createInitialProjectState,
@@ -89,6 +90,34 @@ const SAMPLE_LOGO_SVG = [
 ].join('');
 const SAMPLE_LOGO_URL = `data:image/svg+xml,${encodeURIComponent(SAMPLE_LOGO_SVG)}`;
 const SAMPLE_ACCENT = '#b87333';
+
+// Aurora Ridge Minerals demo logo — dark teal bg, mountain range, gold star, white text
+const AURORA_LOGO_SVG = [
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 60" width="240" height="60">',
+  '<rect width="240" height="60" rx="4" fill="#0b3533"/>',
+  // mountain silhouettes
+  '<polygon points="4,52 18,28 32,42 42,22 56,52" fill="#1a5c58"/>',
+  '<polygon points="20,52 36,30 52,52" fill="#1e6b66"/>',
+  '<polygon points="34,52 42,22 56,38 66,18 80,52" fill="#145450"/>',
+  // gold star above peak
+  '<polygon points="66,13 67.8,18.5 73.5,18.5 69,21.8 70.8,27.3 66,24 61.2,27.3 63,21.8 58.5,18.5 64.2,18.5" fill="#c8a84b"/>',
+  // company name
+  '<text x="90" y="23" font-family="Arial,sans-serif" font-size="12" font-weight="700" fill="#ffffff" letter-spacing="1.2">AURORA RIDGE</text>',
+  '<text x="90" y="37" font-family="Arial,sans-serif" font-size="8.5" font-weight="400" fill="#c8a84b" letter-spacing="2.5">MINERALS</text>',
+  '<text x="90" y="51" font-family="Arial,sans-serif" font-size="7.5" fill="#7ab8b4" letter-spacing="0.3">Northwestern British Columbia</text>',
+  '</svg>',
+].join('');
+const AURORA_LOGO_URL = `data:image/svg+xml,${encodeURIComponent(AURORA_LOGO_SVG)}`;
+const AURORA_ACCENT = '#c8a84b';
+
+// Legend swatch fill: keep the border visible even when the layer has no fill
+const legendFillRgba = (hex, alpha) => {
+  if (typeof hex !== 'string' || !/^#[0-9a-f]{6}$/i.test(hex)) return hex;
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+};
 
 const BASEMAP_OPTIONS = [
   { key: 'light',     label: 'Light',     thumb: 'https://a.basemaps.cartocdn.com/rastertiles/voyager_nolabels/4/2/5.png' },
@@ -865,8 +894,8 @@ export default function App() {
 
   const mapStageStyle = useMemo(() => ({
     ...(constrainedStageSize || {}),
-    '--template-radius': `${themeTokens.panelRadius}px`,
-    '--title-radius': `${themeTokens.titleRadius}px`,
+    '--template-radius': project.layout.cornerRadius != null ? `${project.layout.cornerRadius}px` : `${themeTokens.panelRadius}px`,
+    '--title-radius': project.layout.cornerRadius != null ? `${project.layout.cornerRadius}px` : `${themeTokens.titleRadius}px`,
     '--panel-bg': themeTokens.panelFill,
     '--panel-border': themeTokens.panelBorder,
     '--panel-shadow': themeTokens.panelShadow,
@@ -898,7 +927,7 @@ export default function App() {
     '--font-label': `${project.layout.fonts?.label || 'Inter'}, sans-serif`,
     '--font-callout': `${project.layout.fonts?.callout || 'Inter'}, sans-serif`,
     '--font-footer': `${project.layout.fonts?.footer || 'Inter'}, sans-serif`,
-  }), [themeTokens, constrainedStageSize, project.layout.fonts]);
+  }), [themeTokens, constrainedStageSize, project.layout.fonts, project.layout.cornerRadius]);
 
   const handleRatioChange = useCallback((newRatio) => {
     const map = leafletMapRef.current;
@@ -973,7 +1002,7 @@ export default function App() {
       { focusRoles: true }
     );
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [template, project.layout.frameVersion, project.layout.primaryLayerId, project.layout.compositionPreset, layerFitKey]);
+  }, [mapReady, template, project.layout.frameVersion, project.layout.primaryLayerId, project.layout.compositionPreset, layerFitKey]);
 
   useEffect(() => {
     const map = leafletMapRef.current;
@@ -1513,17 +1542,22 @@ export default function App() {
     regional:       { basemap: 'terrain',   mode: 'project_overview',  accent: '#b87333' },
     infrastructure: { basemap: 'light',     mode: 'access_location',   accent: '#7c3aed' },
     dark:           { basemap: 'dark',      mode: 'drill_plan',        accent: '#60a5fa' },
+    aurora_demo:    { basemap: 'satellite', mode: 'target_anomaly',    accent: AURORA_ACCENT, _aurora: true },
   };
 
   const loadSampleData = async (styleId) => {
     const makeFile = (json, name) => new File([JSON.stringify(json)], name, { type: 'application/json' });
     setProject(createInitialProjectState());
     try {
+      const preset = styleId ? (SAMPLE_STYLE_PRESETS[styleId] || {}) : {};
+      if (preset._aurora) {
+        await loadAuroraDemo();
+        return;
+      }
       await addGeoJSONLayer(makeFile(sampleClaims, 'Sample Claims.geojson'));
       await addGeoJSONLayer(makeFile(sampleDrillholes, 'Sample Drillholes.geojson'));
-      const preset = styleId ? (SAMPLE_STYLE_PRESETS[styleId] || {}) : {};
       const accent = preset.accent || SAMPLE_ACCENT;
-      const { accent: _a, ...styleOverride } = preset;
+      const { accent: _a, _aurora, ...styleOverride } = preset;
       updateLayout({
         logo: SAMPLE_LOGO_URL,
         accentColor: accent,
@@ -1540,6 +1574,71 @@ export default function App() {
     } catch (err) {
       setUploadStatus({ type: 'error', message: `Sample data error: ${err.message}` });
     }
+  };
+
+  // Aurora Ridge Minerals "Cedar Ridge Project" demo — a live recreation of the
+  // landing page investor map: dissolved teal claims on satellite, drill
+  // collars, gold dashed target areas, and intercept callouts.
+  const loadAuroraDemo = async () => {
+    await addGeoJSONAsLayer(auroraClaims, 'Claims.geojson');
+    await addGeoJSONAsLayer(auroraDrillholes, 'Drill Collars.geojson');
+    await addGeoJSONAsLayer(auroraTargets, 'Target Areas.geojson');
+    setProject((prev) => ({
+      ...prev,
+      layers: prev.layers.map((layer) => {
+        if (layer.role === 'claims') {
+          return {
+            ...layer,
+            displayName: 'Claims',
+            style: { ...layer.style, stroke: '#ffffff', fill: '#117a68', fillOpacity: 0.55, strokeWidth: 2.5, dissolve: true },
+            legend: { enabled: true, label: 'Claims' },
+          };
+        }
+        if (layer.role === 'drillholes') {
+          return {
+            ...layer,
+            displayName: 'Drill Collars',
+            style: { ...layer.style, markerColor: '#0b3533', markerFill: '#ffffff', markerSize: 12 },
+            legend: { enabled: true, label: 'Drill Collars' },
+          };
+        }
+        if (layer.role === 'target_areas') {
+          return {
+            ...layer,
+            displayName: 'Target Areas',
+            style: { ...layer.style, stroke: '#d4a72c', fill: '#d4a72c', fillOpacity: 0, strokeWidth: 2.5, dashArray: '8 6' },
+            legend: { enabled: true, label: 'Target Areas' },
+          };
+        }
+        return layer;
+      }),
+      callouts: auroraCallouts.map((callout) => ({
+        ...callout,
+        id: crypto.randomUUID(),
+        featureId: null,
+        layerId: null,
+      })),
+    }));
+    updateLayout({
+      logo: AURORA_LOGO_URL,
+      accentColor: AURORA_ACCENT,
+      title: 'Cedar Ridge Project',
+      subtitle: 'Investor Map',
+      basemap: 'satellite',
+      mode: 'target_anomaly',
+      titleBgColor: '#0b3533',
+      titleFgColor: '#ffffff',
+      insetEnabled: true,
+      insetMode: 'province_state',
+      insetTitle: 'Location Map',
+      legendTitle: 'Legend',
+      footerEnabled: false,
+      northArrowStyle: 'arrow',
+      cornerRadius: 10,
+      exportSettings: { filename: 'cedar-ridge-investor-map', pixelRatio: 2 },
+    });
+    setScreen('editor');
+    setUploadStatus({ type: 'success', message: 'Aurora Ridge Minerals demo loaded — explore the live investor map.' });
   };
 
   const hexToHsl = (hex) => {
@@ -2563,6 +2662,41 @@ export default function App() {
               <label className="toggle-row"><input type="checkbox" checked={project.layout.footerEnabled !== false} onChange={(e) => updateLayout({ footerEnabled: e.target.checked })} /><span>Footer</span></label>
               <label className="toggle-row"><input type="checkbox" checked={project.layout.insetEnabled !== false} onChange={(e) => updateLayout({ insetEnabled: e.target.checked })} /><span>Inset Map</span></label>
             </div>
+            {/* North arrow style picker */}
+            {project.layout.showNorthArrow !== false && (
+              <div className="control-row" style={{ marginTop: 10 }}>
+                <label>Compass Style</label>
+                <div className="north-arrow-style-picker">
+                  {NORTH_ARROW_STYLES.map(({ key, label }) => (
+                    <button key={key} type="button"
+                      className={`north-arrow-style-btn${(project.layout.northArrowStyle || 'classic') === key ? ' active' : ''}`}
+                      onClick={() => updateLayout({ northArrowStyle: key })}
+                      title={label}>
+                      <NorthArrow scale={40} style={key} />
+                      <span>{label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Corner radius */}
+            <div className="control-row inline-2" style={{ marginTop: 10 }}>
+              <div>
+                <label>Panel Corners</label>
+                <input type="range" min="0" max="24" step="1"
+                  value={project.layout.cornerRadius ?? themeTokens.panelRadius ?? 10}
+                  onChange={(e) => updateLayout({ cornerRadius: Number(e.target.value) })} />
+              </div>
+              <div className="range-value" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                <span>{project.layout.cornerRadius ?? themeTokens.panelRadius ?? 10}px</span>
+                {project.layout.cornerRadius != null && (
+                  <button type="button" style={{ fontSize: 10, padding: '1px 5px', background: 'none', border: '1px solid #cbd5e1', borderRadius: 4, cursor: 'pointer', color: '#64748b' }}
+                    onClick={() => updateLayout({ cornerRadius: null })} title="Reset to theme default">↺</button>
+                )}
+              </div>
+            </div>
+
             <button
               type="button"
               className="secondary-btn"
@@ -2678,6 +2812,11 @@ export default function App() {
                     </div>
                     <div className="range-value">{Math.round((selectedLayer.style?.layerOpacity ?? 1) * 100)}%</div>
                   </div>
+                  <label className="toggle-row" style={{ marginTop: 4 }}>
+                    <input type="checkbox" checked={!!selectedLayer.style?.dissolve}
+                      onChange={(e) => updateLayer(selectedLayer.id, { style: { dissolve: e.target.checked } })} />
+                    <span>Dissolve inner borders</span>
+                  </label>
                   <div className="control-row">
                     <label>Fill Pattern</label>
                     <div className="fill-pattern-picker">
@@ -3734,7 +3873,7 @@ export default function App() {
                             />
                           </svg>
                         ) : (
-                          <span className="legend-swatch" style={{ borderColor: item.style.stroke || '#3b82f6', background: item.style.fill || '#93c5fd', opacity: item.style.fillOpacity ?? 1 }} />
+                          <span className="legend-swatch" style={{ borderColor: item.style.stroke || '#3b82f6', borderStyle: item.style.dashArray ? 'dashed' : 'solid', background: legendFillRgba(item.style.fill || '#93c5fd', item.style.fillOpacity ?? 1) }} />
                         )}
                         <LegendLabelEditable label={item.label} onSave={(val) => setDisplayLabel(item.id, val)} />
                       </div>
@@ -3754,7 +3893,7 @@ export default function App() {
         {project.layout.showNorthArrow !== false && resolvedZones.northArrow?.width > 0 && (
           <div className="template-zone" style={{ ...zoneStyle(resolvedZones.northArrow), opacity: dragging?.id === 'northArrow' ? 0.3 : 1, cursor: 'grab' }} onMouseDown={makeDragHandler('northArrow', resolvedZones.northArrow?.width ?? 80, project.layout.northArrowHeightPx ?? 100)}>
             <button className="panel-delete-btn" title="Hide compass rose" onClick={() => updateLayout({ showNorthArrow: false })}>×</button>
-            <NorthArrow scale={project.layout.northArrowHeightPx ?? 100} />
+            <NorthArrow scale={project.layout.northArrowHeightPx ?? 100} style={project.layout.northArrowStyle || 'classic'} />
             {makeResizeHandles(project.layout.northArrowCorner || 'br', {
               elemId: 'northArrow', startW: resolvedZones.northArrow?.width ?? 80, startH: project.layout.northArrowHeightPx ?? 100,
               minW: 40, maxW: 200, minH: 50, maxH: 200,

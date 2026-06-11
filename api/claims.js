@@ -133,6 +133,7 @@ function isStringType(field) {
 
 // Map raw ArcGIS properties onto the BC-style keys the UI renders.
 function normalizeProps(props) {
+  if (!props) return {};
   const keys = Object.keys(props);
   const findKey = (re, requireString = false) =>
     keys.find((k) => re.test(k) && (!requireString || typeof props[k] === 'string'));
@@ -149,7 +150,7 @@ function normalizeProps(props) {
     if (k) out.TAG_NUMBER = props[k];
   }
   if (out.AREA_IN_HECTARES == null) {
-    const k = findKey(/HECTARE|AREA_HA|_HA$/i);
+    const k = findKey(/HECTARE|_HA$/i);
     if (k && Number.isFinite(Number(props[k]))) out.AREA_IN_HECTARES = Number(props[k]);
   }
   if (out.GOOD_TO_DATE == null) {
@@ -184,6 +185,12 @@ async function searchArcgis(cfg, term, type, res) {
         ? 'Claim number search is not available for this province yet.'
         : 'Company/holder search is not available for this province — try searching by claim number.',
     });
+  }
+
+  // Defense in depth: field names come from upstream service metadata —
+  // never interpolate one that isn't a plain identifier (SK uses dots, e.g. SHAPE.AREA)
+  if (!/^[A-Za-z0-9_.]+$/.test(field.name)) {
+    return res.status(502).json({ error: 'Provincial service returned an unexpected field name.' });
   }
 
   let where;

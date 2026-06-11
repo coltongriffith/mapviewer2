@@ -10,6 +10,8 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.104.1",
     "@tmcw/togeojson": "^7.1.2",
+    "@turf/dissolve": "^7.3.5",
+    "@turf/helpers": "^7.3.5",
     "@vercel/analytics": "^2.0.1",
     "fflate": "^0.8.2",
     "jspdf": "^4.2.1",

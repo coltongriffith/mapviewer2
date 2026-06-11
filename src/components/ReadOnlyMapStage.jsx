@@ -21,6 +21,15 @@ function zoneStyle(zone) {
   return { position: 'absolute', top: zone.top, left: zone.left, width: zone.width, height: zone.height, zIndex: 400 };
 }
 
+// Legend swatch fill: keep the border visible even when the layer has no fill
+function legendFillRgba(hex, alpha) {
+  if (typeof hex !== 'string' || !/^#[0-9a-f]{6}$/i.test(hex)) return hex;
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 function renderLegendGroups(items, layout) {
   const mode = layout?.legendMode || 'auto';
   const compact = mode === 'compact' || (mode === 'auto' && items.length <= 2);
@@ -413,7 +422,7 @@ export default function ReadOnlyMapStage({ project }) {
                           <line x1="0" y1="6" x2="22" y2="6" stroke={item.style.stroke || '#333'} strokeWidth={Math.min(item.style.strokeWidth ?? 2, 3)} strokeDasharray={item.style.dashArray || ''} />
                         </svg>
                       ) : (
-                        <span className="legend-swatch" style={{ borderColor: item.style.stroke || '#3b82f6', background: item.style.fill || '#93c5fd', opacity: item.style.fillOpacity ?? 1 }} />
+                        <span className="legend-swatch" style={{ borderColor: item.style.stroke || '#3b82f6', borderStyle: item.style.dashArray ? 'dashed' : 'solid', background: legendFillRgba(item.style.fill || '#93c5fd', item.style.fillOpacity ?? 1) }} />
                       )}
                       <span>{item.label}</span>
                     </div>
