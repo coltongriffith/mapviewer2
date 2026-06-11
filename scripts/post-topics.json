@@ -1,0 +1,86 @@
+[
+  {
+    "id": "dissolve",
+    "theme": "feature",
+    "hook": "One click to turn 47 individual claim blocks into one clean land package",
+    "detail": "Exploration Maps has a 'Dissolve inner borders' toggle on any polygon layer. Adjacent claims merge into a single outlined shape — exactly how investors expect to see your tenure position, not a grid of squares.",
+    "cta": "Try it free at explorationmaps.com"
+  },
+  {
+    "id": "registry_search",
+    "theme": "tip",
+    "hook": "You don't need to log in to MTO, MLAS, or GeoYukon to see who holds ground around your target",
+    "detail": "Search BC, Ontario, Saskatchewan, and Yukon claim registries by name or claim number directly from explorationmaps.com. Results load on the map instantly — good-to dates, acreage, and all. No download, no spreadsheet.",
+    "cta": "Search the registries free at explorationmaps.com"
+  },
+  {
+    "id": "before_after",
+    "theme": "before_after",
+    "hook": "The GIS export nobody wants to show the CEO vs the map that actually gets in the deck",
+    "detail": "Default topo export: thick black outline on a beige contour background, Comic Sans legend, no scale bar. Five minutes in Exploration Maps: satellite basemap, styled tenure fill, target callouts with intercepts, company logo, location inset, scale bar. Same data. Very different conversation.",
+    "cta": "See the difference at explorationmaps.com"
+  },
+  {
+    "id": "pdac_prep",
+    "theme": "industry",
+    "hook": "PDAC is always closer than you think. Your conference maps should not be a last-minute scramble",
+    "detail": "The maps that get conversations started at PDAC are the ones that tell the whole story at a glance — regional context, land position, best drill intercepts, and your logo. Exploration Maps has all six map styles that show up in every booth: Regional Location, Claims Package, Drill Results, Target Generation, Infrastructure, and Dark Satellite.",
+    "cta": "Build your PDAC maps at explorationmaps.com"
+  },
+  {
+    "id": "ni_43101",
+    "theme": "tip",
+    "hook": "A QP should never have to rebuild your map layout",
+    "detail": "Every figure in an NI 43-101 needs: title block, north arrow, scale bar, legend, and a locator inset. Exploration Maps generates all of them automatically. Export at 3× resolution as PNG, SVG, or PDF. Hand the QP a file, not a QGIS project.",
+    "cta": "Free at explorationmaps.com — no account required"
+  },
+  {
+    "id": "open_ground",
+    "theme": "tip",
+    "hook": "Found a gap in the tenure around your target at 11pm? You can have a map ready before the call tomorrow",
+    "detail": "Search the BC, Ontario, Saskatchewan, or Yukon registry, load the surrounding claims, add your target polygon, and export a clean map — in under five minutes, in your browser, free. No GIS, no data subscriptions.",
+    "cta": "explorationmaps.com"
+  },
+  {
+    "id": "north_arrow",
+    "theme": "feature",
+    "hook": "Four compass rose styles because details matter in investor-facing documents",
+    "detail": "Classic 8-point compass, simple two-tone arrow, decorative with cardinal labels, or a surveyor crosshair. One click to swap. Every style inherits your map theme's colors automatically — dark theme, dark compass.",
+    "cta": "Try them at explorationmaps.com"
+  },
+  {
+    "id": "export_formats",
+    "theme": "feature",
+    "hook": "The same map. Three formats. One export panel.",
+    "detail": "PNG at 1×, 2×, or 3× for slide decks and social. Vector SVG for the graphic designer who needs to tweak the legend. Print PDF for the technical report. Exploration Maps exports all three — watermark-free with just an email address.",
+    "cta": "Export free at explorationmaps.com"
+  },
+  {
+    "id": "claims_canada",
+    "theme": "industry",
+    "hook": "Canadian exploration spans four provincial registry systems. Searching all of them used to mean four browser tabs and four logins.",
+    "detail": "BC Mineral Titles, Ontario MLAS, Saskatchewan MARS, GeoYukon — now all searchable from one interface. Type a company name or claim number, pick the province, and see the tenure on a map. Live data, no caching.",
+    "cta": "Search all four at explorationmaps.com"
+  },
+  {
+    "id": "ir_teams",
+    "theme": "audience",
+    "hook": "IR teams: you should not be waiting on a geologist to update the project map for every news release",
+    "detail": "Exploration Maps gives investor relations teams the same map-making tools as the field team. Search the registry, load the claims, drop in the drill results from a CSV, add the best intercept callouts, export. No QGIS license, no GIS training required.",
+    "cta": "explorationmaps.com — free, no account needed"
+  },
+  {
+    "id": "corner_radius",
+    "theme": "feature",
+    "hook": "Sharp corners say technical report. Rounded corners say investor deck. Now you can choose.",
+    "detail": "The new corner radius slider in Exploration Maps lets you set 0px (sharp, report-ready) to 24px (rounded, deck-friendly) on every panel element — legend, title block, scale bar, inset. One control, instant preview.",
+    "cta": "Try it at explorationmaps.com"
+  },
+  {
+    "id": "shapefile_tip",
+    "theme": "tip",
+    "hook": "You don't need to zip your shapefiles before uploading them",
+    "detail": "Drag all four files at once — .shp, .dbf, .prj, .shx — onto the Exploration Maps upload area. The app assembles them automatically and renders the layer. Works the same for GeoJSON, KML, and CSV drillhole tables.",
+    "cta": "explorationmaps.com"
+  }
+]
