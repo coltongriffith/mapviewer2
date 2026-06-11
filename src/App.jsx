@@ -1477,11 +1477,12 @@ export default function App() {
       const dLng = radiusKm / KM_PER_DEG_LNG;
       const bbox = `${centerLng - dLng},${centerLat - dLat},${centerLng + dLng},${centerLat + dLat}`;
 
-      // BC DataBC WFS endpoint for mineral tenures (public, no auth required)
-      const wfsUrl = `https://openmaps.gov.bc.ca/geo/pub/WHSE_MINERAL_TENURE.MTA_ACQUIRED_TENURE_SVW/ows?service=WFS&version=2.0.0&request=GetFeature&typeName=WHSE_MINERAL_TENURE.MTA_ACQUIRED_TENURE_SVW&outputFormat=application%2Fjson&srsName=EPSG%3A4326&count=2000&bbox=${bbox},EPSG:4326`;
-
-      const resp = await fetch(wfsUrl, { signal: AbortSignal.timeout(30000) });
-      if (!resp.ok) throw new Error(`WFS request failed: ${resp.status}`);
+      // Use the existing server-side proxy (handles headers/CORS for the BC WFS)
+      const resp = await fetch(`/api/bc-claims?bbox=${encodeURIComponent(bbox)}`, { signal: AbortSignal.timeout(35000) });
+      if (!resp.ok) {
+        const errBody = await resp.json().catch(() => null);
+        throw new Error(errBody?.error || `Request failed: ${resp.status}`);
+      }
       const data = await resp.json();
 
       const features = (data.features || []).filter((f) => f.geometry);
@@ -1529,7 +1530,7 @@ export default function App() {
         style: { fillColor: color, color, weight: 1, fillOpacity: 0.22, opacity: 0.7 },
         onEachFeature: (feat, lyr) => {
           const props = feat.properties || {};
-          const name = props.TENURE_NUMBER_ID || props.TENURE_ID || props.TENURE_NO || props.ID || '—';
+          const name = props.TENURE_NUMBER_ID || props.TAG_NUMBER || props.TENURE_ID || props.TENURE_NO || props.ID || '—';
           const holder = (ownerField && props[ownerField]) || 'Unknown';
           const status = props.TENURE_STATUS || props.STATUS || '';
           const type = props.TENURE_TYPE || props.TENURE_SUBTYPE || '';
