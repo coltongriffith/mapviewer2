@@ -245,11 +245,49 @@ async function searchBc(term, type, res) {
 }
 
 export default async function handler(req, res) {
-  const { q, type, schema } = req.query;
+  const { q, type, schema, bbox } = req.query;
   const province = (req.query.province || 'bc').toLowerCase();
 
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Cache-Control', 'no-store');
+
+  // BBOX spatial query: return all claims within an envelope (nearby claims overlay)
+  // BC bbox is handled by the dedicated /api/bc-claims proxy; this handles SK/ON/YT.
+  if (bbox && province !== 'bc') {
+    const parts = String(bbox).split(',').map(Number);
+    if (parts.length !== 4 || parts.some((n) => !Number.isFinite(n))) {
+      return res.status(400).json({ error: 'bbox must be minLng,minLat,maxLng,maxLat' });
+    }
+    const [minLng, minLat, maxLng, maxLat] = parts;
+    const cfg = ARCGIS_PROVINCES[province];
+    if (!cfg) {
+      return res.status(400).json({ error: `Province '${province}' is not supported.` });
+    }
+    try {
+      const { layerUrl } = await resolveLayerAndFields(cfg, 'company');
+      const queryUrl = `${layerUrl}/query?${new URLSearchParams({
+        geometry: JSON.stringify({ xmin: minLng, ymin: minLat, xmax: maxLng, ymax: maxLat }),
+        geometryType: 'esriGeometryEnvelope',
+        spatialRel: 'esriSpatialRelIntersects',
+        inSR: '4326',
+        outFields: '*',
+        returnGeometry: 'true',
+        outSR: '4326',
+        resultRecordCount: '2000',
+        f: 'geojson',
+      })}`;
+      const data = await fetchJson(queryUrl);
+      if (data.error) throw new Error(JSON.stringify(data.error).slice(0, 500));
+      if (!Array.isArray(data.features)) throw new Error('Unexpected response from provincial map service');
+      data.features = data.features.map((f) => ({
+        ...f,
+        properties: normalizeProps(f.properties || {}),
+      }));
+      return res.status(200).json(data);
+    } catch (e) {
+      return res.status(502).json({ error: e.message || 'Failed to reach provincial registry' });
+    }
+  }
 
   // Diagnostics: report resolved layer + fields for an ArcGIS province
   if (schema === '1' && ARCGIS_PROVINCES[province]) {

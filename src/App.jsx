@@ -672,6 +672,7 @@ export default function App() {
   const [featureEditorTick, setFeatureEditorTick] = useState(0);
   const [mapReady, setMapReady] = useState(false);
   const [areaClaims, setAreaClaims] = useState(null);
+  const [areaClaimsProvince, setAreaClaimsProvince] = useState('bc');
   const [areaClaimsPickCenter, setAreaClaimsPickCenter] = useState(null); // {lat,lng} custom search origin
   const [areaClaimsPicking, setAreaClaimsPicking] = useState(false);
   const areaClaimsLayerRef = useRef(null);
@@ -1477,6 +1478,7 @@ export default function App() {
   ];
 
   const loadAreaClaims = async (radiusKm) => {
+    const province = areaClaimsProvince;
     setAreaClaims({ status: 'loading', radius: radiusKm, visible: true, features: [], ownerColors: {}, message: 'Searching for nearby claims…' });
 
     try {
@@ -1502,27 +1504,41 @@ export default function App() {
       const dLng = radiusKm / KM_PER_DEG_LNG;
       const minLng = centerLng - dLng, maxLng = centerLng + dLng;
       const minLat = centerLat - dLat, maxLat = centerLat + dLat;
+      const bboxStr = `${minLng},${minLat},${maxLng},${maxLat}`;
 
-      // DataBC GeoServer WFS — BBOX param with lon,lat order + EPSG:4326
-      const wfsBase = 'https://openmaps.gov.bc.ca/geo/pub/wfs'
-        + '?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature'
-        + '&outputFormat=application/json'
-        + '&typeNames=pub:WHSE_MINERAL_TENURE.MTA_ACQUIRED_TENURE_SVW'
-        + '&SRSNAME=EPSG:4326'
-        + '&count=2000'
-        + `&BBOX=${minLng},${minLat},${maxLng},${maxLat},EPSG:4326`;
-
-      // Try direct browser fetch first (public endpoint, usually allows CORS);
-      // fall back to the Vercel serverless proxy if it fails (e.g. local dev)
       let data;
-      try {
-        const directResp = await fetch(wfsBase, { signal: AbortSignal.timeout(30000) });
-        if (!directResp.ok) throw new Error(`WFS ${directResp.status}`);
-        data = await directResp.json();
-      } catch (_directErr) {
+      if (province === 'bc') {
+        // DataBC GeoServer WFS — BBOX param with lon,lat order + EPSG:4326
+        const wfsBase = 'https://openmaps.gov.bc.ca/geo/pub/wfs'
+          + '?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature'
+          + '&outputFormat=application/json'
+          + '&typeNames=pub:WHSE_MINERAL_TENURE.MTA_ACQUIRED_TENURE_SVW'
+          + '&SRSNAME=EPSG:4326'
+          + '&count=2000'
+          + `&BBOX=${bboxStr},EPSG:4326`;
+
+        // Try direct browser fetch first (public endpoint, usually allows CORS);
+        // fall back to the Vercel serverless proxy if it fails (e.g. local dev)
+        try {
+          const directResp = await fetch(wfsBase, { signal: AbortSignal.timeout(30000) });
+          if (!directResp.ok) throw new Error(`WFS ${directResp.status}`);
+          data = await directResp.json();
+        } catch (_directErr) {
+          const proxyResp = await fetch(
+            `/api/bc-claims?bbox=${encodeURIComponent(bboxStr)}`,
+            { signal: AbortSignal.timeout(35000) }
+          );
+          if (!proxyResp.ok) {
+            const errBody = await proxyResp.json().catch(() => null);
+            throw new Error(errBody?.error || `Request failed: ${proxyResp.status}`);
+          }
+          data = await proxyResp.json();
+        }
+      } else {
+        // Non-BC provinces: route through the multi-province proxy (ArcGIS REST spatial query)
         const proxyResp = await fetch(
-          `/api/bc-claims?bbox=${encodeURIComponent(`${minLng},${minLat},${maxLng},${maxLat}`)}`,
-          { signal: AbortSignal.timeout(35000) }
+          `/api/claims?bbox=${encodeURIComponent(bboxStr)}&province=${province}`,
+          { signal: AbortSignal.timeout(45000) }
         );
         if (!proxyResp.ok) {
           const errBody = await proxyResp.json().catch(() => null);
@@ -3080,7 +3096,16 @@ export default function App() {
           <h2 className="section-toggle-btn" onClick={() => toggleSection('areaClaims')}>Nearby Claims <span className={`section-chevron${collapsedSections.areaClaims ? '' : ' open'}`}>›</span></h2>
           {!collapsedSections.areaClaims && (
             <div className="control-grid">
-              <p className="small-note">Load mineral tenure claims from BC DataBC within a radius of your project area. Each claim owner is shown in a distinct colour.</p>
+              <p className="small-note">Load mineral tenure claims within a radius of your project area. Each claim owner is shown in a distinct colour.</p>
+              <div className="control-row">
+                <label>Province</label>
+                <select value={areaClaimsProvince} onChange={(e) => setAreaClaimsProvince(e.target.value)}>
+                  <option value="bc">British Columbia</option>
+                  <option value="on">Ontario</option>
+                  <option value="sk">Saskatchewan</option>
+                  <option value="yt">Yukon</option>
+                </select>
+              </div>
               <div className="control-row inline-2">
                 <div>
                   <label>Search Radius</label>
