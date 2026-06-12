@@ -231,11 +231,15 @@ button, input, select, textarea { font: inherit; }
 .legend-point { width: 12px; height: 12px; border-radius: 999px; border: 1px solid #111; background: #fff; flex: 0 0 auto; }
 .legend-line-svg { display: block; flex: 0 0 auto; overflow: visible; }
 .north-arrow-card { background: var(--north-fill, var(--panel-bg, rgba(255,255,255,0.95))); }
-.scale-card { padding: 16px; background: var(--scale-bg, var(--panel-bg, rgba(255,255,255,0.95))); }
-.scale-bar-track { display: flex; height: 12px; border: 1px solid var(--scale-stroke, #122033); }
+.scale-card {
+  padding: 10px 14px;
+  background: var(--scale-bg, var(--panel-bg, rgba(255,255,255,0.95)));
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px;
+}
+.scale-bar-track { display: flex; height: 10px; max-width: 100%; border: 1px solid var(--scale-stroke, #122033); box-sizing: border-box; }
 .scale-bar-fill { background: var(--scale-stroke, #122033); width: 50%; }
 .scale-bar-fill.light { background: #fff; }
-.scale-bar-label { color: var(--body-text, #1d2b3d); margin-top: 4px; font-size: 12px; }
+.scale-bar-label { color: var(--body-text, #1d2b3d); font-size: 12px; line-height: 1; text-align: center; }
 .logo-card { display: flex; align-items: center; justify-content: center; padding: 10px; background: var(--logo-bg, var(--panel-bg, rgba(255,255,255,0.95))); border-color: var(--logo-border, var(--panel-border, rgba(18,30,48,0.18))); }
 .logo-card img { max-width: 100%; max-height: 100%; object-fit: contain; }
 .footer-card { display: flex; align-items: center; padding: 0 14px; color: var(--footer-fg, #334155); font-size: 12px; background: var(--footer-bg, rgba(255,255,255,0.93)); font-family: var(--font-footer); }
@@ -2178,3 +2182,7 @@ body.is-dragging .template-zone .panel-delete-btn { opacity: 0 !important; }
 .acl-hide-btn { flex-shrink: 0; background: none; border: none; cursor: pointer; font-size: 13px; color: #94a3b8; padding: 0 2px; line-height: 1; }
 .acl-hide-btn:hover { color: #dc2626; }
 .acl-hidden { opacity: 0.4; }
+.acp-callout-btn { margin-top: 7px; width: 100%; background: #2563eb; color: #fff; border: none; border-radius: 5px; padding: 5px 10px; font-size: 12px; font-weight: 600; cursor: pointer; }
+.acp-callout-btn:hover { background: #1d4ed8; }
+.acl-pick-row { display: flex; align-items: center; gap: 7px; }
+.acl-pick-coords { font-size: 11px; color: #475569; font-family: 'Courier New', monospace; white-space: nowrap; }

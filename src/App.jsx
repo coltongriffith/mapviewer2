@@ -39,6 +39,7 @@ import { resolveNI43101Zones } from './templates/technicalReportTemplate';
 import { resolveSidePanelZones, mapSlotPositions } from './templates/sidePanelTemplate';
 import { geojsonBounds, geojsonCenter, unionBounds } from './utils/geometry';
 import { markerSvgUrl } from './utils/leaflet';
+import { claimSummary, claimTooltipHtml, claimPopupRowsHtml } from './utils/claimInfo';
 import L from 'leaflet';
 import { detectRegion } from './utils/detectRegion';
 import { cleanLayerName } from './utils/cleanLayerName';
@@ -671,7 +672,10 @@ export default function App() {
   const [featureEditorTick, setFeatureEditorTick] = useState(0);
   const [mapReady, setMapReady] = useState(false);
   const [areaClaims, setAreaClaims] = useState(null);
+  const [areaClaimsPickCenter, setAreaClaimsPickCenter] = useState(null); // {lat,lng} custom search origin
+  const [areaClaimsPicking, setAreaClaimsPicking] = useState(false);
   const areaClaimsLayerRef = useRef(null);
+  const areaClaimsPinRef = useRef(null);
   const bootstrappedRef = useRef(false);
   const lastSavedSnapshotRef = useRef(JSON.stringify(project));
   // Local state for title/subtitle so every keystroke doesn't write to project (stops flicker)
@@ -1476,18 +1480,22 @@ export default function App() {
     setAreaClaims({ status: 'loading', radius: radiusKm, visible: true, features: [], ownerColors: {}, message: 'Searching for nearby claims…' });
 
     try {
-      // Find centroid of the primary claims layer
-      const claimsLayer = project.layers.find((l) => l.role === 'claims' || l.role === 'property') || project.layers[0];
-      if (!claimsLayer?.geojson) {
-        setAreaClaims((prev) => ({ ...prev, status: 'error', message: 'No claims layer found to center the search.' }));
-        return;
+      // Custom pinned location takes priority; otherwise centroid of the primary claims layer
+      let centerLat, centerLng;
+      if (areaClaimsPickCenter) {
+        centerLat = areaClaimsPickCenter.lat;
+        centerLng = areaClaimsPickCenter.lng;
+      } else {
+        const claimsLayer = project.layers.find((l) => l.role === 'claims' || l.role === 'property') || project.layers[0];
+        if (!claimsLayer?.geojson) {
+          setAreaClaims((prev) => ({ ...prev, status: 'error', message: 'No claims layer found — upload one or set a search location pin.' }));
+          return;
+        }
+        const bounds = geojsonBounds(claimsLayer.geojson);
+        if (!bounds) { setAreaClaims((prev) => ({ ...prev, status: 'error', message: 'Could not compute layer bounds.' })); return; }
+        centerLat = (bounds.minLat + bounds.maxLat) / 2;
+        centerLng = (bounds.minLng + bounds.maxLng) / 2;
       }
-
-      const bounds = geojsonBounds(claimsLayer.geojson);
-      if (!bounds) { setAreaClaims((prev) => ({ ...prev, status: 'error', message: 'Could not compute layer bounds.' })); return; }
-
-      const centerLat = (bounds.minLat + bounds.maxLat) / 2;
-      const centerLng = (bounds.minLng + bounds.maxLng) / 2;
       const KM_PER_DEG_LAT = 111.32;
       const KM_PER_DEG_LNG = KM_PER_DEG_LAT * Math.cos((centerLat * Math.PI) / 180);
       const dLat = radiusKm / KM_PER_DEG_LAT;
@@ -1571,11 +1579,26 @@ export default function App() {
         style: { fillColor: color, color, weight: 1, fillOpacity: 0.22, opacity: 0.7 },
         onEachFeature: (feat, lyr) => {
           const props = feat.properties || {};
-          const name = props.TENURE_NUMBER_ID || props.TAG_NUMBER || props.TENURE_ID || props.TENURE_NO || props.ID || '—';
-          const status = props.TENURE_STATUS || props.STATUS || '';
-          const type = props.TENURE_TYPE || props.TENURE_SUBTYPE || '';
-          lyr.bindTooltip(`<strong>${displayName}</strong><br/>${name}${type ? ` · ${type}` : ''}`, { sticky: true, className: 'area-claims-tooltip' });
-          lyr.bindPopup(`<div class="area-claims-popup"><div class="acp-owner">${displayName}</div><div class="acp-row"><b>Tenure:</b> ${name}</div>${status ? `<div class="acp-row"><b>Status:</b> ${status}</div>` : ''}${type ? `<div class="acp-row"><b>Type:</b> ${type}</div>` : ''}</div>`);
+          lyr.bindTooltip(claimTooltipHtml(props, displayName), { sticky: true, className: 'area-claims-tooltip' });
+          lyr.bindPopup(() => {
+            const el = document.createElement('div');
+            el.className = 'area-claims-popup';
+            el.innerHTML = claimPopupRowsHtml(props, displayName)
+              + '<button type="button" class="acp-callout-btn">+ Add Callout</button>';
+            el.querySelector('.acp-callout-btn').onclick = () => {
+              const center = geojsonCenter(feat);
+              if (!center) return;
+              const s = claimSummary(props, displayName);
+              addCalloutAtAnchor({
+                text: displayName,
+                subtext: [s.tenure, s.status].filter(Boolean).join(' · '),
+                type: 'leader',
+                anchor: { lat: center.lat, lng: center.lng },
+              });
+              lyr.closePopup();
+            };
+            return el;
+          });
         },
       });
       layer.addTo(group);
@@ -1589,6 +1612,39 @@ export default function App() {
       areaClaimsLayerRef.current = null;
     };
   }, [mapReady, areaClaims]);
+
+  // Pick-on-map mode for the nearby claims search origin
+  useEffect(() => {
+    if (!areaClaimsPicking || !mapReady || !leafletMapRef.current) return;
+    const map = leafletMapRef.current;
+    const container = map.getContainer();
+    const prevCursor = container.style.cursor;
+    container.style.cursor = 'crosshair';
+    const onClick = (e) => {
+      setAreaClaimsPickCenter({ lat: e.latlng.lat, lng: e.latlng.lng });
+      setAreaClaimsPicking(false);
+    };
+    map.on('click', onClick);
+    return () => {
+      map.off('click', onClick);
+      container.style.cursor = prevCursor;
+    };
+  }, [areaClaimsPicking, mapReady]);
+
+  // Show a pin marker at the custom search origin
+  useEffect(() => {
+    if (areaClaimsPinRef.current) {
+      areaClaimsPinRef.current.remove();
+      areaClaimsPinRef.current = null;
+    }
+    if (!areaClaimsPickCenter || !mapReady || !leafletMapRef.current) return;
+    const pin = L.circleMarker([areaClaimsPickCenter.lat, areaClaimsPickCenter.lng], {
+      radius: 7, color: '#1d4ed8', fillColor: '#3b82f6', fillOpacity: 0.85, weight: 2,
+    }).bindTooltip('Claims search origin', { direction: 'top', offset: [0, -8] });
+    pin.addTo(leafletMapRef.current);
+    areaClaimsPinRef.current = pin;
+    return () => { pin.remove(); areaClaimsPinRef.current = null; };
+  }, [areaClaimsPickCenter, mapReady]);
 
   const addGeoJSONAsLayer = async (geojson, fileName) => {
     const id = crypto.randomUUID();
@@ -2428,6 +2484,7 @@ export default function App() {
             geojson: { type: 'FeatureCollection', features: feats },
             style: { fill: color, fillOpacity: 0.22, stroke: color, strokeWidth: 1, layerOpacity: 1 },
             legend: { enabled: !!showInLegend, label: ownerLabels[owner] ?? owner },
+            claimInfo: true,
           };
         });
         exportLayers = [...project.layers, ...claimLayers];
@@ -3044,6 +3101,26 @@ export default function App() {
                     {areaClaims?.status === 'loading' ? 'Loading…' : 'Load Claims'}
                   </button>
                 </div>
+              </div>
+              <div className="control-row">
+                <label>Search Location</label>
+                <div className="acl-pick-row">
+                  <button
+                    className={`secondary-btn compact${areaClaimsPicking ? ' active-toggle' : ''}`}
+                    type="button"
+                    disabled={!mapReady}
+                    onClick={() => setAreaClaimsPicking((p) => !p)}
+                  >
+                    {areaClaimsPicking ? 'Click map…' : '📍 Pick on map'}
+                  </button>
+                  {areaClaimsPickCenter && (
+                    <>
+                      <span className="acl-pick-coords">{areaClaimsPickCenter.lat.toFixed(4)}, {areaClaimsPickCenter.lng.toFixed(4)}</span>
+                      <button className="acl-hide-btn" type="button" title="Clear pin — use claims layer instead" onClick={() => setAreaClaimsPickCenter(null)}>×</button>
+                    </>
+                  )}
+                </div>
+                {!areaClaimsPickCenter && <span className="small-note">Defaults to your claims layer. Drop a pin to search anywhere.</span>}
               </div>
               {areaClaims && (
                 <>
@@ -4591,6 +4668,7 @@ export default function App() {
                             geojson: { type: 'FeatureCollection', features: feats },
                             style: { fill: color, fillOpacity: 0.22, stroke: color, strokeWidth: 1, layerOpacity: 1 },
                             legend: { enabled: !!showInLegend, label: ownerLabels[owner] ?? owner },
+                            claimInfo: true,
                           };
                         });
                         shareProject = { ...project, layers: [...project.layers, ...claimLayers] };
