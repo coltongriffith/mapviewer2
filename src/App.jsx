@@ -4567,7 +4567,35 @@ export default function App() {
                     setShareElapsed(0);
                     shareElapsedRef.current = setInterval(() => setShareElapsed(s => s + 1), 1000);
                     try {
-                      const id = await shareMap(project, user?.id ?? null);
+                      // Bake visible nearby claims into layers so recipients see them
+                      let shareProject = project;
+                      if (areaClaims?.visible && areaClaims.features?.length) {
+                        const { features, ownerColors = {}, ownerLabels = {}, ownerField, hiddenOwners = [], showInLegend } = areaClaims;
+                        const ownerGroups = {};
+                        features.forEach((f) => {
+                          const owner = (ownerField ? f.properties?.[ownerField] : null) || 'Unknown';
+                          if (!(hiddenOwners || []).includes(owner)) {
+                            if (!ownerGroups[owner]) ownerGroups[owner] = [];
+                            ownerGroups[owner].push(f);
+                          }
+                        });
+                        const claimLayers = Object.entries(ownerGroups).map(([owner, feats]) => {
+                          const color = ownerColors[owner] || '#888888';
+                          return {
+                            id: `__ac_${owner}`,
+                            name: ownerLabels[owner] ?? owner,
+                            displayName: ownerLabels[owner] ?? owner,
+                            type: 'polygons',
+                            role: 'other',
+                            visible: true,
+                            geojson: { type: 'FeatureCollection', features: feats },
+                            style: { fill: color, fillOpacity: 0.22, stroke: color, strokeWidth: 1, layerOpacity: 1 },
+                            legend: { enabled: !!showInLegend, label: ownerLabels[owner] ?? owner },
+                          };
+                        });
+                        shareProject = { ...project, layers: [...project.layers, ...claimLayers] };
+                      }
+                      const id = await shareMap(shareProject, user?.id ?? null);
                       const base = window.location.origin;
                       setShareUrl(`${base}/map/${id}`);
                     } catch (e) {
