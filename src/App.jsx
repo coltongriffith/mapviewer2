@@ -710,16 +710,33 @@ export default function App() {
   const selectedEllipse = useMemo(() => project.ellipses?.find((ellipse) => ellipse.id === selectedEllipseId) || null, [project.ellipses, selectedEllipseId]);
   const selectedPolygon = useMemo(() => project.polygons?.find((poly) => poly.id === selectedPolygonId) || null, [project.polygons, selectedPolygonId]);
   const legendItems = useMemo(() => buildLegendItems(template, project.layers, project.layout), [template, project.layers, project.layout]);
-  const legendGroups = useMemo(() => renderLegendGroups(legendItems, project.layout), [legendItems, project.layout]);
+
+  const areaClaimsLegendItems = useMemo(() => {
+    if (!areaClaims?.showInLegend || !areaClaims.features?.length) return [];
+    const { ownerColors = {}, ownerLabels = {}, hiddenOwners = [] } = areaClaims;
+    return Object.entries(ownerColors)
+      .filter(([owner]) => !hiddenOwners.includes(owner))
+      .map(([owner, color]) => ({
+        id: `__ac_${owner}`,
+        role: 'other',
+        group: 'Nearby Claims',
+        label: ownerLabels[owner] ?? owner,
+        type: 'polygons',
+        style: { fill: color, fillOpacity: 0.22, stroke: color, strokeWidth: 1 },
+      }));
+  }, [areaClaims]);
+
+  const allLegendItems = useMemo(() => [...legendItems, ...areaClaimsLegendItems], [legendItems, areaClaimsLegendItems]);
+  const legendGroups = useMemo(() => renderLegendGroups(allLegendItems, project.layout), [allLegendItems, project.layout]);
   const resolvedZones = useMemo(() => {
     if (project.layout?.templateId === 'ni_43101_technical') {
-      return resolveNI43101Zones(template, project.layout, mapSize, legendItems);
+      return resolveNI43101Zones(template, project.layout, mapSize, allLegendItems);
     }
     if (project.layout?.templateId === 'side_panel') {
-      return resolveSidePanelZones(template, project.layout, mapSize, legendItems);
+      return resolveSidePanelZones(template, project.layout, mapSize, allLegendItems);
     }
-    return resolveTemplateZones(template, project.layout, mapSize, legendItems);
-  }, [template, project.layout, mapSize, legendItems]);
+    return resolveTemplateZones(template, project.layout, mapSize, allLegendItems);
+  }, [template, project.layout, mapSize, allLegendItems]);
   // Keep a ref so the framing effect can read the current zones without them being a reactive trigger
   const resolvedZonesRef = useRef(resolvedZones);
   useEffect(() => { resolvedZonesRef.current = resolvedZones; }, [resolvedZones]);
@@ -1522,7 +1539,7 @@ export default function App() {
       const ownerColors = {};
       owners.forEach((owner, i) => { ownerColors[owner] = AREA_CLAIMS_COLORS[i % AREA_CLAIMS_COLORS.length]; });
 
-      setAreaClaims({ status: 'loaded', radius: radiusKm, visible: true, features, ownerColors, ownerField, center: { lat: centerLat, lng: centerLng }, message: `${features.length} claims found within ${radiusKm} km` });
+      setAreaClaims({ status: 'loaded', radius: radiusKm, visible: true, features, ownerColors, ownerLabels: {}, hiddenOwners: [], showInLegend: false, ownerField, center: { lat: centerLat, lng: centerLng }, message: `${features.length} claims found within ${radiusKm} km` });
     } catch (err) {
       setAreaClaims((prev) => ({
         ...prev, status: 'error',
@@ -1542,22 +1559,23 @@ export default function App() {
 
     if (!areaClaims?.visible || !areaClaims.features?.length) return;
 
-    const { features, ownerColors, ownerField } = areaClaims;
+    const { features, ownerColors, ownerLabels = {}, ownerField, hiddenOwners = [] } = areaClaims;
     const group = L.layerGroup();
 
     features.forEach((feature) => {
       const owner = (ownerField ? feature.properties?.[ownerField] : null) || 'Unknown';
+      if (hiddenOwners.includes(owner)) return;
       const color = ownerColors[owner] || '#888888';
+      const displayName = ownerLabels[owner] ?? owner;
       const layer = L.geoJSON(feature, {
         style: { fillColor: color, color, weight: 1, fillOpacity: 0.22, opacity: 0.7 },
         onEachFeature: (feat, lyr) => {
           const props = feat.properties || {};
           const name = props.TENURE_NUMBER_ID || props.TAG_NUMBER || props.TENURE_ID || props.TENURE_NO || props.ID || '—';
-          const holder = (ownerField && props[ownerField]) || 'Unknown';
           const status = props.TENURE_STATUS || props.STATUS || '';
           const type = props.TENURE_TYPE || props.TENURE_SUBTYPE || '';
-          lyr.bindTooltip(`<strong>${holder}</strong><br/>${name}${type ? ` · ${type}` : ''}`, { sticky: true, className: 'area-claims-tooltip' });
-          lyr.bindPopup(`<div class="area-claims-popup"><div class="acp-owner">${holder}</div><div class="acp-row"><b>Tenure:</b> ${name}</div>${status ? `<div class="acp-row"><b>Status:</b> ${status}</div>` : ''}${type ? `<div class="acp-row"><b>Type:</b> ${type}</div>` : ''}</div>`);
+          lyr.bindTooltip(`<strong>${displayName}</strong><br/>${name}${type ? ` · ${type}` : ''}`, { sticky: true, className: 'area-claims-tooltip' });
+          lyr.bindPopup(`<div class="area-claims-popup"><div class="acp-owner">${displayName}</div><div class="acp-row"><b>Tenure:</b> ${name}</div>${status ? `<div class="acp-row"><b>Status:</b> ${status}</div>` : ''}${type ? `<div class="acp-row"><b>Type:</b> ${type}</div>` : ''}</div>`);
         },
       });
       layer.addTo(group);
@@ -2386,7 +2404,35 @@ export default function App() {
         import('./export/exportSVG'),
         import('./export/renderScene'),
       ]);
-      const scene = buildScene(mapContainerRef.current, { ...project, layout: { ...project.layout, legendItems } }, leafletMapRef.current);
+      // Build synthetic layers for visible nearby claims so they appear in export
+      let exportLayers = project.layers;
+      if (areaClaims?.visible && areaClaims.features?.length) {
+        const { features, ownerColors = {}, ownerLabels = {}, ownerField, hiddenOwners = [], showInLegend } = areaClaims;
+        const ownerGroups = {};
+        features.forEach((f) => {
+          const owner = (ownerField ? f.properties?.[ownerField] : null) || 'Unknown';
+          if (!(hiddenOwners || []).includes(owner)) {
+            if (!ownerGroups[owner]) ownerGroups[owner] = [];
+            ownerGroups[owner].push(f);
+          }
+        });
+        const claimLayers = Object.entries(ownerGroups).map(([owner, feats]) => {
+          const color = ownerColors[owner] || '#888888';
+          return {
+            id: `__ac_${owner}`,
+            name: ownerLabels[owner] ?? owner,
+            displayName: ownerLabels[owner] ?? owner,
+            type: 'polygons',
+            role: 'other',
+            visible: true,
+            geojson: { type: 'FeatureCollection', features: feats },
+            style: { fill: color, fillOpacity: 0.22, stroke: color, strokeWidth: 1, layerOpacity: 1 },
+            legend: { enabled: !!showInLegend, label: ownerLabels[owner] ?? owner },
+          };
+        });
+        exportLayers = [...project.layers, ...claimLayers];
+      }
+      const scene = buildScene(mapContainerRef.current, { ...project, layers: exportLayers, layout: { ...project.layout, legendItems: allLegendItems } }, leafletMapRef.current);
       const opts = { ...(project.layout?.exportSettings || {}), ...extraOptions };
       if (format === 'png') {
         await exportPNG(scene, opts);
@@ -3010,18 +3056,43 @@ export default function App() {
                         <input type="checkbox" checked={!!areaClaims.visible} onChange={(e) => setAreaClaims((prev) => ({ ...prev, visible: e.target.checked }))} />
                         <span>Show on map</span>
                       </label>
+                      <label className="toggle-row">
+                        <input type="checkbox" checked={!!areaClaims.showInLegend} onChange={(e) => setAreaClaims((prev) => ({ ...prev, showInLegend: e.target.checked }))} />
+                        <span>Add to legend</span>
+                      </label>
                       <div className="area-claims-legend">
-                        {Object.entries(areaClaims.ownerColors).slice(0, 12).map(([owner, color]) => (
-                          <div key={owner} className="acl-row">
-                            <span className="acl-swatch" style={{ background: color }} />
-                            <span className="acl-label" title={owner}>{owner}</span>
-                          </div>
-                        ))}
-                        {Object.keys(areaClaims.ownerColors).length > 12 && (
-                          <div className="acl-row acl-more">+{Object.keys(areaClaims.ownerColors).length - 12} more owners</div>
-                        )}
+                        {Object.entries(areaClaims.ownerColors).map(([owner, color]) => {
+                          const hidden = (areaClaims.hiddenOwners || []).includes(owner);
+                          return (
+                            <div key={owner} className={`acl-row${hidden ? ' acl-hidden' : ''}`}>
+                              <input
+                                type="color"
+                                value={color}
+                                title="Change colour"
+                                onChange={(e) => setAreaClaims((prev) => ({ ...prev, ownerColors: { ...prev.ownerColors, [owner]: e.target.value } }))}
+                                className="acl-color-pick"
+                              />
+                              <input
+                                type="text"
+                                value={(areaClaims.ownerLabels || {})[owner] ?? owner}
+                                onChange={(e) => setAreaClaims((prev) => ({ ...prev, ownerLabels: { ...(prev.ownerLabels || {}), [owner]: e.target.value } }))}
+                                className="acl-name-input"
+                                title="Edit display name"
+                              />
+                              <button
+                                type="button"
+                                className="acl-hide-btn"
+                                title={hidden ? 'Show owner' : 'Hide owner'}
+                                onClick={() => setAreaClaims((prev) => {
+                                  const h = prev.hiddenOwners || [];
+                                  return { ...prev, hiddenOwners: h.includes(owner) ? h.filter((o) => o !== owner) : [...h, owner] };
+                                })}
+                              >{hidden ? '👁' : '×'}</button>
+                            </div>
+                          );
+                        })}
                       </div>
-                      <button className="secondary-btn" type="button" onClick={() => { setAreaClaims(null); }}>Clear</button>
+                      <button className="secondary-btn" type="button" onClick={() => { setAreaClaims(null); }}>Clear All</button>
                     </>
                   )}
                 </>
@@ -4035,7 +4106,7 @@ export default function App() {
           })}
         </div>}
 
-        {legendItems.length && project.layout.showLegend !== false ? (
+        {allLegendItems.length && project.layout.showLegend !== false ? (
           <div className="template-zone" style={{ ...zoneStyle(resolvedZones.legend), opacity: dragging?.id === 'legend' ? 0.3 : 1, cursor: 'grab' }} onMouseDown={makeDragHandler('legend', project.layout.legendWidthPx ?? 300, project.layout.legendHeightPx ?? resolvedZones.legend?.height ?? 168)}>
             <button className="panel-delete-btn" title="Hide legend" onClick={() => updateLayout({ showLegend: false })}>×</button>
             <div className={`template-card legend-card${project.layout.legendTransparent ? ' panel--transparent' : ''}`}>

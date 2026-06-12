@@ -2171,3 +2171,10 @@ body.is-dragging .template-zone .panel-delete-btn { opacity: 0 !important; }
 .area-claims-tooltip { font-size: 12px; }
 .area-claims-popup .acp-owner { font-weight: 700; font-size: 13px; margin-bottom: 4px; }
 .area-claims-popup .acp-row { font-size: 12px; color: #374151; }
+.acl-row { display: flex; align-items: center; gap: 5px; font-size: 12px; }
+.acl-color-pick { width: 22px; height: 22px; border: none; padding: 0; border-radius: 3px; cursor: pointer; flex-shrink: 0; }
+.acl-name-input { flex: 1; min-width: 0; font-size: 12px; padding: 2px 5px; border: 1px solid #e2e8f0; border-radius: 4px; background: #f8fafc; }
+.acl-name-input:focus { outline: none; border-color: #93c5fd; background: #fff; }
+.acl-hide-btn { flex-shrink: 0; background: none; border: none; cursor: pointer; font-size: 13px; color: #94a3b8; padding: 0 2px; line-height: 1; }
+.acl-hide-btn:hover { color: #dc2626; }
+.acl-hidden { opacity: 0.4; }
