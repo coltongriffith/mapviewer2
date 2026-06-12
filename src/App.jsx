@@ -1478,15 +1478,14 @@ export default function App() {
       const minLng = centerLng - dLng, maxLng = centerLng + dLng;
       const minLat = centerLat - dLat, maxLat = centerLat + dLat;
 
-      // CQL BBOX uses lon,lat order consistently regardless of WFS version
-      const cql = `BBOX(SHAPE,${minLng},${minLat},${maxLng},${maxLat})`;
+      // DataBC GeoServer WFS — BBOX param with lon,lat order + EPSG:4326
       const wfsBase = 'https://openmaps.gov.bc.ca/geo/pub/wfs'
         + '?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature'
         + '&outputFormat=application/json'
         + '&typeNames=pub:WHSE_MINERAL_TENURE.MTA_ACQUIRED_TENURE_SVW'
         + '&SRSNAME=EPSG:4326'
         + '&count=2000'
-        + `&CQL_FILTER=${encodeURIComponent(cql)}`;
+        + `&BBOX=${minLng},${minLat},${maxLng},${maxLat},EPSG:4326`;
 
       // Try direct browser fetch first (public endpoint, usually allows CORS);
       // fall back to the Vercel serverless proxy if it fails (e.g. local dev)
