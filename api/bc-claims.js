@@ -10,6 +10,8 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'bbox must be minLng,minLat,maxLng,maxLat' });
     }
     const [minLng, minLat, maxLng, maxLat] = parts;
+    // Use CQL BBOX() — lon,lat order, unambiguous across WFS versions
+    const cql = `BBOX(SHAPE,${minLng},${minLat},${maxLng},${maxLat})`;
     const bboxUrl = [
       'https://openmaps.gov.bc.ca/geo/pub/wfs',
       '?SERVICE=WFS',
@@ -18,7 +20,7 @@ export default async function handler(req, res) {
       '&outputFormat=application/json',
       '&typeNames=pub:WHSE_MINERAL_TENURE.MTA_ACQUIRED_TENURE_SVW',
       '&SRSNAME=EPSG:4326',
-      `&BBOX=${minLat},${minLng},${maxLat},${maxLng},EPSG:4326`,
+      `&CQL_FILTER=${encodeURIComponent(cql)}`,
       '&count=2000',
     ].join('');
     try {

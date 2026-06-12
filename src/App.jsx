@@ -1475,26 +1475,49 @@ export default function App() {
       const KM_PER_DEG_LNG = KM_PER_DEG_LAT * Math.cos((centerLat * Math.PI) / 180);
       const dLat = radiusKm / KM_PER_DEG_LAT;
       const dLng = radiusKm / KM_PER_DEG_LNG;
-      const bbox = `${centerLng - dLng},${centerLat - dLat},${centerLng + dLng},${centerLat + dLat}`;
+      const minLng = centerLng - dLng, maxLng = centerLng + dLng;
+      const minLat = centerLat - dLat, maxLat = centerLat + dLat;
 
-      // Use the existing server-side proxy (handles headers/CORS for the BC WFS)
-      const resp = await fetch(`/api/bc-claims?bbox=${encodeURIComponent(bbox)}`, { signal: AbortSignal.timeout(35000) });
-      if (!resp.ok) {
-        const errBody = await resp.json().catch(() => null);
-        throw new Error(errBody?.error || `Request failed: ${resp.status}`);
+      // CQL BBOX uses lon,lat order consistently regardless of WFS version
+      const cql = `BBOX(SHAPE,${minLng},${minLat},${maxLng},${maxLat})`;
+      const wfsBase = 'https://openmaps.gov.bc.ca/geo/pub/wfs'
+        + '?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature'
+        + '&outputFormat=application/json'
+        + '&typeNames=pub:WHSE_MINERAL_TENURE.MTA_ACQUIRED_TENURE_SVW'
+        + '&SRSNAME=EPSG:4326'
+        + '&count=2000'
+        + `&CQL_FILTER=${encodeURIComponent(cql)}`;
+
+      // Try direct browser fetch first (public endpoint, usually allows CORS);
+      // fall back to the Vercel serverless proxy if it fails (e.g. local dev)
+      let data;
+      try {
+        const directResp = await fetch(wfsBase, { signal: AbortSignal.timeout(30000) });
+        if (!directResp.ok) throw new Error(`WFS ${directResp.status}`);
+        data = await directResp.json();
+      } catch (_directErr) {
+        const proxyResp = await fetch(
+          `/api/bc-claims?bbox=${encodeURIComponent(`${minLng},${minLat},${maxLng},${maxLat}`)}`,
+          { signal: AbortSignal.timeout(35000) }
+        );
+        if (!proxyResp.ok) {
+          const errBody = await proxyResp.json().catch(() => null);
+          throw new Error(errBody?.error || `Request failed: ${proxyResp.status}`);
+        }
+        data = await proxyResp.json();
       }
-      const data = await resp.json();
 
       const features = (data.features || []).filter((f) => f.geometry);
       if (features.length === 0) {
-        setAreaClaims((prev) => ({ ...prev, status: 'loaded', features: [], message: `No claims found within ${radiusKm} km.` }));
+        setAreaClaims((prev) => ({ ...prev, status: 'loaded', features: [], message: `No claims found within ${radiusKm} km. Try a larger radius.` }));
         return;
       }
 
-      // Assign per-owner colors
-      const ownerField = features[0]?.properties?.TENURE_HOLDER_NAME !== undefined
-        ? 'TENURE_HOLDER_NAME' : features[0]?.properties?.OWNER_NAME !== undefined
-        ? 'OWNER_NAME' : Object.keys(features[0]?.properties || {}).find((k) => k.toLowerCase().includes('owner') || k.toLowerCase().includes('holder') || k.toLowerCase().includes('client')) || null;
+      // BC WFS field for owner/holder is OWNER_NAME; fall back to scanning properties
+      const sampleProps = features[0]?.properties || {};
+      const ownerField = 'OWNER_NAME' in sampleProps ? 'OWNER_NAME'
+        : 'TENURE_HOLDER_NAME' in sampleProps ? 'TENURE_HOLDER_NAME'
+        : Object.keys(sampleProps).find((k) => /owner|holder|client/i.test(k)) || null;
 
       const owners = [...new Set(features.map((f) => (ownerField ? f.properties?.[ownerField] : null) || 'Unknown'))];
       const ownerColors = {};
