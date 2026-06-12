@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { makeMarkerIcon } from '../utils/leaflet';
+import { claimTooltipHtml, claimPopupRowsHtml } from '../utils/claimInfo';
 import { POINT_ROLES } from '../projectState';
 import regionsNA from '../assets/regionsNA.json';
 import dissolveGeo from '@turf/dissolve';
@@ -336,6 +337,12 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
           return marker;
         },
         onEachFeature: isDrillholes ? undefined : (feature, featureLayer) => {
+          if (layer.claimInfo) {
+            const props = feature.properties || {};
+            const ownerName = layer.displayName || layer.name || null;
+            featureLayer.bindTooltip(claimTooltipHtml(props, ownerName), { sticky: true, className: 'area-claims-tooltip' });
+            featureLayer.bindPopup(`<div class="area-claims-popup">${claimPopupRowsHtml(props, ownerName)}</div>`);
+          }
           featureLayer.on('click', (e) => {
             if (annotationToolRef?.current) return;
             L.DomEvent.stopPropagation(e);

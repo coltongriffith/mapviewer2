@@ -39,6 +39,7 @@ import { resolveNI43101Zones } from './templates/technicalReportTemplate';
 import { resolveSidePanelZones, mapSlotPositions } from './templates/sidePanelTemplate';
 import { geojsonBounds, geojsonCenter, unionBounds } from './utils/geometry';
 import { markerSvgUrl } from './utils/leaflet';
+import { claimSummary, claimTooltipHtml, claimPopupRowsHtml } from './utils/claimInfo';
 import L from 'leaflet';
 import { detectRegion } from './utils/detectRegion';
 import { cleanLayerName } from './utils/cleanLayerName';
@@ -671,7 +672,10 @@ export default function App() {
   const [featureEditorTick, setFeatureEditorTick] = useState(0);
   const [mapReady, setMapReady] = useState(false);
   const [areaClaims, setAreaClaims] = useState(null);
+  const [areaClaimsPickCenter, setAreaClaimsPickCenter] = useState(null); // {lat,lng} custom search origin
+  const [areaClaimsPicking, setAreaClaimsPicking] = useState(false);
   const areaClaimsLayerRef = useRef(null);
+  const areaClaimsPinRef = useRef(null);
   const bootstrappedRef = useRef(false);
   const lastSavedSnapshotRef = useRef(JSON.stringify(project));
   // Local state for title/subtitle so every keystroke doesn't write to project (stops flicker)
@@ -710,16 +714,33 @@ export default function App() {
   const selectedEllipse = useMemo(() => project.ellipses?.find((ellipse) => ellipse.id === selectedEllipseId) || null, [project.ellipses, selectedEllipseId]);
   const selectedPolygon = useMemo(() => project.polygons?.find((poly) => poly.id === selectedPolygonId) || null, [project.polygons, selectedPolygonId]);
   const legendItems = useMemo(() => buildLegendItems(template, project.layers, project.layout), [template, project.layers, project.layout]);
-  const legendGroups = useMemo(() => renderLegendGroups(legendItems, project.layout), [legendItems, project.layout]);
+
+  const areaClaimsLegendItems = useMemo(() => {
+    if (!areaClaims?.showInLegend || !areaClaims.features?.length) return [];
+    const { ownerColors = {}, ownerLabels = {}, hiddenOwners = [] } = areaClaims;
+    return Object.entries(ownerColors)
+      .filter(([owner]) => !hiddenOwners.includes(owner))
+      .map(([owner, color]) => ({
+        id: `__ac_${owner}`,
+        role: 'other',
+        group: 'Nearby Claims',
+        label: ownerLabels[owner] ?? owner,
+        type: 'polygons',
+        style: { fill: color, fillOpacity: 0.22, stroke: color, strokeWidth: 1 },
+      }));
+  }, [areaClaims]);
+
+  const allLegendItems = useMemo(() => [...legendItems, ...areaClaimsLegendItems], [legendItems, areaClaimsLegendItems]);
+  const legendGroups = useMemo(() => renderLegendGroups(allLegendItems, project.layout), [allLegendItems, project.layout]);
   const resolvedZones = useMemo(() => {
     if (project.layout?.templateId === 'ni_43101_technical') {
-      return resolveNI43101Zones(template, project.layout, mapSize, legendItems);
+      return resolveNI43101Zones(template, project.layout, mapSize, allLegendItems);
     }
     if (project.layout?.templateId === 'side_panel') {
-      return resolveSidePanelZones(template, project.layout, mapSize, legendItems);
+      return resolveSidePanelZones(template, project.layout, mapSize, allLegendItems);
     }
-    return resolveTemplateZones(template, project.layout, mapSize, legendItems);
-  }, [template, project.layout, mapSize, legendItems]);
+    return resolveTemplateZones(template, project.layout, mapSize, allLegendItems);
+  }, [template, project.layout, mapSize, allLegendItems]);
   // Keep a ref so the framing effect can read the current zones without them being a reactive trigger
   const resolvedZonesRef = useRef(resolvedZones);
   useEffect(() => { resolvedZonesRef.current = resolvedZones; }, [resolvedZones]);
@@ -1459,48 +1480,74 @@ export default function App() {
     setAreaClaims({ status: 'loading', radius: radiusKm, visible: true, features: [], ownerColors: {}, message: 'Searching for nearby claims…' });
 
     try {
-      // Find centroid of the primary claims layer
-      const claimsLayer = project.layers.find((l) => l.role === 'claims' || l.role === 'property') || project.layers[0];
-      if (!claimsLayer?.geojson) {
-        setAreaClaims((prev) => ({ ...prev, status: 'error', message: 'No claims layer found to center the search.' }));
-        return;
+      // Custom pinned location takes priority; otherwise centroid of the primary claims layer
+      let centerLat, centerLng;
+      if (areaClaimsPickCenter) {
+        centerLat = areaClaimsPickCenter.lat;
+        centerLng = areaClaimsPickCenter.lng;
+      } else {
+        const claimsLayer = project.layers.find((l) => l.role === 'claims' || l.role === 'property') || project.layers[0];
+        if (!claimsLayer?.geojson) {
+          setAreaClaims((prev) => ({ ...prev, status: 'error', message: 'No claims layer found — upload one or set a search location pin.' }));
+          return;
+        }
+        const bounds = geojsonBounds(claimsLayer.geojson);
+        if (!bounds) { setAreaClaims((prev) => ({ ...prev, status: 'error', message: 'Could not compute layer bounds.' })); return; }
+        centerLat = (bounds.minLat + bounds.maxLat) / 2;
+        centerLng = (bounds.minLng + bounds.maxLng) / 2;
       }
-
-      const bounds = geojsonBounds(claimsLayer.geojson);
-      if (!bounds) { setAreaClaims((prev) => ({ ...prev, status: 'error', message: 'Could not compute layer bounds.' })); return; }
-
-      const centerLat = (bounds.minLat + bounds.maxLat) / 2;
-      const centerLng = (bounds.minLng + bounds.maxLng) / 2;
       const KM_PER_DEG_LAT = 111.32;
       const KM_PER_DEG_LNG = KM_PER_DEG_LAT * Math.cos((centerLat * Math.PI) / 180);
       const dLat = radiusKm / KM_PER_DEG_LAT;
       const dLng = radiusKm / KM_PER_DEG_LNG;
-      const bbox = `${centerLng - dLng},${centerLat - dLat},${centerLng + dLng},${centerLat + dLat}`;
+      const minLng = centerLng - dLng, maxLng = centerLng + dLng;
+      const minLat = centerLat - dLat, maxLat = centerLat + dLat;
 
-      // Use the existing server-side proxy (handles headers/CORS for the BC WFS)
-      const resp = await fetch(`/api/bc-claims?bbox=${encodeURIComponent(bbox)}`, { signal: AbortSignal.timeout(35000) });
-      if (!resp.ok) {
-        const errBody = await resp.json().catch(() => null);
-        throw new Error(errBody?.error || `Request failed: ${resp.status}`);
+      // DataBC GeoServer WFS — BBOX param with lon,lat order + EPSG:4326
+      const wfsBase = 'https://openmaps.gov.bc.ca/geo/pub/wfs'
+        + '?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature'
+        + '&outputFormat=application/json'
+        + '&typeNames=pub:WHSE_MINERAL_TENURE.MTA_ACQUIRED_TENURE_SVW'
+        + '&SRSNAME=EPSG:4326'
+        + '&count=2000'
+        + `&BBOX=${minLng},${minLat},${maxLng},${maxLat},EPSG:4326`;
+
+      // Try direct browser fetch first (public endpoint, usually allows CORS);
+      // fall back to the Vercel serverless proxy if it fails (e.g. local dev)
+      let data;
+      try {
+        const directResp = await fetch(wfsBase, { signal: AbortSignal.timeout(30000) });
+        if (!directResp.ok) throw new Error(`WFS ${directResp.status}`);
+        data = await directResp.json();
+      } catch (_directErr) {
+        const proxyResp = await fetch(
+          `/api/bc-claims?bbox=${encodeURIComponent(`${minLng},${minLat},${maxLng},${maxLat}`)}`,
+          { signal: AbortSignal.timeout(35000) }
+        );
+        if (!proxyResp.ok) {
+          const errBody = await proxyResp.json().catch(() => null);
+          throw new Error(errBody?.error || `Request failed: ${proxyResp.status}`);
+        }
+        data = await proxyResp.json();
       }
-      const data = await resp.json();
 
       const features = (data.features || []).filter((f) => f.geometry);
       if (features.length === 0) {
-        setAreaClaims((prev) => ({ ...prev, status: 'loaded', features: [], message: `No claims found within ${radiusKm} km.` }));
+        setAreaClaims((prev) => ({ ...prev, status: 'loaded', features: [], message: `No claims found within ${radiusKm} km. Try a larger radius.` }));
         return;
       }
 
-      // Assign per-owner colors
-      const ownerField = features[0]?.properties?.TENURE_HOLDER_NAME !== undefined
-        ? 'TENURE_HOLDER_NAME' : features[0]?.properties?.OWNER_NAME !== undefined
-        ? 'OWNER_NAME' : Object.keys(features[0]?.properties || {}).find((k) => k.toLowerCase().includes('owner') || k.toLowerCase().includes('holder') || k.toLowerCase().includes('client')) || null;
+      // BC WFS field for owner/holder is OWNER_NAME; fall back to scanning properties
+      const sampleProps = features[0]?.properties || {};
+      const ownerField = 'OWNER_NAME' in sampleProps ? 'OWNER_NAME'
+        : 'TENURE_HOLDER_NAME' in sampleProps ? 'TENURE_HOLDER_NAME'
+        : Object.keys(sampleProps).find((k) => /owner|holder|client/i.test(k)) || null;
 
       const owners = [...new Set(features.map((f) => (ownerField ? f.properties?.[ownerField] : null) || 'Unknown'))];
       const ownerColors = {};
       owners.forEach((owner, i) => { ownerColors[owner] = AREA_CLAIMS_COLORS[i % AREA_CLAIMS_COLORS.length]; });
 
-      setAreaClaims({ status: 'loaded', radius: radiusKm, visible: true, features, ownerColors, ownerField, center: { lat: centerLat, lng: centerLng }, message: `${features.length} claims found within ${radiusKm} km` });
+      setAreaClaims({ status: 'loaded', radius: radiusKm, visible: true, features, ownerColors, ownerLabels: {}, hiddenOwners: [], showInLegend: false, ownerField, center: { lat: centerLat, lng: centerLng }, message: `${features.length} claims found within ${radiusKm} km` });
     } catch (err) {
       setAreaClaims((prev) => ({
         ...prev, status: 'error',
@@ -1520,22 +1567,38 @@ export default function App() {
 
     if (!areaClaims?.visible || !areaClaims.features?.length) return;
 
-    const { features, ownerColors, ownerField } = areaClaims;
+    const { features, ownerColors, ownerLabels = {}, ownerField, hiddenOwners = [] } = areaClaims;
     const group = L.layerGroup();
 
     features.forEach((feature) => {
       const owner = (ownerField ? feature.properties?.[ownerField] : null) || 'Unknown';
+      if (hiddenOwners.includes(owner)) return;
       const color = ownerColors[owner] || '#888888';
+      const displayName = ownerLabels[owner] ?? owner;
       const layer = L.geoJSON(feature, {
         style: { fillColor: color, color, weight: 1, fillOpacity: 0.22, opacity: 0.7 },
         onEachFeature: (feat, lyr) => {
           const props = feat.properties || {};
-          const name = props.TENURE_NUMBER_ID || props.TAG_NUMBER || props.TENURE_ID || props.TENURE_NO || props.ID || '—';
-          const holder = (ownerField && props[ownerField]) || 'Unknown';
-          const status = props.TENURE_STATUS || props.STATUS || '';
-          const type = props.TENURE_TYPE || props.TENURE_SUBTYPE || '';
-          lyr.bindTooltip(`<strong>${holder}</strong><br/>${name}${type ? ` · ${type}` : ''}`, { sticky: true, className: 'area-claims-tooltip' });
-          lyr.bindPopup(`<div class="area-claims-popup"><div class="acp-owner">${holder}</div><div class="acp-row"><b>Tenure:</b> ${name}</div>${status ? `<div class="acp-row"><b>Status:</b> ${status}</div>` : ''}${type ? `<div class="acp-row"><b>Type:</b> ${type}</div>` : ''}</div>`);
+          lyr.bindTooltip(claimTooltipHtml(props, displayName), { sticky: true, className: 'area-claims-tooltip' });
+          lyr.bindPopup(() => {
+            const el = document.createElement('div');
+            el.className = 'area-claims-popup';
+            el.innerHTML = claimPopupRowsHtml(props, displayName)
+              + '<button type="button" class="acp-callout-btn">+ Add Callout</button>';
+            el.querySelector('.acp-callout-btn').onclick = () => {
+              const center = geojsonCenter(feat);
+              if (!center) return;
+              const s = claimSummary(props, displayName);
+              addCalloutAtAnchor({
+                text: displayName,
+                subtext: [s.tenure, s.status].filter(Boolean).join(' · '),
+                type: 'leader',
+                anchor: { lat: center.lat, lng: center.lng },
+              });
+              lyr.closePopup();
+            };
+            return el;
+          });
         },
       });
       layer.addTo(group);
@@ -1549,6 +1612,39 @@ export default function App() {
       areaClaimsLayerRef.current = null;
     };
   }, [mapReady, areaClaims]);
+
+  // Pick-on-map mode for the nearby claims search origin
+  useEffect(() => {
+    if (!areaClaimsPicking || !mapReady || !leafletMapRef.current) return;
+    const map = leafletMapRef.current;
+    const container = map.getContainer();
+    const prevCursor = container.style.cursor;
+    container.style.cursor = 'crosshair';
+    const onClick = (e) => {
+      setAreaClaimsPickCenter({ lat: e.latlng.lat, lng: e.latlng.lng });
+      setAreaClaimsPicking(false);
+    };
+    map.on('click', onClick);
+    return () => {
+      map.off('click', onClick);
+      container.style.cursor = prevCursor;
+    };
+  }, [areaClaimsPicking, mapReady]);
+
+  // Show a pin marker at the custom search origin
+  useEffect(() => {
+    if (areaClaimsPinRef.current) {
+      areaClaimsPinRef.current.remove();
+      areaClaimsPinRef.current = null;
+    }
+    if (!areaClaimsPickCenter || !mapReady || !leafletMapRef.current) return;
+    const pin = L.circleMarker([areaClaimsPickCenter.lat, areaClaimsPickCenter.lng], {
+      radius: 7, color: '#1d4ed8', fillColor: '#3b82f6', fillOpacity: 0.85, weight: 2,
+    }).bindTooltip('Claims search origin', { direction: 'top', offset: [0, -8] });
+    pin.addTo(leafletMapRef.current);
+    areaClaimsPinRef.current = pin;
+    return () => { pin.remove(); areaClaimsPinRef.current = null; };
+  }, [areaClaimsPickCenter, mapReady]);
 
   const addGeoJSONAsLayer = async (geojson, fileName) => {
     const id = crypto.randomUUID();
@@ -2364,7 +2460,36 @@ export default function App() {
         import('./export/exportSVG'),
         import('./export/renderScene'),
       ]);
-      const scene = buildScene(mapContainerRef.current, { ...project, layout: { ...project.layout, legendItems } }, leafletMapRef.current);
+      // Build synthetic layers for visible nearby claims so they appear in export
+      let exportLayers = project.layers;
+      if (areaClaims?.visible && areaClaims.features?.length) {
+        const { features, ownerColors = {}, ownerLabels = {}, ownerField, hiddenOwners = [], showInLegend } = areaClaims;
+        const ownerGroups = {};
+        features.forEach((f) => {
+          const owner = (ownerField ? f.properties?.[ownerField] : null) || 'Unknown';
+          if (!(hiddenOwners || []).includes(owner)) {
+            if (!ownerGroups[owner]) ownerGroups[owner] = [];
+            ownerGroups[owner].push(f);
+          }
+        });
+        const claimLayers = Object.entries(ownerGroups).map(([owner, feats]) => {
+          const color = ownerColors[owner] || '#888888';
+          return {
+            id: `__ac_${owner}`,
+            name: ownerLabels[owner] ?? owner,
+            displayName: ownerLabels[owner] ?? owner,
+            type: 'polygons',
+            role: 'other',
+            visible: true,
+            geojson: { type: 'FeatureCollection', features: feats },
+            style: { fill: color, fillOpacity: 0.22, stroke: color, strokeWidth: 1, layerOpacity: 1 },
+            legend: { enabled: !!showInLegend, label: ownerLabels[owner] ?? owner },
+            claimInfo: true,
+          };
+        });
+        exportLayers = [...project.layers, ...claimLayers];
+      }
+      const scene = buildScene(mapContainerRef.current, { ...project, layers: exportLayers, layout: { ...project.layout, legendItems: allLegendItems } }, leafletMapRef.current);
       const opts = { ...(project.layout?.exportSettings || {}), ...extraOptions };
       if (format === 'png') {
         await exportPNG(scene, opts);
@@ -2977,6 +3102,26 @@ export default function App() {
                   </button>
                 </div>
               </div>
+              <div className="control-row">
+                <label>Search Location</label>
+                <div className="acl-pick-row">
+                  <button
+                    className={`secondary-btn compact${areaClaimsPicking ? ' active-toggle' : ''}`}
+                    type="button"
+                    disabled={!mapReady}
+                    onClick={() => setAreaClaimsPicking((p) => !p)}
+                  >
+                    {areaClaimsPicking ? 'Click map…' : '📍 Pick on map'}
+                  </button>
+                  {areaClaimsPickCenter && (
+                    <>
+                      <span className="acl-pick-coords">{areaClaimsPickCenter.lat.toFixed(4)}, {areaClaimsPickCenter.lng.toFixed(4)}</span>
+                      <button className="acl-hide-btn" type="button" title="Clear pin — use claims layer instead" onClick={() => setAreaClaimsPickCenter(null)}>×</button>
+                    </>
+                  )}
+                </div>
+                {!areaClaimsPickCenter && <span className="small-note">Defaults to your claims layer. Drop a pin to search anywhere.</span>}
+              </div>
               {areaClaims && (
                 <>
                   <div className={`area-claims-status${areaClaims.status === 'error' ? ' error' : ''}`}>
@@ -2988,18 +3133,43 @@ export default function App() {
                         <input type="checkbox" checked={!!areaClaims.visible} onChange={(e) => setAreaClaims((prev) => ({ ...prev, visible: e.target.checked }))} />
                         <span>Show on map</span>
                       </label>
+                      <label className="toggle-row">
+                        <input type="checkbox" checked={!!areaClaims.showInLegend} onChange={(e) => setAreaClaims((prev) => ({ ...prev, showInLegend: e.target.checked }))} />
+                        <span>Add to legend</span>
+                      </label>
                       <div className="area-claims-legend">
-                        {Object.entries(areaClaims.ownerColors).slice(0, 12).map(([owner, color]) => (
-                          <div key={owner} className="acl-row">
-                            <span className="acl-swatch" style={{ background: color }} />
-                            <span className="acl-label" title={owner}>{owner}</span>
-                          </div>
-                        ))}
-                        {Object.keys(areaClaims.ownerColors).length > 12 && (
-                          <div className="acl-row acl-more">+{Object.keys(areaClaims.ownerColors).length - 12} more owners</div>
-                        )}
+                        {Object.entries(areaClaims.ownerColors).map(([owner, color]) => {
+                          const hidden = (areaClaims.hiddenOwners || []).includes(owner);
+                          return (
+                            <div key={owner} className={`acl-row${hidden ? ' acl-hidden' : ''}`}>
+                              <input
+                                type="color"
+                                value={color}
+                                title="Change colour"
+                                onChange={(e) => setAreaClaims((prev) => ({ ...prev, ownerColors: { ...prev.ownerColors, [owner]: e.target.value } }))}
+                                className="acl-color-pick"
+                              />
+                              <input
+                                type="text"
+                                value={(areaClaims.ownerLabels || {})[owner] ?? owner}
+                                onChange={(e) => setAreaClaims((prev) => ({ ...prev, ownerLabels: { ...(prev.ownerLabels || {}), [owner]: e.target.value } }))}
+                                className="acl-name-input"
+                                title="Edit display name"
+                              />
+                              <button
+                                type="button"
+                                className="acl-hide-btn"
+                                title={hidden ? 'Show owner' : 'Hide owner'}
+                                onClick={() => setAreaClaims((prev) => {
+                                  const h = prev.hiddenOwners || [];
+                                  return { ...prev, hiddenOwners: h.includes(owner) ? h.filter((o) => o !== owner) : [...h, owner] };
+                                })}
+                              >{hidden ? '👁' : '×'}</button>
+                            </div>
+                          );
+                        })}
                       </div>
-                      <button className="secondary-btn" type="button" onClick={() => { setAreaClaims(null); }}>Clear</button>
+                      <button className="secondary-btn" type="button" onClick={() => { setAreaClaims(null); }}>Clear All</button>
                     </>
                   )}
                 </>
@@ -4013,7 +4183,7 @@ export default function App() {
           })}
         </div>}
 
-        {legendItems.length && project.layout.showLegend !== false ? (
+        {allLegendItems.length && project.layout.showLegend !== false ? (
           <div className="template-zone" style={{ ...zoneStyle(resolvedZones.legend), opacity: dragging?.id === 'legend' ? 0.3 : 1, cursor: 'grab' }} onMouseDown={makeDragHandler('legend', project.layout.legendWidthPx ?? 300, project.layout.legendHeightPx ?? resolvedZones.legend?.height ?? 168)}>
             <button className="panel-delete-btn" title="Hide legend" onClick={() => updateLayout({ showLegend: false })}>×</button>
             <div className={`template-card legend-card${project.layout.legendTransparent ? ' panel--transparent' : ''}`}>
@@ -4474,7 +4644,36 @@ export default function App() {
                     setShareElapsed(0);
                     shareElapsedRef.current = setInterval(() => setShareElapsed(s => s + 1), 1000);
                     try {
-                      const id = await shareMap(project, user?.id ?? null);
+                      // Bake visible nearby claims into layers so recipients see them
+                      let shareProject = project;
+                      if (areaClaims?.visible && areaClaims.features?.length) {
+                        const { features, ownerColors = {}, ownerLabels = {}, ownerField, hiddenOwners = [], showInLegend } = areaClaims;
+                        const ownerGroups = {};
+                        features.forEach((f) => {
+                          const owner = (ownerField ? f.properties?.[ownerField] : null) || 'Unknown';
+                          if (!(hiddenOwners || []).includes(owner)) {
+                            if (!ownerGroups[owner]) ownerGroups[owner] = [];
+                            ownerGroups[owner].push(f);
+                          }
+                        });
+                        const claimLayers = Object.entries(ownerGroups).map(([owner, feats]) => {
+                          const color = ownerColors[owner] || '#888888';
+                          return {
+                            id: `__ac_${owner}`,
+                            name: ownerLabels[owner] ?? owner,
+                            displayName: ownerLabels[owner] ?? owner,
+                            type: 'polygons',
+                            role: 'other',
+                            visible: true,
+                            geojson: { type: 'FeatureCollection', features: feats },
+                            style: { fill: color, fillOpacity: 0.22, stroke: color, strokeWidth: 1, layerOpacity: 1 },
+                            legend: { enabled: !!showInLegend, label: ownerLabels[owner] ?? owner },
+                            claimInfo: true,
+                          };
+                        });
+                        shareProject = { ...project, layers: [...project.layers, ...claimLayers] };
+                      }
+                      const id = await shareMap(shareProject, user?.id ?? null);
                       const base = window.location.origin;
                       setShareUrl(`${base}/map/${id}`);
                     } catch (e) {

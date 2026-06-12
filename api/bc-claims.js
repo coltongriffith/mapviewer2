@@ -18,7 +18,7 @@ export default async function handler(req, res) {
       '&outputFormat=application/json',
       '&typeNames=pub:WHSE_MINERAL_TENURE.MTA_ACQUIRED_TENURE_SVW',
       '&SRSNAME=EPSG:4326',
-      `&BBOX=${minLat},${minLng},${maxLat},${maxLng},EPSG:4326`,
+      `&BBOX=${minLng},${minLat},${maxLng},${maxLat},EPSG:4326`,
       '&count=2000',
     ].join('');
     try {
