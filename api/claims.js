@@ -39,6 +39,27 @@ const ARCGIS_PROVINCES = {
     ownerFields: ['OWNERS', 'HOLDER', 'HOLDER_NAME', 'DISPOSITION_HOLDER', 'OWNER_NAME', 'OWNER', 'CLIENT_NAME'],
     numberFields: ['DISPOSIT_1', 'DISPOSITIO', 'DISPOSITION_NUMBER', 'DISPOSITION_NUM', 'DISP_NUM', 'CLAIM_NUMBER'],
   },
+  mb: {
+    // Manitoba Mineral Dispositions — public ArcGIS REST (Economy/Mines).
+    // Layer 1 is the "Mining Claim" leaf layer (catalog: 0 Mineral Dispositions
+    // group, 1 Mining Claim, 2 Mineral Lease, 3 Mineral Exploration Licence,
+    // 5 Patent Mining Claim, 7 Quarry Dispositions). Server is http-only; the
+    // proxy fetches it server-side so there's no mixed-content concern.
+    service: 'http://maps.gov.mb.ca/arcgis/rest/services/Mineral_Dispositions/MapServer',
+    layerId: 1,
+    ownerFields: ['CLIENT_NAME', 'CLIENT', 'HOLDER', 'HOLDER_NAME', 'RECORDED_HOLDER', 'CLAIMANT', 'OWNER_NAME', 'OWNER', 'COMPANY', 'COMPANY_NAME'],
+    numberFields: ['CLAIM_NUMBER', 'CLAIM_NO', 'CLAIMNUM', 'DISPOSITION_NUMBER', 'DISPOSITION_NO', 'DISP_NUM', 'CID'],
+  },
+  nl: {
+    // Newfoundland & Labrador GeoAtlas Mineral Lands — public ArcGIS REST.
+    // The active claims layer is "Map Staked Claims"; the regex also accepts a
+    // generically-named "Mineral/Active Claims" layer but never "Historical
+    // Claims". Source SR is NAD27; inSR/outSR=4326 makes the server reproject.
+    service: 'https://dnrmaps.gov.nl.ca/arcgis/rest/services/GeoAtlas/Mineral_Lands/MapServer',
+    layerMatch: /(map[\s-]*staked|mineral|active)\s*claims?\b/i,
+    ownerFields: ['LICENSEE', 'LICENCE_HOLDER', 'LICENSE_HOLDER', 'OPERATOR', 'CLIENT_NAME', 'CLIENT', 'HOLDER', 'OWNER_NAME', 'OWNER', 'COMPANY', 'COMPANY_NAME'],
+    numberFields: ['LICENCE_NO', 'LICENCE_NUMBER', 'LICENSE_NO', 'LICENSE_NUMBER', 'CLAIM_NO', 'CLAIM_NUMBER', 'MASTER_NO', 'MAP_NUMBER', 'NTS_CLAIM'],
+  },
   yt: {
     service: 'https://mapservices.gov.yk.ca/arcgis/rest/services/GeoYukon/GY_Mining/MapServer',
     layerMatch: /quartz\s*claims/i,
@@ -140,13 +161,17 @@ function normalizeProps(props) {
 
   const out = { ...props };
   if (out.OWNER_NAME == null) {
-    const k = findKey(/OWNER|HOLDER|CLIENT/i, true);
+    // Second pass covers licence-based registries (NL licensee, MB claimant)
+    // without changing how existing provinces resolve — those hit the first match.
+    const k = findKey(/OWNER|HOLDER|CLIENT/i, true)
+      || findKey(/LICENSEE|LICEN[CS]E_HOLDER|OPERATOR|CLAIMANT|COMPANY/i, true);
     if (k) out.OWNER_NAME = props[k];
   }
   if (out.TAG_NUMBER == null) {
     // DISPOSIT_1 is Saskatchewan's string disposition number (truncated name)
     const k = findKey(/TAG_NUMBER|GRANT_NUM|DISPOSITION_NUM|CLAIM_NUM|TENURE_NUM|DISPOSIT_1/i)
-      || findKey(/NUMBER|DISPOSIT/i);
+      || findKey(/NUMBER|DISPOSIT/i)
+      || findKey(/LICEN[CS]E_NO|LICEN[CS]E_NUM|CLAIM_NO|MASTER_NO|GRANT_NO/i);
     if (k) out.TAG_NUMBER = props[k];
   }
   if (out.AREA_IN_HECTARES == null) {
@@ -155,7 +180,8 @@ function normalizeProps(props) {
   }
   if (out.GOOD_TO_DATE == null) {
     // GOODSTANDI is Saskatchewan's good-standing date (truncated name)
-    const k = findKey(/GOOD_TO|GOODSTAND|EXPIR|END_DATE|ANNIVERS/i);
+    const k = findKey(/GOOD_TO|GOODSTAND|EXPIR|END_DATE|ANNIVERS/i)
+      || findKey(/GOOD.?STAND|DUE_DATE|RENEW|VALID_TO|RECORDED_TO/i);
     if (k && props[k] != null) {
       const v = props[k];
       // ArcGIS GeoJSON emits dates as epoch milliseconds
@@ -266,7 +292,7 @@ export default async function handler(req, res) {
     try {
       const { layerUrl } = await resolveLayerAndFields(cfg, 'company');
       const queryUrl = `${layerUrl}/query?${new URLSearchParams({
-        geometry: JSON.stringify({ xmin: minLng, ymin: minLat, xmax: maxLng, ymax: maxLat }),
+        geometry: JSON.stringify({ xmin: minLng, ymin: minLat, xmax: maxLng, ymax: maxLat, spatialReference: { wkid: 4326 } }),
         geometryType: 'esriGeometryEnvelope',
         spatialRel: 'esriSpatialRelIntersects',
         inSR: '4326',
