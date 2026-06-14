@@ -704,5 +704,197 @@
       "how-to-create-exploration-map-investor-presentation"
     ],
     "publishedDate": "2026-01-05"
+  },
+  {
+    "slug": "how-to-search-ontario-mining-claims",
+    "title": "Ontario Mining Claims Lookup — Search MLAS & Map Claims Free",
+    "metaDescription": "Search Ontario mining claims by company name or claim number using the live MLAS registry, then export a professional map in minutes. No GIS software needed.",
+    "directAnswer": "To look up Ontario mining claims, open Exploration Maps, click 'Add Claims → Search Claims Registry', select Ontario, type a company or licence holder name, choose your claim groups, and click Add to map. The tool queries the Ontario MLAS live registry in real time — no download or login required.",
+    "publishedDate": "2026-06-14",
+    "sections": [
+      {
+        "h2": "What Is the Ontario MLAS?",
+        "body": "The Ontario Mineral Lands Administration System (MLAS) is the provincial registry for mining claims, mining leases, and other mineral dispositions, administered by the Ontario Ministry of Mines. It covers the full province, with active exploration concentrated in the Abitibi Greenstone Belt and Sudbury area. Exploration Maps queries the MLAS public GIS service directly — results reflect the current registry state in real time."
+      },
+      {
+        "h2": "Step 1 — Open the Claims Registry Search for Ontario",
+        "body": "From the Exploration Maps landing page, click 'Add Claims → Search Claims Registry'. In the editor, open '+ Add Claims' in the sidebar. Select Ontario — MLAS from the province dropdown."
+      },
+      {
+        "h2": "Step 2 — Search by Company Name or Claim Number",
+        "body": "Type a company or individual holder name (e.g. 'Alamos Gold', 'Agnico Eagle') in the Company tab and press Enter. Switch to the Claim # tab to look up a specific Ontario mining claim number. Results are grouped by geographic cluster — Kirkland Lake, Timmins, Thunder Bay — to help identify the right tenure package quickly."
+      },
+      {
+        "h2": "Step 3 — Select and Add Claims to Your Map",
+        "body": "Check the groups you want. The summary shows total claim count and area in hectares. Click 'Add to map' — the claims appear as a styled polygon layer. The layer role is set automatically to Claims with standard blue styling recognised in NI 43-101 technical reports."
+      },
+      {
+        "h2": "Step 4 — Style and Export",
+        "body": "Adjust colours, opacity, and border weight in the layer card. Add context overlays for roads and reference labels. Choose a basemap and export as PNG, SVG, or PDF. Watermark-free exports are available by entering your email in the export dialog."
+      }
+    ],
+    "faqs": [
+      {
+        "q": "What is the Ontario mining claims lookup portal?",
+        "a": "The Ontario Mineral Lands Administration System (MLAS) is the official registry at ontario.ca. Exploration Maps connects directly to the MLAS public GIS endpoint so you can search and map claims without logging in or downloading Shapefiles."
+      },
+      {
+        "q": "Can I search Ontario claims by claim number?",
+        "a": "Yes. In the Claims Registry Search dialog, switch to the Claim # tab and enter a numeric claim ID. The result shows the single claim with holder, area, type, and expiry date."
+      },
+      {
+        "q": "Who regulates Ontario mining claims?",
+        "a": "The Ontario Ministry of Mines administers mineral tenure under the Mining Act (Ontario). The MLAS system is the authoritative registry for all active mining claims, mining leases, and licence of occupation dispositions in the province."
+      }
+    ],
+    "relatedSlugs": [
+      "how-to-make-a-mining-claims-map",
+      "how-to-map-bc-mineral-claims-live-registry",
+      "how-to-create-ni-43-101-compliant-map"
+    ]
+  },
+  {
+    "slug": "how-to-search-saskatchewan-mineral-claims",
+    "title": "Saskatchewan Mineral Claims Search — Map Dispositions from MARS Free",
+    "metaDescription": "Search Saskatchewan mineral disposition claims by company or number from the live MARS registry and export a professional exploration map. No GIS software needed.",
+    "directAnswer": "To search Saskatchewan mineral claims, open Exploration Maps, click 'Add Claims → Search Claims Registry', select Saskatchewan, and type a company name or disposition number. Results pull live from the Saskatchewan mineral disposition registry and can be added to your map in one click.",
+    "publishedDate": "2026-06-14",
+    "sections": [
+      {
+        "h2": "Saskatchewan Mineral Tenure — How It Works",
+        "body": "Saskatchewan mineral claims are called Mineral Dispositions and are administered by ISC through the MARS system. The province is a major producer of potash, uranium (Athabasca Basin), gold (La Ronge Belt), and base metals. Exploration Maps queries the provincial GIS service directly for real-time tenure data."
+      },
+      {
+        "h2": "Step 1 — Select Saskatchewan in the Registry Search",
+        "body": "In Exploration Maps, click 'Add Claims → Search Claims Registry' and choose Saskatchewan from the province dropdown. You will see two search tabs: Company (holder name) and Claim # (disposition number)."
+      },
+      {
+        "h2": "Step 2 — Search by Holder or Disposition Number",
+        "body": "Type a company name — e.g. 'Cameco', 'Denison Mines', 'Foran Mining'. Saskatchewan disposition numbers are alphanumeric (e.g. MC00001234) — enter one in the Claim # tab to retrieve a single disposition. Results are clustered geographically: Athabasca Basin, La Ronge, Flin Flon Belt."
+      },
+      {
+        "h2": "Step 3 — Select Groups and Add to Map",
+        "body": "Check each geographic group you need. The summary shows total hectares across selected dispositions. Click Add to map — the dispositions are loaded as a styled polygon layer. Colours, line weights, and opacity are all adjustable."
+      },
+      {
+        "h2": "Step 4 — Export Your Saskatchewan Map",
+        "body": "Choose a basemap (Terrain works well for Athabasca Basin properties), add reference labels, and export as PNG or PDF. Use the 3:4 Portrait ratio for NI 43-101 report figures."
+      }
+    ],
+    "faqs": [
+      {
+        "q": "What is MARS and how do I access Saskatchewan mineral claims?",
+        "a": "MARS (Mineral Administration Registry Saskatchewan) is the provincial system for recording and managing mineral dispositions, administered by ISC. The public viewer is at mars.isc.ca. Exploration Maps queries the underlying GIS API so you can search and export maps without downloading files."
+      },
+      {
+        "q": "What are Saskatchewan mineral dispositions?",
+        "a": "Mineral dispositions in Saskatchewan include Mineral Claims, Mineral Leases, and Prospecting Permits. A Mineral Claim grants the exclusive right to explore for and develop minerals in a defined area and must be renewed to remain in good standing."
+      },
+      {
+        "q": "Who regulates mineral claims in Saskatchewan?",
+        "a": "The Saskatchewan Ministry of Energy and Resources administers the Mineral Resources Act. The ISC MARS system is the authoritative registry for all active mineral dispositions in the province."
+      }
+    ],
+    "relatedSlugs": [
+      "how-to-make-a-mining-claims-map",
+      "how-to-search-ontario-mining-claims",
+      "how-to-map-bc-mineral-claims-live-registry"
+    ]
+  },
+  {
+    "slug": "how-to-search-manitoba-mining-claims",
+    "title": "Manitoba Mining Claims Search — Map Dispositions Free",
+    "metaDescription": "Search Manitoba mining claim dispositions by company or claim number from the live provincial registry and export a professional exploration map. No GIS software needed.",
+    "directAnswer": "To search Manitoba mining claims, open Exploration Maps, select 'Add Claims → Search Claims Registry', choose Manitoba, and type a company name or claim number. Results pull live from the Manitoba Mineral Dispositions registry. One click adds the claims as a styled polygon layer ready to export.",
+    "publishedDate": "2026-06-14",
+    "sections": [
+      {
+        "h2": "Manitoba Mineral Tenure Overview",
+        "body": "Manitoba mining claims are regulated by the Ministry of Economic Development, Investment, Trade and Natural Resources. The province hosts the Thompson Nickel Belt, extensive VMS gold-zinc mineralisation near Flin Flon and Snow Lake, and emerging lithium and cesium claims in the Tanco pegmatite district. Mineral claims and leases are registered through Manitoba Mineral Titles Online (MMTO)."
+      },
+      {
+        "h2": "Step 1 — Select Manitoba in Registry Search",
+        "body": "In Exploration Maps, click 'Add Claims → Search Claims Registry'. From the province selector choose Manitoba — Mineral Dispositions. Two search tabs are available: Company (registered client or holder name) and Claim # (specific claim number such as CB12345)."
+      },
+      {
+        "h2": "Step 2 — Search by Company or Claim Number",
+        "body": "Type a company name such as 'Hudbay Minerals', 'Patriot Battery Metals', or 'First Quantum'. The Company tab queries the registered holder field against the Manitoba ArcGIS REST service in real time. Results are clustered by location — Thompson, Flin Flon, Snow Lake — to help identify distinct prospect areas."
+      },
+      {
+        "h2": "Step 3 — Add Claims to Your Map",
+        "body": "Select the geographic groups that match your project. Click Add to map — the Mining Claim polygons are loaded as a new layer automatically styled for investor presentations. Colours, opacity, and labels are fully adjustable."
+      },
+      {
+        "h2": "Step 4 — Export a Professional Manitoba Exploration Map",
+        "body": "Add a basemap (Terrain is ideal for Thompson Nickel Belt properties), turn on Context and Reference Labels overlays, then export as PNG or PDF. 3× pixel ratio PDF exports meet NI 43-101 figure standards."
+      }
+    ],
+    "faqs": [
+      {
+        "q": "How do I look up who owns mineral claims in Manitoba?",
+        "a": "Exploration Maps queries the Manitoba Mineral Dispositions public ArcGIS REST API in real time. Search by company name to see all active Mining Claims registered to that client. You can also visit web2.gov.mb.ca/mineral/mmto.php directly for the government portal."
+      },
+      {
+        "q": "What types of mineral dispositions exist in Manitoba?",
+        "a": "Manitoba mineral dispositions include Mining Claims, Mineral Leases, Mineral Exploration Licences, and Patent Mining Claims (historical). Active Mining Claims are the primary exploration tenure and the layer queried by Exploration Maps."
+      },
+      {
+        "q": "Who regulates Manitoba mining claims?",
+        "a": "The Manitoba Geological Survey and the Ministry of Economic Development, Investment, Trade and Natural Resources administer mineral rights under The Mines and Minerals Act. Manitoba Mineral Titles Online (MMTO) is the registration and tracking system."
+      }
+    ],
+    "relatedSlugs": [
+      "how-to-make-a-mining-claims-map",
+      "how-to-search-ontario-mining-claims",
+      "how-to-search-saskatchewan-mineral-claims"
+    ]
+  },
+  {
+    "slug": "how-to-search-newfoundland-mineral-claims",
+    "title": "Newfoundland Mineral Claims Search — Look Up Licences via GeoAtlas Free",
+    "metaDescription": "Search Newfoundland and Labrador mineral exploration licences by company or licence number using the live GeoAtlas registry and export a professional exploration map.",
+    "directAnswer": "To search Newfoundland and Labrador mineral claims (exploration licences), open Exploration Maps, click 'Add Claims → Search Claims Registry', select Newfoundland & Labrador, and type a company or licensee name. Results pull from the NL GeoAtlas live registry and are added to your map in seconds.",
+    "publishedDate": "2026-06-14",
+    "sections": [
+      {
+        "h2": "Newfoundland Mineral Tenure — Licence-Based System",
+        "body": "Newfoundland and Labrador uses a licence-based tenure system. A Mineral Exploration Licence (MEL) grants the holder exclusive exploration rights within a defined map-staked area covering up to 256 cells of 25 ha each. The province is experiencing a gold exploration renaissance in central Newfoundland's Exploits Subzone, while Labrador hosts world-class iron ore and base metal deposits including Voisey's Bay. Active licences are managed by the NL Department of Industry, Energy and Technology and visible in real time on the NL GeoAtlas."
+      },
+      {
+        "h2": "Step 1 — Open Registry Search for Newfoundland",
+        "body": "In Exploration Maps, click 'Add Claims → Search Claims Registry' and select Newfoundland & Labrador — GeoAtlas from the province dropdown. Two search tabs are available: Company (search by licensee name) and Claim # (search by licence number)."
+      },
+      {
+        "h2": "Step 2 — Search by Licensee or Licence Number",
+        "body": "Type a company or individual licensee name — e.g. 'New Found Gold', 'Exploits Discovery', 'Labrador Iron Ore Royalty'. The search queries the licensee field in the NL GeoAtlas Mineral Lands service. For a specific licence, switch to Claim # and enter the NL licence number. Results are clustered geographically — Central Newfoundland, Labrador Trough, Northern Peninsula."
+      },
+      {
+        "h2": "Step 3 — Select and Import Licences",
+        "body": "Select the geographic clusters that match your project area. Review the total hectares and expiry information. Click Add to map to load the licence polygons as a styled claims layer with standard investor-ready styling applied automatically."
+      },
+      {
+        "h2": "Step 4 — Export a Professional NL Map",
+        "body": "Add a basemap (Terrain or Satellite), enable Reference Labels for communities and geographical features, and export as PNG or PDF. Include an inset map showing the regional context of the Exploits Subzone or Labrador Trough — investors familiar with New Found Gold discoveries will immediately recognise the significance of your property location."
+      }
+    ],
+    "faqs": [
+      {
+        "q": "What is a Newfoundland Mineral Exploration Licence (MEL)?",
+        "a": "A Mineral Exploration Licence (MEL) is the primary exploration tenure in Newfoundland and Labrador, issued under the Mineral Act. Each MEL covers up to 256 map-staked cells of 25 ha each (6,400 ha total). The licence is renewable annually and grants exclusive exploration rights within the licenced area."
+      },
+      {
+        "q": "How do I look up NL mineral exploration licences online?",
+        "a": "The NL GeoAtlas portal at geoatlas.gov.nl.ca shows active mineral licences in real time. Exploration Maps connects directly to the underlying GeoAtlas GIS service, allowing you to search by company name or licence number and immediately map the results without downloading files."
+      },
+      {
+        "q": "Who regulates mineral exploration in Newfoundland and Labrador?",
+        "a": "The NL Department of Industry, Energy and Technology (Mines Branch, Mineral Lands Division) administers mineral exploration licences under the Mineral Act. The GeoAtlas system is maintained by the NL Geological Survey and provides public access to real-time mineral lands data."
+      }
+    ],
+    "relatedSlugs": [
+      "how-to-make-a-mining-claims-map",
+      "how-to-search-ontario-mining-claims",
+      "how-to-search-manitoba-mining-claims"
+    ]
   }
 ]
