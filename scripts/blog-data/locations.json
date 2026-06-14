@@ -35,7 +35,10 @@
     "dataSourceUrl": "https://www2.gov.bc.ca/gov/content/industry/mineral-exploration-mining/mineral-titles",
     "dataFormats": "Shapefile (SHP), KML",
     "dataNote": "BC Mineral Titles Online exports shapefiles in BC Albers (EPSG:3005). Convert to WGS84 (EPSG:4326) using QGIS or mapshaper.org before importing into Exploration Maps.",
-    "workflowTip": "Golden Triangle properties often span multiple NTS 1:50,000 map sheets \u2014 confirm your GeoJSON covers the full tenure area and check for boundary gaps before placing callout labels on key drill holes."
+    "workflowTip": "Golden Triangle properties often span multiple NTS 1:50,000 map sheets \u2014 confirm your GeoJSON covers the full tenure area and check for boundary gaps before placing callout labels on key drill holes.",
+    "liveRegistry": true,
+    "liveRegistryName": "BC Mineral Titles Online (MTO)",
+    "liveRegistrySearchSlug": "how-to-map-bc-mineral-claims-live-registry"
   },
   {
     "name": "Ontario",
@@ -73,7 +76,10 @@
     "dataSourceUrl": "https://www.ontario.ca/page/mineral-lands-administration-system-mlas",
     "dataFormats": "Shapefile, CSV, KML",
     "dataNote": "MLAS exports use NAD83 UTM Zone 17N (EPSG:32617) for most of Ontario. Convert to WGS84 before importing, or verify your data's coordinate system when the imported layer appears offset from the basemap.",
-    "workflowTip": "The Abitibi Greenstone Belt straddles the Ontario\u2013Quebec border \u2014 if your property spans both provinces, import the two provincial claim files as separate layers and keep them distinct for regulatory clarity."
+    "workflowTip": "The Abitibi Greenstone Belt straddles the Ontario\u2013Quebec border \u2014 if your property spans both provinces, import the two provincial claim files as separate layers and keep them distinct for regulatory clarity.",
+    "liveRegistry": true,
+    "liveRegistryName": "Ontario MLAS",
+    "liveRegistrySearchSlug": "how-to-search-ontario-mining-claims"
   },
   {
     "name": "Quebec",
@@ -184,7 +190,10 @@
     "dataSourceUrl": "https://applications.saskatchewan.ca/mineral/",
     "dataFormats": "Shapefile, KML, PDF",
     "dataNote": "Saskatchewan's mineral claims system exports in Saskatchewan Transverse Mercator (EPSG:3400). Use QGIS or mapshaper.org to reproject to WGS84 before importing. Some older claim maps are only available as PDFs \u2014 digitize outlines manually or contact the Ministry for shapefile data.",
-    "workflowTip": "Athabasca Basin uranium properties are typically remote and accessible only by floatplane \u2014 use the Satellite basemap to show the lake-dotted Shield terrain, and add a distance ring from the nearest community (Uranium City, La Loche) to communicate logistics immediately."
+    "workflowTip": "Athabasca Basin uranium properties are typically remote and accessible only by floatplane \u2014 use the Satellite basemap to show the lake-dotted Shield terrain, and add a distance ring from the nearest community (Uranium City, La Loche) to communicate logistics immediately.",
+    "liveRegistry": true,
+    "liveRegistryName": "Saskatchewan MARS",
+    "liveRegistrySearchSlug": "how-to-search-saskatchewan-mineral-claims"
   },
   {
     "name": "Manitoba",
@@ -222,7 +231,10 @@
     "dataSourceUrl": "https://web2.gov.mb.ca/mineral/mmto.php",
     "dataFormats": "Shapefile, KML",
     "dataNote": "Manitoba Mineral Titles Online uses NAD83 geographic coordinates and allows polygon export directly from the map interface. Download your claim group as a Shapefile and convert if needed, though NAD83 and WGS84 are functionally equivalent for most Manitoba locations.",
-    "workflowTip": "Thompson Nickel Belt drill programs often target deep sulphide zones \u2014 label your drill collar map clearly as showing surface collar positions, and note the target depth range in the title block to avoid confusion with the surface expression of the deposit."
+    "workflowTip": "Thompson Nickel Belt drill programs often target deep sulphide zones \u2014 label your drill collar map clearly as showing surface collar positions, and note the target depth range in the title block to avoid confusion with the surface expression of the deposit.",
+    "liveRegistry": true,
+    "liveRegistryName": "Manitoba Mineral Titles Online",
+    "liveRegistrySearchSlug": "how-to-search-manitoba-mining-claims"
   },
   {
     "name": "Nova Scotia",
@@ -295,7 +307,10 @@
     "dataSourceUrl": "https://geoatlas.gov.nl.ca/",
     "dataFormats": "Shapefile, KML",
     "dataNote": "NL GeoAtlas provides mineral claim data as NAD83 geographic coordinates. Download the 'Active Mining Claims' layer from the geospatial data portal. Labrador properties may cross the Quebec boundary \u2014 verify both provincial claim databases if your tenure straddles the border.",
-    "workflowTip": "Central Newfoundland's gold exploration district is active and growing \u2014 include a regional inset showing the Exploits Subzone and the locations of nearby past-producing mines (Nugget Pond, Hammerdown) to give investors the geological context that makes junior projects compelling."
+    "workflowTip": "Central Newfoundland's gold exploration district is active and growing \u2014 include a regional inset showing the Exploits Subzone and the locations of nearby past-producing mines (Nugget Pond, Hammerdown) to give investors the geological context that makes junior projects compelling.",
+    "liveRegistry": true,
+    "liveRegistryName": "NL GeoAtlas",
+    "liveRegistrySearchSlug": "how-to-search-newfoundland-mineral-claims"
   },
   {
     "name": "Yukon",
@@ -333,7 +348,10 @@
     "dataSourceUrl": "https://mapbrowser.gov.yk.ca/",
     "dataFormats": "Shapefile, KML",
     "dataNote": "Yukon MapBrowser exports claim boundaries in NAD83 geographic coordinates. The territory is vast \u2014 properties are often referenced on NTS 1:250,000 map sheets. Include the NTS sheet number in your title block to help regulatory reviewers locate your property.",
-    "workflowTip": "Yukon frontier properties often lack nearby infrastructure \u2014 add a distance ring or annotation showing the distance to the nearest highway or Whitehorse to immediately communicate the fly-in or road-access context that investors need to assess project logistics."
+    "workflowTip": "Yukon frontier properties often lack nearby infrastructure \u2014 add a distance ring or annotation showing the distance to the nearest highway or Whitehorse to immediately communicate the fly-in or road-access context that investors need to assess project logistics.",
+    "liveRegistry": true,
+    "liveRegistryName": "GeoYukon",
+    "liveRegistrySearchSlug": null
   },
   {
     "name": "Northwest Territories",

@@ -52,11 +52,13 @@ const ARCGIS_PROVINCES = {
   },
   nl: {
     // Newfoundland & Labrador GeoAtlas Mineral Lands — public ArcGIS REST.
-    // The active claims layer is "Map Staked Claims"; the regex also accepts a
-    // generically-named "Mineral/Active Claims" layer but never "Historical
-    // Claims". Source SR is NAD27; inSR/outSR=4326 makes the server reproject.
+    // NL uses a licence-based system; the active layer may be named "Map Staked
+    // Claims", "Mineral Claims", or "Mineral Licences" depending on server version.
+    // The regex captures both "claims" and "licences" variants and excludes
+    // "Historical". resolveLayerAndFields is tolerant of empty field lists so
+    // bbox queries work even when the server doesn't expose field metadata.
     service: 'https://dnrmaps.gov.nl.ca/arcgis/rest/services/GeoAtlas/Mineral_Lands/MapServer',
-    layerMatch: /(map[\s-]*staked|mineral|active)\s*claims?\b/i,
+    layerMatch: /(map[\s-]*staked\s*(claims?|licen[cs]e[sd]?)|(mineral|active|current)\s*(claims?|licen[cs]e[sd]?))/i,
     ownerFields: ['LICENSEE', 'LICENCE_HOLDER', 'LICENSE_HOLDER', 'OPERATOR', 'CLIENT_NAME', 'CLIENT', 'HOLDER', 'OWNER_NAME', 'OWNER', 'COMPANY', 'COMPANY_NAME'],
     numberFields: ['LICENCE_NO', 'LICENCE_NUMBER', 'LICENSE_NO', 'LICENSE_NUMBER', 'CLAIM_NO', 'CLAIM_NUMBER', 'MASTER_NO', 'MAP_NUMBER', 'NTS_CLAIM'],
   },
@@ -117,11 +119,19 @@ async function resolveLayerAndFields(cfg, type) {
   const cacheKey = `resolved:${cfg.service}:${cfg.layerMatch || cfg.layerId}:${type === 'number' ? 'number' : 'owner'}`;
   if (metaCache.has(cacheKey)) return metaCache.get(cacheKey);
   const candidates = await listCandidateLayers(cfg);
-  let fallback = null;
+  let fallback = null;       // layer that resolved fields but didn't have the wanted field
+  let urlOnlyFallback = null; // layer whose field metadata failed — URL still usable for bbox
   for (const layer of candidates.slice(0, 6)) {
     const layerUrl = `${cfg.service}/${layer.id}`;
     let fields;
-    try { fields = await resolveFields(layerUrl); } catch { continue; }
+    try {
+      fields = await resolveFields(layerUrl);
+    } catch {
+      // Keep the layer URL even if field metadata is unavailable — the bbox path
+      // only needs a valid query endpoint, not field names.
+      if (!urlOnlyFallback) urlOnlyFallback = { layerUrl, layerName: layer.name, fields: [] };
+      continue;
+    }
     const resolved = { layerUrl, layerName: layer.name, fields };
     if (pickField(wanted, fields)) {
       metaCache.set(cacheKey, resolved);
@@ -129,9 +139,10 @@ async function resolveLayerAndFields(cfg, type) {
     }
     if (!fallback) fallback = resolved;
   }
-  if (fallback) {
-    metaCache.set(cacheKey, fallback);
-    return fallback;
+  const best = fallback || urlOnlyFallback;
+  if (best) {
+    metaCache.set(cacheKey, best);
+    return best;
   }
   throw new Error('No usable claims layer found in service');
 }
@@ -150,6 +161,50 @@ function escapeSql(term) {
 
 function isStringType(field) {
   return field.type === 'esriFieldTypeString';
+}
+
+// Convert ArcGIS esri JSON (f=json) to GeoJSON. Used as fallback when a server
+// returns 500 for f=geojson (ArcGIS Server < 10.3 doesn't support that format).
+function esriToGeoJSON(esriResult) {
+  const features = (esriResult?.features || []).map((f) => {
+    const g = f.geometry;
+    let geometry = null;
+    if (g) {
+      if (g.rings) {
+        // Single ring → Polygon; multiple rings → Polygon with exterior + holes
+        // (GeoJSON Polygon allows multiple rings; winding order is lenient in renderers)
+        geometry = { type: 'Polygon', coordinates: g.rings };
+      } else if (g.paths) {
+        geometry = { type: 'MultiLineString', coordinates: g.paths };
+      } else if (g.x != null) {
+        geometry = { type: 'Point', coordinates: [g.x, g.y] };
+      }
+    }
+    return { type: 'Feature', geometry, properties: f.attributes || {} };
+  });
+  return { type: 'FeatureCollection', features };
+}
+
+// Fetch a query URL, trying f=geojson first and falling back to f=json + convert
+// if the server returns a non-2xx (older ArcGIS servers pre-10.3).
+async function fetchQueryGeoJSON(queryUrl) {
+  try {
+    const data = await fetchJson(queryUrl);
+    if (data.error) throw new Error(JSON.stringify(data.error).slice(0, 500));
+    // Real GeoJSON has a `type` key; esri JSON has `objectIdFieldName` etc.
+    if (data.type === 'FeatureCollection') return data;
+    // Server returned esri JSON even though we asked for geojson — convert it
+    return esriToGeoJSON(data);
+  } catch (firstErr) {
+    // Only retry on 4xx/5xx (upstream errors), not on parse errors
+    if (!firstErr.message?.startsWith('Upstream')) throw firstErr;
+    // Replace f=geojson with f=json in the URL and retry
+    const fallbackUrl = queryUrl.replace(/([?&])f=geojson(&|$)/, '$1f=json$2');
+    if (fallbackUrl === queryUrl) throw firstErr; // no replacement → rethrow
+    const data = await fetchJson(fallbackUrl);
+    if (data.error) throw new Error(JSON.stringify(data.error).slice(0, 500));
+    return esriToGeoJSON(data);
+  }
 }
 
 // Map raw ArcGIS properties onto the BC-style keys the UI renders.
@@ -238,8 +293,7 @@ async function searchArcgis(cfg, term, type, res) {
     f: 'geojson',
   })}`;
 
-  const data = await fetchJson(queryUrl);
-  if (data.error) throw new Error(JSON.stringify(data.error).slice(0, 500));
+  const data = await fetchQueryGeoJSON(queryUrl);
   if (!Array.isArray(data.features)) throw new Error('Unexpected response from provincial map service');
 
   data.features = data.features.map((f) => ({
@@ -302,8 +356,7 @@ export default async function handler(req, res) {
         resultRecordCount: '2000',
         f: 'geojson',
       })}`;
-      const data = await fetchJson(queryUrl);
-      if (data.error) throw new Error(JSON.stringify(data.error).slice(0, 500));
+      const data = await fetchQueryGeoJSON(queryUrl);
       if (!Array.isArray(data.features)) throw new Error('Unexpected response from provincial map service');
       data.features = data.features.map((f) => ({
         ...f,
