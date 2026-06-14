@@ -1,11 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 
 const ADMIN_EMAIL = import.meta.env.VITE_ADMIN_EMAIL;
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
+// ── Formatting helpers ─────────────────────────────────────────────────────────
 function fmt(iso) {
   if (!iso) return '—';
   return new Date(iso).toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -20,9 +19,12 @@ function fmtNum(n) {
   if (n == null) return '—';
   return Number(n).toLocaleString();
 }
+function pct(part, whole) {
+  if (!whole) return 0;
+  return Math.round((Number(part) / Number(whole)) * 100);
+}
 
-// ── Pagination ────────────────────────────────────────────────────────────────
-
+// ── Pagination ──────────────────────────────────────────────────────────────────
 function usePagination(data, pageSize = 10) {
   const [page, setPage] = React.useState(0);
   const total = data?.length || 0;
@@ -31,7 +33,6 @@ function usePagination(data, pageSize = 10) {
   React.useEffect(() => { setPage(0); }, [data]);
   return { slice, page, pageCount, setPage, total };
 }
-
 function Pagination({ page, pageCount, setPage, total }) {
   if (pageCount <= 1) return null;
   return (
@@ -44,23 +45,44 @@ function Pagination({ page, pageCount, setPage, total }) {
   );
 }
 
-// ── Sub-components ────────────────────────────────────────────────────────────
+// ── Primitives ──────────────────────────────────────────────────────────────────
+function Delta({ trend }) {
+  if (!trend) return null;
+  const { cur, prior } = trend;
+  if (prior === 0 && cur === 0) return null;
+  if (prior === 0) return <span className="adm-delta up">▲ New</span>;
+  const change = Math.round(((cur - prior) / prior) * 100);
+  if (change === 0) return <span className="adm-delta flat">0%</span>;
+  const up = change > 0;
+  return <span className={`adm-delta ${up ? 'up' : 'down'}`}>{up ? '▲' : '▼'} {Math.abs(change)}%</span>;
+}
 
-function KPI({ label, value, detail, accent }) {
+function KPI({ label, value, trend, detail, accent }) {
   return (
-    <div className="adm-kpi" style={accent ? { borderTop: `3px solid ${accent}` } : {}}>
+    <div className="adm-kpi" style={accent ? { '--kpi-accent': accent } : {}}>
+      <div className="adm-kpi-top">
+        <span className="adm-kpi-label">{label}</span>
+        {trend && <Delta trend={trend} />}
+      </div>
       <div className="adm-kpi-value">{value ?? <span className="adm-skeleton">···</span>}</div>
-      <div className="adm-kpi-label">{label}</div>
       {detail && <div className="adm-kpi-detail">{detail}</div>}
     </div>
   );
 }
 
-function SectionHeader({ title, count }) {
+function Card({ title, count, eyebrow, children, full }) {
   return (
-    <div className="adm-section-header">
-      <h2 className="adm-section-title">{title}</h2>
-      {count != null && <span className="adm-pill">{count}</span>}
+    <div className={`adm-card${full ? ' adm-card-full' : ''}`}>
+      {(title || eyebrow) && (
+        <div className="adm-card-head">
+          <div>
+            {eyebrow && <p className="adm-card-eyebrow">{eyebrow}</p>}
+            {title && <h2 className="adm-card-title">{title}</h2>}
+          </div>
+          {count != null && <span className="adm-pill">{count}</span>}
+        </div>
+      )}
+      {children}
     </div>
   );
 }
@@ -69,80 +91,133 @@ function Empty({ message }) {
   return <p className="adm-empty">{message}</p>;
 }
 
-function BarChart({ data }) {
-  if (!data || data.length === 0) return <Empty message="No visit data yet — sessions will appear here once users visit the app." />;
+function FormatBadge({ format }) {
+  const colors = { png: '#0ea5e9', svg: '#8b5cf6', pdf: '#f59e0b' };
+  const bg = colors[format?.toLowerCase()] || '#64748b';
+  return <span className="adm-format-badge" style={{ background: bg + '20', color: bg }}>{format?.toUpperCase()}</span>;
+}
 
-  const sorted = [...data].reverse(); // oldest → newest
-  const max = Math.max(...sorted.map((r) => Number(r.sessions)), 1);
-  const gridLines = [0.25, 0.5, 0.75, 1];
-
-  // Show date label every N bars
-  const labelEvery = sorted.length > 20 ? 7 : sorted.length > 10 ? 5 : 1;
+// ── Charts ──────────────────────────────────────────────────────────────────────
+function AreaChart({ data }) {
+  if (!data || data.length === 0) {
+    return <Empty message="No visit data yet — sessions appear here once users land on the app." />;
+  }
+  const pts = [...data]; // RPC returns oldest → newest
+  const W = 720, H = 180, P = 8;
+  const vals = pts.map((p) => Number(p.sessions) || 0);
+  const max = Math.max(...vals, 1);
+  const stepX = pts.length > 1 ? (W - 2 * P) / (pts.length - 1) : 0;
+  const xAt = (i) => (pts.length > 1 ? P + i * stepX : W / 2);
+  const yAt = (v) => H - P - (v / max) * (H - 2 * P - 14);
+  const line = pts.map((p, i) => `${xAt(i).toFixed(1)},${yAt(Number(p.sessions) || 0).toFixed(1)}`);
+  const linePath = 'M' + line.join(' L');
+  const areaPath = `M${xAt(0).toFixed(1)},${H - P} L` + line.join(' L') + ` L${xAt(pts.length - 1).toFixed(1)},${H - P} Z`;
+  const lastIdx = pts.length - 1;
+  const labelIdx = pts.length > 2 ? [0, Math.floor(lastIdx / 2), lastIdx] : pts.map((_, i) => i);
 
   return (
-    <div className="adm-chart-wrap">
-      {/* Y-axis */}
-      <div className="adm-y-axis">
-        {[...gridLines].reverse().map((f) => (
-          <div key={f} className="adm-y-label">{Math.round(max * f)}</div>
+    <div className="adm-area-wrap">
+      <svg viewBox={`0 0 ${W} ${H}`} className="adm-area-svg" preserveAspectRatio="none">
+        <defs>
+          <linearGradient id="admArea" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.28" />
+            <stop offset="100%" stopColor="#3b82f6" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        {[0.5, 1].map((f) => (
+          <line key={f} x1={P} x2={W - P} y1={yAt(max * f)} y2={yAt(max * f)} className="adm-area-grid" />
         ))}
-        <div className="adm-y-label">0</div>
-      </div>
-      {/* Chart area */}
-      <div className="adm-chart-area">
-        {/* Grid lines */}
-        {gridLines.map((f) => (
-          <div key={f} className="adm-grid-line" style={{ bottom: `${f * 100}%` }} />
+        <path d={areaPath} fill="url(#admArea)" />
+        <path d={linePath} className="adm-area-line" />
+        {pts.map((p, i) => (
+          <circle key={i} cx={xAt(i)} cy={yAt(Number(p.sessions) || 0)} r={i === lastIdx ? 3.5 : 2} className="adm-area-dot">
+            <title>{`${p.visit_date}\n${p.sessions} sessions · ${p.logged_in_sessions ?? 0} logged in`}</title>
+          </circle>
         ))}
-        {/* Bars */}
-        <div className="adm-bars">
-          {sorted.map((r, i) => {
-            const pct = Math.max(2, (Number(r.sessions) / max) * 100);
-            const showLabel = i % labelEvery === 0 || i === sorted.length - 1;
-            const label = r.visit_date?.slice(5); // MM-DD
-            return (
-              <div key={r.visit_date} className="adm-bar-col" title={`${r.visit_date}\n${r.sessions} sessions · ${r.logged_in_sessions ?? 0} logged in`}>
-                <div className="adm-bar-fill" style={{ height: `${pct}%` }}>
-                  <span className="adm-bar-tip">{r.sessions}</span>
-                </div>
-                {showLabel && <div className="adm-bar-label">{label}</div>}
-              </div>
-            );
-          })}
-        </div>
+      </svg>
+      <div className="adm-area-axis">
+        {labelIdx.map((i) => <span key={i}>{pts[i].visit_date?.slice(5)}</span>)}
       </div>
     </div>
   );
 }
 
-function FormatBadge({ format }) {
-  const colors = { png: '#0ea5e9', svg: '#8b5cf6', pdf: '#f59e0b' };
-  const bg = colors[format?.toLowerCase()] || '#64748b';
+function Donut({ segments, centerLabel }) {
+  const total = segments.reduce((s, x) => s + Number(x.value || 0), 0);
+  if (!total) return <Empty message="No data yet." />;
+  const R = 42, C = 2 * Math.PI * R;
+  let acc = 0;
   return (
-    <span className="adm-format-badge" style={{ background: bg + '20', color: bg }}>
-      {format?.toUpperCase()}
-    </span>
+    <div className="adm-donut-wrap">
+      <svg viewBox="0 0 100 100" className="adm-donut">
+        <circle cx="50" cy="50" r={R} fill="none" stroke="#f1f5f9" strokeWidth="14" />
+        {segments.map((s, i) => {
+          const frac = Number(s.value || 0) / total;
+          const dash = frac * C;
+          const el = (
+            <circle key={i} cx="50" cy="50" r={R} fill="none" stroke={s.color} strokeWidth="14"
+              strokeDasharray={`${dash} ${C - dash}`} strokeDashoffset={-acc * C}
+              transform="rotate(-90 50 50)" />
+          );
+          acc += frac;
+          return el;
+        })}
+        <text x="50" y="47" textAnchor="middle" className="adm-donut-num">{fmtNum(total)}</text>
+        <text x="50" y="60" textAnchor="middle" className="adm-donut-lbl">{centerLabel}</text>
+      </svg>
+      <div className="adm-donut-legend">
+        {segments.map((s, i) => (
+          <div key={i} className="adm-donut-leg-row">
+            <span className="adm-donut-dot" style={{ background: s.color }} />
+            <span className="adm-donut-leg-label">{s.label}</span>
+            <span className="adm-donut-leg-val">{pct(s.value, total)}%</span>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
-// ── Landing click chart ───────────────────────────────────────────────────────
-
-function LandingClickChart({ data }) {
-  const total = data.reduce((s, r) => s + Number(r.count), 0);
-  const max   = Math.max(...data.map(r => Number(r.count)), 1);
+function HBars({ rows, color = '#3b82f6', emptyMsg }) {
+  if (!rows || rows.length === 0) return <Empty message={emptyMsg || 'No data yet.'} />;
+  const max = Math.max(...rows.map((r) => Number(r.value) || 0), 1);
+  const total = rows.reduce((s, r) => s + (Number(r.value) || 0), 0);
   return (
-    <div className="adm-click-chart">
-      {data.map((r, i) => {
-        const pct = Math.round((Number(r.count) / total) * 100);
-        const barW = Math.round((Number(r.count) / max) * 100);
+    <div className="adm-hbars">
+      {rows.map((r, i) => (
+        <div key={i} className="adm-hbar-row">
+          <div className="adm-hbar-label" title={r.label}>{r.label}</div>
+          <div className="adm-hbar-track">
+            <div className="adm-hbar-fill" style={{ width: `${Math.max(2, pct(r.value, max))}%`, background: r.color || color }} />
+          </div>
+          <div className="adm-hbar-num">{fmtNum(r.value)}</div>
+          <div className="adm-hbar-pct">{pct(r.value, total)}%</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Funnel({ steps }) {
+  const top = steps[0]?.value || 1;
+  return (
+    <div className="adm-funnel">
+      {steps.map((s, i) => {
+        const conv = i > 0 ? pct(s.value, steps[i - 1].value) : null;
         return (
-          <div key={i} className="adm-click-row">
-            <div className="adm-click-label" title={r.element}>{r.element || '(no label)'}</div>
-            <div className="adm-click-track">
-              <div className="adm-click-fill" style={{ width: `${barW}%` }} />
+          <div key={i} className="adm-funnel-step">
+            <div className="adm-funnel-meta">
+              <span className="adm-funnel-label">{s.label}</span>
+              <span className="adm-funnel-val">{fmtNum(s.value)}</span>
             </div>
-            <div className="adm-click-count">{r.count}</div>
-            <div className="adm-click-pct">{pct}%</div>
+            <div className="adm-funnel-track">
+              <div className="adm-funnel-bar" style={{ width: `${Math.max(3, pct(s.value, top))}%`, background: s.color }} />
+            </div>
+            {conv != null && (
+              <div className="adm-funnel-conv">
+                <span className="adm-funnel-arrow">↳</span> {conv}% convert from {steps[i - 1].label.toLowerCase()}
+              </div>
+            )}
           </div>
         );
       })}
@@ -150,61 +225,69 @@ function LandingClickChart({ data }) {
   );
 }
 
-// ── Main component ────────────────────────────────────────────────────────────
+// ── Main ──────────────────────────────────────────────────────────────────────
+const RPC_CALLS = [
+  ['users', 'admin_get_users'],
+  ['exportStats', 'admin_get_export_stats'],
+  ['leads', 'admin_get_leads'],
+  ['recentExports', 'admin_get_recent_exports'],
+  ['dailyVisitors', 'admin_get_daily_visitors'],
+  ['referrerStats', 'admin_get_referrer_stats'],
+  ['deviceStats', 'admin_get_device_stats'],
+  ['exportsByUser', 'admin_get_exports_by_user'],
+  ['kpiTrends', 'admin_get_kpi_trends'],
+  ['funnel', 'admin_get_funnel'],
+  ['campaignStats', 'admin_get_campaign_stats'],
+  ['searchStats', 'admin_get_search_stats'],
+  ['topSharedMaps', 'admin_get_top_shared_maps'],
+  ['landingClicks', 'admin_get_landing_clicks'],
+];
+
+const TABS = [
+  ['overview', 'Overview'],
+  ['growth', 'Acquisition'],
+  ['product', 'Product'],
+  ['revenue', 'Monetization'],
+  ['users', 'Users'],
+];
 
 export default function AdminPage({ onExit }) {
   const { user, loading: authLoading, signIn, signOut } = useAuth();
 
-  const [email, setEmail]       = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
-  const [loggingIn, setLoggingIn]   = useState(false);
+  const [loggingIn, setLoggingIn] = useState(false);
 
-  const [users, setUsers]               = useState(null);
-  const [exportStats, setExportStats]   = useState(null);
-  const [leads, setLeads]               = useState(null);
-  const [recentExports, setRecentExports] = useState(null);
-  const [dailyVisitors, setDailyVisitors] = useState(null);
-  const [referrerStats, setReferrerStats] = useState(null);
-  const [deviceStats, setDeviceStats]   = useState(null);
-  const [exportsByUser, setExportsByUser] = useState(null);
+  const [d, setD] = useState({});
   const [liveVisitors, setLiveVisitors] = useState(null);
-  const [heatmapData, setHeatmapData]   = useState(null);
-  const [dataLoading, setDataLoading]   = useState(false);
-  const [dataError, setDataError]       = useState('');
-  const [editingUser, setEditingUser]   = useState(null);
+  const [dataLoading, setDataLoading] = useState(false);
+  const [dataError, setDataError] = useState('');
+  const [editingUser, setEditingUser] = useState(null);
+  const [tab, setTab] = useState('overview');
 
   const isAdmin = !!ADMIN_EMAIL && user?.email === ADMIN_EMAIL;
 
   useEffect(() => {
     if (!isAdmin || !supabase) return;
     setDataLoading(true);
-    Promise.all([
-      supabase.rpc('admin_get_users'),
-      supabase.rpc('admin_get_export_stats'),
-      supabase.rpc('admin_get_leads'),
-      supabase.rpc('admin_get_recent_exports'),
-      supabase.rpc('admin_get_daily_visitors'),
-      supabase.rpc('admin_get_referrer_stats'),
-      supabase.rpc('admin_get_device_stats'),
-      supabase.rpc('admin_get_exports_by_user'),
-    ]).then(([u, e, l, re, dv, ref, dev, ebu]) => {
-      if (u.error) { setDataError(u.error.message); setDataLoading(false); return; }
-      setUsers(u.data || []);
-      setExportStats(e.data || []);
-      setLeads(l.data || []);
-      setRecentExports(re.data || []);
-      setDailyVisitors(dv.data || []);
-      setReferrerStats(ref.data || []);
-      setDeviceStats(dev.data || []);
-      setExportsByUser(ebu.data || []);
-      setDataLoading(false);
-      // Fetch heatmap data separately so a missing RPC doesn't break the dashboard
-      supabase.rpc('admin_get_landing_clicks').then(({ data }) => {
-        setHeatmapData(data || []);
-      }).catch(() => {});
-    }).catch((err) => {
-      setDataError(err.message || 'Failed to load dashboard data');
+    setDataError('');
+    Promise.allSettled(RPC_CALLS.map(([, fn]) => supabase.rpc(fn))).then((results) => {
+      const next = {};
+      let firstError = '';
+      results.forEach((res, i) => {
+        const [key] = RPC_CALLS[i];
+        if (res.status === 'fulfilled' && !res.value.error) {
+          next[key] = res.value.data || [];
+        } else {
+          next[key] = [];
+          const msg = res.status === 'fulfilled' ? res.value.error?.message : res.reason?.message;
+          // Surface only the critical (users) failure — newer RPCs may not be installed yet
+          if (key === 'users' && msg && !firstError) firstError = msg;
+        }
+      });
+      setD(next);
+      setDataError(firstError);
       setDataLoading(false);
     });
   }, [isAdmin]);
@@ -229,11 +312,32 @@ export default function AdminPage({ onExit }) {
     finally { setLoggingIn(false); }
   }
 
-  // Pagination (hooks must be called unconditionally before any early returns)
-  const exportsByUserPag = usePagination(exportsByUser, 10);
-  const recentExportsPag = usePagination(recentExports, 10);
-  const usersPag         = usePagination(users, 10);
-  const leadsPag         = usePagination(leads, 10);
+  // Pagination hooks (must run unconditionally, before any early return)
+  const exportsByUserPag = usePagination(d.exportsByUser, 10);
+  const recentExportsPag = usePagination(d.recentExports, 10);
+  const usersPag = usePagination(d.users, 10);
+  const leadsPag = usePagination(d.leads, 10);
+  const campaignPag = usePagination(d.campaignStats, 10);
+  const searchPag = usePagination(d.searchStats, 12);
+
+  // Derived values (hooks before early returns)
+  const trendMap = useMemo(() => {
+    const m = {};
+    (d.kpiTrends || []).forEach((r) => { m[r.metric] = { cur: Number(r.current_30d), prior: Number(r.prior_30d) }; });
+    return m;
+  }, [d.kpiTrends]);
+
+  const searchByProvince = useMemo(() => {
+    const m = new Map();
+    (d.searchStats || []).forEach((r) => m.set(r.province, (m.get(r.province) || 0) + Number(r.searches)));
+    return [...m.entries()].map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value);
+  }, [d.searchStats]);
+
+  const premiumUsers = useMemo(
+    () => (d.exportsByUser || []).filter((r) => Number(r.premium_count) > 0)
+      .sort((a, b) => Number(b.premium_count) - Number(a.premium_count)),
+    [d.exportsByUser]
+  );
 
   // ── Pre-auth screens ──────────────────────────────────────────────────────
   if (!supabase) return (
@@ -246,11 +350,9 @@ export default function AdminPage({ onExit }) {
       </div>
     </div>
   );
-
   if (authLoading) return (
     <div className="adm-shell"><div className="adm-login-card"><div className="adm-spinner" /></div></div>
   );
-
   if (!user) return (
     <div className="adm-shell">
       <div className="adm-login-card">
@@ -258,20 +360,15 @@ export default function AdminPage({ onExit }) {
         <h2>Admin</h2>
         <p className="adm-muted">Exploration Maps dashboard</p>
         <form onSubmit={handleLogin} className="adm-login-form">
-          <input type="email" placeholder="Email" value={email}
-            onChange={(e) => setEmail(e.target.value)} required autoFocus />
-          <input type="password" placeholder="Password" value={password}
-            onChange={(e) => setPassword(e.target.value)} required />
+          <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus />
+          <input type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} required />
           {loginError && <p className="adm-error">{loginError}</p>}
-          <button type="submit" className="adm-btn adm-btn-primary" disabled={loggingIn}>
-            {loggingIn ? 'Signing in…' : 'Sign In'}
-          </button>
+          <button type="submit" className="adm-btn adm-btn-primary" disabled={loggingIn}>{loggingIn ? 'Signing in…' : 'Sign In'}</button>
         </form>
         <button className="adm-back-link" onClick={onExit}>← Back to app</button>
       </div>
     </div>
   );
-
   if (!isAdmin) return (
     <div className="adm-shell">
       <div className="adm-login-card">
@@ -285,16 +382,33 @@ export default function AdminPage({ onExit }) {
     </div>
   );
 
-  // ── Derived values ────────────────────────────────────────────────────────
-  const totalExports  = (exportStats || []).reduce((s, r) => s + Number(r.total || 0), 0);
-  const exports30d    = (exportStats || []).reduce((s, r) => s + Number(r.last_30_days || 0), 0);
-  const visitors30d   = (dailyVisitors || []).reduce((s, r) => s + Number(r.sessions || 0), 0);
-  const exportBreakdown = (exportStats || []).map((r) => `${r.format?.toUpperCase()} ${r.last_30_days}`).join(' · ');
+  // ── Derived headline numbers ───────────────────────────────────────────────
+  const cur = (m) => trendMap[m]?.cur;
+  const visitors30d = cur('visitors') ?? (d.dailyVisitors || []).reduce((s, r) => s + Number(r.sessions || 0), 0);
+  const exports30d = cur('exports') ?? (d.exportStats || []).reduce((s, r) => s + Number(r.last_30_days || 0), 0);
+  const exportBreakdown = (d.exportStats || []).map((r) => `${r.format?.toUpperCase()} ${r.last_30_days}`).join(' · ');
 
-  // ── Dashboard ─────────────────────────────────────────────────────────────
+  const f = (d.funnel || [])[0] || {};
+  const funnelSteps = [
+    { label: 'Visitors', value: Number(f.visitors) || visitors30d || 0, color: '#3b82f6' },
+    { label: 'Signups', value: Number(f.signups) || cur('signups') || 0, color: '#6366f1' },
+    { label: 'Activated (exported)', value: Number(f.exporters) || 0, color: '#8b5cf6' },
+    { label: 'Paid intent (no-watermark)', value: Number(f.premium_exporters) || 0, color: '#10b981' },
+  ];
+
+  const formatColors = { png: '#0ea5e9', svg: '#8b5cf6', pdf: '#f59e0b' };
+  const formatSegments = (d.exportStats || []).map((r) => ({
+    label: r.format?.toUpperCase(), value: Number(r.total), color: formatColors[r.format?.toLowerCase()] || '#64748b',
+  }));
+  const deviceSegments = (d.deviceStats || []).map((r, i) => ({
+    label: r.device || 'desktop', value: Number(r.sessions), color: ['#3b82f6', '#93c5fd', '#cbd5e1'][i] || '#e2e8f0',
+  }));
+  const referrerBars = (d.referrerStats || []).slice(0, 8).map((r) => ({ label: r.referrer || 'Direct / Unknown', value: Number(r.sessions) }));
+  const landingBars = (d.landingClicks || []).map((r) => ({ label: r.element || '(no label)', value: Number(r.count) }));
+
+  // ── Dashboard ──────────────────────────────────────────────────────────────
   return (
     <div className="adm-shell">
-      {/* Header */}
       <header className="adm-header">
         <div className="adm-header-left">
           <span className="adm-logo">🗺️</span>
@@ -311,215 +425,293 @@ export default function AdminPage({ onExit }) {
       <main className="adm-body">
         {dataError && <div className="adm-error-bar">⚠ {dataError}</div>}
 
-        {/* KPI row */}
+        {/* KPI row — flow metrics with 30d-over-30d trend */}
         <div className="adm-kpi-row">
-          <KPI label="Live now" value={liveVisitors != null ? String(liveVisitors) : null} detail="active last 5 min" accent="#ef4444" />
-          <KPI label="Visitors (30 days)" value={dataLoading ? null : fmtNum(visitors30d)} accent="#3b82f6" />
-          <KPI label="Exports (30 days)" value={dataLoading ? null : fmtNum(exports30d)} detail={exportBreakdown || null} accent="#8b5cf6" />
-          <KPI label="Total exports" value={dataLoading ? null : fmtNum(totalExports)} accent="#0ea5e9" />
-          <KPI label="Registered users" value={dataLoading ? null : fmtNum(users?.length)} accent="#10b981" />
-          <KPI label="Email leads" value={dataLoading ? null : fmtNum(leads?.length)} accent="#f59e0b" />
+          <KPI label="Live now" value={liveVisitors != null ? String(liveVisitors) : null} detail="active · last 5 min" accent="#ef4444" />
+          <KPI label="Visitors" value={dataLoading ? null : fmtNum(visitors30d)} trend={trendMap.visitors} detail="last 30 days" accent="#3b82f6" />
+          <KPI label="Signups" value={dataLoading ? null : fmtNum(cur('signups') ?? 0)} trend={trendMap.signups} detail="last 30 days" accent="#6366f1" />
+          <KPI label="Searches" value={dataLoading ? null : fmtNum(cur('searches') ?? 0)} trend={trendMap.searches} detail="registry + nearby" accent="#0ea5e9" />
+          <KPI label="Exports" value={dataLoading ? null : fmtNum(exports30d)} trend={trendMap.exports} detail={exportBreakdown || 'last 30 days'} accent="#8b5cf6" />
+          <KPI label="Paid intent" value={dataLoading ? null : fmtNum(cur('premium_exports') ?? 0)} trend={trendMap.premium_exports} detail="no-watermark exports" accent="#10b981" />
+          <KPI label="Email leads" value={dataLoading ? null : fmtNum(cur('leads') ?? (d.leads || []).length)} trend={trendMap.leads} detail="last 30 days" accent="#f59e0b" />
         </div>
 
-        {/* Traffic */}
-        <div className="adm-card">
-          <SectionHeader title="Traffic" />
-          <div className="adm-traffic-layout">
-            {/* Chart */}
-            <div className="adm-chart-col">
-              <p className="adm-chart-eyebrow">Daily sessions — last 30 days</p>
-              <BarChart data={dailyVisitors} />
-            </div>
-            {/* Sources + devices */}
-            <div className="adm-sources-col">
-              <p className="adm-chart-eyebrow">Top sources</p>
-              {referrerStats && referrerStats.length > 0 ? (
-                <div className="adm-source-list">
-                  {(() => {
-                    const total = referrerStats.reduce((s, r) => s + Number(r.sessions), 0);
-                    return referrerStats.slice(0, 7).map((r) => {
-                      const pct = Math.round((Number(r.sessions) / total) * 100);
-                      return (
-                        <div key={r.referrer || 'direct'} className="adm-source-row">
-                          <div className="adm-source-name" title={r.referrer || 'Direct / Unknown'}>
-                            {r.referrer || 'Direct / Unknown'}
-                          </div>
-                          <div className="adm-source-track">
-                            <div className="adm-source-fill" style={{ width: `${pct}%` }} />
-                          </div>
-                          <div className="adm-source-num">{r.sessions}</div>
-                        </div>
-                      );
-                    });
-                  })()}
-                </div>
-              ) : <Empty message="No referrer data yet." />}
-
-              <p className="adm-chart-eyebrow" style={{ marginTop: 24 }}>Devices</p>
-              <div className="adm-device-row">
-                {(deviceStats || []).map((r) => (
-                  <div key={r.device} className="adm-device-chip">
-                    <span className="adm-device-icon">{r.device === 'mobile' ? '📱' : '🖥️'}</span>
-                    <div>
-                      <div className="adm-device-name">{r.device || 'desktop'}</div>
-                      <div className="adm-device-num">{fmtNum(r.sessions)} sessions</div>
-                    </div>
-                  </div>
-                ))}
-                {(!deviceStats || deviceStats.length === 0) && <Empty message="No data yet." />}
-              </div>
-            </div>
-          </div>
+        {/* Tab nav */}
+        <div className="adm-tabs">
+          {TABS.map(([key, label]) => (
+            <button key={key} className={`adm-tab${tab === key ? ' active' : ''}`} onClick={() => setTab(key)}>{label}</button>
+          ))}
         </div>
 
-        {/* Two-column row: Exports by user + Recent exports */}
-        <div className="adm-two-col">
-          {/* Exports by user */}
-          <div className="adm-card">
-            <SectionHeader title="Exports by user" count={exportsByUser?.length} />
-            {exportsByUser && exportsByUser.length > 0 ? (
-              <>
+        {/* ───────── OVERVIEW ───────── */}
+        {tab === 'overview' && (
+          <>
+            <div className="adm-grid-2-1">
+              <Card title="Daily sessions" eyebrow="Traffic · last 30 days">
+                <AreaChart data={d.dailyVisitors} />
+              </Card>
+              <Card title="Conversion funnel" eyebrow="Last 30 days">
+                <Funnel steps={funnelSteps} />
+              </Card>
+            </div>
+            <div className="adm-grid-3">
+              <Card title="Top sources" eyebrow="Where visitors come from">
+                <HBars rows={referrerBars} emptyMsg="No referrer data yet." />
+              </Card>
+              <Card title="Devices">
+                <Donut segments={deviceSegments} centerLabel="sessions" />
+              </Card>
+              <Card title="Searches by province" eyebrow="Product demand">
+                <HBars rows={searchByProvince.slice(0, 8)} color="#0ea5e9" emptyMsg="No searches tracked yet." />
+              </Card>
+            </div>
+          </>
+        )}
+
+        {/* ───────── ACQUISITION ───────── */}
+        {tab === 'growth' && (
+          <>
+            <Card title="Campaigns" eyebrow="UTM-tagged traffic · last 90 days" count={d.campaignStats?.length} full>
+              {d.campaignStats && d.campaignStats.length > 0 ? (
+                <>
+                  <table className="adm-table">
+                    <thead><tr><th>Source</th><th>Medium</th><th>Campaign</th><th>Sessions</th><th>Signups</th><th>Conv.</th></tr></thead>
+                    <tbody>
+                      {campaignPag.slice.map((r, i) => (
+                        <tr key={i}>
+                          <td className="adm-mono">{r.source}</td>
+                          <td className="adm-muted">{r.medium}</td>
+                          <td>{r.campaign}</td>
+                          <td>{fmtNum(r.sessions)}</td>
+                          <td>{fmtNum(r.signups)}</td>
+                          <td className="adm-muted">{pct(r.signups, r.sessions)}%</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <Pagination {...campaignPag} />
+                </>
+              ) : <Empty message="No UTM-tagged traffic yet. Tag marketing links with ?utm_source=…&utm_campaign=… to attribute campaigns here." />}
+            </Card>
+            <div className="adm-grid-2">
+              <Card title="All referrers" eyebrow="Last 90 days">
+                <HBars rows={(d.referrerStats || []).slice(0, 12).map((r) => ({ label: r.referrer, value: Number(r.sessions) }))} emptyMsg="No referrer data yet." />
+              </Card>
+              <Card title="Landing-page clicks" eyebrow="What visitors click" count={landingBars.reduce((s, r) => s + r.value, 0) || null}>
+                <HBars rows={landingBars} color="#6366f1" emptyMsg="No click data yet." />
+              </Card>
+            </div>
+            <Card title="Email leads" eyebrow="Captured in export modal" count={d.leads?.length} full>
+              {d.leads && d.leads.length > 0 ? (
+                <>
+                  <table className="adm-table">
+                    <thead><tr><th>Email</th><th>Project</th><th>Captured</th></tr></thead>
+                    <tbody>
+                      {leadsPag.slice.map((l, i) => (
+                        <tr key={i}>
+                          <td className="adm-mono">{l.email}</td>
+                          <td className="adm-muted">{l.project_title || '—'}</td>
+                          <td className="adm-muted" style={{ whiteSpace: 'nowrap' }}>{fmtTime(l.captured_at)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <Pagination {...leadsPag} />
+                </>
+              ) : <Empty message="No leads yet — they appear when users enter their email in the export modal." />}
+            </Card>
+          </>
+        )}
+
+        {/* ───────── PRODUCT ───────── */}
+        {tab === 'product' && (
+          <>
+            <div className="adm-grid-2">
+              <Card title="Searches by province" eyebrow="Registry + nearby demand">
+                <HBars rows={searchByProvince} color="#0ea5e9" emptyMsg="No searches tracked yet." />
+              </Card>
+              <Card title="Export formats" eyebrow="All time">
+                <Donut segments={formatSegments} centerLabel="exports" />
+              </Card>
+            </div>
+            <Card title="Search breakdown" eyebrow="Province × type · last 90 days" count={d.searchStats?.length} full>
+              {d.searchStats && d.searchStats.length > 0 ? (
+                <>
+                  <table className="adm-table">
+                    <thead><tr><th>Province</th><th>Type</th><th>Searches</th><th>Avg results</th><th>Last</th></tr></thead>
+                    <tbody>
+                      {searchPag.slice.map((r, i) => (
+                        <tr key={i}>
+                          <td><span className="adm-tag adm-tag-blue">{r.province}</span></td>
+                          <td className="adm-muted">{r.kind}</td>
+                          <td><strong>{fmtNum(r.searches)}</strong></td>
+                          <td>{r.avg_results ?? '—'}</td>
+                          <td className="adm-muted" style={{ whiteSpace: 'nowrap' }}>{fmt(r.last_search)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <Pagination {...searchPag} />
+                </>
+              ) : <Empty message="No searches tracked yet — they populate as users search the claims registry or run a nearby-claims lookup." />}
+            </Card>
+            <Card title="Most-viewed shared maps" eyebrow="Virality" count={d.topSharedMaps?.length} full>
+              {d.topSharedMaps && d.topSharedMaps.length > 0 ? (
                 <table className="adm-table">
-                  <thead>
-                    <tr><th>User</th><th>PNG</th><th>SVG</th><th>PDF</th><th>Total</th><th>Last</th></tr>
-                  </thead>
+                  <thead><tr><th>Map</th><th>Views</th><th>Created</th></tr></thead>
                   <tbody>
-                    {exportsByUserPag.slice.map((r, i) => (
+                    {d.topSharedMaps.slice(0, 12).map((r) => (
+                      <tr key={r.id}>
+                        <td className="adm-mono adm-truncate"><a href={`/?share=${r.id}`} target="_blank" rel="noopener noreferrer">{r.id?.slice(0, 8)}…</a></td>
+                        <td><strong>{fmtNum(r.view_count)}</strong></td>
+                        <td className="adm-muted">{fmt(r.created_at)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : <Empty message="No shared maps viewed yet." />}
+            </Card>
+          </>
+        )}
+
+        {/* ───────── MONETIZATION ───────── */}
+        {tab === 'revenue' && (
+          <>
+            <div className="adm-grid-2-1">
+              <Card title="Path to revenue" eyebrow="Visitor → signup → activated → paid intent">
+                <Funnel steps={funnelSteps} />
+                <p className="adm-note">
+                  <strong>Paid intent</strong> = users who exported without a watermark. These are your warmest candidates when you launch paid plans —
+                  watermark removal is the most natural upgrade trigger.
+                </p>
+              </Card>
+              <Card title="Conversion rates" eyebrow="Last 30 days">
+                <div className="adm-stat-list">
+                  <div className="adm-stat-row"><span>Visitor → Signup</span><strong>{pct(funnelSteps[1].value, funnelSteps[0].value)}%</strong></div>
+                  <div className="adm-stat-row"><span>Signup → Activated</span><strong>{pct(funnelSteps[2].value, funnelSteps[1].value)}%</strong></div>
+                  <div className="adm-stat-row"><span>Activated → Paid intent</span><strong>{pct(funnelSteps[3].value, funnelSteps[2].value)}%</strong></div>
+                  <div className="adm-stat-row adm-stat-total"><span>Visitor → Paid intent</span><strong>{pct(funnelSteps[3].value, funnelSteps[0].value)}%</strong></div>
+                </div>
+              </Card>
+            </div>
+            <Card title="Paid-intent users" eyebrow="Exported without watermark — your upgrade list" count={premiumUsers.length} full>
+              {premiumUsers.length > 0 ? (
+                <table className="adm-table">
+                  <thead><tr><th>User</th><th>No-watermark</th><th>Total exports</th><th>Intent rate</th><th>Last export</th></tr></thead>
+                  <tbody>
+                    {premiumUsers.slice(0, 25).map((r, i) => (
                       <tr key={i}>
-                        <td className="adm-mono">{r.user_email || <span className="adm-muted">Anon</span>}</td>
-                        <td>{r.png_count ?? 0}</td>
-                        <td>{r.svg_count ?? 0}</td>
-                        <td>{r.pdf_count ?? 0}</td>
-                        <td><strong>{r.total_exports}</strong></td>
+                        <td className="adm-mono">{r.user_email || <span className="adm-muted">Anonymous</span>}</td>
+                        <td><strong>{fmtNum(r.premium_count)}</strong></td>
+                        <td>{fmtNum(r.total_exports)}</td>
+                        <td className="adm-muted">{pct(r.premium_count, r.total_exports)}%</td>
                         <td className="adm-muted">{fmt(r.last_export)}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-                <Pagination {...exportsByUserPag} />
-              </>
-            ) : <Empty message="No exports tracked yet." />}
-          </div>
+              ) : <Empty message="No watermark-free exports yet." />}
+            </Card>
+            <div className="adm-grid-2">
+              <Card title="Exports by user" eyebrow="Power users" count={d.exportsByUser?.length}>
+                {d.exportsByUser && d.exportsByUser.length > 0 ? (
+                  <>
+                    <table className="adm-table">
+                      <thead><tr><th>User</th><th>PNG</th><th>SVG</th><th>PDF</th><th>Total</th></tr></thead>
+                      <tbody>
+                        {exportsByUserPag.slice.map((r, i) => (
+                          <tr key={i}>
+                            <td className="adm-mono adm-truncate">{r.user_email || <span className="adm-muted">Anon</span>}</td>
+                            <td>{r.png_count ?? 0}</td>
+                            <td>{r.svg_count ?? 0}</td>
+                            <td>{r.pdf_count ?? 0}</td>
+                            <td><strong>{r.total_exports}</strong></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    <Pagination {...exportsByUserPag} />
+                  </>
+                ) : <Empty message="No exports tracked yet." />}
+              </Card>
+              <Card title="Recent exports" eyebrow="Live feed" count={d.recentExports?.length}>
+                {d.recentExports && d.recentExports.length > 0 ? (
+                  <>
+                    <table className="adm-table">
+                      <thead><tr><th>Format</th><th>Project</th><th>When</th></tr></thead>
+                      <tbody>
+                        {recentExportsPag.slice.map((r, i) => (
+                          <tr key={i}>
+                            <td><FormatBadge format={r.format} />{r.no_watermark && <span className="adm-tag adm-tag-green" style={{ marginLeft: 6 }}>clean</span>}</td>
+                            <td className="adm-muted adm-truncate">{r.project_name || '—'}</td>
+                            <td className="adm-muted" style={{ whiteSpace: 'nowrap' }}>{fmtTime(r.created_at)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    <Pagination {...recentExportsPag} />
+                  </>
+                ) : <Empty message="No exports yet." />}
+              </Card>
+            </div>
+          </>
+        )}
 
-          {/* Recent exports feed */}
-          <div className="adm-card">
-            <SectionHeader title="Recent exports" count={recentExports?.length} />
-            {recentExports && recentExports.length > 0 ? (
+        {/* ───────── USERS ───────── */}
+        {tab === 'users' && (
+          <Card title="Registered users" count={d.users?.length} full>
+            {d.users && d.users.length > 0 ? (
               <>
                 <table className="adm-table">
-                  <thead>
-                    <tr><th>Format</th><th>Project</th><th>User</th><th>When</th></tr>
-                  </thead>
+                  <thead><tr><th>Email</th><th>Joined</th><th>Last login</th><th>Projects</th><th></th></tr></thead>
                   <tbody>
-                    {recentExportsPag.slice.map((r, i) => (
-                      <tr key={i}>
-                        <td><FormatBadge format={r.format} /></td>
-                        <td className="adm-muted adm-truncate">{r.project_name || '—'}</td>
-                        <td className="adm-muted adm-truncate">{r.user_email || 'Anonymous'}</td>
-                        <td className="adm-muted" style={{ whiteSpace: 'nowrap' }}>{fmtTime(r.created_at)}</td>
-                      </tr>
+                    {usersPag.slice.map((u) => (
+                      <React.Fragment key={u.id}>
+                        <tr className={editingUser?.id === u.id ? 'adm-row-active' : ''}>
+                          <td>
+                            <span className="adm-mono">{u.email}</span>
+                            {u.email === ADMIN_EMAIL && <span className="adm-tag adm-tag-blue" style={{ marginLeft: 8 }}>you</span>}
+                          </td>
+                          <td className="adm-muted">{fmt(u.created_at)}</td>
+                          <td className="adm-muted">{fmt(u.last_sign_in_at)}</td>
+                          <td>{u.project_count ?? 0}</td>
+                          <td>
+                            <button className="adm-btn adm-btn-ghost adm-btn-sm" onClick={() => setEditingUser(editingUser?.id === u.id ? null : u)}>
+                              {editingUser?.id === u.id ? 'Close' : 'Details'}
+                            </button>
+                          </td>
+                        </tr>
+                        {editingUser?.id === u.id && (
+                          <tr className="adm-row-active">
+                            <td colSpan={5} style={{ padding: '12px 16px 16px' }}>
+                              <div className="adm-user-detail">
+                                <div className="adm-detail-grid">
+                                  <span className="adm-detail-label">User ID</span>
+                                  <code className="adm-detail-val">{u.id}</code>
+                                  <span className="adm-detail-label">Joined</span>
+                                  <span className="adm-detail-val">{fmtTime(u.created_at)}</span>
+                                  <span className="adm-detail-label">Last login</span>
+                                  <span className="adm-detail-val">{fmtTime(u.last_sign_in_at)}</span>
+                                  <span className="adm-detail-label">Projects</span>
+                                  <span className="adm-detail-val">{u.project_count ?? 0}</span>
+                                </div>
+                                <p className="adm-detail-note">
+                                  To reset password or disable account →{' '}
+                                  <a href="https://supabase.com/dashboard" target="_blank" rel="noopener noreferrer">Supabase Dashboard → Authentication → Users</a>
+                                </p>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
                     ))}
                   </tbody>
                 </table>
-                <Pagination {...recentExportsPag} />
+                <Pagination {...usersPag} />
               </>
-            ) : <Empty message="No exports yet." />}
-          </div>
-        </div>
-
-        {/* Users */}
-        <div className="adm-card">
-          <SectionHeader title="Users" count={users?.length} />
-          {users && users.length > 0 ? (
-            <>
-              <table className="adm-table">
-                <thead>
-                  <tr><th>Email</th><th>Joined</th><th>Last login</th><th>Projects</th><th></th></tr>
-                </thead>
-                <tbody>
-                  {usersPag.slice.map((u) => (
-                    <React.Fragment key={u.id}>
-                      <tr className={editingUser?.id === u.id ? 'adm-row-active' : ''}>
-                        <td>
-                          <span className="adm-mono">{u.email}</span>
-                          {u.email === ADMIN_EMAIL && <span className="adm-tag adm-tag-blue" style={{ marginLeft: 8 }}>you</span>}
-                        </td>
-                        <td className="adm-muted">{fmt(u.created_at)}</td>
-                        <td className="adm-muted">{fmt(u.last_sign_in_at)}</td>
-                        <td>{u.project_count ?? 0}</td>
-                        <td>
-                          <button className="adm-btn adm-btn-ghost adm-btn-sm"
-                            onClick={() => setEditingUser(editingUser?.id === u.id ? null : u)}>
-                            {editingUser?.id === u.id ? 'Close' : 'Details'}
-                          </button>
-                        </td>
-                      </tr>
-                      {editingUser?.id === u.id && (
-                        <tr className="adm-row-active">
-                          <td colSpan={5} style={{ padding: '12px 16px 16px' }}>
-                            <div className="adm-user-detail">
-                              <div className="adm-detail-grid">
-                                <span className="adm-detail-label">User ID</span>
-                                <code className="adm-detail-val">{u.id}</code>
-                                <span className="adm-detail-label">Joined</span>
-                                <span className="adm-detail-val">{fmtTime(u.created_at)}</span>
-                                <span className="adm-detail-label">Last login</span>
-                                <span className="adm-detail-val">{fmtTime(u.last_sign_in_at)}</span>
-                                <span className="adm-detail-label">Projects</span>
-                                <span className="adm-detail-val">{u.project_count ?? 0}</span>
-                              </div>
-                              <p className="adm-detail-note">
-                                To reset password or disable account →{' '}
-                                <a href="https://supabase.com/dashboard" target="_blank" rel="noopener noreferrer">
-                                  Supabase Dashboard → Authentication → Users
-                                </a>
-                              </p>
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                    </React.Fragment>
-                  ))}
-                </tbody>
-              </table>
-              <Pagination {...usersPag} />
-            </>
-          ) : <Empty message="No users yet." />}
-        </div>
-
-        {/* Leads */}
-        <div className="adm-card">
-          <SectionHeader title="Email leads" count={leads?.length} />
-          {leads && leads.length > 0 ? (
-            <>
-              <table className="adm-table">
-                <thead><tr><th>Email</th><th>Project</th><th>Captured</th></tr></thead>
-                <tbody>
-                  {leadsPag.slice.map((l, i) => (
-                    <tr key={i}>
-                      <td className="adm-mono">{l.email}</td>
-                      <td className="adm-muted">{l.project_title || '—'}</td>
-                      <td className="adm-muted" style={{ whiteSpace: 'nowrap' }}>{fmtTime(l.captured_at)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <Pagination {...leadsPag} />
-            </>
-          ) : <Empty message="No leads yet — they appear when users enter their email in the export modal." />}
-        </div>
-
-        {/* Landing page clicks */}
-        <div className="adm-card">
-          <SectionHeader
-            title="Landing page clicks"
-            count={heatmapData?.reduce((s, d) => s + Number(d.count), 0)}
-          />
-          {heatmapData && heatmapData.length > 0
-            ? <LandingClickChart data={heatmapData} />
-            : <Empty message="No click data yet — visit the landing page a few times to populate this." />}
-        </div>
-
+            ) : <Empty message="No users yet." />}
+          </Card>
+        )}
       </main>
     </div>
   );

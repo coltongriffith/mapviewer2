@@ -47,6 +47,7 @@ import regionsNA from './assets/regionsNA.json';
 import { fitProjectToTemplate } from './utils/frameMapForTemplate';
 import { getThemeTokens } from './utils/themeTokens';
 import { saveLead, getLastLeadEmail } from './utils/leadCapture';
+import { trackSearch } from './utils/track';
 import {
   clearActiveProjectContext,
   deleteProjectRecord,
@@ -1548,6 +1549,7 @@ export default function App() {
       }
 
       const features = (data.features || []).filter((f) => f.geometry);
+      trackSearch({ kind: 'nearby', province, mode: 'radius', resultCount: features.length });
       if (features.length === 0) {
         setAreaClaims((prev) => ({ ...prev, status: 'loaded', features: [], message: `No claims found within ${radiusKm} km. Try a larger radius.` }));
         return;

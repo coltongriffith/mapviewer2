@@ -1,5 +1,6 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { useClaims } from '../hooks/useClaims';
+import { trackSearch } from '../utils/track';
 
 // ── Spatial clustering helpers ─────────────────────────────────────────────
 
@@ -170,8 +171,25 @@ export default function RegistrySearch({ onImport, onBack }) {
   const [expandedGroups, setExpandedGroups] = useState(new Set());
   const [selectedFlat, setSelectedFlat] = useState(new Set());
   const { results, loading, error, search, reset } = useClaims();
+  const pendingSearchRef = useRef(null);
 
   const provinceCfg = PROVINCES.find(p => p.value === province) || PROVINCES[0];
+
+  // Record the outcome of a submitted search once it resolves (results or error).
+  useEffect(() => {
+    const pending = pendingSearchRef.current;
+    if (!pending || loading) return;
+    if (results || error) {
+      trackSearch({
+        kind: 'registry',
+        province: pending.province,
+        mode: pending.mode,
+        query: pending.query,
+        resultCount: results?.features?.length ?? 0,
+      });
+      pendingSearchRef.current = null;
+    }
+  }, [results, error, loading]);
 
   // Auto-detect mode from query (unless user manually picked)
   useEffect(() => {
@@ -242,6 +260,7 @@ export default function RegistrySearch({ onImport, onBack }) {
     e.preventDefault();
     if (query.trim().length < 2) return;
     clearSelections();
+    pendingSearchRef.current = { province, mode, query: query.trim() };
     search(query.trim(), mode, province);
   }
 
