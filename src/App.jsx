@@ -3103,6 +3103,8 @@ export default function App() {
                   <option value="bc">British Columbia</option>
                   <option value="on">Ontario</option>
                   <option value="sk">Saskatchewan</option>
+                  <option value="mb">Manitoba</option>
+                  <option value="nl">Newfoundland &amp; Labrador</option>
                   <option value="yt">Yukon</option>
                 </select>
               </div>

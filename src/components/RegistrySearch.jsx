@@ -128,6 +128,16 @@ const PROVINCES = [
     placeholders: { company: 'e.g. Cameco', number: 'e.g. MC00001234' },
   },
   {
+    value: 'mb', label: 'Manitoba', registry: 'Mineral Dispositions',
+    modes: ['company', 'number'],
+    placeholders: { company: 'e.g. Hudbay', number: 'e.g. CB12345' },
+  },
+  {
+    value: 'nl', label: 'Newfoundland & Labrador', registry: 'GeoAtlas',
+    modes: ['company', 'number'],
+    placeholders: { company: 'e.g. company or licensee', number: 'e.g. 012345' },
+  },
+  {
     value: 'yt', label: 'Yukon', registry: 'Quartz Claims',
     modes: ['company', 'number'],
     placeholders: { company: 'e.g. claim or owner name', number: 'e.g. YA12345' },

@@ -25,7 +25,7 @@ export default function AddClaimsModal({ onClose, onImport, defaultPath = null }
               <button className="claims-path-btn" onClick={() => setPath('registry')}>
                 <span className="claims-path-icon">🔍</span>
                 <strong>Search Claims Registry</strong>
-                <span>BC · Ontario · Saskatchewan · Yukon</span>
+                <span>BC · Ontario · Saskatchewan · Manitoba · Newfoundland · Yukon</span>
               </button>
               <button className="claims-path-btn" onClick={() => setPath('upload')}>
                 <span className="claims-path-icon">📁</span>
