@@ -1,8 +1,9 @@
 -- ============================================================
--- Exploration Maps — Analytics & Admin Dashboard Setup
--- Run this in Supabase Dashboard → SQL Editor → Run.
--- Safe to re-run: every statement is idempotent (IF NOT EXISTS /
--- CREATE OR REPLACE). Running it again will not drop data.
+-- Exploration Maps -- Analytics & Admin Dashboard Setup
+-- Run this in Supabase Dashboard -> SQL Editor -> Run.
+-- Safe to re-run: tables use IF NOT EXISTS, policies use
+-- exception guards, functions are dropped then recreated.
+-- Running it again will NOT drop data.
 -- ============================================================
 
 -- ────────────────────────────────────────────────────────────
@@ -28,7 +29,7 @@ do $$ begin
     on export_events for insert to anon with check (user_id is null);
 exception when duplicate_object then null; end $$;
 
--- 1b. Email leads (mirrors localStorage leadCapture)
+-- 1b. Email leads
 create table if not exists leads (
   id uuid primary key default gen_random_uuid(),
   email text not null,
@@ -41,7 +42,7 @@ do $$ begin
     on leads for insert to anon, authenticated with check (true);
 exception when duplicate_object then null; end $$;
 
--- 1c. Page views (one row per session, with acquisition attribution)
+-- 1c. Page views (one row per session, with UTM attribution)
 create table if not exists page_views (
   id uuid primary key default gen_random_uuid(),
   user_id uuid references auth.users(id) on delete set null,
@@ -76,13 +77,13 @@ do $$ begin
     on landing_clicks for insert to anon, authenticated with check (true);
 exception when duplicate_object then null; end $$;
 
--- 1e. Claims searches (the core product action — registry & nearby lookups)
+-- 1e. Claims searches (registry & nearby lookups)
 create table if not exists search_events (
   id uuid primary key default gen_random_uuid(),
-  kind text default 'registry',        -- 'registry' | 'nearby'
-  province text,                        -- bc, on, sk, mb, nl, yt…
-  mode text,                            -- company | number | map | radius
-  query_len integer,                   -- length only — never the raw query text
+  kind text default 'registry',
+  province text,
+  mode text,
+  query_len integer,
   result_count integer,
   created_at timestamptz default now()
 );
@@ -93,18 +94,21 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 create index if not exists search_events_created_idx on search_events (created_at);
 
--- 1f. Shared maps: add a view counter if the table already exists
+-- 1f. Add view counter to shared_maps if that table exists
 do $$ begin
-  if exists (select 1 from information_schema.tables
-             where table_schema = 'public' and table_name = 'shared_maps') then
+  if exists (
+    select 1 from information_schema.tables
+    where table_schema = 'public' and table_name = 'shared_maps'
+  ) then
     alter table shared_maps add column if not exists view_count integer default 0;
   end if;
 end $$;
 
--- View-increment RPC (used when a shared map is opened)
 create or replace function increment_shared_map_view(map_id uuid)
 returns void language sql security definer as $$
-  update public.shared_maps set view_count = coalesce(view_count, 0) + 1 where id = map_id;
+  update public.shared_maps
+  set view_count = coalesce(view_count, 0) + 1
+  where id = map_id;
 $$;
 
 -- ────────────────────────────────────────────────────────────
@@ -118,8 +122,7 @@ returns boolean language sql security invoker stable as $$
   );
 $$;
 
--- Drop admin reporting functions first so return-type changes are safe to re-run.
--- (CREATE OR REPLACE cannot alter a function's OUT columns.)
+-- Drop reporting functions before recreating so return-type changes apply cleanly.
 drop function if exists admin_get_kpi_trends();
 drop function if exists admin_get_funnel();
 drop function if exists admin_get_daily_visitors();
@@ -137,60 +140,89 @@ drop function if exists admin_get_leads();
 drop function if exists admin_get_live_visitors();
 
 -- ────────────────────────────────────────────────────────────
--- 3. HEADLINE METRICS — KPI cards with 30d-over-30d trend
+-- 3. KPI TRENDS (current 30d vs prior 30d for delta chips)
 -- ────────────────────────────────────────────────────────────
 create or replace function admin_get_kpi_trends()
-returns table (
-  metric text, current_30d bigint, prior_30d bigint
-)
+returns table (metric text, current_30d bigint, prior_30d bigint)
 language sql security definer stable as $$
-  with bounds as (select now() as n)
-  select 'visitors',
-    (select count(*) from public.page_views, bounds where created_at > n - interval '30 days'),
-    (select count(*) from public.page_views, bounds where created_at <= n - interval '30 days' and created_at > n - interval '60 days')
+  select
+    'visitors'::text,
+    count(*) filter (where pv.created_at > now() - interval '30 days'),
+    count(*) filter (where pv.created_at <= now() - interval '30 days'
+                      and pv.created_at > now() - interval '60 days')
+  from public.page_views pv
   where is_admin()
+
   union all
-  select 'signups',
-    (select count(*) from auth.users, bounds where created_at > n - interval '30 days'),
-    (select count(*) from auth.users, bounds where created_at <= n - interval '30 days' and created_at > n - interval '60 days')
+
+  select
+    'signups'::text,
+    count(*) filter (where u.created_at > now() - interval '30 days'),
+    count(*) filter (where u.created_at <= now() - interval '30 days'
+                      and u.created_at > now() - interval '60 days')
+  from auth.users u
   where is_admin()
+
   union all
-  select 'exports',
-    (select count(*) from public.export_events, bounds where created_at > n - interval '30 days'),
-    (select count(*) from public.export_events, bounds where created_at <= n - interval '30 days' and created_at > n - interval '60 days')
+
+  select
+    'exports'::text,
+    count(*) filter (where e.created_at > now() - interval '30 days'),
+    count(*) filter (where e.created_at <= now() - interval '30 days'
+                      and e.created_at > now() - interval '60 days')
+  from public.export_events e
   where is_admin()
+
   union all
-  select 'premium_exports',
-    (select count(*) from public.export_events, bounds where "noWatermark" and created_at > n - interval '30 days'),
-    (select count(*) from public.export_events, bounds where "noWatermark" and created_at <= n - interval '30 days' and created_at > n - interval '60 days')
+
+  select
+    'premium_exports'::text,
+    count(*) filter (where e.created_at > now() - interval '30 days'
+                      and e."noWatermark"),
+    count(*) filter (where e.created_at <= now() - interval '30 days'
+                      and e.created_at > now() - interval '60 days'
+                      and e."noWatermark")
+  from public.export_events e
   where is_admin()
+
   union all
-  select 'searches',
-    (select count(*) from public.search_events, bounds where created_at > n - interval '30 days'),
-    (select count(*) from public.search_events, bounds where created_at <= n - interval '30 days' and created_at > n - interval '60 days')
+
+  select
+    'searches'::text,
+    count(*) filter (where s.created_at > now() - interval '30 days'),
+    count(*) filter (where s.created_at <= now() - interval '30 days'
+                      and s.created_at > now() - interval '60 days')
+  from public.search_events s
   where is_admin()
+
   union all
-  select 'leads',
-    (select count(*) from public.leads, bounds where captured_at > n - interval '30 days'),
-    (select count(*) from public.leads, bounds where captured_at <= n - interval '30 days' and captured_at > n - interval '60 days')
+
+  select
+    'leads'::text,
+    count(*) filter (where l.captured_at > now() - interval '30 days'),
+    count(*) filter (where l.captured_at <= now() - interval '30 days'
+                      and l.captured_at > now() - interval '60 days')
+  from public.leads l
   where is_admin();
 $$;
 
 -- ────────────────────────────────────────────────────────────
--- 4. CONVERSION FUNNEL (last 30 days) — visitor → signup → activated → paid-intent
+-- 4. CONVERSION FUNNEL (last 30 days)
 -- ────────────────────────────────────────────────────────────
 create or replace function admin_get_funnel()
-returns table (
-  visitors bigint, signups bigint, exporters bigint, premium_exporters bigint
-)
+returns table (visitors bigint, signups bigint, exporters bigint, premium_exporters bigint)
 language sql security definer stable as $$
   select
-    (select count(*) from public.page_views where created_at > now() - interval '30 days'),
-    (select count(*) from auth.users where created_at > now() - interval '30 days'),
-    (select count(distinct coalesce(user_id::text, project_name))
-       from public.export_events where created_at > now() - interval '30 days'),
-    (select count(distinct coalesce(user_id::text, project_name))
-       from public.export_events where "noWatermark" and created_at > now() - interval '30 days')
+    (select count(*) from public.page_views
+      where created_at > now() - interval '30 days'),
+    (select count(*) from auth.users
+      where created_at > now() - interval '30 days'),
+    (select count(distinct coalesce(e.user_id::text, e.project_name))
+      from public.export_events e
+      where e.created_at > now() - interval '30 days'),
+    (select count(distinct coalesce(e.user_id::text, e.project_name))
+      from public.export_events e
+      where e."noWatermark" and e.created_at > now() - interval '30 days')
   where is_admin();
 $$;
 
@@ -201,46 +233,52 @@ create or replace function admin_get_daily_visitors()
 returns table (visit_date date, sessions bigint, logged_in_sessions bigint)
 language sql security definer stable as $$
   select
-    created_at::date as visit_date,
+    pv.created_at::date as visit_date,
     count(*) as sessions,
-    count(*) filter (where user_id is not null) as logged_in_sessions
-  from public.page_views
-  where is_admin() and created_at > now() - interval '30 days'
+    count(*) filter (where pv.user_id is not null) as logged_in_sessions
+  from public.page_views pv
+  where is_admin() and pv.created_at > now() - interval '30 days'
   group by 1 order by 1;
 $$;
 
 create or replace function admin_get_referrer_stats()
 returns table (referrer text, sessions bigint)
 language sql security definer stable as $$
-  select coalesce(nullif(referrer, ''), 'Direct / Unknown') as referrer, count(*) as sessions
-  from public.page_views
-  where is_admin() and created_at > now() - interval '90 days'
+  select
+    coalesce(nullif(pv.referrer, ''), 'Direct / Unknown') as referrer,
+    count(*) as sessions
+  from public.page_views pv
+  where is_admin() and pv.created_at > now() - interval '90 days'
   group by 1 order by 2 desc;
 $$;
 
 create or replace function admin_get_device_stats()
 returns table (device text, sessions bigint)
 language sql security definer stable as $$
-  select coalesce(device, 'desktop') as device, count(*) as sessions
-  from public.page_views
-  where is_admin() and created_at > now() - interval '90 days'
+  select
+    coalesce(pv.device, 'desktop') as device,
+    count(*) as sessions
+  from public.page_views pv
+  where is_admin() and pv.created_at > now() - interval '90 days'
   group by 1 order by 2 desc;
 $$;
 
--- Paid-campaign / UTM performance (marketing spend attribution)
 create or replace function admin_get_campaign_stats()
 returns table (source text, medium text, campaign text, sessions bigint, signups bigint)
 language sql security definer stable as $$
   select
-    coalesce(nullif(utm_source, ''), '(none)') as source,
-    coalesce(nullif(utm_medium, ''), '(none)') as medium,
-    coalesce(nullif(utm_campaign, ''), '(none)') as campaign,
+    coalesce(nullif(pv.utm_source, ''), '(none)') as source,
+    coalesce(nullif(pv.utm_medium, ''), '(none)') as medium,
+    coalesce(nullif(pv.utm_campaign, ''), '(none)') as campaign,
     count(*) as sessions,
-    count(*) filter (where user_id is not null) as signups
-  from public.page_views
-  where is_admin() and created_at > now() - interval '90 days'
-    and (utm_source is not null or utm_campaign is not null)
-  group by 1, 2, 3 order by 4 desc limit 50;
+    count(*) filter (where pv.user_id is not null) as signups
+  from public.page_views pv
+  where is_admin()
+    and pv.created_at > now() - interval '90 days'
+    and (pv.utm_source is not null or pv.utm_campaign is not null)
+  group by 1, 2, 3
+  order by 4 desc
+  limit 50;
 $$;
 
 -- ────────────────────────────────────────────────────────────
@@ -250,52 +288,71 @@ create or replace function admin_get_search_stats()
 returns table (province text, kind text, searches bigint, avg_results numeric, last_search timestamptz)
 language sql security definer stable as $$
   select
-    upper(coalesce(province, '?')) as province,
-    coalesce(kind, 'registry') as kind,
+    upper(coalesce(s.province, '?')) as province,
+    coalesce(s.kind, 'registry') as kind,
     count(*) as searches,
-    round(avg(result_count)) as avg_results,
-    max(created_at) as last_search
-  from public.search_events
-  where is_admin() and created_at > now() - interval '90 days'
-  group by 1, 2 order by 3 desc;
+    round(avg(s.result_count)) as avg_results,
+    max(s.created_at) as last_search
+  from public.search_events s
+  where is_admin() and s.created_at > now() - interval '90 days'
+  group by 1, 2
+  order by 3 desc;
 $$;
 
 create or replace function admin_get_export_stats()
 returns table (format text, total bigint, last_30_days bigint)
 language sql security definer stable as $$
-  select format, count(*) as total,
-    count(*) filter (where created_at > now() - interval '30 days') as last_30_days
-  from public.export_events
+  select
+    e.format,
+    count(*) as total,
+    count(*) filter (where e.created_at > now() - interval '30 days') as last_30_days
+  from public.export_events e
   where is_admin()
-  group by format order by total desc;
+  group by e.format
+  order by total desc;
 $$;
 
 create or replace function admin_get_recent_exports()
 returns table (format text, project_name text, user_email text, no_watermark boolean, created_at timestamptz)
 language sql security definer stable as $$
-  select e.format, e.project_name, u.email as user_email, e."noWatermark" as no_watermark, e.created_at
+  select
+    e.format,
+    e.project_name,
+    u.email as user_email,
+    e."noWatermark" as no_watermark,
+    e.created_at
   from public.export_events e
   left join auth.users u on u.id = e.user_id
   where is_admin()
-  order by e.created_at desc limit 50;
+  order by e.created_at desc
+  limit 50;
 $$;
 
 create or replace function admin_get_landing_clicks()
 returns table (element text, count bigint)
 language sql security definer stable as $$
-  select coalesce(element, '(no label)') as element, count(*) as count
-  from public.landing_clicks
-  where is_admin() and created_at > now() - interval '90 days'
-  group by 1 order by 2 desc limit 30;
+  select
+    coalesce(lc.element, '(no label)') as element,
+    count(*) as count
+  from public.landing_clicks lc
+  where is_admin() and lc.created_at > now() - interval '90 days'
+  group by 1
+  order by 2 desc
+  limit 30;
 $$;
 
 -- ────────────────────────────────────────────────────────────
--- 7. MONETIZATION — who shows paid intent (watermark-free exports)
+-- 7. MONETIZATION
 -- ────────────────────────────────────────────────────────────
 create or replace function admin_get_exports_by_user()
 returns table (
-  user_email text, png_count bigint, svg_count bigint, pdf_count bigint,
-  premium_count bigint, total_exports bigint, last_export timestamptz
+  user_email text,
+  png_count bigint,
+  svg_count bigint,
+  pdf_count bigint,
+  premium_count bigint,
+  total_exports bigint,
+  last_export timestamptz
 )
 language sql security definer stable as $$
   select
@@ -309,16 +366,21 @@ language sql security definer stable as $$
   from public.export_events e
   left join auth.users u on u.id = e.user_id
   where is_admin()
-  group by u.email order by total_exports desc;
+  group by u.email
+  order by total_exports desc;
 $$;
 
 create or replace function admin_get_top_shared_maps()
 returns table (id uuid, view_count integer, created_at timestamptz)
 language sql security definer stable as $$
-  select id, coalesce(view_count, 0) as view_count, created_at
-  from public.shared_maps
+  select
+    sm.id,
+    coalesce(sm.view_count, 0) as view_count,
+    sm.created_at
+  from public.shared_maps sm
   where is_admin()
-  order by coalesce(view_count, 0) desc limit 20;
+  order by coalesce(sm.view_count, 0) desc
+  limit 20;
 $$;
 
 -- ────────────────────────────────────────────────────────────
@@ -327,7 +389,12 @@ $$;
 create or replace function admin_get_users()
 returns table (id uuid, email text, created_at timestamptz, last_sign_in_at timestamptz, project_count bigint)
 language sql security definer stable as $$
-  select u.id, u.email, u.created_at, u.last_sign_in_at, count(p.id) as project_count
+  select
+    u.id,
+    u.email,
+    u.created_at,
+    u.last_sign_in_at,
+    count(p.id) as project_count
   from auth.users u
   left join public.projects p on p.user_id = u.id
   where is_admin()
@@ -338,15 +405,17 @@ $$;
 create or replace function admin_get_leads()
 returns table (email text, project_title text, captured_at timestamptz)
 language sql security definer stable as $$
-  select email, project_title, captured_at
-  from public.leads
+  select l.email, l.project_title, l.captured_at
+  from public.leads l
   where is_admin()
-  order by captured_at desc limit 200;
+  order by l.captured_at desc
+  limit 200;
 $$;
 
 create or replace function admin_get_live_visitors()
 returns table (count bigint)
 language sql security definer stable as $$
-  select count(*) from public.page_views
-  where is_admin() and created_at > now() - interval '5 minutes';
+  select count(*)
+  from public.page_views pv
+  where is_admin() and pv.created_at > now() - interval '5 minutes';
 $$;
