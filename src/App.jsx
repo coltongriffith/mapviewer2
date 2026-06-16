@@ -47,6 +47,8 @@ import regionsNA from './assets/regionsNA.json';
 import { fitProjectToTemplate } from './utils/frameMapForTemplate';
 import { getThemeTokens } from './utils/themeTokens';
 import { saveLead, getLastLeadEmail } from './utils/leadCapture';
+import { trackSearch } from './utils/track';
+import dissolveGeo from '@turf/dissolve';
 import {
   clearActiveProjectContext,
   deleteProjectRecord,
@@ -599,6 +601,28 @@ function NIMapOverlay({ map, mapSize, layout }) {
   );
 }
 
+// Merge all polygons belonging to one owner into a single outline, removing
+// the internal borders between adjacent claims. Returns a FeatureCollection.
+function dissolveOwnerFeatures(feats, ownerKey) {
+  const polys = [];
+  feats.forEach((f) => {
+    const g = f.geometry;
+    if (!g) return;
+    if (g.type === 'Polygon') {
+      polys.push({ type: 'Feature', properties: { __o: ownerKey }, geometry: g });
+    } else if (g.type === 'MultiPolygon') {
+      g.coordinates.forEach((coords) =>
+        polys.push({ type: 'Feature', properties: { __o: ownerKey }, geometry: { type: 'Polygon', coordinates: coords } }));
+    }
+  });
+  if (!polys.length) return { type: 'FeatureCollection', features: [] };
+  try {
+    const merged = dissolveGeo({ type: 'FeatureCollection', features: polys }, { propertyName: '__o' });
+    if (merged?.features?.length) return merged;
+  } catch (_) { /* dissolve failed — fall back to un-merged polygons */ }
+  return { type: 'FeatureCollection', features: polys };
+}
+
 export default function App() {
   const mapContainerRef = useRef(null);
   const mapViewportRef = useRef(null);
@@ -801,15 +825,28 @@ export default function App() {
     const params = new URLSearchParams(window.location.search);
     const ref = document.referrer || null;
     const refDomain = ref ? (() => { try { return new URL(ref).hostname; } catch { return ref; } })() : null;
-    supabase.from('page_views').insert({
-      user_id: user?.id ?? null,
-      path: window.location.pathname,
-      referrer: refDomain,
-      utm_source: params.get('utm_source') || null,
-      utm_medium: params.get('utm_medium') || null,
-      utm_campaign: params.get('utm_campaign') || null,
-      device: /Mobi|Android/i.test(navigator.userAgent) ? 'mobile' : 'desktop',
-    }).then(() => {});
+    // Resolve approximate (city-level) location from edge geo headers, then log
+    // the session. Geo is best-effort — never block or fail the page view on it.
+    const logView = (geo) => {
+      const base = {
+        user_id: user?.id ?? null,
+        path: window.location.pathname,
+        referrer: refDomain,
+        utm_source: params.get('utm_source') || null,
+        utm_medium: params.get('utm_medium') || null,
+        utm_campaign: params.get('utm_campaign') || null,
+        device: /Mobi|Android/i.test(navigator.userAgent) ? 'mobile' : 'desktop',
+      };
+      const withGeo = { ...base, lat: geo?.lat ?? null, lng: geo?.lng ?? null, city: geo?.city ?? null, country: geo?.country ?? null };
+      supabase.from('page_views').insert(withGeo).then(({ error }) => {
+        // If the geo columns aren't in the schema yet, fall back to the base row.
+        if (error) supabase.from('page_views').insert(base).then(() => {});
+      });
+    };
+    fetch('/api/geo', { signal: AbortSignal.timeout(4000) })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((geo) => logView(geo))
+      .catch(() => logView(null));
   }, [user]);
 
   // When user logs in, apply their default template to the current (unsaved) project
@@ -1548,6 +1585,7 @@ export default function App() {
       }
 
       const features = (data.features || []).filter((f) => f.geometry);
+      trackSearch({ kind: 'nearby', province, mode: 'radius', resultCount: features.length });
       if (features.length === 0) {
         setAreaClaims((prev) => ({ ...prev, status: 'loaded', features: [], message: `No claims found within ${radiusKm} km. Try a larger radius.` }));
         return;
@@ -1583,42 +1621,87 @@ export default function App() {
 
     if (!areaClaims?.visible || !areaClaims.features?.length) return;
 
-    const { features, ownerColors, ownerLabels = {}, ownerField, hiddenOwners = [] } = areaClaims;
+    const { features, ownerColors, ownerLabels = {}, ownerField, hiddenOwners = [], dissolve = false } = areaClaims;
+    const fillOpacity = areaClaims.fillOpacity ?? 0.22;
     const group = L.layerGroup();
 
-    features.forEach((feature) => {
-      const owner = (ownerField ? feature.properties?.[ownerField] : null) || 'Unknown';
-      if (hiddenOwners.includes(owner)) return;
-      const color = ownerColors[owner] || '#888888';
-      const displayName = ownerLabels[owner] ?? owner;
-      const layer = L.geoJSON(feature, {
-        style: { fillColor: color, color, weight: 1, fillOpacity: 0.22, opacity: 0.7 },
-        onEachFeature: (feat, lyr) => {
-          const props = feat.properties || {};
-          lyr.bindTooltip(claimTooltipHtml(props, displayName), { sticky: true, className: 'area-claims-tooltip' });
-          lyr.bindPopup(() => {
-            const el = document.createElement('div');
-            el.className = 'area-claims-popup';
-            el.innerHTML = claimPopupRowsHtml(props, displayName)
-              + '<button type="button" class="acp-callout-btn">+ Add Callout</button>';
-            el.querySelector('.acp-callout-btn').onclick = () => {
-              const center = geojsonCenter(feat);
-              if (!center) return;
-              const s = claimSummary(props, displayName);
-              addCalloutAtAnchor({
-                text: displayName,
-                subtext: [s.tenure, s.status].filter(Boolean).join(' · '),
-                type: 'leader',
-                anchor: { lat: center.lat, lng: center.lng },
-              });
-              lyr.closePopup();
-            };
-            return el;
-          });
-        },
+    if (dissolve) {
+      // One merged outline per owner — internal borders between claims disappear.
+      const byOwner = {};
+      features.forEach((f) => {
+        const owner = (ownerField ? f.properties?.[ownerField] : null) || 'Unknown';
+        if (hiddenOwners.includes(owner)) return;
+        (byOwner[owner] = byOwner[owner] || []).push(f);
       });
-      layer.addTo(group);
-    });
+      Object.entries(byOwner).forEach(([owner, feats]) => {
+        const color = ownerColors[owner] || '#888888';
+        const displayName = ownerLabels[owner] ?? owner;
+        const merged = dissolveOwnerFeatures(feats, owner);
+        const totalHa = feats.reduce((s, f) => s + (Number(f.properties?.AREA_IN_HECTARES) || 0), 0);
+        const layer = L.geoJSON(merged, {
+          style: { fillColor: color, color, weight: 1.5, fillOpacity, opacity: 0.85 },
+          onEachFeature: (feat, lyr) => {
+            const haText = totalHa ? ` · ${Math.round(totalHa).toLocaleString()} ha` : '';
+            lyr.bindTooltip(`<strong>${displayName}</strong><br/>${feats.length} claim${feats.length > 1 ? 's' : ''}${haText}`,
+              { sticky: true, className: 'area-claims-tooltip' });
+            lyr.bindPopup(() => {
+              const el = document.createElement('div');
+              el.className = 'area-claims-popup';
+              el.innerHTML = `<div class="acp-owner">${displayName}</div>`
+                + `<div class="acp-row">${feats.length} claim${feats.length > 1 ? 's' : ''}${haText}</div>`
+                + '<button type="button" class="acp-callout-btn">+ Add Callout</button>';
+              el.querySelector('.acp-callout-btn').onclick = () => {
+                const center = geojsonCenter(feat);
+                if (!center) return;
+                addCalloutAtAnchor({
+                  text: displayName,
+                  subtext: `${feats.length} claim${feats.length > 1 ? 's' : ''}${haText}`,
+                  type: 'leader',
+                  anchor: { lat: center.lat, lng: center.lng },
+                });
+                lyr.closePopup();
+              };
+              return el;
+            });
+          },
+        });
+        layer.addTo(group);
+      });
+    } else {
+      features.forEach((feature) => {
+        const owner = (ownerField ? feature.properties?.[ownerField] : null) || 'Unknown';
+        if (hiddenOwners.includes(owner)) return;
+        const color = ownerColors[owner] || '#888888';
+        const displayName = ownerLabels[owner] ?? owner;
+        const layer = L.geoJSON(feature, {
+          style: { fillColor: color, color, weight: 1, fillOpacity, opacity: 0.7 },
+          onEachFeature: (feat, lyr) => {
+            const props = feat.properties || {};
+            lyr.bindTooltip(claimTooltipHtml(props, displayName), { sticky: true, className: 'area-claims-tooltip' });
+            lyr.bindPopup(() => {
+              const el = document.createElement('div');
+              el.className = 'area-claims-popup';
+              el.innerHTML = claimPopupRowsHtml(props, displayName)
+                + '<button type="button" class="acp-callout-btn">+ Add Callout</button>';
+              el.querySelector('.acp-callout-btn').onclick = () => {
+                const center = geojsonCenter(feat);
+                if (!center) return;
+                const s = claimSummary(props, displayName);
+                addCalloutAtAnchor({
+                  text: displayName,
+                  subtext: [s.tenure, s.status].filter(Boolean).join(' · '),
+                  type: 'leader',
+                  anchor: { lat: center.lat, lng: center.lng },
+                });
+                lyr.closePopup();
+              };
+              return el;
+            });
+          },
+        });
+        layer.addTo(group);
+      });
+    }
 
     group.addTo(leafletMapRef.current);
     areaClaimsLayerRef.current = group;
@@ -2498,7 +2581,7 @@ export default function App() {
             role: 'other',
             visible: true,
             geojson: { type: 'FeatureCollection', features: feats },
-            style: { fill: color, fillOpacity: 0.22, stroke: color, strokeWidth: 1, layerOpacity: 1 },
+            style: { fill: color, fillOpacity: areaClaims.fillOpacity ?? 0.22, stroke: color, strokeWidth: areaClaims.dissolve ? 1.5 : 1, layerOpacity: 1, dissolve: !!areaClaims.dissolve },
             legend: { enabled: !!showInLegend, label: ownerLabels[owner] ?? owner },
             claimInfo: true,
           };
@@ -3164,6 +3247,20 @@ export default function App() {
                         <input type="checkbox" checked={!!areaClaims.showInLegend} onChange={(e) => setAreaClaims((prev) => ({ ...prev, showInLegend: e.target.checked }))} />
                         <span>Add to legend</span>
                       </label>
+                      <label className="toggle-row">
+                        <input type="checkbox" checked={!!areaClaims.dissolve} onChange={(e) => setAreaClaims((prev) => ({ ...prev, dissolve: e.target.checked }))} />
+                        <span>Dissolve inner borders</span>
+                      </label>
+                      <div className="acl-opacity-row">
+                        <label>Fill opacity</label>
+                        <input
+                          type="range" min="0" max="1" step="0.05"
+                          value={areaClaims.fillOpacity ?? 0.22}
+                          onChange={(e) => setAreaClaims((prev) => ({ ...prev, fillOpacity: Number(e.target.value) }))}
+                        />
+                        <span className="acl-opacity-val">{Math.round((areaClaims.fillOpacity ?? 0.22) * 100)}%</span>
+                      </div>
+                      <div className="acl-legend-label">Claim owners</div>
                       <div className="area-claims-legend">
                         {Object.entries(areaClaims.ownerColors).map(([owner, color]) => {
                           const hidden = (areaClaims.hiddenOwners || []).includes(owner);
