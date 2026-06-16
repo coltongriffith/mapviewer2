@@ -1,7 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
-import { LAND_DOTS, MAP_W, MAP_H, project } from '../utils/worldDots';
+import { LAND_DOTS } from '../utils/worldDots';
 
 const ADMIN_EMAIL = import.meta.env.VITE_ADMIN_EMAIL;
 
@@ -260,33 +260,125 @@ function Funnel({ steps }) {
   );
 }
 
+// Orthographic (3D sphere) projection of a lon/lat point. Returns null when the
+// point is on the far side of the globe (not visible from the current rotation).
+const GLOBE_TILT = 16; // degrees — slight downward tilt for a nicer view of land
+function projectOrtho(lon, lat, rotationDeg, R) {
+  const lambda = (lon * Math.PI) / 180;
+  const phi = (lat * Math.PI) / 180;
+  const lambda0 = (rotationDeg * Math.PI) / 180;
+  const phi0 = (GLOBE_TILT * Math.PI) / 180;
+  const cosc = Math.sin(phi0) * Math.sin(phi) + Math.cos(phi0) * Math.cos(phi) * Math.cos(lambda - lambda0);
+  if (cosc < -0.03) return null; // back of the sphere
+  const x = R * Math.cos(phi) * Math.sin(lambda - lambda0);
+  const y = R * (Math.cos(phi0) * Math.sin(phi) - Math.sin(phi0) * Math.cos(phi) * Math.cos(lambda - lambda0));
+  return { x, y, depth: Math.max(0, cosc) };
+}
+
+// Recover raw lon/lat from the precomputed equirectangular LAND_DOTS (x = lon+180, y = 90-lat).
+const LAND_LONLAT = LAND_DOTS.map(([x, y]) => [x - 180, 90 - y]);
+
 function WorldMap({ locations }) {
-  const pings = (locations || []).filter((l) => l.lat != null && l.lng != null);
+  const R = 100;
+  const [rotation, setRotation] = useState(-20);
+  const pausedRef = useRef(false);
+  const draggingRef = useRef(false);
+  const lastXRef = useRef(0);
+  const resumeTimerRef = useRef(null);
+
+  useEffect(() => {
+    let raf;
+    const tick = () => {
+      if (!pausedRef.current) setRotation((r) => r + 0.1);
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  const pings = useMemo(
+    () => (locations || []).filter((l) => l.lat != null && l.lng != null),
+    [locations]
+  );
   // Collapse to unique cities for the legend
-  const byCity = [];
-  const seen = new Set();
-  for (const l of pings) {
-    const key = `${l.city || ''}|${l.country || ''}`;
-    if (!seen.has(key)) { seen.add(key); byCity.push(l); }
+  const byCity = useMemo(() => {
+    const seen = new Set();
+    const out = [];
+    for (const l of pings) {
+      const key = `${l.city || ''}|${l.country || ''}`;
+      if (!seen.has(key)) { seen.add(key); out.push(l); }
+    }
+    return out;
+  }, [pings]);
+
+  const land = useMemo(() => {
+    const out = [];
+    for (const [lon, lat] of LAND_LONLAT) {
+      const p = projectOrtho(lon, lat, rotation, R);
+      if (p) out.push(p);
+    }
+    return out;
+  }, [rotation]);
+
+  const pingPoints = useMemo(() => {
+    const out = [];
+    for (const l of pings) {
+      const p = projectOrtho(l.lng, l.lat, rotation, R);
+      if (p) out.push({ ...p, city: l.city, country: l.country });
+    }
+    return out;
+  }, [pings, rotation]);
+
+  function pauseThenResume() {
+    if (resumeTimerRef.current) clearTimeout(resumeTimerRef.current);
+    resumeTimerRef.current = setTimeout(() => { pausedRef.current = false; }, 1800);
   }
+  function onPointerDown(e) {
+    draggingRef.current = true;
+    pausedRef.current = true;
+    lastXRef.current = e.clientX;
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+  }
+  function onPointerMove(e) {
+    if (!draggingRef.current) return;
+    const dx = e.clientX - lastXRef.current;
+    lastXRef.current = e.clientX;
+    setRotation((r) => r + dx * 0.5);
+  }
+  function onPointerUp() {
+    draggingRef.current = false;
+    pauseThenResume();
+  }
+
   return (
     <div>
-      <div className="adm-worldmap-wrap">
-        <svg viewBox={`0 0 ${MAP_W} ${MAP_H}`} className="adm-worldmap" preserveAspectRatio="xMidYMid meet">
-          {LAND_DOTS.map(([x, y], i) => (
-            <circle key={i} cx={x} cy={y} r="0.9" className="adm-worldmap-land" />
+      <div
+        className="adm-globe-wrap"
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerLeave={onPointerUp}
+      >
+        <svg viewBox={`${-R - 12} ${-R - 12} ${2 * R + 24} ${2 * R + 24}`} className="adm-globe-svg">
+          <defs>
+            <radialGradient id="admGlobeShade" cx="35%" cy="30%" r="75%">
+              <stop offset="0%" stopColor="#27406b" />
+              <stop offset="100%" stopColor="#0a0f1c" />
+            </radialGradient>
+          </defs>
+          <circle cx="0" cy="0" r={R} fill="url(#admGlobeShade)" className="adm-globe-sphere" />
+          {land.map((p, i) => (
+            <circle key={i} cx={p.x} cy={p.y} r="1.1" className="adm-globe-land" style={{ opacity: Math.max(0.25, p.depth) }} />
           ))}
-          {pings.map((l, i) => {
-            const { x, y } = project(l.lng, l.lat);
-            return (
-              <g key={i}>
-                <circle cx={x} cy={y} r="2.2" className="adm-worldmap-ping-halo" />
-                <circle cx={x} cy={y} r="1.6" className="adm-worldmap-ping" />
-              </g>
-            );
-          })}
+          {pingPoints.map((p, i) => (
+            <g key={i} style={{ opacity: Math.max(0.35, p.depth) }}>
+              <circle cx={p.x} cy={p.y} r="2.6" className="adm-globe-ping-halo" />
+              <circle cx={p.x} cy={p.y} r="1.8" className="adm-globe-ping" />
+            </g>
+          ))}
+          <circle cx="0" cy="0" r={R} fill="none" className="adm-globe-rim" />
         </svg>
-        {pings.length === 0 && <div className="adm-worldmap-empty">No live visitors right now</div>}
+        {pings.length === 0 && <div className="adm-globe-empty">No live visitors right now</div>}
       </div>
       {byCity.length > 0 && (
         <div className="adm-worldmap-legend">
