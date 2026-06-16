@@ -122,11 +122,12 @@ do $$ begin
   end if;
 end $$;
 
-create or replace function increment_shared_map_view(map_id uuid)
+drop function if exists increment_shared_map_view(uuid);
+create or replace function increment_shared_map_view(map_id text)
 returns void language sql security definer as $$
   update public.shared_maps
   set view_count = coalesce(view_count, 0) + 1
-  where id = map_id;
+  where id::text = map_id;
 $$;
 
 -- ────────────────────────────────────────────────────────────
@@ -390,10 +391,10 @@ language sql security definer stable as $$
 $$;
 
 create or replace function admin_get_top_shared_maps()
-returns table (id uuid, view_count integer)
+returns table (id text, view_count integer)
 language sql security definer stable as $$
   select
-    sm.id,
+    sm.id::text,
     coalesce(sm.view_count, 0) as view_count
   from public.shared_maps sm
   where is_admin()
