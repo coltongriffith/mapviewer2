@@ -378,12 +378,11 @@ language sql security definer stable as $$
 $$;
 
 create or replace function admin_get_top_shared_maps()
-returns table (id uuid, view_count integer, created_at timestamptz)
+returns table (id uuid, view_count integer)
 language sql security definer stable as $$
   select
     sm.id,
-    coalesce(sm.view_count, 0) as view_count,
-    sm.created_at
+    coalesce(sm.view_count, 0) as view_count
   from public.shared_maps sm
   where is_admin()
   order by coalesce(sm.view_count, 0) desc

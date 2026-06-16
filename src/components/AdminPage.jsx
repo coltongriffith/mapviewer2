@@ -664,13 +664,12 @@ export default function AdminPage({ onExit }) {
             <Card title="Most-viewed shared maps" eyebrow="Virality" count={d.topSharedMaps?.length} full>
               {d.topSharedMaps && d.topSharedMaps.length > 0 ? (
                 <table className="adm-table">
-                  <thead><tr><th>Map</th><th>Views</th><th>Created</th></tr></thead>
+                  <thead><tr><th>Map</th><th>Views</th></tr></thead>
                   <tbody>
                     {d.topSharedMaps.slice(0, 12).map((r) => (
                       <tr key={r.id}>
                         <td className="adm-mono adm-truncate"><a href={`/?share=${r.id}`} target="_blank" rel="noopener noreferrer">{r.id?.slice(0, 8)}…</a></td>
                         <td><strong>{fmtNum(r.view_count)}</strong></td>
-                        <td className="adm-muted">{fmt(r.created_at)}</td>
                       </tr>
                     ))}
                   </tbody>
