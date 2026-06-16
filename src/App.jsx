@@ -129,6 +129,7 @@ const BASEMAP_OPTIONS = [
   { key: 'terrain',   label: 'Terrain',   thumb: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/4/5/2' },
   { key: 'satellite', label: 'Satellite', thumb: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/4/5/2' },
   { key: 'natgeo',    label: 'NatGeo',    thumb: 'https://server.arcgisonline.com/ArcGIS/rest/services/NatGeo_World_Map/MapServer/tile/4/5/2' },
+  { key: 'ocean',     label: 'Ocean',     thumb: 'https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/4/5/2' },
   { key: 'blank',     label: 'Blank',     thumb: null },
 ];
 
@@ -751,7 +752,7 @@ export default function App() {
         group: 'Nearby Claims',
         label: ownerLabels[owner] ?? owner,
         type: 'polygons',
-        style: { fill: color, fillOpacity: 0.22, stroke: color, strokeWidth: 1 },
+        style: { fill: color, fillOpacity: areaClaims.fillOpacity ?? 0.22, stroke: color, strokeWidth: areaClaims.dissolve ? 1.5 : 1 },
       }));
   }, [areaClaims]);
 
@@ -2573,6 +2574,9 @@ export default function App() {
         });
         const claimLayers = Object.entries(ownerGroups).map(([owner, feats]) => {
           const color = ownerColors[owner] || '#888888';
+          const exportFeats = areaClaims.dissolve
+            ? (dissolveOwnerFeatures(feats, owner)?.features || feats)
+            : feats;
           return {
             id: `__ac_${owner}`,
             name: ownerLabels[owner] ?? owner,
@@ -2580,8 +2584,8 @@ export default function App() {
             type: 'polygons',
             role: 'other',
             visible: true,
-            geojson: { type: 'FeatureCollection', features: feats },
-            style: { fill: color, fillOpacity: areaClaims.fillOpacity ?? 0.22, stroke: color, strokeWidth: areaClaims.dissolve ? 1.5 : 1, layerOpacity: 1, dissolve: !!areaClaims.dissolve },
+            geojson: { type: 'FeatureCollection', features: exportFeats },
+            style: { fill: color, fillOpacity: areaClaims.fillOpacity ?? 0.22, stroke: color, strokeWidth: areaClaims.dissolve ? 1.5 : 1, layerOpacity: 1 },
             legend: { enabled: !!showInLegend, label: ownerLabels[owner] ?? owner },
             claimInfo: true,
           };
@@ -4045,6 +4049,8 @@ export default function App() {
             <label className="toggle-row"><input type="checkbox" checked={!!referenceOverlays.context} onChange={(e) => updateLayout({ referenceOverlays: { context: e.target.checked } })} /> <span>Roads + Settlements</span></label>
             <label className="toggle-row"><input type="checkbox" checked={!!referenceOverlays.labels} onChange={(e) => updateLayout({ referenceOverlays: { labels: e.target.checked } })} /> <span>Reference Labels</span></label>
             <label className="toggle-row"><input type="checkbox" checked={!!referenceOverlays.rail} onChange={(e) => updateLayout({ referenceOverlays: { rail: e.target.checked } })} /> <span>Railways</span></label>
+            <label className="toggle-row"><input type="checkbox" checked={!!referenceOverlays.boundaries} onChange={(e) => updateLayout({ referenceOverlays: { boundaries: e.target.checked } })} /> <span>Admin Boundaries</span></label>
+            <label className="toggle-row"><input type="checkbox" checked={!!referenceOverlays.rivers} onChange={(e) => updateLayout({ referenceOverlays: { rivers: e.target.checked } })} /> <span>Rivers</span></label>
           </div>}
         </section>
 

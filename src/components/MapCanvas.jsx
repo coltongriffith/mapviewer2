@@ -29,6 +29,10 @@ const BASEMAPS = {
     url: 'https://server.arcgisonline.com/ArcGIS/rest/services/NatGeo_World_Map/MapServer/tile/{z}/{y}/{x}',
     attribution: '&copy; Esri, National Geographic Society',
   },
+  ocean: {
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}',
+    attribution: '&copy; Esri',
+  },
   blank: {
     url: '',
     attribution: '',
@@ -53,6 +57,18 @@ const REFERENCE_OVERLAYS = {
     attribution: '&copy; OpenRailwayMap',
     opacityFactor: 0.9,
     zIndex: 365,
+  },
+  boundaries: {
+    url: 'https://services.arcgisonline.com/arcgis/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+    attribution: '&copy; Esri',
+    opacityFactor: 0.85,
+    zIndex: 355,
+  },
+  rivers: {
+    url: 'https://tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png',
+    attribution: '&copy; OpenStreetMap contributors',
+    opacityFactor: 0.6,
+    zIndex: 345,
   },
 };
 
