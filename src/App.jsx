@@ -751,7 +751,7 @@ export default function App() {
         group: 'Nearby Claims',
         label: ownerLabels[owner] ?? owner,
         type: 'polygons',
-        style: { fill: color, fillOpacity: 0.22, stroke: color, strokeWidth: 1 },
+        style: { fill: color, fillOpacity: areaClaims.fillOpacity ?? 0.22, stroke: color, strokeWidth: areaClaims.dissolve ? 1.5 : 1 },
       }));
   }, [areaClaims]);
 
@@ -2573,6 +2573,9 @@ export default function App() {
         });
         const claimLayers = Object.entries(ownerGroups).map(([owner, feats]) => {
           const color = ownerColors[owner] || '#888888';
+          const exportFeats = areaClaims.dissolve
+            ? (dissolveOwnerFeatures(feats, owner)?.features || feats)
+            : feats;
           return {
             id: `__ac_${owner}`,
             name: ownerLabels[owner] ?? owner,
@@ -2580,8 +2583,8 @@ export default function App() {
             type: 'polygons',
             role: 'other',
             visible: true,
-            geojson: { type: 'FeatureCollection', features: feats },
-            style: { fill: color, fillOpacity: areaClaims.fillOpacity ?? 0.22, stroke: color, strokeWidth: areaClaims.dissolve ? 1.5 : 1, layerOpacity: 1, dissolve: !!areaClaims.dissolve },
+            geojson: { type: 'FeatureCollection', features: exportFeats },
+            style: { fill: color, fillOpacity: areaClaims.fillOpacity ?? 0.22, stroke: color, strokeWidth: areaClaims.dissolve ? 1.5 : 1, layerOpacity: 1 },
             legend: { enabled: !!showInLegend, label: ownerLabels[owner] ?? owner },
             claimInfo: true,
           };
