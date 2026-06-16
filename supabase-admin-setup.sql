@@ -19,6 +19,7 @@ create table if not exists export_events (
   "noWatermark" boolean default false,
   created_at timestamptz default now()
 );
+alter table export_events add column if not exists created_at timestamptz default now();
 alter table export_events enable row level security;
 do $$ begin
   create policy "users insert own export events"
@@ -36,6 +37,7 @@ create table if not exists leads (
   project_title text,
   captured_at timestamptz default now()
 );
+alter table leads add column if not exists captured_at timestamptz default now();
 alter table leads enable row level security;
 do $$ begin
   create policy "anyone insert lead"
@@ -54,6 +56,14 @@ create table if not exists page_views (
   device text,
   created_at timestamptz default now()
 );
+-- Ensure required columns exist even if page_views predates this schema
+alter table page_views add column if not exists created_at timestamptz default now();
+alter table page_views add column if not exists referrer text;
+alter table page_views add column if not exists utm_source text;
+alter table page_views add column if not exists utm_medium text;
+alter table page_views add column if not exists utm_campaign text;
+alter table page_views add column if not exists device text;
+alter table page_views add column if not exists user_id uuid;
 -- Add geolocation columns for the live-visitor world map (safe if already present)
 alter table page_views add column if not exists lat double precision;
 alter table page_views add column if not exists lng double precision;
@@ -76,6 +86,7 @@ create table if not exists landing_clicks (
   page_h integer,
   created_at timestamptz default now()
 );
+alter table landing_clicks add column if not exists created_at timestamptz default now();
 alter table landing_clicks enable row level security;
 do $$ begin
   create policy "anyone insert landing click"
@@ -92,6 +103,7 @@ create table if not exists search_events (
   result_count integer,
   created_at timestamptz default now()
 );
+alter table search_events add column if not exists created_at timestamptz default now();
 alter table search_events enable row level security;
 do $$ begin
   create policy "anyone insert search event"
