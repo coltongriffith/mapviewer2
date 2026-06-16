@@ -1760,6 +1760,52 @@ body.is-dragging .template-zone .panel-delete-btn { opacity: 0 !important; }
 
 .adm-tag-green { background: #dcfce7; color: #16a34a; }
 
+/* Card head action + range toggle */
+.adm-card-head-right { display: flex; align-items: center; gap: 8px; }
+.adm-range-toggle { display: inline-flex; background: #f1f5f9; border-radius: 8px; padding: 2px; gap: 2px; }
+.adm-range-btn {
+  border: none; background: none; cursor: pointer; font-family: inherit;
+  font-size: 12px; font-weight: 600; color: #64748b; padding: 4px 10px; border-radius: 6px;
+  transition: background 0.12s, color 0.12s;
+}
+.adm-range-btn:hover { color: #1e293b; }
+.adm-range-btn.active { background: #fff; color: #2563eb; box-shadow: 0 1px 2px rgba(0,0,0,0.08); }
+
+/* Traffic summary stats */
+.adm-traffic-summary { display: flex; gap: 28px; margin-bottom: 14px; }
+.adm-traffic-stat { display: flex; flex-direction: column; }
+.adm-traffic-stat strong { font-size: 22px; font-weight: 700; color: #0f172a; line-height: 1.1; letter-spacing: -0.4px; }
+.adm-traffic-stat span { font-size: 11px; color: #94a3b8; margin-top: 2px; }
+
+/* Area chart hover */
+.adm-area-wrap { position: relative; }
+.adm-area-guide { stroke: #94a3b8; stroke-width: 1; stroke-dasharray: 3 3; }
+.adm-area-dot-hover { fill: #fff; stroke: #2563eb; stroke-width: 2; }
+.adm-area-tip {
+  position: absolute; top: 0; transform: translateX(-50%); pointer-events: none;
+  background: #0f172a; color: #fff; border-radius: 8px; padding: 7px 10px;
+  font-size: 11px; white-space: nowrap; z-index: 5; box-shadow: 0 4px 14px rgba(0,0,0,0.18);
+}
+.adm-area-tip-date { font-weight: 700; margin-bottom: 3px; }
+.adm-area-tip-row { display: flex; align-items: center; gap: 5px; line-height: 1.5; }
+.adm-area-tip-row.adm-muted { color: #cbd5e1 !important; }
+.adm-area-tip-dot { width: 7px; height: 7px; border-radius: 2px; background: #3b82f6; }
+
+/* Live-visitor world map */
+.adm-worldmap-wrap { position: relative; width: 100%; }
+.adm-worldmap { width: 100%; height: auto; display: block; background: #0b1220; border-radius: 10px; }
+.adm-worldmap-land { fill: #1e293b; }
+.adm-worldmap-ping { fill: #34d399; }
+.adm-worldmap-ping-halo { fill: #34d399; opacity: 0.25; animation: adm-ping 1.8s ease-out infinite; transform-box: fill-box; transform-origin: center; }
+@keyframes adm-ping { 0% { transform: scale(0.6); opacity: 0.5; } 100% { transform: scale(2.6); opacity: 0; } }
+.adm-worldmap-empty {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  color: #64748b; font-size: 13px; pointer-events: none;
+}
+.adm-worldmap-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 12px; }
+.adm-worldmap-loc { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #334155; }
+.adm-worldmap-loc .adm-donut-dot { background: #10b981; }
+
 /* Cards */
 .adm-card {
   background: #fff; border: 1px solid #e2e8f0; border-radius: 12px;
@@ -2276,3 +2322,9 @@ body.is-dragging .template-zone .panel-delete-btn { opacity: 0 !important; }
 .acp-callout-btn:hover { background: #1d4ed8; }
 .acl-pick-row { display: flex; align-items: center; gap: 7px; }
 .acl-pick-coords { font-size: 11px; color: #475569; font-family: 'Courier New', monospace; white-space: nowrap; }
+/* Opacity slider + dissolve controls */
+.acl-opacity-row { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px; margin: 6px 0 2px; }
+.acl-opacity-row > label { font-size: 12px; color: #475569; white-space: nowrap; }
+.acl-opacity-row input[type="range"] { width: 100%; min-width: 0; accent-color: #2563eb; cursor: pointer; }
+.acl-opacity-val { font-size: 11px; color: #64748b; font-variant-numeric: tabular-nums; min-width: 32px; text-align: right; }
+.acl-legend-label { font-size: 10.5px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; margin: 8px 0 2px; }

@@ -54,6 +54,11 @@ create table if not exists page_views (
   device text,
   created_at timestamptz default now()
 );
+-- Add geolocation columns for the live-visitor world map (safe if already present)
+alter table page_views add column if not exists lat double precision;
+alter table page_views add column if not exists lng double precision;
+alter table page_views add column if not exists city text;
+alter table page_views add column if not exists country text;
 alter table page_views enable row level security;
 do $$ begin
   create policy "anyone insert page view"
@@ -138,6 +143,7 @@ drop function if exists admin_get_top_shared_maps();
 drop function if exists admin_get_users();
 drop function if exists admin_get_leads();
 drop function if exists admin_get_live_visitors();
+drop function if exists admin_get_live_locations();
 
 -- ────────────────────────────────────────────────────────────
 -- 3. KPI TRENDS (current 30d vs prior 30d for delta chips)
@@ -237,7 +243,7 @@ language sql security definer stable as $$
     count(*) as sessions,
     count(*) filter (where pv.user_id is not null) as logged_in_sessions
   from public.page_views pv
-  where is_admin() and pv.created_at > now() - interval '30 days'
+  where is_admin() and pv.created_at > now() - interval '90 days'
   group by 1 order by 1;
 $$;
 
@@ -418,4 +424,17 @@ language sql security definer stable as $$
   select count(*)
   from public.page_views pv
   where is_admin() and pv.created_at > now() - interval '5 minutes';
+$$;
+
+-- Recent visitor locations for the live world map (last 30 minutes, geo-located)
+create or replace function admin_get_live_locations()
+returns table (lat double precision, lng double precision, city text, country text, created_at timestamptz)
+language sql security definer stable as $$
+  select pv.lat, pv.lng, pv.city, pv.country, pv.created_at
+  from public.page_views pv
+  where is_admin()
+    and pv.created_at > now() - interval '30 minutes'
+    and pv.lat is not null and pv.lng is not null
+  order by pv.created_at desc
+  limit 200;
 $$;

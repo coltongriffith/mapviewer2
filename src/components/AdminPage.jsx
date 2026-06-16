@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
+import { LAND_DOTS, MAP_W, MAP_H, project } from '../utils/worldDots';
 
 const ADMIN_EMAIL = import.meta.env.VITE_ADMIN_EMAIL;
 
@@ -70,19 +71,34 @@ function KPI({ label, value, trend, detail, accent }) {
   );
 }
 
-function Card({ title, count, eyebrow, children, full }) {
+function Card({ title, count, eyebrow, children, full, action }) {
   return (
     <div className={`adm-card${full ? ' adm-card-full' : ''}`}>
-      {(title || eyebrow) && (
+      {(title || eyebrow || action) && (
         <div className="adm-card-head">
           <div>
             {eyebrow && <p className="adm-card-eyebrow">{eyebrow}</p>}
             {title && <h2 className="adm-card-title">{title}</h2>}
           </div>
-          {count != null && <span className="adm-pill">{count}</span>}
+          <div className="adm-card-head-right">
+            {action}
+            {count != null && <span className="adm-pill">{count}</span>}
+          </div>
         </div>
       )}
       {children}
+    </div>
+  );
+}
+
+function RangeToggle({ value, onChange, options }) {
+  return (
+    <div className="adm-range-toggle">
+      {options.map((o) => (
+        <button key={o} className={`adm-range-btn${value === o ? ' active' : ''}`} onClick={() => onChange(o)}>
+          {o}d
+        </button>
+      ))}
     </div>
   );
 }
@@ -99,24 +115,34 @@ function FormatBadge({ format }) {
 
 // ── Charts ──────────────────────────────────────────────────────────────────────
 function AreaChart({ data }) {
+  const [hover, setHover] = useState(null); // index
   if (!data || data.length === 0) {
     return <Empty message="No visit data yet — sessions appear here once users land on the app." />;
   }
-  const pts = [...data]; // RPC returns oldest → newest
+  const pts = [...data]; // oldest → newest
+  const n = pts.length;
   const W = 720, H = 180, P = 8;
   const vals = pts.map((p) => Number(p.sessions) || 0);
   const max = Math.max(...vals, 1);
-  const stepX = pts.length > 1 ? (W - 2 * P) / (pts.length - 1) : 0;
-  const xAt = (i) => (pts.length > 1 ? P + i * stepX : W / 2);
+  const stepX = n > 1 ? (W - 2 * P) / (n - 1) : 0;
+  const xAt = (i) => (n > 1 ? P + i * stepX : W / 2);
   const yAt = (v) => H - P - (v / max) * (H - 2 * P - 14);
   const line = pts.map((p, i) => `${xAt(i).toFixed(1)},${yAt(Number(p.sessions) || 0).toFixed(1)}`);
   const linePath = 'M' + line.join(' L');
-  const areaPath = `M${xAt(0).toFixed(1)},${H - P} L` + line.join(' L') + ` L${xAt(pts.length - 1).toFixed(1)},${H - P} Z`;
-  const lastIdx = pts.length - 1;
-  const labelIdx = pts.length > 2 ? [0, Math.floor(lastIdx / 2), lastIdx] : pts.map((_, i) => i);
+  const areaPath = `M${xAt(0).toFixed(1)},${H - P} L` + line.join(' L') + ` L${xAt(n - 1).toFixed(1)},${H - P} Z`;
+  const lastIdx = n - 1;
+  const labelIdx = n > 2 ? [0, Math.floor(lastIdx / 2), lastIdx] : pts.map((_, i) => i);
+
+  function handleMove(e) {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const rel = (e.clientX - rect.left) / rect.width;
+    setHover(Math.max(0, Math.min(n - 1, Math.round(rel * (n - 1)))));
+  }
+  const hp = hover != null ? pts[hover] : null;
+  const hoverLeftPct = hover != null && n > 1 ? (hover / (n - 1)) * 100 : 50;
 
   return (
-    <div className="adm-area-wrap">
+    <div className="adm-area-wrap" onMouseMove={handleMove} onMouseLeave={() => setHover(null)}>
       <svg viewBox={`0 0 ${W} ${H}`} className="adm-area-svg" preserveAspectRatio="none">
         <defs>
           <linearGradient id="admArea" x1="0" y1="0" x2="0" y2="1">
@@ -129,12 +155,21 @@ function AreaChart({ data }) {
         ))}
         <path d={areaPath} fill="url(#admArea)" />
         <path d={linePath} className="adm-area-line" />
-        {pts.map((p, i) => (
-          <circle key={i} cx={xAt(i)} cy={yAt(Number(p.sessions) || 0)} r={i === lastIdx ? 3.5 : 2} className="adm-area-dot">
-            <title>{`${p.visit_date}\n${p.sessions} sessions · ${p.logged_in_sessions ?? 0} logged in`}</title>
-          </circle>
-        ))}
+        {hp && (
+          <line x1={xAt(hover)} x2={xAt(hover)} y1={P} y2={H - P} className="adm-area-guide" />
+        )}
+        <circle cx={xAt(lastIdx)} cy={yAt(vals[lastIdx])} r={3} className="adm-area-dot" />
+        {hp && (
+          <circle cx={xAt(hover)} cy={yAt(vals[hover])} r={4} className="adm-area-dot-hover" />
+        )}
       </svg>
+      {hp && (
+        <div className="adm-area-tip" style={{ left: `${hoverLeftPct}%` }}>
+          <div className="adm-area-tip-date">{hp.visit_date}</div>
+          <div className="adm-area-tip-row"><span className="adm-area-tip-dot" />{fmtNum(hp.sessions)} sessions</div>
+          <div className="adm-area-tip-row adm-muted">{fmtNum(hp.logged_in_sessions ?? 0)} logged in</div>
+        </div>
+      )}
       <div className="adm-area-axis">
         {labelIdx.map((i) => <span key={i}>{pts[i].visit_date?.slice(5)}</span>)}
       </div>
@@ -225,6 +260,48 @@ function Funnel({ steps }) {
   );
 }
 
+function WorldMap({ locations }) {
+  const pings = (locations || []).filter((l) => l.lat != null && l.lng != null);
+  // Collapse to unique cities for the legend
+  const byCity = [];
+  const seen = new Set();
+  for (const l of pings) {
+    const key = `${l.city || ''}|${l.country || ''}`;
+    if (!seen.has(key)) { seen.add(key); byCity.push(l); }
+  }
+  return (
+    <div>
+      <div className="adm-worldmap-wrap">
+        <svg viewBox={`0 0 ${MAP_W} ${MAP_H}`} className="adm-worldmap" preserveAspectRatio="xMidYMid meet">
+          {LAND_DOTS.map(([x, y], i) => (
+            <circle key={i} cx={x} cy={y} r="0.9" className="adm-worldmap-land" />
+          ))}
+          {pings.map((l, i) => {
+            const { x, y } = project(l.lng, l.lat);
+            return (
+              <g key={i}>
+                <circle cx={x} cy={y} r="2.2" className="adm-worldmap-ping-halo" />
+                <circle cx={x} cy={y} r="1.6" className="adm-worldmap-ping" />
+              </g>
+            );
+          })}
+        </svg>
+        {pings.length === 0 && <div className="adm-worldmap-empty">No live visitors right now</div>}
+      </div>
+      {byCity.length > 0 && (
+        <div className="adm-worldmap-legend">
+          {byCity.slice(0, 10).map((l, i) => (
+            <span key={i} className="adm-worldmap-loc">
+              <span className="adm-donut-dot" />
+              {[l.city, l.country].filter(Boolean).join(', ') || 'Unknown'}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 const RPC_CALLS = [
   ['users', 'admin_get_users'],
@@ -261,10 +338,12 @@ export default function AdminPage({ onExit }) {
 
   const [d, setD] = useState({});
   const [liveVisitors, setLiveVisitors] = useState(null);
+  const [liveLocations, setLiveLocations] = useState([]);
   const [dataLoading, setDataLoading] = useState(false);
   const [dataError, setDataError] = useState('');
   const [editingUser, setEditingUser] = useState(null);
   const [tab, setTab] = useState('overview');
+  const [range, setRange] = useState(30);
 
   const isAdmin = !!ADMIN_EMAIL && user?.email === ADMIN_EMAIL;
 
@@ -297,6 +376,8 @@ export default function AdminPage({ onExit }) {
     const fetchLive = async () => {
       const { data } = await supabase.rpc('admin_get_live_visitors').catch(() => ({ data: null }));
       setLiveVisitors(data?.[0]?.count ?? 0);
+      const loc = await supabase.rpc('admin_get_live_locations').catch(() => ({ data: null }));
+      setLiveLocations(loc?.data || []);
     };
     fetchLive();
     const interval = setInterval(fetchLive, 30000);
@@ -388,6 +469,14 @@ export default function AdminPage({ onExit }) {
   const exports30d = cur('exports') ?? (d.exportStats || []).reduce((s, r) => s + Number(r.last_30_days || 0), 0);
   const exportBreakdown = (d.exportStats || []).map((r) => `${r.format?.toUpperCase()} ${r.last_30_days}`).join(' · ');
 
+  // Date-range filtering for the traffic chart (daily visitors RPC returns up to 90 days)
+  const rangeDaily = (d.dailyVisitors || []).slice(-range);
+  const rangeTotals = (() => {
+    const sessions = rangeDaily.reduce((s, r) => s + Number(r.sessions || 0), 0);
+    const loggedIn = rangeDaily.reduce((s, r) => s + Number(r.logged_in_sessions || 0), 0);
+    return { sessions, loggedIn, avg: rangeDaily.length ? Math.round(sessions / rangeDaily.length) : 0 };
+  })();
+
   const f = (d.funnel || [])[0] || {};
   const funnelSteps = [
     { label: 'Visitors', value: Number(f.visitors) || visitors30d || 0, color: '#3b82f6' },
@@ -447,13 +536,30 @@ export default function AdminPage({ onExit }) {
         {tab === 'overview' && (
           <>
             <div className="adm-grid-2-1">
-              <Card title="Daily sessions" eyebrow="Traffic · last 30 days">
-                <AreaChart data={d.dailyVisitors} />
+              <Card
+                title="Daily sessions"
+                eyebrow={`Traffic · last ${range} days`}
+                action={<RangeToggle value={range} onChange={setRange} options={[7, 30, 90]} />}
+              >
+                <div className="adm-traffic-summary">
+                  <div className="adm-traffic-stat"><strong>{fmtNum(rangeTotals.sessions)}</strong><span>sessions</span></div>
+                  <div className="adm-traffic-stat"><strong>{fmtNum(rangeTotals.loggedIn)}</strong><span>logged in</span></div>
+                  <div className="adm-traffic-stat"><strong>{fmtNum(rangeTotals.avg)}</strong><span>avg / day</span></div>
+                </div>
+                <AreaChart data={rangeDaily} />
               </Card>
               <Card title="Conversion funnel" eyebrow="Last 30 days">
                 <Funnel steps={funnelSteps} />
               </Card>
             </div>
+            <Card
+              title="Live visitors"
+              eyebrow="Active in the last 30 minutes"
+              action={<span className="adm-delta up">● {liveVisitors ?? 0} now</span>}
+              full
+            >
+              <WorldMap locations={liveLocations} />
+            </Card>
             <div className="adm-grid-3">
               <Card title="Top sources" eyebrow="Where visitors come from">
                 <HBars rows={referrerBars} emptyMsg="No referrer data yet." />
