@@ -106,6 +106,7 @@ do $$ begin
     where table_schema = 'public' and table_name = 'shared_maps'
   ) then
     alter table shared_maps add column if not exists view_count integer default 0;
+    alter table shared_maps add column if not exists created_at timestamptz default now();
   end if;
 end $$;
 
