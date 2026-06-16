@@ -4785,6 +4785,9 @@ export default function App() {
                         });
                         const claimLayers = Object.entries(ownerGroups).map(([owner, feats]) => {
                           const color = ownerColors[owner] || '#888888';
+                          const shareFeats = areaClaims.dissolve
+                            ? (dissolveOwnerFeatures(feats, owner)?.features || feats)
+                            : feats;
                           return {
                             id: `__ac_${owner}`,
                             name: ownerLabels[owner] ?? owner,
@@ -4792,8 +4795,8 @@ export default function App() {
                             type: 'polygons',
                             role: 'other',
                             visible: true,
-                            geojson: { type: 'FeatureCollection', features: feats },
-                            style: { fill: color, fillOpacity: 0.22, stroke: color, strokeWidth: 1, layerOpacity: 1 },
+                            geojson: { type: 'FeatureCollection', features: shareFeats },
+                            style: { fill: color, fillOpacity: areaClaims.fillOpacity ?? 0.22, stroke: color, strokeWidth: areaClaims.dissolve ? 1.5 : 1, layerOpacity: 1 },
                             legend: { enabled: !!showInLegend, label: ownerLabels[owner] ?? owner },
                             claimInfo: true,
                           };
