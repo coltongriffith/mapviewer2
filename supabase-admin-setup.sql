@@ -111,7 +111,30 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 create index if not exists search_events_created_idx on search_events (created_at);
 
--- 1f. Add view counter to shared_maps if that table exists
+-- 1f. Live presence heartbeats (one row per active browser tab, refreshed every
+-- ~25s while the tab is visible). Drives the "live visitors" world map — a
+-- single page_views row per session is too stale to mean "online right now".
+create table if not exists live_pings (
+  session_id text primary key,
+  lat double precision,
+  lng double precision,
+  city text,
+  country text,
+  created_at timestamptz default now()
+);
+alter table live_pings add column if not exists created_at timestamptz default now();
+alter table live_pings enable row level security;
+do $$ begin
+  create policy "anyone upsert own ping"
+    on live_pings for insert to anon, authenticated with check (true);
+exception when duplicate_object then null; end $$;
+do $$ begin
+  create policy "anyone update own ping"
+    on live_pings for update to anon, authenticated using (true) with check (true);
+exception when duplicate_object then null; end $$;
+create index if not exists live_pings_created_idx on live_pings (created_at);
+
+-- 1g. Add view counter to shared_maps if that table exists
 do $$ begin
   if exists (
     select 1 from information_schema.tables
@@ -435,19 +458,21 @@ create or replace function admin_get_live_visitors()
 returns table (count bigint)
 language sql security definer stable as $$
   select count(*)
-  from public.page_views pv
-  where is_admin() and pv.created_at > now() - interval '5 minutes';
+  from public.live_pings lp
+  where is_admin() and lp.created_at > now() - interval '90 seconds';
 $$;
 
--- Recent visitor locations for the live world map (last 30 minutes, geo-located)
+-- Active visitor locations for the live world map. Each row is a heartbeat
+-- from a tab that pinged within the last 90 seconds (sent every ~25s while
+-- the tab is visible), so this reflects who's on the site right now.
 create or replace function admin_get_live_locations()
 returns table (lat double precision, lng double precision, city text, country text, created_at timestamptz)
 language sql security definer stable as $$
-  select pv.lat, pv.lng, pv.city, pv.country, pv.created_at
-  from public.page_views pv
+  select lp.lat, lp.lng, lp.city, lp.country, lp.created_at
+  from public.live_pings lp
   where is_admin()
-    and pv.created_at > now() - interval '30 minutes'
-    and pv.lat is not null and pv.lng is not null
-  order by pv.created_at desc
+    and lp.created_at > now() - interval '90 seconds'
+    and lp.lat is not null and lp.lng is not null
+  order by lp.created_at desc
   limit 200;
 $$;
