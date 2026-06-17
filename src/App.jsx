@@ -849,6 +849,44 @@ export default function App() {
       .catch(() => logView(null));
   }, [user]);
 
+  // Live-presence heartbeat: upsert this tab's location every ~25s while the
+  // page is visible, so the admin "live visitors" map reflects who's actually
+  // on the site right now (a single once-per-session page_view goes stale
+  // within minutes and can't represent "live").
+  useEffect(() => {
+    if (!supabase) return;
+    let sessionId = sessionStorage.getItem('em_live_sid');
+    if (!sessionId) {
+      sessionId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      sessionStorage.setItem('em_live_sid', sessionId);
+    }
+    let geo = null;
+    let geoFetched = false;
+    let timer = null;
+    const ping = () => {
+      if (document.visibilityState !== 'visible') return;
+      supabase.from('live_pings').upsert(
+        { session_id: sessionId, lat: geo?.lat ?? null, lng: geo?.lng ?? null, city: geo?.city ?? null, country: geo?.country ?? null, created_at: new Date().toISOString() },
+        { onConflict: 'session_id' }
+      ).then(() => {}, () => {});
+    };
+    const ensureGeoThenPing = () => {
+      if (geoFetched) { ping(); return; }
+      fetch('/api/geo', { signal: AbortSignal.timeout(4000) })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((g) => { geo = g; geoFetched = true; ping(); })
+        .catch(() => { geoFetched = true; ping(); });
+    };
+    ensureGeoThenPing();
+    timer = setInterval(ping, 25000);
+    const onVisible = () => { if (document.visibilityState === 'visible') ping(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, []);
+
   // When user logs in, apply their default template to the current (unsaved) project
   useEffect(() => {
     if (!user) return;
