@@ -466,10 +466,14 @@ export default function AdminPage({ onExit }) {
   useEffect(() => {
     if (!isAdmin || !supabase) return;
     const fetchLive = async () => {
-      const { data } = await supabase.rpc('admin_get_live_visitors').catch(() => ({ data: null }));
-      setLiveVisitors(data?.[0]?.count ?? 0);
-      const loc = await supabase.rpc('admin_get_live_locations').catch(() => ({ data: null }));
-      setLiveLocations(loc?.data || []);
+      try {
+        const { data } = await supabase.rpc('admin_get_live_visitors');
+        setLiveVisitors(data?.[0]?.count ?? 0);
+      } catch { setLiveVisitors(0); }
+      try {
+        const { data } = await supabase.rpc('admin_get_live_locations');
+        setLiveLocations(data || []);
+      } catch { setLiveLocations([]); }
     };
     fetchLive();
     const interval = setInterval(fetchLive, 30000);
