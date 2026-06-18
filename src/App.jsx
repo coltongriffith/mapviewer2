@@ -843,7 +843,12 @@ export default function App() {
         if (error) supabase.from('page_views').insert(base).then(() => {});
       });
     };
-    fetch('/api/geo', { signal: AbortSignal.timeout(4000) })
+    let geoController;
+    try {
+      geoController = new AbortController();
+      setTimeout(() => geoController.abort(), 4000);
+    } catch { geoController = null; }
+    fetch('/api/geo', geoController ? { signal: geoController.signal } : undefined)
       .then((r) => (r.ok ? r.json() : null))
       .then((geo) => logView(geo))
       .catch(() => logView(null));
@@ -868,14 +873,22 @@ export default function App() {
       supabase.from('live_pings').upsert(
         { session_id: sessionId, lat: geo?.lat ?? null, lng: geo?.lng ?? null, city: geo?.city ?? null, country: geo?.country ?? null, created_at: new Date().toISOString() },
         { onConflict: 'session_id' }
-      ).then(() => {}, () => {});
+      ).then(({ error }) => { if (error) console.warn('[live-ping] upsert failed:', error.message); });
+    };
+    const fetchGeo = () => {
+      // AbortSignal.timeout() is unsupported on iOS Safari < 16.4 and would
+      // throw synchronously, breaking this effect before any catch runs —
+      // build the controller manually instead.
+      const controller = new AbortController();
+      const t = setTimeout(() => controller.abort(), 4000);
+      return fetch('/api/geo', { signal: controller.signal })
+        .then((r) => (r.ok ? r.json() : null))
+        .catch(() => null)
+        .finally(() => clearTimeout(t));
     };
     const ensureGeoThenPing = () => {
       if (geoFetched) { ping(); return; }
-      fetch('/api/geo', { signal: AbortSignal.timeout(4000) })
-        .then((r) => (r.ok ? r.json() : null))
-        .then((g) => { geo = g; geoFetched = true; ping(); })
-        .catch(() => { geoFetched = true; ping(); });
+      fetchGeo().then((g) => { geo = g; geoFetched = true; ping(); });
     };
     ensureGeoThenPing();
     timer = setInterval(ping, 25000);
