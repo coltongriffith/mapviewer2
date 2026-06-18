@@ -124,6 +124,10 @@ create table if not exists live_pings (
 );
 alter table live_pings add column if not exists created_at timestamptz default now();
 alter table live_pings enable row level security;
+-- RLS policies alone aren't enough — Postgres also requires the table-level
+-- privilege grant. live_pings is the first table here that needs UPDATE
+-- (everything else is insert-only), so it's not covered by prior grants.
+grant select, insert, update on table live_pings to anon, authenticated;
 do $$ begin
   create policy "anyone upsert own ping"
     on live_pings for insert to anon, authenticated with check (true);
