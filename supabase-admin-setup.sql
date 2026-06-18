@@ -128,14 +128,14 @@ alter table live_pings enable row level security;
 -- privilege grant. live_pings is the first table here that needs UPDATE
 -- (everything else is insert-only), so it's not covered by prior grants.
 grant select, insert, update on table live_pings to anon, authenticated;
-do $$ begin
-  create policy "anyone upsert own ping"
-    on live_pings for insert to anon, authenticated with check (true);
-exception when duplicate_object then null; end $$;
-do $$ begin
-  create policy "anyone update own ping"
-    on live_pings for update to anon, authenticated using (true) with check (true);
-exception when duplicate_object then null; end $$;
+-- Drop + recreate (rather than create-if-not-exists) so a malformed policy
+-- left over from an earlier attempt can't silently survive untouched.
+drop policy if exists "anyone upsert own ping" on live_pings;
+drop policy if exists "anyone update own ping" on live_pings;
+create policy "anyone upsert own ping"
+  on live_pings for insert to anon, authenticated with check (true);
+create policy "anyone update own ping"
+  on live_pings for update to anon, authenticated using (true) with check (true);
 create index if not exists live_pings_created_idx on live_pings (created_at);
 
 -- 1g. Add view counter to shared_maps if that table exists
