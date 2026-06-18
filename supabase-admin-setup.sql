@@ -132,10 +132,17 @@ grant select, insert, update on table live_pings to anon, authenticated;
 -- left over from an earlier attempt can't silently survive untouched.
 drop policy if exists "anyone upsert own ping" on live_pings;
 drop policy if exists "anyone update own ping" on live_pings;
+drop policy if exists "anyone select live pings" on live_pings;
 create policy "anyone upsert own ping"
   on live_pings for insert to anon, authenticated with check (true);
 create policy "anyone update own ping"
   on live_pings for update to anon, authenticated using (true) with check (true);
+-- The upsert (INSERT ... ON CONFLICT DO UPDATE) needs row visibility to detect
+-- the conflicting row, and admin_get_live_visitors/admin_get_live_locations are
+-- security definer so they don't need this, but PostgREST's own conflict
+-- resolution for upsert does — without it the INSERT side can be rejected.
+create policy "anyone select live pings"
+  on live_pings for select to anon, authenticated using (true);
 create index if not exists live_pings_created_idx on live_pings (created_at);
 
 -- 1g. Add view counter to shared_maps if that table exists
