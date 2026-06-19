@@ -191,20 +191,34 @@ returns boolean language sql security invoker stable as $$
 $$;
 
 -- Drop reporting functions before recreating so return-type changes apply cleanly.
+-- Functions whose argument signature changed (e.g. zero-arg -> date-range) must
+-- have BOTH the old and new signatures dropped — Postgres treats the argument
+-- list as part of a function's identity, so create-or-replace won't overwrite a
+-- differently-signed sibling and both would otherwise linger.
 drop function if exists admin_get_kpi_trends();
 drop function if exists admin_get_funnel();
 drop function if exists admin_get_daily_visitors();
 drop function if exists admin_get_referrer_stats();
+drop function if exists admin_get_referrer_stats(timestamptz, timestamptz);
 drop function if exists admin_get_device_stats();
+drop function if exists admin_get_device_stats(timestamptz, timestamptz);
 drop function if exists admin_get_campaign_stats();
+drop function if exists admin_get_campaign_stats(timestamptz, timestamptz);
 drop function if exists admin_get_search_stats();
+drop function if exists admin_get_search_stats(timestamptz, timestamptz);
 drop function if exists admin_get_export_stats();
 drop function if exists admin_get_recent_exports();
+drop function if exists admin_get_recent_exports(timestamptz, timestamptz);
 drop function if exists admin_get_landing_clicks();
+drop function if exists admin_get_landing_clicks(timestamptz, timestamptz);
 drop function if exists admin_get_exports_by_user();
 drop function if exists admin_get_top_shared_maps();
 drop function if exists admin_get_users();
 drop function if exists admin_get_leads();
+drop function if exists admin_get_leads(timestamptz, timestamptz);
+drop function if exists admin_get_day_summary(date);
+drop function if exists admin_get_sessions_for_day(date);
+drop function if exists admin_get_session_timeline(text);
 drop function if exists admin_get_live_visitors();
 drop function if exists admin_get_live_locations();
 
