@@ -278,9 +278,15 @@ function projectOrtho(lon, lat, rotationDeg, R) {
 // Recover raw lon/lat from the precomputed equirectangular LAND_DOTS (x = lon+180, y = 90-lat).
 const LAND_LONLAT = LAND_DOTS.map(([x, y]) => [x - 180, 90 - y]);
 
+// Latitude/longitude graticule lines, drawn as short dashed arcs for a subtle
+// 3D-grid feel without the cost of a full great-circle path generator.
+const GRID_LATS = [-60, -30, 0, 30, 60];
+const GRID_LONS = [-150, -120, -90, -60, -30, 0, 30, 60, 90, 120, 150, 180];
+
 function WorldMap({ locations }) {
   const R = 100;
   const [rotation, setRotation] = useState(-20);
+  const [hoverIdx, setHoverIdx] = useState(null);
   const pausedRef = useRef(false);
   const draggingRef = useRef(false);
   const lastXRef = useRef(0);
@@ -300,15 +306,24 @@ function WorldMap({ locations }) {
     () => (locations || []).filter((l) => l.lat != null && l.lng != null),
     [locations]
   );
-  // Collapse to unique cities for the legend
-  const byCity = useMemo(() => {
-    const seen = new Set();
-    const out = [];
+
+  // Cluster pings that round to the same ~10km grid cell (multiple tabs/visitors
+  // in the same city) into a single marker with a count, instead of stacking
+  // identical dots on top of each other.
+  const clusters = useMemo(() => {
+    const byKey = new Map();
     for (const l of pings) {
-      const key = `${l.city || ''}|${l.country || ''}`;
-      if (!seen.has(key)) { seen.add(key); out.push(l); }
+      const key = `${l.lat.toFixed(1)},${l.lng.toFixed(1)}`;
+      const existing = byKey.get(key);
+      if (existing) {
+        existing.count += 1;
+        if (!existing.city && l.city) existing.city = l.city;
+        if (!existing.region && l.region) existing.region = l.region;
+      } else {
+        byKey.set(key, { lat: l.lat, lng: l.lng, city: l.city, region: l.region, country: l.country, count: 1 });
+      }
     }
-    return out;
+    return [...byKey.values()];
   }, [pings]);
 
   const land = useMemo(() => {
@@ -320,14 +335,35 @@ function WorldMap({ locations }) {
     return out;
   }, [rotation]);
 
+  const gridLines = useMemo(() => {
+    const lines = [];
+    for (const lat of GRID_LATS) {
+      const pts = [];
+      for (let lon = -180; lon <= 180; lon += 6) {
+        const p = projectOrtho(lon, lat, rotation, R);
+        if (p) pts.push(p);
+      }
+      lines.push(pts);
+    }
+    for (const lon of GRID_LONS) {
+      const pts = [];
+      for (let lat = -90; lat <= 90; lat += 6) {
+        const p = projectOrtho(lon, lat, rotation, R);
+        if (p) pts.push(p);
+      }
+      lines.push(pts);
+    }
+    return lines;
+  }, [rotation]);
+
   const pingPoints = useMemo(() => {
     const out = [];
-    for (const l of pings) {
+    clusters.forEach((l, i) => {
       const p = projectOrtho(l.lng, l.lat, rotation, R);
-      if (p) out.push({ ...p, city: l.city, country: l.country });
-    }
+      if (p) out.push({ ...p, city: l.city, region: l.region, country: l.country, count: l.count, key: i });
+    });
     return out;
-  }, [pings, rotation]);
+  }, [clusters, rotation]);
 
   function pauseThenResume() {
     if (resumeTimerRef.current) clearTimeout(resumeTimerRef.current);
@@ -350,8 +386,14 @@ function WorldMap({ locations }) {
     pauseThenResume();
   }
 
+  const hovered = hoverIdx != null ? pingPoints.find((p) => p.key === hoverIdx) : null;
+
   return (
     <div>
+      <div className="adm-globe-header">
+        <span className="adm-globe-live-dot" />
+        {pings.length} visitor{pings.length === 1 ? '' : 's'} live now
+      </div>
       <div
         className="adm-globe-wrap"
         onPointerDown={onPointerDown}
@@ -362,32 +404,75 @@ function WorldMap({ locations }) {
         <svg viewBox={`${-R - 12} ${-R - 12} ${2 * R + 24} ${2 * R + 24}`} className="adm-globe-svg">
           <defs>
             <radialGradient id="admGlobeShade" cx="35%" cy="30%" r="75%">
-              <stop offset="0%" stopColor="#27406b" />
-              <stop offset="100%" stopColor="#0a0f1c" />
+              <stop offset="0%" stopColor="#2f4d80" />
+              <stop offset="60%" stopColor="#16233f" />
+              <stop offset="100%" stopColor="#080b14" />
+            </radialGradient>
+            <radialGradient id="admGlobeAtmo" cx="50%" cy="50%" r="50%">
+              <stop offset="78%" stopColor="#60a5fa" stopOpacity="0" />
+              <stop offset="92%" stopColor="#60a5fa" stopOpacity="0.18" />
+              <stop offset="100%" stopColor="#60a5fa" stopOpacity="0" />
             </radialGradient>
           </defs>
+          <circle cx="0" cy="0" r={R + 8} fill="url(#admGlobeAtmo)" />
           <circle cx="0" cy="0" r={R} fill="url(#admGlobeShade)" className="adm-globe-sphere" />
+          {gridLines.map((pts, i) => (
+            <polyline
+              key={`g${i}`}
+              points={pts.map((p) => `${p.x},${p.y}`).join(' ')}
+              className="adm-globe-grid"
+            />
+          ))}
           {land.map((p, i) => (
-            <circle key={i} cx={p.x} cy={p.y} r="1.1" className="adm-globe-land" style={{ opacity: Math.max(0.25, p.depth) }} />
+            <circle key={i} cx={p.x} cy={p.y} r="1.15" className="adm-globe-land" style={{ opacity: Math.max(0.22, p.depth) }} />
           ))}
-          {pingPoints.map((p, i) => (
-            <g key={i} style={{ opacity: Math.max(0.35, p.depth) }}>
-              <circle cx={p.x} cy={p.y} r="2.6" className="adm-globe-ping-halo" />
-              <circle cx={p.x} cy={p.y} r="1.8" className="adm-globe-ping" />
-            </g>
-          ))}
+          {pingPoints.map((p) => {
+            const r = Math.min(4.5, 1.8 + Math.log2(p.count + 1));
+            return (
+              <g
+                key={p.key}
+                style={{ opacity: Math.max(0.4, p.depth), cursor: 'pointer' }}
+                onPointerEnter={() => setHoverIdx(p.key)}
+                onPointerLeave={() => setHoverIdx((cur) => (cur === p.key ? null : cur))}
+              >
+                <circle cx={p.x} cy={p.y} r={r + 1.6} className="adm-globe-ping-halo" />
+                <circle cx={p.x} cy={p.y} r={r} className="adm-globe-ping" />
+                {p.count > 1 && (
+                  <text x={p.x} y={p.y + 2.6} textAnchor="middle" className="adm-globe-ping-count">{p.count}</text>
+                )}
+              </g>
+            );
+          })}
           <circle cx="0" cy="0" r={R} fill="none" className="adm-globe-rim" />
         </svg>
+        {hovered && (
+          <div
+            className="adm-globe-tooltip"
+            style={{
+              left: `calc(50% + ${(hovered.x / R) * 50}%)`,
+              top: `calc(50% + ${(hovered.y / R) * 50}%)`,
+            }}
+          >
+            <strong>{[hovered.city, hovered.region].filter(Boolean).join(', ') || 'Unknown location'}</strong>
+            <span>{hovered.country || ''}</span>
+            <span className="adm-globe-tooltip-count">{hovered.count} active {hovered.count === 1 ? 'tab' : 'tabs'}</span>
+          </div>
+        )}
         {pings.length === 0 && <div className="adm-globe-empty">No live visitors right now</div>}
       </div>
-      {byCity.length > 0 && (
+      {clusters.length > 0 && (
         <div className="adm-worldmap-legend">
-          {byCity.slice(0, 10).map((l, i) => (
-            <span key={i} className="adm-worldmap-loc">
-              <span className="adm-donut-dot" />
-              {[l.city, l.country].filter(Boolean).join(', ') || 'Unknown'}
-            </span>
-          ))}
+          {clusters
+            .slice()
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 10)
+            .map((l, i) => (
+              <span key={i} className="adm-worldmap-loc">
+                <span className="adm-donut-dot" />
+                {[l.city, l.region, l.country].filter(Boolean).join(', ') || 'Unknown'}
+                {l.count > 1 && <span className="adm-worldmap-loc-count">×{l.count}</span>}
+              </span>
+            ))}
         </div>
       )}
     </div>

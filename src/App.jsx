@@ -871,7 +871,7 @@ export default function App() {
     const ping = () => {
       if (document.visibilityState !== 'visible') return;
       supabase.from('live_pings').upsert(
-        { session_id: sessionId, lat: geo?.lat ?? null, lng: geo?.lng ?? null, city: geo?.city ?? null, country: geo?.country ?? null, created_at: new Date().toISOString() },
+        { session_id: sessionId, lat: geo?.lat ?? null, lng: geo?.lng ?? null, city: geo?.city ?? null, region: geo?.region ?? null, country: geo?.country ?? null, created_at: new Date().toISOString() },
         { onConflict: 'session_id' }
       ).then(({ error }) => { if (error) console.warn('[live-ping] upsert failed:', error.message); });
     };
