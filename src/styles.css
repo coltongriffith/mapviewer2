@@ -1792,25 +1792,54 @@ body.is-dragging .template-zone .panel-delete-btn { opacity: 0 !important; }
 .adm-area-tip-dot { width: 7px; height: 7px; border-radius: 2px; background: #3b82f6; }
 
 /* Live-visitor interactive globe */
+.adm-globe-header {
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+  font-size: 12.5px; font-weight: 600; color: #334155; margin-bottom: 6px;
+}
+.adm-globe-live-dot {
+  width: 8px; height: 8px; border-radius: 50%; background: #10b981;
+  box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.6);
+  animation: adm-live-dot-pulse 1.8s ease-out infinite;
+}
+@keyframes adm-live-dot-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.55); }
+  70% { box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+}
 .adm-globe-wrap {
-  position: relative; width: 220px; height: 220px; margin: 4px auto 0;
+  position: relative; width: 240px; height: 240px; margin: 4px auto 0;
   cursor: grab; touch-action: none;
 }
 .adm-globe-wrap:active { cursor: grabbing; }
 .adm-globe-svg { width: 100%; height: 100%; display: block; overflow: visible; }
-.adm-globe-sphere { filter: drop-shadow(0 8px 18px rgba(15, 23, 42, 0.35)); }
-.adm-globe-rim { stroke: rgba(148, 163, 184, 0.25); stroke-width: 1; }
-.adm-globe-land { fill: #3b5380; }
-.adm-globe-ping { fill: #34d399; }
+.adm-globe-sphere { filter: drop-shadow(0 8px 22px rgba(8, 11, 20, 0.45)); }
+.adm-globe-rim { stroke: rgba(148, 163, 184, 0.3); stroke-width: 1; }
+.adm-globe-grid { fill: none; stroke: rgba(148, 163, 184, 0.14); stroke-width: 0.5; }
+.adm-globe-land { fill: #4a6694; }
+.adm-globe-ping { fill: #34d399; stroke: #ecfdf5; stroke-width: 0.4; }
 .adm-globe-ping-halo { fill: #34d399; opacity: 0.3; animation: adm-ping 1.8s ease-out infinite; transform-box: fill-box; transform-origin: center; }
+.adm-globe-ping-count {
+  font-size: 3.4px; font-weight: 700; fill: #06281d; pointer-events: none;
+}
 @keyframes adm-ping { 0% { transform: scale(0.6); opacity: 0.5; } 100% { transform: scale(2.6); opacity: 0; } }
 .adm-globe-empty {
   position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
   color: #64748b; font-size: 12px; text-align: center; pointer-events: none; padding: 0 24px;
 }
+.adm-globe-tooltip {
+  position: absolute; transform: translate(-50%, -130%);
+  background: rgba(15, 23, 42, 0.92); color: #f1f5f9; border-radius: 8px;
+  padding: 7px 10px; font-size: 11.5px; line-height: 1.5; white-space: nowrap;
+  pointer-events: none; box-shadow: 0 6px 18px rgba(15, 23, 42, 0.35); z-index: 5;
+  display: flex; flex-direction: column; gap: 1px;
+}
+.adm-globe-tooltip strong { font-size: 12px; }
+.adm-globe-tooltip span { color: #94a3b8; }
+.adm-globe-tooltip-count { color: #6ee7b7 !important; }
 .adm-worldmap-legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 14px; margin-top: 14px; }
 .adm-worldmap-loc { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #334155; }
 .adm-worldmap-loc .adm-donut-dot { background: #10b981; }
+.adm-worldmap-loc-count { color: #94a3b8; font-weight: 600; font-size: 11px; }
 
 /* Cards */
 .adm-card {

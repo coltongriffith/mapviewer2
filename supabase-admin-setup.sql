@@ -119,10 +119,12 @@ create table if not exists live_pings (
   lat double precision,
   lng double precision,
   city text,
+  region text,
   country text,
   created_at timestamptz default now()
 );
 alter table live_pings add column if not exists created_at timestamptz default now();
+alter table live_pings add column if not exists region text;
 alter table live_pings enable row level security;
 -- RLS policies alone aren't enough — Postgres also requires the table-level
 -- privilege grant. live_pings is the first table here that needs UPDATE
@@ -477,9 +479,9 @@ $$;
 -- from a tab that pinged within the last 90 seconds (sent every ~25s while
 -- the tab is visible), so this reflects who's on the site right now.
 create or replace function admin_get_live_locations()
-returns table (lat double precision, lng double precision, city text, country text, created_at timestamptz)
+returns table (lat double precision, lng double precision, city text, region text, country text, created_at timestamptz)
 language sql security definer stable as $$
-  select lp.lat, lp.lng, lp.city, lp.country, lp.created_at
+  select lp.lat, lp.lng, lp.city, lp.region, lp.country, lp.created_at
   from public.live_pings lp
   where is_admin()
     and lp.created_at > now() - interval '90 seconds'

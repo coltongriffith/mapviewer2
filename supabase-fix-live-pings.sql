@@ -10,10 +10,12 @@ create table if not exists live_pings (
   lat double precision,
   lng double precision,
   city text,
+  region text,
   country text,
   created_at timestamptz default now()
 );
 alter table live_pings add column if not exists created_at timestamptz default now();
+alter table live_pings add column if not exists region text;
 alter table live_pings enable row level security;
 
 grant select, insert, update on table live_pings to anon, authenticated;

@@ -17,6 +17,7 @@ export default function handler(req, res) {
     lat: num(h['x-vercel-ip-latitude']),
     lng: num(h['x-vercel-ip-longitude']),
     city: decode(h['x-vercel-ip-city']) || null,
+    region: decode(h['x-vercel-ip-country-region']) || null,
     country: h['x-vercel-ip-country'] || null,
   });
 }
