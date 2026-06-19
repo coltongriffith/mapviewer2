@@ -13,6 +13,7 @@
     "@turf/dissolve": "^7.3.5",
     "@turf/helpers": "^7.3.5",
     "@vercel/analytics": "^2.0.1",
+    "d3-geo": "^3.1.1",
     "fflate": "^0.8.2",
     "jspdf": "^4.2.1",
     "jszip": "^3.10.1",
@@ -20,7 +21,9 @@
     "proj4": "^2.20.8",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "shpjs": "^4.0.4"
+    "shpjs": "^4.0.4",
+    "topojson-client": "^3.1.0",
+    "world-atlas": "^2.0.2"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.2.0",

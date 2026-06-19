@@ -6,14 +6,15 @@ import LayerList from './components/LayerList';
 import LocatorInset from './components/LocatorInset';
 import CalloutsOverlay from './components/CalloutsOverlay';
 import LandingPage from './components/LandingPage';
-import AdminPage from './components/AdminPage';
 import SharedMapViewer from './components/SharedMapViewer';
 import UploadPanel from './components/UploadPanel';
 import AnnotationOverlay from './components/AnnotationOverlay';
 import ShadeOverlay from './components/ShadeOverlay';
+import { getSessionId } from './utils/session';
 import NorthArrow, { NORTH_ARROW_STYLES } from './components/NorthArrow';
 
 const MapCanvas = React.lazy(() => import('./components/MapCanvas'));
+const AdminPage = React.lazy(() => import('./components/AdminPage'));
 const ExportHDModal = React.lazy(() => import('./components/ExportHDModal'));
 const HowToUseModal = React.lazy(() => import('./components/HowToUseModal'));
 const ColumnMapperModal = React.lazy(() => import('./components/ColumnMapperModal'));
@@ -830,6 +831,7 @@ export default function App() {
     const logView = (geo) => {
       const base = {
         user_id: user?.id ?? null,
+        session_id: getSessionId(),
         path: window.location.pathname,
         referrer: refDomain,
         utm_source: params.get('utm_source') || null,
@@ -860,11 +862,7 @@ export default function App() {
   // within minutes and can't represent "live").
   useEffect(() => {
     if (!supabase) return;
-    let sessionId = sessionStorage.getItem('em_live_sid');
-    if (!sessionId) {
-      sessionId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      sessionStorage.setItem('em_live_sid', sessionId);
-    }
+    const sessionId = getSessionId();
     let geo = null;
     let geoFetched = false;
     let timer = null;
@@ -2660,6 +2658,7 @@ export default function App() {
       if (supabase) {
         supabase.from('export_events').insert({
           user_id: user?.id ?? null,
+          session_id: getSessionId(),
           format,
           project_name: project.layout?.title || projectName || 'Untitled',
           noWatermark: Boolean(extraOptions.noWatermark),
@@ -2862,7 +2861,11 @@ export default function App() {
   const referenceOverlays = project.layout.referenceOverlays || {};
 
   if (screen === 'admin') {
-    return <AdminPage onExit={() => setScreen('landing')} />;
+    return (
+      <React.Suspense fallback={null}>
+        <AdminPage onExit={() => setScreen('landing')} />
+      </React.Suspense>
+    );
   }
 
   if (screen === 'shared_view') {

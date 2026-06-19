@@ -1,7 +1,14 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { geoOrthographic, geoPath, geoGraticule10 } from 'd3-geo';
+import { feature } from 'topojson-client';
+import landTopo from 'world-atlas/land-110m.json';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
-import { LAND_DOTS } from '../utils/worldDots';
+
+// Real coastline geometry (110m resolution — plenty of detail for a 240px
+// globe widget) instead of the old hand-tuned continent-ellipse dot cloud.
+const LAND_FEATURE = feature(landTopo, landTopo.objects.land);
+const GRATICULE = geoGraticule10();
 
 const ADMIN_EMAIL = import.meta.env.VITE_ADMIN_EMAIL;
 
@@ -275,14 +282,6 @@ function projectOrtho(lon, lat, rotationDeg, R) {
   return { x, y, depth: Math.max(0, cosc) };
 }
 
-// Recover raw lon/lat from the precomputed equirectangular LAND_DOTS (x = lon+180, y = 90-lat).
-const LAND_LONLAT = LAND_DOTS.map(([x, y]) => [x - 180, 90 - y]);
-
-// Latitude/longitude graticule lines, drawn as short dashed arcs for a subtle
-// 3D-grid feel without the cost of a full great-circle path generator.
-const GRID_LATS = [-60, -30, 0, 30, 60];
-const GRID_LONS = [-150, -120, -90, -60, -30, 0, 30, 60, 90, 120, 150, 180];
-
 function WorldMap({ locations }) {
   const R = 100;
   const [rotation, setRotation] = useState(-20);
@@ -326,35 +325,19 @@ function WorldMap({ locations }) {
     return [...byKey.values()];
   }, [pings]);
 
-  const land = useMemo(() => {
-    const out = [];
-    for (const [lon, lat] of LAND_LONLAT) {
-      const p = projectOrtho(lon, lat, rotation, R);
-      if (p) out.push(p);
-    }
-    return out;
+  // Real orthographic projection (d3-geo handles antimeridian wrap and
+  // back-of-sphere clipping correctly, which the old manual dot-cloud couldn't).
+  const pathGen = useMemo(() => {
+    const projection = geoOrthographic()
+      .rotate([-rotation, -GLOBE_TILT])
+      .clipAngle(90)
+      .scale(R)
+      .translate([0, 0]);
+    return geoPath(projection);
   }, [rotation]);
 
-  const gridLines = useMemo(() => {
-    const lines = [];
-    for (const lat of GRID_LATS) {
-      const pts = [];
-      for (let lon = -180; lon <= 180; lon += 6) {
-        const p = projectOrtho(lon, lat, rotation, R);
-        if (p) pts.push(p);
-      }
-      lines.push(pts);
-    }
-    for (const lon of GRID_LONS) {
-      const pts = [];
-      for (let lat = -90; lat <= 90; lat += 6) {
-        const p = projectOrtho(lon, lat, rotation, R);
-        if (p) pts.push(p);
-      }
-      lines.push(pts);
-    }
-    return lines;
-  }, [rotation]);
+  const landPath = useMemo(() => pathGen(LAND_FEATURE), [pathGen]);
+  const graticulePath = useMemo(() => pathGen(GRATICULE), [pathGen]);
 
   const pingPoints = useMemo(() => {
     const out = [];
@@ -416,16 +399,8 @@ function WorldMap({ locations }) {
           </defs>
           <circle cx="0" cy="0" r={R + 8} fill="url(#admGlobeAtmo)" />
           <circle cx="0" cy="0" r={R} fill="url(#admGlobeShade)" className="adm-globe-sphere" />
-          {gridLines.map((pts, i) => (
-            <polyline
-              key={`g${i}`}
-              points={pts.map((p) => `${p.x},${p.y}`).join(' ')}
-              className="adm-globe-grid"
-            />
-          ))}
-          {land.map((p, i) => (
-            <circle key={i} cx={p.x} cy={p.y} r="1.15" className="adm-globe-land" style={{ opacity: Math.max(0.22, p.depth) }} />
-          ))}
+          {graticulePath && <path d={graticulePath} className="adm-globe-grid" />}
+          {landPath && <path d={landPath} className="adm-globe-land" />}
           {pingPoints.map((p) => {
             const r = Math.min(4.5, 1.8 + Math.log2(p.count + 1));
             return (
@@ -479,22 +454,153 @@ function WorldMap({ locations }) {
   );
 }
 
+const EVENT_KIND_META = {
+  page_view: { icon: '◦', label: 'Page view' },
+  search: { icon: '🔍', label: 'Search' },
+  export: { icon: '⬇', label: 'Export' },
+  lead: { icon: '✉', label: 'Lead' },
+  click: { icon: '⊙', label: 'Click' },
+};
+
+function fmtDuration(seconds) {
+  if (seconds == null) return '—';
+  if (seconds < 60) return `${seconds}s`;
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return s ? `${m}m ${s}s` : `${m}m`;
+}
+
+// Heuristic only — there's no ground truth for "is this a real visitor", but a
+// session with more than one page view, or any search/export/lead, is very
+// unlikely to be a bot or an instant bounce.
+function sessionLooksReal(s) {
+  return Number(s.page_view_count) > 1 || Number(s.search_count) > 0 || Number(s.export_count) > 0 || !!s.lead_email;
+}
+
+function DayDetail({ day, summary, sessions, loading, onOpenSession }) {
+  const dayLabel = new Date(`${day}T00:00:00.000Z`).toLocaleDateString('en-CA', {
+    weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
+  });
+  const real = sessions.filter(sessionLooksReal).length;
+  return (
+    <Card title={`Day detail — ${dayLabel}`} eyebrow="Single-day drill-down" full>
+      {loading ? (
+        <div className="adm-skeleton-block" />
+      ) : (
+        <>
+          <div className="adm-day-summary-row">
+            <KPI label="Page views" value={fmtNum(summary?.page_views ?? 0)} accent="#3b82f6" />
+            <KPI label="Sessions" value={fmtNum(summary?.sessions ?? 0)} detail={`${real} look real`} accent="#0ea5e9" />
+            <KPI label="Signups" value={fmtNum(summary?.signups ?? 0)} accent="#6366f1" />
+            <KPI label="Searches" value={fmtNum(summary?.searches ?? 0)} accent="#0ea5e9" />
+            <KPI label="Exports" value={fmtNum(summary?.exports ?? 0)} accent="#8b5cf6" />
+            <KPI label="Paid intent" value={fmtNum(summary?.premium_exports ?? 0)} accent="#10b981" />
+            <KPI label="Leads" value={fmtNum(summary?.leads ?? 0)} accent="#f59e0b" />
+          </div>
+          {sessions.length === 0 ? (
+            <Empty message="No visitor sessions recorded for this day." />
+          ) : (
+            <table className="adm-table">
+              <thead>
+                <tr>
+                  <th>First seen</th>
+                  <th>Duration</th>
+                  <th>Location</th>
+                  <th>Source</th>
+                  <th>Device</th>
+                  <th>Pages</th>
+                  <th>Searches</th>
+                  <th>Exports</th>
+                  <th>Lead</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {sessions.map((s) => {
+                  const durationSec = s.first_seen && s.last_seen
+                    ? Math.max(0, Math.round((new Date(s.last_seen) - new Date(s.first_seen)) / 1000))
+                    : null;
+                  return (
+                    <tr key={s.session_id}>
+                      <td>{fmtTime(s.first_seen)}</td>
+                      <td>{fmtDuration(durationSec)}</td>
+                      <td>{[s.city, s.country].filter(Boolean).join(', ') || '—'}</td>
+                      <td>{s.utm_source || s.referrer || 'Direct'}</td>
+                      <td>{s.device || '—'}</td>
+                      <td>{s.page_view_count ?? 0}</td>
+                      <td>{s.search_count ?? 0}</td>
+                      <td>{s.export_count ?? 0}</td>
+                      <td>{s.lead_email || '—'}</td>
+                      <td>
+                        <span className={`adm-real-badge ${sessionLooksReal(s) ? 'real' : 'maybe'}`}>
+                          {sessionLooksReal(s) ? 'Real' : 'Bounce?'}
+                        </span>
+                        <button className="adm-btn adm-btn-ghost adm-btn-sm" onClick={() => onOpenSession(s.session_id)}>
+                          Timeline
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </>
+      )}
+    </Card>
+  );
+}
+
+function SessionTimelineModal({ sessionId, events, onClose }) {
+  return (
+    <div className="adm-modal-overlay" onClick={onClose}>
+      <div className="adm-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="adm-modal-head">
+          <h3>Session timeline</h3>
+          <button className="adm-btn adm-btn-ghost adm-btn-sm" onClick={onClose}>✕</button>
+        </div>
+        <p className="adm-muted adm-modal-sid">{sessionId}</p>
+        {events == null ? (
+          <div className="adm-skeleton-block" />
+        ) : events.length === 0 ? (
+          <Empty message="No tracked events for this session." />
+        ) : (
+          <ul className="adm-timeline">
+            {events.map((ev, i) => {
+              const meta = EVENT_KIND_META[ev.kind] || { icon: '•', label: ev.kind };
+              return (
+                <li key={i} className={`adm-timeline-item adm-timeline-${ev.kind}`}>
+                  <span className="adm-timeline-icon">{meta.icon}</span>
+                  <span className="adm-timeline-time">{fmtTime(ev.event_time)}</span>
+                  <span className="adm-timeline-detail"><strong>{meta.label}</strong> — {ev.detail}</span>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
+// Third element marks RPCs that accept an optional { p_start, p_end } range —
+// used to narrow a breakdown to a single picked day instead of the default window.
 const RPC_CALLS = [
   ['users', 'admin_get_users'],
   ['exportStats', 'admin_get_export_stats'],
-  ['leads', 'admin_get_leads'],
-  ['recentExports', 'admin_get_recent_exports'],
+  ['leads', 'admin_get_leads', true],
+  ['recentExports', 'admin_get_recent_exports', true],
   ['dailyVisitors', 'admin_get_daily_visitors'],
-  ['referrerStats', 'admin_get_referrer_stats'],
-  ['deviceStats', 'admin_get_device_stats'],
+  ['referrerStats', 'admin_get_referrer_stats', true],
+  ['deviceStats', 'admin_get_device_stats', true],
   ['exportsByUser', 'admin_get_exports_by_user'],
   ['kpiTrends', 'admin_get_kpi_trends'],
   ['funnel', 'admin_get_funnel'],
-  ['campaignStats', 'admin_get_campaign_stats'],
-  ['searchStats', 'admin_get_search_stats'],
+  ['campaignStats', 'admin_get_campaign_stats', true],
+  ['searchStats', 'admin_get_search_stats', true],
   ['topSharedMaps', 'admin_get_top_shared_maps'],
-  ['landingClicks', 'admin_get_landing_clicks'],
+  ['landingClicks', 'admin_get_landing_clicks', true],
 ];
 
 const TABS = [
@@ -521,14 +627,35 @@ export default function AdminPage({ onExit }) {
   const [editingUser, setEditingUser] = useState(null);
   const [tab, setTab] = useState('overview');
   const [range, setRange] = useState(30);
+  const [selectedDay, setSelectedDay] = useState(''); // '' = no day filter, else 'YYYY-MM-DD'
+  const [daySummary, setDaySummary] = useState(null);
+  const [daySessions, setDaySessions] = useState([]);
+  const [dayLoading, setDayLoading] = useState(false);
+  const [openSessionId, setOpenSessionId] = useState(null);
+  const [sessionTimeline, setSessionTimeline] = useState(null);
 
   const isAdmin = !!ADMIN_EMAIL && user?.email === ADMIN_EMAIL;
+
+  // When a specific day is picked, narrow every range-aware RPC to that
+  // calendar day (UTC); otherwise fall back to the 7/30/90-day toggle.
+  const queryWindow = useMemo(() => {
+    if (selectedDay) {
+      const start = new Date(`${selectedDay}T00:00:00.000Z`);
+      const end = new Date(start.getTime() + 86400000);
+      return { p_start: start.toISOString(), p_end: end.toISOString() };
+    }
+    const end = new Date();
+    const start = new Date(end.getTime() - range * 86400000);
+    return { p_start: start.toISOString(), p_end: end.toISOString() };
+  }, [selectedDay, range]);
 
   useEffect(() => {
     if (!isAdmin || !supabase) return;
     setDataLoading(true);
     setDataError('');
-    Promise.allSettled(RPC_CALLS.map(([, fn]) => supabase.rpc(fn))).then((results) => {
+    Promise.allSettled(
+      RPC_CALLS.map(([, fn, acceptsRange]) => supabase.rpc(fn, acceptsRange ? queryWindow : undefined))
+    ).then((results) => {
       const next = {};
       let firstError = '';
       results.forEach((res, i) => {
@@ -546,7 +673,30 @@ export default function AdminPage({ onExit }) {
       setDataError(firstError);
       setDataLoading(false);
     });
-  }, [isAdmin]);
+  }, [isAdmin, queryWindow]);
+
+  // Per-day drill-down: headline counts + the list of sessions active that day.
+  useEffect(() => {
+    if (!isAdmin || !supabase || !selectedDay) { setDaySummary(null); setDaySessions([]); return; }
+    setDayLoading(true);
+    Promise.all([
+      supabase.rpc('admin_get_day_summary', { p_day: selectedDay }),
+      supabase.rpc('admin_get_sessions_for_day', { p_day: selectedDay }),
+    ]).then(([summaryRes, sessionsRes]) => {
+      setDaySummary(summaryRes.data?.[0] || null);
+      setDaySessions(sessionsRes.data || []);
+    }).catch(() => { setDaySummary(null); setDaySessions([]); })
+      .finally(() => setDayLoading(false));
+  }, [isAdmin, selectedDay]);
+
+  function openSession(sessionId) {
+    setOpenSessionId(sessionId);
+    setSessionTimeline(null);
+    if (!supabase) return;
+    supabase.rpc('admin_get_session_timeline', { p_session_id: sessionId }).then(({ data }) => {
+      setSessionTimeline(data || []);
+    });
+  }
 
   useEffect(() => {
     if (!isAdmin || !supabase) return;
@@ -711,7 +861,28 @@ export default function AdminPage({ onExit }) {
           {TABS.map(([key, label]) => (
             <button key={key} className={`adm-tab${tab === key ? ' active' : ''}`} onClick={() => setTab(key)}>{label}</button>
           ))}
+          <div className="adm-day-filter">
+            <input
+              type="date"
+              value={selectedDay}
+              max={new Date().toISOString().slice(0, 10)}
+              onChange={(e) => setSelectedDay(e.target.value)}
+            />
+            {selectedDay && (
+              <button className="adm-btn adm-btn-ghost adm-btn-sm" onClick={() => setSelectedDay('')}>Clear</button>
+            )}
+          </div>
         </div>
+
+        {selectedDay && (
+          <DayDetail
+            day={selectedDay}
+            summary={daySummary}
+            sessions={daySessions}
+            loading={dayLoading}
+            onOpenSession={openSession}
+          />
+        )}
 
         {/* ───────── OVERVIEW ───────── */}
         {tab === 'overview' && (
@@ -999,6 +1170,13 @@ export default function AdminPage({ onExit }) {
           </Card>
         )}
       </main>
+      {openSessionId && (
+        <SessionTimelineModal
+          sessionId={openSessionId}
+          events={sessionTimeline}
+          onClose={() => { setOpenSessionId(null); setSessionTimeline(null); }}
+        />
+      )}
     </div>
   );
 }

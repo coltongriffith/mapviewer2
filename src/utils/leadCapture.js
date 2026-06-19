@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { getSessionId } from './session';
 
 const LEAD_KEY = 'mapviewer.hdLeadCaptures';
 
@@ -24,6 +25,7 @@ export function saveLead({ email, projectTitle = '' }) {
   // Mirror to Supabase for admin dashboard visibility (fire-and-forget)
   if (supabase) {
     supabase.from('leads').insert({
+      session_id: getSessionId(),
       email: entry.email,
       project_title: entry.projectTitle || null,
       captured_at: entry.capturedAt,
