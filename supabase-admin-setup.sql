@@ -20,6 +20,7 @@ create table if not exists export_events (
   created_at timestamptz default now()
 );
 alter table export_events add column if not exists created_at timestamptz default now();
+alter table export_events add column if not exists session_id text;
 alter table export_events enable row level security;
 do $$ begin
   create policy "users insert own export events"
@@ -38,6 +39,7 @@ create table if not exists leads (
   captured_at timestamptz default now()
 );
 alter table leads add column if not exists captured_at timestamptz default now();
+alter table leads add column if not exists session_id text;
 alter table leads enable row level security;
 do $$ begin
   create policy "anyone insert lead"
@@ -64,6 +66,7 @@ alter table page_views add column if not exists utm_medium text;
 alter table page_views add column if not exists utm_campaign text;
 alter table page_views add column if not exists device text;
 alter table page_views add column if not exists user_id uuid;
+alter table page_views add column if not exists session_id text;
 -- Add geolocation columns for the live-visitor world map (safe if already present)
 alter table page_views add column if not exists lat double precision;
 alter table page_views add column if not exists lng double precision;
@@ -87,6 +90,7 @@ create table if not exists landing_clicks (
   created_at timestamptz default now()
 );
 alter table landing_clicks add column if not exists created_at timestamptz default now();
+alter table landing_clicks add column if not exists session_id text;
 alter table landing_clicks enable row level security;
 do $$ begin
   create policy "anyone insert landing click"
@@ -104,6 +108,7 @@ create table if not exists search_events (
   created_at timestamptz default now()
 );
 alter table search_events add column if not exists created_at timestamptz default now();
+alter table search_events add column if not exists session_id text;
 alter table search_events enable row level security;
 do $$ begin
   create policy "anyone insert search event"
@@ -146,6 +151,14 @@ create policy "anyone update own ping"
 create policy "anyone select live pings"
   on live_pings for select to anon, authenticated using (true);
 create index if not exists live_pings_created_idx on live_pings (created_at);
+
+-- 1f-2. Session-id indexes, used by admin_get_sessions_for_day /
+-- admin_get_session_timeline to reconstruct what a single visitor did.
+create index if not exists page_views_session_idx on page_views (session_id);
+create index if not exists search_events_session_idx on search_events (session_id);
+create index if not exists export_events_session_idx on export_events (session_id);
+create index if not exists leads_session_idx on leads (session_id);
+create index if not exists landing_clicks_session_idx on landing_clicks (session_id);
 
 -- 1g. Add view counter to shared_maps if that table exists
 do $$ begin
@@ -297,29 +310,36 @@ language sql security definer stable as $$
   group by 1 order by 1;
 $$;
 
-create or replace function admin_get_referrer_stats()
+-- p_start/p_end let the admin dashboard narrow any breakdown to a single
+-- calendar day (or any custom range) instead of the fixed 90-day window;
+-- omitting them (or passing null) preserves the original last-90-days behavior.
+create or replace function admin_get_referrer_stats(p_start timestamptz default null, p_end timestamptz default null)
 returns table (referrer text, sessions bigint)
 language sql security definer stable as $$
   select
     coalesce(nullif(pv.referrer, ''), 'Direct / Unknown') as referrer,
     count(*) as sessions
   from public.page_views pv
-  where is_admin() and pv.created_at > now() - interval '90 days'
+  where is_admin()
+    and pv.created_at > coalesce(p_start, now() - interval '90 days')
+    and pv.created_at <= coalesce(p_end, now())
   group by 1 order by 2 desc;
 $$;
 
-create or replace function admin_get_device_stats()
+create or replace function admin_get_device_stats(p_start timestamptz default null, p_end timestamptz default null)
 returns table (device text, sessions bigint)
 language sql security definer stable as $$
   select
     coalesce(pv.device, 'desktop') as device,
     count(*) as sessions
   from public.page_views pv
-  where is_admin() and pv.created_at > now() - interval '90 days'
+  where is_admin()
+    and pv.created_at > coalesce(p_start, now() - interval '90 days')
+    and pv.created_at <= coalesce(p_end, now())
   group by 1 order by 2 desc;
 $$;
 
-create or replace function admin_get_campaign_stats()
+create or replace function admin_get_campaign_stats(p_start timestamptz default null, p_end timestamptz default null)
 returns table (source text, medium text, campaign text, sessions bigint, signups bigint)
 language sql security definer stable as $$
   select
@@ -330,7 +350,8 @@ language sql security definer stable as $$
     count(*) filter (where pv.user_id is not null) as signups
   from public.page_views pv
   where is_admin()
-    and pv.created_at > now() - interval '90 days'
+    and pv.created_at > coalesce(p_start, now() - interval '90 days')
+    and pv.created_at <= coalesce(p_end, now())
     and (pv.utm_source is not null or pv.utm_campaign is not null)
   group by 1, 2, 3
   order by 4 desc
@@ -340,7 +361,7 @@ $$;
 -- ────────────────────────────────────────────────────────────
 -- 6. PRODUCT USAGE
 -- ────────────────────────────────────────────────────────────
-create or replace function admin_get_search_stats()
+create or replace function admin_get_search_stats(p_start timestamptz default null, p_end timestamptz default null)
 returns table (province text, kind text, searches bigint, avg_results numeric, last_search timestamptz)
 language sql security definer stable as $$
   select
@@ -350,7 +371,9 @@ language sql security definer stable as $$
     round(avg(s.result_count)) as avg_results,
     max(s.created_at) as last_search
   from public.search_events s
-  where is_admin() and s.created_at > now() - interval '90 days'
+  where is_admin()
+    and s.created_at > coalesce(p_start, now() - interval '90 days')
+    and s.created_at <= coalesce(p_end, now())
   group by 1, 2
   order by 3 desc;
 $$;
@@ -368,7 +391,7 @@ language sql security definer stable as $$
   order by total desc;
 $$;
 
-create or replace function admin_get_recent_exports()
+create or replace function admin_get_recent_exports(p_start timestamptz default null, p_end timestamptz default null)
 returns table (format text, project_name text, user_email text, no_watermark boolean, created_at timestamptz)
 language sql security definer stable as $$
   select
@@ -380,18 +403,22 @@ language sql security definer stable as $$
   from public.export_events e
   left join auth.users u on u.id = e.user_id
   where is_admin()
+    and e.created_at > coalesce(p_start, '-infinity'::timestamptz)
+    and e.created_at <= coalesce(p_end, now())
   order by e.created_at desc
   limit 50;
 $$;
 
-create or replace function admin_get_landing_clicks()
+create or replace function admin_get_landing_clicks(p_start timestamptz default null, p_end timestamptz default null)
 returns table (element text, count bigint)
 language sql security definer stable as $$
   select
     coalesce(lc.element, '(no label)') as element,
     count(*) as count
   from public.landing_clicks lc
-  where is_admin() and lc.created_at > now() - interval '90 days'
+  where is_admin()
+    and lc.created_at > coalesce(p_start, now() - interval '90 days')
+    and lc.created_at <= coalesce(p_end, now())
   group by 1
   order by 2 desc
   limit 30;
@@ -457,14 +484,132 @@ language sql security definer stable as $$
   order by u.created_at desc;
 $$;
 
-create or replace function admin_get_leads()
+create or replace function admin_get_leads(p_start timestamptz default null, p_end timestamptz default null)
 returns table (email text, project_title text, captured_at timestamptz)
 language sql security definer stable as $$
   select l.email, l.project_title, l.captured_at
   from public.leads l
   where is_admin()
+    and l.captured_at > coalesce(p_start, '-infinity'::timestamptz)
+    and l.captured_at <= coalesce(p_end, now())
   order by l.captured_at desc
   limit 200;
+$$;
+
+-- ────────────────────────────────────────────────────────────
+-- 8b. PER-DAY DRILL-DOWN: headline numbers for one calendar day, the list of
+-- sessions active that day, and the full event timeline for one session.
+-- Lets an admin look at "10 visitors today" and see whether each one was a
+-- real person and what they actually did on the site.
+-- ────────────────────────────────────────────────────────────
+create or replace function admin_get_day_summary(p_day date)
+returns table (
+  page_views bigint, sessions bigint, signups bigint,
+  searches bigint, exports bigint, premium_exports bigint, leads bigint
+)
+language sql security definer stable as $$
+  select
+    (select count(*) from public.page_views
+      where created_at >= p_day::timestamptz and created_at < (p_day + 1)::timestamptz),
+    (select count(distinct session_id) from public.page_views
+      where session_id is not null and created_at >= p_day::timestamptz and created_at < (p_day + 1)::timestamptz),
+    (select count(*) from auth.users
+      where created_at >= p_day::timestamptz and created_at < (p_day + 1)::timestamptz),
+    (select count(*) from public.search_events
+      where created_at >= p_day::timestamptz and created_at < (p_day + 1)::timestamptz),
+    (select count(*) from public.export_events
+      where created_at >= p_day::timestamptz and created_at < (p_day + 1)::timestamptz),
+    (select count(*) from public.export_events
+      where "noWatermark" and created_at >= p_day::timestamptz and created_at < (p_day + 1)::timestamptz),
+    (select count(*) from public.leads
+      where captured_at >= p_day::timestamptz and captured_at < (p_day + 1)::timestamptz)
+  where is_admin();
+$$;
+
+create or replace function admin_get_sessions_for_day(p_day date)
+returns table (
+  session_id text,
+  first_seen timestamptz,
+  last_seen timestamptz,
+  page_view_count bigint,
+  paths text[],
+  search_count bigint,
+  export_count bigint,
+  lead_email text,
+  device text,
+  referrer text,
+  city text,
+  country text,
+  utm_source text,
+  user_email text
+)
+language sql security definer stable as $$
+  with day_views as (
+    select * from public.page_views
+    where session_id is not null
+      and created_at >= p_day::timestamptz and created_at < (p_day + 1)::timestamptz
+  ),
+  day_sessions as (
+    select distinct session_id from day_views
+    union
+    select distinct session_id from public.search_events
+      where session_id is not null and created_at >= p_day::timestamptz and created_at < (p_day + 1)::timestamptz
+    union
+    select distinct session_id from public.export_events
+      where session_id is not null and created_at >= p_day::timestamptz and created_at < (p_day + 1)::timestamptz
+    union
+    select distinct session_id from public.leads
+      where session_id is not null and captured_at >= p_day::timestamptz and captured_at < (p_day + 1)::timestamptz
+  )
+  select
+    ds.session_id,
+    min(pv.created_at) as first_seen,
+    max(pv.created_at) as last_seen,
+    count(pv.id) as page_view_count,
+    array_agg(distinct pv.path) filter (where pv.path is not null) as paths,
+    (select count(*) from public.search_events se where se.session_id = ds.session_id
+       and se.created_at >= p_day::timestamptz and se.created_at < (p_day + 1)::timestamptz) as search_count,
+    (select count(*) from public.export_events ee where ee.session_id = ds.session_id
+       and ee.created_at >= p_day::timestamptz and ee.created_at < (p_day + 1)::timestamptz) as export_count,
+    (select l.email from public.leads l where l.session_id = ds.session_id
+       and l.captured_at >= p_day::timestamptz and l.captured_at < (p_day + 1)::timestamptz limit 1) as lead_email,
+    max(pv.device) as device,
+    max(pv.referrer) as referrer,
+    max(pv.city) as city,
+    max(pv.country) as country,
+    max(pv.utm_source) as utm_source,
+    max(u.email) as user_email
+  from day_sessions ds
+  left join day_views pv on pv.session_id = ds.session_id
+  left join auth.users u on u.id = pv.user_id
+  where is_admin()
+  group by ds.session_id
+  order by first_seen desc nulls last;
+$$;
+
+create or replace function admin_get_session_timeline(p_session_id text)
+returns table (event_time timestamptz, kind text, detail text)
+language sql security definer stable as $$
+  select pv.created_at, 'page_view'::text,
+    coalesce(pv.path, '/') || coalesce(' via ' || nullif(pv.referrer, ''), '')
+  from public.page_views pv where pv.session_id = p_session_id and is_admin()
+  union all
+  select se.created_at, 'search'::text,
+    coalesce(se.kind, 'registry') || ' search · ' || coalesce(upper(se.province), '?')
+      || ' · ' || coalesce(se.result_count::text, '0') || ' results'
+  from public.search_events se where se.session_id = p_session_id and is_admin()
+  union all
+  select ee.created_at, 'export'::text,
+    upper(ee.format) || ' export · ' || coalesce(ee.project_name, 'Untitled')
+      || case when ee."noWatermark" then ' (no watermark)' else '' end
+  from public.export_events ee where ee.session_id = p_session_id and is_admin()
+  union all
+  select l.captured_at, 'lead'::text, 'Email captured: ' || l.email
+  from public.leads l where l.session_id = p_session_id and is_admin()
+  union all
+  select lc.created_at, 'click'::text, 'Clicked ' || coalesce(lc.element, '(unlabeled)')
+  from public.landing_clicks lc where lc.session_id = p_session_id and is_admin()
+  order by 1 asc;
 $$;
 
 create or replace function admin_get_live_visitors()

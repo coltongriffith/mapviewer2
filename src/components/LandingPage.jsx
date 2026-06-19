@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { supabase } from '../lib/supabase';
+import { getSessionId } from '../utils/session';
 
 const GALLERY_STYLES = [
   { id: 'drill_plan',   label: 'Drill Results',    desc: 'Collars, intercepts & target rings',     accent: '#2563eb', bg: '#1a2535', water: '#0f172a', img: '/gallery/drill-results.png' },
@@ -52,7 +53,7 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
     const y_pct = Math.round(((e.clientY + window.scrollY) / Math.max(document.body.scrollHeight, 1)) * 100);
     const viewport_w = window.innerWidth;
     const page_h = document.body.scrollHeight;
-    supabase.from('landing_clicks').insert({ x_pct, y_pct, element, viewport_w, page_h }).then(() => {});
+    supabase.from('landing_clicks').insert({ session_id: getSessionId(), x_pct, y_pct, element, viewport_w, page_h }).then(() => {});
   }
 
   return (

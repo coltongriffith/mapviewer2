@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { getSessionId } from './session';
 
 // Lightweight, fire-and-forget product analytics. Never throws, never blocks UI.
 
@@ -18,6 +19,7 @@ export function trackSearch({ kind, province, mode, query, resultCount }) {
   if (!supabase) return;
   try {
     supabase.from('search_events').insert({
+      session_id: getSessionId(),
       kind: kind || 'registry',
       province: province || null,
       mode: mode || null,
