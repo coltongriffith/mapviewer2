@@ -8,7 +8,7 @@ const GALLERY_STYLES = [
   { id: 'target',       label: 'Target Generation',desc: 'Anomaly areas & priority zones',         accent: '#dc2626', bg: '#fef2f2', water: '#fee2e2', img: '/gallery/target.png' },
   { id: 'regional',     label: 'Regional Context', desc: 'Property location in the district',      accent: '#b87333', bg: '#fef9ee', water: '#fde68a', img: '/gallery/regional.png' },
   { id: 'infrastructure', label: 'Infrastructure', desc: 'Access routes, roads & power lines',     accent: '#7c3aed', bg: '#f5f3ff', water: '#ede9fe', img: '/gallery/infrastructure.png' },
-  { id: 'dark',         label: 'Dark Satellite',   desc: 'Satellite basemap, high contrast',       accent: '#60a5fa', bg: '#0f172a', water: '#1e3a5f', img: '/gallery/dark.png' },
+  { id: 'dark',         label: 'Dark Satellite',   desc: 'Dark basemap, high contrast',            accent: '#60a5fa', bg: '#0f172a', water: '#1e3a5f', img: '/gallery/dark.png' },
 ];
 import { useAuth } from '../hooks/useAuth.jsx';
 import AuthModal from './AuthModal';
