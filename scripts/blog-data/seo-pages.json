@@ -1,0 +1,320 @@
+[
+  {
+    "slug": "mining-map-software",
+    "fullTitle": "Mining Map Software for Exploration Teams | Exploration Maps",
+    "h1": "Mining Map Software for Exploration Teams",
+    "label": "Mining Map Software",
+    "metaDescription": "Create clean mining and mineral exploration maps from claims, drillholes, targets, and GIS files. Export investor-ready maps without GIS software.",
+    "intro": "Exploration Maps is browser-based mining map software for building clean, investor-ready project maps from claim boundaries, drillholes, targets, and your own GIS files — without learning a full desktop GIS system.",
+    "softwareApp": true,
+    "sections": [
+      {
+        "h2": "What mining map software is used for",
+        "body": "Mining map software turns raw exploration data — claim boundaries, drill collars, sample points, target outlines, roads — into a single readable map. Geologists, junior mining companies, consultants, and investor relations teams use these maps to show where a project is, what ground a company controls, and what the exploration results look like. The goal is a map that a non-technical reader can understand at a glance, formatted for a slide, a report figure, a website, or a news release."
+      },
+      {
+        "h2": "Why exploration teams need clean project maps",
+        "body": "A project map is often the first thing an investor, partner, or regulator looks at. A cluttered screenshot from a desktop GIS or a generic satellite image with hand-drawn boxes undermines credibility. Clean maps with a clear legend, scale bar, north arrow, and title block communicate that the work behind them is organized. For capital markets and corporate development teams, map quality is part of how a project is judged."
+      },
+      {
+        "h2": "Claim maps, drillhole maps, target maps, and project overview maps",
+        "html": "Most exploration programs need a few recurring map types, and Exploration Maps handles each one. A <a href=\"/bc-mineral-claims-map/\">claims map</a> shows the land position and tenure outline. A <a href=\"/drill-results-map/\">drill results map</a> shows collars, intercepts, and assay highlights. A target map shows priority areas and anomalies over the claim block. A project overview, or location map, places the property in its regional and infrastructure context. You can build all of these from the same imported data and reuse a consistent style across them."
+      },
+      {
+        "h2": "From data to investor decks, websites, reports, and news releases",
+        "body": "Once a map is styled, you export it for the channel you need: a 16:9 PNG for an investor deck or PowerPoint slide, a high-resolution image for a company website, a print-ready PDF figure for a technical report, or a clear graphic for a drill-result news release. Because the underlying project is saved, you can update the data and re-export the same map layout when results change, keeping every channel consistent."
+      },
+      {
+        "h2": "Built for non-GIS users",
+        "body": "Traditional GIS tools are powerful but assume you know about coordinate reference systems, symbology rules, layout composers, and projection handling. Exploration Maps assigns sensible styling automatically when you tag a layer as claims, drillholes, or targets, fits the view to your data, and gives you a layout with the standard map elements already in place. Most users produce a presentable map in their first session without prior GIS training."
+      },
+      {
+        "h2": "Import the data you already have",
+        "html": "If you already work with GIS files, you can bring them straight in — see <a href=\"/shapefile-to-map/\">turning a Shapefile into a map</a>. Exploration Maps reads Shapefile, GeoJSON, KML, and CSV, so most exploration datasets import without conversion. You can also <a href=\"/mining-claim-search-by-company-name/\">search public mineral claim data</a> directly when you do not have a file to start from."
+      }
+    ],
+    "disclaimer": null,
+    "faqs": [
+      {
+        "q": "Do I need GIS experience to use mining map software?",
+        "a": "No. Exploration Maps applies standard styling automatically when you assign a layer role (claims, drillholes, targets) and provides a layout with a legend, scale bar, north arrow, and title block already in place. It is designed for geologists, IR teams, and other non-GIS users."
+      },
+      {
+        "q": "What file types can I import?",
+        "a": "You can import Shapefile, GeoJSON, KML, and CSV. CSV files with coordinate columns are mapped using a column mapper so latitude and longitude are assigned correctly."
+      },
+      {
+        "q": "What can I export?",
+        "a": "You can export PNG images for presentations and websites and print-ready PDFs for technical reports. Common ratios such as 16:9 landscape and letter portrait are available for decks and report figures."
+      }
+    ],
+    "related": ["mining-exploration-map-software", "bc-mineral-claims-map", "mining-claim-search-by-company-name", "shapefile-to-map", "drill-results-map"]
+  },
+  {
+    "slug": "mining-exploration-map-software",
+    "fullTitle": "Mining Exploration Map Software | Build Project Maps Faster",
+    "h1": "Mining Exploration Map Software",
+    "label": "Exploration Mapping",
+    "metaDescription": "Build mineral exploration maps with claims, drillholes, targets, labels, roads, and project data. Create clean maps for decks, reports, and investor updates.",
+    "intro": "Exploration Maps is mining exploration map software for building complete project maps — claim boundaries, access roads, targets, drillholes, and assay callouts — and exporting them for decks, reports, and investor updates.",
+    "softwareApp": false,
+    "sections": [
+      {
+        "h2": "What to include on a mineral exploration map",
+        "body": "A useful mineral exploration map answers a few questions quickly: where is the project, what does the company control, how do you get there, and what has the exploration found so far. In practice that means claim boundaries, a project location reference, access roads and infrastructure, target areas, and drillholes or sample results. Not every map needs all of these — a location map keeps it simple, while a results map adds detail — but these are the standard building blocks."
+      },
+      {
+        "h2": "Claim boundaries",
+        "body": "Claim boundaries define the land position. Import them as a Shapefile, GeoJSON, or KML and tag the layer as claims to apply the conventional blue outline and light fill. Multiple claim blocks can be styled separately and labelled so a reader can tell optioned ground from staked ground."
+      },
+      {
+        "h2": "Project location",
+        "body": "A location reference places the property relative to towns, regional geography, and known deposits. This is what investors look for first: is the project in a recognized district, and how remote is it. A small inset or regional overview map provides this context."
+      },
+      {
+        "h2": "Access roads",
+        "body": "Roads and trails show how a property is reached and how advanced the infrastructure is. Add them as a context layer or import your own road data, then reduce the opacity so access lines support the map without competing with claims and results."
+      },
+      {
+        "h2": "Targets",
+        "body": "Target areas and anomalies show where the exploration thesis is focused. Draw target outlines or import them, then label each one. On a target generation map these become the visual centre of the story over the claim block."
+      },
+      {
+        "h2": "Drillholes and assay callouts",
+        "html": "Drill collars, intercepts, and assay highlights turn results into something a reader can interpret. Import collars from CSV or GeoJSON and add callouts for the best intervals. For a full walkthrough, see <a href=\"/drill-results-map/\">drill results map</a>."
+      },
+      {
+        "h2": "Nearby infrastructure",
+        "body": "Power, rail, ports, mills, and nearby operating mines all affect how a project is valued. Showing them on an infrastructure map makes the development case concrete rather than abstract."
+      },
+      {
+        "h2": "Export formats",
+        "body": "Export PNG for slides, websites, and email updates, or PDF for print-ready report figures. Use a 16:9 landscape ratio for presentations and a letter or A4 page for technical reports. Maps export with a legend, scale bar, north arrow, and title block."
+      },
+      {
+        "h2": "Investor communication use cases",
+        "body": "Exploration maps carry a lot of the investor story: corporate presentations, fact sheets, website project pages, drill-result news releases, and internal reviews ahead of a financing or a deal. Building them in one place keeps the visual style consistent across every document a company puts out."
+      }
+    ],
+    "disclaimer": null,
+    "faqs": [
+      {
+        "q": "What should a mineral exploration map include?",
+        "a": "Most exploration maps include claim boundaries, a project location reference, access roads, target areas, and drillholes or sample results. The exact mix depends on the map's purpose — a location map stays simple, while a drill results map adds collars and assay callouts."
+      },
+      {
+        "q": "Can I build different map types from the same project?",
+        "a": "Yes. You can reuse the same imported data to produce a claims map, a target map, a drill results map, and a location map with a consistent style, then export each one separately."
+      }
+    ],
+    "related": ["mining-map-software", "shapefile-to-map", "drill-results-map", "bc-mineral-claims-map"]
+  },
+  {
+    "slug": "bc-mineral-claims-map",
+    "fullTitle": "BC Mineral Claims Map Tool | Search Claims & Export Project Maps",
+    "h1": "BC Mineral Claims Map Tool",
+    "label": "BC Mineral Claims",
+    "metaDescription": "Search public BC mineral claim data, style claim blocks, add project details, and export clean maps for decks, websites, and reports.",
+    "intro": "Exploration Maps helps you turn public British Columbia mineral claim data into a clean project map — search claims, style the blocks, add project details, and export for decks, websites, and reports.",
+    "softwareApp": false,
+    "sections": [
+      {
+        "h2": "Searching BC mineral claims",
+        "body": "You can pull public British Columbia mineral claim data into Exploration Maps and use it as the starting point for a project map, rather than rebuilding boundaries by hand. This is useful when you want to review a land position quickly or assemble a map without first exporting and converting files from a government portal."
+      },
+      {
+        "h2": "Turning claim data into a clean project map",
+        "body": "Raw claim polygons are rarely presentation-ready. Once the claims are loaded, tag the layer as claims for standard styling, add context such as roads and water, choose a basemap, and frame the view. The result is a map a reader can interpret, not a screenshot of a data viewer."
+      },
+      {
+        "h2": "Using claim maps for investor decks and internal review",
+        "body": "A BC claims map is a core asset for corporate presentations, project web pages, and internal reviews ahead of staking decisions or financings. Because the project is saved, you can update it as the land position changes and re-export the same layout."
+      },
+      {
+        "h2": "Adding labels, project details, roads, targets, and logos",
+        "body": "Add claim labels, a title block with the project name and date, access roads, target outlines, and your company logo. These details turn a boundary outline into a complete project map that stands on its own in a deck or report."
+      },
+      {
+        "h2": "Exporting clean map graphics",
+        "body": "Export a PNG for slides and websites or a PDF for print-ready report figures. Maps include a legend, scale bar, north arrow, and title block, so they read as finished figures rather than rough working images."
+      },
+      {
+        "h2": "Researching other companies' ground",
+        "html": "If you are reviewing competitor land positions or doing deal due diligence, you can also <a href=\"/mining-claim-search-by-company-name/\">search mineral claims by company name</a> and map the results the same way."
+      }
+    ],
+    "disclaimer": "Exploration Maps is not the official British Columbia mineral titles registry. Always verify current claim status, ownership, boundaries, and tenure details through BC Mineral Titles Online (MTO) before relying on a map for staking, transactions, or filings.",
+    "faqs": [
+      {
+        "q": "Is Exploration Maps the official BC claims registry?",
+        "a": "No. Exploration Maps is a mapping tool, not a government registry. The official source for British Columbia mineral claim status, ownership, and tenure is BC Mineral Titles Online (MTO), and you should verify details there before relying on them."
+      },
+      {
+        "q": "Can I export a BC claims map for an investor deck?",
+        "a": "Yes. You can export PNG images sized for presentation slides and websites, or PDF figures for technical reports, with a legend, scale bar, north arrow, and title block included."
+      },
+      {
+        "q": "Can I add roads, targets, and my logo to a BC claims map?",
+        "a": "Yes. You can add access roads, target outlines, claim labels, a project title block, and your company logo to build a complete project map from the claim boundaries."
+      }
+    ],
+    "related": ["mining-claim-search-by-company-name", "mining-map-software", "mining-exploration-map-software"]
+  },
+  {
+    "slug": "mining-claim-search-by-company-name",
+    "fullTitle": "Mining Claim Search by Company Name | Exploration Maps",
+    "h1": "Mining Claim Search by Company Name",
+    "label": "Claim Search",
+    "metaDescription": "Search mineral claims by company name and turn public claim data into clean project maps for research, investor decks, and internal review.",
+    "intro": "Exploration Maps lets you search public mineral claim data and turn the results into clean maps — useful for reviewing a company's land position, competitor research, deal review, and due diligence.",
+    "softwareApp": false,
+    "sections": [
+      {
+        "h2": "Why search claims by company name",
+        "body": "Searching mineral claims by company name answers a direct question: what ground does this company actually control. Instead of looking up individual tenures one at a time, you can review a company's land position as a whole and then map it. This is one of the most practical starting points for research on a junior explorer or a prospective deal, where supported by the underlying public data."
+      },
+      {
+        "h2": "Reviewing land positions",
+        "body": "A company-name search gives you the shape and extent of a land package — how concentrated it is, whether it covers a known trend, and how it sits relative to neighbours. Mapping it makes the land position legible in a way a list of tenure numbers never will."
+      },
+      {
+        "h2": "Competitor research",
+        "body": "Mapping a competitor's claims shows where they are expanding, what districts they favour, and whether their ground borders yours. This context is helpful for staking decisions, partnership discussions, and understanding a peer group."
+      },
+      {
+        "h2": "Deal review",
+        "body": "When evaluating an acquisition, option, or earn-in, a claims map built from a company-name search lets you see the asset clearly before going deep into documents. It is a fast first-pass filter for corporate development and capital markets teams."
+      },
+      {
+        "h2": "Project due diligence",
+        "body": "During due diligence, an independent map of the target's claims helps cross-check what is being represented. It is a visual reference to review alongside the official tenure records, not a replacement for them."
+      },
+      {
+        "h2": "Turning claim search results into usable maps",
+        "body": "Once you have the claims, style them, add context such as roads and regional geography, and frame the view. The output is a clean map rather than a raw data view, ready to drop into the document you are working on."
+      },
+      {
+        "h2": "Using the output in decks, reports, websites, and internal memos",
+        "html": "Export the map as a PNG for slides, websites, and internal memos, or a PDF for formal reports. For a province-specific workflow, see the <a href=\"/bc-mineral-claims-map/\">BC mineral claims map tool</a>, and for the full feature set see <a href=\"/mining-map-software/\">mining map software</a>."
+      }
+    ],
+    "disclaimer": "Claim search results and any maps built from them are for research and visualization only. Exploration Maps is not an official government registry. Always verify current claim ownership, status, boundaries, and tenure details through the applicable government mineral titles registry before relying on them for transactions, staking, or filings. Search-by-company-name is available where the underlying public claim data supports it.",
+    "faqs": [
+      {
+        "q": "Can I search mineral claims by company name?",
+        "a": "Where the underlying public claim data supports it, yes — you can search by company or holder name to review a company's land position and then map the results. Coverage depends on what the relevant public registry exposes."
+      },
+      {
+        "q": "Is a claim search map an official ownership record?",
+        "a": "No. Maps built from a claim search are for research and visualization only. Always verify current ownership, status, and tenure details through the official government mineral titles registry before relying on them."
+      },
+      {
+        "q": "What can I use a company-name claim map for?",
+        "a": "Common uses include reviewing land positions, competitor research, deal review, and project due diligence, with the output dropped into investor decks, reports, websites, or internal memos."
+      }
+    ],
+    "related": ["bc-mineral-claims-map", "mining-map-software", "mining-exploration-map-software"]
+  },
+  {
+    "slug": "shapefile-to-map",
+    "fullTitle": "Shapefile to Map Tool for Mining Projects | Exploration Maps",
+    "h1": "Shapefile to Map Tool for Mining Projects",
+    "label": "Shapefile to Map",
+    "metaDescription": "Upload Shapefile, GeoJSON, KML, or CSV data and create clean mineral exploration maps for presentations, reports, and investor materials.",
+    "intro": "Exploration Maps turns Shapefile, GeoJSON, KML, and CSV data into clean mineral exploration maps — a fast way to get a presentation-ready output when you already have the files but do not want to work in full GIS software.",
+    "softwareApp": false,
+    "sections": [
+      {
+        "h2": "Uploading Shapefile, GeoJSON, KML, and CSV data",
+        "body": "If you already have exploration data as files, you can import it directly. Exploration Maps reads Shapefile, GeoJSON, KML, and CSV. CSV files with coordinate columns are handled with a column mapper so latitude and longitude are assigned correctly. Most exploration datasets import without manual conversion."
+      },
+      {
+        "h2": "Converting raw files into clean visual maps",
+        "body": "Imported files usually look raw — default colours, no labels, no layout. Tag each layer by role (claims, drillholes, targets) to apply sensible styling, then the map is fit to your data automatically. The point of this tool is the step that desktop GIS makes slow: getting from a valid file to a clean visual quickly."
+      },
+      {
+        "h2": "Styling layers",
+        "body": "Adjust stroke and fill colours, opacity, and labels per layer. Use separate layers for separate claim blocks or sample types so each appears distinctly in the legend. Reduce the opacity on context layers like roads and water so your main data stays dominant."
+      },
+      {
+        "h2": "Adding labels and project context",
+        "body": "Add claim and feature labels, a title block with the project name and date, a north arrow, and a scale bar. Optional context overlays place the data in its regional and infrastructure setting so the map reads on its own."
+      },
+      {
+        "h2": "Exporting maps for presentations and reports",
+        "body": "Export a PNG for slides and websites or a PDF for print-ready report figures, using a 16:9 landscape ratio for decks or a letter or A4 page for technical reports."
+      },
+      {
+        "h2": "For users who do not want to work in full GIS software",
+        "html": "Desktop GIS is the right tool for heavy analysis, but it is overkill when you simply need a clean figure from data you already have. This tool focuses on presentation output. For the broader workflow, see <a href=\"/mining-exploration-map-software/\">mining exploration map software</a>."
+      }
+    ],
+    "disclaimer": null,
+    "faqs": [
+      {
+        "q": "Can I turn a Shapefile into a map without GIS software?",
+        "a": "Yes. Upload your Shapefile (along with its companion files) and Exploration Maps renders it in the browser. You can style it, add labels and a title block, and export a presentation-ready PNG or PDF without a desktop GIS."
+      },
+      {
+        "q": "What file types are supported?",
+        "a": "Shapefile, GeoJSON, KML, and CSV. CSV files with coordinate columns use a column mapper to assign latitude and longitude."
+      },
+      {
+        "q": "What coordinate system should my data use?",
+        "a": "Data in WGS84 (EPSG:4326) imports most reliably. If your source is in another projection, convert it to WGS84 before importing."
+      }
+    ],
+    "related": ["mining-exploration-map-software", "mining-map-software", "drill-results-map"]
+  },
+  {
+    "slug": "drill-results-map",
+    "fullTitle": "Drill Results Map Tool for Exploration Updates | Exploration Maps",
+    "h1": "Drill Results Map Tool for Exploration Updates",
+    "label": "Drill Results",
+    "metaDescription": "Create clear drillhole and assay maps for mining presentations, reports, news releases, and investor updates.",
+    "intro": "Exploration Maps helps you build clear drillhole and assay maps — collars, intercepts, targets, and claim context — for news releases, presentations, technical summaries, and investor updates.",
+    "softwareApp": false,
+    "sections": [
+      {
+        "h2": "Why drill results need clear maps",
+        "body": "Drill results are hard to interpret as a table of numbers alone. A map shows where the holes are, how they relate to each other and to the target, and which intercepts matter. For investors reading a news release, a clear drill map is often the difference between a result that lands and one that gets skimmed past."
+      },
+      {
+        "h2": "Showing drill collars",
+        "body": "Import drill collars from CSV or GeoJSON — typically hole ID, latitude, and longitude — and plot them on the claim block. Label holes clearly and keep the symbols consistent so the pattern of the program is easy to follow."
+      },
+      {
+        "h2": "Highlighting assays and intercepts",
+        "body": "Add callouts for the best intervals — grade and width — next to the relevant holes. Highlighting the intercepts that drive the story keeps attention on the results that matter instead of burying them among every hole drilled."
+      },
+      {
+        "h2": "Showing targets and claim boundaries",
+        "body": "Place the drilling in context by including target outlines and claim boundaries. This shows whether holes are testing the intended target and confirms the results sit within the company's ground."
+      },
+      {
+        "h2": "Using maps in news releases, decks, technical summaries, and investor updates",
+        "body": "The same drill map can serve a news release figure, a slide in a corporate deck, a technical summary, and an investor email update. Building it once and exporting per channel keeps the results presented consistently everywhere they appear."
+      },
+      {
+        "h2": "Export-ready visuals",
+        "html": "Export PNG for slides, websites, and news releases, or PDF for print-ready report figures, with a legend, scale bar, north arrow, and title block included. For the broader exploration map workflow, see <a href=\"/mining-exploration-map-software/\">mining exploration map software</a>."
+      }
+    ],
+    "disclaimer": null,
+    "faqs": [
+      {
+        "q": "What data do I need for a drill results map?",
+        "a": "At minimum, drill collar locations (hole ID, latitude, longitude), which you can import from CSV or GeoJSON. To highlight results, add the key intercepts (grade and width) as callouts, and include target outlines and claim boundaries for context."
+      },
+      {
+        "q": "Can I use a drill results map in a news release?",
+        "a": "Yes. Export a PNG or PDF figure with a legend, scale bar, north arrow, and title block, sized for a news release, slide, or report."
+      },
+      {
+        "q": "Can I update the map when new holes come in?",
+        "a": "Yes. Because the project is saved, you can add new collars and intercepts and re-export the same layout as the program progresses."
+      }
+    ],
+    "related": ["mining-exploration-map-software", "mining-map-software", "shapefile-to-map"]
+  }
+]
