@@ -1,10 +1,11 @@
 /**
  * Per-style sample projects for the 6 landing-page gallery cards.
  *
- * Each card now loads a real, distinct demo built from the Cedar Ridge
+ * Each card loads a real, distinct demo built from the Cedar Ridge
  * ("Aurora Ridge Minerals") geometry — configured to match the map type the
  * card advertises — instead of all six loading the same generic data. This
- * mirrors how the before/after compare loads the full investor map.
+ * mirrors how the before/after compare loads the full investor map, and uses
+ * the Aurora Ridge Minerals branding throughout for consistency.
  *
  * A recipe lists the layers to add (each referencing a real GeoJSON dataset,
  * with the role/styling/legend to apply), the callouts to place, and the
@@ -18,142 +19,106 @@ import {
   auroraRoads,
 } from './auroraDemo.js';
 
+// Aurora Ridge Minerals palette
+const TEAL = '#117a68';        // claims fill
+const TEAL_DARK = '#0b3533';   // title block / collar ring
+const GOLD = '#c8a84b';        // accent
+const TARGET_GOLD = '#d4a72c'; // target outlines
 const TITLE = 'Cedar Ridge Project';
-const DARK_TITLE_BG = '#0b1f3a';
+const FOOTER = 'Aurora Ridge Minerals Corp. | Cedar Ridge Project, BC';
+
+// Brand defaults shared by every gallery demo.
+const brand = (extra = {}) => ({
+  accentColor: GOLD,
+  titleBgColor: TEAL_DARK,
+  titleFgColor: '#ffffff',
+  insetEnabled: true,
+  insetMode: 'province_state',
+  insetTitle: 'Location Map',
+  legendTitle: 'Legend',
+  northArrowStyle: 'arrow',
+  cornerRadius: 10,
+  ...extra,
+});
+
+const claimsLayer = (style, label = 'Claims') => ({
+  data: auroraClaims, name: 'Claims.geojson', role: 'claims', displayName: label,
+  style: { stroke: '#ffffff', fill: TEAL, fillOpacity: 0.5, strokeWidth: 2.5, dissolve: true, ...style },
+  legend: { enabled: true, label },
+});
+const collarsLayer = (size = 12) => ({
+  data: auroraDrillholes, name: 'Drill Collars.geojson', role: 'drillholes', displayName: 'Drill Collars',
+  style: { markerColor: TEAL_DARK, markerFill: '#ffffff', markerSize: size },
+  legend: { enabled: true, label: 'Drill Collars' },
+});
+const targetsLayer = () => ({
+  data: auroraTargets, name: 'Target Areas.geojson', role: 'target_areas', displayName: 'Target Areas',
+  style: { stroke: TARGET_GOLD, fill: TARGET_GOLD, fillOpacity: 0, strokeWidth: 2.5, dashArray: '8 6' },
+  legend: { enabled: true, label: 'Target Areas' },
+});
 
 export const GALLERY_DEMOS = {
   // Drill Results — collars & intercepts on satellite imagery
   drill_plan: {
-    title: TITLE,
-    subtitle: 'Drill Results — 2024 Program',
-    layout: {
-      basemap: 'satellite', mode: 'drill_plan', accentColor: '#2563eb',
-      titleBgColor: DARK_TITLE_BG, titleFgColor: '#ffffff',
-      insetEnabled: true, insetMode: 'province_state', insetTitle: 'Location Map',
-      footerEnabled: false, northArrowStyle: 'arrow', cornerRadius: 10,
-      exportSettings: { filename: 'cedar-ridge-drill-results', pixelRatio: 2 },
-    },
-    layers: [
-      { data: auroraClaims, name: 'Claims.geojson', role: 'claims', displayName: 'Claims',
-        style: { stroke: '#cfe0ff', fill: '#1d4ed8', fillOpacity: 0.18, strokeWidth: 2, dissolve: true },
-        legend: { enabled: true, label: 'Claims' } },
-      { data: auroraDrillholes, name: 'Drill Collars.geojson', role: 'drillholes', displayName: 'Drill Collars',
-        style: { markerColor: '#0b1f3a', markerFill: '#ffffff', markerSize: 12 },
-        legend: { enabled: true, label: 'Drill Collars' } },
-    ],
+    title: TITLE, subtitle: 'Drill Results — 2024 Program',
+    layout: brand({ basemap: 'satellite', mode: 'drill_plan', footerEnabled: false,
+      exportSettings: { filename: 'cedar-ridge-drill-results', pixelRatio: 2 } }),
+    layers: [claimsLayer({ fillOpacity: 0.42 }), collarsLayer(12)],
     callouts: auroraCallouts,
   },
 
   // Claims Package — land position on a clean light basemap
   claims: {
-    title: TITLE,
-    subtitle: 'Claims & Land Position',
-    layout: {
-      basemap: 'light', mode: 'regional_claims', accentColor: '#16a34a',
-      titleBgColor: null, titleFgColor: null,
-      insetEnabled: true, insetMode: 'province_state', insetTitle: 'Land Position',
-      footerEnabled: true, northArrowStyle: 'classic', cornerRadius: 8,
-      exportSettings: { filename: 'cedar-ridge-claims', pixelRatio: 2 },
-    },
-    layers: [
-      { data: auroraClaims, name: 'Claims.geojson', role: 'claims', displayName: 'Mineral Claims',
-        style: { stroke: '#15803d', fill: '#16a34a', fillOpacity: 0.16, strokeWidth: 2.5, dissolve: true },
-        legend: { enabled: true, label: 'Mineral Claims' } },
-    ],
+    title: TITLE, subtitle: 'Claims & Land Position',
+    layout: brand({ basemap: 'light', mode: 'regional_claims', footerEnabled: true, footerText: FOOTER,
+      insetTitle: 'Land Position', exportSettings: { filename: 'cedar-ridge-claims', pixelRatio: 2 } }),
+    layers: [claimsLayer({ stroke: TEAL_DARK, fillOpacity: 0.3 }, 'Mineral Claims')],
     callouts: null,
   },
 
   // Target Generation — priority anomaly zones over the claim block
   target: {
-    title: TITLE,
-    subtitle: 'Target Generation',
-    layout: {
-      basemap: 'light', mode: 'target_anomaly', accentColor: '#dc2626',
-      titleBgColor: null, titleFgColor: null,
-      insetEnabled: true, insetMode: 'province_state', insetTitle: 'Location Map',
-      footerEnabled: true, northArrowStyle: 'classic', cornerRadius: 8,
-      exportSettings: { filename: 'cedar-ridge-targets', pixelRatio: 2 },
-    },
+    title: TITLE, subtitle: 'Target Generation',
+    layout: brand({ basemap: 'light', mode: 'target_anomaly', footerEnabled: true, footerText: FOOTER,
+      exportSettings: { filename: 'cedar-ridge-targets', pixelRatio: 2 } }),
     layers: [
-      { data: auroraClaims, name: 'Claims.geojson', role: 'claims', displayName: 'Claims',
-        style: { stroke: '#94a3b8', fill: '#cbd5e1', fillOpacity: 0.18, strokeWidth: 1.5, dissolve: true },
-        legend: { enabled: true, label: 'Claims' } },
-      { data: auroraTargets, name: 'Target Areas.geojson', role: 'target_areas', displayName: 'Target Areas',
-        style: { stroke: '#dc2626', fill: '#dc2626', fillOpacity: 0.12, strokeWidth: 2.5, dashArray: '8 6' },
-        legend: { enabled: true, label: 'Priority Targets' } },
-      { data: auroraDrillholes, name: 'Drill Collars.geojson', role: 'drillholes', displayName: 'Drill Collars',
-        style: { markerColor: '#7f1d1d', markerFill: '#ffffff', markerSize: 9 },
-        legend: { enabled: true, label: 'Drill Collars' } },
+      claimsLayer({ stroke: TEAL_DARK, fill: TEAL, fillOpacity: 0.18, strokeWidth: 1.5 }),
+      targetsLayer(),
+      collarsLayer(9),
     ],
     callouts: auroraCallouts,
   },
 
   // Regional Context — property location in the district on terrain
   regional: {
-    title: TITLE,
-    subtitle: 'Regional Location',
-    layout: {
-      basemap: 'terrain', mode: 'project_overview', accentColor: '#b87333',
-      titleBgColor: null, titleFgColor: null,
-      insetEnabled: true, insetMode: 'province_state', insetTitle: 'Province',
-      compositionPreset: 'regional', footerEnabled: true, northArrowStyle: 'classic', cornerRadius: 8,
-      exportSettings: { filename: 'cedar-ridge-regional', pixelRatio: 2 },
-    },
-    layers: [
-      { data: auroraClaims, name: 'Claims.geojson', role: 'claims', displayName: 'Property',
-        style: { stroke: '#b87333', fill: '#b87333', fillOpacity: 0.15, strokeWidth: 2.5, dissolve: true },
-        legend: { enabled: true, label: 'Cedar Ridge Property' } },
-    ],
+    title: TITLE, subtitle: 'Regional Location',
+    layout: brand({ basemap: 'terrain', mode: 'project_overview', compositionPreset: 'regional',
+      footerEnabled: true, footerText: FOOTER, insetTitle: 'Province',
+      exportSettings: { filename: 'cedar-ridge-regional', pixelRatio: 2 } }),
+    layers: [claimsLayer({ stroke: TEAL_DARK, fill: TEAL, fillOpacity: 0.28, strokeWidth: 2.5 }, 'Cedar Ridge Property')],
     callouts: null,
   },
 
   // Infrastructure — access roads & power corridor
   infrastructure: {
-    title: TITLE,
-    subtitle: 'Access & Infrastructure',
-    layout: {
-      basemap: 'light', mode: 'access_location', accentColor: '#7c3aed',
-      titleBgColor: null, titleFgColor: null,
-      insetEnabled: true, insetMode: 'province_state', insetTitle: 'Location Map',
-      footerEnabled: true, northArrowStyle: 'classic', cornerRadius: 8,
-      exportSettings: { filename: 'cedar-ridge-infrastructure', pixelRatio: 2 },
-    },
+    title: TITLE, subtitle: 'Access & Infrastructure',
+    layout: brand({ basemap: 'light', mode: 'access_location', footerEnabled: true, footerText: FOOTER,
+      exportSettings: { filename: 'cedar-ridge-infrastructure', pixelRatio: 2 } }),
     layers: [
-      { data: auroraClaims, name: 'Claims.geojson', role: 'claims', displayName: 'Claims',
-        style: { stroke: '#7c3aed', fill: '#7c3aed', fillOpacity: 0.10, strokeWidth: 1.5, dissolve: true },
-        legend: { enabled: true, label: 'Claims' } },
+      claimsLayer({ stroke: TEAL_DARK, fill: TEAL, fillOpacity: 0.14, strokeWidth: 1.5 }),
       { data: auroraRoads, name: 'Access Roads.geojson', role: 'roads_access', displayName: 'Access & Power',
-        style: { stroke: '#7c3aed', strokeWidth: 3, dashArray: '2 0' },
-        legend: { enabled: true, label: 'Access & Power' } },
-      { data: auroraDrillholes, name: 'Drill Collars.geojson', role: 'drillholes', displayName: 'Drill Collars',
-        style: { markerColor: '#4c1d95', markerFill: '#ffffff', markerSize: 8 },
-        legend: { enabled: true, label: 'Drill Collars' } },
+        style: { stroke: GOLD, strokeWidth: 3 }, legend: { enabled: true, label: 'Access & Power' } },
+      collarsLayer(8),
     ],
     callouts: null,
   },
 
   // Dark Satellite — high-contrast full investor view on imagery
   dark: {
-    title: TITLE,
-    subtitle: 'Satellite Overview',
-    layout: {
-      basemap: 'satellite', mode: 'project_overview', accentColor: '#38bdf8',
-      titleBgColor: DARK_TITLE_BG, titleFgColor: '#ffffff',
-      insetEnabled: true, insetMode: 'province_state', insetTitle: 'Location Map',
-      footerEnabled: false, northArrowStyle: 'arrow', cornerRadius: 10,
-      exportSettings: { filename: 'cedar-ridge-satellite', pixelRatio: 2 },
-    },
-    layers: [
-      { data: auroraClaims, name: 'Claims.geojson', role: 'claims', displayName: 'Claims',
-        style: { stroke: '#ffffff', fill: '#38bdf8', fillOpacity: 0.20, strokeWidth: 2.5, dissolve: true },
-        legend: { enabled: true, label: 'Claims' } },
-      { data: auroraTargets, name: 'Target Areas.geojson', role: 'target_areas', displayName: 'Target Areas',
-        style: { stroke: '#fde047', fill: '#fde047', fillOpacity: 0, strokeWidth: 2.5, dashArray: '8 6' },
-        legend: { enabled: true, label: 'Target Areas' } },
-      { data: auroraDrillholes, name: 'Drill Collars.geojson', role: 'drillholes', displayName: 'Drill Collars',
-        style: { markerColor: '#0b1f3a', markerFill: '#38bdf8', markerSize: 11 },
-        legend: { enabled: true, label: 'Drill Collars' } },
-    ],
+    title: TITLE, subtitle: 'Satellite Overview',
+    layout: brand({ basemap: 'satellite', mode: 'project_overview', footerEnabled: false,
+      exportSettings: { filename: 'cedar-ridge-satellite', pixelRatio: 2 } }),
+    layers: [claimsLayer({ fillOpacity: 0.5 }), targetsLayer(), collarsLayer(11)],
     callouts: auroraCallouts,
   },
 };
