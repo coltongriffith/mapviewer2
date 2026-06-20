@@ -338,6 +338,19 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
       </main>
       <footer className="landing-footer">
         <div className="landing-footer-links">
+          <a href="/mining-map-software/" className="landing-footer-link">Mining Map Software</a>
+          <span className="landing-footer-sep">·</span>
+          <a href="/mining-exploration-map-software/" className="landing-footer-link">Exploration Map Software</a>
+          <span className="landing-footer-sep">·</span>
+          <a href="/bc-mineral-claims-map/" className="landing-footer-link">BC Claims Map</a>
+          <span className="landing-footer-sep">·</span>
+          <a href="/mining-claim-search-by-company-name/" className="landing-footer-link">Claim Search by Company</a>
+          <span className="landing-footer-sep">·</span>
+          <a href="/shapefile-to-map/" className="landing-footer-link">Shapefile to Map</a>
+          <span className="landing-footer-sep">·</span>
+          <a href="/drill-results-map/" className="landing-footer-link">Drill Results Map</a>
+        </div>
+        <div className="landing-footer-links">
           <a href="/" className="landing-footer-link">Home</a>
           <span className="landing-footer-sep">·</span>
           <a href="/about/" className="landing-footer-link">About</a>

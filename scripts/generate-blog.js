@@ -23,6 +23,7 @@ const howToPosts    = JSON.parse(readFileSync(join(__dirname, 'blog-data', 'how-
 const compPosts     = JSON.parse(readFileSync(join(__dirname, 'blog-data', 'comparison-posts.json'), 'utf8'));
 const locations     = JSON.parse(readFileSync(join(__dirname, 'blog-data', 'locations.json'), 'utf8'));
 const mapTypes      = JSON.parse(readFileSync(join(__dirname, 'blog-data', 'map-types.json'), 'utf8'));
+const seoPages      = JSON.parse(readFileSync(join(__dirname, 'blog-data', 'seo-pages.json'), 'utf8'));
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -144,6 +145,23 @@ article strong{color:#0f172a}
 .data-table tr:nth-child(even) td{background:#f8fafc}
 /* Post date */
 .post-date{color:#94a3b8;font-size:12px}
+/* SEO landing page */
+.lp-wrap{max-width:820px;margin:0 auto;padding:0 24px}
+.lp article h2{font-size:1.45rem}
+.lp-intro{font-size:1.15rem;color:#334155;line-height:1.7;margin:0 0 8px}
+.lp-cta{background:linear-gradient(135deg,#1e3a5f 0%,#2563eb 100%);border-radius:14px;padding:32px 28px;color:#fff;text-align:center;margin:40px 0}
+.lp-cta h2{color:#fff !important;border:none !important;margin:0 0 8px !important;padding:0 !important;font-size:1.3rem}
+.lp-cta p{color:#bfdbfe;margin:0 0 18px;font-size:0.98rem}
+.lp-cta a{display:inline-block;background:#fff;color:#1e3a5f;padding:12px 26px;border-radius:9px;font-weight:700;font-size:15px;text-decoration:none}
+.lp-cta a:hover{background:#dbeafe;text-decoration:none}
+.lp-related{border-top:2px solid #e8edf3;margin-top:48px;padding-top:24px}
+.lp-related h2{font-size:1.2rem;border:none;padding:0}
+.lp-related-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px;margin-top:8px}
+.lp-related-card{border:1px solid #e2e8f0;border-radius:10px;padding:16px 18px;display:block;text-decoration:none}
+.lp-related-card:hover{border-color:#2563eb;box-shadow:0 4px 14px rgba(37,99,235,0.1);text-decoration:none}
+.lp-related-card strong{display:block;color:#0f172a;font-size:0.98rem;margin-bottom:4px}
+.lp-related-card span{color:#64748b;font-size:13px;line-height:1.5}
+.disclaimer-box{background:#fffbeb;border-left:4px solid #d97706;padding:14px 18px;border-radius:0 8px 8px 0;margin:24px 0;color:#374151;line-height:1.7;font-size:0.95rem}
 /* Footer */
 .site-footer{border-top:1px solid #e2e8f0;padding:28px 24px;text-align:center;font-size:13px;color:#94a3b8;margin-top:40px}
 .site-footer-links{margin-bottom:8px;display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:6px}
@@ -153,24 +171,28 @@ article strong{color:#0f172a}
 
 // ─── Page shell ───────────────────────────────────────────────────────────────
 
-function pageShell({ title, description, canonical, schema, body, noindex = false }) {
+function pageShell({ title, description, canonical, schema, body, noindex = false, fullTitle = null, ogType = 'article' }) {
+  // fullTitle overrides the default "<title> | SITE_NAME" pattern, used by
+  // landing pages whose exact title tag is specified verbatim.
+  const titleTag = fullTitle || `${title} | ${SITE_NAME}`;
+  const ogTitle = fullTitle || title;
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${esc(title)} | ${SITE_NAME}</title>
+<title>${esc(titleTag)}</title>
 <meta name="description" content="${esc(description)}">
 <link rel="canonical" href="${esc(canonical)}">
 ${noindex ? '<meta name="robots" content="noindex,follow">' : ''}
-<meta property="og:title" content="${esc(title)}">
+<meta property="og:title" content="${esc(ogTitle)}">
 <meta property="og:description" content="${esc(description)}">
 <meta property="og:url" content="${esc(canonical)}">
-<meta property="og:type" content="article">
+<meta property="og:type" content="${esc(ogType)}">
 <meta property="og:site_name" content="${esc(SITE_NAME)}">
 <meta property="og:image" content="${OG_IMAGE}">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="${esc(title)}">
+<meta name="twitter:title" content="${esc(ogTitle)}">
 <meta name="twitter:description" content="${esc(description)}">
 <meta name="twitter:image" content="${OG_IMAGE}">
 ${schema ? `<script type="application/ld+json">${JSON.stringify(schema, null, 0)}</script>` : ''}
@@ -191,6 +213,19 @@ ${schema ? `<script type="application/ld+json">${JSON.stringify(schema, null, 0)
 </nav>
 ${body}
 <footer class="site-footer">
+  <div class="site-footer-links">
+    <a href="/mining-map-software/">Mining Map Software</a>
+    <span class="site-footer-sep">·</span>
+    <a href="/mining-exploration-map-software/">Exploration Map Software</a>
+    <span class="site-footer-sep">·</span>
+    <a href="/bc-mineral-claims-map/">BC Claims Map</a>
+    <span class="site-footer-sep">·</span>
+    <a href="/mining-claim-search-by-company-name/">Claim Search by Company</a>
+    <span class="site-footer-sep">·</span>
+    <a href="/shapefile-to-map/">Shapefile to Map</a>
+    <span class="site-footer-sep">·</span>
+    <a href="/drill-results-map/">Drill Results Map</a>
+  </div>
   <div class="site-footer-links">
     <a href="/">Home</a>
     <span class="site-footer-sep">·</span>
@@ -255,7 +290,9 @@ function faqBlock(faqs) {
 
 function renderSections(sections) {
   return sections.map(s => {
-    const body = s.body ? `<p>${esc(s.body)}</p>` : '';
+    // s.html is raw (trusted, author-controlled) and allows inline internal
+    // links; s.body is plain text and gets escaped. Use one or the other.
+    const body = s.html ? `<p>${s.html}</p>` : s.body ? `<p>${esc(s.body)}</p>` : '';
     const items = s.items ? `<ul>${s.items.map(i => `<li>${esc(i)}</li>`).join('')}</ul>` : '';
     return `<h2>${esc(s.h2)}</h2>${body}${items}`;
   }).join('\n');
@@ -661,25 +698,103 @@ function buildBlogIndex(allUrls) {
   return pageShell({ title: 'Exploration Mapping Guides & Tutorials', description: 'Guides, tutorials, and comparisons for creating professional mining exploration maps — investor presentations, NI 43-101 figures, and news release maps.', canonical: url, schema, body });
 }
 
+// ─── SEO landing pages (top-level, e.g. /mining-map-software/) ─────────────────
+
+function softwareAppSchema(name, description, url) {
+  return {
+    '@type': 'SoftwareApplication',
+    name,
+    description,
+    url,
+    applicationCategory: 'BusinessApplication',
+    operatingSystem: 'Web browser',
+    publisher: { '@type': 'Organization', name: SITE_NAME, url: SITE },
+  };
+}
+
+function buildSeoLandingPage(page, allLandingPages) {
+  const url = `${SITE}/${page.slug}/`;
+
+  const graph = [];
+  if (page.softwareApp) {
+    graph.push(softwareAppSchema(page.h1, page.metaDescription, url));
+  }
+  if (page.faqs?.length) graph.push(faqSchema(page.faqs));
+  graph.push({
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Home', item: SITE },
+      { '@type': 'ListItem', position: 2, name: page.h1, item: url },
+    ],
+  });
+  const schema = { '@context': 'https://schema.org', '@graph': graph };
+
+  const disclaimerHtml = page.disclaimer
+    ? `<p class="disclaimer-box"><strong>Verify with the official registry:</strong> ${esc(page.disclaimer)}</p>`
+    : '';
+
+  // Related internal links resolved against the other landing pages.
+  const relatedCards = (page.related || [])
+    .map(slug => allLandingPages.find(p => p.slug === slug))
+    .filter(Boolean)
+    .map(p => `<a class="lp-related-card" href="/${p.slug}/"><strong>${esc(p.h1)}</strong><span>${esc(p.metaDescription)}</span></a>`)
+    .join('\n');
+  const relatedHtml = relatedCards
+    ? `<section class="lp-related"><h2>Related tools and guides</h2><div class="lp-related-grid">${relatedCards}</div></section>`
+    : '';
+
+  const body = `
+<div class="lp-wrap lp">
+  <div class="page-hero">
+    <p class="page-hero-label">${esc(page.label)}</p>
+    <h1>${esc(page.h1)}</h1>
+  </div>
+  <article>
+    <p class="lp-intro">${esc(page.intro)}</p>
+    ${renderSections(page.sections || [])}
+    ${disclaimerHtml}
+    <div class="lp-cta">
+      <h2>Start a map</h2>
+      <p>Import your data, style it, and export a clean map. No GIS experience needed.</p>
+      <a href="/">Open Exploration Maps →</a>
+    </div>
+    ${faqBlock(page.faqs)}
+    ${relatedHtml}
+  </article>
+</div>`;
+
+  return pageShell({
+    title: page.h1,
+    fullTitle: page.fullTitle,
+    description: page.metaDescription,
+    canonical: url,
+    schema,
+    body,
+    ogType: 'website',
+  });
+}
+
 // ─── Sitemap ──────────────────────────────────────────────────────────────────
 
-function buildSitemap(allUrls) {
+function buildSitemap(allUrls, landingUrls = []) {
   const today = new Date().toISOString().split('T')[0];
-  const blogEntries = allUrls.map(u => `  <url><loc>${esc(u)}</loc><lastmod>${today}</lastmod><changefreq>monthly</changefreq><priority>0.7</priority></url>`).join('\n');
-  const staticEntries = [
-    `  <url><loc>${SITE}/about/</loc><lastmod>${today}</lastmod><changefreq>monthly</changefreq><priority>0.6</priority></url>`,
-    `  <url><loc>${SITE}/contact/</loc><lastmod>${today}</lastmod><changefreq>yearly</changefreq><priority>0.5</priority></url>`,
-  ].join('\n');
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${blogEntries}\n${staticEntries}\n</urlset>`;
   const homepage = `  <url><loc>${SITE}/</loc><lastmod>${today}</lastmod><changefreq>weekly</changefreq><priority>1.0</priority></url>`;
-  const entries = allUrls.map(u => {
+  // Top-level SEO landing pages — high priority money pages.
+  const landingEntries = landingUrls
+    .map(u => `  <url><loc>${esc(u)}</loc><lastmod>${today}</lastmod><changefreq>monthly</changefreq><priority>0.9</priority></url>`)
+    .join('\n');
+  const blogEntries = allUrls.map(u => {
     const isBlogIndex = u === `${SITE}/blog/`;
     const isHub = /\/blog\/(how-to|comparisons|locations)\/$/.test(u);
     const priority = isBlogIndex ? '0.9' : isHub ? '0.8' : '0.7';
     const freq = isBlogIndex || isHub ? 'weekly' : 'monthly';
     return `  <url><loc>${esc(u)}</loc><lastmod>${today}</lastmod><changefreq>${freq}</changefreq><priority>${priority}</priority></url>`;
   }).join('\n');
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${homepage}\n${entries}\n</urlset>`;
+  const staticEntries = [
+    `  <url><loc>${SITE}/about/</loc><lastmod>${today}</lastmod><changefreq>monthly</changefreq><priority>0.6</priority></url>`,
+    `  <url><loc>${SITE}/contact/</loc><lastmod>${today}</lastmod><changefreq>yearly</changefreq><priority>0.5</priority></url>`,
+  ].join('\n');
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${homepage}\n${landingEntries}\n${blogEntries}\n${staticEntries}\n</urlset>`;
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
@@ -771,8 +886,17 @@ async function main() {
   writeFile(join(OUT, 'index.html'), buildBlogIndex(allUrls));
   console.log('  ✓ blog index');
 
+  // Top-level SEO landing pages (output to public/<slug>/, not public/blog/)
+  const landingUrls = [];
+  for (const page of seoPages) {
+    const html = buildSeoLandingPage(page, seoPages);
+    writeFile(join(ROOT, 'public', page.slug, 'index.html'), html);
+    landingUrls.push(`${SITE}/${page.slug}/`);
+    console.log(`  ✓ landing: ${page.slug}`);
+  }
+
   // Sitemap
-  writeFile(join(ROOT, 'public', 'sitemap.xml'), buildSitemap(allUrls));
+  writeFile(join(ROOT, 'public', 'sitemap.xml'), buildSitemap(allUrls, landingUrls));
   console.log('  ✓ sitemap.xml');
 
   // robots.txt

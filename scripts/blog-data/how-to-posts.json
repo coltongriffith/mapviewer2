@@ -896,5 +896,269 @@
       "how-to-search-ontario-mining-claims",
       "how-to-search-manitoba-mining-claims"
     ]
+  },
+  {
+    "slug": "what-to-include-on-a-mining-claim-map",
+    "mapTypeId": "mining-claims-map",
+    "title": "What to Include on a Mining Claim Map",
+    "metaDescription": "A practical checklist of what belongs on a mining claim map — claim boundaries, labels, scale, legend, context, and disclaimers — for investor and report use.",
+    "directAnswer": "A mining claim map should include claim boundaries with clear styling, claim labels, a project title block, a legend, a scale bar and north arrow, geographic context (roads and water), and a note directing readers to the official registry for tenure verification.",
+    "sections": [
+      {
+        "h2": "Start with the claim boundaries",
+        "body": "The claim boundaries are the subject of the map. Style them with the conventional blue outline and light fill so they read as mineral tenure, and use separate layers and colours if you need to distinguish staked, optioned, or applied-for ground. Keep the boundaries the most visually prominent element on the page."
+      },
+      {
+        "h2": "Label the claims",
+        "body": "Add labels so a reader can connect each block to a tenure number or a name used in the text. Unlabelled polygons force the reader to guess, which undermines a map meant for investors or reviewers."
+      },
+      {
+        "h2": "Add a title block and date",
+        "body": "Include the project name, the company name, and a map date. Tenure changes over time, so a date tells the reader how current the land position is. A project number is useful for reports that reference multiple maps."
+      },
+      {
+        "h2": "Include a legend, scale bar, and north arrow",
+        "body": "These three elements make a map readable and credible. The legend explains the colours, the scale bar gives a sense of size, and the north arrow orients the reader. Maps without them look like working screenshots rather than finished figures."
+      },
+      {
+        "h2": "Provide geographic context",
+        "body": "Roads, water bodies, and nearby place names help a reader understand access and location. Add them as low-opacity context layers so they support the claims without competing with them."
+      },
+      {
+        "h2": "Add a registry verification note",
+        "html": "Because a claim map is a visualization, not an ownership record, include a short note telling readers to confirm tenure details with the official government registry. For a full walkthrough of building the map, see <a href=\"/blog/how-to-make-a-mining-claims-map/\">how to make a mining claims map</a>, or the <a href=\"/bc-mineral-claims-map/\">BC mineral claims map tool</a> for a province-specific workflow."
+      }
+    ],
+    "faqs": [
+      {
+        "q": "What is the standard colour for claims on a map?",
+        "a": "A medium blue outline with a light, semi-transparent blue fill is the convention used in most technical reports and is recognized by investors and reviewers."
+      },
+      {
+        "q": "Does a claim map prove ownership?",
+        "a": "No. A claim map is a visualization. Current ownership, status, and tenure must be verified through the official government mineral titles registry."
+      },
+      {
+        "q": "What map elements do investors expect?",
+        "a": "At minimum a clear claim outline, labels, a legend, a scale bar, a north arrow, and a title block with the project name and date."
+      }
+    ],
+    "relatedSlugs": [
+      "how-to-make-a-mining-claims-map",
+      "how-to-create-exploration-map-investor-presentation",
+      "how-to-export-mining-map-pdf"
+    ],
+    "publishedDate": "2026-06-20"
+  },
+  {
+    "slug": "turn-public-mineral-claim-data-into-project-map",
+    "mapTypeId": "mining-claims-map",
+    "title": "How to Turn Public Mineral Claim Data Into a Project Map",
+    "metaDescription": "Turn public mineral claim data into a clean project map — find the data, import it, style the claims, add context, and export for decks and reports.",
+    "directAnswer": "To turn public mineral claim data into a project map, download or search the claim boundaries, import them as GeoJSON, Shapefile, or KML, tag the layer as claims for standard styling, add context and a title block, then export as PNG or PDF.",
+    "sections": [
+      {
+        "h2": "Find the public claim data",
+        "body": "Most jurisdictions publish mineral claim boundaries through a government mineral titles portal. You can usually download tenure as Shapefile or KML, and in some cases search by holder or company name. This public data is the raw material for your map."
+      },
+      {
+        "h2": "Import it into a mapping tool",
+        "html": "Bring the data into Exploration Maps, which reads Shapefile, GeoJSON, KML, and CSV. If your download is a Shapefile, you can import it directly — see <a href=\"/shapefile-to-map/\">Shapefile to map</a> for that workflow. If you do not have a file, you can <a href=\"/mining-claim-search-by-company-name/\">search claims by company name</a> where the data supports it."
+      },
+      {
+        "h2": "Style the claims",
+        "body": "Tag the imported layer as claims to apply the conventional outline and fill automatically. Use separate layers and colours for different claim blocks so each is distinct in the legend."
+      },
+      {
+        "h2": "Add context and project details",
+        "body": "Add roads and water for geographic context, a title block with the project name and date, claim labels, and your company logo. These turn raw boundaries into a complete, readable project map."
+      },
+      {
+        "h2": "Frame and export",
+        "body": "Set the ratio for your output — 16:9 for slides, letter or A4 for reports — frame the view, and export a PNG or PDF with the legend, scale bar, and north arrow included."
+      },
+      {
+        "h2": "Verify before you rely on it",
+        "body": "Public data can lag behind the official record. Confirm current ownership, status, and tenure through the applicable government mineral titles registry before relying on the map for staking, transactions, or filings."
+      }
+    ],
+    "faqs": [
+      {
+        "q": "Where does public mineral claim data come from?",
+        "a": "It is published by government mineral titles registries, which typically offer tenure boundaries as Shapefile or KML downloads and sometimes a search by company or holder name."
+      },
+      {
+        "q": "What format should I import?",
+        "a": "GeoJSON imports most reliably, but Shapefile, KML, and CSV are all supported. Convert non-WGS84 data to WGS84 (EPSG:4326) first."
+      },
+      {
+        "q": "Is the resulting map official?",
+        "a": "No. It is a visualization of public data. Verify current tenure details through the official registry before relying on them."
+      }
+    ],
+    "relatedSlugs": [
+      "how-to-make-a-mining-claims-map",
+      "how-to-import-geojson-mining-map",
+      "how-to-import-csv-data-mining-map"
+    ],
+    "publishedDate": "2026-06-20"
+  },
+  {
+    "slug": "map-drill-results-for-junior-mining-news-release",
+    "mapTypeId": "drill-results-map",
+    "title": "How to Map Drill Results for a Junior Mining News Release",
+    "metaDescription": "Build a clear drill results map for a junior mining news release — plot collars, highlight key intercepts, show targets and claims, and export a clean figure.",
+    "directAnswer": "For a news release drill map, plot drill collars from CSV or GeoJSON, label the holes, add callouts for the best intercepts (grade and width), show the target and claim boundaries for context, and export a clean PNG or PDF figure.",
+    "sections": [
+      {
+        "h2": "Why the map carries the news release",
+        "body": "In a junior mining news release, the drill map is often what readers look at before the body text. A clear map showing where the holes are and which intercepts matter helps the result land with investors who skim. A confusing map buries the news."
+      },
+      {
+        "h2": "Plot the drill collars",
+        "body": "Import collar locations from CSV or GeoJSON — typically hole ID, latitude, and longitude. Label each hole and keep the symbols consistent so the drilling pattern is easy to follow."
+      },
+      {
+        "h2": "Highlight the key intercepts",
+        "body": "Add callouts next to the relevant holes for the headline intervals — grade over width. Resist labelling every hole; highlight the results that drive the story so attention goes where it should."
+      },
+      {
+        "h2": "Show the target and claim context",
+        "body": "Include the target outline and claim boundaries so readers can see the holes are testing the intended target and sit on the company’s ground. Context is what makes a result interpretable rather than just a set of dots."
+      },
+      {
+        "h2": "Keep it clean for a wide audience",
+        "body": "News releases reach non-technical readers. Use a clear basemap, a concise legend, and a readable title block. Avoid clutter — the map should be understandable at the size it will appear in an email or on a phone."
+      },
+      {
+        "h2": "Export the figure",
+        "html": "Export a PNG for the release and website or a PDF for any attached report, with the legend, scale bar, and north arrow included. For the underlying workflow and the full feature set, see <a href=\"/drill-results-map/\">the drill results map tool</a> and <a href=\"/blog/how-to-make-a-drill-results-map/\">how to make a drill results map</a>."
+      }
+    ],
+    "faqs": [
+      {
+        "q": "What data do I need for a news release drill map?",
+        "a": "Drill collar locations at minimum (hole ID, latitude, longitude), plus the key intercepts you want to highlight as callouts, and ideally the target outline and claim boundaries for context."
+      },
+      {
+        "q": "What format should the figure be?",
+        "a": "A PNG sized for email and web works for most releases; a PDF is useful if the map is also a report figure. Include a legend, scale bar, north arrow, and title block."
+      },
+      {
+        "q": "How do I keep the map readable for investors?",
+        "a": "Highlight only the intercepts that matter, use a clean basemap and concise legend, and check the map is legible at the small size it will appear in a release."
+      }
+    ],
+    "relatedSlugs": [
+      "how-to-make-a-drill-results-map",
+      "how-to-create-exploration-map-investor-presentation",
+      "how-to-export-mining-map-pdf"
+    ],
+    "publishedDate": "2026-06-20"
+  },
+  {
+    "slug": "exploration-mapping-file-types-shapefile-kml-geojson-csv",
+    "title": "Shapefile, KML, GeoJSON, and CSV: Which File Types Matter for Exploration Mapping?",
+    "metaDescription": "Understand Shapefile, KML, GeoJSON, and CSV for exploration mapping — what each is good for, when to use it, and how to get a clean map from each.",
+    "directAnswer": "Shapefile and GeoJSON are best for claim and target boundaries, KML is common from Google Earth and government exports, and CSV suits drill collars and sample points with coordinate columns. Exploration Maps imports all four.",
+    "sections": [
+      {
+        "h2": "Why file types matter",
+        "body": "Exploration data arrives in several formats depending on where it came from — a government tenure download, a colleague’s Google Earth file, a lab’s spreadsheet. Knowing what each format is good for saves time and avoids conversion headaches when you build a map."
+      },
+      {
+        "h2": "Shapefile",
+        "body": "The Shapefile is the long-standing GIS standard for boundaries like claims and targets. It is actually several files together (.shp, .shx, .dbf and others), so keep them as a set. It is the most common format from government mineral titles portals."
+      },
+      {
+        "h2": "GeoJSON",
+        "body": "GeoJSON is a single, modern, text-based format that is easy to share and imports cleanly. It works well for claim boundaries, target outlines, roads, and any polygon or line data. If you can choose, GeoJSON is often the smoothest option."
+      },
+      {
+        "h2": "KML",
+        "body": "KML comes from Google Earth and many government exports. It is handy for quick sketches and shared boundaries, though styling embedded in KML may be simplified on import. It is well suited to outlines and points you already have in Google Earth."
+      },
+      {
+        "h2": "CSV",
+        "body": "CSV is a spreadsheet export, ideal for point data like drill collars and sample locations that have latitude and longitude columns. A column mapper assigns the coordinate fields on import. CSV is the natural format for results that start life in Excel."
+      },
+      {
+        "h2": "Getting a clean map from any of them",
+        "html": "Whatever the format, the workflow is the same: import, tag the layer by role for styling, add context and a title block, and export. See <a href=\"/shapefile-to-map/\">Shapefile to map</a> for files you already have, or <a href=\"/mining-exploration-map-software/\">mining exploration map software</a> for the full picture. A note on projection: convert data to WGS84 (EPSG:4326) before importing for the most reliable result."
+      }
+    ],
+    "faqs": [
+      {
+        "q": "Which file format is best for exploration mapping?",
+        "a": "GeoJSON is often the smoothest for boundaries and lines; Shapefile is the GIS standard and common from government portals; CSV is best for drill collars and samples; KML is common from Google Earth. Exploration Maps supports all four."
+      },
+      {
+        "q": "Do I need to convert my files?",
+        "a": "Usually not — Shapefile, GeoJSON, KML, and CSV import directly. Convert to WGS84 (EPSG:4326) first if your data is in another coordinate system."
+      },
+      {
+        "q": "How do I map data from a spreadsheet?",
+        "a": "Export it as CSV with latitude and longitude columns and use the column mapper on import to assign the coordinate fields."
+      }
+    ],
+    "relatedSlugs": [
+      "how-to-import-geojson-mining-map",
+      "how-to-import-csv-data-mining-map",
+      "how-to-make-a-mining-claims-map"
+    ],
+    "publishedDate": "2026-06-20"
+  },
+  {
+    "slug": "mineral-exploration-map-for-investor-deck",
+    "mapTypeId": "location-map",
+    "title": "How to Create a Mineral Exploration Map for an Investor Deck",
+    "metaDescription": "Plan the maps in a mining investor deck — which map belongs on which slide, how to keep them consistent, and how to export them at 16:9 for presentations.",
+    "directAnswer": "A mining investor deck usually needs a location map, a claims map, and a results or target map. Build them from one project with a consistent theme, size them to 16:9, and export PNG at 2× so they stay sharp on screen and projector.",
+    "sections": [
+      {
+        "h2": "Think about the deck, not just one map",
+        "html": "Most decks need a small set of maps that tell a sequence: where the project is, what the company controls, and what the exploration has found. Rather than make each one in isolation, plan them together so they share a style. For the step-by-step of a single presentation map, see <a href=\"/blog/how-to-create-exploration-map-investor-presentation/\">how to create an exploration map for an investor presentation</a>."
+      },
+      {
+        "h2": "The location slide",
+        "body": "Open with a location map that places the project in its region — near a recognized district, relative to towns and infrastructure. This answers the first question an investor asks and sets up everything that follows."
+      },
+      {
+        "h2": "The claims slide",
+        "html": "Follow with a claims map showing the land position. Keep it clean and labelled so the extent of the ground is obvious. See the <a href=\"/bc-mineral-claims-map/\">claims map workflow</a> for how to build it."
+      },
+      {
+        "h2": "The results or target slide",
+        "html": "Show the exploration story with a target map or a <a href=\"/drill-results-map/\">drill results map</a>, highlighting the intercepts or anomalies that matter. This is usually the slide investors study most."
+      },
+      {
+        "h2": "Keep the maps consistent",
+        "body": "Use the same theme, basemap, and title style across every map in the deck. Consistent maps look deliberate and professional; a mix of styles looks assembled from whatever was on hand. Building them from one saved project makes this easy."
+      },
+      {
+        "h2": "Export for presentation",
+        "html": "Size maps to a 16:9 landscape ratio and export PNG at 2× resolution so they stay sharp on a projector or large screen. For the full toolset, see <a href=\"/mining-map-software/\">mining map software</a>."
+      }
+    ],
+    "faqs": [
+      {
+        "q": "Which maps belong in a mining investor deck?",
+        "a": "Typically a location map, a claims map showing the land position, and a results or target map highlighting the exploration story. The exact set depends on the project stage."
+      },
+      {
+        "q": "What size should deck maps be?",
+        "a": "A 16:9 landscape ratio matches standard slides. Export PNG at 2× resolution so the maps stay sharp on screen and projector."
+      },
+      {
+        "q": "How do I keep the maps consistent?",
+        "a": "Build them from one saved project and apply the same theme, basemap, and title style across each map so the deck looks cohesive."
+      }
+    ],
+    "relatedSlugs": [
+      "how-to-create-exploration-map-investor-presentation",
+      "how-to-make-a-mining-claims-map",
+      "how-to-make-a-drill-results-map"
+    ],
+    "publishedDate": "2026-06-20"
   }
 ]
