@@ -97,6 +97,34 @@ export const auroraTargets = {
   ],
 };
 
+// ── Access roads / infrastructure: a main haul road approaching from the
+// southeast with a spur into the drill area, plus a powerline corridor.
+function lineFeature(ptsKm, props) {
+  return {
+    type: 'Feature',
+    properties: props,
+    geometry: { type: 'LineString', coordinates: ptsKm.map(([x, y]) => toLngLat(x, y)) },
+  };
+}
+
+export const auroraRoads = {
+  type: 'FeatureCollection',
+  features: [
+    lineFeature(
+      [[5.5, -4.8], [3.6, -3.2], [2.1, -1.9], [0.6, -0.9], [-0.6, 0.2], [-1.9, 0.9]],
+      { Name: 'Main Access Road', Type: 'Resource road' }
+    ),
+    lineFeature(
+      [[0.6, -0.9], [1.4, -0.8], [2.3, 0.2], [2.4, 0.8]],
+      { Name: 'Drill Pad Spur', Type: 'Spur' }
+    ),
+    lineFeature(
+      [[5.2, -5.0], [4.0, -2.6], [2.6, 0.1], [1.0, 2.6]],
+      { Name: 'Powerline Corridor', Type: 'Powerline' }
+    ),
+  ],
+};
+
 // ── Intercept callouts anchored to the headline collar in each target
 const calloutAnchor = (xKm, yKm) => {
   const [lng, lat] = toLngLat(xKm, yKm);
