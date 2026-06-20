@@ -23,6 +23,7 @@ import { loadGeoJSON, loadCSV, loadShapefileSet } from './utils/importers';
 import sampleClaims from './assets/sampleClaims.json';
 import sampleDrillholes from './assets/sampleDrillholes.json';
 import { auroraClaims, auroraDrillholes, auroraTargets, auroraCallouts } from './assets/auroraDemo';
+import { GALLERY_DEMOS } from './assets/galleryDemos';
 import {
   CALLOUT_TYPES,
   createInitialProjectState,
@@ -1883,14 +1884,10 @@ export default function App() {
     }
   };
 
+  // The 6 gallery cards are handled by GALLERY_DEMOS (assets/galleryDemos.js);
+  // aurora_demo (the before/after compare) keeps its dedicated loader.
   const SAMPLE_STYLE_PRESETS = {
-    drill_plan:     { basemap: 'satellite', mode: 'drill_plan',        accent: '#2563eb' },
-    claims:         { basemap: 'light',     mode: 'regional_claims',   accent: '#16a34a' },
-    target:         { basemap: 'light',     mode: 'target_anomaly',    accent: '#dc2626' },
-    regional:       { basemap: 'terrain',   mode: 'project_overview',  accent: '#b87333' },
-    infrastructure: { basemap: 'light',     mode: 'access_location',   accent: '#7c3aed' },
-    dark:           { basemap: 'dark',      mode: 'drill_plan',        accent: '#60a5fa' },
-    aurora_demo:    { basemap: 'satellite', mode: 'target_anomaly',    accent: AURORA_ACCENT, _aurora: true },
+    aurora_demo: { basemap: 'satellite', mode: 'target_anomaly', accent: AURORA_ACCENT, _aurora: true },
   };
 
   const loadSampleData = async (styleId) => {
@@ -1900,6 +1897,11 @@ export default function App() {
       const preset = styleId ? (SAMPLE_STYLE_PRESETS[styleId] || {}) : {};
       if (preset._aurora) {
         await loadAuroraDemo();
+        return;
+      }
+      // Each gallery card loads its own real, style-matched demo project.
+      if (typeof styleId === 'string' && GALLERY_DEMOS[styleId]) {
+        await loadGalleryDemo(GALLERY_DEMOS[styleId]);
         return;
       }
       await addGeoJSONLayer(makeFile(sampleClaims, 'Sample Claims.geojson'));
@@ -1922,6 +1924,46 @@ export default function App() {
     } catch (err) {
       setUploadStatus({ type: 'error', message: `Sample data error: ${err.message}` });
     }
+  };
+
+  // Loads one of the 6 landing-page gallery demos (see assets/galleryDemos.js).
+  // Adds each layer from real GeoJSON data, applies the recipe's per-role
+  // styling/legend, places callouts, and configures the layout so the loaded
+  // map matches the style the gallery card advertises.
+  const loadGalleryDemo = async (recipe) => {
+    for (const layer of recipe.layers) {
+      await addGeoJSONAsLayer(layer.data, layer.name);
+    }
+    setProject((prev) => ({
+      ...prev,
+      layers: prev.layers.map((layer) => {
+        const r = recipe.layers.find((x) => x.role === layer.role);
+        if (!r) return layer;
+        return {
+          ...layer,
+          displayName: r.displayName ?? layer.displayName,
+          visible: r.visible ?? layer.visible,
+          style: { ...layer.style, ...(r.style || {}) },
+          legend: r.legend ?? layer.legend,
+          userStyled: true,
+        };
+      }),
+      callouts: (recipe.callouts || []).map((callout) => ({
+        ...callout,
+        id: crypto.randomUUID(),
+        featureId: null,
+        layerId: null,
+      })),
+    }));
+    updateLayout({
+      logo: AURORA_LOGO_URL,
+      title: recipe.title,
+      subtitle: recipe.subtitle,
+      legendTitle: 'Legend',
+      ...recipe.layout,
+    });
+    setScreen('editor');
+    setUploadStatus({ type: 'success', message: `${recipe.title} demo loaded — ${recipe.subtitle}. Explore the editor and export to try it out.` });
   };
 
   // Aurora Ridge Minerals "Cedar Ridge Project" demo — a live recreation of the
