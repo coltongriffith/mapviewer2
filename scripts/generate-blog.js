@@ -171,7 +171,7 @@ article strong{color:#0f172a}
 
 // ─── Page shell ───────────────────────────────────────────────────────────────
 
-function pageShell({ title, description, canonical, schema, body, noindex = false, fullTitle = null, ogType = 'article' }) {
+function pageShell({ title, description, canonical, schema, body, noindex = false, fullTitle = null, ogType = 'article', ogImage = OG_IMAGE }) {
   // fullTitle overrides the default "<title> | SITE_NAME" pattern, used by
   // landing pages whose exact title tag is specified verbatim.
   const titleTag = fullTitle || `${title} | ${SITE_NAME}`;
@@ -190,11 +190,11 @@ ${noindex ? '<meta name="robots" content="noindex,follow">' : ''}
 <meta property="og:url" content="${esc(canonical)}">
 <meta property="og:type" content="${esc(ogType)}">
 <meta property="og:site_name" content="${esc(SITE_NAME)}">
-<meta property="og:image" content="${OG_IMAGE}">
+<meta property="og:image" content="${ogImage}">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="${esc(ogTitle)}">
 <meta name="twitter:description" content="${esc(description)}">
-<meta name="twitter:image" content="${OG_IMAGE}">
+<meta name="twitter:image" content="${ogImage}">
 ${schema ? `<script type="application/ld+json">${JSON.stringify(schema, null, 0)}</script>` : ''}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -771,6 +771,7 @@ function buildSeoLandingPage(page, allLandingPages) {
     schema,
     body,
     ogType: 'website',
+    ogImage: `${SITE}/og/${page.slug}.png`,
   });
 }
 
