@@ -125,6 +125,37 @@ export const auroraRoads = {
   ],
 };
 
+// ── Neighbouring claim blocks: other companies' tenures near Cedar Ridge,
+// for regional context (so the property doesn't look like it's alone in
+// the district). Simple rectangles, not staked-cell grids like the main
+// claim block.
+function rectFeature(cxKm, cyKm, wKm, hKm, props) {
+  const x0 = cxKm - wKm / 2, x1 = cxKm + wKm / 2;
+  const y0 = cyKm - hKm / 2, y1 = cyKm + hKm / 2;
+  return {
+    type: 'Feature',
+    properties: props,
+    geometry: { type: 'Polygon', coordinates: [[toLngLat(x0, y0), toLngLat(x1, y0), toLngLat(x1, y1), toLngLat(x0, y1), toLngLat(x0, y0)]] },
+  };
+}
+
+export const auroraNeighborClaims = {
+  type: 'FeatureCollection',
+  features: [
+    rectFeature(-9.5, 5.5, 4.5, 3.5, { TenureID: 'NX-2201', Owner: 'Skeena River Resources' }),
+    rectFeature(8.5, -7, 5, 4, { TenureID: 'KP-0877', Owner: 'Kispiox Mining Ltd.' }),
+    rectFeature(-7, -8.5, 3.5, 3, { TenureID: 'BW-1542', Owner: 'Babine West Corp.' }),
+  ],
+};
+
+// ── Nearby settlement, for regional/district maps
+export const auroraSettlements = {
+  type: 'FeatureCollection',
+  features: [
+    { type: 'Feature', properties: { Name: 'Cedar Falls', Type: 'town' }, geometry: { type: 'Point', coordinates: toLngLat(11, -9) } },
+  ],
+};
+
 // ── Intercept callouts anchored to the headline collar in each target
 const calloutAnchor = (xKm, yKm) => {
   const [lng, lat] = toLngLat(xKm, yKm);

@@ -89,35 +89,49 @@ export const GALLERY_DEMOS = {
     callouts: auroraCallouts,
   },
 
-  // Regional Context — property location in the district on terrain
+  // Regional Context — property location in the district: zoomed out so the
+  // claim block reads as a small feature within a wider district, with the
+  // district road network for context.
   regional: {
     title: TITLE, subtitle: 'Regional Location',
     layout: brand({ basemap: 'terrain', mode: 'project_overview', compositionPreset: 'regional',
-      footerEnabled: true, footerText: FOOTER, insetTitle: 'Province',
+      footerEnabled: true, footerText: FOOTER, insetTitle: 'Province', zoomPadFrac: 1.3,
       exportSettings: { filename: 'cedar-ridge-regional', pixelRatio: 2 } }),
-    layers: [claimsLayer({ stroke: TEAL_DARK, fill: TEAL, fillOpacity: 0.28, strokeWidth: 2.5 }, 'Cedar Ridge Property')],
-    callouts: null,
+    layers: [
+      { data: auroraRoads, name: 'District Roads.geojson', role: 'roads_access', displayName: 'District Roads',
+        style: { stroke: '#7a6a4a', strokeWidth: 2 }, legend: { enabled: true, label: 'District Roads' } },
+      claimsLayer({ stroke: TEAL_DARK, fill: TEAL, fillOpacity: 0.35, strokeWidth: 2.5 }, 'Cedar Ridge Property'),
+    ],
+    callouts: [{
+      text: 'Cedar Ridge Property', subtext: 'Claim Block', type: 'leader', priority: 1,
+      anchor: { lat: 55.45, lng: -127.2 }, offset: { x: 130, y: -90 }, boxWidth: 170,
+      style: { background: '#ffffff', border: '#0b3533', textColor: '#0b3533', subtextColor: '#13554f', fontSize: 13, paddingX: 12, paddingY: 9 },
+    }],
   },
 
-  // Infrastructure — access roads & power corridor
+  // Infrastructure — access roads vs. the separate power corridor, each
+  // styled distinctly so the two line types in the description are
+  // actually visually distinguishable, with a small in-image legend.
   infrastructure: {
     title: TITLE, subtitle: 'Access & Infrastructure',
     layout: brand({ basemap: 'light', mode: 'access_location', footerEnabled: true, footerText: FOOTER,
       exportSettings: { filename: 'cedar-ridge-infrastructure', pixelRatio: 2 } }),
     layers: [
       claimsLayer({ stroke: TEAL_DARK, fill: TEAL, fillOpacity: 0.14, strokeWidth: 1.5 }),
-      { data: auroraRoads, name: 'Access Roads.geojson', role: 'roads_access', displayName: 'Access & Power',
-        style: { stroke: GOLD, strokeWidth: 3 }, legend: { enabled: true, label: 'Access & Power' } },
+      { data: auroraRoads, name: 'Access Roads.geojson', role: 'roads_access', displayName: 'Access Roads',
+        style: { stroke: GOLD, strokeWidth: 3, byType: { Powerline: { stroke: '#6b6f76', strokeWidth: 2.5, dashArray: '2 5' } } },
+        legend: { enabled: true, label: 'Access Roads', extra: [{ label: 'Powerline Corridor', stroke: '#6b6f76', dashArray: '2 5' }] } },
       collarsLayer(8),
     ],
     callouts: null,
   },
 
-  // Dark Satellite — high-contrast full investor view on imagery
+  // Dark Satellite — the app's actual "Dark" basemap (near-black, high
+  // contrast), not the regular daytime satellite imagery.
   dark: {
-    title: TITLE, subtitle: 'Satellite Overview',
-    layout: brand({ basemap: 'satellite', mode: 'project_overview', footerEnabled: false,
-      exportSettings: { filename: 'cedar-ridge-satellite', pixelRatio: 2 } }),
+    title: TITLE, subtitle: 'Dark Basemap Overview',
+    layout: brand({ basemap: 'dark', mode: 'project_overview', footerEnabled: false,
+      exportSettings: { filename: 'cedar-ridge-dark', pixelRatio: 2 } }),
     layers: [claimsLayer({ fillOpacity: 0.5 }), targetsLayer(), collarsLayer(11)],
     callouts: auroraCallouts,
   },
