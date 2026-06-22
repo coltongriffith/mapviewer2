@@ -376,12 +376,17 @@ function drawTitleBlockCanvas(ctx, scene, scale) {
   const { title } = getOverlayMetrics(scene);
   const x = title.left * scale, y = title.top * scale, w = title.width * scale, h = title.height * scale;
   if (!w || !h) return;
-  if (!layout.titleTransparent) drawPanelRect(ctx, x, y, w, h, (theme.titleRadius ?? theme.panelRadius ?? 10) * scale, theme.titleFill, theme.titleBorder, scale);
+  const titleRadius = (theme.titleRadius ?? theme.panelRadius ?? 10) * scale;
+  if (!layout.titleTransparent) drawPanelRect(ctx, x, y, w, h, titleRadius, theme.titleFill, theme.titleBorder, scale);
   const leftBar = theme.titleAccent && theme.titleAccentStyle === 'left';
   if (theme.titleAccent) {
+    ctx.save();
+    drawRoundedRect(ctx, x, y, w, h, titleRadius);
+    ctx.clip();
     ctx.fillStyle = theme.titleAccent;
     if (leftBar) { ctx.fillRect(x, y, 6 * scale, h); }
     else { ctx.fillRect(x, y, w, 5 * scale); }
+    ctx.restore();
   }
   const titleFont = `${layout.fonts?.title || 'Inter'}, Arial, sans-serif`;
   const tfs = layout.titleFontScale ?? 1;
@@ -428,18 +433,30 @@ function drawTitleBlockCanvas(ctx, scene, scale) {
   ctx.restore();
 }
 
-function groupLegendItems(items, layout) {
-  const mode = layout?.legendMode || 'auto';
-  const compact = mode === 'compact' || (mode === 'auto' && items.length <= 2);
-  if (compact) return [{ heading: null, items }];
-  const groups = [];
-  for (const item of items) {
-    const heading = item.group || 'Map Data';
-    let bucket = groups.find((g) => g.heading === heading);
-    if (!bucket) { bucket = { heading, items: [] }; groups.push(bucket); }
-    bucket.items.push(item);
+function groupLegendItems(items) {
+  return [{ heading: null, items }];
+}
+
+function pushRoundedClip(svgDefs, x, y, w, h, r) {
+  const id = `em-clip-${svgDefs.length}`;
+  svgDefs.push(`<clipPath id="${id}"><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${r}" /></clipPath>`);
+  return id;
+}
+
+// Rough word-wrap estimate for SVG text (no DOM measurement available) —
+// mirrors the charsPerLine heuristic used by estimateBox() in calloutLayout.js.
+function estimateWrapLines(text, maxWidth, fontSize, charFactor = 0.56) {
+  if (!text) return [];
+  const charsPerLine = Math.max(4, Math.floor(maxWidth / Math.max(4, fontSize * charFactor)));
+  const words = String(text).split(' ');
+  const lines = [];
+  let line = '';
+  for (const word of words) {
+    const test = line ? `${line} ${word}` : word;
+    if (test.length > charsPerLine && line) { lines.push(line); line = word; } else { line = test; }
   }
-  return groups;
+  if (line) lines.push(line);
+  return lines;
 }
 
 function legendSwatchSvg(item, x, y, scale) {
@@ -471,8 +488,7 @@ function drawLegendCanvas(ctx, scene, scale) {
   ctx.fillStyle = theme.panelTitle; ctx.font = `700 ${15 * scale * lfs}px ${legendFont}`; ctx.textBaseline = 'top'; ctx.fillText(scene.project.layout?.legendTitle || 'Legend', x + leftPad * scale, y + 14 * scale);
   const lp = (theme.panelAccentLeft ? 20 : 16) * scale;
   let rowY = y + 40 * scale;
-  groupLegendItems(items, scene.project.layout).forEach((group) => {
-    if (group.heading) { ctx.fillStyle = theme.mutedText; ctx.font = `700 ${11 * scale * lfs}px ${legendFont}`; ctx.fillText(group.heading.toUpperCase(), x + lp, rowY); rowY += 18 * scale; }
+  groupLegendItems(items).forEach((group) => {
     group.items.forEach((item) => {
       if (item.type === 'points') {
         const shape = item.markerShape || item.style?.markerShape || 'circle';
@@ -485,12 +501,22 @@ function drawLegendCanvas(ctx, scene, scale) {
         ctx.lineWidth = Math.max(1, scale);
         ctx.stroke();
         ctx.restore();
+      } else if (item.type === 'line') {
+        ctx.save();
+        ctx.strokeStyle = item.style.stroke || '#3b82f6';
+        ctx.lineWidth = Math.max(scale, (item.style.strokeWidth ?? 2) * 0.6 * scale);
+        const dash = (item.style.dashArray || '').split(/[ ,]+/).filter(Boolean).map(Number);
+        ctx.setLineDash(dash.length ? dash.map((d) => d * scale) : []);
+        ctx.beginPath();
+        ctx.moveTo(x + lp, rowY + 8 * scale);
+        ctx.lineTo(x + lp + 18 * scale, rowY + 8 * scale);
+        ctx.stroke();
+        ctx.restore();
       } else {
         ctx.fillStyle = rgba(item.style.fill || '#93c5fd', item.style.fillOpacity ?? 0.22); ctx.fillRect(x + lp, rowY + 2 * scale, 18 * scale, 12 * scale); ctx.strokeStyle = item.style.stroke || '#3b82f6'; ctx.lineWidth = Math.max(1, scale); ctx.strokeRect(x + lp, rowY + 2 * scale, 18 * scale, 12 * scale);
       }
       ctx.fillStyle = theme.bodyText; ctx.font = `${13 * scale * lfs}px ${legendFont}`; ctx.textBaseline = 'middle'; ctx.fillText(item.label || 'Layer', x + lp + 30 * scale, rowY + 9 * scale); rowY += 24 * scale;
     });
-    rowY += 6 * scale;
   });
   ctx.restore();
 }
@@ -511,6 +537,10 @@ function drawNorthArrowCanvas(ctx, scene, scale) {
   const fg = theme.northArrowText;
   const bg = theme.northArrowFill;
   const arrowStyle = scene.project.layout?.northArrowStyle || 'classic';
+
+  ctx.save();
+  drawRoundedRect(ctx, x, y, w, h, (theme.panelRadius ?? 10) * scale);
+  ctx.clip();
 
   if (arrowStyle === 'arrow') {
     const tipY = cy - R, baseY = cy + R * 0.55, arrowW = R * 0.38, notchY = cy + R * 0.1;
@@ -583,6 +613,7 @@ function drawNorthArrowCanvas(ctx, scene, scale) {
     ctx.fillStyle = fg; ctx.font = `700 ${h * 0.16}px Arial`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText('N', cx, y + h * 0.14); ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
   }
+  ctx.restore();
 }
 
 function pickScaleLabel(map) {
@@ -890,15 +921,29 @@ function drawCalloutsCanvas(ctx, scene, scale) {
     const textX = align === 'center'
       ? c.left + c.width / 2
       : c.left + (c.type === 'plain' ? 0 : paddingX);
-    const subtextOffset = (c.subtext ? fontSize * 0.75 + 4 * scale : 0);
-    const textY = c.top + (c.type === 'plain' ? fontSize : c.height / 2 - subtextOffset / 2);
     const maxTextW = c.width - (c.type === 'plain' ? 0 : paddingX * 2);
-    ctx.fillStyle = c.style?.textColor || theme.calloutText; ctx.font = `700 ${fontSize}px ${calloutFont}`; ctx.textBaseline = 'middle'; ctx.textAlign = align; ctx.fillText(fitText(ctx, c.text || '', maxTextW), textX, textY);
-    if (c.subtext) {
+
+    ctx.save();
+    if (c.type !== 'plain') { drawRoundedRect(ctx, c.left, c.top, c.width, c.height, radius); ctx.clip(); }
+    ctx.font = `700 ${fontSize}px ${calloutFont}`;
+    const titleLines = wrapText(ctx, c.text || '', maxTextW);
+    const titleLineH = fontSize * 1.2;
+    ctx.font = `${subtextSize}px ${calloutFont}`;
+    const subtextLines = c.subtext ? wrapText(ctx, c.subtext, maxTextW) : [];
+    const subtextLineH = subtextSize * 1.3;
+    const titleBlockH = titleLines.length * titleLineH;
+    const subBlockH = subtextLines.length ? subtextLines.length * subtextLineH + 4 * scale : 0;
+    const blockTop = c.top + (c.type === 'plain' ? 0 : c.height / 2 - (titleBlockH + subBlockH) / 2);
+
+    ctx.fillStyle = c.style?.textColor || theme.calloutText; ctx.font = `700 ${fontSize}px ${calloutFont}`; ctx.textBaseline = 'top'; ctx.textAlign = align;
+    titleLines.forEach((line, i) => { ctx.fillText(line, textX, blockTop + i * titleLineH); });
+    if (subtextLines.length) {
       ctx.fillStyle = c.style?.subtextColor || '#475569';
       ctx.font = `${subtextSize}px ${calloutFont}`;
-      ctx.fillText(fitText(ctx, c.subtext, maxTextW), textX, textY + subtextOffset);
+      const subTop = blockTop + titleBlockH + 4 * scale;
+      subtextLines.forEach((line, i) => { ctx.fillText(line, textX, subTop + i * subtextLineH); });
     }
+    ctx.restore();
     ctx.textAlign = 'left';
   });
 }
@@ -1965,12 +2010,14 @@ function renderEllipsesSvg(scene, scale, svgDefs) {
     return `<g id="em-ring-${safeId}" class="em-ring">${shadeSvg}<g transform="rotate(${rotation} ${center.x} ${center.y})"><ellipse cx="${center.x}" cy="${center.y}" rx="${width / 2}" ry="${height / 2}" fill="none" stroke="${color}" stroke-width="${2 * scale}"${dash} /></g>${label}</g>`;
   }).join('\n');
 }
-function renderTitleSvg(scene, scale) {
+function renderTitleSvg(scene, scale, svgDefs) {
   if (scene.project.layout?.showTitle === false) return '';
   const theme = getTheme(scene);
   const layout = scene.project.layout || {};
   const { title } = getOverlayMetrics(scene);
   const x = title.left * scale, y = title.top * scale, w = title.width * scale, h = title.height * scale;
+  const titleFont = `${layout.fonts?.title || 'Inter'}, Arial, sans-serif`;
+  const radius = (theme.titleRadius ?? theme.panelRadius ?? 10) * scale;
   const leftBar = theme.titleAccent && theme.titleAccentStyle === 'left';
   const accent = theme.titleAccent
     ? leftBar
@@ -1978,29 +2025,45 @@ function renderTitleSvg(scene, scale) {
       : `<rect x="${x}" y="${y}" width="${w}" height="${5 * scale}" fill="${theme.titleAccent}" />`
     : '';
   const textX = x + (leftBar ? 22 : 18) * scale;
+  const padRight = 12 * scale;
+  const availW = w - (textX - x) - padRight;
   const topOff = (theme.titleAccent && !leftBar) ? 46 : 42;
   const tfs = layout.titleFontScale ?? 1;
+  const titleSize = 26 * scale * tfs;
+  const titleLines = estimateWrapLines(layout.title || 'Project Map', availW, titleSize);
+  const titleSvg = titleLines.map((line, i) =>
+    `<text x="${textX}" y="${(y + topOff * scale) + i * titleSize * 1.18}" fill="${theme.titleText}" font-family="${titleFont}" font-size="${titleSize}" font-weight="700">${escapeXml(line)}</text>`
+  ).join('');
+  const subtitleSize = 14 * scale * tfs;
+  const subtitleY = y + topOff * scale + titleLines.length * titleSize * 1.18 + subtitleSize * 0.3;
+  const subtitleLines = layout.subtitle ? estimateWrapLines(layout.subtitle, availW, subtitleSize) : [];
+  const subtitleSvg = subtitleLines.map((line, i) =>
+    `<text x="${textX}" y="${subtitleY + i * subtitleSize * 1.3}" fill="${theme.subtitleText}" font-family="${titleFont}" font-size="${subtitleSize}">${escapeXml(line)}</text>`
+  ).join('');
   const metaItems = [layout.mapDate, layout.projectNumber, layout.mapScaleNote].filter(Boolean);
   const metaSvg = metaItems.map((item, i) =>
-    `<text x="${x + w - 12 * scale}" y="${y + (topOff - 22 + i * 14 * tfs) * scale}" text-anchor="end" fill="${theme.subtitleText}" font-family="Arial" font-size="${10 * scale * tfs}">${escapeXml(item)}</text>`
+    `<text x="${x + w - 12 * scale}" y="${y + (topOff - 22 + i * 14 * tfs) * scale}" text-anchor="end" fill="${theme.subtitleText}" font-family="${titleFont}" font-size="${10 * scale * tfs}">${escapeXml(item)}</text>`
   ).join('');
-  return `<g id="em-title" class="em-panel">${svgRect(x, y, w, h, (theme.titleRadius ?? theme.panelRadius ?? 10) * scale, theme.titleFill, theme.titleBorder, scale)}${accent}<text x="${textX}" y="${y + topOff * scale}" fill="${theme.titleText}" font-family="Arial" font-size="${26 * scale * tfs}" font-weight="700">${escapeXml(layout.title || 'Project Map')}</text><text x="${textX}" y="${y + (topOff + 22 * tfs) * scale}" fill="${theme.subtitleText}" font-family="Arial" font-size="${14 * scale * tfs}">${escapeXml(layout.subtitle || '')}</text>${metaSvg}</g>`;
+  const clipId = pushRoundedClip(svgDefs, x, y, w, h, radius);
+  return `<g id="em-title" class="em-panel" clip-path="url(#${clipId})">${svgRect(x, y, w, h, radius, theme.titleFill, theme.titleBorder, scale)}${accent}${titleSvg}${subtitleSvg}${metaSvg}</g>`;
 }
 function svgPanelAccentLeft(x, y, h, theme, scale) {
   if (!theme.panelAccentLeft) return '';
   return `<rect x="${x}" y="${y}" width="${4 * scale}" height="${h}" fill="${theme.panelAccentLeft}" />`;
 }
-function renderLegendSvg(scene, scale) {
+function renderLegendSvg(scene, scale, svgDefs) {
   if (scene.project.layout?.showLegend === false) return '';
   const { legend } = getOverlayMetrics(scene); const items = scene.project.layout?.legendItems || []; if (!items.length) return '';
   const x = legend.left * scale, y = legend.top * scale, w = legend.width * scale, h = legend.height * scale;
   const theme = getTheme(scene);
+  const legendFont = `${scene.project.layout?.fonts?.legend || 'Inter'}, Arial, sans-serif`;
   const lfs = scene.project.layout?.legendFontScale ?? 1;
   const lp = (theme.panelAccentLeft ? 20 : 16) * scale;
-  const rows = items.map((item, index) => { const rowY = y + (40 + index * 24) * scale; return `<g id="em-legend-item-${index}" class="em-legend-item">${legendSwatchSvg(item, x + lp, rowY + 1 * scale, scale)}<text x="${x + lp + 30 * scale}" y="${rowY + 12 * scale}" fill="${theme.bodyText}" font-family="Arial" font-size="${13 * scale * lfs}">${escapeXml(item.label || 'Layer')}</text></g>`; }).join('\n');
-  return `<g id="em-legend" class="em-panel">${svgRect(x, y, w, h, (theme.panelRadius ?? 10) * scale, theme.panelFill, theme.panelBorder, scale)}${svgPanelAccentLeft(x, y, h, theme, scale)}<text x="${x + lp}" y="${y + 24 * scale}" fill="${theme.panelTitle}" font-family="Arial" font-size="${15 * scale * lfs}" font-weight="700">${escapeXml(scene.project.layout?.legendTitle || 'Legend')}</text>${rows}</g>`;
+  const rows = items.map((item, index) => { const rowY = y + (40 + index * 24) * scale; return `<g id="em-legend-item-${index}" class="em-legend-item">${legendSwatchSvg(item, x + lp, rowY + 1 * scale, scale)}<text x="${x + lp + 30 * scale}" y="${rowY + 12 * scale}" fill="${theme.bodyText}" font-family="${legendFont}" font-size="${13 * scale * lfs}">${escapeXml(item.label || 'Layer')}</text></g>`; }).join('\n');
+  const clipId = pushRoundedClip(svgDefs, x, y, w, h, (theme.panelRadius ?? 10) * scale);
+  return `<g id="em-legend" class="em-panel" clip-path="url(#${clipId})">${svgRect(x, y, w, h, (theme.panelRadius ?? 10) * scale, theme.panelFill, theme.panelBorder, scale)}${svgPanelAccentLeft(x, y, h, theme, scale)}<text x="${x + lp}" y="${y + 24 * scale}" fill="${theme.panelTitle}" font-family="${legendFont}" font-size="${15 * scale * lfs}" font-weight="700">${escapeXml(scene.project.layout?.legendTitle || 'Legend')}</text>${rows}</g>`;
 }
-function renderNorthArrowSvg(scene, scale) {
+function renderNorthArrowSvg(scene, scale, svgDefs) {
   if (scene.project.layout?.showNorthArrow === false) return '';
   const theme = getTheme(scene);
   const { northArrow } = getOverlayMetrics(scene);
@@ -2055,7 +2118,8 @@ function renderNorthArrowSvg(scene, scale) {
     const ne_x = cx + r45, ne_y = cy - r45, se_x = cx + r45, se_y = cy + r45, sw_x = cx - r45, sw_y = cy + r45, nw_x = cx - r45, nw_y = cy - r45;
     rose = `<path d="M ${nx} ${ny} L ${ne_x} ${ne_y} L ${cx} ${cy} L ${nw_x} ${nw_y} Z" fill="${fg}" /><path d="M ${sx} ${sy} L ${sw_x} ${sw_y} L ${cx} ${cy} L ${se_x} ${se_y} Z" fill="${fg}" fill-opacity="0.55" /><path d="M ${ex} ${ey} L ${se_x} ${se_y} L ${cx} ${cy} L ${ne_x} ${ne_y} Z" fill="${fg}" fill-opacity="0.35" /><path d="M ${wx} ${wy} L ${nw_x} ${nw_y} L ${cx} ${cy} L ${sw_x} ${sw_y} Z" fill="${fg}" fill-opacity="0.35" /><circle cx="${cx}" cy="${cy}" r="${R + rn * 0.5}" fill="none" stroke="${fg}" stroke-opacity="0.2" stroke-width="${h * 0.012}" /><circle cx="${cx}" cy="${cy}" r="${h * 0.044}" fill="${bg}" stroke="${fg}" stroke-width="${h * 0.018}" /><text x="${cx}" y="${y + h * 0.14}" text-anchor="middle" dominant-baseline="middle" fill="${fg}" font-family="Arial" font-size="${h * 0.16}" font-weight="700">N</text>`;
   }
-  return `<g id="em-north-arrow" class="em-panel">${panel}${rose}</g>`;
+  const clipId = pushRoundedClip(svgDefs, x, y, w, h, (theme.panelRadius ?? 10) * scale);
+  return `<g id="em-north-arrow" class="em-panel" clip-path="url(#${clipId})">${panel}${rose}</g>`;
 }
 function renderScaleBarSvg(scene, scale) {
   if (scene.project.layout?.showScaleBar === false) return '';
@@ -2103,7 +2167,7 @@ function renderInsetSvg(scene, scale, svgDefs) {
   return `<g id="em-inset" class="em-panel">${panelSvg}${titleSvg}${insetBackdropSvg(innerX, innerY, innerW, innerH, scale, svgDefs)}${markerSvg}<text x="${x + 12 * scale}" y="${y + h - 10 * scale}" fill="${theme.insetMuted}" font-family="Arial" font-size="${11 * scale}">${escapeXml(insetLabel || ref.label)}</text></g>`;
 }
 function renderLogoSvg(scene, scale) { const theme = getTheme(scene); const logo = scene.project.layout?.logo; if (!logo) return ''; const zone = getOverlayMetrics(scene).logo; if (!zone?.width || !zone?.height) return '';  const x = zone.left * scale, y = zone.top * scale, w = zone.width * scale, h = zone.height * scale, padding = 10 * scale; return `<g id="em-logo" class="em-panel">${svgRect(x, y, w, h, (theme.panelRadius ?? 10) * scale, theme.logoFill, theme.logoBorder, scale)}<image href="${escapeXml(logo)}" x="${x + padding}" y="${y + padding}" width="${w - padding * 2}" height="${h - padding * 2}" preserveAspectRatio="xMidYMid meet" /></g>`; }
-function renderCalloutsSvg(scene, scale) {
+function renderCalloutsSvg(scene, scale, svgDefs) {
   const calloutFont = `${scene.project.layout?.fonts?.callout || 'Inter'}, Arial, sans-serif`;
   return placeCallouts(scene, scale).map((c) => {
     const safeId = String(c.id || '').replace(/[^a-zA-Z0-9]/g, '');
@@ -2136,12 +2200,23 @@ function renderCalloutsSvg(scene, scale) {
     const textX = svgAlign === 'center' ? c.left + c.width / 2 : c.left + (c.type === 'plain' ? 0 : svgPadX);
     const textAnchor = svgAlign === 'center' ? 'middle' : 'start';
     const svgFontSz = (c.style?.fontSize || 12) * scale;
-    const svgSubOff = c.subtext ? svgFontSz * 0.75 + 4 * scale : 0;
-    const textY = c.top + (c.type === 'plain' ? svgFontSz : c.height / 2 - svgSubOff / 2);
     const svgSubFontSz = Math.max(9, (c.style?.fontSize || 12) - 2) * scale;
-    const mainText = `<text x="${textX}" y="${textY}" text-anchor="${textAnchor}" dominant-baseline="middle" fill="${textFill}" font-family="${calloutFont}" font-size="${svgFontSz}" font-weight="700">${escapeXml(c.text || '')}</text>`;
-    const subtextEl = c.subtext ? `<text x="${textX}" y="${textY + svgFontSz * 1.5 + 4 * scale}" text-anchor="${textAnchor}" dominant-baseline="middle" fill="${c.style?.subtextColor || '#475569'}" font-family="${calloutFont}" font-size="${svgSubFontSz}">${escapeXml(c.subtext)}</text>` : '';
-    return `<g id="em-callout-${safeId}" class="em-callout">${line}${dot}${box}${mainText}${subtextEl}</g>`;
+    const wrapWidth = (c.width || 160) * scale - (c.type === 'plain' ? 0 : svgPadX * 2);
+    const titleLines = estimateWrapLines(c.text || '', wrapWidth, svgFontSz);
+    const subtextLines = c.subtext ? estimateWrapLines(c.subtext, wrapWidth, svgSubFontSz) : [];
+    const titleBlockH = titleLines.length * svgFontSz * 1.2;
+    const subBlockH = subtextLines.length ? subtextLines.length * svgSubFontSz * 1.3 + 4 * scale : 0;
+    const startY = c.top + (c.type === 'plain' ? svgFontSz : c.height / 2 - (titleBlockH + subBlockH) / 2 + svgFontSz * 0.85);
+    const mainText = titleLines.map((tl, i) =>
+      `<text x="${textX}" y="${startY + i * svgFontSz * 1.2}" text-anchor="${textAnchor}" fill="${textFill}" font-family="${calloutFont}" font-size="${svgFontSz}" font-weight="700">${escapeXml(tl)}</text>`
+    ).join('');
+    const subtextStartY = startY + titleBlockH + svgSubFontSz * 0.9;
+    const subtextEl = subtextLines.map((sl, i) =>
+      `<text x="${textX}" y="${subtextStartY + i * svgSubFontSz * 1.3}" text-anchor="${textAnchor}" fill="${c.style?.subtextColor || '#475569'}" font-family="${calloutFont}" font-size="${svgSubFontSz}">${escapeXml(sl)}</text>`
+    ).join('');
+    const clipId = c.type !== 'plain' ? pushRoundedClip(svgDefs, c.left, c.top, c.width, c.height, 6 * scale) : null;
+    const textGroup = clipId ? `<g clip-path="url(#${clipId})">${mainText}${subtextEl}</g>` : `${mainText}${subtextEl}`;
+    return `<g id="em-callout-${safeId}" class="em-callout">${line}${dot}${box}${textGroup}</g>`;
   }).join('\n');
 }
 
@@ -2157,17 +2232,17 @@ export async function renderSceneToSvg(scene, options = {}) {
     const f = getNI43101MapFrame(scene, scale);
     const clipId = 'ni-mapframe-clip';
     svgDefs.push(`<clipPath id="${clipId}"><rect x="${f.mapLeft}" y="${f.mapTop}" width="${f.mapRight - f.mapLeft}" height="${f.mapBottom - f.mapTop}" /></clipPath>`);
-    const clipped = `<g id="em-map-content" clip-path="url(#${clipId})">${basemapImage}${renderRegionHighlightsSvg(scene, scale)}${renderVectorsSvg(scene, scale)}${renderEllipsesSvg(scene, scale, svgDefs)}${renderPolygonsSvg(scene, scale)}${renderMarkersSvg(scene, scale)}${renderCalloutsSvg(scene, scale)}${renderDistanceLinesSvg(scene, scale)}</g>`;
+    const clipped = `<g id="em-map-content" clip-path="url(#${clipId})">${basemapImage}${renderRegionHighlightsSvg(scene, scale)}${renderVectorsSvg(scene, scale)}${renderEllipsesSvg(scene, scale, svgDefs)}${renderPolygonsSvg(scene, scale)}${renderMarkersSvg(scene, scale)}${renderCalloutsSvg(scene, scale, svgDefs)}${renderDistanceLinesSvg(scene, scale)}</g>`;
     const niFrame = getNI43101MapFrame(scene, scale);
     const wmX = niFrame.mapRight - 8 * scale;
     const wmY = niFrame.mapBottom - 5 * scale;
     const watermark = options.noWatermark ? '' : `<text x="${wmX}" y="${wmY}" font-family="Arial,sans-serif" font-size="${9 * scale}" font-weight="bold" fill="#64748b" fill-opacity="0.72" text-anchor="end" dominant-baseline="auto" paint-order="stroke" stroke="#ffffff" stroke-opacity="0.55" stroke-width="2.5" stroke-linejoin="round">explorationmaps.com</text>`;
-    const panels = `<g id="em-overlay-panels">${renderLegendSvg(scene, scale)}${renderNorthArrowSvg(scene, scale)}${renderInsetSvg(scene, scale, svgDefs)}${renderLogoSvg(scene, scale)}${renderScaleBarSvg(scene, scale)}${renderDistanceTicksSvg(scene, scale)}${renderTitleStripSvg(scene, scale)}</g>`;
+    const panels = `<g id="em-overlay-panels">${renderLegendSvg(scene, scale, svgDefs)}${renderNorthArrowSvg(scene, scale, svgDefs)}${renderInsetSvg(scene, scale, svgDefs)}${renderLogoSvg(scene, scale)}${renderScaleBarSvg(scene, scale)}${renderDistanceTicksSvg(scene, scale)}${renderTitleStripSvg(scene, scale)}</g>`;
     mapContent = `${clipped}${panels}${watermark}`;
   } else {
     const watermark = options.noWatermark ? '' : `<text x="${width - 8}" y="${height - 5}" font-family="Arial,sans-serif" font-size="9" font-weight="bold" fill="#64748b" fill-opacity="0.72" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-opacity="0.55" stroke-width="2.5" stroke-linejoin="round">explorationmaps.com</text>`;
-    const mapLayers = `<g id="em-map-content">${basemapImage}${renderRegionHighlightsSvg(scene, scale)}${renderVectorsSvg(scene, scale)}${renderEllipsesSvg(scene, scale, svgDefs)}${renderPolygonsSvg(scene, scale)}${renderMarkersSvg(scene, scale)}${renderCalloutsSvg(scene, scale)}${renderDistanceLinesSvg(scene, scale)}</g>`;
-    const panels = `<g id="em-overlay-panels">${renderTitleSvg(scene, scale)}${renderLegendSvg(scene, scale)}${renderNorthArrowSvg(scene, scale)}${renderInsetSvg(scene, scale, svgDefs)}${renderScaleBarSvg(scene, scale)}${renderFooterSvg(scene, scale)}${renderLogoSvg(scene, scale)}</g>`;
+    const mapLayers = `<g id="em-map-content">${basemapImage}${renderRegionHighlightsSvg(scene, scale)}${renderVectorsSvg(scene, scale)}${renderEllipsesSvg(scene, scale, svgDefs)}${renderPolygonsSvg(scene, scale)}${renderMarkersSvg(scene, scale)}${renderCalloutsSvg(scene, scale, svgDefs)}${renderDistanceLinesSvg(scene, scale)}</g>`;
+    const panels = `<g id="em-overlay-panels">${renderTitleSvg(scene, scale, svgDefs)}${renderLegendSvg(scene, scale, svgDefs)}${renderNorthArrowSvg(scene, scale, svgDefs)}${renderInsetSvg(scene, scale, svgDefs)}${renderScaleBarSvg(scene, scale)}${renderFooterSvg(scene, scale)}${renderLogoSvg(scene, scale)}</g>`;
     mapContent = `${mapLayers}${panels}${watermark}`;
   }
 

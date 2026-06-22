@@ -98,7 +98,7 @@ export default function CalloutsOverlay({ map, callouts, selectedCalloutId, onSe
               top: callout.top,
               width: callout.width,
               minHeight: callout.height,
-              fontFamily: fontFamily || 'Inter, sans-serif',
+              fontFamily: `${fontFamily || 'Inter'}, Arial, Helvetica, sans-serif`,
               ...(callout.type === 'badge' ? {
                 background: 'transparent',
                 padding: 0,
@@ -138,7 +138,7 @@ export default function CalloutsOverlay({ map, callouts, selectedCalloutId, onSe
             }}
           >
             {callout.type === 'badge' ? (
-              <div className="badge-callout" style={{ fontFamily: fontFamily || 'Inter, sans-serif', fontSize: style.fontSize || 12 }}>
+              <div className="badge-callout" style={{ fontFamily: `${fontFamily || 'Inter'}, Arial, Helvetica, sans-serif`, fontSize: style.fontSize || 12 }}>
                 <div className="badge-chip" style={{ background: callout.badgeColor || '#d97706' }}>
                   {callout.badgeValue || '—'}
                 </div>
