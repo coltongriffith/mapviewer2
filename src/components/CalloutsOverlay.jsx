@@ -109,7 +109,8 @@ export default function CalloutsOverlay({ map, callouts, selectedCalloutId, onSe
                 borderColor: style.border || '#102640',
                 color: style.textColor || '#0f172a',
                 fontSize: style.fontSize || 12,
-                padding: `${style.paddingY || 8}px ${style.paddingX || 10}px`,
+                textAlign: style.textAlign || 'left',
+                padding: `${style.paddingY || 8}px ${style.paddingX ?? Math.max(4, Math.min(10, (callout.width || 160) * 0.06))}px`,
               }),
             }}
             onClick={() => onSelect?.(callout.id)}

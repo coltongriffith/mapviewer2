@@ -101,6 +101,9 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
 
     map.on('click', (event) => onMapClickRef.current?.(event.latlng));
 
+    const regionHighlightPane = map.createPane('regionHighlightPane');
+    regionHighlightPane.style.zIndex = 355;
+
     overlayGroupRef.current = L.layerGroup().addTo(map);
     regionHighlightGroupRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
@@ -191,7 +194,7 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
       if (!region) return;
       L.geoJSON(
         { type: 'Feature', geometry: { type: 'Polygon', coordinates: region.coordinates } },
-        { style: () => ({ fillColor: color || '#ef4444', fillOpacity: opacity ?? 0.45, stroke: false, weight: 0 }) }
+        { pane: 'regionHighlightPane', style: () => ({ fillColor: color || '#ef4444', fillOpacity: opacity ?? 0.45, stroke: false, weight: 0 }) }
       ).addTo(group);
     });
   }, [project?.layout?.regionHighlights]);

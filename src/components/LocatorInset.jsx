@@ -47,18 +47,28 @@ function mercY(lat) {
   return Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360));
 }
 
-function projectToSvg(lng, lat, refBbox, svgW, svgH, pad) {
+// projection params carry a single shared scale so x/y are not independently
+// stretched to fill a fixed square — that's what caused wide states (e.g.
+// Nebraska) to render squished horizontally.
+function makeProjection(refBbox, targetSize, pad) {
   const [minLng, minLat, maxLng, maxLat] = refBbox;
-  const rangeW = maxLng - minLng || 1;
   const minMY = mercY(minLat), maxMY = mercY(maxLat);
-  const rangeH = maxMY - minMY || 1;
-  const x = pad + ((lng - minLng) / rangeW) * (svgW - pad * 2);
-  const y = (svgH - pad) - ((mercY(lat) - minMY) / rangeH) * (svgH - pad * 2);
-  return [x, y];
+  // True width/height in comparable (radian-ish) units.
+  const trueW = (maxLng - minLng) * (Math.PI / 180) || 1e-9;
+  const trueH = (maxMY - minMY) || 1e-9;
+  const avail = targetSize - pad * 2;
+  const scale = avail / Math.max(trueW, trueH);
+  const svgW = trueW * scale + pad * 2;
+  const svgH = trueH * scale + pad * 2;
+  const project = (lng, lat) => [
+    pad + (lng - minLng) * (Math.PI / 180) * scale,
+    (svgH - pad) - (mercY(lat) - minMY) * scale,
+  ];
+  return { svgW, svgH, project };
 }
 
 function buildAutoSvg(region, visibleBounds) {
-  const svgW = 100, svgH = 100, pad = 6;
+  const pad = 6;
   // Expand region bbox slightly for padding
   const [minLng, minLat, maxLng, maxLat] = region.bbox;
   const padFrac = 0.06;
@@ -66,18 +76,20 @@ function buildAutoSvg(region, visibleBounds) {
   const dLat = (maxLat - minLat) * padFrac;
   const refBbox = [minLng - dLng, minLat - dLat, maxLng + dLng, maxLat + dLat];
 
+  const { svgW, svgH, project } = makeProjection(refBbox, 100, pad);
+
   // Build SVG path(s) for region outline
   const paths = region.coordinates.map(ring => {
     if (ring.length < 2) return '';
-    const pts = ring.map(([lng, lat]) => projectToSvg(lng, lat, refBbox, svgW, svgH, pad));
+    const pts = ring.map(([lng, lat]) => project(lng, lat));
     return 'M ' + pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' L ') + ' Z';
   }).filter(Boolean);
 
   // Project location marker from visible bounds
   let markerEl = null;
   if (visibleBounds) {
-    const [cx1, cy1] = projectToSvg(visibleBounds.minLng, visibleBounds.maxLat, refBbox, svgW, svgH, pad);
-    const [cx2, cy2] = projectToSvg(visibleBounds.maxLng, visibleBounds.minLat, refBbox, svgW, svgH, pad);
+    const [cx1, cy1] = project(visibleBounds.minLng, visibleBounds.maxLat);
+    const [cx2, cy2] = project(visibleBounds.maxLng, visibleBounds.minLat);
     const mx = Math.min(cx1, cx2), my = Math.min(cy1, cy2);
     const mw = Math.max(4, Math.abs(cx2 - cx1)), mh = Math.max(4, Math.abs(cy2 - cy1));
     const dotX = mx + mw / 2, dotY = my + mh / 2;
@@ -87,7 +99,7 @@ function buildAutoSvg(region, visibleBounds) {
     markerEl = { mx: Math.max(pad, mx), my: Math.max(pad, my), mw, mh, cx, cy };
   }
 
-  return { paths, markerEl };
+  return { paths, markerEl, svgW, svgH };
 }
 
 export default function LocatorInset({ layers, insetMode, mode, insetImage, autoInsetRegion, insetTitle, insetLabel, zone, regionFill, regionStroke, bgFill, markerColor }) {
@@ -120,8 +132,8 @@ export default function LocatorInset({ layers, insetMode, mode, insetImage, auto
           <img src={insetImage} alt="Inset map" className="inset-image" />
         </div>
       ) : showAuto ? (
-        <svg viewBox="0 0 100 100" className="inset-svg" preserveAspectRatio="xMidYMid meet">
-          <rect x="0" y="0" width="100" height="100" fill={bgFill || '#f0f4f8'} />
+        <svg viewBox={`0 0 ${autoSvg.svgW.toFixed(1)} ${autoSvg.svgH.toFixed(1)}`} className="inset-svg" preserveAspectRatio="xMidYMid meet">
+          <rect x="0" y="0" width={autoSvg.svgW.toFixed(1)} height={autoSvg.svgH.toFixed(1)} fill={bgFill || '#f0f4f8'} />
           {autoSvg.paths.map((d, i) => (
             <path key={i} d={d} fill={regionFill || '#dce8f5'} stroke={regionStroke || '#8aabcf'} strokeWidth="0.8" />
           ))}

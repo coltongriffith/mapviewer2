@@ -9,11 +9,11 @@ export function estimateBox(callout) {
   const subtext = callout.subtext || '';
   const style = callout.style || {};
   const fontSize = style.fontSize || 12;
-  const paddingX = style.paddingX || 10;
   const paddingY = style.paddingY || 8;
   const width = callout.boxWidth
     ? Math.max(100, Math.min(callout.boxWidth, 400))
-    : Math.max(120, Math.min(Math.max(title.length, subtext.length) * (fontSize * 0.58) + paddingX * 2 + 8, 280));
+    : Math.max(120, Math.min(Math.max(title.length, subtext.length) * (fontSize * 0.58) + (style.paddingX || 10) * 2 + 8, 280));
+  const paddingX = style.paddingX ?? Math.max(4, Math.min(10, width * 0.06));
   const charsPerLine = Math.max(12, Math.floor((width - paddingX * 2) / Math.max(6, fontSize * 0.55)));
   const titleLines = Math.max(1, Math.ceil(title.length / charsPerLine));
   const subtextLines = subtext ? Math.max(1, Math.ceil(subtext.length / charsPerLine)) : 0;
