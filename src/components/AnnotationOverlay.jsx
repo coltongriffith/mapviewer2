@@ -287,7 +287,7 @@ export default function AnnotationOverlay({
                     stroke="rgba(255,255,255,0.85)" strokeWidth={3} paintOrder="stroke"
                     textAnchor="middle" dominantBaseline="middle"
                     transform={`rotate(${pos.angle}, ${pos.x}, ${pos.y})`}
-                    fontFamily={labelFont || 'Inter, sans-serif'}
+                    fontFamily={`${labelFont || 'Inter'}, Arial, Helvetica, sans-serif`}
                     style={{ pointerEvents: 'auto', cursor: 'move', userSelect: 'none' }}
                     onClick={(e) => { e.stopPropagation(); onSelectPolygon?.(poly.id); }}
                     onPointerDown={(e) => {
@@ -454,7 +454,7 @@ export default function AnnotationOverlay({
                       fontSize={labelFontSize}
                       fontWeight={ellipse.labelBold !== false ? '700' : '400'}
                       fill={labelColor}
-                      fontFamily={labelFont || 'Inter, sans-serif'}
+                      fontFamily={`${labelFont || 'Inter'}, Arial, Helvetica, sans-serif`}
                       style={{ pointerEvents: 'auto', cursor: 'move', userSelect: 'none' }}
                       onClick={(e) => { e.stopPropagation(); onSelectEllipse?.(ellipse.id); }}
                       onPointerDown={(e) => {
@@ -517,7 +517,7 @@ export default function AnnotationOverlay({
             fillOpacity={m.opacity ?? 0.35}
             fontSize={m.size || 28}
             fontWeight={m.bold !== false ? '700' : '400'}
-            fontFamily={labelFont || 'Inter, sans-serif'}
+            fontFamily={`${labelFont || 'Inter'}, Arial, Helvetica, sans-serif`}
             letterSpacing={`${(m.tracking ?? 0.12)}em`}
             transform={m.rotation ? `rotate(${m.rotation}, ${m.x}, ${m.y})` : undefined}
             style={{ pointerEvents: 'auto', cursor: 'move', userSelect: 'none', textTransform: 'uppercase' }}
@@ -547,7 +547,7 @@ export default function AnnotationOverlay({
             style={{
               left: finalX,
               top: finalY,
-              fontFamily: labelFont || 'Inter, sans-serif',
+              fontFamily: `${labelFont || 'Inter'}, Arial, Helvetica, sans-serif`,
               fontSize: ellipse.labelFontSize || 11,
               fontWeight: ellipse.labelBold !== false ? '700' : '400',
               color: ellipse.labelColor || ellipse.color || '#dc2626',
@@ -588,7 +588,7 @@ export default function AnnotationOverlay({
               left: baseX,
               top: baseY,
               transform: 'translateX(-50%)',
-              fontFamily: labelFont || 'Inter, sans-serif',
+              fontFamily: `${labelFont || 'Inter'}, Arial, Helvetica, sans-serif`,
               fontSize: poly.labelFontSize || 12,
               fontWeight: poly.labelBold !== false ? '700' : '400',
               color: poly.labelColor || poly.color || '#000000',
@@ -641,7 +641,7 @@ export default function AnnotationOverlay({
               <div
                 className="free-marker-label"
                 style={{
-                  fontFamily: labelFont || 'Inter, sans-serif',
+                  fontFamily: `${labelFont || 'Inter'}, Arial, Helvetica, sans-serif`,
                   position: 'absolute',
                   left: labelOffsetX,
                   top: labelOffsetY,

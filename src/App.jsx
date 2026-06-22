@@ -401,21 +401,8 @@ function RecentProjectsModal({ entries, currentProjectId, onOpen, onRename, onDe
   );
 }
 
-function renderLegendGroups(items, layout) {
-  const mode = layout?.legendMode || 'auto';
-  const compact = mode === 'compact' || (mode === 'auto' && items.length <= 2);
-  if (compact) return [{ heading: null, items }];
-  const groups = [];
-  for (const item of items) {
-    const heading = item.group || 'Map Data';
-    let bucket = groups.find((g) => g.heading === heading);
-    if (!bucket) {
-      bucket = { heading, items: [] };
-      groups.push(bucket);
-    }
-    bucket.items.push(item);
-  }
-  return groups;
+function renderLegendGroups(items) {
+  return [{ heading: null, items }];
 }
 
 function getFeatureLabel(feature, layer) {
@@ -1034,11 +1021,11 @@ export default function App() {
     '--inset-muted': themeTokens.insetMuted,
     '--logo-bg': themeTokens.logoFill,
     '--logo-border': themeTokens.logoBorder,
-    '--font-title': `${project.layout.fonts?.title || 'Inter'}, sans-serif`,
-    '--font-legend': `${project.layout.fonts?.legend || 'Inter'}, sans-serif`,
-    '--font-label': `${project.layout.fonts?.label || 'Inter'}, sans-serif`,
-    '--font-callout': `${project.layout.fonts?.callout || 'Inter'}, sans-serif`,
-    '--font-footer': `${project.layout.fonts?.footer || 'Inter'}, sans-serif`,
+    '--font-title': `${project.layout.fonts?.title || 'Inter'}, Arial, Helvetica, sans-serif`,
+    '--font-legend': `${project.layout.fonts?.legend || 'Inter'}, Arial, Helvetica, sans-serif`,
+    '--font-label': `${project.layout.fonts?.label || 'Inter'}, Arial, Helvetica, sans-serif`,
+    '--font-callout': `${project.layout.fonts?.callout || 'Inter'}, Arial, Helvetica, sans-serif`,
+    '--font-footer': `${project.layout.fonts?.footer || 'Inter'}, Arial, Helvetica, sans-serif`,
   }), [themeTokens, constrainedStageSize, project.layout.fonts, project.layout.cornerRadius]);
 
   const handleRatioChange = useCallback((newRatio) => {
