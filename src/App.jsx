@@ -3547,6 +3547,15 @@ export default function App() {
                             </div>
                             <div className="range-value">{callout.style?.fontSize || 12}px</div>
                           </div>
+                          <div className="control-row">
+                            <div>
+                              <label>Text Align</label>
+                              <select value={callout.style?.textAlign || 'left'} onChange={(e) => updateCallout(callout.id, { style: { ...(callout.style || {}), textAlign: e.target.value } })}>
+                                <option value="left">Left</option>
+                                <option value="center">Center</option>
+                              </select>
+                            </div>
+                          </div>
                         </>
                       )}
                       <div className="control-label">Nudge</div>

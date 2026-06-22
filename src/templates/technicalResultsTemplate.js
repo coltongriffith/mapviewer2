@@ -232,8 +232,22 @@ export function resolveTemplateZones(template, layout, mapSize, legendItems) {
   };
 }
 
+// Basemaps whose raster tiles bake in highway/road symbology with no
+// corresponding vector layer to attach a legend entry to.
+const HIGHWAY_BASEMAPS = new Set(['terrain', 'natgeo']);
+
 function buildOverlayLegendItems(layout) {
   const items = [];
+  if (HIGHWAY_BASEMAPS.has(layout?.basemap) && layout?.showHighwaysLegend !== false) {
+    items.push({
+      id: 'overlay-highways',
+      role: 'roads_access',
+      group: 'Reference',
+      label: 'Highways',
+      type: 'line',
+      style: { stroke: '#e8a23d', fill: '#e8a23d', fillOpacity: 0, strokeWidth: 2 },
+    });
+  }
   if (layout?.referenceOverlays?.rail) {
     items.push({
       id: 'overlay-rail',

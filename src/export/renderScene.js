@@ -885,17 +885,21 @@ function drawCalloutsCanvas(ctx, scene, scale) {
     const subtextSize = Math.max(9, (c.style?.fontSize || 12) - 2) * scale;
     ctx.setLineDash([]);
     if (c.type !== 'plain') { drawRoundedRect(ctx, c.left, c.top, c.width, c.height, radius); ctx.fillStyle = c.style?.background || theme.calloutFill; ctx.fill(); ctx.strokeStyle = c.style?.border || theme.calloutBorder; ctx.lineWidth = 1 * scale; ctx.stroke(); }
-    const paddingX = (c.style?.paddingX || 10) * scale;
-    const textX = c.left + (c.type === 'plain' ? 0 : paddingX);
+    const paddingX = (c.style?.paddingX ?? Math.max(4, Math.min(10, (c.width || 160) * 0.06))) * scale;
+    const align = c.style?.textAlign === 'center' ? 'center' : 'left';
+    const textX = align === 'center'
+      ? c.left + c.width / 2
+      : c.left + (c.type === 'plain' ? 0 : paddingX);
     const subtextOffset = (c.subtext ? fontSize * 0.75 + 4 * scale : 0);
     const textY = c.top + (c.type === 'plain' ? fontSize : c.height / 2 - subtextOffset / 2);
     const maxTextW = c.width - (c.type === 'plain' ? 0 : paddingX * 2);
-    ctx.fillStyle = c.style?.textColor || theme.calloutText; ctx.font = `700 ${fontSize}px ${calloutFont}`; ctx.textBaseline = 'middle'; ctx.textAlign = 'left'; ctx.fillText(fitText(ctx, c.text || '', maxTextW), textX, textY);
+    ctx.fillStyle = c.style?.textColor || theme.calloutText; ctx.font = `700 ${fontSize}px ${calloutFont}`; ctx.textBaseline = 'middle'; ctx.textAlign = align; ctx.fillText(fitText(ctx, c.text || '', maxTextW), textX, textY);
     if (c.subtext) {
       ctx.fillStyle = c.style?.subtextColor || '#475569';
       ctx.font = `${subtextSize}px ${calloutFont}`;
       ctx.fillText(fitText(ctx, c.subtext, maxTextW), textX, textY + subtextOffset);
     }
+    ctx.textAlign = 'left';
   });
 }
 
@@ -2127,14 +2131,16 @@ function renderCalloutsSvg(scene, scale) {
     const boxStroke = c.style?.border || '#17304f';
     const box = c.type !== 'plain' ? `<rect x="${c.left}" y="${c.top}" width="${c.width}" height="${c.height}" rx="${6 * scale}" ${toSvgFill(rawBoxFill)} stroke="${boxStroke}" />` : '';
     const textFill = c.style?.textColor || '#102640';
-    const svgPadX = (c.style?.paddingX || 10) * scale;
-    const textX = c.left + (c.type === 'plain' ? 0 : svgPadX);
+    const svgPadX = (c.style?.paddingX ?? Math.max(4, Math.min(10, (c.width || 160) * 0.06))) * scale;
+    const svgAlign = c.style?.textAlign === 'center' ? 'center' : 'left';
+    const textX = svgAlign === 'center' ? c.left + c.width / 2 : c.left + (c.type === 'plain' ? 0 : svgPadX);
+    const textAnchor = svgAlign === 'center' ? 'middle' : 'start';
     const svgFontSz = (c.style?.fontSize || 12) * scale;
     const svgSubOff = c.subtext ? svgFontSz * 0.75 + 4 * scale : 0;
     const textY = c.top + (c.type === 'plain' ? svgFontSz : c.height / 2 - svgSubOff / 2);
     const svgSubFontSz = Math.max(9, (c.style?.fontSize || 12) - 2) * scale;
-    const mainText = `<text x="${textX}" y="${textY}" dominant-baseline="middle" fill="${textFill}" font-family="${calloutFont}" font-size="${svgFontSz}" font-weight="700">${escapeXml(c.text || '')}</text>`;
-    const subtextEl = c.subtext ? `<text x="${textX}" y="${textY + svgFontSz * 1.5 + 4 * scale}" dominant-baseline="middle" fill="${c.style?.subtextColor || '#475569'}" font-family="${calloutFont}" font-size="${svgSubFontSz}">${escapeXml(c.subtext)}</text>` : '';
+    const mainText = `<text x="${textX}" y="${textY}" text-anchor="${textAnchor}" dominant-baseline="middle" fill="${textFill}" font-family="${calloutFont}" font-size="${svgFontSz}" font-weight="700">${escapeXml(c.text || '')}</text>`;
+    const subtextEl = c.subtext ? `<text x="${textX}" y="${textY + svgFontSz * 1.5 + 4 * scale}" text-anchor="${textAnchor}" dominant-baseline="middle" fill="${c.style?.subtextColor || '#475569'}" font-family="${calloutFont}" font-size="${svgSubFontSz}">${escapeXml(c.subtext)}</text>` : '';
     return `<g id="em-callout-${safeId}" class="em-callout">${line}${dot}${box}${mainText}${subtextEl}</g>`;
   }).join('\n');
 }

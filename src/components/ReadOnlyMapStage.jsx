@@ -437,7 +437,7 @@ export default function ReadOnlyMapStage({ project }) {
       {/* North arrow */}
       {layout.showNorthArrow !== false && resolvedZones.northArrow?.width > 0 && (
         <div className="template-zone" style={zoneStyle(resolvedZones.northArrow)}>
-          <NorthArrow scale={layout.northArrowHeightPx ?? 100} />
+          <NorthArrow scale={layout.northArrowHeightPx ?? 100} style={layout.northArrowStyle || 'classic'} />
         </div>
       )}
 
