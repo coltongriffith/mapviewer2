@@ -578,7 +578,12 @@ language sql security definer stable as $$
   select
     ds.session_id,
     min(pv.created_at) as first_seen,
-    max(pv.created_at) as last_seen,
+    -- A single once-per-session page_view row means min(pv.created_at) =
+    -- max(pv.created_at), so duration would always read 0. The live-presence
+    -- heartbeat (live_pings, upserted every ~25s while the tab is visible)
+    -- keeps advancing for as long as the visitor stays, so fold its latest
+    -- timestamp in as the real "last seen" signal.
+    greatest(max(pv.created_at), max(lp.created_at)) as last_seen,
     count(pv.id) as page_view_count,
     array_agg(distinct pv.path) filter (where pv.path is not null) as paths,
     (select count(*) from public.search_events se where se.session_id = ds.session_id
@@ -595,6 +600,7 @@ language sql security definer stable as $$
     max(u.email) as user_email
   from day_sessions ds
   left join day_views pv on pv.session_id = ds.session_id
+  left join public.live_pings lp on lp.session_id = ds.session_id
   left join auth.users u on u.id = pv.user_id
   where is_admin()
   group by ds.session_id
