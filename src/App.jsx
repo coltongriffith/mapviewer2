@@ -1642,7 +1642,7 @@ export default function App() {
     } catch (err) {
       setAreaClaims((prev) => ({
         ...prev, status: 'error',
-        message: err.name === 'TimeoutError' ? 'Request timed out. Try a smaller radius.' : `Failed to load: ${err.message}`,
+        message: err.name === 'TimeoutError' ? 'Request timed out. Try a smaller radius.' : `Failed to load: ${String(err.message || err).slice(0, 160)}`,
       }));
     }
   };

@@ -23,7 +23,7 @@ export function useClaims() {
       if (!data?.features) throw new Error('Unexpected response format from registry');
       setResults(data);
     } catch (e) {
-      setError(e.message || 'Search failed');
+      setError(String(e.message || 'Search failed').slice(0, 200));
     } finally {
       setLoading(false);
     }
