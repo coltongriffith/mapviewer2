@@ -170,7 +170,10 @@ export default function RegistrySearch({ onImport, onBack }) {
   const [selectedGroups, setSelectedGroups] = useState(new Set());
   const [expandedGroups, setExpandedGroups] = useState(new Set());
   const [selectedFlat, setSelectedFlat] = useState(new Set());
-  const { results, loading, error, search, reset } = useClaims();
+  const {
+    results, loading, error, search, reset,
+    crossProvinceHits, crossProvinceLoading, searchOtherProvinces, adoptResults,
+  } = useClaims();
   const pendingSearchRef = useRef(null);
 
   const provinceCfg = PROVINCES.find(p => p.value === province) || PROVINCES[0];
@@ -187,9 +190,23 @@ export default function RegistrySearch({ onImport, onBack }) {
         query: pending.query,
         resultCount: results?.features?.length ?? 0,
       });
+      // A miss in the selected province doesn't mean the company has no
+      // claims at all — check the other provinces in the background so a
+      // wrong-province guess doesn't read as "search is broken".
+      if (!error && results?.features?.length === 0 && pending.mode !== 'map') {
+        searchOtherProvinces(pending.query, pending.mode, pending.province, PROVINCES);
+      }
       pendingSearchRef.current = null;
     }
-  }, [results, error, loading]);
+  }, [results, error, loading, searchOtherProvinces]);
+
+  function handleSwitchProvince(hit) {
+    setProvince(hit.province.value);
+    setManualMode(false);
+    setMode(autoDetectMode(query, hit.province.modes));
+    adoptResults(hit.data);
+    clearSelections();
+  }
 
   // Auto-detect mode from query (unless user manually picked)
   useEffect(() => {
@@ -367,6 +384,9 @@ export default function RegistrySearch({ onImport, onBack }) {
           ))}
         </select>
       </div>
+      <p className="claims-province-hint">
+        Not sure which province? Search any company name — we'll check the others automatically if nothing turns up here.
+      </p>
 
       {/* Search mode tabs */}
       <div className="claims-mode-tabs">
@@ -405,7 +425,28 @@ export default function RegistrySearch({ onImport, onBack }) {
       {error && <p className="claims-error">⚠ {error}</p>}
 
       {results && allFeatures.length === 0 && (
-        <p className="claims-empty">No active claims found for "{query}" in {provinceCfg.label}. Try a shorter name or check spelling.</p>
+        <>
+          <p className="claims-empty">No active claims found for "{query}" in {provinceCfg.label}. Try a shorter name or check spelling.</p>
+          {crossProvinceLoading && (
+            <p className="claims-cross-province-checking">Checking other provinces…</p>
+          )}
+          {crossProvinceHits && crossProvinceHits.length > 0 && (
+            <div className="claims-cross-province-hits">
+              <p className="claims-cross-province-label">Found elsewhere:</p>
+              {crossProvinceHits.map((hit) => (
+                <button
+                  key={hit.province.value}
+                  type="button"
+                  className="claims-cross-province-row"
+                  onClick={() => handleSwitchProvince(hit)}
+                >
+                  <span>{hit.province.label} — {hit.count} claim{hit.count !== 1 ? 's' : ''} found</span>
+                  <span className="claims-cross-province-switch">Switch &amp; view →</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </>
       )}
 
       {allFeatures.length >= 500 && (
