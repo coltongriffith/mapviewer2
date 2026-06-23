@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 
 const PROXY = '/api/claims';
 
@@ -20,9 +20,11 @@ export function useClaims() {
   const [error, setError] = useState(null);
   const [crossProvinceHits, setCrossProvinceHits] = useState(null);
   const [crossProvinceLoading, setCrossProvinceLoading] = useState(false);
+  const requestIdRef = useRef(0);
 
   // type: 'company' | 'number' | 'map'; province: 'bc' | 'on' | 'sk' | 'yt'
   const search = useCallback(async (query, type = 'company', province = 'bc') => {
+    requestIdRef.current += 1; // invalidate any in-flight cross-province check from a prior search
     setLoading(true);
     setError(null);
     setResults(null);
@@ -41,7 +43,10 @@ export function useClaims() {
   // the primary search comes back empty so we can point the user at the right
   // one instead of leaving them with a bare "nothing found". Failures and
   // zero-result provinces are dropped silently — this never surfaces an error.
+  // A request token guards against a slower, stale call overwriting the
+  // results of a newer one if searches overlap.
   const searchOtherProvinces = useCallback(async (query, type, excludeProvince, candidateProvinces) => {
+    const myRequestId = ++requestIdRef.current;
     setCrossProvinceLoading(true);
     setCrossProvinceHits(null);
     try {
@@ -50,12 +55,13 @@ export function useClaims() {
           .filter((p) => p.value !== excludeProvince)
           .map((p) => fetchProvince(query, type, p.value).then((data) => ({ province: p, data })))
       );
+      if (requestIdRef.current !== myRequestId) return;
       const hits = settled
         .filter((r) => r.status === 'fulfilled' && r.value.data.features.length > 0)
         .map((r) => ({ province: r.value.province, count: r.value.data.features.length, data: r.value.data }));
       setCrossProvinceHits(hits);
     } finally {
-      setCrossProvinceLoading(false);
+      if (requestIdRef.current === myRequestId) setCrossProvinceLoading(false);
     }
   }, []);
 
