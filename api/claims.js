@@ -4,16 +4,16 @@
 //   bc — BC WFS (openmaps.gov.bc.ca), WHSE_MINERAL_TENURE.MTA_ACQUIRED_TENURE_SVW
 //   on — Ontario MLAS operational map service (LIO ArcGIS REST)
 //   sk — Saskatchewan Mineral Dispositions (gis.saskatchewan.ca ArcGIS REST)
+//   mb — Manitoba Mineral Dispositions (gov.mb.ca ArcGIS REST)
+//   nl — Newfoundland & Labrador Mineral Lands GeoAtlas (ArcGIS REST)
 //   yt — Yukon quartz claims (GeoYukon GY_Mining ArcGIS REST)
 //
 // Not supported (no free public queryable API as of 2026):
 //   qc — GESTIM is login-gated; SIGÉOM exposes WMS images only, titres miniers
 //        are bulk downloads with no attribute-query endpoint
 //   ab — crown mineral agreements distributed via AltaLIS under license
-//   mb — iMaQs viewer only; GIS data is download-only
 //   ns — NovaROC viewer; mineral titles are download-only
 //   nb — GeoNB has no documented public mineral claims query service
-//   nl — Mineral Lands GeoAtlas viewer only
 //   nt/nu — Geocortex viewers / federal (CIRNAC) snapshots, no stable query API
 //   pe — no active mineral claim registry
 //
@@ -77,13 +77,35 @@ const FETCH_HEADERS = {
   Origin: 'https://explorationmaps.com',
 };
 
+// Some provincial WAFs/CDNs (notably dnrmaps.gov.nl.ca) block our identifying
+// bot UA + Referer/Origin combo and return an HTML challenge page instead of
+// JSON. Retry once looking like a plain browser before giving up.
+const FALLBACK_FETCH_HEADERS = {
+  Accept: 'application/json',
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+};
+
+function looksLikeHtml(body, contentType) {
+  return /html/i.test(contentType || '') || /^\s*<(!doctype|html)/i.test(body || '');
+}
+
 // Module-scope metadata cache (persists across warm invocations)
 const metaCache = new Map();
 
 async function fetchJson(url) {
-  const r = await fetch(url, { headers: FETCH_HEADERS, signal: AbortSignal.timeout(20000) });
+  let r = await fetch(url, { headers: FETCH_HEADERS, signal: AbortSignal.timeout(20000) });
   if (!r.ok) {
-    const body = await r.text().catch(() => '');
+    let body = await r.text().catch(() => '');
+    if (looksLikeHtml(body, r.headers.get('content-type'))) {
+      // Likely a WAF/bot-block page rather than a real API error — retry
+      // once with a generic browser identity before surfacing anything.
+      const retry = await fetch(url, { headers: FALLBACK_FETCH_HEADERS, signal: AbortSignal.timeout(20000) }).catch(() => null);
+      if (retry?.ok) return retry.json();
+      if (retry) { r = retry; body = await retry.text().catch(() => ''); }
+    }
+    if (looksLikeHtml(body, r.headers.get('content-type'))) {
+      throw new Error(`Upstream ${r.status}: the registry is blocking automated requests or is temporarily unavailable. Try again later.`);
+    }
     throw new Error(`Upstream ${r.status}: ${body.slice(0, 500)}`);
   }
   return r.json();
