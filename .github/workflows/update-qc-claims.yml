@@ -19,15 +19,23 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install
 
       - name: Download, reproject, and load Quebec claims
         env:
+          # The province-wide shapefile is large; shpjs builds the whole GeoJSON in
+          # memory, so give Node a generous heap (GitHub runners have ~16 GB RAM).
+          NODE_OPTIONS: --max-old-space-size=12288
           SUPABASE_URL:              ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          # Optional: only set if the ministry moves the source file.
+          # Optional overrides (leave unset to auto-discover the file):
+          #   QC_CLAIMS_URL         — direct .zip/.gpkg URL, skips discovery
+          #   QC_CLAIMS_CKAN_QUERY  — Données Québec catalog search term
+          #   QC_CLAIMS_INDEX_URL   — fallback listing page to scrape for a .zip link
           QC_CLAIMS_URL:             ${{ secrets.QC_CLAIMS_URL }}
+          QC_CLAIMS_CKAN_QUERY:      ${{ secrets.QC_CLAIMS_CKAN_QUERY }}
+          QC_CLAIMS_INDEX_URL:       ${{ secrets.QC_CLAIMS_INDEX_URL }}
         run: node scripts/update-qc-claims.js
