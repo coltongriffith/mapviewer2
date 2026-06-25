@@ -84,9 +84,13 @@ const FETCH_HEADERS = {
 // bot UA + Referer/Origin combo and return an HTML challenge page instead of
 // JSON. Retry once looking like a plain browser before giving up.
 const FALLBACK_FETCH_HEADERS = {
-  Accept: 'application/json',
+  Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,application/json;q=0.8,*/*;q=0.7',
+  'Accept-Language': 'en-US,en;q=0.9',
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+  'Upgrade-Insecure-Requests': '1',
 };
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function looksLikeHtml(body, contentType) {
   return /html/i.test(contentType || '') || /^\s*<(!doctype|html)/i.test(body || '');
@@ -117,8 +121,17 @@ async function fetchJson(url) {
 }
 
 async function fetchJsonOnce(url) {
-  let r = await fetch(url, { headers: FETCH_HEADERS, signal: AbortSignal.timeout(20000) });
-  if (!r.ok) {
+  // Transient gateway errors (502/503/504) are common on older provincial
+  // ArcGIS stacks — notably maps.gov.mb.ca, whose front-end reverse proxy
+  // intermittently returns "502 invalid response while acting as a gateway"
+  // when its backend is busy. Retry a couple of times with backoff before
+  // giving up so a flaky upstream doesn't surface as a hard failure.
+  let r;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt > 0) await sleep(400 * attempt);
+    r = await fetch(url, { headers: FETCH_HEADERS, signal: AbortSignal.timeout(20000) });
+    if (r.ok) return r.json();
+
     let body = await r.text().catch(() => '');
     // Some provincial WAFs block our bot UA outright (403/406) regardless of
     // whether the block page is HTML or a bare error status — retry once with
@@ -129,12 +142,16 @@ async function fetchJsonOnce(url) {
       if (retry?.ok) return retry.json();
       if (retry) { r = retry; body = await retry.text().catch(() => ''); }
     }
+
+    // Retry transient gateway 5xx; fall through to throw on anything else.
+    if (r.status === 502 || r.status === 503 || r.status === 504) continue;
+
     if (looksLikeHtml(body, r.headers.get('content-type'))) {
       throw new Error(`Upstream ${r.status}: the registry is blocking automated requests or is temporarily unavailable. Try again later.`);
     }
     throw new Error(`Upstream ${r.status}: ${body.slice(0, 500)}`);
   }
-  return r.json();
+  throw new Error(`Upstream ${r?.status || 502}: the registry's gateway is returning errors right now. Try again shortly.`);
 }
 
 async function resolveFields(layerUrl) {
