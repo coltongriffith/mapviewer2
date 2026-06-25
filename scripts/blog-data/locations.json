@@ -117,7 +117,10 @@
     "dataSourceUrl": "https://gestim.mines.gouv.qc.ca/",
     "dataFormats": "Shapefile, KML",
     "dataNote": "GESTIM Plus exports in the Quebec Lambert Conformal Conic projection (EPSG:32198). Convert to WGS84 before importing. French-language column headers are standard \u2014 use the Column Mapper to assign latitude/longitude fields manually.",
-    "workflowTip": "Many Abitibi projects share similar property names \u2014 include the NTS map sheet number (e.g., 32C/02) in your title block subtitle to differentiate adjacent properties along the same belt segment."
+    "workflowTip": "Many Abitibi projects share similar property names \u2014 include the NTS map sheet number (e.g., 32C/02) in your title block subtitle to differentiate adjacent properties along the same belt segment.",
+    "liveRegistry": true,
+    "liveRegistryName": "GESTIM Plus",
+    "liveRegistrySearchSlug": "how-to-search-quebec-mining-claims"
   },
   {
     "name": "Alberta",
