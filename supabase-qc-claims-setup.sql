@@ -63,5 +63,72 @@ $$;
 
 grant execute on function public.truncate_qc_claims() to service_role;
 
+-- ── Nearby-radius (spatial) search support ──────────────────────────────────
+-- The "Nearby Claims" map tool sends a bounding box (envelope). Quebec has no
+-- live ArcGIS service, so the spatial query runs here in PostGIS. We derive a
+-- real geometry column from the stored GeoJSON so it can be GIST-indexed and
+-- queried fast. Safe to run on the already-loaded table — it backfills in place.
+create extension if not exists postgis;
+
+-- Immutable, error-tolerant GeoJSON -> geometry. A single malformed geometry
+-- yields NULL (and is simply skipped) instead of failing a whole weekly reload.
+create or replace function public.qc_geom_from_geojson(g jsonb)
+returns geometry
+language plpgsql
+immutable
+as $$
+begin
+  if g is null then
+    return null;
+  end if;
+  return st_setsrid(st_geomfromgeojson(g::text), 4326);
+exception when others then
+  return null;
+end;
+$$;
+
+-- Generated column: auto-populated on every insert (the weekly loader needs no
+-- change) and backfilled for existing rows the moment this runs on a populated
+-- table.
+alter table public.qc_claims
+  add column if not exists geom geometry(Geometry, 4326)
+  generated always as (public.qc_geom_from_geojson(geometry)) stored;
+
+create index if not exists qc_claims_geom_gist
+  on public.qc_claims using gist (geom);
+
+-- Envelope-intersection lookup for the nearby-radius tool. security definer so
+-- the public anon key can call it under the existing read-only policy. Returns
+-- the same columns the /api/claims proxy maps to BC-style property names.
+create or replace function public.qc_claims_in_bbox(
+  min_lng double precision,
+  min_lat double precision,
+  max_lng double precision,
+  max_lat double precision
+)
+returns table (
+  tag_number    text,
+  owner_name    text,
+  status        text,
+  good_to_date  date,
+  area_hectares numeric,
+  title_type    text,
+  geometry      jsonb
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select tag_number, owner_name, status, good_to_date, area_hectares, title_type, geometry
+  from public.qc_claims
+  where geom && st_makeenvelope(min_lng, min_lat, max_lng, max_lat, 4326)
+  limit 2000;
+$$;
+
+grant execute on function public.qc_claims_in_bbox(double precision, double precision, double precision, double precision)
+  to anon, service_role;
+
 -- Quick sanity check after the first weekly load runs:
 --   select count(*), max(source_updated_at) from public.qc_claims;
+--   select count(*) from public.qc_claims where geom is not null;

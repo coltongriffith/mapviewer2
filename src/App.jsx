@@ -3271,6 +3271,7 @@ export default function App() {
                 <select value={areaClaimsProvince} onChange={(e) => setAreaClaimsProvince(e.target.value)}>
                   <option value="bc">British Columbia</option>
                   <option value="on">Ontario</option>
+                  <option value="qc">Quebec</option>
                   <option value="sk">Saskatchewan</option>
                   <option value="mb">Manitoba</option>
                   <option value="nl">Newfoundland &amp; Labrador</option>
