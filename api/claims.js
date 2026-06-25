@@ -96,6 +96,27 @@ function looksLikeHtml(body, contentType) {
 const metaCache = new Map();
 
 async function fetchJson(url) {
+  // Try the URL as given, then (only if it fails outright) with the opposite
+  // protocol. Some provincial gov ArcGIS hosts answer on https even when http is
+  // the documented endpoint — notably maps.gov.mb.ca — and a few WAFs block one
+  // scheme but not the other, so this recovers Manitoba without affecting hosts
+  // that already work on the first try.
+  const variants = [url];
+  if (/^http:\/\//i.test(url)) variants.push(url.replace(/^http:/i, 'https:'));
+  else if (/^https:\/\//i.test(url)) variants.push(url.replace(/^https:/i, 'http:'));
+
+  let lastErr;
+  for (const u of variants) {
+    try {
+      return await fetchJsonOnce(u);
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw lastErr;
+}
+
+async function fetchJsonOnce(url) {
   let r = await fetch(url, { headers: FETCH_HEADERS, signal: AbortSignal.timeout(20000) });
   if (!r.ok) {
     let body = await r.text().catch(() => '');
@@ -341,16 +362,40 @@ async function searchArcgis(cfg, term, type, res) {
 // Supabase table (see scripts/update-qc-claims.js + supabase-qc-claims-setup.sql)
 // and searched here via PostgREST. Reads use the anon key + a public-read RLS
 // policy; rows are already normalized to the BC-style property names.
-async function searchQc(term, type, res) {
-  // Accept either the bare server-side names or the VITE_-prefixed ones the
-  // frontend Supabase client already uses — both point at the same project,
-  // and the anon key is public-safe (it ships in the client bundle anyway),
-  // so this avoids requiring a second, duplicate set of Vercel env vars.
+// Quebec is self-hosted in Supabase. Accept either the bare server-side names
+// or the VITE_-prefixed ones the frontend Supabase client already uses — both
+// point at the same project, and the anon key is public-safe (it ships in the
+// client bundle anyway), so this avoids requiring a duplicate set of Vercel
+// env vars. Returns null when not configured.
+function qcSupabaseCreds() {
   const base = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
   const key = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!base || !key) {
+  if (!base || !key) return null;
+  return { base, key };
+}
+
+// Map a qc_claims row onto the BC-style property names the UI renders.
+function qcRowToFeature(row) {
+  return {
+    type: 'Feature',
+    geometry: row.geometry || null,
+    properties: {
+      OWNER_NAME: row.owner_name,
+      TAG_NUMBER: row.tag_number,
+      AREA_IN_HECTARES: row.area_hectares,
+      GOOD_TO_DATE: row.good_to_date,
+      TITLE_TYPE_DESCRIPTION: row.title_type,
+      STATUS: row.status,
+    },
+  };
+}
+
+async function searchQc(term, type, res) {
+  const creds = qcSupabaseCreds();
+  if (!creds) {
     return res.status(503).json({ error: 'Quebec claims data is not available right now.' });
   }
+  const { base, key } = creds;
 
   // PostgREST treats * as the ilike wildcard; strip user-supplied wildcards and
   // PostgREST-reserved characters so the term can only match literally.
@@ -375,19 +420,43 @@ async function searchQc(term, type, res) {
     throw new Error(`Quebec claims store ${r.status}: ${body.slice(0, 300)}`);
   }
   const rows = await r.json();
-  const features = rows.map((row) => ({
-    type: 'Feature',
-    geometry: row.geometry || null,
-    // Keys already match what the UI renders; no normalizeProps pass needed.
-    properties: {
-      OWNER_NAME: row.owner_name,
-      TAG_NUMBER: row.tag_number,
-      AREA_IN_HECTARES: row.area_hectares,
-      GOOD_TO_DATE: row.good_to_date,
-      TITLE_TYPE_DESCRIPTION: row.title_type,
-      STATUS: row.status,
+  // Keys already match what the UI renders; no normalizeProps pass needed.
+  const features = rows.map(qcRowToFeature);
+  return res.status(200).json({ type: 'FeatureCollection', features });
+}
+
+// Quebec nearby-radius (bbox) query. The store has no live ArcGIS service, so
+// the spatial lookup runs in Postgres via the qc_claims_in_bbox PostGIS RPC
+// (see supabase-qc-claims-setup.sql) and returns the same row shape as search.
+async function searchQcBbox(minLng, minLat, maxLng, maxLat, res) {
+  const creds = qcSupabaseCreds();
+  if (!creds) {
+    return res.status(503).json({ error: 'Quebec claims data is not available right now.' });
+  }
+  const { base, key } = creds;
+  const r = await fetch(`${base}/rest/v1/rpc/qc_claims_in_bbox`, {
+    method: 'POST',
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
     },
-  }));
+    body: JSON.stringify({ min_lng: minLng, min_lat: minLat, max_lng: maxLng, max_lat: maxLat }),
+    signal: AbortSignal.timeout(20000),
+  });
+  if (!r.ok) {
+    const body = await r.text().catch(() => '');
+    // PGRST202 = the RPC hasn't been created yet (setup SQL not run)
+    if (r.status === 404 || /PGRST202/.test(body)) {
+      return res.status(503).json({
+        error: 'Quebec nearby-claims search is not set up yet. Run the qc_claims spatial setup SQL.',
+      });
+    }
+    throw new Error(`Quebec claims store ${r.status}: ${body.slice(0, 300)}`);
+  }
+  const rows = await r.json();
+  const features = rows.map(qcRowToFeature);
   return res.status(200).json({ type: 'FeatureCollection', features });
 }
 
@@ -427,15 +496,17 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'bbox must be minLng,minLat,maxLng,maxLat' });
     }
     const [minLng, minLat, maxLng, maxLat] = parts;
+    // Quebec is self-hosted; its spatial lookup runs in Postgres/PostGIS.
+    if (province === 'qc') {
+      try {
+        return await searchQcBbox(minLng, minLat, maxLng, maxLat, res);
+      } catch (e) {
+        return res.status(502).json({ error: e.message || 'Failed to reach the Quebec claims store' });
+      }
+    }
     const cfg = ARCGIS_PROVINCES[province];
     if (!cfg) {
-      // qc is self-hosted without PostGIS, so it can't answer spatial envelope
-      // queries — only company/claim-number search. Other values are unsupported.
-      return res.status(400).json({
-        error: province === 'qc'
-          ? 'Quebec supports company and claim-number search, not the nearby-radius map tool.'
-          : `Province '${province}' is not supported.`,
-      });
+      return res.status(400).json({ error: `Province '${province}' is not supported.` });
     }
     try {
       const { layerUrl } = await resolveLayerAndFields(cfg, 'company');
