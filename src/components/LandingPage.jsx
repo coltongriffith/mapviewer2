@@ -104,7 +104,7 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
           {onSearchBCClaims && (
             <button className="landing-hero2-primary" type="button" onClick={onSearchBCClaims} data-track="CTA: Search Claims Registry">
               Search the Claims Registry
-              <span className="landing-hero2-primary-sub">By name or claim number · BC · Ontario · Saskatchewan · Manitoba · Newfoundland · Yukon</span>
+              <span className="landing-hero2-primary-sub">By name or claim number · BC · Ontario · Quebec · Saskatchewan · Manitoba · Newfoundland · Yukon</span>
             </button>
           )}
           <div className="landing-hero2-secondary-row">
@@ -211,7 +211,7 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
       <section className="landing-included" data-section="included">
         <div className="landing-included-heading">What's included</div>
         <ul className="landing-included-list">
-          <li>Live claim search — BC, Ontario, Saskatchewan, Manitoba, Newfoundland &amp; Labrador, Yukon</li>
+          <li>Live claim search — BC, Ontario, Quebec, Saskatchewan, Manitoba, Newfoundland &amp; Labrador, Yukon</li>
           <li>Shapefile, GeoJSON, KML &amp; CSV import</li>
           <li>Drillhole callouts with assay labels</li>
           <li>Distance rings, inset map, scale bar, north arrow</li>
@@ -267,6 +267,7 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
                 <ul className="landing-ds-list">
                   <li><strong>BC Mineral Titles Online (MTO)</strong> — mineral claims, coal licenses. <a href="https://www.mtonline.gov.bc.ca" target="_blank" rel="noopener noreferrer">mtonline.gov.bc.ca</a> · <a href="/blog/how-to-map-bc-mineral-claims-live-registry/">Search guide ›</a></li>
                   <li><strong>Ontario MLAS</strong> — mining claims, mining lands. <a href="https://www.ontario.ca/page/mining-lands-administration-system" target="_blank" rel="noopener noreferrer">ontario.ca/MLAS</a></li>
+                  <li><strong>Quebec GESTIM</strong> — titres miniers (claims), refreshed weekly. <a href="https://gestim.mines.gouv.qc.ca/" target="_blank" rel="noopener noreferrer">gestim.mines.gouv.qc.ca</a> · <a href="/blog/how-to-search-quebec-mining-claims/">Search guide ›</a></li>
                   <li><strong>Saskatchewan MARS</strong> — mineral dispositions. <a href="https://mars.isc.ca" target="_blank" rel="noopener noreferrer">mars.isc.ca</a></li>
                   <li><strong>Manitoba Mineral Titles Online</strong> — mining claims, mineral leases. <a href="https://web2.gov.mb.ca/mineral/mmto.php" target="_blank" rel="noopener noreferrer">web2.gov.mb.ca/mineral</a></li>
                   <li><strong>NL GeoAtlas — Mineral Lands</strong> — mineral exploration licences. <a href="https://geoatlas.gov.nl.ca/" target="_blank" rel="noopener noreferrer">geoatlas.gov.nl.ca</a></li>

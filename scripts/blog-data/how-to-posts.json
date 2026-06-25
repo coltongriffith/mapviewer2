@@ -898,6 +898,54 @@
     ]
   },
   {
+    "slug": "how-to-search-quebec-mining-claims",
+    "title": "Quebec Mining Claims Search — Map GESTIM Titres Free",
+    "metaDescription": "Search Quebec mining claims (titres miniers) by titleholder or claim number and export a professional exploration map. Built on Quebec's public GESTIM data — no GIS software needed.",
+    "directAnswer": "To search Quebec mining claims, open Exploration Maps, select 'Add Claims → Search Claims Registry', choose Quebec, and type a titleholder (company) name or claim number. Results come from Quebec's public GESTIM titres miniers dataset, refreshed weekly. One click adds the claims as a styled polygon layer ready to export.",
+    "publishedDate": "2026-06-25",
+    "sections": [
+      {
+        "h2": "Quebec Mineral Tenure Overview",
+        "body": "Quebec mining claims (titres miniers) are administered by the Ministère des Ressources naturelles et des Forêts through GESTIM Plus. Quebec is a tier-one jurisdiction: the Abitibi greenstone belt hosts world-class gold and base-metal deposits such as Canadian Malartic and LaRonde, while the James Bay region has become Canada's fastest-growing lithium and critical-minerals district. The map-designation claim (claim désigné sur carte) is the dominant exploration tenure."
+      },
+      {
+        "h2": "Step 1 — Select Quebec in Registry Search",
+        "body": "In Exploration Maps, click 'Add Claims → Search Claims Registry'. From the province selector choose Quebec — GESTIM. Two search tabs are available: Company (titleholder / titulaire name) and Claim # (a specific title number such as 2654321)."
+      },
+      {
+        "h2": "Step 2 — Search by Titleholder or Claim Number",
+        "body": "Type a company name such as 'Osisko', 'Patriot Battery Metals', or 'Les métaux Niobay'. Accented French names are fully supported. The Company tab matches against the registered titleholder field; the Claim # tab looks up an exact title number. Results cover active titles across Abitibi, James Bay, Nunavik, and the Laurentides."
+      },
+      {
+        "h2": "Step 3 — Add Claims to Your Map",
+        "body": "Select the geographic groups that match your project. Click Add to map — the claim polygons load as a new layer, already reprojected from Quebec Lambert (EPSG:32198) to WGS84 and styled for investor presentations. Colours, opacity, and labels are fully adjustable."
+      },
+      {
+        "h2": "Step 4 — Export a Professional Quebec Exploration Map",
+        "body": "Add a basemap (Terrain works well for Abitibi belt properties), turn on Context and Reference Labels overlays, then export as PNG or PDF. 3× pixel ratio PDF exports meet NI 43-101 figure standards."
+      }
+    ],
+    "faqs": [
+      {
+        "q": "How do I look up who owns mining claims in Quebec?",
+        "a": "Exploration Maps searches Quebec's public GESTIM titres miniers dataset, which we refresh weekly. Search by titleholder name to see active claims registered to that company. You can also visit gestim.mines.gouv.qc.ca directly for the official government portal (login required for transactions)."
+      },
+      {
+        "q": "Why is Quebec searched differently from other provinces?",
+        "a": "Unlike provinces with a live public query API, Quebec's GESTIM portal is login-gated and SIGÉOM only serves map images. Quebec does publish its complete active-titles dataset as a free public shapefile, refreshed every Monday, so Exploration Maps loads that weekly and searches it the same way — by company or claim number — with no login needed."
+      },
+      {
+        "q": "Who regulates mining claims in Quebec?",
+        "a": "The Ministère des Ressources naturelles et des Forêts (MRNF) administers mineral titles under the Mining Act (Loi sur les mines). GESTIM Plus is the official registration and management system for titres miniers."
+      }
+    ],
+    "relatedSlugs": [
+      "how-to-make-a-mining-claims-map",
+      "how-to-search-ontario-mining-claims",
+      "how-to-search-newfoundland-mineral-claims"
+    ]
+  },
+  {
     "slug": "what-to-include-on-a-mining-claim-map",
     "mapTypeId": "mining-claims-map",
     "title": "What to Include on a Mining Claim Map",
