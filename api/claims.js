@@ -533,6 +533,30 @@ export default async function handler(req, res) {
     }
   }
 
+  // Raw-fetch diagnostics: hit the layer metadata endpoint directly on both URL
+  // schemes and report the exact status / body snippet, so we can tell an IP/WAF
+  // block (fast 403) from a timeout or a moved service. Read-only, no auth.
+  if (schema === 'raw' && ARCGIS_PROVINCES[province]) {
+    const cfg = ARCGIS_PROVINCES[province];
+    const layerId = cfg.layerId != null ? cfg.layerId : 0;
+    const baseUrl = `${cfg.service}/${layerId}?f=json`;
+    const urls = [baseUrl];
+    if (/^http:\/\//i.test(baseUrl)) urls.push(baseUrl.replace(/^http:/i, 'https:'));
+    else urls.push(baseUrl.replace(/^https:/i, 'http:'));
+    const attempts = [];
+    for (const u of urls) {
+      const started = Date.now();
+      try {
+        const rr = await fetch(u, { headers: FALLBACK_FETCH_HEADERS, signal: AbortSignal.timeout(15000) });
+        const body = await rr.text().catch(() => '');
+        attempts.push({ url: u, ok: rr.ok, status: rr.status, ms: Date.now() - started, contentType: rr.headers.get('content-type'), bodySnippet: body.slice(0, 300) });
+      } catch (e) {
+        attempts.push({ url: u, error: String(e.name || e.message || e), ms: Date.now() - started });
+      }
+    }
+    return res.status(200).json({ province, attempts });
+  }
+
   // Diagnostics: report resolved layer + fields for an ArcGIS province
   if (schema === '1' && ARCGIS_PROVINCES[province]) {
     try {
