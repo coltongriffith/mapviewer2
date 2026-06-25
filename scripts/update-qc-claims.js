@@ -32,6 +32,16 @@
 const FETCH_TIMEOUT_MS = 30_000;
 
 import shp from 'shpjs';
+import JSZip from 'jszip';
+
+// GESTIM's DBF is Windows-1252 (Latin-1) encoded — full of French accents in
+// holder names ("Métaux", "Société", "Forêt"). shpjs's top-level zip handler
+// decodes the DBF with whatever .cpg the zip ships (or UTF-8 if none), which
+// mangles those accents (é → byte 0xE9 → U+FFFD). The zip entry point gives no way
+// to override that, so we unzip ourselves and call shpjs's lower-level parsers
+// directly, forcing the correct DBF encoding while still letting parseShp reproject
+// to WGS84 via the .prj. Override with QC_DBF_ENCODING if the source ever changes.
+const DBF_ENCODING = process.env.QC_DBF_ENCODING || 'windows-1252';
 
 // NOTE: shpjs already reprojects geometry to WGS84 itself when the zip contains a
 // .prj file (see node_modules/shpjs/lib/parseShp.js: makeParseCoord runs every
@@ -78,7 +88,9 @@ const FIELD_CANDIDATES = {
   status:        ['STI_DES_AN', 'STI_DES_FR', 'STI_CODE'],
   good_to_date:  ['TIT_DAT_EX'],
   area_hectares: ['TIT_SUPRF', 'POL_SUPRF'],
-  title_type:    ['TT_DES_AN', 'TT_DES_FR', 'TT_CODE'],
+  // TT_DES_* turned out to be the territory (Québec "South"/"North"), not the
+  // title kind — that's the polygon-type field TPO_DES_* ("Claim", etc.).
+  title_type:    ['TPO_DES_AN', 'TPO_DES_FR', 'TPO_CODE', 'TT_DES_AN'],
 };
 
 function pick(props, candidates) {
@@ -331,6 +343,41 @@ async function discoverZipUrl(indexUrl) {
   return preferred;
 }
 
+// Case-insensitive lookup of a shapefile companion (base + ext) within the
+// extracted zip entries, since companions may be .SHP/.DBF/.PRJ in any casing.
+function zipCompanion(files, base, ext) {
+  const target = (base + ext).toLowerCase();
+  const key = Object.keys(files).find((k) => k.toLowerCase() === target);
+  return key ? files[key] : null;
+}
+
+// Unzip the shapefile ourselves and drive shpjs's lower-level parsers so we can
+// force the DBF encoding (see DBF_ENCODING note up top). parseShp still reprojects
+// to WGS84 via the .prj, exactly like the top-level shp() would.
+async function parseShapefileZip(buf) {
+  const zip = await JSZip.loadAsync(buf);
+  const files = {};
+  await Promise.all(
+    Object.keys(zip.files)
+      .filter((n) => !n.includes('__MACOSX') && !zip.files[n].dir)
+      .map(async (n) => { files[n] = Buffer.from(await zip.files[n].async('nodebuffer')); })
+  );
+  const shpKeys = Object.keys(files).filter((n) => n.toLowerCase().endsWith('.shp'));
+  if (!shpKeys.length) throw new Error('No .shp layer found inside the downloaded zip.');
+
+  const collections = [];
+  for (const shpKey of shpKeys) {
+    const base = shpKey.slice(0, -4);
+    const prj = zipCompanion(files, base, '.prj');   // lets parseShp reproject to WGS84
+    const dbf = zipCompanion(files, base, '.dbf');
+    if (!prj) console.log(`  warning: no .prj for ${shpKey}; coordinates may not be WGS84.`);
+    const geoms = shp.parseShp(files[shpKey], prj || undefined);
+    const records = dbf ? shp.parseDbf(dbf, DBF_ENCODING) : undefined;
+    collections.push(shp.combine([geoms, records]));
+  }
+  return collections.length === 1 ? collections[0] : collections;
+}
+
 async function main() {
   if (!SUPABASE_URL || !SERVICE_KEY) {
     throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY env vars are required.');
@@ -355,9 +402,9 @@ async function main() {
   }
   console.log(`Downloaded ${(buf.length / 1e6).toFixed(1)} MB from ${sourceUrl}. Parsing shapefile …`);
 
-  // shpjs accepts a zip buffer and returns GeoJSON (one FeatureCollection, or an
-  // array of them if the zip holds multiple layers).
-  const parsed = await shp(buf);
+  // Parse the zip into GeoJSON (one FeatureCollection, or an array of them if the
+  // zip holds multiple layers), forcing the correct DBF text encoding.
+  const parsed = await parseShapefileZip(buf);
   buf = null; // release the ~100 MB zip buffer before we balloon into row objects
   const collections = Array.isArray(parsed) ? parsed : [parsed];
   let total = 0;
@@ -366,6 +413,11 @@ async function main() {
   const firstProps = collections.find((c) => c.features && c.features.length)?.features[0]?.properties;
   if (firstProps) {
     console.log('First feature attribute keys:', Object.keys(firstProps).join(', '));
+    // One-time diagnostic: dump the first feature's full values so the real
+    // meaning of each GESTIM field is visible in the run log (e.g. which column
+    // actually holds the title type vs. the territory).
+    console.log('First feature sample values:');
+    for (const [k, v] of Object.entries(firstProps)) console.log(`    ${k} = ${JSON.stringify(v)}`);
   }
 
   const today = new Date().toISOString().slice(0, 10);
