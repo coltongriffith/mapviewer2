@@ -45,5 +45,23 @@ create policy "qc_claims public read"
   on public.qc_claims for select
   using (true);
 
+-- ── Fast table reset for the weekly loader ──────────────────────────────────
+-- The loader replaces the whole table each run. Deleting ~268k rows one by one
+-- updates the GIN trigram index per row and exceeds the API statement timeout, so
+-- the loader calls this helper instead: TRUNCATE is a metadata operation (instant)
+-- and "restart identity" keeps the id sequence from growing across reloads.
+create or replace function public.truncate_qc_claims()
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  truncate table public.qc_claims restart identity;
+end;
+$$;
+
+grant execute on function public.truncate_qc_claims() to service_role;
+
 -- Quick sanity check after the first weekly load runs:
 --   select count(*), max(source_updated_at) from public.qc_claims;

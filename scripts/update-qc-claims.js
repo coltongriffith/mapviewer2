@@ -88,9 +88,10 @@ const FIELD_CANDIDATES = {
   status:        ['STI_DES_AN', 'STI_DES_FR', 'STI_CODE'],
   good_to_date:  ['TIT_DAT_EX'],
   area_hectares: ['TIT_SUPRF', 'POL_SUPRF'],
-  // TT_DES_* turned out to be the territory (Québec "South"/"North"), not the
-  // title kind — that's the polygon-type field TPO_DES_* ("Claim", etc.).
-  title_type:    ['TPO_DES_AN', 'TPO_DES_FR', 'TPO_CODE', 'TT_DES_AN'],
+  // The title kind is the right-type code TER_CODE (e.g. "CDC" = claim désigné sur
+  // carte / map-designated claim). TPO_DES_* is the staking-cell geometry type and
+  // TT_DES_* is the territory ("South"/"North") — neither is the title kind.
+  title_type:    ['TER_CODE'],
 };
 
 function pick(props, candidates) {
@@ -149,6 +150,38 @@ async function supabaseFetch(path, init) {
     throw new Error(`Supabase ${init?.method || 'GET'} ${path} → ${r.status}: ${body.slice(0, 300)}`);
   }
   return r;
+}
+
+// Empty the table before reloading. We TRUNCATE via an RPC helper rather than
+// DELETE: once the GIN trigram index is populated, deleting ~268k rows one by one
+// updates that index per row and blows Supabase's statement timeout. TRUNCATE is a
+// metadata operation, so it's effectively instant. Falls back to DELETE (fine for a
+// small/empty table) if the helper function hasn't been added yet.
+async function clearTable() {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/truncate_qc_claims`, {
+    method: 'POST',
+    headers: {
+      apikey: SERVICE_KEY,
+      Authorization: `Bearer ${SERVICE_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: '{}',
+  });
+  if (r.ok) {
+    console.log('Cleared existing rows via truncate_qc_claims().');
+    return;
+  }
+  const body = await r.text().catch(() => '');
+  if (r.status === 404 || /PGRST202|could not find the function/i.test(body)) {
+    console.log(
+      'truncate_qc_claims() not found — add it from supabase-qc-claims-setup.sql to avoid ' +
+      'delete timeouts. Falling back to DELETE …'
+    );
+    await supabaseFetch('qc_claims?id=gte.0', { method: 'DELETE', headers: { Prefer: 'return=minimal' } });
+    console.log('Cleared existing rows via DELETE.');
+    return;
+  }
+  throw new Error(`Clear failed: ${r.status}: ${body.slice(0, 300)}`);
 }
 
 // A real zip starts with the "PK" local-file/central-dir/empty-archive magic.
@@ -459,7 +492,7 @@ async function main() {
   // clear once we know we have fresh rows in hand (guard above), so a failed
   // download never wipes the existing data.
   console.log('Clearing existing rows …');
-  await supabaseFetch('qc_claims?id=gte.0', { method: 'DELETE', headers: { Prefer: 'return=minimal' } });
+  await clearTable();
 
   console.log(`Inserting ${rows.length} rows in batches of ${BATCH_SIZE} …`);
   for (let i = 0; i < rows.length; i += BATCH_SIZE) {
