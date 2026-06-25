@@ -1,0 +1,33 @@
+name: Update Quebec Claims
+
+on:
+  # Quebec refreshes its public claims file every Monday; reload Tuesday 11:00 UTC
+  # (after the source has been published) so our copy stays a few days fresh.
+  schedule:
+    - cron: '0 11 * * 2'
+
+  # Allow manual trigger from the Actions tab (for testing / first load).
+  workflow_dispatch:
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download, reproject, and load Quebec claims
+        env:
+          SUPABASE_URL:              ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          # Optional: only set if the ministry moves the source file.
+          QC_CLAIMS_URL:             ${{ secrets.QC_CLAIMS_URL }}
+        run: node scripts/update-qc-claims.js

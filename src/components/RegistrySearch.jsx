@@ -143,6 +143,11 @@ const PROVINCES = [
     modes: ['company', 'number'],
     placeholders: { company: 'e.g. claim or owner name', number: 'e.g. YA12345' },
   },
+  {
+    value: 'qc', label: 'Quebec', registry: 'GESTIM',
+    modes: ['company', 'number'],
+    placeholders: { company: 'e.g. titleholder name', number: 'e.g. 2654321' },
+  },
 ];
 
 const MODE_LABELS = {

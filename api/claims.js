@@ -8,9 +8,12 @@
 //   nl — Newfoundland & Labrador Mineral Lands GeoAtlas (ArcGIS REST)
 //   yt — Yukon quartz claims (GeoYukon GY_Mining ArcGIS REST)
 //
+// Self-hosted (no live API, loaded weekly into Supabase — see searchQc):
+//   qc — GESTIM is login-gated and SIGÉOM serves WMS images only, but Quebec's
+//        titres miniers are published as a free public shapefile refreshed every
+//        Monday. scripts/update-qc-claims.js loads it into the qc_claims table.
+//
 // Not supported (no free public queryable API as of 2026):
-//   qc — GESTIM is login-gated; SIGÉOM exposes WMS images only, titres miniers
-//        are bulk downloads with no attribute-query endpoint
 //   ab — crown mineral agreements distributed via AltaLIS under license
 //   ns — NovaROC viewer; mineral titles are download-only
 //   nb — GeoNB has no documented public mineral claims query service
@@ -325,6 +328,56 @@ async function searchArcgis(cfg, term, type, res) {
   return res.status(200).json(data);
 }
 
+// Quebec has no live queryable registry, so its claims are loaded weekly into a
+// Supabase table (see scripts/update-qc-claims.js + supabase-qc-claims-setup.sql)
+// and searched here via PostgREST. Reads use the anon key + a public-read RLS
+// policy; rows are already normalized to the BC-style property names.
+async function searchQc(term, type, res) {
+  const base = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!base || !key) {
+    return res.status(503).json({ error: 'Quebec claims data is not available right now.' });
+  }
+
+  // PostgREST treats * as the ilike wildcard; strip user-supplied wildcards and
+  // PostgREST-reserved characters so the term can only match literally.
+  const cleaned = term.replace(/[*%,()]/g, ' ').trim();
+  if (cleaned.length < 2) {
+    return res.status(400).json({ error: 'q param required (min 2 chars)' });
+  }
+
+  const filter = type === 'number'
+    ? `tag_number=ilike.${encodeURIComponent(cleaned)}`
+    : `owner_name=ilike.${encodeURIComponent(`*${cleaned}*`)}`;
+  const url = `${base}/rest/v1/qc_claims?` +
+    `select=tag_number,owner_name,status,good_to_date,area_hectares,title_type,geometry` +
+    `&${filter}&limit=500`;
+
+  const r = await fetch(url, {
+    headers: { apikey: key, Authorization: `Bearer ${key}`, Accept: 'application/json' },
+    signal: AbortSignal.timeout(20000),
+  });
+  if (!r.ok) {
+    const body = await r.text().catch(() => '');
+    throw new Error(`Quebec claims store ${r.status}: ${body.slice(0, 300)}`);
+  }
+  const rows = await r.json();
+  const features = rows.map((row) => ({
+    type: 'Feature',
+    geometry: row.geometry || null,
+    // Keys already match what the UI renders; no normalizeProps pass needed.
+    properties: {
+      OWNER_NAME: row.owner_name,
+      TAG_NUMBER: row.tag_number,
+      AREA_IN_HECTARES: row.area_hectares,
+      GOOD_TO_DATE: row.good_to_date,
+      TITLE_TYPE_DESCRIPTION: row.title_type,
+      STATUS: row.status,
+    },
+  }));
+  return res.status(200).json({ type: 'FeatureCollection', features });
+}
+
 async function searchBc(term, type, res) {
   const safeTerm = term.replace(/'/g, "''").replace(/%/g, '\\%').replace(/_/g, '\\_');
   let cqlFilter;
@@ -363,7 +416,13 @@ export default async function handler(req, res) {
     const [minLng, minLat, maxLng, maxLat] = parts;
     const cfg = ARCGIS_PROVINCES[province];
     if (!cfg) {
-      return res.status(400).json({ error: `Province '${province}' is not supported.` });
+      // qc is self-hosted without PostGIS, so it can't answer spatial envelope
+      // queries — only company/claim-number search. Other values are unsupported.
+      return res.status(400).json({
+        error: province === 'qc'
+          ? 'Quebec supports company and claim-number search, not the nearby-radius map tool.'
+          : `Province '${province}' is not supported.`,
+      });
     }
     try {
       const { layerUrl } = await resolveLayerAndFields(cfg, 'company');
@@ -418,7 +477,7 @@ export default async function handler(req, res) {
     }
   }
 
-  if (province !== 'bc' && !ARCGIS_PROVINCES[province]) {
+  if (province !== 'bc' && province !== 'qc' && !ARCGIS_PROVINCES[province]) {
     return res.status(400).json({ error: `Province '${province}' is not supported yet.` });
   }
   if (type === 'map' && province !== 'bc') {
@@ -431,6 +490,7 @@ export default async function handler(req, res) {
 
   try {
     if (province === 'bc') return await searchBc(term, type, res);
+    if (province === 'qc') return await searchQc(term, type, res);
     return await searchArcgis(ARCGIS_PROVINCES[province], term, type, res);
   } catch (e) {
     return res.status(502).json({ error: e.message || 'Failed to reach provincial registry' });
