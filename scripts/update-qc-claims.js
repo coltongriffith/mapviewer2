@@ -3,7 +3,7 @@
 // Quebec publishes its full mineral-titles ("titres miniers") dataset as a free
 // public shapefile, refreshed every Monday. Unlike the other provinces there is
 // no live attribute-query API to hit on demand, so we download that file once a
-// week, reproject it from Quebec Lambert (EPSG:32198) to WGS84, and load it into
+// week (shpjs reprojects it to WGS84 via the bundled .prj) and load it into
 // the `qc_claims` Supabase table. The /api/claims function then searches that
 // table for the `qc` province.
 //
@@ -32,14 +32,12 @@
 const FETCH_TIMEOUT_MS = 30_000;
 
 import shp from 'shpjs';
-import proj4 from 'proj4';
 
-// Quebec Lambert (NAD83 / Quebec Lambert), the projection GESTIM exports in.
-const QC_LAMBERT =
-  '+proj=lcc +lat_1=60 +lat_2=46 +lat_0=44 +lon_0=-68.5 ' +
-  '+x_0=0 +y_0=0 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs';
-const WGS84 = 'EPSG:4326';
-const toWgs84 = proj4(QC_LAMBERT, WGS84);
+// NOTE: shpjs already reprojects geometry to WGS84 itself when the zip contains a
+// .prj file (see node_modules/shpjs/lib/parseShp.js: makeParseCoord runs every
+// coordinate through trans.inverse()). So we must NOT reproject again here — doing
+// so double-transforms the coordinates into garbage. We only round them to trim
+// the stored jsonb size.
 
 // GESTIM's real public distribution host, discovered by introspecting the Angular
 // app's JS bundle. The province-wide ACTIVE-titles shapefile lives at this stable
@@ -68,13 +66,19 @@ const COORD_PRECISION = 6;        // ~0.1 m; trims jsonb size considerably
 // Candidate source field names (GESTIM French names, with a few fallbacks).
 // The first one present on a feature wins — mirrors the resilient field
 // resolution the live-API provinces use in api/claims.js.
+// Mapped to GESTIM's real shapefile schema (confirmed from a live run's
+// "First feature attribute keys" log):
+//   TIT_NO      title number              DET_NOM   holder (détenteur) name
+//   STI_DES_*   title status description  TIT_DAT_EX expiry date
+//   TIT_SUPRF   title area (hectares)     TT_DES_*   title-type description
+// English (_AN) variants are preferred for display where both exist.
 const FIELD_CANDIDATES = {
-  tag_number:    ['NO_TITRE', 'NO_CLAIM', 'NUMERO', 'NO_TITRE_M', 'CLAIM_NO'],
-  owner_name:    ['TITULAIRE', 'NOM_TITULA', 'NOM', 'DETENTEUR', 'NOM_DETENT'],
-  status:        ['STATUT', 'STATUT_TIT', 'ETAT'],
-  good_to_date:  ['DATE_EXPIR', 'DATE_FIN', 'DATE_EXP', 'EXPIRATION'],
-  area_hectares: ['SUPERFICIE', 'SUPERF_HA', 'HECTARES', 'AREA_HA'],
-  title_type:    ['TYPE_TITRE', 'TYPE', 'TYPE_TITR'],
+  tag_number:    ['TIT_NO', 'POL_NO_SEQ'],
+  owner_name:    ['DET_NOM', 'DET_LIST', 'DET_NUMER'],
+  status:        ['STI_DES_AN', 'STI_DES_FR', 'STI_CODE'],
+  good_to_date:  ['TIT_DAT_EX'],
+  area_hectares: ['TIT_SUPRF', 'POL_SUPRF'],
+  title_type:    ['TT_DES_AN', 'TT_DES_FR', 'TT_CODE'],
 };
 
 function pick(props, candidates) {
@@ -102,13 +106,11 @@ function round(n) {
   return Math.round(n * f) / f;
 }
 
-// Reproject every coordinate in a GeoJSON geometry from Quebec Lambert to WGS84.
-function reprojectGeometry(geom) {
+// Round every coordinate in a GeoJSON geometry (shpjs has already reprojected it
+// to WGS84). Rounding to COORD_PRECISION (~0.1 m) trims the stored jsonb size.
+function roundGeometry(geom) {
   if (!geom || !geom.coordinates) return null;
-  const mapPos = (pos) => {
-    const [x, y] = toWgs84.forward([pos[0], pos[1]]);
-    return [round(x), round(y)];
-  };
+  const mapPos = (pos) => [round(pos[0]), round(pos[1])];
   const walk = (coords, depth) =>
     depth === 0 ? mapPos(coords) : coords.map((c) => walk(c, depth - 1));
   const depthByType = {
@@ -118,11 +120,6 @@ function reprojectGeometry(geom) {
   const depth = depthByType[geom.type];
   if (depth == null) return null;
   return { type: geom.type, coordinates: walk(geom.coordinates, depth) };
-}
-
-function isActive(status) {
-  if (!status) return true; // keep when status is unknown rather than dropping data
-  return /actif|active|valide|valid|en\s*vigueur/i.test(String(status));
 }
 
 async function supabaseFetch(path, init) {
@@ -373,8 +370,10 @@ async function main() {
 
   const today = new Date().toISOString().slice(0, 10);
   const rows = [];
-  let skippedInactive = 0;
   let skippedNoGeom = 0;
+  // The source file is GESTIM's pre-filtered ACTIVE-titles export, so we keep every
+  // title (status is stored for display only — we don't re-filter on it, which would
+  // risk dropping everything if a status string doesn't match an expected pattern).
   // Consume features destructively (null each slot as we go) so the GC can reclaim
   // the parsed geometry during this loop instead of holding the full parse *and*
   // the full row set in memory at once — the province-wide file is large enough
@@ -386,15 +385,13 @@ async function main() {
       feats[i] = null;
       if (!f) continue;
       const props = f.properties || {};
-      const status = pick(props, FIELD_CANDIDATES.status);
-      if (!isActive(status)) { skippedInactive++; continue; }
-      const geometry = reprojectGeometry(f.geometry);
+      const geometry = roundGeometry(f.geometry);
       if (!geometry) { skippedNoGeom++; continue; }
       const area = pick(props, FIELD_CANDIDATES.area_hectares);
       rows.push({
         tag_number: pick(props, FIELD_CANDIDATES.tag_number)?.toString() ?? null,
         owner_name: pick(props, FIELD_CANDIDATES.owner_name)?.toString() ?? null,
-        status: status?.toString() ?? null,
+        status: pick(props, FIELD_CANDIDATES.status)?.toString() ?? null,
         good_to_date: toIsoDate(pick(props, FIELD_CANDIDATES.good_to_date)),
         area_hectares: area != null && Number.isFinite(Number(area)) ? Number(area) : null,
         title_type: pick(props, FIELD_CANDIDATES.title_type)?.toString() ?? null,
@@ -403,10 +400,7 @@ async function main() {
       });
     }
   }
-  console.log(
-    `Prepared ${rows.length} active claims ` +
-    `(skipped ${skippedInactive} inactive, ${skippedNoGeom} without geometry).`
-  );
+  console.log(`Prepared ${rows.length} claims (skipped ${skippedNoGeom} without geometry).`);
   if (!rows.length) throw new Error('No rows to load — aborting before clearing the table.');
 
   // Replace the table contents. Delete first, then insert in batches. We only
