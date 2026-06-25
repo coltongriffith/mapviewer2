@@ -41,16 +41,19 @@ const QC_LAMBERT =
 const WGS84 = 'EPSG:4326';
 const toWgs84 = proj4(QC_LAMBERT, WGS84);
 
-// Where to look for the claims file. The exact zip URL on GESTIM's distribution
-// site isn't documented and changes, so by default we scrape the index page for
-// the right .zip link. Set QC_CLAIMS_URL (a GitHub secret) to a direct file URL
-// to skip discovery entirely; set QC_CLAIMS_INDEX_URL to point discovery at a
-// different listing page.
-const SOURCE_URL = process.env.QC_CLAIMS_URL || '';
+// GESTIM's real public distribution host, discovered by introspecting the Angular
+// app's JS bundle. The province-wide ACTIVE-titles shapefile lives at this stable
+// URL — that's exactly the set we want (every active mining title, searchable by
+// holder), and it's far smaller than the "ALL" file (which also carries expired
+// titles we'd filter out anyway). Set QC_CLAIMS_URL to override.
+const DEFAULT_SHAPE_URL =
+  'https://diffusion.mern.gouv.qc.ca/Public/GESTIM/telechargements/Province_shape/TITRES_ACTIFS_ACTIVE_TITLES.zip';
+const SOURCE_URL = process.env.QC_CLAIMS_URL || DEFAULT_SHAPE_URL;
+
+// Fallback discovery, only used if the known URL above ever stops being a valid zip.
 const CKAN_QUERY = process.env.QC_CLAIMS_CKAN_QUERY || 'titres miniers';
-// The legacy ASP listing has been retired (404s); the only known surface left is
-// the new Angular distribution site. Its index.html has no links in the raw HTML
-// (client-rendered), so we instead introspect its JS bundle — see scrapeAngularApp.
+// The new Angular distribution site has no links in raw HTML (client-rendered), so
+// discovery introspects its JS bundle for download URLs — see scrapeAngularBundle.
 const INDEX_URL = process.env.QC_CLAIMS_INDEX_URL || 'https://documents-gestim.mines.gouv.qc.ca/cartes';
 const BROWSER_UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
@@ -156,6 +159,30 @@ async function fetchBuffer(url) {
   const ct = res.headers.get('content-type') || '';
   const buf = Buffer.from(await res.arrayBuffer());
   return { res, ct, buf };
+}
+
+// Download a URL and return its bytes only if they're a real zip; otherwise log
+// what came back (status, content-type, a snippet) and return null so the caller
+// can fall back to discovery.
+async function tryDownloadZip(url) {
+  console.log(`Downloading Quebec claims from ${url} …`);
+  let res, ct, buf;
+  try {
+    ({ res, ct, buf } = await fetchBuffer(url));
+  } catch (e) {
+    console.log(`  download failed: ${e.message}`);
+    return null;
+  }
+  if (!res.ok) {
+    console.log(`  HTTP ${res.status} (content-type "${ct}", ${buf.length} bytes)`);
+    return null;
+  }
+  if (!isZip(buf)) {
+    console.log(`  not a zip (content-type "${ct}", ${buf.length} bytes). First 300 chars:`);
+    console.log('  ' + buf.toString('utf8').slice(0, 300).replace(/\n/g, '\n  '));
+    return null;
+  }
+  return buf;
 }
 
 // Données Québec (donneesquebec.ca) runs on CKAN, which exposes a stable JSON
@@ -312,58 +339,69 @@ async function main() {
     throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY env vars are required.');
   }
 
-  const sourceUrl =
-    SOURCE_URL ||
-    (await discoverViaCkan(CKAN_QUERY)) ||
-    (await discoverZipUrl(INDEX_URL));
-  if (!sourceUrl) {
-    throw new Error(
-      'Could not auto-discover the claims file via either Données Québec or the GESTIM index. ' +
-      'Inspect the dumps above, then set the QC_CLAIMS_URL secret to the direct .zip/.gpkg URL.'
-    );
+  // Try the known URL first; only if it stops being a valid zip do we fall back to
+  // (slower, noisier) auto-discovery — so a moved/renamed file self-heals instead
+  // of failing the run.
+  let sourceUrl = SOURCE_URL;
+  let buf = await tryDownloadZip(sourceUrl);
+  if (!buf) {
+    console.log('Known URL did not return a valid zip; falling back to auto-discovery …');
+    sourceUrl = (await discoverViaCkan(CKAN_QUERY)) || (await discoverZipUrl(INDEX_URL));
+    if (!sourceUrl) {
+      throw new Error(
+        'Could not find the claims file at the known URL or via discovery. ' +
+        'Inspect the dumps above, then set the QC_CLAIMS_URL secret to the direct .zip URL.'
+      );
+    }
+    buf = await tryDownloadZip(sourceUrl);
+    if (!buf) throw new Error(`Discovered URL ${sourceUrl} did not return a valid zip either.`);
   }
-
-  console.log(`Downloading Quebec claims from ${sourceUrl} …`);
-  const { res, ct, buf } = await fetchBuffer(sourceUrl);
-  if (!res.ok) throw new Error(`Download failed: HTTP ${res.status} (content-type "${ct}")`);
-  if (!isZip(buf)) {
-    console.log(`Response is not a zip (content-type "${ct}", ${buf.length} bytes). First 800 chars:`);
-    console.log('  ' + buf.toString('utf8').slice(0, 800).replace(/\n/g, '\n  '));
-    throw new Error('Downloaded file is not a zip — the source URL returned an error/HTML page. See the dump above and set QC_CLAIMS_URL.');
-  }
-  console.log(`Downloaded ${(buf.length / 1e6).toFixed(1)} MB. Parsing shapefile …`);
+  console.log(`Downloaded ${(buf.length / 1e6).toFixed(1)} MB from ${sourceUrl}. Parsing shapefile …`);
 
   // shpjs accepts a zip buffer and returns GeoJSON (one FeatureCollection, or an
   // array of them if the zip holds multiple layers).
   const parsed = await shp(buf);
+  buf = null; // release the ~100 MB zip buffer before we balloon into row objects
   const collections = Array.isArray(parsed) ? parsed : [parsed];
-  const allFeatures = collections.flatMap((c) => c.features || []);
-  console.log(`Parsed ${allFeatures.length} features.`);
-  if (allFeatures[0]) {
-    console.log('First feature attribute keys:', Object.keys(allFeatures[0].properties || {}).join(', '));
+  let total = 0;
+  for (const c of collections) total += (c.features || []).length;
+  console.log(`Parsed ${total} features.`);
+  const firstProps = collections.find((c) => c.features && c.features.length)?.features[0]?.properties;
+  if (firstProps) {
+    console.log('First feature attribute keys:', Object.keys(firstProps).join(', '));
   }
 
   const today = new Date().toISOString().slice(0, 10);
   const rows = [];
   let skippedInactive = 0;
   let skippedNoGeom = 0;
-  for (const f of allFeatures) {
-    const props = f.properties || {};
-    const status = pick(props, FIELD_CANDIDATES.status);
-    if (!isActive(status)) { skippedInactive++; continue; }
-    const geometry = reprojectGeometry(f.geometry);
-    if (!geometry) { skippedNoGeom++; continue; }
-    const area = pick(props, FIELD_CANDIDATES.area_hectares);
-    rows.push({
-      tag_number: pick(props, FIELD_CANDIDATES.tag_number)?.toString() ?? null,
-      owner_name: pick(props, FIELD_CANDIDATES.owner_name)?.toString() ?? null,
-      status: status?.toString() ?? null,
-      good_to_date: toIsoDate(pick(props, FIELD_CANDIDATES.good_to_date)),
-      area_hectares: area != null && Number.isFinite(Number(area)) ? Number(area) : null,
-      title_type: pick(props, FIELD_CANDIDATES.title_type)?.toString() ?? null,
-      geometry,
-      source_updated_at: today,
-    });
+  // Consume features destructively (null each slot as we go) so the GC can reclaim
+  // the parsed geometry during this loop instead of holding the full parse *and*
+  // the full row set in memory at once — the province-wide file is large enough
+  // that keeping both blows the heap.
+  for (const c of collections) {
+    const feats = c.features || [];
+    for (let i = 0; i < feats.length; i++) {
+      const f = feats[i];
+      feats[i] = null;
+      if (!f) continue;
+      const props = f.properties || {};
+      const status = pick(props, FIELD_CANDIDATES.status);
+      if (!isActive(status)) { skippedInactive++; continue; }
+      const geometry = reprojectGeometry(f.geometry);
+      if (!geometry) { skippedNoGeom++; continue; }
+      const area = pick(props, FIELD_CANDIDATES.area_hectares);
+      rows.push({
+        tag_number: pick(props, FIELD_CANDIDATES.tag_number)?.toString() ?? null,
+        owner_name: pick(props, FIELD_CANDIDATES.owner_name)?.toString() ?? null,
+        status: status?.toString() ?? null,
+        good_to_date: toIsoDate(pick(props, FIELD_CANDIDATES.good_to_date)),
+        area_hectares: area != null && Number.isFinite(Number(area)) ? Number(area) : null,
+        title_type: pick(props, FIELD_CANDIDATES.title_type)?.toString() ?? null,
+        geometry,
+        source_updated_at: today,
+      });
+    }
   }
   console.log(
     `Prepared ${rows.length} active claims ` +

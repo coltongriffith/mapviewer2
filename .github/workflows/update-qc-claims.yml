@@ -26,6 +26,9 @@ jobs:
 
       - name: Download, reproject, and load Quebec claims
         env:
+          # The province-wide shapefile is large; shpjs builds the whole GeoJSON in
+          # memory, so give Node a generous heap (GitHub runners have ~16 GB RAM).
+          NODE_OPTIONS: --max-old-space-size=12288
           SUPABASE_URL:              ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           # Optional overrides (leave unset to auto-discover the file):
