@@ -99,9 +99,11 @@ async function fetchJson(url) {
   let r = await fetch(url, { headers: FETCH_HEADERS, signal: AbortSignal.timeout(20000) });
   if (!r.ok) {
     let body = await r.text().catch(() => '');
-    if (looksLikeHtml(body, r.headers.get('content-type'))) {
-      // Likely a WAF/bot-block page rather than a real API error — retry
-      // once with a generic browser identity before surfacing anything.
+    // Some provincial WAFs block our bot UA outright (403/406) regardless of
+    // whether the block page is HTML or a bare error status — retry once with
+    // a generic browser identity before surfacing anything as unavailable.
+    const looksBlocked = looksLikeHtml(body, r.headers.get('content-type')) || r.status === 403 || r.status === 406;
+    if (looksBlocked) {
       const retry = await fetch(url, { headers: FALLBACK_FETCH_HEADERS, signal: AbortSignal.timeout(20000) }).catch(() => null);
       if (retry?.ok) return retry.json();
       if (retry) { r = retry; body = await retry.text().catch(() => ''); }
@@ -286,6 +288,13 @@ async function searchArcgis(cfg, term, type, res) {
   const candidates = type === 'number' ? cfg.numberFields : cfg.ownerFields;
   const field = pickField(candidates, fields);
   if (!field) {
+    if (!fields.length) {
+      // resolveLayerAndFields couldn't read any field metadata at all — the
+      // upstream server is unreachable/blocking us, not actually missing the field.
+      return res.status(502).json({
+        error: 'The provincial registry is temporarily unavailable. Please try again shortly.',
+      });
+    }
     return res.status(400).json({
       error: type === 'number'
         ? 'Claim number search is not available for this province yet.'
@@ -333,8 +342,12 @@ async function searchArcgis(cfg, term, type, res) {
 // and searched here via PostgREST. Reads use the anon key + a public-read RLS
 // policy; rows are already normalized to the BC-style property names.
 async function searchQc(term, type, res) {
-  const base = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
+  // Accept either the bare server-side names or the VITE_-prefixed ones the
+  // frontend Supabase client already uses — both point at the same project,
+  // and the anon key is public-safe (it ships in the client bundle anyway),
+  // so this avoids requiring a second, duplicate set of Vercel env vars.
+  const base = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+  const key = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!base || !key) {
     return res.status(503).json({ error: 'Quebec claims data is not available right now.' });
   }
