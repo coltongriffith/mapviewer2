@@ -29,8 +29,10 @@ jobs:
           SUPABASE_URL:              ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           # Optional overrides (leave unset to auto-discover the file):
-          #   QC_CLAIMS_URL       — direct .zip URL, skips discovery
-          #   QC_CLAIMS_INDEX_URL — listing page to scrape for the .zip link
+          #   QC_CLAIMS_URL         — direct .zip/.gpkg URL, skips discovery
+          #   QC_CLAIMS_CKAN_QUERY  — Données Québec catalog search term
+          #   QC_CLAIMS_INDEX_URL   — fallback listing page to scrape for a .zip link
           QC_CLAIMS_URL:             ${{ secrets.QC_CLAIMS_URL }}
+          QC_CLAIMS_CKAN_QUERY:      ${{ secrets.QC_CLAIMS_CKAN_QUERY }}
           QC_CLAIMS_INDEX_URL:       ${{ secrets.QC_CLAIMS_INDEX_URL }}
         run: node scripts/update-qc-claims.js

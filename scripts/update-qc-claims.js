@@ -14,14 +14,22 @@
 //   SUPABASE_URL                — your project URL (https://xxxx.supabase.co)
 //   SUPABASE_SERVICE_ROLE_KEY   — service-role key (bypasses RLS for the bulk load)
 // Optional:
-//   QC_CLAIMS_URL               — direct .zip URL; skips auto-discovery
-//   QC_CLAIMS_INDEX_URL         — listing page to scrape for the .zip link
+//   QC_CLAIMS_URL               — direct .zip URL; skips auto-discovery entirely
+//   QC_CLAIMS_CKAN_QUERY        — Données Québec catalog search term (default below)
+//   QC_CLAIMS_INDEX_URL         — fallback HTML listing page to scrape for a .zip link
 //
-// By default the loader scrapes GESTIM's distribution index for the claims zip
-// (the exact filename isn't documented and changes). It logs every zip link it
-// finds and the field names on the first feature, so a single run tells you both
-// the real download URL and whether the attribute mapping is right. If discovery
-// can't pin the file, set QC_CLAIMS_URL to the direct .zip URL.
+// Discovery, in order:
+//   1. QC_CLAIMS_URL, if set — skips everything else.
+//   2. Données Québec's CKAN API (donneesquebec.ca), searched for QC_CLAIMS_CKAN_QUERY.
+//      This is a stable JSON catalog API (not a scraped page), so it survives the
+//      government site's own frontend changing.
+//   3. Falls back to scraping QC_CLAIMS_INDEX_URL's HTML for a .zip link, in case the
+//      CKAN search doesn't turn up the right dataset.
+// Every step logs what it found, so a failed run's log always shows the real
+// candidates/response and not just "didn't work" — if discovery can't pin the file,
+// set QC_CLAIMS_URL to the direct .zip/.gpkg URL.
+
+const FETCH_TIMEOUT_MS = 30_000;
 
 import shp from 'shpjs';
 import proj4 from 'proj4';
@@ -39,6 +47,7 @@ const toWgs84 = proj4(QC_LAMBERT, WGS84);
 // to skip discovery entirely; set QC_CLAIMS_INDEX_URL to point discovery at a
 // different listing page.
 const SOURCE_URL = process.env.QC_CLAIMS_URL || '';
+const CKAN_QUERY = process.env.QC_CLAIMS_CKAN_QUERY || 'titres miniers';
 const INDEX_URL = process.env.QC_CLAIMS_INDEX_URL || 'https://documents-gestim.mines.gouv.qc.ca/cartes';
 const BROWSER_UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
@@ -139,10 +148,54 @@ async function fetchBuffer(url) {
   const res = await fetch(url, {
     headers: { 'User-Agent': BROWSER_UA, Accept: 'application/zip,application/octet-stream,text/html,*/*' },
     redirect: 'follow',
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
   const ct = res.headers.get('content-type') || '';
   const buf = Buffer.from(await res.arrayBuffer());
   return { res, ct, buf };
+}
+
+// Données Québec (donneesquebec.ca) runs on CKAN, which exposes a stable JSON
+// search API — unlike GESTIM's own distribution page, which turned out to be a
+// client-rendered Angular app shell with no links in the raw HTML. Search the
+// catalog for the query term and pick the most promising SHP/GPKG resource.
+async function discoverViaCkan(query) {
+  const apiUrl = `https://www.donneesquebec.ca/recherche/api/3/action/package_search?q=${encodeURIComponent(query)}&rows=10`;
+  console.log(`Searching Données Québec catalog for "${query}" …`);
+  let json;
+  try {
+    const r = await fetch(apiUrl, {
+      headers: { 'User-Agent': BROWSER_UA, Accept: 'application/json' },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+    const text = await r.text();
+    console.log(`  CKAN HTTP ${r.status}, ${text.length} bytes`);
+    if (!r.ok) { console.log('  ' + text.slice(0, 800)); return null; }
+    json = JSON.parse(text);
+  } catch (e) {
+    console.log(`  CKAN search failed: ${e.message}`);
+    return null;
+  }
+  const packages = json?.result?.results || [];
+  console.log(`  found ${packages.length} dataset(s): ${packages.map((p) => p.name).join(', ')}`);
+
+  const candidates = [];
+  for (const pkg of packages) {
+    for (const res of pkg.resources || []) {
+      console.log(`    - [${pkg.name}] "${res.name}" format=${res.format} url=${res.url}`);
+      if (/^(shp|shapefile|gpkg|geopackage)$/i.test(res.format || '')) {
+        candidates.push(res);
+      }
+    }
+  }
+  if (!candidates.length) {
+    console.log('  no SHP/GPKG resources found in the matching datasets.');
+    return null;
+  }
+  const preferred =
+    candidates.find((r) => /titre|claim|droit/i.test(`${r.name} ${r.url}`)) || candidates[0];
+  console.log(`  selected: ${preferred.url}`);
+  return preferred.url;
 }
 
 // Scrape the GESTIM distribution index for the claims/titres .zip link. The
@@ -159,7 +212,7 @@ async function discoverZipUrl(indexUrl) {
   if (!abs.length) {
     console.log('  no .zip links found on the index page. First 800 chars of the response:');
     console.log('  ' + html.slice(0, 800).replace(/\n/g, '\n  '));
-    throw new Error('Could not auto-discover the claims zip. Inspect the page dump above, then set the QC_CLAIMS_URL secret to the direct .zip URL.');
+    return null;
   }
   console.log(`  found ${abs.length} zip link(s):`);
   abs.forEach((u) => console.log(`    - ${u}`));
@@ -174,7 +227,16 @@ async function main() {
     throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY env vars are required.');
   }
 
-  const sourceUrl = SOURCE_URL || (await discoverZipUrl(INDEX_URL));
+  const sourceUrl =
+    SOURCE_URL ||
+    (await discoverViaCkan(CKAN_QUERY)) ||
+    (await discoverZipUrl(INDEX_URL));
+  if (!sourceUrl) {
+    throw new Error(
+      'Could not auto-discover the claims file via either Données Québec or the GESTIM index. ' +
+      'Inspect the dumps above, then set the QC_CLAIMS_URL secret to the direct .zip/.gpkg URL.'
+    );
+  }
 
   console.log(`Downloading Quebec claims from ${sourceUrl} …`);
   const { res, ct, buf } = await fetchBuffer(sourceUrl);
