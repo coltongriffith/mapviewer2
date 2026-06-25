@@ -14,13 +14,14 @@
 //   SUPABASE_URL                — your project URL (https://xxxx.supabase.co)
 //   SUPABASE_SERVICE_ROLE_KEY   — service-role key (bypasses RLS for the bulk load)
 // Optional:
-//   QC_CLAIMS_URL               — override the source shapefile (.zip) URL
+//   QC_CLAIMS_URL               — direct .zip URL; skips auto-discovery
+//   QC_CLAIMS_INDEX_URL         — listing page to scrape for the .zip link
 //
-// NOTE: QC_CLAIMS_URL must point at the current Quebec claims shapefile zip.
-// The default below is the documented GESTIM "Québec minier" claims export; if
-// the ministry moves it, set QC_CLAIMS_URL in the workflow/secret rather than
-// editing this file. The loader logs the field names it sees on the first
-// feature so you can confirm the attribute mapping after a run.
+// By default the loader scrapes GESTIM's distribution index for the claims zip
+// (the exact filename isn't documented and changes). It logs every zip link it
+// finds and the field names on the first feature, so a single run tells you both
+// the real download URL and whether the attribute mapping is right. If discovery
+// can't pin the file, set QC_CLAIMS_URL to the direct .zip URL.
 
 import shp from 'shpjs';
 import proj4 from 'proj4';
@@ -32,9 +33,16 @@ const QC_LAMBERT =
 const WGS84 = 'EPSG:4326';
 const toWgs84 = proj4(QC_LAMBERT, WGS84);
 
-const SOURCE_URL =
-  process.env.QC_CLAIMS_URL ||
-  'https://documents-gestim.mines.gouv.qc.ca/cartes/Titres_miniers.zip';
+// Where to look for the claims file. The exact zip URL on GESTIM's distribution
+// site isn't documented and changes, so by default we scrape the index page for
+// the right .zip link. Set QC_CLAIMS_URL (a GitHub secret) to a direct file URL
+// to skip discovery entirely; set QC_CLAIMS_INDEX_URL to point discovery at a
+// different listing page.
+const SOURCE_URL = process.env.QC_CLAIMS_URL || '';
+const INDEX_URL = process.env.QC_CLAIMS_INDEX_URL || 'https://documents-gestim.mines.gouv.qc.ca/cartes';
+const BROWSER_UA =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
+  '(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -119,21 +127,63 @@ async function supabaseFetch(path, init) {
   return r;
 }
 
+// A real zip starts with the "PK" local-file/central-dir/empty-archive magic.
+// This lets us reject HTML error pages before handing them to the shapefile
+// parser (which otherwise dies with a cryptic "end of central directory" error).
+function isZip(buf) {
+  return buf.length > 4 && buf[0] === 0x50 && buf[1] === 0x4b &&
+    (buf[2] === 0x03 || buf[2] === 0x05 || buf[2] === 0x07);
+}
+
+async function fetchBuffer(url) {
+  const res = await fetch(url, {
+    headers: { 'User-Agent': BROWSER_UA, Accept: 'application/zip,application/octet-stream,text/html,*/*' },
+    redirect: 'follow',
+  });
+  const ct = res.headers.get('content-type') || '';
+  const buf = Buffer.from(await res.arrayBuffer());
+  return { res, ct, buf };
+}
+
+// Scrape the GESTIM distribution index for the claims/titres .zip link. The
+// exact filename isn't documented and changes, so we resolve it at run time and
+// log everything we find — if discovery can't pin it, the log shows the user
+// (and me) exactly what the page returned so QC_CLAIMS_URL can be set directly.
+async function discoverZipUrl(indexUrl) {
+  console.log(`Discovering claims zip from index page ${indexUrl} …`);
+  const { res, ct, buf } = await fetchBuffer(indexUrl);
+  const html = buf.toString('utf8');
+  console.log(`  index HTTP ${res.status}, content-type "${ct}", ${buf.length} bytes`);
+  const links = [...html.matchAll(/(?:href|src)\s*=\s*["']([^"']+\.zip[^"']*)["']/gi)].map((m) => m[1]);
+  const abs = [...new Set(links)].map((l) => { try { return new URL(l, indexUrl).href; } catch { return null; } }).filter(Boolean);
+  if (!abs.length) {
+    console.log('  no .zip links found on the index page. First 800 chars of the response:');
+    console.log('  ' + html.slice(0, 800).replace(/\n/g, '\n  '));
+    throw new Error('Could not auto-discover the claims zip. Inspect the page dump above, then set the QC_CLAIMS_URL secret to the direct .zip URL.');
+  }
+  console.log(`  found ${abs.length} zip link(s):`);
+  abs.forEach((u) => console.log(`    - ${u}`));
+  // Prefer a link that looks like mining titles/claims; else take the first.
+  const preferred = abs.find((u) => /titre|claim|mini|droit/i.test(u)) || abs[0];
+  console.log(`  selected: ${preferred}`);
+  return preferred;
+}
+
 async function main() {
   if (!SUPABASE_URL || !SERVICE_KEY) {
     throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY env vars are required.');
   }
 
-  console.log(`Downloading Quebec claims from ${SOURCE_URL} …`);
-  const res = await fetch(SOURCE_URL, {
-    headers: {
-      'User-Agent':
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-      Accept: 'application/octet-stream,application/zip,*/*',
-    },
-  });
-  if (!res.ok) throw new Error(`Download failed: HTTP ${res.status}`);
-  const buf = Buffer.from(await res.arrayBuffer());
+  const sourceUrl = SOURCE_URL || (await discoverZipUrl(INDEX_URL));
+
+  console.log(`Downloading Quebec claims from ${sourceUrl} …`);
+  const { res, ct, buf } = await fetchBuffer(sourceUrl);
+  if (!res.ok) throw new Error(`Download failed: HTTP ${res.status} (content-type "${ct}")`);
+  if (!isZip(buf)) {
+    console.log(`Response is not a zip (content-type "${ct}", ${buf.length} bytes). First 800 chars:`);
+    console.log('  ' + buf.toString('utf8').slice(0, 800).replace(/\n/g, '\n  '));
+    throw new Error('Downloaded file is not a zip — the source URL returned an error/HTML page. See the dump above and set QC_CLAIMS_URL.');
+  }
   console.log(`Downloaded ${(buf.length / 1e6).toFixed(1)} MB. Parsing shapefile …`);
 
   // shpjs accepts a zip buffer and returns GeoJSON (one FeatureCollection, or an
