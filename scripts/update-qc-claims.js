@@ -48,7 +48,10 @@ const toWgs84 = proj4(QC_LAMBERT, WGS84);
 // different listing page.
 const SOURCE_URL = process.env.QC_CLAIMS_URL || '';
 const CKAN_QUERY = process.env.QC_CLAIMS_CKAN_QUERY || 'titres miniers';
-const INDEX_URL = process.env.QC_CLAIMS_INDEX_URL || 'https://documents-gestim.mines.gouv.qc.ca/cartes';
+// The new documents-gestim.mines.gouv.qc.ca site is a client-rendered Angular app
+// (no links in raw HTML), so default to the legacy ASP listing, which is
+// server-rendered with real <a href> download links.
+const INDEX_URL = process.env.QC_CLAIMS_INDEX_URL || 'https://gestim.mines.gouv.qc.ca/ftp/cartes/carte_quebec_eng.asp';
 const BROWSER_UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
   '(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
@@ -203,21 +206,40 @@ async function discoverViaCkan(query) {
 // log everything we find — if discovery can't pin it, the log shows the user
 // (and me) exactly what the page returned so QC_CLAIMS_URL can be set directly.
 async function discoverZipUrl(indexUrl) {
-  console.log(`Discovering claims zip from index page ${indexUrl} …`);
+  console.log(`Discovering claims file from index page ${indexUrl} …`);
   const { res, ct, buf } = await fetchBuffer(indexUrl);
   const html = buf.toString('utf8');
   console.log(`  index HTTP ${res.status}, content-type "${ct}", ${buf.length} bytes`);
-  const links = [...html.matchAll(/(?:href|src)\s*=\s*["']([^"']+\.zip[^"']*)["']/gi)].map((m) => m[1]);
-  const abs = [...new Set(links)].map((l) => { try { return new URL(l, indexUrl).href; } catch { return null; } }).filter(Boolean);
-  if (!abs.length) {
-    console.log('  no .zip links found on the index page. First 800 chars of the response:');
+
+  // Collect every href/src on the page (resolved to absolute), so a single run
+  // reveals the real download structure even if the files aren't plain .zip.
+  const raw = [...html.matchAll(/(?:href|src)\s*=\s*["']([^"']+)["']/gi)].map((m) => m[1]);
+  const abs = [...new Set(raw)]
+    .map((l) => { try { return new URL(l, indexUrl).href; } catch { return null; } })
+    .filter(Boolean);
+
+  // Downloadable data files we know how to (or might) handle.
+  const dataLinks = abs.filter((u) => /\.(zip|gpkg|exe)(\?|$)/i.test(u));
+  if (dataLinks.length) {
+    console.log(`  found ${dataLinks.length} data link(s):`);
+    dataLinks.forEach((u) => console.log(`    - ${u}`));
+  } else {
+    console.log(`  no .zip/.gpkg/.exe links found. All ${abs.length} link(s) on the page:`);
+    abs.slice(0, 60).forEach((u) => console.log(`    - ${u}`));
+    if (abs.length > 60) console.log(`    … (${abs.length - 60} more)`);
+    console.log('  First 800 chars of the response:');
     console.log('  ' + html.slice(0, 800).replace(/\n/g, '\n  '));
     return null;
   }
-  console.log(`  found ${abs.length} zip link(s):`);
-  abs.forEach((u) => console.log(`    - ${u}`));
-  // Prefer a link that looks like mining titles/claims; else take the first.
-  const preferred = abs.find((u) => /titre|claim|mini|droit/i.test(u)) || abs[0];
+
+  // shpjs only handles zips; ignore .exe/.gpkg for selection (logged above so we
+  // can still see them and pin one via QC_CLAIMS_URL if needed).
+  const zips = dataLinks.filter((u) => /\.zip(\?|$)/i.test(u));
+  if (!zips.length) {
+    console.log('  data links exist but none are .zip — set QC_CLAIMS_URL to the right one above.');
+    return null;
+  }
+  const preferred = zips.find((u) => /titre|claim|mini|droit/i.test(u)) || zips[0];
   console.log(`  selected: ${preferred}`);
   return preferred;
 }
