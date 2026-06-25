@@ -48,10 +48,10 @@ const toWgs84 = proj4(QC_LAMBERT, WGS84);
 // different listing page.
 const SOURCE_URL = process.env.QC_CLAIMS_URL || '';
 const CKAN_QUERY = process.env.QC_CLAIMS_CKAN_QUERY || 'titres miniers';
-// The new documents-gestim.mines.gouv.qc.ca site is a client-rendered Angular app
-// (no links in raw HTML), so default to the legacy ASP listing, which is
-// server-rendered with real <a href> download links.
-const INDEX_URL = process.env.QC_CLAIMS_INDEX_URL || 'https://gestim.mines.gouv.qc.ca/ftp/cartes/carte_quebec_eng.asp';
+// The legacy ASP listing has been retired (404s); the only known surface left is
+// the new Angular distribution site. Its index.html has no links in the raw HTML
+// (client-rendered), so we instead introspect its JS bundle — see scrapeAngularApp.
+const INDEX_URL = process.env.QC_CLAIMS_INDEX_URL || 'https://documents-gestim.mines.gouv.qc.ca/cartes';
 const BROWSER_UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
   '(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
@@ -201,6 +201,76 @@ async function discoverViaCkan(query) {
   return preferred.url;
 }
 
+function absUrls(rawLinks, baseUrl) {
+  return [...new Set(rawLinks)]
+    .map((l) => { try { return new URL(l, baseUrl).href; } catch { return null; } })
+    .filter(Boolean);
+}
+
+// documents-gestim.mines.gouv.qc.ca serves a client-rendered Angular app — the
+// index.html itself has no download links, only <script src> tags for its JS
+// bundles. Those bundles have the app's real API routes/asset URLs baked in at
+// build time, so fetching and grepping them is a one-shot way to find the real
+// backend without guessing more page URLs by hand.
+const MAX_BUNDLES_TO_SCAN = 8;
+
+async function scrapeAngularBundle(html, baseUrl) {
+  const allScriptSrcs = absUrls(
+    [...html.matchAll(/<script[^>]+src\s*=\s*["']([^"']+)["']/gi)].map((m) => m[1]),
+    baseUrl
+  ).filter((u) => /\.js(\?|$)/i.test(u));
+  if (!allScriptSrcs.length) {
+    console.log('  no <script src> bundles found on the page either.');
+    return null;
+  }
+  const scriptSrcs = allScriptSrcs.slice(0, MAX_BUNDLES_TO_SCAN);
+  console.log(
+    `  inspecting ${scriptSrcs.length} JS bundle(s) for API/zip references` +
+    (allScriptSrcs.length > scriptSrcs.length ? ` (capped from ${allScriptSrcs.length})` : '') + ' …'
+  );
+
+  let combined = '';
+  for (const src of scriptSrcs) {
+    try {
+      const { res, buf } = await fetchBuffer(src);
+      console.log(`    - ${src} → HTTP ${res.status}, ${buf.length} bytes`);
+      if (res.ok) combined += buf.toString('utf8') + '\n';
+    } catch (e) {
+      console.log(`    - ${src} → failed: ${e.message}`);
+    }
+  }
+
+  const zipLiterals = [...new Set(
+    [...combined.matchAll(/["'`]([^"'`]*\.zip)["'`]/gi)].map((m) => m[1])
+  )];
+  const apiPaths = [...new Set(
+    [...combined.matchAll(/["'`](\/[a-zA-Z0-9_\-./]*\/(?:api|recherche|telechargement|download)[a-zA-Z0-9_\-./]*)["'`]/gi)].map((m) => m[1])
+  )];
+
+  if (zipLiterals.length) {
+    console.log(`  found ${zipLiterals.length} .zip string literal(s) in the bundles:`);
+    zipLiterals.slice(0, 30).forEach((u) => console.log(`    - ${u}`));
+  }
+  if (apiPaths.length) {
+    console.log(`  found ${apiPaths.length} candidate API path(s) in the bundles:`);
+    apiPaths.slice(0, 30).forEach((u) => console.log(`    - ${u}`));
+  }
+  if (!zipLiterals.length && !apiPaths.length) {
+    console.log('  no .zip literals or API paths found in the bundles.');
+    return null;
+  }
+
+  const zipUrls = absUrls(zipLiterals, baseUrl);
+  if (zipUrls.length) {
+    const preferred = zipUrls.find((u) => /titre|claim|mini|droit/i.test(u)) || zipUrls[0];
+    console.log(`  selected: ${preferred}`);
+    return preferred;
+  }
+  console.log('  no direct .zip URL — the app likely fetches its file list from the API path(s) above.');
+  console.log('  set QC_CLAIMS_URL once the right download URL is confirmed.');
+  return null;
+}
+
 // Scrape the GESTIM distribution index for the claims/titres .zip link. The
 // exact filename isn't documented and changes, so we resolve it at run time and
 // log everything we find — if discovery can't pin it, the log shows the user
@@ -213,10 +283,7 @@ async function discoverZipUrl(indexUrl) {
 
   // Collect every href/src on the page (resolved to absolute), so a single run
   // reveals the real download structure even if the files aren't plain .zip.
-  const raw = [...html.matchAll(/(?:href|src)\s*=\s*["']([^"']+)["']/gi)].map((m) => m[1]);
-  const abs = [...new Set(raw)]
-    .map((l) => { try { return new URL(l, indexUrl).href; } catch { return null; } })
-    .filter(Boolean);
+  const abs = absUrls([...html.matchAll(/(?:href|src)\s*=\s*["']([^"']+)["']/gi)].map((m) => m[1]), indexUrl);
 
   // Downloadable data files we know how to (or might) handle.
   const dataLinks = abs.filter((u) => /\.(zip|gpkg|exe)(\?|$)/i.test(u));
@@ -224,12 +291,8 @@ async function discoverZipUrl(indexUrl) {
     console.log(`  found ${dataLinks.length} data link(s):`);
     dataLinks.forEach((u) => console.log(`    - ${u}`));
   } else {
-    console.log(`  no .zip/.gpkg/.exe links found. All ${abs.length} link(s) on the page:`);
-    abs.slice(0, 60).forEach((u) => console.log(`    - ${u}`));
-    if (abs.length > 60) console.log(`    … (${abs.length - 60} more)`);
-    console.log('  First 800 chars of the response:');
-    console.log('  ' + html.slice(0, 800).replace(/\n/g, '\n  '));
-    return null;
+    console.log(`  no .zip/.gpkg/.exe links found directly on the page (${abs.length} total link(s)).`);
+    return await scrapeAngularBundle(html, indexUrl);
   }
 
   // shpjs only handles zips; ignore .exe/.gpkg for selection (logged above so we
