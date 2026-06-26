@@ -582,55 +582,29 @@ export default async function handler(req, res) {
   // service name or org id. Run from the live deployment only — this sandbox's
   // own egress policy blocks arcgis.com/gov.mb.ca hosts outright.
   if (schema === 'mb-discover') {
-    const TIGHT_KEYWORDS = /(mineral|mining\s*claim|quarry\s*disposition|mineral\s*disposition|exploration\s*licen[cs]e)/i;
+    // geoportal.gov.mb.ca's DCAT catalog was already checked and confirmed to
+    // have no mineral/mining-claims dataset (267 entries, none match) — so
+    // this only probes the rdmaps.gov.mb.ca host backing the official public
+    // mining-claims viewer (viewer=MapGallery_Geology.MapGallery), a different
+    // host than the broken maps.gov.mb.ca service.
     const probes = [
-      // The official public mining-claims map lives on rdmaps.gov.mb.ca, a
-      // different host than the broken maps.gov.mb.ca service — its Geocortex
-      // HTML5 Viewer (viewer=MapGallery_Geology.MapGallery) loads its map
-      // service list from one of these standard config endpoints.
       'https://rdmaps.gov.mb.ca/Geocortex/Essentials/REST/sites/MapGallery_Geology/viewers/MapGallery/virtualdirectory/Resources/Config/Default',
       'https://rdmaps.gov.mb.ca/Html5Viewer/Resources/Config/Default?site=MapGallery_Geology&viewer=MapGallery',
       'https://rdmaps.gov.mb.ca/arcgis/rest/services?f=json',
       'https://rdmaps.gov.mb.ca/arcgis/rest/services/Mineral_Dispositions/MapServer?f=json',
-      'https://geoportal.gov.mb.ca/api/feed/dcat-us/1.1.json',
-      'https://mli.gov.mb.ca/land_projects/mining.html',
     ];
     const attempts = [];
-    let matchedDatasets = [];
-    let allTitles = [];
     for (const u of probes) {
       const started = Date.now();
       try {
         const rr = await fetch(u, { headers: FALLBACK_FETCH_HEADERS, signal: AbortSignal.timeout(15000) });
         const body = await rr.text().catch(() => '');
-        const entry = { url: u, ok: rr.ok, status: rr.status, ms: Date.now() - started, contentType: rr.headers.get('content-type') };
-        if (rr.ok && /dcat-us/.test(u)) {
-          try {
-            const json = JSON.parse(body);
-            const datasets = Array.isArray(json.dataset) ? json.dataset : [];
-            allTitles = datasets.map((d) => d.title);
-            matchedDatasets = datasets
-              .filter((d) => TIGHT_KEYWORDS.test(d.title || '') || TIGHT_KEYWORDS.test(d.description || ''))
-              .map((d) => ({
-                title: d.title,
-                landingPage: d.landingPage,
-                restApi: (d.distribution || []).find((dd) => dd.format === 'ArcGIS GeoServices REST API')?.accessURL
-                  || (d.distribution || []).find((dd) => dd.format === 'ArcGIS GeoServices REST API')?.downloadURL
-                  || null,
-              }));
-            entry.totalDatasets = datasets.length;
-          } catch (e) {
-            entry.parseError = String(e.message || e);
-          }
-        } else {
-          entry.bodySnippet = body.slice(0, 500);
-        }
-        attempts.push(entry);
+        attempts.push({ url: u, ok: rr.ok, status: rr.status, ms: Date.now() - started, contentType: rr.headers.get('content-type'), bodySnippet: body.slice(0, 500) });
       } catch (e) {
         attempts.push({ url: u, error: String(e.name || e.message || e), ms: Date.now() - started });
       }
     }
-    return res.status(200).json({ attempts, matchedDatasets, allTitles });
+    return res.status(200).json({ attempts });
   }
 
   // Diagnostics: report resolved layer + fields for an ArcGIS province
