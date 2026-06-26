@@ -85,9 +85,9 @@ export async function renameCloudProject(id, name) {
   if (error) throw error;
 }
 
-// ── Templates ─────────────────────────────────────────────────────────────────
+// ── Brand Kits (stored in the `templates` table) ────────────────────────────
 
-export async function listTemplates() {
+export async function listBrandKits() {
   const user = await currentUser();
   const { data, error } = await requireSupabase()
     .from('templates')
@@ -98,7 +98,7 @@ export async function listTemplates() {
   return data || [];
 }
 
-export async function saveTemplate({ name, config, isDefault = false }) {
+export async function saveBrandKit({ name, config, isDefault = false }) {
   const user = await currentUser();
 
   if (isDefault) {
@@ -117,7 +117,7 @@ export async function saveTemplate({ name, config, isDefault = false }) {
   return data;
 }
 
-export async function updateTemplate(id, updates) {
+export async function updateBrandKit(id, updates) {
   const user = await currentUser();
   const { error } = await requireSupabase()
     .from('templates')
@@ -127,7 +127,7 @@ export async function updateTemplate(id, updates) {
   if (error) throw error;
 }
 
-export async function setDefaultTemplate(id) {
+export async function setDefaultBrandKit(id) {
   const user = await currentUser();
   await requireSupabase()
     .from('templates')
@@ -141,7 +141,7 @@ export async function setDefaultTemplate(id) {
   if (error) throw error;
 }
 
-export async function deleteTemplate(id) {
+export async function deleteBrandKit(id) {
   const user = await currentUser();
   const { error } = await requireSupabase()
     .from('templates')
@@ -151,7 +151,7 @@ export async function deleteTemplate(id) {
   if (error) throw error;
 }
 
-export async function getDefaultTemplate() {
+export async function getDefaultBrandKit() {
   const user = await currentUser();
   const { data, error } = await requireSupabase()
     .from('templates')
@@ -190,7 +190,7 @@ export async function loadSharedMap(id) {
   return data.state;
 }
 
-export const TEMPLATE_SAVEABLE_KEYS = [
+export const BRAND_KIT_SAVEABLE_KEYS = [
   // Style & theme
   'themeId', 'accentColor', 'titleBgColor', 'titleFgColor', 'panelBgColor', 'panelFgColor', 'templateId',
   // Logo
@@ -217,10 +217,10 @@ export const TEMPLATE_SAVEABLE_KEYS = [
   'markerDefaults', 'zoneDefaults',
 ];
 
-export function applyTemplateConfig(config, currentLayout) {
+export function applyBrandKitConfig(config, currentLayout) {
   if (!config) return currentLayout;
   const patch = {};
-  for (const key of TEMPLATE_SAVEABLE_KEYS) {
+  for (const key of BRAND_KIT_SAVEABLE_KEYS) {
     if (config[key] !== undefined) patch[key] = config[key];
   }
   // Merge fonts instead of overwriting so per-slot overrides are preserved
