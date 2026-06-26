@@ -86,6 +86,8 @@ import {
   saveAccountSettings,
   ACCOUNT_SETTINGS_KEYS,
   shareMap,
+  cloneSharedMapToCloud,
+  loadSharedMap,
 } from './utils/cloudStorage';
 import { useAuth } from './hooks/useAuth';
 import { supabase } from './lib/supabase';
@@ -685,7 +687,7 @@ export default function App() {
     if (window.location.pathname.startsWith('/map/')) return 'shared_view';
     return 'landing';
   });
-  const [sharedMapId] = useState(() => {
+  const [sharedMapId, setSharedMapId] = useState(() => {
     const m = window.location.pathname.match(/^\/map\/([^/]+)/);
     return m ? m[1] : null;
   });
@@ -3003,6 +3005,58 @@ export default function App() {
     setUploadStatus({ type: 'success', message: `Opened project: ${entry.name}` });
   };
 
+  // Fork a shared map's state into the signed-in user's account and open the new
+  // copy in the editor. The recipient gets an independent project; the sender's
+  // map is untouched.
+  const cloneSharedMapAndOpen = async (state) => {
+    const name = state?.layout?.title || 'Shared map';
+    const newId = await cloneSharedMapToCloud(state, name);
+    // Drop the /map/:id URL so a later refresh lands on the editor, not the viewer.
+    try { window.history.replaceState({}, '', '/'); } catch { /* noop */ }
+    setSharedMapId(null);
+    openProjectFromRecent({ id: newId, name, payload: state });
+    setScreen('editor');
+  };
+
+  // "Edit this map" on a shared view: clone immediately if signed in, otherwise
+  // remember the intent and open the auth modal — the resume effect below picks
+  // it up once a session exists (same tab sign-in OR return after email confirm).
+  const handleEditSharedCopy = async (state) => {
+    if (user) {
+      try {
+        await cloneSharedMapAndOpen(state);
+      } catch (err) {
+        setUploadStatus({ type: 'error', message: `Couldn't open a copy: ${err.message}` });
+      }
+      return;
+    }
+    if (sharedMapId) {
+      try { localStorage.setItem('pendingEditShareId', sharedMapId); } catch { /* noop */ }
+    }
+    setShowAuthFromGate(true);
+  };
+
+  // Resume a pending "edit a copy" once the user becomes authenticated while on
+  // the shared view (covers both in-tab sign-in and the email-confirm round-trip,
+  // where the page reloads on /map/:id and we re-fetch the state ourselves).
+  useEffect(() => {
+    if (screen !== 'shared_view' || !user || !sharedMapId) return;
+    let pending = null;
+    try { pending = localStorage.getItem('pendingEditShareId'); } catch { /* noop */ }
+    if (pending !== sharedMapId) return;
+    try { localStorage.removeItem('pendingEditShareId'); } catch { /* noop */ }
+    setShowAuthFromGate(false);
+    (async () => {
+      try {
+        const state = await loadSharedMap(sharedMapId);
+        if (state) await cloneSharedMapAndOpen(state);
+      } catch (err) {
+        setUploadStatus({ type: 'error', message: `Couldn't open a copy: ${err.message}` });
+      }
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [screen, user, sharedMapId]);
+
   const duplicateCurrentProject = async () => {
     const name = `${projectName || project.layout?.title || 'Untitled map'} Copy`;
     if (user) {
@@ -3100,7 +3154,17 @@ export default function App() {
   }
 
   if (screen === 'shared_view') {
-    return <SharedMapViewer mapId={sharedMapId} onExit={() => { window.location.href = '/'; }} />;
+    return (
+      <>
+        <SharedMapViewer
+          mapId={sharedMapId}
+          user={user}
+          onEditCopy={handleEditSharedCopy}
+          onExit={() => { window.location.href = '/'; }}
+        />
+        {showAuthFromGate && <AuthModal onClose={() => setShowAuthFromGate(false)} />}
+      </>
+    );
   }
 
   if (screen === 'landing') {

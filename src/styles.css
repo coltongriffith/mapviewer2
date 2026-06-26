@@ -2344,6 +2344,14 @@ body.is-dragging .template-zone .panel-delete-btn { opacity: 0 !important; }
   transition: background 0.15s;
 }
 .shared-map-cta-btn:hover { background: #1d4ed8; }
+.shared-map-bar-actions { display: flex; align-items: center; gap: 10px; }
+.shared-map-edit-btn {
+  background: transparent; color: #e2e8f0; border: 1px solid #475569;
+  border-radius: 6px; padding: 7px 16px; font-size: 13px; font-weight: 600;
+  cursor: pointer; transition: background 0.15s, border-color 0.15s;
+}
+.shared-map-edit-btn:hover { background: #334155; border-color: #64748b; }
+.shared-map-edit-btn:disabled { opacity: 0.6; cursor: default; }
 .shared-map-loading, .shared-map-error {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   height: 100vh; color: #94a3b8; font-family: system-ui, sans-serif; gap: 16px;

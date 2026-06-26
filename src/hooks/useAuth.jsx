@@ -34,7 +34,10 @@ export function AuthProvider({ children }) {
 
   async function signUp(email, password) {
     if (!supabase) throw new Error('Auth not configured');
-    const { error } = await supabase.auth.signUp({ email, password });
+    // Return the user to the page they signed up from (e.g. a /map/:id share
+    // link) after they confirm their email, so a pending "edit a copy" resumes.
+    const emailRedirectTo = typeof window !== 'undefined' ? window.location.href : undefined;
+    const { error } = await supabase.auth.signUp({ email, password, options: { emailRedirectTo } });
     if (error) throw error;
   }
 
