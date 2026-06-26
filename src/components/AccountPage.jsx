@@ -2,9 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import {
   listCloudProjects,
+  loadCloudProject,
+  saveCloudProject,
   renameCloudProject,
   deleteCloudProject,
   listBrandKits,
+  saveBrandKit,
   setDefaultBrandKit,
   updateBrandKit,
   deleteBrandKit,
@@ -22,7 +25,7 @@ function fmtRelative(iso) {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-function ProjectCard({ entry, onOpen, onRename, onDelete }) {
+function ProjectCard({ entry, onOpen, onRename, onDelete, onDuplicate }) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(entry.name);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -61,6 +64,7 @@ function ProjectCard({ entry, onOpen, onRename, onDelete }) {
         ) : (
           <>
             <button className="acct-icon-btn" type="button" title="Rename" onClick={() => setEditing(true)}>✎</button>
+            <button className="acct-icon-btn" type="button" title="Duplicate" onClick={() => onDuplicate(entry)}>⧉</button>
             <button className="acct-icon-btn danger" type="button" title="Delete" onClick={() => setConfirmDelete(true)}>✕</button>
           </>
         )}
@@ -69,7 +73,7 @@ function ProjectCard({ entry, onOpen, onRename, onDelete }) {
   );
 }
 
-function BrandKitCard({ kit, onApply, onSetDefault, onRename, onDelete }) {
+function BrandKitCard({ kit, onApply, onUse, onSetDefault, onRename, onDelete, onDuplicate }) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(kit.name);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -105,10 +109,12 @@ function BrandKitCard({ kit, onApply, onSetDefault, onRename, onDelete }) {
         ) : (
           <>
             <button className="btn compact" type="button" onClick={() => onApply(kit)}>Apply</button>
+            <button className="acct-icon-btn" title="New project from this kit" type="button" onClick={() => onUse(kit)}>＋</button>
             {!kit.is_default && (
               <button className="acct-icon-btn" title="Set as default" type="button" onClick={() => onSetDefault(kit.id)}>★</button>
             )}
             <button className="acct-icon-btn" title="Rename" type="button" onClick={() => setEditing(true)}>✎</button>
+            <button className="acct-icon-btn" title="Duplicate" type="button" onClick={() => onDuplicate(kit)}>⧉</button>
             <button className="acct-icon-btn danger" title="Delete" type="button" onClick={() => setConfirmDelete(true)}>✕</button>
           </>
         )}
@@ -117,7 +123,56 @@ function BrandKitCard({ kit, onApply, onSetDefault, onRename, onDelete }) {
   );
 }
 
-export default function AccountPage({ onOpenProject, onNewProject, onExit, onApplyBrandKit }) {
+const SETTINGS_FIELDS = [
+  { key: 'companyName', label: 'Company name', placeholder: 'Acme Exploration Ltd.' },
+  { key: 'qpName', label: 'Qualified Person', placeholder: 'Jane Doe, P.Geo.' },
+  { key: 'qpCredentials', label: 'QP credentials', placeholder: 'P.Geo., M.Sc.' },
+  { key: 'projectionName', label: 'Projection', placeholder: 'NAD83 / UTM Zone 15N' },
+];
+
+function AccountSettingsCard({ settings, onSave }) {
+  const [form, setForm] = useState(() => ({ ...settings }));
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => { setForm({ ...settings }); }, [settings]);
+
+  const dirty = SETTINGS_FIELDS.some((f) => (form[f.key] || '') !== (settings[f.key] || ''));
+
+  const save = () => {
+    const clean = {};
+    for (const f of SETTINGS_FIELDS) {
+      const v = (form[f.key] || '').trim();
+      if (v) clean[f.key] = v;
+    }
+    onSave(clean);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  return (
+    <div className="acct-settings-card">
+      <div className="acct-settings-grid">
+        {SETTINGS_FIELDS.map((f) => (
+          <label key={f.key} className="acct-settings-field">
+            <span>{f.label}</span>
+            <input
+              type="text"
+              value={form[f.key] || ''}
+              placeholder={f.placeholder}
+              onChange={(e) => setForm((prev) => ({ ...prev, [f.key]: e.target.value }))}
+            />
+          </label>
+        ))}
+      </div>
+      <div className="acct-settings-actions">
+        <button className="btn" type="button" onClick={save} disabled={!dirty}>Save defaults</button>
+        {saved && <span className="acct-settings-saved">✓ Saved</span>}
+      </div>
+    </div>
+  );
+}
+
+export default function AccountPage({ onOpenProject, onNewProject, onExit, onApplyBrandKit, onUseKit, accountSettings = {}, onSaveSettings }) {
   const { user, signOut } = useAuth();
   const [projects, setProjects] = useState([]);
   const [brandKits, setBrandKits] = useState([]);
@@ -135,6 +190,21 @@ export default function AccountPage({ onOpenProject, onNewProject, onExit, onApp
   const refreshProjects = () => listCloudProjects().then(setProjects).catch(() => {});
   const refreshBrandKits = () => listBrandKits().then(setBrandKits).catch(() => {});
 
+  const duplicateProject = async (entry) => {
+    try {
+      const full = await loadCloudProject(entry.id);
+      await saveCloudProject({ id: null, name: `${entry.name} Copy`, payload: full.payload });
+      refreshProjects();
+    } catch { /* ignore — list simply won't gain the copy */ }
+  };
+
+  const duplicateKit = async (kit) => {
+    try {
+      await saveBrandKit({ name: `${kit.name} Copy`, config: kit.config || {} });
+      refreshBrandKits();
+    } catch { /* ignore */ }
+  };
+
   return (
     <div className="acct-shell">
       <header className="acct-header">
@@ -149,6 +219,14 @@ export default function AccountPage({ onOpenProject, onNewProject, onExit, onApp
       </header>
 
       <main className="acct-main">
+        <section className="acct-section">
+          <div className="acct-section-header">
+            <h2>Brand defaults</h2>
+          </div>
+          <p className="acct-section-hint">Used to pre-fill every new project you start.</p>
+          <AccountSettingsCard settings={accountSettings} onSave={onSaveSettings} />
+        </section>
+
         <section className="acct-section">
           <div className="acct-section-header">
             <h2>My Projects</h2>
@@ -167,6 +245,7 @@ export default function AccountPage({ onOpenProject, onNewProject, onExit, onApp
                   onOpen={onOpenProject}
                   onRename={(id, name) => { renameCloudProject(id, name).then(refreshProjects).catch(() => {}); }}
                   onDelete={(id) => { deleteCloudProject(id).then(refreshProjects).catch(() => {}); }}
+                  onDuplicate={duplicateProject}
                 />
               ))}
             </div>
@@ -188,9 +267,11 @@ export default function AccountPage({ onOpenProject, onNewProject, onExit, onApp
                   key={kit.id}
                   kit={kit}
                   onApply={(k) => onApplyBrandKit(k.config || {})}
+                  onUse={(k) => onUseKit(k.config || {})}
                   onSetDefault={(id) => { setDefaultBrandKit(id).then(refreshBrandKits).catch(() => {}); }}
                   onRename={(id, name) => { updateBrandKit(id, { name }).then(refreshBrandKits).catch(() => {}); }}
                   onDelete={(id) => { deleteBrandKit(id).then(refreshBrandKits).catch(() => {}); }}
+                  onDuplicate={duplicateKit}
                 />
               ))}
             </div>

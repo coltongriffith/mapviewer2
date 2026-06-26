@@ -201,6 +201,36 @@ export async function loadSharedMap(id) {
   return data.state;
 }
 
+// ── Account settings (one row per user in `account_settings`) ───────────────
+// Reusable defaults (company, QP info, projection) seeded into new projects.
+
+export async function getAccountSettings() {
+  const user = await currentUser();
+  const { data, error } = await requireSupabase()
+    .from('account_settings')
+    .select('settings')
+    .eq('user_id', user.id)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.settings || {};
+}
+
+export async function saveAccountSettings(settings) {
+  const user = await currentUser();
+  const { error } = await requireSupabase()
+    .from('account_settings')
+    .upsert(
+      { user_id: user.id, settings, updated_at: new Date().toISOString() },
+      { onConflict: 'user_id' },
+    );
+  if (error) throw error;
+  return settings;
+}
+
+// Fields the account settings panel manages; also the keys merged into new
+// projects' layout so a long-time user's company/QP defaults pre-fill.
+export const ACCOUNT_SETTINGS_KEYS = ['companyName', 'qpName', 'qpCredentials', 'projectionName'];
+
 export const BRAND_KIT_SAVEABLE_KEYS = [
   // Style & theme
   'themeId', 'accentColor', 'titleBgColor', 'titleFgColor', 'panelBgColor', 'panelFgColor', 'templateId',

@@ -64,6 +64,8 @@ import {
   saveProjectRecord,
   touchLastOpenedProject,
   updateProjectThumbnailRecord,
+  getAccountSettingsLocal,
+  saveAccountSettingsLocal,
 } from './utils/projectStorage';
 import {
   deleteCloudProject,
@@ -80,6 +82,9 @@ import {
   updateProjectThumbnail,
   applyBrandKitConfig,
   BRAND_KIT_SAVEABLE_KEYS,
+  getAccountSettings,
+  saveAccountSettings,
+  ACCOUNT_SETTINGS_KEYS,
   shareMap,
 } from './utils/cloudStorage';
 import { useAuth } from './hooks/useAuth';
@@ -88,6 +93,7 @@ import { renderBrandKitSwatch } from './utils/brandKitSwatch';
 import { captureProjectThumbnail } from './utils/thumbnailCapture';
 import UserMenu from './components/UserMenu';
 import AuthModal from './components/AuthModal';
+import ColorField from './components/ColorField';
 import { CORNER_KEY, getCornerLayout, moveToCorner, moveToCornerFirst, moveToCornerBeside, findElement } from './utils/cornerLayout';
 
 const SAMPLE_LOGO_SVG = [
@@ -424,6 +430,22 @@ function selectValue(options, value, fallback = 'Inter') {
   return options[value] ? value : fallback;
 }
 
+// Font dropdown that surfaces the default brand kit's fonts in a "Brand kit"
+// optgroup at the top, so applying a brand font is one click. Falls back to the
+// plain FONT_OPTIONS list when no brand fonts are available.
+function FontSelect({ value, brandFonts = [], onChange }) {
+  return (
+    <select value={selectValue(FONT_OPTIONS, value)} onChange={onChange}>
+      {brandFonts.length > 0 && (
+        <optgroup label="Brand kit">
+          {brandFonts.map((f) => <option key={`brand-${f}`} value={f}>{f} (brand)</option>)}
+        </optgroup>
+      )}
+      {Object.entries(FONT_OPTIONS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+    </select>
+  );
+}
+
 function initialWorkspaceState() {
   const base = createInitialProjectState();
   const fallback = {
@@ -636,6 +658,7 @@ export default function App() {
   const [showBrandKitManager, setShowBrandKitManager] = useState(false);
   const [showAuthFromGate, setShowAuthFromGate] = useState(false);
   const [cloudTemplates, setCloudTemplates] = useState([]);
+  const [accountSettings, setAccountSettings] = useState({});
   const [savingTemplate, setSavingTemplate] = useState(false);
   const [savingTemplateName, setSavingTemplateName] = useState(null);
   const [renamingTemplateId, setRenamingTemplateId] = useState(null);
@@ -803,6 +826,42 @@ export default function App() {
     return Object.keys(overrides).length ? { ...base, ...overrides } : base;
   }, [project.layout?.themeId, project.layout?.accentColor, project.layout?.titleBgColor, project.layout?.titleFgColor, project.layout?.panelBgColor, project.layout?.panelFgColor]);
 
+  // Brand palette shown as one-click swatches on every color picker: the
+  // current project's 5 theme colors + the default brand kit's 5 colors,
+  // deduped by hex. Only valid #hex values are kept (skips rgba theme tokens).
+  const brandColors = useMemo(() => {
+    const HEX = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
+    const layout = project.layout || {};
+    const defaultKit = cloudTemplates.find((t) => t.is_default)?.config || {};
+    const fields = [
+      ['accentColor', 'Accent'],
+      ['titleBgColor', 'Title bg'],
+      ['titleFgColor', 'Title text'],
+      ['panelBgColor', 'Panel bg'],
+      ['panelFgColor', 'Panel text'],
+    ];
+    const out = [];
+    const seen = new Set();
+    const add = (hex, label) => {
+      if (!hex || !HEX.test(hex)) return;
+      const key = hex.toLowerCase();
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push({ hex, label });
+    };
+    // Project theme colors first (what the user is actively working with)
+    for (const [key, label] of fields) add(layout[key], label);
+    // Then the default brand kit's colors
+    for (const [key, label] of fields) add(defaultKit[key], `Kit ${label.toLowerCase()}`);
+    return out;
+  }, [project.layout?.accentColor, project.layout?.titleBgColor, project.layout?.titleFgColor, project.layout?.panelBgColor, project.layout?.panelFgColor, cloudTemplates]);
+
+  // Distinct fonts from the default brand kit, surfaced in the font pickers.
+  const brandFonts = useMemo(() => {
+    const kitFonts = cloudTemplates.find((t) => t.is_default)?.config?.fonts || {};
+    return [...new Set(Object.values(kitFonts).filter((f) => f && FONT_OPTIONS[f]))];
+  }, [cloudTemplates]);
+
   useEffect(() => {
     if (!bootstrappedRef.current) {
       bootstrappedRef.current = true;
@@ -917,6 +976,36 @@ export default function App() {
     }).catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
+
+  // Load account-level defaults (company/QP/projection): from the cloud when
+  // signed in, otherwise from the local mirror for anonymous users.
+  useEffect(() => {
+    if (user) {
+      getAccountSettings().then(setAccountSettings).catch(() => {});
+    } else {
+      setAccountSettings(getAccountSettingsLocal());
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+
+  // Merge the saved account defaults into a fresh layout (only non-empty fields).
+  const seedLayoutWithSettings = (layout) => {
+    const patch = {};
+    for (const k of ACCOUNT_SETTINGS_KEYS) {
+      if (accountSettings[k]) patch[k] = accountSettings[k];
+    }
+    return Object.keys(patch).length ? { ...layout, ...patch } : layout;
+  };
+
+  const handleSaveAccountSettings = async (next) => {
+    setAccountSettings(next);
+    try {
+      if (user) await saveAccountSettings(next);
+      else saveAccountSettingsLocal(next);
+    } catch (err) {
+      setUploadStatus({ type: 'error', message: `Could not save settings: ${err.message}` });
+    }
+  };
 
   useEffect(() => {
     const handler = () => setUploadStatus({
@@ -2913,7 +3002,8 @@ export default function App() {
 
 
   const startNewProject = () => {
-    const blank = createInitialProjectState();
+    const base = createInitialProjectState();
+    const blank = { ...base, layout: seedLayoutWithSettings(base.layout) };
     setProject(blank);
     setProjectId(null);
     setProjectName('Untitled map');
@@ -2967,6 +3057,13 @@ export default function App() {
             updateLayout(applyBrandKitConfig(config, project.layout));
             setScreen('editor');
           }}
+          onUseKit={(config) => {
+            startNewProject();
+            updateLayout(applyBrandKitConfig(config, createInitialProjectState().layout));
+            setScreen('editor');
+          }}
+          accountSettings={accountSettings}
+          onSaveSettings={handleSaveAccountSettings}
         />
       </React.Suspense>
     );
@@ -3140,7 +3237,7 @@ export default function App() {
               {(project.layout.basemap === 'blank') && (
                 <div className="control-row inline-2" style={{ marginTop: 8 }}>
                   <label>Background Color</label>
-                  <input type="color" value={project.layout.blankBg || '#ffffff'} onChange={(e) => updateLayout({ blankBg: e.target.value })} />
+                  <ColorField value={project.layout.blankBg || '#ffffff'} onChange={(e) => updateLayout({ blankBg: e.target.value })} brandColors={brandColors} />
                 </div>
               )}
             </div>
@@ -3228,11 +3325,11 @@ export default function App() {
               <div className="control-row inline-2">
                 <div>
                   <label>{isPointStyledLayer(selectedLayer) ? 'Point Border' : 'Outline Color'}</label>
-                  <input type="color" value={selectedLayer.style?.stroke || selectedLayer.style?.markerColor || '#2563eb'} onChange={(e) => { const id = selectedLayer.id, val = e.target.value; clearTimeout(layerStyleDebounceRef.current); layerStyleDebounceRef.current = setTimeout(() => updateLayer(id, { style: { stroke: val, markerColor: val } }), 50); }} />
+                  <ColorField value={selectedLayer.style?.stroke || selectedLayer.style?.markerColor || '#2563eb'} onChange={(e) => { const id = selectedLayer.id, val = e.target.value; clearTimeout(layerStyleDebounceRef.current); layerStyleDebounceRef.current = setTimeout(() => updateLayer(id, { style: { stroke: val, markerColor: val } }), 50); }} brandColors={brandColors} />
                 </div>
                 <div>
                   <label>{isPointStyledLayer(selectedLayer) ? 'Point Fill' : 'Fill Color'}</label>
-                  <input type="color" value={selectedLayer.style?.fill || selectedLayer.style?.markerFill || '#93c5fd'} onChange={(e) => { const id = selectedLayer.id, val = e.target.value; clearTimeout(layerStyleDebounceRef.current); layerStyleDebounceRef.current = setTimeout(() => updateLayer(id, { style: { fill: val, markerFill: val } }), 50); }} />
+                  <ColorField value={selectedLayer.style?.fill || selectedLayer.style?.markerFill || '#93c5fd'} onChange={(e) => { const id = selectedLayer.id, val = e.target.value; clearTimeout(layerStyleDebounceRef.current); layerStyleDebounceRef.current = setTimeout(() => updateLayer(id, { style: { fill: val, markerFill: val } }), 50); }} brandColors={brandColors} />
                 </div>
               </div>
               {isPointStyledLayer(selectedLayer) ? (
@@ -3495,28 +3592,28 @@ export default function App() {
                   </div>
                   <div>
                     <label>Chip Color</label>
-                    <input type="color" value={selectedFeature.badgeColor || '#d97706'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, badgeColor: e.target.value }))} />
+                    <ColorField value={selectedFeature.badgeColor || '#d97706'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, badgeColor: e.target.value }))} brandColors={brandColors} />
                   </div>
                 </div>
               )}
               <div className="control-row inline-2">
                 <div>
                   <label>Background</label>
-                  <input type="color" value={selectedFeature.style?.background || '#ffffff'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, style: { ...(prev.style || {}), background: e.target.value } }))} />
+                  <ColorField value={selectedFeature.style?.background || '#ffffff'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, style: { ...(prev.style || {}), background: e.target.value } }))} brandColors={brandColors} />
                 </div>
                 <div>
                   <label>Border</label>
-                  <input type="color" value={selectedFeature.style?.border || '#102640'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, style: { ...(prev.style || {}), border: e.target.value } }))} />
+                  <ColorField value={selectedFeature.style?.border || '#102640'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, style: { ...(prev.style || {}), border: e.target.value } }))} brandColors={brandColors} />
                 </div>
               </div>
               <div className="control-row inline-2">
                 <div>
                   <label>Text</label>
-                  <input type="color" value={selectedFeature.style?.textColor || '#0f172a'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, style: { ...(prev.style || {}), textColor: e.target.value } }))} />
+                  <ColorField value={selectedFeature.style?.textColor || '#0f172a'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, style: { ...(prev.style || {}), textColor: e.target.value } }))} brandColors={brandColors} />
                 </div>
                 <div>
                   <label>Subtext</label>
-                  <input type="color" value={selectedFeature.style?.subtextColor || '#475569'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, style: { ...(prev.style || {}), subtextColor: e.target.value } }))} />
+                  <ColorField value={selectedFeature.style?.subtextColor || '#475569'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, style: { ...(prev.style || {}), subtextColor: e.target.value } }))} brandColors={brandColors} />
                 </div>
               </div>
               <div className="control-row inline-2">
@@ -3578,7 +3675,7 @@ export default function App() {
                           </div>
                           <div>
                             <label>Chip Color</label>
-                            <input type="color" value={callout.badgeColor || '#d97706'} onChange={(e) => updateCallout(callout.id, { badgeColor: e.target.value })} />
+                            <ColorField value={callout.badgeColor || '#d97706'} onChange={(e) => updateCallout(callout.id, { badgeColor: e.target.value })} brandColors={brandColors} />
                           </div>
                         </div>
                       )}
@@ -3587,21 +3684,21 @@ export default function App() {
                           <div className="control-row inline-2">
                             <div>
                               <label>Background</label>
-                              <input type="color" value={callout.style?.background || '#ffffff'} onChange={(e) => updateCallout(callout.id, { style: { ...(callout.style || {}), background: e.target.value } })} />
+                              <ColorField value={callout.style?.background || '#ffffff'} onChange={(e) => updateCallout(callout.id, { style: { ...(callout.style || {}), background: e.target.value } })} brandColors={brandColors} />
                             </div>
                             <div>
                               <label>Border / Line</label>
-                              <input type="color" value={callout.style?.border || '#102640'} onChange={(e) => updateCallout(callout.id, { style: { ...(callout.style || {}), border: e.target.value } })} />
+                              <ColorField value={callout.style?.border || '#102640'} onChange={(e) => updateCallout(callout.id, { style: { ...(callout.style || {}), border: e.target.value } })} brandColors={brandColors} />
                             </div>
                           </div>
                           <div className="control-row inline-2">
                             <div>
                               <label>Text Color</label>
-                              <input type="color" value={callout.style?.textColor || '#0f172a'} onChange={(e) => updateCallout(callout.id, { style: { ...(callout.style || {}), textColor: e.target.value } })} />
+                              <ColorField value={callout.style?.textColor || '#0f172a'} onChange={(e) => updateCallout(callout.id, { style: { ...(callout.style || {}), textColor: e.target.value } })} brandColors={brandColors} />
                             </div>
                             <div>
                               <label>Subtext Color</label>
-                              <input type="color" value={callout.style?.subtextColor || '#475569'} onChange={(e) => updateCallout(callout.id, { style: { ...(callout.style || {}), subtextColor: e.target.value } })} />
+                              <ColorField value={callout.style?.subtextColor || '#475569'} onChange={(e) => updateCallout(callout.id, { style: { ...(callout.style || {}), subtextColor: e.target.value } })} brandColors={brandColors} />
                             </div>
                           </div>
                           <div className="control-row inline-2">
@@ -3688,7 +3785,7 @@ export default function App() {
                 </div>
                 <div>
                   <label>Color</label>
-                  <input type="color" value={selectedMarker.color || '#1e293b'} onChange={(e) => updateMarker(selectedMarker.id, { color: e.target.value })} />
+                  <ColorField value={selectedMarker.color || '#1e293b'} onChange={(e) => updateMarker(selectedMarker.id, { color: e.target.value })} brandColors={brandColors} />
                 </div>
               </div>
               <button className="secondary-btn" type="button" onClick={() => { setProject((prev) => ({ ...prev, markers: prev.markers.filter((m) => m.id !== selectedMarker.id) })); setSelectedFeature(null); }}>Remove Label</button>
@@ -3706,7 +3803,7 @@ export default function App() {
                 </div>
                 <div>
                   <label>Color</label>
-                  <input type="color" value={selectedMarker.color} onChange={(e) => updateMarker(selectedMarker.id, { color: e.target.value })} />
+                  <ColorField value={selectedMarker.color} onChange={(e) => updateMarker(selectedMarker.id, { color: e.target.value })} brandColors={brandColors} />
                 </div>
               </div>
               <div className="control-row inline-2">
@@ -3738,7 +3835,7 @@ export default function App() {
                     </div>
                     <div>
                       <label>Ring Color</label>
-                      <input type="color" value={selectedEllipse.color || '#dc2626'} onChange={(e) => updateEllipse(selectedEllipse.id, { color: e.target.value })} />
+                      <ColorField value={selectedEllipse.color || '#dc2626'} onChange={(e) => updateEllipse(selectedEllipse.id, { color: e.target.value })} brandColors={brandColors} />
                     </div>
                   </div>
                   <div className="control-row">
@@ -3758,7 +3855,7 @@ export default function App() {
                   <div className="control-row inline-2">
                     <div>
                       <label>Label Color</label>
-                      <input type="color" value={selectedEllipse.labelColor || selectedEllipse.color || '#dc2626'} onChange={(e) => updateEllipse(selectedEllipse.id, { labelColor: e.target.value })} />
+                      <ColorField value={selectedEllipse.labelColor || selectedEllipse.color || '#dc2626'} onChange={(e) => updateEllipse(selectedEllipse.id, { labelColor: e.target.value })} brandColors={brandColors} />
                     </div>
                     <label className="toggle-row" style={{ marginTop: 0 }}>
                       <input type="checkbox" checked={selectedEllipse.labelBold !== false} onChange={(e) => updateEllipse(selectedEllipse.id, { labelBold: e.target.checked })} />
@@ -3798,7 +3895,7 @@ export default function App() {
                     </div>
                     <div>
                       <label>Color</label>
-                      <input type="color" value={selectedEllipse.color} onChange={(e) => updateEllipse(selectedEllipse.id, { color: e.target.value })} />
+                      <ColorField value={selectedEllipse.color} onChange={(e) => updateEllipse(selectedEllipse.id, { color: e.target.value })} brandColors={brandColors} />
                     </div>
                   </div>
                 </>
@@ -3818,7 +3915,7 @@ export default function App() {
                   <div className="control-row inline-2">
                     <div>
                       <label>Shade Color</label>
-                      <input type="color" value={selectedEllipse.outsideShadeColor || '#000000'} onChange={(e) => updateEllipse(selectedEllipse.id, { outsideShadeColor: e.target.value })} />
+                      <ColorField value={selectedEllipse.outsideShadeColor || '#000000'} onChange={(e) => updateEllipse(selectedEllipse.id, { outsideShadeColor: e.target.value })} brandColors={brandColors} />
                     </div>
                     <div>
                       <label>Opacity</label>
@@ -3851,7 +3948,7 @@ export default function App() {
               <div className="control-row inline-2">
                 <div>
                   <label>Color</label>
-                  <input type="color" value={selectedPolygon.color || '#000000'} onChange={(e) => updatePolygon(selectedPolygon.id, { color: e.target.value })} />
+                  <ColorField value={selectedPolygon.color || '#000000'} onChange={(e) => updatePolygon(selectedPolygon.id, { color: e.target.value })} brandColors={brandColors} />
                 </div>
                 <div>
                   <label>Stroke Width</label>
@@ -3887,7 +3984,7 @@ export default function App() {
                   <div className="control-row inline-2">
                     <div>
                       <label>Shade Color</label>
-                      <input type="color" value={selectedPolygon.outsideShadeColor || '#000000'} onChange={(e) => updatePolygon(selectedPolygon.id, { outsideShadeColor: e.target.value })} />
+                      <ColorField value={selectedPolygon.outsideShadeColor || '#000000'} onChange={(e) => updatePolygon(selectedPolygon.id, { outsideShadeColor: e.target.value })} brandColors={brandColors} />
                     </div>
                     <div>
                       <label>Opacity</label>
@@ -3908,8 +4005,8 @@ export default function App() {
                 <div className="control-section-title">Distance Line</div>
                 <div className="control-row">
                   <label>Color</label>
-                  <input type="color" value={dl.color || '#e11d48'}
-                    onChange={(e) => updateDistanceLine(dl.id, { color: e.target.value })} />
+                  <ColorField value={dl.color || '#e11d48'}
+                    onChange={(e) => updateDistanceLine(dl.id, { color: e.target.value })} brandColors={brandColors} />
                 </div>
                 <div className="control-row">
                   <label>Units</label>
@@ -3951,38 +4048,53 @@ export default function App() {
             <div className="color-overrides-grid">
               <div className="color-override-cell">
                 <label>Title bg</label>
-                <div className="color-swatch-wrap">
-                  <input type="color" className="swatch-input" value={project.layout.titleBgColor || themeTokens.titleFill?.replace(/rgba?\([^)]+\)/i, '') || '#0c1a35'} onChange={(e) => updateLayout({ titleBgColor: e.target.value })} title="Title block background" />
-                  {project.layout.titleBgColor && <button className="swatch-reset" type="button" onClick={() => updateLayout({ titleBgColor: null })} title="Reset">✕</button>}
-                </div>
+                <ColorField
+                  value={project.layout.titleBgColor || themeTokens.titleFill?.replace(/rgba?\([^)]+\)/i, '') || '#0c1a35'}
+                  onChange={(e) => updateLayout({ titleBgColor: e.target.value })}
+                  title="Title block background"
+                  brandColors={brandColors}
+                  onReset={project.layout.titleBgColor ? () => updateLayout({ titleBgColor: null }) : undefined}
+                />
               </div>
               <div className="color-override-cell">
                 <label>Title text</label>
-                <div className="color-swatch-wrap">
-                  <input type="color" className="swatch-input" value={project.layout.titleFgColor || themeTokens.titleText || '#ffffff'} onChange={(e) => updateLayout({ titleFgColor: e.target.value })} title="Title text color" />
-                  {project.layout.titleFgColor && <button className="swatch-reset" type="button" onClick={() => updateLayout({ titleFgColor: null })} title="Reset">✕</button>}
-                </div>
+                <ColorField
+                  value={project.layout.titleFgColor || themeTokens.titleText || '#ffffff'}
+                  onChange={(e) => updateLayout({ titleFgColor: e.target.value })}
+                  title="Title text color"
+                  brandColors={brandColors}
+                  onReset={project.layout.titleFgColor ? () => updateLayout({ titleFgColor: null }) : undefined}
+                />
               </div>
               <div className="color-override-cell">
                 <label>Panel bg</label>
-                <div className="color-swatch-wrap">
-                  <input type="color" className="swatch-input" value={project.layout.panelBgColor || '#ffffff'} onChange={(e) => updateLayout({ panelBgColor: e.target.value })} title="Overlay panel background" />
-                  {project.layout.panelBgColor && <button className="swatch-reset" type="button" onClick={() => updateLayout({ panelBgColor: null })} title="Reset">✕</button>}
-                </div>
+                <ColorField
+                  value={project.layout.panelBgColor || '#ffffff'}
+                  onChange={(e) => updateLayout({ panelBgColor: e.target.value })}
+                  title="Overlay panel background"
+                  brandColors={brandColors}
+                  onReset={project.layout.panelBgColor ? () => updateLayout({ panelBgColor: null }) : undefined}
+                />
               </div>
               <div className="color-override-cell">
                 <label>Panel text</label>
-                <div className="color-swatch-wrap">
-                  <input type="color" className="swatch-input" value={project.layout.panelFgColor || themeTokens.bodyText || '#1e293b'} onChange={(e) => updateLayout({ panelFgColor: e.target.value })} title="Panel text color" />
-                  {project.layout.panelFgColor && <button className="swatch-reset" type="button" onClick={() => updateLayout({ panelFgColor: null })} title="Reset">✕</button>}
-                </div>
+                <ColorField
+                  value={project.layout.panelFgColor || themeTokens.bodyText || '#1e293b'}
+                  onChange={(e) => updateLayout({ panelFgColor: e.target.value })}
+                  title="Panel text color"
+                  brandColors={brandColors}
+                  onReset={project.layout.panelFgColor ? () => updateLayout({ panelFgColor: null }) : undefined}
+                />
               </div>
               <div className="color-override-cell">
                 <label>Accent</label>
-                <div className="color-swatch-wrap">
-                  <input type="color" className="swatch-input" value={project.layout.accentColor || themeTokens.titleAccent || '#2563eb'} onChange={(e) => updateLayout({ accentColor: e.target.value })} title="Accent color (stripe, callout borders)" />
-                  {project.layout.accentColor && <button className="swatch-reset" type="button" onClick={() => updateLayout({ accentColor: null })} title="Reset">✕</button>}
-                </div>
+                <ColorField
+                  value={project.layout.accentColor || themeTokens.titleAccent || '#2563eb'}
+                  onChange={(e) => updateLayout({ accentColor: e.target.value })}
+                  title="Accent color (stripe, callout borders)"
+                  brandColors={brandColors}
+                  onReset={project.layout.accentColor ? () => updateLayout({ accentColor: null }) : undefined}
+                />
               </div>
               {(project.layout.titleBgColor || project.layout.titleFgColor || project.layout.panelBgColor || project.layout.panelFgColor || project.layout.accentColor) && (
                 <div className="color-override-cell">
@@ -4001,12 +4113,12 @@ export default function App() {
               <summary>Fonts</summary>
               <div className="sub-details-body">
                 <div className="control-row inline-2">
-                  <div><label>Title</label><select value={selectValue(FONT_OPTIONS, project.layout.fonts?.title)} onChange={(e) => updateLayout({ fonts: { title: e.target.value } })}>{Object.entries(FONT_OPTIONS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></div>
-                  <div><label>Legend</label><select value={selectValue(FONT_OPTIONS, project.layout.fonts?.legend)} onChange={(e) => updateLayout({ fonts: { legend: e.target.value } })}>{Object.entries(FONT_OPTIONS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></div>
+                  <div><label>Title</label><FontSelect value={project.layout.fonts?.title} brandFonts={brandFonts} onChange={(e) => updateLayout({ fonts: { title: e.target.value } })} /></div>
+                  <div><label>Legend</label><FontSelect value={project.layout.fonts?.legend} brandFonts={brandFonts} onChange={(e) => updateLayout({ fonts: { legend: e.target.value } })} /></div>
                 </div>
                 <div className="control-row inline-2">
-                  <div><label>Labels</label><select value={selectValue(FONT_OPTIONS, project.layout.fonts?.label)} onChange={(e) => updateLayout({ fonts: { label: e.target.value } })}>{Object.entries(FONT_OPTIONS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></div>
-                  <div><label>Callouts</label><select value={selectValue(FONT_OPTIONS, project.layout.fonts?.callout)} onChange={(e) => updateLayout({ fonts: { callout: e.target.value } })}>{Object.entries(FONT_OPTIONS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></div>
+                  <div><label>Labels</label><FontSelect value={project.layout.fonts?.label} brandFonts={brandFonts} onChange={(e) => updateLayout({ fonts: { label: e.target.value } })} /></div>
+                  <div><label>Callouts</label><FontSelect value={project.layout.fonts?.callout} brandFonts={brandFonts} onChange={(e) => updateLayout({ fonts: { callout: e.target.value } })} /></div>
                 </div>
               </div>
             </details>
@@ -4112,7 +4224,7 @@ export default function App() {
                   return (
                     <div key={h.regionId} className="region-highlight-row">
                       <span className="region-highlight-name">{regionName}</span>
-                      <input type="color" value={h.color || '#ef4444'} title="Color" onChange={(e) => updateLayout({ regionHighlights: project.layout.regionHighlights.map((x, j) => j === i ? { ...x, color: e.target.value } : x) })} />
+                      <ColorField value={h.color || '#ef4444'} title="Color" onChange={(e) => updateLayout({ regionHighlights: project.layout.regionHighlights.map((x, j) => j === i ? { ...x, color: e.target.value } : x) })} brandColors={brandColors} />
                       <input type="range" min="0.1" max="1" step="0.05" value={h.opacity ?? 0.45} title="Opacity" onChange={(e) => updateLayout({ regionHighlights: project.layout.regionHighlights.map((x, j) => j === i ? { ...x, opacity: Number(e.target.value) } : x) })} />
                       <span className="range-label">{Math.round((h.opacity ?? 0.45) * 100)}%</span>
                       <button className="icon-btn remove-btn" type="button" title="Remove" onClick={() => updateLayout({ regionHighlights: project.layout.regionHighlights.filter((_, j) => j !== i) })}>×</button>
@@ -4188,15 +4300,15 @@ export default function App() {
               <div className="control-row inline-2" style={{ flexWrap: 'wrap', gap: 8 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <label style={{ marginBottom: 0 }}>Region</label>
-                  <input type="color" value={project.layout.insetRegionFill || '#dce8f5'} onChange={(e) => updateLayout({ insetRegionFill: e.target.value })} title="Region fill" />
+                  <ColorField value={project.layout.insetRegionFill || '#dce8f5'} onChange={(e) => updateLayout({ insetRegionFill: e.target.value })} title="Region fill" brandColors={brandColors} />
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <label style={{ marginBottom: 0 }}>Background</label>
-                  <input type="color" value={project.layout.insetBgFill || '#f0f4f8'} onChange={(e) => updateLayout({ insetBgFill: e.target.value })} title="Background" />
+                  <ColorField value={project.layout.insetBgFill || '#f0f4f8'} onChange={(e) => updateLayout({ insetBgFill: e.target.value })} title="Background" brandColors={brandColors} />
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <label style={{ marginBottom: 0 }}>Marker</label>
-                  <input type="color" value={project.layout.insetMarkerColor || '#2563eb'} onChange={(e) => updateLayout({ insetMarkerColor: e.target.value })} title="Marker color" />
+                  <ColorField value={project.layout.insetMarkerColor || '#2563eb'} onChange={(e) => updateLayout({ insetMarkerColor: e.target.value })} title="Marker color" brandColors={brandColors} />
                 </div>
               </div>
             )}
@@ -4607,22 +4719,22 @@ export default function App() {
                 </div>
                 <div className="control-row">
                   <label>Chip Color</label>
-                  <input type="color" value={selectedFeature.badgeColor || '#d97706'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, badgeColor: e.target.value }))} />
+                  <ColorField value={selectedFeature.badgeColor || '#d97706'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, badgeColor: e.target.value }))} brandColors={brandColors} />
                 </div>
               </div>
             )}
             <div className="drillhole-inline-row2">
               <div className="control-row">
                 <label>BG</label>
-                <input type="color" value={selectedFeature.style?.background || '#ffffff'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, style: { ...(prev.style || {}), background: e.target.value } }))} />
+                <ColorField value={selectedFeature.style?.background || '#ffffff'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, style: { ...(prev.style || {}), background: e.target.value } }))} brandColors={brandColors} />
               </div>
               <div className="control-row">
                 <label>Border</label>
-                <input type="color" value={selectedFeature.style?.border || '#102640'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, style: { ...(prev.style || {}), border: e.target.value } }))} />
+                <ColorField value={selectedFeature.style?.border || '#102640'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, style: { ...(prev.style || {}), border: e.target.value } }))} brandColors={brandColors} />
               </div>
               <div className="control-row">
                 <label>Text</label>
-                <input type="color" value={selectedFeature.style?.textColor || '#0f172a'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, style: { ...(prev.style || {}), textColor: e.target.value } }))} />
+                <ColorField value={selectedFeature.style?.textColor || '#0f172a'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, style: { ...(prev.style || {}), textColor: e.target.value } }))} brandColors={brandColors} />
               </div>
             </div>
             <div className="control-row" style={{ marginTop: 6 }}>
