@@ -584,6 +584,14 @@ export default async function handler(req, res) {
   if (schema === 'mb-discover') {
     const TIGHT_KEYWORDS = /(mineral|mining\s*claim|quarry\s*disposition|mineral\s*disposition|exploration\s*licen[cs]e)/i;
     const probes = [
+      // The official public mining-claims map lives on rdmaps.gov.mb.ca, a
+      // different host than the broken maps.gov.mb.ca service — its Geocortex
+      // HTML5 Viewer (viewer=MapGallery_Geology.MapGallery) loads its map
+      // service list from one of these standard config endpoints.
+      'https://rdmaps.gov.mb.ca/Geocortex/Essentials/REST/sites/MapGallery_Geology/viewers/MapGallery/virtualdirectory/Resources/Config/Default',
+      'https://rdmaps.gov.mb.ca/Html5Viewer/Resources/Config/Default?site=MapGallery_Geology&viewer=MapGallery',
+      'https://rdmaps.gov.mb.ca/arcgis/rest/services?f=json',
+      'https://rdmaps.gov.mb.ca/arcgis/rest/services/Mineral_Dispositions/MapServer?f=json',
       'https://geoportal.gov.mb.ca/api/feed/dcat-us/1.1.json',
       'https://mli.gov.mb.ca/land_projects/mining.html',
     ];
@@ -615,7 +623,7 @@ export default async function handler(req, res) {
             entry.parseError = String(e.message || e);
           }
         } else {
-          entry.bodySnippet = body.slice(0, 300);
+          entry.bodySnippet = body.slice(0, 500);
         }
         attempts.push(entry);
       } catch (e) {
