@@ -446,6 +446,21 @@ function FontSelect({ value, brandFonts = [], onChange }) {
   );
 }
 
+// Frame the map to the nearby-claims overlay. Used when reopening a project
+// whose only geographic content is nearby claims (no uploaded layers), so the
+// claims aren't left rendered off-screen.
+function fitMapToAreaClaims(map, areaClaims) {
+  if (!areaClaims?.features?.length) return false;
+  try {
+    const bounds = L.geoJSON({ type: 'FeatureCollection', features: areaClaims.features }).getBounds();
+    if (bounds.isValid()) {
+      map.fitBounds(bounds, { padding: [40, 40], animate: false });
+      return true;
+    }
+  } catch { /* malformed geometry — leave the view as-is */ }
+  return false;
+}
+
 function initialWorkspaceState() {
   const base = createInitialProjectState();
   const fallback = {
@@ -1177,12 +1192,20 @@ export default function App() {
     if (screen !== 'editor') {
       setMapReady(false);
       leafletMapRef.current = null;
+    } else if (project.layers.length === 0 && project.areaClaims?.features?.length) {
+      // Entering the editor on a claims-only project (e.g. a restored draft or a
+      // reopened pin-based search): frame to the saved view / claims so they
+      // aren't left rendered off-screen. Scoped to claims-only so projects with
+      // uploaded layers keep their existing autofit behavior.
+      skipAutoFitRef.current = true;
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [screen]);
 
   useEffect(() => {
     const map = leafletMapRef.current;
-    if (!map || project.layers.length === 0) return;
+    if (!map) return;
+    const noLayers = project.layers.length === 0;
     // Use the ref so cosmetic layout changes (title, logo size, opacity…) don't
     // trigger a map reframe. Only the explicit deps below cause refitting.
     if (skipAutoFitRef.current) {
@@ -1192,7 +1215,13 @@ export default function App() {
         ? Math.abs(saved.screenW - mapSizeRef.current.width) / saved.screenW < 0.15
         : false;
       if (saved?.center && screenMatch) {
+        // Restore the exact saved view — works even for claims-only projects
+        // (no layers), which previously bailed out and left claims off-screen.
         map.setView([saved.center.lat, saved.center.lng], saved.zoom, { animate: false });
+      } else if (noLayers) {
+        // No usable saved view and no layers — frame the nearby claims so a
+        // claims-only project reopens showing its claims rather than blank.
+        fitMapToAreaClaims(map, project.areaClaims);
       } else {
         // No saved view, or different screen size — fit to focus layers for this screen
         fitProjectToTemplate(
@@ -1205,6 +1234,7 @@ export default function App() {
       }
       return;
     }
+    if (noLayers) return;
     fitProjectToTemplate(
       project,
       map,
