@@ -425,6 +425,22 @@ function selectValue(options, value, fallback = 'Inter') {
   return options[value] ? value : fallback;
 }
 
+// Font dropdown that surfaces the default brand kit's fonts in a "Brand kit"
+// optgroup at the top, so applying a brand font is one click. Falls back to the
+// plain FONT_OPTIONS list when no brand fonts are available.
+function FontSelect({ value, brandFonts = [], onChange }) {
+  return (
+    <select value={selectValue(FONT_OPTIONS, value)} onChange={onChange}>
+      {brandFonts.length > 0 && (
+        <optgroup label="Brand kit">
+          {brandFonts.map((f) => <option key={`brand-${f}`} value={f}>{f} (brand)</option>)}
+        </optgroup>
+      )}
+      {Object.entries(FONT_OPTIONS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+    </select>
+  );
+}
+
 function initialWorkspaceState() {
   const base = createInitialProjectState();
   const fallback = {
@@ -833,6 +849,12 @@ export default function App() {
     for (const [key, label] of fields) add(defaultKit[key], `Kit ${label.toLowerCase()}`);
     return out;
   }, [project.layout?.accentColor, project.layout?.titleBgColor, project.layout?.titleFgColor, project.layout?.panelBgColor, project.layout?.panelFgColor, cloudTemplates]);
+
+  // Distinct fonts from the default brand kit, surfaced in the font pickers.
+  const brandFonts = useMemo(() => {
+    const kitFonts = cloudTemplates.find((t) => t.is_default)?.config?.fonts || {};
+    return [...new Set(Object.values(kitFonts).filter((f) => f && FONT_OPTIONS[f]))];
+  }, [cloudTemplates]);
 
   useEffect(() => {
     if (!bootstrappedRef.current) {
@@ -4047,12 +4069,12 @@ export default function App() {
               <summary>Fonts</summary>
               <div className="sub-details-body">
                 <div className="control-row inline-2">
-                  <div><label>Title</label><select value={selectValue(FONT_OPTIONS, project.layout.fonts?.title)} onChange={(e) => updateLayout({ fonts: { title: e.target.value } })}>{Object.entries(FONT_OPTIONS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></div>
-                  <div><label>Legend</label><select value={selectValue(FONT_OPTIONS, project.layout.fonts?.legend)} onChange={(e) => updateLayout({ fonts: { legend: e.target.value } })}>{Object.entries(FONT_OPTIONS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></div>
+                  <div><label>Title</label><FontSelect value={project.layout.fonts?.title} brandFonts={brandFonts} onChange={(e) => updateLayout({ fonts: { title: e.target.value } })} /></div>
+                  <div><label>Legend</label><FontSelect value={project.layout.fonts?.legend} brandFonts={brandFonts} onChange={(e) => updateLayout({ fonts: { legend: e.target.value } })} /></div>
                 </div>
                 <div className="control-row inline-2">
-                  <div><label>Labels</label><select value={selectValue(FONT_OPTIONS, project.layout.fonts?.label)} onChange={(e) => updateLayout({ fonts: { label: e.target.value } })}>{Object.entries(FONT_OPTIONS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></div>
-                  <div><label>Callouts</label><select value={selectValue(FONT_OPTIONS, project.layout.fonts?.callout)} onChange={(e) => updateLayout({ fonts: { callout: e.target.value } })}>{Object.entries(FONT_OPTIONS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></div>
+                  <div><label>Labels</label><FontSelect value={project.layout.fonts?.label} brandFonts={brandFonts} onChange={(e) => updateLayout({ fonts: { label: e.target.value } })} /></div>
+                  <div><label>Callouts</label><FontSelect value={project.layout.fonts?.callout} brandFonts={brandFonts} onChange={(e) => updateLayout({ fonts: { callout: e.target.value } })} /></div>
                 </div>
               </div>
             </details>
