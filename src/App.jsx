@@ -3020,6 +3020,11 @@ export default function App() {
             updateLayout(applyBrandKitConfig(config, project.layout));
             setScreen('editor');
           }}
+          onUseKit={(config) => {
+            startNewProject();
+            updateLayout(applyBrandKitConfig(config, createInitialProjectState().layout));
+            setScreen('editor');
+          }}
         />
       </React.Suspense>
     );
