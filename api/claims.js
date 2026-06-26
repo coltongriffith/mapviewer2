@@ -587,12 +587,11 @@ export default async function handler(req, res) {
     // this only probes the rdmaps.gov.mb.ca host backing the official public
     // mining-claims viewer (viewer=MapGallery_Geology.MapGallery), a different
     // host than the broken maps.gov.mb.ca service.
-    // The services root confirmed an "iMaQs" folder (Integrated Mining and
-    // Quarrying System) — almost certainly the working mirror of the same
-    // mineral-dispositions data that's 502'ing on maps.gov.mb.ca.
+    // Confirmed working: rdmaps.gov.mb.ca hosts iMaQs/imaqsMining (MapServer),
+    // the live mineral-dispositions data on a healthy host (maps.gov.mb.ca
+    // 502s). Probe its layer list to find the mining-claim leaf layer.
     const probes = [
-      'https://rdmaps.gov.mb.ca/arcgis/rest/services/iMaQs?f=json',
-      'https://rdmaps.gov.mb.ca/arcgis/rest/services/iMaQs/MapServer?f=json',
+      'https://rdmaps.gov.mb.ca/arcgis/rest/services/iMaQs/imaqsMining/MapServer?f=json',
     ];
     const attempts = [];
     for (const u of probes) {
@@ -600,7 +599,14 @@ export default async function handler(req, res) {
       try {
         const rr = await fetch(u, { headers: FALLBACK_FETCH_HEADERS, signal: AbortSignal.timeout(15000) });
         const body = await rr.text().catch(() => '');
-        attempts.push({ url: u, ok: rr.ok, status: rr.status, ms: Date.now() - started, contentType: rr.headers.get('content-type'), bodySnippet: body.slice(0, 500) });
+        // For the MapServer metadata, pull just the layers array so we can read
+        // the leaf-layer names/ids without the full (huge) service descriptor.
+        let layers;
+        try {
+          const j = JSON.parse(body);
+          if (Array.isArray(j.layers)) layers = j.layers.map((l) => ({ id: l.id, name: l.name, parentLayerId: l.parentLayerId, subLayerIds: l.subLayerIds }));
+        } catch { /* not json — fall back to snippet */ }
+        attempts.push({ url: u, ok: rr.ok, status: rr.status, ms: Date.now() - started, contentType: rr.headers.get('content-type'), layers, bodySnippet: layers ? undefined : body.slice(0, 500) });
       } catch (e) {
         attempts.push({ url: u, error: String(e.name || e.message || e), ms: Date.now() - started });
       }
