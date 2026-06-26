@@ -17,7 +17,7 @@ export async function listCloudProjects() {
   const user = await currentUser();
   const { data, error } = await requireSupabase()
     .from('projects')
-    .select('id, name, updated_at')
+    .select('id, name, updated_at, thumbnail')
     .eq('user_id', user.id)
     .order('updated_at', { ascending: false });
   if (error) throw error;
@@ -25,7 +25,18 @@ export async function listCloudProjects() {
     id: r.id,
     name: r.name,
     updatedAt: r.updated_at,
+    thumbnail: r.thumbnail || null,
   }));
+}
+
+export async function updateProjectThumbnail(id, thumbnail) {
+  const user = await currentUser();
+  const { error } = await requireSupabase()
+    .from('projects')
+    .update({ thumbnail })
+    .eq('id', id)
+    .eq('user_id', user.id);
+  if (error) throw error;
 }
 
 export async function saveCloudProject({ id, name, payload }) {

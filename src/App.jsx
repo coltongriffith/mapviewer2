@@ -15,6 +15,7 @@ import NorthArrow, { NORTH_ARROW_STYLES } from './components/NorthArrow';
 
 const MapCanvas = React.lazy(() => import('./components/MapCanvas'));
 const AdminPage = React.lazy(() => import('./components/AdminPage'));
+const AccountPage = React.lazy(() => import('./components/AccountPage'));
 const ExportHDModal = React.lazy(() => import('./components/ExportHDModal'));
 const HowToUseModal = React.lazy(() => import('./components/HowToUseModal'));
 const ColumnMapperModal = React.lazy(() => import('./components/ColumnMapperModal'));
@@ -62,6 +63,7 @@ import {
   saveDraft,
   saveProjectRecord,
   touchLastOpenedProject,
+  updateProjectThumbnailRecord,
 } from './utils/projectStorage';
 import {
   deleteCloudProject,
@@ -75,6 +77,7 @@ import {
   saveBrandKit,
   setDefaultBrandKit,
   updateBrandKit,
+  updateProjectThumbnail,
   applyBrandKitConfig,
   BRAND_KIT_SAVEABLE_KEYS,
   shareMap,
@@ -82,7 +85,9 @@ import {
 import { useAuth } from './hooks/useAuth';
 import { supabase } from './lib/supabase';
 import { renderBrandKitSwatch } from './utils/brandKitSwatch';
+import { captureProjectThumbnail } from './utils/thumbnailCapture';
 import UserMenu from './components/UserMenu';
+import AuthModal from './components/AuthModal';
 import { CORNER_KEY, getCornerLayout, moveToCorner, moveToCornerFirst, moveToCornerBeside, findElement } from './utils/cornerLayout';
 
 const SAMPLE_LOGO_SVG = [
@@ -629,6 +634,7 @@ export default function App() {
   const { user } = useAuth();
   const [storageWarningDismissed, setStorageWarningDismissed] = useState(false);
   const [showBrandKitManager, setShowBrandKitManager] = useState(false);
+  const [showAuthFromGate, setShowAuthFromGate] = useState(false);
   const [cloudTemplates, setCloudTemplates] = useState([]);
   const [savingTemplate, setSavingTemplate] = useState(false);
   const [savingTemplateName, setSavingTemplateName] = useState(null);
@@ -637,6 +643,7 @@ export default function App() {
 
   const [screen, setScreen] = useState(() => {
     if (window.location.pathname === '/admin') return 'admin';
+    if (window.location.pathname === '/account') return 'account';
     if (window.location.pathname.startsWith('/map/')) return 'shared_view';
     return 'landing';
   });
@@ -978,9 +985,11 @@ export default function App() {
   useEffect(() => {
     if (screen === 'admin') {
       if (window.location.pathname !== '/admin') window.history.replaceState({}, '', '/admin');
+    } else if (screen === 'account') {
+      if (window.location.pathname !== '/account') window.history.replaceState({}, '', '/account');
     } else if (screen === 'shared_view' && sharedMapId) {
       window.history.replaceState({}, '', `/map/${sharedMapId}`);
-    } else if (window.location.pathname === '/admin' || window.location.pathname.startsWith('/map/')) {
+    } else if (window.location.pathname === '/admin' || window.location.pathname === '/account' || window.location.pathname.startsWith('/map/')) {
       window.history.replaceState({}, '', '/');
     }
   }, [screen, sharedMapId]);
@@ -2737,6 +2746,23 @@ export default function App() {
   };
 
 
+  const captureAndStoreThumbnail = (id, isCloud) => {
+    if (!id || !mapContainerRef.current || !leafletMapRef.current) return;
+    captureProjectThumbnail({
+      mapContainer: mapContainerRef.current,
+      project,
+      map: leafletMapRef.current,
+    }).then((thumbnail) => {
+      if (!thumbnail) return;
+      if (isCloud) {
+        updateProjectThumbnail(id, thumbnail).catch(() => {});
+      } else {
+        updateProjectThumbnailRecord(id, thumbnail);
+      }
+      setRecentProjects((prev) => prev.map((p) => (p.id === id ? { ...p, thumbnail } : p)));
+    }).catch(() => {});
+  };
+
   const saveCurrentProject = async (nextName = null) => {
     const nameToSave = (nextName || projectName || project.layout?.title || 'Untitled map').trim();
     const idToSave = projectId || crypto.randomUUID();
@@ -2750,6 +2776,7 @@ export default function App() {
         saveDraft({ payload: project, projectId: cloudId, projectName: nameToSave });
         listCloudProjects().then(setRecentProjects).catch(() => {});
         setUploadStatus({ type: 'success', message: `Saved to cloud: ${nameToSave}` });
+        captureAndStoreThumbnail(cloudId, true);
       } catch (err) {
         setUploadStatus({ type: 'error', message: `Cloud save failed: ${err.message}` });
       }
@@ -2762,6 +2789,7 @@ export default function App() {
       setIsDirty(false);
       saveDraft({ payload: project, projectId: saved.id, projectName: saved.name });
       setUploadStatus({ type: 'success', message: `Saved project: ${saved.name}` });
+      captureAndStoreThumbnail(saved.id, false);
     }
   };
 
@@ -2788,6 +2816,7 @@ export default function App() {
         saveDraft({ payload: project, projectId: cloudId, projectName: nameToSave });
         listCloudProjects().then(setRecentProjects).catch(() => {});
         setUploadStatus({ type: 'success', message: `Saved to cloud as: ${nameToSave}` });
+        captureAndStoreThumbnail(cloudId, true);
       } catch (err) {
         setUploadStatus({ type: 'error', message: `Cloud save failed: ${err.message}` });
       }
@@ -2800,6 +2829,7 @@ export default function App() {
       setIsDirty(false);
       saveDraft({ payload: project, projectId: saved.id, projectName: saved.name });
       setUploadStatus({ type: 'success', message: `Saved as new project: ${saved.name}` });
+      captureAndStoreThumbnail(saved.id, false);
     }
   };
 
@@ -2911,6 +2941,37 @@ export default function App() {
     );
   }
 
+  if (screen === 'account') {
+    if (!user) {
+      return (
+        <div className="acct-signin-gate">
+          <div className="acct-signin-card">
+            <h2>Sign in to view your dashboard</h2>
+            <p className="acct-signin-hint">Your projects and brand kits live in your account.</p>
+            <div className="acct-signin-actions">
+              <button className="btn" type="button" onClick={() => setShowAuthFromGate(true)}>Sign in / Create account</button>
+              <button className="secondary-btn" type="button" onClick={() => setScreen('landing')}>← Back</button>
+            </div>
+          </div>
+          {showAuthFromGate && <AuthModal onClose={() => setShowAuthFromGate(false)} />}
+        </div>
+      );
+    }
+    return (
+      <React.Suspense fallback={null}>
+        <AccountPage
+          onOpenProject={(entry) => { openProjectFromRecent(entry); setScreen('editor'); }}
+          onNewProject={() => { startNewProject(); setScreen('editor'); }}
+          onExit={() => setScreen('landing')}
+          onApplyBrandKit={(config) => {
+            updateLayout(applyBrandKitConfig(config, project.layout));
+            setScreen('editor');
+          }}
+        />
+      </React.Suspense>
+    );
+  }
+
   if (screen === 'shared_view') {
     return <SharedMapViewer mapId={sharedMapId} onExit={() => { window.location.href = '/'; }} />;
   }
@@ -2927,6 +2988,7 @@ export default function App() {
           onShowHelp={() => setShowHelpModal(true)}
           onSearchBCClaims={() => { setScreen('editor'); setAddClaimsModalPath('registry'); setShowAddClaimsModal(true); }}
           onUploadFile={() => { setScreen('editor'); setAddClaimsModalPath('upload'); setShowAddClaimsModal(true); }}
+          onOpenAccount={() => setScreen('account')}
         />
         {showHelpModal && <React.Suspense fallback={null}><HowToUseModal onClose={() => setShowHelpModal(false)} /></React.Suspense>}
       </>
@@ -2935,7 +2997,7 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <Sidebar footer={<UserMenu onOpenTemplates={() => setShowBrandKitManager(true)} />}>
+      <Sidebar footer={<UserMenu onOpenTemplates={() => setShowBrandKitManager(true)} onOpenAccount={() => setScreen('account')} />}>
         <div className="sidebar-header-row">
           <button className="sidebar-wordmark" type="button" onClick={() => setScreen('landing')}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">

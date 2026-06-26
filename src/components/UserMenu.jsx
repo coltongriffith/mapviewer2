@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useAuth } from '../hooks/useAuth.jsx';
 import AuthModal from './AuthModal';
 
-export default function UserMenu({ onOpenTemplates }) {
+export default function UserMenu({ onOpenTemplates, onOpenAccount }) {
   const { user, signOut } = useAuth();
   const [showAuth, setShowAuth] = useState(false);
 
@@ -22,10 +22,15 @@ export default function UserMenu({ onOpenTemplates }) {
 
   return (
     <div className="sidebar-account-panel signed-in">
-      <div className="sidebar-account-email" title={user.email}>
+      <button
+        className="sidebar-account-email sidebar-account-email-btn"
+        title={`${user.email} — open dashboard`}
+        type="button"
+        onClick={onOpenAccount}
+      >
         <span className="sidebar-account-avatar">{user.email?.slice(0, 2).toUpperCase() ?? '??'}</span>
         <span className="sidebar-account-name">{user.email}</span>
-      </div>
+      </button>
       <div className="sidebar-account-actions">
         <button className="sidebar-account-action-btn" onClick={onOpenTemplates}>
           Brand Kits

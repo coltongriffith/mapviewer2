@@ -24,7 +24,7 @@ function formatRelativeDate(iso) {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleStyle, recentProjects = [], onOpenProject, onShowHelp, onSearchBCClaims, onUploadFile }) {
+export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleStyle, recentProjects = [], onOpenProject, onShowHelp, onSearchBCClaims, onUploadFile, onOpenAccount }) {
   const { user } = useAuth();
   const [showAuth, setShowAuth] = useState(false);
   const [dataSourcesOpen, setDataSourcesOpen] = useState(false);
@@ -74,10 +74,10 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
             </button>
           )}
           {user ? (
-            <span className="landing-nav-user">
+            <button className="landing-nav-user landing-nav-user-btn" type="button" onClick={onOpenAccount} data-track="Nav: Open dashboard">
               <span className="landing-nav-avatar">{user.email?.slice(0, 2).toUpperCase() ?? '??'}</span>
               {user.email}
-            </span>
+            </button>
           ) : (
             <button className="landing-nav-signin" type="button" onClick={() => setShowAuth(true)} data-track="Nav: Sign in">
               Sign in

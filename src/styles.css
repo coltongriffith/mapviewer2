@@ -513,6 +513,8 @@ button, input, select, textarea { font: inherit; }
 .landing-nav-signin { background: none; border: 1px solid #bfcfe8; border-radius: 8px; padding: 9px 16px; font-size: 14px; font-weight: 600; color: #2563eb; cursor: pointer; font-family: inherit; transition: background 0.15s, border-color 0.15s; }
 .landing-nav-signin:hover { background: #eff6ff; border-color: #93c5fd; }
 .landing-nav-user { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #516173; font-weight: 500; }
+.landing-nav-user-btn { background: none; border: none; cursor: pointer; padding: 4px 6px; border-radius: 8px; }
+.landing-nav-user-btn:hover { background: rgba(37,99,235,0.08); }
 .landing-nav-avatar { width: 28px; height: 28px; border-radius: 999px; background: #2563eb; color: #fff; font-size: 11px; font-weight: 800; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 
 /* Mock badge callout */
@@ -1350,6 +1352,16 @@ body.is-dragging .template-zone .panel-delete-btn { opacity: 0 !important; }
   gap: 8px;
   min-width: 0;
 }
+.sidebar-account-email-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  border-radius: 6px;
+}
+.sidebar-account-email-btn:hover .sidebar-account-name { text-decoration: underline; }
 .sidebar-account-avatar {
   width: 26px;
   height: 26px;
@@ -2425,3 +2437,95 @@ body.is-dragging .template-zone .panel-delete-btn { opacity: 0 !important; }
 .adm-timeline-export .adm-timeline-icon { color: #8b5cf6; }
 .adm-timeline-search .adm-timeline-icon { color: #0ea5e9; }
 .adm-timeline-lead .adm-timeline-icon { color: #f59e0b; }
+
+/* ── Account Dashboard ──────────────────────────────────────────── */
+.acct-shell {
+  min-height: 100vh;
+  background: #f8fafc;
+  font-family: Inter, system-ui, Arial, sans-serif;
+  color: #0f172a;
+}
+.acct-signin-gate {
+  min-height: 100vh; display: flex; align-items: center; justify-content: center;
+  background: #f8fafc;
+}
+.acct-signin-card {
+  max-width: 360px; background: #fff; border: 1px solid #e2e8f0; border-radius: 16px;
+  padding: 40px 36px; box-shadow: 0 4px 32px rgba(0,0,0,0.08); text-align: center;
+}
+.acct-signin-card h2 { margin: 0 0 6px; font-size: 20px; font-weight: 700; color: #0f172a; }
+.acct-signin-hint { margin: 0 0 20px; font-size: 13px; color: #64748b; }
+.acct-signin-actions { display: flex; flex-direction: column; gap: 10px; }
+
+.acct-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 28px; height: 56px; background: #fff;
+  border-bottom: 1px solid #e2e8f0; position: sticky; top: 0; z-index: 100;
+}
+.acct-header-left { display: flex; align-items: center; gap: 14px; }
+.acct-header-title { font-size: 15px; font-weight: 700; color: #0f172a; }
+.acct-header-right { display: flex; align-items: center; gap: 10px; }
+.acct-header-email { font-size: 12px; color: #94a3b8; margin-right: 4px; }
+.acct-back-link {
+  background: none; border: none; cursor: pointer; color: #64748b;
+  font-size: 13px; text-decoration: none; transition: color 0.12s;
+}
+.acct-back-link:hover { color: #3b82f6; }
+
+.acct-main {
+  max-width: 1280px; margin: 0 auto; padding: 28px 28px 80px;
+  display: flex; flex-direction: column; gap: 36px;
+}
+.acct-section-header {
+  display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;
+}
+.acct-section-header h2 { margin: 0; font-size: 17px; font-weight: 700; color: #0f172a; white-space: nowrap; }
+.acct-section-header .btn { width: auto; }
+.acct-header .secondary-btn { width: auto; }
+.acct-card-actions .btn { width: auto; flex: 1; }
+.acct-empty { color: #94a3b8; font-size: 13px; margin: 8px 0 0; }
+
+.acct-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 18px;
+}
+.acct-card {
+  background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;
+  display: flex; flex-direction: column; transition: box-shadow 0.15s, border-color 0.15s;
+}
+.acct-card:hover { box-shadow: 0 4px 16px rgba(15,23,42,0.08); border-color: #cbd5e1; }
+.acct-card-thumb {
+  width: 100%; aspect-ratio: 16 / 10; background: #f1f5f9; border: none; padding: 0;
+  cursor: pointer; display: flex; align-items: center; justify-content: center; overflow: hidden;
+}
+.acct-card-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.acct-brandkit-thumb { cursor: default; }
+.acct-card-thumb-placeholder {
+  font-size: 22px; font-weight: 700; color: #cbd5e1; letter-spacing: 0.04em;
+}
+.acct-card-body { padding: 10px 12px 4px; display: flex; flex-direction: column; gap: 2px; }
+.acct-card-name {
+  background: none; border: none; padding: 0; text-align: left; cursor: pointer;
+  font-size: 13.5px; font-weight: 600; color: #1e293b; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; display: flex; align-items: center; gap: 6px;
+}
+.acct-card-name:hover { color: #2563eb; }
+.acct-card-name-input {
+  font-size: 13.5px; font-weight: 600; padding: 3px 6px; border: 1px solid #3b82f6;
+  border-radius: 6px; outline: none; width: 100%; box-sizing: border-box;
+}
+.acct-card-date { font-size: 11px; color: #94a3b8; }
+.acct-card-actions {
+  display: flex; align-items: center; gap: 6px; padding: 8px 12px 12px; flex-wrap: wrap;
+}
+.acct-icon-btn {
+  background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 6px; cursor: pointer;
+  font-size: 12px; color: #64748b; padding: 4px 8px; transition: background 0.12s, color 0.12s;
+}
+.acct-icon-btn:hover { background: #e2e8f0; color: #1e293b; }
+.acct-icon-btn.danger:hover { background: #fee2e2; color: #dc2626; border-color: #fca5a5; }
+.acct-confirm-label { font-size: 11.5px; color: #64748b; margin-right: 2px; }
+.acct-badge {
+  font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+  color: #d97706; background: #fef3c7; border: 1px solid #fde68a; padding: 1px 5px;
+  border-radius: 4px; flex-shrink: 0;
+}
