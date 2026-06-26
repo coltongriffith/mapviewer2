@@ -591,7 +591,7 @@ export default async function handler(req, res) {
     // the live mineral-dispositions data on a healthy host (maps.gov.mb.ca
     // 502s). Probe its layer list to find the mining-claim leaf layer.
     const probes = [
-      'https://rdmaps.gov.mb.ca/arcgis/rest/services/iMaQs/imaqsMining/MapServer?f=json',
+      'https://rdmaps.gov.mb.ca/arcgis/rest/services/iMaQs/imaqsMining/MapServer/3?f=json',
     ];
     const attempts = [];
     for (const u of probes) {
@@ -601,12 +601,13 @@ export default async function handler(req, res) {
         const body = await rr.text().catch(() => '');
         // For the MapServer metadata, pull just the layers array so we can read
         // the leaf-layer names/ids without the full (huge) service descriptor.
-        let layers;
+        let layers; let layerName; let fields;
         try {
           const j = JSON.parse(body);
           if (Array.isArray(j.layers)) layers = j.layers.map((l) => ({ id: l.id, name: l.name, parentLayerId: l.parentLayerId, subLayerIds: l.subLayerIds }));
+          if (Array.isArray(j.fields)) { layerName = j.name; fields = j.fields.map((f) => `${f.name} (${f.type})`); }
         } catch { /* not json — fall back to snippet */ }
-        attempts.push({ url: u, ok: rr.ok, status: rr.status, ms: Date.now() - started, contentType: rr.headers.get('content-type'), layers, bodySnippet: layers ? undefined : body.slice(0, 500) });
+        attempts.push({ url: u, ok: rr.ok, status: rr.status, ms: Date.now() - started, contentType: rr.headers.get('content-type'), layerName, fields, layers, bodySnippet: (layers || fields) ? undefined : body.slice(0, 500) });
       } catch (e) {
         attempts.push({ url: u, error: String(e.name || e.message || e), ms: Date.now() - started });
       }
