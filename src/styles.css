@@ -2479,7 +2479,10 @@ body.is-dragging .template-zone .panel-delete-btn { opacity: 0 !important; }
 .acct-section-header {
   display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;
 }
-.acct-section-header h2 { margin: 0; font-size: 17px; font-weight: 700; color: #0f172a; }
+.acct-section-header h2 { margin: 0; font-size: 17px; font-weight: 700; color: #0f172a; white-space: nowrap; }
+.acct-section-header .btn { width: auto; }
+.acct-header .secondary-btn { width: auto; }
+.acct-card-actions .btn { width: auto; flex: 1; }
 .acct-empty { color: #94a3b8; font-size: 13px; margin: 8px 0 0; }
 
 .acct-grid {
