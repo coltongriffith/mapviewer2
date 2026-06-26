@@ -778,12 +778,27 @@ button, input, select, textarea { font: inherit; }
   height: 34px;
 }
 .swatch-reset-all:hover { color: #ef4444; border-color: #fecaca; background: #fef2f2; }
-/* ColorField: native picker + brand palette swatches */
+/* ColorField: native picker + brand palette swatches (popover on click) */
 .color-field { display: flex; flex-direction: column; gap: 4px; }
-.brand-swatch-row { display: flex; flex-wrap: wrap; gap: 3px; max-width: 120px; }
+.color-swatch-wrap { position: relative; }
+.brand-swatch-popover {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 30;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  max-width: 160px;
+  padding: 8px;
+  background: #fff;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.16);
+}
 .brand-swatch {
-  width: 15px;
-  height: 15px;
+  width: 18px;
+  height: 18px;
   border-radius: 4px;
   border: 1px solid rgba(15, 23, 42, 0.18);
   padding: 0;
