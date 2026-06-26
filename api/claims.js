@@ -582,13 +582,14 @@ export default async function handler(req, res) {
   // service name or org id. Run from the live deployment only — this sandbox's
   // own egress policy blocks arcgis.com/gov.mb.ca hosts outright.
   if (schema === 'mb-discover') {
-    const KEYWORDS = /(mineral|mining|claim|quarry|disposition|lease|licen[cs]e)/i;
+    const TIGHT_KEYWORDS = /(mineral|mining\s*claim|quarry\s*disposition|mineral\s*disposition|exploration\s*licen[cs]e)/i;
     const probes = [
       'https://geoportal.gov.mb.ca/api/feed/dcat-us/1.1.json',
       'https://mli.gov.mb.ca/land_projects/mining.html',
     ];
     const attempts = [];
     let matchedDatasets = [];
+    let allTitles = [];
     for (const u of probes) {
       const started = Date.now();
       try {
@@ -599,12 +600,15 @@ export default async function handler(req, res) {
           try {
             const json = JSON.parse(body);
             const datasets = Array.isArray(json.dataset) ? json.dataset : [];
+            allTitles = datasets.map((d) => d.title);
             matchedDatasets = datasets
-              .filter((d) => KEYWORDS.test(d.title || '') || KEYWORDS.test(d.description || ''))
+              .filter((d) => TIGHT_KEYWORDS.test(d.title || '') || TIGHT_KEYWORDS.test(d.description || ''))
               .map((d) => ({
                 title: d.title,
                 landingPage: d.landingPage,
-                distribution: (d.distribution || []).map((dd) => ({ format: dd.format, url: dd.downloadURL || dd.accessURL })),
+                restApi: (d.distribution || []).find((dd) => dd.format === 'ArcGIS GeoServices REST API')?.accessURL
+                  || (d.distribution || []).find((dd) => dd.format === 'ArcGIS GeoServices REST API')?.downloadURL
+                  || null,
               }));
             entry.totalDatasets = datasets.length;
           } catch (e) {
@@ -618,7 +622,7 @@ export default async function handler(req, res) {
         attempts.push({ url: u, error: String(e.name || e.message || e), ms: Date.now() - started });
       }
     }
-    return res.status(200).json({ attempts, matchedDatasets });
+    return res.status(200).json({ attempts, matchedDatasets, allTitles });
   }
 
   // Diagnostics: report resolved layer + fields for an ArcGIS province
