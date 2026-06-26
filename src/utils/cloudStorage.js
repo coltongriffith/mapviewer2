@@ -201,6 +201,15 @@ export async function loadSharedMap(id) {
   return data.state;
 }
 
+// Fork a shared map's state into the signed-in user's own account as a brand-new
+// project. The shared `state` is the exact same shape as a project `payload`, so
+// it can be inserted directly; the recipient gets a fully independent copy and
+// the original sender's map is untouched. Requires an authenticated session.
+export async function cloneSharedMapToCloud(state, name) {
+  const displayName = name || state?.layout?.title || 'Shared map';
+  return saveCloudProject({ id: null, name: displayName, payload: state });
+}
+
 // ── Account settings (one row per user in `account_settings`) ───────────────
 // Reusable defaults (company, QP info, projection) seeded into new projects.
 

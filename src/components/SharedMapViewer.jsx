@@ -3,10 +3,23 @@ import { loadSharedMap } from '../utils/cloudStorage';
 
 const ReadOnlyMapStage = React.lazy(() => import('./ReadOnlyMapStage'));
 
-export default function SharedMapViewer({ mapId, onExit }) {
+export default function SharedMapViewer({ mapId, onExit, user, onEditCopy }) {
   const [project, setProject] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState(false);
+
+  const handleEdit = async () => {
+    if (!project || editing) return;
+    setEditing(true);
+    try {
+      await onEditCopy?.(project);
+    } finally {
+      // If onEditCopy navigated away this unmount-safe reset is harmless; if it
+      // only opened the auth modal (signed-out), re-enable the button.
+      setEditing(false);
+    }
+  };
 
   useEffect(() => {
     if (!mapId) { setError('No map ID provided'); setLoading(false); return; }
@@ -50,9 +63,14 @@ export default function SharedMapViewer({ mapId, onExit }) {
         <span className="shared-map-bar-brand">
           Made with <a href="/" rel="noopener">ExplorationMaps</a>
         </span>
-        <button className="shared-map-cta-btn" onClick={onExit}>
-          Create your own map →
-        </button>
+        <div className="shared-map-bar-actions">
+          <button className="shared-map-edit-btn" onClick={handleEdit} disabled={editing}>
+            {editing ? 'Opening…' : (user ? 'Edit this map' : 'Sign in to edit')}
+          </button>
+          <button className="shared-map-cta-btn" onClick={onExit}>
+            Create your own map →
+          </button>
+        </div>
       </div>
     </div>
   );
