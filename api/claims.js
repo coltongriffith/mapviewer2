@@ -574,6 +574,53 @@ export default async function handler(req, res) {
     return res.status(200).json({ province, attempts });
   }
 
+  // Manitoba alternative-source discovery: maps.gov.mb.ca's own ArcGIS REST
+  // endpoint gateways a persistent 502 to our traffic (confirmed via schema=raw),
+  // so this probes Manitoba's public ArcGIS Hub geoportal for the same data
+  // mirrored elsewhere. The DCAT feed lists every published dataset with its
+  // direct service/download URLs, so we don't need to already know the right
+  // service name or org id. Run from the live deployment only — this sandbox's
+  // own egress policy blocks arcgis.com/gov.mb.ca hosts outright.
+  if (schema === 'mb-discover') {
+    const KEYWORDS = /(mineral|mining|claim|quarry|disposition|lease|licen[cs]e)/i;
+    const probes = [
+      'https://geoportal.gov.mb.ca/api/feed/dcat-us/1.1.json',
+      'https://mli.gov.mb.ca/land_projects/mining.html',
+    ];
+    const attempts = [];
+    let matchedDatasets = [];
+    for (const u of probes) {
+      const started = Date.now();
+      try {
+        const rr = await fetch(u, { headers: FALLBACK_FETCH_HEADERS, signal: AbortSignal.timeout(15000) });
+        const body = await rr.text().catch(() => '');
+        const entry = { url: u, ok: rr.ok, status: rr.status, ms: Date.now() - started, contentType: rr.headers.get('content-type') };
+        if (rr.ok && /dcat-us/.test(u)) {
+          try {
+            const json = JSON.parse(body);
+            const datasets = Array.isArray(json.dataset) ? json.dataset : [];
+            matchedDatasets = datasets
+              .filter((d) => KEYWORDS.test(d.title || '') || KEYWORDS.test(d.description || ''))
+              .map((d) => ({
+                title: d.title,
+                landingPage: d.landingPage,
+                distribution: (d.distribution || []).map((dd) => ({ format: dd.format, url: dd.downloadURL || dd.accessURL })),
+              }));
+            entry.totalDatasets = datasets.length;
+          } catch (e) {
+            entry.parseError = String(e.message || e);
+          }
+        } else {
+          entry.bodySnippet = body.slice(0, 300);
+        }
+        attempts.push(entry);
+      } catch (e) {
+        attempts.push({ url: u, error: String(e.name || e.message || e), ms: Date.now() - started });
+      }
+    }
+    return res.status(200).json({ attempts, matchedDatasets });
+  }
+
   // Diagnostics: report resolved layer + fields for an ArcGIS province
   if (schema === '1' && ARCGIS_PROVINCES[province]) {
     try {
