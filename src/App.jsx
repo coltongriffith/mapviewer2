@@ -684,7 +684,20 @@ export default function App() {
   const [viewportSize, setViewportSize] = useState({ width: 1600, height: 1000 });
   const [featureEditorTick, setFeatureEditorTick] = useState(0);
   const [mapReady, setMapReady] = useState(false);
-  const [areaClaims, setAreaClaims] = useState(null);
+  // Nearby-claims overlay is backed by the project object so it persists with
+  // saves/drafts (callouts, markers, etc. already do). The shim keeps the
+  // existing areaClaims/setAreaClaims call sites working unchanged: reads come
+  // from project.areaClaims, writes go through setProject. Other areaClaims*
+  // states below (province/pickCenter/picking) stay ephemeral UI-only.
+  const areaClaims = project.areaClaims ?? null;
+  const setAreaClaims = useCallback((updater) => {
+    setProject((p) => {
+      const current = p.areaClaims ?? null;
+      const nextVal = typeof updater === 'function' ? updater(current) : updater;
+      if (nextVal === current) return p;
+      return { ...p, areaClaims: nextVal };
+    });
+  }, []);
   const [areaClaimsProvince, setAreaClaimsProvince] = useState('bc');
   const [areaClaimsPickCenter, setAreaClaimsPickCenter] = useState(null); // {lat,lng} custom search origin
   const [areaClaimsPicking, setAreaClaimsPicking] = useState(false);

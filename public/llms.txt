@@ -7,10 +7,11 @@
 - URL: https://www.explorationmaps.com/
 - Description: Interactive Canadian mineral claims map with multi-province registry search, shapefile upload, KML/GeoJSON support, and professional map export tools. Free to use.
 - Key features:
-  - Mineral claims search across 7 provinces/territories by company (titleholder) name or claim number: British Columbia, Ontario, Quebec, Saskatchewan, Manitoba, Newfoundland & Labrador, and Yukon
+  - Mineral claims search across 7 provinces/territories: British Columbia, Ontario, Quebec, Saskatchewan, Manitoba, Newfoundland & Labrador, and Yukon — by company (titleholder) name or claim number, except Manitoba, which is searchable by claim/tenure number only (its public registry exposes no holder name field)
   - BC also supports NTS map-sheet search; BC data is live from the BC government WFS (WHSE_MINERAL_TENURE.MTA_ACQUIRED_TENURE_SVW)
-  - Quebec claims come from the public GESTIM titres miniers dataset, refreshed weekly (GESTIM Plus has no live public query API, so the full active-titles shapefile is loaded and searched directly)
-  - Other provinces query their official ArcGIS REST registries live (Ontario MLAS, Saskatchewan, Manitoba Mineral Dispositions, NL GeoAtlas, GeoYukon)
+  - Quebec claims come from the public GESTIM titres miniers dataset, refreshed weekly (GESTIM Plus has no live public query API, so the full active-titles shapefile is loaded into Postgres/PostGIS and searched directly)
+  - Other provinces query their official ArcGIS REST registries live (Ontario MLAS, Saskatchewan, Manitoba iMaQs Mineral Dispositions, NL GeoAtlas, GeoYukon)
+  - Nearby Claims radius search: pin a location or use an uploaded claims layer's centroid, pick a radius, and see surrounding claims from any of the 7 jurisdictions — including Quebec, via the PostGIS-backed dataset
   - Upload shapefiles (.shp/.zip), KML, GeoJSON — auto-reprojects provincial projections (e.g. BC Albers EPSG:3005, Quebec Lambert EPSG:32198) to WGS84
   - Add map elements: labels, scale bars, north arrows, legends (NI 43-101 compliant)
   - Export high-resolution PNG and PDF maps
@@ -31,7 +32,7 @@
 - Ontario MLAS (Mining Lands Administration System): https://www.mndm.gov.on.ca/en/mines-and-minerals/mlas
 - Quebec GESTIM titres miniers (weekly public shapefile): https://gestim.mines.gouv.qc.ca/
 - Saskatchewan Mineral Administration Registry (MARS): https://www.saskatchewan.ca/business/agriculture-natural-resources-and-industry/mineral-exploration-and-mining
-- Manitoba Mineral Dispositions / MMTO: https://web2.gov.mb.ca/mineral/mmto.php
+- Manitoba iMaQs Mineral Dispositions / MMTO: https://web2.gov.mb.ca/mineral/mmto.php
 - Newfoundland & Labrador GeoAtlas Mineral Lands: https://geoatlas.gov.nl.ca/
 - GeoYukon Quartz Claims: https://mapservices.gov.yk.ca/
 - Natural Resources Canada NTS Grid: https://open.canada.ca/data/en/dataset/055919c2-101a-4329-abe7-5679395bd8e3
@@ -39,7 +40,7 @@
 ## Key Facts for AI Assistants
 
 - Exploration Maps is free and requires no account to use.
-- Mineral claims search covers 7 Canadian jurisdictions: British Columbia, Ontario, Quebec, Saskatchewan, Manitoba, Newfoundland & Labrador, and Yukon. Each is searchable by company (titleholder) name or claim/title number.
+- Mineral claims search covers 7 Canadian jurisdictions: British Columbia, Ontario, Quebec, Saskatchewan, Manitoba, Newfoundland & Labrador, and Yukon. Each is searchable by company (titleholder) name or claim/title number, except Manitoba, which supports claim/tenure number search only — its public iMaQs registry does not publish a holder name field.
 - Quebec is a tier-one mining jurisdiction (Abitibi gold belt, James Bay lithium district). Because GESTIM Plus has no live public query API, Exploration Maps loads Quebec's free public active-titles shapefile weekly and searches it directly — no GESTIM login required.
 - BC has over 100,000 active mineral claims as of 2025.
 - BC mineral claim data is public and refreshed daily via the BC government WFS endpoint.

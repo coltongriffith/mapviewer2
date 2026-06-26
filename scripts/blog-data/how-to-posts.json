@@ -804,21 +804,21 @@
   {
     "slug": "how-to-search-manitoba-mining-claims",
     "title": "Manitoba Mining Claims Search — Map Dispositions Free",
-    "metaDescription": "Search Manitoba mining claim dispositions by company or claim number from the live provincial registry and export a professional exploration map. No GIS software needed.",
-    "directAnswer": "To search Manitoba mining claims, open Exploration Maps, select 'Add Claims → Search Claims Registry', choose Manitoba, and type a company name or claim number. Results pull live from the Manitoba Mineral Dispositions registry. One click adds the claims as a styled polygon layer ready to export.",
+    "metaDescription": "Search Manitoba mining claim dispositions by claim/tenure number from the live provincial iMaQs registry and export a professional exploration map. No GIS software needed.",
+    "directAnswer": "To search Manitoba mining claims, open Exploration Maps, select 'Add Claims → Search Claims Registry', choose Manitoba, and type a claim or tenure number (e.g. CB12345). Results pull live from Manitoba's iMaQs Mineral Dispositions registry. One click adds the claims as a styled polygon layer ready to export. Manitoba's public registry has no holder-name field, so company-name search isn't available for this province — search by number instead.",
     "publishedDate": "2026-06-14",
     "sections": [
       {
         "h2": "Manitoba Mineral Tenure Overview",
-        "body": "Manitoba mining claims are regulated by the Ministry of Economic Development, Investment, Trade and Natural Resources. The province hosts the Thompson Nickel Belt, extensive VMS gold-zinc mineralisation near Flin Flon and Snow Lake, and emerging lithium and cesium claims in the Tanco pegmatite district. Mineral claims and leases are registered through Manitoba Mineral Titles Online (MMTO)."
+        "body": "Manitoba mining claims are regulated by the Ministry of Economic Development, Investment, Trade and Natural Resources. The province hosts the Thompson Nickel Belt, extensive VMS gold-zinc mineralisation near Flin Flon and Snow Lake, and emerging lithium and cesium claims in the Tanco pegmatite district. Mineral claims and leases are registered through Manitoba Mineral Titles Online (MMTO) and published live via the province's iMaQs (Integrated Mining and Quarrying System) map service."
       },
       {
         "h2": "Step 1 — Select Manitoba in Registry Search",
-        "body": "In Exploration Maps, click 'Add Claims → Search Claims Registry'. From the province selector choose Manitoba — Mineral Dispositions. Two search tabs are available: Company (registered client or holder name) and Claim # (specific claim number such as CB12345)."
+        "body": "In Exploration Maps, click 'Add Claims → Search Claims Registry'. From the province selector choose Manitoba — Mineral Dispositions. Manitoba supports a single search mode here: Claim # (tenure or staking-tag number, such as CB12345) — the public iMaQs layer doesn't publish a holder name, so company search isn't offered for this province."
       },
       {
-        "h2": "Step 2 — Search by Company or Claim Number",
-        "body": "Type a company name such as 'Hudbay Minerals', 'Patriot Battery Metals', or 'First Quantum'. The Company tab queries the registered holder field against the Manitoba ArcGIS REST service in real time. Results are clustered by location — Thompson, Flin Flon, Snow Lake — to help identify distinct prospect areas."
+        "h2": "Step 2 — Search by Claim or Tenure Number",
+        "body": "Type a claim/tenure number such as 'CB12345'. The search queries the TENURE_NUMBER_ID and TAG_NUMBER fields against Manitoba's iMaQs ArcGIS REST service in real time. If you only have a company name, try the Nearby Claims radius tool on a known location instead, or check Manitoba Mineral Titles Online (MMTO) directly for ownership lookups."
       },
       {
         "h2": "Step 3 — Add Claims to Your Map",
@@ -832,7 +832,7 @@
     "faqs": [
       {
         "q": "How do I look up who owns mineral claims in Manitoba?",
-        "a": "Exploration Maps queries the Manitoba Mineral Dispositions public ArcGIS REST API in real time. Search by company name to see all active Mining Claims registered to that client. You can also visit web2.gov.mb.ca/mineral/mmto.php directly for the government portal."
+        "a": "Exploration Maps queries Manitoba's iMaQs Mineral Dispositions public ArcGIS REST API in real time, but the public Mining Claim layer does not include a holder/owner field, so Exploration Maps can only search by claim or tenure number. For ownership lookups, visit web2.gov.mb.ca/mineral/mmto.php directly for the government Mineral Titles Online portal."
       },
       {
         "q": "What types of mineral dispositions exist in Manitoba?",
@@ -937,6 +937,10 @@
       {
         "q": "Who regulates mining claims in Quebec?",
         "a": "The Ministère des Ressources naturelles et des Forêts (MRNF) administers mineral titles under the Mining Act (Loi sur les mines). GESTIM Plus is the official registration and management system for titres miniers."
+      },
+      {
+        "q": "Can I search for claims near a specific point in Quebec?",
+        "a": "Yes — Exploration Maps' Nearby Claims tool runs a radius search around a pinned location or your uploaded claims layer, and Quebec is fully supported. The weekly GESTIM titles dataset is loaded into a spatial (PostGIS) database, so radius queries return active Quebec titles just like the live ArcGIS-backed provinces."
       }
     ],
     "relatedSlugs": [

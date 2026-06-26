@@ -10,7 +10,7 @@
     "id": "registry_search",
     "theme": "tip",
     "hook": "You don't need to log in to MTO, MLAS, or GESTIM to see who holds ground around your target",
-    "detail": "Search BC, Ontario, Quebec, Saskatchewan, Manitoba, Newfoundland, and Yukon claim registries by company name or claim number directly from explorationmaps.com. Results load on the map instantly — good-to dates, acreage, and all. No download, no spreadsheet.",
+    "detail": "Search BC, Ontario, Quebec, Saskatchewan, Manitoba, Newfoundland, and Yukon claim registries by company name or claim number directly from explorationmaps.com (Manitoba is claim-number search only — its registry has no holder field). Results load on the map instantly — good-to dates, acreage, and all. No download, no spreadsheet.",
     "cta": "Search the registries free at explorationmaps.com"
   },
   {
@@ -59,7 +59,7 @@
     "id": "claims_canada",
     "theme": "industry",
     "hook": "Canadian exploration spans a patchwork of provincial registry systems. Searching all of them used to mean a dozen browser tabs and a login for each.",
-    "detail": "BC Mineral Titles, Ontario MLAS, Quebec GESTIM, Saskatchewan MARS, Manitoba Mineral Dispositions, NL GeoAtlas, GeoYukon — now all searchable from one interface. Type a company name or claim number, pick the province, and see the tenure on a map. Search nothing turns up in your province? It checks the others automatically.",
+    "detail": "BC Mineral Titles, Ontario MLAS, Quebec GESTIM, Saskatchewan MARS, Manitoba Mineral Dispositions, NL GeoAtlas, GeoYukon — now all searchable from one interface. Type a company name or claim number (claim number only for Manitoba), pick the province, and see the tenure on a map. Search nothing turns up in your province? It checks the others automatically.",
     "cta": "Search all seven at explorationmaps.com"
   },
   {

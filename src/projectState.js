@@ -175,5 +175,8 @@ export function createInitialProjectState() {
     distanceLines: [],
     ratioMapStates: {},
     mapView: null,
+    // Nearby-claims overlay (province registry search by radius). Stored on the
+    // project so it persists with saves/drafts like every other map element.
+    areaClaims: null,
   };
 }

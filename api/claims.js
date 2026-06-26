@@ -43,15 +43,19 @@ const ARCGIS_PROVINCES = {
     numberFields: ['DISPOSIT_1', 'DISPOSITIO', 'DISPOSITION_NUMBER', 'DISPOSITION_NUM', 'DISP_NUM', 'CLAIM_NUMBER'],
   },
   mb: {
-    // Manitoba Mineral Dispositions — public ArcGIS REST (Economy/Mines).
-    // Layer 1 is the "Mining Claim" leaf layer (catalog: 0 Mineral Dispositions
-    // group, 1 Mining Claim, 2 Mineral Lease, 3 Mineral Exploration Licence,
-    // 5 Patent Mining Claim, 7 Quarry Dispositions). Server is http-only; the
-    // proxy fetches it server-side so there's no mixed-content concern.
-    service: 'http://maps.gov.mb.ca/arcgis/rest/services/Mineral_Dispositions/MapServer',
-    layerId: 1,
-    ownerFields: ['CLIENT_NAME', 'CLIENT', 'HOLDER', 'HOLDER_NAME', 'RECORDED_HOLDER', 'CLAIMANT', 'OWNER_NAME', 'OWNER', 'COMPANY', 'COMPANY_NAME'],
-    numberFields: ['CLAIM_NUMBER', 'CLAIM_NO', 'CLAIMNUM', 'DISPOSITION_NUMBER', 'DISPOSITION_NO', 'DISP_NUM', 'CID'],
+    // Manitoba iMaQs (Integrated Mining and Quarrying System) — public ArcGIS
+    // REST on rdmaps.gov.mb.ca. The long-standing maps.gov.mb.ca service now
+    // returns a persistent gateway 502 (its ArcGIS backend is down), but the
+    // same data is served healthily here, the host behind Manitoba's public
+    // mineral-dispositions map viewer. imaqsMining layer 3 is the "Mining
+    // Claim" leaf (4 Patent, 5 Exploration Licence, 8 Cancelled — excluded).
+    // The layer publishes no holder/owner field, so company search is not
+    // available for Manitoba (ownerFields empty → graceful "search by number");
+    // claims are looked up by tenure number (TENURE_NUMBER_ID) or staking tag.
+    service: 'https://rdmaps.gov.mb.ca/arcgis/rest/services/iMaQs/imaqsMining/MapServer',
+    layerId: 3,
+    ownerFields: [],
+    numberFields: ['TENURE_NUMBER_ID', 'TAG_NUMBER'],
   },
   nl: {
     // Newfoundland & Labrador GeoAtlas Mineral Lands — public ArcGIS REST.
@@ -309,6 +313,11 @@ function normalizeProps(props) {
         ? new Date(v).toISOString().slice(0, 10)
         : String(v);
     }
+  }
+  // A layer can expose GOOD_TO_DATE literally (e.g. Manitoba iMaQs), in which
+  // case the spread above kept the raw epoch-ms number — convert it too.
+  if (typeof out.GOOD_TO_DATE === 'number' && out.GOOD_TO_DATE > 1e10) {
+    out.GOOD_TO_DATE = new Date(out.GOOD_TO_DATE).toISOString().slice(0, 10);
   }
   if (out.TITLE_TYPE_DESCRIPTION == null) {
     // Prefer human-readable *_DESC fields over *_CODE fields (e.g. Ontario
