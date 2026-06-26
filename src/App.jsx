@@ -64,6 +64,8 @@ import {
   saveProjectRecord,
   touchLastOpenedProject,
   updateProjectThumbnailRecord,
+  getAccountSettingsLocal,
+  saveAccountSettingsLocal,
 } from './utils/projectStorage';
 import {
   deleteCloudProject,
@@ -80,6 +82,9 @@ import {
   updateProjectThumbnail,
   applyBrandKitConfig,
   BRAND_KIT_SAVEABLE_KEYS,
+  getAccountSettings,
+  saveAccountSettings,
+  ACCOUNT_SETTINGS_KEYS,
   shareMap,
 } from './utils/cloudStorage';
 import { useAuth } from './hooks/useAuth';
@@ -653,6 +658,7 @@ export default function App() {
   const [showBrandKitManager, setShowBrandKitManager] = useState(false);
   const [showAuthFromGate, setShowAuthFromGate] = useState(false);
   const [cloudTemplates, setCloudTemplates] = useState([]);
+  const [accountSettings, setAccountSettings] = useState({});
   const [savingTemplate, setSavingTemplate] = useState(false);
   const [savingTemplateName, setSavingTemplateName] = useState(null);
   const [renamingTemplateId, setRenamingTemplateId] = useState(null);
@@ -970,6 +976,36 @@ export default function App() {
     }).catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
+
+  // Load account-level defaults (company/QP/projection): from the cloud when
+  // signed in, otherwise from the local mirror for anonymous users.
+  useEffect(() => {
+    if (user) {
+      getAccountSettings().then(setAccountSettings).catch(() => {});
+    } else {
+      setAccountSettings(getAccountSettingsLocal());
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+
+  // Merge the saved account defaults into a fresh layout (only non-empty fields).
+  const seedLayoutWithSettings = (layout) => {
+    const patch = {};
+    for (const k of ACCOUNT_SETTINGS_KEYS) {
+      if (accountSettings[k]) patch[k] = accountSettings[k];
+    }
+    return Object.keys(patch).length ? { ...layout, ...patch } : layout;
+  };
+
+  const handleSaveAccountSettings = async (next) => {
+    setAccountSettings(next);
+    try {
+      if (user) await saveAccountSettings(next);
+      else saveAccountSettingsLocal(next);
+    } catch (err) {
+      setUploadStatus({ type: 'error', message: `Could not save settings: ${err.message}` });
+    }
+  };
 
   useEffect(() => {
     const handler = () => setUploadStatus({
@@ -2966,7 +3002,8 @@ export default function App() {
 
 
   const startNewProject = () => {
-    const blank = createInitialProjectState();
+    const base = createInitialProjectState();
+    const blank = { ...base, layout: seedLayoutWithSettings(base.layout) };
     setProject(blank);
     setProjectId(null);
     setProjectName('Untitled map');
@@ -3025,6 +3062,8 @@ export default function App() {
             updateLayout(applyBrandKitConfig(config, createInitialProjectState().layout));
             setScreen('editor');
           }}
+          accountSettings={accountSettings}
+          onSaveSettings={handleSaveAccountSettings}
         />
       </React.Suspense>
     );

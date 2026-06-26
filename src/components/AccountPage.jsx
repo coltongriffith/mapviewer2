@@ -123,7 +123,56 @@ function BrandKitCard({ kit, onApply, onUse, onSetDefault, onRename, onDelete, o
   );
 }
 
-export default function AccountPage({ onOpenProject, onNewProject, onExit, onApplyBrandKit, onUseKit }) {
+const SETTINGS_FIELDS = [
+  { key: 'companyName', label: 'Company name', placeholder: 'Acme Exploration Ltd.' },
+  { key: 'qpName', label: 'Qualified Person', placeholder: 'Jane Doe, P.Geo.' },
+  { key: 'qpCredentials', label: 'QP credentials', placeholder: 'P.Geo., M.Sc.' },
+  { key: 'projectionName', label: 'Projection', placeholder: 'NAD83 / UTM Zone 15N' },
+];
+
+function AccountSettingsCard({ settings, onSave }) {
+  const [form, setForm] = useState(() => ({ ...settings }));
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => { setForm({ ...settings }); }, [settings]);
+
+  const dirty = SETTINGS_FIELDS.some((f) => (form[f.key] || '') !== (settings[f.key] || ''));
+
+  const save = () => {
+    const clean = {};
+    for (const f of SETTINGS_FIELDS) {
+      const v = (form[f.key] || '').trim();
+      if (v) clean[f.key] = v;
+    }
+    onSave(clean);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  return (
+    <div className="acct-settings-card">
+      <div className="acct-settings-grid">
+        {SETTINGS_FIELDS.map((f) => (
+          <label key={f.key} className="acct-settings-field">
+            <span>{f.label}</span>
+            <input
+              type="text"
+              value={form[f.key] || ''}
+              placeholder={f.placeholder}
+              onChange={(e) => setForm((prev) => ({ ...prev, [f.key]: e.target.value }))}
+            />
+          </label>
+        ))}
+      </div>
+      <div className="acct-settings-actions">
+        <button className="btn" type="button" onClick={save} disabled={!dirty}>Save defaults</button>
+        {saved && <span className="acct-settings-saved">✓ Saved</span>}
+      </div>
+    </div>
+  );
+}
+
+export default function AccountPage({ onOpenProject, onNewProject, onExit, onApplyBrandKit, onUseKit, accountSettings = {}, onSaveSettings }) {
   const { user, signOut } = useAuth();
   const [projects, setProjects] = useState([]);
   const [brandKits, setBrandKits] = useState([]);
@@ -170,6 +219,14 @@ export default function AccountPage({ onOpenProject, onNewProject, onExit, onApp
       </header>
 
       <main className="acct-main">
+        <section className="acct-section">
+          <div className="acct-section-header">
+            <h2>Brand defaults</h2>
+          </div>
+          <p className="acct-section-hint">Used to pre-fill every new project you start.</p>
+          <AccountSettingsCard settings={accountSettings} onSave={onSaveSettings} />
+        </section>
+
         <section className="acct-section">
           <div className="acct-section-header">
             <h2>My Projects</h2>

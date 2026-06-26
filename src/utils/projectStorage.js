@@ -3,6 +3,7 @@ import { deflateSync, inflateSync, strToU8, strFromU8 } from 'fflate';
 const PROJECTS_KEY = 'mapviewer.projects.v1';
 const DRAFT_KEY = 'mapviewer.draft.v1';
 const LAST_OPENED_PROJECT_KEY = 'mapviewer.lastProjectId.v1';
+const ACCOUNT_SETTINGS_KEY = 'mapviewer.accountSettings.v1';
 const GZ_PREFIX = 'gz1:';
 
 // Trim GeoJSON coordinate precision to 6 decimal places (sub-meter accuracy).
@@ -77,6 +78,17 @@ export function estimateStorageUsedBytes() {
   } catch {
     return 0;
   }
+}
+
+// Account-level defaults (company, QP info, projection) for anonymous users —
+// the localStorage mirror of the cloud `account_settings` table.
+export function getAccountSettingsLocal() {
+  return safeParse(localStorage.getItem(ACCOUNT_SETTINGS_KEY), {});
+}
+
+export function saveAccountSettingsLocal(settings) {
+  safeSetItem(ACCOUNT_SETTINGS_KEY, JSON.stringify(settings || {}));
+  return settings || {};
 }
 
 export function listProjects() {
