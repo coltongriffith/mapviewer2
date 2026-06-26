@@ -129,9 +129,11 @@ const PROVINCES = [
     placeholders: { company: 'e.g. Cameco', number: 'e.g. MC00001234' },
   },
   {
+    // Manitoba's public iMaQs claim layer publishes no holder name, so only
+    // claim-number (tenure / staking tag) lookup is supported — no company mode.
     value: 'mb', label: 'Manitoba', registry: 'Mineral Dispositions',
-    modes: ['company', 'number'],
-    placeholders: { company: 'e.g. Hudbay', number: 'e.g. CB12345' },
+    modes: ['number'],
+    placeholders: { number: 'e.g. CB12345' },
   },
   {
     value: 'nl', label: 'Newfoundland & Labrador', registry: 'GeoAtlas',
@@ -157,11 +159,14 @@ const MODE_LABELS = {
 };
 
 function autoDetectMode(q, allowedModes) {
-  if (!q) return 'company';
+  // Fall back to the province's first supported mode, not a hardcoded
+  // 'company' — some provinces (e.g. Manitoba) only support number search.
+  const fallback = allowedModes.includes('company') ? 'company' : allowedModes[0];
+  if (!q) return fallback;
   const t = q.trim();
   if (/^\d+$/.test(t) && allowedModes.includes('number')) return 'number';
   if (/^\d{3}[A-Za-z]/.test(t) && allowedModes.includes('map')) return 'map';
-  return 'company';
+  return fallback;
 }
 
 // ── Component ──────────────────────────────────────────────────────────────

@@ -43,15 +43,19 @@ const ARCGIS_PROVINCES = {
     numberFields: ['DISPOSIT_1', 'DISPOSITIO', 'DISPOSITION_NUMBER', 'DISPOSITION_NUM', 'DISP_NUM', 'CLAIM_NUMBER'],
   },
   mb: {
-    // Manitoba Mineral Dispositions — public ArcGIS REST (Economy/Mines).
-    // Layer 1 is the "Mining Claim" leaf layer (catalog: 0 Mineral Dispositions
-    // group, 1 Mining Claim, 2 Mineral Lease, 3 Mineral Exploration Licence,
-    // 5 Patent Mining Claim, 7 Quarry Dispositions). Server is http-only; the
-    // proxy fetches it server-side so there's no mixed-content concern.
-    service: 'http://maps.gov.mb.ca/arcgis/rest/services/Mineral_Dispositions/MapServer',
-    layerId: 1,
-    ownerFields: ['CLIENT_NAME', 'CLIENT', 'HOLDER', 'HOLDER_NAME', 'RECORDED_HOLDER', 'CLAIMANT', 'OWNER_NAME', 'OWNER', 'COMPANY', 'COMPANY_NAME'],
-    numberFields: ['CLAIM_NUMBER', 'CLAIM_NO', 'CLAIMNUM', 'DISPOSITION_NUMBER', 'DISPOSITION_NO', 'DISP_NUM', 'CID'],
+    // Manitoba iMaQs (Integrated Mining and Quarrying System) — public ArcGIS
+    // REST on rdmaps.gov.mb.ca. The long-standing maps.gov.mb.ca service now
+    // returns a persistent gateway 502 (its ArcGIS backend is down), but the
+    // same data is served healthily here, the host behind Manitoba's public
+    // mineral-dispositions map viewer. imaqsMining layer 3 is the "Mining
+    // Claim" leaf (4 Patent, 5 Exploration Licence, 8 Cancelled — excluded).
+    // The layer publishes no holder/owner field, so company search is not
+    // available for Manitoba (ownerFields empty → graceful "search by number");
+    // claims are looked up by tenure number (TENURE_NUMBER_ID) or staking tag.
+    service: 'https://rdmaps.gov.mb.ca/arcgis/rest/services/iMaQs/imaqsMining/MapServer',
+    layerId: 3,
+    ownerFields: [],
+    numberFields: ['TENURE_NUMBER_ID', 'TAG_NUMBER'],
   },
   nl: {
     // Newfoundland & Labrador GeoAtlas Mineral Lands — public ArcGIS REST.
@@ -309,6 +313,11 @@ function normalizeProps(props) {
         ? new Date(v).toISOString().slice(0, 10)
         : String(v);
     }
+  }
+  // A layer can expose GOOD_TO_DATE literally (e.g. Manitoba iMaQs), in which
+  // case the spread above kept the raw epoch-ms number — convert it too.
+  if (typeof out.GOOD_TO_DATE === 'number' && out.GOOD_TO_DATE > 1e10) {
+    out.GOOD_TO_DATE = new Date(out.GOOD_TO_DATE).toISOString().slice(0, 10);
   }
   if (out.TITLE_TYPE_DESCRIPTION == null) {
     // Prefer human-readable *_DESC fields over *_CODE fields (e.g. Ontario
@@ -572,47 +581,6 @@ export default async function handler(req, res) {
       }
     }
     return res.status(200).json({ province, attempts });
-  }
-
-  // Manitoba alternative-source discovery: maps.gov.mb.ca's own ArcGIS REST
-  // endpoint gateways a persistent 502 to our traffic (confirmed via schema=raw),
-  // so this probes Manitoba's public ArcGIS Hub geoportal for the same data
-  // mirrored elsewhere. The DCAT feed lists every published dataset with its
-  // direct service/download URLs, so we don't need to already know the right
-  // service name or org id. Run from the live deployment only — this sandbox's
-  // own egress policy blocks arcgis.com/gov.mb.ca hosts outright.
-  if (schema === 'mb-discover') {
-    // geoportal.gov.mb.ca's DCAT catalog was already checked and confirmed to
-    // have no mineral/mining-claims dataset (267 entries, none match) — so
-    // this only probes the rdmaps.gov.mb.ca host backing the official public
-    // mining-claims viewer (viewer=MapGallery_Geology.MapGallery), a different
-    // host than the broken maps.gov.mb.ca service.
-    // Confirmed working: rdmaps.gov.mb.ca hosts iMaQs/imaqsMining (MapServer),
-    // the live mineral-dispositions data on a healthy host (maps.gov.mb.ca
-    // 502s). Probe its layer list to find the mining-claim leaf layer.
-    const probes = [
-      'https://rdmaps.gov.mb.ca/arcgis/rest/services/iMaQs/imaqsMining/MapServer/3?f=json',
-    ];
-    const attempts = [];
-    for (const u of probes) {
-      const started = Date.now();
-      try {
-        const rr = await fetch(u, { headers: FALLBACK_FETCH_HEADERS, signal: AbortSignal.timeout(15000) });
-        const body = await rr.text().catch(() => '');
-        // For the MapServer metadata, pull just the layers array so we can read
-        // the leaf-layer names/ids without the full (huge) service descriptor.
-        let layers; let layerName; let fields;
-        try {
-          const j = JSON.parse(body);
-          if (Array.isArray(j.layers)) layers = j.layers.map((l) => ({ id: l.id, name: l.name, parentLayerId: l.parentLayerId, subLayerIds: l.subLayerIds }));
-          if (Array.isArray(j.fields)) { layerName = j.name; fields = j.fields.map((f) => `${f.name} (${f.type})`); }
-        } catch { /* not json — fall back to snippet */ }
-        attempts.push({ url: u, ok: rr.ok, status: rr.status, ms: Date.now() - started, contentType: rr.headers.get('content-type'), layerName, fields, layers, bodySnippet: (layers || fields) ? undefined : body.slice(0, 500) });
-      } catch (e) {
-        attempts.push({ url: u, error: String(e.name || e.message || e), ms: Date.now() - started });
-      }
-    }
-    return res.status(200).json({ attempts });
   }
 
   // Diagnostics: report resolved layer + fields for an ArcGIS province
