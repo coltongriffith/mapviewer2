@@ -62,6 +62,7 @@ import {
   saveDraft,
   saveProjectRecord,
   touchLastOpenedProject,
+  updateProjectThumbnailRecord,
 } from './utils/projectStorage';
 import {
   deleteCloudProject,
@@ -75,6 +76,7 @@ import {
   saveBrandKit,
   setDefaultBrandKit,
   updateBrandKit,
+  updateProjectThumbnail,
   applyBrandKitConfig,
   BRAND_KIT_SAVEABLE_KEYS,
   shareMap,
@@ -82,6 +84,7 @@ import {
 import { useAuth } from './hooks/useAuth';
 import { supabase } from './lib/supabase';
 import { renderBrandKitSwatch } from './utils/brandKitSwatch';
+import { captureProjectThumbnail } from './utils/thumbnailCapture';
 import UserMenu from './components/UserMenu';
 import { CORNER_KEY, getCornerLayout, moveToCorner, moveToCornerFirst, moveToCornerBeside, findElement } from './utils/cornerLayout';
 
@@ -2737,6 +2740,23 @@ export default function App() {
   };
 
 
+  const captureAndStoreThumbnail = (id, isCloud) => {
+    if (!id || !mapContainerRef.current || !leafletMapRef.current) return;
+    captureProjectThumbnail({
+      mapContainer: mapContainerRef.current,
+      project,
+      map: leafletMapRef.current,
+    }).then((thumbnail) => {
+      if (!thumbnail) return;
+      if (isCloud) {
+        updateProjectThumbnail(id, thumbnail).catch(() => {});
+      } else {
+        updateProjectThumbnailRecord(id, thumbnail);
+      }
+      setRecentProjects((prev) => prev.map((p) => (p.id === id ? { ...p, thumbnail } : p)));
+    }).catch(() => {});
+  };
+
   const saveCurrentProject = async (nextName = null) => {
     const nameToSave = (nextName || projectName || project.layout?.title || 'Untitled map').trim();
     const idToSave = projectId || crypto.randomUUID();
@@ -2750,6 +2770,7 @@ export default function App() {
         saveDraft({ payload: project, projectId: cloudId, projectName: nameToSave });
         listCloudProjects().then(setRecentProjects).catch(() => {});
         setUploadStatus({ type: 'success', message: `Saved to cloud: ${nameToSave}` });
+        captureAndStoreThumbnail(cloudId, true);
       } catch (err) {
         setUploadStatus({ type: 'error', message: `Cloud save failed: ${err.message}` });
       }
@@ -2762,6 +2783,7 @@ export default function App() {
       setIsDirty(false);
       saveDraft({ payload: project, projectId: saved.id, projectName: saved.name });
       setUploadStatus({ type: 'success', message: `Saved project: ${saved.name}` });
+      captureAndStoreThumbnail(saved.id, false);
     }
   };
 
@@ -2788,6 +2810,7 @@ export default function App() {
         saveDraft({ payload: project, projectId: cloudId, projectName: nameToSave });
         listCloudProjects().then(setRecentProjects).catch(() => {});
         setUploadStatus({ type: 'success', message: `Saved to cloud as: ${nameToSave}` });
+        captureAndStoreThumbnail(cloudId, true);
       } catch (err) {
         setUploadStatus({ type: 'error', message: `Cloud save failed: ${err.message}` });
       }
@@ -2800,6 +2823,7 @@ export default function App() {
       setIsDirty(false);
       saveDraft({ payload: project, projectId: saved.id, projectName: saved.name });
       setUploadStatus({ type: 'success', message: `Saved as new project: ${saved.name}` });
+      captureAndStoreThumbnail(saved.id, false);
     }
   };
 
