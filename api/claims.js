@@ -587,11 +587,12 @@ export default async function handler(req, res) {
     // this only probes the rdmaps.gov.mb.ca host backing the official public
     // mining-claims viewer (viewer=MapGallery_Geology.MapGallery), a different
     // host than the broken maps.gov.mb.ca service.
+    // The services root confirmed an "iMaQs" folder (Integrated Mining and
+    // Quarrying System) — almost certainly the working mirror of the same
+    // mineral-dispositions data that's 502'ing on maps.gov.mb.ca.
     const probes = [
-      'https://rdmaps.gov.mb.ca/Geocortex/Essentials/REST/sites/MapGallery_Geology/viewers/MapGallery/virtualdirectory/Resources/Config/Default',
-      'https://rdmaps.gov.mb.ca/Html5Viewer/Resources/Config/Default?site=MapGallery_Geology&viewer=MapGallery',
-      'https://rdmaps.gov.mb.ca/arcgis/rest/services?f=json',
-      'https://rdmaps.gov.mb.ca/arcgis/rest/services/Mineral_Dispositions/MapServer?f=json',
+      'https://rdmaps.gov.mb.ca/arcgis/rest/services/iMaQs?f=json',
+      'https://rdmaps.gov.mb.ca/arcgis/rest/services/iMaQs/MapServer?f=json',
     ];
     const attempts = [];
     for (const u of probes) {
