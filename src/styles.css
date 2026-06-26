@@ -1485,6 +1485,14 @@ body.is-dragging .template-zone .panel-delete-btn { opacity: 0 !important; }
   transition: border-color 0.12s;
 }
 .tmgr-row:hover { border-color: #cbd5e1; background: #fff; }
+.tmgr-swatch {
+  width: 48px;
+  height: 30px;
+  border-radius: 6px;
+  object-fit: cover;
+  border: 1px solid #e2e8f0;
+  flex-shrink: 0;
+}
 .tmgr-star {
   background: none;
   border: none;

@@ -10,7 +10,7 @@ export default function UserMenu({ onOpenTemplates }) {
     return (
       <>
         <div className="sidebar-account-panel">
-          <div className="sidebar-account-hint">Sign in to save projects to the cloud and use company templates.</div>
+          <div className="sidebar-account-hint">Sign in to save projects to the cloud and use brand kits.</div>
           <button className="sidebar-account-signin-btn" onClick={() => setShowAuth(true)}>
             Sign in / Create account
           </button>
@@ -28,7 +28,7 @@ export default function UserMenu({ onOpenTemplates }) {
       </div>
       <div className="sidebar-account-actions">
         <button className="sidebar-account-action-btn" onClick={onOpenTemplates}>
-          My Templates
+          Brand Kits
         </button>
         <button className="sidebar-account-action-btn muted" onClick={signOut}>
           Sign out

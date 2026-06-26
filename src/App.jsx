@@ -65,22 +65,23 @@ import {
 } from './utils/projectStorage';
 import {
   deleteCloudProject,
-  deleteTemplate,
-  getDefaultTemplate,
+  deleteBrandKit,
+  getDefaultBrandKit,
   listCloudProjects,
-  listTemplates,
+  listBrandKits,
   loadCloudProject,
   renameCloudProject,
   saveCloudProject,
-  saveTemplate,
-  setDefaultTemplate,
-  updateTemplate,
-  applyTemplateConfig,
-  TEMPLATE_SAVEABLE_KEYS,
+  saveBrandKit,
+  setDefaultBrandKit,
+  updateBrandKit,
+  applyBrandKitConfig,
+  BRAND_KIT_SAVEABLE_KEYS,
   shareMap,
 } from './utils/cloudStorage';
 import { useAuth } from './hooks/useAuth';
 import { supabase } from './lib/supabase';
+import { renderBrandKitSwatch } from './utils/brandKitSwatch';
 import UserMenu from './components/UserMenu';
 import { CORNER_KEY, getCornerLayout, moveToCorner, moveToCornerFirst, moveToCornerBeside, findElement } from './utils/cornerLayout';
 
@@ -627,7 +628,7 @@ export default function App() {
 
   const { user } = useAuth();
   const [storageWarningDismissed, setStorageWarningDismissed] = useState(false);
-  const [showTemplateManager, setShowTemplateManager] = useState(false);
+  const [showBrandKitManager, setShowBrandKitManager] = useState(false);
   const [cloudTemplates, setCloudTemplates] = useState([]);
   const [savingTemplate, setSavingTemplate] = useState(false);
   const [savingTemplateName, setSavingTemplateName] = useState(null);
@@ -814,7 +815,7 @@ export default function App() {
   useEffect(() => {
     if (user) {
       listCloudProjects().then(setRecentProjects).catch(() => setRecentProjects(listProjects()));
-      listTemplates().then(setCloudTemplates).catch(() => {});
+      listBrandKits().then(setCloudTemplates).catch(() => {});
     } else {
       setRecentProjects(listProjects());
     }
@@ -899,12 +900,12 @@ export default function App() {
     };
   }, []);
 
-  // When user logs in, apply their default template to the current (unsaved) project
+  // When user logs in, apply their default brand kit to the current (unsaved) project
   useEffect(() => {
     if (!user) return;
-    getDefaultTemplate().then((tmpl) => {
+    getDefaultBrandKit().then((tmpl) => {
       if (tmpl?.config) {
-        setProject((prev) => ({ ...prev, layout: applyTemplateConfig(tmpl.config, prev.layout) }));
+        setProject((prev) => ({ ...prev, layout: applyBrandKitConfig(tmpl.config, prev.layout) }));
       }
     }).catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2808,16 +2809,16 @@ export default function App() {
     setSavingTemplate(true);
     try {
       const config = Object.fromEntries(
-        TEMPLATE_SAVEABLE_KEYS
+        BRAND_KIT_SAVEABLE_KEYS
           .filter((k) => project.layout[k] !== undefined)
           .map((k) => [k, project.layout[k]])
       );
       if (project.layout.fonts) config.fonts = project.layout.fonts;
-      await saveTemplate({ name, config });
-      listTemplates().then(setCloudTemplates).catch(() => {});
+      await saveBrandKit({ name, config });
+      listBrandKits().then(setCloudTemplates).catch(() => {});
       setSavingTemplateName(null);
     } catch (err) {
-      setUploadStatus({ type: 'error', message: `Could not save template: ${err.message}` });
+      setUploadStatus({ type: 'error', message: `Could not save brand kit: ${err.message}` });
     } finally {
       setSavingTemplate(false);
     }
@@ -2934,7 +2935,7 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <Sidebar footer={<UserMenu onOpenTemplates={() => setShowTemplateManager(true)} />}>
+      <Sidebar footer={<UserMenu onOpenTemplates={() => setShowBrandKitManager(true)} />}>
         <div className="sidebar-header-row">
           <button className="sidebar-wordmark" type="button" onClick={() => setScreen('landing')}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -4065,20 +4066,20 @@ export default function App() {
               </div>
             </details>
 
-            {/* Saved Templates */}
+            {/* Brand Kits */}
             <div className="template-manager-block">
               <div className="template-manager-header">
-                <span className="template-manager-label">Saved Templates</span>
+                <span className="template-manager-label">My Brand Kits</span>
                 {user && (
-                  <button className="btn compact" type="button" onClick={() => setShowTemplateManager(true)}>
-                    {cloudTemplates.length > 0 ? `Manage (${cloudTemplates.length})` : '+ Save Template'}
+                  <button className="btn compact" type="button" onClick={() => setShowBrandKitManager(true)}>
+                    {cloudTemplates.length > 0 ? `Manage (${cloudTemplates.length})` : '+ Save Brand Kit'}
                   </button>
                 )}
               </div>
               {!user ? (
-                <p className="template-manager-hint">Sign in to save and apply company templates.</p>
+                <p className="template-manager-hint">Sign in to save and apply brand kits.</p>
               ) : cloudTemplates.length === 0 ? (
-                <p className="template-manager-hint">No templates yet — save your brand look to reuse across projects.</p>
+                <p className="template-manager-hint">No brand kits yet — save your brand look to reuse across projects.</p>
               ) : (
                 <ul className="template-manager-list">
                   {cloudTemplates.map((tmpl) => (
@@ -4089,7 +4090,7 @@ export default function App() {
                         className="btn compact"
                         type="button"
                         onClick={() => {
-                          const newLayout = applyTemplateConfig(tmpl.config || {}, project.layout);
+                          const newLayout = applyBrandKitConfig(tmpl.config || {}, project.layout);
                           updateLayout(Object.fromEntries(Object.entries(newLayout).filter(([k]) => newLayout[k] !== project.layout[k])));
                           setUploadStatus({ type: 'success', message: `"${tmpl.name}" applied — upload your layers to get started.` });
                         }}
@@ -4688,24 +4689,24 @@ export default function App() {
           height: dragging.ghostH,
         }} />
       )}
-      {/* Template Manager Modal */}
-      {showTemplateManager && (
-        <div className="modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) setShowTemplateManager(false); }}>
+      {/* Brand Kit Manager Modal */}
+      {showBrandKitManager && (
+        <div className="modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) setShowBrandKitManager(false); }}>
           <div className="modal-panel tmgr-panel">
-            <button className="modal-close-btn" onClick={() => setShowTemplateManager(false)}>×</button>
+            <button className="modal-close-btn" onClick={() => setShowBrandKitManager(false)}>×</button>
             <div className="tmgr-header">
-              <h2 className="tmgr-title">Saved Templates</h2>
+              <h2 className="tmgr-title">My Brand Kits</h2>
               <p className="tmgr-subtitle">Save your brand look once, apply to any project.</p>
             </div>
 
-            {/* Save new template form */}
+            {/* Save new brand kit form */}
             <div className="tmgr-save-section">
               {savingTemplateName !== null ? (
                 <div className="tmgr-save-row">
                   <input
                     autoFocus
                     className="tmgr-name-input"
-                    placeholder="Template name…"
+                    placeholder="Brand kit name…"
                     value={savingTemplateName}
                     onChange={(e) => setSavingTemplateName(e.target.value)}
                     onKeyDown={(e) => {
@@ -4722,24 +4723,25 @@ export default function App() {
                   <button className="btn compact secondary" type="button" onClick={() => setSavingTemplateName(null)}>Cancel</button>
                 </div>
               ) : (
-                <button className="btn compact" type="button" onClick={() => setSavingTemplateName(projectName || '')}>+ Save Current Settings as Template</button>
+                <button className="btn compact" type="button" onClick={() => setSavingTemplateName(projectName || '')}>+ Save Current Settings as Brand Kit</button>
               )}
             </div>
 
-            {/* Template list */}
+            {/* Brand kit list */}
             {cloudTemplates.length === 0 ? (
-              <p className="tmgr-empty">No templates saved yet.</p>
+              <p className="tmgr-empty">No brand kits saved yet.</p>
             ) : (
               <ul className="tmgr-list">
                 {cloudTemplates.map((tmpl) => (
                   <li key={tmpl.id} className="tmgr-row">
+                    <img className="tmgr-swatch" src={renderBrandKitSwatch(tmpl.config || {})} alt="" />
                     <button
                       className={`tmgr-star${tmpl.is_default ? ' active' : ''}`}
-                      title={tmpl.is_default ? 'Default template' : 'Set as default'}
+                      title={tmpl.is_default ? 'Default brand kit' : 'Set as default'}
                       onClick={async () => {
                         if (tmpl.is_default) return;
-                        await setDefaultTemplate(tmpl.id);
-                        listTemplates().then(setCloudTemplates).catch(() => {});
+                        await setDefaultBrandKit(tmpl.id);
+                        listBrandKits().then(setCloudTemplates).catch(() => {});
                       }}
                     >★</button>
                     <div className="tmgr-name-block">
@@ -4752,16 +4754,16 @@ export default function App() {
                             onChange={(e) => setRenamingTemplateName(e.target.value)}
                             onKeyDown={async (e) => {
                               if (e.key === 'Enter') {
-                                await updateTemplate(tmpl.id, { name: renamingTemplateName.trim() || tmpl.name });
-                                listTemplates().then(setCloudTemplates).catch(() => {});
+                                await updateBrandKit(tmpl.id, { name: renamingTemplateName.trim() || tmpl.name });
+                                listBrandKits().then(setCloudTemplates).catch(() => {});
                                 setRenamingTemplateId(null);
                               }
                               if (e.key === 'Escape') setRenamingTemplateId(null);
                             }}
                           />
                           <button className="tmgr-icon-btn" title="Confirm" onClick={async () => {
-                            await updateTemplate(tmpl.id, { name: renamingTemplateName.trim() || tmpl.name });
-                            listTemplates().then(setCloudTemplates).catch(() => {});
+                            await updateBrandKit(tmpl.id, { name: renamingTemplateName.trim() || tmpl.name });
+                            listBrandKits().then(setCloudTemplates).catch(() => {});
                             setRenamingTemplateId(null);
                           }}>✓</button>
                           <button className="tmgr-icon-btn muted" title="Cancel" onClick={() => setRenamingTemplateId(null)}>✗</button>
@@ -4776,9 +4778,9 @@ export default function App() {
                         className="btn compact"
                         type="button"
                         onClick={() => {
-                          const newLayout = applyTemplateConfig(tmpl.config || {}, project.layout);
+                          const newLayout = applyBrandKitConfig(tmpl.config || {}, project.layout);
                           updateLayout(Object.fromEntries(Object.entries(newLayout).filter(([k]) => newLayout[k] !== project.layout[k])));
-                          setShowTemplateManager(false);
+                          setShowBrandKitManager(false);
                           setUploadStatus({ type: 'success', message: `"${tmpl.name}" applied — upload your layers to get started.` });
                         }}
                       >Apply</button>
@@ -4791,9 +4793,9 @@ export default function App() {
                         className="tmgr-icon-btn danger"
                         title="Delete"
                         onClick={async () => {
-                          if (!window.confirm(`Delete template "${tmpl.name}"?`)) return;
-                          await deleteTemplate(tmpl.id);
-                          listTemplates().then(setCloudTemplates).catch(() => {});
+                          if (!window.confirm(`Delete brand kit "${tmpl.name}"?`)) return;
+                          await deleteBrandKit(tmpl.id);
+                          listBrandKits().then(setCloudTemplates).catch(() => {});
                         }}
                       >✕</button>
                     </div>
