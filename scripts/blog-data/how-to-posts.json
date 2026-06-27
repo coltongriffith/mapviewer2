@@ -22,7 +22,7 @@
       {
         "h2": "Step 1: Search BC claims by company or claimholder",
         "body": "Open Exploration Maps and choose Add Claims → Search Claims Registry. Select British Columbia, then type a company or claimholder name. The tool returns the matching tenures from public BC registry data so you can map a competitor's ground or your own holdings without manually entering coordinates.",
-        "image": { "alt": "Claim search panel with British Columbia selected and a company name typed in", "caption": "Searching BC tenures by claimholder name in the Add Claims panel" }
+        "image": { "alt": "Claim search panel with British Columbia selected and a company name typed in", "caption": "Searching BC tenures by claimholder name in the Add Claims panel", "src": "/blog-img/registry-bc.png" }
       },
       {
         "h2": "Step 2: Add the claims to your map",
@@ -32,7 +32,7 @@
       {
         "h2": "Step 3: Assign the Claims role and style the tenures",
         "body": "Expand the layer card and choose 'Claims' from the Role dropdown to apply the standard convention: a medium-blue stroke with a light, semi-transparent blue fill. Adjust the stroke and fill colour pickers if you want to distinguish optioned ground, JV claims, or separate blocks — each layer gets its own legend entry, so rename them to something descriptive like 'Optioned Claims' or 'Zone 1 Tenures'.",
-        "image": { "alt": "Layer card showing the Claims role selected with blue stroke and fill", "caption": "Assigning the Claims role applies investor-standard blue styling" }
+        "image": { "alt": "Layer card showing the Claims role selected with blue stroke and fill", "caption": "Assigning the Claims role applies investor-standard blue styling", "src": "/blog-img/layer-claims-role.png" }
       },
       {
         "h2": "Step 4: Add context, a title block, and your logo",
@@ -41,7 +41,7 @@
       {
         "h2": "Step 5: Export a clean BC claims map",
         "body": "Pick an export ratio — Landscape 16:9 for slides and news releases, Letter Portrait for reports — frame the claims within the bounds, then export PNG for presentations or PDF for print. Enter your email to unlock watermark-free exports.",
-        "image": { "alt": "Export panel with Landscape 16:9 ratio selected over a framed BC claims map", "caption": "Framing and exporting the finished BC claims map" }
+        "image": { "alt": "Export panel with Landscape 16:9 ratio selected over a framed BC claims map", "caption": "Framing and exporting the finished BC claims map", "src": "/blog-img/ratio-169.png" }
       },
       {
         "h2": "Example: mapping a competitor's Golden Triangle ground",
@@ -138,12 +138,12 @@
       {
         "h2": "Step 1: Get your claims onto the map",
         "body": "Open Exploration Maps. To search public data, choose Add Claims → Search Claims Registry, pick your province, and type a company or claimholder name. To use your own file, click the import button in the Layers section and select your GeoJSON, Shapefile, or KML. Either way the layer is added automatically and the map fits to your claims. If your data is corner coordinates in a spreadsheet, import the CSV and the Column Mapper assigns the fields.",
-        "image": { "alt": "Layers panel with a claims boundary imported and the map fit to its extent", "caption": "A claims boundary imported and framed automatically" }
+        "image": { "alt": "Layers panel with a claims boundary imported and the map fit to its extent", "caption": "A claims boundary imported and framed automatically", "src": "/blog-img/map-claims.png" }
       },
       {
         "h2": "Step 2: Assign the Claims layer role",
         "body": "Expand the layer card and select 'Claims' from the Role dropdown. This applies the standard convention automatically: a blue stroke with a light, semi-transparent blue fill — the styling investors and NI 43-101 reviewers expect. Override the stroke and fill colours per layer if you're showing multiple blocks.",
-        "image": { "alt": "Layer card with the Claims role selected showing blue claim styling", "caption": "The Claims role applies investor-standard styling in one click" }
+        "image": { "alt": "Layer card with the Claims role selected showing blue claim styling", "caption": "The Claims role applies investor-standard styling in one click", "src": "/blog-img/layer-claims-role.png" }
       },
       {
         "h2": "Step 3: Add context layers",
@@ -271,7 +271,7 @@
       {
         "h2": "Step 1: Import the drill collar CSV",
         "body": "Click the import button in the Layers section and select your collar CSV. The Column Mapper opens automatically — assign latitude and longitude. Columns named Lat, Long, Latitude, Longitude, Easting, or Northing are detected for you. Every other column (hole ID, depth, grade) is preserved and accessible when you click a hole.",
-        "image": { "alt": "Column Mapper showing latitude and longitude columns being assigned from a collar CSV", "caption": "Mapping coordinate columns when importing a collar CSV" }
+        "image": { "alt": "Column Mapper showing latitude and longitude columns being assigned from a collar CSV", "caption": "Mapping coordinate columns when importing a collar CSV", "src": "/blog-img/column-mapper.png" }
       },
       {
         "h2": "Common coordinate issues (and fixes)",
@@ -286,7 +286,7 @@
       {
         "h2": "Step 2: Assign the Drillholes role",
         "body": "Expand the layer card and select 'Drillholes' from the Role dropdown for standard dark circle markers. A marker size of 12–16 px reads well at most scales.",
-        "image": { "alt": "Drillholes role selected on a layer of collar points over a property", "caption": "Collars styled with the Drillholes role" }
+        "image": { "alt": "Drillholes role selected on a layer of collar points over a property", "caption": "Collars styled with the Drillholes role", "src": "/blog-img/layer-drillholes-role.png" }
       },
       {
         "h2": "Step 3: Add hole-ID and intercept callouts",
@@ -377,12 +377,12 @@
       {
         "h2": "Step 1: Brand the map with a theme, colours, and logo",
         "body": "Pick a theme such as Investor — Navy & White, then apply your own brand colours and logo so every map in the deck matches. Saving a brand kit means the next project starts on-brand automatically. Click the title to set the project and company name, and add the date in Design → Text & Metadata.",
-        "image": { "alt": "Map with a navy title block, company logo, and branded colours applied", "caption": "A branded title block keeps every deck map consistent" }
+        "image": { "alt": "Map with a navy title block, company logo, and branded colours applied", "caption": "A branded title block keeps every deck map consistent", "src": "/blog-img/title-block.png" }
       },
       {
         "h2": "Step 2: Set the Landscape 16:9 ratio",
         "body": "Activate Landscape 16:9 in the Export section before framing — it matches the standard PowerPoint and Keynote slide, so the map fills the slide with no letterboxing. The frame shows exactly what will export, so pan and zoom to taste.",
-        "image": { "alt": "Export panel with Landscape 16:9 selected and the map framed to the slide", "caption": "Framing to the 16:9 slide ratio before export" }
+        "image": { "alt": "Export panel with Landscape 16:9 selected and the map framed to the slide", "caption": "Framing to the 16:9 slide ratio before export", "src": "/blog-img/ratio-169.png" }
       },
       {
         "h2": "Step 3: Keep the legend scannable",
@@ -865,7 +865,7 @@
       {
         "h2": "Step 2: Import and open the Column Mapper",
         "body": "Click the import button in the Layers section and select your CSV. The Column Mapper opens automatically, listing every detected column with dropdowns to assign roles.",
-        "image": { "alt": "Column Mapper listing CSV columns with latitude and longitude dropdowns", "caption": "The Column Mapper opens automatically for any imported CSV" }
+        "image": { "alt": "Column Mapper listing CSV columns with latitude and longitude dropdowns", "caption": "The Column Mapper opens automatically for any imported CSV", "src": "/blog-img/column-mapper.png" }
       },
       {
         "h2": "Step 3: Assign latitude and longitude",
@@ -875,7 +875,7 @@
       {
         "h2": "Step 4: Set the role and style",
         "body": "Expand the layer and assign a role: Drillholes for collars, Anomalies for geochem, or Default for general points. Override marker colour, size, and shape in the styling controls. For soil results, sizing markers by grade communicates spatial distribution at a glance.",
-        "image": { "alt": "Imported point layer styled with graduated marker sizes by grade", "caption": "Sizing markers by value reveals grade distribution" }
+        "image": { "alt": "Imported point layer with a role assigned and marker size set", "caption": "Assigning a role and styling imported points", "src": "/blog-img/layer-drillholes-role.png" }
       },
       {
         "h2": "Step 5: Label points and add callouts",
@@ -1033,12 +1033,11 @@
       {
         "h2": "Step 1: Open the claims registry search for Ontario",
         "body": "From the landing page choose Add Claims → Search Claims Registry, or open '+ Add Claims' in the editor sidebar. Select Ontario — MLAS from the province dropdown.",
-        "image": { "alt": "Add Claims panel with Ontario — MLAS selected in the province dropdown", "caption": "Selecting Ontario in the claims registry search" }
+        "image": { "alt": "Add Claims panel with Ontario — MLAS selected in the province dropdown", "caption": "Selecting Ontario in the claims registry search", "src": "/blog-img/registry-on.png" }
       },
       {
         "h2": "Step 2: Search by company name or claim number",
         "body": "Type a company or individual holder name — e.g. 'Alamos Gold' or 'Agnico Eagle' — in the Company tab and press Enter, or switch to the Claim # tab for a specific Ontario claim number. Results are grouped by geographic cluster (Kirkland Lake, Timmins, Thunder Bay) so you can pick the right tenure package quickly.",
-        "image": { "alt": "Search results grouped by Kirkland Lake, Timmins, and Thunder Bay clusters", "caption": "Claim results grouped by geographic cluster" },
         "cta": { "text": "Search a claimholder and create a map.", "sub": "Find an operator's Ontario ground and add it in one click." }
       },
       {
@@ -1224,7 +1223,7 @@
       {
         "h2": "Step 1: Open registry search for Newfoundland",
         "body": "Choose Add Claims → Search Claims Registry and select Newfoundland & Labrador — GeoAtlas. Two tabs are available: Company (licensee name) and Claim # (licence number).",
-        "image": { "alt": "Add Claims panel with Newfoundland & Labrador — GeoAtlas selected", "caption": "Selecting Newfoundland & Labrador in the registry search" }
+        "image": { "alt": "Add Claims panel with Newfoundland & Labrador — GeoAtlas selected", "caption": "Selecting Newfoundland & Labrador in the registry search", "src": "/blog-img/registry-nl.png" }
       },
       {
         "h2": "Step 2: Search by licensee or licence number",
@@ -1327,7 +1326,7 @@
       {
         "h2": "Step 1: Select Quebec in registry search",
         "body": "Choose Add Claims → Search Claims Registry and select Quebec — GESTIM. Two tabs are available: Company (titleholder / titulaire name) and Claim # (an exact title number such as 2654321).",
-        "image": { "alt": "Add Claims panel with Quebec — GESTIM selected", "caption": "Selecting Quebec in the claims registry search" }
+        "image": { "alt": "Add Claims panel with Quebec — GESTIM selected", "caption": "Selecting Quebec in the claims registry search", "src": "/blog-img/registry-qc.png" }
       },
       {
         "h2": "Step 2: Search by titleholder or claim number",
@@ -1527,12 +1526,12 @@
       {
         "h2": "Step 1: Plot the drill collars",
         "body": "Import collars from a CSV or GeoJSON — typically hole ID, latitude, longitude — and assign the Drillholes role. Keep the symbols consistent so the drilling pattern is easy to follow. See the CSV import guide if your coordinates need attention.",
-        "image": { "alt": "Drill collars plotted as consistent markers over a target area", "caption": "Collars plotted with the Drillholes role" }
+        "image": { "alt": "Drill collars plotted as consistent markers over a target area", "caption": "Collars plotted with the Drillholes role", "src": "/blog-img/map-claims.png" }
       },
       {
         "h2": "Step 2: Highlight the headline intercepts",
         "body": "Add Badge Label callouts next to the holes that drive the story — grade over width, e.g. '32m @ 6.1 g/t Au'. Resist labelling every hole; spotlight the results investors should remember so attention goes where it should.",
-        "image": { "alt": "Two holes badge-labelled with their best intercepts standing out from the pattern", "caption": "Badging only the headline holes keeps the story clear" },
+        "image": { "alt": "Two holes badge-labelled with their best intercepts standing out from the pattern", "caption": "Badging only the headline holes keeps the story clear", "src": "/blog-img/badge-editor.png" },
         "cta": { "text": "Turn drill data into a clean news-release figure.", "sub": "Badge your best holes so the numbers stand out at a glance." }
       },
       {
