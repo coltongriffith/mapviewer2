@@ -192,33 +192,50 @@
   {
     "slug": "best-mining-map-software-junior-exploration",
     "title": "Best Mining Map Software for Junior Exploration Companies",
-    "metaDescription": "Compare the best mining map tools for junior exploration companies in 2024: Exploration Maps, ArcGIS, QGIS, MapInfo, and Illustrator. Which is right for you?",
-    "directAnswer": "For junior exploration companies that need investor-ready maps quickly and without a GIS specialist, Exploration Maps is the best choice. For teams with a dedicated GIS professional who needs spatial analysis capability, QGIS (free) or ArcGIS are the industry standards.",
+    "metaDescription": "An honest comparison of mining map tools for junior exploration teams: Exploration Maps, QGIS, ArcGIS, MapInfo, and Illustrator. Which is fastest for clean investor-ready maps, and which is better for technical GIS analysis.",
+    "directAnswer": "If you need clean, investor-ready maps quickly and without a GIS specialist, Exploration Maps is the fastest path. If you need spatial analysis, coordinate transformations, or heavy data processing, QGIS (free) or ArcGIS remain the better tools. Many teams use both: do the analysis in a GIS, then build the presentation map in Exploration Maps. Exploration Maps is a fast map-making and visualization tool, not a replacement for a full GIS.",
     "competitor": "Multiple",
     "sections": [
       {
-        "h2": "What Junior Mining Companies Actually Need from a Map Tool",
-        "body": "Junior exploration companies have specific map requirements: investor presentation figures (16:9 PNG), NI 43-101 technical report maps (PDF, Letter or A4), exploration news release figures, and property overview maps for corporate presentations and websites. These are distinct from the complex spatial analysis needs of major mining companies or government geological surveys."
+        "cta": { "text": "Turn public claim data into a clean map.", "sub": "See how fast an investor-ready map comes together — no GIS setup." }
       },
       {
-        "h2": "Exploration Maps: Built for This Use Case",
-        "body": "Exploration Maps is the only tool purpose-built for junior mining investor maps. It includes five industry-standard design themes (Investor Navy, Technical Sharp, Modern Dark, Terrain Earthy, Blueprint Cyan), pre-configured for NI 43-101-compliant outputs with north arrow, scale bar, legend, and title block. No setup, no GIS training, browser-based."
+        "h2": "What junior mining companies actually need from a map tool",
+        "body": "Junior exploration teams mostly need a specific set of outputs: investor presentation figures (16:9 PNG), NI 43-101 report maps (PDF), news-release figures, and property overview maps for decks and websites. That's a different job from the spatial analysis majors and government surveys do — and the right tool depends on which job you're doing."
       },
       {
-        "h2": "QGIS: Best Free Option with Full GIS Power",
-        "body": "QGIS is excellent for teams with a geologist or GIS professional comfortable with spatial software. It is free, full-featured, and can produce high-quality cartographic outputs — but requires meaningful time investment to configure maps to presentation standards."
+        "h2": "Quick answer: which tool when",
+        "checklist": [
+          "Need a clean investor or news-release map fast, no GIS specialist → Exploration Maps",
+          "Need spatial analysis, reprojection, or heavy data processing → QGIS or ArcGIS",
+          "Have a GIS pro and an enterprise stack already → ArcGIS or MapInfo",
+          "Need bespoke custom cartography for a one-off → GIS export + Illustrator finishing",
+          "Common reality → use a GIS for analysis, then Exploration Maps for the presentation map"
+        ]
       },
       {
-        "h2": "ArcGIS: Industry Standard, High Cost",
-        "body": "ArcGIS is the gold standard for professional GIS work in the mining industry. Most major companies and geological surveys run on ArcGIS. For a junior company, the cost and complexity are often prohibitive unless a dedicated GIS professional is on staff."
+        "h2": "Exploration Maps: fastest path to a clean investor map",
+        "body": "Exploration Maps is purpose-built for junior mining presentation maps. It ships investor-ready themes pre-configured with north arrow, scale bar, legend, and title block, searches public claim data, and imports shapefiles, KML, GeoJSON, and drillhole CSVs — browser-based, no GIS training. It is deliberately not a full GIS: for analysis you'll still want QGIS or ArcGIS.",
+        "cta": { "text": "Import your file and export an investor-ready map.", "sub": "Drop in a shapefile or CSV and export a clean PNG or PDF." }
       },
       {
-        "h2": "Adobe Illustrator: For Custom Design, Not Mapping",
-        "body": "Some exploration companies use Illustrator to polish maps after export from a GIS tool. Illustrator produces beautiful output but cannot handle geographic data natively — it is a finishing layer, not a mapping tool. For quick investor maps, this workflow is impractical."
+        "h2": "QGIS: best free option with full GIS power",
+        "body": "QGIS is excellent for teams with a geologist or GIS professional. It's free, full-featured, and produces high-quality cartography and real spatial analysis — but it takes meaningful time to configure a map to presentation standard, which is exactly the gap Exploration Maps fills."
       },
       {
-        "h2": "MapInfo: Legacy Enterprise Tool",
-        "body": "MapInfo (now Precisely MapInfo Pro) is used at some major mining companies and geological surveys in Canada and Australia. It is a capable enterprise GIS but carries similar cost and complexity barriers as ArcGIS, with a smaller community and slower development pace."
+        "h2": "ArcGIS: industry standard for technical GIS",
+        "body": "ArcGIS is the gold standard for professional GIS in mining; most majors and geological surveys run on it. It's the better choice when you need deep analysis and enterprise data management. For a junior whose main need is presentation maps, the cost and learning curve are often hard to justify without a dedicated GIS pro on staff."
+      },
+      {
+        "h2": "MapInfo: capable legacy enterprise GIS",
+        "body": "MapInfo (now Precisely MapInfo Pro) is a capable enterprise GIS used at some majors and surveys in Canada and Australia. Like ArcGIS, it's strong for technical work but carries cost and complexity barriers, with a smaller community."
+      },
+      {
+        "h2": "Adobe Illustrator: finishing, not mapping",
+        "body": "Some teams polish a GIS-exported map in Illustrator for a bespoke look. Illustrator produces beautiful output but can't handle geographic data natively — it's a finishing layer, not a mapping tool, and impractical for quick, repeatable investor maps."
+      },
+      {
+        "cta": { "text": "Search a claimholder and create a map.", "sub": "Try the fast path for your next deck or news-release figure." }
       }
     ],
     "comparisonTable": {
@@ -270,17 +287,26 @@
     "faqs": [
       {
         "q": "What map software do most junior mining companies use?",
-        "a": "Most junior mining companies use a combination of tools. QGIS or ArcGIS for data management and analysis, and increasingly Exploration Maps or Adobe Illustrator for final presentation-quality outputs. The trend is toward browser-based tools that non-GIS staff can use independently."
+        "a": "Usually a combination: QGIS or ArcGIS for data management and analysis, plus a faster tool like Exploration Maps (or Illustrator finishing) for presentation-quality outputs. The trend is toward browser-based tools that non-GIS staff can use independently for decks and news releases."
+      },
+      {
+        "q": "Does Exploration Maps replace QGIS or ArcGIS?",
+        "a": "No — and it isn't trying to. Exploration Maps is a fast map-making and visualization tool for clean investor-ready and news-release maps. For spatial analysis, reprojection, and heavy data processing, QGIS and ArcGIS remain the better tools. The common workflow is to analyze in a GIS and present in Exploration Maps."
       },
       {
         "q": "Do I need GIS software if I use Exploration Maps?",
-        "a": "Not for creating investor presentation maps, news release figures, or NI 43-101 map figures. If you need to process raw survey data, transform coordinate systems, or run spatial analysis, you will still need QGIS or ArcGIS for those preparatory steps. Export the results as GeoJSON and import into Exploration Maps."
+        "a": "Not for investor presentation maps, news-release figures, or NI 43-101 map figures. If you need to process raw survey data, transform coordinate systems, or run spatial analysis, use QGIS or ArcGIS for those steps, then export GeoJSON and import it into Exploration Maps to build the final map."
+      },
+      {
+        "q": "What's the fastest way to get an investor map if I have no GIS person?",
+        "a": "Search a claimholder to pull public claim data, or import your shapefile/KML/GeoJSON/CSV, assign the Claims or Drillholes role, add a branded title block, and export. See the mining claims map guide for the full workflow."
       }
     ],
     "relatedSlugs": [
       "exploration-maps-vs-arcgis",
       "exploration-maps-vs-qgis",
-      "how-to-make-a-mining-claims-map"
+      "how-to-make-a-mining-claims-map",
+      "how-to-create-exploration-map-investor-presentation"
     ],
     "publishedDate": "2026-01-26"
   },

@@ -162,6 +162,33 @@ article strong{color:#0f172a}
 .lp-related-card strong{display:block;color:#0f172a;font-size:0.98rem;margin-bottom:4px}
 .lp-related-card span{color:#64748b;font-size:13px;line-height:1.5}
 .disclaimer-box{background:#fffbeb;border-left:4px solid #d97706;padding:14px 18px;border-radius:0 8px 8px 0;margin:24px 0;color:#374151;line-height:1.7;font-size:0.95rem}
+/* Inline CTA band */
+.inline-cta{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;background:linear-gradient(135deg,#eff6ff 0%,#e0e7ff 100%);border:1px solid #c7d7fe;border-radius:12px;padding:18px 22px;margin:28px 0}
+.inline-cta-copy{display:flex;flex-direction:column;gap:2px}
+.inline-cta-copy strong{font-size:1.02rem;color:#1e293b;font-weight:700}
+.inline-cta-copy span{font-size:0.9rem;color:#475569}
+.inline-cta-btn{display:inline-block;background:#2563eb;color:#fff;padding:10px 20px;border-radius:9px;font-weight:700;font-size:14px;white-space:nowrap;text-decoration:none}
+.inline-cta-btn:hover{background:#1d4ed8;text-decoration:none}
+/* Screenshot figure placeholder */
+.blog-figure{margin:22px 0}
+.blog-figure img{display:block;width:100%;border:1px solid #e2e8f0;border-radius:10px}
+.screenshot-frame{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-height:180px;background:repeating-linear-gradient(45deg,#f8fafc,#f8fafc 12px,#f1f5f9 12px,#f1f5f9 24px);border:1.5px dashed #cbd5e1;border-radius:10px;color:#64748b;font-size:0.9rem;font-weight:600;text-align:center;padding:24px}
+.screenshot-frame-icon{font-size:28px;color:#94a3b8;line-height:1}
+.blog-figure figcaption{margin-top:8px;font-size:13px;color:#64748b;text-align:center;font-style:italic}
+/* Checklist */
+.checklist{list-style:none;padding:0;margin:16px 0}
+.checklist li{position:relative;padding-left:30px;margin-bottom:10px;color:#374151;line-height:1.6}
+.checklist li::before{content:'✓';position:absolute;left:0;top:0;display:flex;align-items:center;justify-content:center;width:20px;height:20px;background:#16a34a;color:#fff;border-radius:50%;font-size:12px;font-weight:700}
+/* Source / verify / capability boxes */
+.box-title{display:block;font-size:0.95rem;font-weight:700;margin-bottom:6px}
+.source-box{background:#f1f5f9;border-left:4px solid #475569;padding:14px 18px;border-radius:0 8px 8px 0;margin:24px 0;color:#374151;line-height:1.7;font-size:0.92rem}
+.source-box .box-title{color:#334155}
+.verify-box{background:#fffbeb;border-left:4px solid #d97706;padding:14px 18px;border-radius:0 8px 8px 0;margin:24px 0;color:#374151;line-height:1.7;font-size:0.92rem}
+.verify-box .box-title{color:#b45309}
+.capability-box{background:#f0f9ff;border-left:4px solid #2563eb;padding:14px 18px;border-radius:0 8px 8px 0;margin:24px 0;color:#374151;line-height:1.7;font-size:0.92rem}
+.capability-box .box-title{color:#1d4ed8}
+.capability-box ul{padding-left:20px;margin:6px 0}
+.note-box{background:#f8fafc;border-left:4px solid #94a3b8;padding:14px 18px;border-radius:0 8px 8px 0;margin:24px 0;color:#374151;line-height:1.7;font-size:0.92rem}
 /* Footer */
 .site-footer{border-top:1px solid #e2e8f0;padding:28px 24px;text-align:center;font-size:13px;color:#94a3b8;margin-top:40px}
 .site-footer-links{margin-bottom:8px;display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:6px}
@@ -286,15 +313,82 @@ function faqBlock(faqs) {
 </section>`;
 }
 
+// ─── Inline CTA band (top / middle / bottom conversion prompts) ───────────────
+
+// Renders a product-led call-to-action band. `text` is the headline (approved
+// copy like "Search a claimholder and create a map."), `sub` an optional line,
+// `href` the destination (defaults to the editor). `label` is the button text.
+function inlineCta({ text, sub = '', href = '/', label = 'Open Exploration Maps →' } = {}) {
+  if (!text) return '';
+  return `<div class="inline-cta">
+  <div class="inline-cta-copy">
+    <strong>${esc(text)}</strong>
+    ${sub ? `<span>${esc(sub)}</span>` : ''}
+  </div>
+  <a class="inline-cta-btn" href="${esc(href)}">${esc(label)}</a>
+</div>`;
+}
+
+// ─── Typed content blocks ─────────────────────────────────────────────────────
+
+// A styled screenshot placeholder. No real asset is required — it shows the
+// caption inside a framed "screenshot" box, so the page is useful now and a real
+// PNG can be dropped in later (set `src` to a /blog-img path to swap it in).
+function figureBlock({ alt = '', caption = '', src = '' } = {}) {
+  const label = caption || alt || 'App screenshot';
+  const inner = src
+    ? `<img src="${esc(src)}" alt="${esc(alt || caption)}" loading="lazy">`
+    : `<div class="screenshot-frame"><span class="screenshot-frame-icon">▦</span><span>${esc(label)}</span></div>`;
+  return `<figure class="blog-figure">${inner}${caption ? `<figcaption>${esc(caption)}</figcaption>` : ''}</figure>`;
+}
+
+function checklistBlock(items) {
+  if (!items?.length) return '';
+  return `<ul class="checklist">${items.map(i => `<li>${esc(i)}</li>`).join('')}</ul>`;
+}
+
+function tableBlock({ headers = [], rows = [] } = {}) {
+  if (!headers.length && !rows.length) return '';
+  const head = headers.length ? `<thead><tr>${headers.map(h => `<th>${esc(h)}</th>`).join('')}</tr></thead>` : '';
+  const body = `<tbody>${rows.map(r => `<tr>${r.map(c => `<td>${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody>`;
+  return `<table class="data-table">${head}${body}</table>`;
+}
+
+// Callout boxes. `kind` selects the style/semantics:
+//   source     → public-registry data-source disclaimer
+//   verify     → "verify with the official registry" warning
+//   capability → what the app can / cannot verify
+//   tip        → helpful tip   note → neutral note
+// `html` is trusted (allows internal links); `title` is escaped.
+function boxBlock({ kind = 'note', title = '', html = '' } = {}) {
+  const cls = { source: 'source-box', verify: 'verify-box', capability: 'capability-box', tip: 'tip-box', note: 'note-box' }[kind] || 'note-box';
+  const heading = title ? `<strong class="box-title">${esc(title)}</strong>` : '';
+  return `<div class="${cls}">${heading}${html ? `<div>${html}</div>` : ''}</div>`;
+}
+
 // ─── Sections renderer ────────────────────────────────────────────────────────
 
+// Each section may combine any of: h2, h3, body/html, items, checklist, table,
+// image, cta, box. h2 is optional so a section can be a standalone CTA/figure/box
+// with no heading. Existing posts (h2 + body/html + items) render unchanged.
 function renderSections(sections) {
   return sections.map(s => {
-    // s.html is raw (trusted, author-controlled) and allows inline internal
-    // links; s.body is plain text and gets escaped. Use one or the other.
-    const body = s.html ? `<p>${s.html}</p>` : s.body ? `<p>${esc(s.body)}</p>` : '';
+    const h2 = s.h2 ? `<h2>${esc(s.h2)}</h2>` : '';
+    const h3 = s.h3 ? `<h3>${esc(s.h3)}</h3>` : '';
+    // s.body is plain text and gets escaped; s.html is raw (trusted,
+    // author-controlled) and allows inline internal links. A section may use
+    // either or both — when both are present, the escaped body renders first,
+    // then the raw HTML paragraph.
+    const bodyP = s.body ? `<p>${esc(s.body)}</p>` : '';
+    const htmlP = s.html ? `<p>${s.html}</p>` : '';
+    const body = `${bodyP}${htmlP}`;
     const items = s.items ? `<ul>${s.items.map(i => `<li>${esc(i)}</li>`).join('')}</ul>` : '';
-    return `<h2>${esc(s.h2)}</h2>${body}${items}`;
+    const checklist = s.checklist ? checklistBlock(s.checklist) : '';
+    const table = s.table ? tableBlock(s.table) : '';
+    const image = s.image ? figureBlock(s.image) : '';
+    const box = s.box ? boxBlock(s.box) : '';
+    const cta = s.cta ? inlineCta(s.cta) : '';
+    return `${h2}${h3}${body}${items}${checklist}${table}${image}${box}${cta}`;
   }).join('\n');
 }
 
@@ -372,12 +466,17 @@ function buildHowToPage(post, allPosts) {
         '@type': 'HowTo',
         name: post.title,
         description: post.directAnswer,
-        step: (post.sections || []).map((s, i) => ({
-          '@type': 'HowToStep',
-          position: i + 1,
-          name: `Step ${i + 1}`,
-          text: s.body || (s.items || []).join('. '),
-        })),
+        // Only textual sections become HowTo steps — image/cta/box-only sections
+        // carry no instruction text and would otherwise emit empty steps.
+        step: (post.sections || [])
+          .map(s => ({ s, text: s.body || (s.items || []).join('. ') }))
+          .filter(({ text }) => text)
+          .map(({ s, text }, i) => ({
+            '@type': 'HowToStep',
+            position: i + 1,
+            name: s.h2 || `Step ${i + 1}`,
+            text,
+          })),
       },
       ...(post.faqs?.length ? [faqSchema(post.faqs)] : []),
       breadcrumbSchema(post.title, url),
@@ -386,6 +485,13 @@ function buildHowToPage(post, allPosts) {
 
   const pubDate = post.publishedDate ? `<span class="post-date">· <time datetime="${esc(post.publishedDate)}">${formatDate(post.publishedDate)}</time></span>` : '';
 
+  // Product-led CTAs at the top (right after the direct answer) and bottom
+  // (before the FAQs). Posts may override the copy via post.ctaTop/post.ctaBottom;
+  // both default to approved language. Mid-page CTAs come from `cta` section
+  // blocks, so every priority page gets top / middle / bottom prompts.
+  const topCta = inlineCta(post.ctaTop || { text: 'Turn public claim data into a clean map.', sub: 'No GIS experience needed — import, style, and export in minutes.' });
+  const bottomCta = inlineCta(post.ctaBottom || { text: 'Import your file and export an investor-ready map.', sub: 'Open the editor and have a shareable map in minutes.' });
+
   const body = `
 <div class="page-wrap">
   <div class="blog-layout">
@@ -393,7 +499,9 @@ function buildHowToPage(post, allPosts) {
       <p class="breadcrumb"><a href="/">Home</a><span>›</span><a href="/blog/">Blog</a><span>›</span><a href="/blog/how-to/">How-to Guides</a><span>›</span>${esc(post.title)} ${pubDate}</p>
       <h1>${esc(post.title)}</h1>
       <p class="direct-answer">${esc(post.directAnswer)}</p>
+      ${topCta}
       ${renderSections(post.sections || [])}
+      ${bottomCta}
       ${faqBlock(post.faqs)}
     </article>
     ${sidebar({ relatedHtml: related, compareHtml: COMP_LINKS, locationHtml })}

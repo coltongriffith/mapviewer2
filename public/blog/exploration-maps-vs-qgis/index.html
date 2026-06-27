@@ -17,7 +17,7 @@
 <meta name="twitter:title" content="Exploration Maps vs QGIS for Exploration Mapping">
 <meta name="twitter:description" content="Comparing Exploration Maps and QGIS for mining and exploration mapping. Which is better for investor presentations, news releases, and NI 43-101 maps?">
 <meta name="twitter:image" content="https://www.explorationmaps.com/og-image.png">
-<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Exploration Maps vs QGIS for Exploration Mapping","description":"Comparing Exploration Maps and QGIS for mining and exploration mapping. Which is better for investor presentations, news releases, and NI 43-101 maps?","url":"https://www.explorationmaps.com/blog/exploration-maps-vs-qgis/","datePublished":"2026-01-19","dateModified":"2026-06-26","author":{"@type":"Organization","name":"Exploration Maps","url":"https://www.explorationmaps.com"},"publisher":{"@type":"Organization","name":"Exploration Maps","url":"https://www.explorationmaps.com"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Can I use QGIS to prepare data and Exploration Maps for the final map?","acceptedAnswer":{"@type":"Answer","text":"Yes — this is actually the recommended workflow for teams that need both analytical capability and fast presentation output. Export your processed layers from QGIS as GeoJSON (right-click layer → Export → Save Features As → GeoJSON, CRS: EPSG:4326), then import into Exploration Maps."}},{"@type":"Question","name":"Does QGIS produce better-quality maps than Exploration Maps?","acceptedAnswer":{"@type":"Answer","text":"QGIS's Print Layout can produce very high-quality maps given enough time and expertise. For standard investor presentation maps, NI 43-101 figures, and news release maps, Exploration Maps produces output that is equivalent or superior in presentation quality — in a fraction of the time."}}],"speakable":{"@type":"SpeakableSpecification","cssSelector":[".direct-answer",".faq-a"]}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://www.explorationmaps.com"},{"@type":"ListItem","position":2,"name":"Blog","item":"https://www.explorationmaps.com/blog/"},{"@type":"ListItem","position":3,"name":"Exploration Maps vs QGIS for Exploration Mapping","item":"https://www.explorationmaps.com/blog/exploration-maps-vs-qgis/"}]}]}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Exploration Maps vs QGIS for Exploration Mapping","description":"Comparing Exploration Maps and QGIS for mining and exploration mapping. Which is better for investor presentations, news releases, and NI 43-101 maps?","url":"https://www.explorationmaps.com/blog/exploration-maps-vs-qgis/","datePublished":"2026-01-19","dateModified":"2026-06-27","author":{"@type":"Organization","name":"Exploration Maps","url":"https://www.explorationmaps.com"},"publisher":{"@type":"Organization","name":"Exploration Maps","url":"https://www.explorationmaps.com"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Can I use QGIS to prepare data and Exploration Maps for the final map?","acceptedAnswer":{"@type":"Answer","text":"Yes — this is actually the recommended workflow for teams that need both analytical capability and fast presentation output. Export your processed layers from QGIS as GeoJSON (right-click layer → Export → Save Features As → GeoJSON, CRS: EPSG:4326), then import into Exploration Maps."}},{"@type":"Question","name":"Does QGIS produce better-quality maps than Exploration Maps?","acceptedAnswer":{"@type":"Answer","text":"QGIS's Print Layout can produce very high-quality maps given enough time and expertise. For standard investor presentation maps, NI 43-101 figures, and news release maps, Exploration Maps produces output that is equivalent or superior in presentation quality — in a fraction of the time."}}],"speakable":{"@type":"SpeakableSpecification","cssSelector":[".direct-answer",".faq-a"]}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://www.explorationmaps.com"},{"@type":"ListItem","position":2,"name":"Blog","item":"https://www.explorationmaps.com/blog/"},{"@type":"ListItem","position":3,"name":"Exploration Maps vs QGIS for Exploration Mapping","item":"https://www.explorationmaps.com/blog/exploration-maps-vs-qgis/"}]}]}</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
@@ -137,6 +137,33 @@ article strong{color:#0f172a}
 .lp-related-card strong{display:block;color:#0f172a;font-size:0.98rem;margin-bottom:4px}
 .lp-related-card span{color:#64748b;font-size:13px;line-height:1.5}
 .disclaimer-box{background:#fffbeb;border-left:4px solid #d97706;padding:14px 18px;border-radius:0 8px 8px 0;margin:24px 0;color:#374151;line-height:1.7;font-size:0.95rem}
+/* Inline CTA band */
+.inline-cta{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;background:linear-gradient(135deg,#eff6ff 0%,#e0e7ff 100%);border:1px solid #c7d7fe;border-radius:12px;padding:18px 22px;margin:28px 0}
+.inline-cta-copy{display:flex;flex-direction:column;gap:2px}
+.inline-cta-copy strong{font-size:1.02rem;color:#1e293b;font-weight:700}
+.inline-cta-copy span{font-size:0.9rem;color:#475569}
+.inline-cta-btn{display:inline-block;background:#2563eb;color:#fff;padding:10px 20px;border-radius:9px;font-weight:700;font-size:14px;white-space:nowrap;text-decoration:none}
+.inline-cta-btn:hover{background:#1d4ed8;text-decoration:none}
+/* Screenshot figure placeholder */
+.blog-figure{margin:22px 0}
+.blog-figure img{display:block;width:100%;border:1px solid #e2e8f0;border-radius:10px}
+.screenshot-frame{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-height:180px;background:repeating-linear-gradient(45deg,#f8fafc,#f8fafc 12px,#f1f5f9 12px,#f1f5f9 24px);border:1.5px dashed #cbd5e1;border-radius:10px;color:#64748b;font-size:0.9rem;font-weight:600;text-align:center;padding:24px}
+.screenshot-frame-icon{font-size:28px;color:#94a3b8;line-height:1}
+.blog-figure figcaption{margin-top:8px;font-size:13px;color:#64748b;text-align:center;font-style:italic}
+/* Checklist */
+.checklist{list-style:none;padding:0;margin:16px 0}
+.checklist li{position:relative;padding-left:30px;margin-bottom:10px;color:#374151;line-height:1.6}
+.checklist li::before{content:'✓';position:absolute;left:0;top:0;display:flex;align-items:center;justify-content:center;width:20px;height:20px;background:#16a34a;color:#fff;border-radius:50%;font-size:12px;font-weight:700}
+/* Source / verify / capability boxes */
+.box-title{display:block;font-size:0.95rem;font-weight:700;margin-bottom:6px}
+.source-box{background:#f1f5f9;border-left:4px solid #475569;padding:14px 18px;border-radius:0 8px 8px 0;margin:24px 0;color:#374151;line-height:1.7;font-size:0.92rem}
+.source-box .box-title{color:#334155}
+.verify-box{background:#fffbeb;border-left:4px solid #d97706;padding:14px 18px;border-radius:0 8px 8px 0;margin:24px 0;color:#374151;line-height:1.7;font-size:0.92rem}
+.verify-box .box-title{color:#b45309}
+.capability-box{background:#f0f9ff;border-left:4px solid #2563eb;padding:14px 18px;border-radius:0 8px 8px 0;margin:24px 0;color:#374151;line-height:1.7;font-size:0.92rem}
+.capability-box .box-title{color:#1d4ed8}
+.capability-box ul{padding-left:20px;margin:6px 0}
+.note-box{background:#f8fafc;border-left:4px solid #94a3b8;padding:14px 18px;border-radius:0 8px 8px 0;margin:24px 0;color:#374151;line-height:1.7;font-size:0.92rem}
 /* Footer */
 .site-footer{border-top:1px solid #e2e8f0;padding:28px 24px;text-align:center;font-size:13px;color:#94a3b8;margin-top:40px}
 .site-footer-links{margin-bottom:8px;display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:6px}
