@@ -42,7 +42,7 @@ import { resolveNI43101Zones } from './templates/technicalReportTemplate';
 import { resolveSidePanelZones, mapSlotPositions } from './templates/sidePanelTemplate';
 import { geojsonBounds, geojsonCenter, unionBounds } from './utils/geometry';
 import { markerSvgUrl } from './utils/leaflet';
-import { claimSummary, claimTooltipHtml, claimPopupRowsHtml } from './utils/claimInfo';
+import { claimSummary, claimTooltipHtml, claimPopupRowsHtml, esc } from './utils/claimInfo';
 import L from 'leaflet';
 import { detectRegion } from './utils/detectRegion';
 import { cleanLayerName } from './utils/cleanLayerName';
@@ -924,8 +924,12 @@ export default function App() {
       const withGeo = { ...base, lat: geo?.lat ?? null, lng: geo?.lng ?? null, city: geo?.city ?? null, country: geo?.country ?? null };
       supabase.from('page_views').insert(withGeo).then(({ error }) => {
         // If the geo columns aren't in the schema yet, fall back to the base row.
-        if (error) supabase.from('page_views').insert(base).then(() => {});
-      });
+        if (error) {
+          supabase.from('page_views').insert(base).then(({ error: fallbackError }) => {
+            if (fallbackError) console.warn('[page_views] insert failed:', fallbackError.message);
+          });
+        }
+      }).catch((err) => console.warn('[page_views] insert failed:', err.message));
     };
     let geoController;
     try {
@@ -1830,12 +1834,12 @@ export default function App() {
           style: { fillColor: color, color, weight: 1.5, fillOpacity, opacity: 0.85 },
           onEachFeature: (feat, lyr) => {
             const haText = totalHa ? ` · ${Math.round(totalHa).toLocaleString()} ha` : '';
-            lyr.bindTooltip(`<strong>${displayName}</strong><br/>${feats.length} claim${feats.length > 1 ? 's' : ''}${haText}`,
+            lyr.bindTooltip(`<strong>${esc(displayName)}</strong><br/>${feats.length} claim${feats.length > 1 ? 's' : ''}${haText}`,
               { sticky: true, className: 'area-claims-tooltip' });
             lyr.bindPopup(() => {
               const el = document.createElement('div');
               el.className = 'area-claims-popup';
-              el.innerHTML = `<div class="acp-owner">${displayName}</div>`
+              el.innerHTML = `<div class="acp-owner">${esc(displayName)}</div>`
                 + `<div class="acp-row">${feats.length} claim${feats.length > 1 ? 's' : ''}${haText}</div>`
                 + '<button type="button" class="acp-callout-btn">+ Add Callout</button>';
               el.querySelector('.acp-callout-btn').onclick = () => {

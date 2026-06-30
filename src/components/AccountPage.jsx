@@ -32,7 +32,7 @@ function ProjectCard({ entry, onOpen, onRename, onDelete, onDuplicate }) {
 
   return (
     <div className="acct-card acct-project-card">
-      <button className="acct-card-thumb" type="button" onClick={() => !editing && onOpen(entry)}>
+      <button className="acct-card-thumb" type="button" aria-label={`Open ${entry.name || 'project'}`} onClick={() => !editing && onOpen(entry)}>
         {entry.thumbnail ? (
           <img src={entry.thumbnail} alt="" />
         ) : (

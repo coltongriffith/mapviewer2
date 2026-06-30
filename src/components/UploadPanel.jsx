@@ -52,6 +52,7 @@ export default function UploadPanel({ onUploadFile, onUploadFiles, inputRef, sta
         onDrop={handleDrop}
         role="button"
         tabIndex={0}
+        aria-label="Upload shapefile, GeoJSON, KML, or CSV file"
         onClick={() => inputRef.current?.click()}
         onKeyDown={(event) => {
           if (event.key === 'Enter' || event.key === ' ') {

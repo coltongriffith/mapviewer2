@@ -1,7 +1,7 @@
 // Helpers to extract and format mineral tenure claim info for tooltips/popups.
 // Field names cover the BC MTA_ACQUIRED_TENURE_SVW schema with generic fallbacks.
 
-const esc = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+export const esc = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 export function claimSummary(props = {}, ownerName = null) {
   const tenure = props.TENURE_NUMBER_ID || props.TAG_NUMBER || props.TENURE_ID || props.TENURE_NO || props.ID || null;
