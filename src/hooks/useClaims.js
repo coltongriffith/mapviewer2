@@ -56,6 +56,9 @@ export function useClaims() {
           .map((p) => fetchProvince(query, type, p.value).then((data) => ({ province: p, data })))
       );
       if (requestIdRef.current !== myRequestId) return;
+      settled
+        .filter((r) => r.status === 'rejected')
+        .forEach((r) => console.warn('[cross-province search] failed:', r.reason?.message || r.reason));
       const hits = settled
         .filter((r) => r.status === 'fulfilled' && r.value.data.features.length > 0)
         .map((r) => ({ province: r.value.province, count: r.value.data.features.length, data: r.value.data }));

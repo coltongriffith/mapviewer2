@@ -55,7 +55,13 @@ export default function ClaimsFileUpload({ onImport, onBack }) {
         onDrop={handleDrop}
         role="button"
         tabIndex={0}
-        onKeyDown={e => e.key === 'Enter' && inputRef.current?.click()}
+        aria-label="Upload claim boundaries file (GeoJSON, KML, or zipped shapefile)"
+        onKeyDown={e => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            inputRef.current?.click();
+          }
+        }}
       >
         <input
           ref={inputRef}
