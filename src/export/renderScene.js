@@ -550,8 +550,9 @@ function drawNorthArrowCanvas(ctx, scene, scale) {
     drawPanelAccentLeft(ctx, x, y, h, theme, scale);
   }
   const cx = x + w / 2;
-  const cy = y + h * 0.56;
-  const R = h * 0.27, Re = R * 0.71, rn = h * 0.09, r45 = rn * 0.707;
+  const cy = y + h * 0.55;
+  // Slightly smaller rose so it doesn't crowd the panel edges in export.
+  const R = h * 0.24, Re = R * 0.71, rn = h * 0.078, r45 = rn * 0.707;
   const fg = theme.northArrowText;
   const bg = theme.northArrowFill;
   const arrowStyle = scene.project.layout?.northArrowStyle || 'classic';
@@ -654,7 +655,7 @@ function drawScaleBarCanvas(ctx, scene, scale) {
   drawPanelRect(ctx, x, y, w, h, (theme.panelRadius ?? 10) * scale, theme.scaleFill, theme.panelBorder, scale);
   drawPanelAccentLeft(ctx, x, y, h, theme, scale);
   // Center bar + label inside the panel (mirrors the editor's flex layout)
-  const barH = 10 * scale, gap = 5 * scale, textH = 12 * scale;
+  const barH = 6 * scale, gap = 4 * scale, textH = 11 * scale;
   const barWidth = Math.min(scaleState.widthPx * scale, w - 24 * scale);
   const startY = y + (h - (barH + gap + textH)) / 2;
   const barX = x + (w - barWidth) / 2;
@@ -2087,8 +2088,9 @@ function renderNorthArrowSvg(scene, scale, svgDefs) {
   const { northArrow } = getOverlayMetrics(scene);
   const x = northArrow.left * scale, y = northArrow.top * scale, w = northArrow.width * scale, h = northArrow.height * scale;
   const cx = x + w / 2;
-  const cy = y + h * 0.56;
-  const R = h * 0.27, Re = R * 0.71, rn = h * 0.09, r45 = rn * 0.707;
+  const cy = y + h * 0.55;
+  // Slightly smaller rose so it doesn't crowd the panel edges in export.
+  const R = h * 0.24, Re = R * 0.71, rn = h * 0.078, r45 = rn * 0.707;
   const fg = theme.northArrowText, bg = theme.northArrowFill;
   const transparent = scene.project.layout?.northArrowTransparent;
   const panel = transparent ? '' : `${svgRect(x, y, w, h, (theme.panelRadius ?? 10) * scale, bg, theme.panelBorder, scale)}${svgPanelAccentLeft(x, y, h, theme, scale)}`;
@@ -2143,7 +2145,7 @@ function renderScaleBarSvg(scene, scale) {
   if (scene.project.layout?.showScaleBar === false) return '';
   const theme = getTheme(scene); const { scaleBar } = getOverlayMetrics(scene); const x = scaleBar.left * scale, y = scaleBar.top * scale, w = scaleBar.width * scale, h = scaleBar.height * scale, scaleState = pickScaleLabel(scene.map);
   // Center bar + label inside the panel (mirrors the editor's flex layout)
-  const barH = 10 * scale, gap = 5 * scale, textH = 12 * scale;
+  const barH = 6 * scale, gap = 4 * scale, textH = 11 * scale;
   const barWidth = Math.min(scaleState.widthPx * scale, w - 24 * scale);
   const startY = y + (h - (barH + gap + textH)) / 2;
   const barX = x + (w - barWidth) / 2;

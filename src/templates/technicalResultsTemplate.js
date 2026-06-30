@@ -6,8 +6,8 @@ const BASE_ZONES = {
   logo: { top: 126, left: 22, width: 168, height: 74 },
   inset: { top: 22, right: 22, width: 244, height: 190 },
   legend: { bottom: 102, left: 22, width: 300, height: 168 },
-  scaleBar: { bottom: 22, left: 22, width: 230, height: 64 },
-  northArrow: { bottom: 22, right: 22, width: 90, height: 100 },
+  scaleBar: { bottom: 22, left: 22, width: 180, height: 46 },
+  northArrow: { bottom: 22, right: 22, width: 96, height: 104 },
   footer: { bottom: 22, left: 270, width: 440, height: 42 },
 };
 
