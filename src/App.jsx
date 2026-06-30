@@ -96,6 +96,7 @@ import { captureProjectThumbnail } from './utils/thumbnailCapture';
 import UserMenu from './components/UserMenu';
 import AuthModal from './components/AuthModal';
 import ColorField from './components/ColorField';
+import BrandKitStudio from './components/BrandKitStudio';
 import { CORNER_KEY, getCornerLayout, moveToCorner, moveToCornerFirst, moveToCornerBeside, findElement } from './utils/cornerLayout';
 
 const SAMPLE_LOGO_SVG = [
@@ -676,10 +677,6 @@ export default function App() {
   const [showAuthFromGate, setShowAuthFromGate] = useState(false);
   const [cloudTemplates, setCloudTemplates] = useState([]);
   const [accountSettings, setAccountSettings] = useState({});
-  const [savingTemplate, setSavingTemplate] = useState(false);
-  const [savingTemplateName, setSavingTemplateName] = useState(null);
-  const [renamingTemplateId, setRenamingTemplateId] = useState(null);
-  const [renamingTemplateName, setRenamingTemplateName] = useState('');
 
   const [screen, setScreen] = useState(() => {
     if (window.location.pathname === '/admin') return 'admin';
@@ -2954,27 +2951,6 @@ export default function App() {
     }
   };
 
-  const doSaveTemplate = async () => {
-    const name = (savingTemplateName || '').trim();
-    if (!name || savingTemplate) return;
-    setSavingTemplate(true);
-    try {
-      const config = Object.fromEntries(
-        BRAND_KIT_SAVEABLE_KEYS
-          .filter((k) => project.layout[k] !== undefined)
-          .map((k) => [k, project.layout[k]])
-      );
-      if (project.layout.fonts) config.fonts = project.layout.fonts;
-      await saveBrandKit({ name, config });
-      listBrandKits().then(setCloudTemplates).catch(() => {});
-      setSavingTemplateName(null);
-    } catch (err) {
-      setUploadStatus({ type: 'error', message: `Could not save brand kit: ${err.message}` });
-    } finally {
-      setSavingTemplate(false);
-    }
-  };
-
   const openProjectFromRecent = async (entry) => {
     let payload = entry.payload;
     if (!payload && user) {
@@ -4437,13 +4413,50 @@ export default function App() {
               </div>
               <div>
                 <label>Scale</label>
-                <select value={project.layout.exportSettings.pixelRatio} onChange={(e) => updateLayout({ exportSettings: { pixelRatio: Number(e.target.value) } })}>
+                <select
+                  value={(project.layout.exportSettings.customWidth || 0) > 0 ? 'custom' : project.layout.exportSettings.pixelRatio}
+                  onChange={(e) => {
+                    if (e.target.value === 'custom') {
+                      const el = mapContainerRef.current;
+                      const baseW = (el?.clientWidth) || viewportSize.width || 1600;
+                      updateLayout({ exportSettings: { customWidth: Math.round(baseW * 2) } });
+                    } else {
+                      updateLayout({ exportSettings: { pixelRatio: Number(e.target.value), customWidth: 0 } });
+                    }
+                  }}
+                >
                   <option value={1}>1× — Screen</option>
                   <option value={2}>2× — Print</option>
                   <option value={3}>3× — Large format</option>
+                  <option value="custom">Custom (px)</option>
                 </select>
               </div>
             </div>
+            {(project.layout.exportSettings.customWidth || 0) > 0 && (() => {
+              const el = mapContainerRef.current;
+              const aspect = (el?.clientWidth && el?.clientHeight) ? el.clientWidth / el.clientHeight : (viewportSize.width / viewportSize.height) || (16 / 9);
+              const cw = project.layout.exportSettings.customWidth || 0;
+              const ch = Math.round(cw / aspect);
+              return (
+                <div className="control-row inline-2 export-custom-size">
+                  <div>
+                    <label>Width (px)</label>
+                    <input
+                      type="number"
+                      min="200"
+                      max="12000"
+                      step="50"
+                      value={cw}
+                      onChange={(e) => updateLayout({ exportSettings: { customWidth: Math.max(0, Math.min(12000, Math.round(Number(e.target.value) || 0))) } })}
+                    />
+                  </div>
+                  <div>
+                    <label>Height (px)</label>
+                    <input type="number" value={ch} readOnly title="Height follows the map's aspect ratio" />
+                  </div>
+                </div>
+              );
+            })()}
             <div className="button-row">
               <button className={`btn primary${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('png'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export PNG'}</button>
               <button className={`btn${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('svg'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export SVG'}</button>
@@ -4959,120 +4972,20 @@ export default function App() {
       )}
       {/* Brand Kit Manager Modal */}
       {showBrandKitManager && (
-        <div className="modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) setShowBrandKitManager(false); }}>
-          <div className="modal-panel tmgr-panel">
-            <button className="modal-close-btn" onClick={() => setShowBrandKitManager(false)}>×</button>
-            <div className="tmgr-header">
-              <h2 className="tmgr-title">My Brand Kits</h2>
-              <p className="tmgr-subtitle">Save your brand look once, apply to any project.</p>
-            </div>
-
-            {/* Save new brand kit form */}
-            <div className="tmgr-save-section">
-              {savingTemplateName !== null ? (
-                <div className="tmgr-save-row">
-                  <input
-                    autoFocus
-                    className="tmgr-name-input"
-                    placeholder="Brand kit name…"
-                    value={savingTemplateName}
-                    onChange={(e) => setSavingTemplateName(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') doSaveTemplate();
-                      if (e.key === 'Escape') setSavingTemplateName(null);
-                    }}
-                  />
-                  <button
-                    className="btn compact"
-                    type="button"
-                    disabled={!savingTemplateName.trim() || savingTemplate}
-                    onClick={doSaveTemplate}
-                  >{savingTemplate ? 'Saving…' : 'Save'}</button>
-                  <button className="btn compact secondary" type="button" onClick={() => setSavingTemplateName(null)}>Cancel</button>
-                </div>
-              ) : (
-                <button className="btn compact" type="button" onClick={() => setSavingTemplateName(projectName || '')}>+ Save Current Settings as Brand Kit</button>
-              )}
-            </div>
-
-            {/* Brand kit list */}
-            {cloudTemplates.length === 0 ? (
-              <p className="tmgr-empty">No brand kits saved yet.</p>
-            ) : (
-              <ul className="tmgr-list">
-                {cloudTemplates.map((tmpl) => (
-                  <li key={tmpl.id} className="tmgr-row">
-                    <img className="tmgr-swatch" src={renderBrandKitSwatch(tmpl.config || {})} alt="" />
-                    <button
-                      className={`tmgr-star${tmpl.is_default ? ' active' : ''}`}
-                      title={tmpl.is_default ? 'Default brand kit' : 'Set as default'}
-                      onClick={async () => {
-                        if (tmpl.is_default) return;
-                        await setDefaultBrandKit(tmpl.id);
-                        listBrandKits().then(setCloudTemplates).catch(() => {});
-                      }}
-                    >★</button>
-                    <div className="tmgr-name-block">
-                      {renamingTemplateId === tmpl.id ? (
-                        <div className="tmgr-rename-row">
-                          <input
-                            autoFocus
-                            className="tmgr-name-input"
-                            value={renamingTemplateName}
-                            onChange={(e) => setRenamingTemplateName(e.target.value)}
-                            onKeyDown={async (e) => {
-                              if (e.key === 'Enter') {
-                                await updateBrandKit(tmpl.id, { name: renamingTemplateName.trim() || tmpl.name });
-                                listBrandKits().then(setCloudTemplates).catch(() => {});
-                                setRenamingTemplateId(null);
-                              }
-                              if (e.key === 'Escape') setRenamingTemplateId(null);
-                            }}
-                          />
-                          <button className="tmgr-icon-btn" title="Confirm" onClick={async () => {
-                            await updateBrandKit(tmpl.id, { name: renamingTemplateName.trim() || tmpl.name });
-                            listBrandKits().then(setCloudTemplates).catch(() => {});
-                            setRenamingTemplateId(null);
-                          }}>✓</button>
-                          <button className="tmgr-icon-btn muted" title="Cancel" onClick={() => setRenamingTemplateId(null)}>✗</button>
-                        </div>
-                      ) : (
-                        <span className="tmgr-name">{tmpl.name}</span>
-                      )}
-                      {tmpl.is_default && <span className="tmgr-badge">Default</span>}
-                    </div>
-                    <div className="tmgr-actions">
-                      <button
-                        className="btn compact"
-                        type="button"
-                        onClick={() => {
-                          const newLayout = applyBrandKitConfig(tmpl.config || {}, project.layout);
-                          updateLayout(Object.fromEntries(Object.entries(newLayout).filter(([k]) => newLayout[k] !== project.layout[k])));
-                          setShowBrandKitManager(false);
-                          setUploadStatus({ type: 'success', message: `"${tmpl.name}" applied — upload your layers to get started.` });
-                        }}
-                      >Apply</button>
-                      <button
-                        className="tmgr-icon-btn"
-                        title="Rename"
-                        onClick={() => { setRenamingTemplateId(tmpl.id); setRenamingTemplateName(tmpl.name); }}
-                      >✎</button>
-                      <button
-                        className="tmgr-icon-btn danger"
-                        title="Delete"
-                        onClick={async () => {
-                          if (!window.confirm(`Delete brand kit "${tmpl.name}"?`)) return;
-                          await deleteBrandKit(tmpl.id);
-                          listBrandKits().then(setCloudTemplates).catch(() => {});
-                        }}
-                      >✕</button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </div>
+        <BrandKitStudio
+          onClose={() => setShowBrandKitManager(false)}
+          isAuthed={!!user}
+          kits={cloudTemplates}
+          brandColors={brandColors}
+          project={project}
+          onReload={() => listBrandKits().then(setCloudTemplates).catch(() => {})}
+          applyToProject={(config) => {
+            const newLayout = applyBrandKitConfig(config || {}, project.layout);
+            updateLayout(Object.fromEntries(Object.entries(newLayout).filter(([k]) => newLayout[k] !== project.layout[k])));
+            setShowBrandKitManager(false);
+            setUploadStatus({ type: 'success', message: 'Brand kit applied to your map.' });
+          }}
+        />
       )}
 
       {showRecentProjects ? (
