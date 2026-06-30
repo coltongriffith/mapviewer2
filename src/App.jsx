@@ -1097,17 +1097,24 @@ export default function App() {
     }
   }, [screen, sharedMapId]);
 
+  const customExportW = project.layout.exportSettings?.customWidth || 0;
+  const customExportH = project.layout.exportSettings?.customHeight || 0;
   const constrainedStageSize = useMemo(() => {
-    if (!activeRatio) return null;
-    const config = EXPORT_RATIOS[activeRatio];
+    // A custom pixel size (width×height) takes priority and constrains the
+    // on-screen stage to that exact aspect ratio, so the user edits at the size
+    // they'll export. Otherwise fall back to a preset export ratio.
+    let targetRatio = null;
+    if (customExportW > 0 && customExportH > 0) targetRatio = customExportW / customExportH;
+    else if (activeRatio) targetRatio = EXPORT_RATIOS[activeRatio].ratio;
+    if (!targetRatio) return null;
     const PAD = 32;
     const availW = Math.max(100, viewportSize.width - PAD * 2);
     const availH = Math.max(100, viewportSize.height - PAD * 2);
-    if (availW / availH > config.ratio) {
-      return { width: Math.round(availH * config.ratio), height: availH };
+    if (availW / availH > targetRatio) {
+      return { width: Math.round(availH * targetRatio), height: availH };
     }
-    return { width: availW, height: Math.round(availW / config.ratio) };
-  }, [activeRatio, viewportSize]);
+    return { width: availW, height: Math.round(availW / targetRatio) };
+  }, [activeRatio, viewportSize, customExportW, customExportH]);
 
   // Stable key for the auto-fit effect — changes only for fit-relevant layer events
   // (add/remove, visibility toggle, role change, GeoJSON data arrives).
@@ -1169,6 +1176,9 @@ export default function App() {
 
     activeRatioRef.current = newRatio;
     setActiveRatio(newRatio);
+    // A preset ratio and a custom pixel size are mutually exclusive framing modes.
+    if (newRatio) updateLayout({ exportSettings: { customWidth: 0, customHeight: 0 } });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -2184,20 +2194,35 @@ export default function App() {
     return '#' + [f(0), f(8), f(4)].map((v) => Math.round(v * 255).toString(16).padStart(2, '0')).join('');
   };
 
-  const extractDominantColor = (imageData) => {
+  // Extract a small palette of distinct colours from a logo, sorted by how much
+  // of the logo each covers. Returns [{ hex, h, s, l, count }]. Multi-colour logos
+  // (e.g. navy + copper) yield more than one entry, so callers can pull both a
+  // base colour and a separate accent instead of deriving everything from one.
+  const extractLogoPalette = (imageData) => {
     const buckets = {};
     for (let i = 0; i < imageData.length; i += 4) {
       const r = imageData[i]; const g = imageData[i + 1]; const b = imageData[i + 2]; const a = imageData[i + 3];
       if (a < 128) continue;
       const brightness = (r + g + b) / 3;
-      if (brightness > 220 || brightness < 30) continue;
+      if (brightness > 232 || brightness < 20) continue; // drop near-white / near-black
       const key = `${r >> 5},${g >> 5},${b >> 5}`;
-      buckets[key] = (buckets[key] || 0) + 1;
+      const bk = buckets[key] || (buckets[key] = { count: 0, r: 0, g: 0, b: 0 });
+      bk.count += 1; bk.r += r; bk.g += g; bk.b += b;
     }
-    const top = Object.entries(buckets).sort((a, b) => b[1] - a[1])[0];
-    if (!top) return null;
-    const [rk, gk, bk] = top[0].split(',').map(Number);
-    return '#' + [rk << 5, gk << 5, bk << 5].map((v) => Math.min(255, v).toString(16).padStart(2, '0')).join('');
+    const clusters = Object.values(buckets).map((bk) => {
+      const r = Math.round(bk.r / bk.count); const g = Math.round(bk.g / bk.count); const b = Math.round(bk.b / bk.count);
+      const hex = '#' + [r, g, b].map((v) => v.toString(16).padStart(2, '0')).join('');
+      const [h, s, l] = hexToHsl(hex);
+      return { hex, h, s, l, count: bk.count };
+    }).sort((a, b) => b.count - a.count);
+    const hueDist = (a, b) => { const d = Math.abs(a - b) % 360; return d > 180 ? 360 - d : d; };
+    const out = [];
+    for (const c of clusters) {
+      if (out.some((o) => hueDist(o.h, c.h) < 22 && Math.abs(o.l - c.l) < 16)) continue;
+      out.push(c);
+      if (out.length >= 4) break;
+    }
+    return out;
   };
 
   const applyBrandPaletteToLayers = (color) => {
@@ -2246,12 +2271,19 @@ export default function App() {
           const ctx = canvas.getContext('2d');
           ctx.drawImage(img, 0, 0, 64, 64);
           const { data } = ctx.getImageData(0, 0, 64, 64);
-          const color = extractDominantColor(data);
-          if (color) {
-            const [h, s] = hexToHsl(color);
-            const titleBg = hslToHex(h, Math.max(s, 68), 18);
-            updateLayout({ logo: dataUrl, accentColor: color, titleBgColor: titleBg, titleFgColor: '#ffffff' });
-            applyBrandPaletteToLayers(color);
+          const palette = extractLogoPalette(data);
+          if (palette.length) {
+            // Base = the colour covering the most of the logo (drives the dark
+            // title strip). Accent = a distinct, saturated second colour if the
+            // logo has one (so a two-colour logo keeps both), else the base.
+            const base = palette[0];
+            const hueDist = (a, b) => { const d = Math.abs(a - b) % 360; return d > 180 ? 360 - d : d; };
+            const accentSrc = palette.find((c) => c !== base && c.s >= 28 && hueDist(c.h, base.h) > 28)
+              || (base.s >= 28 ? base : palette.find((c) => c.s >= 28) || base);
+            const titleBg = hslToHex(base.h, Math.max(base.s, 58), 18);
+            const accentColor = accentSrc.s < 34 ? hslToHex(accentSrc.h, Math.max(accentSrc.s, 52), 50) : accentSrc.hex;
+            updateLayout({ logo: dataUrl, accentColor, titleBgColor: titleBg, titleFgColor: '#ffffff' });
+            applyBrandPaletteToLayers(accentColor);
           } else {
             updateLayout({ logo: dataUrl });
           }
@@ -4313,35 +4345,40 @@ export default function App() {
             {/* Brand Kits */}
             <div className="template-manager-block">
               <div className="template-manager-header">
-                <span className="template-manager-label">My Brand Kits</span>
+                <span className="template-manager-label">Brand Kits</span>
                 {user && (
-                  <button className="btn compact" type="button" onClick={() => setShowBrandKitManager(true)}>
-                    {cloudTemplates.length > 0 ? `Manage (${cloudTemplates.length})` : '+ Save Brand Kit'}
+                  <button className="btn compact secondary" type="button" onClick={() => setShowBrandKitManager(true)}>
+                    {cloudTemplates.length > 0 ? 'Manage' : '+ New kit'}
                   </button>
                 )}
               </div>
               {!user ? (
                 <p className="template-manager-hint">Sign in to save and apply brand kits.</p>
               ) : cloudTemplates.length === 0 ? (
-                <p className="template-manager-hint">No brand kits yet — save your brand look to reuse across projects.</p>
+                <p className="template-manager-hint">No brand kits yet — open the studio to create one.</p>
               ) : (
-                <ul className="template-manager-list">
+                <div className="bk-side-list">
                   {cloudTemplates.map((tmpl) => (
-                    <li key={tmpl.id} className="template-manager-row">
-                      {tmpl.is_default && <span className="template-default-star active" title="Default">★</span>}
-                      <span className="template-name">{tmpl.name}</span>
-                      <button
-                        className="btn compact"
-                        type="button"
-                        onClick={() => {
-                          const newLayout = applyBrandKitConfig(tmpl.config || {}, project.layout);
-                          updateLayout(Object.fromEntries(Object.entries(newLayout).filter(([k]) => newLayout[k] !== project.layout[k])));
-                          setUploadStatus({ type: 'success', message: `"${tmpl.name}" applied — upload your layers to get started.` });
-                        }}
-                      >Apply</button>
-                    </li>
+                    <div key={tmpl.id} className="bk-side-card">
+                      <img className="bk-side-swatch" src={renderBrandKitSwatch(tmpl.config || {}, { width: 132, height: 46 })} alt="" />
+                      <div className="bk-side-info">
+                        <span className="bk-side-name" title={tmpl.name}>
+                          {tmpl.name || 'Untitled kit'}
+                          {tmpl.is_default && <span className="bk-side-badge">Default</span>}
+                        </span>
+                        <button
+                          className="btn compact"
+                          type="button"
+                          onClick={() => {
+                            const newLayout = applyBrandKitConfig(tmpl.config || {}, project.layout);
+                            updateLayout(Object.fromEntries(Object.entries(newLayout).filter(([k]) => newLayout[k] !== project.layout[k])));
+                            setUploadStatus({ type: 'success', message: `"${tmpl.name}" applied.` });
+                          }}
+                        >Apply</button>
+                      </div>
+                    </div>
                   ))}
-                </ul>
+                </div>
               )}
             </div>
           </div>
@@ -4417,11 +4454,16 @@ export default function App() {
                   value={(project.layout.exportSettings.customWidth || 0) > 0 ? 'custom' : project.layout.exportSettings.pixelRatio}
                   onChange={(e) => {
                     if (e.target.value === 'custom') {
+                      // Seed the custom size from the current on-screen frame, then
+                      // constrain the editing canvas to it (clearing any preset ratio).
                       const el = mapContainerRef.current;
-                      const baseW = (el?.clientWidth) || viewportSize.width || 1600;
-                      updateLayout({ exportSettings: { customWidth: Math.round(baseW * 2) } });
+                      const baseW = el?.clientWidth || viewportSize.width || 1600;
+                      const baseH = el?.clientHeight || viewportSize.height || 1000;
+                      activeRatioRef.current = null;
+                      setActiveRatio(null);
+                      updateLayout({ exportSettings: { customWidth: Math.round(baseW * 2), customHeight: Math.round(baseH * 2) } });
                     } else {
-                      updateLayout({ exportSettings: { pixelRatio: Number(e.target.value), customWidth: 0 } });
+                      updateLayout({ exportSettings: { pixelRatio: Number(e.target.value), customWidth: 0, customHeight: 0 } });
                     }
                   }}
                 >
@@ -4432,13 +4474,9 @@ export default function App() {
                 </select>
               </div>
             </div>
-            {(project.layout.exportSettings.customWidth || 0) > 0 && (() => {
-              const el = mapContainerRef.current;
-              const aspect = (el?.clientWidth && el?.clientHeight) ? el.clientWidth / el.clientHeight : (viewportSize.width / viewportSize.height) || (16 / 9);
-              const cw = project.layout.exportSettings.customWidth || 0;
-              const ch = Math.round(cw / aspect);
-              return (
-                <div className="control-row inline-2 export-custom-size">
+            {(project.layout.exportSettings.customWidth || 0) > 0 && (
+              <div className="export-custom-size">
+                <div className="control-row inline-2">
                   <div>
                     <label>Width (px)</label>
                     <input
@@ -4446,17 +4484,25 @@ export default function App() {
                       min="200"
                       max="12000"
                       step="50"
-                      value={cw}
-                      onChange={(e) => updateLayout({ exportSettings: { customWidth: Math.max(0, Math.min(12000, Math.round(Number(e.target.value) || 0))) } })}
+                      value={project.layout.exportSettings.customWidth || 0}
+                      onChange={(e) => updateLayout({ exportSettings: { customWidth: Math.max(200, Math.min(12000, Math.round(Number(e.target.value) || 200))) } })}
                     />
                   </div>
                   <div>
                     <label>Height (px)</label>
-                    <input type="number" value={ch} readOnly title="Height follows the map's aspect ratio" />
+                    <input
+                      type="number"
+                      min="200"
+                      max="12000"
+                      step="50"
+                      value={project.layout.exportSettings.customHeight || 0}
+                      onChange={(e) => updateLayout({ exportSettings: { customHeight: Math.max(200, Math.min(12000, Math.round(Number(e.target.value) || 200))) } })}
+                    />
                   </div>
                 </div>
-              );
-            })()}
+                <p className="export-custom-hint">The editing canvas matches this size — pan &amp; zoom to frame, then export at exactly {project.layout.exportSettings.customWidth || 0}×{project.layout.exportSettings.customHeight || 0}px.</p>
+              </div>
+            )}
             <div className="button-row">
               <button className={`btn primary${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('png'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export PNG'}</button>
               <button className={`btn${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('svg'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export SVG'}</button>
@@ -4514,15 +4560,17 @@ export default function App() {
             {exportError && <div className="export-error-msg">{exportError}</div>}
           </div>
         </div>
-        <div ref={mapViewportRef} className={`map-viewport${activeRatio ? ' map-viewport--ratio-active' : ''}`}>
-          {activeRatio && (
+        <div ref={mapViewportRef} className={`map-viewport${constrainedStageSize ? ' map-viewport--ratio-active' : ''}`}>
+          {constrainedStageSize && (
             <div className="ratio-frame-badge">
-              {EXPORT_RATIOS[activeRatio].label} — {EXPORT_RATIOS[activeRatio].description}
+              {activeRatio
+                ? `${EXPORT_RATIOS[activeRatio].label} — ${EXPORT_RATIOS[activeRatio].description}`
+                : `Custom — ${customExportW} × ${customExportH} px`}
             </div>
           )}
           <div
             ref={mapContainerRef}
-            className={`map-stage${activeRatio ? ' map-stage--ratio-constrained' : ''}`}
+            className={`map-stage${constrainedStageSize ? ' map-stage--ratio-constrained' : ''}`}
             data-theme={project.layout.themeId || 'modern_rounded'}
             data-title-accent-style={themeTokens.titleAccentStyle || 'top'}
             data-annotation-tool={annotationTool || ''}
@@ -4891,14 +4939,14 @@ export default function App() {
               const isHov = (slot) => hz?.corner === corner && hz?.slot === slot;
               const slots = isTop
                 ? [
-                    { slot: 'first', label: '① First position' },
-                    { slot: 'beside', label: '② Side by side' },
-                    { slot: 'last',  label: '③ Stack further out' },
+                    { slot: 'first', label: 'Closest to corner' },
+                    { slot: 'beside', label: 'Side by side' },
+                    { slot: 'last',  label: 'Furthest in' },
                   ]
                 : [
-                    { slot: 'last',  label: '③ Stack further out' },
-                    { slot: 'beside', label: '② Side by side' },
-                    { slot: 'first', label: '① First position' },
+                    { slot: 'last',  label: 'Furthest in' },
+                    { slot: 'beside', label: 'Side by side' },
+                    { slot: 'first', label: 'Closest to corner' },
                   ];
               return (
                 <div key={corner} className={`drop-zone-cluster drop-zone-cluster--${corner}`}>
