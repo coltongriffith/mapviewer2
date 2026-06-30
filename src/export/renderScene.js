@@ -13,6 +13,24 @@ import dissolveGeo from '@turf/dissolve';
 let _exportWarnings = [];
 export function getExportWarnings() { return _exportWarnings; }
 
+// Resolve the uniform render scale. A custom export width (in px) takes priority
+// and is converted to a scale relative to the on-screen composition width, so the
+// output is exactly that many pixels wide with the aspect ratio preserved. Falls
+// back to the pixelRatio multiplier (1×/2×/3×). The scale is clamped so a stray
+// value can't allocate an absurd canvas.
+function resolveExportScale(scene, options = {}) {
+  const settings = scene?.project?.layout?.exportSettings || {};
+  const customWidth = Number(options.customWidth ?? settings.customWidth ?? 0);
+  const sceneW = scene?.width || 0;
+  if (customWidth > 0 && sceneW > 0) {
+    const scale = customWidth / sceneW;
+    // Cap the long edge at 12000px to stay within canvas limits.
+    const maxScale = 12000 / Math.max(sceneW, scene?.height || sceneW);
+    return Math.max(0.1, Math.min(scale, maxScale));
+  }
+  return Number(options.pixelRatio || settings.pixelRatio || 2);
+}
+
 function getPointAtFraction(pts, fraction) {
   const n = pts.length;
   const segs = [];
@@ -1697,7 +1715,7 @@ function drawDistanceLinesCanvas(ctx, scene, scale) {
 
 export async function renderSceneToCanvas(scene, options = {}) {
   _exportWarnings = [];
-  const scale = Number(options.pixelRatio || scene.project.layout?.exportSettings?.pixelRatio || 2);
+  const scale = resolveExportScale(scene, options);
   const canvas = document.createElement('canvas'); canvas.width = Math.round(scene.width * scale); canvas.height = Math.round(scene.height * scale); const ctx = canvas.getContext('2d');
   const mapBg = scene.project.layout?.basemap === 'blank' ? (scene.project.layout?.blankBg || '#ffffff') : '#ffffff';
   ctx.fillStyle = mapBg; ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -2222,7 +2240,7 @@ function renderCalloutsSvg(scene, scale, svgDefs) {
 
 export async function renderSceneToSvg(scene, options = {}) {
   _exportWarnings = [];
-  const scale = Number(options.pixelRatio || scene.project.layout?.exportSettings?.pixelRatio || 2); const width = Math.round(scene.width * scale), height = Math.round(scene.height * scale);
+  const scale = resolveExportScale(scene, options); const width = Math.round(scene.width * scale), height = Math.round(scene.height * scale);
   const isNI = scene.template?.id === 'ni_43101_technical';
   const basemapImage = await renderBasemapImageSvg(scene, scale);
 
