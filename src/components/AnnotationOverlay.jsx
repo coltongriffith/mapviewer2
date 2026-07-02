@@ -170,7 +170,7 @@ export default function AnnotationOverlay({
       window.removeEventListener('pointerup', handleUp);
       window.removeEventListener('pointercancel', handleUp);
     };
-  }, [map, onMoveEllipse, onMoveMarker, onMoveLabelOffset, onMoveEllipseLabelOffset, onMoveEllipseLabelAngle]);
+  }, [map, onMoveEllipse, onMoveMarker, onMoveLabelOffset, onMoveEllipseLabelOffset, onMoveEllipseLabelAngle, onMovePolygonLabel]);
 
   const placedMarkers = useMemo(() => resolvePositions(markers, map, 'marker'), [markers, map, tick]);
   const placedEllipses = useMemo(() => resolvePositions(ellipses, map, 'ellipse'), [ellipses, map, tick]);

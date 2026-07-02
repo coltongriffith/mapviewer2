@@ -204,7 +204,10 @@ export default function RegistrySearch({ onImport, onBack }) {
       // claims at all — check the other provinces in the background so a
       // wrong-province guess doesn't read as "search is broken".
       if (!error && results?.features?.length === 0 && pending.mode !== 'map') {
-        searchOtherProvinces(pending.query, pending.mode, pending.province, PROVINCES);
+        // Only query provinces that actually support this search mode —
+        // e.g. Manitoba is number-only, so a company search there is a guaranteed 400.
+        searchOtherProvinces(pending.query, pending.mode, pending.province,
+          PROVINCES.filter((p) => p.modes.includes(pending.mode)));
       }
       pendingSearchRef.current = null;
     }
@@ -520,7 +523,7 @@ export default function RegistrySearch({ onImport, onBack }) {
                           <span className="claims-group-label">{group.label}</span>
                           <span className="claims-group-meta">
                             {group.features.length} claim{group.features.length !== 1 ? 's' : ''} · {group.totalHa > 0 ? `${group.totalHa.toFixed(0)} ha` : ''}
-                            {group.earliestExpiry ? ` · exp. ${group.latestExpiry}` : ''}
+                            {group.earliestExpiry ? ` · exp. ${group.earliestExpiry}` : ''}
                           </span>
                         </div>
                         <button className="claims-group-expand" type="button" onClick={e => toggleExpand(gi, e)} title={isExp ? 'Collapse' : 'Expand claims'}>
