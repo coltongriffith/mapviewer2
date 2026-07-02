@@ -8,14 +8,22 @@ const GZ_PREFIX = 'gz1:';
 
 // Trim GeoJSON coordinate precision to 6 decimal places (sub-meter accuracy).
 // Reduces JSON size by ~35% for dense geometries with no visible quality loss.
-function trimCoordinatePrecision(str) {
-  return str.replace(/(-?\d+\.\d{7,})/g, (m) => parseFloat(m).toFixed(6));
+// Applied via a stringify replacer scoped to `coordinates` keys only — a raw
+// regex over the serialized JSON would also rewrite long decimals inside user
+// text (e.g. a callout reading "Au 1.2345678 g/t").
+function roundCoordsDeep(value) {
+  if (typeof value === 'number') return Math.round(value * 1e6) / 1e6;
+  if (Array.isArray(value)) return value.map(roundCoordsDeep);
+  return value;
+}
+
+function serialize(obj) {
+  return JSON.stringify(obj, (key, value) => (key === 'coordinates' ? roundCoordsDeep(value) : value));
 }
 
 function compress(str) {
   try {
-    const trimmed = trimCoordinatePrecision(str);
-    const compressed = deflateSync(strToU8(trimmed));
+    const compressed = deflateSync(strToU8(str));
     // btoa expects a binary string
     let binary = '';
     for (let i = 0; i < compressed.length; i++) binary += String.fromCharCode(compressed[i]);
@@ -63,7 +71,7 @@ function readProjects() {
 }
 
 function writeProjects(projects) {
-  safeSetItem(PROJECTS_KEY, compress(JSON.stringify(projects)));
+  safeSetItem(PROJECTS_KEY, compress(serialize(projects)));
 }
 
 export function estimateStorageUsedBytes() {
@@ -138,7 +146,7 @@ export function updateProjectThumbnailRecord(id, thumbnail) {
 }
 
 export function saveDraft({ payload, projectId, projectName }) {
-  safeSetItem(DRAFT_KEY, compress(JSON.stringify({
+  safeSetItem(DRAFT_KEY, compress(serialize({
     payload,
     projectId: projectId || null,
     projectName: projectName || null,

@@ -357,12 +357,18 @@ export default function AnnotationOverlay({
               {/* Endpoint dots */}
               <circle cx={dl.x1} cy={dl.y1} r={4} fill={color} style={{ pointerEvents: 'none' }} />
               <circle cx={dl.x2} cy={dl.y2} r={4} fill={color} style={{ pointerEvents: 'none' }} />
-              {/* Midpoint label background */}
-              <rect
-                x={mx - 28} y={my - 9} width={56} height={18} rx={3}
-                fill="rgba(255,255,255,0.93)"
-                style={{ pointerEvents: 'none' }}
-              />
+              {/* Midpoint label background — sized to the label so long values
+                  like "1609.3 km" don't overflow a fixed-width box */}
+              {(() => {
+                const w = Math.max(56, label.length * 6.8 + 12);
+                return (
+                  <rect
+                    x={mx - w / 2} y={my - 9} width={w} height={18} rx={3}
+                    fill="rgba(255,255,255,0.93)"
+                    style={{ pointerEvents: 'none' }}
+                  />
+                );
+              })()}
               {/* Midpoint label text */}
               <text
                 x={mx} y={my}

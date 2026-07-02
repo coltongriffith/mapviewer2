@@ -12,19 +12,9 @@ const GALLERY_STYLES = [
 ];
 import { useAuth } from '../hooks/useAuth.jsx';
 import AuthModal from './AuthModal';
+import { formatRelativeDate } from '../utils/dates';
 
-function formatRelativeDate(iso) {
-  if (!iso) return '';
-  const diff = Date.now() - new Date(iso).getTime();
-  const days = Math.floor(diff / 86400000);
-  if (days === 0) return 'Today';
-  if (days === 1) return 'Yesterday';
-  if (days < 7) return `${days} days ago`;
-  if (days < 30) return `${Math.floor(days / 7)} week${days < 14 ? '' : 's'} ago`;
-  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
-
-export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleStyle, recentProjects = [], onOpenProject, onShowHelp, onSearchBCClaims, onUploadFile, onOpenAccount }) {
+export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleStyle, recentProjects = [], onOpenProject, onShowHelp, onSearchClaims, onUploadFile, onOpenAccount }) {
   const { user } = useAuth();
   const [showAuth, setShowAuth] = useState(false);
   const [dataSourcesOpen, setDataSourcesOpen] = useState(false);
@@ -83,8 +73,8 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
               Sign in
             </button>
           )}
-          <button className="btn primary" type="button" onClick={onOpenEditor} data-track="Nav: Try for Free">
-            Try for Free
+          <button className="btn primary" type="button" onClick={onOpenEditor} data-track="Nav: Make a map">
+            Make a map
           </button>
         </div>
       </nav>
@@ -93,7 +83,7 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
 
       {/* Hero — centered, simple */}
       <div className="landing-hero2" data-section="hero">
-        <div className="landing-hero2-tagline">Raw data in. Investor map out.</div>
+        <div className="landing-hero2-tagline">Live claim search · 7 Canadian provinces</div>
         <h1 className="landing-hero2-h1">Turn raw exploration data into clean investor maps.</h1>
         <p className="landing-hero2-sub">
           Search the registry or import your files, then export a presentation-ready map
@@ -101,10 +91,10 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
         </p>
 
         <div className="landing-hero2-ctas" data-section="hero-ctas">
-          {onSearchBCClaims && (
-            <button className="landing-hero2-primary" type="button" onClick={onSearchBCClaims} data-track="CTA: Search Claims Registry">
+          {onSearchClaims && (
+            <button className="landing-hero2-primary" type="button" onClick={onSearchClaims} data-track="CTA: Search Claims Registry">
               Search the Claims Registry
-              <span className="landing-hero2-primary-sub">By name or claim number · BC · Ontario · Quebec · Saskatchewan · Manitoba · Newfoundland · Yukon</span>
+              <span className="landing-hero2-primary-sub">By company name or claim number — live from 7 provincial registries</span>
             </button>
           )}
           <div className="landing-hero2-secondary-row">
@@ -125,7 +115,9 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
       <div className="landing-ba" data-section="before-after">
         <div className="landing-ba-panel landing-ba-before">
           <div className="landing-ba-tag">Raw export</div>
-          <img src="/gallery/ba-before.png" alt="Raw GIS export — unstyled claims outline on topo basemap" className="landing-ba-img" />
+          <button type="button" className="landing-ba-map-btn" onClick={() => onLoadSampleStyle?.('aurora_demo')} data-track="Before/After: open Aurora demo (before panel)">
+            <img src="/gallery/ba-before.png" alt="Raw GIS export — unstyled claims outline on topo basemap" className="landing-ba-img" />
+          </button>
         </div>
 
         <div className="landing-ba-arrow" aria-hidden="true">
@@ -226,7 +218,7 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
         <div className="landing-faq-grid">
           <div className="landing-faq-item">
             <strong>Is it free?</strong>
-            <span>Yes. Search, style, and export — all free. Watermark-free exports just ask for your email.</span>
+            <span>Yes — everything is free. Exports are watermark-free with just an email (no account needed).</span>
           </div>
           <div className="landing-faq-item">
             <strong>Do I need an account?</strong>
@@ -324,8 +316,8 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
           <div className="landing-bottom-cta-headline">Raw data in. Investor map out.</div>
           <div className="landing-bottom-cta-sub">Free · No account · Works in your browser</div>
           <div className="landing-bottom-cta-actions">
-            {onSearchBCClaims && (
-              <button className="landing-bottom-primary" onClick={onSearchBCClaims} data-track="Bottom CTA: Search Claims">
+            {onSearchClaims && (
+              <button className="landing-bottom-primary" onClick={onSearchClaims} data-track="Bottom CTA: Search Claims">
                 Search the Claims Registry →
               </button>
             )}

@@ -21,6 +21,7 @@ const HowToUseModal = React.lazy(() => import('./components/HowToUseModal'));
 const ColumnMapperModal = React.lazy(() => import('./components/ColumnMapperModal'));
 const AddClaimsModal = React.lazy(() => import('./components/AddClaimsModal'));
 import { loadGeoJSON, loadCSV, loadShapefileSet } from './utils/importers';
+import { maybeReprojectGeoJSON } from './utils/reproject';
 import sampleClaims from './assets/sampleClaims.json';
 import sampleDrillholes from './assets/sampleDrillholes.json';
 import { auroraClaims, auroraDrillholes, auroraTargets, auroraCallouts } from './assets/auroraDemo';
@@ -90,6 +91,7 @@ import {
   loadSharedMap,
 } from './utils/cloudStorage';
 import { useAuth } from './hooks/useAuth';
+import { useUndoHistory } from './hooks/useUndoHistory';
 import { supabase } from './lib/supabase';
 import { renderBrandKitSwatch } from './utils/brandKitSwatch';
 import { captureProjectThumbnail } from './utils/thumbnailCapture';
@@ -692,6 +694,7 @@ export default function App() {
   const [project, setProject] = useState(initialWorkspace.project);
   const [projectId, setProjectId] = useState(initialWorkspace.projectId);
   const [projectName, setProjectName] = useState(initialWorkspace.projectName);
+  const { undo, redo, canUndo, canRedo } = useUndoHistory(project, setProject, projectId);
   const [recentProjects, setRecentProjects] = useState(() => listProjects());
   const [showRecentProjects, setShowRecentProjects] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
@@ -970,9 +973,14 @@ export default function App() {
         .catch(() => null)
         .finally(() => clearTimeout(t));
     };
+    // Coalesce concurrent callers onto one in-flight request so overlapping
+    // invocations can't each fetch (and a slow response can't overwrite a
+    // newer one) — every caller pings once the shared fetch settles.
+    let geoPromise = null;
     const ensureGeoThenPing = () => {
       if (geoFetched) { ping(); return; }
-      fetchGeo().then((g) => { geo = g; geoFetched = true; ping(); });
+      geoPromise = geoPromise || fetchGeo().then((g) => { geo = g; geoFetched = true; });
+      geoPromise.then(() => ping());
     };
     ensureGeoThenPing();
     timer = setInterval(ping, 25000);
@@ -1937,7 +1945,10 @@ export default function App() {
     return () => { pin.remove(); areaClaimsPinRef.current = null; };
   }, [areaClaimsPickCenter, mapReady]);
 
-  const addGeoJSONAsLayer = async (geojson, fileName) => {
+  const addGeoJSONAsLayer = async (rawGeojson, fileName) => {
+    // Projected files (BC Albers) arrive through every import path — convert
+    // here rather than per-path, and fail loudly when the CRS isn't detectable.
+    const geojson = maybeReprojectGeoJSON(rawGeojson);
     const id = crypto.randomUUID();
     const baseName = fileName.replace(/\.(zip|geojson|json|kml|kmz|csv)$/i, '') || 'Layer';
     const kind = detectLayerKind(geojson);
@@ -3189,7 +3200,7 @@ export default function App() {
           recentProjects={recentProjects}
           onOpenProject={(entry) => { openProjectFromRecent(entry); setScreen('editor'); }}
           onShowHelp={() => setShowHelpModal(true)}
-          onSearchBCClaims={() => { setScreen('editor'); setAddClaimsModalPath('registry'); setShowAddClaimsModal(true); }}
+          onSearchClaims={() => { setScreen('editor'); setAddClaimsModalPath('registry'); setShowAddClaimsModal(true); }}
           onUploadFile={() => { setScreen('editor'); setAddClaimsModalPath('upload'); setShowAddClaimsModal(true); }}
           onOpenAccount={() => setScreen('account')}
         />
@@ -4540,6 +4551,11 @@ export default function App() {
               <button className="topbar-btn" type="button" onClick={() => setShowRecentProjects(true)}>Open</button>
               <button className="topbar-btn" type="button" onClick={startNewProject}>New</button>
               <button className="topbar-btn" type="button" onClick={duplicateCurrentProject}>Dup</button>
+            </div>
+            <div className="topbar-divider" />
+            <div className="topbar-btn-group">
+              <button className="topbar-btn" type="button" aria-label="Undo" title="Undo (Ctrl+Z)" disabled={!canUndo} onClick={undo}>↺</button>
+              <button className="topbar-btn" type="button" aria-label="Redo" title="Redo (Ctrl+Shift+Z)" disabled={!canRedo} onClick={redo}>↻</button>
             </div>
             <div className="topbar-divider" />
             <div className="topbar-btn-group">
