@@ -8,23 +8,23 @@ const SHOWCASE = [
   {
     id: 'regional',
     label: 'Regional project location map',
-    desc: 'Property location in district context — nearby deposits, towns, and access.',
+    desc: 'Property location in district context — neighbouring operators, district roads, and the town down the valley.',
     img: '/gallery/regional.png',
-    tags: ['Project boundary', 'Nearby deposits', 'Roads'],
+    tags: ['Project boundary', 'Nearby operators', 'District roads'],
   },
   {
-    id: 'claims',
-    label: 'Claims & tenure map',
-    desc: 'Mineral tenures and land position, styled for decks and filings.',
-    img: '/gallery/claims.png',
-    tags: ['Claims', 'Project boundary', 'Labels'],
+    id: 'target',
+    label: 'Claims & drill target map',
+    desc: 'The claim block with priority target areas and collar locations, labelled with headline intercepts.',
+    img: '/gallery/target.png',
+    tags: ['Claims', 'Target areas', 'Drill collars'],
   },
   {
     id: 'infrastructure',
     label: 'Infrastructure & access map',
-    desc: 'Roads, rail, and power around the project — the access story at a glance.',
+    desc: 'Access roads and the powerline corridor around the claims — the access story at a glance.',
     img: '/gallery/infrastructure.png',
-    tags: ['Roads', 'Rail', 'Power'],
+    tags: ['Access roads', 'Powerline corridor', 'Drill collars'],
   },
 ];
 
@@ -39,94 +39,6 @@ function formatRelativeDate(iso) {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-/* Decorative hero map — a stylized product canvas: terrain, lake, contours,
-   claim blocks, road/rail/power lines, and drill targets. Purely visual. */
-function HeroMapArt() {
-  return (
-    <svg className="lm-map-art" viewBox="0 0 860 430" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-      <defs>
-        <linearGradient id="lmTerrain" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#eef3ec" />
-          <stop offset="0.55" stopColor="#e7eee4" />
-          <stop offset="1" stopColor="#e9ede8" />
-        </linearGradient>
-        <linearGradient id="lmLake" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#d3e5f4" />
-          <stop offset="1" stopColor="#c2d9ee" />
-        </linearGradient>
-      </defs>
-
-      <rect width="860" height="430" fill="url(#lmTerrain)" />
-
-      {/* contours */}
-      <g fill="none" stroke="#c7d2c3" strokeWidth="1">
-        <path d="M-20 96 C 140 40, 300 150, 470 100 S 760 40, 890 96" />
-        <path d="M-20 150 C 150 96, 310 205, 480 152 S 770 92, 890 148" opacity="0.8" />
-        <path d="M-20 320 C 130 268, 260 372, 430 330 S 700 260, 890 330" opacity="0.75" />
-        <path d="M-20 375 C 150 322, 290 420, 470 378 S 720 320, 890 385" opacity="0.6" />
-      </g>
-
-      {/* lake */}
-      <path d="M600 288 C 640 260, 720 262, 762 286 C 806 310, 812 352, 768 372 C 720 394, 640 390, 606 360 C 576 334, 568 310, 600 288 Z" fill="url(#lmLake)" stroke="#a9c6e2" strokeWidth="1.4" />
-      <text x="686" y="334" fontSize="11.5" fill="#5c7ea0" fontStyle="italic" textAnchor="middle">Trout Lake</text>
-
-      {/* road */}
-      <path d="M-10 404 C 150 358, 250 320, 340 250 C 420 188, 520 160, 640 148 C 730 140, 800 118, 872 84" fill="none" stroke="#a8b0ba" strokeWidth="3.4" />
-      <path d="M-10 404 C 150 358, 250 320, 340 250 C 420 188, 520 160, 640 148 C 730 140, 800 118, 872 84" fill="none" stroke="#fdfefe" strokeWidth="1.1" strokeDasharray="7 7" />
-      <g transform="translate(196,340) rotate(-22)"><rect x="-26" y="-9" width="52" height="16" rx="3.5" fill="#ffffff" stroke="#c3cbd4" strokeWidth="0.8" /><text x="0" y="3.4" fontSize="9" fill="#4a5768" textAnchor="middle" fontWeight="600">Hwy 37</text></g>
-
-      {/* rail */}
-      <path d="M-10 246 C 130 236, 260 258, 380 300 C 470 332, 560 350, 700 352 L 872 350" fill="none" stroke="#7d8b99" strokeWidth="2" />
-      <path d="M-10 246 C 130 236, 260 258, 380 300 C 470 332, 560 350, 700 352 L 872 350" fill="none" stroke="#7d8b99" strokeWidth="7" strokeDasharray="1.6 16" opacity="0.85" />
-      <g transform="translate(560,364)"><rect x="-20" y="-8" width="40" height="15" rx="3.5" fill="#ffffff" stroke="#c3cbd4" strokeWidth="0.8" /><text x="0" y="3.4" fontSize="8.6" fill="#4a5768" textAnchor="middle" fontWeight="600">CN Rail</text></g>
-
-      {/* power line */}
-      <path d="M60 -8 L 140 92 L 232 176 L 330 236 L 440 280 L 566 306" fill="none" stroke="#3f9860" strokeWidth="1.8" strokeDasharray="10 4" />
-      {[[140, 92], [232, 176], [330, 236], [440, 280]].map(([x, y], i) => (
-        <g key={i}><line x1={x - 5} y1={y - 7} x2={x + 5} y2={y + 7} stroke="#3f9860" strokeWidth="1.6" /><line x1={x + 5} y1={y - 7} x2={x - 5} y2={y + 7} stroke="#3f9860" strokeWidth="1.6" /></g>
-      ))}
-      <g transform="translate(120,138)"><rect x="-28" y="-8" width="56" height="15" rx="3.5" fill="#ffffff" stroke="#bfd8c6" strokeWidth="0.8" /><text x="0" y="3.4" fontSize="8.6" fill="#2f7a4c" textAnchor="middle" fontWeight="600">138 kV line</text></g>
-
-      {/* claim blocks */}
-      <g stroke="#c2703d" strokeWidth="1.7" fill="#c2703d" fillOpacity="0.10">
-        <rect x="332" y="118" width="86" height="66" />
-        <rect x="418" y="118" width="86" height="66" />
-        <rect x="332" y="184" width="86" height="66" />
-        <rect x="418" y="184" width="86" height="66" />
-        <rect x="504" y="151" width="86" height="66" />
-        <rect x="270" y="151" width="62" height="66" />
-      </g>
-      <rect x="332" y="118" width="172" height="132" fill="none" stroke="#a4552a" strokeWidth="2.4" />
-      <g transform="translate(418,106)"><rect x="-62" y="-11" width="124" height="18" rx="4" fill="#ffffff" stroke="#d9b9a2" strokeWidth="0.9" /><text x="0" y="2.8" fontSize="10" fill="#8a4a22" textAnchor="middle" fontWeight="700">CARIBOO RIDGE CLAIMS</text></g>
-
-      {/* drill targets */}
-      {[[398, 176], [452, 206], [478, 158]].map(([x, y], i) => (
-        <g key={i}>
-          <circle cx={x} cy={y} r="10" fill="none" stroke="#d33d3d" strokeWidth="1.6" strokeDasharray="3 2.4" />
-          <circle cx={x} cy={y} r="3.2" fill="#d33d3d" />
-        </g>
-      ))}
-      <g transform="translate(474,232)"><rect x="-38" y="-8" width="76" height="15" rx="3.5" fill="#ffffff" stroke="#e4b9b9" strokeWidth="0.8" /><text x="0" y="3.4" fontSize="8.6" fill="#b03030" textAnchor="middle" fontWeight="600">Drill targets</text></g>
-
-      {/* project marker */}
-      <g transform="translate(376,148)">
-        <path d="M0 -16 C -7 -16 -12 -11 -12 -5 C -12 3 0 14 0 14 C 0 14 12 3 12 -5 C 12 -11 7 -16 0 -16 Z" fill="#2563eb" stroke="#ffffff" strokeWidth="1.6" />
-        <circle cx="0" cy="-5.5" r="4" fill="#ffffff" />
-      </g>
-
-      {/* north + scale */}
-      <g transform="translate(822,44)" opacity="0.9">
-        <circle r="15" fill="#ffffff" stroke="#c9d2dc" strokeWidth="1" />
-        <path d="M0 -9 L 4 5 L 0 2 L -4 5 Z" fill="#37475c" />
-        <text x="0" y="12.6" fontSize="7.4" fill="#37475c" textAnchor="middle" fontWeight="700">N</text>
-      </g>
-      <g transform="translate(760,408)">
-        <rect x="0" y="0" width="34" height="5" fill="#37475c" /><rect x="34" y="0" width="34" height="5" fill="#ffffff" stroke="#37475c" strokeWidth="0.9" />
-        <text x="34" y="-4" fontSize="8.4" fill="#4a5768" textAnchor="middle">5 km</text>
-      </g>
-    </svg>
-  );
-}
 
 export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleStyle, recentProjects = [], onOpenProject, onShowHelp, onSearchBCClaims, onUploadFile, onOpenAccount }) {
   const { user } = useAuth();
@@ -238,50 +150,28 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
             <div className="lm-mock">
               <div className="lm-mock-chrome">
                 <span className="lm-mock-dots" aria-hidden="true"><i /><i /><i /></span>
-                <div className="lm-mock-url">explorationmaps.com — Cariboo Ridge Project</div>
+                <div className="lm-mock-url">explorationmaps.com — Cedar Ridge Project · Investor Map</div>
                 <div className="lm-mock-chrome-actions">
                   <span className="lm-mock-chip-btn">Share</span>
                   <span className="lm-mock-chip-btn lm-mock-chip-primary">Export</span>
                 </div>
               </div>
 
-              <div className="lm-mock-body">
-                <HeroMapArt />
-
-                {/* floating layer panel */}
-                <div className="lm-float lm-layers-card">
-                  <div className="lm-float-title">Layers</div>
-                  {[
-                    ['Claims', '#c2703d'],
-                    ['Drill targets', '#d33d3d'],
-                    ['Roads', '#8b95a1'],
-                    ['Rail', '#66717e'],
-                    ['Power', '#3f9860'],
-                  ].map(([name, color]) => (
-                    <div className="lm-layer-row" key={name}>
-                      <span className="lm-layer-check" aria-hidden="true">
-                        <svg width="9" height="9" viewBox="0 0 24 24" fill="none"><path d="M4 12.5l5 5L20 6.5" stroke="#fff" strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                      </span>
-                      <span className="lm-layer-swatch" style={{ background: color }} aria-hidden="true" />
-                      {name}
-                    </div>
-                  ))}
-                </div>
-
-                {/* floating action chips */}
-                <div className="lm-float lm-chip lm-chip-1">
-                  <span className="lm-chip-ico" aria-hidden="true">⌕</span> Search claims
-                </div>
-                <div className="lm-float lm-chip lm-chip-2">
-                  <span className="lm-chip-ico" aria-hidden="true">＋</span> Add infrastructure
-                </div>
-                <div className="lm-float lm-chip lm-chip-3">
-                  <span className="lm-chip-ico" aria-hidden="true">◧</span> Style layers
-                </div>
-                <div className="lm-float lm-chip lm-chip-4 lm-chip-accent">
-                  <span className="lm-chip-ico" aria-hidden="true">↧</span> Export investor-ready map
-                </div>
-              </div>
+              {/* Real export from the product — clicking opens it as a live, editable demo */}
+              <button
+                type="button"
+                className="lm-mock-body"
+                onClick={() => (onLoadSampleStyle ? onLoadSampleStyle('aurora_demo') : onOpenEditor())}
+                data-track="Hero mockup: open live demo"
+                aria-label="Open this map as a live demo"
+              >
+                <img
+                  className="lm-mock-img"
+                  src="/gallery/ba-after.png"
+                  alt="Cedar Ridge Project investor map — claims boundary, drill collars, target areas with assay callouts, legend, location inset, north arrow, and scale bar"
+                />
+                <span className="lm-mock-live">Open this map live →</span>
+              </button>
 
               {/* workflow / prompt bar */}
               <div className="lm-prompt">
@@ -299,6 +189,17 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
                   </button>
                 </div>
               </div>
+            </div>
+
+            {/* floating action chips — straddle the frame edges so the map stays clear */}
+            <div className="lm-float lm-chip lm-chip-1" aria-hidden="true">
+              <span className="lm-chip-ico">⌕</span> Search claims
+            </div>
+            <div className="lm-float lm-chip lm-chip-3" aria-hidden="true">
+              <span className="lm-chip-ico">◧</span> Style layers
+            </div>
+            <div className="lm-float lm-chip lm-chip-4 lm-chip-accent" aria-hidden="true">
+              <span className="lm-chip-ico">↧</span> Export investor-ready map
             </div>
           </div>
 

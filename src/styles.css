@@ -2761,7 +2761,7 @@ body.is-dragging .template-zone .panel-delete-btn { opacity: 0 !important; }
 .lm-hero-trust { font-size: 12.5px; color: var(--lm-faint); margin: 20px 0 0; }
 
 /* Hero mockup */
-.lm-mock-wrap { position: relative; max-width: 1020px; margin: 46px auto 0; padding: 0 4px; }
+.lm-mock-wrap { position: relative; max-width: 880px; margin: 46px auto 0; padding: 0 4px; }
 .lm-mock {
   background: #fff; border: 1px solid #dde4ee; border-radius: 16px; overflow: hidden;
   box-shadow: 0 1px 2px rgba(15,27,45,.05), 0 24px 70px -18px rgba(15,27,45,.22);
@@ -2783,26 +2783,32 @@ body.is-dragging .template-zone .panel-delete-btn { opacity: 0 !important; }
   border: 1px solid var(--lm-hair); border-radius: 6px; padding: 3px 10px; background: #fff;
 }
 .lm-mock-chip-primary { background: var(--lm-blue); border-color: var(--lm-blue); color: #fff; }
-.lm-mock-body { position: relative; aspect-ratio: 2 / 1; min-height: 300px; overflow: hidden; }
-.lm-map-art { position: absolute; inset: 0; width: 100%; height: 100%; }
-
-/* floating UI on the mockup */
-.lm-float {
-  position: absolute; background: rgba(255,255,255,0.96); border: 1px solid #dfe6ef;
-  border-radius: 11px; box-shadow: 0 8px 26px -8px rgba(15,27,45,.24);
-  backdrop-filter: blur(4px);
+/* The mockup body is a real product export, clickable to open the live demo. */
+.lm-mock-body {
+  position: relative; display: block; width: 100%; padding: 0; margin: 0;
+  border: none; background: #0f1b2d; cursor: pointer; overflow: hidden; text-align: left;
 }
-.lm-layers-card { top: 16px; left: 16px; padding: 10px 13px 11px; width: 148px; }
-.lm-float-title { font-size: 10px; font-weight: 750; text-transform: uppercase; letter-spacing: .08em; color: var(--lm-faint); margin-bottom: 8px; }
-.lm-layer-row { display: flex; align-items: center; gap: 7px; font-size: 11.5px; font-weight: 560; color: #33404f; padding: 3px 0; }
-.lm-layer-check { width: 13px; height: 13px; border-radius: 4px; background: var(--lm-blue); display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.lm-layer-swatch { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+.lm-mock-img { display: block; width: 100%; height: auto; }
+.lm-mock-live {
+  position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%) translateY(6px);
+  background: rgba(12, 22, 38, 0.92); color: #fff; font-size: 12.5px; font-weight: 650;
+  border-radius: 999px; padding: 8px 18px; opacity: 0; transition: opacity .18s ease, transform .18s ease;
+  pointer-events: none; white-space: nowrap;
+}
+.lm-mock-body:hover .lm-mock-live, .lm-mock-body:focus-visible .lm-mock-live { opacity: 1; transform: translateX(-50%) translateY(0); }
+.lm-mock-body:hover .lm-mock-img { opacity: 0.96; }
+
+/* floating action chips — straddle the mockup frame edges (never cover the map) */
+.lm-float {
+  position: absolute; background: rgba(255,255,255,0.97); border: 1px solid #dfe6ef;
+  border-radius: 11px; box-shadow: 0 8px 26px -8px rgba(15,27,45,.24);
+  backdrop-filter: blur(4px); z-index: 5;
+}
 .lm-chip { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 640; color: #2c3a4b; padding: 8px 14px; white-space: nowrap; }
 .lm-chip-ico { color: var(--lm-blue); font-size: 13px; line-height: 1; }
-.lm-chip-1 { top: 18px; right: 18px; animation: lm-bob 7s ease-in-out infinite; }
-.lm-chip-2 { top: 64%; left: 22px; animation: lm-bob 8s ease-in-out .8s infinite; }
-.lm-chip-3 { top: 40%; right: 26px; animation: lm-bob 7.5s ease-in-out 1.6s infinite; }
-.lm-chip-4 { bottom: 18px; right: 18px; animation: lm-bob 8.5s ease-in-out .4s infinite; }
+.lm-chip-1 { top: 310px; left: -16px; animation: lm-bob 7s ease-in-out infinite; }
+.lm-chip-3 { top: 34%; right: -16px; animation: lm-bob 7.5s ease-in-out 1.6s infinite; }
+.lm-chip-4 { bottom: 88px; right: -18px; left: auto; animation: lm-bob 8.5s ease-in-out .4s infinite; }
 .lm-chip-accent { background: var(--lm-navy); border-color: var(--lm-navy); color: #fff; }
 .lm-chip-accent .lm-chip-ico { color: #7fa8f2; }
 @keyframes lm-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
@@ -2985,7 +2991,7 @@ body.is-dragging .template-zone .panel-delete-btn { opacity: 0 !important; }
 .lm-reveal.lm-vis { opacity: 1; transform: none; }
 @media (prefers-reduced-motion: reduce) {
   .lm-reveal { opacity: 1; transform: none; transition: none; }
-  .lm-chip-1, .lm-chip-2, .lm-chip-3, .lm-chip-4 { animation: none; }
+  .lm-chip-1, .lm-chip-3, .lm-chip-4 { animation: none; }
   .lm-btn:hover, .lm-card:hover, .lm-show-card:hover { transform: none; }
 }
 
@@ -2998,16 +3004,12 @@ body.is-dragging .template-zone .panel-delete-btn { opacity: 0 !important; }
   .lm-footer-inner { grid-template-columns: 1fr 1fr; }
   .lm-section { padding: 60px 22px; }
   .lm-hero { padding-top: 52px; }
-  .lm-chip-2, .lm-chip-3 { display: none; }
-  .lm-layers-card { width: 128px; padding: 8px 11px 9px; }
-  .lm-mock-body { aspect-ratio: 16 / 11; }
+  .lm-chip-1, .lm-chip-3, .lm-chip-4 { display: none; }
   .lm-mock-url { display: none; }
   .lm-prompt-chip-go { margin-left: 0; }
 }
 @media (max-width: 560px) {
   .lm-footer-inner { grid-template-columns: 1fr; gap: 26px; }
   .lm-hero-ctas .lm-btn-lg { width: 100%; }
-  .lm-chip-1 { display: none; }
-  /* keep the export chip fully visible on narrow screens */
-  .lm-chip-4 { left: 12px; right: 12px; bottom: 12px; justify-content: center; font-size: 11.5px; }
+
 }
