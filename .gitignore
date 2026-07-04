@@ -24,3 +24,10 @@ Thumbs.db
 # Vite / misc
 *.local
 .claude/worktrees/
+
+# pSEO pipeline outputs (generated; fixtures stay committed).
+# Remove these lines when publishing real batches so refreshes can be committed.
+data/pseo/*.csv
+data/pseo/geo/
+public/companies/
+public/companies-assets/
