@@ -241,6 +241,16 @@ function main() {
     if (!ownersByTicker.has(m.ticker)) ownersByTicker.set(m.ticker, new Set());
     ownersByTicker.get(m.ticker).add(m.owner_raw);
   }
+  // Matched tickers but ZERO claims rows loaded means the (gitignored)
+  // claims_bc/claims_on CSVs are missing or empty — a fresh checkout or a
+  // standalone 07 run, not a world where every claim vanished. Wiping the
+  // tracked pages from that state would be destructive; refuse. (A real
+  // all-expired refresh still passes: a full 02/03 pull yields thousands of
+  // other owners' rows, so claimsAll is never empty when inputs are intact.)
+  if (ownersByTicker.size && !claimsAll.length) {
+    throw new Error(`${ownersByTicker.size} matched ticker(s) but no claims data loaded — run 02/03 first (claims CSVs are gitignored); refusing to wipe existing pages.`);
+  }
+
   // Per-ticker live (non-expired) claims — the SAME filter the publish loop
   // applies. The isExpired guard is belt-and-braces (02/03 filter at fetch),
   // and computing it up front means the geometry check below doesn't count a
@@ -264,12 +274,6 @@ function main() {
   if (publishable.length && !publishable.some((t) => fs.existsSync(path.join(PATHS.geo, `${t}.geojson`)))) {
     throw new Error(`${publishable.length} ticker(s) to publish but no cached geometry for any of them — run 05/06 first; refusing to wipe existing pages.`);
   }
-
-  // This script fully owns pagesOut: wipe and regenerate it every run so a
-  // ticker that dropped out (claims all expired, removed from the batch, match
-  // lost) has its old page deleted rather than left deploying stale forever.
-  fs.rmSync(PATHS.pagesOut, { recursive: true, force: true });
-  fs.mkdirSync(PATHS.pagesOut, { recursive: true });
 
   // Centroids for neighbour computation (only tickers with cached geometry)
   const centroids = new Map();
