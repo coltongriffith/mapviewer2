@@ -132,14 +132,20 @@ async function rasterizeOg(svgPath, pngPath) {
 
 async function main() {
   const only = opt('--ticker');
+  const { readCsv } = await import('./lib.mjs');
   const files = fs.existsSync(PATHS.geo) ? fs.readdirSync(PATHS.geo).filter((f) => f.endsWith('.geojson')) : [];
   if (!files.length) {
-    // Empty match set is valid — 07 still runs to remove stale pages.
-    console.warn('  ! no cached geometry — nothing to render');
+    // An empty cache is only OK when there was nothing to fetch. With matched
+    // tickers it means 05 silently produced nothing (registry outage?) — fail
+    // here, or 07 would wipe every published page as if the tickers dropped out.
+    const matches = fs.existsSync(PATHS.matches) ? readCsv(PATHS.matches) : [];
+    if (matches.length) {
+      throw new Error(`matches.csv has ${matches.length} row(s) but the geometry cache is empty — 05 produced nothing. Re-run 05; not safe to continue.`);
+    }
+    console.warn('  ! no matches and no cached geometry — nothing to render');
     return;
   }
   fs.mkdirSync(PATHS.assetsOut, { recursive: true });
-  const { readCsv } = await import('./lib.mjs');
   const issuers = new Map(readCsv(PATHS.issuers).map((i) => [i.ticker, i]));
 
   for (const file of files) {
