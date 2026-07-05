@@ -275,12 +275,6 @@ function main() {
     throw new Error(`${publishable.length} ticker(s) to publish but no cached geometry for any of them — run 05/06 first; refusing to wipe existing pages.`);
   }
 
-  // This script fully owns pagesOut: wipe and regenerate it every run so a
-  // ticker that dropped out (claims all expired, removed from the batch, match
-  // lost) has its old page deleted rather than left deploying stale forever.
-  fs.rmSync(PATHS.pagesOut, { recursive: true, force: true });
-  fs.mkdirSync(PATHS.pagesOut, { recursive: true });
-
   // Centroids for neighbour computation (only tickers with cached geometry)
   const centroids = new Map();
   for (const ticker of ownersByTicker.keys()) {
