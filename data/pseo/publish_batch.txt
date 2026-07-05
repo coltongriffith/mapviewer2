@@ -1,0 +1,8 @@
+# One ticker per line — only tickers listed here get a live /companies/ page.
+# Lines starting with # are comments/ignored. Keep this list small at first
+# (batch 1 ≈ your first ~100 outreach targets); grow it once indexing looks
+# healthy in Search Console. See scripts/pseo/README.md for the full rollout plan.
+#
+# Example:
+# ARM
+# BCK

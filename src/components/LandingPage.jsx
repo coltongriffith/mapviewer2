@@ -1,17 +1,32 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { getSessionId } from '../utils/session';
-
-const GALLERY_STYLES = [
-  { id: 'drill_plan',   label: 'Drill Results',    desc: 'Collars, intercepts & target rings',     accent: '#2563eb', bg: '#1a2535', water: '#0f172a', img: '/gallery/drill-results.png' },
-  { id: 'claims',       label: 'Claims Package',   desc: 'Mineral tenures & land position',        accent: '#16a34a', bg: '#f0fdf4', water: '#dcfce7', img: '/gallery/claims.png' },
-  { id: 'target',       label: 'Target Generation',desc: 'Anomaly areas & priority zones',         accent: '#dc2626', bg: '#fef2f2', water: '#fee2e2', img: '/gallery/target.png' },
-  { id: 'regional',     label: 'Regional Context', desc: 'Property location in the district',      accent: '#b87333', bg: '#fef9ee', water: '#fde68a', img: '/gallery/regional.png' },
-  { id: 'infrastructure', label: 'Infrastructure', desc: 'Access routes, roads & power lines',     accent: '#7c3aed', bg: '#f5f3ff', water: '#ede9fe', img: '/gallery/infrastructure.png' },
-  { id: 'dark',         label: 'Dark Satellite',   desc: 'Dark basemap, high contrast',            accent: '#60a5fa', bg: '#0f172a', water: '#1e3a5f', img: '/gallery/dark.png' },
-];
 import { useAuth } from '../hooks/useAuth.jsx';
 import AuthModal from './AuthModal';
+
+const SHOWCASE = [
+  {
+    id: 'regional',
+    label: 'Regional project location map',
+    desc: 'Property location in district context — neighbouring operators, district roads, and the town down the valley.',
+    img: '/gallery/regional.png',
+    tags: ['Project boundary', 'Nearby operators', 'District roads'],
+  },
+  {
+    id: 'target',
+    label: 'Claims & drill target map',
+    desc: 'The claim block with priority target areas and collar locations, labelled with headline intercepts.',
+    img: '/gallery/target.png',
+    tags: ['Claims', 'Target areas', 'Drill collars'],
+  },
+  {
+    id: 'infrastructure',
+    label: 'Infrastructure & access map',
+    desc: 'Access roads and the powerline corridor around the claims — the access story at a glance.',
+    img: '/gallery/infrastructure.png',
+    tags: ['Access roads', 'Powerline corridor', 'Drill collars'],
+  },
+];
 
 function formatRelativeDate(iso) {
   if (!iso) return '';
@@ -24,11 +39,24 @@ function formatRelativeDate(iso) {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
+
 export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleStyle, recentProjects = [], onOpenProject, onShowHelp, onSearchBCClaims, onUploadFile, onOpenAccount }) {
   const { user } = useAuth();
   const [showAuth, setShowAuth] = useState(false);
-  const [dataSourcesOpen, setDataSourcesOpen] = useState(false);
   const clickThrottleRef = useRef(0);
+  const rootRef = useRef(null);
+
+  // Gentle fade-in on scroll for sections tagged with .lm-reveal
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root || !('IntersectionObserver' in window)) return undefined;
+    const els = root.querySelectorAll('.lm-reveal');
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach((en) => { if (en.isIntersecting) { en.target.classList.add('lm-vis'); io.unobserve(en.target); } });
+    }, { rootMargin: '0px 0px -8% 0px' });
+    els.forEach((el) => io.observe(el));
+    return () => io.disconnect();
+  }, []);
 
   function handleLandingClick(e) {
     const now = Date.now();
@@ -56,311 +84,400 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
     supabase.from('landing_clicks').insert({ session_id: getSessionId(), x_pct, y_pct, element, viewport_w, page_h }).then(() => {});
   }
 
+  const scrollTo = (id) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
   return (
-    <div className="landing-shell" onClick={handleLandingClick}>
+    <div className="lm-shell" ref={rootRef} onClick={handleLandingClick}>
       {showAuth && <AuthModal onClose={() => setShowAuth(false)} />}
 
-      <nav className="landing-nav">
-        <div className="landing-wordmark">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" fill="#2563eb" />
-          </svg>
-          Exploration Maps
-        </div>
-        <div className="landing-nav-actions">
-          {onShowHelp && (
-            <button className="landing-how-to-link" type="button" onClick={onShowHelp} data-track="Nav: How to use">
-              How to use →
-            </button>
-          )}
-          {user ? (
-            <button className="landing-nav-user landing-nav-user-btn" type="button" onClick={onOpenAccount} data-track="Nav: Open dashboard">
-              <span className="landing-nav-avatar">{user.email?.slice(0, 2).toUpperCase() ?? '??'}</span>
-              {user.email}
-            </button>
-          ) : (
-            <button className="landing-nav-signin" type="button" onClick={() => setShowAuth(true)} data-track="Nav: Sign in">
-              Sign in
-            </button>
-          )}
-          <button className="btn primary" type="button" onClick={onOpenEditor} data-track="Nav: Try for Free">
-            Try for Free
+      {/* ── Header ─────────────────────────────────────────────── */}
+      <header className="lm-nav">
+        <div className="lm-nav-inner">
+          <div className="lm-wordmark">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" fill="#2563eb" />
+            </svg>
+            Exploration Maps
+          </div>
+          <nav className="lm-nav-links" aria-label="Main">
+            <button type="button" onClick={() => scrollTo('features')} data-track="Nav: Features">Features</button>
+            <button type="button" onClick={() => scrollTo('use-cases')} data-track="Nav: Use Cases">Use Cases</button>
+            <button type="button" onClick={() => scrollTo('examples')} data-track="Nav: Examples">Examples</button>
+            <button type="button" onClick={() => scrollTo('pricing')} data-track="Nav: Pricing">Pricing</button>
+            {user ? (
+              <button type="button" onClick={onOpenAccount} data-track="Nav: Dashboard">Dashboard</button>
+            ) : (
+              <button type="button" onClick={() => setShowAuth(true)} data-track="Nav: Login">Login</button>
+            )}
+          </nav>
+          <button className="lm-btn lm-btn-primary lm-nav-cta" type="button" onClick={onOpenEditor} data-track="Nav: Start Mapping">
+            Start Mapping
           </button>
         </div>
-      </nav>
+      </header>
 
       <main>
-
-      {/* Hero — centered, simple */}
-      <div className="landing-hero2" data-section="hero">
-        <div className="landing-hero2-tagline">Raw data in. Investor map out.</div>
-        <h1 className="landing-hero2-h1">Turn raw exploration data into clean investor maps.</h1>
-        <p className="landing-hero2-sub">
-          Search the registry or import your files, then export a presentation-ready map
-          in under five minutes — no GIS required.
-        </p>
-
-        <div className="landing-hero2-ctas" data-section="hero-ctas">
-          {onSearchBCClaims && (
-            <button className="landing-hero2-primary" type="button" onClick={onSearchBCClaims} data-track="CTA: Search Claims Registry">
-              Search the Claims Registry
-              <span className="landing-hero2-primary-sub">By name or claim number · BC · Ontario · Quebec · Saskatchewan · Manitoba · Newfoundland · Yukon</span>
-            </button>
-          )}
-          <div className="landing-hero2-secondary-row">
-            {onUploadFile && (
-              <button className="landing-hero2-secondary" type="button" onClick={onUploadFile} data-track="CTA: Upload a File">
-                Upload a Shapefile
+        {/* ── Hero ───────────────────────────────────────────────── */}
+        <section className="lm-hero" data-section="hero">
+          <div className="lm-hero-copy">
+            <div className="lm-pill">
+              <span className="lm-pill-dot" aria-hidden="true" />
+              Mapping platform for mineral exploration
+            </div>
+            <h1 className="lm-h1">
+              Exploration maps without the <span className="lm-h1-accent">GIS bottleneck.</span>
+            </h1>
+            <p className="lm-hero-sub">
+              Search claims, plot projects, add infrastructure, style layers, and export
+              polished maps for decks, websites, and investor updates.
+            </p>
+            <div className="lm-hero-ctas">
+              <button className="lm-btn lm-btn-primary lm-btn-lg" type="button" onClick={onOpenEditor} data-track="Hero: Start Mapping">
+                Start Mapping
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14m0 0l-6-6m6 6l-6 6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
               </button>
-            )}
-            <button className="landing-hero2-secondary" type="button" onClick={() => { if (onLoadSampleStyle) onLoadSampleStyle('drill_plan'); else onOpenEditor(); }} data-track="CTA: Try sample">
-              See an Example
-            </button>
-          </div>
-          <p className="landing-trust-strip">Free · No account · Works in your browser</p>
-        </div>
-      </div>
-
-      {/* Before / After */}
-      <div className="landing-ba" data-section="before-after">
-        <div className="landing-ba-panel landing-ba-before">
-          <div className="landing-ba-tag">Raw export</div>
-          <img src="/gallery/ba-before.png" alt="Raw GIS export — unstyled claims outline on topo basemap" className="landing-ba-img" />
-        </div>
-
-        <div className="landing-ba-arrow" aria-hidden="true">
-          <svg width="34" height="34" viewBox="0 0 24 24" fill="none">
-            <path d="M5 12h14m0 0l-5-5m5 5l-5 5" stroke="#2563eb" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-        </div>
-
-        <div className="landing-ba-panel landing-ba-after">
-          <div className="landing-ba-tag landing-ba-tag-after">Investor map</div>
-          <button type="button" className="landing-ba-map-btn" onClick={() => onLoadSampleStyle?.('aurora_demo')} data-track="Before/After: open Aurora demo">
-            <img src="/gallery/ba-after.png" alt="Cedar Ridge Project — professional investor map with logo, callouts, and legend" className="landing-ba-img" />
-            <div className="landing-ba-demo-hint">Open live demo</div>
-          </button>
-        </div>
-      </div>
-
-      {/* Three steps, one line each */}
-      <section className="landing-flow-section" data-section="flow">
-        <div className="landing-flow-heading">Three steps. Under five minutes.</div>
-        <div className="landing-flow">
-          <div className="landing-flow-item">
-            <span className="landing-flow-num">1</span>
-            <strong>Find</strong>
-            <span>Search claims by name or claim number, or upload your own files.</span>
-          </div>
-          <div className="landing-flow-item">
-            <span className="landing-flow-num">2</span>
-            <strong>Style</strong>
-            <span>Pick a template. Add callouts, rings, and your logo.</span>
-          </div>
-          <div className="landing-flow-item">
-            <span className="landing-flow-num">3</span>
-            <strong>Export</strong>
-            <span>PNG, SVG, or PDF — ready for the deck or the report.</span>
-          </div>
-        </div>
-      </section>
-
-      {/* Who it's for */}
-      <section className="landing-who" data-section="who">
-        <p>
-          Built for <strong>geologists</strong>, <strong>IR teams</strong>, and <strong>consultants</strong> who
-          need a clean map today — not another GIS project.
-        </p>
-      </section>
-
-      {/* Map gallery */}
-      <section className="landing-gallery">
-        <div className="landing-gallery-heading">Six map styles. One click.</div>
-        <p className="landing-gallery-sub">Click any style to try it with sample data.</p>
-        <div className="landing-gallery-grid">
-          {GALLERY_STYLES.map((style) => (
-            <button
-              key={style.id}
-              type="button"
-              className="landing-gallery-card"
-              onClick={() => onLoadSampleStyle ? onLoadSampleStyle(style.id) : onLoadSample?.()}
-              data-track={`Gallery: ${style.label}`}
-            >
-              <div className="landing-gallery-mock" style={style.img ? undefined : { background: style.bg }}>
-                {style.img
-                  ? <img src={style.img} alt={style.label} className="landing-gallery-preview-img" />
-                  : <>
-                      <div className="landing-gallery-mock-claim" style={{ borderColor: style.accent }} />
-                      <div className="landing-gallery-mock-ring" style={{ borderColor: style.accent }} />
-                      <div className="landing-gallery-mock-dot" style={{ background: style.accent }} />
-                      <div className="landing-gallery-mock-title" style={{ background: style.accent + '22', borderLeft: `3px solid ${style.accent}` }} />
-                    </>
-                }
-              </div>
-              <div className="landing-gallery-card-body">
-                <div className="landing-gallery-card-label">{style.label}</div>
-                <div className="landing-gallery-card-desc">{style.desc}</div>
-                <div className="landing-gallery-card-cta" style={{ color: style.accent }}>Try this style →</div>
-              </div>
-            </button>
-          ))}
-        </div>
-      </section>
-
-      {/* What's included — compact checklist */}
-      <section className="landing-included" data-section="included">
-        <div className="landing-included-heading">What's included</div>
-        <ul className="landing-included-list">
-          <li>Live claim search — BC, Ontario, Quebec, Saskatchewan, Manitoba, Newfoundland &amp; Labrador, Yukon</li>
-          <li>Shapefile, GeoJSON, KML &amp; CSV import</li>
-          <li>Drillhole callouts with assay labels</li>
-          <li>Distance rings, inset map, scale bar, north arrow</li>
-          <li>Your logo and colors on every map</li>
-          <li>PNG, SVG &amp; PDF export up to 3× resolution</li>
-        </ul>
-      </section>
-
-      {/* FAQ */}
-      <section className="landing-faq" data-section="faq">
-        <div className="landing-faq-heading">Common questions</div>
-        <div className="landing-faq-grid">
-          <div className="landing-faq-item">
-            <strong>Is it free?</strong>
-            <span>Yes. Search, style, and export — all free. Watermark-free exports just ask for your email.</span>
-          </div>
-          <div className="landing-faq-item">
-            <strong>Do I need an account?</strong>
-            <span>No. Sign in only if you want cloud saves and a reusable company template.</span>
-          </div>
-          <div className="landing-faq-item">
-            <strong>Where does the claims data come from?</strong>
-            <span>Live from each government registry the moment you search. Nothing cached or out of date.</span>
-          </div>
-          <div className="landing-faq-item">
-            <strong>Is my data private?</strong>
-            <span>Uploaded files stay in your browser unless you choose to save to the cloud.</span>
-          </div>
-        </div>
-      </section>
-
-      {/* Data sources guide */}
-      <section className="landing-data-sources">
-        <button
-          type="button"
-          className="landing-ds-toggle"
-          onClick={() => setDataSourcesOpen((o) => !o)}
-          aria-expanded={dataSourcesOpen}
-        >
-          <span>Where to find mining map data</span>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ transform: dataSourcesOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
-            <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-        </button>
-        {dataSourcesOpen && (
-          <div className="landing-ds-body">
-            <div className="landing-ds-intro">
-              Exploration Maps accepts <strong>GeoJSON</strong>, <strong>Shapefile (.zip or .shp+.dbf)</strong>, <strong>KML/KMZ</strong>, and <strong>CSV</strong> drillhole tables. Here are the best free sources by jurisdiction.
+              <button className="lm-btn lm-btn-ghost lm-btn-lg" type="button" onClick={() => scrollTo('examples')} data-track="Hero: View Example Maps">
+                View Example Maps
+              </button>
             </div>
-            <div className="landing-ds-grid">
-              <div className="landing-ds-region">
-                <div className="landing-ds-region-name">🇨🇦 Canada</div>
-                <ul className="landing-ds-list">
-                  <li><strong>BC Mineral Titles Online (MTO)</strong> — mineral claims, coal licenses. <a href="https://www.mtonline.gov.bc.ca" target="_blank" rel="noopener noreferrer">mtonline.gov.bc.ca</a> · <a href="/blog/how-to-map-bc-mineral-claims-live-registry/">Search guide ›</a></li>
-                  <li><strong>Ontario MLAS</strong> — mining claims, mining lands. <a href="https://www.ontario.ca/page/mining-lands-administration-system" target="_blank" rel="noopener noreferrer">ontario.ca/MLAS</a></li>
-                  <li><strong>Quebec GESTIM</strong> — titres miniers (claims), refreshed weekly. <a href="https://gestim.mines.gouv.qc.ca/" target="_blank" rel="noopener noreferrer">gestim.mines.gouv.qc.ca</a> · <a href="/blog/how-to-search-quebec-mining-claims/">Search guide ›</a></li>
-                  <li><strong>Saskatchewan MARS</strong> — mineral dispositions. <a href="https://mars.isc.ca" target="_blank" rel="noopener noreferrer">mars.isc.ca</a></li>
-                  <li><strong>Manitoba Mineral Titles Online</strong> — mining claims, mineral leases. <a href="https://web2.gov.mb.ca/mineral/mmto.php" target="_blank" rel="noopener noreferrer">web2.gov.mb.ca/mineral</a></li>
-                  <li><strong>NL GeoAtlas — Mineral Lands</strong> — mineral exploration licences. <a href="https://geoatlas.gov.nl.ca/" target="_blank" rel="noopener noreferrer">geoatlas.gov.nl.ca</a></li>
-                  <li><strong>GeoYukon</strong> — quartz &amp; placer claims. <a href="https://mapservices.gov.yk.ca/GeoYukon/" target="_blank" rel="noopener noreferrer">mapservices.gov.yk.ca</a></li>
-                  <li><strong>NRCan Open Government</strong> — geology, roads, boundaries. <a href="https://open.canada.ca/en/open-data" target="_blank" rel="noopener noreferrer">open.canada.ca</a></li>
-                </ul>
-              </div>
-              <div className="landing-ds-region">
-                <div className="landing-ds-region-name">🇦🇺 Australia</div>
-                <ul className="landing-ds-list">
-                  <li><strong>Geoscience Australia</strong> — national geology, mineral deposits. <a href="https://www.ga.gov.au" target="_blank" rel="noopener noreferrer">ga.gov.au</a></li>
-                  <li><strong>MineralMap.ga.gov.au</strong> — interactive, export GeoJSON.</li>
-                  <li><strong>State Surveys</strong> — GSWA (WA), DPIR (NT), GSNSW (NSW) each have open-data portals for tenements and geology.</li>
-                </ul>
-              </div>
-              <div className="landing-ds-region">
-                <div className="landing-ds-region-name">🌍 Global / Other</div>
-                <ul className="landing-ds-list">
-                  <li><strong>OpenStreetMap</strong> via <a href="https://overpass-turbo.eu" target="_blank" rel="noopener noreferrer">Overpass Turbo</a> — roads, settlements, railways as GeoJSON.</li>
-                  <li><strong>USGS National Map</strong> — US geology, boundaries. <a href="https://nationalmap.gov" target="_blank" rel="noopener noreferrer">nationalmap.gov</a></li>
-                  <li><strong>Natural Earth</strong> — country/province boundaries, rivers, roads. <a href="https://naturalearthdata.com" target="_blank" rel="noopener noreferrer">naturalearthdata.com</a></li>
-                </ul>
-              </div>
-            </div>
-            <div className="landing-ds-tip">
-              <strong>Pro tip:</strong> Export claims as Shapefile, then drag all 4 files (<code>.shp</code>, <code>.dbf</code>, <code>.prj</code>, <code>.shx</code>) onto the upload area at once — no zipping needed.
-            </div>
+            <p className="lm-hero-trust">
+              Built for mineral exploration teams, IR professionals, geologists, consultants, and mining executives.
+            </p>
           </div>
-        )}
-      </section>
 
-      {recentProjects.length > 0 && (
-        <div className="landing-recent">
-          <div className="landing-recent-heading">Recent projects</div>
-          <div className="landing-recent-grid">
-            {recentProjects.slice(0, 3).map((entry) => (
+          {/* ── Hero product mockup ─────────────────────────────── */}
+          <div className="lm-mock-wrap" data-section="hero-mockup">
+            <div className="lm-mock">
+              <div className="lm-mock-chrome">
+                <span className="lm-mock-dots" aria-hidden="true"><i /><i /><i /></span>
+                <div className="lm-mock-url">explorationmaps.com — Cedar Ridge Project · Investor Map</div>
+                <div className="lm-mock-chrome-actions">
+                  <span className="lm-mock-chip-btn">Share</span>
+                  <span className="lm-mock-chip-btn lm-mock-chip-primary">Export</span>
+                </div>
+              </div>
+
+              {/* Real export from the product — clicking opens it as a live, editable demo */}
               <button
-                key={entry.id}
                 type="button"
-                className="landing-recent-card"
-                onClick={() => onOpenProject(entry)}
+                className="lm-mock-body"
+                onClick={() => (onLoadSampleStyle ? onLoadSampleStyle('aurora_demo') : onOpenEditor())}
+                data-track="Hero mockup: open live demo"
+                aria-label="Open this map as a live demo"
               >
-                <div className="landing-recent-name">{entry.name || 'Untitled map'}</div>
-                <div className="landing-recent-date">{formatRelativeDate(entry.updatedAt)}</div>
-                <div className="landing-recent-continue">Continue →</div>
+                <img
+                  className="lm-mock-img"
+                  src="/gallery/ba-after.png"
+                  alt="Cedar Ridge Project investor map — claims boundary, drill collars, target areas with assay callouts, legend, location inset, north arrow, and scale bar"
+                />
+                <span className="lm-mock-live">Open this map live →</span>
               </button>
-            ))}
-          </div>
-        </div>
-      )}
 
-      <section className="landing-bottom-cta" data-section="bottom-cta">
-        <div className="landing-bottom-cta-inner">
-          <div className="landing-bottom-cta-headline">Raw data in. Investor map out.</div>
-          <div className="landing-bottom-cta-sub">Free · No account · Works in your browser</div>
-          <div className="landing-bottom-cta-actions">
-            {onSearchBCClaims && (
-              <button className="landing-bottom-primary" onClick={onSearchBCClaims} data-track="Bottom CTA: Search Claims">
-                Search the Claims Registry →
+              {/* workflow / prompt bar */}
+              <div className="lm-prompt">
+                <div className="lm-prompt-line">
+                  <svg className="lm-prompt-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="7" stroke="#64748b" strokeWidth="2"/><path d="M20 20l-3.5-3.5" stroke="#64748b" strokeWidth="2" strokeLinecap="round"/></svg>
+                  <span className="lm-prompt-text">Map a rare earth project with nearby roads, rail, power, claims, and drill targets…</span>
+                </div>
+                <div className="lm-prompt-actions">
+                  <button type="button" className="lm-prompt-chip" onClick={onUploadFile} data-track="Prompt: Attach CSV">Attach CSV</button>
+                  <button type="button" className="lm-prompt-chip" onClick={onOpenEditor} data-track="Prompt: Select region">Select region</button>
+                  <button type="button" className="lm-prompt-chip" onClick={onSearchBCClaims} data-track="Prompt: Add claims">Add claims</button>
+                  <button type="button" className="lm-prompt-chip lm-prompt-chip-go" onClick={onOpenEditor} data-track="Prompt: Export map">
+                    Export map
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14m0 0l-6-6m6 6l-6 6" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* floating action chips — straddle the frame edges so the map stays clear */}
+            <div className="lm-float lm-chip lm-chip-1" aria-hidden="true">
+              <span className="lm-chip-ico">⌕</span> Search claims
+            </div>
+            <div className="lm-float lm-chip lm-chip-3" aria-hidden="true">
+              <span className="lm-chip-ico">◧</span> Style layers
+            </div>
+            <div className="lm-float lm-chip lm-chip-4 lm-chip-accent" aria-hidden="true">
+              <span className="lm-chip-ico">↧</span> Export investor-ready map
+            </div>
+          </div>
+
+          {recentProjects.length > 0 && (
+            <div className="lm-recent" data-section="recent">
+              <span className="lm-recent-label">Pick up where you left off:</span>
+              {recentProjects.slice(0, 3).map((entry) => (
+                <button key={entry.id} type="button" className="lm-recent-chip" onClick={() => onOpenProject(entry)}>
+                  {entry.name || 'Untitled map'}
+                  <span>{formatRelativeDate(entry.updatedAt)}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* ── Problem ────────────────────────────────────────────── */}
+        <section className="lm-section lm-reveal" data-section="problem">
+          <div className="lm-section-inner">
+            <p className="lm-eyebrow">The problem</p>
+            <h2 className="lm-h2">Mining maps should not take days to make.</h2>
+            <p className="lm-section-sub">
+              Exploration teams often need maps quickly — for presentations, news releases, websites,
+              investor calls, and internal planning. Traditional GIS workflows can be slow, technical,
+              and dependent on external support.
+            </p>
+            <div className="lm-grid-3">
+              <div className="lm-card">
+                <div className="lm-card-ico" aria-hidden="true">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="#2563eb" strokeWidth="1.8"/><path d="M12 7v5l3.5 2" stroke="#2563eb" strokeWidth="1.8" strokeLinecap="round"/></svg>
+                </div>
+                <h3>Slow GIS turnaround</h3>
+                <p>Waiting on map edits can delay decks, updates, and investor materials.</p>
+              </div>
+              <div className="lm-card">
+                <div className="lm-card-ico" aria-hidden="true">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="8" height="7" rx="1.5" stroke="#2563eb" strokeWidth="1.8"/><rect x="13" y="9" width="8" height="7" rx="1.5" stroke="#2563eb" strokeWidth="1.8"/><rect x="6" y="15" width="8" height="6" rx="1.5" stroke="#2563eb" strokeWidth="1.8"/></svg>
+                </div>
+                <h3>Messy public data</h3>
+                <p>Claims, infrastructure, coordinates, and project data are scattered across different sources.</p>
+              </div>
+              <div className="lm-card">
+                <div className="lm-card-ico" aria-hidden="true">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="14" rx="2" stroke="#2563eb" strokeWidth="1.8"/><path d="M3 13l5-4 4 3 4-5 5 6" stroke="#2563eb" strokeWidth="1.8" strokeLinejoin="round"/><path d="M8 21h8" stroke="#2563eb" strokeWidth="1.8" strokeLinecap="round"/></svg>
+                </div>
+                <h3>Hard-to-edit visuals</h3>
+                <p>Static map images are difficult to update when project data changes.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ── Workflow ───────────────────────────────────────────── */}
+        <section className="lm-section lm-section-tint lm-reveal" data-section="workflow">
+          <div className="lm-section-inner">
+            <p className="lm-eyebrow">How it works</p>
+            <h2 className="lm-h2">From project data to polished map in one workflow.</h2>
+            <div className="lm-steps">
+              <div className="lm-step">
+                <div className="lm-step-num">1</div>
+                <div className="lm-step-preview" aria-hidden="true">
+                  <div className="lm-sp-search">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="#94a3b8" strokeWidth="2.4"/><path d="M20 20l-3.5-3.5" stroke="#94a3b8" strokeWidth="2.4" strokeLinecap="round"/></svg>
+                    <i style={{ width: '62%' }} />
+                  </div>
+                  <div className="lm-sp-row"><i style={{ width: '78%' }} /></div>
+                  <div className="lm-sp-row"><i style={{ width: '54%' }} /></div>
+                  <div className="lm-sp-file">CSV · KML · GeoJSON · SHP</div>
+                </div>
+                <h3>Search or upload</h3>
+                <p>Search claims, companies, projects, or coordinates. Upload CSV, KML, GeoJSON, shapefiles, and more.</p>
+              </div>
+              <div className="lm-step">
+                <div className="lm-step-num">2</div>
+                <div className="lm-step-preview" aria-hidden="true">
+                  <div className="lm-sp-layers">
+                    <span style={{ background: '#c2703d' }} /><i style={{ width: '48%' }} />
+                  </div>
+                  <div className="lm-sp-layers">
+                    <span style={{ background: '#3f9860' }} /><i style={{ width: '62%' }} />
+                  </div>
+                  <div className="lm-sp-layers">
+                    <span style={{ background: '#d33d3d' }} /><i style={{ width: '40%' }} />
+                  </div>
+                  <div className="lm-sp-swatches"><b style={{ background: '#2563eb' }} /><b style={{ background: '#c2703d' }} /><b style={{ background: '#3f9860' }} /><b style={{ background: '#0f1b2d' }} /></div>
+                </div>
+                <h3>Style and layer</h3>
+                <p>Add claim blocks, infrastructure, targets, labels, roads, rail, power, terrain, and more.</p>
+              </div>
+              <div className="lm-step">
+                <div className="lm-step-num">3</div>
+                <div className="lm-step-preview" aria-hidden="true">
+                  <div className="lm-sp-doc">
+                    <div className="lm-sp-doc-title" />
+                    <div className="lm-sp-doc-map" />
+                  </div>
+                  <div className="lm-sp-formats"><b>PNG</b><b>SVG</b><b>PDF</b></div>
+                </div>
+                <h3>Export and share</h3>
+                <p>Create clean visuals for presentations, websites, reports, social posts, and investor updates.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ── Features ───────────────────────────────────────────── */}
+        <section className="lm-section lm-reveal" id="features" data-section="features">
+          <div className="lm-section-inner">
+            <p className="lm-eyebrow">Features</p>
+            <h2 className="lm-h2">Everything a project map needs. Nothing you have to install.</h2>
+            <div className="lm-grid-3 lm-feature-grid">
+              {[
+                ['Claim & tenure search', 'Quickly search and map mineral claims by company, region, or project.', <svg key="i" width="19" height="19" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="1.8"/><path d="M20 20l-3.5-3.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/><rect x="8" y="8" width="6" height="6" stroke="currentColor" strokeWidth="1.5"/></svg>],
+                ['Project location maps', 'Build polished location maps for decks, fact sheets, websites, and investor materials.', <svg key="i" width="19" height="19" viewBox="0 0 24 24" fill="none"><path d="M12 21s7-6.1 7-11a7 7 0 10-14 0c0 4.9 7 11 7 11z" stroke="currentColor" strokeWidth="1.8"/><circle cx="12" cy="10" r="2.6" stroke="currentColor" strokeWidth="1.8"/></svg>],
+                ['Infrastructure layers', 'Add roads, rail, power, ports, airports, towns, and nearby projects.', <svg key="i" width="19" height="19" viewBox="0 0 24 24" fill="none"><path d="M4 19L19 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeDasharray="4 3"/><path d="M4 8l6 6M14 4l6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>],
+                ['Data upload support', 'Import CSV, KML, KMZ, GeoJSON, shapefile, and coordinate-based data.', <svg key="i" width="19" height="19" viewBox="0 0 24 24" fill="none"><path d="M12 16V4m0 0l-4.5 4.5M12 4l4.5 4.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/><path d="M4 16v3a2 2 0 002 2h12a2 2 0 002-2v-3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>],
+                ['Editable map styling', 'Adjust colours, labels, markers, layers, boundaries, and layout elements.', <svg key="i" width="19" height="19" viewBox="0 0 24 24" fill="none"><path d="M12 21a9 9 0 110-18c4.97 0 9 3.2 9 7.2 0 2.65-2.15 4.3-4.8 4.3H14a2 2 0 00-1.5 3.3c.32.37.5.8.5 1.2 0 1.1-.9 2-1 2z" stroke="currentColor" strokeWidth="1.8"/><circle cx="7.5" cy="11" r="1.2" fill="currentColor"/><circle cx="11" cy="7.5" r="1.2" fill="currentColor"/><circle cx="15.5" cy="8.5" r="1.2" fill="currentColor"/></svg>],
+                ['Investor-ready exports', 'Export clean visuals for presentations, websites, reports, and news release graphics.', <svg key="i" width="19" height="19" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="2.5" stroke="currentColor" strokeWidth="1.8"/><path d="M12 15V8m0 7l-3-3m3 3l3-3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/><path d="M7 18h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>],
+              ].map(([title, desc, icon]) => (
+                <div className="lm-card lm-feature" key={title}>
+                  <div className="lm-card-ico">{icon}</div>
+                  <h3>{title}</h3>
+                  <p>{desc}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* ── Use cases ──────────────────────────────────────────── */}
+        <section className="lm-section lm-section-tint lm-reveal" id="use-cases" data-section="use-cases">
+          <div className="lm-section-inner">
+            <p className="lm-eyebrow">Use cases</p>
+            <h2 className="lm-h2">Built for the way exploration teams actually use maps.</h2>
+            <div className="lm-grid-2">
+              {[
+                ['Investor presentations', 'Create clean project maps for decks, financing materials, and investor calls.'],
+                ['Website project pages', 'Build polished maps showing claims, access, infrastructure, and regional context.'],
+                ['Exploration planning', 'Review targets, infrastructure, claim boundaries, and project data in one place.'],
+                ['Consultant & IR workflows', 'Reduce back-and-forth between technical teams, designers, and GIS contractors.'],
+              ].map(([title, desc], i) => (
+                <div className="lm-card lm-usecase" key={title}>
+                  <span className="lm-usecase-marker" aria-hidden="true">{['◈', '▣', '◎', '⇄'][i]}</span>
+                  <div>
+                    <h3>{title}</h3>
+                    <p>{desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* ── Example showcase ───────────────────────────────────── */}
+        <section className="lm-section lm-reveal" id="examples" data-section="examples">
+          <div className="lm-section-inner">
+            <p className="lm-eyebrow">Examples</p>
+            <h2 className="lm-h2">Clean maps for real exploration workflows.</h2>
+            <p className="lm-section-sub">Every example below was exported from Exploration Maps. Click one to open it with sample data.</p>
+            <div className="lm-grid-3 lm-showcase">
+              {SHOWCASE.map((ex) => (
+                <button
+                  key={ex.id}
+                  type="button"
+                  className="lm-show-card"
+                  onClick={() => (onLoadSampleStyle ? onLoadSampleStyle(ex.id) : onLoadSample?.())}
+                  data-track={`Showcase: ${ex.label}`}
+                >
+                  <div className="lm-show-img"><img src={ex.img} alt={ex.label} loading="lazy" /></div>
+                  <div className="lm-show-body">
+                    <h3>{ex.label}</h3>
+                    <p>{ex.desc}</p>
+                    <div className="lm-show-tags">
+                      {ex.tags.map((t) => <span key={t}>{t}</span>)}
+                    </div>
+                    <span className="lm-show-cta">Open this example →</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* ── Comparison ─────────────────────────────────────────── */}
+        <section className="lm-section lm-section-tint lm-reveal" data-section="comparison">
+          <div className="lm-section-inner">
+            <p className="lm-eyebrow">Why switch</p>
+            <h2 className="lm-h2">A faster alternative to the usual mapping workflow.</h2>
+            <div className="lm-compare">
+              <div className="lm-compare-col lm-compare-old">
+                <h3>Traditional GIS workflow</h3>
+                <ul>
+                  <li>Send data to GIS or design support</li>
+                  <li>Wait for map drafts</li>
+                  <li>Request revisions</li>
+                  <li>Re-export static files</li>
+                  <li>Repeat whenever data changes</li>
+                </ul>
+              </div>
+              <div className="lm-compare-col lm-compare-new">
+                <div className="lm-compare-badge">Exploration Maps</div>
+                <h3>One tool, in your browser</h3>
+                <ul>
+                  <li>Search or upload data</li>
+                  <li>Edit layers directly</li>
+                  <li>Update labels and styling</li>
+                  <li>Export clean visuals</li>
+                  <li>Share or revise anytime</li>
+                </ul>
+                <button className="lm-btn lm-btn-primary" type="button" onClick={onOpenEditor} data-track="Comparison: Start Mapping">
+                  Start Mapping
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ── Final CTA ──────────────────────────────────────────── */}
+        <section className="lm-cta lm-reveal" id="pricing" data-section="bottom-cta">
+          <div className="lm-cta-inner">
+            <h2 className="lm-h2">Start building cleaner exploration maps.</h2>
+            <p className="lm-section-sub lm-cta-sub">
+              Create project maps, claim maps, infrastructure maps, and investor-ready visuals from one simple platform.
+            </p>
+            <div className="lm-hero-ctas lm-cta-actions">
+              <button className="lm-btn lm-btn-primary lm-btn-lg" type="button" onClick={onOpenEditor} data-track="Bottom CTA: Start Mapping">
+                Start Mapping
               </button>
-            )}
-            <button className="landing-bottom-ghost" onClick={onOpenEditor} data-track="Bottom CTA: Open Editor">
-              Open the Editor
-            </button>
+              <button className="lm-btn lm-btn-ghost-light lm-btn-lg" type="button" onClick={() => scrollTo('examples')} data-track="Bottom CTA: View Example Maps">
+                View Example Maps
+              </button>
+            </div>
+            <p className="lm-cta-pricing">Free during early access — no account needed to make your first map. Team plans coming soon.</p>
           </div>
-        </div>
-      </section>
-
+        </section>
       </main>
-      <footer className="landing-footer">
-        <div className="landing-footer-links">
-          <a href="/mining-map-software/" className="landing-footer-link">Mining Map Software</a>
-          <span className="landing-footer-sep">·</span>
-          <a href="/mining-exploration-map-software/" className="landing-footer-link">Exploration Map Software</a>
-          <span className="landing-footer-sep">·</span>
-          <a href="/bc-mineral-claims-map/" className="landing-footer-link">BC Claims Map</a>
-          <span className="landing-footer-sep">·</span>
-          <a href="/mining-claim-search-by-company-name/" className="landing-footer-link">Claim Search by Company</a>
-          <span className="landing-footer-sep">·</span>
-          <a href="/shapefile-to-map/" className="landing-footer-link">Shapefile to Map</a>
-          <span className="landing-footer-sep">·</span>
-          <a href="/drill-results-map/" className="landing-footer-link">Drill Results Map</a>
+
+      {/* ── Footer ─────────────────────────────────────────────── */}
+      <footer className="lm-footer" data-section="footer">
+        <div className="lm-footer-inner">
+          <div className="lm-footer-brand">
+            <div className="lm-wordmark">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" fill="#2563eb" />
+              </svg>
+              Exploration Maps
+            </div>
+            <p>Clean, editable, investor-ready maps for mineral exploration teams.</p>
+          </div>
+          <div className="lm-footer-col">
+            <h4>Product</h4>
+            <button type="button" onClick={() => scrollTo('features')}>Features</button>
+            <button type="button" onClick={() => scrollTo('examples')}>Examples</button>
+            <button type="button" onClick={() => scrollTo('pricing')}>Pricing</button>
+            {onShowHelp && <button type="button" onClick={onShowHelp}>How to use</button>}
+          </div>
+          <div className="lm-footer-col">
+            <h4>Popular tools</h4>
+            <a href="/mining-map-software/">Mining map software</a>
+            <a href="/bc-mineral-claims-map/">BC claims map</a>
+            <a href="/mining-claim-search-by-company-name/">Claim search by company</a>
+            <a href="/drill-results-map/">Drill results map</a>
+          </div>
+          <div className="lm-footer-col">
+            <h4>Company</h4>
+            <a href="/about/">About</a>
+            <a href="/blog/">Guides</a>
+            <a href="/contact/">Contact</a>
+            {user ? (
+              <button type="button" onClick={onOpenAccount}>Dashboard</button>
+            ) : (
+              <button type="button" onClick={() => setShowAuth(true)}>Login</button>
+            )}
+          </div>
         </div>
-        <div className="landing-footer-links">
-          <a href="/" className="landing-footer-link">Home</a>
-          <span className="landing-footer-sep">·</span>
-          <a href="/about/" className="landing-footer-link">About</a>
-          <span className="landing-footer-sep">·</span>
-          <a href="/blog/" className="landing-footer-link">Guides</a>
-          <span className="landing-footer-sep">·</span>
-          <a href="/privacy/" className="landing-footer-link">Privacy</a>
+        <div className="lm-footer-base">
+          © {new Date().getFullYear()} Exploration Maps · <a href="/privacy/">Privacy</a>
         </div>
-        © {new Date().getFullYear()} Exploration Maps · Sign in to save projects to the cloud and access company templates.
       </footer>
     </div>
   );

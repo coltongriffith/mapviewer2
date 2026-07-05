@@ -1,0 +1,29 @@
+name: pSEO — Discover registry schema
+
+# Read-only. Prints the BC WFS field list and the Ontario MLAS layer list/fields
+# to the run log — it changes nothing and commits nothing. Run this first (and
+# whenever a later run starts failing, since these government endpoints move
+# without notice) to find the current field names / Ontario layer id.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: BC WFS schema
+        run: node scripts/pseo/02_fetch_claims_bc.mjs --discover
+
+      - name: Ontario MLAS layers
+        run: node scripts/pseo/03_fetch_claims_on.mjs --discover
