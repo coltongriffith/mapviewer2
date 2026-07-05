@@ -228,6 +228,14 @@ export function slugifyTicker(ticker) {
 
 export function todayIso() { return new Date().toISOString().slice(0, 10); }
 
+// A tenure whose good-to/due date has passed is pending forfeiture, not held —
+// the registries still return these rows, so every pull must drop them before
+// they reach a published page. Blank/unparseable dates are kept (can't judge).
+export function isExpired(goodTo, today = todayIso()) {
+  const d = String(goodTo ?? '').slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(d) && d < today;
+}
+
 export function esc(s) {
   return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }

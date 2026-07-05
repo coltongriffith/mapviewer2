@@ -13,7 +13,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { resolvePaths, BC_WFS, ON_ARCGIS } from './config.mjs';
-import { readCsv, fetchJson } from './lib.mjs';
+import { readCsv, fetchJson, isExpired } from './lib.mjs';
 
 const args = process.argv.slice(2);
 const PATHS = resolvePaths(args.includes('--fixture'));
@@ -28,17 +28,21 @@ async function bcGeometry(ownerRaw) {
     srsName: 'EPSG:4326', CQL_FILTER: cql, count: '2000',
   })}`;
   const j = await fetchJson(url, { timeoutMs: 120000 });
-  return (j.features || []).map((f) => ({
-    type: 'Feature',
-    geometry: f.geometry,
-    properties: {
-      claim_id: f.properties?.[F.tenureId] ?? '',
-      claim_name: f.properties?.[F.claimName] ?? '',
-      area_ha: f.properties?.[F.areaHa] ?? '',
-      good_to_date: String(f.properties?.[F.goodTo] ?? '').slice(0, 10),
-      province: 'BC',
-    },
-  }));
+  return (j.features || [])
+    // Live query returns tenures past their good-to date (pending forfeiture) —
+    // filter here too or expired polygons land back on the page map/table.
+    .filter((f) => !isExpired(f.properties?.[F.goodTo]))
+    .map((f) => ({
+      type: 'Feature',
+      geometry: f.geometry,
+      properties: {
+        claim_id: f.properties?.[F.tenureId] ?? '',
+        claim_name: f.properties?.[F.claimName] ?? '',
+        area_ha: f.properties?.[F.areaHa] ?? '',
+        good_to_date: String(f.properties?.[F.goodTo] ?? '').slice(0, 10),
+        province: 'BC',
+      },
+    }));
 }
 
 async function onGeometry(ownerRaw, layerId) {
@@ -46,23 +50,35 @@ async function onGeometry(ownerRaw, layerId) {
   const fields = (meta.fields || []).map((f) => f.name);
   const ownerField = ON_ARCGIS.ownerFields.find((f) => fields.includes(f));
   const numField = ON_ARCGIS.numberFields.find((f) => fields.includes(f));
+  // Same due-date preference as 03 — needed both for the page table and to
+  // filter out claims already past their due date.
+  const dateField = fields.find((f) => /DUE|EXPIR|GOOD_TO|END_DATE/i.test(f))
+    || fields.find((f) => /ANNIVERSARY/i.test(f)) || null;
   const params = new URLSearchParams({
     f: 'geojson', outFields: '*', returnGeometry: 'true',
     where: `UPPER(${ownerField}) = UPPER('${ownerRaw.replace(/'/g, "''")}')`,
     outSR: '4326', resultRecordCount: '2000',
   });
   const j = await fetchJson(`${ON_ARCGIS.service}/${layerId}/query?${params}`, { timeoutMs: 120000 });
-  return (j.features || []).map((f) => ({
-    type: 'Feature',
-    geometry: f.geometry,
-    properties: {
-      claim_id: f.properties?.[numField] ?? '',
-      claim_name: '',
-      area_ha: f.properties?.AREA_HA ?? f.properties?.HECTARES ?? '',
-      good_to_date: '',
-      province: 'ON',
-    },
-  }));
+  const fmtDate = (v) => {
+    if (v == null || v === '') return '';
+    const n = Number(v);
+    if (Number.isFinite(n) && n > 10_000_000_000) return new Date(n).toISOString().slice(0, 10);
+    return String(v).slice(0, 10);
+  };
+  return (j.features || [])
+    .map((f) => ({
+      type: 'Feature',
+      geometry: f.geometry,
+      properties: {
+        claim_id: f.properties?.[numField] ?? '',
+        claim_name: '',
+        area_ha: f.properties?.AREA_HA ?? f.properties?.HECTARES ?? '',
+        good_to_date: dateField ? fmtDate(f.properties?.[dateField]) : '',
+        province: 'ON',
+      },
+    }))
+    .filter((f) => !isExpired(f.properties.good_to_date));
 }
 
 // Fixture mode: synthesize a contiguous cluster of rectangular cells per claim

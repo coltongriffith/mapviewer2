@@ -12,7 +12,7 @@
 
 import path from 'node:path';
 import { resolvePaths, BC_WFS } from './config.mjs';
-import { readCsv, writeCsv, fetchJson } from './lib.mjs';
+import { readCsv, writeCsv, fetchJson, isExpired } from './lib.mjs';
 
 const args = process.argv.slice(2);
 const PATHS = resolvePaths(args.includes('--fixture'));
@@ -41,6 +41,7 @@ async function discover() {
 async function fullPull() {
   const F = BC_WFS.fields;
   const rows = [];
+  let expired = 0;
   let startIndex = 0;
   for (;;) {
     const url = wfsUrl({
@@ -54,6 +55,9 @@ async function fullPull() {
     const feats = j.features || [];
     for (const f of feats) {
       const p = f.properties || {};
+      // The layer keeps tenures past their good-to date (pending forfeiture) —
+      // those must never be published as held claims.
+      if (isExpired(p[F.goodTo])) { expired++; continue; }
       rows.push({
         claim_id: p[F.tenureId] ?? '',
         claim_name: p[F.claimName] ?? '',
@@ -69,6 +73,7 @@ async function fullPull() {
     if (startIndex > 500000) throw new Error('Paging runaway (>500k) — aborting.');
   }
   if (!rows.length) throw new Error('Full pull returned zero tenures — check the CQL/typeName.');
+  console.log(`  dropped ${expired} expired tenures (good-to date in the past)`);
   writeCsv(PATHS.claimsBc, rows);
 }
 

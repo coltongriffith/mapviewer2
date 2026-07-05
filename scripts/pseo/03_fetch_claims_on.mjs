@@ -10,7 +10,7 @@
 
 import path from 'node:path';
 import { resolvePaths, ON_ARCGIS } from './config.mjs';
-import { readCsv, writeCsv, fetchJson } from './lib.mjs';
+import { readCsv, writeCsv, fetchJson, isExpired } from './lib.mjs';
 
 const args = process.argv.slice(2);
 const PATHS = resolvePaths(args.includes('--fixture'));
@@ -51,6 +51,7 @@ async function fullPull(layerId) {
   console.log(`  owner=${ownerField} num=${numField} area=${areaField} date=${dateField}`);
 
   const rows = [];
+  let expired = 0;
   let offset = 0;
   for (;;) {
     const params = new URLSearchParams({
@@ -64,6 +65,9 @@ async function fullPull(layerId) {
     const feats = j.features || [];
     for (const f of feats) {
       const a = f.attributes || {};
+      // Drop claims already past their due/expiry date — the layer keeps them
+      // but they must never be published as held claims.
+      if (dateField && isExpired(fmtEpoch(a[dateField]))) { expired++; continue; }
       rows.push({
         claim_id: a[numField] ?? '',
         claim_name: nameField ? (a[nameField] ?? '') : '',
@@ -79,6 +83,7 @@ async function fullPull(layerId) {
     if (offset > 800000) throw new Error('Paging runaway — aborting.');
   }
   if (!rows.length) throw new Error('Zero Ontario claims returned — wrong layer?');
+  console.log(`  dropped ${expired} expired claims (due date in the past)`);
   writeCsv(PATHS.claimsOn, rows);
 }
 
