@@ -243,6 +243,12 @@ function main() {
   }
   if (!ownersByTicker.size) throw new Error('No tickers to publish.');
 
+  // This script fully owns pagesOut: wipe and regenerate it every run so a
+  // ticker that dropped out (claims all expired, removed from the batch, match
+  // lost) has its old page deleted rather than left deploying stale forever.
+  fs.rmSync(PATHS.pagesOut, { recursive: true, force: true });
+  fs.mkdirSync(PATHS.pagesOut, { recursive: true });
+
   // Centroids for neighbour computation (only tickers with cached geometry)
   const centroids = new Map();
   for (const ticker of ownersByTicker.keys()) {
@@ -292,6 +298,19 @@ function main() {
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, 'index.html'), hubPage({ ...hub, entries: sorted }));
     console.log(`  ✓ hub /companies/${hub.slug ? hub.slug + '/' : ''} (${sorted.length})`);
+  }
+
+  // Prune map assets for tickers that didn't publish this run — an orphaned
+  // /companies-assets/[TICKER].svg would otherwise keep deploying with no page.
+  if (fs.existsSync(PATHS.assetsOut)) {
+    const keep = new Set(published.map((p) => p.ticker));
+    for (const f of fs.readdirSync(PATHS.assetsOut)) {
+      const ticker = f.replace(/-og\.png$|\.svg$|\.png$/, '');
+      if (!keep.has(ticker)) {
+        fs.rmSync(path.join(PATHS.assetsOut, f), { force: true });
+        console.log(`  ✂ pruned orphaned asset ${f}`);
+      }
+    }
   }
 
   // Sitemap (skipped entirely in fixture mode — fixture pages are noindex)
