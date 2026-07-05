@@ -246,6 +246,13 @@ function main() {
   // deletes its page instead of leaving it deployed indefinitely.
   if (!ownersByTicker.size) console.warn('  ! no tickers to publish — removing all company pages');
 
+  // …but matched tickers with ZERO cached geometry means 05/06 silently failed
+  // (registry outage), not that the tickers dropped out. Wiping here would open
+  // a PR deleting every page — refuse instead.
+  if (ownersByTicker.size && ![...ownersByTicker.keys()].some((t) => fs.existsSync(path.join(PATHS.geo, `${t}.geojson`)))) {
+    throw new Error(`${ownersByTicker.size} ticker(s) to publish but no cached geometry for any of them — run 05/06 first; refusing to wipe existing pages.`);
+  }
+
   // This script fully owns pagesOut: wipe and regenerate it every run so a
   // ticker that dropped out (claims all expired, removed from the batch, match
   // lost) has its old page deleted rather than left deploying stale forever.
