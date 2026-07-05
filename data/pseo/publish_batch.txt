@@ -6,3 +6,6 @@
 # Example:
 # ARM
 # BCK
+GOT.V
+SGD.TO
+FDR.V
