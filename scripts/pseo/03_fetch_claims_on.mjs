@@ -43,7 +43,10 @@ async function fullPull(layerId) {
     throw new Error(`Layer ${layerId} lacks expected owner/number fields.\n  has: ${fields.join(', ')}`);
   }
   const areaField = fields.find((f) => /AREA|HECTARE/i.test(f)) || null;
-  const dateField = fields.find((f) => /ANNIVERSARY|DUE|EXPIR|END_DATE/i.test(f)) || null;
+  // "Good-to" = the claim's due/expiry date; prefer that over the assessment
+  // anniversary when both exist (Ontario layer 1 has CLAIM_DUE_DATE + ANNIVERSARY_DATE).
+  const dateField = fields.find((f) => /DUE|EXPIR|GOOD_TO|END_DATE/i.test(f))
+    || fields.find((f) => /ANNIVERSARY/i.test(f)) || null;
   const nameField = fields.find((f) => /CLAIM_NAME|TITLE_NAME|NAME/i.test(f) && f !== ownerField) || null;
   console.log(`  owner=${ownerField} num=${numField} area=${areaField} date=${dateField}`);
 

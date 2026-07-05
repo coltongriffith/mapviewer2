@@ -7,22 +7,27 @@ name: pSEO — Generate company pages
 # the hand-verification checkpoint the plan calls for. Merge the PR to publish.
 #
 # First-time setup:
-#   1. Run the "pSEO — Discover registry schema" workflow to get the current
-#      Ontario MLAS claims-layer id (BC needs no id).
+#   1. Add your issuer list. The exchanges block automated downloads (TSX returns
+#      HTTP 403 from a runner), so the reliable path is a hand-maintained CSV:
+#      commit data/pseo/manual/issuers.csv (columns: ticker,exchange,company —
+#      see data/pseo/manual/issuers.example.csv). Step 01 auto-detects it, no
+#      inputs needed. (You can also point issuers_csv_path at another repo path.)
 #   2. Add a few tickers to data/pseo/publish_batch.txt (small PR, review as
 #      normal) — only tickers listed there get a live page.
-#   3. Run this workflow with that Ontario layer id as the "on_layer" input.
-#   4. If step 01 (issuers) fails — TSXV/CSE endpoints are undocumented and
-#      move — download the file by hand from tsx.com / thecse.com, add it to
-#      the repo under data/pseo/manual/ (via a normal commit or the GitHub web
-#      UI "Add file"), and re-run with the tsxv_xlsx_path / cse_csv_path inputs
-#      pointing at it.
+#   3. Run this workflow. The Ontario claims-layer id is hardcoded in
+#      scripts/pseo/config.mjs (layer 1); leave on_layer blank unless LIO
+#      renumbers the service — re-run the Discover workflow to confirm and
+#      override it here.
 
 on:
   workflow_dispatch:
     inputs:
+      issuers_csv_path:
+        description: 'Repo path to a ready-made issuer list (ticker,exchange,company). Defaults to auto-detecting data/pseo/manual/issuers.csv.'
+        required: false
+        type: string
       on_layer:
-        description: 'Ontario MLAS ArcGIS claims-layer id (from the Discover workflow). Leave blank once hardcoded in scripts/pseo/config.mjs.'
+        description: 'Ontario MLAS ArcGIS claims-layer id (from the Discover workflow). Leave blank — layer 1 is hardcoded in scripts/pseo/config.mjs.'
         required: false
         type: string
       tsxv_xlsx_path:
@@ -52,9 +57,10 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: 01 — Fetch issuers (TSXV + CSE)
+      - name: 01 — Fetch issuers (manual list preferred; TSXV/CSE best-effort)
         run: |
           ARGS=""
+          if [ -n "${{ inputs.issuers_csv_path }}" ]; then ARGS="$ARGS --issuers-csv ${{ inputs.issuers_csv_path }}"; fi
           if [ -n "${{ inputs.tsxv_xlsx_path }}" ]; then ARGS="$ARGS --xlsx ${{ inputs.tsxv_xlsx_path }}"; fi
           if [ -n "${{ inputs.cse_csv_path }}" ]; then ARGS="$ARGS --cse-csv ${{ inputs.cse_csv_path }}"; fi
           node scripts/pseo/01_fetch_issuers.mjs $ARGS

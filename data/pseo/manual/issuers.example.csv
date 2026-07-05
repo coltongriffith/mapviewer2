@@ -1,0 +1,8 @@
+ticker,exchange,company,sector,market_cap
+# Copy this file to issuers.csv (same folder) and fill in your real batch.
+# Required columns: ticker, company. Optional: exchange (TSXV/CSE, defaults
+# TSXV), sector (defaults Mining), market_cap (only orders the review queue).
+# This is the reliable issuer source — the exchanges block automated downloads,
+# so 01_fetch_issuers.mjs uses manual/issuers.csv directly when present.
+ABC,TSXV,Example Gold Corp.,Mining,25000000
+XYZ,CSE,Sample Copper Resources Ltd.,Mining,8000000

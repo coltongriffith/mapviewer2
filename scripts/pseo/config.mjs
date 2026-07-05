@@ -10,6 +10,7 @@ export const PATHS = {
   data: path.join(ROOT, 'data', 'pseo'),
   geo: path.join(ROOT, 'data', 'pseo', 'geo'),
   fixtures: path.join(ROOT, 'data', 'pseo', 'fixtures'),
+  manual: path.join(ROOT, 'data', 'pseo', 'manual'),
   issuers: path.join(ROOT, 'data', 'pseo', 'issuers.csv'),
   claimsBc: path.join(ROOT, 'data', 'pseo', 'claims_bc.csv'),
   claimsOn: path.join(ROOT, 'data', 'pseo', 'claims_on.csv'),
@@ -52,8 +53,10 @@ export const SITE_NAME = 'Exploration Maps';
 
 // ── Data sources ─────────────────────────────────────────────────────────────
 
-// TSXV "mining" issuer directory workbook (tsx.com → resource 101). If the URL
-// moves, download by hand and run 01 with --xlsx <file> or --csv <file>.
+// TSXV "mining" issuer directory workbook. NOTE: tsx.com blocks automated
+// downloads (HTTP 403 confirmed from a GitHub runner), so the auto-fetch is
+// best-effort only. The reliable path is a hand-maintained issuer list — see
+// data/pseo/manual/issuers.example.csv and 01_fetch_issuers.mjs.
 export const TSXV_XLSX_URL = 'https://www.tsx.com/en/resource/101';
 
 // CSE listed-securities export. Undocumented endpoint — expect churn. Fallback:
@@ -79,8 +82,10 @@ export const BC_WFS = {
 // Ontario MLAS operational service (same service api/claims.js queries live).
 export const ON_ARCGIS = {
   service: 'https://ws.lioservices.lrc.gov.on.ca/arcgis2/rest/services/MLAS/mlas_op/MapServer',
-  // Layer index confirmed via --discover (the active-claims polygon layer).
-  layer: null, // null → 03 requires --discover first, then pass --layer N
+  // Layer 1 = "Mining Claim" (active), confirmed via the Discover workflow
+  // (fields HOLDER, TENURE_NUMBER_ID, ANNIVERSARY_DATE, CLAIM_DUE_DATE). Re-run
+  // Discover and update this if LIO renumbers the service.
+  layer: 1,
   pageSize: 1000,
   ownerFields: ['HOLDER', 'CLAIM_HOLDER', 'RECORDED_HOLDER', 'HOLDER_NAME', 'OWNER_NAME', 'OWNER', 'CLIENT_NAME'],
   numberFields: ['TENURE_NUMBER_ID', 'CLAIM_NUMBER', 'CLAIMNUM', 'CLAIM_NUM', 'TENURE_NUMBER', 'CLAIM_ID', 'CELL_CLAIM_NUMBER'],

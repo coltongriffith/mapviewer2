@@ -22,16 +22,17 @@ workflow → **Run workflow**):
    publish step.
 
 **First time:**
-1. Run *Discover*, note the Ontario layer id from the log.
+1. Add your issuer list. The exchanges block automated downloads (TSX returns
+   HTTP 403 from a runner), so the reliable source is a hand-maintained CSV:
+   copy `data/pseo/manual/issuers.example.csv` → `data/pseo/manual/issuers.csv`,
+   fill in your batch (columns `ticker,exchange,company`), and commit it
+   (GitHub's web "Add file" button works — no local setup needed). Step 01
+   auto-detects that file; you don't touch any input.
 2. Add a handful of tickers to `data/pseo/publish_batch.txt` (small PR, review
    as normal — only tickers listed there ever get a live page).
-3. Run *Generate*, pasting that Ontario layer id into the `on_layer` input.
-4. If the "01 — Fetch issuers" step fails: TSXV's workbook and CSE's CSV are
-   undocumented endpoints that move. Download the file by hand from
-   tsx.com / thecse.com, add it to the repo under `data/pseo/manual/` (a
-   normal commit, or GitHub's web "Add file" button — no local setup needed),
-   and re-run *Generate* with `tsxv_xlsx_path` / `cse_csv_path` pointing at it.
-5. On the opened PR: check `data/pseo/review_queue.csv` for real matches
+3. Run *Generate*. The Ontario claims-layer id is hardcoded (`layer 1`); leave
+   `on_layer` blank unless a *Discover* run shows LIO renumbered the service.
+4. On the opened PR: check `data/pseo/review_queue.csv` for real matches
    (confirmed ones go in `data/pseo/aliases.csv` for next run), hand-verify the
    top ~300 tickers by market cap in `data/pseo/matches.csv`, click through the
    Vercel preview, then merge.
@@ -42,7 +43,7 @@ each run's PR shows exactly what changed.
 ## Run it locally (alternative)
 
 ```
-node scripts/pseo/01_fetch_issuers.mjs                 # issuers.csv (TSXV xlsx + CSE csv)
+node scripts/pseo/01_fetch_issuers.mjs                 # issuers.csv (uses data/pseo/manual/issuers.csv if present)
 node scripts/pseo/02_fetch_claims_bc.mjs --discover    # verify field names, then:
 node scripts/pseo/02_fetch_claims_bc.mjs               # claims_bc.csv (full pull)
 node scripts/pseo/03_fetch_claims_on.mjs --discover    # find claims layer id, then:

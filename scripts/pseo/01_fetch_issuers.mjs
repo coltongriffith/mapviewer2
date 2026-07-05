@@ -1,14 +1,25 @@
 #!/usr/bin/env node
 // 01 — Build data/pseo/issuers.csv: one row per TSXV/CSE mining issuer.
 //
-//   node scripts/pseo/01_fetch_issuers.mjs                # fetch both sources
-//   node scripts/pseo/01_fetch_issuers.mjs --xlsx f.xlsx  # local TSXV workbook
-//   node scripts/pseo/01_fetch_issuers.mjs --cse-csv f.csv
-//   node scripts/pseo/01_fetch_issuers.mjs --fixture      # use bundled fixtures
+// Reliable path (recommended): keep a hand-maintained list. Drop a CSV with at
+// least `ticker,exchange,company` columns at data/pseo/manual/issuers.csv (or
+// pass --issuers-csv <path>) and this step uses it directly, no network. That's
+// the batch-1 workflow — you already know your outreach tickers, and it dodges
+// the exchanges entirely.
+//
+//   node scripts/pseo/01_fetch_issuers.mjs                     # manual file if present, else auto-fetch
+//   node scripts/pseo/01_fetch_issuers.mjs --issuers-csv f.csv # explicit ready-made list
+//   node scripts/pseo/01_fetch_issuers.mjs --xlsx f.xlsx       # local TSXV workbook
+//   node scripts/pseo/01_fetch_issuers.mjs --cse-csv f.csv     # local CSE csv
+//   node scripts/pseo/01_fetch_issuers.mjs --fixture           # bundled fixtures
+//
+// Auto-fetch from tsx.com / thecse.com is BEST-EFFORT: the exchanges block
+// automated downloads (TSX returns HTTP 403), so a failing source just warns
+// and is skipped. The step only hard-fails if it ends up with zero issuers.
 //
 // Output columns: ticker,exchange,company,sector,market_cap
-// (market_cap stays blank when the source doesn't provide it — it only orders
-// the hand-verification queue, nothing else depends on it.)
+// (sector defaults to "Mining"; market_cap is optional and only orders the
+// hand-verification queue — nothing else depends on it.)
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -21,6 +32,31 @@ const flag = (name) => args.includes(name);
 const opt = (name) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : null; };
 
 const MINING_SECTOR = /MINING|MINERAL|METALS|GOLD|SILVER|COPPER|LITHIUM|URANIUM|DIAMOND|COAL|RARE.?EARTH/i;
+
+// Read a ready-made issuer CSV (any column names — we detect ticker/exchange/
+// company/sector/market_cap). exchange defaults to TSXV when a column is absent.
+function readIssuerCsv(file) {
+  const rows = readCsv(file);
+  if (!rows.length) throw new Error(`${file} has no rows`);
+  const keys = Object.keys(rows[0]);
+  const k = (re) => keys.find((key) => re.test(key));
+  const kT = k(/ticker|symbol/i), kC = k(/company|issuer|name/i);
+  const kE = k(/exchange|exch|market\b/i), kS = k(/sector|industry/i), kM = k(/market.?cap|qmv/i);
+  if (!kT || !kC) throw new Error(`${file}: need a ticker and a company column; found: ${keys.join(', ')}`);
+  const out = [];
+  for (const r of rows) {
+    const ticker = (r[kT] || '').trim();
+    const company = (r[kC] || '').trim();
+    if (!ticker || ticker.startsWith('#') || !company) continue;
+    let exchange = (kE ? r[kE] : '').trim().toUpperCase();
+    if (/VENTURE|TSXV|TSX.?V|TSX-?V/.test(exchange)) exchange = 'TSXV';
+    else if (/CSE|CNSX|CANADIAN SEC/.test(exchange)) exchange = 'CSE';
+    else if (!exchange) exchange = 'TSXV';
+    out.push({ ticker, exchange, company, sector: (kS ? r[kS] : '').trim() || 'Mining', market_cap: (kM ? r[kM] : '').trim() });
+  }
+  if (!out.length) throw new Error(`${file}: parsed to zero issuers`);
+  return out;
+}
 
 function pickCol(headerRow, patterns) {
   for (const p of patterns) {
@@ -95,23 +131,67 @@ async function cseIssuers() {
   return out;
 }
 
+// Dedupe cross-listings by normalized company name, keeping the first-seen row
+// (callers pass the higher-priority source first).
+function dedupe(rows) {
+  const seen = new Set();
+  const out = [];
+  for (const r of rows) {
+    const key = normalizeName(r.company);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(r);
+  }
+  return out;
+}
+
 async function main() {
-  let issuers;
   if (flag('--fixture')) {
-    issuers = readCsv(path.join(PATHS.fixtures, 'issuers_fixture.csv'));
+    const issuers = readCsv(path.join(PATHS.fixtures, 'issuers_fixture.csv'));
     console.log(`Fixture mode: ${issuers.length} issuers`);
-  } else {
-    const [tsxv, cse] = [await tsxvIssuers(), await cseIssuers()];
-    // Dedupe cross-listings by normalized company name (keep TSXV row)
-    const seen = new Set();
-    issuers = [];
-    for (const r of [...tsxv, ...cse]) {
-      const key = normalizeName(r.company);
-      if (seen.has(key)) continue;
-      seen.add(key);
-      issuers.push(r);
+    writeCsv(PATHS.issuers, issuers, ['ticker', 'exchange', 'company', 'sector', 'market_cap']);
+    return;
+  }
+
+  // 1) Explicit ready-made list — highest priority, no network.
+  const explicit = opt('--issuers-csv');
+  if (explicit) {
+    const issuers = dedupe(readIssuerCsv(explicit));
+    console.log(`Using --issuers-csv ${explicit}: ${issuers.length} issuers`);
+    writeCsv(PATHS.issuers, issuers, ['ticker', 'exchange', 'company', 'sector', 'market_cap']);
+    return;
+  }
+
+  // 2) Hand-maintained manual file — the recommended reliable path.
+  const manualFile = path.join(PATHS.manual, 'issuers.csv');
+  if (fs.existsSync(manualFile)) {
+    const issuers = dedupe(readIssuerCsv(manualFile));
+    console.log(`Using manual list ${manualFile}: ${issuers.length} issuers`);
+    writeCsv(PATHS.issuers, issuers, ['ticker', 'exchange', 'company', 'sector', 'market_cap']);
+    return;
+  }
+
+  // 3) Best-effort auto-fetch. The exchanges block automated downloads, so a
+  //    failing source just warns and is skipped — we only hard-fail on zero.
+  const collected = [];
+  for (const [label, fn] of [['TSXV', tsxvIssuers], ['CSE', cseIssuers]]) {
+    try {
+      collected.push(...(await fn()));
+    } catch (err) {
+      console.warn(`  ⚠ ${label} auto-fetch skipped: ${err.message}`);
     }
   }
+  const issuers = dedupe(collected);
+  if (!issuers.length) {
+    throw new Error(
+      'No issuers resolved. The exchanges block automated downloads, so provide a\n' +
+      'hand-maintained list instead:\n' +
+      `  • drop a CSV (ticker,exchange,company) at ${manualFile}, or\n` +
+      '  • pass --issuers-csv <path> (or --xlsx / --cse-csv for a local export).\n' +
+      'See data/pseo/manual/issuers.example.csv for the format.'
+    );
+  }
+  console.log(`Auto-fetched ${issuers.length} issuers`);
   writeCsv(PATHS.issuers, issuers, ['ticker', 'exchange', 'company', 'sector', 'market_cap']);
 }
 
