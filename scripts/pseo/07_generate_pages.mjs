@@ -229,13 +229,15 @@ function main() {
     if (!fs.existsSync(PAGES.batchFile)) {
       throw new Error(`No publish batch file at ${PAGES.batchFile}.\nCreate it (one ticker per line) or run with --all / --fixture.`);
     }
-    allow = new Set(fs.readFileSync(PAGES.batchFile, 'utf8').split('\n').map((l) => l.split('#')[0].trim()).filter(Boolean));
+    // Accept Yahoo/TMX-suffixed forms ("GOT.V", "SGD.TO") — matches.csv uses bare tickers.
+    const normTicker = (t) => t.toUpperCase().replace(/\.(V|TO|CN|C|NE|VN)$/, '');
+    allow = new Set(fs.readFileSync(PAGES.batchFile, 'utf8').split('\n').map((l) => normTicker(l.split('#')[0].trim())).filter(Boolean));
   }
 
   // Group matched owners per ticker
   const ownersByTicker = new Map();
   for (const m of matches) {
-    if (allow && !allow.has(m.ticker)) continue;
+    if (allow && !allow.has(m.ticker.toUpperCase())) continue;
     if (!ownersByTicker.has(m.ticker)) ownersByTicker.set(m.ticker, new Set());
     ownersByTicker.get(m.ticker).add(m.owner_raw);
   }
