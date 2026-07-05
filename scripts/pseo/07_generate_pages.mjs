@@ -241,23 +241,29 @@ function main() {
     if (!ownersByTicker.has(m.ticker)) ownersByTicker.set(m.ticker, new Set());
     ownersByTicker.get(m.ticker).add(m.owner_raw);
   }
+  // Per-ticker live (non-expired) claims — the SAME filter the publish loop
+  // applies. The isExpired guard is belt-and-braces (02/03 filter at fetch),
+  // and computing it up front means the geometry check below doesn't count a
+  // ticker whose claims all expired (nothing for 05 to cache) as publishable.
+  const liveClaimsByTicker = new Map([...ownersByTicker].map(([ticker, owners]) => [
+    ticker,
+    claimsAll.filter((c) => owners.has(c.owner_raw) && !isExpired(c.good_to_date)),
+  ]));
+  const publishable = [...ownersByTicker.keys()]
+    .filter((t) => issuerByTicker.get(t) && liveClaimsByTicker.get(t).length);
+
   // Zero publishable tickers is a valid outcome, not an error — the wipe and
   // asset prune below must still run so that dropping the LAST live ticker
-  // deletes its page instead of leaving it deployed indefinitely.
-  if (!ownersByTicker.size) console.warn('  ! no tickers to publish — removing all company pages');
+  // (or its claims all expiring) deletes its page instead of leaving it
+  // deployed indefinitely.
+  if (!publishable.length) console.warn('  ! no tickers to publish — removing all company pages');
 
-  // …but matched tickers with ZERO cached geometry means 05/06 silently failed
-  // (registry outage), not that the tickers dropped out. Wiping here would open
-  // a PR deleting every page — refuse instead.
-  if (ownersByTicker.size && ![...ownersByTicker.keys()].some((t) => fs.existsSync(path.join(PATHS.geo, `${t}.geojson`)))) {
-    throw new Error(`${ownersByTicker.size} ticker(s) to publish but no cached geometry for any of them — run 05/06 first; refusing to wipe existing pages.`);
+  // …but publishable tickers with ZERO cached geometry means 05/06 silently
+  // failed (registry outage), not that the tickers dropped out. Wiping here
+  // would open a PR deleting every page — refuse instead.
+  if (publishable.length && !publishable.some((t) => fs.existsSync(path.join(PATHS.geo, `${t}.geojson`)))) {
+    throw new Error(`${publishable.length} ticker(s) to publish but no cached geometry for any of them — run 05/06 first; refusing to wipe existing pages.`);
   }
-
-  // This script fully owns pagesOut: wipe and regenerate it every run so a
-  // ticker that dropped out (claims all expired, removed from the batch, match
-  // lost) has its old page deleted rather than left deploying stale forever.
-  fs.rmSync(PATHS.pagesOut, { recursive: true, force: true });
-  fs.mkdirSync(PATHS.pagesOut, { recursive: true });
 
   // This script fully owns pagesOut: wipe and regenerate it every run so a
   // ticker that dropped out (claims all expired, removed from the batch, match
@@ -277,10 +283,8 @@ function main() {
   for (const [ticker, owners] of ownersByTicker) {
     const iss = issuerByTicker.get(ticker);
     if (!iss) { console.warn(`  ! ${ticker}: not in issuers.csv — skipped`); continue; }
-    // isExpired guard is belt-and-braces: 02/03 filter at fetch, but a stale
-    // claims CSV re-run through 07 alone must still never publish expired rows.
-    const claims = claimsAll.filter((c) => owners.has(c.owner_raw) && !isExpired(c.good_to_date));
-    if (!claims.length) { console.warn(`  ! ${ticker}: no claims — skipped`); continue; }
+    const claims = liveClaimsByTicker.get(ticker);
+    if (!claims.length) { console.warn(`  ! ${ticker}: no live claims — skipped`); continue; }
     const gf = path.join(PATHS.geo, `${ticker}.geojson`);
     if (!fs.existsSync(gf)) { console.warn(`  ! ${ticker}: no map render — skipped (run 05+06)`); continue; }
 
