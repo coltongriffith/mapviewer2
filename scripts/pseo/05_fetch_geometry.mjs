@@ -114,7 +114,14 @@ async function main() {
     if (!byTicker.has(m.ticker)) byTicker.set(m.ticker, []);
     byTicker.get(m.ticker).push(m);
   }
-  if (!byTicker.size) throw new Error('No tickers to fetch — check matches.csv / --ticker.');
+  if (!byTicker.size) {
+    if (only) throw new Error(`--ticker ${only} not found in matches.csv.`);
+    // Zero matches is valid (e.g. every claim expired) — 07 still runs and
+    // removes the now-unpublishable pages, so don't kill the pipeline here.
+    console.warn('  ! matches.csv has no rows — nothing to fetch');
+    fs.mkdirSync(PATHS.geo, { recursive: true });
+    return;
+  }
   fs.mkdirSync(PATHS.geo, { recursive: true });
 
   const allClaims = [PATHS.claimsBc, PATHS.claimsOn]

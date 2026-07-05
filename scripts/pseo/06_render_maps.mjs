@@ -132,8 +132,12 @@ async function rasterizeOg(svgPath, pngPath) {
 
 async function main() {
   const only = opt('--ticker');
-  const files = fs.readdirSync(PATHS.geo).filter((f) => f.endsWith('.geojson'));
-  if (!files.length) throw new Error('No cached geometry — run 05 first.');
+  const files = fs.existsSync(PATHS.geo) ? fs.readdirSync(PATHS.geo).filter((f) => f.endsWith('.geojson')) : [];
+  if (!files.length) {
+    // Empty match set is valid — 07 still runs to remove stale pages.
+    console.warn('  ! no cached geometry — nothing to render');
+    return;
+  }
   fs.mkdirSync(PATHS.assetsOut, { recursive: true });
   const { readCsv } = await import('./lib.mjs');
   const issuers = new Map(readCsv(PATHS.issuers).map((i) => [i.ticker, i]));

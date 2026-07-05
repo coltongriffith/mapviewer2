@@ -241,7 +241,16 @@ function main() {
     if (!ownersByTicker.has(m.ticker)) ownersByTicker.set(m.ticker, new Set());
     ownersByTicker.get(m.ticker).add(m.owner_raw);
   }
-  if (!ownersByTicker.size) throw new Error('No tickers to publish.');
+  // Zero publishable tickers is a valid outcome, not an error — the wipe and
+  // asset prune below must still run so that dropping the LAST live ticker
+  // deletes its page instead of leaving it deployed indefinitely.
+  if (!ownersByTicker.size) console.warn('  ! no tickers to publish — removing all company pages');
+
+  // This script fully owns pagesOut: wipe and regenerate it every run so a
+  // ticker that dropped out (claims all expired, removed from the batch, match
+  // lost) has its old page deleted rather than left deploying stale forever.
+  fs.rmSync(PATHS.pagesOut, { recursive: true, force: true });
+  fs.mkdirSync(PATHS.pagesOut, { recursive: true });
 
   // This script fully owns pagesOut: wipe and regenerate it every run so a
   // ticker that dropped out (claims all expired, removed from the batch, match
