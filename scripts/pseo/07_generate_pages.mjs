@@ -268,11 +268,14 @@ function main() {
   // deployed indefinitely.
   if (!publishable.length) console.warn('  ! no tickers to publish — removing all company pages');
 
-  // …but publishable tickers with ZERO cached geometry means 05/06 silently
-  // failed (registry outage), not that the tickers dropped out. Wiping here
-  // would open a PR deleting every page — refuse instead.
-  if (publishable.length && !publishable.some((t) => fs.existsSync(path.join(PATHS.geo, `${t}.geojson`)))) {
-    throw new Error(`${publishable.length} ticker(s) to publish but no cached geometry for any of them — run 05/06 first; refusing to wipe existing pages.`);
+  // …but a publishable ticker without cached geometry means 05 failed for it
+  // (registry outage / owner-name drift), not that it dropped out. Wiping
+  // would delete its existing page and the publish loop would just skip it —
+  // so require geometry for EVERY publishable ticker, not merely one. Escape
+  // hatch for a genuinely dead ticker: remove it from publish_batch.txt.
+  const missingGeo = publishable.filter((t) => !fs.existsSync(path.join(PATHS.geo, `${t}.geojson`)));
+  if (missingGeo.length) {
+    throw new Error(`no cached geometry for publishable ticker(s): ${missingGeo.join(', ')} — run 05/06 first; refusing to wipe existing pages.`);
   }
 
   // All guards passed. This script fully owns pagesOut: wipe and regenerate it
