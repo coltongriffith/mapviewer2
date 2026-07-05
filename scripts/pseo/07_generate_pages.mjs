@@ -12,7 +12,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { resolvePaths, SITE, SITE_NAME, PAGES } from './config.mjs';
-import { readCsv, esc, fmtHa, centroidOf, haversineKm, todayIso } from './lib.mjs';
+import { readCsv, esc, fmtHa, centroidOf, haversineKm, todayIso, isExpired } from './lib.mjs';
 
 const args = process.argv.slice(2);
 const FIXTURE = args.includes('--fixture');
@@ -255,7 +255,9 @@ function main() {
   for (const [ticker, owners] of ownersByTicker) {
     const iss = issuerByTicker.get(ticker);
     if (!iss) { console.warn(`  ! ${ticker}: not in issuers.csv — skipped`); continue; }
-    const claims = claimsAll.filter((c) => owners.has(c.owner_raw));
+    // isExpired guard is belt-and-braces: 02/03 filter at fetch, but a stale
+    // claims CSV re-run through 07 alone must still never publish expired rows.
+    const claims = claimsAll.filter((c) => owners.has(c.owner_raw) && !isExpired(c.good_to_date));
     if (!claims.length) { console.warn(`  ! ${ticker}: no claims — skipped`); continue; }
     const gf = path.join(PATHS.geo, `${ticker}.geojson`);
     if (!fs.existsSync(gf)) { console.warn(`  ! ${ticker}: no map render — skipped (run 05+06)`); continue; }
