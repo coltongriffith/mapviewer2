@@ -241,6 +241,16 @@ function main() {
     if (!ownersByTicker.has(m.ticker)) ownersByTicker.set(m.ticker, new Set());
     ownersByTicker.get(m.ticker).add(m.owner_raw);
   }
+  // Matched tickers but ZERO claims rows loaded means the (gitignored)
+  // claims_bc/claims_on CSVs are missing or empty — a fresh checkout or a
+  // standalone 07 run, not a world where every claim vanished. Wiping the
+  // tracked pages from that state would be destructive; refuse. (A real
+  // all-expired refresh still passes: a full 02/03 pull yields thousands of
+  // other owners' rows, so claimsAll is never empty when inputs are intact.)
+  if (ownersByTicker.size && !claimsAll.length) {
+    throw new Error(`${ownersByTicker.size} matched ticker(s) but no claims data loaded — run 02/03 first (claims CSVs are gitignored); refusing to wipe existing pages.`);
+  }
+
   // Per-ticker live (non-expired) claims — the SAME filter the publish loop
   // applies. The isExpired guard is belt-and-braces (02/03 filter at fetch),
   // and computing it up front means the geometry check below doesn't count a
