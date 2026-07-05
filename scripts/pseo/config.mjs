@@ -21,6 +21,32 @@ export const PATHS = {
   sitemap: path.join(ROOT, 'public', 'sitemap-companies.xml'),
 };
 
+// Resolve the working path set for a run. `fixture=true` redirects every
+// generated/output path (issuers/claims/matches/geo/pages/assets) into a
+// sandboxed .fixture-demo folder, completely separate from the tracked
+// production files (issuers.csv, matches.csv, public/companies/, …) — so
+// `npm run pseo:fixture` can never leave fake-company data sitting in a path
+// a careless `git add` would pick up. aliases.csv and publish_batch.txt are
+// intentionally NOT overridden: fixture mode reads its own
+// fixtures/aliases_fixture.csv directly (see 04_match_owners.mjs).
+export function resolvePaths(fixture) {
+  if (!fixture) return PATHS;
+  const demoData = path.join(PATHS.data, '.fixture-demo');
+  const demoPublic = path.join(ROOT, 'public', '.pseo-fixture-demo');
+  return {
+    ...PATHS,
+    geo: path.join(demoData, 'geo'),
+    issuers: path.join(demoData, 'issuers.csv'),
+    claimsBc: path.join(demoData, 'claims_bc.csv'),
+    claimsOn: path.join(demoData, 'claims_on.csv'),
+    matches: path.join(demoData, 'matches.csv'),
+    reviewQueue: path.join(demoData, 'review_queue.csv'),
+    pagesOut: path.join(demoPublic, 'companies'),
+    assetsOut: path.join(demoPublic, 'companies-assets'),
+    sitemap: path.join(demoData, 'sitemap-companies.xml'),
+  };
+}
+
 export const SITE = 'https://www.explorationmaps.com';
 export const SITE_NAME = 'Exploration Maps';
 

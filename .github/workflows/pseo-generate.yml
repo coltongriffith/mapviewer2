@@ -1,0 +1,113 @@
+name: pSEO — Generate company pages
+
+# Runs the full pipeline (issuers → claims → match → geometry → render → pages)
+# and opens a Pull Request with the result instead of pushing straight to main.
+# Vercel's GitHub integration deploys a preview for that PR automatically, so
+# you can click through real company pages before anything goes live — this is
+# the hand-verification checkpoint the plan calls for. Merge the PR to publish.
+#
+# First-time setup:
+#   1. Run the "pSEO — Discover registry schema" workflow to get the current
+#      Ontario MLAS claims-layer id (BC needs no id).
+#   2. Add a few tickers to data/pseo/publish_batch.txt (small PR, review as
+#      normal) — only tickers listed there get a live page.
+#   3. Run this workflow with that Ontario layer id as the "on_layer" input.
+#   4. If step 01 (issuers) fails — TSXV/CSE endpoints are undocumented and
+#      move — download the file by hand from tsx.com / thecse.com, add it to
+#      the repo under data/pseo/manual/ (via a normal commit or the GitHub web
+#      UI "Add file"), and re-run with the tsxv_xlsx_path / cse_csv_path inputs
+#      pointing at it.
+
+on:
+  workflow_dispatch:
+    inputs:
+      on_layer:
+        description: 'Ontario MLAS ArcGIS claims-layer id (from the Discover workflow). Leave blank once hardcoded in scripts/pseo/config.mjs.'
+        required: false
+        type: string
+      tsxv_xlsx_path:
+        description: 'Repo path to a manually downloaded TSXV issuer workbook (only if the automatic download fails)'
+        required: false
+        type: string
+      cse_csv_path:
+        description: 'Repo path to a manually downloaded CSE listings CSV (only if the automatic download fails)'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: 01 — Fetch issuers (TSXV + CSE)
+        run: |
+          ARGS=""
+          if [ -n "${{ inputs.tsxv_xlsx_path }}" ]; then ARGS="$ARGS --xlsx ${{ inputs.tsxv_xlsx_path }}"; fi
+          if [ -n "${{ inputs.cse_csv_path }}" ]; then ARGS="$ARGS --cse-csv ${{ inputs.cse_csv_path }}"; fi
+          node scripts/pseo/01_fetch_issuers.mjs $ARGS
+
+      - name: 02 — Fetch BC claims (full pull)
+        run: node scripts/pseo/02_fetch_claims_bc.mjs
+
+      - name: 03 — Fetch Ontario claims (full pull)
+        run: |
+          if [ -n "${{ inputs.on_layer }}" ]; then
+            node scripts/pseo/03_fetch_claims_on.mjs --layer "${{ inputs.on_layer }}"
+          else
+            node scripts/pseo/03_fetch_claims_on.mjs
+          fi
+
+      - name: 04 — Match claim owners to tickers
+        run: node scripts/pseo/04_match_owners.mjs
+
+      - name: 05 — Fetch per-ticker claim geometry
+        run: |
+          if [ -n "${{ inputs.on_layer }}" ]; then
+            node scripts/pseo/05_fetch_geometry.mjs --layer "${{ inputs.on_layer }}"
+          else
+            node scripts/pseo/05_fetch_geometry.mjs
+          fi
+
+      - name: 06 — Render claim maps (SVG; OG images off by default — see README)
+        run: node scripts/pseo/06_render_maps.mjs --skip-og
+
+      - name: 07 — Generate pages for the publish batch
+        run: node scripts/pseo/07_generate_pages.mjs
+
+      - name: Summary
+        run: |
+          echo "### pSEO run summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Matched tickers: $(($(wc -l < data/pseo/matches.csv) - 1))" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Review queue (needs a human look): $(($(wc -l < data/pseo/review_queue.csv) - 1))" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Published pages: $(find public/companies -mindepth 1 -maxdepth 1 -type d | wc -l)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Open a PR with the results
+        uses: peter-evans/create-pull-request@v6
+        with:
+          commit-message: 'pSEO: refresh company claim-map pages'
+          branch: pseo-refresh
+          title: 'pSEO refresh — company claim-map pages'
+          body: |
+            Automated run of the pSEO pipeline (issuers → claims → match → geometry → render → pages).
+
+            **Before merging:**
+            - [ ] Check `data/pseo/review_queue.csv` for any new rows — confirm real matches and add them to `data/pseo/aliases.csv` in a follow-up run, ignore the rest.
+            - [ ] Hand-verify the top ~300 tickers by market cap in `data/pseo/matches.csv` (set `verified=yes`) before their pages are trusted.
+            - [ ] Click through a few pages on this PR's Vercel preview deploy.
+            - [ ] Confirm `data/pseo/publish_batch.txt` only lists the tickers you intend to make live right now.
+
+            Merging this PR is what actually publishes these pages to explorationmaps.com.
+          labels: pseo

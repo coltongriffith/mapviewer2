@@ -25,9 +25,16 @@ Thumbs.db
 *.local
 .claude/worktrees/
 
-# pSEO pipeline outputs (generated; fixtures stay committed).
-# Remove these lines when publishing real batches so refreshes can be committed.
-data/pseo/*.csv
+# pSEO pipeline: large raw registry pulls + geometry cache are re-fetched fresh
+# on every GitHub Actions run, so they don't need to live in git. Everything
+# else under data/pseo/ (aliases.csv, publish_batch.txt, matches.csv,
+# review_queue.csv, issuers.csv) IS tracked — it's small and either
+# human-curated or useful to review as a diff on each run's commit.
+data/pseo/claims_bc.csv
+data/pseo/claims_on.csv
 data/pseo/geo/
-public/companies/
-public/companies-assets/
+data/pseo/.cse_raw.csv
+# npm run pseo:fixture output — sandboxed so fictional demo companies can
+# never land in the tracked production paths above.
+data/pseo/.fixture-demo/
+public/.pseo-fixture-demo/

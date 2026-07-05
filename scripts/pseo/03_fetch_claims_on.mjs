@@ -9,10 +9,11 @@
 //   node scripts/pseo/03_fetch_claims_on.mjs --fixture
 
 import path from 'node:path';
-import { PATHS, ON_ARCGIS } from './config.mjs';
+import { resolvePaths, ON_ARCGIS } from './config.mjs';
 import { readCsv, writeCsv, fetchJson } from './lib.mjs';
 
 const args = process.argv.slice(2);
+const PATHS = resolvePaths(args.includes('--fixture'));
 const opt = (name) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : null; };
 
 async function discover() {

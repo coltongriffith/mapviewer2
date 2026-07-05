@@ -2,6 +2,8 @@
 // 04 — Match registry claim owners to exchange issuers.
 //
 //   node scripts/pseo/04_match_owners.mjs
+//   node scripts/pseo/04_match_owners.mjs --fixture   # reads fixtures/aliases_fixture.csv,
+//                                                      # never touches the real aliases.csv
 //
 // Inputs : issuers.csv, claims_bc.csv / claims_on.csv (whichever exist),
 //          aliases.csv (optional; owner_raw → ticker overrides, grows over time)
@@ -12,8 +14,12 @@
 // (lib.nameScore). Aliases always win at score 100 with source=alias.
 
 import fs from 'node:fs';
-import { PATHS, MATCH } from './config.mjs';
+import path from 'node:path';
+import { resolvePaths, MATCH } from './config.mjs';
 import { readCsv, writeCsv, normalizeName, nameScore } from './lib.mjs';
+
+const FIXTURE = process.argv.includes('--fixture');
+const PATHS = resolvePaths(FIXTURE);
 
 function loadClaims() {
   const files = [PATHS.claimsBc, PATHS.claimsOn].filter((f) => fs.existsSync(f));
@@ -26,7 +32,8 @@ function loadClaims() {
 function main() {
   const issuers = readCsv(PATHS.issuers);
   const claims = loadClaims();
-  const aliases = fs.existsSync(PATHS.aliases) ? readCsv(PATHS.aliases) : [];
+  const aliasesFile = FIXTURE ? path.join(PATHS.fixtures, 'aliases_fixture.csv') : PATHS.aliases;
+  const aliases = fs.existsSync(aliasesFile) ? readCsv(aliasesFile) : [];
   const aliasMap = new Map(aliases.map((a) => [normalizeName(a.owner_raw), a.ticker]));
   const issuerByTicker = new Map(issuers.map((i) => [i.ticker, i]));
   const issuerNorms = issuers.map((i) => ({ ...i, norm: normalizeName(i.company) }));

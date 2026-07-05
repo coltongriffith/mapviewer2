@@ -11,12 +11,13 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { PATHS, SITE, SITE_NAME, PAGES } from './config.mjs';
+import { resolvePaths, SITE, SITE_NAME, PAGES } from './config.mjs';
 import { readCsv, esc, fmtHa, centroidOf, haversineKm, todayIso } from './lib.mjs';
 
 const args = process.argv.slice(2);
 const FIXTURE = args.includes('--fixture');
 const ALL = args.includes('--all');
+const PATHS = resolvePaths(FIXTURE);
 
 const REGISTRY_BY_PROV = {
   BC: { name: 'BC Mineral Titles Online', url: 'https://www.mtonline.gov.bc.ca/' },
@@ -114,7 +115,10 @@ function companyPage({ iss, claims, geo, neighbours, updated }) {
   const registries = provs.map((p) => REGISTRY_BY_PROV[p]).filter(Boolean);
   const url = `${SITE}/companies/${iss.ticker.toLowerCase()}/`;
   const mapSvg = `/companies-assets/${iss.ticker}.svg`;
-  const ogPng = `${SITE}/companies-assets/${iss.ticker}-og.png`;
+  // OG-image rendering (06 --skip-og) is optional — fall back to the site
+  // default so pages never link a 404'd image when Playwright isn't set up.
+  const ogPngPath = path.join(PATHS.assetsOut, `${iss.ticker}-og.png`);
+  const ogPng = fs.existsSync(ogPngPath) ? `${SITE}/companies-assets/${iss.ticker}-og.png` : `${SITE}/og-image.png`;
   const title = `${iss.company} (${iss.exchange}: ${iss.ticker}) — Mineral Claims Map`;
   const description = `${iss.company} holds ${claims.length} mineral claims totalling ${fmtHa(totalHa)} ha in ${provNames}. Interactive claims map, claim list, and expiry dates from public registry data.`;
 

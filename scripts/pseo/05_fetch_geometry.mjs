@@ -12,10 +12,11 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { PATHS, BC_WFS, ON_ARCGIS } from './config.mjs';
+import { resolvePaths, BC_WFS, ON_ARCGIS } from './config.mjs';
 import { readCsv, fetchJson } from './lib.mjs';
 
 const args = process.argv.slice(2);
+const PATHS = resolvePaths(args.includes('--fixture'));
 const opt = (name) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : null; };
 
 async function bcGeometry(ownerRaw) {

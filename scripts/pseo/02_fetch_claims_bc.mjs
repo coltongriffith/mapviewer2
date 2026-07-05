@@ -11,10 +11,11 @@
 // confirm MTO terms before the public launch (plan: Risks).
 
 import path from 'node:path';
-import { PATHS, BC_WFS } from './config.mjs';
+import { resolvePaths, BC_WFS } from './config.mjs';
 import { readCsv, writeCsv, fetchJson } from './lib.mjs';
 
 const args = process.argv.slice(2);
+const PATHS = resolvePaths(args.includes('--fixture'));
 
 function wfsUrl(params) {
   const base = new URLSearchParams({

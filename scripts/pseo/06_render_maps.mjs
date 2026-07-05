@@ -4,6 +4,7 @@
 //   node scripts/pseo/06_render_maps.mjs            # all cached tickers
 //   node scripts/pseo/06_render_maps.mjs --ticker ARM
 //   node scripts/pseo/06_render_maps.mjs --skip-og  # SVG only (no Playwright)
+//   node scripts/pseo/06_render_maps.mjs --fixture  # read/write the sandboxed demo paths
 //
 // Outputs per ticker into public/companies-assets/:
 //   [TICKER].svg      page map (1000×640): claims + labels + scale bar + watermark
@@ -15,10 +16,11 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { PATHS, SITE_NAME } from './config.mjs';
+import { resolvePaths, SITE_NAME } from './config.mjs';
 import { mercatorX, mercatorY, geojsonBounds, esc } from './lib.mjs';
 
 const args = process.argv.slice(2);
+const PATHS = resolvePaths(args.includes('--fixture'));
 const opt = (name) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : null; };
 
 const W = 1000, H = 640, PAD = 70;
@@ -106,10 +108,15 @@ function renderSvg(ticker, company, geojson) {
 }
 
 async function loadChromium() {
-  try { return (await import('playwright')).chromium; }
-  catch {
-    // Fall back to a globally installed playwright (e.g. CI images / sandboxes)
-    return (await import('/opt/node22/lib/node_modules/playwright/index.mjs')).chromium;
+  try {
+    return (await import('playwright')).chromium;
+  } catch {
+    throw new Error(
+      'OG-image rendering needs the "playwright" package with Chromium installed.\n' +
+      '  Run: npm i -D playwright && npx playwright install --with-deps chromium\n' +
+      '  Or pass --skip-og to render just the page map (pages fall back to the\n' +
+      '  site default og-image.png — fine for launch; add real OG images later).'
+    );
   }
 }
 

@@ -12,10 +12,11 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { PATHS, TSXV_XLSX_URL, CSE_CSV_URL } from './config.mjs';
+import { resolvePaths, TSXV_XLSX_URL, CSE_CSV_URL } from './config.mjs';
 import { readCsv, writeCsv, fetchBuffer, fetchText, readXlsxFirstSheet, normalizeName } from './lib.mjs';
 
 const args = process.argv.slice(2);
+const PATHS = resolvePaths(args.includes('--fixture'));
 const flag = (name) => args.includes(name);
 const opt = (name) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : null; };
 
