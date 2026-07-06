@@ -40,3 +40,45 @@ STU.V
 CMD.V
 DBG.V
 GSPR.V
+
+# Batch 2 — remaining top-100 candidates that matched BC/Ontario claims
+# at auto-accept score (>=92) in the last run. Excludes AMK/CUU/LBC
+# (JV/alias review pending). Scan for recent M&A before trusting — the
+# pipeline can't detect acquisitions (cf. MTB).
+ADZ.V
+AFF.V
+AMX.V
+BEX.V
+BMV.V
+CASA.V
+CASC.CN
+CNC.V
+CONE.V
+DCOP.V
+DLP.V
+DLTA.V
+DRY.V
+EGM.V
+EVNI.V
+FEX.V
+FG.V
+GFG.V
+GMR.CN
+GRDM.V
+GSH.V
+IZN.V
+LME.V
+MEK.V
+MLM.CN
+NBRK.CN
+NIM.V
+NOB.V
+OMM.V
+PPP.V
+PX.V
+QZM.V
+RKR.V
+TWR.V
+WRLG.V
+XIM.V
+XTM.V
