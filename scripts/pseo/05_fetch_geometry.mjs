@@ -13,7 +13,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { resolvePaths, BC_WFS, ON_ARCGIS } from './config.mjs';
-import { readCsv, fetchJson, isExpired } from './lib.mjs';
+import { readCsv, fetchJson, isExpired, polygonHectares } from './lib.mjs';
 
 const args = process.argv.slice(2);
 const PATHS = resolvePaths(args.includes('--fixture'));
@@ -67,17 +67,25 @@ async function onGeometry(ownerRaw, layerId) {
     return String(v).slice(0, 10);
   };
   return (j.features || [])
-    .map((f) => ({
-      type: 'Feature',
-      geometry: f.geometry,
-      properties: {
-        claim_id: f.properties?.[numField] ?? '',
-        claim_name: '',
-        area_ha: f.properties?.AREA_HA ?? f.properties?.HECTARES ?? '',
-        good_to_date: dateField ? fmtDate(f.properties?.[dateField]) : '',
-        province: 'ON',
-      },
-    }))
+    .map((f) => {
+      // MLAS returns no usable hectares attribute — derive it from the polygon
+      // so ON claims don't report 0 ha on the page stats/table.
+      const attrHa = f.properties?.AREA_HA ?? f.properties?.HECTARES ?? '';
+      const area_ha = attrHa !== '' && Number(attrHa) > 0
+        ? attrHa
+        : Math.round(polygonHectares(f.geometry) * 10) / 10;
+      return {
+        type: 'Feature',
+        geometry: f.geometry,
+        properties: {
+          claim_id: f.properties?.[numField] ?? '',
+          claim_name: '',
+          area_ha,
+          good_to_date: dateField ? fmtDate(f.properties?.[dateField]) : '',
+          province: 'ON',
+        },
+      };
+    })
     .filter((f) => !isExpired(f.properties.good_to_date));
 }
 

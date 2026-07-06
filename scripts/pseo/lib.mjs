@@ -214,6 +214,31 @@ export function haversineKm(a, b) {
   return 2 * R * Math.asin(Math.sqrt(s));
 }
 
+// Hectares of a Polygon/MultiPolygon geometry via the spherical excess formula
+// (outer ring area minus holes). Used when a registry omits an area attribute —
+// Ontario MLAS returns no usable hectares field, so ON claims would otherwise
+// report 0 ha. Accurate to well within a rounding error at claim scale.
+export function polygonHectares(geometry) {
+  if (!geometry) return 0;
+  const R = 6378137; // metres
+  const ringAreaM2 = (ring) => {
+    if (!ring || ring.length < 3) return 0;
+    let total = 0;
+    for (let i = 0; i < ring.length; i++) {
+      const [lng1, lat1] = ring[i];
+      const [lng2, lat2] = ring[(i + 1) % ring.length];
+      total += ((lng2 - lng1) * Math.PI / 180) *
+        (2 + Math.sin((lat1 * Math.PI) / 180) + Math.sin((lat2 * Math.PI) / 180));
+    }
+    return Math.abs((total * R * R) / 2);
+  };
+  const polyAreaM2 = (rings) => rings.reduce((a, r, i) => a + (i === 0 ? ringAreaM2(r) : -ringAreaM2(r)), 0);
+  const polys = geometry.type === 'Polygon' ? [geometry.coordinates]
+    : geometry.type === 'MultiPolygon' ? geometry.coordinates : [];
+  const m2 = polys.reduce((a, p) => a + polyAreaM2(p), 0);
+  return m2 / 10000; // m² → ha
+}
+
 // ── Misc ─────────────────────────────────────────────────────────────────────
 
 export function fmtHa(n) {
