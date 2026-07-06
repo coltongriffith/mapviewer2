@@ -1,6 +1,9 @@
 # Batch 1 — first 40 strongest BC-cluster candidates from the top-100 list
 # (see data/pseo/manual/company_notes.md). AMK, CUU, LBC pulled pending
 # ownership review — their own notes flag JV/alias uncertainty.
+# MTB pulled: Mountain Boy Minerals was acquired by ExGen Resources and
+# delisted from the TSXV ~Dec 23, 2025 — no longer a live issuer (anti-goal:
+# mergers/acquisitions). Revisit as the acquirer only after verifying claims.
 GOT.V
 TUD.V
 ESK.V
@@ -13,7 +16,6 @@ SVG.V
 DEC.V
 SCOT.V
 JUGR.V
-MTB.V
 MTS.V
 SKP.V
 ENDR.CN

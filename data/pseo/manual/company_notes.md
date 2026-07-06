@@ -16,7 +16,7 @@ Important: this is a ranked hand-verification queue, not a registry-verified pub
 | 10 | DEC | TSXV | Decade Resources Ltd. | Golden Triangle / Stewart, BC | Red Cliff / Del Norte | Medium | BC Golden Triangle/Stewart focus; should produce map if owner matches. |
 | 11 | SCOT | TSXV | Scottie Resources Corp. | Golden Triangle / Stewart, BC | Scottie Gold Mine | Medium | Strong BC flagship and active exploration; verify registered owner exact string. |
 | 12 | JUGR | TSXV | Juggernaut Exploration Ltd. | Golden Triangle, BC | Big One / Midas / Empire | Medium | Active BC Golden Triangle explorer; likely useful SEO target. |
-| 13 | MTB | TSXV | Mountain Boy Minerals Ltd. | Golden Triangle / Stewart, BC | BA / Theia / Telegraph | Medium | BC-focused Golden Triangle explorer; verify claim ownership. |
+| 13 | MTB | TSXV | Mountain Boy Minerals Ltd. | Golden Triangle / Stewart, BC | BA / Theia / Telegraph | Do not publish | ACQUIRED by ExGen Resources; delisted from TSXV ~Dec 23, 2025. Not a live issuer — pulled from the publish batch. Revisit only as the acquirer after verifying claim ownership. |
 | 14 | MTS | TSXV | Metallis Resources Inc. | Golden Triangle / Eskay Camp, BC | Kirkham | Medium | BC Golden Triangle package; good visual-map candidate. |
 | 15 | SKP | TSXV | StrikePoint Gold Inc. | Golden Triangle / Stewart, BC | Porter / Willoughby | Medium | BC flagship; verify current active ownership. |
 | 16 | AMK | TSXV | American Creek Resources Ltd. | Golden Triangle / Treaty Creek, BC | Treaty Creek interest | Low | Included only as a review candidate; JV/interest may not match registry owner. |
