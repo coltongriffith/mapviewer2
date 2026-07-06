@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Eskay Mining Corp. (TSXV: ESK) — Mineral Claims Map</title>
+<meta name="description" content="Eskay Mining Corp. holds 200 mineral claims totalling 56,597 ha in British Columbia. Interactive claims map, claim list, and expiry dates from public registry data.">
+<link rel="canonical" href="https://www.explorationmaps.com/companies/esk/">
+
+<meta property="og:title" content="Eskay Mining Corp. (TSXV: ESK) — Mineral Claims Map">
+<meta property="og:description" content="Eskay Mining Corp. holds 200 mineral claims totalling 56,597 ha in British Columbia. Interactive claims map, claim list, and expiry dates from public registry data.">
+<meta property="og:url" content="https://www.explorationmaps.com/companies/esk/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Exploration Maps">
+<meta property="og:image" content="https://www.explorationmaps.com/og-image.png">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Organization","name":"Eskay Mining Corp.","tickerSymbol":"TSXV:ESK","url":"https://www.explorationmaps.com/companies/esk/"},{"@type":"Dataset","name":"Eskay Mining Corp. mineral claims","description":"Eskay Mining Corp. holds 200 mineral claims totalling 56,597 ha in British Columbia. Interactive claims map, claim list, and expiry dates from public registry data.","url":"https://www.explorationmaps.com/companies/esk/","creator":{"@type":"Organization","name":"Exploration Maps","url":"https://www.explorationmaps.com"},"dateModified":"2026-07-06","license":"https://www.mtonline.gov.bc.ca/","spatialCoverage":"British Columbia"}]}</script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Inter',system-ui,-apple-system,sans-serif;color:#18212e;background:#fafbfd;line-height:1.6}
+a{color:#2563eb;text-decoration:none}a:hover{text-decoration:underline}
+.nav{display:flex;align-items:center;justify-content:space-between;padding:0 24px;height:58px;border-bottom:1px solid #e4e9f1;background:#fff;position:sticky;top:0;z-index:50}
+.nav-brand{display:flex;align-items:center;gap:8px;font-weight:750;font-size:15px;color:#0f1b2d}
+.nav-cta{background:#2563eb;color:#fff;padding:8px 16px;border-radius:8px;font-size:13px;font-weight:650;white-space:nowrap}
+.nav-cta:hover{background:#1d4ed8;text-decoration:none}
+.wrap{max-width:960px;margin:0 auto;padding:36px 22px 70px}
+.crumb{font-size:12.5px;color:#8b96a5;margin-bottom:16px}
+.crumb a{color:#8b96a5}
+h1{font-size:clamp(22px,3.4vw,32px);line-height:1.15;letter-spacing:-.02em;margin-bottom:10px}
+.sub{color:#566274;font-size:15px;max-width:70ch;margin-bottom:8px}
+.updated{font-size:12px;color:#8b96a5;margin-bottom:22px}
+.map-card{background:#fff;border:1px solid #e4e9f1;border-radius:14px;overflow:hidden;box-shadow:0 10px 32px -14px rgba(15,27,45,.15);margin-bottom:14px}
+.map-card img,.map-card object{display:block;width:100%;height:auto}
+.map-actions{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 30px}
+.btn{display:inline-flex;align-items:center;gap:7px;border-radius:9px;font-weight:640;font-size:13.5px;padding:9px 16px;border:1px solid transparent}
+.btn-primary{background:#2563eb;color:#fff}.btn-primary:hover{background:#1d4ed8;text-decoration:none}
+.btn-ghost{background:#fff;color:#18212e;border-color:#d4dce7}.btn-ghost:hover{border-color:#aebccf;text-decoration:none}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:0 0 30px}
+.stat{background:#fff;border:1px solid #e4e9f1;border-radius:11px;padding:14px 16px}
+.stat b{display:block;font-size:21px;letter-spacing:-.01em;font-variant-numeric:tabular-nums}
+.stat span{font-size:12px;color:#8b96a5}
+h2{font-size:18px;letter-spacing:-.01em;margin:34px 0 12px}
+table{width:100%;border-collapse:collapse;font-size:13px;background:#fff;border:1px solid #e4e9f1;border-radius:10px;overflow:hidden}
+th{background:#f3f6fa;text-align:left;padding:9px 12px;font-weight:650;color:#45566a;border-bottom:1px solid #e4e9f1}
+td{padding:8px 12px;border-bottom:1px solid #eef2f7;font-variant-numeric:tabular-nums}
+tr:last-child td{border-bottom:none}
+.tbl-wrap{overflow-x:auto;border-radius:10px}
+.claim-cta{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;background:linear-gradient(135deg,#eff6ff,#e0e7ff);border:1px solid #c7d7fe;border-radius:12px;padding:16px 20px;margin:30px 0}
+.claim-cta b{font-size:15px}
+.claim-cta span{display:block;font-size:13px;color:#566274}
+.neigh{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
+.neigh a{background:#fff;border:1px solid #e4e9f1;border-radius:11px;padding:13px 15px;display:block}
+.neigh a:hover{border-color:#2563eb;text-decoration:none}
+.neigh b{display:block;font-size:13.5px;color:#0f1b2d}
+.neigh span{font-size:12px;color:#8b96a5}
+.disclaimer{background:#fffbeb;border-left:4px solid #d97706;border-radius:0 10px 10px 0;padding:13px 16px;font-size:13px;color:#57534e;line-height:1.65;margin:34px 0}
+.footer{border-top:1px solid #e4e9f1;padding:26px 22px;text-align:center;font-size:12.5px;color:#8b96a5;background:#fff}
+.footer a{color:#566274}
+.hub-list{columns:3;column-gap:26px;font-size:14px}
+.hub-list li{margin-bottom:7px;break-inside:avoid;list-style:none}
+@media(max-width:700px){.hub-list{columns:1}}
+</style>
+</head>
+<body>
+<nav class="nav">
+  <a class="nav-brand" href="/">
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" fill="#2563eb"/></svg>
+    Exploration Maps
+  </a>
+  <a class="nav-cta" href="/">Start Mapping</a>
+</nav>
+
+<div class="wrap">
+  <p class="crumb"><a href="/">Home</a> › <a href="/companies/">Companies</a> › ESK</p>
+  <h1>Eskay Mining Corp. (TSXV: ESK) — Mineral Claims Map</h1>
+  <p class="sub">Eskay Mining Corp. holds <strong>200 mineral claims</strong> totalling <strong>56,597 ha</strong> in British Columbia. Data from <a href="https://www.mtonline.gov.bc.ca/" rel="nofollow noopener">BC Mineral Titles Online</a> public records.</p>
+  <p class="updated">Claims updated 2026-07-06</p>
+
+  <div class="map-card"><img src="/companies-assets/ESK.svg" alt="Map of Eskay Mining Corp. mineral claims" loading="eager"></div>
+  <div class="map-actions">
+    <a class="btn btn-primary" href="/?utm_source=companies&amp;utm_campaign=ESK">Open interactive version →</a>
+    <a class="btn btn-ghost" href="/?utm_source=companies&amp;utm_campaign=ESK-export">Export an investor-ready version — free during early access.</a>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><b>200</b><span>Mineral claims</span></div>
+    <div class="stat"><b>56,597</b><span>Total hectares</span></div>
+    <div class="stat"><b>BC</b><span>Province</span></div>
+    <div class="stat"><b>2026-10-22</b><span>Earliest good-to date</span></div>
+  </div>
+
+  <div class="claim-cta">
+    <div><b>Is this your company?</b><span>Claim this page to correct details and get an editable, branded version of this map.</span></div>
+    <a class="btn btn-primary" href="mailto:hello@explorationmaps.com?subject=Claim%20page%3A%20ESK">Claim this page</a>
+  </div>
+
+  <h2>Claim list</h2>
+  <div class="tbl-wrap">
+  <table>
+    <thead><tr><th>Claim ID</th><th>Name</th><th>Area (ha)</th><th>Good-to date</th><th>Province</th></tr></thead>
+    <tbody>
+      <tr><td>251344</td><td>COUL 1</td><td>500</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>251345</td><td>COUL 2</td><td>500</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>251346</td><td>COUL 3</td><td>500</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>251347</td><td>COUL 4</td><td>500</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>251358</td><td>UNUK 1</td><td>500</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>251360</td><td>UNUK 11</td><td>500</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>251361</td><td>UNUK 12</td><td>500</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>251374</td><td>UNUK 13</td><td>400</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>251375</td><td>UNUK 14</td><td>400</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>251379</td><td>UNUK 22</td><td>500</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>251446</td><td>COREY 1</td><td>500</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>251447</td><td>COREY 2</td><td>500</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>251448</td><td>COREY 3</td><td>500</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>251449</td><td>COREY 4</td><td>500</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>251450</td><td>COREY 5</td><td>500</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>251451</td><td>COREY 6</td><td>500</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>251452</td><td>COREY 7</td><td>500</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>251453</td><td>COREY 8</td><td>500</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>251723</td><td>COREY 21</td><td>100</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>251726</td><td>COREY 24</td><td>400</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>251727</td><td>COREY 25</td><td>100</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>251728</td><td>COREY 26</td><td>100</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>251729</td><td>COREY 27</td><td>400</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>251730</td><td>COREY 28</td><td>400</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>251731</td><td>COREY 29</td><td>200</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>251732</td><td>COREY 30</td><td>200</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>251733</td><td>COREY 31</td><td>400</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>251734</td><td>COREY 32</td><td>500</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>251735</td><td>COREY 33</td><td>500</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>251736</td><td>COREY 34</td><td>500</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>251737</td><td>COREY 35</td><td>500</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>251738</td><td>COREY 36</td><td>350</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>251739</td><td>COREY 37</td><td>350</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>251844</td><td>LANCE 3</td><td>450</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>251845</td><td>LANCE 4</td><td>450</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>252107</td><td>JOJO M</td><td>450</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>252108</td><td>CARL J</td><td>500</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>252111</td><td>DWAYNE 1</td><td>400</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>252872</td><td>SIB 27</td><td>25</td><td>2032-12-31</td><td>BC</td></tr>
+      <tr><td>252876</td><td>SIB 31</td><td>25</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>253015</td><td>POLO 7</td><td>500</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>253016</td><td>POLO 8</td><td>500</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>253146</td><td>AFTOM #7</td><td>400</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>253147</td><td>AFTOM #9</td><td>500</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>253152</td><td>AFTOM #14</td><td>500</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>253153</td><td>AFTOM #15</td><td>500</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>253154</td><td>AFTOM #16</td><td>400</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>253155</td><td>AFTOM #18</td><td>400</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>253156</td><td>AFTOM #19</td><td>500</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>253157</td><td>AFTOM #20</td><td>500</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>253176</td><td>P-MAC #1</td><td>25</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>253177</td><td>P-MAC #2</td><td>25</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>253180</td><td>P-MAC #5</td><td>25</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>253182</td><td>P-MAC #7</td><td>25</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>253184</td><td>P-MAC #9</td><td>25</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>253240</td><td>POLO 13</td><td>125</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>253295</td><td>FRED 15</td><td>375</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>255254</td><td>S.I.B. #1</td><td>25</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>255255</td><td>S.I.B. #2</td><td>25</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>255256</td><td>S.I.B. #3</td><td>25</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>255257</td><td>S.I.B. #4</td><td>25</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>301766</td><td>GINGER 1</td><td>500</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>301767</td><td>GINGER 2</td><td>500</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>304070</td><td>RAMBO 1</td><td>25</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>304072</td><td>RAMBO 3</td><td>25</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>304074</td><td>RAMBO 5</td><td>25</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>305317</td><td>FOG 1</td><td>25</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>305318</td><td>FOG 2</td><td>25</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>305319</td><td>FOG 3</td><td>25</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>305320</td><td>FOG 4</td><td>25</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>305321</td><td>FOG 5</td><td>25</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>305322</td><td>FOG 6</td><td>25</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>306723</td><td>NOOT 1</td><td>500</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>306724</td><td>NOOT 2</td><td>500</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>306725</td><td>NOOT 3</td><td>500</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>308909</td><td>DEL-1</td><td>200</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>313285</td><td>CALVIN</td><td>500</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>367934</td><td>PUD 1</td><td>500</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>367935</td><td>PUD 2</td><td>100</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>367943</td><td>MEGAN 1</td><td>25</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>367944</td><td>MEGAN 2</td><td>25</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>373867</td><td>STO 2</td><td>125</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>384019</td><td>JOHN 1</td><td>400</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>384020</td><td>JOHN 2</td><td>400</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>387231</td><td>IRVING 1</td><td>500</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>387233</td><td>IRVING 3</td><td>500</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>387237</td><td>BELL 1</td><td>500</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>387238</td><td>BELL 2</td><td>500</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>387239</td><td>BELL 3</td><td>375</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>387240</td><td>BELL 4</td><td>500</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>387241</td><td>BELL 5</td><td>200</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>387245</td><td>BELL 6</td><td>250</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>387248</td><td>BELL 7</td><td>175</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>387249</td><td>BELL 8</td><td>125</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>389463</td><td>TOON 1</td><td>50</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>389464</td><td>TOON 2</td><td>300</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>390911</td><td>HARRY 1</td><td>500</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>390912</td><td>HARRY 2</td><td>375</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>390913</td><td>HARRY 3</td><td>500</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>390914</td><td>SC 1</td><td>500</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>390915</td><td>SC 2</td><td>500</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>390916</td><td>SC 3</td><td>500</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>390917</td><td>SC 4</td><td>500</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>390918</td><td>SC 5</td><td>500</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>390919</td><td>SC 6</td><td>500</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>390920</td><td>SC 7</td><td>500</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>390921</td><td>SC 8</td><td>500</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>392425</td><td>HARRY 4</td><td>500</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>392426</td><td>HARRY 5</td><td>100</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>392427</td><td>KING 1</td><td>75</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>392428</td><td>KING 2</td><td>400</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>392429</td><td>KING 3</td><td>450</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>392430</td><td>KING 4</td><td>450</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>392431</td><td>KING 5</td><td>450</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>392432</td><td>KING 6</td><td>300</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>392433</td><td>KING 7</td><td>450</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>392440</td><td>VALCANO 1</td><td>450</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>392441</td><td>VALCANO 2</td><td>450</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>392442</td><td>VALCANO 3</td><td>400</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>392443</td><td>VALCANO 4</td><td>400</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>392444</td><td>VALCANO 5</td><td>225</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>392445</td><td>VALCANO 6</td><td>450</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>392446</td><td>VALCANO 7</td><td>450</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>392447</td><td>VALCANO 8</td><td>400</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>392448</td><td>VALCANO 9</td><td>400</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>392449</td><td>CALVIN 2</td><td>350</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>392450</td><td>CALVIN 3</td><td>350</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>392451</td><td>CALVIN 4</td><td>250</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>392452</td><td>CALVIN 5</td><td>500</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>392453</td><td>GINGRASS 1</td><td>150</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>392454</td><td>GINGRASS 2</td><td>500</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>392455</td><td>GINGRASS 3</td><td>300</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>392456</td><td>GINGRASS 4</td><td>225</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>392457</td><td>GINGRASS 5</td><td>300</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>392458</td><td>IRVING 5</td><td>225</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>392459</td><td>IRVING 6</td><td>450</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>394157</td><td>LANCE 5</td><td>150</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>394158</td><td>MEGAN 3</td><td>100</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>394159</td><td>MEGAN 4</td><td>75</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>394160</td><td>SKI</td><td>125</td><td>2031-12-31</td><td>BC</td></tr>
+      <tr><td>394161</td><td>DWAYNE 2</td><td>175</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>394162</td><td>AFT</td><td>50</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>394163</td><td>SHIRLEY</td><td>75</td><td>2027-01-31</td><td>BC</td></tr>
+      <tr><td>394164</td><td>FREDDY 1</td><td>75</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>404668</td><td>SUL 1</td><td>500</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>404669</td><td>SUL 2</td><td>500</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>508074</td><td>—</td><td>429.8</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>508080</td><td>—</td><td>358.2</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>517031</td><td>WINA</td><td>321.2</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>517100</td><td>WINA2</td><td>124.9</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>517148</td><td>DAR</td><td>53.6</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>517241</td><td>SWAMP</td><td>17.9</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>527171</td><td>—</td><td>231.6</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>527172</td><td>—</td><td>17.8</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>527177</td><td>—</td><td>320.9</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>527180</td><td>—</td><td>35.6</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>527241</td><td>—</td><td>178.3</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>528661</td><td>—</td><td>142.5</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>528664</td><td>SIB FIXUP 1</td><td>35.6</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>528665</td><td>SIB FIXUP 2</td><td>17.8</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>528666</td><td>SIB FIXUP 3</td><td>17.8</td><td>2032-12-31</td><td>BC</td></tr>
+      <tr><td>529757</td><td>UNUK SE FRACTION</td><td>71.7</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>529758</td><td>—</td><td>178.4</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>541059</td><td>—</td><td>17.8</td><td>2031-12-31</td><td>BC</td></tr>
+      <tr><td>1034028</td><td>CRACK-FILLER</td><td>537.1</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>1043810</td><td>—</td><td>53.5</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>1043811</td><td>—</td><td>53.5</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>1043812</td><td>—</td><td>35.6</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>1043813</td><td>—</td><td>35.6</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>1043814</td><td>—</td><td>35.6</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>1043815</td><td>—</td><td>17.8</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>1043816</td><td>P-MAC CLEAN-UP</td><td>89.1</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>1043825</td><td>MAC 1</td><td>35.6</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>1045213</td><td>ESKAY FB 90</td><td>142.5</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>1062255</td><td>NEW ESKAY BORDER 1</td><td>106.9</td><td>2032-12-31</td><td>BC</td></tr>
+      <tr><td>1062258</td><td>—</td><td>249.8</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>1062321</td><td>ESKAY SLIVER</td><td>17.8</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>1062322</td><td>ESKAY SLIVER 1</td><td>107.3</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>1062323</td><td>ESKAY SLIVER 2</td><td>89.4</td><td>2032-12-31</td><td>BC</td></tr>
+      <tr><td>1062324</td><td>ESKAY SLIVER 3</td><td>179.1</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>1062325</td><td>ESKAY SLIVER 4</td><td>35.6</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>1062326</td><td>ESKAY SLIVER 5</td><td>266.6</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>1064068</td><td>JOJO SOUTH</td><td>178.7</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>1064074</td><td>HARRY 4 WEST</td><td>71.4</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>1072290</td><td>GOOD SLICE</td><td>35.6</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>1080187</td><td>—</td><td>88.8</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>1080222</td><td>VALCANO 10</td><td>124.3</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>1083510</td><td>VALCANO 1A</td><td>124.3</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>1083511</td><td>VALCANO 1B</td><td>17.8</td><td>2034-09-01</td><td>BC</td></tr>
+      <tr><td>1089802</td><td>—</td><td>35.5</td><td>2028-01-01</td><td>BC</td></tr>
+      <tr><td>1089809</td><td>ESKAY A</td><td>17.8</td><td>2028-01-01</td><td>BC</td></tr>
+      <tr><td>1089838</td><td>NEW ESAKY B</td><td>976.2</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>1089847</td><td>—</td><td>71.1</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>1089878</td><td>—</td><td>213.3</td><td>2034-12-31</td><td>BC</td></tr>
+      <tr><td>1095595</td><td>TRI LAKES</td><td>17.8</td><td>2034-11-14</td><td>BC</td></tr>
+      <tr><td>1095596</td><td>TRI LAKES 2</td><td>53.3</td><td>2034-11-14</td><td>BC</td></tr>
+      <tr><td>1096618</td><td>TRI LAKE DEEP</td><td>408.4</td><td>2034-07-10</td><td>BC</td></tr>
+      <tr><td>1096673</td><td>TRI LAKES 3</td><td>1,349</td><td>2034-07-10</td><td>BC</td></tr>
+      <tr><td>1108970</td><td>Eskay B</td><td>17.8</td><td>2026-11-07</td><td>BC</td></tr>
+      <tr><td>1116904</td><td>—</td><td>35.6</td><td>2026-10-22</td><td>BC</td></tr>
+    </tbody>
+  </table>
+  </div>
+  
+
+  
+  <h2>Neighbouring claim holders</h2>
+  <div class="neigh">
+    <a href="/companies/mts/"><b>Metallis Resources Inc.</b><span>TSXV: MTS · ~14 km away</span></a>
+    <a href="/companies/tud/"><b>Tudor Gold Corp.</b><span>TSXV: TUD · ~19 km away</span></a>
+    <a href="/companies/gstm/"><b>Goldstorm Metals Corp.</b><span>TSXV: GSTM · ~27 km away</span></a>
+    <a href="/companies/endr/"><b>Enduro Metals Corporation</b><span>CSE: ENDR · ~47 km away</span></a>
+    <a href="/companies/scot/"><b>Scottie Resources Corp.</b><span>TSXV: SCOT · ~67 km away</span></a>
+    <a href="/companies/skp/"><b>StrikePoint Gold Inc.</b><span>TSXV: SKP · ~84 km away</span></a>
+  </div>
+
+  <div class="disclaimer">
+    Sourced from BC Mineral Titles Online public records on 2026-07-06. Exploration Maps is a mapping tool, not the official registry — claim status changes daily. Always verify current ownership, status, and boundaries with the registry.
+    <a href="mailto:hello@explorationmaps.com?subject=Data%20correction%3A%20ESK">Report an error</a>.
+  </div>
+</div>
+<footer class="footer">
+  <p><a href="/">Home</a> · <a href="/companies/">Companies</a> · <a href="/blog/">Guides</a> · <a href="/about/">About</a> · <a href="/privacy/">Privacy</a></p>
+  <p style="margin-top:6px">© 2026 Exploration Maps</p>
+</footer>
+</body>
+</html>

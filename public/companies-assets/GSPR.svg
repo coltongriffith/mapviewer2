@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 640" font-family="Arial, Helvetica, sans-serif">
+  <rect width="1000" height="640" fill="#f3efe6" />
+  <line x1="200" y1="0" x2="200" y2="640" stroke="#d9d2c0" stroke-width="0.7" />
+  <line x1="0" y1="128" x2="1000" y2="128" stroke="#d9d2c0" stroke-width="0.7" />
+  <line x1="400" y1="0" x2="400" y2="640" stroke="#d9d2c0" stroke-width="0.7" />
+  <line x1="0" y1="256" x2="1000" y2="256" stroke="#d9d2c0" stroke-width="0.7" />
+  <line x1="600" y1="0" x2="600" y2="640" stroke="#d9d2c0" stroke-width="0.7" />
+  <line x1="0" y1="384" x2="1000" y2="384" stroke="#d9d2c0" stroke-width="0.7" />
+  <line x1="800" y1="0" x2="800" y2="640" stroke="#d9d2c0" stroke-width="0.7" />
+  <line x1="0" y1="512" x2="1000" y2="512" stroke="#d9d2c0" stroke-width="0.7" />
+  <path d="M526.0 504.9 L524.5 504.9 L524.5 506.5 L526.0 506.5 L526.0 504.9 Z" fill="#2f8f83" fill-opacity="0.34" stroke="#0e5b52" stroke-width="1.6" />
+  <path d="M538.3 504.9 L536.7 504.9 L536.7 506.5 L538.3 506.5 L538.3 504.9 Z" fill="#2f8f83" fill-opacity="0.34" stroke="#0e5b52" stroke-width="1.6" />
+  <path d="M535.2 504.9 L533.7 504.9 L533.7 506.5 L535.2 506.5 L536.7 506.5 L536.7 504.9 L535.2 504.9 Z" fill="#2f8f83" fill-opacity="0.34" stroke="#0e5b52" stroke-width="1.6" />
+  <path d="M524.5 508.1 L524.5 509.6 L524.5 511.2 L524.5 512.8 L526.0 512.8 L527.6 512.8 L529.1 512.8 L530.6 512.8 L530.6 511.2 L530.6 509.6 L530.6 508.1 L530.6 506.5 L529.1 506.5 L527.6 506.5 L526.0 506.5 L524.5 506.5 L524.5 508.1 Z" fill="#2f8f83" fill-opacity="0.34" stroke="#0e5b52" stroke-width="1.6" />
+  <path d="M521.4 514.4 L521.4 515.9 L523.0 515.9 L524.5 515.9 L526.0 515.9 L527.6 515.9 L529.1 515.9 L529.1 514.4 L529.1 512.8 L527.6 512.8 L526.0 512.8 L524.5 512.8 L524.5 511.2 L524.5 509.6 L524.5 508.1 L524.5 506.5 L524.5 504.9 L523.0 504.9 L523.0 506.5 L523.0 508.1 L523.0 509.6 L523.0 511.2 L523.0 512.8 L521.4 512.8 L521.4 514.4 Z" fill="#2f8f83" fill-opacity="0.34" stroke="#0e5b52" stroke-width="1.6" />
+  <path d="M530.6 511.2 L530.6 512.8 L532.2 512.8 L533.7 512.8 L535.2 512.8 L535.2 511.2 L535.2 509.6 L533.7 509.6 L532.2 509.6 L530.6 509.6 L530.6 511.2 Z" fill="#2f8f83" fill-opacity="0.34" stroke="#0e5b52" stroke-width="1.6" />
+  <path d="M530.6 514.4 L530.6 515.9 L532.2 515.9 L533.7 515.9 L535.2 515.9 L535.2 514.4 L535.2 512.8 L533.7 512.8 L532.2 512.8 L530.6 512.8 L530.6 514.4 Z" fill="#2f8f83" fill-opacity="0.34" stroke="#0e5b52" stroke-width="1.6" />
+  <path d="M536.7 519.1 L536.7 520.6 L538.3 520.6 L538.3 522.2 L539.8 522.2 L539.8 520.6 L539.8 519.1 L539.8 517.5 L538.3 517.5 L536.7 517.5 L536.7 519.1 Z" fill="#2f8f83" fill-opacity="0.34" stroke="#0e5b52" stroke-width="1.6" />
+  <path d="M536.7 515.9 L536.7 517.5 L538.3 517.5 L539.8 517.5 L539.8 515.9 L539.8 514.4 L538.3 514.4 L536.7 514.4 L536.7 515.9 Z" fill="#2f8f83" fill-opacity="0.34" stroke="#0e5b52" stroke-width="1.6" />
+  <path d="M535.2 517.5 L535.2 519.1 L535.2 520.6 L536.7 520.6 L536.7 519.1 L536.7 517.5 L536.7 515.9 L535.2 515.9 L535.2 517.5 Z" fill="#2f8f83" fill-opacity="0.34" stroke="#0e5b52" stroke-width="1.6" />
+  <path d="M539.8 520.6 L539.8 522.2 L541.3 522.2 L542.9 522.2 L542.9 520.6 L542.9 519.1 L541.3 519.1 L539.8 519.1 L539.8 520.6 Z" fill="#2f8f83" fill-opacity="0.34" stroke="#0e5b52" stroke-width="1.6" />
+  <path d="M538.3 503.4 L536.7 503.4 L536.7 504.9 L538.3 504.9 L539.8 504.9 L539.8 503.4 L538.3 503.4 Z" fill="#2f8f83" fill-opacity="0.34" stroke="#0e5b52" stroke-width="1.6" />
+  <path d="M535.2 511.2 L535.2 512.8 L535.2 514.4 L535.2 515.9 L536.7 515.9 L536.7 514.4 L536.7 512.8 L536.7 511.2 L536.7 509.6 L535.2 509.6 L535.2 511.2 Z" fill="#2f8f83" fill-opacity="0.34" stroke="#0e5b52" stroke-width="1.6" />
+  <path d="M530.6 504.9 L529.1 504.9 L529.1 506.5 L530.6 506.5 L530.6 508.1 L530.6 509.6 L532.2 509.6 L533.7 509.6 L533.7 508.1 L533.7 506.5 L533.7 504.9 L532.2 504.9 L530.6 504.9 Z" fill="#2f8f83" fill-opacity="0.34" stroke="#0e5b52" stroke-width="1.6" />
+  <path d="M529.1 514.4 L529.1 515.9 L530.6 515.9 L530.6 514.4 L530.6 512.8 L529.1 512.8 L529.1 514.4 Z" fill="#2f8f83" fill-opacity="0.34" stroke="#0e5b52" stroke-width="1.6" />
+  <path d="M536.7 520.6 L535.2 520.6 L535.2 522.2 L536.7 522.2 L538.3 522.2 L538.3 520.6 L536.7 520.6 Z" fill="#2f8f83" fill-opacity="0.34" stroke="#0e5b52" stroke-width="1.6" />
+  <path d="M526.0 503.4 L524.5 503.4 L524.5 504.9 L526.0 504.9 L526.0 503.4 Z" fill="#2f8f83" fill-opacity="0.34" stroke="#0e5b52" stroke-width="1.6" />
+  <path d="M527.6 504.9 L526.0 504.9 L526.0 506.5 L527.6 506.5 L529.1 506.5 L529.1 504.9 L527.6 504.9 Z" fill="#2f8f83" fill-opacity="0.34" stroke="#0e5b52" stroke-width="1.6" />
+  <path d="M539.8 504.9 L538.3 504.9 L538.3 506.5 L539.8 506.5 L539.8 504.9 Z" fill="#2f8f83" fill-opacity="0.34" stroke="#0e5b52" stroke-width="1.6" />
+  <path d="M532.2 500.2 L532.2 501.8 L532.2 503.4 L533.7 503.4 L533.7 504.9 L535.2 504.9 L536.7 504.9 L536.7 503.4 L538.3 503.4 L539.8 503.4 L539.8 501.8 L539.8 500.2 L539.8 498.6 L538.3 498.6 L536.7 498.6 L535.2 498.6 L533.7 498.6 L532.2 498.6 L532.2 500.2 Z" fill="#2f8f83" fill-opacity="0.34" stroke="#0e5b52" stroke-width="1.6" />
+  <path d="M532.2 517.5 L532.2 519.1 L533.7 519.1 L533.7 520.6 L533.7 522.2 L535.2 522.2 L535.2 520.6 L535.2 519.1 L535.2 517.5 L535.2 515.9 L533.7 515.9 L532.2 515.9 L532.2 517.5 Z" fill="#2f8f83" fill-opacity="0.34" stroke="#0e5b52" stroke-width="1.6" />
+  <path d="M536.7 511.2 L536.7 512.8 L536.7 514.4 L538.3 514.4 L539.8 514.4 L539.8 512.8 L539.8 511.2 L539.8 509.6 L538.3 509.6 L536.7 509.6 L536.7 511.2 Z" fill="#2f8f83" fill-opacity="0.34" stroke="#0e5b52" stroke-width="1.6" />
+  <path d="M529.1 503.4 L527.6 503.4 L527.6 504.9 L529.1 504.9 L529.1 503.4 Z" fill="#2f8f83" fill-opacity="0.34" stroke="#0e5b52" stroke-width="1.6" />
+  <path d="M526.0 503.4 L526.0 504.9 L527.6 504.9 L527.6 503.4 L527.6 501.8 L526.0 501.8 L526.0 503.4 Z" fill="#2f8f83" fill-opacity="0.34" stroke="#0e5b52" stroke-width="1.6" />
+  <path d="M530.6 503.4 L529.1 503.4 L529.1 504.9 L530.6 504.9 L530.6 503.4 Z" fill="#2f8f83" fill-opacity="0.34" stroke="#0e5b52" stroke-width="1.6" />
+  <path d="M524.5 493.9 L523.0 493.9 L523.0 495.5 L524.5 495.5 L524.5 497.1 L524.5 498.6 L524.5 500.2 L526.0 500.2 L526.0 498.6 L527.6 498.6 L529.1 498.6 L530.6 498.6 L532.2 498.6 L533.7 498.6 L533.7 497.1 L532.2 497.1 L530.6 497.1 L529.1 497.1 L529.1 495.5 L527.6 495.5 L526.0 495.5 L526.0 493.9 L524.5 493.9 Z" fill="#2f8f83" fill-opacity="0.34" stroke="#0e5b52" stroke-width="1.6" />
+  <path d="M526.0 500.2 L526.0 501.8 L527.6 501.8 L527.6 503.4 L529.1 503.4 L530.6 503.4 L532.2 503.4 L532.2 501.8 L532.2 500.2 L532.2 498.6 L530.6 498.6 L529.1 498.6 L527.6 498.6 L526.0 498.6 L526.0 500.2 Z" fill="#2f8f83" fill-opacity="0.34" stroke="#0e5b52" stroke-width="1.6" />
+  <path d="M524.5 501.8 L524.5 503.4 L526.0 503.4 L526.0 501.8 L526.0 500.2 L524.5 500.2 L524.5 501.8 Z" fill="#2f8f83" fill-opacity="0.34" stroke="#0e5b52" stroke-width="1.6" />
+  <path d="M532.2 503.4 L530.6 503.4 L530.6 504.9 L532.2 504.9 L533.7 504.9 L533.7 503.4 L532.2 503.4 Z" fill="#2f8f83" fill-opacity="0.34" stroke="#0e5b52" stroke-width="1.6" />
+  <path d="M464.8 130.2 L464.8 131.8 L466.3 131.8 L467.8 131.8 L467.8 130.2 L467.8 128.6 L466.3 128.6 L464.8 128.6 L464.8 130.2 Z" fill="#2f8f83" fill-opacity="0.34" stroke="#0e5b52" stroke-width="1.6" />
+  <path d="M463.3 131.8 L463.3 133.4 L464.8 133.4 L466.3 133.4 L467.8 133.4 L469.4 133.4 L470.9 133.4 L470.9 131.8 L470.9 130.2 L470.9 128.6 L470.9 127.0 L469.4 127.0 L467.8 127.0 L467.8 128.6 L467.8 130.2 L467.8 131.8 L466.3 131.8 L464.8 131.8 L464.8 130.2 L463.3 130.2 L463.3 131.8 Z" fill="#2f8f83" fill-opacity="0.34" stroke="#0e5b52" stroke-width="1.6" />
+  <path d="M463.3 127.0 L461.7 127.0 L461.7 128.6 L463.3 128.6 L464.8 128.6 L466.3 128.6 L467.8 128.6 L467.8 127.0 L466.3 127.0 L466.3 125.4 L464.8 125.4 L463.3 125.4 L463.3 127.0 Z" fill="#2f8f83" fill-opacity="0.34" stroke="#0e5b52" stroke-width="1.6" />
+  <path d="M464.8 128.6 L463.3 128.6 L463.3 130.2 L464.8 130.2 L464.8 128.6 Z" fill="#2f8f83" fill-opacity="0.34" stroke="#0e5b52" stroke-width="1.6" />
+  <path d="M467.8 125.4 L466.3 125.4 L466.3 127.0 L467.8 127.0 L467.8 125.4 Z" fill="#2f8f83" fill-opacity="0.34" stroke="#0e5b52" stroke-width="1.6" />
+  <path d="M463.3 125.4 L461.7 125.4 L461.7 127.0 L463.3 127.0 L463.3 125.4 Z" fill="#2f8f83" fill-opacity="0.34" stroke="#0e5b52" stroke-width="1.6" />
+  <path d="M467.8 133.4 L466.3 133.4 L466.3 135.0 L467.8 135.0 L467.8 133.4 Z" fill="#2f8f83" fill-opacity="0.34" stroke="#0e5b52" stroke-width="1.6" />
+  <path d="M463.3 128.6 L461.7 128.6 L461.7 130.2 L463.3 130.2 L463.3 128.6 Z" fill="#2f8f83" fill-opacity="0.34" stroke="#0e5b52" stroke-width="1.6" />
+  <path d="M466.3 133.4 L464.8 133.4 L464.8 135.0 L466.3 135.0 L466.3 133.4 Z" fill="#2f8f83" fill-opacity="0.34" stroke="#0e5b52" stroke-width="1.6" />
+  <path d="M457.1 120.6 L457.1 122.2 L458.7 122.2 L458.7 123.8 L460.2 123.8 L461.7 123.8 L461.7 122.2 L461.7 120.6 L461.7 119.0 L460.2 119.0 L458.7 119.0 L457.1 119.0 L457.1 120.6 Z" fill="#2f8f83" fill-opacity="0.34" stroke="#0e5b52" stroke-width="1.6" />
+  <path d="M458.7 122.2 L457.1 122.2 L457.1 123.8 L458.7 123.8 L458.7 122.2 Z" fill="#2f8f83" fill-opacity="0.34" stroke="#0e5b52" stroke-width="1.6" />
+  <!-- title strip -->
+  <rect x="0" y="0" width="1000" height="54" fill="#173042" />
+  <text x="20" y="34" font-size="21" font-weight="bold" fill="#ffffff">GSP Resource Corp. — Mineral Claims</text>
+  <text x="980" y="34" font-size="15" fill="#cfe3df" text-anchor="end">GSPR</text>
+  <!-- scale bar -->
+  <g transform="translate(788.8892082881204, 596)">
+    <rect x="0" y="0" width="85.55539585593984" height="8" fill="#173042" />
+    <rect x="85.55539585593984" y="0" width="85.55539585593984" height="8" fill="#ffffff" stroke="#173042" stroke-width="1" />
+    <text x="85.55539585593984" y="-6" font-size="12" fill="#173042" text-anchor="middle">50 km</text>
+  </g>
+  <!-- north arrow -->
+  <g transform="translate(956, 92)">
+    <circle r="17" fill="#ffffff" stroke="#b9b09a" />
+    <path d="M0 -10 L5 7 L0 3 L-5 7 Z" fill="#173042" />
+    <text y="14" font-size="9" font-weight="bold" fill="#173042" text-anchor="middle">N</text>
+  </g>
+  <!-- watermark -->
+  <text x="20" y="620" font-size="13" fill="#7d8b8a">Map by Exploration Maps — explorationmaps.com</text>
+</svg>

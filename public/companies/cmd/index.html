@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Commander Resources Ltd. (TSXV: CMD) — Mineral Claims Map</title>
+<meta name="description" content="Commander Resources Ltd. holds 225 mineral claims totalling 26,219 ha in British Columbia and Ontario. Interactive claims map, claim list, and expiry dates from public registry data.">
+<link rel="canonical" href="https://www.explorationmaps.com/companies/cmd/">
+
+<meta property="og:title" content="Commander Resources Ltd. (TSXV: CMD) — Mineral Claims Map">
+<meta property="og:description" content="Commander Resources Ltd. holds 225 mineral claims totalling 26,219 ha in British Columbia and Ontario. Interactive claims map, claim list, and expiry dates from public registry data.">
+<meta property="og:url" content="https://www.explorationmaps.com/companies/cmd/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Exploration Maps">
+<meta property="og:image" content="https://www.explorationmaps.com/og-image.png">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Organization","name":"Commander Resources Ltd.","tickerSymbol":"TSXV:CMD","url":"https://www.explorationmaps.com/companies/cmd/"},{"@type":"Dataset","name":"Commander Resources Ltd. mineral claims","description":"Commander Resources Ltd. holds 225 mineral claims totalling 26,219 ha in British Columbia and Ontario. Interactive claims map, claim list, and expiry dates from public registry data.","url":"https://www.explorationmaps.com/companies/cmd/","creator":{"@type":"Organization","name":"Exploration Maps","url":"https://www.explorationmaps.com"},"dateModified":"2026-07-06","license":"https://www.mtonline.gov.bc.ca/","spatialCoverage":"British Columbia and Ontario"}]}</script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Inter',system-ui,-apple-system,sans-serif;color:#18212e;background:#fafbfd;line-height:1.6}
+a{color:#2563eb;text-decoration:none}a:hover{text-decoration:underline}
+.nav{display:flex;align-items:center;justify-content:space-between;padding:0 24px;height:58px;border-bottom:1px solid #e4e9f1;background:#fff;position:sticky;top:0;z-index:50}
+.nav-brand{display:flex;align-items:center;gap:8px;font-weight:750;font-size:15px;color:#0f1b2d}
+.nav-cta{background:#2563eb;color:#fff;padding:8px 16px;border-radius:8px;font-size:13px;font-weight:650;white-space:nowrap}
+.nav-cta:hover{background:#1d4ed8;text-decoration:none}
+.wrap{max-width:960px;margin:0 auto;padding:36px 22px 70px}
+.crumb{font-size:12.5px;color:#8b96a5;margin-bottom:16px}
+.crumb a{color:#8b96a5}
+h1{font-size:clamp(22px,3.4vw,32px);line-height:1.15;letter-spacing:-.02em;margin-bottom:10px}
+.sub{color:#566274;font-size:15px;max-width:70ch;margin-bottom:8px}
+.updated{font-size:12px;color:#8b96a5;margin-bottom:22px}
+.map-card{background:#fff;border:1px solid #e4e9f1;border-radius:14px;overflow:hidden;box-shadow:0 10px 32px -14px rgba(15,27,45,.15);margin-bottom:14px}
+.map-card img,.map-card object{display:block;width:100%;height:auto}
+.map-actions{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 30px}
+.btn{display:inline-flex;align-items:center;gap:7px;border-radius:9px;font-weight:640;font-size:13.5px;padding:9px 16px;border:1px solid transparent}
+.btn-primary{background:#2563eb;color:#fff}.btn-primary:hover{background:#1d4ed8;text-decoration:none}
+.btn-ghost{background:#fff;color:#18212e;border-color:#d4dce7}.btn-ghost:hover{border-color:#aebccf;text-decoration:none}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:0 0 30px}
+.stat{background:#fff;border:1px solid #e4e9f1;border-radius:11px;padding:14px 16px}
+.stat b{display:block;font-size:21px;letter-spacing:-.01em;font-variant-numeric:tabular-nums}
+.stat span{font-size:12px;color:#8b96a5}
+h2{font-size:18px;letter-spacing:-.01em;margin:34px 0 12px}
+table{width:100%;border-collapse:collapse;font-size:13px;background:#fff;border:1px solid #e4e9f1;border-radius:10px;overflow:hidden}
+th{background:#f3f6fa;text-align:left;padding:9px 12px;font-weight:650;color:#45566a;border-bottom:1px solid #e4e9f1}
+td{padding:8px 12px;border-bottom:1px solid #eef2f7;font-variant-numeric:tabular-nums}
+tr:last-child td{border-bottom:none}
+.tbl-wrap{overflow-x:auto;border-radius:10px}
+.claim-cta{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;background:linear-gradient(135deg,#eff6ff,#e0e7ff);border:1px solid #c7d7fe;border-radius:12px;padding:16px 20px;margin:30px 0}
+.claim-cta b{font-size:15px}
+.claim-cta span{display:block;font-size:13px;color:#566274}
+.neigh{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
+.neigh a{background:#fff;border:1px solid #e4e9f1;border-radius:11px;padding:13px 15px;display:block}
+.neigh a:hover{border-color:#2563eb;text-decoration:none}
+.neigh b{display:block;font-size:13.5px;color:#0f1b2d}
+.neigh span{font-size:12px;color:#8b96a5}
+.disclaimer{background:#fffbeb;border-left:4px solid #d97706;border-radius:0 10px 10px 0;padding:13px 16px;font-size:13px;color:#57534e;line-height:1.65;margin:34px 0}
+.footer{border-top:1px solid #e4e9f1;padding:26px 22px;text-align:center;font-size:12.5px;color:#8b96a5;background:#fff}
+.footer a{color:#566274}
+.hub-list{columns:3;column-gap:26px;font-size:14px}
+.hub-list li{margin-bottom:7px;break-inside:avoid;list-style:none}
+@media(max-width:700px){.hub-list{columns:1}}
+</style>
+</head>
+<body>
+<nav class="nav">
+  <a class="nav-brand" href="/">
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" fill="#2563eb"/></svg>
+    Exploration Maps
+  </a>
+  <a class="nav-cta" href="/">Start Mapping</a>
+</nav>
+
+<div class="wrap">
+  <p class="crumb"><a href="/">Home</a> › <a href="/companies/">Companies</a> › CMD</p>
+  <h1>Commander Resources Ltd. (TSXV: CMD) — Mineral Claims Map</h1>
+  <p class="sub">Commander Resources Ltd. holds <strong>225 mineral claims</strong> totalling <strong>26,219 ha</strong> in British Columbia and Ontario. Data from <a href="https://www.mtonline.gov.bc.ca/" rel="nofollow noopener">BC Mineral Titles Online</a> and <a href="https://www.mlas.mndm.gov.on.ca/" rel="nofollow noopener">Ontario MLAS</a> public records.</p>
+  <p class="updated">Claims updated 2026-07-06</p>
+
+  <div class="map-card"><img src="/companies-assets/CMD.svg" alt="Map of Commander Resources Ltd. mineral claims" loading="eager"></div>
+  <div class="map-actions">
+    <a class="btn btn-primary" href="/?utm_source=companies&amp;utm_campaign=CMD">Open interactive version →</a>
+    <a class="btn btn-ghost" href="/?utm_source=companies&amp;utm_campaign=CMD-export">Export an investor-ready version — free during early access.</a>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><b>225</b><span>Mineral claims</span></div>
+    <div class="stat"><b>26,219</b><span>Total hectares</span></div>
+    <div class="stat"><b>BC, ON</b><span>Provinces</span></div>
+    <div class="stat"><b>2026-10-13</b><span>Earliest good-to date</span></div>
+  </div>
+
+  <div class="claim-cta">
+    <div><b>Is this your company?</b><span>Claim this page to correct details and get an editable, branded version of this map.</span></div>
+    <a class="btn btn-primary" href="mailto:hello@explorationmaps.com?subject=Claim%20page%3A%20CMD">Claim this page</a>
+  </div>
+
+  <h2>Claim list</h2>
+  <div class="tbl-wrap">
+  <table>
+    <thead><tr><th>Claim ID</th><th>Name</th><th>Area (ha)</th><th>Good-to date</th><th>Province</th></tr></thead>
+    <tbody>
+      <tr><td>517298</td><td>—</td><td>98.1</td><td>2027-03-04</td><td>BC</td></tr>
+      <tr><td>1035123</td><td>—</td><td>398</td><td>2027-03-01</td><td>BC</td></tr>
+      <tr><td>1060658</td><td>HENRY LEE</td><td>813.7</td><td>2027-03-01</td><td>BC</td></tr>
+      <tr><td>1063545</td><td>BURN 1</td><td>1,700</td><td>2035-06-16</td><td>BC</td></tr>
+      <tr><td>1063546</td><td>BURN 2</td><td>1,773</td><td>2030-06-16</td><td>BC</td></tr>
+      <tr><td>1064096</td><td>DOME AMALGAM 2</td><td>333.5</td><td>2027-03-04</td><td>BC</td></tr>
+      <tr><td>1064097</td><td>DOME W</td><td>353.1</td><td>2027-03-04</td><td>BC</td></tr>
+      <tr><td>1064098</td><td>DOME</td><td>725.9</td><td>2027-03-04</td><td>BC</td></tr>
+      <tr><td>1064099</td><td>DOME S</td><td>176.6</td><td>2027-03-04</td><td>BC</td></tr>
+      <tr><td>1064100</td><td>DOME S 2</td><td>412.1</td><td>2027-03-04</td><td>BC</td></tr>
+      <tr><td>1065101</td><td>BURN 3</td><td>1,789</td><td>2030-02-28</td><td>BC</td></tr>
+      <tr><td>1065102</td><td>BURN 4</td><td>1,826</td><td>2030-02-28</td><td>BC</td></tr>
+      <tr><td>1065103</td><td>BURN 5</td><td>1,809</td><td>2032-06-16</td><td>BC</td></tr>
+      <tr><td>1065104</td><td>BURN 6</td><td>1,828</td><td>2035-06-16</td><td>BC</td></tr>
+      <tr><td>1065105</td><td>BURN 7</td><td>1,829</td><td>2035-06-16</td><td>BC</td></tr>
+      <tr><td>1065106</td><td>BURN 8</td><td>1,829</td><td>2030-06-16</td><td>BC</td></tr>
+      <tr><td>1065107</td><td>BURN 9</td><td>1,794</td><td>2030-02-28</td><td>BC</td></tr>
+      <tr><td>1068156</td><td>BURN 10</td><td>1,372</td><td>2030-02-28</td><td>BC</td></tr>
+      <tr><td>1072508</td><td>BURN 11</td><td>347.1</td><td>2030-06-16</td><td>BC</td></tr>
+      <tr><td>1084564</td><td>—</td><td>54.8</td><td>2035-06-16</td><td>BC</td></tr>
+      <tr><td>1084565</td><td>—</td><td>73.1</td><td>2035-06-16</td><td>BC</td></tr>
+      <tr><td>1091881</td><td>HENRY LEE 5</td><td>651.7</td><td>2027-03-01</td><td>BC</td></tr>
+      <tr><td>1099900</td><td>—</td><td>72.3</td><td>2027-03-01</td><td>BC</td></tr>
+      <tr><td>103804</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>105440</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>105441</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>105442</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>110100</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>110407</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>110408</td><td>—</td><td>20.6</td><td>2027-04-12</td><td>ON</td></tr>
+      <tr><td>110409</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>111717</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>112313</td><td>—</td><td>20.6</td><td>2027-04-12</td><td>ON</td></tr>
+      <tr><td>114366</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>123639</td><td>—</td><td>20.6</td><td>2027-04-12</td><td>ON</td></tr>
+      <tr><td>123640</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>124314</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>125279</td><td>—</td><td>20.6</td><td>2027-04-12</td><td>ON</td></tr>
+      <tr><td>128679</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>129444</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>131747</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>133197</td><td>—</td><td>20.6</td><td>2027-04-12</td><td>ON</td></tr>
+      <tr><td>135703</td><td>—</td><td>20.6</td><td>2027-04-12</td><td>ON</td></tr>
+      <tr><td>135704</td><td>—</td><td>20.6</td><td>2027-04-12</td><td>ON</td></tr>
+      <tr><td>135705</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>135706</td><td>—</td><td>20.6</td><td>2027-04-12</td><td>ON</td></tr>
+      <tr><td>137238</td><td>—</td><td>20.6</td><td>2027-04-12</td><td>ON</td></tr>
+      <tr><td>137335</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>139896</td><td>—</td><td>20.6</td><td>2027-04-12</td><td>ON</td></tr>
+      <tr><td>140662</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>140663</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>141777</td><td>—</td><td>20.6</td><td>2027-04-12</td><td>ON</td></tr>
+      <tr><td>141778</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>143216</td><td>—</td><td>20.6</td><td>2027-04-12</td><td>ON</td></tr>
+      <tr><td>143217</td><td>—</td><td>20.6</td><td>2027-04-12</td><td>ON</td></tr>
+      <tr><td>143218</td><td>—</td><td>20.6</td><td>2027-04-12</td><td>ON</td></tr>
+      <tr><td>145955</td><td>—</td><td>20.6</td><td>2027-04-12</td><td>ON</td></tr>
+      <tr><td>146073</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>146938</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>147822</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>147972</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>151045</td><td>—</td><td>20.6</td><td>2027-04-12</td><td>ON</td></tr>
+      <tr><td>151760</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>153243</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>157295</td><td>—</td><td>20.6</td><td>2027-04-12</td><td>ON</td></tr>
+      <tr><td>159388</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>159389</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>161439</td><td>—</td><td>20.6</td><td>2027-04-12</td><td>ON</td></tr>
+      <tr><td>161440</td><td>—</td><td>20.6</td><td>2027-04-12</td><td>ON</td></tr>
+      <tr><td>162014</td><td>—</td><td>20.6</td><td>2027-04-12</td><td>ON</td></tr>
+      <tr><td>162629</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>164707</td><td>—</td><td>20.6</td><td>2027-04-12</td><td>ON</td></tr>
+      <tr><td>166762</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>166826</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>167952</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>167953</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>175519</td><td>—</td><td>20.6</td><td>2027-04-12</td><td>ON</td></tr>
+      <tr><td>180873</td><td>—</td><td>20.6</td><td>2027-04-12</td><td>ON</td></tr>
+      <tr><td>184427</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>187013</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>187363</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>189261</td><td>—</td><td>20.6</td><td>2027-04-12</td><td>ON</td></tr>
+      <tr><td>189359</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>194005</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>194006</td><td>—</td><td>20.6</td><td>2027-04-12</td><td>ON</td></tr>
+      <tr><td>195031</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>196047</td><td>—</td><td>20.6</td><td>2027-04-12</td><td>ON</td></tr>
+      <tr><td>197920</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>200518</td><td>—</td><td>20.6</td><td>2027-04-12</td><td>ON</td></tr>
+      <tr><td>201929</td><td>—</td><td>20.6</td><td>2027-04-12</td><td>ON</td></tr>
+      <tr><td>201930</td><td>—</td><td>20.6</td><td>2027-04-12</td><td>ON</td></tr>
+      <tr><td>206518</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>206519</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>214479</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>214662</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>216185</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>221917</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>221918</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>224703</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>226634</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>226635</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>236990</td><td>—</td><td>20.6</td><td>2027-04-12</td><td>ON</td></tr>
+      <tr><td>238682</td><td>—</td><td>20.6</td><td>2027-04-12</td><td>ON</td></tr>
+      <tr><td>239276</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>239890</td><td>—</td><td>20.6</td><td>2027-04-12</td><td>ON</td></tr>
+      <tr><td>241616</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>242055</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>243145</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>243146</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>243147</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>248599</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>248600</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>248601</td><td>—</td><td>20.6</td><td>2027-04-12</td><td>ON</td></tr>
+      <tr><td>248602</td><td>—</td><td>20.6</td><td>2027-04-12</td><td>ON</td></tr>
+      <tr><td>248619</td><td>—</td><td>20.6</td><td>2027-04-12</td><td>ON</td></tr>
+      <tr><td>248699</td><td>—</td><td>20.6</td><td>2027-04-12</td><td>ON</td></tr>
+      <tr><td>249359</td><td>—</td><td>20.6</td><td>2027-04-12</td><td>ON</td></tr>
+      <tr><td>249360</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>249620</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>255637</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>255638</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>255639</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>256005</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>258076</td><td>—</td><td>20.6</td><td>2027-04-12</td><td>ON</td></tr>
+      <tr><td>260060</td><td>—</td><td>20.6</td><td>2027-04-12</td><td>ON</td></tr>
+      <tr><td>262053</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>263200</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>265176</td><td>—</td><td>20.6</td><td>2027-04-12</td><td>ON</td></tr>
+      <tr><td>265177</td><td>—</td><td>20.6</td><td>2027-04-12</td><td>ON</td></tr>
+      <tr><td>267125</td><td>—</td><td>20.6</td><td>2027-04-12</td><td>ON</td></tr>
+      <tr><td>268089</td><td>—</td><td>20.6</td><td>2027-04-12</td><td>ON</td></tr>
+      <tr><td>269916</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>272392</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>275903</td><td>—</td><td>20.6</td><td>2027-04-12</td><td>ON</td></tr>
+      <tr><td>276544</td><td>—</td><td>20.6</td><td>2027-04-12</td><td>ON</td></tr>
+      <tr><td>276545</td><td>—</td><td>20.6</td><td>2027-04-12</td><td>ON</td></tr>
+      <tr><td>288749</td><td>—</td><td>20.6</td><td>2027-04-12</td><td>ON</td></tr>
+      <tr><td>292643</td><td>—</td><td>20.6</td><td>2027-04-12</td><td>ON</td></tr>
+      <tr><td>293258</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>296777</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>299836</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>299910</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>299911</td><td>—</td><td>20.6</td><td>2027-04-12</td><td>ON</td></tr>
+      <tr><td>303702</td><td>—</td><td>20.6</td><td>2027-04-12</td><td>ON</td></tr>
+      <tr><td>305389</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>305390</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>305391</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>307875</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>307876</td><td>—</td><td>20.6</td><td>2027-04-12</td><td>ON</td></tr>
+      <tr><td>308483</td><td>—</td><td>20.6</td><td>2027-04-12</td><td>ON</td></tr>
+      <tr><td>308748</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>308749</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>309931</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>311053</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>320327</td><td>—</td><td>20.6</td><td>2027-04-12</td><td>ON</td></tr>
+      <tr><td>321885</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>323874</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>325247</td><td>—</td><td>20.6</td><td>2027-04-12</td><td>ON</td></tr>
+      <tr><td>325248</td><td>—</td><td>20.6</td><td>2027-04-12</td><td>ON</td></tr>
+      <tr><td>329959</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>332001</td><td>—</td><td>20.6</td><td>2027-04-12</td><td>ON</td></tr>
+      <tr><td>332002</td><td>—</td><td>20.6</td><td>2027-04-12</td><td>ON</td></tr>
+      <tr><td>332525</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>337100</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>342804</td><td>—</td><td>20.6</td><td>2026-10-13</td><td>ON</td></tr>
+      <tr><td>540275</td><td>—</td><td>20.6</td><td>2027-01-30</td><td>ON</td></tr>
+      <tr><td>540276</td><td>—</td><td>20.6</td><td>2027-01-30</td><td>ON</td></tr>
+      <tr><td>540277</td><td>—</td><td>20.6</td><td>2027-01-30</td><td>ON</td></tr>
+      <tr><td>540278</td><td>—</td><td>20.6</td><td>2027-01-30</td><td>ON</td></tr>
+      <tr><td>540280</td><td>—</td><td>20.6</td><td>2027-01-30</td><td>ON</td></tr>
+      <tr><td>540281</td><td>—</td><td>20.6</td><td>2027-01-30</td><td>ON</td></tr>
+      <tr><td>540282</td><td>—</td><td>20.6</td><td>2027-01-30</td><td>ON</td></tr>
+      <tr><td>540283</td><td>—</td><td>20.6</td><td>2027-01-30</td><td>ON</td></tr>
+      <tr><td>540284</td><td>—</td><td>20.6</td><td>2027-01-30</td><td>ON</td></tr>
+      <tr><td>540286</td><td>—</td><td>20.6</td><td>2027-01-30</td><td>ON</td></tr>
+      <tr><td>540287</td><td>—</td><td>20.6</td><td>2027-01-30</td><td>ON</td></tr>
+      <tr><td>540288</td><td>—</td><td>20.6</td><td>2027-01-30</td><td>ON</td></tr>
+      <tr><td>540289</td><td>—</td><td>20.6</td><td>2027-01-30</td><td>ON</td></tr>
+      <tr><td>540290</td><td>—</td><td>20.6</td><td>2027-01-30</td><td>ON</td></tr>
+      <tr><td>540291</td><td>—</td><td>20.6</td><td>2027-01-30</td><td>ON</td></tr>
+      <tr><td>540292</td><td>—</td><td>20.6</td><td>2027-01-30</td><td>ON</td></tr>
+      <tr><td>540293</td><td>—</td><td>20.6</td><td>2027-01-30</td><td>ON</td></tr>
+      <tr><td>540296</td><td>—</td><td>20.6</td><td>2027-01-30</td><td>ON</td></tr>
+      <tr><td>540298</td><td>—</td><td>20.6</td><td>2027-01-30</td><td>ON</td></tr>
+      <tr><td>540299</td><td>—</td><td>20.6</td><td>2027-01-30</td><td>ON</td></tr>
+      <tr><td>540301</td><td>—</td><td>20.6</td><td>2027-01-30</td><td>ON</td></tr>
+      <tr><td>540302</td><td>—</td><td>20.6</td><td>2027-01-30</td><td>ON</td></tr>
+      <tr><td>540303</td><td>—</td><td>20.6</td><td>2027-01-30</td><td>ON</td></tr>
+      <tr><td>540305</td><td>—</td><td>20.6</td><td>2027-01-30</td><td>ON</td></tr>
+      <tr><td>540306</td><td>—</td><td>20.6</td><td>2027-01-30</td><td>ON</td></tr>
+      <tr><td>540307</td><td>—</td><td>20.6</td><td>2027-01-30</td><td>ON</td></tr>
+      <tr><td>540309</td><td>—</td><td>20.6</td><td>2027-01-30</td><td>ON</td></tr>
+      <tr><td>540311</td><td>—</td><td>20.6</td><td>2027-01-30</td><td>ON</td></tr>
+      <tr><td>540312</td><td>—</td><td>20.6</td><td>2027-01-30</td><td>ON</td></tr>
+      <tr><td>540314</td><td>—</td><td>20.6</td><td>2027-01-30</td><td>ON</td></tr>
+      <tr><td>540315</td><td>—</td><td>20.6</td><td>2027-01-30</td><td>ON</td></tr>
+      <tr><td>540316</td><td>—</td><td>20.6</td><td>2027-01-30</td><td>ON</td></tr>
+      <tr><td>540317</td><td>—</td><td>20.6</td><td>2027-01-30</td><td>ON</td></tr>
+      <tr><td>540337</td><td>—</td><td>20.6</td><td>2027-01-30</td><td>ON</td></tr>
+      <tr><td>540338</td><td>—</td><td>20.6</td><td>2027-01-30</td><td>ON</td></tr>
+      <tr><td>540340</td><td>—</td><td>20.6</td><td>2027-01-30</td><td>ON</td></tr>
+      <tr><td>540344</td><td>—</td><td>20.6</td><td>2027-01-30</td><td>ON</td></tr>
+      <tr><td>540354</td><td>—</td><td>20.6</td><td>2027-01-30</td><td>ON</td></tr>
+      <tr><td>540356</td><td>—</td><td>20.6</td><td>2027-01-30</td><td>ON</td></tr>
+      <tr><td>540396</td><td>—</td><td>20.6</td><td>2027-01-30</td><td>ON</td></tr>
+      <tr><td>540399</td><td>—</td><td>20.6</td><td>2027-01-30</td><td>ON</td></tr>
+      <tr><td>540403</td><td>—</td><td>20.6</td><td>2027-01-30</td><td>ON</td></tr>
+      <tr><td>540406</td><td>—</td><td>20.6</td><td>2027-01-30</td><td>ON</td></tr>
+      <tr><td>540407</td><td>—</td><td>20.6</td><td>2027-01-30</td><td>ON</td></tr>
+      <tr><td>540408</td><td>—</td><td>20.6</td><td>2027-01-30</td><td>ON</td></tr>
+      <tr><td>540412</td><td>—</td><td>20.6</td><td>2027-01-30</td><td>ON</td></tr>
+      <tr><td>540416</td><td>—</td><td>20.6</td><td>2027-01-30</td><td>ON</td></tr>
+      <tr><td>540417</td><td>—</td><td>20.6</td><td>2027-01-30</td><td>ON</td></tr>
+      <tr><td>540418</td><td>—</td><td>20.6</td><td>2027-01-30</td><td>ON</td></tr>
+      <tr><td>540432</td><td>—</td><td>20.6</td><td>2027-01-30</td><td>ON</td></tr>
+      <tr><td>540433</td><td>—</td><td>20.6</td><td>2027-01-30</td><td>ON</td></tr>
+      <tr><td>620677</td><td>—</td><td>20.6</td><td>2026-11-26</td><td>ON</td></tr>
+      <tr><td>620678</td><td>—</td><td>20.6</td><td>2026-11-26</td><td>ON</td></tr>
+      <tr><td>620679</td><td>—</td><td>20.6</td><td>2026-11-26</td><td>ON</td></tr>
+      <tr><td>620680</td><td>—</td><td>20.6</td><td>2026-11-26</td><td>ON</td></tr>
+      <tr><td>620681</td><td>—</td><td>20.6</td><td>2026-11-26</td><td>ON</td></tr>
+      <tr><td>913104</td><td>—</td><td>20.6</td><td>2026-11-26</td><td>ON</td></tr>
+      <tr><td>913105</td><td>—</td><td>20.6</td><td>2026-11-26</td><td>ON</td></tr>
+      <tr><td>913106</td><td>—</td><td>20.6</td><td>2026-11-26</td><td>ON</td></tr>
+      <tr><td>913107</td><td>—</td><td>20.6</td><td>2026-11-26</td><td>ON</td></tr>
+    </tbody>
+  </table>
+  </div>
+  
+
+  
+  <h2>Neighbouring claim holders</h2>
+  <div class="neigh">
+    <a href="/companies/bbb/"><b>Brixton Metals Corporation</b><span>TSXV: BBB · ~145 km away</span></a>
+    <a href="/companies/pjx/"><b>PJX Resources Inc.</b><span>TSXV: PJX · ~638 km away</span></a>
+    <a href="/companies/tro/"><b>Taranis Resources Inc.</b><span>TSXV: TRO · ~660 km away</span></a>
+    <a href="/companies/auen/"><b>Golden Sky Minerals Corp.</b><span>TSXV: AUEN · ~866 km away</span></a>
+    <a href="/companies/kdk/"><b>Kodiak Copper Corp.</b><span>TSXV: KDK · ~900 km away</span></a>
+    <a href="/companies/gspr/"><b>GSP Resource Corp.</b><span>TSXV: GSPR · ~916 km away</span></a>
+  </div>
+
+  <div class="disclaimer">
+    Sourced from BC Mineral Titles Online and Ontario MLAS public records on 2026-07-06. Exploration Maps is a mapping tool, not the official registry — claim status changes daily. Always verify current ownership, status, and boundaries with the registry.
+    <a href="mailto:hello@explorationmaps.com?subject=Data%20correction%3A%20CMD">Report an error</a>.
+  </div>
+</div>
+<footer class="footer">
+  <p><a href="/">Home</a> · <a href="/companies/">Companies</a> · <a href="/blog/">Guides</a> · <a href="/about/">About</a> · <a href="/privacy/">Privacy</a></p>
+  <p style="margin-top:6px">© 2026 Exploration Maps</p>
+</footer>
+</body>
+</html>

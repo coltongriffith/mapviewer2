@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 640" font-family="Arial, Helvetica, sans-serif">
+  <rect width="1000" height="640" fill="#f3efe6" />
+  <line x1="200" y1="0" x2="200" y2="640" stroke="#d9d2c0" stroke-width="0.7" />
+  <line x1="0" y1="128" x2="1000" y2="128" stroke="#d9d2c0" stroke-width="0.7" />
+  <line x1="400" y1="0" x2="400" y2="640" stroke="#d9d2c0" stroke-width="0.7" />
+  <line x1="0" y1="256" x2="1000" y2="256" stroke="#d9d2c0" stroke-width="0.7" />
+  <line x1="600" y1="0" x2="600" y2="640" stroke="#d9d2c0" stroke-width="0.7" />
+  <line x1="0" y1="384" x2="1000" y2="384" stroke="#d9d2c0" stroke-width="0.7" />
+  <line x1="800" y1="0" x2="800" y2="640" stroke="#d9d2c0" stroke-width="0.7" />
+  <line x1="0" y1="512" x2="1000" y2="512" stroke="#d9d2c0" stroke-width="0.7" />
+  <path d="M347.7 481.3 L347.8 521.6 L381.6 521.6 L415.4 521.6 L449.3 521.6 L483.1 521.6 L516.9 521.6 L516.9 481.3 L550.8 481.3 L550.8 441.0 L550.8 400.7 L550.8 360.4 L550.8 320.1 L550.8 279.8 L550.8 239.4 L516.9 239.4 L483.1 239.4 L449.2 239.4 L415.4 239.4 L381.6 239.4 L381.6 279.8 L347.7 279.8 L347.7 320.1 L347.7 360.4 L347.7 400.7 L347.7 441.0 L347.7 481.3 Z" fill="#2f8f83" fill-opacity="0.34" stroke="#0e5b52" stroke-width="1.6" />
+  <path d="M516.9 199.1 L516.9 239.4 L550.8 239.4 L550.8 279.8 L584.6 279.8 L618.4 279.8 L652.3 279.8 L652.3 239.4 L652.3 199.1 L652.3 158.8 L652.3 118.4 L618.4 118.4 L584.6 118.4 L550.7 118.4 L516.9 118.4 L516.9 158.8 L516.9 199.1 Z" fill="#2f8f83" fill-opacity="0.34" stroke="#0e5b52" stroke-width="1.6" />
+  <!-- title strip -->
+  <rect x="0" y="0" width="1000" height="54" fill="#173042" />
+  <text x="20" y="34" font-size="21" font-weight="bold" fill="#ffffff">StrikePoint Gold Inc. — Mineral Claims</text>
+  <text x="980" y="34" font-size="15" fill="#cfe3df" text-anchor="end">SKP</text>
+  <!-- scale bar -->
+  <g transform="translate(786.1373724290288, 596)">
+    <rect x="0" y="0" width="86.93131378548559" height="8" fill="#173042" />
+    <rect x="86.93131378548559" y="0" width="86.93131378548559" height="8" fill="#ffffff" stroke="#173042" stroke-width="1" />
+    <text x="86.93131378548559" y="-6" font-size="12" fill="#173042" text-anchor="middle">2 km</text>
+  </g>
+  <!-- north arrow -->
+  <g transform="translate(956, 92)">
+    <circle r="17" fill="#ffffff" stroke="#b9b09a" />
+    <path d="M0 -10 L5 7 L0 3 L-5 7 Z" fill="#173042" />
+    <text y="14" font-size="9" font-weight="bold" fill="#173042" text-anchor="middle">N</text>
+  </g>
+  <!-- watermark -->
+  <text x="20" y="620" font-size="13" fill="#7d8b8a">Map by Exploration Maps — explorationmaps.com</text>
+</svg>
