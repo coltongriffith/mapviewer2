@@ -2173,6 +2173,46 @@ export default function App() {
     setUploadStatus({ type: 'success', message: 'Aurora Ridge Minerals demo loaded — explore the live investor map.' });
   };
 
+  // Deep link from a public /companies/[ticker] page. "/?claims=TICKER" fetches
+  // that company's registered claim geometry (served by the pSEO pipeline at
+  // /companies-assets/[TICKER].geojson) and opens it as an editable claims layer
+  // — so "Open interactive version" lands on the company's real map, not a blank
+  // editor. Runs once on mount; a missing/empty file falls back to the landing.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const raw = params.get('claims');
+    if (!raw) return;
+    const ticker = raw.toUpperCase();
+    if (!/^[A-Z0-9.\-]{1,12}$/.test(ticker)) return;
+    const company = params.get('company');
+    let cancelled = false;
+    (async () => {
+      setUploadStatus({ type: 'info', message: `Loading ${company || ticker} claims…` });
+      try {
+        const res = await fetch(`/companies-assets/${ticker}.geojson`);
+        if (!res.ok) throw new Error(`no published claims for ${ticker}`);
+        const geojson = await res.json();
+        if (cancelled) return;
+        if (!geojson?.features?.length) throw new Error('empty claim set');
+        setProject(createInitialProjectState());
+        await addGeoJSONAsLayer(geojson, `${company || ticker} Claims.geojson`);
+        updateLayout({
+          title: company ? `${company} — Mineral Claims` : `${ticker} — Mineral Claims`,
+          exportSettings: { filename: `${ticker.toLowerCase()}-claims`, pixelRatio: 2 },
+        });
+        setScreen('editor');
+        setUploadStatus({ type: 'success', message: `Loaded ${geojson.features.length} claims — style and export your map.` });
+      } catch (err) {
+        if (!cancelled) setUploadStatus({ type: 'error', message: `Couldn't load claims: ${err.message}` });
+      } finally {
+        // Drop the query string so a refresh doesn't re-trigger the load.
+        if (!cancelled) window.history.replaceState({}, '', '/');
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const hexToHsl = (hex) => {
     const r = parseInt(hex.slice(1, 3), 16) / 255;
     const g = parseInt(hex.slice(3, 5), 16) / 255;
