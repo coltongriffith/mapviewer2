@@ -111,7 +111,24 @@ ${body}
 function companyPage({ iss, claims, geo, neighbours, updated }) {
   const provs = [...new Set(claims.map((c) => c.province))];
   const provNames = provs.map((p) => PROV_NAME[p] || p).join(' and ');
-  const totalHa = claims.reduce((a, c) => a + (Number(c.area_ha) || 0), 0);
+  // Some registries (Ontario MLAS) don't publish a claim area and the polygon
+  // can be missing, so an area of 0 means "unknown", not a zero-hectare claim.
+  // Sum only known areas, and phrase the total so unknowns aren't misrepresented.
+  const hasArea = (c) => Number(c.area_ha) > 0;
+  const knownArea = claims.filter(hasArea);
+  const totalHa = knownArea.reduce((a, c) => a + Number(c.area_ha), 0);
+  const allAreasKnown = knownArea.length === claims.length;
+  // Prose fragment: "" when no areas known, " totalling X ha" when all known,
+  // " spanning over X ha" when only some are.
+  const haPhrase = knownArea.length === 0 ? ''
+    : allAreasKnown ? ` totalling ${fmtHa(totalHa)} ha`
+    : ` spanning over ${fmtHa(totalHa)} ha`;
+  // Same fragment with the hectares figure bolded, for the on-page headline.
+  const haPhraseHtml = knownArea.length === 0 ? ''
+    : allAreasKnown ? ` totalling <strong>${fmtHa(totalHa)} ha</strong>`
+    : ` spanning over <strong>${fmtHa(totalHa)} ha</strong>`;
+  const totalHaStat = knownArea.length === 0 ? '—'
+    : allAreasKnown ? fmtHa(totalHa) : `${fmtHa(totalHa)}+`;
   const registries = provs.map((p) => REGISTRY_BY_PROV[p]).filter(Boolean);
   const url = `${SITE}/companies/${iss.ticker.toLowerCase()}/`;
   const mapSvg = `/companies-assets/${iss.ticker}.svg`;
@@ -120,11 +137,11 @@ function companyPage({ iss, claims, geo, neighbours, updated }) {
   const ogPngPath = path.join(PATHS.assetsOut, `${iss.ticker}-og.png`);
   const ogPng = fs.existsSync(ogPngPath) ? `${SITE}/companies-assets/${iss.ticker}-og.png` : `${SITE}/og-image.png`;
   const title = `${iss.company} (${iss.exchange}: ${iss.ticker}) — Mineral Claims Map`;
-  const description = `${iss.company} holds ${claims.length} mineral claims totalling ${fmtHa(totalHa)} ha in ${provNames}. Interactive claims map, claim list, and expiry dates from public registry data.`;
+  const description = `${iss.company} holds ${claims.length} mineral claims${haPhrase} in ${provNames}. Interactive claims map, claim list, and expiry dates from public registry data.`;
 
   const exportCopy = PAGES.showPricing ? PAGES.pricedExportCopy : PAGES.freeExportCopy;
   const claimRows = claims.slice(0, PAGES.claimsTableMax).map((c) => `
-      <tr><td>${esc(c.claim_id)}</td><td>${esc(c.claim_name || '—')}</td><td>${fmtHa(c.area_ha)}</td><td>${esc(c.good_to_date || '—')}</td><td>${esc(c.province)}</td></tr>`).join('');
+      <tr><td>${esc(c.claim_id)}</td><td>${esc(c.claim_name || '—')}</td><td>${hasArea(c) ? fmtHa(c.area_ha) : '—'}</td><td>${esc(c.good_to_date || '—')}</td><td>${esc(c.province)}</td></tr>`).join('');
 
   const neighHtml = neighbours.length ? `
   <h2>Neighbouring claim holders</h2>
@@ -153,7 +170,7 @@ function companyPage({ iss, claims, geo, neighbours, updated }) {
 <div class="wrap">
   <p class="crumb"><a href="/">Home</a> › <a href="/companies/">Companies</a> › ${esc(iss.ticker)}</p>
   <h1>${esc(iss.company)} (${esc(iss.exchange)}: ${esc(iss.ticker)}) — Mineral Claims Map</h1>
-  <p class="sub">${esc(iss.company)} holds <strong>${claims.length} mineral claims</strong> totalling <strong>${fmtHa(totalHa)} ha</strong> in ${esc(provNames)}. Data from ${registries.map((r) => `<a href="${r.url}" rel="nofollow noopener">${esc(r.name)}</a>`).join(' and ')} public records.</p>
+  <p class="sub">${esc(iss.company)} holds <strong>${claims.length} mineral claims</strong>${haPhraseHtml} in ${esc(provNames)}. Data from ${registries.map((r) => `<a href="${r.url}" rel="nofollow noopener">${esc(r.name)}</a>`).join(' and ')} public records.</p>
   <p class="updated">Claims updated ${esc(updated)}</p>
 
   <div class="map-card"><img src="${mapSvg}" alt="Map of ${esc(iss.company)} mineral claims" loading="eager"></div>
@@ -164,7 +181,7 @@ function companyPage({ iss, claims, geo, neighbours, updated }) {
 
   <div class="stats">
     <div class="stat"><b>${claims.length}</b><span>Mineral claims</span></div>
-    <div class="stat"><b>${fmtHa(totalHa)}</b><span>Total hectares</span></div>
+    <div class="stat"><b>${totalHaStat}</b><span>Total hectares${allAreasKnown ? '' : ' (known)'}</span></div>
     <div class="stat"><b>${provs.join(', ')}</b><span>Province${provs.length > 1 ? 's' : ''}</span></div>
     <div class="stat"><b>${esc(nextExpiry(claims))}</b><span>Earliest good-to date</span></div>
   </div>
