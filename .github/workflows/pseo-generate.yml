@@ -20,6 +20,14 @@ name: pSEO — Generate company pages
 #      override it here.
 
 on:
+  # Monthly self-refresh so pages track claim status, good-to dates, dropped
+  # tickers and newly-standing ground without a manual run. Reuses the single
+  # `pseo-refresh` branch/PR (create-pull-request updates it in place), so this
+  # keeps one always-current refresh PR rather than opening a new one each time.
+  # Claim data changes slowly, so monthly balances freshness against registry
+  # load (each run pulls the full BC + Ontario tenure sets).
+  schedule:
+    - cron: '0 8 1 * *'   # 08:00 UTC on the 1st of each month
   workflow_dispatch:
     inputs:
       issuers_csv_path:
