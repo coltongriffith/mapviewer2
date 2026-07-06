@@ -1,11 +1,40 @@
-# One ticker per line — only tickers listed here get a live /companies/ page.
-# Lines starting with # are comments/ignored. Keep this list small at first
-# (batch 1 ≈ your first ~100 outreach targets); grow it once indexing looks
-# healthy in Search Console. See scripts/pseo/README.md for the full rollout plan.
-#
-# Example:
-# ARM
-# BCK
+# Batch 1 — first 40 strongest BC-cluster candidates from the top-100 list
+# (see data/pseo/manual/company_notes.md). AMK, CUU, LBC pulled pending
+# ownership review — their own notes flag JV/alias uncertainty.
 GOT.V
-SGD.TO
-FDR.V
+TUD.V
+ESK.V
+DV.V
+KFR.V
+BBB.V
+GSTM.V
+TUO.V
+SVG.V
+DEC.V
+SCOT.V
+JUGR.V
+MTB.V
+MTS.V
+SKP.V
+ENDR.CN
+COCO.V
+AHR.V
+KDK.V
+NCX.V
+SURG.V
+PEX.V
+AWX.V
+PJX.V
+EPL.V
+TRO.V
+GLDC.V
+PEMC.V
+GIT.V
+SPMT.CN
+AUEN.V
+TBK.V
+FYL.V
+STU.V
+CMD.V
+DBG.V
+GSPR.V
