@@ -2194,7 +2194,17 @@ export default function App() {
         const geojson = await res.json();
         if (cancelled) return;
         if (!geojson?.features?.length) throw new Error('empty claim set');
+        // Start a fresh, unowned workspace so Save/autosave creates a NEW map
+        // rather than overwriting whatever project the user last had open.
         setProject(createInitialProjectState());
+        setProjectId(null);
+        setProjectName(company ? `${company} — Mineral Claims` : `${ticker} — Mineral Claims`);
+        setSelectedLayerId(null);
+        setSelectedCalloutId(null);
+        setSelectedFeature(null);
+        setSelectedMarkerId(null);
+        setSelectedEllipseId(null);
+        clearActiveProjectContext();
         await addGeoJSONAsLayer(geojson, `${company || ticker} Claims.geojson`);
         updateLayout({
           title: company ? `${company} — Mineral Claims` : `${ticker} — Mineral Claims`,
