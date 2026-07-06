@@ -297,10 +297,23 @@ function main() {
   for (const [ticker, owners] of ownersByTicker) {
     const iss = issuerByTicker.get(ticker);
     if (!iss) { console.warn(`  ! ${ticker}: not in issuers.csv — skipped`); continue; }
-    const claims = liveClaimsByTicker.get(ticker);
-    if (!claims.length) { console.warn(`  ! ${ticker}: no live claims — skipped`); continue; }
+    const liveClaims = liveClaimsByTicker.get(ticker);
+    if (!liveClaims.length) { console.warn(`  ! ${ticker}: no live claims — skipped`); continue; }
     const gf = path.join(PATHS.geo, `${ticker}.geojson`);
     if (!fs.existsSync(gf)) { console.warn(`  ! ${ticker}: no map render — skipped (run 05+06)`); continue; }
+
+    // Backfill missing areas (Ontario claims carry no hectares in the CSV) from
+    // the geometry file, which computes area from the polygon in step 05.
+    let geoAreaById = new Map();
+    try {
+      const gj = JSON.parse(fs.readFileSync(gf, 'utf8'));
+      geoAreaById = new Map((gj.features || [])
+        .map((f) => [String(f.properties?.claim_id ?? ''), Number(f.properties?.area_ha) || 0])
+        .filter(([id, ha]) => id && ha > 0));
+    } catch { /* fall back to CSV areas */ }
+    const claims = liveClaims.map((c) => (
+      Number(c.area_ha) > 0 ? c : { ...c, area_ha: geoAreaById.get(String(c.claim_id)) || c.area_ha }
+    ));
 
     const me = centroids.get(ticker);
     const neighbours = me ? [...centroids.entries()]
