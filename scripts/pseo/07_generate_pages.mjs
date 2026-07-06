@@ -175,8 +175,8 @@ function companyPage({ iss, claims, geo, neighbours, updated }) {
 
   <div class="map-card"><img src="${mapSvg}" alt="Map of ${esc(iss.company)} mineral claims" loading="eager"></div>
   <div class="map-actions">
-    <a class="btn btn-primary" href="/?utm_source=companies&amp;utm_campaign=${esc(iss.ticker)}">Open interactive version →</a>
-    <a class="btn btn-ghost" href="/?utm_source=companies&amp;utm_campaign=${esc(iss.ticker)}-export">${esc(exportCopy)}</a>
+    <a class="btn btn-primary" href="/?claims=${encodeURIComponent(iss.ticker)}&amp;company=${encodeURIComponent(iss.company)}&amp;utm_source=companies&amp;utm_campaign=${encodeURIComponent(iss.ticker)}">Open interactive version →</a>
+    <a class="btn btn-ghost" href="/?claims=${encodeURIComponent(iss.ticker)}&amp;company=${encodeURIComponent(iss.company)}&amp;utm_source=companies&amp;utm_campaign=${encodeURIComponent(iss.ticker)}-export">${esc(exportCopy)}</a>
   </div>
 
   <div class="stats">
@@ -344,6 +344,10 @@ function main() {
     const dir = path.join(PATHS.pagesOut, ticker.toLowerCase());
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, 'index.html'), html);
+    // Deploy the claim geometry so the page's "Open interactive version" button
+    // can deep-link into the editor (/?claims=TICKER fetches this file).
+    fs.mkdirSync(PATHS.assetsOut, { recursive: true });
+    fs.copyFileSync(gf, path.join(PATHS.assetsOut, `${ticker}.geojson`));
     published.push({ ...iss, provinces: [...new Set(claims.map((c) => c.province))] });
     console.log(`  ✓ /companies/${ticker.toLowerCase()}/ (${claims.length} claims)`);
   }
@@ -369,7 +373,7 @@ function main() {
   if (fs.existsSync(PATHS.assetsOut)) {
     const keep = new Set(published.map((p) => p.ticker));
     for (const f of fs.readdirSync(PATHS.assetsOut)) {
-      const ticker = f.replace(/-og\.png$|\.svg$|\.png$/, '');
+      const ticker = f.replace(/-og\.png$|\.svg$|\.png$|\.geojson$/, '');
       if (!keep.has(ticker)) {
         fs.rmSync(path.join(PATHS.assetsOut, f), { force: true });
         console.log(`  ✂ pruned orphaned asset ${f}`);
