@@ -499,6 +499,7 @@ function buildHowToPage(post, allPosts) {
       <p class="breadcrumb"><a href="/">Home</a><span>›</span><a href="/blog/">Blog</a><span>›</span><a href="/blog/how-to/">How-to Guides</a><span>›</span>${esc(post.title)} ${pubDate}</p>
       <h1>${esc(post.title)}</h1>
       <p class="direct-answer">${esc(post.directAnswer)}</p>
+      ${heroFigureForPost(post)}
       ${topCta}
       ${renderSections(post.sections || [])}
       ${bottomCta}
@@ -561,6 +562,7 @@ function buildCompPage(post, allPosts) {
       <p class="breadcrumb"><a href="/">Home</a><span>›</span><a href="/blog/">Blog</a><span>›</span><a href="/blog/comparisons/">Comparisons</a><span>›</span>${esc(post.title)} ${compPubDate}</p>
       <h1>${esc(post.title)}</h1>
       <p class="direct-answer">${esc(post.directAnswer)}</p>
+      ${heroFigureForPost(post)}
       ${renderSections(post.sections || [])}
       ${tableHtml}
       ${faqBlock(post.faqs)}
@@ -592,6 +594,21 @@ const INLINE_BY_MAPTYPE = {
   'target-generation-map': { src: '/blog-img/title-block.png', alt: 'Styled target areas with a branded title block' },
   'infrastructure-map': { src: '/blog-img/title-block.png', alt: 'Infrastructure map with a branded title block' },
 };
+
+// Hero figure for a how-to / comparison post that carries no image section of
+// its own — uses the post's map-type export when known, else a polished
+// finished-map default. Returns '' for posts that already embed screenshots,
+// so the top-10 rewritten guides aren't double-imaged.
+function heroFigureForPost(post) {
+  const hasOwnImage = (post.sections || []).some(s => s.image || s.type === 'image');
+  if (hasOwnImage) return '';
+  const src = (post.mapTypeId && HERO_BY_MAPTYPE[post.mapTypeId]) || '/gallery/ba-after.png';
+  return figureBlock({
+    src,
+    alt: 'Example mining map created in Exploration Maps',
+    caption: 'A finished map exported from Exploration Maps — the kind of output this guide walks you to.',
+  });
+}
 
 function buildLocationPage(location, mapType) {
   const pageSlug = `${mapType.slug}-${location.slug}`;
