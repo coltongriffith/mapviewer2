@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Engold Mines Ltd. (TSXV: EGM) — Mineral Claims Map</title>
+<meta name="description" content="Engold Mines Ltd. holds 103 mineral claims totalling 27,999 ha in British Columbia. Interactive claims map, claim list, and expiry dates from public registry data.">
+<link rel="canonical" href="https://www.explorationmaps.com/companies/egm/">
+
+<meta property="og:title" content="Engold Mines Ltd. (TSXV: EGM) — Mineral Claims Map">
+<meta property="og:description" content="Engold Mines Ltd. holds 103 mineral claims totalling 27,999 ha in British Columbia. Interactive claims map, claim list, and expiry dates from public registry data.">
+<meta property="og:url" content="https://www.explorationmaps.com/companies/egm/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Exploration Maps">
+<meta property="og:image" content="https://www.explorationmaps.com/og-image.png">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Organization","name":"Engold Mines Ltd.","tickerSymbol":"TSXV:EGM","url":"https://www.explorationmaps.com/companies/egm/"},{"@type":"Dataset","name":"Engold Mines Ltd. mineral claims","description":"Engold Mines Ltd. holds 103 mineral claims totalling 27,999 ha in British Columbia. Interactive claims map, claim list, and expiry dates from public registry data.","url":"https://www.explorationmaps.com/companies/egm/","creator":{"@type":"Organization","name":"Exploration Maps","url":"https://www.explorationmaps.com"},"dateModified":"2026-07-07","license":"https://www.mtonline.gov.bc.ca/","spatialCoverage":"British Columbia"}]}</script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Inter',system-ui,-apple-system,sans-serif;color:#18212e;background:#fafbfd;line-height:1.6}
+a{color:#2563eb;text-decoration:none}a:hover{text-decoration:underline}
+.nav{display:flex;align-items:center;justify-content:space-between;padding:0 24px;height:58px;border-bottom:1px solid #e4e9f1;background:#fff;position:sticky;top:0;z-index:50}
+.nav-brand{display:flex;align-items:center;gap:8px;font-weight:750;font-size:15px;color:#0f1b2d}
+.nav-cta{background:#2563eb;color:#fff;padding:8px 16px;border-radius:8px;font-size:13px;font-weight:650;white-space:nowrap}
+.nav-cta:hover{background:#1d4ed8;text-decoration:none}
+.wrap{max-width:960px;margin:0 auto;padding:36px 22px 70px}
+.crumb{font-size:12.5px;color:#8b96a5;margin-bottom:16px}
+.crumb a{color:#8b96a5}
+h1{font-size:clamp(22px,3.4vw,32px);line-height:1.15;letter-spacing:-.02em;margin-bottom:10px}
+.sub{color:#566274;font-size:15px;max-width:70ch;margin-bottom:8px}
+.updated{font-size:12px;color:#8b96a5;margin-bottom:22px}
+.map-card{background:#fff;border:1px solid #e4e9f1;border-radius:14px;overflow:hidden;box-shadow:0 10px 32px -14px rgba(15,27,45,.15);margin-bottom:14px}
+.map-card img,.map-card object{display:block;width:100%;height:auto}
+.map-actions{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 30px}
+.btn{display:inline-flex;align-items:center;gap:7px;border-radius:9px;font-weight:640;font-size:13.5px;padding:9px 16px;border:1px solid transparent}
+.btn-primary{background:#2563eb;color:#fff}.btn-primary:hover{background:#1d4ed8;text-decoration:none}
+.btn-ghost{background:#fff;color:#18212e;border-color:#d4dce7}.btn-ghost:hover{border-color:#aebccf;text-decoration:none}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:0 0 30px}
+.stat{background:#fff;border:1px solid #e4e9f1;border-radius:11px;padding:14px 16px}
+.stat b{display:block;font-size:21px;letter-spacing:-.01em;font-variant-numeric:tabular-nums}
+.stat span{font-size:12px;color:#8b96a5}
+h2{font-size:18px;letter-spacing:-.01em;margin:34px 0 12px}
+table{width:100%;border-collapse:collapse;font-size:13px;background:#fff;border:1px solid #e4e9f1;border-radius:10px;overflow:hidden}
+th{background:#f3f6fa;text-align:left;padding:9px 12px;font-weight:650;color:#45566a;border-bottom:1px solid #e4e9f1}
+td{padding:8px 12px;border-bottom:1px solid #eef2f7;font-variant-numeric:tabular-nums}
+tr:last-child td{border-bottom:none}
+.tbl-wrap{overflow-x:auto;border-radius:10px}
+.claim-cta{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;background:linear-gradient(135deg,#eff6ff,#e0e7ff);border:1px solid #c7d7fe;border-radius:12px;padding:16px 20px;margin:30px 0}
+.claim-cta b{font-size:15px}
+.claim-cta span{display:block;font-size:13px;color:#566274}
+.neigh{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
+.neigh a{background:#fff;border:1px solid #e4e9f1;border-radius:11px;padding:13px 15px;display:block}
+.neigh a:hover{border-color:#2563eb;text-decoration:none}
+.neigh b{display:block;font-size:13.5px;color:#0f1b2d}
+.neigh span{font-size:12px;color:#8b96a5}
+.disclaimer{background:#fffbeb;border-left:4px solid #d97706;border-radius:0 10px 10px 0;padding:13px 16px;font-size:13px;color:#57534e;line-height:1.65;margin:34px 0}
+.footer{border-top:1px solid #e4e9f1;padding:26px 22px;text-align:center;font-size:12.5px;color:#8b96a5;background:#fff}
+.footer a{color:#566274}
+.hub-list{columns:3;column-gap:26px;font-size:14px}
+.hub-list li{margin-bottom:7px;break-inside:avoid;list-style:none}
+@media(max-width:700px){.hub-list{columns:1}}
+</style>
+</head>
+<body>
+<nav class="nav">
+  <a class="nav-brand" href="/">
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" fill="#2563eb"/></svg>
+    Exploration Maps
+  </a>
+  <a class="nav-cta" href="/">Start Mapping</a>
+</nav>
+
+<div class="wrap">
+  <p class="crumb"><a href="/">Home</a> › <a href="/companies/">Companies</a> › EGM</p>
+  <h1>Engold Mines Ltd. (TSXV: EGM) — Mineral Claims Map</h1>
+  <p class="sub">Engold Mines Ltd. holds <strong>103 mineral claims</strong> totalling <strong>27,999 ha</strong> in British Columbia. Data from <a href="https://www.mtonline.gov.bc.ca/" rel="nofollow noopener">BC Mineral Titles Online</a> public records.</p>
+  <p class="updated">Claims updated 2026-07-07</p>
+
+  <div class="map-card"><img src="/companies-assets/EGM.svg" alt="Map of Engold Mines Ltd. mineral claims" loading="eager"></div>
+  <div class="map-actions">
+    <a class="btn btn-primary" href="/?claims=EGM&amp;company=Engold%20Mines%20Ltd.&amp;utm_source=companies&amp;utm_campaign=EGM">Open interactive version →</a>
+    <a class="btn btn-ghost" href="/?claims=EGM&amp;company=Engold%20Mines%20Ltd.&amp;utm_source=companies&amp;utm_campaign=EGM-export">Export an investor-ready version — free during early access.</a>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><b>103</b><span>Mineral claims</span></div>
+    <div class="stat"><b>27,999</b><span>Total hectares</span></div>
+    <div class="stat"><b>BC</b><span>Province</span></div>
+    <div class="stat"><b>2034-08-31</b><span>Earliest good-to date</span></div>
+  </div>
+
+  <div class="claim-cta">
+    <div><b>Is this your company?</b><span>Claim this page to correct details and get an editable, branded version of this map.</span></div>
+    <a class="btn btn-primary" href="mailto:hello@explorationmaps.com?subject=Claim%20page%3A%20EGM">Claim this page</a>
+  </div>
+
+  <h2>Claim list</h2>
+  <div class="tbl-wrap">
+  <table>
+    <thead><tr><th>Claim ID</th><th>Name</th><th>Area (ha)</th><th>Good-to date</th><th>Province</th></tr></thead>
+    <tbody>
+      <tr><td>208311</td><td>DORA M.C.</td><td>500</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>208312</td><td>DORA 1</td><td>225</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>208335</td><td>PEWEE #1</td><td>450</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>208336</td><td>PEWEE #3</td><td>25</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>208337</td><td>PEWEE #2</td><td>25</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>208375</td><td>CLUB 15</td><td>100</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>309368</td><td>MURPHY 4</td><td>500</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>373378</td><td>JACK 1</td><td>400</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>373379</td><td>JACK 2</td><td>400</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>373380</td><td>DORA 2</td><td>400</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>373381</td><td>DORA 3</td><td>400</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>399332</td><td>SPOUT 1</td><td>500</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>399333</td><td>SPOUT 4</td><td>25</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>399334</td><td>SPOUT 5</td><td>25</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>399335</td><td>SPOUT 6</td><td>25</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>399336</td><td>SPOUT 7</td><td>25</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>399337</td><td>SPOUT 8</td><td>25</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>399338</td><td>SPOUT 9</td><td>25</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>402246</td><td>MUR 1</td><td>300</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>407790</td><td>SPOUT 10</td><td>375</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>407791</td><td>SPOUT 19</td><td>500</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>407800</td><td>SPOUT 11</td><td>500</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>407801</td><td>SPOUT 12</td><td>25</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>407802</td><td>SPOUT 13</td><td>25</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>407803</td><td>SPOUT 14</td><td>25</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>407804</td><td>SPOUT 15</td><td>25</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>407805</td><td>SPOUT 17</td><td>25</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>407806</td><td>SPOUT 16</td><td>25</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>407807</td><td>SPOUT 18</td><td>25</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>409025</td><td>COPPER 20</td><td>500</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>515410</td><td>—</td><td>318.6</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>520034</td><td>SPOUT WEST 1</td><td>497.5</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>520198</td><td>JV 12</td><td>39.9</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>520226</td><td>JV 39</td><td>199.3</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>520227</td><td>JV 40</td><td>199.2</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>520229</td><td>JV 41</td><td>139.5</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>527391</td><td>—</td><td>178.9</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>527396</td><td>—</td><td>596.1</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>527400</td><td>—</td><td>477.1</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>527403</td><td>—</td><td>397.6</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>527404</td><td>—</td><td>496.7</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>527632</td><td>—</td><td>199</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>527633</td><td>—</td><td>159.2</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>527634</td><td>—</td><td>159.2</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>527636</td><td>—</td><td>199</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>527637</td><td>—</td><td>477.5</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>528070</td><td>—</td><td>715.3</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>528073</td><td>—</td><td>298.1</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>528077</td><td>—</td><td>397.4</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>528085</td><td>—</td><td>19.9</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>528091</td><td>—</td><td>536.8</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>528095</td><td>—</td><td>556.7</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>528096</td><td>—</td><td>159.1</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>528101</td><td>—</td><td>159</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>528437</td><td>—</td><td>298.3</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>540530</td><td>SPOUT WEST 1</td><td>278.4</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>547059</td><td>JOSH 2</td><td>358.1</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>577235</td><td>—</td><td>497.9</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>577236</td><td>—</td><td>557.6</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>577237</td><td>—</td><td>139.5</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>577238</td><td>—</td><td>418.4</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>577239</td><td>—</td><td>59.8</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>577241</td><td>COCO 2</td><td>258.8</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>585676</td><td>CARSON</td><td>238.5</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>585677</td><td>CARSON 2</td><td>119.2</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>606965</td><td>SPOUT 1</td><td>19.9</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>697623</td><td>STUART</td><td>159.3</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>832351</td><td>CYAN</td><td>79.7</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>836886</td><td>R-2</td><td>199.1</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>854474</td><td>CYAN 1</td><td>199.3</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>854476</td><td>CYAN2</td><td>139.5</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>854520</td><td>FLY 2</td><td>498.2</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>857467</td><td>J&amp;D</td><td>99.6</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>862634</td><td>JONES</td><td>398</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>865254</td><td>PEACH</td><td>19.9</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>899790</td><td>RILEY SUR</td><td>99.6</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>899791</td><td>STUART.2</td><td>19.9</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>941549</td><td>JACK FRAC</td><td>19.9</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>1034358</td><td>RED 1</td><td>358.5</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>1034474</td><td>LLH1</td><td>1,315</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>1040124</td><td>SPOUT FR</td><td>19.9</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>1040127</td><td>—</td><td>39.8</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>1058808</td><td>—</td><td>199</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>1058852</td><td>FLY</td><td>39.9</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>1058864</td><td>—</td><td>119.4</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>1060432</td><td>SPOUT N 1</td><td>556.6</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>1060433</td><td>SPOUT N 2</td><td>497.2</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>1060434</td><td>SPOUT N 3</td><td>358</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>1060436</td><td>SPOUT N 4</td><td>477.4</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>1060437</td><td>SPOUT N 5</td><td>358.1</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>1060438</td><td>SPOUT N 6</td><td>318.3</td><td>2034-11-30</td><td>BC</td></tr>
+      <tr><td>1061089</td><td>MURPHY WEST</td><td>378.4</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>1066314</td><td>CYAN S 1</td><td>358.9</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>1066315</td><td>CYAN S 2</td><td>358.9</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>1066316</td><td>CYAN S 3</td><td>438.6</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>1066317</td><td>CYAN S 4</td><td>358.9</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>1066318</td><td>CYAN S 5</td><td>358.9</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>1066319</td><td>CYAN S 6</td><td>358.9</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>1066320</td><td>CYAN S 7</td><td>358.9</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>1066321</td><td>CYAN S 8</td><td>259.2</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>1066864</td><td>SPOUT FR 2</td><td>219.1</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>1067524</td><td>SPOUT N 7</td><td>357.7</td><td>2034-08-31</td><td>BC</td></tr>
+      <tr><td>1067525</td><td>SPOUT N 8</td><td>357.6</td><td>2034-08-31</td><td>BC</td></tr>
+    </tbody>
+  </table>
+  </div>
+  
+
+  
+  <h2>Neighbouring claim holders</h2>
+  <div class="neigh">
+    <a href="/companies/omm/"><b>Omineca Mining and Metals Ltd.</b><span>TSXV: OMM · ~100 km away</span></a>
+    <a href="/companies/auen/"><b>Golden Sky Minerals Corp.</b><span>TSXV: AUEN · ~104 km away</span></a>
+    <a href="/companies/rkr/"><b>Rokmaster Resources Corp.</b><span>TSXV: RKR · ~114 km away</span></a>
+    <a href="/companies/dcop/"><b>District Copper Corp.</b><span>TSXV: DCOP · ~141 km away</span></a>
+    <a href="/companies/gmr/"><b>Gelum Resources Ltd.</b><span>CSE: GMR · ~152 km away</span></a>
+    <a href="/companies/bmv/"><b>Bathurst Metals Corp.</b><span>TSXV: BMV · ~157 km away</span></a>
+  </div>
+
+  <div class="disclaimer">
+    Sourced from BC Mineral Titles Online public records on 2026-07-07. Exploration Maps is a mapping tool, not the official registry — claim status changes daily. Always verify current ownership, status, and boundaries with the registry.
+    <a href="mailto:hello@explorationmaps.com?subject=Data%20correction%3A%20EGM">Report an error</a>.
+  </div>
+</div>
+<footer class="footer">
+  <p><a href="/">Home</a> · <a href="/companies/">Companies</a> · <a href="/blog/">Guides</a> · <a href="/about/">About</a> · <a href="/privacy/">Privacy</a></p>
+  <p style="margin-top:6px">© 2026 Exploration Maps</p>
+</footer>
+</body>
+</html>
