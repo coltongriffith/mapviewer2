@@ -334,10 +334,14 @@ function inlineCta({ text, sub = '', href = '/', label = 'Open Exploration Maps 
 // A styled screenshot placeholder. No real asset is required — it shows the
 // caption inside a framed "screenshot" box, so the page is useful now and a real
 // PNG can be dropped in later (set `src` to a /blog-img path to swap it in).
-function figureBlock({ alt = '', caption = '', src = '' } = {}) {
+// `eager: true` for above-the-fold hero images (the LCP candidate) — loads
+// immediately at high fetch priority instead of the default lazy, which would
+// defer the main visual's fetch. Inline screenshots keep the lazy default.
+function figureBlock({ alt = '', caption = '', src = '', eager = false } = {}) {
   const label = caption || alt || 'App screenshot';
+  const loadAttrs = eager ? 'loading="eager" fetchpriority="high"' : 'loading="lazy"';
   const inner = src
-    ? `<img src="${esc(src)}" alt="${esc(alt || caption)}" loading="lazy">`
+    ? `<img src="${esc(src)}" alt="${esc(alt || caption)}" ${loadAttrs}>`
     : `<div class="screenshot-frame"><span class="screenshot-frame-icon">▦</span><span>${esc(label)}</span></div>`;
   return `<figure class="blog-figure">${inner}${caption ? `<figcaption>${esc(caption)}</figcaption>` : ''}</figure>`;
 }
@@ -607,6 +611,7 @@ function heroFigureForPost(post) {
     src,
     alt: 'Example mining map created in Exploration Maps',
     caption: 'A finished map exported from Exploration Maps — the kind of output this guide walks you to.',
+    eager: true,
   });
 }
 
@@ -721,6 +726,7 @@ function buildLocationPage(location, mapType) {
         src: HERO_BY_MAPTYPE[mapType.slug],
         alt: `Example ${mapType.name.toLowerCase()} created in Exploration Maps`,
         caption: `Example ${mapType.name.toLowerCase()} exported from Exploration Maps — style your ${location.name} data the same way.`,
+        eager: true,
       }) : ''}
 
       <h2>About Mining in ${esc(location.name)}</h2>
