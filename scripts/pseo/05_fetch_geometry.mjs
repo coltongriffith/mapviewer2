@@ -19,7 +19,7 @@ const args = process.argv.slice(2);
 const PATHS = resolvePaths(args.includes('--fixture'));
 const opt = (name) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : null; };
 
-const GEO_PAGE = 2000;
+
 
 async function bcGeometry(ownerRaw) {
   const F = BC_WFS.fields;
@@ -33,13 +33,13 @@ async function bcGeometry(ownerRaw) {
       SERVICE: 'WFS', VERSION: '2.0.0', REQUEST: 'GetFeature',
       outputFormat: 'application/json', typeNames: BC_WFS.typeName,
       srsName: 'EPSG:4326', CQL_FILTER: cql,
-      count: String(GEO_PAGE), startIndex: String(startIndex), sortBy: F.tenureId,
+      count: String(BC_WFS.pageSize), startIndex: String(startIndex), sortBy: F.tenureId,
     })}`;
     const j = await fetchJson(url, { timeoutMs: 120000 });
     const page = j.features || [];
     feats.push(...page);
-    if (page.length < GEO_PAGE) break;
-    startIndex += GEO_PAGE;
+    if (page.length < BC_WFS.pageSize) break;
+    startIndex += BC_WFS.pageSize;
     if (startIndex > 200000) throw new Error(`BC geometry paging runaway for ${ownerRaw}`);
   }
   return feats
@@ -68,23 +68,27 @@ async function onGeometry(ownerRaw, layerId) {
   // filter out claims already past their due date.
   const dateField = fields.find((f) => /DUE|EXPIR|GOOD_TO|END_DATE/i.test(f))
     || fields.find((f) => /ANNIVERSARY/i.test(f)) || null;
-  // Page through the ArcGIS layer — a query caps at ~2000 features, so holders
-  // with thousands of Ontario claims (e.g. Canada Nickel) would be truncated.
+  // Page through the ArcGIS layer with the service's own page size (MLAS caps
+  // responses at ON_ARCGIS.pageSize=1000 regardless of what we request) and its
+  // exceededTransferLimit flag — same loop as the 03 full pull. A fixed larger
+  // page size would see 1000 < requested and stop after the first page,
+  // truncating holders like Canada Nickel/GFG.
   const rawFeats = [];
   let offset = 0;
   for (;;) {
     const params = new URLSearchParams({
       f: 'geojson', outFields: '*', returnGeometry: 'true',
       where: `UPPER(${ownerField}) = UPPER('${ownerRaw.replace(/'/g, "''")}')`,
-      outSR: '4326', resultRecordCount: String(GEO_PAGE), resultOffset: String(offset),
+      outSR: '4326', resultRecordCount: String(ON_ARCGIS.pageSize), resultOffset: String(offset),
       orderByFields: numField,
     });
     const j = await fetchJson(`${ON_ARCGIS.service}/${layerId}/query?${params}`, { timeoutMs: 120000 });
     if (j.error) throw new Error(`ArcGIS error: ${JSON.stringify(j.error)}`);
     const page = j.features || [];
     rawFeats.push(...page);
-    if (page.length < GEO_PAGE) break;
-    offset += GEO_PAGE;
+    if (!page.length) break;
+    if (!j.exceededTransferLimit && page.length < ON_ARCGIS.pageSize) break;
+    offset += page.length;
     if (offset > 200000) throw new Error(`ON geometry paging runaway for ${ownerRaw}`);
   }
   const fmtDate = (v) => {
