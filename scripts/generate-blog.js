@@ -574,6 +574,25 @@ function buildCompPage(post, allPosts) {
 
 // ─── Location × map-type page ─────────────────────────────────────────────────
 
+// Real finished-map exports (public/gallery/) shown as the hero on each
+// location page, keyed by map-type slug — so a "Drill Results Map — Alaska"
+// page actually shows a drill results map instead of being a wall of text.
+const HERO_BY_MAPTYPE = {
+  'mining-claims-map': '/gallery/claims.png',
+  'drill-results-map': '/gallery/drill-results.png',
+  'location-map': '/gallery/regional.png',
+  'target-generation-map': '/gallery/target.png',
+  'infrastructure-map': '/gallery/infrastructure.png',
+};
+// A secondary in-workflow screenshot per map type (real product UI/output).
+const INLINE_BY_MAPTYPE = {
+  'mining-claims-map': { src: '/blog-img/map-claims.png', alt: 'Mineral claims styled on a map in Exploration Maps' },
+  'drill-results-map': { src: '/blog-img/badge-editor.png', alt: 'Labelling a drillhole with its best intercept in Exploration Maps' },
+  'location-map': { src: '/blog-img/title-block.png', alt: 'Branded title block on an exported map' },
+  'target-generation-map': { src: '/blog-img/title-block.png', alt: 'Styled target areas with a branded title block' },
+  'infrastructure-map': { src: '/blog-img/title-block.png', alt: 'Infrastructure map with a branded title block' },
+};
+
 function buildLocationPage(location, mapType) {
   const pageSlug = `${mapType.slug}-${location.slug}`;
   const url = `${SITE}/blog/${pageSlug}/`;
@@ -681,6 +700,11 @@ function buildLocationPage(location, mapType) {
       <p class="breadcrumb"><a href="/">Home</a><span>›</span><a href="/blog/">Blog</a><span>›</span><a href="/blog/locations/">By Region</a><span>›</span>${esc(title)} ${locPubDate}</p>
       <h1>${esc(title)}</h1>
       <p class="direct-answer">${esc(directAnswer)}</p>
+      ${HERO_BY_MAPTYPE[mapType.slug] ? figureBlock({
+        src: HERO_BY_MAPTYPE[mapType.slug],
+        alt: `Example ${mapType.name.toLowerCase()} created in Exploration Maps`,
+        caption: `Example ${mapType.name.toLowerCase()} exported from Exploration Maps — style your ${location.name} data the same way.`,
+      }) : ''}
 
       <h2>About Mining in ${esc(location.name)}</h2>
       <p>${esc(location.description)}</p>
@@ -692,6 +716,7 @@ function buildLocationPage(location, mapType) {
       <h2>How to Create a ${esc(mapType.name)} for ${esc(location.name)}</h2>
       <p>For a full step-by-step guide to ${esc(mapType.name.toLowerCase())}s, see <a href="/blog/${esc(mapType.howToSlug)}/">How to Make a ${esc(mapType.name)}</a>.</p>
       <ol class="steps-list">${steps}</ol>
+      ${INLINE_BY_MAPTYPE[mapType.slug] ? figureBlock({ ...INLINE_BY_MAPTYPE[mapType.slug], caption: `${INLINE_BY_MAPTYPE[mapType.slug].alt}.` }) : ''}
       ${tipHtml}
 
       <h2>Recommended Settings for ${esc(location.name)}</h2>
