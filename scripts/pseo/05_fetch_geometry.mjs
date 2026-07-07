@@ -19,16 +19,30 @@ const args = process.argv.slice(2);
 const PATHS = resolvePaths(args.includes('--fixture'));
 const opt = (name) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : null; };
 
+const GEO_PAGE = 2000;
+
 async function bcGeometry(ownerRaw) {
   const F = BC_WFS.fields;
   const cql = `${F.owner}='${ownerRaw.replace(/'/g, "''")}'`;
-  const url = `${BC_WFS.base}?${new URLSearchParams({
-    SERVICE: 'WFS', VERSION: '2.0.0', REQUEST: 'GetFeature',
-    outputFormat: 'application/json', typeNames: BC_WFS.typeName,
-    srsName: 'EPSG:4326', CQL_FILTER: cql, count: '2000',
-  })}`;
-  const j = await fetchJson(url, { timeoutMs: 120000 });
-  return (j.features || [])
+  // Page through the WFS — a single request caps at ~2000 features, so large
+  // holders (thousands of tenures) would otherwise be silently truncated.
+  const feats = [];
+  let startIndex = 0;
+  for (;;) {
+    const url = `${BC_WFS.base}?${new URLSearchParams({
+      SERVICE: 'WFS', VERSION: '2.0.0', REQUEST: 'GetFeature',
+      outputFormat: 'application/json', typeNames: BC_WFS.typeName,
+      srsName: 'EPSG:4326', CQL_FILTER: cql,
+      count: String(GEO_PAGE), startIndex: String(startIndex), sortBy: F.tenureId,
+    })}`;
+    const j = await fetchJson(url, { timeoutMs: 120000 });
+    const page = j.features || [];
+    feats.push(...page);
+    if (page.length < GEO_PAGE) break;
+    startIndex += GEO_PAGE;
+    if (startIndex > 200000) throw new Error(`BC geometry paging runaway for ${ownerRaw}`);
+  }
+  return feats
     // Live query returns tenures past their good-to date (pending forfeiture) —
     // filter here too or expired polygons land back on the page map/table.
     .filter((f) => !isExpired(f.properties?.[F.goodTo]))
@@ -54,19 +68,32 @@ async function onGeometry(ownerRaw, layerId) {
   // filter out claims already past their due date.
   const dateField = fields.find((f) => /DUE|EXPIR|GOOD_TO|END_DATE/i.test(f))
     || fields.find((f) => /ANNIVERSARY/i.test(f)) || null;
-  const params = new URLSearchParams({
-    f: 'geojson', outFields: '*', returnGeometry: 'true',
-    where: `UPPER(${ownerField}) = UPPER('${ownerRaw.replace(/'/g, "''")}')`,
-    outSR: '4326', resultRecordCount: '2000',
-  });
-  const j = await fetchJson(`${ON_ARCGIS.service}/${layerId}/query?${params}`, { timeoutMs: 120000 });
+  // Page through the ArcGIS layer — a query caps at ~2000 features, so holders
+  // with thousands of Ontario claims (e.g. Canada Nickel) would be truncated.
+  const rawFeats = [];
+  let offset = 0;
+  for (;;) {
+    const params = new URLSearchParams({
+      f: 'geojson', outFields: '*', returnGeometry: 'true',
+      where: `UPPER(${ownerField}) = UPPER('${ownerRaw.replace(/'/g, "''")}')`,
+      outSR: '4326', resultRecordCount: String(GEO_PAGE), resultOffset: String(offset),
+      orderByFields: numField,
+    });
+    const j = await fetchJson(`${ON_ARCGIS.service}/${layerId}/query?${params}`, { timeoutMs: 120000 });
+    if (j.error) throw new Error(`ArcGIS error: ${JSON.stringify(j.error)}`);
+    const page = j.features || [];
+    rawFeats.push(...page);
+    if (page.length < GEO_PAGE) break;
+    offset += GEO_PAGE;
+    if (offset > 200000) throw new Error(`ON geometry paging runaway for ${ownerRaw}`);
+  }
   const fmtDate = (v) => {
     if (v == null || v === '') return '';
     const n = Number(v);
     if (Number.isFinite(n) && n > 10_000_000_000) return new Date(n).toISOString().slice(0, 10);
     return String(v).slice(0, 10);
   };
-  return (j.features || [])
+  return rawFeats
     .map((f) => {
       // MLAS returns no usable hectares attribute — derive it from the polygon
       // so ON claims don't report 0 ha on the page stats/table.
