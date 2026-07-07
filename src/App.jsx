@@ -2969,10 +2969,13 @@ export default function App() {
 
   const saveCurrentProject = async (nextName = null) => {
     const nameToSave = (nextName || projectName || project.layout?.title || 'Untitled map').trim();
-    const idToSave = projectId || crypto.randomUUID();
     if (user) {
       try {
-        const cloudId = await saveCloudProject({ id: idToSave, name: nameToSave, payload: project });
+        // Pass projectId as-is: when it's null (a new or deep-linked map),
+        // saveCloudProject INSERTS a fresh row and returns its id. Fabricating
+        // a random id here would send it down the UPDATE path, which matches no
+        // row and silently saves nothing while the UI reports success.
+        const cloudId = await saveCloudProject({ id: projectId, name: nameToSave, payload: project });
         setProjectId(cloudId);
         setProjectName(nameToSave);
         lastSavedSnapshotRef.current = JSON.stringify(project);
@@ -2985,7 +2988,9 @@ export default function App() {
         setUploadStatus({ type: 'error', message: `Cloud save failed: ${err.message}` });
       }
     } else {
-      const saved = saveProjectRecord({ id: idToSave, name: nameToSave, payload: project });
+      // Local store needs an explicit id; reuse the current one or mint a new
+      // record. (saveProjectRecord updates in place when the id already exists.)
+      const saved = saveProjectRecord({ id: projectId || crypto.randomUUID(), name: nameToSave, payload: project });
       setProjectId(saved.id);
       setProjectName(saved.name);
       setRecentProjects(listProjects());
@@ -3265,10 +3270,10 @@ export default function App() {
           <div className="onboarding-card">
             <div className="onboarding-title">Get started</div>
             <ol className="onboarding-steps">
-              <li>Upload claims / property boundary (GeoJSON or .zip shapefile)</li>
+              <li>Upload your map layers — claims, drillholes, roads, or any GeoJSON / .zip shapefile</li>
               <li>Upload your logo — colours will be auto-applied to the map</li>
-              <li>Upload an inset image</li>
-              <li>Upload drillholes or other layers (optional)</li>
+              <li>Upload an inset image (optional)</li>
+              <li>Add more layers or search public claims anytime</li>
             </ol>
             <button className="sample-data-link" type="button" onClick={loadSampleData}>
               Or load sample mining data →
