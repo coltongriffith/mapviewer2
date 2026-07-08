@@ -2,14 +2,16 @@ import React, { useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
 
 export default function AuthModal({ onClose }) {
-  const { signIn, signUp, resetPassword } = useAuth();
-  const [mode, setMode] = useState('signin'); // 'signin' | 'signup' | 'reset'
+  const { signIn, signUp, signInWithMagicLink, resetPassword } = useAuth();
+  // 'magic' is the default: one email, no password, no confirm round-trip.
+  const [mode, setMode] = useState('magic'); // 'magic' | 'signin' | 'signup' | 'reset'
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
   const [loading, setLoading] = useState(false);
+  const [linkSent, setLinkSent] = useState(false);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -21,7 +23,11 @@ export default function AuthModal({ onClose }) {
     }
     setLoading(true);
     try {
-      if (mode === 'signin') {
+      if (mode === 'magic') {
+        await signInWithMagicLink(email);
+        setLinkSent(true);
+        setInfo(`We emailed a sign-in link to ${email}. Open it on this device — your map will still be here.`);
+      } else if (mode === 'signin') {
         await signIn(email, password);
         onClose();
       } else if (mode === 'signup') {
@@ -40,13 +46,17 @@ export default function AuthModal({ onClose }) {
     }
   }
 
-  const title = mode === 'signin' ? 'Sign in' : mode === 'signup' ? 'Create account' : 'Reset password';
+  const title = mode === 'magic' ? 'Sign in' : mode === 'signin' ? 'Sign in with password' : mode === 'signup' ? 'Create account' : 'Reset password';
+  const submitLabel = mode === 'magic' ? (linkSent ? 'Resend link' : 'Email me a sign-in link') : title;
 
   return (
     <div className="modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="modal-panel auth-modal">
         <button className="modal-close-btn" onClick={onClose} aria-label="Close">×</button>
         <h2 className="auth-modal-title">{title}</h2>
+        {mode === 'magic' && !linkSent && (
+          <p className="auth-modal-sub">No password needed — we email you a link that signs you in (and creates your account if you're new).</p>
+        )}
 
         {info && <div className="auth-info-msg">{info}</div>}
         {error && <div className="auth-error-msg">{error}</div>}
@@ -65,7 +75,7 @@ export default function AuthModal({ onClose }) {
             />
           </label>
 
-          {mode !== 'reset' && (
+          {mode !== 'reset' && mode !== 'magic' && (
             <label className="auth-label">
               Password
               <input
@@ -96,13 +106,22 @@ export default function AuthModal({ onClose }) {
           )}
 
           <button className="btn auth-submit-btn" type="submit" disabled={loading}>
-            {loading ? 'Please wait…' : title}
+            {loading ? 'Please wait…' : submitLabel}
           </button>
         </form>
 
         <div className="auth-footer-links">
+          {mode === 'magic' && (
+            <button className="link-btn" onClick={() => { setError(''); setInfo(''); setMode('signin'); }}>
+              Use a password instead
+            </button>
+          )}
           {mode === 'signin' && (
             <>
+              <button className="link-btn" onClick={() => { setError(''); setInfo(''); setMode('magic'); }}>
+                Email me a link instead
+              </button>
+              <span className="auth-link-sep">·</span>
               <button className="link-btn" onClick={() => { setError(''); setMode('signup'); }}>
                 Create account
               </button>

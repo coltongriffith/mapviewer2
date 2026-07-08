@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { loadSharedMap } from '../utils/cloudStorage';
+import { trackEvent } from '../utils/track';
 
 const ReadOnlyMapStage = React.lazy(() => import('./ReadOnlyMapStage'));
 
@@ -28,6 +29,11 @@ export default function SharedMapViewer({ mapId, onExit, user, onEditCopy }) {
         if (!state) { setError('not_found'); setLoading(false); return; }
         setProject(state);
         setLoading(false);
+        // ?ref carries the sharer's session id — joins this view (and any fork
+        // that follows) back to the share_created event.
+        let ref = null;
+        try { ref = new URLSearchParams(window.location.search).get('ref'); } catch { /* noop */ }
+        trackEvent('share_viewed', { mapId, ref }, user?.id);
       })
       .catch(e => { setError(e.message); setLoading(false); });
   }, [mapId]);
@@ -65,7 +71,7 @@ export default function SharedMapViewer({ mapId, onExit, user, onEditCopy }) {
         </span>
         <div className="shared-map-bar-actions">
           <button className="shared-map-edit-btn" onClick={handleEdit} disabled={editing}>
-            {editing ? 'Opening…' : (user ? 'Edit this map' : 'Sign in to edit')}
+            {editing ? 'Opening…' : (user ? 'Edit this map' : 'Make your own copy — free, no signup')}
           </button>
           <button className="shared-map-cta-btn" onClick={onExit}>
             Create your own map →

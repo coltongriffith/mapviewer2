@@ -50,7 +50,7 @@ import regionsNA from './assets/regionsNA.json';
 import { fitProjectToTemplate } from './utils/frameMapForTemplate';
 import { getThemeTokens } from './utils/themeTokens';
 import { saveLead, getLastLeadEmail } from './utils/leadCapture';
-import { trackSearch } from './utils/track';
+import { trackSearch, trackEvent } from './utils/track';
 import dissolveGeo from '@turf/dissolve';
 import {
   clearActiveProjectContext,
@@ -58,6 +58,7 @@ import {
   duplicateProjectRecord,
   estimateStorageUsedBytes,
   listProjects,
+  loadDraft,
   renameProjectRecord,
   resolveInitialWorkspace,
   saveDraft,
@@ -699,6 +700,7 @@ export default function App() {
   const [showShareModal, setShowShareModal] = useState(false);
   const [showAddClaimsModal, setShowAddClaimsModal] = useState(false);
   const [addClaimsModalPath, setAddClaimsModalPath] = useState(null);
+  const [addClaimsProvince, setAddClaimsProvince] = useState(null);
   const [shareUrl, setShareUrl] = useState(null);
   const [shareLoading, setShareLoading] = useState(false);
   const [shareElapsed, setShareElapsed] = useState(0);
@@ -900,6 +902,132 @@ export default function App() {
       setRecentProjects(listProjects());
     }
   }, [user, projectId, isDirty]);
+
+  // Small-viewport notice: the editor renders on phones but is built for
+  // desktop. Shown once per session; impressions tracked to size mobile demand
+  // before investing in full touch support.
+  const [showMobileBanner, setShowMobileBanner] = useState(false);
+  useEffect(() => {
+    if (screen !== 'editor') return;
+    let dismissed = false;
+    try { dismissed = !!sessionStorage.getItem('em_mobile_banner_dismissed'); } catch { /* noop */ }
+    // innerWidth lies on phones: the editor's ~945px min layout makes mobile
+    // Chrome expand the layout viewport. Detect actual small touch devices by
+    // physical screen size + coarse pointer instead.
+    const isPhone = window.matchMedia?.('(pointer: coarse)')?.matches
+      && Math.min(window.screen?.width || 9999, window.screen?.height || 9999) < 700;
+    if (dismissed || !isPhone) return;
+    setShowMobileBanner(true);
+    trackEvent('mobile_editor_banner_shown', { screenW: window.screen?.width, screenH: window.screen?.height });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [screen]);
+
+  // ── Undo/redo ──────────────────────────────────────────────────────────────
+  // History of settled project states (object refs — every update is immutable,
+  // so storing references is free). 400ms debounce coalesces drags/typing into
+  // one step; ring buffer caps memory at 30 snapshots.
+  const historyRef = useRef({ stack: [], index: -1, restoring: false, pending: null });
+  useEffect(() => {
+    const h = historyRef.current;
+    if (h.restoring) { h.restoring = false; h.pending = null; return undefined; }
+    h.pending = project;
+    const t = setTimeout(() => {
+      h.pending = null;
+      h.stack = h.stack.slice(0, h.index + 1);
+      h.stack.push(project);
+      if (h.stack.length > 30) h.stack.shift();
+      h.index = h.stack.length - 1;
+    }, 400);
+    return () => clearTimeout(t);
+  }, [project]);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      const key = e.key.toLowerCase();
+      if (key !== 'z' && key !== 'y') return;
+      const tag = document.activeElement?.tagName?.toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || document.activeElement?.isContentEditable) return;
+      if (screen !== 'editor') return;
+      e.preventDefault();
+      const h = historyRef.current;
+      // A change made in the last 400ms hasn't been pushed yet — flush it so
+      // undo steps back from what's on screen, not from an older state.
+      if (h.pending) {
+        h.stack = h.stack.slice(0, h.index + 1);
+        h.stack.push(h.pending);
+        if (h.stack.length > 30) h.stack.shift();
+        h.index = h.stack.length - 1;
+        h.pending = null;
+      }
+      const redoWanted = key === 'y' || e.shiftKey;
+      if (redoWanted) {
+        if (h.index >= h.stack.length - 1) return;
+        h.index += 1;
+      } else {
+        if (h.index <= 0) return;
+        h.index -= 1;
+      }
+      h.restoring = true;
+      skipAutoFitRef.current = true;
+      setProject(h.stack[h.index]);
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [screen]);
+
+  // One-time migration: when a user signs in, push any anonymous local maps to
+  // their cloud account so work made before signing up isn't stranded in this
+  // browser's localStorage (the old behaviour silently lost it on other devices).
+  useEffect(() => {
+    if (!user || !supabase) return;
+    const flag = `em_migrated_${user.id}`;
+    try { if (localStorage.getItem(flag)) return; } catch { return; }
+    const locals = listProjects().slice(0, 10); // cap: pathological hoards stay local
+    const draft = loadDraft();
+    const jobs = [...locals.map((p) => ({ name: p.name, payload: p.payload }))];
+    // Unsaved in-progress draft with real content and no saved record of its own.
+    if (draft?.payload?.layers?.length && !draft.projectId) {
+      jobs.push({ name: draft.projectName || draft.payload?.layout?.title || 'Untitled map', payload: draft.payload });
+    }
+    try { localStorage.setItem(flag, '1'); } catch { /* still migrate this once */ }
+    if (!jobs.length) return;
+    (async () => {
+      let migrated = 0;
+      for (const job of jobs) {
+        try { await saveCloudProject({ id: null, name: job.name, payload: job.payload }); migrated += 1; }
+        catch { /* leave that one local; don't block the rest */ }
+      }
+      if (migrated > 0) {
+        listCloudProjects().then(setRecentProjects).catch(() => {});
+        setUploadStatus({ type: 'success', message: `${migrated} map${migrated === 1 ? '' : 's'} from this browser ${migrated === 1 ? 'is' : 'are'} now saved to your account.` });
+      }
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+
+  // Funnel: editor_opened (once per browser session)
+  useEffect(() => {
+    if (screen !== 'editor') return;
+    try {
+      if (sessionStorage.getItem('em_editor_opened')) return;
+      sessionStorage.setItem('em_editor_opened', '1');
+    } catch { /* if sessionStorage is unavailable, still fire once per mount */ }
+    trackEvent('editor_opened', {}, user?.id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [screen]);
+
+  // Funnel: first_layer_added — the activation event (once per browser session)
+  useEffect(() => {
+    if (project.layers.length === 0) return;
+    try {
+      if (sessionStorage.getItem('em_first_layer')) return;
+      sessionStorage.setItem('em_first_layer', '1');
+    } catch { /* noop */ }
+    trackEvent('first_layer_added', { count: project.layers.length }, user?.id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project.layers.length]);
 
   // Track unique visitor sessions (once per browser session, fire-and-forget)
   useEffect(() => {
@@ -1289,19 +1417,25 @@ export default function App() {
       if (e.key !== 'Delete' && e.key !== 'Backspace') return;
       const tag = document.activeElement?.tagName?.toLowerCase();
       if (tag === 'input' || tag === 'textarea' || document.activeElement?.isContentEditable) return;
+      let deleted = null;
       if (selectedMarkerId) {
         setProject((prev) => ({ ...prev, markers: (prev.markers || []).filter((m) => m.id !== selectedMarkerId) }));
         setSelectedMarkerId(null);
+        deleted = 'Marker';
       } else if (selectedCalloutId) {
         setProject((prev) => ({ ...prev, callouts: prev.callouts.filter((c) => c.id !== selectedCalloutId) }));
         setSelectedCalloutId(null);
+        deleted = 'Callout';
       } else if (selectedEllipseId) {
         setProject((prev) => ({ ...prev, ellipses: (prev.ellipses || []).filter((el) => el.id !== selectedEllipseId) }));
         setSelectedEllipseId(null);
+        deleted = 'Ellipse';
       } else if (selectedPolygonId) {
         setProject((prev) => ({ ...prev, polygons: (prev.polygons || []).filter((poly) => poly.id !== selectedPolygonId) }));
         setSelectedPolygonId(null);
+        deleted = 'Polygon';
       }
+      if (deleted) setUploadStatus({ type: 'info', message: `${deleted} deleted — press Ctrl+Z to undo.` });
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
@@ -2001,7 +2135,7 @@ export default function App() {
       if (name.endsWith('.csv')) {
         const result = await loadCSV(file);
         if (result.needsMapping) {
-          setCsvMappingData({ headers: result.headers, rows: result.rows, filename: file.name });
+          setCsvMappingData({ headers: result.headers, rows: result.rows, filename: file.name, guesses: result.guesses, hint: result.hint });
         } else {
           await addGeoJSONAsLayer(result, file.name);
           if (screen !== 'editor') setScreen('editor');
@@ -2220,6 +2354,40 @@ export default function App() {
       }
     })();
     return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Deep links from blog/location SEO pages — lands visitors in a purposeful
+  // editor instead of a blank one:
+  //   /?intent=claims&region=british-columbia → editor + registry search with
+  //     the region's province pre-selected (7 supported registries)
+  //   /?intent=drill-results                  → editor, CSV upload prompt
+  //   /?demo=aurora_demo                      → loads the styled demo map
+  // UTM params are captured by the page_views effect before we strip the query.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const intent = params.get('intent');
+    const demo = params.get('demo');
+    if (!intent && !demo) return;
+    const REGION_TO_PROVINCE = {
+      'british-columbia': 'bc', ontario: 'on', quebec: 'qc', saskatchewan: 'sk',
+      manitoba: 'mb', 'newfoundland-labrador': 'nl', yukon: 'yt',
+      bc: 'bc', on: 'on', qc: 'qc', sk: 'sk', mb: 'mb', nl: 'nl', yt: 'yt',
+    };
+    try { window.history.replaceState({}, '', '/'); } catch { /* noop */ }
+    if (demo) {
+      loadSampleData(demo);
+      return;
+    }
+    setScreen('editor');
+    if (intent === 'claims') {
+      const province = REGION_TO_PROVINCE[(params.get('region') || '').toLowerCase()] || null;
+      setAddClaimsProvince(province);
+      setAddClaimsModalPath('registry');
+      setShowAddClaimsModal(true);
+    } else if (intent === 'drill-results' || intent === 'csv') {
+      setUploadStatus({ type: 'info', message: 'Import your drill hole or sample CSV to get started — drag it into the upload area.' });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -2576,6 +2744,7 @@ export default function App() {
   const removeCallout = (calloutId) => {
     setProject((prev) => ({ ...prev, callouts: prev.callouts.filter((callout) => callout.id !== calloutId) }));
     if (selectedCalloutId === calloutId) setSelectedCalloutId(null);
+    setUploadStatus({ type: 'info', message: 'Callout deleted — press Ctrl+Z to undo.' });
   };
 
   const handleFeatureClick = ({ layerId, feature, latlng, isLayerSelect }) => {
@@ -2920,6 +3089,7 @@ export default function App() {
           noWatermark: Boolean(extraOptions.noWatermark),
         }).then(() => {});
       }
+      trackEvent('export_completed', { format, noWatermark: Boolean(extraOptions.noWatermark) }, user?.id);
     } catch (err) {
       setExportError(`Export failed: ${err.message}`);
       setUploadStatus({ type: 'error', message: `Export failed: ${err.message}` });
@@ -3077,6 +3247,7 @@ export default function App() {
   // map is untouched.
   const cloneSharedMapAndOpen = async (state) => {
     const name = state?.layout?.title || 'Shared map';
+    trackEvent('share_forked', { mapId: sharedMapId, mode: 'cloud' }, user?.id);
     const newId = await cloneSharedMapToCloud(state, name);
     // Drop the /map/:id URL so a later refresh lands on the editor, not the viewer.
     try { window.history.replaceState({}, '', '/'); } catch { /* noop */ }
@@ -3085,9 +3256,9 @@ export default function App() {
     setScreen('editor');
   };
 
-  // "Edit this map" on a shared view: clone immediately if signed in, otherwise
-  // remember the intent and open the auth modal — the resume effect below picks
-  // it up once a session exists (same tab sign-in OR return after email confirm).
+  // "Make a copy" on a shared view: signed-in users get a cloud clone;
+  // anonymous users get a local copy immediately — no signup wall on the viral
+  // loop. The local draft autosaves and migrates to cloud if they sign in later.
   const handleEditSharedCopy = async (state) => {
     if (user) {
       try {
@@ -3097,10 +3268,21 @@ export default function App() {
       }
       return;
     }
-    if (sharedMapId) {
-      try { localStorage.setItem('pendingEditShareId', sharedMapId); } catch { /* noop */ }
-    }
-    setShowAuthFromGate(true);
+    trackEvent('share_forked', { mapId: sharedMapId, mode: 'local' });
+    try { window.history.replaceState({}, '', '/'); } catch { /* noop */ }
+    setSharedMapId(null);
+    skipAutoFitRef.current = true;
+    setProject(state);
+    setProjectId(null);
+    setProjectName(state?.layout?.title ? `${state.layout.title} (copy)` : 'Shared map (copy)');
+    setSelectedLayerId(null);
+    setSelectedCalloutId(null);
+    setSelectedFeature(null);
+    setSelectedMarkerId(null);
+    setSelectedEllipseId(null);
+    clearActiveProjectContext();
+    setScreen('editor');
+    setUploadStatus({ type: 'success', message: 'This is your own editable copy — sign in any time to save it to an account.' });
   };
 
   // Resume a pending "edit a copy" once the user becomes authenticated while on
@@ -3255,6 +3437,12 @@ export default function App() {
 
   return (
     <div className="app-shell">
+      {showMobileBanner && (
+        <div className="mobile-editor-banner" role="status">
+          <span>The editor works best on a desktop. Touch mostly works, but for the full experience grab a bigger screen.</span>
+          <button type="button" onClick={() => { setShowMobileBanner(false); try { sessionStorage.setItem('em_mobile_banner_dismissed', '1'); } catch { /* noop */ } }} aria-label="Dismiss">✕</button>
+        </div>
+      )}
       <Sidebar footer={<UserMenu onOpenTemplates={() => setShowBrandKitManager(true)} onOpenAccount={() => setScreen('account')} />}>
         <div className="sidebar-header-row">
           <button className="sidebar-wordmark" type="button" onClick={() => setScreen('landing')}>
@@ -5125,7 +5313,8 @@ export default function App() {
         {showAddClaimsModal && (
           <AddClaimsModal
             defaultPath={addClaimsModalPath}
-            onClose={() => { setShowAddClaimsModal(false); setAddClaimsModalPath(null); }}
+            initialProvince={addClaimsProvince}
+            onClose={() => { setShowAddClaimsModal(false); setAddClaimsModalPath(null); setAddClaimsProvince(null); }}
             onImport={(geojson, name) => {
               addGeoJSONAsLayer(geojson, `${name}.geojson`);
               setShowAddClaimsModal(false);
@@ -5201,7 +5390,10 @@ export default function App() {
                       }
                       const id = await shareMap(shareProject, user?.id ?? null);
                       const base = window.location.origin;
-                      setShareUrl(`${base}/map/${id}`);
+                      // ?ref ties later share_viewed/share_forked events back to
+                      // this sharer's session so the viral loop is measurable.
+                      setShareUrl(`${base}/map/${id}?ref=${getSessionId()}`);
+                      trackEvent('share_created', { mapId: id }, user?.id);
                     } catch (e) {
                       alert('Failed to create share link: ' + e.message);
                     } finally {
@@ -5243,6 +5435,8 @@ export default function App() {
             headers={csvMappingData.headers}
             rows={csvMappingData.rows}
             filename={csvMappingData.filename}
+            guesses={csvMappingData.guesses}
+            hint={csvMappingData.hint}
             onImport={async (geojson) => {
               setCsvMappingData(null);
               try {

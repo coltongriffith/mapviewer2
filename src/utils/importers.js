@@ -127,8 +127,30 @@ export async function loadShapefileSet(files) {
 function detectColumn(headers, role) {
   const synonyms = COL_SYNONYMS[role] || [];
   const h = headers.map((v) => v.toLowerCase().trim().replace(/[\s-]/g, '_'));
-  const idx = synonyms.reduce((found, syn) => found >= 0 ? found : h.indexOf(syn), -1);
+  let idx = synonyms.reduce((found, syn) => found >= 0 ? found : h.indexOf(syn), -1);
+  if (idx >= 0) return idx;
+  // Loose match for real-world headers ("Latitude (DD)", "lon_wgs84",
+  // "utm_easting_m") — exact-only sent too many clean files to the manual
+  // mapper. Substring matching only for tokens >=3 chars so 'x'/'y' can't
+  // false-positive inside unrelated names.
+  idx = h.findIndex((name) => synonyms.some((syn) =>
+    syn.length >= 3 && (name.startsWith(syn) || name.includes(`_${syn}`) || name.includes(`${syn}_`))
+  ));
   return idx;
+}
+
+// Do the values in these two columns look like WGS84 lon/lat (what the map
+// expects)? Guards against silently plotting UTM metres at absurd coordinates.
+function valuesLookLikeLonLat(rows, xHeader, yHeader) {
+  const sample = [];
+  for (const row of rows) {
+    const x = parseFloat(row[xHeader]);
+    const y = parseFloat(row[yHeader]);
+    if (!isNaN(x) && !isNaN(y)) sample.push([x, y]);
+    if (sample.length >= 50) break;
+  }
+  if (!sample.length) return false;
+  return sample.every(([x, y]) => Math.abs(x) <= 180 && Math.abs(y) <= 90);
 }
 
 async function parseCsvText(text) {
@@ -185,20 +207,48 @@ export async function loadCSV(file) {
 
   const xIdx = detectColumn(headers, 'x');
   const yIdx = detectColumn(headers, 'y');
+  const idIdx = detectColumn(headers, 'id');
+  const elevIdx = detectColumn(headers, 'elev');
+  const guesses = {
+    ...(xIdx >= 0 ? { x: headers[xIdx] } : {}),
+    ...(yIdx >= 0 ? { y: headers[yIdx] } : {}),
+    ...(idIdx >= 0 ? { id: headers[idIdx] } : {}),
+    ...(elevIdx >= 0 ? { elev: headers[elevIdx] } : {}),
+  };
 
-  // If both coordinate columns were found unambiguously, convert now
+  // Both coordinate columns found AND the values are in lon/lat range →
+  // import with zero questions asked.
   if (xIdx >= 0 && yIdx >= 0) {
-    const idIdx = detectColumn(headers, 'id');
-    const elevIdx = detectColumn(headers, 'elev');
-    const mapping = {
-      x: headers[xIdx],
-      y: headers[yIdx],
-      ...(idIdx >= 0 ? { id: headers[idIdx] } : {}),
-      ...(elevIdx >= 0 ? { elev: headers[elevIdx] } : {}),
+    if (valuesLookLikeLonLat(rows, headers[xIdx], headers[yIdx])) {
+      return csvToGeoJSON(rows, guesses);
+    }
+    // Headers matched but values look projected (UTM metres etc.) — importing
+    // would scatter points at nonsense coordinates. Ask, with an explanation.
+    return {
+      needsMapping: true, headers, rows, guesses,
+      hint: 'These coordinates look like projected values (e.g. UTM metres), not latitude/longitude. Exploration Maps needs WGS84 lat/long — convert the file at mapshaper.org, or pick different columns if the file has lat/long ones.',
     };
-    return csvToGeoJSON(rows, mapping);
   }
 
-  // Needs user to map columns
-  return { needsMapping: true, headers, rows };
+  // Headers didn't identify a coordinate pair — scan values for one plausible
+  // lon/lat pair to pre-select in the mapper.
+  if (!guesses.x || !guesses.y) {
+    const numericCols = headers.filter((hd) => {
+      let seen = 0;
+      for (const row of rows) {
+        const v = row[hd];
+        if (v === '' || v == null) continue;
+        if (isNaN(parseFloat(v))) return false;
+        if (++seen >= 20) break;
+      }
+      return seen > 0;
+    });
+    const latCands = numericCols.filter((hd) => rows.slice(0, 50).every((r) => r[hd] === '' || Math.abs(parseFloat(r[hd])) <= 90));
+    const lonCands = numericCols.filter((hd) => !latCands.includes(hd) && rows.slice(0, 50).every((r) => r[hd] === '' || Math.abs(parseFloat(r[hd])) <= 180));
+    if (!guesses.y && latCands.length === 1) guesses.y = latCands[0];
+    if (!guesses.x && lonCands.length === 1) guesses.x = lonCands[0];
+  }
+
+  // Needs user confirmation — pre-populated with our best guesses.
+  return { needsMapping: true, headers, rows, guesses };
 }

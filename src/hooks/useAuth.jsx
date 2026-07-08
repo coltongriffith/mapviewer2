@@ -1,7 +1,22 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
+import { trackEvent } from '../utils/track';
 
 const AuthContext = createContext(null);
+
+// Fire signup_completed exactly once per new account, on the first SIGNED_IN
+// after the account was created (covers password+confirm and magic-link paths).
+function trackSignupOnce(user) {
+  if (!user?.id || !user.created_at) return;
+  const ageMs = Date.now() - new Date(user.created_at).getTime();
+  if (ageMs > 10 * 60 * 1000) return; // existing account signing back in
+  const flag = `em_signup_tracked_${user.id}`;
+  try {
+    if (localStorage.getItem(flag)) return;
+    localStorage.setItem(flag, '1');
+  } catch { /* still fire; worst case a duplicate row */ }
+  trackEvent('signup_completed', {}, user.id);
+}
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
@@ -21,6 +36,7 @@ export function AuthProvider({ children }) {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
+      if (_event === 'SIGNED_IN' && session?.user) trackSignupOnce(session.user);
     });
 
     return () => subscription.unsubscribe();
@@ -41,6 +57,16 @@ export function AuthProvider({ children }) {
     if (error) throw error;
   }
 
+  async function signInWithMagicLink(email) {
+    if (!supabase) throw new Error('Auth not configured');
+    // One email, no password, no confirm round-trip — the link both creates
+    // the account (if new) and signs in, returning to the page it was sent
+    // from (so a pending shared-map fork or unsaved draft is still there).
+    const emailRedirectTo = typeof window !== 'undefined' ? window.location.href : undefined;
+    const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo } });
+    if (error) throw error;
+  }
+
   async function signOut() {
     if (!supabase) return;
     const { error } = await supabase.auth.signOut();
@@ -54,7 +80,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, signIn, signUp, signOut, resetPassword }}>
+    <AuthContext.Provider value={{ user, loading, signIn, signUp, signInWithMagicLink, signOut, resetPassword }}>
       {children}
     </AuthContext.Provider>
   );

@@ -171,8 +171,8 @@ function autoDetectMode(q, allowedModes) {
 
 // ── Component ──────────────────────────────────────────────────────────────
 
-export default function RegistrySearch({ onImport, onBack }) {
-  const [province, setProvince] = useState('bc');
+export default function RegistrySearch({ onImport, onBack, initialProvince }) {
+  const [province, setProvince] = useState(initialProvince || 'bc');
   const [query, setQuery] = useState('');
   const [mode, setMode] = useState('company');
   const [manualMode, setManualMode] = useState(false);

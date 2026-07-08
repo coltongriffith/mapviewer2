@@ -3013,3 +3013,13 @@ body.is-dragging .template-zone .panel-delete-btn { opacity: 0 !important; }
   .lm-hero-ctas .lm-btn-lg { width: 100%; }
 
 }
+
+/* Magic-link auth subtitle */
+.auth-modal-sub{font-size:13.5px;color:#64748b;line-height:1.55;margin:-4px 0 14px}
+
+/* Pointer-event dragging (mouse + touch): stop the browser from hijacking
+   drags as page scroll/zoom on the draggable overlays and their handles. */
+.rdrag{touch-action:none}
+.rdrag .resize-handle{touch-action:none}
+.mobile-editor-banner{position:fixed;bottom:12px;left:12px;right:12px;z-index:1200;display:flex;align-items:center;gap:10px;background:#0f172a;color:#e2e8f0;font-size:13px;line-height:1.45;padding:10px 12px;border-radius:10px;box-shadow:0 8px 24px rgba(15,23,42,.35)}
+.mobile-editor-banner button{background:none;border:none;color:#94a3b8;font-size:15px;cursor:pointer;padding:2px 6px;margin-left:auto}

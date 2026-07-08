@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import RegistrySearch from './RegistrySearch';
 import ClaimsFileUpload from './ClaimsFileUpload';
 
-export default function AddClaimsModal({ onClose, onImport, defaultPath = null }) {
+export default function AddClaimsModal({ onClose, onImport, defaultPath = null, initialProvince = null }) {
   const [path, setPath] = useState(defaultPath); // null | 'registry' | 'upload'
 
   function handleBackdropClick(e) {
@@ -38,6 +38,7 @@ export default function AddClaimsModal({ onClose, onImport, defaultPath = null }
 
         {path === 'registry' && (
           <RegistrySearch
+            initialProvince={initialProvince}
             onImport={(items) => {
               // items is [{geojson, name}, ...] — one entry per geographic group
               items.forEach(({ geojson, name }) => onImport(geojson, name));

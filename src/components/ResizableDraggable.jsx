@@ -23,7 +23,9 @@ export default function ResizableDraggable({
   const [snapGuides, setSnapGuides] = useState([]);
 
   const startDrag = useCallback((e) => {
-    if (e.button !== 0) return;
+    // Pointer events cover mouse, touch, and pen; only reject non-primary
+    // MOUSE buttons (touch reports button 0 or -1 depending on browser).
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
     e.stopPropagation();
     e.preventDefault();
     onDragStart?.();
@@ -43,16 +45,18 @@ export default function ResizableDraggable({
     const up = () => {
       setSnapGuides([]);
       onDragEnd?.();
-      window.removeEventListener('mousemove', mv);
-      window.removeEventListener('mouseup', up);
+      window.removeEventListener('pointermove', mv);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
     };
 
-    window.addEventListener('mousemove', mv);
-    window.addEventListener('mouseup', up);
+    window.addEventListener('pointermove', mv);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
   }, [containerH, containerW, h, id, onDragEnd, onDragStart, onMove, snapElements, w, x, y]);
 
   const startResize = useCallback((e, dir) => {
-    if (e.button !== 0) return;
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
     e.stopPropagation();
     e.preventDefault();
     const sx = e.clientX;
@@ -85,12 +89,14 @@ export default function ResizableDraggable({
     };
 
     const up = () => {
-      window.removeEventListener('mousemove', mv);
-      window.removeEventListener('mouseup', up);
+      window.removeEventListener('pointermove', mv);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
     };
 
-    window.addEventListener('mousemove', mv);
-    window.addEventListener('mouseup', up);
+    window.addEventListener('pointermove', mv);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
   }, [h, minH, minW, onResize, w, x, y]);
 
   const handlePos = {
@@ -133,13 +139,13 @@ export default function ResizableDraggable({
           cursor: 'move',
           boxSizing: 'border-box',
         }}
-        onMouseDown={startDrag}
+        onPointerDown={startDrag}
       >
         {children}
         {Object.entries(handlePos).map(([dir, pos]) => (
           <div
             key={dir}
-            onMouseDown={(e) => startResize(e, dir)}
+            onPointerDown={(e) => startResize(e, dir)}
             style={{
               position: 'absolute',
               width: 8,
