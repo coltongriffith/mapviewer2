@@ -5,8 +5,14 @@
     "title": "How to Map BC Mineral Claims from the Public Registry",
     "metaDescription": "Search British Columbia mineral claims by company or claimholder, import the tenures into Exploration Maps, style them, and export a clean investor-ready map. Includes Mineral Titles Online verification steps.",
     "directAnswer": "To map BC mineral claims, open Exploration Maps, search a company or claimholder to pull their British Columbia tenures from public registry data, add the claims to the map, assign the Claims layer role for standard styling, add context and a title block, then export a PNG or PDF. Always confirm current ownership, status, and boundaries in BC Mineral Titles Online (MTO) before relying on the map.",
-    "ctaTop": { "text": "Search a claimholder and create a map.", "sub": "Pull a company's BC tenures and have a styled map in minutes." },
-    "ctaBottom": { "text": "Import your file and export an investor-ready map.", "sub": "Open the editor, drop in your claims, and export a clean PNG or PDF." },
+    "ctaTop": {
+      "text": "Search a claimholder and create a map.",
+      "sub": "Pull a company's BC tenures and have a styled map in minutes."
+    },
+    "ctaBottom": {
+      "text": "Import your file and export an investor-ready map.",
+      "sub": "Open the editor, drop in your claims, and export a clean PNG or PDF."
+    },
     "sections": [
       {
         "h2": "What you'll need",
@@ -22,17 +28,28 @@
       {
         "h2": "Step 1: Search BC claims by company or claimholder",
         "body": "Open Exploration Maps and choose Add Claims → Search Claims Registry. Select British Columbia, then type a company or claimholder name. The tool returns the matching tenures from public BC registry data so you can map a competitor's ground or your own holdings without manually entering coordinates.",
-        "image": { "alt": "Claim search panel with British Columbia selected and a company name typed in", "caption": "Searching BC tenures by claimholder name in the Add Claims panel", "src": "/blog-img/registry-bc.png" }
+        "image": {
+          "alt": "Claim search panel with British Columbia selected and a company name typed in",
+          "caption": "Searching BC tenures by claimholder name in the Add Claims panel",
+          "src": "/blog-img/registry-bc.png"
+        }
       },
       {
         "h2": "Step 2: Add the claims to your map",
         "body": "Select the tenures (or tenure groups) you want and click Add to map. They're added as a claims layer and the map fits to their extent automatically. If you instead have a tenure file, use the import button in the Layers section and select your GeoJSON, Shapefile, or KML — the layer is added the same way.",
-        "cta": { "text": "Turn public claim data into a clean map.", "sub": "Add a claimholder's BC tenures to the map in one click." }
+        "cta": {
+          "text": "Turn public claim data into a clean map.",
+          "sub": "Add a claimholder's BC tenures to the map in one click."
+        }
       },
       {
         "h2": "Step 3: Assign the Claims role and style the tenures",
         "body": "Expand the layer card and choose 'Claims' from the Role dropdown to apply the standard convention: a medium-blue stroke with a light, semi-transparent blue fill. Adjust the stroke and fill colour pickers if you want to distinguish optioned ground, JV claims, or separate blocks — each layer gets its own legend entry, so rename them to something descriptive like 'Optioned Claims' or 'Zone 1 Tenures'.",
-        "image": { "alt": "Layer card showing the Claims role selected with blue stroke and fill", "caption": "Assigning the Claims role applies investor-standard blue styling", "src": "/blog-img/layer-claims-role.png" }
+        "image": {
+          "alt": "Layer card showing the Claims role selected with blue stroke and fill",
+          "caption": "Assigning the Claims role applies investor-standard blue styling",
+          "src": "/blog-img/layer-claims-role.png"
+        }
       },
       {
         "h2": "Step 4: Add context, a title block, and your logo",
@@ -41,7 +58,11 @@
       {
         "h2": "Step 5: Export a clean BC claims map",
         "body": "Pick an export ratio — Landscape 16:9 for slides and news releases, Letter Portrait for reports — frame the claims within the bounds, then export PNG for presentations or PDF for print. Enter your email to unlock watermark-free exports.",
-        "image": { "alt": "Export panel with Landscape 16:9 ratio selected over a framed BC claims map", "caption": "Framing and exporting the finished BC claims map", "src": "/blog-img/ratio-169.png" }
+        "image": {
+          "alt": "Export panel with Landscape 16:9 ratio selected over a framed BC claims map",
+          "caption": "Framing and exporting the finished BC claims map",
+          "src": "/blog-img/ratio-169.png"
+        }
       },
       {
         "h2": "Example: mapping a competitor's Golden Triangle ground",
@@ -117,8 +138,14 @@
     "title": "How to Make a Mining Claims Map",
     "metaDescription": "The complete guide to making a mining claims map: import public claim data, shapefiles, KML, GeoJSON, or drillhole CSVs, style your claims, and export a clean investor-ready map in minutes. Links to province-by-province search guides.",
     "directAnswer": "To make a mining claims map, get your claims into Exploration Maps — either search a claimholder to pull public registry data or import a GeoJSON, Shapefile, or KML — assign the Claims layer role for standard blue styling, add context layers and a title block, then export as PNG or PDF. Exploration Maps is a visualization tool, not the official registry, so verify ownership and boundaries with the relevant provincial registry.",
-    "ctaTop": { "text": "Turn public claim data into a clean map.", "sub": "Search a claimholder or import a file and style it in minutes." },
-    "ctaBottom": { "text": "Import your file and export an investor-ready map.", "sub": "Open the editor and have a shareable claims map in minutes." },
+    "ctaTop": {
+      "text": "Turn public claim data into a clean map.",
+      "sub": "Search a claimholder or import a file and style it in minutes."
+    },
+    "ctaBottom": {
+      "text": "Import your file and export an investor-ready map.",
+      "sub": "Open the editor and have a shareable claims map in minutes."
+    },
     "sections": [
       {
         "h2": "What you need before you start",
@@ -138,12 +165,20 @@
       {
         "h2": "Step 1: Get your claims onto the map",
         "body": "Open Exploration Maps. To search public data, choose Add Claims → Search Claims Registry, pick your province, and type a company or claimholder name. To use your own file, click the import button in the Layers section and select your GeoJSON, Shapefile, or KML. Either way the layer is added automatically and the map fits to your claims. If your data is corner coordinates in a spreadsheet, import the CSV and the Column Mapper assigns the fields.",
-        "image": { "alt": "Layers panel with a claims boundary imported and the map fit to its extent", "caption": "A claims boundary imported and framed automatically", "src": "/blog-img/map-claims.png" }
+        "image": {
+          "alt": "Layers panel with a claims boundary imported and the map fit to its extent",
+          "caption": "A claims boundary imported and framed automatically",
+          "src": "/blog-img/map-claims.png"
+        }
       },
       {
         "h2": "Step 2: Assign the Claims layer role",
         "body": "Expand the layer card and select 'Claims' from the Role dropdown. This applies the standard convention automatically: a blue stroke with a light, semi-transparent blue fill — the styling investors and NI 43-101 reviewers expect. Override the stroke and fill colours per layer if you're showing multiple blocks.",
-        "image": { "alt": "Layer card with the Claims role selected showing blue claim styling", "caption": "The Claims role applies investor-standard styling in one click", "src": "/blog-img/layer-claims-role.png" }
+        "image": {
+          "alt": "Layer card with the Claims role selected showing blue claim styling",
+          "caption": "The Claims role applies investor-standard styling in one click",
+          "src": "/blog-img/layer-claims-role.png"
+        }
       },
       {
         "h2": "Step 3: Add context layers",
@@ -156,7 +191,10 @@
       {
         "h2": "Step 5: Configure the title block and logo",
         "body": "Click the title on the map to edit it inline — project name as the title, company name as the subtitle. Add the map date and project number in Design → Text & Metadata, and upload your logo at the bottom of the Layers section.",
-        "cta": { "text": "Search a claimholder and create a map.", "sub": "Pull public tenures for any province and style them instantly." }
+        "cta": {
+          "text": "Search a claimholder and create a map.",
+          "sub": "Pull public tenures for any province and style them instantly."
+        }
       },
       {
         "h2": "Step 6: Export your map",
@@ -169,13 +207,37 @@
       {
         "h2": "Choosing your starting point",
         "table": {
-          "headers": ["You have…", "Best path", "Guide"],
+          "headers": [
+            "You have…",
+            "Best path",
+            "Guide"
+          ],
           "rows": [
-            ["Just a company name", "Search the claims registry in-app", "Your province guide above"],
-            ["A Shapefile or GeoJSON", "Import as a layer", "Import GeoJSON / Shapefile"],
-            ["A KML from Google Earth", "Import as a layer", "Import GeoJSON / Shapefile"],
-            ["Corner coordinates in a spreadsheet", "Import CSV + Column Mapper", "Import CSV data"],
-            ["Drill collars to add", "Import collar CSV, assign Drillholes", "Drill results map"]
+            [
+              "Just a company name",
+              "Search the claims registry in-app",
+              "Your province guide above"
+            ],
+            [
+              "A Shapefile or GeoJSON",
+              "Import as a layer",
+              "Import GeoJSON / Shapefile"
+            ],
+            [
+              "A KML from Google Earth",
+              "Import as a layer",
+              "Import GeoJSON / Shapefile"
+            ],
+            [
+              "Corner coordinates in a spreadsheet",
+              "Import CSV + Column Mapper",
+              "Import CSV data"
+            ],
+            [
+              "Drill collars to add",
+              "Import collar CSV, assign Drillholes",
+              "Drill results map"
+            ]
           ]
         }
       },
@@ -240,8 +302,14 @@
     "title": "How to Make a Drill Results Map",
     "metaDescription": "Turn a drill collar CSV into a clean drill results map for news releases and NI 43-101 reports: required columns, fixing coordinate issues, hole-ID callouts and intercept labels, and a print-ready export.",
     "directAnswer": "To make a drill results map, import your drill collar CSV, map the latitude/longitude (or easting/northing) columns, assign the Drillholes role, add callout labels showing hole ID and best intercept, add the property boundary, then export as a Landscape 16:9 PNG or a news-release figure PDF.",
-    "ctaTop": { "text": "Import your file and export an investor-ready map.", "sub": "Drop in a collar CSV and label your best holes in minutes." },
-    "ctaBottom": { "text": "Turn drill data into a clean map.", "sub": "Open the editor, import your collars, and export a news-release figure." },
+    "ctaTop": {
+      "text": "Import your file and export an investor-ready map.",
+      "sub": "Drop in a collar CSV and label your best holes in minutes."
+    },
+    "ctaBottom": {
+      "text": "Turn drill data into a clean map.",
+      "sub": "Open the editor, import your collars, and export a news-release figure."
+    },
     "sections": [
       {
         "h2": "What data you need",
@@ -257,21 +325,60 @@
         "h2": "Required and recommended CSV columns",
         "body": "At minimum you need a hole ID and a coordinate pair. Everything else is preserved as feature properties you can show in callouts.",
         "table": {
-          "headers": ["Column", "Required?", "Example", "Notes"],
+          "headers": [
+            "Column",
+            "Required?",
+            "Example",
+            "Notes"
+          ],
           "rows": [
-            ["Hole ID", "Required", "DDH-24-012", "Used as the callout title"],
-            ["Latitude / Northing", "Required", "50.12345", "Decimal degrees or UTM northing"],
-            ["Longitude / Easting", "Required", "-122.54321", "Decimal degrees or UTM easting"],
-            ["Total depth (m)", "Recommended", "248.5", "Context in callouts/tables"],
-            ["Best intercept", "Recommended", "15.2m @ 4.8 g/t Au", "The headline label"],
-            ["Azimuth / Dip", "Optional", "135 / -50", "If you note hole orientation"]
+            [
+              "Hole ID",
+              "Required",
+              "DDH-24-012",
+              "Used as the callout title"
+            ],
+            [
+              "Latitude / Northing",
+              "Required",
+              "50.12345",
+              "Decimal degrees or UTM northing"
+            ],
+            [
+              "Longitude / Easting",
+              "Required",
+              "-122.54321",
+              "Decimal degrees or UTM easting"
+            ],
+            [
+              "Total depth (m)",
+              "Recommended",
+              "248.5",
+              "Context in callouts/tables"
+            ],
+            [
+              "Best intercept",
+              "Recommended",
+              "15.2m @ 4.8 g/t Au",
+              "The headline label"
+            ],
+            [
+              "Azimuth / Dip",
+              "Optional",
+              "135 / -50",
+              "If you note hole orientation"
+            ]
           ]
         }
       },
       {
         "h2": "Step 1: Import the drill collar CSV",
         "body": "Click the import button in the Layers section and select your collar CSV. The Column Mapper opens automatically — assign latitude and longitude. Columns named Lat, Long, Latitude, Longitude, Easting, or Northing are detected for you. Every other column (hole ID, depth, grade) is preserved and accessible when you click a hole.",
-        "image": { "alt": "Column Mapper showing latitude and longitude columns being assigned from a collar CSV", "caption": "Mapping coordinate columns when importing a collar CSV", "src": "/blog-img/column-mapper.png" }
+        "image": {
+          "alt": "Column Mapper showing latitude and longitude columns being assigned from a collar CSV",
+          "caption": "Mapping coordinate columns when importing a collar CSV",
+          "src": "/blog-img/column-mapper.png"
+        }
       },
       {
         "h2": "Common coordinate issues (and fixes)",
@@ -286,7 +393,11 @@
       {
         "h2": "Step 2: Assign the Drillholes role",
         "body": "Expand the layer card and select 'Drillholes' from the Role dropdown for standard dark circle markers. A marker size of 12–16 px reads well at most scales.",
-        "image": { "alt": "Drillholes role selected on a layer of collar points over a property", "caption": "Collars styled with the Drillholes role", "src": "/blog-img/layer-drillholes-role.png" }
+        "image": {
+          "alt": "Drillholes role selected on a layer of collar points over a property",
+          "caption": "Collars styled with the Drillholes role",
+          "src": "/blog-img/layer-drillholes-role.png"
+        }
       },
       {
         "h2": "Step 3: Add hole-ID and intercept callouts",
@@ -295,7 +406,10 @@
       {
         "h2": "Step 4: Add the property boundary",
         "body": "Import your claims boundary as a second layer and assign the Claims role. This gives the drill pattern the property context investors and analysts expect to see.",
-        "cta": { "text": "Turn public claim data into a clean map.", "sub": "Add your claims boundary around the drill pattern in seconds." }
+        "cta": {
+          "text": "Turn public claim data into a clean map.",
+          "sub": "Add your claims boundary around the drill pattern in seconds."
+        }
       },
       {
         "h2": "Step 5: Frame and export for a news release",
@@ -358,8 +472,14 @@
     "title": "How to Create an Exploration Map for an Investor Presentation",
     "metaDescription": "Build investor-ready exploration maps for decks, project overviews, and news releases: pick a branded theme, set a 16:9 layout, keep the legend clean, add callouts, and export sharp PNGs and PDFs.",
     "directAnswer": "For an investor presentation map, use a branded theme (such as Investor — Navy & White), the Landscape 16:9 ratio, a satellite or light basemap, a concise legend, and callouts for your key results — then export PNG at 2× resolution. Most decks use three maps: a regional location map, a property/claims overview, and a results map.",
-    "ctaTop": { "text": "Import your file and export an investor-ready map.", "sub": "Build a deck-ready map with your brand colours and logo in minutes." },
-    "ctaBottom": { "text": "Turn public claim data into a clean map.", "sub": "Open the editor and export sharp PNGs and PDFs for your deck." },
+    "ctaTop": {
+      "text": "Import your file and export an investor-ready map.",
+      "sub": "Build a deck-ready map with your brand colours and logo in minutes."
+    },
+    "ctaBottom": {
+      "text": "Turn public claim data into a clean map.",
+      "sub": "Open the editor and export sharp PNGs and PDFs for your deck."
+    },
     "sections": [
       {
         "h2": "Why map quality matters in mining investor decks",
@@ -377,17 +497,28 @@
       {
         "h2": "Step 1: Brand the map with a theme, colours, and logo",
         "body": "Pick a theme such as Investor — Navy & White, then apply your own brand colours and logo so every map in the deck matches. Saving a brand kit means the next project starts on-brand automatically. Click the title to set the project and company name, and add the date in Design → Text & Metadata.",
-        "image": { "alt": "Map with a navy title block, company logo, and branded colours applied", "caption": "A branded title block keeps every deck map consistent", "src": "/blog-img/title-block.png" }
+        "image": {
+          "alt": "Map with a navy title block, company logo, and branded colours applied",
+          "caption": "A branded title block keeps every deck map consistent",
+          "src": "/blog-img/title-block.png"
+        }
       },
       {
         "h2": "Step 2: Set the Landscape 16:9 ratio",
         "body": "Activate Landscape 16:9 in the Export section before framing — it matches the standard PowerPoint and Keynote slide, so the map fills the slide with no letterboxing. The frame shows exactly what will export, so pan and zoom to taste.",
-        "image": { "alt": "Export panel with Landscape 16:9 selected and the map framed to the slide", "caption": "Framing to the 16:9 slide ratio before export", "src": "/blog-img/ratio-169.png" }
+        "image": {
+          "alt": "Export panel with Landscape 16:9 selected and the map framed to the slide",
+          "caption": "Framing to the 16:9 slide ratio before export",
+          "src": "/blog-img/ratio-169.png"
+        }
       },
       {
         "h2": "Step 3: Keep the legend scannable",
         "body": "Decks are read at speed. Disable legend entries the audience doesn't need, use the Compact legend mode, and if you have more than ~5 entries, split into two slides (overview + detail) rather than crowding one map.",
-        "cta": { "text": "Turn public claim data into a clean map.", "sub": "Pull your tenures and build a clean property-overview slide." }
+        "cta": {
+          "text": "Turn public claim data into a clean map.",
+          "sub": "Pull your tenures and build a clean property-overview slide."
+        }
       },
       {
         "h2": "Step 4: Add callouts for your headline results",
@@ -455,42 +586,80 @@
   {
     "slug": "how-to-import-geojson-mining-map",
     "title": "How to Import GeoJSON Data into a Mining Map",
-    "metaDescription": "Complete guide to importing GeoJSON files into Exploration Maps for mining claims, drill holes, targets, and geological features.",
-    "directAnswer": "To import GeoJSON into Exploration Maps, click the import button in the Layers section, select your .geojson or .json file, and the layer is added automatically with the map fitting to your data bounds.",
+    "metaDescription": "Import GeoJSON into a mining map in one click. Convert Shapefiles free at mapshaper.org, assign layer roles for automatic styling, and fix common coordinate-system issues.",
+    "directAnswer": "To import GeoJSON into Exploration Maps, click the import button in the Layers section, select your .geojson or .json file, and the layer is added automatically with the map zoomed to your data. Assign a layer Role (Claims, Drillholes, Targets) to get standard exploration styling in one click.",
     "sections": [
       {
-        "h2": "What is GeoJSON and Why It's Used for Mining Maps",
-        "body": "GeoJSON is an open standard format for encoding geographic data — polygons, lines, and points — as JSON. It is the most widely compatible format for web-based mapping tools. Most GIS software (QGIS, ArcGIS, MapInfo) can export to GeoJSON, and government mineral title databases often provide boundary data in GeoJSON or Shapefile format (which can be converted)."
+        "h2": "What you need",
+        "checklist": [
+          "A .geojson or .json file (polygons, lines, or points)",
+          "Coordinates in WGS84 latitude/longitude (EPSG:4326) — the standard for web maps",
+          "If your data is a Shapefile or KML: two minutes to convert it (below)"
+        ]
       },
       {
-        "h2": "Converting Shapefiles to GeoJSON",
-        "body": "If your data is in Shapefile format (.shp, .dbf, .shx, .prj), convert it to GeoJSON before importing. The free online tool at mapshaper.org accepts Shapefile ZIP archives and exports clean GeoJSON in seconds. QGIS users can right-click any layer and choose Export → Save Features As → GeoJSON."
+        "h2": "Why GeoJSON is the easiest format to work with",
+        "body": "GeoJSON is a single text file that encodes polygons, lines, and points as JSON. Unlike a Shapefile — which is really four or more files that must travel together — a GeoJSON never arrives missing its .prj or .dbf. Most government open-data portals and modern GIS tools export it directly, and it imports into Exploration Maps with zero configuration."
       },
       {
-        "h2": "Importing Your GeoJSON File",
-        "body": "In Exploration Maps, click the upload/import icon in the Layers section of the sidebar. Select your .geojson or .json file. The layer is added immediately and the map automatically fits to the extent of your data. If your file contains multiple geometry types (polygons and lines, for example), they are split into separate layers automatically."
+        "h2": "Converting a Shapefile to GeoJSON (free, 2 minutes)",
+        "body": "If your data came as a Shapefile (.shp + .dbf + .shx + .prj) or KML, convert it first:",
+        "items": [
+          "Go to mapshaper.org (free, runs in your browser — your data never uploads to a server)",
+          "Drag the whole Shapefile set in (or the .zip) — include the .prj so the projection is read correctly",
+          "Click Export → GeoJSON",
+          "Import the downloaded file into Exploration Maps"
+        ]
       },
       {
-        "h2": "Assigning a Layer Role After Import",
-        "body": "After importing, expand the layer card and assign a Role. Roles drive automatic styling — Claims applies blue boundaries, Drillholes applies dark circle markers, Target Areas applies amber dashed outlines. Assigning the correct role saves significant manual styling time and ensures your map follows industry conventions."
+        "h2": "Importing the file",
+        "body": "In Exploration Maps, click the import button in the Layers section of the sidebar and select your file. The layer is added, the map zooms to its bounds, and polygon, line, and point geometry are detected automatically. Attribute properties come along too — they drive labels and callouts later."
       },
       {
-        "h2": "Checking Coordinate Systems",
-        "body": "Exploration Maps expects geographic coordinates in WGS84 (EPSG:4326 — standard latitude/longitude). If your GeoJSON displays in the wrong location or far off from expected, the source data may be in a projected coordinate system (UTM, NAD83). Re-export from your GIS software with the coordinate system set to WGS84 / EPSG:4326."
+        "h2": "Assign a Role to get instant styling",
+        "body": "Expand the new layer card and set its Role. Roles apply the styling conventions readers of exploration maps expect — Claims get the classic boundary treatment, Drillholes render as collar points, Target Areas get dashed outlines. You can override any colour afterwards, but the role gets you to a presentable map immediately.",
+        "image": {
+          "src": "/blog-img/layer-claims-role.png",
+          "alt": "Assigning the Claims role to an imported GeoJSON layer",
+          "caption": "Assigning a Role after import applies standard exploration styling in one click."
+        }
+      },
+      {
+        "h2": "If your data lands in the wrong place",
+        "body": "Exploration Maps expects geographic coordinates (WGS84 / EPSG:4326). If your imported layer appears in the ocean or at (0,0), the file is almost certainly in a projected system like UTM.",
+        "box": {
+          "kind": "tip",
+          "title": "Fix a UTM or projected file",
+          "html": "Open the original file in mapshaper.org, run the console command <code>-proj wgs84</code> (or export from your GIS with CRS set to EPSG:4326), then re-import. Zone mismatches are the #1 cause of misplaced exploration data."
+        }
+      },
+      {
+        "cta": {
+          "text": "Import your GeoJSON and export an investor-ready map.",
+          "sub": "Drag the file in, pick a role, export in minutes."
+        }
       }
     ],
     "faqs": [
       {
-        "q": "What file extensions does Exploration Maps accept?",
-        "a": "For vector data: .geojson and .json. For tabular point data: .csv. For images (logo and inset maps): .jpg and .png. Shapefiles must be converted to GeoJSON first."
+        "q": "What GeoJSON geometry types can I import?",
+        "a": "Polygons and MultiPolygons (claims, licences, target outlines), LineStrings (roads, powerlines, trenches), and Points (drill collars, samples, showings). A single FeatureCollection can mix types, though separate layers per type style more cleanly."
       },
       {
-        "q": "My GeoJSON file shows in the wrong location — what's wrong?",
-        "a": "The most common cause is that the data is in a projected coordinate system (such as UTM Zone 10N or BC Albers) rather than geographic coordinates (WGS84 latitude/longitude). Re-export from your GIS software, specifying WGS84 / EPSG:4326 as the output coordinate reference system."
+        "q": "Is there a file size limit for GeoJSON imports?",
+        "a": "Very large files (tens of megabytes) can slow the browser. If your file is heavy, simplify the geometry at mapshaper.org (Simplify → 10–30%) — claim boundaries rarely need survey-grade vertex density for a presentation map."
       },
       {
-        "q": "Can I import multiple GeoJSON files?",
-        "a": "Yes — import as many files as needed. Each file becomes a separate layer in the Layers list. You can toggle visibility, reorder layers (drag to change draw order), and style each layer independently."
+        "q": "Do my GeoJSON attributes/properties import too?",
+        "a": "Yes. Feature properties are preserved and available for labels and callouts — for example a claim number or hole ID column can be shown directly on the map."
+      },
+      {
+        "q": "My coordinates are in UTM. Can I import them?",
+        "a": "Convert to WGS84 first. In mapshaper, load the file with its .prj and export as GeoJSON with the wgs84 setting, or reproject in QGIS with 'Save As' → CRS EPSG:4326. If the file has no .prj, you'll need to know the UTM zone to reproject correctly."
+      },
+      {
+        "q": "Can I import multiple GeoJSON files into one map?",
+        "a": "Yes — each import becomes its own layer with independent styling, visibility, and legend entry. A typical project map stacks a claims layer, a drillhole layer, and a target-areas layer."
       }
     ],
     "relatedSlugs": [
@@ -503,46 +672,91 @@
   {
     "slug": "how-to-choose-basemap-mining-map",
     "title": "How to Choose the Right Basemap for a Mining Map",
-    "metaDescription": "Guide to choosing between light, satellite, topographic, and dark basemaps for mining exploration maps in investor presentations, technical reports, and news releases.",
-    "directAnswer": "Use the Light basemap for NI 43-101 reports and regulatory filings, Satellite for investor presentations and location maps showing terrain, Topographic for infrastructure and access maps, and Dark for digital dashboards and social media.",
+    "metaDescription": "Which basemap for a mining map? Light for technical reports, Satellite for investor decks, Topographic for access maps, Dark for social — with a quick-reference table.",
+    "directAnswer": "Use the Light basemap for NI 43-101 reports and regulatory filings, Satellite for investor presentations that benefit from terrain context, Topographic for access and infrastructure maps, and Dark for digital dashboards and social media. When in doubt: Light for print, Satellite for slides.",
     "sections": [
       {
-        "h2": "The Four Basemaps and When to Use Each",
-        "body": "Exploration Maps offers four basemap styles. Each has a specific context where it performs best:"
+        "h2": "Quick reference",
+        "table": {
+          "headers": [
+            "Basemap",
+            "Best for",
+            "Avoid when"
+          ],
+          "rows": [
+            [
+              "Light",
+              "NI 43-101 figures, permitting, any printed document",
+              "You need terrain or vegetation context"
+            ],
+            [
+              "Satellite",
+              "Investor decks, location maps, showing access and topography",
+              "The document will be printed in black and white"
+            ],
+            [
+              "Topographic",
+              "Access roads, infrastructure planning, field maps",
+              "The audience is non-technical investors"
+            ],
+            [
+              "Dark",
+              "Websites, social posts, on-screen dashboards",
+              "Print of any kind — dark backgrounds waste ink and lose detail"
+            ]
+          ]
+        }
       },
       {
-        "h2": "Light Basemap: Technical Reports and Regulatory Filings",
-        "body": "The Light basemap uses a neutral light gray background that makes coloured data layers — claims boundaries, drill holes, target areas — stand out clearly. It is the standard choice for NI 43-101 technical reports, regulatory submissions, and any map where the data must be legible in black-and-white printing. Pair with the Technical — Sharp Borders theme for formal documents."
+        "h2": "Light — technical reports and regulatory filings",
+        "body": "A neutral light-grey canvas that makes data layers the star: claim boundaries, drill collars, and labels all read clearly, and it photocopies and prints without losing information. If the map is going into a technical report, a permit application, or anything a regulator will read, start here."
       },
       {
-        "h2": "Satellite Basemap: Investor Presentations and Location Maps",
-        "body": "The Satellite basemap shows real aerial imagery, giving investors immediate visual context for terrain, vegetation, access roads, and infrastructure. It is the most compelling basemap for investor materials and is especially effective for properties with distinct topographic features. Reduce the Reference Labels overlay opacity to 50% so place names are readable without overwhelming the imagery."
+        "h2": "Satellite — investor presentations and location maps",
+        "body": "Real imagery gives an audience instant context — terrain, vegetation, lakes, existing roads and disturbance. It answers the questions investors actually ask ('how remote is this?', 'is there access?') before they're asked. Pair it with white or light-coloured boundaries and labels so they hold contrast against the imagery."
       },
       {
-        "h2": "Topographic Basemap: Infrastructure and Field Maps",
-        "body": "The Topographic basemap shows contour lines and elevation shading. It is ideal for infrastructure maps (road access, drill site planning), environmental assessments, and field geology maps where elevation context matters. Pair with the Terrain — Earthy & Warm theme for a cohesive look."
+        "h2": "Topographic — access and infrastructure maps",
+        "body": "Contour lines and elevation shading make this the right choice when the story is physical: road access, proposed drill pads, powerline routes, camp locations. Field crews also find topo maps the easiest to orient with."
       },
       {
-        "h2": "Dark Basemap: Digital Presentations and Social Media",
-        "body": "The Dark basemap provides a high-contrast background that makes coloured data layers glow. It is best for digital-first content: website graphics, social media posts, and on-screen investor day presentations. It is not suitable for printed materials or formal technical documents."
+        "h2": "Dark — digital-first content",
+        "body": "High contrast makes coloured layers glow on screen — striking for a website hero, a social post announcing results, or an on-screen dashboard. Never print it."
       },
       {
-        "h2": "Reference Overlays: Adding Context to Any Basemap",
-        "body": "Regardless of which basemap you choose, the Context overlay adds roads, water bodies, and towns. The Reference Labels overlay adds place names. The Railway Network overlay adds rail infrastructure. These overlays work on top of any basemap and can be fine-tuned with the Overlay Opacity slider."
+        "h2": "Add context to any basemap",
+        "body": "Whichever basemap you pick, two overlays sharpen the story:",
+        "items": [
+          "Context overlay — roads, water bodies, and towns at low opacity",
+          "Reference Labels — place names that orient a reader instantly"
+        ],
+        "box": {
+          "kind": "tip",
+          "title": "One deck, one basemap",
+          "html": "If a presentation includes several maps, keep the basemap consistent across all of them — switching styles slide-to-slide reads as sloppy. Pick per document, not per map."
+        }
       }
     ],
     "faqs": [
       {
-        "q": "Which basemap is required for NI 43-101 reports?",
-        "a": "NI 43-101 does not specify a particular basemap style, but convention strongly favours the Light or Topographic basemap for technical maps. The requirement is that the map be legible, have a north arrow, scale bar, and appropriate legend — the style is at the discretion of the Qualified Person."
+        "q": "Which basemap is best for an NI 43-101 technical report?",
+        "a": "Light. It prints cleanly, keeps data layers legible, and matches the neutral presentation regulators and QPs expect in report figures. Use Satellite only for a supplementary location/access figure where imagery adds real information."
       },
       {
-        "q": "Can I use satellite imagery in a printed report?",
-        "a": "Yes. Satellite basemaps export at full resolution in PNG and PDF formats, suitable for print. Ensure your export pixel ratio is set to 2× or 3× for print-quality output."
+        "q": "Can I change the basemap after styling my layers?",
+        "a": "Yes — basemap and data layers are independent, so you can switch any time. Do check label and boundary contrast after switching: white labels that pop on Satellite can disappear on Light."
       },
       {
-        "q": "What basemap works best for a regional location map?",
-        "a": "The Satellite basemap is most commonly used for regional location maps — it helps investors immediately understand the property's physical setting and surrounding terrain. The Topographic basemap is also effective for mountainous or complex terrain."
+        "q": "Which basemap should I use for a drill results news release figure?",
+        "a": "Satellite or Light. Satellite gives context for a property-scale figure; Light is safer for a tight collar-map figure where grades and hole IDs must be unmissable."
+      },
+      {
+        "q": "Do the basemaps work at any zoom level?",
+        "a": "Yes, all four cover the globe at property to continental scales. Satellite resolution varies by region at very tight zooms — remote northern properties may show coarser imagery than populated areas."
+      },
+      {
+        "q": "Is there a blank/no-basemap option for clean claim plats?",
+        "a": "Use Light at low opacity or crop tightly — its neutral grey reads nearly blank in print while keeping just enough geographic anchoring."
       }
     ],
     "relatedSlugs": [
@@ -555,42 +769,101 @@
   {
     "slug": "how-to-export-mining-map-pdf",
     "title": "How to Export a Mining Map as a PDF",
-    "metaDescription": "Export high-quality PDF mining maps for NI 43-101 reports, news releases, and regulatory filings. Guide covering page sizes, pixel ratio, and print settings.",
-    "directAnswer": "To export a mining map as PDF in Exploration Maps, click the PDF button in the toolbar, choose your page size (Letter, A4, or News Release Figure), enter your email to remove the watermark, and download.",
+    "metaDescription": "Export a mining map as a print-ready PDF: page sizes for NI 43-101 figures and news releases, 3× pixel ratio for print, and watermark-free download.",
+    "directAnswer": "To export a mining map as a PDF, set your ratio in the Export section (Letter, A4, or 16:9), click the PDF button in the toolbar, choose the matching page size, enter your work email to remove the watermark, and download. Use 3× pixel ratio for anything that will be printed.",
     "sections": [
       {
-        "h2": "PDF vs PNG: Which to Use",
-        "body": "Use PDF for documents that will be printed or submitted to regulators — NI 43-101 reports, permitting applications, environmental assessments. Use PNG for digital use — PowerPoint slides, email attachments, website images, and news release wire service submissions. Both formats export at full resolution with all panels (title, legend, logo) included."
+        "h2": "Before you export",
+        "checklist": [
+          "Frame the view — everything important inside the ratio guides, nothing critical near the edges",
+          "Title block filled in: project, company, date",
+          "Legend, scale bar, and north arrow enabled",
+          "Ratio set to match your target page size (Portrait 3:4 for Letter Portrait, Landscape 16:9 for slides)"
+        ]
       },
       {
-        "h2": "Choosing the Right PDF Page Size",
-        "body": "Exploration Maps offers five PDF page sizes: PowerPoint 16:9 (13.33\" × 7.5\") for presentation-ready PDFs, Letter Landscape (11\" × 8.5\") and Portrait (8.5\" × 11\") for North American regulatory filings, A4 Landscape and Portrait for international filings and European investors, and News Release Figure (6\" × 4.5\") for figures attached to press releases. Choose Letter or A4 Portrait for NI 43-101 appendix maps."
+        "h2": "PDF or PNG?",
+        "body": "Use PDF for anything printed or filed — technical report figures, permitting documents, news-release figures that go to a wire service. Use PNG for slides, websites, and email. PDFs preserve exact page dimensions; PNGs are lighter and drop straight into PowerPoint."
       },
       {
-        "h2": "Setting the Export Ratio Before Exporting PDF",
-        "body": "Activate the appropriate ratio in the Export section before clicking PDF. For Letter Portrait PDFs, use the Portrait 3:4 ratio. For Landscape PDFs, use Landscape 16:9. This ensures your map fills the page without letterboxing. Pan and zoom to frame your map within the ratio bounds — the dashed border shows the export frame."
+        "h2": "Pick the right page size",
+        "table": {
+          "headers": [
+            "Page size",
+            "Dimensions",
+            "Use it for"
+          ],
+          "rows": [
+            [
+              "PowerPoint 16:9",
+              "13.33 × 7.5 in",
+              "Presentation-ready PDF slides"
+            ],
+            [
+              "Letter Landscape",
+              "11 × 8.5 in",
+              "North American report figures"
+            ],
+            [
+              "Letter Portrait",
+              "8.5 × 11 in",
+              "Full-page report figures, permit applications"
+            ],
+            [
+              "A4 Landscape",
+              "297 × 210 mm",
+              "International reports"
+            ],
+            [
+              "News Release Figure",
+              "8 × 6 in",
+              "Wire-service news release attachments"
+            ]
+          ]
+        }
       },
       {
-        "h2": "Watermark-Free Export",
-        "body": "Enter your work email in the export dialog to unlock clean PDF exports with no explorationmaps.com watermark. Your email is stored locally and remembered for future sessions. A 'Download with watermark' option is always available without entering an email if you need a quick draft."
+        "h2": "Set the ratio, then export",
+        "body": "Activate the matching ratio in the Export section first — the on-screen guides show exactly what the PDF will contain, so you frame once and export without surprises.",
+        "image": {
+          "src": "/blog-img/ratio-169.png",
+          "alt": "Selecting the Landscape 16:9 export ratio",
+          "caption": "Match the on-screen ratio to your PDF page size before exporting."
+        }
       },
       {
-        "h2": "Pixel Ratio for Print-Quality PDFs",
-        "body": "Set the Pixel Ratio to 3× in Export Settings for any map that will be printed. 3× produces an image embedded in the PDF at approximately 300 DPI at standard page sizes — the minimum for professional print quality. 2× is sufficient for screen-only use."
+        "h2": "Print quality: use 3× pixel ratio",
+        "box": {
+          "kind": "tip",
+          "title": "3× for print, 2× for screens",
+          "html": "In Export Settings, set Pixel Ratio to <strong>3×</strong> for any printed PDF — roughly 300 DPI equivalent, so fine claim boundaries and small labels stay crisp on paper. 2× is fine for PDFs that will only be viewed on screen."
+        }
+      },
+      {
+        "h2": "Removing the watermark",
+        "body": "Enter your work email in the export dialog to unlock clean, watermark-free exports. You only do this once per browser."
       }
     ],
     "faqs": [
       {
-        "q": "What PDF page size should I use for a NI 43-101 technical report?",
-        "a": "NI 43-101 technical reports are typically formatted on Letter (8.5\" × 11\") or A4 (8.27\" × 11.69\") paper. Use the Letter Portrait or A4 Portrait PDF page size. For larger foldout maps included as appendices, use Letter Landscape."
-      },
-      {
-        "q": "Can I embed a PDF mining map into a Word document?",
-        "a": "Yes. In Word, use Insert → Object → Create from File to embed the PDF, or insert the PNG export as an image (which is simpler for most users). For NI 43-101 reports where the map is a separate appendix, the PDF file itself is typically submitted as a separate attachment."
-      },
-      {
         "q": "What resolution is the exported PDF?",
-        "a": "PDFs from Exploration Maps contain a raster image at the resolution set by your Pixel Ratio setting. At 2× ratio and Letter Portrait size, the embedded image is approximately 200 DPI — suitable for most professional printing. At 3×, it approaches 300 DPI — the standard for high-quality print."
+        "a": "The map is embedded at your chosen pixel ratio: 2× is sharp on screens; 3× is print quality (~300 DPI equivalent at the chosen page size). For NI 43-101 report figures, use 3×."
+      },
+      {
+        "q": "Can I export a PDF sized for a news release?",
+        "a": "Yes — the News Release Figure size (8 × 6 in) matches what wire services and IR teams typically request, and pairs with the Landscape ratio guides for framing."
+      },
+      {
+        "q": "Is the PDF vector or raster?",
+        "a": "The map itself is a high-resolution raster embedded at exact page dimensions — consistent output regardless of layer complexity, and what report printers expect. Use 3× pixel ratio to keep it print-crisp."
+      },
+      {
+        "q": "Why does my exported PDF crop differently from my screen?",
+        "a": "The export follows the ratio guides, not your browser window. Activate the ratio that matches your page size before framing, and keep key content inside the guide lines."
+      },
+      {
+        "q": "Can I export multiple page sizes from the same map?",
+        "a": "Yes — the map isn't altered by exporting. Switch ratio/page size and export again; a common workflow is a 16:9 PNG for the deck plus a Letter PDF for the report from the same project."
       }
     ],
     "relatedSlugs": [
@@ -603,34 +876,52 @@
   {
     "slug": "how-to-add-distance-ring-mining-map",
     "title": "How to Add a Distance Ring to a Mining Map",
-    "metaDescription": "Add distance rings to exploration maps to show radius from a key point — drill target, town, or infrastructure. Step-by-step guide with arc labels.",
-    "directAnswer": "To add a distance ring, click 'Draw Distance Ring' in the Annotations section, click the center point on the map, then set the radius in kilometres and add an arc label to show the distance.",
+    "metaDescription": "Add a distance ring to a mining map: place the centre, set a true-distance radius in km, label the arc, and use outside-shade to focus attention on your project.",
+    "directAnswer": "Click 'Draw Distance Ring' in the Annotations section, click the centre point on the map, set the radius in kilometres, and add a curved arc label such as '50 km from Port of Prince Rupert'. Rings are drawn as true great-circle distances.",
     "sections": [
       {
-        "h2": "When to Use Distance Rings on Mining Maps",
-        "body": "Distance rings communicate scale and proximity — how far the project is from a town, port, mill, or power line. They are commonly used on location maps to show the project is within a certain radius of infrastructure, and on drill plan maps to show target spacing."
+        "h2": "When a distance ring earns its place",
+        "body": "Distance rings turn 'remote project' into a concrete number. Use one when proximity is part of the story:",
+        "items": [
+          "Distance to the nearest town, port, rail line, mill, or power line",
+          "'Within trucking distance' arguments for development-stage projects",
+          "Showing several projects within a set radius of shared infrastructure",
+          "District-scale maps — '25 km from the discovery' positioning"
+        ]
       },
       {
-        "h2": "Placing the Ring",
-        "body": "Click 'Draw Distance Ring' in the Annotations section of the sidebar. Click anywhere on the map to place the ring center. A ring appears immediately — adjust the radius in kilometres using the sidebar input."
+        "h2": "Placing the ring",
+        "body": "Click 'Draw Distance Ring' in the Annotations section, then click the map where the ring should be centred — the infrastructure item is usually the better centre than your project, because the label then reads as the distance to it. Set the radius in kilometres in the ring controls; the ring is computed as a true great-circle distance, so it stays accurate at any latitude."
       },
       {
-        "h2": "Adding an Arc Label",
-        "body": "Enable 'Curved arc label' in the ring controls. Enter the label text (e.g., '50 km from Port of Prince Rupert'). The label curves along the ring perimeter. Drag the label text or use the Angle slider to position it at any point around the ring — 0° is the top."
+        "h2": "Labelling the arc",
+        "body": "Enable 'Curved arc label' and type the text — e.g. '50 km from Port of Prince Rupert'. The label follows the arc, so it stays readable without covering your data. Keep it short: distance + landmark."
       },
       {
-        "h2": "Using Outside Shade for Focus",
-        "body": "Enable 'Outside shade' to add a translucent dark or light vignette over everything outside the ring. This focuses the viewer's attention on the interior area. Use the Dark preset (35% opacity) for a strong focus effect, or Light (30%) for a softer fog effect over satellite imagery."
+        "h2": "Focusing with outside shade",
+        "box": {
+          "kind": "tip",
+          "title": "Outside shade",
+          "html": "Enable 'Outside shade' to dim everything beyond the ring with a translucent vignette. It pulls the eye inside the radius — effective on satellite basemaps where imagery competes with your data. Keep the shade subtle; the goal is focus, not blackout."
+        }
       }
     ],
     "faqs": [
       {
-        "q": "How do I show a specific distance from a town or port?",
-        "a": "Place the ring center on the town or port location, set the radius to the desired distance in km, and add an arc label showing the distance and reference point. For example: '45 km from Stewart, BC'."
+        "q": "Is the ring a true distance circle or a screen circle?",
+        "a": "A true great-circle radius — 50 km on the ring is 50 km on the ground, regardless of latitude or how the web-mercator basemap stretches at high latitudes."
       },
       {
-        "q": "Can I add multiple rings at different radii?",
-        "a": "Yes — click 'Draw Distance Ring' multiple times to place multiple rings. Each ring is independently configurable with its own radius, color, and label."
+        "q": "Can I add more than one distance ring?",
+        "a": "Yes. Concentric rings (e.g. 25/50/100 km) from one centre work well for regional context; separate rings around different infrastructure points each carry their own label."
+      },
+      {
+        "q": "Should the ring centre on my project or the infrastructure?",
+        "a": "Centre on the infrastructure when the message is 'we are X km from it' — the ring then passes through or near your project, which reads naturally. Centre on the project when showing everything available within a radius."
+      },
+      {
+        "q": "Does the ring appear in the exported PNG/PDF?",
+        "a": "Yes — rings, arc labels, and outside shade all render in exports exactly as on screen, at full export resolution."
       }
     ],
     "relatedSlugs": [
@@ -643,34 +934,53 @@
   {
     "slug": "how-to-add-scale-bar-north-arrow",
     "title": "How to Add a Scale Bar and North Arrow to a Mining Map",
-    "metaDescription": "Add a scale bar and north arrow to your exploration map — required for NI 43-101 technical reports and regulatory submissions. Quick guide.",
-    "directAnswer": "Toggle the Scale Bar and North Arrow on in the Design section of the sidebar. They appear on the map automatically and can be repositioned using the corner picker controls.",
+    "metaDescription": "Add a scale bar and north arrow to a mining map in two clicks, position them by corner, and meet the standard expectations for NI 43-101 report figures.",
+    "directAnswer": "Toggle Scale Bar and North Arrow on in the Design section of the sidebar. Both render on the map automatically — the scale bar computes true ground distance for your current view — and each can be assigned to any corner with the corner pickers.",
     "sections": [
       {
-        "h2": "Why Scale Bars and North Arrows Are Required",
-        "body": "NI 43-101 technical reports and most regulatory submissions require maps to include a scale bar and north arrow. These elements allow reviewers to measure distances and understand map orientation without additional tools. Without them, maps in technical documents are considered incomplete."
+        "h2": "Why these two elements are non-negotiable",
+        "body": "A map without a scale bar and north arrow isn't a figure — it's an illustration. Reviewers of technical reports expect both on every map figure, and investors subconsciously read their presence as competence. They cost two clicks; missing them costs credibility.",
+        "box": {
+          "kind": "note",
+          "title": "Report figures",
+          "html": "Preparing figures for a technical report? See the full checklist in <a href=\"/blog/how-to-create-ni-43-101-compliant-map/\">How to Create an NI 43-101 Map Figure</a>."
+        }
       },
       {
-        "h2": "Enabling the Scale Bar",
-        "body": "Open the Design section in the sidebar and toggle the Scale Bar switch on. The scale bar appears on the map and calculates the displayed distance automatically based on the current zoom level. As you zoom in or out, the scale bar updates in real time. The scale bar is included in all exports (PNG, SVG, PDF)."
+        "h2": "Enable the scale bar",
+        "body": "Open the Design section and toggle Scale Bar on. It calculates real ground distance for the current view and picks a clean round number (1 km, 2 km, 5 km…) that updates as you zoom — you never hand-edit it."
       },
       {
-        "h2": "Enabling the North Arrow",
-        "body": "Toggle the North Arrow switch on in the Design section. The north arrow appears in the corner you specify using the corner picker. Position it in a corner that doesn't conflict with other panels (title, legend, logo, inset)."
+        "h2": "Enable the north arrow",
+        "body": "Toggle North Arrow on in the same section. Choose the style that matches the map's tone — the simple arrow suits technical figures; the compass style suits presentation maps."
       },
       {
-        "h2": "Positioning Both Elements",
-        "body": "Use the corner pickers in the Design section to assign the scale bar and north arrow to specific corners. Elements assigned to the same corner stack automatically without overlapping. Adjust Safe Margins to control how close elements can get to the map edge."
+        "h2": "Position both with the corner pickers",
+        "body": "Each element gets a corner assignment. The conventions that keep a figure tidy:",
+        "items": [
+          "Scale bar: bottom-left or bottom-right, away from the legend",
+          "North arrow: a top corner, opposite the title block",
+          "Never let either overlap data, labels, or the inset map",
+          "Elements assigned to the same corner stack automatically with correct spacing"
+        ]
       }
     ],
     "faqs": [
       {
-        "q": "Is a scale bar required for NI 43-101 maps?",
-        "a": "Yes. NI 43-101 Form 43-101F1 specifies that all maps included in technical reports must have a scale indicator (scale bar or representative fraction), north arrow, and legend. Maps without these elements may result in comments from the reviewing securities commission."
+        "q": "Does the scale bar stay accurate at high latitudes?",
+        "a": "Yes — it computes true ground distance at the map centre for the current view rather than assuming a fixed metres-per-pixel, which is exactly where naive scale bars go wrong on northern properties."
       },
       {
-        "q": "Does the scale bar update when I zoom the map?",
-        "a": "Yes. The scale bar calculates the distance it represents based on the current zoom level and map projection. If you zoom in, the scale bar shows a shorter distance; zoom out and it shows a longer distance. This means you should set your final zoom level before exporting."
+        "q": "Can I set the scale bar to a specific distance like exactly 5 km?",
+        "a": "The bar auto-selects a clean round distance appropriate to your zoom. Adjust zoom slightly and it snaps between standard steps (1, 2, 5, 10 km…), so you can land on the figure you want."
+      },
+      {
+        "q": "Are the scale bar and north arrow included in exports?",
+        "a": "Yes, both render into PNG and PDF exports at full resolution, in the corners you assigned."
+      },
+      {
+        "q": "Do I need both for an NI 43-101 figure?",
+        "a": "Standard practice is yes — scale bar, north arrow, legend, and title information are the baseline expectations for technical report figures. Your QP has final say on the report's requirements."
       }
     ],
     "relatedSlugs": [
@@ -684,65 +994,96 @@
     "slug": "how-to-create-target-generation-map",
     "mapTypeId": "target-generation-map",
     "title": "How to Create a Target Generation Map",
-    "metaDescription": "Step-by-step guide to creating a target generation map for exploration programs. Show anomalies, structural features, and priority targets for investor and technical presentations.",
-    "directAnswer": "To create a target generation map, import your target polygon outlines as GeoJSON, assign the Target Areas role, add anomaly and structural layers, apply outside shading to focus attention on priority zones, label each target, and export at high resolution for technical presentations.",
+    "metaDescription": "Create a target generation map: dashed target outlines over claims, labelled rationale per target, disclosure-safe wording, and an investor-ready export.",
+    "directAnswer": "To make a target generation map, import your claims and target outlines, assign the Target Areas role for dashed-outline styling, add drill collars or geochem points if you have them, label each target with a name and one-line rationale, then export. Frame targets as conceptual — they are exploration targets, not resources.",
     "sections": [
       {
-        "h2": "What You Need Before You Start",
-        "body": "Gather the following before building your target generation map:",
-        "items": [
-          "Target polygon outlines as GeoJSON (digitized from geophysics interpretation or structural mapping)",
-          "Anomaly extents as a separate GeoJSON layer (if available)",
-          "Fault and structural linework as GeoJSON",
-          "Property claims boundary GeoJSON",
-          "Company logo and project name"
+        "h2": "What you need",
+        "checklist": [
+          "Claim/property boundary (GeoJSON, Shapefile, or KML)",
+          "Target outlines — drawn in your GIS, or sketched from geophysics/geochem",
+          "Optional: drill collars, geochem points, or geophysical anomaly outlines that support each target",
+          "A one-line rationale per target (e.g. 'coincident IP chargeability + Au-in-soil')"
         ]
       },
       {
-        "h2": "Step 1: Import Target Polygon Data",
-        "body": "Open Exploration Maps and click the import button. Select your target outlines GeoJSON — each polygon should represent a discrete exploration target. The layer is added and the map fits to your data extent automatically. If you have multiple target tiers (e.g., Priority 1, Priority 2), import each as a separate layer so you can style them independently."
+        "h2": "Build the map",
+        "items": [
+          "Import the property boundary and assign the Claims role",
+          "Import target outlines and assign the Target Areas role — they get the conventional dashed outline that reads as 'conceptual, not drilled'",
+          "Add supporting layers (collars, soil grids) so targets visibly sit on evidence",
+          "Label each target: short name plus the rationale — 'Target A — IP anomaly, 1.2 g/t Au boulders'",
+          "Choose Satellite or Topographic basemap so targets sit in real terrain context",
+          "Add title block, legend, scale bar, north arrow; export 16:9 PNG for decks or PDF for reports"
+        ]
       },
       {
-        "h2": "Step 2: Assign the Target Areas Role",
-        "body": "Expand the layer card and select 'Target Areas' from the Role dropdown. This applies a warm orange stroke with a light fill — the conventional styling for exploration targets. For your highest-priority targets, switch the fill to a more saturated colour and increase the stroke weight to 2–3 px. For lower-priority targets, reduce opacity to 40–60% so the hierarchy is visually clear at a glance."
+        "h2": "Styling that reads correctly",
+        "table": {
+          "headers": [
+            "Layer",
+            "Convention",
+            "Why"
+          ],
+          "rows": [
+            [
+              "Target areas",
+              "Dashed outline, no/low fill",
+              "Dashed = interpreted/conceptual; solid fill overstates confidence"
+            ],
+            [
+              "Claims",
+              "Solid boundary, light fill",
+              "The one 'hard' legal line on the map"
+            ],
+            [
+              "Drill collars",
+              "Small solid points",
+              "Evidence, not the story — keep them quiet"
+            ],
+            [
+              "Anomalies",
+              "Soft colour fill at low opacity",
+              "Background support for the targets drawn over them"
+            ]
+          ]
+        }
       },
       {
-        "h2": "Step 3: Add Anomaly and Structural Layers",
-        "body": "Import your geophysical anomaly extents and fault or structural linework as separate GeoJSON layers. Assign anomaly polygons a high-contrast fill (magenta or gold works well at low opacity) to communicate the extent of the geophysical signal. Assign fault lines a dashed dark stroke. Reducing the opacity on both to 50–70% keeps these layers readable without overwhelming the target polygons in the foreground."
+        "h2": "Say it safely",
+        "box": {
+          "kind": "verify",
+          "title": "Targets are conceptual — label them that way",
+          "html": "An exploration target is not a mineral resource. Keep wording like 'exploration target', 'untested anomaly', or 'conceptual' on the map or its caption, and avoid grades/tonnage on target labels unless they carry the required cautionary language. Your QP should review any figure that goes into public disclosure."
+        }
       },
       {
-        "h2": "Step 4: Apply Outside Shade to Focus Attention",
-        "body": "In the Design section, enable the Outside Shade effect on your priority target layers. This darkens the map area outside the target polygon, drawing the viewer's eye directly to the area of interest. Use it selectively — applying it to too many layers simultaneously reduces the effect. Outside Shade is particularly effective when presenting a single high-priority target to investors or JV partners."
-      },
-      {
-        "h2": "Step 5: Label Each Target",
-        "body": "Click on each target polygon to open the inline feature editor. Enter the target name (e.g., 'Zone A', 'North Anomaly', 'Western Shear') as the label. For targets with associated geochemical peak values or historical resource estimates, add a brief subtext note. Labels anchor to the polygon centroid automatically — drag them to adjust positioning if polygons overlap."
-      },
-      {
-        "h2": "Step 6: Export for Technical Presentations",
-        "body": "Target generation maps are typically shown in technical investor presentations and JV partner packages, so the 16:9 Landscape ratio is standard. Select the Satellite basemap to provide terrain and vegetation context. Apply the Technical — Sharp Borders or Modern — Dark Indigo theme. Export at 3× resolution (PNG) for high-resolution display on large screens and in printed technical documents."
+        "cta": {
+          "text": "Turn your target concepts into a clean map.",
+          "sub": "Import boundaries, drop in targets, export an investor-ready figure."
+        }
       }
     ],
     "faqs": [
       {
-        "q": "What data format do I need for target polygon outlines?",
-        "a": "GeoJSON is the required format. If your target outlines are in a GIS package (QGIS, ArcGIS, or MapInfo), export the layer as GeoJSON with CRS set to EPSG:4326 (WGS84). If you've sketched targets in a PDF interpretation, you'll need to digitize them in QGIS first — draw your polygon outlines, then export as GeoJSON."
+        "q": "How do I draw target outlines if I only have points or a grid?",
+        "a": "Sketch the outlines in your GIS (QGIS's polygon tool over your geophysics/geochem raster works well), export as GeoJSON, and import. Many teams simply digitize a loose ellipse around the anomaly — the dashed styling correctly communicates that it's interpretive."
       },
       {
-        "q": "How do I show multiple priority levels (Priority 1, Priority 2, Priority 3) on the same map?",
-        "a": "Import each priority tier as a separate GeoJSON layer. Style Priority 1 targets with a fully saturated colour and 100% opacity. Apply 60% opacity to Priority 2 and 30–40% opacity to Priority 3. This creates a clear visual hierarchy that communicates target ranking without requiring a written legend explanation."
+        "q": "What's the difference between a target generation map and a drill plan?",
+        "a": "A target map shows where and why you would drill (anomalies, rationale); a drill plan shows exactly where holes are placed. Target maps are conceptual and dashed; drill plans show engineered collar positions."
       },
       {
-        "q": "Can I show geophysical anomaly extents (magnetic, IP) alongside the target polygons?",
-        "a": "Yes. Import your anomaly extents as a separate GeoJSON polygon layer. Use a semi-transparent fill (20–30% opacity) in a contrasting colour — gold or magenta works well against a satellite basemap. Place the anomaly layer below the target layer in the layer stack so the target outlines render on top."
+        "q": "Can I show geophysics under my targets?",
+        "a": "Yes — import anomaly outlines as polygons at low-opacity fill, then draw targets above. Evidence under interpretation is the layout that convinces."
       },
       {
-        "q": "What export resolution is needed for investor technical presentations?",
-        "a": "Export at 3× (PNG) for technical presentations intended for display at full screen on a projector or large monitor. This produces a PNG at approximately 5760 × 3240 pixels for a 16:9 export, which is sufficient for any current display and prints cleanly to A3 or tabloid size."
+        "q": "How many targets should one map show?",
+        "a": "As many as the property genuinely has — but rank them (A/B/C or 1/2/3) in the labels. A map with 15 unranked targets reads as unfocused; the same 15 with a clear top-3 reads as a pipeline."
       },
       {
-        "q": "Should I use a satellite or topographic basemap for a target generation map?",
-        "a": "Satellite is the preferred basemap for target generation maps — it communicates terrain, vegetation cover, and outcrop distribution in a single layer, all of which are relevant to the geological story. Use Topographic if your property is in a heavily forested area where satellite imagery doesn't show ground features clearly, or if the structural linework is the primary focus and needs a clean background."
+        "q": "Is a target generation map suitable for a news release?",
+        "a": "Yes, commonly — but the disclosure caution applies double. Keep target labels free of implied tonnage/grade, mark outlines as conceptual, and have your QP review the figure before release."
       }
     ],
     "relatedSlugs": [
@@ -756,65 +1097,102 @@
     "slug": "how-to-create-infrastructure-map",
     "mapTypeId": "infrastructure-map",
     "title": "How to Create an Infrastructure Map for a Mining Property",
-    "metaDescription": "Step-by-step guide to creating a mining property infrastructure map showing road access, power, water, and logistics. Used in permitting applications, feasibility studies, and investor presentations.",
-    "directAnswer": "To create an infrastructure map, import road network and water body GeoJSON, assign Roads and Rivers roles, enable the topographic basemap, add labels for key infrastructure points (airstrip, camp, power line, nearest town), include a scale bar, and export as PDF for permitting packages.",
+    "metaDescription": "Create a mining infrastructure map: roads, power, rail and facilities layered over your property, distance rings to ports and towns, and a clean export for studies and decks.",
+    "directAnswer": "To make an infrastructure map, import your property boundary, add roads, powerlines, rail, and facilities as line and point layers, style them in muted colours under a Topographic or Satellite basemap, add distance rings to key infrastructure, and export. The story is access and cost — make distances explicit.",
     "sections": [
       {
-        "h2": "What You Need Before You Start",
-        "body": "Prepare the following before building your infrastructure map:",
-        "items": [
-          "Road network GeoJSON (from OpenStreetMap export or your GIS package)",
-          "Water bodies and rivers GeoJSON",
-          "Property boundary GeoJSON",
-          "Coordinates of key infrastructure points: airstrip, camp, power line corridor, nearest service community",
-          "Company logo"
+        "h2": "What you need",
+        "checklist": [
+          "Property/claims boundary",
+          "Infrastructure line data — roads, powerlines, rail (government open-data portals publish these for most jurisdictions)",
+          "Point locations for facilities: towns, ports, mills, airstrips, camps",
+          "The distances that matter to your story (to power, to port, to labour)"
         ]
       },
       {
-        "h2": "Step 1: Import Road and Access Data",
-        "body": "Click the import button and select your road network GeoJSON. Assign the Roads role — this applies a medium-weight grey stroke appropriate for showing access routes. If you have multiple road types (paved highway vs. gravel access road vs. exploration track), import each as a separate layer and differentiate by stroke weight: 3 px for highways, 2 px for gravel roads, 1 px dashed for exploration tracks."
+        "h2": "Build the map",
+        "items": [
+          "Import the property boundary (Claims role)",
+          "Import each infrastructure type as its own layer — separate layers mean separate legend entries and independent styling",
+          "Style lines by type: solid for existing roads, dashed for proposed routes; distinct colours for power vs rail",
+          "Add facility points with labels (port, mill, town names)",
+          "Choose the Topographic basemap — terrain context explains why routes go where they go",
+          "Add distance rings from key infrastructure (e.g. '35 km from grid power')",
+          "Title block, legend, scale bar, north arrow — then export"
+        ]
       },
       {
-        "h2": "Step 2: Add Water Bodies and Rivers",
-        "body": "Import your water body and river GeoJSON and assign the Rivers role. Water features are a critical component of infrastructure maps for permitting — they show watercourse crossings, proximity to water licences, and drainage basin context. Enable the Context overlay in the Design section as a supplemental water layer if your imported data has gaps."
+        "h2": "Layer sources and styling",
+        "table": {
+          "headers": [
+            "Feature",
+            "Typical source",
+            "Style"
+          ],
+          "rows": [
+            [
+              "Roads",
+              "Provincial/state open-data road network",
+              "Solid line, neutral grey/brown"
+            ],
+            [
+              "Powerlines",
+              "Utility or government GIS portals",
+              "Distinct colour (e.g. orange), medium weight"
+            ],
+            [
+              "Rail",
+              "National rail network datasets",
+              "Dark solid line"
+            ],
+            [
+              "Proposed routes",
+              "Your engineering sketch",
+              "Dashed — never solid"
+            ],
+            [
+              "Facilities",
+              "Manually placed points",
+              "Labelled markers, kept sparse"
+            ]
+          ]
+        }
       },
       {
-        "h2": "Step 3: Import the Property Boundary",
-        "body": "Import your claims boundary as a GeoJSON and assign the Claims role. Reduce the fill opacity to 15–20% so the property boundary is visible without obscuring the infrastructure layers beneath it. The Claims boundary establishes the relationship between your property extent and the surrounding infrastructure — the core message of this map type."
+        "h2": "Make distance the headline",
+        "box": {
+          "kind": "tip",
+          "title": "Numbers beat lines",
+          "html": "Investors don't measure your map — they read it. A road on the map says access exists; a <a href=\"/blog/how-to-add-distance-ring-mining-map/\">distance ring</a> labelled '12 km to Highway 37' says what it costs. Put explicit distances on every piece of infrastructure that matters."
+        }
       },
       {
-        "h2": "Step 4: Configure the Topographic Basemap",
-        "body": "In the Design section, select the Topographic basemap. For infrastructure maps, topography is more informative than satellite imagery — contour lines communicate the terrain challenges (ridge crossings, valley floors, slope angles) that determine infrastructure routing and access costs. Apply the Terrain — Earthy & Warm or Technical — Sharp Borders theme, both of which are calibrated for topographic basemaps."
-      },
-      {
-        "h2": "Step 5: Add Infrastructure Labels",
-        "body": "Click on the map at each key infrastructure point to add a label. Common labels for infrastructure maps: nearest town and distance (e.g., 'Stewart, BC — 45 km'), port or railhead, airstrip or helicopter pad, power line, diesel fuel depot. For linear infrastructure (roads, power lines), use the route label type which places the label along the line rather than at a point. Keep label text concise — infrastructure maps are read quickly and need to communicate logistics at a glance."
-      },
-      {
-        "h2": "Step 6: Export for Permitting Packages",
-        "body": "Infrastructure maps submitted with permitting applications (environmental assessments, mine permits, reclamation plans) should be exported as PDF in Letter Landscape or A3 format. Enable the scale bar — distance accuracy is particularly important on infrastructure maps where reviewers need to verify road distances and setbacks from watercourses. Enable the North Arrow. Export at print-ready quality for formal submissions."
+        "cta": {
+          "text": "Map your project's access story.",
+          "sub": "Import boundaries and infrastructure, label the distances, export."
+        }
       }
     ],
     "faqs": [
       {
-        "q": "What file format do I need for road network data?",
-        "a": "GeoJSON is required. You can export road data from OpenStreetMap using the Overpass Turbo tool (overpass-turbo.eu) — filter for highway types and export as GeoJSON. If you have road data in a shapefile from a government dataset, convert it to GeoJSON using QGIS (right-click layer → Export → Save Features As → GeoJSON, CRS: EPSG:4326)."
+        "q": "Where do I get roads and powerline data?",
+        "a": "Provincial and state open-data portals publish road networks and, in most cases, transmission lines as downloadable GIS layers (Shapefile or GeoJSON). National datasets cover rail. Convert to GeoJSON at mapshaper.org if needed and import each as its own layer."
       },
       {
-        "q": "Does the map need a scale bar for permitting submissions?",
-        "a": "Yes — a scale bar is a standard requirement for maps submitted with permitting applications, environmental assessments, and reclamation plan documents. Toggle it on in the Design section. The scale bar in Exploration Maps updates automatically as you zoom, so it always reflects the current display scale accurately."
+        "q": "How do I show proposed vs existing infrastructure?",
+        "a": "The universal convention: existing = solid lines, proposed = dashed. Add '(proposed)' to the legend label too — a study reviewer will look for it."
       },
       {
-        "q": "What basemap is best for infrastructure maps?",
-        "a": "Topographic is the best basemap for infrastructure maps — it shows terrain context and contour lines that are directly relevant to road and infrastructure routing. Satellite is a good alternative in areas with sparse vegetation where ground features are visible from imagery. For formal permitting documents, Topographic is the more accepted convention."
+        "q": "What basemap works best for infrastructure maps?",
+        "a": "Topographic. Contours explain route choices (valleys, passes) and give field-realistic context. Satellite is the alternative when vegetation/terrain imagery itself is part of the access story."
       },
       {
-        "q": "How do I show distance to the nearest highway or service community?",
-        "a": "Add a distance ring centred on your property boundary or camp location — this visually communicates the radius to nearby infrastructure. Alternatively, add a point label at the nearest town or highway junction with the approximate road distance in kilometres in the label subtext. Both approaches are commonly used in investor and permitting documentation."
+        "q": "Should an infrastructure map show my drill targets too?",
+        "a": "Usually not — one map, one story. Keep the infrastructure figure clean and pair it with a separate targets or results map in the same deck, using the same basemap and theme for consistency."
       },
       {
-        "q": "Can I show a power line corridor and camp location on the same map?",
-        "a": "Yes. Import your power line corridor as a line GeoJSON layer and style it with a dashed orange stroke — the conventional mapping symbol for power lines. Add a point label at the camp location. If you don't have a GeoJSON for the power line, you can digitize it by exporting a manually drawn line from QGIS or Google Earth Pro as GeoJSON and importing it into Exploration Maps."
+        "q": "Can I use this for a PEA or feasibility-style figure?",
+        "a": "Yes — a clean property-plus-infrastructure figure with explicit distances is a standard early-study exhibit. Export as Letter PDF at 3× pixel ratio for the document, and have the study author confirm figure requirements."
       }
     ],
     "relatedSlugs": [
@@ -830,8 +1208,14 @@
     "title": "How to Import CSV Data into a Mining Map",
     "metaDescription": "Import drill collars, soil geochem, and rock samples from a CSV into Exploration Maps: required columns, fixing UTM and lat/long coordinate issues, labelling points, and exporting a clean map.",
     "directAnswer": "To import CSV data into a mining map, click import and select your CSV — the Column Mapper opens automatically. Assign your latitude and longitude columns (in decimal degrees), click Import, and your points render immediately. Every other column is preserved as a feature property you can use for labels and callouts.",
-    "ctaTop": { "text": "Import your file and export an investor-ready map.", "sub": "Drop in a CSV, map the coordinates, and style it in minutes." },
-    "ctaBottom": { "text": "Turn your spreadsheet into a clean map.", "sub": "Open the editor, import your CSV, and export a PNG or PDF." },
+    "ctaTop": {
+      "text": "Import your file and export an investor-ready map.",
+      "sub": "Drop in a CSV, map the coordinates, and style it in minutes."
+    },
+    "ctaBottom": {
+      "text": "Turn your spreadsheet into a clean map.",
+      "sub": "Open the editor, import your CSV, and export a PNG or PDF."
+    },
     "sections": [
       {
         "h2": "What CSV data works with Exploration Maps",
@@ -848,13 +1232,43 @@
         "h2": "Required and recommended columns",
         "body": "Only the coordinate pair is strictly required. Column names can be anything — you assign them in the Column Mapper.",
         "table": {
-          "headers": ["Column", "Required?", "Example", "Notes"],
+          "headers": [
+            "Column",
+            "Required?",
+            "Example",
+            "Notes"
+          ],
           "rows": [
-            ["Latitude", "Required", "49.2827", "Decimal degrees (WGS84)"],
-            ["Longitude", "Required", "-123.1207", "Decimal degrees; negative in the west"],
-            ["ID / Name", "Recommended", "DDH-24-012", "Becomes the point label"],
-            ["Value column(s)", "Optional", "4.8 (g/t Au)", "Grade, depth, element — kept as properties"],
-            ["Type / Category", "Optional", "Soil", "Useful for styling or splitting layers"]
+            [
+              "Latitude",
+              "Required",
+              "49.2827",
+              "Decimal degrees (WGS84)"
+            ],
+            [
+              "Longitude",
+              "Required",
+              "-123.1207",
+              "Decimal degrees; negative in the west"
+            ],
+            [
+              "ID / Name",
+              "Recommended",
+              "DDH-24-012",
+              "Becomes the point label"
+            ],
+            [
+              "Value column(s)",
+              "Optional",
+              "4.8 (g/t Au)",
+              "Grade, depth, element — kept as properties"
+            ],
+            [
+              "Type / Category",
+              "Optional",
+              "Soil",
+              "Useful for styling or splitting layers"
+            ]
           ]
         }
       },
@@ -865,17 +1279,28 @@
       {
         "h2": "Step 2: Import and open the Column Mapper",
         "body": "Click the import button in the Layers section and select your CSV. The Column Mapper opens automatically, listing every detected column with dropdowns to assign roles.",
-        "image": { "alt": "Column Mapper listing CSV columns with latitude and longitude dropdowns", "caption": "The Column Mapper opens automatically for any imported CSV", "src": "/blog-img/column-mapper.png" }
+        "image": {
+          "alt": "Column Mapper listing CSV columns with latitude and longitude dropdowns",
+          "caption": "The Column Mapper opens automatically for any imported CSV",
+          "src": "/blog-img/column-mapper.png"
+        }
       },
       {
         "h2": "Step 3: Assign latitude and longitude",
         "body": "Use the Latitude and Longitude dropdowns. Columns named Lat, Latitude, Y, or POINT_Y (and Long, Longitude, X, POINT_X) are auto-detected; assign anything else manually. Click Import and your points render on the map immediately.",
-        "cta": { "text": "Turn your spreadsheet into a clean map.", "sub": "Map your coordinate columns and see points appear instantly." }
+        "cta": {
+          "text": "Turn your spreadsheet into a clean map.",
+          "sub": "Map your coordinate columns and see points appear instantly."
+        }
       },
       {
         "h2": "Step 4: Set the role and style",
         "body": "Expand the layer and assign a role: Drillholes for collars, Anomalies for geochem, or Default for general points. Override marker colour, size, and shape in the styling controls. For soil results, sizing markers by grade communicates spatial distribution at a glance.",
-        "image": { "alt": "Imported point layer with a role assigned and marker size set", "caption": "Assigning a role and styling imported points", "src": "/blog-img/layer-drillholes-role.png" }
+        "image": {
+          "alt": "Imported point layer with a role assigned and marker size set",
+          "caption": "Assigning a role and styling imported points",
+          "src": "/blog-img/layer-drillholes-role.png"
+        }
       },
       {
         "h2": "Step 5: Label points and add callouts",
@@ -947,66 +1372,114 @@
   {
     "slug": "how-to-create-ni-43-101-compliant-map",
     "title": "How to Create an NI 43-101 Compliant Map",
-    "metaDescription": "Step-by-step guide to creating map figures that meet NI 43-101 technical report standards. Covers required map elements, export quality, title block fields, and QP review requirements.",
-    "directAnswer": "To create an NI 43-101 compliant map, enable the title block with project name, date, and projection reference, add a scale bar and north arrow, configure the legend, apply the Technical theme, and export as a high-resolution PDF. Exploration Maps includes all required map elements and applies industry-standard NI 43-101 styling by default.",
+    "metaDescription": "Build NI 43-101-ready map figures: the standard element checklist (scale, north arrow, legend, datum, date), where each lives in Exploration Maps, and a print-quality export.",
+    "directAnswer": "An NI 43-101 report map figure is expected to include a title with project and figure number, scale bar, north arrow, legend, coordinate/projection note, data source, effective date, and clean legible styling. Exploration Maps includes all of these elements — turn them on, fill in the title block, and export as PDF at 3× pixel ratio.",
     "sections": [
       {
-        "h2": "What NI 43-101 Requires for Map Figures",
-        "body": "National Instrument 43-101 (Standards of Disclosure for Mineral Projects) does not prescribe a rigid cartographic standard, but QPs (Qualified Persons) and securities regulators expect map figures in technical reports to contain:",
-        "items": [
-          "Title block: project name, property name, company name, map date, and figure number",
-          "North arrow",
-          "Scale bar with distance in kilometres or metres appropriate to the map scale",
-          "Legend explaining all symbols and colours used",
-          "Datum and projection reference (e.g., NAD83 / UTM Zone 10N or WGS84)",
-          "Map type label (e.g., Property Location Map, Mineral Claims Map, Drill Hole Location Map)"
+        "h2": "The standard figure checklist",
+        "body": "Technical report figures follow strong conventions. Before any map goes to your QP, it should carry:",
+        "checklist": [
+          "Title block: project name, figure title, figure number",
+          "Company name and map date (effective date of the data)",
+          "Scale bar (true ground distance) and north arrow",
+          "Legend covering every symbol and line style on the figure",
+          "Location/index inset so the reader can place the map",
+          "Data sources (e.g. 'Claim boundaries: BC Mineral Titles Online, retrieved 2026-07-06')",
+          "Legible styling in print: no reliance on subtle colour differences"
         ]
       },
       {
-        "h2": "Step 1: Choose the Right Export Ratio and Page Size",
-        "body": "NI 43-101 technical reports are submitted as PDFs, typically formatted to Letter or A4 paper size. Maps are embedded as figures — either full-page (Letter Landscape) or half-page figures within text. In Exploration Maps, select the Letter Portrait or Letter Landscape export ratio in the Export section. Letter Landscape is standard for full-page map figures. For maps intended to sit alongside descriptive text, Letter Portrait with the map occupying the upper portion of the page is common."
+        "h2": "Where each element lives in Exploration Maps",
+        "table": {
+          "headers": [
+            "Requirement",
+            "Where",
+            "Notes"
+          ],
+          "rows": [
+            [
+              "Title, company, date",
+              "Title block (Design section)",
+              "Shows project, subtitle, and date; add figure number to the title text"
+            ],
+            [
+              "Scale bar / north arrow",
+              "Design section toggles",
+              "True-distance scale bar; corner-assignable"
+            ],
+            [
+              "Legend",
+              "Per-layer legend settings",
+              "Every visible layer can carry a legend entry — audit before export"
+            ],
+            [
+              "Location inset",
+              "Inset map (Design section)",
+              "Province/state inset places the property automatically"
+            ],
+            [
+              "Source & datum note",
+              "Footer text",
+              "E.g. 'WGS84 / Web Mercator. Claims: MTO, 2026-07-06. Not an official tenure record.'"
+            ],
+            [
+              "Print quality",
+              "Export settings",
+              "PDF, Letter/A4, pixel ratio 3×"
+            ]
+          ]
+        }
       },
       {
-        "h2": "Step 2: Enable the Title Block with Required Fields",
-        "body": "Click the title text on the map to edit it inline. Enter the project name as the main title and the map type (e.g., 'Property Location Map') as the subtitle. In Design → Text & Metadata, fill in: Map Date (the date the data was compiled, not the export date), Company Name, and Figure Number if applicable. Upload the company logo using the logo uploader in the Layers section. The QP often requires the coordinate system in the title block — add this in the Map Notes field."
+        "h2": "Build it in order",
+        "items": [
+          "Import claims/drillholes/targets and assign roles so styling follows convention",
+          "Choose the Light basemap — it prints cleanly and keeps data prominent",
+          "Fill the title block: project, figure title and number, company, date",
+          "Enable scale bar, north arrow, legend, and the location inset",
+          "Add the footer source/datum note",
+          "Set Letter or A4 ratio, frame the figure, export PDF at 3× pixel ratio"
+        ]
       },
       {
-        "h2": "Step 3: Add Scale Bar and North Arrow",
-        "body": "Toggle on both the Scale Bar and North Arrow in the Design section. These are mandatory elements in every NI 43-101 map figure. The scale bar calculates the displayed distance automatically from the current zoom level and updates if you pan or zoom — always set your final map frame before exporting so the scale bar reflects the correct distance. The north arrow is placed automatically in the corner of the map frame."
+        "h2": "What compliance actually means here",
+        "box": {
+          "kind": "verify",
+          "title": "Your QP decides — this is figure craft, not legal advice",
+          "html": "NI 43-101 is a disclosure standard, and the Qualified Person signing the report decides what its figures must show. The checklist above reflects standard expectations reviewers look for, not a legal guarantee of compliance. Always have the QP review final figures — and verify tenure data against the official registry before it appears in a report."
+        }
       },
       {
-        "h2": "Step 4: Configure the Legend",
-        "body": "The legend is generated automatically from your layer names and styles. Rename each layer in the layer card to a descriptive name that will appear in the legend — 'Mineral Claims' rather than 'layer_1', 'Drill Collars — 2024 Program' rather than 'drills_q3.csv'. For NI 43-101 maps, every symbol and colour used on the map must be identified in the legend. If you have multiple claim blocks with different colours, each should be a separate named layer."
-      },
-      {
-        "h2": "Step 5: Apply the Technical Theme",
-        "body": "In the Design section, select the Technical — Sharp Borders theme. This theme is calibrated to the visual conventions used in Canadian technical reports: clean line weights, a light background, high-contrast claim boundaries, and a neutral colour palette that reproduces clearly when printed. The Investor — Navy & White theme is acceptable for investor-facing technical reports but is less conventional in formal regulatory submissions."
-      },
-      {
-        "h2": "Step 6: Export at Submission Quality",
-        "body": "Export as PDF for formal NI 43-101 technical report submission. PDFs from Exploration Maps are vector-quality — lines, labels, and boundaries remain crisp at any zoom level when viewed in a PDF reader or printed. For PNG exports, use the 2× or 3× setting for sufficient resolution at the figure's intended print size. A Letter Landscape PNG at 3× is approximately 3300 × 2550 px — suitable for printing at 300 DPI on Letter paper."
+        "cta": {
+          "text": "Build a report-ready figure in minutes.",
+          "sub": "Standard elements on by default — title block, scale, legend, inset."
+        }
       }
     ],
     "faqs": [
       {
-        "q": "What map elements are required in an NI 43-101 technical report?",
-        "a": "The QP is responsible for ensuring figures meet the technical standards required under NI 43-101 and Form 43-101F1. Standard required elements are: title block (project name, company, date, figure number), north arrow, scale bar, legend, and a datum/projection reference. The exact figure list depends on the report type — a resource estimate report will require different maps than a preliminary economic assessment."
+        "q": "Does NI 43-101 formally list required map elements?",
+        "a": "The instrument requires that maps be legible and support the disclosure (location, tenure, results), and Form 43-101F1 requires certain maps (e.g. location, property). The specific elements — scale, north arrow, legend, sources — are standard professional practice that QPs and reviewers expect on every figure."
       },
       {
-        "q": "What resolution does a QP require for map figures?",
-        "a": "There is no mandated resolution in NI 43-101, but industry practice is that map figures should be legible at the print size at which they will appear in the report. For PNG exports, 300 DPI at the intended print size is the accepted standard. Exploration Maps PDF exports are vector-quality and resolution-independent. PNG exports should use the 2× or 3× setting."
+        "q": "What projection/datum note should I use?",
+        "a": "State what the map uses — for Exploration Maps exports that's WGS84 geographic data rendered in Web Mercator. A footer like 'WGS84 / Web Mercator; claim boundaries from [registry], retrieved [date]' covers datum, source, and currency in one line."
       },
       {
-        "q": "Does Exploration Maps support the coordinate system references required in NI 43-101?",
-        "a": "All data in Exploration Maps is handled in WGS84 (EPSG:4326). If your QP requires a specific projection reference in the title block (e.g., NAD83 / UTM Zone 10N), add this as a manual note in the Map Notes field in Design → Text & Metadata. The underlying geographic accuracy is WGS84 — the projection statement is a labelling requirement for standard investor-facing map figures."
+        "q": "Can I use a satellite basemap in a technical report figure?",
+        "a": "Yes, where imagery adds information (access, terrain, disturbance) — typically the location/access figure. For claim plats and results figures, the Light basemap keeps line work legible in print."
       },
       {
-        "q": "What colour conventions are expected for mineral claims in NI 43-101 maps?",
-        "a": "The conventional colour for mineral claims in Canadian NI 43-101 reports is blue — a medium blue stroke with a light blue semi-transparent fill at 20–25% opacity. This is applied automatically when you assign the Claims role in Exploration Maps, and it matches the convention recognized by QPs, securities lawyers, and regulators across the industry."
+        "q": "What export settings make a figure print-ready?",
+        "a": "PDF at Letter or A4 page size with pixel ratio 3× — roughly 300 DPI equivalent. Check that the smallest text on the figure is still readable at 100% print size."
       },
       {
-        "q": "Can I include multiple map figures from the same project in one Exploration Maps session?",
-        "a": "Yes. Create multiple maps for the same project by adjusting the zoom level, visible layers, and export ratio for each figure. Common NI 43-101 figure sets include: a regional location map (zoomed out to show the province or state), a property location map (showing the claims boundary and surrounding area), and a detailed drill hole location map. Export each figure separately as a numbered PDF for insertion into the report document."
+        "q": "Is registry claim data reliable enough for a report figure?",
+        "a": "Registry pulls are the right starting point, but tenure changes; verify ownership, status, and boundaries against the official registry as of the report's effective date, and date-stamp the source in the figure. The report's QP has final responsibility for the data shown."
+      },
+      {
+        "q": "Do I need a location inset on every figure?",
+        "a": "Not every figure — but the property-location figure needs one, and small-scale detail figures benefit from one so readers stay oriented. It's one toggle, so the practical answer is: include it unless it crowds the figure."
       }
     ],
     "relatedSlugs": [
@@ -1023,8 +1496,14 @@
     "metaDescription": "Search Ontario mining claims by company name or claim number from public MLAS data, add them to a map, style them, and export a clean investor-ready figure. Includes MLAS verification steps.",
     "directAnswer": "To search Ontario mining claims, open Exploration Maps, choose Add Claims → Search Claims Registry, select Ontario, type a company or claim-holder name (or a claim number), pick your claim groups, and click Add to map. Assign the Claims role, style, and export. Always confirm current holder, status, and boundaries in the official Ontario MLAS before relying on the map.",
     "publishedDate": "2026-06-14",
-    "ctaTop": { "text": "Search a claimholder and create a map.", "sub": "Pull an Ontario company's claims and style them in minutes." },
-    "ctaBottom": { "text": "Turn public claim data into a clean map.", "sub": "Open the editor, add Ontario claims, and export a PNG or PDF." },
+    "ctaTop": {
+      "text": "Search a claimholder and create a map.",
+      "sub": "Pull an Ontario company's claims and style them in minutes."
+    },
+    "ctaBottom": {
+      "text": "Turn public claim data into a clean map.",
+      "sub": "Open the editor, add Ontario claims, and export a PNG or PDF."
+    },
     "sections": [
       {
         "h2": "What is the Ontario MLAS?",
@@ -1033,12 +1512,19 @@
       {
         "h2": "Step 1: Open the claims registry search for Ontario",
         "body": "From the landing page choose Add Claims → Search Claims Registry, or open '+ Add Claims' in the editor sidebar. Select Ontario — MLAS from the province dropdown.",
-        "image": { "alt": "Add Claims panel with Ontario — MLAS selected in the province dropdown", "caption": "Selecting Ontario in the claims registry search", "src": "/blog-img/registry-on.png" }
+        "image": {
+          "alt": "Add Claims panel with Ontario — MLAS selected in the province dropdown",
+          "caption": "Selecting Ontario in the claims registry search",
+          "src": "/blog-img/registry-on.png"
+        }
       },
       {
         "h2": "Step 2: Search by company name or claim number",
         "body": "Type a company or individual holder name — e.g. 'Alamos Gold' or 'Agnico Eagle' — in the Company tab and press Enter, or switch to the Claim # tab for a specific Ontario claim number. Results are grouped by geographic cluster (Kirkland Lake, Timmins, Thunder Bay) so you can pick the right tenure package quickly.",
-        "cta": { "text": "Search a claimholder and create a map.", "sub": "Find an operator's Ontario ground and add it in one click." }
+        "cta": {
+          "text": "Search a claimholder and create a map.",
+          "sub": "Find an operator's Ontario ground and add it in one click."
+        }
       },
       {
         "h2": "Step 3: Add the claims and assign the Claims role",
@@ -1113,98 +1599,149 @@
   {
     "slug": "how-to-search-saskatchewan-mineral-claims",
     "title": "Saskatchewan Mineral Claims Search — Map Dispositions from MARS Free",
-    "metaDescription": "Search Saskatchewan mineral disposition claims by company or number from the live MARS registry and export a professional exploration map. No GIS software needed.",
-    "directAnswer": "To search Saskatchewan mineral claims, open Exploration Maps, click 'Add Claims → Search Claims Registry', select Saskatchewan, and type a company name or disposition number. Results pull live from the Saskatchewan mineral disposition registry and can be added to your map in one click.",
+    "metaDescription": "Search Saskatchewan mineral dispositions by company or claim number and turn them into a styled, investor-ready map in minutes — then verify in MARS.",
+    "directAnswer": "To search Saskatchewan mineral claims, open Exploration Maps, click 'Add Claims → Search Claims Registry', select Saskatchewan, and search by company name or disposition number. Matching mineral dispositions from the public MARS data are grouped geographically — add them to your map with one click, style, and export.",
     "publishedDate": "2026-06-14",
     "sections": [
       {
-        "h2": "Saskatchewan Mineral Tenure — How It Works",
-        "body": "Saskatchewan mineral claims are called Mineral Dispositions and are administered by ISC through the MARS system. The province is a major producer of potash, uranium (Athabasca Basin), gold (La Ronge Belt), and base metals. Exploration Maps queries the provincial GIS service directly for real-time tenure data."
+        "h2": "Saskatchewan tenure in 30 seconds",
+        "body": "Saskatchewan mineral claims are called mineral dispositions, administered through the MARS (Mineral Administration Registry Saskatchewan) system. Modern dispositions are staked electronically, so boundaries are clean digital polygons — which makes them map beautifully. The Athabasca Basin uranium district is the province's marquee address, alongside gold near La Ronge and base metals toward the Flin Flon belt."
       },
       {
-        "h2": "Step 1 — Select Saskatchewan in the Registry Search",
-        "body": "In Exploration Maps, click 'Add Claims → Search Claims Registry' and choose Saskatchewan from the province dropdown. You will see two search tabs: Company (holder name) and Claim # (disposition number)."
+        "h2": "Search by company or disposition number",
+        "body": "In Exploration Maps, click 'Add Claims → Search Claims Registry' and choose Saskatchewan. Type a company name — 'Cameco', 'Denison', 'Foran' — or a disposition number. The search queries the public Saskatchewan mineral disposition data and returns matching dispositions grouped by geographic cluster, with total hectares per group.",
+        "box": {
+          "kind": "source",
+          "title": "Where this data comes from",
+          "html": "Results are queried from Saskatchewan's public mineral disposition GIS data (the same data behind MARS map products). Public GIS layers can lag the registry — treat the map as a visualization, not a tenure record."
+        }
       },
       {
-        "h2": "Step 2 — Search by Holder or Disposition Number",
-        "body": "Type a company name — e.g. 'Cameco', 'Denison Mines', 'Foran Mining'. Saskatchewan disposition numbers are alphanumeric (e.g. MC00001234) — enter one in the Claim # tab to retrieve a single disposition. Results are clustered geographically: Athabasca Basin, La Ronge, Flin Flon Belt."
+        "h2": "Add to map, style, export",
+        "items": [
+          "Check the geographic groups you want — the summary shows disposition count and total hectares",
+          "Click Add to map: boundaries load as a claims layer with standard styling",
+          "Pick a basemap (Terrain suits Athabasca Basin properties), enable Context and Reference Labels",
+          "Add your title block and logo, then export a PNG for slides or PDF for reports"
+        ]
       },
       {
-        "h2": "Step 3 — Select Groups and Add to Map",
-        "body": "Check each geographic group you need. The summary shows total hectares across selected dispositions. Click Add to map — the dispositions are loaded as a styled polygon layer. Colours, line weights, and opacity are all adjustable."
+        "h2": "Verify before you rely on it",
+        "box": {
+          "kind": "verify",
+          "title": "MARS is the record",
+          "html": "Ownership, status, and expiry change constantly. Before using a Saskatchewan claims map in a news release, report, or transaction, verify the dispositions in the official MARS registry. Exploration Maps is a mapping tool, not the registry."
+        }
       },
       {
-        "h2": "Step 4 — Export Your Saskatchewan Map",
-        "body": "Choose a basemap (Terrain works well for Athabasca Basin properties), add reference labels, and export as PNG or PDF. Use the 3:4 Portrait ratio for NI 43-101 report figures."
+        "cta": {
+          "text": "Search a Saskatchewan claimholder and map their ground.",
+          "sub": "Company or disposition number in — styled map out."
+        }
       }
     ],
     "faqs": [
       {
-        "q": "What is MARS and how do I access Saskatchewan mineral claims?",
-        "a": "MARS (Mineral Administration Registry Saskatchewan) is the provincial system for recording and managing mineral dispositions, administered by ISC. The public viewer is at mars.isc.ca. Exploration Maps queries the underlying GIS API so you can search and export maps without downloading files."
+        "q": "What's the difference between a claim and a disposition in Saskatchewan?",
+        "a": "'Mineral disposition' is Saskatchewan's umbrella term for mineral tenure — claims, leases, and permits are all dispositions. Day to day, 'claim' and 'disposition' get used interchangeably for the exploration-stage tenure you'll be mapping."
       },
       {
-        "q": "What are Saskatchewan mineral dispositions?",
-        "a": "Mineral dispositions in Saskatchewan include Mineral Claims, Mineral Leases, and Prospecting Permits. A Mineral Claim grants the exclusive right to explore for and develop minerals in a defined area and must be renewed to remain in good standing."
+        "q": "Can I search by claim owner name?",
+        "a": "Yes — Saskatchewan's public data includes holder names, so searching 'Cameco' or 'NexGen' returns their dispositions grouped by area. Name variations happen (numbered companies, subsidiaries), so try the exact legal name if a search comes up light."
       },
       {
-        "q": "Who regulates mineral claims in Saskatchewan?",
-        "a": "The Saskatchewan Ministry of Energy and Resources administers the Mineral Resources Act. The ISC MARS system is the authoritative registry for all active mineral dispositions in the province."
+        "q": "How current is the disposition data?",
+        "a": "It's queried from the public Saskatchewan GIS services when you search, which track the registry closely but can lag new staking or lapses by days. For anything binding, check MARS directly."
+      },
+      {
+        "q": "Can I combine Saskatchewan claims with my own project data?",
+        "a": "Yes — after adding registry claims, import your own GeoJSON/Shapefile/CSV layers (targets, drillholes, soil grids) on top, style each independently, and export one combined figure."
+      },
+      {
+        "q": "Does this cover the Athabasca Basin uranium properties?",
+        "a": "Yes — dispositions across the province, including the Basin, are in the same public dataset. Terrain or Satellite basemaps work well there since most properties sit far from mapped roads."
       }
     ],
     "relatedSlugs": [
       "how-to-make-a-mining-claims-map",
       "how-to-search-ontario-mining-claims",
       "how-to-map-bc-mineral-claims-live-registry"
-    ]
+    ],
+    "mapTypeId": "mining-claims-map"
   },
   {
     "slug": "how-to-search-manitoba-mining-claims",
     "title": "Manitoba Mining Claims Search — Map Dispositions Free",
-    "metaDescription": "Search Manitoba mining claim dispositions by claim/tenure number from the live provincial iMaQs registry and export a professional exploration map. No GIS software needed.",
-    "directAnswer": "To search Manitoba mining claims, open Exploration Maps, select 'Add Claims → Search Claims Registry', choose Manitoba, and type a claim or tenure number (e.g. CB12345). Results pull live from Manitoba's iMaQs Mineral Dispositions registry. One click adds the claims as a styled polygon layer ready to export. Manitoba's public registry has no holder-name field, so company-name search isn't available for this province — search by number instead.",
+    "metaDescription": "Map Manitoba mining claims by claim/tenure number: find numbers in iMaQs, pull boundaries into a styled map, and export — with honest notes on what the public data includes.",
+    "directAnswer": "To map Manitoba mining claims, open Exploration Maps, click 'Add Claims → Search Claims Registry', choose Manitoba, and search by claim or tenure number (e.g. CB12345). Manitoba's public claim data doesn't include holder names, so number search is the reliable route — get the numbers from the iMaQs registry, then map them in one click.",
     "publishedDate": "2026-06-14",
     "sections": [
       {
-        "h2": "Manitoba Mineral Tenure Overview",
-        "body": "Manitoba mining claims are regulated by the Ministry of Economic Development, Investment, Trade and Natural Resources. The province hosts the Thompson Nickel Belt, extensive VMS gold-zinc mineralisation near Flin Flon and Snow Lake, and emerging lithium and cesium claims in the Tanco pegmatite district. Mineral claims and leases are registered through Manitoba Mineral Titles Online (MMTO) and published live via the province's iMaQs (Integrated Mining and Quarrying System) map service."
+        "h2": "Manitoba tenure in 30 seconds",
+        "body": "Manitoba mining claims are administered through iMaQs (the Integrated Mining and Quarrying System). The province's headline belts are the Flin Flon–Snow Lake VMS camp and the Thompson Nickel Belt, with gold camps at Lynn Lake and Rice Lake. Claim boundaries are published as public GIS data — with one quirk that changes how you search."
       },
       {
-        "h2": "Step 1 — Select Manitoba in Registry Search",
-        "body": "In Exploration Maps, click 'Add Claims → Search Claims Registry'. From the province selector choose Manitoba — Mineral Dispositions. Manitoba supports a single search mode here: Claim # (tenure or staking-tag number, such as CB12345) — the public iMaQs layer doesn't publish a holder name, so company search isn't offered for this province."
+        "h2": "Why you search by number in Manitoba",
+        "body": "Manitoba's public claim layer publishes geometry and claim numbers but no holder names. That means company-name search isn't possible against the public data — searching here works by claim or tenure number.",
+        "box": {
+          "kind": "capability",
+          "title": "What works in Manitoba",
+          "html": "<strong>Works:</strong> search by claim/tenure number (e.g. CB12345), map the boundaries, style and export.<br><strong>Doesn't:</strong> company-name search — the public layer carries no ownership attribute. Find a company's claim numbers in <em>iMaQs</em> or their disclosures first, then map them here."
+        }
       },
       {
-        "h2": "Step 2 — Search by Claim or Tenure Number",
-        "body": "Type a claim/tenure number such as 'CB12345'. The search queries the TENURE_NUMBER_ID and TAG_NUMBER fields against Manitoba's iMaQs ArcGIS REST service in real time. If you only have a company name, try the Nearby Claims radius tool on a known location instead, or check Manitoba Mineral Titles Online (MMTO) directly for ownership lookups."
+        "h2": "Find the numbers, then map them",
+        "items": [
+          "Look up the claims in Manitoba's iMaQs system (or take numbers from a company's news releases and technical reports)",
+          "In Exploration Maps: Add Claims → Search Claims Registry → Manitoba",
+          "Enter a claim/tenure number — matching claims return grouped geographically",
+          "Add to map: boundaries load as a styled claims layer",
+          "Add your own layers (drillholes, targets), title block, and export"
+        ]
       },
       {
-        "h2": "Step 3 — Add Claims to Your Map",
-        "body": "Select the geographic groups that match your project. Click Add to map — the Mining Claim polygons are loaded as a new layer automatically styled for investor presentations. Colours, opacity, and labels are fully adjustable."
+        "h2": "Verify before you rely on it",
+        "box": {
+          "kind": "verify",
+          "title": "iMaQs is the record",
+          "html": "Confirm ownership, status, and expiry in Manitoba's official iMaQs registry before using the map in anything that matters — the public GIS layer can lag, and it carries no ownership data at all."
+        }
       },
       {
-        "h2": "Step 4 — Export a Professional Manitoba Exploration Map",
-        "body": "Add a basemap (Terrain is ideal for Thompson Nickel Belt properties), turn on Context and Reference Labels overlays, then export as PNG or PDF. 3× pixel ratio PDF exports meet NI 43-101 figure standards."
+        "cta": {
+          "text": "Map Manitoba claims from their numbers.",
+          "sub": "Boundaries in, styled export out — minutes, not hours."
+        }
       }
     ],
     "faqs": [
       {
-        "q": "How do I look up who owns mineral claims in Manitoba?",
-        "a": "Exploration Maps queries Manitoba's iMaQs Mineral Dispositions public ArcGIS REST API in real time, but the public Mining Claim layer does not include a holder/owner field, so Exploration Maps can only search by claim or tenure number. For ownership lookups, visit web2.gov.mb.ca/mineral/mmto.php directly for the government Mineral Titles Online portal."
+        "q": "Why can't I search Manitoba claims by company name?",
+        "a": "Manitoba's public claim GIS layer doesn't publish holder names, so there's nothing to match a company search against. Get claim numbers from iMaQs or company disclosures, then search those numbers."
       },
       {
-        "q": "What types of mineral dispositions exist in Manitoba?",
-        "a": "Manitoba mineral dispositions include Mining Claims, Mineral Leases, Mineral Exploration Licences, and Patent Mining Claims (historical). Active Mining Claims are the primary exploration tenure and the layer queried by Exploration Maps."
+        "q": "Where do I find a company's Manitoba claim numbers?",
+        "a": "Three reliable places: the iMaQs registry itself, the company's technical reports (claims tables are standard), and news releases announcing acquisitions or staking. Claim numbers look like 'CB12345' or similar letter-prefix formats."
       },
       {
-        "q": "Who regulates Manitoba mining claims?",
-        "a": "The Manitoba Geological Survey and the Ministry of Economic Development, Investment, Trade and Natural Resources administer mineral rights under The Mines and Minerals Act. Manitoba Mineral Titles Online (MMTO) is the registration and tracking system."
+        "q": "What claim types exist in Manitoba?",
+        "a": "Mining claims for exploration-stage tenure, mineral leases for advanced projects, and quarry permissions for aggregates. The public layer you'll map covers mining claims; leases appear in iMaQs."
+      },
+      {
+        "q": "Can I map an entire district like Snow Lake?",
+        "a": "Yes, practically: gather the claim numbers of the operators you care about and add each set — grouped results make multi-company district maps straightforward. There's no 'select everything in an area' from the public layer alone."
+      },
+      {
+        "q": "How do I show ownership on a Manitoba map if the data has no owners?",
+        "a": "Add it yourself: after mapping each company's claims as separate layers (one search per company's numbers), rename the layers and colour them by company. The legend then carries the ownership story the raw data can't."
       }
     ],
     "relatedSlugs": [
       "how-to-make-a-mining-claims-map",
       "how-to-search-ontario-mining-claims",
       "how-to-search-saskatchewan-mineral-claims"
-    ]
+    ],
+    "mapTypeId": "mining-claims-map"
   },
   {
     "slug": "how-to-search-newfoundland-mineral-claims",
@@ -1213,8 +1750,14 @@
     "metaDescription": "Search Newfoundland and Labrador mineral exploration licences by company or licence number from public GeoAtlas data, map a project area, and export a clean investor-ready figure. Includes verification steps.",
     "directAnswer": "To map Newfoundland & Labrador mineral claims (exploration licences), open Exploration Maps, choose Add Claims → Search Claims Registry, select Newfoundland & Labrador, and type a company or licensee name (or a licence number). Add the licences to your map, style them, and export. Always verify current licence holder, status, and boundaries in the official NL GeoAtlas before relying on the map.",
     "publishedDate": "2026-06-14",
-    "ctaTop": { "text": "Search a claimholder and create a map.", "sub": "Pull a licensee's NL exploration licences and map them in minutes." },
-    "ctaBottom": { "text": "Turn public licence data into a clean project map.", "sub": "Open the editor, add the licences, and export a PNG or PDF." },
+    "ctaTop": {
+      "text": "Search a claimholder and create a map.",
+      "sub": "Pull a licensee's NL exploration licences and map them in minutes."
+    },
+    "ctaBottom": {
+      "text": "Turn public licence data into a clean project map.",
+      "sub": "Open the editor, add the licences, and export a PNG or PDF."
+    },
     "sections": [
       {
         "h2": "How Newfoundland tenure works (licence-based)",
@@ -1223,12 +1766,19 @@
       {
         "h2": "Step 1: Open registry search for Newfoundland",
         "body": "Choose Add Claims → Search Claims Registry and select Newfoundland & Labrador — GeoAtlas. Two tabs are available: Company (licensee name) and Claim # (licence number).",
-        "image": { "alt": "Add Claims panel with Newfoundland & Labrador — GeoAtlas selected", "caption": "Selecting Newfoundland & Labrador in the registry search", "src": "/blog-img/registry-nl.png" }
+        "image": {
+          "alt": "Add Claims panel with Newfoundland & Labrador — GeoAtlas selected",
+          "caption": "Selecting Newfoundland & Labrador in the registry search",
+          "src": "/blog-img/registry-nl.png"
+        }
       },
       {
         "h2": "Step 2: Search by licensee or licence number",
         "body": "Type a company or licensee name — e.g. 'New Found Gold' or 'Exploits Discovery' — or switch to Claim # for a specific licence. Results are clustered geographically (Central Newfoundland, Labrador Trough, Northern Peninsula) so you can pick the right project area.",
-        "cta": { "text": "Turn public licence data into a clean project map.", "sub": "Add a licensee's MELs to your project map in one click." }
+        "cta": {
+          "text": "Turn public licence data into a clean project map.",
+          "sub": "Add a licensee's MELs to your project map in one click."
+        }
       },
       {
         "h2": "Step 3: Add licences and assign the Claims role",
@@ -1307,8 +1857,14 @@
     "metaDescription": "Search Quebec mining claims (titres miniers) by titleholder or claim number from Quebec's public GESTIM dataset, map them, and export a clean investor-ready figure. Note: Quebec uses a refreshed public dataset, not a live query.",
     "directAnswer": "To map Quebec mining claims, open Exploration Maps, choose Add Claims → Search Claims Registry, select Quebec, and type a titleholder (company) name or claim number. The results come from Quebec's public GESTIM titres miniers dataset, which is a refreshed public extract (not a live query), so it can lag the official registry. Always verify current title status and boundaries in GESTIM before relying on the map.",
     "publishedDate": "2026-06-25",
-    "ctaTop": { "text": "Search a claimholder and create a map.", "sub": "Pull a titleholder's Quebec claims and map them in minutes." },
-    "ctaBottom": { "text": "Turn public claim data into a clean map.", "sub": "Open the editor, add Quebec titres, and export a PNG or PDF." },
+    "ctaTop": {
+      "text": "Search a claimholder and create a map.",
+      "sub": "Pull a titleholder's Quebec claims and map them in minutes."
+    },
+    "ctaBottom": {
+      "text": "Turn public claim data into a clean map.",
+      "sub": "Open the editor, add Quebec titres, and export a PNG or PDF."
+    },
     "sections": [
       {
         "h2": "Quebec mineral tenure overview",
@@ -1326,12 +1882,19 @@
       {
         "h2": "Step 1: Select Quebec in registry search",
         "body": "Choose Add Claims → Search Claims Registry and select Quebec — GESTIM. Two tabs are available: Company (titleholder / titulaire name) and Claim # (an exact title number such as 2654321).",
-        "image": { "alt": "Add Claims panel with Quebec — GESTIM selected", "caption": "Selecting Quebec in the claims registry search", "src": "/blog-img/registry-qc.png" }
+        "image": {
+          "alt": "Add Claims panel with Quebec — GESTIM selected",
+          "caption": "Selecting Quebec in the claims registry search",
+          "src": "/blog-img/registry-qc.png"
+        }
       },
       {
         "h2": "Step 2: Search by titleholder or claim number",
         "body": "Type a company name such as 'Osisko', 'Patriot Battery Metals', or 'Les métaux Niobay' — accented French names are supported. The Company tab matches the registered titleholder; the Claim # tab looks up an exact title number. Results cover active titles across Abitibi, James Bay, Nunavik, and the Laurentides.",
-        "cta": { "text": "Turn public claim data into a clean map.", "sub": "Add a titleholder's Quebec claims to your map in one click." }
+        "cta": {
+          "text": "Turn public claim data into a clean map.",
+          "sub": "Add a titleholder's Quebec claims to your map in one click."
+        }
       },
       {
         "h2": "Step 3: Add claims and assign the Claims role",
@@ -1399,46 +1962,72 @@
     "slug": "what-to-include-on-a-mining-claim-map",
     "mapTypeId": "mining-claims-map",
     "title": "What to Include on a Mining Claim Map",
-    "metaDescription": "A practical checklist of what belongs on a mining claim map — claim boundaries, labels, scale, legend, context, and disclaimers — for investor and report use.",
-    "directAnswer": "A mining claim map should include claim boundaries with clear styling, claim labels, a project title block, a legend, a scale bar and north arrow, geographic context (roads and water), and a note directing readers to the official registry for tenure verification.",
+    "metaDescription": "The complete checklist for a professional mining claim map — boundaries, labels, title block, legend, scale, context, inset, and the verification note most maps forget.",
+    "directAnswer": "A mining claim map needs: styled claim boundaries, claim labels, a title block with project/company/date, a legend, scale bar and north arrow, geographic context (roads, water, place names), a location inset, and a registry-verification note. That combination makes it readable, credible, and safe to share.",
     "sections": [
       {
-        "h2": "Start with the claim boundaries",
-        "body": "The claim boundaries are the subject of the map. Style them with the conventional blue outline and light fill so they read as mineral tenure, and use separate layers and colours if you need to distinguish staked, optioned, or applied-for ground. Keep the boundaries the most visually prominent element on the page."
+        "h2": "The checklist",
+        "checklist": [
+          "Claim boundaries — the subject, styled conventionally",
+          "Claim labels — tenure numbers or block names",
+          "Title block — project, company, date",
+          "Legend — every symbol explained",
+          "Scale bar + north arrow",
+          "Geographic context — roads, water, towns at low opacity",
+          "Location inset — where in the province/state this sits",
+          "Registry note — where the data came from and when"
+        ]
       },
       {
-        "h2": "Label the claims",
-        "body": "Add labels so a reader can connect each block to a tenure number or a name used in the text. Unlabelled polygons force the reader to guess, which undermines a map meant for investors or reviewers."
+        "h2": "Boundaries: the one hard line",
+        "body": "Claims are the legal spine of the map — style them so nothing competes: the conventional treatment is a solid boundary with a light fill. If the property has multiple claim blocks or partners, colour by block/owner and let the legend explain."
       },
       {
-        "h2": "Add a title block and date",
-        "body": "Include the project name, the company name, and a map date. Tenure changes over time, so a date tells the reader how current the land position is. A project number is useful for reports that reference multiple maps."
+        "h2": "Labels: connect map to paperwork",
+        "body": "Label claims with tenure numbers (technical audiences) or block names (investor audiences). Unlabelled polygons force readers to cross-reference a table — label the map and the figure stands alone.",
+        "image": {
+          "src": "/blog-img/map-claims.png",
+          "alt": "A styled mining claims map with labels and legend",
+          "caption": "Boundaries, labels, and a legend — the core of a claim map that stands alone."
+        }
       },
       {
-        "h2": "Include a legend, scale bar, and north arrow",
-        "body": "These three elements make a map readable and credible. The legend explains the colours, the scale bar gives a sense of size, and the north arrow orients the reader. Maps without them look like working screenshots rather than finished figures."
+        "h2": "Title block and date: the credibility markers",
+        "body": "Project name, company, and — critically — a date. Tenure changes monthly; an undated claim map is unusable to anyone careful. The date tells readers exactly how current the picture is."
       },
       {
-        "h2": "Provide geographic context",
-        "body": "Roads, water bodies, and nearby place names help a reader understand access and location. Add them as low-opacity context layers so they support the claims without competing with them."
+        "h2": "Scale, north, legend, context, inset",
+        "body": "These five turn a shape-drawing into a map: scale bar and north arrow orient it; the legend decodes it; low-opacity roads/water/towns place it locally; the inset places it regionally. All are toggles in the Design section — there's no excuse for a figure missing them."
       },
       {
-        "h2": "Add a registry verification note",
-        "html": "Because a claim map is a visualization, not an ownership record, include a short note telling readers to confirm tenure details with the official government registry. For a full walkthrough of building the map, see <a href=\"/blog/how-to-make-a-mining-claims-map/\">how to make a mining claims map</a>, or the <a href=\"/bc-mineral-claims-map/\">BC mineral claims map tool</a> for a province-specific workflow."
+        "h2": "The note almost everyone forgets",
+        "box": {
+          "kind": "verify",
+          "title": "Say where the boundaries came from",
+          "html": "Add a footer note: source registry and retrieval date, plus 'verify current tenure with the official registry'. E.g. <em>'Claim boundaries: BC Mineral Titles Online, retrieved 2026-07-06. Not an official tenure record.'</em> It protects you, and sophisticated readers look for it."
+        }
       }
     ],
     "faqs": [
       {
-        "q": "What is the standard colour for claims on a map?",
-        "a": "A medium blue outline with a light, semi-transparent blue fill is the convention used in most technical reports and is recognized by investors and reviewers."
+        "q": "Should I show expired or pending claims on the map?",
+        "a": "Only with distinct styling and a legend entry — e.g. dashed grey for 'application pending'. Mixing expired ground into a solid claims layer misrepresents the holding; when in doubt, map active tenure only."
       },
       {
-        "q": "Does a claim map prove ownership?",
-        "a": "No. A claim map is a visualization. Current ownership, status, and tenure must be verified through the official government mineral titles registry."
+        "q": "What colour should claim boundaries be?",
+        "a": "There's no rule, but the readable convention is a strong boundary colour (blue/red) with a light fill of the same hue at low opacity. On satellite basemaps, use white or a bright colour for contrast."
       },
       {
-        "q": "What map elements do investors expect?",
-        "a": "At minimum a clear claim outline, labels, a legend, a scale bar, a north arrow, and a title block with the project name and date."
+        "q": "Do I label every claim or just blocks?",
+        "a": "Scale decides. A 10-claim property: label each tenure number. A 300-cell land package: label named blocks and provide the full tenure list in an accompanying table — 300 numbers on one figure is noise."
+      },
+      {
+        "q": "What goes in the legend of a claims-only map?",
+        "a": "Even a single-layer map benefits from a legend entry ('Mineral claims — Company X') plus entries for context layers if shown. If claims are coloured by owner or block, the legend is where that coding is explained."
+      },
+      {
+        "q": "Is a claim map from public registry data accurate enough to publish?",
+        "a": "For presentations and releases, yes, with the source-and-date note and registry verification of anything material. For legal or transaction purposes, always work from official registry records — public GIS layers can lag."
       }
     ],
     "relatedSlugs": [
@@ -1449,66 +2038,19 @@
     "publishedDate": "2026-06-20"
   },
   {
-    "slug": "turn-public-mineral-claim-data-into-project-map",
-    "mapTypeId": "mining-claims-map",
-    "title": "How to Turn Public Mineral Claim Data Into a Project Map",
-    "metaDescription": "Turn public mineral claim data into a clean project map — find the data, import it, style the claims, add context, and export for decks and reports.",
-    "directAnswer": "To turn public mineral claim data into a project map, download or search the claim boundaries, import them as GeoJSON, Shapefile, or KML, tag the layer as claims for standard styling, add context and a title block, then export as PNG or PDF.",
-    "sections": [
-      {
-        "h2": "Find the public claim data",
-        "body": "Most jurisdictions publish mineral claim boundaries through a government mineral titles portal. You can usually download tenure as Shapefile or KML, and in some cases search by holder or company name. This public data is the raw material for your map."
-      },
-      {
-        "h2": "Import it into a mapping tool",
-        "html": "Bring the data into Exploration Maps, which reads Shapefile, GeoJSON, KML, and CSV. If your download is a Shapefile, you can import it directly — see <a href=\"/shapefile-to-map/\">Shapefile to map</a> for that workflow. If you do not have a file, you can <a href=\"/mining-claim-search-by-company-name/\">search claims by company name</a> where the data supports it."
-      },
-      {
-        "h2": "Style the claims",
-        "body": "Tag the imported layer as claims to apply the conventional outline and fill automatically. Use separate layers and colours for different claim blocks so each is distinct in the legend."
-      },
-      {
-        "h2": "Add context and project details",
-        "body": "Add roads and water for geographic context, a title block with the project name and date, claim labels, and your company logo. These turn raw boundaries into a complete, readable project map."
-      },
-      {
-        "h2": "Frame and export",
-        "body": "Set the ratio for your output — 16:9 for slides, letter or A4 for reports — frame the view, and export a PNG or PDF with the legend, scale bar, and north arrow included."
-      },
-      {
-        "h2": "Verify before you rely on it",
-        "body": "Public data can lag behind the official record. Confirm current ownership, status, and tenure through the applicable government mineral titles registry before relying on the map for staking, transactions, or filings."
-      }
-    ],
-    "faqs": [
-      {
-        "q": "Where does public mineral claim data come from?",
-        "a": "It is published by government mineral titles registries, which typically offer tenure boundaries as Shapefile or KML downloads and sometimes a search by company or holder name."
-      },
-      {
-        "q": "What format should I import?",
-        "a": "GeoJSON imports most reliably, but Shapefile, KML, and CSV are all supported. Convert non-WGS84 data to WGS84 (EPSG:4326) first."
-      },
-      {
-        "q": "Is the resulting map official?",
-        "a": "No. It is a visualization of public data. Verify current tenure details through the official registry before relying on them."
-      }
-    ],
-    "relatedSlugs": [
-      "how-to-make-a-mining-claims-map",
-      "how-to-import-geojson-mining-map",
-      "how-to-import-csv-data-mining-map"
-    ],
-    "publishedDate": "2026-06-20"
-  },
-  {
     "slug": "map-drill-results-for-junior-mining-news-release",
     "mapTypeId": "drill-results-map",
     "title": "How to Map Drill Results for a Junior Mining News Release",
     "metaDescription": "Build a clear drill results figure for a junior mining news release: plot collars, highlight the headline intercepts, show targets and claims for context, and export a clean PNG or PDF that reads on a phone.",
     "directAnswer": "For a news-release drill map, plot collars from a CSV or GeoJSON, label the holes, badge the headline intercepts (grade × width), add the target and claim boundaries for context, keep the legend and title block clean, and export a PNG for the release and website or a news-release figure PDF. The map should be legible at the small size it appears in an email or on a phone.",
-    "ctaTop": { "text": "Import your file and export an investor-ready map.", "sub": "Drop in your collars and build a release-ready figure in minutes." },
-    "ctaBottom": { "text": "Turn drill data into a clean news-release figure.", "sub": "Open the editor, label your best holes, and export a clean figure." },
+    "ctaTop": {
+      "text": "Import your file and export an investor-ready map.",
+      "sub": "Drop in your collars and build a release-ready figure in minutes."
+    },
+    "ctaBottom": {
+      "text": "Turn drill data into a clean news-release figure.",
+      "sub": "Open the editor, label your best holes, and export a clean figure."
+    },
     "sections": [
       {
         "h2": "Why the map carries the news release",
@@ -1526,13 +2068,24 @@
       {
         "h2": "Step 1: Plot the drill collars",
         "body": "Import collars from a CSV or GeoJSON — typically hole ID, latitude, longitude — and assign the Drillholes role. Keep the symbols consistent so the drilling pattern is easy to follow. See the CSV import guide if your coordinates need attention.",
-        "image": { "alt": "Drill collars plotted as consistent markers over a target area", "caption": "Collars plotted with the Drillholes role", "src": "/blog-img/map-claims.png" }
+        "image": {
+          "alt": "Drill collars plotted as consistent markers over a target area",
+          "caption": "Collars plotted with the Drillholes role",
+          "src": "/blog-img/map-claims.png"
+        }
       },
       {
         "h2": "Step 2: Highlight the headline intercepts",
         "body": "Add Badge Label callouts next to the holes that drive the story — grade over width, e.g. '32m @ 6.1 g/t Au'. Resist labelling every hole; spotlight the results investors should remember so attention goes where it should.",
-        "image": { "alt": "Two holes badge-labelled with their best intercepts standing out from the pattern", "caption": "Badging only the headline holes keeps the story clear", "src": "/blog-img/badge-editor.png" },
-        "cta": { "text": "Turn drill data into a clean news-release figure.", "sub": "Badge your best holes so the numbers stand out at a glance." }
+        "image": {
+          "alt": "Two holes badge-labelled with their best intercepts standing out from the pattern",
+          "caption": "Badging only the headline holes keeps the story clear",
+          "src": "/blog-img/badge-editor.png"
+        },
+        "cta": {
+          "text": "Turn drill data into a clean news-release figure.",
+          "sub": "Badge your best holes so the numbers stand out at a glance."
+        }
       },
       {
         "h2": "Step 3: Show the target and claim context",
@@ -1596,105 +2149,98 @@
   {
     "slug": "exploration-mapping-file-types-shapefile-kml-geojson-csv",
     "title": "Shapefile, KML, GeoJSON, and CSV: Which File Types Matter for Exploration Mapping?",
-    "metaDescription": "Understand Shapefile, KML, GeoJSON, and CSV for exploration mapping — what each is good for, when to use it, and how to get a clean map from each.",
-    "directAnswer": "Shapefile and GeoJSON are best for claim and target boundaries, KML is common from Google Earth and government exports, and CSV suits drill collars and sample points with coordinate columns. Exploration Maps imports all four.",
+    "metaDescription": "Shapefile vs GeoJSON vs KML vs CSV for exploration mapping — what each format is for, the gotchas (missing .prj, UTM coordinates), and how to convert between them free.",
+    "directAnswer": "Shapefile and GeoJSON carry boundaries (claims, targets), KML comes from Google Earth and some government portals, and CSV carries point data like drill collars. Exploration Maps imports all four — when you get a choice, ask for GeoJSON.",
     "sections": [
       {
-        "h2": "Why file types matter",
-        "body": "Exploration data arrives in several formats depending on where it came from — a government tenure download, a colleague’s Google Earth file, a lab’s spreadsheet. Knowing what each format is good for saves time and avoids conversion headaches when you build a map."
+        "h2": "Quick reference",
+        "table": {
+          "headers": [
+            "Format",
+            "Extensions",
+            "Best for",
+            "Watch out for"
+          ],
+          "rows": [
+            [
+              "Shapefile",
+              ".shp + .dbf + .shx + .prj",
+              "Claims/target boundaries from GIS and registries",
+              "It's 4+ files — a missing .prj loses the projection"
+            ],
+            [
+              "GeoJSON",
+              ".geojson / .json",
+              "Everything — the cleanest interchange format",
+              "Large files can be slow; simplify heavy geometry"
+            ],
+            [
+              "KML/KMZ",
+              ".kml / .kmz",
+              "Google Earth sketches, some registry exports",
+              "Styling is discarded on import; geometry survives"
+            ],
+            [
+              "CSV",
+              ".csv",
+              "Drill collars, samples — any point list",
+              "Coordinate column naming and UTM vs lat/long"
+            ]
+          ]
+        }
       },
       {
-        "h2": "Shapefile",
-        "body": "The Shapefile is the long-standing GIS standard for boundaries like claims and targets. It is actually several files together (.shp, .shx, .dbf and others), so keep them as a set. It is the most common format from government mineral titles portals."
+        "h2": "Shapefile — the GIS incumbent",
+        "body": "Decades old and still what most registries and consultants hand over. A 'shapefile' is really a bundle: .shp (geometry), .dbf (attributes), .shx (index), .prj (projection). Keep the set together — especially the .prj, without which no tool can know where your data belongs. Convert to GeoJSON at mapshaper.org (drag the whole set or a .zip in, export GeoJSON) for the smoothest import."
       },
       {
-        "h2": "GeoJSON",
-        "body": "GeoJSON is a single, modern, text-based format that is easy to share and imports cleanly. It works well for claim boundaries, target outlines, roads, and any polygon or line data. If you can choose, GeoJSON is often the smoothest option."
+        "h2": "GeoJSON — ask for this one",
+        "body": "One text file, human-readable, no companion files to lose, imports directly. When a consultant or data room asks what format you want, say GeoJSON in WGS84. Its only weakness is bulk — survey-grade boundaries carry more vertices than a presentation map needs, and mapshaper's Simplify fixes that in seconds."
       },
       {
-        "h2": "KML",
-        "body": "KML comes from Google Earth and many government exports. It is handy for quick sketches and shared boundaries, though styling embedded in KML may be simplified on import. It is well suited to outlines and points you already have in Google Earth."
+        "h2": "KML — the Google Earth format",
+        "body": "KML (and its zipped sibling KMZ) is how boundaries get sketched and shared by people who don't run GIS. Geometry imports fine; Google Earth's styling (icons, colours) doesn't — you'll restyle with layer roles anyway, which is faster than fixing inherited styles."
       },
       {
-        "h2": "CSV",
-        "body": "CSV is a spreadsheet export, ideal for point data like drill collars and sample locations that have latitude and longitude columns. A column mapper assigns the coordinate fields on import. CSV is the natural format for results that start life in Excel."
+        "h2": "CSV — points with coordinates",
+        "body": "A spreadsheet with latitude/longitude columns is the natural format for drill collars, soil samples, and showings. On import you map which columns are coordinates and identifiers — hole ID and coordinates are enough; extra columns (depth, azimuth, assay) survive for labels and callouts.",
+        "html": "For the collar-specific workflow — column mapping, callouts, badge labels — see <a href=\"/blog/how-to-import-csv-data-mining-map/\">How to Import CSV Data into a Mining Map</a>."
       },
       {
-        "h2": "Getting a clean map from any of them",
-        "html": "Whatever the format, the workflow is the same: import, tag the layer by role for styling, add context and a title block, and export. See <a href=\"/shapefile-to-map/\">Shapefile to map</a> for files you already have, or <a href=\"/mining-exploration-map-software/\">mining exploration map software</a> for the full picture. A note on projection: convert data to WGS84 (EPSG:4326) before importing for the most reliable result."
+        "h2": "The universal fix",
+        "box": {
+          "kind": "tip",
+          "title": "When in doubt: mapshaper.org",
+          "html": "Free, browser-based, nothing uploads to a server. It opens Shapefile/GeoJSON/KML/CSV, reprojects (<code>-proj wgs84</code>), simplifies heavy geometry, and exports clean GeoJSON. It untangles 90% of exploration data problems."
+        }
       }
     ],
     "faqs": [
       {
-        "q": "Which file format is best for exploration mapping?",
-        "a": "GeoJSON is often the smoothest for boundaries and lines; Shapefile is the GIS standard and common from government portals; CSV is best for drill collars and samples; KML is common from Google Earth. Exploration Maps supports all four."
+        "q": "Which file format should I request from a consultant or data room?",
+        "a": "GeoJSON in WGS84 (EPSG:4326). It's one file, opens everywhere, and imports with zero configuration. Shapefile is an acceptable second — insist the .prj is included."
       },
       {
-        "q": "Do I need to convert my files?",
-        "a": "Usually not — Shapefile, GeoJSON, KML, and CSV import directly. Convert to WGS84 (EPSG:4326) first if your data is in another coordinate system."
+        "q": "My Shapefile imports in the wrong location. What happened?",
+        "a": "It's in a projected coordinate system (usually UTM) and either the .prj is missing or wasn't honoured. Load it into mapshaper with its .prj and export as WGS84 GeoJSON; if there's no .prj you'll need to know the UTM zone to reproject correctly."
       },
       {
-        "q": "How do I map data from a spreadsheet?",
-        "a": "Export it as CSV with latitude and longitude columns and use the column mapper on import to assign the coordinate fields."
+        "q": "Can I import a KMZ directly?",
+        "a": "KMZ is a zipped KML. If a KMZ doesn't import, unzip it (rename to .zip) and import the .kml inside — the geometry is identical."
+      },
+      {
+        "q": "What columns does a CSV need for drill collars?",
+        "a": "Minimum: a hole ID and a coordinate pair (latitude/longitude in decimal degrees, or easting/northing you convert first). Recommended: depth, azimuth, dip, and your headline intercept for labels."
+      },
+      {
+        "q": "Does converting between formats lose data?",
+        "a": "Geometry and attributes survive Shapefile ↔ GeoJSON ↔ KML conversion. What you lose: Shapefile column-name length limits (10 chars) truncate long attribute names, and KML styling never transfers — plan to restyle after import regardless."
       }
     ],
     "relatedSlugs": [
       "how-to-import-geojson-mining-map",
       "how-to-import-csv-data-mining-map",
       "how-to-make-a-mining-claims-map"
-    ],
-    "publishedDate": "2026-06-20"
-  },
-  {
-    "slug": "mineral-exploration-map-for-investor-deck",
-    "mapTypeId": "location-map",
-    "title": "How to Create a Mineral Exploration Map for an Investor Deck",
-    "metaDescription": "Plan the maps in a mining investor deck — which map belongs on which slide, how to keep them consistent, and how to export them at 16:9 for presentations.",
-    "directAnswer": "A mining investor deck usually needs a location map, a claims map, and a results or target map. Build them from one project with a consistent theme, size them to 16:9, and export PNG at 2× so they stay sharp on screen and projector.",
-    "sections": [
-      {
-        "h2": "Think about the deck, not just one map",
-        "html": "Most decks need a small set of maps that tell a sequence: where the project is, what the company controls, and what the exploration has found. Rather than make each one in isolation, plan them together so they share a style. For the step-by-step of a single presentation map, see <a href=\"/blog/how-to-create-exploration-map-investor-presentation/\">how to create an exploration map for an investor presentation</a>."
-      },
-      {
-        "h2": "The location slide",
-        "body": "Open with a location map that places the project in its region — near a recognized district, relative to towns and infrastructure. This answers the first question an investor asks and sets up everything that follows."
-      },
-      {
-        "h2": "The claims slide",
-        "html": "Follow with a claims map showing the land position. Keep it clean and labelled so the extent of the ground is obvious. See the <a href=\"/bc-mineral-claims-map/\">claims map workflow</a> for how to build it."
-      },
-      {
-        "h2": "The results or target slide",
-        "html": "Show the exploration story with a target map or a <a href=\"/drill-results-map/\">drill results map</a>, highlighting the intercepts or anomalies that matter. This is usually the slide investors study most."
-      },
-      {
-        "h2": "Keep the maps consistent",
-        "body": "Use the same theme, basemap, and title style across every map in the deck. Consistent maps look deliberate and professional; a mix of styles looks assembled from whatever was on hand. Building them from one saved project makes this easy."
-      },
-      {
-        "h2": "Export for presentation",
-        "html": "Size maps to a 16:9 landscape ratio and export PNG at 2× resolution so they stay sharp on a projector or large screen. For the full toolset, see <a href=\"/mining-map-software/\">mining map software</a>."
-      }
-    ],
-    "faqs": [
-      {
-        "q": "Which maps belong in a mining investor deck?",
-        "a": "Typically a location map, a claims map showing the land position, and a results or target map highlighting the exploration story. The exact set depends on the project stage."
-      },
-      {
-        "q": "What size should deck maps be?",
-        "a": "A 16:9 landscape ratio matches standard slides. Export PNG at 2× resolution so the maps stay sharp on screen and projector."
-      },
-      {
-        "q": "How do I keep the maps consistent?",
-        "a": "Build them from one saved project and apply the same theme, basemap, and title style across each map so the deck looks cohesive."
-      }
-    ],
-    "relatedSlugs": [
-      "how-to-create-exploration-map-investor-presentation",
-      "how-to-make-a-mining-claims-map",
-      "how-to-make-a-drill-results-map"
     ],
     "publishedDate": "2026-06-20"
   }

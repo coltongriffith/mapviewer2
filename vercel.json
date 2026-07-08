@@ -1,7 +1,13 @@
 {
   "rewrites": [
-    { "source": "/map/:id", "destination": "/index.html" },
-    { "source": "/(.*)", "destination": "/index.html" }
+    {
+      "source": "/map/:id",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
   ],
   "headers": [
     {
@@ -32,6 +38,33 @@
           "value": "camera=(), microphone=(), geolocation=(), interest-cohort=()"
         }
       ]
+    }
+  ],
+  "redirects": [
+    {
+      "source": "/blog/location-map-:loc/",
+      "destination": "/blog/how-to-create-exploration-map-investor-presentation/",
+      "permanent": true
+    },
+    {
+      "source": "/blog/target-generation-map-:loc/",
+      "destination": "/blog/how-to-create-target-generation-map/",
+      "permanent": true
+    },
+    {
+      "source": "/blog/infrastructure-map-:loc/",
+      "destination": "/blog/how-to-create-infrastructure-map/",
+      "permanent": true
+    },
+    {
+      "source": "/blog/mineral-exploration-map-for-investor-deck/",
+      "destination": "/blog/how-to-create-exploration-map-investor-presentation/",
+      "permanent": true
+    },
+    {
+      "source": "/blog/turn-public-mineral-claim-data-into-project-map/",
+      "destination": "/blog/how-to-make-a-mining-claims-map/",
+      "permanent": true
     }
   ]
 }

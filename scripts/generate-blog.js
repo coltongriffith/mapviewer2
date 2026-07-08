@@ -5,7 +5,7 @@
  * Outputs static HTML to public/blog/[slug]/index.html
  */
 
-import { readFileSync, writeFileSync, mkdirSync } from 'fs';
+import { readFileSync, writeFileSync, mkdirSync, rmSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -24,6 +24,15 @@ const compPosts     = JSON.parse(readFileSync(join(__dirname, 'blog-data', 'comp
 const locations     = JSON.parse(readFileSync(join(__dirname, 'blog-data', 'locations.json'), 'utf8'));
 const mapTypes      = JSON.parse(readFileSync(join(__dirname, 'blog-data', 'map-types.json'), 'utf8'));
 const seoPages      = JSON.parse(readFileSync(join(__dirname, 'blog-data', 'seo-pages.json'), 'utf8'));
+
+// Region pages are only generated for map types with real regional search
+// intent (mining claims, drill results). Types flagged regionPages:false keep
+// their how-to guide but no 28-region template fan-out — those pages were thin
+// and near-duplicate. Removed URLs 301 via vercel.json.
+const REGION_MAP_TYPES = mapTypes.filter(t => t.regionPages !== false);
+
+// Fully generated output — wipe so removed posts/pages actually disappear.
+rmSync(OUT, { recursive: true, force: true });
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -449,9 +458,10 @@ function buildHowToPage(post, allPosts) {
   const url = `${SITE}/blog/${post.slug}/`;
   const related = relatedLinks(post.relatedSlugs || [], allPosts);
 
-  // Location cross-links for posts that map to a specific map type
+  // Location cross-links for posts that map to a specific map type — only for
+  // types that still have region pages (pruned types would link to redirects).
   let locationHtml = '';
-  if (post.mapTypeId) {
+  if (post.mapTypeId && REGION_MAP_TYPES.some(t => t.slug === post.mapTypeId)) {
     const topLocations = ['british-columbia', 'nevada', 'ontario'];
     locationHtml = topLocations
       .map(locSlug => {
@@ -674,7 +684,7 @@ function buildLocationPage(location, mapType) {
   };
 
   // Sidebar: same location, other map types
-  const sameLocationLinks = mapTypes
+  const sameLocationLinks = REGION_MAP_TYPES
     .filter(t => t.id !== mapType.id)
     .slice(0, 4)
     .map(t => `<li><a href="/blog/${t.slug}-${location.slug}/">${esc(t.name)} — ${esc(location.name)}</a></li>`)
@@ -817,7 +827,7 @@ function buildBlogIndex(allUrls) {
 </div>`).join('\n');
 
   // All location pages, grouped by map type with anchor IDs
-  const locationSections = mapTypes.map(mt => {
+  const locationSections = REGION_MAP_TYPES.map(mt => {
     const cards = locations.map(loc => `
 <div class="blog-card">
   <span class="blog-card-tag">Location Guide</span>
@@ -832,7 +842,7 @@ function buildBlogIndex(allUrls) {
   const toc = `<nav class="index-toc" aria-label="Jump to section">
   <a href="#how-to">How-to Guides</a>
   <a href="#comparisons">Comparisons</a>
-  ${mapTypes.map(mt => `<a href="#${mt.slug}">${esc(mt.name)}</a>`).join('\n  ')}
+  ${REGION_MAP_TYPES.map(mt => `<a href="#${mt.slug}">${esc(mt.name)}</a>`).join('\n  ')}
 </nav>`;
 
   const body = `
@@ -981,7 +991,7 @@ async function main() {
   // Location × map-type pages
   let locationCount = 0;
   for (const location of locations) {
-    for (const mapType of mapTypes) {
+    for (const mapType of REGION_MAP_TYPES) {
       const { pageSlug, html } = buildLocationPage(location, mapType);
       writeFile(join(OUT, pageSlug, 'index.html'), html);
       allUrls.push(`${SITE}/blog/${pageSlug}/`);
@@ -1024,7 +1034,7 @@ async function main() {
   console.log('  ✓ hub: comparisons');
 
   const locTableRows = locations.map(loc => {
-    const links = mapTypes.map(mt => `<a href="/blog/${mt.slug}-${loc.slug}/">${esc(mt.name)}</a>`).join(' · ');
+    const links = REGION_MAP_TYPES.map(mt => `<a href="/blog/${mt.slug}-${loc.slug}/">${esc(mt.name)}</a>`).join(' · ');
     return `<tr><td><strong>${esc(loc.name)}</strong></td><td>${links}</td></tr>`;
   }).join('');
 
