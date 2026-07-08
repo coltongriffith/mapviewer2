@@ -58,6 +58,7 @@ import {
   duplicateProjectRecord,
   estimateStorageUsedBytes,
   listProjects,
+  loadDraft,
   renameProjectRecord,
   resolveInitialWorkspace,
   saveDraft,
@@ -901,6 +902,36 @@ export default function App() {
       setRecentProjects(listProjects());
     }
   }, [user, projectId, isDirty]);
+
+  // One-time migration: when a user signs in, push any anonymous local maps to
+  // their cloud account so work made before signing up isn't stranded in this
+  // browser's localStorage (the old behaviour silently lost it on other devices).
+  useEffect(() => {
+    if (!user || !supabase) return;
+    const flag = `em_migrated_${user.id}`;
+    try { if (localStorage.getItem(flag)) return; } catch { return; }
+    const locals = listProjects().slice(0, 10); // cap: pathological hoards stay local
+    const draft = loadDraft();
+    const jobs = [...locals.map((p) => ({ name: p.name, payload: p.payload }))];
+    // Unsaved in-progress draft with real content and no saved record of its own.
+    if (draft?.payload?.layers?.length && !draft.projectId) {
+      jobs.push({ name: draft.projectName || draft.payload?.layout?.title || 'Untitled map', payload: draft.payload });
+    }
+    try { localStorage.setItem(flag, '1'); } catch { /* still migrate this once */ }
+    if (!jobs.length) return;
+    (async () => {
+      let migrated = 0;
+      for (const job of jobs) {
+        try { await saveCloudProject({ id: null, name: job.name, payload: job.payload }); migrated += 1; }
+        catch { /* leave that one local; don't block the rest */ }
+      }
+      if (migrated > 0) {
+        listCloudProjects().then(setRecentProjects).catch(() => {});
+        setUploadStatus({ type: 'success', message: `${migrated} map${migrated === 1 ? '' : 's'} from this browser ${migrated === 1 ? 'is' : 'are'} now saved to your account.` });
+      }
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   // Funnel: editor_opened (once per browser session)
   useEffect(() => {
@@ -2024,7 +2055,7 @@ export default function App() {
       if (name.endsWith('.csv')) {
         const result = await loadCSV(file);
         if (result.needsMapping) {
-          setCsvMappingData({ headers: result.headers, rows: result.rows, filename: file.name });
+          setCsvMappingData({ headers: result.headers, rows: result.rows, filename: file.name, guesses: result.guesses, hint: result.hint });
         } else {
           await addGeoJSONAsLayer(result, file.name);
           if (screen !== 'editor') setScreen('editor');
@@ -3144,9 +3175,9 @@ export default function App() {
     setScreen('editor');
   };
 
-  // "Edit this map" on a shared view: clone immediately if signed in, otherwise
-  // remember the intent and open the auth modal — the resume effect below picks
-  // it up once a session exists (same tab sign-in OR return after email confirm).
+  // "Make a copy" on a shared view: signed-in users get a cloud clone;
+  // anonymous users get a local copy immediately — no signup wall on the viral
+  // loop. The local draft autosaves and migrates to cloud if they sign in later.
   const handleEditSharedCopy = async (state) => {
     if (user) {
       try {
@@ -3156,10 +3187,21 @@ export default function App() {
       }
       return;
     }
-    if (sharedMapId) {
-      try { localStorage.setItem('pendingEditShareId', sharedMapId); } catch { /* noop */ }
-    }
-    setShowAuthFromGate(true);
+    trackEvent('share_forked', { mapId: sharedMapId, mode: 'local' });
+    try { window.history.replaceState({}, '', '/'); } catch { /* noop */ }
+    setSharedMapId(null);
+    skipAutoFitRef.current = true;
+    setProject(state);
+    setProjectId(null);
+    setProjectName(state?.layout?.title ? `${state.layout.title} (copy)` : 'Shared map (copy)');
+    setSelectedLayerId(null);
+    setSelectedCalloutId(null);
+    setSelectedFeature(null);
+    setSelectedMarkerId(null);
+    setSelectedEllipseId(null);
+    clearActiveProjectContext();
+    setScreen('editor');
+    setUploadStatus({ type: 'success', message: 'This is your own editable copy — sign in any time to save it to an account.' });
   };
 
   // Resume a pending "edit a copy" once the user becomes authenticated while on
@@ -5306,6 +5348,8 @@ export default function App() {
             headers={csvMappingData.headers}
             rows={csvMappingData.rows}
             filename={csvMappingData.filename}
+            guesses={csvMappingData.guesses}
+            hint={csvMappingData.hint}
             onImport={async (geojson) => {
               setCsvMappingData(null);
               try {

@@ -71,7 +71,7 @@ export default function SharedMapViewer({ mapId, onExit, user, onEditCopy }) {
         </span>
         <div className="shared-map-bar-actions">
           <button className="shared-map-edit-btn" onClick={handleEdit} disabled={editing}>
-            {editing ? 'Opening…' : (user ? 'Edit this map' : 'Sign in to edit')}
+            {editing ? 'Opening…' : (user ? 'Edit this map' : 'Make your own copy — free, no signup')}
           </button>
           <button className="shared-map-cta-btn" onClick={onExit}>
             Create your own map →

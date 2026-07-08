@@ -3013,3 +3013,6 @@ body.is-dragging .template-zone .panel-delete-btn { opacity: 0 !important; }
   .lm-hero-ctas .lm-btn-lg { width: 100%; }
 
 }
+
+/* Magic-link auth subtitle */
+.auth-modal-sub{font-size:13.5px;color:#64748b;line-height:1.55;margin:-4px 0 14px}

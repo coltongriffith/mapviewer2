@@ -2,19 +2,23 @@ import React, { useState } from 'react';
 import { csvToGeoJSON } from '../utils/importers';
 
 const ROLES = [
-  { value: 'x',       label: 'Easting / Longitude (X) *' },
-  { value: 'y',       label: 'Northing / Latitude (Y) *' },
-  { value: 'id',      label: 'Hole ID / Name' },
-  { value: 'elev',    label: 'Elevation / Z' },
+  { value: 'x',       label: 'Longitude — east/west position *' },
+  { value: 'y',       label: 'Latitude — north/south position *' },
+  { value: 'id',      label: 'Point name (hole ID, sample #…)' },
+  { value: 'elev',    label: 'Elevation' },
   { value: 'azimuth', label: 'Azimuth' },
   { value: 'dip',     label: 'Dip' },
   { value: 'skip',    label: '— Skip —' },
 ];
 
-export default function ColumnMapperModal({ headers, rows, filename, onImport, onClose }) {
+export default function ColumnMapperModal({ headers, rows, filename, onImport, onClose, guesses = {}, hint = '' }) {
   const [mapping, setMapping] = useState(() => {
     const init = {};
     headers.forEach((h) => { init[h] = 'skip'; });
+    // Pre-select detected columns so most users just confirm and import.
+    Object.entries(guesses).forEach(([role, header]) => {
+      if (header && init[header] !== undefined) init[header] = role;
+    });
     return init;
   });
   const [error, setError] = useState('');
@@ -35,8 +39,8 @@ export default function ColumnMapperModal({ headers, rows, filename, onImport, o
   const handleImport = () => {
     const xCol = Object.keys(mapping).find((h) => mapping[h] === 'x');
     const yCol = Object.keys(mapping).find((h) => mapping[h] === 'y');
-    if (!xCol) { setError('Please assign a column to Easting / Longitude (X).'); return; }
-    if (!yCol) { setError('Please assign a column to Northing / Latitude (Y).'); return; }
+    if (!xCol) { setError('Which column has the east/west position (longitude)? Pick it above.'); return; }
+    if (!yCol) { setError('Which column has the north/south position (latitude)? Pick it above.'); return; }
 
     const idCol = Object.keys(mapping).find((h) => mapping[h] === 'id');
     const elevCol = Object.keys(mapping).find((h) => mapping[h] === 'elev');
@@ -63,8 +67,13 @@ export default function ColumnMapperModal({ headers, rows, filename, onImport, o
         <button className="export-hd-close" type="button" onClick={onClose} aria-label="Close">✕</button>
         <h3 className="export-hd-title" style={{ marginBottom: 4 }}>Map CSV columns</h3>
         <p className="export-hd-desc" style={{ marginBottom: 12 }}>
-          <strong>{filename}</strong> — assign each column to a role. X and Y are required.
+          <strong>{filename}</strong> — tell us which columns hold the coordinates. We've pre-selected our best guess.
         </p>
+        {hint && (
+          <p className="export-hd-desc" style={{ marginBottom: 12, background: '#fef9c3', border: '1px solid #fde047', borderRadius: 8, padding: '8px 12px', color: '#713f12' }}>
+            {hint}
+          </p>
+        )}
 
         <div style={{ overflowX: 'auto', marginBottom: 16 }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>

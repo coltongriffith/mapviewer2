@@ -57,6 +57,16 @@ export function AuthProvider({ children }) {
     if (error) throw error;
   }
 
+  async function signInWithMagicLink(email) {
+    if (!supabase) throw new Error('Auth not configured');
+    // One email, no password, no confirm round-trip — the link both creates
+    // the account (if new) and signs in, returning to the page it was sent
+    // from (so a pending shared-map fork or unsaved draft is still there).
+    const emailRedirectTo = typeof window !== 'undefined' ? window.location.href : undefined;
+    const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo } });
+    if (error) throw error;
+  }
+
   async function signOut() {
     if (!supabase) return;
     const { error } = await supabase.auth.signOut();
@@ -70,7 +80,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, signIn, signUp, signOut, resetPassword }}>
+    <AuthContext.Provider value={{ user, loading, signIn, signUp, signInWithMagicLink, signOut, resetPassword }}>
       {children}
     </AuthContext.Provider>
   );
