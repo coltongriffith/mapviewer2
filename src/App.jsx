@@ -903,6 +903,80 @@ export default function App() {
     }
   }, [user, projectId, isDirty]);
 
+  // Small-viewport notice: the editor renders on phones but is built for
+  // desktop. Shown once per session; impressions tracked to size mobile demand
+  // before investing in full touch support.
+  const [showMobileBanner, setShowMobileBanner] = useState(false);
+  useEffect(() => {
+    if (screen !== 'editor') return;
+    let dismissed = false;
+    try { dismissed = !!sessionStorage.getItem('em_mobile_banner_dismissed'); } catch { /* noop */ }
+    // innerWidth lies on phones: the editor's ~945px min layout makes mobile
+    // Chrome expand the layout viewport. Detect actual small touch devices by
+    // physical screen size + coarse pointer instead.
+    const isPhone = window.matchMedia?.('(pointer: coarse)')?.matches
+      && Math.min(window.screen?.width || 9999, window.screen?.height || 9999) < 700;
+    if (dismissed || !isPhone) return;
+    setShowMobileBanner(true);
+    trackEvent('mobile_editor_banner_shown', { screenW: window.screen?.width, screenH: window.screen?.height });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [screen]);
+
+  // ── Undo/redo ──────────────────────────────────────────────────────────────
+  // History of settled project states (object refs — every update is immutable,
+  // so storing references is free). 400ms debounce coalesces drags/typing into
+  // one step; ring buffer caps memory at 30 snapshots.
+  const historyRef = useRef({ stack: [], index: -1, restoring: false, pending: null });
+  useEffect(() => {
+    const h = historyRef.current;
+    if (h.restoring) { h.restoring = false; h.pending = null; return undefined; }
+    h.pending = project;
+    const t = setTimeout(() => {
+      h.pending = null;
+      h.stack = h.stack.slice(0, h.index + 1);
+      h.stack.push(project);
+      if (h.stack.length > 30) h.stack.shift();
+      h.index = h.stack.length - 1;
+    }, 400);
+    return () => clearTimeout(t);
+  }, [project]);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      const key = e.key.toLowerCase();
+      if (key !== 'z' && key !== 'y') return;
+      const tag = document.activeElement?.tagName?.toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || document.activeElement?.isContentEditable) return;
+      if (screen !== 'editor') return;
+      e.preventDefault();
+      const h = historyRef.current;
+      // A change made in the last 400ms hasn't been pushed yet — flush it so
+      // undo steps back from what's on screen, not from an older state.
+      if (h.pending) {
+        h.stack = h.stack.slice(0, h.index + 1);
+        h.stack.push(h.pending);
+        if (h.stack.length > 30) h.stack.shift();
+        h.index = h.stack.length - 1;
+        h.pending = null;
+      }
+      const redoWanted = key === 'y' || e.shiftKey;
+      if (redoWanted) {
+        if (h.index >= h.stack.length - 1) return;
+        h.index += 1;
+      } else {
+        if (h.index <= 0) return;
+        h.index -= 1;
+      }
+      h.restoring = true;
+      skipAutoFitRef.current = true;
+      setProject(h.stack[h.index]);
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [screen]);
+
   // One-time migration: when a user signs in, push any anonymous local maps to
   // their cloud account so work made before signing up isn't stranded in this
   // browser's localStorage (the old behaviour silently lost it on other devices).
@@ -1343,19 +1417,25 @@ export default function App() {
       if (e.key !== 'Delete' && e.key !== 'Backspace') return;
       const tag = document.activeElement?.tagName?.toLowerCase();
       if (tag === 'input' || tag === 'textarea' || document.activeElement?.isContentEditable) return;
+      let deleted = null;
       if (selectedMarkerId) {
         setProject((prev) => ({ ...prev, markers: (prev.markers || []).filter((m) => m.id !== selectedMarkerId) }));
         setSelectedMarkerId(null);
+        deleted = 'Marker';
       } else if (selectedCalloutId) {
         setProject((prev) => ({ ...prev, callouts: prev.callouts.filter((c) => c.id !== selectedCalloutId) }));
         setSelectedCalloutId(null);
+        deleted = 'Callout';
       } else if (selectedEllipseId) {
         setProject((prev) => ({ ...prev, ellipses: (prev.ellipses || []).filter((el) => el.id !== selectedEllipseId) }));
         setSelectedEllipseId(null);
+        deleted = 'Ellipse';
       } else if (selectedPolygonId) {
         setProject((prev) => ({ ...prev, polygons: (prev.polygons || []).filter((poly) => poly.id !== selectedPolygonId) }));
         setSelectedPolygonId(null);
+        deleted = 'Polygon';
       }
+      if (deleted) setUploadStatus({ type: 'info', message: `${deleted} deleted — press Ctrl+Z to undo.` });
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
@@ -2664,6 +2744,7 @@ export default function App() {
   const removeCallout = (calloutId) => {
     setProject((prev) => ({ ...prev, callouts: prev.callouts.filter((callout) => callout.id !== calloutId) }));
     if (selectedCalloutId === calloutId) setSelectedCalloutId(null);
+    setUploadStatus({ type: 'info', message: 'Callout deleted — press Ctrl+Z to undo.' });
   };
 
   const handleFeatureClick = ({ layerId, feature, latlng, isLayerSelect }) => {
@@ -3356,6 +3437,12 @@ export default function App() {
 
   return (
     <div className="app-shell">
+      {showMobileBanner && (
+        <div className="mobile-editor-banner" role="status">
+          <span>The editor works best on a desktop. Touch mostly works, but for the full experience grab a bigger screen.</span>
+          <button type="button" onClick={() => { setShowMobileBanner(false); try { sessionStorage.setItem('em_mobile_banner_dismissed', '1'); } catch { /* noop */ } }} aria-label="Dismiss">✕</button>
+        </div>
+      )}
       <Sidebar footer={<UserMenu onOpenTemplates={() => setShowBrandKitManager(true)} onOpenAccount={() => setScreen('account')} />}>
         <div className="sidebar-header-row">
           <button className="sidebar-wordmark" type="button" onClick={() => setScreen('landing')}>
