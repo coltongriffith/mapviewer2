@@ -8,8 +8,18 @@
     "description": "A map showing mineral claim boundaries and property outlines used for investor presentations, regulatory filings, and property acquisitions.",
     "primaryKeyword": "mining claims map",
     "intro": "A mining claims map shows the boundaries of mineral tenures, staked claims, and licence areas overlaid on a geographic basemap. It is the most commonly required map in junior mining and exploration — used in NI 43-101 technical reports, investor decks, news releases, and property acquisition packages.",
-    "useCases": ["NI 43-101 technical reports", "Investor presentations", "News release figures", "Property acquisition packages", "Regulatory filings"],
-    "roles": ["Claims", "Roads", "Rivers"],
+    "useCases": [
+      "NI 43-101 technical reports",
+      "Investor presentations",
+      "News release figures",
+      "Property acquisition packages",
+      "Regulatory filings"
+    ],
+    "roles": [
+      "Claims",
+      "Roads",
+      "Rivers"
+    ],
     "recommendedBasemap": "Light or Satellite",
     "recommendedTheme": "Investor — Navy & White or Technical — Sharp Borders",
     "steps": [
@@ -32,8 +42,17 @@
     "description": "A map displaying drill collar locations with assay results and intercept data, used in news releases and NI 43-101 reports.",
     "primaryKeyword": "drill results map",
     "intro": "A drill results map plots the collar locations of completed drill holes alongside key assay results — typically highest-grade intercept, hole depth, and azimuth. It is the standard figure included in exploration news releases and is scrutinized by investors and analysts to understand the spatial distribution of mineralization.",
-    "useCases": ["Exploration news releases", "NI 43-101 technical reports", "Investor day presentations", "Analyst briefings"],
-    "roles": ["Drillholes", "Claims", "Target Areas"],
+    "useCases": [
+      "Exploration news releases",
+      "NI 43-101 technical reports",
+      "Investor day presentations",
+      "Analyst briefings"
+    ],
+    "roles": [
+      "Drillholes",
+      "Claims",
+      "Target Areas"
+    ],
     "recommendedBasemap": "Light or Satellite",
     "recommendedTheme": "Investor — Navy & White",
     "steps": [
@@ -56,8 +75,19 @@
     "description": "A regional context map showing where an exploration project is situated within a province, state, or country — standard in all investor materials.",
     "primaryKeyword": "exploration project location map",
     "intro": "A location map provides geographic context for an exploration project — showing the property in relation to nearby infrastructure, towns, past-producing mines, and regional geology. It is required in virtually every investor presentation, technical report, and corporate presentation. A clear, professional location map immediately communicates project accessibility and regional context.",
-    "useCases": ["Corporate presentations", "NI 43-101 reports", "Investor decks", "Website project pages", "Regulatory submissions"],
-    "roles": ["Claims", "Roads", "Rivers", "Labels"],
+    "useCases": [
+      "Corporate presentations",
+      "NI 43-101 reports",
+      "Investor decks",
+      "Website project pages",
+      "Regulatory submissions"
+    ],
+    "roles": [
+      "Claims",
+      "Roads",
+      "Rivers",
+      "Labels"
+    ],
     "recommendedBasemap": "Satellite or Topographic",
     "recommendedTheme": "Investor — Navy & White or Terrain — Earthy & Warm",
     "steps": [
@@ -69,7 +99,8 @@
       "Add a distance ring to show project scale",
       "Configure the title with project name and region",
       "Export as PNG for presentations or PDF for reports"
-    ]
+    ],
+    "regionPages": false
   },
   {
     "id": "target-generation-map",
@@ -80,8 +111,18 @@
     "description": "A map highlighting exploration targets, geophysical anomalies, and structural features used to prioritize drill locations.",
     "primaryKeyword": "target generation map",
     "intro": "A target generation map integrates multiple datasets — geophysical anomalies, geochemical results, structural features, and historical workings — to visually communicate which areas have the highest exploration priority. These maps are central to project generation pitches and technical program planning.",
-    "useCases": ["Exploration program planning", "Investor technical presentations", "JV partner presentations", "Staking decisions"],
-    "roles": ["Target Areas", "Anomalies", "Faults", "Claims"],
+    "useCases": [
+      "Exploration program planning",
+      "Investor technical presentations",
+      "JV partner presentations",
+      "Staking decisions"
+    ],
+    "roles": [
+      "Target Areas",
+      "Anomalies",
+      "Faults",
+      "Claims"
+    ],
     "recommendedBasemap": "Satellite",
     "recommendedTheme": "Technical — Sharp Borders or Modern — Dark Indigo",
     "steps": [
@@ -93,7 +134,8 @@
       "Add labels for each named target",
       "Overlay on Satellite basemap to show terrain context",
       "Export at high resolution (3×) for technical presentations"
-    ]
+    ],
+    "regionPages": false
   },
   {
     "id": "infrastructure-map",
@@ -104,8 +146,18 @@
     "description": "A map showing access roads, power lines, water, and logistics infrastructure relative to an exploration property.",
     "primaryKeyword": "mining infrastructure map",
     "intro": "An infrastructure map communicates the logistical reality of an exploration project — road access, power availability, water sources, airstrips, and proximity to service communities. Investors and permitting authorities use these maps to assess project advancement costs and feasibility. A well-made infrastructure map can significantly de-risk a project in the eyes of financiers.",
-    "useCases": ["Permitting applications", "Feasibility studies", "Investor presentations", "Environmental assessments"],
-    "roles": ["Roads", "Rivers", "Claims", "Labels"],
+    "useCases": [
+      "Permitting applications",
+      "Feasibility studies",
+      "Investor presentations",
+      "Environmental assessments"
+    ],
+    "roles": [
+      "Roads",
+      "Rivers",
+      "Claims",
+      "Labels"
+    ],
     "recommendedBasemap": "Topographic",
     "recommendedTheme": "Terrain — Earthy & Warm or Technical — Sharp Borders",
     "steps": [
@@ -117,6 +169,7 @@
       "Add a scale bar to communicate distances accurately",
       "Enable North Arrow",
       "Export as PDF for permitting packages"
-    ]
+    ],
+    "regionPages": false
   }
 ]
