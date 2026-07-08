@@ -327,6 +327,15 @@ function faqBlock(faqs) {
 // Renders a product-led call-to-action band. `text` is the headline (approved
 // copy like "Search a claimholder and create a map."), `sub` an optional line,
 // `href` the destination (defaults to the editor). `label` is the button text.
+// Location slugs the app has a live claims registry for (RegistrySearch:
+// BC, ON, QC, SK, MB, NL, YT). Only these get a region-scoped registry deep
+// link; every other region opens the upload path instead of silently
+// defaulting the registry search to BC.
+const REGISTRY_REGION_SLUGS = new Set([
+  'british-columbia', 'ontario', 'quebec', 'saskatchewan',
+  'manitoba', 'newfoundland-labrador', 'yukon',
+]);
+
 // Deep link into the app with intent/region so SEO visitors land in a
 // purposeful editor (registry pre-selected, upload prompt, or demo) instead of
 // a blank one. Consumed by the ?intent/?region/?demo effect in src/App.jsx.
@@ -788,11 +797,13 @@ function buildLocationPage(location, mapType) {
 
       ${faqBlock(faqs)}
     </article>
-    ${sidebar({ relatedHtml, howToHtml, compareHtml: COMP_LINKS, appHref: appLink({
-      intent: mapType.slug === 'drill-results-map' ? 'drill-results' : 'claims',
-      region: location.slug,
-      campaign: pageSlug,
-    }) })}
+    ${sidebar({ relatedHtml, howToHtml, compareHtml: COMP_LINKS, appHref: appLink(
+      mapType.slug === 'drill-results-map'
+        ? { intent: 'drill-results', campaign: pageSlug }
+        : REGISTRY_REGION_SLUGS.has(location.slug)
+          ? { intent: 'claims', region: location.slug, campaign: pageSlug }
+          : { intent: 'claims-upload', campaign: pageSlug }
+    ) })}
   </div>
 </div>`;
 
