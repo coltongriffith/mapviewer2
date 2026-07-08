@@ -927,6 +927,11 @@ export default function App() {
   // so storing references is free). 400ms debounce coalesces drags/typing into
   // one step; ring buffer caps memory at 30 snapshots.
   const historyRef = useRef({ stack: [], index: -1, restoring: false, pending: null });
+  // Wipe undo history when a different map is loaded (open / new / demo / fork /
+  // deep-link). Without this, Ctrl+Z could restore project A's payload into
+  // project B's still-active id and the next Save would overwrite B with A.
+  // NOT called on Save — saving a draft keeps the same map, so undo survives it.
+  const resetHistory = () => { historyRef.current = { stack: [], index: -1, restoring: false, pending: null }; };
   useEffect(() => {
     const h = historyRef.current;
     if (h.restoring) { h.restoring = false; h.pending = null; return undefined; }
@@ -2168,6 +2173,7 @@ export default function App() {
 
   const loadSampleData = async (styleId) => {
     const makeFile = (json, name) => new File([JSON.stringify(json)], name, { type: 'application/json' });
+    resetHistory();
     setProject(createInitialProjectState());
     try {
       const preset = styleId ? (SAMPLE_STYLE_PRESETS[styleId] || {}) : {};
@@ -2330,6 +2336,7 @@ export default function App() {
         if (!geojson?.features?.length) throw new Error('empty claim set');
         // Start a fresh, unowned workspace so Save/autosave creates a NEW map
         // rather than overwriting whatever project the user last had open.
+        resetHistory();
         setProject(createInitialProjectState());
         setProjectId(null);
         setProjectName(company ? `${company} — Mineral Claims` : `${ticker} — Mineral Claims`);
@@ -2371,7 +2378,7 @@ export default function App() {
     if (!intent && !demo) return;
     const REGION_TO_PROVINCE = {
       'british-columbia': 'bc', ontario: 'on', quebec: 'qc', saskatchewan: 'sk',
-      manitoba: 'mb', 'newfoundland-labrador': 'nl', yukon: 'yt',
+      manitoba: 'mb', 'newfoundland-labrador': 'nl', newfoundland: 'nl', yukon: 'yt',
       bc: 'bc', on: 'on', qc: 'qc', sk: 'sk', mb: 'mb', nl: 'nl', yt: 'yt',
     };
     try { window.history.replaceState({}, '', '/'); } catch { /* noop */ }
@@ -2382,8 +2389,17 @@ export default function App() {
     setScreen('editor');
     if (intent === 'claims') {
       const province = REGION_TO_PROVINCE[(params.get('region') || '').toLowerCase()] || null;
-      setAddClaimsProvince(province);
-      setAddClaimsModalPath('registry');
+      // No live registry for this region → open the upload path instead of the
+      // registry search silently defaulting to BC.
+      if (!province && params.get('region')) {
+        setAddClaimsModalPath('upload');
+      } else {
+        setAddClaimsProvince(province);
+        setAddClaimsModalPath('registry');
+      }
+      setShowAddClaimsModal(true);
+    } else if (intent === 'claims-upload') {
+      setAddClaimsModalPath('upload');
       setShowAddClaimsModal(true);
     } else if (intent === 'drill-results' || intent === 'csv') {
       setUploadStatus({ type: 'info', message: 'Import your drill hole or sample CSV to get started — drag it into the upload area.' });
@@ -3224,6 +3240,7 @@ export default function App() {
       }
     }
     if (!payload) return;
+    resetHistory();
     skipAutoFitRef.current = true;
     setProject(payload);
     setProjectId(entry.id);
@@ -3271,6 +3288,7 @@ export default function App() {
     trackEvent('share_forked', { mapId: sharedMapId, mode: 'local' });
     try { window.history.replaceState({}, '', '/'); } catch { /* noop */ }
     setSharedMapId(null);
+    resetHistory();
     skipAutoFitRef.current = true;
     setProject(state);
     setProjectId(null);
@@ -3337,6 +3355,7 @@ export default function App() {
   const startNewProject = () => {
     const base = createInitialProjectState();
     const blank = { ...base, layout: seedLayoutWithSettings(base.layout) };
+    resetHistory();
     setProject(blank);
     setProjectId(null);
     setProjectName('Untitled map');
