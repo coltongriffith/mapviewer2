@@ -279,7 +279,7 @@ ${body}
 
 // ─── Sidebar ──────────────────────────────────────────────────────────────────
 
-function sidebar({ relatedHtml = '', compareHtml = '', howToHtml = '', locationHtml = '' } = {}) {
+function sidebar({ relatedHtml = '', compareHtml = '', howToHtml = '', locationHtml = '', appHref = '/' } = {}) {
   const comparisons = compareHtml ? `<div class="sidebar-card"><h3>Compare Tools</h3><ul>${compareHtml}</ul></div>` : '';
   const howToGuide = howToHtml ? `<div class="sidebar-card"><h3>Step-by-Step Guide</h3><ul>${howToHtml}</ul></div>` : '';
   const relatedCard = relatedHtml ? `<div class="sidebar-card"><h3>Related Guides</h3><ul>${relatedHtml}</ul></div>` : '';
@@ -288,7 +288,7 @@ function sidebar({ relatedHtml = '', compareHtml = '', howToHtml = '', locationH
   <div class="cta-card">
     <h3>Create Your Map Now</h3>
     <p>No GIS experience needed. Import your data, choose a theme, and export in minutes.</p>
-    <a class="cta-btn" href="/">Open Exploration Maps →</a>
+    <a class="cta-btn" href="${esc(appHref)}">Open Exploration Maps →</a>
   </div>
   ${howToGuide}
   ${relatedCard}
@@ -327,6 +327,20 @@ function faqBlock(faqs) {
 // Renders a product-led call-to-action band. `text` is the headline (approved
 // copy like "Search a claimholder and create a map."), `sub` an optional line,
 // `href` the destination (defaults to the editor). `label` is the button text.
+// Deep link into the app with intent/region so SEO visitors land in a
+// purposeful editor (registry pre-selected, upload prompt, or demo) instead of
+// a blank one. Consumed by the ?intent/?region/?demo effect in src/App.jsx.
+function appLink({ intent = null, region = null, demo = null, campaign = '' } = {}) {
+  const p = new URLSearchParams();
+  if (demo) p.set('demo', demo);
+  if (intent) p.set('intent', intent);
+  if (region) p.set('region', region);
+  p.set('utm_source', 'blog');
+  p.set('utm_medium', 'cta');
+  if (campaign) p.set('utm_campaign', campaign);
+  return `/?${p.toString()}`;
+}
+
 function inlineCta({ text, sub = '', href = '/', label = 'Open Exploration Maps →' } = {}) {
   if (!text) return '';
   return `<div class="inline-cta">
@@ -503,8 +517,17 @@ function buildHowToPage(post, allPosts) {
   // (before the FAQs). Posts may override the copy via post.ctaTop/post.ctaBottom;
   // both default to approved language. Mid-page CTAs come from `cta` section
   // blocks, so every priority page gets top / middle / bottom prompts.
-  const topCta = inlineCta(post.ctaTop || { text: 'Turn public claim data into a clean map.', sub: 'No GIS experience needed — import, style, and export in minutes.' });
-  const bottomCta = inlineCta(post.ctaBottom || { text: 'Import your file and export an investor-ready map.', sub: 'Open the editor and have a shareable map in minutes.' });
+  // Deep-link CTAs: registry guides open the right province's search; drill/CSV
+  // guides open the upload prompt; claims guides open registry search.
+  const searchRegion = (post.slug.match(/search-([a-z-]+?)-(?:mining|mineral)-claims/) || [])[1] || null;
+  const postApp = appLink({
+    intent: post.mapTypeId === 'drill-results-map' ? 'drill-results'
+      : (post.mapTypeId === 'mining-claims-map' || searchRegion) ? 'claims' : null,
+    region: searchRegion,
+    campaign: post.slug,
+  });
+  const topCta = inlineCta({ href: postApp, ...(post.ctaTop || { text: 'Turn public claim data into a clean map.', sub: 'No GIS experience needed — import, style, and export in minutes.' }) });
+  const bottomCta = inlineCta({ href: postApp, ...(post.ctaBottom || { text: 'Import your file and export an investor-ready map.', sub: 'Open the editor and have a shareable map in minutes.' }) });
 
   const body = `
 <div class="page-wrap">
@@ -519,7 +542,7 @@ function buildHowToPage(post, allPosts) {
       ${bottomCta}
       ${faqBlock(post.faqs)}
     </article>
-    ${sidebar({ relatedHtml: related, compareHtml: COMP_LINKS, locationHtml })}
+    ${sidebar({ relatedHtml: related, compareHtml: COMP_LINKS, locationHtml, appHref: postApp })}
   </div>
 </div>`;
 
@@ -581,7 +604,7 @@ function buildCompPage(post, allPosts) {
       ${tableHtml}
       ${faqBlock(post.faqs)}
     </article>
-    ${sidebar({ relatedHtml: related, locationHtml: locLinksHtml })}
+    ${sidebar({ relatedHtml: related, locationHtml: locLinksHtml, appHref: appLink({ demo: 'aurora_demo', campaign: post.slug }) })}
   </div>
 </div>`;
 
@@ -765,7 +788,11 @@ function buildLocationPage(location, mapType) {
 
       ${faqBlock(faqs)}
     </article>
-    ${sidebar({ relatedHtml, howToHtml, compareHtml: COMP_LINKS })}
+    ${sidebar({ relatedHtml, howToHtml, compareHtml: COMP_LINKS, appHref: appLink({
+      intent: mapType.slug === 'drill-results-map' ? 'drill-results' : 'claims',
+      region: location.slug,
+      campaign: pageSlug,
+    }) })}
   </div>
 </div>`;
 

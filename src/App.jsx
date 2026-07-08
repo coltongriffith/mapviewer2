@@ -50,7 +50,7 @@ import regionsNA from './assets/regionsNA.json';
 import { fitProjectToTemplate } from './utils/frameMapForTemplate';
 import { getThemeTokens } from './utils/themeTokens';
 import { saveLead, getLastLeadEmail } from './utils/leadCapture';
-import { trackSearch } from './utils/track';
+import { trackSearch, trackEvent } from './utils/track';
 import dissolveGeo from '@turf/dissolve';
 import {
   clearActiveProjectContext,
@@ -699,6 +699,7 @@ export default function App() {
   const [showShareModal, setShowShareModal] = useState(false);
   const [showAddClaimsModal, setShowAddClaimsModal] = useState(false);
   const [addClaimsModalPath, setAddClaimsModalPath] = useState(null);
+  const [addClaimsProvince, setAddClaimsProvince] = useState(null);
   const [shareUrl, setShareUrl] = useState(null);
   const [shareLoading, setShareLoading] = useState(false);
   const [shareElapsed, setShareElapsed] = useState(0);
@@ -900,6 +901,28 @@ export default function App() {
       setRecentProjects(listProjects());
     }
   }, [user, projectId, isDirty]);
+
+  // Funnel: editor_opened (once per browser session)
+  useEffect(() => {
+    if (screen !== 'editor') return;
+    try {
+      if (sessionStorage.getItem('em_editor_opened')) return;
+      sessionStorage.setItem('em_editor_opened', '1');
+    } catch { /* if sessionStorage is unavailable, still fire once per mount */ }
+    trackEvent('editor_opened', {}, user?.id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [screen]);
+
+  // Funnel: first_layer_added — the activation event (once per browser session)
+  useEffect(() => {
+    if (project.layers.length === 0) return;
+    try {
+      if (sessionStorage.getItem('em_first_layer')) return;
+      sessionStorage.setItem('em_first_layer', '1');
+    } catch { /* noop */ }
+    trackEvent('first_layer_added', { count: project.layers.length }, user?.id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project.layers.length]);
 
   // Track unique visitor sessions (once per browser session, fire-and-forget)
   useEffect(() => {
@@ -2223,6 +2246,40 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Deep links from blog/location SEO pages — lands visitors in a purposeful
+  // editor instead of a blank one:
+  //   /?intent=claims&region=british-columbia → editor + registry search with
+  //     the region's province pre-selected (7 supported registries)
+  //   /?intent=drill-results                  → editor, CSV upload prompt
+  //   /?demo=aurora_demo                      → loads the styled demo map
+  // UTM params are captured by the page_views effect before we strip the query.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const intent = params.get('intent');
+    const demo = params.get('demo');
+    if (!intent && !demo) return;
+    const REGION_TO_PROVINCE = {
+      'british-columbia': 'bc', ontario: 'on', quebec: 'qc', saskatchewan: 'sk',
+      manitoba: 'mb', 'newfoundland-labrador': 'nl', yukon: 'yt',
+      bc: 'bc', on: 'on', qc: 'qc', sk: 'sk', mb: 'mb', nl: 'nl', yt: 'yt',
+    };
+    try { window.history.replaceState({}, '', '/'); } catch { /* noop */ }
+    if (demo) {
+      loadSampleData(demo);
+      return;
+    }
+    setScreen('editor');
+    if (intent === 'claims') {
+      const province = REGION_TO_PROVINCE[(params.get('region') || '').toLowerCase()] || null;
+      setAddClaimsProvince(province);
+      setAddClaimsModalPath('registry');
+      setShowAddClaimsModal(true);
+    } else if (intent === 'drill-results' || intent === 'csv') {
+      setUploadStatus({ type: 'info', message: 'Import your drill hole or sample CSV to get started — drag it into the upload area.' });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const hexToHsl = (hex) => {
     const r = parseInt(hex.slice(1, 3), 16) / 255;
     const g = parseInt(hex.slice(3, 5), 16) / 255;
@@ -2920,6 +2977,7 @@ export default function App() {
           noWatermark: Boolean(extraOptions.noWatermark),
         }).then(() => {});
       }
+      trackEvent('export_completed', { format, noWatermark: Boolean(extraOptions.noWatermark) }, user?.id);
     } catch (err) {
       setExportError(`Export failed: ${err.message}`);
       setUploadStatus({ type: 'error', message: `Export failed: ${err.message}` });
@@ -3077,6 +3135,7 @@ export default function App() {
   // map is untouched.
   const cloneSharedMapAndOpen = async (state) => {
     const name = state?.layout?.title || 'Shared map';
+    trackEvent('share_forked', { mapId: sharedMapId, mode: 'cloud' }, user?.id);
     const newId = await cloneSharedMapToCloud(state, name);
     // Drop the /map/:id URL so a later refresh lands on the editor, not the viewer.
     try { window.history.replaceState({}, '', '/'); } catch { /* noop */ }
@@ -5125,7 +5184,8 @@ export default function App() {
         {showAddClaimsModal && (
           <AddClaimsModal
             defaultPath={addClaimsModalPath}
-            onClose={() => { setShowAddClaimsModal(false); setAddClaimsModalPath(null); }}
+            initialProvince={addClaimsProvince}
+            onClose={() => { setShowAddClaimsModal(false); setAddClaimsModalPath(null); setAddClaimsProvince(null); }}
             onImport={(geojson, name) => {
               addGeoJSONAsLayer(geojson, `${name}.geojson`);
               setShowAddClaimsModal(false);
@@ -5201,7 +5261,10 @@ export default function App() {
                       }
                       const id = await shareMap(shareProject, user?.id ?? null);
                       const base = window.location.origin;
-                      setShareUrl(`${base}/map/${id}`);
+                      // ?ref ties later share_viewed/share_forked events back to
+                      // this sharer's session so the viral loop is measurable.
+                      setShareUrl(`${base}/map/${id}?ref=${getSessionId()}`);
+                      trackEvent('share_created', { mapId: id }, user?.id);
                     } catch (e) {
                       alert('Failed to create share link: ' + e.message);
                     } finally {

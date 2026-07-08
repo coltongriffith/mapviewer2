@@ -597,6 +597,7 @@ const RPC_CALLS = [
   ['exportsByUser', 'admin_get_exports_by_user'],
   ['kpiTrends', 'admin_get_kpi_trends'],
   ['funnel', 'admin_get_funnel'],
+  ['productFunnel', 'admin_get_product_funnel'],
   ['campaignStats', 'admin_get_campaign_stats', true],
   ['searchStats', 'admin_get_search_stats', true],
   ['topSharedMaps', 'admin_get_top_shared_maps'],
@@ -816,6 +817,21 @@ export default function AdminPage({ onExit }) {
     { label: 'Paid intent (no-watermark)', value: Number(f.premium_exporters) || 0, color: '#10b981' },
   ];
 
+  // Session-level activation funnel from product_events (last 30 days).
+  const pf = Object.fromEntries((d.productFunnel || []).map((r) => [r.event, Number(r.sessions) || 0]));
+  const activationSteps = [
+    { label: 'Opened editor', value: pf.editor_opened || 0, color: '#3b82f6' },
+    { label: 'Added first layer', value: pf.first_layer_added || 0, color: '#6366f1' },
+    { label: 'Exported', value: pf.export_completed || 0, color: '#8b5cf6' },
+  ];
+  const shareLoop = [
+    { label: 'Shares created', value: pf.share_created || 0, color: '#0ea5e9' },
+    { label: 'Share views', value: pf.share_viewed || 0, color: '#38bdf8' },
+    { label: 'Forked a copy', value: pf.share_forked || 0, color: '#10b981' },
+    { label: 'Signed up', value: pf.signup_completed || 0, color: '#f59e0b' },
+  ];
+  const hasProductEvents = Object.keys(pf).length > 0;
+
   const formatColors = { png: '#0ea5e9', svg: '#8b5cf6', pdf: '#f59e0b' };
   const formatSegments = (d.exportStats || []).map((r) => ({
     label: r.format?.toUpperCase(), value: Number(r.total), color: formatColors[r.format?.toLowerCase()] || '#64748b',
@@ -903,6 +919,16 @@ export default function AdminPage({ onExit }) {
               <Card title="Conversion funnel" eyebrow="Last 30 days">
                 <Funnel steps={funnelSteps} />
               </Card>
+              {hasProductEvents && (
+                <Card title="Activation funnel" eyebrow="Sessions, last 30 days">
+                  <Funnel steps={activationSteps} />
+                </Card>
+              )}
+              {hasProductEvents && (pf.share_created || 0) > 0 && (
+                <Card title="Sharing loop" eyebrow="Sessions, last 30 days">
+                  <Funnel steps={shareLoop} />
+                </Card>
+              )}
             </div>
             <Card
               title="Live visitors"
