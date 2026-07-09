@@ -35,3 +35,10 @@ ReactDOM.createRoot(document.getElementById("root")).render(
     </ErrorBoundary>
   </React.StrictMode>
 );
+
+// Remove the static SEO/crawler fallback once the app has painted, so real
+// users only see the app (crawlers that don't run JS keep the static content).
+// rAF waits for the first paint so there's no blank flash between the two.
+requestAnimationFrame(() => {
+  document.getElementById("seo-fallback")?.remove();
+});

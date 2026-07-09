@@ -64,6 +64,61 @@
 </head>
 <body>
 <div id="root"></div>
+<!--
+  Static SEO/crawler fallback. The app renders into #root (a sibling) and
+  main.jsx removes this block on mount, so real visitors never see it — but
+  crawlers and AI answer engines that don't execute JavaScript (GPTBot,
+  OAI-SearchBot, ClaudeBot, PerplexityBot, etc.) get real, readable content and
+  internal links instead of an empty shell.
+-->
+<div id="seo-fallback">
+  <header>
+    <p><strong>Exploration Maps</strong> — browser-based mapping for junior mining &amp; exploration teams.</p>
+  </header>
+  <main>
+    <h1>Investor-ready mining maps in minutes.</h1>
+    <p>Exploration Maps is a browser-based tool for junior mining and mineral
+    exploration companies. Search mineral claims, plot drill results and
+    projects, add infrastructure, and export polished maps for investor decks,
+    news releases, NI 43-101 technical reports, and investor updates — with no
+    GIS experience required.</p>
+    <a href="/">Start mapping →</a>
+
+    <h2>From project data to polished map in one workflow</h2>
+    <ol>
+      <li><strong>Search or upload.</strong> Search claims, companies, projects, or
+      coordinates, or upload CSV, KML, GeoJSON, and shapefiles.</li>
+      <li><strong>Style and layer.</strong> Add claim blocks, infrastructure, targets,
+      labels, roads, rail, power, and terrain.</li>
+      <li><strong>Export and share.</strong> Create clean PNG, SVG, and PDF visuals for
+      presentations, reports, websites, and investor updates.</li>
+    </ol>
+
+    <h2>What you can make</h2>
+    <ul>
+      <li>Mining claims maps from live provincial registry data (BC, Ontario,
+      Quebec, Saskatchewan, Manitoba, Newfoundland &amp; Labrador, Yukon)</li>
+      <li>Drill results maps with grade/interval callout labels</li>
+      <li>NI 43-101-compliant report figures with scale bar, north arrow, and legend</li>
+      <li>Target generation and infrastructure/access maps</li>
+    </ul>
+
+    <h2>Guides &amp; resources</h2>
+    <ul>
+      <li><a href="/blog/">Mining map guides &amp; tutorials</a></li>
+      <li><a href="/blog/how-to-make-a-mining-claims-map/">How to make a mining claims map</a></li>
+      <li><a href="/blog/how-to-make-a-drill-results-map/">How to make a drill results map</a></li>
+      <li><a href="/blog/how-to-create-ni-43-101-compliant-map/">How to create an NI 43-101 map figure</a></li>
+      <li><a href="/blog/exploration-maps-vs-qgis/">Exploration Maps vs QGIS</a></li>
+      <li><a href="/mining-map-software/">Mining map software</a></li>
+      <li><a href="/bc-mineral-claims-map/">BC mineral claims map</a></li>
+      <li><a href="/drill-results-map/">Drill results map</a></li>
+      <li><a href="/companies/">Mineral claim maps by company</a></li>
+    </ul>
+    <p>Built for mineral exploration teams, IR professionals, geologists,
+    consultants, and mining executives.</p>
+  </main>
+</div>
 <script type="module" src="/src/main.jsx"></script>
 </body>
 </html>
