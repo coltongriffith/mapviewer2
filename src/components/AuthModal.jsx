@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
 
-export default function AuthModal({ onClose, context = '', initialMode = 'magic' }) {
+export default function AuthModal({ onClose, context = '' }) {
   const { signIn, signUp, signInWithMagicLink, resetPassword } = useAuth();
   // 'magic' is the default: one email, no password, no confirm round-trip.
-  const [mode, setMode] = useState(initialMode); // 'magic' | 'signin' | 'signup' | 'reset'
+  const [mode, setMode] = useState('magic'); // 'magic' | 'signin' | 'signup' | 'reset'
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');

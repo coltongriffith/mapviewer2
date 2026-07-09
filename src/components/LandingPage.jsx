@@ -28,10 +28,6 @@ const SHOWCASE = [
   },
 ];
 
-// A handful of recognizable TSXV juniors whose claim-map pages are pre-built
-// (public/companies/*). The "claim your company map" wedge for the first-10
-// push — a visitor who recognizes their own ticker converts far better than one
-// imagining a blank map. Full directory lives at /companies/.
 // Social proof under the hero. OFF by default: flip to true only once the named
 // companies have agreed to be listed publicly — don't ship customer names to a
 // live marketing page without their sign-off. Both maps below were made in the
