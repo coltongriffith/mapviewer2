@@ -29,9 +29,13 @@ export function captureAttribution() {
       referrer: refDomain,
       landing_path: window.location.pathname || null,
     };
-    // Only persist if there's something worth attributing; otherwise leave the
-    // slot empty so a later utm-bearing entry point can still claim first touch.
-    if (Object.values(data).some((v) => v)) {
+    // Only persist when there's a real acquisition signal. landing_path is
+    // always set (even "/"), so it must NOT count — otherwise a plain direct
+    // visit would store an empty first touch and the early-return above would
+    // then drop the utm_campaign / claimed ticker from a later company-link
+    // load in the same tab, which is exactly the attribution we want to keep.
+    const hasSignal = data.utm_source || data.utm_medium || data.utm_campaign || data.claim || data.referrer;
+    if (hasSignal) {
       sessionStorage.setItem(KEY, JSON.stringify(data));
     }
   } catch {
