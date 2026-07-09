@@ -171,9 +171,9 @@ function autoDetectMode(q, allowedModes) {
 
 // ── Component ──────────────────────────────────────────────────────────────
 
-export default function RegistrySearch({ onImport, onBack, initialProvince }) {
+export default function RegistrySearch({ onImport, onBack, initialProvince, initialQuery = '', autoSearch = false }) {
   const [province, setProvince] = useState(initialProvince || 'bc');
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState(initialQuery);
   const [mode, setMode] = useState('company');
   const [manualMode, setManualMode] = useState(false);
   const [selectedOwner, setSelectedOwner] = useState(null);
@@ -185,6 +185,19 @@ export default function RegistrySearch({ onImport, onBack, initialProvince }) {
     crossProvinceHits, crossProvinceLoading, searchOtherProvinces, adoptResults,
   } = useClaims();
   const pendingSearchRef = useRef(null);
+  // Deep-link prefill (e.g. a company page with no published map): run the
+  // company-name search once on mount so the visitor sees results immediately
+  // instead of an empty box. Cross-province fallback then handles the province.
+  const autoSearchedRef = useRef(false);
+  useEffect(() => {
+    if (!autoSearch || autoSearchedRef.current) return;
+    const q = (initialQuery || '').trim();
+    if (q.length < 2) return;
+    autoSearchedRef.current = true;
+    pendingSearchRef.current = { province, mode: 'company', query: q };
+    search(q, 'company', province);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const provinceCfg = PROVINCES.find(p => p.value === province) || PROVINCES[0];
 

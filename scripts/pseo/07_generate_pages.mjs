@@ -175,8 +175,8 @@ function companyPage({ iss, claims, geo, neighbours, updated }) {
 
   <div class="map-card"><img src="${mapSvg}" alt="Map of ${esc(iss.company)} mineral claims" loading="eager"></div>
   <div class="map-actions">
-    <a class="btn btn-primary" href="/?claims=${encodeURIComponent(iss.ticker)}&amp;company=${encodeURIComponent(iss.company)}&amp;utm_source=companies&amp;utm_campaign=${encodeURIComponent(iss.ticker)}">Open interactive version →</a>
-    <a class="btn btn-ghost" href="/?claims=${encodeURIComponent(iss.ticker)}&amp;company=${encodeURIComponent(iss.company)}&amp;utm_source=companies&amp;utm_campaign=${encodeURIComponent(iss.ticker)}-export">${esc(exportCopy)}</a>
+    <a class="btn btn-primary" href="/?claims=${encodeURIComponent(iss.ticker)}&amp;company=${encodeURIComponent(iss.company)}&amp;region=${encodeURIComponent((provs[0] || '').toLowerCase())}&amp;utm_source=companies&amp;utm_campaign=${encodeURIComponent(iss.ticker)}">Open interactive version →</a>
+    <a class="btn btn-ghost" href="/?claims=${encodeURIComponent(iss.ticker)}&amp;company=${encodeURIComponent(iss.company)}&amp;region=${encodeURIComponent((provs[0] || '').toLowerCase())}&amp;utm_source=companies&amp;utm_campaign=${encodeURIComponent(iss.ticker)}-export">${esc(exportCopy)}</a>
   </div>
 
   <div class="stats">
@@ -396,6 +396,12 @@ function main() {
   }
 
   console.log(`\n✓ ${published.length} company pages generated`);
+  if (!FIXTURE && published.length) {
+    console.log(`\n⚠  COMMIT THE CLAIM GEOMETRY or the "Open interactive version" button 404s and`);
+    console.log(`   the app falls back to a registry search instead of loading the real map:`);
+    console.log(`     git add public/companies public/companies-assets public/sitemap-companies.xml`);
+    console.log(`   The .geojson files under public/companies-assets/ are what /?claims=TICKER fetches.`);
+  }
 }
 
 try { main(); } catch (err) { console.error(`\n✗ 07_generate_pages failed:\n${err.message}`); process.exit(1); }

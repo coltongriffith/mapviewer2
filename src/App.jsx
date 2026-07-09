@@ -659,6 +659,16 @@ function dissolveOwnerFeatures(feats, ownerKey) {
   return { type: 'FeatureCollection', features: polys };
 }
 
+// Maps a location/region slug (from SEO deep links and company-page CTAs) to
+// the province code the claims registry uses. Only the 7 registry-backed
+// provinces resolve; anything else returns undefined so callers fall back to
+// the upload path rather than defaulting to BC.
+const REGION_TO_PROVINCE = {
+  'british-columbia': 'bc', ontario: 'on', quebec: 'qc', saskatchewan: 'sk',
+  manitoba: 'mb', 'newfoundland-labrador': 'nl', newfoundland: 'nl', yukon: 'yt',
+  bc: 'bc', on: 'on', qc: 'qc', sk: 'sk', mb: 'mb', nl: 'nl', yt: 'yt',
+};
+
 export default function App() {
   const mapContainerRef = useRef(null);
   const mapViewportRef = useRef(null);
@@ -707,6 +717,8 @@ export default function App() {
   const [showAddClaimsModal, setShowAddClaimsModal] = useState(false);
   const [addClaimsModalPath, setAddClaimsModalPath] = useState(null);
   const [addClaimsProvince, setAddClaimsProvince] = useState(null);
+  const [addClaimsQuery, setAddClaimsQuery] = useState('');
+  const [addClaimsAutoSearch, setAddClaimsAutoSearch] = useState(false);
   const [shareUrl, setShareUrl] = useState(null);
   const [shareLoading, setShareLoading] = useState(false);
   const [shareElapsed, setShareElapsed] = useState(0);
@@ -2402,13 +2414,19 @@ export default function App() {
         trackEvent('claim_intent', { ticker, loaded: false }, null);
         setClaimPrompt({ company: label, loaded: false });
       } else {
-        // "Open interactive version" with no geometry: don't dump the visitor on
-        // a raw error — open the editor's Add-Claims flow so the click still leads
-        // somewhere useful.
+        // "Open interactive version" with no published geometry: don't dump the
+        // visitor on a raw error or a blank search — open Add-Claims → registry
+        // pre-filled with the company name (and province, if the CTA passed one)
+        // and auto-run the search so they land on the company's live claims.
+        // Cross-province fallback in RegistrySearch covers a wrong/absent region.
+        const province = REGION_TO_PROVINCE[(params.get('region') || '').toLowerCase()] || null;
         setScreen('editor');
+        setAddClaimsProvince(province);
+        setAddClaimsQuery(company || '');
+        setAddClaimsAutoSearch(Boolean(company));
         setAddClaimsModalPath('registry');
         setShowAddClaimsModal(true);
-        setUploadStatus({ type: 'info', message: `Couldn't find a published map for ${label} — search the registry or upload your claims to build one.` });
+        setUploadStatus({ type: 'info', message: `Searching the live registry for ${label}'s claims…` });
       }
       // Drop the query string so a refresh doesn't re-trigger the load.
       if (!cancelled) window.history.replaceState({}, '', '/');
@@ -2429,11 +2447,6 @@ export default function App() {
     const intent = params.get('intent');
     const demo = params.get('demo');
     if (!intent && !demo) return;
-    const REGION_TO_PROVINCE = {
-      'british-columbia': 'bc', ontario: 'on', quebec: 'qc', saskatchewan: 'sk',
-      manitoba: 'mb', 'newfoundland-labrador': 'nl', newfoundland: 'nl', yukon: 'yt',
-      bc: 'bc', on: 'on', qc: 'qc', sk: 'sk', mb: 'mb', nl: 'nl', yt: 'yt',
-    };
     try { window.history.replaceState({}, '', '/'); } catch { /* noop */ }
     if (demo) {
       loadSampleData(demo);
@@ -5416,7 +5429,9 @@ export default function App() {
           <AddClaimsModal
             defaultPath={addClaimsModalPath}
             initialProvince={addClaimsProvince}
-            onClose={() => { setShowAddClaimsModal(false); setAddClaimsModalPath(null); setAddClaimsProvince(null); }}
+            initialQuery={addClaimsQuery}
+            autoSearch={addClaimsAutoSearch}
+            onClose={() => { setShowAddClaimsModal(false); setAddClaimsModalPath(null); setAddClaimsProvince(null); setAddClaimsQuery(''); setAddClaimsAutoSearch(false); }}
             onImport={(geojson, name) => {
               addGeoJSONAsLayer(geojson, `${name}.geojson`);
               setShowAddClaimsModal(false);
