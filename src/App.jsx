@@ -719,6 +719,8 @@ export default function App() {
   const [addClaimsProvince, setAddClaimsProvince] = useState(null);
   const [addClaimsQuery, setAddClaimsQuery] = useState('');
   const [addClaimsAutoSearch, setAddClaimsAutoSearch] = useState(false);
+  const [hasExported, setHasExported] = useState(false);
+  const [onboardingDismissed, setOnboardingDismissed] = useState(false);
   const [shareUrl, setShareUrl] = useState(null);
   const [shareLoading, setShareLoading] = useState(false);
   const [shareElapsed, setShareElapsed] = useState(0);
@@ -895,6 +897,14 @@ export default function App() {
     const kitFonts = cloudTemplates.find((t) => t.is_default)?.config?.fonts || {};
     return [...new Set(Object.values(kitFonts).filter((f) => f && FONT_OPTIONS[f]))];
   }, [cloudTemplates]);
+
+  // Onboarding checklist progress (Add data → Style → Export). Derived from
+  // project state so steps tick off automatically; the card persists past the
+  // first layer until all three are done or the user dismisses it.
+  const onbStep1 = project.layers.length > 0 || (project.areaClaims?.features?.length > 0);
+  const onbStep2 = onbStep1 && (project.layers.some((l) => l.userStyled) || Boolean(project.layout?.logo));
+  const onbStep3 = hasExported;
+  const showOnboarding = !onboardingDismissed && !(onbStep1 && onbStep2 && onbStep3);
 
   useEffect(() => {
     if (!bootstrappedRef.current) {
@@ -3206,6 +3216,7 @@ export default function App() {
         }).then(() => {});
       }
       trackEvent('export_completed', { format, noWatermark: Boolean(extraOptions.noWatermark) }, user?.id);
+      setHasExported(true);
       // Anonymous exporter just got value — nudge them to save it to an account.
       // Once per session, and not while an auth modal is already up.
       if (!user) {
@@ -3598,18 +3609,49 @@ export default function App() {
           <button className="sidebar-home-link" type="button" onClick={() => setScreen('landing')}>← Home</button>
         </div>
 
-        {project.layers.length === 0 ? (
+        {showOnboarding ? (
           <div className="onboarding-card">
-            <div className="onboarding-title">Get started</div>
-            <ol className="onboarding-steps">
-              <li>Upload your map layers — claims, drillholes, roads, or any GeoJSON / .zip shapefile</li>
-              <li>Upload your logo — colours will be auto-applied to the map</li>
-              <li>Upload an inset image (optional)</li>
-              <li>Add more layers or search public claims anytime</li>
+            <div className="onboarding-card-head">
+              <div className="onboarding-title">Make your first map</div>
+              <button className="onboarding-dismiss" type="button" aria-label="Dismiss" onClick={() => { setOnboardingDismissed(true); trackEvent('onboarding_dismissed', { step1: onbStep1, step2: onbStep2, step3: onbStep3 }); }}>✕</button>
+            </div>
+            <ol className="onboarding-checklist">
+              <li className={onbStep1 ? 'done' : ''}>
+                <span className="onb-tick">{onbStep1 ? '✓' : '1'}</span>
+                <div className="onb-body">
+                  <strong>Add your data</strong>
+                  {!onbStep1 && (
+                    <div className="onb-actions">
+                      <button type="button" onClick={() => { setAddClaimsModalPath(null); setShowAddClaimsModal(true); trackEvent('onboarding_step', { step: 'add_data', via: 'claims' }); }}>Search public claims</button>
+                      <button type="button" onClick={() => { uploadInputRef.current?.click(); trackEvent('onboarding_step', { step: 'add_data', via: 'upload' }); }}>Upload a file</button>
+                      <button type="button" className="onb-link" onClick={() => { loadSampleData(); trackEvent('onboarding_step', { step: 'add_data', via: 'sample' }); }}>Load sample data</button>
+                    </div>
+                  )}
+                </div>
+              </li>
+              <li className={onbStep2 ? 'done' : (onbStep1 ? '' : 'onb-locked')}>
+                <span className="onb-tick">{onbStep2 ? '✓' : '2'}</span>
+                <div className="onb-body">
+                  <strong>Style it</strong>
+                  {onbStep1 && !onbStep2 && (
+                    <div className="onb-actions">
+                      <button type="button" onClick={() => { layersSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); trackEvent('onboarding_step', { step: 'style' }); }}>Open layer styling</button>
+                    </div>
+                  )}
+                </div>
+              </li>
+              <li className={onbStep3 ? 'done' : (onbStep1 ? '' : 'onb-locked')}>
+                <span className="onb-tick">{onbStep3 ? '✓' : '3'}</span>
+                <div className="onb-body">
+                  <strong>Export &amp; share</strong>
+                  {onbStep1 && !onbStep3 && (
+                    <div className="onb-actions">
+                      <button type="button" onClick={() => { handleExportClick('png'); trackEvent('onboarding_step', { step: 'export' }); }}>Export PNG</button>
+                    </div>
+                  )}
+                </div>
+              </li>
             </ol>
-            <button className="sample-data-link" type="button" onClick={loadSampleData}>
-              Or load sample mining data →
-            </button>
           </div>
         ) : null}
 
