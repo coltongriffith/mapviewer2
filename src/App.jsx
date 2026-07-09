@@ -2323,7 +2323,9 @@ export default function App() {
   // that company's registered claim geometry (served by the pSEO pipeline at
   // /companies-assets/[TICKER].geojson) and opens it as an editable claims layer
   // — so "Open interactive version" lands on the company's real map, not a blank
-  // editor. Runs once on mount; a missing/empty file falls back to the landing.
+  // editor. Runs once on mount. When no geometry is published, the flow degrades
+  // gracefully: "Claim this page" (&claim=1) still opens the account prompt, and
+  // both paths drop the visitor into the Add-Claims flow rather than an error.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const raw = params.get('claims');
@@ -2336,42 +2338,80 @@ export default function App() {
     const wantClaim = params.get('claim');
     let cancelled = false;
     (async () => {
-      setUploadStatus({ type: 'info', message: `Loading ${company || ticker} claims…` });
+      const label = company || ticker;
+      setUploadStatus({ type: 'info', message: `Loading ${label} claims…` });
+      // Fetch the published geometry, but never assume it exists: the SPA
+      // rewrite in vercel.json serves index.html (HTTP 200, HTML body) for any
+      // unknown path, so a missing /companies-assets/[TICKER].geojson comes back
+      // as HTML, not a 404. Parse defensively and treat anything that isn't a
+      // real FeatureCollection as "no published claims".
+      let geojson = null;
       try {
         const res = await fetch(`/companies-assets/${ticker}.geojson`);
-        if (!res.ok) throw new Error(`no published claims for ${ticker}`);
-        const geojson = await res.json();
-        if (cancelled) return;
-        if (!geojson?.features?.length) throw new Error('empty claim set');
-        // Start a fresh, unowned workspace so Save/autosave creates a NEW map
-        // rather than overwriting whatever project the user last had open.
-        resetHistory();
-        setProject(createInitialProjectState());
-        setProjectId(null);
-        setProjectName(company ? `${company} — Mineral Claims` : `${ticker} — Mineral Claims`);
-        setSelectedLayerId(null);
-        setSelectedCalloutId(null);
-        setSelectedFeature(null);
-        setSelectedMarkerId(null);
-        setSelectedEllipseId(null);
-        clearActiveProjectContext();
-        await addGeoJSONAsLayer(geojson, `${company || ticker} Claims.geojson`);
+        if (res.ok) {
+          const ct = res.headers.get('content-type') || '';
+          const text = await res.text();
+          if (!/^\s*</.test(text) && (ct.includes('json') || ct.includes('geo') || text.trimStart().startsWith('{'))) {
+            const parsed = JSON.parse(text);
+            if (parsed?.features?.length) geojson = parsed;
+          }
+        }
+      } catch {
+        geojson = null; // fall through to the claim-intent fallback below
+      }
+      if (cancelled) return;
+
+      // Start a fresh, unowned workspace either way so Save/autosave creates a
+      // NEW map rather than overwriting whatever project was last open.
+      resetHistory();
+      setProject(createInitialProjectState());
+      setProjectId(null);
+      setProjectName(`${label} — Mineral Claims`);
+      setSelectedLayerId(null);
+      setSelectedCalloutId(null);
+      setSelectedFeature(null);
+      setSelectedMarkerId(null);
+      setSelectedEllipseId(null);
+      clearActiveProjectContext();
+
+      if (geojson) {
+        await addGeoJSONAsLayer(geojson, `${label} Claims.geojson`);
         updateLayout({
-          title: company ? `${company} — Mineral Claims` : `${ticker} — Mineral Claims`,
+          title: `${label} — Mineral Claims`,
           exportSettings: { filename: `${ticker.toLowerCase()}-claims`, pixelRatio: 2 },
         });
         setScreen('editor');
         setUploadStatus({ type: 'success', message: `Loaded ${geojson.features.length} claims — style and export your map.` });
         if (wantClaim) {
-          trackEvent('claim_intent', { ticker }, null);
-          setClaimPrompt({ company: company || ticker });
+          trackEvent('claim_intent', { ticker, loaded: true }, null);
+          setClaimPrompt({ company: label, loaded: true });
         }
-      } catch (err) {
-        if (!cancelled) setUploadStatus({ type: 'error', message: `Couldn't load claims: ${err.message}` });
-      } finally {
-        // Drop the query string so a refresh doesn't re-trigger the load.
-        if (!cancelled) window.history.replaceState({}, '', '/');
+      } else if (wantClaim) {
+        // No published geometry available — the "Claim this page" CTA must still
+        // route the visitor to account creation rather than dead-ending. Land
+        // them in the editor with their company pre-titled and honest guidance.
+        updateLayout({
+          title: `${label} — Mineral Claims`,
+          exportSettings: { filename: `${ticker.toLowerCase()}-claims`, pixelRatio: 2 },
+        });
+        setScreen('editor');
+        // Account prompt is the single primary action here — it's what "Claim
+        // this page" asked for. Dismissing it leaves a usable editor with the
+        // guidance below (don't stack the Add-Claims modal on top of it).
+        setUploadStatus({ type: 'info', message: `Start ${label}'s map — search the registry or upload your claims to begin.` });
+        trackEvent('claim_intent', { ticker, loaded: false }, null);
+        setClaimPrompt({ company: label, loaded: false });
+      } else {
+        // "Open interactive version" with no geometry: don't dump the visitor on
+        // a raw error — open the editor's Add-Claims flow so the click still leads
+        // somewhere useful.
+        setScreen('editor');
+        setAddClaimsModalPath('registry');
+        setShowAddClaimsModal(true);
+        setUploadStatus({ type: 'info', message: `Couldn't find a published map for ${label} — search the registry or upload your claims to build one.` });
       }
+      // Drop the query string so a refresh doesn't re-trigger the load.
+      if (!cancelled) window.history.replaceState({}, '', '/');
     })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -5401,7 +5441,9 @@ export default function App() {
       {claimPrompt && !user && (
         <AuthModal
           onClose={() => setClaimPrompt(null)}
-          context={`Claim the ${claimPrompt.company} page — create a free account (no password) to save this map, brand it, and export it without a watermark.`}
+          context={claimPrompt.loaded
+            ? `Claim the ${claimPrompt.company} page — create a free account (no password) to save this map, brand it, and export it without a watermark.`
+            : `Claim the ${claimPrompt.company} page — create a free account (no password) to build and save your company's map, brand it, and export without a watermark.`}
         />
       )}
       {showPostExportSignup && !user && (
