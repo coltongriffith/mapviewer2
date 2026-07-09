@@ -96,9 +96,10 @@ export default function ExportHDModal({ format = 'png', activeRatio = null, isSi
           </>
         ) : (
           <>
-            <h3 id="hd-modal-title" className="export-hd-title">Export {formatLabel} without watermark</h3>
+            <h3 id="hd-modal-title" className="export-hd-title">Export {formatLabel} — remove the watermark</h3>
             <p className="export-hd-desc">
-              Enter your email to download a clean export now — no <em>explorationmaps.com</em> label.
+              Enter your email to remove the large watermark and unlock full-resolution exports now.
+              A small <em>explorationmaps.com</em> credit stays in the corner on the free plan.
               We'll also email you a one-click sign-in link (no password) so this map is saved to your
               free account and ready to reuse.
             </p>
