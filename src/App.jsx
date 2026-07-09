@@ -912,6 +912,40 @@ export default function App() {
     return () => window.clearTimeout(timer);
   }, [project, projectId, projectName]);
 
+  // Auto cloud-save for signed-in users editing a saved (cloud) project. The
+  // local draft above already persists every 250ms; this mirrors it to the
+  // cloud after ~10s of quiet so an hour of edits isn't stranded in one browser
+  // until the user remembers to click Save. Manual Save/Save As still work.
+  useEffect(() => {
+    if (!user || !projectId || !isDirty || !supabase) return;
+    const t = window.setTimeout(async () => {
+      const snapshot = JSON.stringify(project);
+      try {
+        await saveCloudProject({ id: projectId, name: projectName, payload: project });
+        // Match the manual-save bookkeeping so isDirty clears and the badge
+        // reflects a clean cloud state.
+        lastSavedSnapshotRef.current = snapshot;
+        setIsDirty(false);
+        setSaveFlash(true);
+        clearTimeout(saveFlashTimerRef.current);
+        saveFlashTimerRef.current = setTimeout(() => setSaveFlash(false), 2000);
+      } catch (err) {
+        setUploadStatus({ type: 'error', message: `Couldn't auto-save to the cloud (${err.message}). Your work is safe in this browser — click Save to retry.` });
+      }
+    }, 10000);
+    return () => window.clearTimeout(t);
+  }, [project, user, projectId, projectName, isDirty]);
+
+  // Warn before leaving with unsaved cloud changes. Only for signed-in users:
+  // anonymous work is continuously persisted to the local draft, so a prompt
+  // there would be noise. Gives auto cloud-save (or a manual Save) a chance.
+  useEffect(() => {
+    if (!user || !isDirty) return;
+    const handler = (e) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [user, isDirty]);
+
   useEffect(() => {
     if (user) {
       listCloudProjects().then(setRecentProjects).catch(() => setRecentProjects(listProjects()));
