@@ -6,7 +6,12 @@ import "leaflet/dist/leaflet.css";
 import { exportLeadsCsv } from "./utils/leadCapture";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { AuthProvider } from "./hooks/useAuth.jsx";
+import { captureAttribution } from "./utils/attribution";
 import { inject } from "@vercel/analytics";
+
+// Record first-touch acquisition context immediately, before any deep-link
+// effect strips the query string, so signup_completed can be attributed.
+captureAttribution();
 
 if (typeof crypto.randomUUID !== 'function') {
   crypto.randomUUID = () =>

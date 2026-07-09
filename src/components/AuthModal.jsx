@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
 
-export default function AuthModal({ onClose }) {
+export default function AuthModal({ onClose, context = '', initialMode = 'magic' }) {
   const { signIn, signUp, signInWithMagicLink, resetPassword } = useAuth();
   // 'magic' is the default: one email, no password, no confirm round-trip.
-  const [mode, setMode] = useState('magic'); // 'magic' | 'signin' | 'signup' | 'reset'
+  const [mode, setMode] = useState(initialMode); // 'magic' | 'signin' | 'signup' | 'reset'
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -54,6 +54,9 @@ export default function AuthModal({ onClose }) {
       <div className="modal-panel auth-modal">
         <button className="modal-close-btn" onClick={onClose} aria-label="Close">×</button>
         <h2 className="auth-modal-title">{title}</h2>
+        {context && !linkSent && (
+          <p className="auth-modal-context">{context}</p>
+        )}
         {mode === 'magic' && !linkSent && (
           <p className="auth-modal-sub">No password needed — we email you a link that signs you in (and creates your account if you're new).</p>
         )}

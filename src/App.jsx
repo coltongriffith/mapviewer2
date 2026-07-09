@@ -672,10 +672,16 @@ export default function App() {
   const insetInputRef = useRef(null);
   const uploadInputRef = useRef(null);
 
-  const { user } = useAuth();
+  const { user, signInWithMagicLink } = useAuth();
   const [storageWarningDismissed, setStorageWarningDismissed] = useState(false);
   const [showBrandKitManager, setShowBrandKitManager] = useState(false);
   const [showAuthFromGate, setShowAuthFromGate] = useState(false);
+  // Set when a visitor arrives from a company page's "Claim this page" CTA
+  // (/?claims=TICKER&claim=1). After their claims load we prompt account
+  // creation — claiming a company map is the natural moment to ask for an account.
+  const [claimPrompt, setClaimPrompt] = useState(null); // { company }
+  // One-time, per-session nudge shown to anonymous users right after they export.
+  const [showPostExportSignup, setShowPostExportSignup] = useState(false);
   const [cloudTemplates, setCloudTemplates] = useState([]);
   const [accountSettings, setAccountSettings] = useState({});
 
@@ -2325,6 +2331,9 @@ export default function App() {
     const ticker = raw.toUpperCase();
     if (!/^[A-Z0-9.\-]{1,12}$/.test(ticker)) return;
     const company = params.get('company');
+    // "Claim this page" links carry &claim=1 — after the claims load we prompt
+    // account creation so the map is saved to the visitor's own account.
+    const wantClaim = params.get('claim');
     let cancelled = false;
     (async () => {
       setUploadStatus({ type: 'info', message: `Loading ${company || ticker} claims…` });
@@ -2353,6 +2362,10 @@ export default function App() {
         });
         setScreen('editor');
         setUploadStatus({ type: 'success', message: `Loaded ${geojson.features.length} claims — style and export your map.` });
+        if (wantClaim) {
+          trackEvent('claim_intent', { ticker }, null);
+          setClaimPrompt({ company: company || ticker });
+        }
       } catch (err) {
         if (!cancelled) setUploadStatus({ type: 'error', message: `Couldn't load claims: ${err.message}` });
       } finally {
@@ -3106,6 +3119,16 @@ export default function App() {
         }).then(() => {});
       }
       trackEvent('export_completed', { format, noWatermark: Boolean(extraOptions.noWatermark) }, user?.id);
+      // Anonymous exporter just got value — nudge them to save it to an account.
+      // Once per session, and not while an auth modal is already up.
+      if (!user) {
+        try {
+          if (!sessionStorage.getItem('em_post_export_nudge')) {
+            sessionStorage.setItem('em_post_export_nudge', '1');
+            setShowPostExportSignup(true);
+          }
+        } catch { setShowPostExportSignup(true); }
+      }
     } catch (err) {
       setExportError(`Export failed: ${err.message}`);
       setUploadStatus({ type: 'error', message: `Export failed: ${err.message}` });
@@ -3115,18 +3138,33 @@ export default function App() {
   };
 
   const handleExportClick = (format) => {
-    // PDF always shows the modal so the user can choose the page size
-    if (format !== 'pdf' && getLastLeadEmail()) {
+    // Signed-in users, or anyone who's already left an email, skip the gate for
+    // raster/vector exports and get a clean file straight away. PDF always shows
+    // the modal so the user can choose the page size.
+    if (format !== 'pdf' && (user || getLastLeadEmail())) {
       handleExport(format, { noWatermark: true });
     } else {
       setPendingExportFormat(format);
       setShowExportModal(true);
+      // The export gate is the strongest natural signup moment — measure how
+      // often it's seen so we can separate a traffic problem from a conversion one.
+      trackEvent('export_gate_shown', { format, signedIn: Boolean(user) }, user?.id);
     }
   };
 
   const handleExportModalConfirm = async (email, extraOpts = {}) => {
     setShowExportModal(false);
     saveLead({ email, projectTitle: project.layout?.title || '' });
+    // Anonymous export: fire a no-password magic link alongside the clean
+    // download so the same email that unlocked the watermark also creates a
+    // saved account. Fire-and-forget — never hold the user's export hostage to
+    // the email round-trip.
+    if (!user && email) {
+      trackEvent('export_gate_signup_started', { format: pendingExportFormat }, null);
+      signInWithMagicLink(email).catch(() => { /* email send is best-effort */ });
+      // They just got a sign-in link — don't also fire the post-export nudge.
+      try { sessionStorage.setItem('em_post_export_nudge', '1'); } catch { /* noop */ }
+    }
     await handleExport(pendingExportFormat, { noWatermark: true, ...extraOpts });
   };
 
@@ -4791,8 +4829,13 @@ export default function App() {
         <div className="map-topbar editor-toolbar">
           <div className="map-topbar-left">
             <div className="map-topbar-title">{project.layout.title || 'Project Map'}</div>
-            <div className={`autosave-badge ${isDirty ? 'dirty' : saveFlash ? 'flash' : 'clean'}`}>
-              {isDirty ? 'Unsaved' : saveFlash ? '✓ Saved' : user ? 'Cloud ✓' : 'Saved ✓'}
+            <div
+              className={`autosave-badge ${isDirty ? 'dirty' : saveFlash ? 'flash' : 'clean'}${!user && !isDirty ? ' local' : ''}`}
+              onClick={!user && !isDirty ? () => setShowAuthFromGate(true) : undefined}
+              role={!user && !isDirty ? 'button' : undefined}
+              title={!user && !isDirty ? 'Saved only on this device — sign in to keep your maps' : undefined}
+            >
+              {isDirty ? 'Unsaved' : saveFlash ? '✓ Saved' : user ? 'Cloud ✓' : 'On this device — sign in to keep'}
             </div>
           </div>
           <div className="map-topbar-right">
@@ -5346,6 +5389,8 @@ export default function App() {
           <ExportHDModal
             format={pendingExportFormat}
             activeRatio={activeRatio}
+            isSignedIn={Boolean(user)}
+            userEmail={user?.email || ''}
             onConfirm={handleExportModalConfirm}
             onWithWatermark={handleExportModalWithWatermark}
             onClose={() => setShowExportModal(false)}
@@ -5353,6 +5398,24 @@ export default function App() {
         ) : null}
         {showHelpModal && <HowToUseModal onClose={() => setShowHelpModal(false)} />}
       </React.Suspense>
+      {claimPrompt && !user && (
+        <AuthModal
+          onClose={() => setClaimPrompt(null)}
+          context={`Claim the ${claimPrompt.company} page — create a free account (no password) to save this map, brand it, and export it without a watermark.`}
+        />
+      )}
+      {showPostExportSignup && !user && (
+        <div className="post-export-toast" role="status">
+          <div className="post-export-toast-body">
+            <strong>Map exported.</strong> Create a free account to save it and reuse your branding next time — no password.
+          </div>
+          <div className="post-export-toast-actions">
+            <button className="btn compact primary" type="button" onClick={() => { setShowPostExportSignup(false); setShowAuthFromGate(true); }}>Save to account</button>
+            <button className="post-export-toast-dismiss" type="button" onClick={() => setShowPostExportSignup(false)} aria-label="Dismiss">✕</button>
+          </div>
+        </div>
+      )}
+      {showAuthFromGate && <AuthModal onClose={() => setShowAuthFromGate(false)} />}
       {showShareModal && (
         <div className="modal-backdrop" onClick={() => setShowShareModal(false)}>
           <div className="share-modal" onClick={e => e.stopPropagation()}>
