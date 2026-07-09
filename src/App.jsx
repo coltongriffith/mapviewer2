@@ -3208,7 +3208,10 @@ export default function App() {
         exportLayers = [...project.layers, ...claimLayers];
       }
       const scene = buildScene(mapContainerRef.current, { ...project, layers: exportLayers, layout: { ...project.layout, legendItems: allLegendItems } }, leafletMapRef.current);
-      const opts = { ...(project.layout?.exportSettings || {}), ...extraOptions };
+      // No paid tier yet — signed-in is the temporary stand-in so logged-in
+      // users get a fully clean export now, ahead of billing. Revisit once
+      // a real paid flag exists on the account.
+      const opts = { ...(project.layout?.exportSettings || {}), ...extraOptions, paidTier: Boolean(user) };
       if (format === 'png') {
         await exportPNG(scene, opts);
       } else if (format === 'svg' || format === 'svg_ai') {
