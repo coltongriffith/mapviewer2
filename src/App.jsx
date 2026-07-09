@@ -672,10 +672,16 @@ export default function App() {
   const insetInputRef = useRef(null);
   const uploadInputRef = useRef(null);
 
-  const { user } = useAuth();
+  const { user, signInWithMagicLink } = useAuth();
   const [storageWarningDismissed, setStorageWarningDismissed] = useState(false);
   const [showBrandKitManager, setShowBrandKitManager] = useState(false);
   const [showAuthFromGate, setShowAuthFromGate] = useState(false);
+  // Set when a visitor arrives from a company page's "Claim this page" CTA
+  // (/?claims=TICKER&claim=1). After their claims load we prompt account
+  // creation — claiming a company map is the natural moment to ask for an account.
+  const [claimPrompt, setClaimPrompt] = useState(null); // { company }
+  // One-time, per-session nudge shown to anonymous users right after they export.
+  const [showPostExportSignup, setShowPostExportSignup] = useState(false);
   const [cloudTemplates, setCloudTemplates] = useState([]);
   const [accountSettings, setAccountSettings] = useState({});
 
@@ -2317,7 +2323,9 @@ export default function App() {
   // that company's registered claim geometry (served by the pSEO pipeline at
   // /companies-assets/[TICKER].geojson) and opens it as an editable claims layer
   // — so "Open interactive version" lands on the company's real map, not a blank
-  // editor. Runs once on mount; a missing/empty file falls back to the landing.
+  // editor. Runs once on mount. When no geometry is published, the flow degrades
+  // gracefully: "Claim this page" (&claim=1) still opens the account prompt, and
+  // both paths drop the visitor into the Add-Claims flow rather than an error.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const raw = params.get('claims');
@@ -2325,40 +2333,85 @@ export default function App() {
     const ticker = raw.toUpperCase();
     if (!/^[A-Z0-9.\-]{1,12}$/.test(ticker)) return;
     const company = params.get('company');
+    // "Claim this page" links carry &claim=1 — after the claims load we prompt
+    // account creation so the map is saved to the visitor's own account.
+    const wantClaim = params.get('claim');
     let cancelled = false;
     (async () => {
-      setUploadStatus({ type: 'info', message: `Loading ${company || ticker} claims…` });
+      const label = company || ticker;
+      setUploadStatus({ type: 'info', message: `Loading ${label} claims…` });
+      // Fetch the published geometry, but never assume it exists: the SPA
+      // rewrite in vercel.json serves index.html (HTTP 200, HTML body) for any
+      // unknown path, so a missing /companies-assets/[TICKER].geojson comes back
+      // as HTML, not a 404. Parse defensively and treat anything that isn't a
+      // real FeatureCollection as "no published claims".
+      let geojson = null;
       try {
         const res = await fetch(`/companies-assets/${ticker}.geojson`);
-        if (!res.ok) throw new Error(`no published claims for ${ticker}`);
-        const geojson = await res.json();
-        if (cancelled) return;
-        if (!geojson?.features?.length) throw new Error('empty claim set');
-        // Start a fresh, unowned workspace so Save/autosave creates a NEW map
-        // rather than overwriting whatever project the user last had open.
-        resetHistory();
-        setProject(createInitialProjectState());
-        setProjectId(null);
-        setProjectName(company ? `${company} — Mineral Claims` : `${ticker} — Mineral Claims`);
-        setSelectedLayerId(null);
-        setSelectedCalloutId(null);
-        setSelectedFeature(null);
-        setSelectedMarkerId(null);
-        setSelectedEllipseId(null);
-        clearActiveProjectContext();
-        await addGeoJSONAsLayer(geojson, `${company || ticker} Claims.geojson`);
+        if (res.ok) {
+          const ct = res.headers.get('content-type') || '';
+          const text = await res.text();
+          if (!/^\s*</.test(text) && (ct.includes('json') || ct.includes('geo') || text.trimStart().startsWith('{'))) {
+            const parsed = JSON.parse(text);
+            if (parsed?.features?.length) geojson = parsed;
+          }
+        }
+      } catch {
+        geojson = null; // fall through to the claim-intent fallback below
+      }
+      if (cancelled) return;
+
+      // Start a fresh, unowned workspace either way so Save/autosave creates a
+      // NEW map rather than overwriting whatever project was last open.
+      resetHistory();
+      setProject(createInitialProjectState());
+      setProjectId(null);
+      setProjectName(`${label} — Mineral Claims`);
+      setSelectedLayerId(null);
+      setSelectedCalloutId(null);
+      setSelectedFeature(null);
+      setSelectedMarkerId(null);
+      setSelectedEllipseId(null);
+      clearActiveProjectContext();
+
+      if (geojson) {
+        await addGeoJSONAsLayer(geojson, `${label} Claims.geojson`);
         updateLayout({
-          title: company ? `${company} — Mineral Claims` : `${ticker} — Mineral Claims`,
+          title: `${label} — Mineral Claims`,
           exportSettings: { filename: `${ticker.toLowerCase()}-claims`, pixelRatio: 2 },
         });
         setScreen('editor');
         setUploadStatus({ type: 'success', message: `Loaded ${geojson.features.length} claims — style and export your map.` });
-      } catch (err) {
-        if (!cancelled) setUploadStatus({ type: 'error', message: `Couldn't load claims: ${err.message}` });
-      } finally {
-        // Drop the query string so a refresh doesn't re-trigger the load.
-        if (!cancelled) window.history.replaceState({}, '', '/');
+        if (wantClaim) {
+          trackEvent('claim_intent', { ticker, loaded: true }, null);
+          setClaimPrompt({ company: label, loaded: true });
+        }
+      } else if (wantClaim) {
+        // No published geometry available — the "Claim this page" CTA must still
+        // route the visitor to account creation rather than dead-ending. Land
+        // them in the editor with their company pre-titled and honest guidance.
+        updateLayout({
+          title: `${label} — Mineral Claims`,
+          exportSettings: { filename: `${ticker.toLowerCase()}-claims`, pixelRatio: 2 },
+        });
+        setScreen('editor');
+        // Account prompt is the single primary action here — it's what "Claim
+        // this page" asked for. Dismissing it leaves a usable editor with the
+        // guidance below (don't stack the Add-Claims modal on top of it).
+        setUploadStatus({ type: 'info', message: `Start ${label}'s map — search the registry or upload your claims to begin.` });
+        trackEvent('claim_intent', { ticker, loaded: false }, null);
+        setClaimPrompt({ company: label, loaded: false });
+      } else {
+        // "Open interactive version" with no geometry: don't dump the visitor on
+        // a raw error — open the editor's Add-Claims flow so the click still leads
+        // somewhere useful.
+        setScreen('editor');
+        setAddClaimsModalPath('registry');
+        setShowAddClaimsModal(true);
+        setUploadStatus({ type: 'info', message: `Couldn't find a published map for ${label} — search the registry or upload your claims to build one.` });
       }
+      // Drop the query string so a refresh doesn't re-trigger the load.
+      if (!cancelled) window.history.replaceState({}, '', '/');
     })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -3106,6 +3159,16 @@ export default function App() {
         }).then(() => {});
       }
       trackEvent('export_completed', { format, noWatermark: Boolean(extraOptions.noWatermark) }, user?.id);
+      // Anonymous exporter just got value — nudge them to save it to an account.
+      // Once per session, and not while an auth modal is already up.
+      if (!user) {
+        try {
+          if (!sessionStorage.getItem('em_post_export_nudge')) {
+            sessionStorage.setItem('em_post_export_nudge', '1');
+            setShowPostExportSignup(true);
+          }
+        } catch { setShowPostExportSignup(true); }
+      }
     } catch (err) {
       setExportError(`Export failed: ${err.message}`);
       setUploadStatus({ type: 'error', message: `Export failed: ${err.message}` });
@@ -3115,18 +3178,33 @@ export default function App() {
   };
 
   const handleExportClick = (format) => {
-    // PDF always shows the modal so the user can choose the page size
-    if (format !== 'pdf' && getLastLeadEmail()) {
+    // Signed-in users, or anyone who's already left an email, skip the gate for
+    // raster/vector exports and get a clean file straight away. PDF always shows
+    // the modal so the user can choose the page size.
+    if (format !== 'pdf' && (user || getLastLeadEmail())) {
       handleExport(format, { noWatermark: true });
     } else {
       setPendingExportFormat(format);
       setShowExportModal(true);
+      // The export gate is the strongest natural signup moment — measure how
+      // often it's seen so we can separate a traffic problem from a conversion one.
+      trackEvent('export_gate_shown', { format, signedIn: Boolean(user) }, user?.id);
     }
   };
 
   const handleExportModalConfirm = async (email, extraOpts = {}) => {
     setShowExportModal(false);
     saveLead({ email, projectTitle: project.layout?.title || '' });
+    // Anonymous export: fire a no-password magic link alongside the clean
+    // download so the same email that unlocked the watermark also creates a
+    // saved account. Fire-and-forget — never hold the user's export hostage to
+    // the email round-trip.
+    if (!user && email) {
+      trackEvent('export_gate_signup_started', { format: pendingExportFormat }, null);
+      signInWithMagicLink(email).catch(() => { /* email send is best-effort */ });
+      // They just got a sign-in link — don't also fire the post-export nudge.
+      try { sessionStorage.setItem('em_post_export_nudge', '1'); } catch { /* noop */ }
+    }
     await handleExport(pendingExportFormat, { noWatermark: true, ...extraOpts });
   };
 
@@ -4791,8 +4869,13 @@ export default function App() {
         <div className="map-topbar editor-toolbar">
           <div className="map-topbar-left">
             <div className="map-topbar-title">{project.layout.title || 'Project Map'}</div>
-            <div className={`autosave-badge ${isDirty ? 'dirty' : saveFlash ? 'flash' : 'clean'}`}>
-              {isDirty ? 'Unsaved' : saveFlash ? '✓ Saved' : user ? 'Cloud ✓' : 'Saved ✓'}
+            <div
+              className={`autosave-badge ${isDirty ? 'dirty' : saveFlash ? 'flash' : 'clean'}${!user && !isDirty ? ' local' : ''}`}
+              onClick={!user && !isDirty ? () => setShowAuthFromGate(true) : undefined}
+              role={!user && !isDirty ? 'button' : undefined}
+              title={!user && !isDirty ? 'Saved only on this device — sign in to keep your maps' : undefined}
+            >
+              {isDirty ? 'Unsaved' : saveFlash ? '✓ Saved' : user ? 'Cloud ✓' : 'On this device — sign in to keep'}
             </div>
           </div>
           <div className="map-topbar-right">
@@ -5346,6 +5429,8 @@ export default function App() {
           <ExportHDModal
             format={pendingExportFormat}
             activeRatio={activeRatio}
+            isSignedIn={Boolean(user)}
+            userEmail={user?.email || ''}
             onConfirm={handleExportModalConfirm}
             onWithWatermark={handleExportModalWithWatermark}
             onClose={() => setShowExportModal(false)}
@@ -5353,6 +5438,26 @@ export default function App() {
         ) : null}
         {showHelpModal && <HowToUseModal onClose={() => setShowHelpModal(false)} />}
       </React.Suspense>
+      {claimPrompt && !user && (
+        <AuthModal
+          onClose={() => setClaimPrompt(null)}
+          context={claimPrompt.loaded
+            ? `Claim the ${claimPrompt.company} page — create a free account (no password) to save this map, brand it, and export it without a watermark.`
+            : `Claim the ${claimPrompt.company} page — create a free account (no password) to build and save your company's map, brand it, and export without a watermark.`}
+        />
+      )}
+      {showPostExportSignup && !user && (
+        <div className="post-export-toast" role="status">
+          <div className="post-export-toast-body">
+            <strong>Map exported.</strong> Create a free account to save it and reuse your branding next time — no password.
+          </div>
+          <div className="post-export-toast-actions">
+            <button className="btn compact primary" type="button" onClick={() => { setShowPostExportSignup(false); setShowAuthFromGate(true); }}>Save to account</button>
+            <button className="post-export-toast-dismiss" type="button" onClick={() => setShowPostExportSignup(false)} aria-label="Dismiss">✕</button>
+          </div>
+        </div>
+      )}
+      {showAuthFromGate && <AuthModal onClose={() => setShowAuthFromGate(false)} />}
       {showShareModal && (
         <div className="modal-backdrop" onClick={() => setShowShareModal(false)}>
           <div className="share-modal" onClick={e => e.stopPropagation()}>

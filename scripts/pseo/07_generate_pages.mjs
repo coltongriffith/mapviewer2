@@ -187,8 +187,8 @@ function companyPage({ iss, claims, geo, neighbours, updated }) {
   </div>
 
   <div class="claim-cta">
-    <div><b>Is this your company?</b><span>Claim this page to correct details and get an editable, branded version of this map.</span></div>
-    <a class="btn btn-primary" href="mailto:${PAGES.correctionEmail}?subject=${encodeURIComponent(`Claim page: ${iss.ticker}`)}">Claim this page</a>
+    <div><b>Is this your company?</b><span>Claim this page to get an editable, branded version of this map — free account, no password.</span></div>
+    <a class="btn btn-primary" href="/?claims=${encodeURIComponent(iss.ticker)}&amp;company=${encodeURIComponent(iss.company)}&amp;claim=1&amp;utm_source=companies&amp;utm_medium=claim_cta&amp;utm_campaign=${encodeURIComponent(iss.ticker)}">Claim this page</a>
   </div>
 
   <h2>Claim list</h2>

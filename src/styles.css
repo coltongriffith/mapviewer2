@@ -845,6 +845,9 @@ button, input, select, textarea { font: inherit; }
   color: #2b4d74;
 }
 .autosave-badge.clean { background: #edf9f0; border-color: #bfe4c8; color: #1f6a35; }
+/* Anonymous, saved-locally state — clickable prompt to sign in and keep maps. */
+.autosave-badge.local { background: #fff8eb; border-color: #f0d8a9; color: #8a5b08; cursor: pointer; }
+.autosave-badge.local:hover { background: #fdefcf; }
 .autosave-badge.dirty { background: #fff8eb; border-color: #f0d8a9; color: #8a5b08; }
 .autosave-badge.flash {
   background: #d1fae5;
@@ -2911,6 +2914,40 @@ body.is-dragging .template-zone .panel-delete-btn { opacity: 0 !important; }
 .lm-show-tags span { font-size: 10.5px; font-weight: 640; color: #4c5a6c; background: #eef2f8; border-radius: 999px; padding: 2.5px 9px; }
 .lm-show-cta { font-size: 12.5px; font-weight: 680; color: var(--lm-blue); margin-top: 8px; }
 
+/* Find-your-company */
+.lm-company-grid { margin-top: 34px; }
+.lm-company-card {
+  display: flex; flex-direction: column; gap: 4px; text-align: left;
+  background: #fff; border: 1px solid var(--lm-hair); border-radius: 12px;
+  padding: 16px 18px; text-decoration: none;
+  transition: box-shadow .16s, border-color .16s, transform .16s;
+}
+.lm-company-card:hover { border-color: #b9c9de; box-shadow: 0 14px 36px -16px rgba(15,27,45,.22); transform: translateY(-2px); text-decoration: none; }
+.lm-company-name { font-size: 15px; font-weight: 700; color: #0f1b2d; letter-spacing: -0.01em; }
+.lm-company-ticker { font-size: 12.5px; font-weight: 640; color: var(--lm-blue); }
+.lm-company-all { display: inline-block; margin-top: 22px; font-size: 13.5px; font-weight: 680; color: var(--lm-blue); text-decoration: none; }
+.lm-company-all:hover { text-decoration: underline; }
+
+/* Social proof strip */
+.lm-proof { padding: 22px 24px; background: #fff; border-bottom: 1px solid var(--lm-hair); }
+.lm-proof-inner { max-width: 1080px; margin: 0 auto; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px 26px; text-align: center; }
+.lm-proof-label { font-size: 12.5px; font-weight: 600; color: var(--lm-muted); }
+.lm-proof-names { display: flex; flex-wrap: wrap; gap: 10px 22px; }
+.lm-proof-name { font-size: 14px; font-weight: 730; color: #0f1b2d; letter-spacing: -0.01em; }
+
+/* Post-export signup nudge (editor) */
+.post-export-toast {
+  position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+  z-index: 1200; display: flex; align-items: center; gap: 14px;
+  background: #0f1b2d; color: #fff; border-radius: 12px; padding: 13px 16px;
+  box-shadow: 0 18px 48px -12px rgba(15,27,45,.5); max-width: 92vw;
+}
+.post-export-toast-body { font-size: 13px; line-height: 1.5; }
+.post-export-toast-body strong { font-weight: 700; }
+.post-export-toast-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.post-export-toast-dismiss { background: transparent; border: 0; color: #9fb3cc; font-size: 15px; cursor: pointer; padding: 4px; line-height: 1; }
+.post-export-toast-dismiss:hover { color: #fff; }
+
 /* Comparison */
 .lm-compare { display: grid; grid-template-columns: 1fr 1.12fr; gap: 20px; margin-top: 38px; align-items: stretch; }
 .lm-compare-col { border-radius: 16px; padding: 28px 30px; }
@@ -3016,6 +3053,7 @@ body.is-dragging .template-zone .panel-delete-btn { opacity: 0 !important; }
 
 /* Magic-link auth subtitle */
 .auth-modal-sub{font-size:13.5px;color:#64748b;line-height:1.55;margin:-4px 0 14px}
+.auth-modal-context{font-size:13.5px;color:#0f1b2d;line-height:1.55;margin:-4px 0 12px;background:#eff6ff;border:1px solid #c7d7fe;border-radius:9px;padding:10px 12px;font-weight:600}
 
 /* Pointer-event dragging (mouse + touch): stop the browser from hijacking
    drags as page scroll/zoom on the draggable overlays and their handles. */

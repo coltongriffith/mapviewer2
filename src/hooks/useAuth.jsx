@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { trackEvent } from '../utils/track';
+import { getAttribution } from '../utils/attribution';
 
 const AuthContext = createContext(null);
 
@@ -15,7 +16,9 @@ function trackSignupOnce(user) {
     if (localStorage.getItem(flag)) return;
     localStorage.setItem(flag, '1');
   } catch { /* still fire; worst case a duplicate row */ }
-  trackEvent('signup_completed', {}, user.id);
+  // Attach first-touch attribution (utm_source / utm_campaign / claimed ticker)
+  // so the admin funnel can tell which channel produced each account.
+  trackEvent('signup_completed', getAttribution(), user.id);
 }
 
 export function AuthProvider({ children }) {

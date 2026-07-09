@@ -28,6 +28,30 @@ const SHOWCASE = [
   },
 ];
 
+// A handful of recognizable TSXV juniors whose claim-map pages are pre-built
+// (public/companies/*). The "claim your company map" wedge for the first-10
+// push — a visitor who recognizes their own ticker converts far better than one
+// imagining a blank map. Full directory lives at /companies/.
+// Social proof under the hero. OFF by default: flip to true only once the named
+// companies have agreed to be listed publicly — don't ship customer names to a
+// live marketing page without their sign-off. Both maps below were made in the
+// product (Star Copper published 2; Discovery Energy Metals' Crystal Lake map).
+const SHOW_SOCIAL_PROOF = false;
+const SOCIAL_PROOF_COMPANIES = ['Star Copper', 'Discovery Energy Metals'];
+
+// A handful of recognizable TSXV juniors whose claim-map pages are pre-built
+// (public/companies/*). The "claim your company map" wedge for the first-10
+// push — a visitor who recognizes their own ticker converts far better than one
+// imagining a blank map. Full directory lives at /companies/.
+const COMPANY_PAGES = [
+  { ticker: 'DV', name: 'Dolly Varden Silver' },
+  { ticker: 'GOT', name: 'Goliath Resources' },
+  { ticker: 'ESK', name: 'Eskay Mining' },
+  { ticker: 'BBB', name: 'Brixton Metals' },
+  { ticker: 'SCOT', name: 'Scottie Resources' },
+  { ticker: 'TUD', name: 'Tudor Gold' },
+];
+
 function formatRelativeDate(iso) {
   if (!iso) return '';
   const diff = Date.now() - new Date(iso).getTime();
@@ -107,7 +131,7 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
             {user ? (
               <button type="button" onClick={onOpenAccount} data-track="Nav: Dashboard">Dashboard</button>
             ) : (
-              <button type="button" onClick={() => setShowAuth(true)} data-track="Nav: Login">Login</button>
+              <button type="button" onClick={() => setShowAuth(true)} data-track="Nav: Sign up free">Sign in / Sign up free</button>
             )}
           </nav>
           <button className="lm-btn lm-btn-primary lm-nav-cta" type="button" onClick={onOpenEditor} data-track="Nav: Start Mapping">
@@ -215,6 +239,20 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
             </div>
           )}
         </section>
+
+        {/* ── Social proof (gated until named companies sign off) ─── */}
+        {SHOW_SOCIAL_PROOF && (
+          <section className="lm-proof lm-reveal" data-section="social-proof">
+            <div className="lm-proof-inner">
+              <span className="lm-proof-label">Maps built here have been published in real junior-mining investor materials</span>
+              <div className="lm-proof-names">
+                {SOCIAL_PROOF_COMPANIES.map((name) => (
+                  <span className="lm-proof-name" key={name}>{name}</span>
+                ))}
+              </div>
+            </div>
+          </section>
+        )}
 
         {/* ── Problem ────────────────────────────────────────────── */}
         <section className="lm-section lm-reveal" data-section="problem">
@@ -353,6 +391,32 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
           </div>
         </section>
 
+        {/* ── Find your company ──────────────────────────────────── */}
+        <section className="lm-section lm-section-tint lm-reveal" id="companies" data-section="companies">
+          <div className="lm-section-inner">
+            <p className="lm-eyebrow">Your company</p>
+            <h2 className="lm-h2">On the TSXV or CSE? We may have already mapped your claims.</h2>
+            <p className="lm-section-sub">
+              We've built claim-map pages for dozens of junior explorers from public registry data.
+              Open yours, then claim it to get the editable, branded version for your next deck or news release.
+            </p>
+            <div className="lm-grid-3 lm-company-grid">
+              {COMPANY_PAGES.map((c) => (
+                <a
+                  key={c.ticker}
+                  className="lm-company-card"
+                  href={`/companies/${c.ticker.toLowerCase()}/`}
+                  data-track={`Company: ${c.ticker}`}
+                >
+                  <span className="lm-company-name">{c.name}</span>
+                  <span className="lm-company-ticker">{c.ticker} · View claim map →</span>
+                </a>
+              ))}
+            </div>
+            <a className="lm-company-all" href="/companies/" data-track="Company: See all">See all mapped companies →</a>
+          </div>
+        </section>
+
         {/* ── Example showcase ───────────────────────────────────── */}
         <section className="lm-section lm-reveal" id="examples" data-section="examples">
           <div className="lm-section-inner">
@@ -432,7 +496,7 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
                 View Example Maps
               </button>
             </div>
-            <p className="lm-cta-pricing">Free during early access — no account needed to make your first map. Team plans coming soon.</p>
+            <p className="lm-cta-pricing">Free during early access. Make your first map in minutes — create a free account to save it, reuse your branding, and export without a watermark. Team plans coming soon.</p>
           </div>
         </section>
       </main>
@@ -471,7 +535,7 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
             {user ? (
               <button type="button" onClick={onOpenAccount}>Dashboard</button>
             ) : (
-              <button type="button" onClick={() => setShowAuth(true)}>Login</button>
+              <button type="button" onClick={() => setShowAuth(true)}>Sign in / Sign up free</button>
             )}
           </div>
         </div>
