@@ -46,12 +46,14 @@ export async function saveCloudProject({ id, name, payload }) {
   const record = { name: name || payload?.layout?.title || 'Untitled map', payload, updated_at: now };
 
   if (id) {
-    const { error } = await requireSupabase()
+    const { data, error } = await requireSupabase()
       .from('projects')
       .update(record)
       .eq('id', id)
-      .eq('user_id', user.id);
+      .eq('user_id', user.id)
+      .select('id');
     if (error) throw error;
+    if (!data || !data.length) throw new Error('Project not found in cloud');
     return id;
   } else {
     const { data, error } = await requireSupabase()

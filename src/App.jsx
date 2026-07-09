@@ -940,7 +940,23 @@ export default function App() {
         clearTimeout(saveFlashTimerRef.current);
         saveFlashTimerRef.current = setTimeout(() => setSaveFlash(false), 2000);
       } catch (err) {
-        setUploadStatus({ type: 'error', message: `Couldn't auto-save to the cloud (${err.message}). Your work is safe in this browser — click Save to retry.` });
+        if (err.message.includes('not found')) {
+          // projectId exists locally but not in cloud (draft migration case):
+          // create it as a new cloud project instead of failing silently.
+          try {
+            const newId = await saveCloudProject({ id: null, name: projectName, payload: project });
+            setProjectId(newId);
+            lastSavedSnapshotRef.current = snapshot;
+            setIsDirty(false);
+            setSaveFlash(true);
+            clearTimeout(saveFlashTimerRef.current);
+            saveFlashTimerRef.current = setTimeout(() => setSaveFlash(false), 2000);
+          } catch (createErr) {
+            setUploadStatus({ type: 'error', message: `Couldn't save to the cloud (${createErr.message}). Your work is safe in this browser — click Save to retry.` });
+          }
+        } else {
+          setUploadStatus({ type: 'error', message: `Couldn't auto-save to the cloud (${err.message}). Your work is safe in this browser — click Save to retry.` });
+        }
       }
     }, 10000);
     return () => window.clearTimeout(t);

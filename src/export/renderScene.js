@@ -1728,11 +1728,14 @@ export async function renderSceneToCanvas(scene, options = {}) {
   drawScaleBarCanvas(ctx, scene, scale);
   drawLegendCanvas(ctx, scene, scale); drawNorthArrowCanvas(ctx, scene, scale); await drawInsetCanvas(ctx, scene, scale); await drawLogoCanvas(ctx, scene, scale);
   if (isNI) { drawDistanceTicksCanvas(ctx, scene, scale); drawTitleStripCanvas(ctx, scene, scale); }
-  if (!options.noWatermark) {
-    const niFrame = isNI ? getNI43101MapFrame(scene, scale) : null;
-    const wmX = niFrame ? niFrame.mapRight - 8 * scale : canvas.width - 8 * scale;
-    const wmY = niFrame ? niFrame.mapBottom - 5 * scale : canvas.height - 5 * scale;
-    ctx.save(); ctx.font = `bold ${9 * scale}px Arial, sans-serif`; ctx.fillStyle = 'rgba(100,116,139,0.72)'; ctx.textAlign = 'right'; ctx.textBaseline = 'bottom'; ctx.shadowColor = 'rgba(255,255,255,0.6)'; ctx.shadowBlur = 3 * scale; ctx.fillText('explorationmaps.com', wmX, wmY); ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.restore();
+  const niFrame = isNI ? getNI43101MapFrame(scene, scale) : null;
+  const wmX = niFrame ? niFrame.mapRight - 8 * scale : canvas.width - 8 * scale;
+  const wmY = niFrame ? niFrame.mapBottom - 5 * scale : canvas.height - 5 * scale;
+  const watermark = options.noWatermark
+    ? (options.paidTier ? null : { text: 'explorationmaps.com', font: `${6.5 * scale}px Arial, sans-serif`, fill: 'rgba(148,163,184,0.6)', shadow: 'rgba(255,255,255,0.5)' })
+    : { text: 'explorationmaps.com', font: `bold ${9 * scale}px Arial, sans-serif`, fill: 'rgba(100,116,139,0.72)', shadow: 'rgba(255,255,255,0.6)' };
+  if (watermark) {
+    ctx.save(); ctx.font = watermark.font; ctx.fillStyle = watermark.fill; ctx.textAlign = 'right'; ctx.textBaseline = 'bottom'; ctx.shadowColor = watermark.shadow; ctx.shadowBlur = 3 * scale; ctx.fillText(watermark.text, wmX, wmY); ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.restore();
   }
   return canvas;
 }
