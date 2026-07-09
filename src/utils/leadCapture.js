@@ -30,6 +30,11 @@ export function saveLead({ email, projectTitle = '' }) {
       project_title: entry.projectTitle || null,
       captured_at: entry.capturedAt,
     }).then(() => {});
+    // Trigger the welcome email. Ships inert: the send-welcome function no-ops
+    // without a RESEND_API_KEY, and if it isn't deployed yet the invoke just
+    // errors and is swallowed — nothing sends until email is configured.
+    supabase.functions?.invoke('send-welcome', { body: { email: entry.email } })
+      .then(() => {}, () => {});
   }
   return entry;
 }

@@ -2256,11 +2256,18 @@ export async function renderSceneToSvg(scene, options = {}) {
     const niFrame = getNI43101MapFrame(scene, scale);
     const wmX = niFrame.mapRight - 8 * scale;
     const wmY = niFrame.mapBottom - 5 * scale;
-    const watermark = options.noWatermark ? '' : `<text x="${wmX}" y="${wmY}" font-family="Arial,sans-serif" font-size="${9 * scale}" font-weight="bold" fill="#64748b" fill-opacity="0.72" text-anchor="end" dominant-baseline="auto" paint-order="stroke" stroke="#ffffff" stroke-opacity="0.55" stroke-width="2.5" stroke-linejoin="round">explorationmaps.com</text>`;
+    // Attribution: pre-email shows the removable watermark; after email
+    // (noWatermark) a smaller persistent mark stays on all free exports; a
+    // future paid tier (options.paidTier) is the only thing that removes it.
+    const watermark = options.noWatermark
+      ? (options.paidTier ? '' : `<text x="${wmX}" y="${wmY}" font-family="Arial,sans-serif" font-size="${6.5 * scale}" font-weight="600" fill="#94a3b8" fill-opacity="0.6" text-anchor="end" dominant-baseline="auto" paint-order="stroke" stroke="#ffffff" stroke-opacity="0.5" stroke-width="${2 * scale}" stroke-linejoin="round">explorationmaps.com</text>`)
+      : `<text x="${wmX}" y="${wmY}" font-family="Arial,sans-serif" font-size="${9 * scale}" font-weight="bold" fill="#64748b" fill-opacity="0.72" text-anchor="end" dominant-baseline="auto" paint-order="stroke" stroke="#ffffff" stroke-opacity="0.55" stroke-width="2.5" stroke-linejoin="round">explorationmaps.com</text>`;
     const panels = `<g id="em-overlay-panels">${renderLegendSvg(scene, scale, svgDefs)}${renderNorthArrowSvg(scene, scale, svgDefs)}${renderInsetSvg(scene, scale, svgDefs)}${renderLogoSvg(scene, scale)}${renderScaleBarSvg(scene, scale)}${renderDistanceTicksSvg(scene, scale)}${renderTitleStripSvg(scene, scale)}</g>`;
     mapContent = `${clipped}${panels}${watermark}`;
   } else {
-    const watermark = options.noWatermark ? '' : `<text x="${width - 8}" y="${height - 5}" font-family="Arial,sans-serif" font-size="9" font-weight="bold" fill="#64748b" fill-opacity="0.72" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-opacity="0.55" stroke-width="2.5" stroke-linejoin="round">explorationmaps.com</text>`;
+    const watermark = options.noWatermark
+      ? (options.paidTier ? '' : `<text x="${width - 8}" y="${height - 5}" font-family="Arial,sans-serif" font-size="6.5" font-weight="600" fill="#94a3b8" fill-opacity="0.6" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-opacity="0.5" stroke-width="2" stroke-linejoin="round">explorationmaps.com</text>`)
+      : `<text x="${width - 8}" y="${height - 5}" font-family="Arial,sans-serif" font-size="9" font-weight="bold" fill="#64748b" fill-opacity="0.72" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-opacity="0.55" stroke-width="2.5" stroke-linejoin="round">explorationmaps.com</text>`;
     const mapLayers = `<g id="em-map-content">${basemapImage}${renderRegionHighlightsSvg(scene, scale)}${renderVectorsSvg(scene, scale)}${renderEllipsesSvg(scene, scale, svgDefs)}${renderPolygonsSvg(scene, scale)}${renderMarkersSvg(scene, scale)}${renderCalloutsSvg(scene, scale, svgDefs)}${renderDistanceLinesSvg(scene, scale)}</g>`;
     const panels = `<g id="em-overlay-panels">${renderTitleSvg(scene, scale, svgDefs)}${renderLegendSvg(scene, scale, svgDefs)}${renderNorthArrowSvg(scene, scale, svgDefs)}${renderInsetSvg(scene, scale, svgDefs)}${renderScaleBarSvg(scene, scale)}${renderFooterSvg(scene, scale)}${renderLogoSvg(scene, scale)}</g>`;
     mapContent = `${mapLayers}${panels}${watermark}`;

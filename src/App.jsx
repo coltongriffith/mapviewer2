@@ -659,6 +659,16 @@ function dissolveOwnerFeatures(feats, ownerKey) {
   return { type: 'FeatureCollection', features: polys };
 }
 
+// Maps a location/region slug (from SEO deep links and company-page CTAs) to
+// the province code the claims registry uses. Only the 7 registry-backed
+// provinces resolve; anything else returns undefined so callers fall back to
+// the upload path rather than defaulting to BC.
+const REGION_TO_PROVINCE = {
+  'british-columbia': 'bc', ontario: 'on', quebec: 'qc', saskatchewan: 'sk',
+  manitoba: 'mb', 'newfoundland-labrador': 'nl', newfoundland: 'nl', yukon: 'yt',
+  bc: 'bc', on: 'on', qc: 'qc', sk: 'sk', mb: 'mb', nl: 'nl', yt: 'yt',
+};
+
 export default function App() {
   const mapContainerRef = useRef(null);
   const mapViewportRef = useRef(null);
@@ -707,6 +717,10 @@ export default function App() {
   const [showAddClaimsModal, setShowAddClaimsModal] = useState(false);
   const [addClaimsModalPath, setAddClaimsModalPath] = useState(null);
   const [addClaimsProvince, setAddClaimsProvince] = useState(null);
+  const [addClaimsQuery, setAddClaimsQuery] = useState('');
+  const [addClaimsAutoSearch, setAddClaimsAutoSearch] = useState(false);
+  const [hasExported, setHasExported] = useState(false);
+  const [onboardingDismissed, setOnboardingDismissed] = useState(false);
   const [shareUrl, setShareUrl] = useState(null);
   const [shareLoading, setShareLoading] = useState(false);
   const [shareElapsed, setShareElapsed] = useState(0);
@@ -884,6 +898,14 @@ export default function App() {
     return [...new Set(Object.values(kitFonts).filter((f) => f && FONT_OPTIONS[f]))];
   }, [cloudTemplates]);
 
+  // Onboarding checklist progress (Add data → Style → Export). Derived from
+  // project state so steps tick off automatically; the card persists past the
+  // first layer until all three are done or the user dismisses it.
+  const onbStep1 = project.layers.length > 0 || (project.areaClaims?.features?.length > 0);
+  const onbStep2 = onbStep1 && (project.layers.some((l) => l.userStyled) || Boolean(project.layout?.logo));
+  const onbStep3 = hasExported;
+  const showOnboarding = !onboardingDismissed && !(onbStep1 && onbStep2 && onbStep3);
+
   useEffect(() => {
     if (!bootstrappedRef.current) {
       bootstrappedRef.current = true;
@@ -899,6 +921,40 @@ export default function App() {
     }, 250);
     return () => window.clearTimeout(timer);
   }, [project, projectId, projectName]);
+
+  // Auto cloud-save for signed-in users editing a saved (cloud) project. The
+  // local draft above already persists every 250ms; this mirrors it to the
+  // cloud after ~10s of quiet so an hour of edits isn't stranded in one browser
+  // until the user remembers to click Save. Manual Save/Save As still work.
+  useEffect(() => {
+    if (!user || !projectId || !isDirty || !supabase) return;
+    const t = window.setTimeout(async () => {
+      const snapshot = JSON.stringify(project);
+      try {
+        await saveCloudProject({ id: projectId, name: projectName, payload: project });
+        // Match the manual-save bookkeeping so isDirty clears and the badge
+        // reflects a clean cloud state.
+        lastSavedSnapshotRef.current = snapshot;
+        setIsDirty(false);
+        setSaveFlash(true);
+        clearTimeout(saveFlashTimerRef.current);
+        saveFlashTimerRef.current = setTimeout(() => setSaveFlash(false), 2000);
+      } catch (err) {
+        setUploadStatus({ type: 'error', message: `Couldn't auto-save to the cloud (${err.message}). Your work is safe in this browser — click Save to retry.` });
+      }
+    }, 10000);
+    return () => window.clearTimeout(t);
+  }, [project, user, projectId, projectName, isDirty]);
+
+  // Warn before leaving with unsaved cloud changes. Only for signed-in users:
+  // anonymous work is continuously persisted to the local draft, so a prompt
+  // there would be noise. Gives auto cloud-save (or a manual Save) a chance.
+  useEffect(() => {
+    if (!user || !isDirty) return;
+    const handler = (e) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [user, isDirty]);
 
   useEffect(() => {
     if (user) {
@@ -2402,13 +2458,19 @@ export default function App() {
         trackEvent('claim_intent', { ticker, loaded: false }, null);
         setClaimPrompt({ company: label, loaded: false });
       } else {
-        // "Open interactive version" with no geometry: don't dump the visitor on
-        // a raw error — open the editor's Add-Claims flow so the click still leads
-        // somewhere useful.
+        // "Open interactive version" with no published geometry: don't dump the
+        // visitor on a raw error or a blank search — open Add-Claims → registry
+        // pre-filled with the company name (and province, if the CTA passed one)
+        // and auto-run the search so they land on the company's live claims.
+        // Cross-province fallback in RegistrySearch covers a wrong/absent region.
+        const province = REGION_TO_PROVINCE[(params.get('region') || '').toLowerCase()] || null;
         setScreen('editor');
+        setAddClaimsProvince(province);
+        setAddClaimsQuery(company || '');
+        setAddClaimsAutoSearch(Boolean(company));
         setAddClaimsModalPath('registry');
         setShowAddClaimsModal(true);
-        setUploadStatus({ type: 'info', message: `Couldn't find a published map for ${label} — search the registry or upload your claims to build one.` });
+        setUploadStatus({ type: 'info', message: `Searching the live registry for ${label}'s claims…` });
       }
       // Drop the query string so a refresh doesn't re-trigger the load.
       if (!cancelled) window.history.replaceState({}, '', '/');
@@ -2429,11 +2491,6 @@ export default function App() {
     const intent = params.get('intent');
     const demo = params.get('demo');
     if (!intent && !demo) return;
-    const REGION_TO_PROVINCE = {
-      'british-columbia': 'bc', ontario: 'on', quebec: 'qc', saskatchewan: 'sk',
-      manitoba: 'mb', 'newfoundland-labrador': 'nl', newfoundland: 'nl', yukon: 'yt',
-      bc: 'bc', on: 'on', qc: 'qc', sk: 'sk', mb: 'mb', nl: 'nl', yt: 'yt',
-    };
     try { window.history.replaceState({}, '', '/'); } catch { /* noop */ }
     if (demo) {
       loadSampleData(demo);
@@ -3159,6 +3216,7 @@ export default function App() {
         }).then(() => {});
       }
       trackEvent('export_completed', { format, noWatermark: Boolean(extraOptions.noWatermark) }, user?.id);
+      setHasExported(true);
       // Anonymous exporter just got value — nudge them to save it to an account.
       // Once per session, and not while an auth modal is already up.
       if (!user) {
@@ -3551,18 +3609,49 @@ export default function App() {
           <button className="sidebar-home-link" type="button" onClick={() => setScreen('landing')}>← Home</button>
         </div>
 
-        {project.layers.length === 0 ? (
+        {showOnboarding ? (
           <div className="onboarding-card">
-            <div className="onboarding-title">Get started</div>
-            <ol className="onboarding-steps">
-              <li>Upload your map layers — claims, drillholes, roads, or any GeoJSON / .zip shapefile</li>
-              <li>Upload your logo — colours will be auto-applied to the map</li>
-              <li>Upload an inset image (optional)</li>
-              <li>Add more layers or search public claims anytime</li>
+            <div className="onboarding-card-head">
+              <div className="onboarding-title">Make your first map</div>
+              <button className="onboarding-dismiss" type="button" aria-label="Dismiss" onClick={() => { setOnboardingDismissed(true); trackEvent('onboarding_dismissed', { step1: onbStep1, step2: onbStep2, step3: onbStep3 }); }}>✕</button>
+            </div>
+            <ol className="onboarding-checklist">
+              <li className={onbStep1 ? 'done' : ''}>
+                <span className="onb-tick">{onbStep1 ? '✓' : '1'}</span>
+                <div className="onb-body">
+                  <strong>Add your data</strong>
+                  {!onbStep1 && (
+                    <div className="onb-actions">
+                      <button type="button" onClick={() => { setAddClaimsModalPath(null); setShowAddClaimsModal(true); trackEvent('onboarding_step', { step: 'add_data', via: 'claims' }); }}>Search public claims</button>
+                      <button type="button" onClick={() => { uploadInputRef.current?.click(); trackEvent('onboarding_step', { step: 'add_data', via: 'upload' }); }}>Upload a file</button>
+                      <button type="button" className="onb-link" onClick={() => { loadSampleData(); trackEvent('onboarding_step', { step: 'add_data', via: 'sample' }); }}>Load sample data</button>
+                    </div>
+                  )}
+                </div>
+              </li>
+              <li className={onbStep2 ? 'done' : (onbStep1 ? '' : 'onb-locked')}>
+                <span className="onb-tick">{onbStep2 ? '✓' : '2'}</span>
+                <div className="onb-body">
+                  <strong>Style it</strong>
+                  {onbStep1 && !onbStep2 && (
+                    <div className="onb-actions">
+                      <button type="button" onClick={() => { layersSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); trackEvent('onboarding_step', { step: 'style' }); }}>Open layer styling</button>
+                    </div>
+                  )}
+                </div>
+              </li>
+              <li className={onbStep3 ? 'done' : (onbStep1 ? '' : 'onb-locked')}>
+                <span className="onb-tick">{onbStep3 ? '✓' : '3'}</span>
+                <div className="onb-body">
+                  <strong>Export &amp; share</strong>
+                  {onbStep1 && !onbStep3 && (
+                    <div className="onb-actions">
+                      <button type="button" onClick={() => { handleExportClick('png'); trackEvent('onboarding_step', { step: 'export' }); }}>Export PNG</button>
+                    </div>
+                  )}
+                </div>
+              </li>
             </ol>
-            <button className="sample-data-link" type="button" onClick={loadSampleData}>
-              Or load sample mining data →
-            </button>
           </div>
         ) : null}
 
@@ -5416,7 +5505,9 @@ export default function App() {
           <AddClaimsModal
             defaultPath={addClaimsModalPath}
             initialProvince={addClaimsProvince}
-            onClose={() => { setShowAddClaimsModal(false); setAddClaimsModalPath(null); setAddClaimsProvince(null); }}
+            initialQuery={addClaimsQuery}
+            autoSearch={addClaimsAutoSearch}
+            onClose={() => { setShowAddClaimsModal(false); setAddClaimsModalPath(null); setAddClaimsProvince(null); setAddClaimsQuery(''); setAddClaimsAutoSearch(false); }}
             onImport={(geojson, name) => {
               addGeoJSONAsLayer(geojson, `${name}.geojson`);
               setShowAddClaimsModal(false);

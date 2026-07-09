@@ -171,9 +171,19 @@ function autoDetectMode(q, allowedModes) {
 
 // ── Component ──────────────────────────────────────────────────────────────
 
-export default function RegistrySearch({ onImport, onBack, initialProvince }) {
-  const [province, setProvince] = useState(initialProvince || 'bc');
-  const [query, setQuery] = useState('');
+const LAST_PROVINCE_KEY = 'em_last_province';
+
+export default function RegistrySearch({ onImport, onBack, initialProvince, initialQuery = '', autoSearch = false }) {
+  // Default to a deep-link province, else the last province this browser used,
+  // else BC — so a repeat visitor isn't reset to BC every time.
+  const [province, setProvince] = useState(() => {
+    if (initialProvince) return initialProvince;
+    try { return localStorage.getItem(LAST_PROVINCE_KEY) || 'bc'; } catch { return 'bc'; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem(LAST_PROVINCE_KEY, province); } catch { /* ignore */ }
+  }, [province]);
+  const [query, setQuery] = useState(initialQuery);
   const [mode, setMode] = useState('company');
   const [manualMode, setManualMode] = useState(false);
   const [selectedOwner, setSelectedOwner] = useState(null);
@@ -185,6 +195,19 @@ export default function RegistrySearch({ onImport, onBack, initialProvince }) {
     crossProvinceHits, crossProvinceLoading, searchOtherProvinces, adoptResults,
   } = useClaims();
   const pendingSearchRef = useRef(null);
+  // Deep-link prefill (e.g. a company page with no published map): run the
+  // company-name search once on mount so the visitor sees results immediately
+  // instead of an empty box. Cross-province fallback then handles the province.
+  const autoSearchedRef = useRef(false);
+  useEffect(() => {
+    if (!autoSearch || autoSearchedRef.current) return;
+    const q = (initialQuery || '').trim();
+    if (q.length < 2) return;
+    autoSearchedRef.current = true;
+    pendingSearchRef.current = { province, mode: 'company', query: q };
+    search(q, 'company', province);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const provinceCfg = PROVINCES.find(p => p.value === province) || PROVINCES[0];
 
