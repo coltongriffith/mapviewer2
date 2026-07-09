@@ -171,8 +171,18 @@ function autoDetectMode(q, allowedModes) {
 
 // ── Component ──────────────────────────────────────────────────────────────
 
+const LAST_PROVINCE_KEY = 'em_last_province';
+
 export default function RegistrySearch({ onImport, onBack, initialProvince, initialQuery = '', autoSearch = false }) {
-  const [province, setProvince] = useState(initialProvince || 'bc');
+  // Default to a deep-link province, else the last province this browser used,
+  // else BC — so a repeat visitor isn't reset to BC every time.
+  const [province, setProvince] = useState(() => {
+    if (initialProvince) return initialProvince;
+    try { return localStorage.getItem(LAST_PROVINCE_KEY) || 'bc'; } catch { return 'bc'; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem(LAST_PROVINCE_KEY, province); } catch { /* ignore */ }
+  }, [province]);
   const [query, setQuery] = useState(initialQuery);
   const [mode, setMode] = useState('company');
   const [manualMode, setManualMode] = useState(false);
