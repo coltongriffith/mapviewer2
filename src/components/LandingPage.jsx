@@ -145,11 +145,11 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
               Mapping platform for mineral exploration
             </div>
             <h1 className="lm-h1">
-              Exploration maps without the <span className="lm-h1-accent">GIS bottleneck.</span>
+              Investor-ready mining maps <span className="lm-h1-accent">in minutes.</span>
             </h1>
             <p className="lm-hero-sub">
-              Search claims, plot projects, add infrastructure, style layers, and export
-              polished maps for decks, websites, and investor updates.
+              Search claims, plot projects, add infrastructure, and export polished maps
+              for decks, news releases, and investor updates — no GIS required.
             </p>
             <div className="lm-hero-ctas">
               <button className="lm-btn lm-btn-primary lm-btn-lg" type="button" onClick={onOpenEditor} data-track="Hero: Start Mapping">
