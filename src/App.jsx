@@ -771,6 +771,9 @@ export default function App() {
   const [areaClaimsPicking, setAreaClaimsPicking] = useState(false);
   const areaClaimsLayerRef = useRef(null);
   const areaClaimsPinRef = useRef(null);
+  // Generation counter for nearby-claims searches: a stale response (older
+  // search or one from before a reset) may not overwrite newer results.
+  const areaClaimsReqRef = useRef(0);
   const bootstrappedRef = useRef(false);
   const lastSavedSnapshotRef = useRef(JSON.stringify(project));
   // Always-fresh serialization of the current project, updated by the local
@@ -1908,6 +1911,8 @@ export default function App() {
 
   const loadAreaClaims = async (radiusKm) => {
     const province = areaClaimsProvince;
+    const reqId = ++areaClaimsReqRef.current;
+    const stillCurrent = () => areaClaimsReqRef.current === reqId;
     setAreaClaims({ status: 'loading', radius: radiusKm, visible: true, features: [], ownerColors: {}, message: 'Searching for nearby claims…' });
 
     try {
@@ -1946,9 +1951,11 @@ export default function App() {
           + '&count=2000'
           + `&BBOX=${bboxStr},EPSG:4326`;
 
-        // Try direct browser fetch first (public endpoint, usually allows CORS);
-        // fall back to the Vercel serverless proxy if it fails (e.g. local dev)
+        // Direct browser fetch is only possible in local dev: production CSP
+        // (connect-src) does not include openmaps.gov.bc.ca, so attempting it
+        // there is a guaranteed CSP failure before the proxy fallback.
         try {
+          if (!import.meta.env.DEV) throw new Error('prod: use proxy');
           const directResp = await fetch(wfsBase, { signal: AbortSignal.timeout(30000) });
           if (!directResp.ok) throw new Error(`WFS ${directResp.status}`);
           data = await directResp.json();
@@ -1976,6 +1983,7 @@ export default function App() {
         data = await proxyResp.json();
       }
 
+      if (!stillCurrent()) return; // a newer nearby search (or reset) took over
       const features = (data.features || []).filter((f) => f.geometry);
       trackSearch({ kind: 'nearby', province, mode: 'radius', resultCount: features.length });
       if (features.length === 0) {
@@ -1993,8 +2001,10 @@ export default function App() {
       const ownerColors = {};
       owners.forEach((owner, i) => { ownerColors[owner] = AREA_CLAIMS_COLORS[i % AREA_CLAIMS_COLORS.length]; });
 
+      if (!stillCurrent()) return;
       setAreaClaims({ status: 'loaded', radius: radiusKm, visible: true, features, ownerColors, ownerLabels: {}, hiddenOwners: [], showInLegend: false, ownerField, center: { lat: centerLat, lng: centerLng }, message: `${features.length} claims found within ${radiusKm} km` });
     } catch (err) {
+      if (!stillCurrent()) return;
       setAreaClaims((prev) => ({
         ...prev, status: 'error',
         message: err.name === 'TimeoutError' ? 'Request timed out. Try a smaller radius.' : `Failed to load: ${String(err.message || err).slice(0, 160)}`,
