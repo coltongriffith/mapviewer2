@@ -192,15 +192,12 @@ export async function shareMap(project, userId = null) {
 
 export async function loadSharedMap(id) {
   const sb = requireSupabase();
-  const { data, error } = await sb
-    .from('shared_maps')
-    .select('state')
-    .eq('id', id)
-    .single();
+  // Narrow lookup RPC (get_shared_map): returns only the map state for one
+  // id and bumps view_count server-side. Direct table SELECT is revoked —
+  // anonymous clients cannot enumerate shared_maps.
+  const { data, error } = await sb.rpc('get_shared_map', { share_id: id });
   if (error || !data) return null;
-  // Increment view count in the background (fire-and-forget)
-  sb.rpc('increment_shared_map_view', { map_id: id }).then(() => {});
-  return data.state;
+  return data;
 }
 
 // Fork a shared map's state into the signed-in user's own account as a brand-new

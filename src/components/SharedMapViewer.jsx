@@ -24,8 +24,14 @@ export default function SharedMapViewer({ mapId, onExit, user, onEditCopy }) {
 
   useEffect(() => {
     if (!mapId) { setError('No map ID provided'); setLoading(false); return; }
+    // Cancellation guard: if mapId changes or the viewer unmounts while the
+    // load is in flight, the stale completion must not touch state.
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
     loadSharedMap(mapId)
       .then(state => {
+        if (cancelled) return;
         if (!state) { setError('not_found'); setLoading(false); return; }
         setProject(state);
         setLoading(false);
@@ -35,7 +41,8 @@ export default function SharedMapViewer({ mapId, onExit, user, onEditCopy }) {
         try { ref = new URLSearchParams(window.location.search).get('ref'); } catch { /* noop */ }
         trackEvent('share_viewed', { mapId, ref }, user?.id);
       })
-      .catch(e => { setError(e.message); setLoading(false); });
+      .catch(e => { if (!cancelled) { setError(e.message); setLoading(false); } });
+    return () => { cancelled = true; };
   }, [mapId]);
 
   if (loading) {
