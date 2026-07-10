@@ -51,11 +51,8 @@ export const CALLOUT_TYPES = {
 export const TEMPLATE_THEMES = {
   investor_clean:  'Clean',
   technical_sharp: 'Technical',
-  minimal_tech:    'Minimal',
   modern_dark:     'Dark',
-  bold_modern:     'Bold',
   warm_terrain:    'Warm',
-  editorial:       'Editorial',
 };
 
 export const FONT_OPTIONS = {
