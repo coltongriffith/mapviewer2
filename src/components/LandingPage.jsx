@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { supabase } from '../lib/supabase';
-import { getSessionId } from '../utils/session';
+import { trackLandingClick } from '../utils/track';
 import { useAuth } from '../hooks/useAuth.jsx';
 import AuthModal from './AuthModal';
 
@@ -82,7 +81,6 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
     const now = Date.now();
     if (now - clickThrottleRef.current < 500) return;
     clickThrottleRef.current = now;
-    if (!supabase) return;
     const tracked = e.target.closest('[data-track]');
     const interactive = e.target.closest('button, a');
     let element = null;
@@ -99,9 +97,7 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
     }
     const x_pct = Math.round((e.clientX / window.innerWidth) * 100);
     const y_pct = Math.round(((e.clientY + window.scrollY) / Math.max(document.body.scrollHeight, 1)) * 100);
-    const viewport_w = window.innerWidth;
-    const page_h = document.body.scrollHeight;
-    supabase.from('landing_clicks').insert({ session_id: getSessionId(), x_pct, y_pct, element, viewport_w, page_h }).then(() => {});
+    trackLandingClick({ xPct: x_pct, yPct: y_pct, element, viewportW: window.innerWidth, pageH: document.body.scrollHeight });
   }
 
   const scrollTo = (id) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });

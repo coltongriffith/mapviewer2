@@ -50,7 +50,7 @@ import regionsNA from './assets/regionsNA.json';
 import { fitProjectToTemplate } from './utils/frameMapForTemplate';
 import { getThemeTokens } from './utils/themeTokens';
 import { saveLead, getLastLeadEmail } from './utils/leadCapture';
-import { trackSearch, trackEvent } from './utils/track';
+import { trackSearch, trackEvent, trackPageView, trackPing } from './utils/track';
 import dissolveGeo from '@turf/dissolve';
 import {
   clearActiveProjectContext,
@@ -1112,81 +1112,37 @@ export default function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project.layers.length]);
 
-  // Track unique visitor sessions (once per browser session, fire-and-forget)
+  // Track unique visitor sessions (once per browser session, fire-and-forget).
+  // Geo + user identity are resolved server-side by /api/track — no client
+  // geo round-trip and no direct table insert.
   useEffect(() => {
-    if (!supabase || sessionStorage.getItem('em_visited')) return;
+    if (sessionStorage.getItem('em_visited')) return;
     sessionStorage.setItem('em_visited', '1');
     const params = new URLSearchParams(window.location.search);
     const ref = document.referrer || null;
     const refDomain = ref ? (() => { try { return new URL(ref).hostname; } catch { return ref; } })() : null;
-    // Resolve approximate (city-level) location from edge geo headers, then log
-    // the session. Geo is best-effort — never block or fail the page view on it.
-    const logView = (geo) => {
-      const base = {
-        user_id: user?.id ?? null,
-        session_id: getSessionId(),
-        path: window.location.pathname,
-        referrer: refDomain,
-        utm_source: params.get('utm_source') || null,
-        utm_medium: params.get('utm_medium') || null,
-        utm_campaign: params.get('utm_campaign') || null,
-        device: /Mobi|Android/i.test(navigator.userAgent) ? 'mobile' : 'desktop',
-      };
-      const withGeo = { ...base, lat: geo?.lat ?? null, lng: geo?.lng ?? null, city: geo?.city ?? null, country: geo?.country ?? null };
-      supabase.from('page_views').insert(withGeo).then(({ error }) => {
-        // If the geo columns aren't in the schema yet, fall back to the base row.
-        if (error) {
-          supabase.from('page_views').insert(base).then(({ error: fallbackError }) => {
-            if (fallbackError) console.warn('[page_views] insert failed:', fallbackError.message);
-          });
-        }
-      }).catch((err) => console.warn('[page_views] insert failed:', err.message));
-    };
-    let geoController;
-    try {
-      geoController = new AbortController();
-      setTimeout(() => geoController.abort(), 4000);
-    } catch { geoController = null; }
-    fetch('/api/geo', geoController ? { signal: geoController.signal } : undefined)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((geo) => logView(geo))
-      .catch(() => logView(null));
-  }, [user]);
+    trackPageView({
+      path: window.location.pathname,
+      referrer: refDomain,
+      utmSource: params.get('utm_source'),
+      utmMedium: params.get('utm_medium'),
+      utmCampaign: params.get('utm_campaign'),
+      device: /Mobi|Android/i.test(navigator.userAgent) ? 'mobile' : 'desktop',
+    });
+  }, []);
 
-  // Live-presence heartbeat: upsert this tab's location every ~25s while the
-  // page is visible, so the admin "live visitors" map reflects who's actually
-  // on the site right now (a single once-per-session page_view goes stale
-  // within minutes and can't represent "live").
+  // Live-presence heartbeat: ping /api/track every ~25s while the page is
+  // visible, so the admin "live visitors" map reflects who's actually on the
+  // site right now. The server derives location from edge headers and writes
+  // live_pings with the service role — the table is no longer readable or
+  // writable from the browser.
   useEffect(() => {
-    if (!supabase) return;
-    const sessionId = getSessionId();
-    let geo = null;
-    let geoFetched = false;
-    let timer = null;
     const ping = () => {
       if (document.visibilityState !== 'visible') return;
-      supabase.from('live_pings').upsert(
-        { session_id: sessionId, lat: geo?.lat ?? null, lng: geo?.lng ?? null, city: geo?.city ?? null, region: geo?.region ?? null, country: geo?.country ?? null, created_at: new Date().toISOString() },
-        { onConflict: 'session_id' }
-      ).then(({ error }) => { if (error) console.warn('[live-ping] upsert failed:', error.message); });
+      trackPing();
     };
-    const fetchGeo = () => {
-      // AbortSignal.timeout() is unsupported on iOS Safari < 16.4 and would
-      // throw synchronously, breaking this effect before any catch runs —
-      // build the controller manually instead.
-      const controller = new AbortController();
-      const t = setTimeout(() => controller.abort(), 4000);
-      return fetch('/api/geo', { signal: controller.signal })
-        .then((r) => (r.ok ? r.json() : null))
-        .catch(() => null)
-        .finally(() => clearTimeout(t));
-    };
-    const ensureGeoThenPing = () => {
-      if (geoFetched) { ping(); return; }
-      fetchGeo().then((g) => { geo = g; geoFetched = true; ping(); });
-    };
-    ensureGeoThenPing();
-    timer = setInterval(ping, 25000);
+    ping();
+    const timer = setInterval(ping, 25000);
     const onVisible = () => { if (document.visibilityState === 'visible') ping(); };
     document.addEventListener('visibilitychange', onVisible);
     return () => {
