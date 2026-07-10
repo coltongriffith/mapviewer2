@@ -58,9 +58,12 @@ const REFERENCE_OVERLAYS = {
   // XYZ). Global coverage, so it works over Canadian claims, at compilation
   // scale: unit colors read well zoomed out but stay coarse at property scale.
   geology: {
-    url: 'https://mrdata.usgs.gov/services/geology',
-    wms: { layers: 'geology', format: 'image/png', transparent: true },
-    attribution: '&copy; USGS',
+    // USGS MRData "worldgeol" WMS — world geologic map compiled by the
+    // Geological Survey of Canada. Global coverage; layers verified from
+    // GetCapabilities: `geology` (bedrock units) + `contacts` (unit borders).
+    url: 'https://mrdata.usgs.gov/services/worldgeol',
+    wms: { layers: 'geology,contacts', format: 'image/png', transparent: true },
+    attribution: '&copy; USGS / GSC',
     opacityFactor: 0.85,
     zIndex: 345,
   },
