@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 640" font-family="Arial, Helvetica, sans-serif">
+  <rect width="1000" height="640" fill="#f3efe6" />
+  <line x1="200" y1="0" x2="200" y2="640" stroke="#d9d2c0" stroke-width="0.7" />
+  <line x1="0" y1="128" x2="1000" y2="128" stroke="#d9d2c0" stroke-width="0.7" />
+  <line x1="400" y1="0" x2="400" y2="640" stroke="#d9d2c0" stroke-width="0.7" />
+  <line x1="0" y1="256" x2="1000" y2="256" stroke="#d9d2c0" stroke-width="0.7" />
+  <line x1="600" y1="0" x2="600" y2="640" stroke="#d9d2c0" stroke-width="0.7" />
+  <line x1="0" y1="384" x2="1000" y2="384" stroke="#d9d2c0" stroke-width="0.7" />
+  <line x1="800" y1="0" x2="800" y2="640" stroke="#d9d2c0" stroke-width="0.7" />
+  <line x1="0" y1="512" x2="1000" y2="512" stroke="#d9d2c0" stroke-width="0.7" />
+  <path d="M521.8 504.9 L521.8 521.7 L536.4 521.7 L550.9 521.7 L550.9 504.9 L550.9 488.1 L550.9 471.3 L550.9 454.5 L536.4 454.5 L521.8 454.5 L521.8 471.3 L521.8 488.1 L521.8 504.9 Z" fill="#2f8f83" fill-opacity="0.34" stroke="#0e5b52" stroke-width="1.6" />
+  <path d="M376.4 286.6 L376.4 303.4 L390.9 303.4 L390.9 320.2 L405.5 320.2 L420.0 320.2 L420.0 337.0 L434.6 337.0 L434.6 353.8 L449.1 353.8 L449.1 370.6 L463.7 370.6 L463.7 387.4 L478.2 387.4 L478.2 404.2 L478.2 421.0 L478.2 437.8 L492.7 437.8 L492.7 454.5 L507.3 454.5 L521.8 454.5 L536.4 454.5 L550.9 454.5 L565.5 454.5 L565.5 437.8 L580.0 437.8 L580.0 421.0 L594.5 421.0 L594.5 404.2 L609.1 404.2 L623.6 404.2 L623.6 387.4 L609.1 387.4 L609.1 370.6 L609.1 353.8 L594.5 353.8 L594.5 337.0 L594.5 320.2 L580.0 320.2 L580.0 303.4 L580.0 286.6 L580.0 269.8 L565.4 269.8 L550.9 269.8 L536.4 269.8 L521.8 269.8 L507.3 269.8 L492.7 269.8 L478.2 269.8 L463.6 269.8 L449.1 269.8 L449.1 253.0 L449.1 236.2 L449.1 219.4 L434.6 219.4 L420.0 219.4 L420.0 236.2 L405.5 236.2 L405.5 253.0 L390.9 253.0 L376.4 253.0 L376.4 269.8 L376.4 286.6 Z" fill="#2f8f83" fill-opacity="0.34" stroke="#0e5b52" stroke-width="1.6" />
+  <path d="M449.1 253.0 L449.1 269.8 L463.6 269.8 L478.2 269.8 L492.7 269.8 L507.3 269.8 L521.8 269.8 L521.8 253.0 L521.8 236.2 L521.8 219.4 L521.8 202.5 L521.8 185.7 L536.3 185.7 L536.3 168.9 L536.3 152.1 L536.3 135.3 L536.3 118.5 L521.8 118.5 L507.3 118.5 L492.7 118.5 L478.2 118.5 L478.2 135.3 L478.2 152.1 L478.2 168.9 L478.2 185.7 L478.2 202.5 L478.2 219.4 L463.6 219.4 L449.1 219.4 L449.1 236.2 L449.1 253.0 Z" fill="#2f8f83" fill-opacity="0.34" stroke="#0e5b52" stroke-width="1.6" />
+  <path d="M376.4 353.8 L376.4 370.6 L390.9 370.6 L405.5 370.6 L405.5 387.4 L420.0 387.4 L434.6 387.4 L434.6 404.2 L449.1 404.2 L463.7 404.2 L478.2 404.2 L478.2 387.4 L463.7 387.4 L463.7 370.6 L449.1 370.6 L449.1 353.8 L434.6 353.8 L434.6 337.0 L420.0 337.0 L420.0 320.2 L405.5 320.2 L390.9 320.2 L390.9 303.4 L376.4 303.4 L376.4 320.2 L376.4 337.0 L376.4 353.8 Z" fill="#2f8f83" fill-opacity="0.34" stroke="#0e5b52" stroke-width="1.6" />
+  <!-- title strip -->
+  <rect x="0" y="0" width="1000" height="54" fill="#173042" />
+  <text x="20" y="34" font-size="21" font-weight="bold" fill="#ffffff">Casa Minerals Inc. — Mineral Claims</text>
+  <text x="980" y="34" font-size="15" fill="#cfe3df" text-anchor="end">CASA</text>
+  <!-- scale bar -->
+  <g transform="translate(778.8986513633022, 596)">
+    <rect x="0" y="0" width="90.5506743183489" height="8" fill="#173042" />
+    <rect x="90.5506743183489" y="0" width="90.5506743183489" height="8" fill="#ffffff" stroke="#173042" stroke-width="1" />
+    <text x="90.5506743183489" y="-6" font-size="12" fill="#173042" text-anchor="middle">5 km</text>
+  </g>
+  <!-- north arrow -->
+  <g transform="translate(956, 92)">
+    <circle r="17" fill="#ffffff" stroke="#b9b09a" />
+    <path d="M0 -10 L5 7 L0 3 L-5 7 Z" fill="#173042" />
+    <text y="14" font-size="9" font-weight="bold" fill="#173042" text-anchor="middle">N</text>
+  </g>
+  <!-- watermark -->
+  <text x="20" y="620" font-size="13" fill="#7d8b8a">Map by Exploration Maps — explorationmaps.com</text>
+</svg>
