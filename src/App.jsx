@@ -51,6 +51,7 @@ import { fitProjectToTemplate } from './utils/frameMapForTemplate';
 import { getThemeTokens } from './utils/themeTokens';
 import { saveLead, getLastLeadEmail } from './utils/leadCapture';
 import { trackSearch, trackEvent, trackPageView, trackPing } from './utils/track';
+import { createSaveCoordinator, runGuardedSave } from './utils/saveCoordinator';
 import dissolveGeo from '@turf/dissolve';
 import {
   clearActiveProjectContext,
@@ -772,6 +773,13 @@ export default function App() {
   const areaClaimsPinRef = useRef(null);
   const bootstrappedRef = useRef(false);
   const lastSavedSnapshotRef = useRef(JSON.stringify(project));
+  // Always-fresh serialization of the current project, updated by the local
+  // autosave effect. Save completions compare against this to decide whether
+  // dirty state may be cleared (see utils/saveCoordinator.js).
+  const lastSerializedRef = useRef(lastSavedSnapshotRef.current);
+  // Guards async save completions against workspace switches: every project
+  // open/new/fork bumps the epoch, detaching in-flight saves from the UI.
+  const saveCoordRef = useRef(createSaveCoordinator());
   // Local state for title/subtitle so every keystroke doesn't write to project (stops flicker)
   const [localTitle, setLocalTitle] = useState(project.layout.title || '');
   const [localSubtitle, setLocalSubtitle] = useState(project.layout.subtitle || '');
@@ -912,6 +920,7 @@ export default function App() {
       return;
     }
     const serialized = JSON.stringify(project);
+    lastSerializedRef.current = serialized;
     setIsDirty(serialized !== lastSavedSnapshotRef.current);
     const timer = window.setTimeout(() => {
       saveDraft({ payload: project, projectId, projectName });
@@ -930,29 +939,47 @@ export default function App() {
     if (!user || !projectId || !isDirty || !supabase) return;
     const t = window.setTimeout(async () => {
       const snapshot = JSON.stringify(project);
-      try {
-        await saveCloudProject({ id: projectId, name: projectName, payload: project });
-        // Match the manual-save bookkeeping so isDirty clears and the badge
-        // reflects a clean cloud state.
-        lastSavedSnapshotRef.current = snapshot;
-        setIsDirty(false);
+      // Ticket + snapshot captured at fire time. After the await, the
+      // completion may only touch state if the workspace hasn't switched;
+      // dirty may only clear if the project still matches what was saved.
+      // Edits made during the save keep isDirty true, which re-arms this
+      // effect for another pass — nothing newer is ever masked or cancelled.
+      const ticket = saveCoordRef.current.begin();
+      const flashSaved = () => {
         setSaveFlash(true);
         clearTimeout(saveFlashTimerRef.current);
         saveFlashTimerRef.current = setTimeout(() => setSaveFlash(false), 2000);
-      } catch (err) {
-        if (err.message.includes('not found')) {
+      };
+      const outcome = await runGuardedSave({
+        ticket,
+        snapshot,
+        doSave: () => saveCloudProject({ id: projectId, name: projectName, payload: project }),
+        getCurrentSerialized: () => lastSerializedRef.current,
+        onSaved: () => { lastSavedSnapshotRef.current = snapshot; setIsDirty(false); flashSaved(); },
+        // Saved, but the user kept editing: advance the baseline to what the
+        // cloud now holds and stay dirty so the newer edits save next pass.
+        onMismatch: () => { lastSavedSnapshotRef.current = snapshot; },
+        onError: () => {},
+      });
+      if (outcome.status === 'error') {
+        const err = outcome.err;
+        if (String(err?.message || '').includes('not found')) {
           // projectId exists locally but not in cloud (draft migration case):
           // create it as a new cloud project instead of failing silently.
-          try {
-            const newId = await saveCloudProject({ id: null, name: projectName, payload: project });
-            setProjectId(newId);
-            lastSavedSnapshotRef.current = snapshot;
-            setIsDirty(false);
-            setSaveFlash(true);
-            clearTimeout(saveFlashTimerRef.current);
-            saveFlashTimerRef.current = setTimeout(() => setSaveFlash(false), 2000);
-          } catch (createErr) {
-            setUploadStatus({ type: 'error', message: `Couldn't save to the cloud (${createErr.message}). Your work is safe in this browser — click Save to retry.` });
+          const created = await runGuardedSave({
+            ticket,
+            snapshot,
+            doSave: () => saveCloudProject({ id: null, name: projectName, payload: project }),
+            getCurrentSerialized: () => lastSerializedRef.current,
+            onSaved: () => { lastSavedSnapshotRef.current = snapshot; setIsDirty(false); flashSaved(); },
+            onMismatch: () => { lastSavedSnapshotRef.current = snapshot; },
+            onError: (createErr) => {
+              setUploadStatus({ type: 'error', message: `Couldn't save to the cloud (${createErr.message}). Your work is safe in this browser — click Save to retry.` });
+            },
+          });
+          // Re-point the workspace at the new row only if we're still in it.
+          if ((created.status === 'saved' || created.status === 'saved-but-dirty') && ticket.stillCurrent()) {
+            setProjectId(created.result);
           }
         } else {
           setUploadStatus({ type: 'error', message: `Couldn't auto-save to the cloud (${err.message}). Your work is safe in this browser — click Save to retry.` });
@@ -2207,6 +2234,7 @@ export default function App() {
 
   const loadSampleData = async (styleId) => {
     const makeFile = (json, name) => new File([JSON.stringify(json)], name, { type: 'application/json' });
+    saveCoordRef.current.switchWorkspace();
     resetHistory();
     setProject(createInitialProjectState());
     try {
@@ -2391,6 +2419,7 @@ export default function App() {
 
       // Start a fresh, unowned workspace either way so Save/autosave creates a
       // NEW map rather than overwriting whatever project was last open.
+      saveCoordRef.current.switchWorkspace();
       resetHistory();
       setProject(createInitialProjectState());
       setProjectId(null);
@@ -3267,22 +3296,35 @@ export default function App() {
   const saveCurrentProject = async (nextName = null) => {
     const nameToSave = (nextName || projectName || project.layout?.title || 'Untitled map').trim();
     if (user) {
-      try {
-        // Pass projectId as-is: when it's null (a new or deep-linked map),
-        // saveCloudProject INSERTS a fresh row and returns its id. Fabricating
-        // a random id here would send it down the UPDATE path, which matches no
-        // row and silently saves nothing while the UI reports success.
-        const cloudId = await saveCloudProject({ id: projectId, name: nameToSave, payload: project });
+      // Snapshot + ticket BEFORE the await: edits made while the save is in
+      // flight must not be masked (dirty stays set), and a workspace switch
+      // mid-save must detach this completion entirely.
+      const snapshot = JSON.stringify(project);
+      const payloadToSave = project;
+      const ticket = saveCoordRef.current.begin();
+      // Pass projectId as-is: when it's null (a new or deep-linked map),
+      // saveCloudProject INSERTS a fresh row and returns its id. Fabricating
+      // a random id here would send it down the UPDATE path, which matches no
+      // row and silently saves nothing while the UI reports success.
+      const outcome = await runGuardedSave({
+        ticket,
+        snapshot,
+        doSave: () => saveCloudProject({ id: projectId, name: nameToSave, payload: payloadToSave }),
+        getCurrentSerialized: () => lastSerializedRef.current,
+        onSaved: () => { lastSavedSnapshotRef.current = snapshot; setIsDirty(false); },
+        onMismatch: () => { lastSavedSnapshotRef.current = snapshot; },
+        onError: (err) => {
+          setUploadStatus({ type: 'error', message: `Cloud save failed: ${err.message}. Your work is still saved in this browser.` });
+        },
+      });
+      if ((outcome.status === 'saved' || outcome.status === 'saved-but-dirty') && ticket.stillCurrent()) {
+        const cloudId = outcome.result;
         setProjectId(cloudId);
         setProjectName(nameToSave);
-        lastSavedSnapshotRef.current = JSON.stringify(project);
-        setIsDirty(false);
-        saveDraft({ payload: project, projectId: cloudId, projectName: nameToSave });
+        saveDraft({ payload: payloadToSave, projectId: cloudId, projectName: nameToSave });
         listCloudProjects().then(setRecentProjects).catch(() => {});
         setUploadStatus({ type: 'success', message: `Saved to cloud: ${nameToSave}` });
         captureAndStoreThumbnail(cloudId, true);
-      } catch (err) {
-        setUploadStatus({ type: 'error', message: `Cloud save failed: ${err.message}` });
       }
     } else {
       // Local store needs an explicit id; reuse the current one or mint a new
@@ -3313,18 +3355,28 @@ export default function App() {
     if (!nextName) return;
     const nameToSave = nextName.trim();
     if (user) {
-      try {
-        const cloudId = await saveCloudProject({ id: null, name: nameToSave, payload: project });
+      const snapshot = JSON.stringify(project);
+      const payloadToSave = project;
+      const ticket = saveCoordRef.current.begin();
+      const outcome = await runGuardedSave({
+        ticket,
+        snapshot,
+        doSave: () => saveCloudProject({ id: null, name: nameToSave, payload: payloadToSave }),
+        getCurrentSerialized: () => lastSerializedRef.current,
+        onSaved: () => { lastSavedSnapshotRef.current = snapshot; setIsDirty(false); },
+        onMismatch: () => { lastSavedSnapshotRef.current = snapshot; },
+        onError: (err) => {
+          setUploadStatus({ type: 'error', message: `Cloud save failed: ${err.message}. Your work is still saved in this browser.` });
+        },
+      });
+      if ((outcome.status === 'saved' || outcome.status === 'saved-but-dirty') && ticket.stillCurrent()) {
+        const cloudId = outcome.result;
         setProjectId(cloudId);
         setProjectName(nameToSave);
-        lastSavedSnapshotRef.current = JSON.stringify(project);
-        setIsDirty(false);
-        saveDraft({ payload: project, projectId: cloudId, projectName: nameToSave });
+        saveDraft({ payload: payloadToSave, projectId: cloudId, projectName: nameToSave });
         listCloudProjects().then(setRecentProjects).catch(() => {});
         setUploadStatus({ type: 'success', message: `Saved to cloud as: ${nameToSave}` });
         captureAndStoreThumbnail(cloudId, true);
-      } catch (err) {
-        setUploadStatus({ type: 'error', message: `Cloud save failed: ${err.message}` });
       }
     } else {
       const saved = saveProjectRecord({ id: crypto.randomUUID(), name: nameToSave, payload: project });
@@ -3340,17 +3392,24 @@ export default function App() {
   };
 
   const openProjectFromRecent = async (entry) => {
+    // Switching workspaces: detach every in-flight save completion from the
+    // UI immediately, and take a ticket so that if a SECOND open starts while
+    // this one is still fetching, the slower fetch cannot clobber it.
+    saveCoordRef.current.switchWorkspace();
+    const openTicket = saveCoordRef.current.begin();
     let payload = entry.payload;
     if (!payload && user) {
       try {
         const full = await loadCloudProject(entry.id);
         payload = full.payload;
       } catch (err) {
-        setUploadStatus({ type: 'error', message: `Failed to open project: ${err.message}` });
+        if (openTicket.stillCurrent()) {
+          setUploadStatus({ type: 'error', message: `Failed to open project: ${err.message}` });
+        }
         return;
       }
     }
-    if (!payload) return;
+    if (!payload || !openTicket.stillCurrent()) return;
     resetHistory();
     skipAutoFitRef.current = true;
     setProject(payload);
@@ -3399,6 +3458,7 @@ export default function App() {
     trackEvent('share_forked', { mapId: sharedMapId, mode: 'local' });
     try { window.history.replaceState({}, '', '/'); } catch { /* noop */ }
     setSharedMapId(null);
+    saveCoordRef.current.switchWorkspace();
     resetHistory();
     skipAutoFitRef.current = true;
     setProject(state);
@@ -3438,17 +3498,26 @@ export default function App() {
   const duplicateCurrentProject = async () => {
     const name = `${projectName || project.layout?.title || 'Untitled map'} Copy`;
     if (user) {
-      try {
-        const cloudId = await saveCloudProject({ id: null, name, payload: project });
-        setProjectId(cloudId);
+      const snapshot = JSON.stringify(project);
+      const payloadToSave = project;
+      const ticket = saveCoordRef.current.begin();
+      const outcome = await runGuardedSave({
+        ticket,
+        snapshot,
+        doSave: () => saveCloudProject({ id: null, name, payload: payloadToSave }),
+        getCurrentSerialized: () => lastSerializedRef.current,
+        onSaved: () => { lastSavedSnapshotRef.current = snapshot; setIsDirty(false); },
+        onMismatch: () => { lastSavedSnapshotRef.current = snapshot; },
+        onError: (err) => {
+          setUploadStatus({ type: 'error', message: `Cloud duplicate failed: ${err.message}` });
+        },
+      });
+      if ((outcome.status === 'saved' || outcome.status === 'saved-but-dirty') && ticket.stillCurrent()) {
+        setProjectId(outcome.result);
         setProjectName(name);
-        lastSavedSnapshotRef.current = JSON.stringify(project);
-        setIsDirty(false);
-        saveDraft({ payload: project, projectId: cloudId, projectName: name });
+        saveDraft({ payload: payloadToSave, projectId: outcome.result, projectName: name });
         listCloudProjects().then(setRecentProjects).catch(() => {});
         setUploadStatus({ type: 'success', message: `Duplicated to cloud as: ${name}` });
-      } catch (err) {
-        setUploadStatus({ type: 'error', message: `Cloud duplicate failed: ${err.message}` });
       }
     } else {
       const saved = duplicateProjectRecord({ sourcePayload: project, name });
@@ -3466,6 +3535,7 @@ export default function App() {
   const startNewProject = () => {
     const base = createInitialProjectState();
     const blank = { ...base, layout: seedLayoutWithSettings(base.layout) };
+    saveCoordRef.current.switchWorkspace();
     resetHistory();
     setProject(blank);
     setProjectId(null);
