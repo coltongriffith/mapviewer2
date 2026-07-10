@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "node scripts/generate-blog.js && vite build && mkdir -p dist/admin && cp dist/index.html dist/admin/index.html",
-    "pseo:fixture": "node scripts/pseo/01_fetch_issuers.mjs --fixture && node scripts/pseo/02_fetch_claims_bc.mjs --fixture && node scripts/pseo/03_fetch_claims_on.mjs --fixture && node scripts/pseo/04_match_owners.mjs --fixture && node scripts/pseo/05_fetch_geometry.mjs --fixture && node scripts/pseo/06_render_maps.mjs --fixture --skip-og && node scripts/pseo/07_generate_pages.mjs --fixture"
+    "pseo:fixture": "node scripts/pseo/01_fetch_issuers.mjs --fixture && node scripts/pseo/02_fetch_claims_bc.mjs --fixture && node scripts/pseo/03_fetch_claims_on.mjs --fixture && node scripts/pseo/04_match_owners.mjs --fixture && node scripts/pseo/05_fetch_geometry.mjs --fixture && node scripts/pseo/06_render_maps.mjs --fixture --skip-og && node scripts/pseo/07_generate_pages.mjs --fixture",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.104.1",
@@ -27,8 +29,13 @@
     "world-atlas": "^2.0.2"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@vitejs/plugin-react": "^4.2.0",
+    "jsdom": "^29.1.1",
     "vite": "^5.4.21",
-    "vite-plugin-node-polyfills": "^0.25.0"
+    "vite-plugin-node-polyfills": "^0.25.0",
+    "vitest": "^4.1.10"
   }
 }
