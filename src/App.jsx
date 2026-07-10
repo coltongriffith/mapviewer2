@@ -4888,6 +4888,7 @@ export default function App() {
             <label className="toggle-row"><input type="checkbox" checked={!!referenceOverlays.context} onChange={(e) => updateLayout({ referenceOverlays: { context: e.target.checked } })} /> <span>Roads + Settlements</span></label>
             <label className="toggle-row"><input type="checkbox" checked={!!referenceOverlays.labels} onChange={(e) => updateLayout({ referenceOverlays: { labels: e.target.checked } })} /> <span>Reference Labels</span></label>
             <label className="toggle-row"><input type="checkbox" checked={!!referenceOverlays.rail} onChange={(e) => updateLayout({ referenceOverlays: { rail: e.target.checked } })} /> <span>Railways</span></label>
+            <label className="toggle-row"><input type="checkbox" checked={!!referenceOverlays.geology} onChange={(e) => updateLayout({ referenceOverlays: { geology: e.target.checked } })} /> <span>Bedrock Geology (USGS)</span></label>
           </div>}
         </section>
 

@@ -54,6 +54,16 @@ const REFERENCE_OVERLAYS = {
     opacityFactor: 0.9,
     zIndex: 365,
   },
+  // Bedrock geology — USGS MRData world geologic map compilation (WMS, not
+  // XYZ). Global coverage, so it works over Canadian claims, at compilation
+  // scale: unit colors read well zoomed out but stay coarse at property scale.
+  geology: {
+    url: 'https://mrdata.usgs.gov/services/geology',
+    wms: { layers: 'geology', format: 'image/png', transparent: true },
+    attribution: '&copy; USGS',
+    opacityFactor: 0.85,
+    zIndex: 345,
+  },
 };
 
 function detectGeomType(geojson) {
@@ -166,7 +176,7 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
       }
 
       if (active && !existing) {
-        referenceRefs.current[key] = L.tileLayer(cfg.url, {
+        const opts = {
           attribution: cfg.attribution,
           maxZoom: cfg.maxZoom || 20,
           crossOrigin: true,
@@ -174,7 +184,13 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
           keepBuffer: 3,
           opacity: Math.max(0.2, Math.min(1, baseOpacity * cfg.opacityFactor)),
           zIndex: cfg.zIndex,
-        }).addTo(map);
+        };
+        // WMS overlays (e.g. USGS geology) still render as <img> tiles, so
+        // export capture treats them identically to XYZ layers.
+        referenceRefs.current[key] = cfg.wms
+          ? L.tileLayer.wms(cfg.url, { ...opts, ...cfg.wms })
+          : L.tileLayer(cfg.url, opts);
+        referenceRefs.current[key].addTo(map);
         return;
       }
 
