@@ -2002,7 +2002,10 @@ export default function App() {
       owners.forEach((owner, i) => { ownerColors[owner] = AREA_CLAIMS_COLORS[i % AREA_CLAIMS_COLORS.length]; });
 
       if (!stillCurrent()) return;
-      setAreaClaims({ status: 'loaded', radius: radiusKm, visible: true, features, ownerColors, ownerLabels: {}, hiddenOwners: [], showInLegend: false, ownerField, center: { lat: centerLat, lng: centerLng }, message: `${features.length} claims found within ${radiusKm} km` });
+      const truncNote = data.meta?.truncated
+        ? ` (large area — showing the first ${features.length}${data.meta.totalKnown ? ` of ${data.meta.totalKnown}` : ''}; try a smaller radius)`
+        : '';
+      setAreaClaims({ status: 'loaded', radius: radiusKm, visible: true, features, ownerColors, ownerLabels: {}, hiddenOwners: [], showInLegend: false, ownerField, center: { lat: centerLat, lng: centerLng }, message: `${features.length} claims found within ${radiusKm} km${truncNote}` });
     } catch (err) {
       if (!stillCurrent()) return;
       setAreaClaims((prev) => ({

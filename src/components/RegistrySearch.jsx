@@ -457,6 +457,14 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
 
       {error && <p className="claims-error">⚠ {error}</p>}
 
+      {results?.meta?.truncated && allFeatures.length > 0 && (
+        <p className="claims-error" role="status">
+          ⚠ Large result set — showing the first {allFeatures.length.toLocaleString()}
+          {results.meta.totalKnown ? ` of ${results.meta.totalKnown.toLocaleString()}` : ''} claims.
+          Narrow the search (full company name or claim number) to see everything.
+        </p>
+      )}
+
       {results && allFeatures.length === 0 && (
         <>
           <p className="claims-empty">No active claims found for "{query}" in {provinceCfg.label}. Try a shorter name or check spelling.</p>

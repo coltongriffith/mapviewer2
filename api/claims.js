@@ -26,6 +26,8 @@
 // normalized to the BC property names the UI renders (OWNER_NAME, TAG_NUMBER,
 // AREA_IN_HECTARES, GOOD_TO_DATE, TITLE_TYPE_DESCRIPTION).
 
+import { fetchAllPages, fetchWfsAll, MAX_TOTAL_FEATURES, MAX_PAGES } from './_lib/paging.js';
+
 const ARCGIS_PROVINCES = {
   on: {
     service: 'https://ws.lioservices.lrc.gov.on.ca/arcgis2/rest/services/MLAS/mlas_op/MapServer',
@@ -165,7 +167,101 @@ async function resolveFields(layerUrl) {
   const fields = (meta?.fields || []).map((f) => ({ name: f.name, type: f.type }));
   if (!fields.length) throw new Error('Layer has no queryable fields');
   metaCache.set(cacheKey, fields);
+  // Stash the paging-relevant layer capabilities under a sibling key so the
+  // pagination code can respect the server's own limits.
+  metaCache.set(`layermeta:${layerUrl}`, {
+    maxRecordCount: Number(meta?.maxRecordCount) || 1000,
+    supportsPagination: Boolean(meta?.advancedQueryCapabilities?.supportsPagination),
+    objectIdField: meta?.objectIdField || (meta?.fields || []).find((f) => f.type === 'esriFieldTypeOID')?.name || 'OBJECTID',
+  });
   return fields;
+}
+
+// Layer paging capabilities; safe defaults when metadata was unreadable.
+async function resolveLayerMeta(layerUrl) {
+  const key = `layermeta:${layerUrl}`;
+  if (!metaCache.has(key)) {
+    try { await resolveFields(layerUrl); } catch { /* url-only fallback layers */ }
+  }
+  return metaCache.get(key) || { maxRecordCount: 1000, supportsPagination: false, objectIdField: 'OBJECTID' };
+}
+
+// Fetch EVERY page of an ArcGIS query (attribute or spatial), honoring the
+// server's maxRecordCount and pagination support, deduplicating by object id,
+// and reporting honest completeness metadata. Strategy ladder:
+//  1. supportsPagination → resultOffset/resultRecordCount loop
+//  2. otherwise         → returnIdsOnly (authoritative total) + objectIds batches
+//  3. ids query failed  → single legacy capped query, marked truncated if full
+async function arcgisQueryAll(layerUrl, baseParams) {
+  const layerMeta = await resolveLayerMeta(layerUrl);
+  const pageSize = Math.min(Math.max(layerMeta.maxRecordCount, 1), 1000);
+  const idField = layerMeta.objectIdField;
+
+  if (layerMeta.supportsPagination) {
+    return fetchAllPages({
+      provider: 'arcgis',
+      pageSize,
+      idField,
+      fetchPage: async (offset, count) => {
+        const url = `${layerUrl}/query?${new URLSearchParams({
+          ...baseParams,
+          resultOffset: String(offset),
+          resultRecordCount: String(count),
+          f: 'geojson',
+        })}`;
+        const data = await fetchQueryGeoJSON(url);
+        if (!Array.isArray(data.features)) throw new Error('Unexpected response from provincial map service');
+        return { features: data.features };
+      },
+    });
+  }
+
+  // No pagination support: object-ids two-phase fetch.
+  try {
+    const idsUrl = `${layerUrl}/query?${new URLSearchParams({ ...baseParams, returnIdsOnly: 'true', f: 'json' })}`;
+    const idResp = await fetchJson(idsUrl);
+    const ids = Array.isArray(idResp?.objectIds) ? idResp.objectIds : null;
+    if (!ids) throw new Error('no objectIds');
+    const oidField = idResp.objectIdFieldName || idField;
+    const capped = ids.slice(0, MAX_TOTAL_FEATURES);
+    const features = [];
+    let pagesFetched = 0;
+    let failedLate = false;
+    const CHUNK = 100;
+    for (let i = 0; i < capped.length && pagesFetched < MAX_PAGES * 4; i += CHUNK) {
+      const chunk = capped.slice(i, i + CHUNK);
+      const url = `${layerUrl}/query?${new URLSearchParams({
+        objectIds: chunk.join(','),
+        outFields: '*',
+        returnGeometry: 'true',
+        outSR: '4326',
+        f: 'geojson',
+      })}`;
+      try {
+        const data = await fetchQueryGeoJSON(url);
+        pagesFetched += 1;
+        for (const f of data.features || []) features.push(f);
+      } catch (e) {
+        if (pagesFetched === 0) throw e;
+        failedLate = true;
+        break;
+      }
+    }
+    const truncated = failedLate || ids.length > capped.length || features.length < capped.length;
+    return {
+      features,
+      meta: { totalKnown: ids.length, returned: features.length, truncated, pagesFetched: pagesFetched + 1, provider: 'arcgis' },
+    };
+  } catch {
+    // Ids phase unavailable — single legacy query, honestly flagged when full.
+    const url = `${layerUrl}/query?${new URLSearchParams({ ...baseParams, resultRecordCount: '2000', f: 'geojson' })}`;
+    const data = await fetchQueryGeoJSON(url);
+    if (!Array.isArray(data.features)) throw new Error('Unexpected response from provincial map service');
+    return {
+      features: data.features,
+      meta: { totalKnown: null, returned: data.features.length, truncated: data.features.length >= 2000, pagesFetched: 1, provider: 'arcgis' },
+    };
+  }
 }
 
 async function listCandidateLayers(cfg) {
@@ -365,23 +461,18 @@ async function searchArcgis(cfg, term, type, res) {
     return res.status(400).json({ error: `${field.name} is numeric — enter digits only.` });
   }
 
-  const queryUrl = `${layerUrl}/query?${new URLSearchParams({
+  const { features, meta } = await arcgisQueryAll(layerUrl, {
     where,
     outFields: '*',
     returnGeometry: 'true',
     outSR: '4326',
-    resultRecordCount: '500',
-    f: 'geojson',
-  })}`;
+  });
 
-  const data = await fetchQueryGeoJSON(queryUrl);
-  if (!Array.isArray(data.features)) throw new Error('Unexpected response from provincial map service');
-
-  data.features = data.features.map((f) => ({
-    ...f,
-    properties: normalizeProps(f.properties || {}),
-  }));
-  return res.status(200).json(data);
+  return res.status(200).json({
+    type: 'FeatureCollection',
+    features: features.map((f) => ({ ...f, properties: normalizeProps(f.properties || {}) })),
+    meta,
+  });
 }
 
 // Quebec has no live queryable registry, so its claims are loaded weekly into a
@@ -433,22 +524,29 @@ async function searchQc(term, type, res) {
   const filter = type === 'number'
     ? `tag_number=ilike.${encodeURIComponent(cleaned)}`
     : `owner_name=ilike.${encodeURIComponent(`*${cleaned}*`)}`;
-  const url = `${base}/rest/v1/qc_claims?` +
-    `select=tag_number,owner_name,status,good_to_date,area_hectares,title_type,geometry` +
-    `&${filter}&limit=500`;
 
-  const r = await fetch(url, {
-    headers: { apikey: key, Authorization: `Bearer ${key}`, Accept: 'application/json' },
-    signal: AbortSignal.timeout(20000),
+  const { features, meta } = await fetchAllPages({
+    provider: 'qc-store',
+    pageSize: 1000,
+    idField: 'TAG_NUMBER',
+    fetchPage: async (offset, count) => {
+      const url = `${base}/rest/v1/qc_claims?` +
+        `select=tag_number,owner_name,status,good_to_date,area_hectares,title_type,geometry` +
+        `&${filter}&limit=${count}&offset=${offset}`;
+      const r = await fetch(url, {
+        headers: { apikey: key, Authorization: `Bearer ${key}`, Accept: 'application/json' },
+        signal: AbortSignal.timeout(20000),
+      });
+      if (!r.ok) {
+        const body = await r.text().catch(() => '');
+        throw new Error(`Quebec claims store ${r.status}: ${body.slice(0, 300)}`);
+      }
+      const rows = await r.json();
+      // Keys already match what the UI renders; no normalizeProps pass needed.
+      return { features: rows.map(qcRowToFeature) };
+    },
   });
-  if (!r.ok) {
-    const body = await r.text().catch(() => '');
-    throw new Error(`Quebec claims store ${r.status}: ${body.slice(0, 300)}`);
-  }
-  const rows = await r.json();
-  // Keys already match what the UI renders; no normalizeProps pass needed.
-  const features = rows.map(qcRowToFeature);
-  return res.status(200).json({ type: 'FeatureCollection', features });
+  return res.status(200).json({ type: 'FeatureCollection', features, meta });
 }
 
 // Quebec nearby-radius (bbox) query. The store has no live ArcGIS service, so
@@ -493,18 +591,20 @@ async function searchBc(term, type, res) {
   else if (type === 'map') cqlFilter = `MAP_UNIT_NO ILIKE '${safeTerm}%'`;
   else cqlFilter = `OWNER_NAME ILIKE '%${safeTerm}%'`;
 
-  const wfsUrl = [
+  const buildUrl = (startIndex, count) => [
     'https://openmaps.gov.bc.ca/geo/pub/wfs',
     '?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature',
     '&outputFormat=application/json',
     '&typeNames=pub:WHSE_MINERAL_TENURE.MTA_ACQUIRED_TENURE_SVW',
     '&SRSNAME=EPSG:4326',
     `&CQL_FILTER=${encodeURIComponent(cqlFilter)}`,
-    '&count=500',
+    '&sortBy=TENURE_NUMBER_ID',   // WFS paging requires a stable sort
+    `&count=${count}`,
+    `&startIndex=${startIndex}`,
   ].join('');
 
-  const data = await fetchJson(wfsUrl);
-  return res.status(200).json(data);
+  const { features, meta } = await fetchWfsAll({ fetchJson, buildUrl, pageSize: 1000, provider: 'bc-wfs' });
+  return res.status(200).json({ type: 'FeatureCollection', features, meta });
 }
 
 export default async function handler(req, res) {
@@ -536,7 +636,7 @@ export default async function handler(req, res) {
     }
     try {
       const { layerUrl } = await resolveLayerAndFields(cfg, 'company');
-      const queryUrl = `${layerUrl}/query?${new URLSearchParams({
+      const { features, meta } = await arcgisQueryAll(layerUrl, {
         geometry: JSON.stringify({ xmin: minLng, ymin: minLat, xmax: maxLng, ymax: maxLat, spatialReference: { wkid: 4326 } }),
         geometryType: 'esriGeometryEnvelope',
         spatialRel: 'esriSpatialRelIntersects',
@@ -544,16 +644,12 @@ export default async function handler(req, res) {
         outFields: '*',
         returnGeometry: 'true',
         outSR: '4326',
-        resultRecordCount: '2000',
-        f: 'geojson',
-      })}`;
-      const data = await fetchQueryGeoJSON(queryUrl);
-      if (!Array.isArray(data.features)) throw new Error('Unexpected response from provincial map service');
-      data.features = data.features.map((f) => ({
-        ...f,
-        properties: normalizeProps(f.properties || {}),
-      }));
-      return res.status(200).json(data);
+      });
+      return res.status(200).json({
+        type: 'FeatureCollection',
+        features: features.map((f) => ({ ...f, properties: normalizeProps(f.properties || {}) })),
+        meta,
+      });
     } catch (e) {
       return res.status(502).json({ error: e.message || 'Failed to reach provincial registry' });
     }
