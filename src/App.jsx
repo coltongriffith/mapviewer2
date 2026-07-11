@@ -2217,6 +2217,9 @@ export default function App() {
           setCsvMappingData({ headers: result.headers, rows: result.rows, filename: file.name, guesses: result.guesses, hint: result.hint });
         } else {
           await addGeoJSONAsLayer(result, file.name);
+          if (result.meta?.skippedRows) {
+            setUploadStatus({ type: 'info', message: `Imported ${result.features.length} points — ${result.meta.skippedRows} row${result.meta.skippedRows === 1 ? '' : 's'} skipped (missing or invalid coordinates).` });
+          }
           if (screen !== 'editor') setScreen('editor');
         }
       } else {
