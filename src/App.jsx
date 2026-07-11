@@ -68,6 +68,9 @@ import {
   updateProjectThumbnailRecord,
   getAccountSettingsLocal,
   saveAccountSettingsLocal,
+  getRecoveryInfo,
+  exportRecoveryRecord,
+  discardRecoveryRecord,
 } from './utils/projectStorage';
 import {
   deleteCloudProject,
@@ -775,6 +778,7 @@ export default function App() {
   // search or one from before a reset) may not overwrite newer results.
   const areaClaimsReqRef = useRef(0);
   const bootstrappedRef = useRef(false);
+  const draftWriteFailedRef = useRef(false);
   const lastSavedSnapshotRef = useRef(JSON.stringify(project));
   // Always-fresh serialization of the current project, updated by the local
   // autosave effect. Save completions compare against this to decide whether
@@ -926,7 +930,17 @@ export default function App() {
     lastSerializedRef.current = serialized;
     setIsDirty(serialized !== lastSavedSnapshotRef.current);
     const timer = window.setTimeout(() => {
-      saveDraft({ payload: project, projectId, projectName });
+      const wrote = saveDraft({ payload: project, projectId, projectName });
+      if (!wrote.ok) {
+        // Don't flash "Saved" on a failed write. Warn once per failure streak
+        // (quota failures also raise the storage banner via its event).
+        if (!draftWriteFailedRef.current) {
+          draftWriteFailedRef.current = true;
+          setUploadStatus({ type: 'error', message: `Couldn't auto-save to this browser (${wrote.message}). Your map is still open — export it or free up space.` });
+        }
+        return;
+      }
+      draftWriteFailedRef.current = false;
       setSaveFlash(true);
       clearTimeout(saveFlashTimerRef.current);
       saveFlashTimerRef.current = setTimeout(() => setSaveFlash(false), 2000);
@@ -1141,6 +1155,22 @@ export default function App() {
     trackEvent('first_layer_added', { count: project.layers.length }, user?.id);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project.layers.length]);
+
+  // Corrupted-record recovery: if a stored project blob failed to decompress,
+  // the original bytes were preserved under a .recovery key. Surface a
+  // non-blocking warning and expose manual export/removal helpers — the
+  // corrupted copy is never deleted automatically.
+  useEffect(() => {
+    const recoveries = getRecoveryInfo();
+    if (!recoveries.length) return;
+    window.__exportRecovery = (key) => exportRecoveryRecord(key || recoveries[0].key);
+    window.__discardRecovery = (key) => discardRecoveryRecord(key || recoveries[0].key);
+    setUploadStatus({
+      type: 'error',
+      message: 'A locally saved project record was corrupted and could not be opened. The original data was preserved — contact support, or use __exportRecovery() / __discardRecovery() in the browser console to export or remove it.',
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Track unique visitor sessions (once per browser session, fire-and-forget).
   // Geo + user identity are resolved server-side by /api/track — no client
@@ -3346,6 +3376,12 @@ export default function App() {
       // Local store needs an explicit id; reuse the current one or mint a new
       // record. (saveProjectRecord updates in place when the id already exists.)
       const saved = saveProjectRecord({ id: projectId || crypto.randomUUID(), name: nameToSave, payload: project });
+      if (!saved.storage?.ok) {
+        // The write FAILED — never claim success. The in-memory project is
+        // untouched and stays dirty so the user can free space and retry.
+        setUploadStatus({ type: 'error', message: `Couldn't save to this browser: ${saved.storage?.message || 'storage write failed.'} Your map is still open — free up space (delete an old project) and save again.` });
+        return;
+      }
       setProjectId(saved.id);
       setProjectName(saved.name);
       setRecentProjects(listProjects());
@@ -3396,6 +3432,10 @@ export default function App() {
       }
     } else {
       const saved = saveProjectRecord({ id: crypto.randomUUID(), name: nameToSave, payload: project });
+      if (!saved.storage?.ok) {
+        setUploadStatus({ type: 'error', message: `Couldn't save to this browser: ${saved.storage?.message || 'storage write failed.'} Your map is still open — free up space and try again.` });
+        return;
+      }
       setProjectId(saved.id);
       setProjectName(saved.name);
       setRecentProjects(listProjects());
@@ -3537,6 +3577,10 @@ export default function App() {
       }
     } else {
       const saved = duplicateProjectRecord({ sourcePayload: project, name });
+      if (!saved.storage?.ok) {
+        setUploadStatus({ type: 'error', message: `Couldn't duplicate in this browser: ${saved.storage?.message || 'storage write failed.'}` });
+        return;
+      }
       setProjectId(saved.id);
       setProjectName(saved.name);
       setRecentProjects(listProjects());
