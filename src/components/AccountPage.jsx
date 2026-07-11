@@ -177,32 +177,55 @@ export default function AccountPage({ onOpenProject, onNewProject, onExit, onApp
   const [projects, setProjects] = useState([]);
   const [brandKits, setBrandKits] = useState([]);
   const [loading, setLoading] = useState(true);
+  // Visible, non-destructive error banner. Failures never wipe data that
+  // already loaded — a failed refresh keeps showing the last good list.
+  const [loadError, setLoadError] = useState(null);
 
   useEffect(() => {
     if (!user) return;
+    let cancelled = false;   // a sign-out / user switch mid-flight must not apply
     setLoading(true);
-    Promise.all([listCloudProjects(), listBrandKits()])
-      .then(([p, k]) => { setProjects(p); setBrandKits(k); })
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    setLoadError(null);
+    // Independent requests: one failing must not blank the other's data.
+    Promise.allSettled([listCloudProjects(), listBrandKits()])
+      .then(([p, k]) => {
+        if (cancelled) return;
+        if (p.status === 'fulfilled') setProjects(p.value);
+        if (k.status === 'fulfilled') setBrandKits(k.value);
+        const failures = [p.status === 'rejected' && 'projects', k.status === 'rejected' && 'brand kits'].filter(Boolean);
+        if (failures.length) setLoadError(`Couldn't load your ${failures.join(' and ')} — check your connection and reload to retry.`);
+      })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, [user]);
 
-  const refreshProjects = () => listCloudProjects().then(setProjects).catch(() => {});
-  const refreshBrandKits = () => listBrandKits().then(setBrandKits).catch(() => {});
+  const refreshProjects = () => listCloudProjects().then((p) => { setProjects(p); }).catch(() => {
+    setLoadError("Couldn't refresh your projects — the last loaded list is shown.");
+  });
+  const refreshBrandKits = () => listBrandKits().then((k) => { setBrandKits(k); }).catch(() => {
+    setLoadError("Couldn't refresh your brand kits — the last loaded list is shown.");
+  });
+  const surfaceActionError = (what) => (err) => {
+    setLoadError(`${what} failed: ${String(err?.message || err).slice(0, 140)}`);
+  };
 
   const duplicateProject = async (entry) => {
     try {
       const full = await loadCloudProject(entry.id);
       await saveCloudProject({ id: null, name: `${entry.name} Copy`, payload: full.payload });
       refreshProjects();
-    } catch { /* ignore — list simply won't gain the copy */ }
+    } catch (err) {
+      surfaceActionError('Duplicating the project')(err);
+    }
   };
 
   const duplicateKit = async (kit) => {
     try {
       await saveBrandKit({ name: `${kit.name} Copy`, config: kit.config || {} });
       refreshBrandKits();
-    } catch { /* ignore */ }
+    } catch (err) {
+      surfaceActionError('Duplicating the brand kit')(err);
+    }
   };
 
   return (
@@ -219,6 +242,12 @@ export default function AccountPage({ onOpenProject, onNewProject, onExit, onApp
       </header>
 
       <main className="acct-main">
+        {loadError && (
+          <div className="claims-error" role="alert" style={{ margin: '0 0 12px' }}>
+            ⚠ {loadError}
+            <button type="button" className="secondary-btn" style={{ marginLeft: 10 }} onClick={() => setLoadError(null)}>Dismiss</button>
+          </div>
+        )}
         <section className="acct-section">
           <div className="acct-section-header">
             <h2>Brand defaults</h2>
@@ -243,8 +272,8 @@ export default function AccountPage({ onOpenProject, onNewProject, onExit, onApp
                   key={entry.id}
                   entry={entry}
                   onOpen={onOpenProject}
-                  onRename={(id, name) => { renameCloudProject(id, name).then(refreshProjects).catch(() => {}); }}
-                  onDelete={(id) => { deleteCloudProject(id).then(refreshProjects).catch(() => {}); }}
+                  onRename={(id, name) => { renameCloudProject(id, name).then(refreshProjects).catch(surfaceActionError('Renaming the project')); }}
+                  onDelete={(id) => { deleteCloudProject(id).then(refreshProjects).catch(surfaceActionError('Deleting the project')); }}
                   onDuplicate={duplicateProject}
                 />
               ))}
@@ -268,9 +297,9 @@ export default function AccountPage({ onOpenProject, onNewProject, onExit, onApp
                   kit={kit}
                   onApply={(k) => onApplyBrandKit(k.config || {})}
                   onUse={(k) => onUseKit(k.config || {})}
-                  onSetDefault={(id) => { setDefaultBrandKit(id).then(refreshBrandKits).catch(() => {}); }}
-                  onRename={(id, name) => { updateBrandKit(id, { name }).then(refreshBrandKits).catch(() => {}); }}
-                  onDelete={(id) => { deleteBrandKit(id).then(refreshBrandKits).catch(() => {}); }}
+                  onSetDefault={(id) => { setDefaultBrandKit(id).then(refreshBrandKits).catch(surfaceActionError('Setting the default kit')); }}
+                  onRename={(id, name) => { updateBrandKit(id, { name }).then(refreshBrandKits).catch(surfaceActionError('Renaming the kit')); }}
+                  onDelete={(id) => { deleteBrandKit(id).then(refreshBrandKits).catch(surfaceActionError('Deleting the kit')); }}
                   onDuplicate={duplicateKit}
                 />
               ))}

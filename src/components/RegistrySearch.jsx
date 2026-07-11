@@ -99,12 +99,17 @@ function clusterFeatures(features, thresholdKm = 50) {
       const avgLat = ctrs.reduce((s, c) => s + c[1], 0) / ctrs.length;
       const totalHa = feats.reduce((s, f) => s + (Number(f.properties?.AREA_IN_HECTARES) || 0), 0);
       const expiries = feats.map(f => f.properties?.GOOD_TO_DATE).filter(Boolean).sort();
+      const today = new Date().toISOString().slice(0, 10);
+      const upcoming = expiries.filter((d) => d.slice(0, 10) >= today);
       return {
         features: feats,
         centroid: [avgLng, avgLat],
         totalHa,
-        earliestExpiry: expiries[0]?.slice(0, 10),
+        // Soonest still-valid expiry (the risk-relevant date), the horizon,
+        // and how many claims are already expired.
+        earliestExpiry: upcoming[0]?.slice(0, 10),
         latestExpiry: expiries[expiries.length - 1]?.slice(0, 10),
+        expiredCount: expiries.length - upcoming.length,
       };
     })
     .sort((a, b) => b.features.length - a.features.length);
@@ -227,7 +232,14 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
       // claims at all — check the other provinces in the background so a
       // wrong-province guess doesn't read as "search is broken".
       if (!error && results?.features?.length === 0 && pending.mode !== 'map') {
-        searchOtherProvinces(pending.query, pending.mode, pending.province, PROVINCES);
+        searchOtherProvinces(
+          pending.query,
+          pending.mode,
+          pending.province,
+          // Only fan out to provinces that actually support this search mode —
+          // e.g. Manitoba is number-only, so a company search shouldn't hit it.
+          PROVINCES.filter((p) => p.modes.includes(pending.mode)),
+        );
       }
       pendingSearchRef.current = null;
     }
@@ -551,7 +563,7 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
                           <span className="claims-group-label">{group.label}</span>
                           <span className="claims-group-meta">
                             {group.features.length} claim{group.features.length !== 1 ? 's' : ''} · {group.totalHa > 0 ? `${group.totalHa.toFixed(0)} ha` : ''}
-                            {group.earliestExpiry ? ` · exp. ${group.latestExpiry}` : ''}
+                            {group.earliestExpiry ? ` · exp. ${group.earliestExpiry}${group.latestExpiry && group.latestExpiry !== group.earliestExpiry ? `–${group.latestExpiry}` : ''}` : ''}{group.expiredCount > 0 ? ` · ${group.expiredCount} expired` : ''}
                           </span>
                         </div>
                         <button className="claims-group-expand" type="button" onClick={e => toggleExpand(gi, e)} title={isExp ? 'Collapse' : 'Expand claims'}>
