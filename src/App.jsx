@@ -52,6 +52,7 @@ import { getThemeTokens } from './utils/themeTokens';
 import { saveLead, getLastLeadEmail } from './utils/leadCapture';
 import { trackSearch, trackEvent, trackPageView, trackPing } from './utils/track';
 import { createSaveCoordinator, runGuardedSave } from './utils/saveCoordinator';
+import { runCloudMigration } from './utils/cloudMigration';
 import dissolveGeo from '@turf/dissolve';
 import {
   clearActiveProjectContext,
@@ -1104,31 +1105,25 @@ export default function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [screen]);
 
-  // One-time migration: when a user signs in, push any anonymous local maps to
-  // their cloud account so work made before signing up isn't stranded in this
-  // browser's localStorage (the old behaviour silently lost it on other devices).
+  // Local → cloud migration on sign-in, with per-project tracking and retries
+  // (utils/cloudMigration.js). Completion is recorded only when every eligible
+  // project uploaded; temporary failures retry on later sessions without
+  // duplicating already-migrated projects. Local copies are never deleted.
   useEffect(() => {
     if (!user || !supabase) return;
-    const flag = `em_migrated_${user.id}`;
-    try { if (localStorage.getItem(flag)) return; } catch { return; }
-    const locals = listProjects().slice(0, 10); // cap: pathological hoards stay local
-    const draft = loadDraft();
-    const jobs = [...locals.map((p) => ({ name: p.name, payload: p.payload }))];
-    // Unsaved in-progress draft with real content and no saved record of its own.
-    if (draft?.payload?.layers?.length && !draft.projectId) {
-      jobs.push({ name: draft.projectName || draft.payload?.layout?.title || 'Untitled map', payload: draft.payload });
-    }
-    try { localStorage.setItem(flag, '1'); } catch { /* still migrate this once */ }
-    if (!jobs.length) return;
     (async () => {
-      let migrated = 0;
-      for (const job of jobs) {
-        try { await saveCloudProject({ id: null, name: job.name, payload: job.payload }); migrated += 1; }
-        catch { /* leave that one local; don't block the rest */ }
-      }
-      if (migrated > 0) {
+      const result = await runCloudMigration({
+        userId: user.id,
+        localProjects: listProjects().slice(0, 10), // cap: pathological hoards stay local
+        draft: loadDraft(),
+        uploadProject: ({ name, payload }) => saveCloudProject({ id: null, name, payload }),
+      });
+      if (result.migrated > 0) {
         listCloudProjects().then(setRecentProjects).catch(() => {});
-        setUploadStatus({ type: 'success', message: `${migrated} map${migrated === 1 ? '' : 's'} from this browser ${migrated === 1 ? 'is' : 'are'} now saved to your account.` });
+        setUploadStatus({ type: 'success', message: `${result.migrated} map${result.migrated === 1 ? '' : 's'} from this browser ${result.migrated === 1 ? 'is' : 'are'} now saved to your account.` });
+      }
+      if (result.failed > 0) {
+        setUploadStatus({ type: 'info', message: `${result.failed} local map${result.failed === 1 ? '' : 's'} couldn't be uploaded to your account yet — they're still safe in this browser and will retry next time you sign in.` });
       }
     })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
