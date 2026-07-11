@@ -28,6 +28,7 @@
 
 import { fetchAllPages, fetchWfsAll, MAX_TOTAL_FEATURES, MAX_PAGES } from './_lib/paging.js';
 import { applyCors, handleMethods, queryTooLong, validateTerm, validateBbox, rateLimited, diagnosticsAllowed, publicErrorMessage } from './_lib/guard.js';
+import { esriGeometryToGeoJSON } from './_lib/esri.js';
 
 const ARCGIS_PROVINCES = {
   on: {
@@ -331,23 +332,14 @@ function isStringType(field) {
 
 // Convert ArcGIS esri JSON (f=json) to GeoJSON. Used as fallback when a server
 // returns 500 for f=geojson (ArcGIS Server < 10.3 doesn't support that format).
+// Ring classification (exterior vs hole vs separate polygon) lives in
+// _lib/esri.js — see that file for the algorithm.
 function esriToGeoJSON(esriResult) {
-  const features = (esriResult?.features || []).map((f) => {
-    const g = f.geometry;
-    let geometry = null;
-    if (g) {
-      if (g.rings) {
-        // Single ring → Polygon; multiple rings → Polygon with exterior + holes
-        // (GeoJSON Polygon allows multiple rings; winding order is lenient in renderers)
-        geometry = { type: 'Polygon', coordinates: g.rings };
-      } else if (g.paths) {
-        geometry = { type: 'MultiLineString', coordinates: g.paths };
-      } else if (g.x != null) {
-        geometry = { type: 'Point', coordinates: [g.x, g.y] };
-      }
-    }
-    return { type: 'Feature', geometry, properties: f.attributes || {} };
-  });
+  const features = (esriResult?.features || []).map((f) => ({
+    type: 'Feature',
+    geometry: esriGeometryToGeoJSON(f.geometry),
+    properties: f.attributes || {},
+  }));
   return { type: 'FeatureCollection', features };
 }
 
