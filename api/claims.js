@@ -27,6 +27,7 @@
 // AREA_IN_HECTARES, GOOD_TO_DATE, TITLE_TYPE_DESCRIPTION).
 
 import { fetchAllPages, fetchWfsAll, MAX_TOTAL_FEATURES, MAX_PAGES } from './_lib/paging.js';
+import { applyCors, handleMethods, queryTooLong, validateTerm, validateBbox, rateLimited, diagnosticsAllowed, publicErrorMessage } from './_lib/guard.js';
 
 const ARCGIS_PROVINCES = {
   on: {
@@ -608,26 +609,29 @@ async function searchBc(term, type, res) {
 }
 
 export default async function handler(req, res) {
+  applyCors(req, res);
+  res.setHeader('Cache-Control', 'no-store');
+  if (handleMethods(req, res, ['GET'])) return;
+  if (queryTooLong(req)) return res.status(414).json({ error: 'query string too long' });
+  if (rateLimited(req, { max: 60, windowMs: 60_000, bucket: 'claims' })) {
+    return res.status(429).json({ error: 'rate limited — slow down and try again' });
+  }
+
   const { q, type, schema, bbox } = req.query;
   const province = (req.query.province || 'bc').toLowerCase();
-
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Cache-Control', 'no-store');
 
   // BBOX spatial query: return all claims within an envelope (nearby claims overlay)
   // BC bbox is handled by the dedicated /api/bc-claims proxy; this handles SK/ON/YT.
   if (bbox && province !== 'bc') {
-    const parts = String(bbox).split(',').map(Number);
-    if (parts.length !== 4 || parts.some((n) => !Number.isFinite(n))) {
-      return res.status(400).json({ error: 'bbox must be minLng,minLat,maxLng,maxLat' });
-    }
-    const [minLng, minLat, maxLng, maxLat] = parts;
+    const checked = validateBbox(bbox);
+    if (!checked.ok) return res.status(400).json({ error: checked.error });
+    const [minLng, minLat, maxLng, maxLat] = checked.bbox;
     // Quebec is self-hosted; its spatial lookup runs in Postgres/PostGIS.
     if (province === 'qc') {
       try {
         return await searchQcBbox(minLng, minLat, maxLng, maxLat, res);
       } catch (e) {
-        return res.status(502).json({ error: e.message || 'Failed to reach the Quebec claims store' });
+        return res.status(502).json({ error: publicErrorMessage(e, 'Failed to reach the Quebec claims store.') });
       }
     }
     const cfg = ARCGIS_PROVINCES[province];
@@ -651,7 +655,7 @@ export default async function handler(req, res) {
         meta,
       });
     } catch (e) {
-      return res.status(502).json({ error: e.message || 'Failed to reach provincial registry' });
+      return res.status(502).json({ error: publicErrorMessage(e, 'Failed to reach the provincial registry.') });
     }
   }
 
@@ -659,6 +663,7 @@ export default async function handler(req, res) {
   // schemes and report the exact status / body snippet, so we can tell an IP/WAF
   // block (fast 403) from a timeout or a moved service. Read-only, no auth.
   if (schema === 'raw' && ARCGIS_PROVINCES[province]) {
+    if (!diagnosticsAllowed(req)) return res.status(404).json({ error: 'not found' });
     const cfg = ARCGIS_PROVINCES[province];
     const layerId = cfg.layerId != null ? cfg.layerId : 0;
     const baseUrl = `${cfg.service}/${layerId}?f=json`;
@@ -681,6 +686,7 @@ export default async function handler(req, res) {
 
   // Diagnostics: report resolved layer + fields for an ArcGIS province
   if (schema === '1' && ARCGIS_PROVINCES[province]) {
+    if (!diagnosticsAllowed(req)) return res.status(404).json({ error: 'not found' });
     try {
       const cfg = ARCGIS_PROVINCES[province];
       const candidates = await listCandidateLayers(cfg);
@@ -703,7 +709,7 @@ export default async function handler(req, res) {
         },
       });
     } catch (e) {
-      return res.status(502).json({ error: e.message });
+      return res.status(502).json({ error: publicErrorMessage(e, 'Diagnostics failed.') });
     }
   }
 
@@ -713,16 +719,16 @@ export default async function handler(req, res) {
   if (type === 'map' && province !== 'bc') {
     return res.status(400).json({ error: 'Map sheet search is only available for BC.' });
   }
-  if (!q || q.trim().length < 2) {
-    return res.status(400).json({ error: 'q param required (min 2 chars)' });
-  }
-  const term = q.trim();
+  const checkedTerm = validateTerm(q);
+  if (!checkedTerm.ok) return res.status(400).json({ error: checkedTerm.error });
+  const term = checkedTerm.term;
 
   try {
     if (province === 'bc') return await searchBc(term, type, res);
     if (province === 'qc') return await searchQc(term, type, res);
     return await searchArcgis(ARCGIS_PROVINCES[province], term, type, res);
   } catch (e) {
-    return res.status(502).json({ error: e.message || 'Failed to reach provincial registry' });
+    if (process.env.NODE_ENV !== 'production') console.warn('[claims]', e?.message);
+    return res.status(502).json({ error: publicErrorMessage(e, 'Failed to reach the provincial registry.') });
   }
 }

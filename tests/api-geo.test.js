@@ -14,9 +14,16 @@ function mockRes() {
 }
 
 describe('api/geo', () => {
+  it('rejects non-GET methods', () => {
+    const res = mockRes();
+    res.end = function () { this.ended = true; return this; };
+    handler({ method: 'POST', headers: {} }, res);
+    expect(res.statusCode).toBe(405);
+  });
+
   it('echoes Vercel geolocation headers as numbers/strings', () => {
     const res = mockRes();
-    handler({ headers: {
+    handler({ method: 'GET', headers: {
       'x-vercel-ip-latitude': '49.28',
       'x-vercel-ip-longitude': '-123.12',
       'x-vercel-ip-city': 'Vancouver',
@@ -30,7 +37,7 @@ describe('api/geo', () => {
 
   it('returns nulls for missing or malformed headers', () => {
     const res = mockRes();
-    handler({ headers: { 'x-vercel-ip-latitude': 'not-a-number' } }, res);
+    handler({ method: 'GET', headers: { 'x-vercel-ip-latitude': 'not-a-number' } }, res);
     expect(res.body).toEqual({ lat: null, lng: null, city: null, region: null, country: null });
   });
 });

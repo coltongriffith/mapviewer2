@@ -2,6 +2,14 @@
 // geolocation headers. No external service, no API key, no rate limit.
 // Used to plot live visitors on the admin world map.
 export default function handler(req, res) {
+  if (req.method === 'OPTIONS') {
+    res.setHeader('Allow', 'GET, OPTIONS');
+    return res.status(204).end();
+  }
+  if (req.method !== 'GET') {
+    res.setHeader('Allow', 'GET, OPTIONS');
+    return res.status(405).json({ error: 'method not allowed' });
+  }
   const h = req.headers || {};
   const num = (v) => {
     const n = parseFloat(v);
