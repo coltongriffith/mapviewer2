@@ -50,7 +50,7 @@ import regionsNA from './assets/regionsNA.json';
 import { fitProjectToTemplate } from './utils/frameMapForTemplate';
 import { getThemeTokens } from './utils/themeTokens';
 import { saveLead, getLastLeadEmail } from './utils/leadCapture';
-import { trackSearch, trackEvent, trackPageView, trackPing } from './utils/track';
+import { trackSearch, trackEvent, trackEventOnce, trackPageView, trackPing } from './utils/track';
 import { createSaveCoordinator, runGuardedSave } from './utils/saveCoordinator';
 import { runCloudMigration } from './utils/cloudMigration';
 import dissolveGeo from '@turf/dissolve';
@@ -1116,7 +1116,7 @@ export default function App() {
         userId: user.id,
         localProjects: listProjects().slice(0, 10), // cap: pathological hoards stay local
         draft: loadDraft(),
-        uploadProject: ({ name, payload }) => saveCloudProject({ id: null, name, payload }),
+        uploadProject: ({ name, payload }) => saveCloudProject({ id: null, name, payload, silent: true }),
       });
       if (result.migrated > 0) {
         listCloudProjects().then(setRecentProjects).catch(() => {});
@@ -2175,12 +2175,17 @@ export default function App() {
     return () => { pin.remove(); areaClaimsPinRef.current = null; };
   }, [areaClaimsPickCenter, mapReady]);
 
-  const addGeoJSONAsLayer = async (geojson, fileName) => {
+  // `source` distinguishes user-supplied data (upload/csv/registry — real
+  // value) from curated content (demo/template/deeplink). It feeds the
+  // layer_added analytics event and, via the activation taxonomy, decides
+  // whether adding a layer counts toward activation (only upload/csv do).
+  const addGeoJSONAsLayer = async (geojson, fileName, source = 'upload') => {
     const id = crypto.randomUUID();
     const baseName = fileName.replace(/\.(zip|geojson|json|kml|kmz|csv)$/i, '') || 'Layer';
     const kind = detectLayerKind(geojson);
     const role = inferRoleFromLayer({ name: baseName, type: kind });
     const displayName = cleanLayerName(baseName, role);
+    trackEvent('layer_added', { source, role, kind, feature_count: geojson?.features?.length ?? 0 });
 
     const baseLayer = {
       id,
@@ -2241,7 +2246,7 @@ export default function App() {
         if (result.needsMapping) {
           setCsvMappingData({ headers: result.headers, rows: result.rows, filename: file.name, guesses: result.guesses, hint: result.hint });
         } else {
-          await addGeoJSONAsLayer(result, file.name);
+          await addGeoJSONAsLayer(result, file.name, 'csv');
           if (result.meta?.skippedRows) {
             setUploadStatus({ type: 'info', message: `Imported ${result.features.length} points — ${result.meta.skippedRows} row${result.meta.skippedRows === 1 ? '' : 's'} skipped (missing or invalid coordinates).` });
           }
@@ -2317,7 +2322,7 @@ export default function App() {
   // map matches the style the gallery card advertises.
   const loadGalleryDemo = async (recipe) => {
     for (const layer of recipe.layers) {
-      await addGeoJSONAsLayer(layer.data, layer.name);
+      await addGeoJSONAsLayer(layer.data, layer.name, 'demo');
     }
     setProject((prev) => ({
       ...prev,
@@ -2355,9 +2360,9 @@ export default function App() {
   // landing page investor map: dissolved teal claims on satellite, drill
   // collars, gold dashed target areas, and intercept callouts.
   const loadAuroraDemo = async () => {
-    await addGeoJSONAsLayer(auroraClaims, 'Claims.geojson');
-    await addGeoJSONAsLayer(auroraDrillholes, 'Drill Collars.geojson');
-    await addGeoJSONAsLayer(auroraTargets, 'Target Areas.geojson');
+    await addGeoJSONAsLayer(auroraClaims, 'Claims.geojson', 'demo');
+    await addGeoJSONAsLayer(auroraDrillholes, 'Drill Collars.geojson', 'demo');
+    await addGeoJSONAsLayer(auroraTargets, 'Target Areas.geojson', 'demo');
     setProject((prev) => ({
       ...prev,
       layers: prev.layers.map((layer) => {
@@ -2473,7 +2478,7 @@ export default function App() {
       clearActiveProjectContext();
 
       if (geojson) {
-        await addGeoJSONAsLayer(geojson, `${label} Claims.geojson`);
+        await addGeoJSONAsLayer(geojson, `${label} Claims.geojson`, 'deeplink');
         updateLayout({
           title: `${label} — Mineral Claims`,
           exportSettings: { filename: `${ticker.toLowerCase()}-claims`, pixelRatio: 2 },
@@ -2841,6 +2846,7 @@ export default function App() {
   };
 
   const addCalloutAtAnchor = ({ text, subtext = '', type = 'leader', anchor, featureId, layerId, style = {}, boxWidth = 188, badgeValue, badgeColor }) => {
+    trackEventOnce('element_added', 'callout', { type: 'callout' });
     const calloutId = crypto.randomUUID();
     setProject((prev) => {
       const accent = prev.layout?.accentColor || null;
@@ -2969,6 +2975,7 @@ export default function App() {
   };
 
   const addMarkerAt = (latlng) => {
+    trackEventOnce('element_added', 'marker', { type: 'marker' });
     const id = crypto.randomUUID();
     setProject((prev) => ({
       ...prev,
@@ -2989,6 +2996,7 @@ export default function App() {
   };
 
   const addEllipseAt = (latlng) => {
+    trackEventOnce('element_added', 'ellipse', { type: 'ellipse' });
     const id = crypto.randomUUID();
     setProject((prev) => {
       const accent = prev.layout?.accentColor || null;
@@ -3013,6 +3021,7 @@ export default function App() {
   };
 
   const addRingAt = (latlng) => {
+    trackEventOnce('element_added', 'ring', { type: 'ring' });
     const id = crypto.randomUUID();
     let radiusKm = 10;
     if (leafletMapRef.current) {
@@ -3047,6 +3056,7 @@ export default function App() {
   };
 
   const addDistanceLine = (p1, p2) => {
+    trackEventOnce('element_added', 'distance', { type: 'distance' });
     const id = crypto.randomUUID();
     setProject(prev => ({
       ...prev,
@@ -3153,6 +3163,7 @@ export default function App() {
 
   const finishPolygon = () => {
     if (pendingPolygonPoints.length < 3) return;
+    trackEventOnce('element_added', 'polygon', { type: 'polygon' });
     const id = crypto.randomUUID();
     setProject((prev) => ({
       ...prev,
@@ -3273,6 +3284,7 @@ export default function App() {
         } catch { setShowPostExportSignup(true); }
       }
     } catch (err) {
+      trackEvent('export_failed', { format, message: String(err?.message ?? err).slice(0, 120) });
       setExportError(`Export failed: ${err.message}`);
       setUploadStatus({ type: 'error', message: `Export failed: ${err.message}` });
     } finally {
@@ -3477,6 +3489,7 @@ export default function App() {
     saveDraft({ payload, projectId: entry.id, projectName: entry.name });
     lastSavedSnapshotRef.current = JSON.stringify(payload);
     setIsDirty(false);
+    if (entry.id) trackEvent('project_opened', { project_id: entry.id, source: 'recent' });
     setUploadStatus({ type: 'success', message: `Opened project: ${entry.name}` });
   };
 
@@ -5610,7 +5623,7 @@ export default function App() {
             autoSearch={addClaimsAutoSearch}
             onClose={() => { setShowAddClaimsModal(false); setAddClaimsModalPath(null); setAddClaimsProvince(null); setAddClaimsQuery(''); setAddClaimsAutoSearch(false); }}
             onImport={(geojson, name) => {
-              addGeoJSONAsLayer(geojson, `${name}.geojson`);
+              addGeoJSONAsLayer(geojson, `${name}.geojson`, 'registry');
               setShowAddClaimsModal(false);
               setAddClaimsModalPath(null);
               if (screen !== 'editor') setScreen('editor');
@@ -5756,7 +5769,7 @@ export default function App() {
             onImport={async (geojson) => {
               setCsvMappingData(null);
               try {
-                await addGeoJSONAsLayer(geojson, csvMappingData.filename);
+                await addGeoJSONAsLayer(geojson, csvMappingData.filename, 'csv');
                 if (screen !== 'editor') setScreen('editor');
               } catch (err) {
                 setUploadStatus({ type: 'error', message: `Import failed: ${err.message}` });

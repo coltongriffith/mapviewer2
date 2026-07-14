@@ -54,6 +54,26 @@ export function trackEvent(event, props = {}, _userId = null) {
   post({ kind: 'event', event, props: props && Object.keys(props).length ? props : undefined });
 }
 
+// Per-tab-session dedupe: this module-scoped Set lives as long as the tab, so
+// it matches the sessionStorage-based session id. Used for events that would
+// otherwise fire at keystroke/autosave cadence (project_saved, element_added)
+// where the metric is "this happened at least once this session", not a count.
+const sentOnce = new Set();
+
+/**
+ * Fire an event at most once per (event, dedupeKey) per tab-session.
+ * @param {string} event      snake_case event name (must be on the server allowlist)
+ * @param {string} dedupeKey  stable key — e.g. a project id or an element type
+ * @param {object} [props]    context sent only on the first fire
+ */
+export function trackEventOnce(event, dedupeKey, props = {}) {
+  if (!event) return;
+  const k = `${event}:${dedupeKey}`;
+  if (sentOnce.has(k)) return;
+  sentOnce.add(k);
+  trackEvent(event, props);
+}
+
 /**
  * Track a claims search — the core product action. Powers the "Product" tab
  * in the admin dashboard (which provinces/registries people actually use).

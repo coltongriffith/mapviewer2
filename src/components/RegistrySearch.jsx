@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { useClaims } from '../hooks/useClaims';
-import { trackSearch } from '../utils/track';
+import { trackSearch, trackEvent } from '../utils/track';
 
 // ── Spatial clustering helpers ─────────────────────────────────────────────
 
@@ -395,12 +395,20 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
         name: groups.length > 1 ? `${holder} – ${g.label}` : `${holder} Claims`,
       };
     });
+    // Province + count only coexist here (lost before reaching App's layer add).
+    trackEvent('registry_claims_imported', {
+      province,
+      mode: 'groups',
+      groups: items.length,
+      features: items.reduce((n, it) => n + (it.geojson.features?.length || 0), 0),
+    });
     onImport(items);
   }
 
   function handleAddFlat() {
     const features = [...selectedFlat].sort((a, b) => a - b).map(i => allFeatures[i]);
     const holder = features[0]?.properties?.OWNER_NAME || query;
+    trackEvent('registry_claims_imported', { province, mode: 'flat', groups: 1, features: features.length });
     onImport([{
       geojson: { type: 'FeatureCollection', features },
       name: mode === 'number' ? `Claim ${query}` : `${holder} Claims`,
