@@ -4,6 +4,12 @@ import { feature } from 'topojson-client';
 import landTopo from 'world-atlas/land-110m.json';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
+import OverviewTab from './admin/OverviewTab';
+import UsersTab from './admin/UsersTab';
+import ProductTab from './admin/ProductTab';
+import {
+  useDashboardWindow, useOverview, useEngagement, useUsersOverview, useUserDetail,
+} from './admin/useDashboardData';
 
 // Real coastline geometry (110m resolution — plenty of detail for a 240px
 // globe widget) instead of the old hand-tuned continent-ellipse dot cloud.
@@ -606,11 +612,12 @@ const RPC_CALLS = [
 
 const TABS = [
   ['overview', 'Overview'],
-  ['growth', 'Acquisition'],
-  ['product', 'Product'],
-  ['revenue', 'Monetization'],
   ['users', 'Users'],
+  ['product', 'Product'],
+  ['growth', 'Acquisition'],
+  ['revenue', 'Monetization'],
 ];
+const LEGACY_TABS = new Set(['growth', 'revenue']);
 
 export default function AdminPage({ onExit }) {
   const { user, loading: authLoading, signIn, signOut } = useAuth();
@@ -650,8 +657,20 @@ export default function AdminPage({ onExit }) {
     return { p_start: start.toISOString(), p_end: end.toISOString() };
   }, [selectedDay, range]);
 
+  // Dashboard v2 data: complete-Pacific-day window; each RPC loads lazily only
+  // when its tab is active, so Overview's first paint is a single RPC.
+  const dashWindow = useDashboardWindow(range);
+  const overview = useOverview(dashWindow, isAdmin && tab === 'overview');
+  const engagement = useEngagement(dashWindow, isAdmin && tab === 'product');
+  const usersOverview = useUsersOverview(isAdmin && tab === 'users');
+  const userDetail = useUserDetail();
+
   useEffect(() => {
     if (!isAdmin || !supabase) return;
+    // The legacy Acquisition/Monetization tabs (and their KPI row) are the only
+    // consumers of this 15-call batch now; the v2 tabs use their own single
+    // RPCs. Gating it here keeps the Overview first paint to one RPC.
+    if (!LEGACY_TABS.has(tab)) return;
     setDataLoading(true);
     setDataError('');
     Promise.allSettled(
@@ -674,7 +693,7 @@ export default function AdminPage({ onExit }) {
       setDataError(firstError);
       setDataLoading(false);
     });
-  }, [isAdmin, queryWindow]);
+  }, [isAdmin, queryWindow, tab]);
 
   // Per-day drill-down: headline counts + the list of sessions active that day.
   useEffect(() => {
@@ -861,7 +880,10 @@ export default function AdminPage({ onExit }) {
       <main className="adm-body">
         {dataError && <div className="adm-error-bar">⚠ {dataError}</div>}
 
-        {/* KPI row — flow metrics with 30d-over-30d trend */}
+        {/* Legacy KPI row — flow metrics with 30d-over-30d trend. Shown only on
+            the legacy Acquisition/Monetization tabs; the new Overview tab has
+            its own product-analytics StatTiles. */}
+        {LEGACY_TABS.has(tab) && (
         <div className="adm-kpi-row">
           <KPI label="Live now" value={liveVisitors != null ? String(liveVisitors) : null} detail="active · last 5 min" accent="#ef4444" />
           <KPI label="Visitors" value={dataLoading ? null : fmtNum(visitors30d)} trend={trendMap.visitors} detail="last 30 days" accent="#3b82f6" />
@@ -871,6 +893,7 @@ export default function AdminPage({ onExit }) {
           <KPI label="Paid intent" value={dataLoading ? null : fmtNum(cur('premium_exports') ?? 0)} trend={trendMap.premium_exports} detail="no-watermark exports" accent="#10b981" />
           <KPI label="Email leads" value={dataLoading ? null : fmtNum(cur('leads') ?? (d.leads || []).length)} trend={trendMap.leads} detail="last 30 days" accent="#f59e0b" />
         </div>
+        )}
 
         {/* Tab nav */}
         <div className="adm-tabs">
@@ -900,36 +923,38 @@ export default function AdminPage({ onExit }) {
           />
         )}
 
-        {/* ───────── OVERVIEW ───────── */}
+        {/* ───────── OVERVIEW (v2) ───────── */}
         {tab === 'overview' && (
+          <OverviewTab
+            data={overview.data}
+            loading={overview.loading}
+            range={range}
+            onRange={setRange}
+            onPickDay={setSelectedDay}
+            onOpenSession={openSession}
+            onOpenUser={(id) => { userDetail.load(id); setTab('users'); }}
+          />
+        )}
+
+        {/* ───────── USERS (v2) ───────── */}
+        {tab === 'users' && (
+          <UsersTab
+            data={usersOverview.data}
+            loading={usersOverview.loading}
+            detail={userDetail}
+            onLoadDetail={userDetail.load}
+            onOpenSession={openSession}
+          />
+        )}
+
+        {/* ───────── PRODUCT (v2) ───────── */}
+        {tab === 'product' && (
+          <ProductTab data={engagement.data} loading={engagement.loading} range={range} />
+        )}
+
+        {/* ───────── ACQUISITION ───────── */}
+        {tab === 'growth' && (
           <>
-            <div className="adm-grid-2-1">
-              <Card
-                title="Daily sessions"
-                eyebrow={`Traffic · last ${range} days`}
-                action={<RangeToggle value={range} onChange={setRange} options={[7, 30, 90]} />}
-              >
-                <div className="adm-traffic-summary">
-                  <div className="adm-traffic-stat"><strong>{fmtNum(rangeTotals.sessions)}</strong><span>sessions</span></div>
-                  <div className="adm-traffic-stat"><strong>{fmtNum(rangeTotals.loggedIn)}</strong><span>logged in</span></div>
-                  <div className="adm-traffic-stat"><strong>{fmtNum(rangeTotals.avg)}</strong><span>avg / day</span></div>
-                </div>
-                <AreaChart data={rangeDaily} />
-              </Card>
-              <Card title="Conversion funnel" eyebrow="Last 30 days">
-                <Funnel steps={funnelSteps} />
-              </Card>
-              {hasProductEvents && (
-                <Card title="Activation funnel" eyebrow="Sessions, last 30 days">
-                  <Funnel steps={activationSteps} />
-                </Card>
-              )}
-              {hasProductEvents && (pf.share_created || 0) > 0 && (
-                <Card title="Sharing loop" eyebrow="Sessions, last 30 days">
-                  <Funnel steps={shareLoop} />
-                </Card>
-              )}
-            </div>
             <Card
               title="Live visitors"
               eyebrow="Active in the last 30 minutes"
@@ -938,23 +963,6 @@ export default function AdminPage({ onExit }) {
             >
               <WorldMap locations={liveLocations} />
             </Card>
-            <div className="adm-grid-3">
-              <Card title="Top sources" eyebrow="Where visitors come from">
-                <HBars rows={referrerBars} emptyMsg="No referrer data yet." />
-              </Card>
-              <Card title="Devices">
-                <Donut segments={deviceSegments} centerLabel="sessions" />
-              </Card>
-              <Card title="Searches by province" eyebrow="Product demand">
-                <HBars rows={searchByProvince.slice(0, 8)} color="#0ea5e9" emptyMsg="No searches tracked yet." />
-              </Card>
-            </div>
-          </>
-        )}
-
-        {/* ───────── ACQUISITION ───────── */}
-        {tab === 'growth' && (
-          <>
             <Card title="Campaigns" eyebrow="UTM-tagged traffic · last 90 days" count={d.campaignStats?.length} full>
               {d.campaignStats && d.campaignStats.length > 0 ? (
                 <>
@@ -1003,56 +1011,6 @@ export default function AdminPage({ onExit }) {
                   <Pagination {...leadsPag} />
                 </>
               ) : <Empty message="No leads yet — they appear when users enter their email in the export modal." />}
-            </Card>
-          </>
-        )}
-
-        {/* ───────── PRODUCT ───────── */}
-        {tab === 'product' && (
-          <>
-            <div className="adm-grid-2">
-              <Card title="Searches by province" eyebrow="Registry + nearby demand">
-                <HBars rows={searchByProvince} color="#0ea5e9" emptyMsg="No searches tracked yet." />
-              </Card>
-              <Card title="Export formats" eyebrow="All time">
-                <Donut segments={formatSegments} centerLabel="exports" />
-              </Card>
-            </div>
-            <Card title="Search breakdown" eyebrow="Province × type · last 90 days" count={d.searchStats?.length} full>
-              {d.searchStats && d.searchStats.length > 0 ? (
-                <>
-                  <table className="adm-table">
-                    <thead><tr><th>Province</th><th>Type</th><th>Searches</th><th>Avg results</th><th>Last</th></tr></thead>
-                    <tbody>
-                      {searchPag.slice.map((r, i) => (
-                        <tr key={i}>
-                          <td><span className="adm-tag adm-tag-blue">{r.province}</span></td>
-                          <td className="adm-muted">{r.kind}</td>
-                          <td><strong>{fmtNum(r.searches)}</strong></td>
-                          <td>{r.avg_results ?? '—'}</td>
-                          <td className="adm-muted" style={{ whiteSpace: 'nowrap' }}>{fmt(r.last_search)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  <Pagination {...searchPag} />
-                </>
-              ) : <Empty message="No searches tracked yet — they populate as users search the claims registry or run a nearby-claims lookup." />}
-            </Card>
-            <Card title="Most-viewed shared maps" eyebrow="Virality" count={d.topSharedMaps?.length} full>
-              {d.topSharedMaps && d.topSharedMaps.length > 0 ? (
-                <table className="adm-table">
-                  <thead><tr><th>Map</th><th>Views</th></tr></thead>
-                  <tbody>
-                    {d.topSharedMaps.slice(0, 12).map((r) => (
-                      <tr key={r.id}>
-                        <td className="adm-mono adm-truncate"><a href={`/?share=${r.id}`} target="_blank" rel="noopener noreferrer">{r.id?.slice(0, 8)}…</a></td>
-                        <td><strong>{fmtNum(r.view_count)}</strong></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              ) : <Empty message="No shared maps viewed yet." />}
             </Card>
           </>
         )}
@@ -1141,60 +1099,6 @@ export default function AdminPage({ onExit }) {
         )}
 
         {/* ───────── USERS ───────── */}
-        {tab === 'users' && (
-          <Card title="Registered users" count={d.users?.length} full>
-            {d.users && d.users.length > 0 ? (
-              <>
-                <table className="adm-table">
-                  <thead><tr><th>Email</th><th>Joined</th><th>Last login</th><th>Projects</th><th></th></tr></thead>
-                  <tbody>
-                    {usersPag.slice.map((u) => (
-                      <React.Fragment key={u.id}>
-                        <tr className={editingUser?.id === u.id ? 'adm-row-active' : ''}>
-                          <td>
-                            <span className="adm-mono">{u.email}</span>
-                            {u.email === ADMIN_EMAIL && <span className="adm-tag adm-tag-blue" style={{ marginLeft: 8 }}>you</span>}
-                          </td>
-                          <td className="adm-muted">{fmt(u.created_at)}</td>
-                          <td className="adm-muted">{fmt(u.last_sign_in_at)}</td>
-                          <td>{u.project_count ?? 0}</td>
-                          <td>
-                            <button className="adm-btn adm-btn-ghost adm-btn-sm" onClick={() => setEditingUser(editingUser?.id === u.id ? null : u)}>
-                              {editingUser?.id === u.id ? 'Close' : 'Details'}
-                            </button>
-                          </td>
-                        </tr>
-                        {editingUser?.id === u.id && (
-                          <tr className="adm-row-active">
-                            <td colSpan={5} style={{ padding: '12px 16px 16px' }}>
-                              <div className="adm-user-detail">
-                                <div className="adm-detail-grid">
-                                  <span className="adm-detail-label">User ID</span>
-                                  <code className="adm-detail-val">{u.id}</code>
-                                  <span className="adm-detail-label">Joined</span>
-                                  <span className="adm-detail-val">{fmtTime(u.created_at)}</span>
-                                  <span className="adm-detail-label">Last login</span>
-                                  <span className="adm-detail-val">{fmtTime(u.last_sign_in_at)}</span>
-                                  <span className="adm-detail-label">Projects</span>
-                                  <span className="adm-detail-val">{u.project_count ?? 0}</span>
-                                </div>
-                                <p className="adm-detail-note">
-                                  To reset password or disable account →{' '}
-                                  <a href="https://supabase.com/dashboard" target="_blank" rel="noopener noreferrer">Supabase Dashboard → Authentication → Users</a>
-                                </p>
-                              </div>
-                            </td>
-                          </tr>
-                        )}
-                      </React.Fragment>
-                    ))}
-                  </tbody>
-                </table>
-                <Pagination {...usersPag} />
-              </>
-            ) : <Empty message="No users yet." />}
-          </Card>
-        )}
       </main>
       {openSessionId && (
         <SessionTimelineModal
