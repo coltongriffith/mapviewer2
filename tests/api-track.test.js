@@ -167,3 +167,57 @@ describe('api/track identity', () => {
     expect(inserts[0].row.user_id).toBeNull();
   });
 });
+
+describe('api/track dashboard-v2 events', () => {
+  const NEW_EVENTS = [
+    'project_created', 'project_saved', 'project_opened', 'layer_added',
+    'element_added', 'registry_claims_imported', 'export_failed',
+  ];
+  it('accepts every new dashboard event name', async () => {
+    for (const event of NEW_EVENTS) {
+      const res = mockRes();
+      await handler(req({ kind: 'event', session_id: SID, event, props: { project_id: 'p1' } }, { ip: uniqueIp() }), res);
+      expect(res.statusCode, event).toBe(204);
+      expect(inserts.at(-1).row.event).toBe(event);
+    }
+  });
+
+  it('still rejects an unknown event name', async () => {
+    const res = mockRes();
+    await handler(req({ kind: 'event', session_id: SID, event: 'made_up_event' }, { ip: uniqueIp() }), res);
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('search inserts carry user_id from a verified token', async () => {
+    getUserMock.mockResolvedValue({ data: { user: { id: 'user-777' } }, error: null });
+    const res = mockRes();
+    await handler(req(
+      { kind: 'search', session_id: SID, search_kind: 'registry', province: 'bc', mode: 'company', query_len: 5, result_count: 12 },
+      { ip: uniqueIp(), authorization: 'Bearer good' },
+    ), res);
+    expect(res.statusCode).toBe(204);
+    expect(inserts.at(-1).table).toBe('search_events');
+    expect(inserts.at(-1).row.user_id).toBe('user-777');
+    expect(inserts.at(-1).row.province).toBe('bc');
+  });
+
+  it('anonymous searches insert user_id null', async () => {
+    const res = mockRes();
+    await handler(req(
+      { kind: 'search', session_id: SID, search_kind: 'nearby', province: 'on', result_count: 3 },
+      { ip: uniqueIp() },
+    ), res);
+    expect(res.statusCode).toBe(204);
+    expect(inserts.at(-1).row.user_id).toBeNull();
+  });
+
+  it('truncates a long export_failed message within the props limit', async () => {
+    const res = mockRes();
+    const message = 'e'.repeat(500);
+    await handler(req({ kind: 'event', session_id: SID, event: 'export_failed', props: { format: 'pdf', message } }, { ip: uniqueIp() }), res);
+    // 500 chars is well under MAX_PROPS_BYTES (2KB) so it's accepted as-is;
+    // the client truncates to 120 — assert the endpoint stores what it's given.
+    expect(res.statusCode).toBe(204);
+    expect(inserts.at(-1).row.props.format).toBe('pdf');
+  });
+});

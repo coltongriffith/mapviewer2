@@ -33,6 +33,15 @@ const EVENT_ALLOWLIST = new Set([
   'mobile_editor_banner_shown',
   'onboarding_step',
   'onboarding_dismissed',
+  // Dashboard v2 product events (see supabase migration 20260713000001 +
+  // src/components/admin/metrics.js for the taxonomy these feed).
+  'project_created',
+  'project_saved',
+  'project_opened',
+  'layer_added',
+  'element_added',
+  'registry_claims_imported',
+  'export_failed',
 ]);
 
 const MAX_BODY_BYTES = 8 * 1024;
@@ -168,8 +177,13 @@ export default async function handler(req, res) {
     }
 
     if (kind === 'search') {
+      // Attribute the search to the signed-in user when a valid token is
+      // present (search_events.user_id, added in migration 20260713000001) so
+      // the dashboard can show which users search. Null for anonymous.
+      const userId = await resolveUserId(req, sb);
       const { error } = await sb.from('search_events').insert({
         session_id: sessionId,
+        user_id: userId,
         kind: str(body.search_kind, 32) || 'registry',
         province: str(body.province, 32),
         mode: str(body.mode, 32),
