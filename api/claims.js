@@ -26,6 +26,10 @@
 // normalized to the BC property names the UI renders (OWNER_NAME, TAG_NUMBER,
 // AREA_IN_HECTARES, GOOD_TO_DATE, TITLE_TYPE_DESCRIPTION).
 
+import { fetchAllPages, fetchWfsAll, MAX_TOTAL_FEATURES, MAX_PAGES } from './_lib/paging.js';
+import { applyCors, handleMethods, queryTooLong, validateTerm, validateBbox, rateLimited, diagnosticsAllowed, publicErrorMessage } from './_lib/guard.js';
+import { esriGeometryToGeoJSON } from './_lib/esri.js';
+
 const ARCGIS_PROVINCES = {
   on: {
     service: 'https://ws.lioservices.lrc.gov.on.ca/arcgis2/rest/services/MLAS/mlas_op/MapServer',
@@ -76,6 +80,52 @@ const ARCGIS_PROVINCES = {
     numberFields: ['GRANT_NUMBER', 'GRANT_NUM', 'CLAIM_NUMBER', 'CLAIM_NUM'],
   },
 };
+
+// ── United States — federal mining claims (BLM MLRS) ────────────────────────
+// One national ArcGIS FeatureServer, scoped per state with a WHERE filter.
+// Source: BLM Mineral & Land Records System "Mining Claims Not Closed" HUB
+// service (pre-filtered upstream to not-closed cases, so closed claims can
+// never surface as active here). Endpoint overridable via env for schema
+// migrations on BLM's side.
+//
+// Field names are resolved at runtime against the live layer metadata from
+// the candidate lists below (the same self-configuring mechanism used for
+// ON/SK/MB/NL/YT — see resolveLayerAndFields). Verify post-deploy with the
+// gated diagnostics: /api/claims?schema=1&province=us-nv (x-admin-secret).
+//
+// No claimant/owner search in v1: the BLM spatial service does not publish
+// claimant names (those live in separate MLRS reports keyed by serial
+// number — a future enrichment). ownerFields stays empty so a company
+// search degrades to the standard "not available here" message.
+//
+// Alaska is deliberately not listed: Alaska has extensive STATE-managed
+// mining claims that this federal dataset does not cover, and listing it
+// would misrepresent coverage. Any other state is one line to add.
+const BLM_MLRS_SERVICE = process.env.BLM_MLRS_SERVICE_URL
+  || 'https://gis.blm.gov/nlsdb/rest/services/HUB/BLM_Natl_MLRS_Mining_Claims_Not_Closed/FeatureServer';
+
+const US_STATE_CODES = ['NV', 'AZ', 'UT', 'ID', 'MT', 'WY', 'CO', 'NM', 'CA', 'OR', 'WA'];
+
+const US_JURISDICTIONS = Object.fromEntries(US_STATE_CODES.map((code) => [
+  `us-${code.toLowerCase()}`,
+  {
+    service: BLM_MLRS_SERVICE,
+    layerId: 0,
+    provider: 'blm-mlrs',
+    usState: code,
+    // Candidate field names, resolved against live metadata at runtime.
+    stateFields: ['STATE_GEO', 'ADMIN_ST', 'ADM_ST', 'STATE'],
+    nameFields: ['CSE_NAME', 'CLAIM_NAME', 'MC_NAME', 'CASE_NAME', 'NAME'],
+    numberFields: ['CSE_NR', 'MLRS_CSE_NR', 'CASE_NR', 'SER_NR', 'SERIAL_NR'],
+    legacyNumberFields: ['LGCY_CSE_NR', 'LEGACY_CASE_NR', 'LGCY_SER_NR'],
+    ownerFields: [], // no claimant data in the spatial service (see above)
+  },
+]));
+
+// Unified lookup: Canadian ArcGIS provinces + US BLM state jurisdictions.
+function getArcgisJurisdiction(province) {
+  return ARCGIS_PROVINCES[province] || US_JURISDICTIONS[province] || null;
+}
 
 const FETCH_HEADERS = {
   Accept: 'application/json',
@@ -165,7 +215,101 @@ async function resolveFields(layerUrl) {
   const fields = (meta?.fields || []).map((f) => ({ name: f.name, type: f.type }));
   if (!fields.length) throw new Error('Layer has no queryable fields');
   metaCache.set(cacheKey, fields);
+  // Stash the paging-relevant layer capabilities under a sibling key so the
+  // pagination code can respect the server's own limits.
+  metaCache.set(`layermeta:${layerUrl}`, {
+    maxRecordCount: Number(meta?.maxRecordCount) || 1000,
+    supportsPagination: Boolean(meta?.advancedQueryCapabilities?.supportsPagination),
+    objectIdField: meta?.objectIdField || (meta?.fields || []).find((f) => f.type === 'esriFieldTypeOID')?.name || 'OBJECTID',
+  });
   return fields;
+}
+
+// Layer paging capabilities; safe defaults when metadata was unreadable.
+async function resolveLayerMeta(layerUrl) {
+  const key = `layermeta:${layerUrl}`;
+  if (!metaCache.has(key)) {
+    try { await resolveFields(layerUrl); } catch { /* url-only fallback layers */ }
+  }
+  return metaCache.get(key) || { maxRecordCount: 1000, supportsPagination: false, objectIdField: 'OBJECTID' };
+}
+
+// Fetch EVERY page of an ArcGIS query (attribute or spatial), honoring the
+// server's maxRecordCount and pagination support, deduplicating by object id,
+// and reporting honest completeness metadata. Strategy ladder:
+//  1. supportsPagination → resultOffset/resultRecordCount loop
+//  2. otherwise         → returnIdsOnly (authoritative total) + objectIds batches
+//  3. ids query failed  → single legacy capped query, marked truncated if full
+async function arcgisQueryAll(layerUrl, baseParams) {
+  const layerMeta = await resolveLayerMeta(layerUrl);
+  const pageSize = Math.min(Math.max(layerMeta.maxRecordCount, 1), 1000);
+  const idField = layerMeta.objectIdField;
+
+  if (layerMeta.supportsPagination) {
+    return fetchAllPages({
+      provider: 'arcgis',
+      pageSize,
+      idField,
+      fetchPage: async (offset, count) => {
+        const url = `${layerUrl}/query?${new URLSearchParams({
+          ...baseParams,
+          resultOffset: String(offset),
+          resultRecordCount: String(count),
+          f: 'geojson',
+        })}`;
+        const data = await fetchQueryGeoJSON(url);
+        if (!Array.isArray(data.features)) throw new Error('Unexpected response from provincial map service');
+        return { features: data.features };
+      },
+    });
+  }
+
+  // No pagination support: object-ids two-phase fetch.
+  try {
+    const idsUrl = `${layerUrl}/query?${new URLSearchParams({ ...baseParams, returnIdsOnly: 'true', f: 'json' })}`;
+    const idResp = await fetchJson(idsUrl);
+    const ids = Array.isArray(idResp?.objectIds) ? idResp.objectIds : null;
+    if (!ids) throw new Error('no objectIds');
+    const oidField = idResp.objectIdFieldName || idField;
+    const capped = ids.slice(0, MAX_TOTAL_FEATURES);
+    const features = [];
+    let pagesFetched = 0;
+    let failedLate = false;
+    const CHUNK = 100;
+    for (let i = 0; i < capped.length && pagesFetched < MAX_PAGES * 4; i += CHUNK) {
+      const chunk = capped.slice(i, i + CHUNK);
+      const url = `${layerUrl}/query?${new URLSearchParams({
+        objectIds: chunk.join(','),
+        outFields: '*',
+        returnGeometry: 'true',
+        outSR: '4326',
+        f: 'geojson',
+      })}`;
+      try {
+        const data = await fetchQueryGeoJSON(url);
+        pagesFetched += 1;
+        for (const f of data.features || []) features.push(f);
+      } catch (e) {
+        if (pagesFetched === 0) throw e;
+        failedLate = true;
+        break;
+      }
+    }
+    const truncated = failedLate || ids.length > capped.length || features.length < capped.length;
+    return {
+      features,
+      meta: { totalKnown: ids.length, returned: features.length, truncated, pagesFetched: pagesFetched + 1, provider: 'arcgis' },
+    };
+  } catch {
+    // Ids phase unavailable — single legacy query, honestly flagged when full.
+    const url = `${layerUrl}/query?${new URLSearchParams({ ...baseParams, resultRecordCount: '2000', f: 'geojson' })}`;
+    const data = await fetchQueryGeoJSON(url);
+    if (!Array.isArray(data.features)) throw new Error('Unexpected response from provincial map service');
+    return {
+      features: data.features,
+      meta: { totalKnown: null, returned: data.features.length, truncated: data.features.length >= 2000, pagesFetched: 1, provider: 'arcgis' },
+    };
+  }
 }
 
 async function listCandidateLayers(cfg) {
@@ -184,8 +328,11 @@ async function listCandidateLayers(cfg) {
 // has the owner field is never cached for a number search, and vice versa.
 // Cached separately per search type for the same reason.
 async function resolveLayerAndFields(cfg, type) {
-  const wanted = type === 'number' ? cfg.numberFields : cfg.ownerFields;
-  const cacheKey = `resolved:${cfg.service}:${cfg.layerMatch || cfg.layerId}:${type === 'number' ? 'number' : 'owner'}`;
+  const wanted = type === 'number' ? cfg.numberFields
+    : type === 'name' ? (cfg.nameFields || [])
+    : cfg.ownerFields;
+  const variant = type === 'number' ? 'number' : type === 'name' ? 'name' : 'owner';
+  const cacheKey = `resolved:${cfg.service}:${cfg.layerMatch || cfg.layerId}:${variant}`;
   if (metaCache.has(cacheKey)) return metaCache.get(cacheKey);
   const candidates = await listCandidateLayers(cfg);
   let fallback = null;       // layer that resolved fields but didn't have the wanted field
@@ -234,23 +381,14 @@ function isStringType(field) {
 
 // Convert ArcGIS esri JSON (f=json) to GeoJSON. Used as fallback when a server
 // returns 500 for f=geojson (ArcGIS Server < 10.3 doesn't support that format).
+// Ring classification (exterior vs hole vs separate polygon) lives in
+// _lib/esri.js — see that file for the algorithm.
 function esriToGeoJSON(esriResult) {
-  const features = (esriResult?.features || []).map((f) => {
-    const g = f.geometry;
-    let geometry = null;
-    if (g) {
-      if (g.rings) {
-        // Single ring → Polygon; multiple rings → Polygon with exterior + holes
-        // (GeoJSON Polygon allows multiple rings; winding order is lenient in renderers)
-        geometry = { type: 'Polygon', coordinates: g.rings };
-      } else if (g.paths) {
-        geometry = { type: 'MultiLineString', coordinates: g.paths };
-      } else if (g.x != null) {
-        geometry = { type: 'Point', coordinates: [g.x, g.y] };
-      }
-    }
-    return { type: 'Feature', geometry, properties: f.attributes || {} };
-  });
+  const features = (esriResult?.features || []).map((f) => ({
+    type: 'Feature',
+    geometry: esriGeometryToGeoJSON(f.geometry),
+    properties: f.attributes || {},
+  }));
   return { type: 'FeatureCollection', features };
 }
 
@@ -277,13 +415,66 @@ async function fetchQueryGeoJSON(queryUrl) {
 }
 
 // Map raw ArcGIS properties onto the BC-style keys the UI renders.
-function normalizeProps(props) {
+// Map official BLM case-type text onto the app's normalized claim types.
+// Based on MLRS case-type wording (LODE CLAIM / PLACER CLAIM / MILL SITE /
+// TUNNEL SITE); anything else is preserved verbatim and classified 'other'.
+function normalizeUsClaimType(text) {
+  if (!text) return 'unknown';
+  const t = String(text).toLowerCase();
+  if (t.includes('lode')) return 'lode';
+  if (t.includes('placer')) return 'placer';
+  if (t.includes('mill')) return 'mill_site';
+  if (t.includes('tunnel')) return 'tunnel_site';
+  return 'other';
+}
+
+const ACRES_PER_HECTARE = 2.47105;
+
+function normalizeProps(props, cfg = null) {
   if (!props) return {};
   const keys = Object.keys(props);
   const findKey = (re, requireString = false) =>
     keys.find((k) => re.test(k) && (!requireString || typeof props[k] === 'string'));
 
   const out = { ...props };
+
+  // ── BLM MLRS (US federal claims): explicit mapping FIRST, so US records
+  // are never forced through Canadian-convention inference. Original BLM
+  // values stay on the object untouched (spread above) for traceability.
+  if (cfg?.provider === 'blm-mlrs') {
+    const pick = (cands) => {
+      for (const c of cands || []) {
+        const k = keys.find((key) => key.toUpperCase() === c.toUpperCase());
+        if (k && props[k] != null && props[k] !== '') return props[k];
+      }
+      return null;
+    };
+    const serial = pick(cfg.numberFields);
+    const legacy = pick(cfg.legacyNumberFields);
+    const name = pick(cfg.nameFields);
+    const typeText = pick(['CSE_TYPE_TXT', 'CASETYPE_TXT', 'CSE_TYPE', 'CASE_TYPE', 'CASE_TYPE_TXT']);
+    const disp = pick(['CSE_DISP_TXT', 'DISP_TXT', 'CASE_DISP', 'DISPOSITION']);
+    const acres = pick(['RCRD_ACRS', 'ACRES', 'RECORD_ACRES', 'RCRD_ACRES']);
+    const stateVal = pick(cfg.stateFields);
+
+    if (serial != null) out.TAG_NUMBER = String(serial);
+    if (legacy != null) out.LEGACY_NR = String(legacy);
+    if (name != null) out.CLAIM_NAME = String(name);
+    if (typeText != null) out.TITLE_TYPE_DESCRIPTION = String(typeText);
+    out.CLAIM_TYPE = normalizeUsClaimType(typeText);
+    if (disp != null) out.STATUS = String(disp);
+    if (acres != null && Number.isFinite(Number(acres))) {
+      out.AREA_IN_HECTARES = Number(acres) / ACRES_PER_HECTARE;
+    }
+    out.US_STATE = stateVal != null ? String(stateVal) : cfg.usState;
+    out.SOURCE_SYSTEM = 'BLM MLRS';
+    // PLSS-derived boundaries: generalized representations, not legal surveys.
+    out.GEOM_GENERALIZED = true;
+    // Deliberately NO GOOD_TO_DATE inference for US records — BLM assessment/
+    // anniversary semantics differ from Canadian expiry and mislabeling a
+    // date as "expires" would be worse than omitting it.
+    return out;
+  }
   if (out.OWNER_NAME == null) {
     // Second pass covers licence-based registries (NL licensee, MB claimant)
     // without changing how existing provinces resolve — those hit the first match.
@@ -329,59 +520,94 @@ function normalizeProps(props) {
   return out;
 }
 
+// Resolve the per-jurisdiction scoping clause (US: state filter). Returns
+// null when the jurisdiction needs no scoping (Canadian provinces), or
+// throws a user-facing error when scoping is required but unresolvable —
+// returning nationwide results labeled as one state would be worse.
+function resolveBaseWhere(cfg, fields) {
+  if (!cfg.usState) return null;
+  const stateField = pickField(cfg.stateFields, fields);
+  if (!stateField || !/^[A-Za-z0-9_.]+$/.test(stateField.name)) {
+    throw new Error('The BLM registry schema changed and state filtering is unavailable. Try again later.');
+  }
+  return `UPPER(${stateField.name}) = '${escapeSql(cfg.usState).toUpperCase()}'`;
+}
+
 async function searchArcgis(cfg, term, type, res) {
   const { layerUrl, fields } = await resolveLayerAndFields(cfg, type);
 
-  const candidates = type === 'number' ? cfg.numberFields : cfg.ownerFields;
+  const candidates = type === 'number' ? cfg.numberFields
+    : type === 'name' ? (cfg.nameFields || [])
+    : cfg.ownerFields;
   const field = pickField(candidates, fields);
   if (!field) {
     if (!fields.length) {
       // resolveLayerAndFields couldn't read any field metadata at all — the
       // upstream server is unreachable/blocking us, not actually missing the field.
       return res.status(502).json({
-        error: 'The provincial registry is temporarily unavailable. Please try again shortly.',
+        error: 'The registry is temporarily unavailable. Please try again shortly.',
       });
     }
     return res.status(400).json({
       error: type === 'number'
-        ? 'Claim number search is not available for this province yet.'
-        : 'Company/holder search is not available for this province — try searching by claim number.',
+        ? 'Claim number search is not available here yet.'
+        : type === 'name'
+          ? 'Claim-name search is not available here yet — try searching by serial number.'
+          : 'Company/holder search is not available here — try searching by claim number.',
     });
   }
 
   // Defense in depth: field names come from upstream service metadata —
   // never interpolate one that isn't a plain identifier (SK uses dots, e.g. SHAPE.AREA)
   if (!/^[A-Za-z0-9_.]+$/.test(field.name)) {
-    return res.status(502).json({ error: 'Provincial service returned an unexpected field name.' });
+    return res.status(502).json({ error: 'Registry service returned an unexpected field name.' });
   }
 
+  // US serial numbers tolerate formatting differences: "NV 105331298" and
+  // "nv-105331298" both match NV105331298.
+  const effectiveTerm = (cfg.provider === 'blm-mlrs' && type === 'number')
+    ? term.replace(/[\s-]/g, '')
+    : term;
+
   let where;
-  const safe = escapeSql(term);
+  const safe = escapeSql(effectiveTerm);
   if (isStringType(field)) {
     where = `UPPER(${field.name}) LIKE UPPER('%${safe}%')`;
-  } else if (/^\d+$/.test(term)) {
-    where = `${field.name} = ${term}`;
+    // MLRS serial search also matches the legacy case serial when that
+    // field exists on the layer (older claims are often known by it).
+    if (cfg.provider === 'blm-mlrs' && type === 'number') {
+      const legacyField = pickField(cfg.legacyNumberFields, fields);
+      if (legacyField && /^[A-Za-z0-9_.]+$/.test(legacyField.name)) {
+        where = `(${where} OR UPPER(${legacyField.name}) LIKE UPPER('%${safe}%'))`;
+      }
+    }
+  } else if (/^\d+$/.test(effectiveTerm)) {
+    where = `${field.name} = ${effectiveTerm}`;
   } else {
     return res.status(400).json({ error: `${field.name} is numeric — enter digits only.` });
   }
 
-  const queryUrl = `${layerUrl}/query?${new URLSearchParams({
+  let baseWhere;
+  try {
+    baseWhere = resolveBaseWhere(cfg, fields);
+  } catch (e) {
+    return res.status(502).json({ error: e.message });
+  }
+  if (baseWhere) where = `(${where}) AND ${baseWhere}`;
+
+  const { features, meta } = await arcgisQueryAll(layerUrl, {
     where,
     outFields: '*',
     returnGeometry: 'true',
     outSR: '4326',
-    resultRecordCount: '500',
-    f: 'geojson',
-  })}`;
+  });
+  if (cfg.provider) meta.provider = cfg.provider;
 
-  const data = await fetchQueryGeoJSON(queryUrl);
-  if (!Array.isArray(data.features)) throw new Error('Unexpected response from provincial map service');
-
-  data.features = data.features.map((f) => ({
-    ...f,
-    properties: normalizeProps(f.properties || {}),
-  }));
-  return res.status(200).json(data);
+  return res.status(200).json({
+    type: 'FeatureCollection',
+    features: features.map((f) => ({ ...f, properties: normalizeProps(f.properties || {}, cfg) })),
+    meta,
+  });
 }
 
 // Quebec has no live queryable registry, so its claims are loaded weekly into a
@@ -433,22 +659,29 @@ async function searchQc(term, type, res) {
   const filter = type === 'number'
     ? `tag_number=ilike.${encodeURIComponent(cleaned)}`
     : `owner_name=ilike.${encodeURIComponent(`*${cleaned}*`)}`;
-  const url = `${base}/rest/v1/qc_claims?` +
-    `select=tag_number,owner_name,status,good_to_date,area_hectares,title_type,geometry` +
-    `&${filter}&limit=500`;
 
-  const r = await fetch(url, {
-    headers: { apikey: key, Authorization: `Bearer ${key}`, Accept: 'application/json' },
-    signal: AbortSignal.timeout(20000),
+  const { features, meta } = await fetchAllPages({
+    provider: 'qc-store',
+    pageSize: 1000,
+    idField: 'TAG_NUMBER',
+    fetchPage: async (offset, count) => {
+      const url = `${base}/rest/v1/qc_claims?` +
+        `select=tag_number,owner_name,status,good_to_date,area_hectares,title_type,geometry` +
+        `&${filter}&limit=${count}&offset=${offset}`;
+      const r = await fetch(url, {
+        headers: { apikey: key, Authorization: `Bearer ${key}`, Accept: 'application/json' },
+        signal: AbortSignal.timeout(20000),
+      });
+      if (!r.ok) {
+        const body = await r.text().catch(() => '');
+        throw new Error(`Quebec claims store ${r.status}: ${body.slice(0, 300)}`);
+      }
+      const rows = await r.json();
+      // Keys already match what the UI renders; no normalizeProps pass needed.
+      return { features: rows.map(qcRowToFeature) };
+    },
   });
-  if (!r.ok) {
-    const body = await r.text().catch(() => '');
-    throw new Error(`Quebec claims store ${r.status}: ${body.slice(0, 300)}`);
-  }
-  const rows = await r.json();
-  // Keys already match what the UI renders; no normalizeProps pass needed.
-  const features = rows.map(qcRowToFeature);
-  return res.status(200).json({ type: 'FeatureCollection', features });
+  return res.status(200).json({ type: 'FeatureCollection', features, meta });
 }
 
 // Quebec nearby-radius (bbox) query. The store has no live ArcGIS service, so
@@ -493,50 +726,64 @@ async function searchBc(term, type, res) {
   else if (type === 'map') cqlFilter = `MAP_UNIT_NO ILIKE '${safeTerm}%'`;
   else cqlFilter = `OWNER_NAME ILIKE '%${safeTerm}%'`;
 
-  const wfsUrl = [
+  const buildUrl = (startIndex, count) => [
     'https://openmaps.gov.bc.ca/geo/pub/wfs',
     '?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature',
     '&outputFormat=application/json',
     '&typeNames=pub:WHSE_MINERAL_TENURE.MTA_ACQUIRED_TENURE_SVW',
     '&SRSNAME=EPSG:4326',
     `&CQL_FILTER=${encodeURIComponent(cqlFilter)}`,
-    '&count=500',
+    '&sortBy=TENURE_NUMBER_ID',   // WFS paging requires a stable sort
+    `&count=${count}`,
+    `&startIndex=${startIndex}`,
   ].join('');
 
-  const data = await fetchJson(wfsUrl);
-  return res.status(200).json(data);
+  const { features, meta } = await fetchWfsAll({ fetchJson, buildUrl, pageSize: 1000, provider: 'bc-wfs' });
+  return res.status(200).json({ type: 'FeatureCollection', features, meta });
 }
 
 export default async function handler(req, res) {
+  applyCors(req, res);
+  res.setHeader('Cache-Control', 'no-store');
+  if (handleMethods(req, res, ['GET'])) return;
+  if (queryTooLong(req)) return res.status(414).json({ error: 'query string too long' });
+  if (rateLimited(req, { max: 60, windowMs: 60_000, bucket: 'claims' })) {
+    return res.status(429).json({ error: 'rate limited — slow down and try again' });
+  }
+
   const { q, type, schema, bbox } = req.query;
   const province = (req.query.province || 'bc').toLowerCase();
-
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Cache-Control', 'no-store');
 
   // BBOX spatial query: return all claims within an envelope (nearby claims overlay)
   // BC bbox is handled by the dedicated /api/bc-claims proxy; this handles SK/ON/YT.
   if (bbox && province !== 'bc') {
-    const parts = String(bbox).split(',').map(Number);
-    if (parts.length !== 4 || parts.some((n) => !Number.isFinite(n))) {
-      return res.status(400).json({ error: 'bbox must be minLng,minLat,maxLng,maxLat' });
-    }
-    const [minLng, minLat, maxLng, maxLat] = parts;
+    const checked = validateBbox(bbox);
+    if (!checked.ok) return res.status(400).json({ error: checked.error });
+    const [minLng, minLat, maxLng, maxLat] = checked.bbox;
     // Quebec is self-hosted; its spatial lookup runs in Postgres/PostGIS.
     if (province === 'qc') {
       try {
         return await searchQcBbox(minLng, minLat, maxLng, maxLat, res);
       } catch (e) {
-        return res.status(502).json({ error: e.message || 'Failed to reach the Quebec claims store' });
+        return res.status(502).json({ error: publicErrorMessage(e, 'Failed to reach the Quebec claims store.') });
       }
     }
-    const cfg = ARCGIS_PROVINCES[province];
+    const cfg = getArcgisJurisdiction(province);
     if (!cfg) {
       return res.status(400).json({ error: `Province '${province}' is not supported.` });
     }
     try {
-      const { layerUrl } = await resolveLayerAndFields(cfg, 'company');
-      const queryUrl = `${layerUrl}/query?${new URLSearchParams({
+      // 'number' resolves for every jurisdiction (US has no owner fields);
+      // the bbox path only needs a valid layer URL + field list.
+      const { layerUrl, fields } = await resolveLayerAndFields(cfg, cfg.ownerFields?.length ? 'company' : 'number');
+      let baseWhere = null;
+      try {
+        baseWhere = resolveBaseWhere(cfg, fields);
+      } catch (e) {
+        return res.status(502).json({ error: e.message });
+      }
+      const { features, meta } = await arcgisQueryAll(layerUrl, {
+        ...(baseWhere ? { where: baseWhere } : {}),
         geometry: JSON.stringify({ xmin: minLng, ymin: minLat, xmax: maxLng, ymax: maxLat, spatialReference: { wkid: 4326 } }),
         geometryType: 'esriGeometryEnvelope',
         spatialRel: 'esriSpatialRelIntersects',
@@ -544,26 +791,23 @@ export default async function handler(req, res) {
         outFields: '*',
         returnGeometry: 'true',
         outSR: '4326',
-        resultRecordCount: '2000',
-        f: 'geojson',
-      })}`;
-      const data = await fetchQueryGeoJSON(queryUrl);
-      if (!Array.isArray(data.features)) throw new Error('Unexpected response from provincial map service');
-      data.features = data.features.map((f) => ({
-        ...f,
-        properties: normalizeProps(f.properties || {}),
-      }));
-      return res.status(200).json(data);
+      });
+      return res.status(200).json({
+        type: 'FeatureCollection',
+        features: features.map((f) => ({ ...f, properties: normalizeProps(f.properties || {}, cfg) })),
+        meta,
+      });
     } catch (e) {
-      return res.status(502).json({ error: e.message || 'Failed to reach provincial registry' });
+      return res.status(502).json({ error: publicErrorMessage(e, 'Failed to reach the provincial registry.') });
     }
   }
 
   // Raw-fetch diagnostics: hit the layer metadata endpoint directly on both URL
   // schemes and report the exact status / body snippet, so we can tell an IP/WAF
   // block (fast 403) from a timeout or a moved service. Read-only, no auth.
-  if (schema === 'raw' && ARCGIS_PROVINCES[province]) {
-    const cfg = ARCGIS_PROVINCES[province];
+  if (schema === 'raw' && getArcgisJurisdiction(province)) {
+    if (!diagnosticsAllowed(req)) return res.status(404).json({ error: 'not found' });
+    const cfg = getArcgisJurisdiction(province);
     const layerId = cfg.layerId != null ? cfg.layerId : 0;
     const baseUrl = `${cfg.service}/${layerId}?f=json`;
     const urls = [baseUrl];
@@ -584,49 +828,66 @@ export default async function handler(req, res) {
   }
 
   // Diagnostics: report resolved layer + fields for an ArcGIS province
-  if (schema === '1' && ARCGIS_PROVINCES[province]) {
+  if (schema === '1' && getArcgisJurisdiction(province)) {
+    if (!diagnosticsAllowed(req)) return res.status(404).json({ error: 'not found' });
     try {
-      const cfg = ARCGIS_PROVINCES[province];
+      const cfg = getArcgisJurisdiction(province);
       const candidates = await listCandidateLayers(cfg);
       // Owner and number fields may resolve to different layers
-      const ownerResolved = await resolveLayerAndFields(cfg, 'company');
+      const ownerResolved = cfg.ownerFields?.length ? await resolveLayerAndFields(cfg, 'company') : null;
       const numberResolved = await resolveLayerAndFields(cfg, 'number');
+      const nameResolved = cfg.nameFields?.length ? await resolveLayerAndFields(cfg, 'name') : null;
       return res.status(200).json({
         candidateLayers: candidates.map((l) => `${l.id}: ${l.name}`),
-        company: {
-          layerUrl: ownerResolved.layerUrl,
-          layerName: ownerResolved.layerName,
-          fields: ownerResolved.fields.map((f) => `${f.name} (${f.type})`),
-          ownerField: pickField(cfg.ownerFields, ownerResolved.fields)?.name || null,
-        },
+        ...(ownerResolved ? {
+          company: {
+            layerUrl: ownerResolved.layerUrl,
+            layerName: ownerResolved.layerName,
+            fields: ownerResolved.fields.map((f) => `${f.name} (${f.type})`),
+            ownerField: pickField(cfg.ownerFields, ownerResolved.fields)?.name || null,
+          },
+        } : {}),
         number: {
           layerUrl: numberResolved.layerUrl,
           layerName: numberResolved.layerName,
           fields: numberResolved.fields.map((f) => `${f.name} (${f.type})`),
           numberField: pickField(cfg.numberFields, numberResolved.fields)?.name || null,
+          ...(cfg.legacyNumberFields ? { legacyField: pickField(cfg.legacyNumberFields, numberResolved.fields)?.name || null } : {}),
         },
+        ...(nameResolved ? {
+          name: {
+            layerUrl: nameResolved.layerUrl,
+            nameField: pickField(cfg.nameFields, nameResolved.fields)?.name || null,
+          },
+        } : {}),
+        ...(cfg.stateFields ? {
+          stateField: pickField(cfg.stateFields, numberResolved.fields)?.name || null,
+        } : {}),
       });
     } catch (e) {
-      return res.status(502).json({ error: e.message });
+      return res.status(502).json({ error: publicErrorMessage(e, 'Diagnostics failed.') });
     }
   }
 
-  if (province !== 'bc' && province !== 'qc' && !ARCGIS_PROVINCES[province]) {
-    return res.status(400).json({ error: `Province '${province}' is not supported yet.` });
+  if (province !== 'bc' && province !== 'qc' && !getArcgisJurisdiction(province)) {
+    return res.status(400).json({ error: `Jurisdiction '${province}' is not supported yet.` });
   }
   if (type === 'map' && province !== 'bc') {
     return res.status(400).json({ error: 'Map sheet search is only available for BC.' });
   }
-  if (!q || q.trim().length < 2) {
-    return res.status(400).json({ error: 'q param required (min 2 chars)' });
+  if (type === 'name' && !getArcgisJurisdiction(province)?.nameFields?.length) {
+    return res.status(400).json({ error: 'Claim-name search is not available for this jurisdiction.' });
   }
-  const term = q.trim();
+  const checkedTerm = validateTerm(q);
+  if (!checkedTerm.ok) return res.status(400).json({ error: checkedTerm.error });
+  const term = checkedTerm.term;
 
   try {
     if (province === 'bc') return await searchBc(term, type, res);
     if (province === 'qc') return await searchQc(term, type, res);
-    return await searchArcgis(ARCGIS_PROVINCES[province], term, type, res);
+    return await searchArcgis(getArcgisJurisdiction(province), term, type, res);
   } catch (e) {
-    return res.status(502).json({ error: e.message || 'Failed to reach provincial registry' });
+    if (process.env.NODE_ENV !== 'production') console.warn('[claims]', e?.message);
+    return res.status(502).json({ error: publicErrorMessage(e, 'Failed to reach the provincial registry.') });
   }
 }

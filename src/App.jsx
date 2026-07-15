@@ -50,7 +50,10 @@ import regionsNA from './assets/regionsNA.json';
 import { fitProjectToTemplate } from './utils/frameMapForTemplate';
 import { getThemeTokens } from './utils/themeTokens';
 import { saveLead, getLastLeadEmail } from './utils/leadCapture';
-import { trackSearch, trackEvent } from './utils/track';
+import { trackSearch, trackEvent, trackEventOnce, trackPageView, trackPing } from './utils/track';
+import { createSaveCoordinator, runGuardedSave } from './utils/saveCoordinator';
+import { US_CLAIMS_ENABLED, US_STATES, US_GROUP_LABEL, US_GEOMETRY_DISCLAIMER, isUsJurisdiction } from './utils/jurisdictions';
+import { runCloudMigration } from './utils/cloudMigration';
 import dissolveGeo from '@turf/dissolve';
 import {
   clearActiveProjectContext,
@@ -67,6 +70,9 @@ import {
   updateProjectThumbnailRecord,
   getAccountSettingsLocal,
   saveAccountSettingsLocal,
+  getRecoveryInfo,
+  exportRecoveryRecord,
+  discardRecoveryRecord,
 } from './utils/projectStorage';
 import {
   deleteCloudProject,
@@ -663,10 +669,19 @@ function dissolveOwnerFeatures(feats, ownerKey) {
 // the province code the claims registry uses. Only the 7 registry-backed
 // provinces resolve; anything else returns undefined so callers fall back to
 // the upload path rather than defaulting to BC.
+const US_REGION_SLUGS = {
+  nevada: 'us-nv', arizona: 'us-az', utah: 'us-ut', idaho: 'us-id',
+  montana: 'us-mt', wyoming: 'us-wy', colorado: 'us-co', 'new-mexico': 'us-nm',
+  california: 'us-ca', oregon: 'us-or', washington: 'us-wa',
+};
+
 const REGION_TO_PROVINCE = {
   'british-columbia': 'bc', ontario: 'on', quebec: 'qc', saskatchewan: 'sk',
   manitoba: 'mb', 'newfoundland-labrador': 'nl', newfoundland: 'nl', yukon: 'yt',
   bc: 'bc', on: 'on', qc: 'qc', sk: 'sk', mb: 'mb', nl: 'nl', yt: 'yt',
+  // US federal (BLM) states — only routable when the feature is enabled;
+  // with the flag off these slugs fall through to the upload path.
+  ...(US_CLAIMS_ENABLED ? US_REGION_SLUGS : {}),
 };
 
 export default function App() {
@@ -770,8 +785,19 @@ export default function App() {
   const [areaClaimsPicking, setAreaClaimsPicking] = useState(false);
   const areaClaimsLayerRef = useRef(null);
   const areaClaimsPinRef = useRef(null);
+  // Generation counter for nearby-claims searches: a stale response (older
+  // search or one from before a reset) may not overwrite newer results.
+  const areaClaimsReqRef = useRef(0);
   const bootstrappedRef = useRef(false);
+  const draftWriteFailedRef = useRef(false);
   const lastSavedSnapshotRef = useRef(JSON.stringify(project));
+  // Always-fresh serialization of the current project, updated by the local
+  // autosave effect. Save completions compare against this to decide whether
+  // dirty state may be cleared (see utils/saveCoordinator.js).
+  const lastSerializedRef = useRef(lastSavedSnapshotRef.current);
+  // Guards async save completions against workspace switches: every project
+  // open/new/fork bumps the epoch, detaching in-flight saves from the UI.
+  const saveCoordRef = useRef(createSaveCoordinator());
   // Local state for title/subtitle so every keystroke doesn't write to project (stops flicker)
   const [localTitle, setLocalTitle] = useState(project.layout.title || '');
   const [localSubtitle, setLocalSubtitle] = useState(project.layout.subtitle || '');
@@ -912,9 +938,20 @@ export default function App() {
       return;
     }
     const serialized = JSON.stringify(project);
+    lastSerializedRef.current = serialized;
     setIsDirty(serialized !== lastSavedSnapshotRef.current);
     const timer = window.setTimeout(() => {
-      saveDraft({ payload: project, projectId, projectName });
+      const wrote = saveDraft({ payload: project, projectId, projectName });
+      if (!wrote.ok) {
+        // Don't flash "Saved" on a failed write. Warn once per failure streak
+        // (quota failures also raise the storage banner via its event).
+        if (!draftWriteFailedRef.current) {
+          draftWriteFailedRef.current = true;
+          setUploadStatus({ type: 'error', message: `Couldn't auto-save to this browser (${wrote.message}). Your map is still open — export it or free up space.` });
+        }
+        return;
+      }
+      draftWriteFailedRef.current = false;
       setSaveFlash(true);
       clearTimeout(saveFlashTimerRef.current);
       saveFlashTimerRef.current = setTimeout(() => setSaveFlash(false), 2000);
@@ -930,29 +967,47 @@ export default function App() {
     if (!user || !projectId || !isDirty || !supabase) return;
     const t = window.setTimeout(async () => {
       const snapshot = JSON.stringify(project);
-      try {
-        await saveCloudProject({ id: projectId, name: projectName, payload: project });
-        // Match the manual-save bookkeeping so isDirty clears and the badge
-        // reflects a clean cloud state.
-        lastSavedSnapshotRef.current = snapshot;
-        setIsDirty(false);
+      // Ticket + snapshot captured at fire time. After the await, the
+      // completion may only touch state if the workspace hasn't switched;
+      // dirty may only clear if the project still matches what was saved.
+      // Edits made during the save keep isDirty true, which re-arms this
+      // effect for another pass — nothing newer is ever masked or cancelled.
+      const ticket = saveCoordRef.current.begin();
+      const flashSaved = () => {
         setSaveFlash(true);
         clearTimeout(saveFlashTimerRef.current);
         saveFlashTimerRef.current = setTimeout(() => setSaveFlash(false), 2000);
-      } catch (err) {
-        if (err.message.includes('not found')) {
+      };
+      const outcome = await runGuardedSave({
+        ticket,
+        snapshot,
+        doSave: () => saveCloudProject({ id: projectId, name: projectName, payload: project }),
+        getCurrentSerialized: () => lastSerializedRef.current,
+        onSaved: () => { lastSavedSnapshotRef.current = snapshot; setIsDirty(false); flashSaved(); },
+        // Saved, but the user kept editing: advance the baseline to what the
+        // cloud now holds and stay dirty so the newer edits save next pass.
+        onMismatch: () => { lastSavedSnapshotRef.current = snapshot; },
+        onError: () => {},
+      });
+      if (outcome.status === 'error') {
+        const err = outcome.err;
+        if (String(err?.message || '').includes('not found')) {
           // projectId exists locally but not in cloud (draft migration case):
           // create it as a new cloud project instead of failing silently.
-          try {
-            const newId = await saveCloudProject({ id: null, name: projectName, payload: project });
-            setProjectId(newId);
-            lastSavedSnapshotRef.current = snapshot;
-            setIsDirty(false);
-            setSaveFlash(true);
-            clearTimeout(saveFlashTimerRef.current);
-            saveFlashTimerRef.current = setTimeout(() => setSaveFlash(false), 2000);
-          } catch (createErr) {
-            setUploadStatus({ type: 'error', message: `Couldn't save to the cloud (${createErr.message}). Your work is safe in this browser — click Save to retry.` });
+          const created = await runGuardedSave({
+            ticket,
+            snapshot,
+            doSave: () => saveCloudProject({ id: null, name: projectName, payload: project }),
+            getCurrentSerialized: () => lastSerializedRef.current,
+            onSaved: () => { lastSavedSnapshotRef.current = snapshot; setIsDirty(false); flashSaved(); },
+            onMismatch: () => { lastSavedSnapshotRef.current = snapshot; },
+            onError: (createErr) => {
+              setUploadStatus({ type: 'error', message: `Couldn't save to the cloud (${createErr.message}). Your work is safe in this browser — click Save to retry.` });
+            },
+          });
+          // Re-point the workspace at the new row only if we're still in it.
+          if ((created.status === 'saved' || created.status === 'saved-but-dirty') && ticket.stillCurrent()) {
+            setProjectId(created.result);
           }
         } else {
           setUploadStatus({ type: 'error', message: `Couldn't auto-save to the cloud (${err.message}). Your work is safe in this browser — click Save to retry.` });
@@ -1060,31 +1115,25 @@ export default function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [screen]);
 
-  // One-time migration: when a user signs in, push any anonymous local maps to
-  // their cloud account so work made before signing up isn't stranded in this
-  // browser's localStorage (the old behaviour silently lost it on other devices).
+  // Local → cloud migration on sign-in, with per-project tracking and retries
+  // (utils/cloudMigration.js). Completion is recorded only when every eligible
+  // project uploaded; temporary failures retry on later sessions without
+  // duplicating already-migrated projects. Local copies are never deleted.
   useEffect(() => {
     if (!user || !supabase) return;
-    const flag = `em_migrated_${user.id}`;
-    try { if (localStorage.getItem(flag)) return; } catch { return; }
-    const locals = listProjects().slice(0, 10); // cap: pathological hoards stay local
-    const draft = loadDraft();
-    const jobs = [...locals.map((p) => ({ name: p.name, payload: p.payload }))];
-    // Unsaved in-progress draft with real content and no saved record of its own.
-    if (draft?.payload?.layers?.length && !draft.projectId) {
-      jobs.push({ name: draft.projectName || draft.payload?.layout?.title || 'Untitled map', payload: draft.payload });
-    }
-    try { localStorage.setItem(flag, '1'); } catch { /* still migrate this once */ }
-    if (!jobs.length) return;
     (async () => {
-      let migrated = 0;
-      for (const job of jobs) {
-        try { await saveCloudProject({ id: null, name: job.name, payload: job.payload }); migrated += 1; }
-        catch { /* leave that one local; don't block the rest */ }
-      }
-      if (migrated > 0) {
+      const result = await runCloudMigration({
+        userId: user.id,
+        localProjects: listProjects().slice(0, 10), // cap: pathological hoards stay local
+        draft: loadDraft(),
+        uploadProject: ({ name, payload }) => saveCloudProject({ id: null, name, payload, silent: true }),
+      });
+      if (result.migrated > 0) {
         listCloudProjects().then(setRecentProjects).catch(() => {});
-        setUploadStatus({ type: 'success', message: `${migrated} map${migrated === 1 ? '' : 's'} from this browser ${migrated === 1 ? 'is' : 'are'} now saved to your account.` });
+        setUploadStatus({ type: 'success', message: `${result.migrated} map${result.migrated === 1 ? '' : 's'} from this browser ${result.migrated === 1 ? 'is' : 'are'} now saved to your account.` });
+      }
+      if (result.failed > 0) {
+        setUploadStatus({ type: 'info', message: `${result.failed} local map${result.failed === 1 ? '' : 's'} couldn't be uploaded to your account yet — they're still safe in this browser and will retry next time you sign in.` });
       }
     })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1112,81 +1161,53 @@ export default function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project.layers.length]);
 
-  // Track unique visitor sessions (once per browser session, fire-and-forget)
+  // Corrupted-record recovery: if a stored project blob failed to decompress,
+  // the original bytes were preserved under a .recovery key. Surface a
+  // non-blocking warning and expose manual export/removal helpers — the
+  // corrupted copy is never deleted automatically.
   useEffect(() => {
-    if (!supabase || sessionStorage.getItem('em_visited')) return;
+    const recoveries = getRecoveryInfo();
+    if (!recoveries.length) return;
+    window.__exportRecovery = (key) => exportRecoveryRecord(key || recoveries[0].key);
+    window.__discardRecovery = (key) => discardRecoveryRecord(key || recoveries[0].key);
+    setUploadStatus({
+      type: 'error',
+      message: 'A locally saved project record was corrupted and could not be opened. The original data was preserved — contact support, or use __exportRecovery() / __discardRecovery() in the browser console to export or remove it.',
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Track unique visitor sessions (once per browser session, fire-and-forget).
+  // Geo + user identity are resolved server-side by /api/track — no client
+  // geo round-trip and no direct table insert.
+  useEffect(() => {
+    if (sessionStorage.getItem('em_visited')) return;
     sessionStorage.setItem('em_visited', '1');
     const params = new URLSearchParams(window.location.search);
     const ref = document.referrer || null;
     const refDomain = ref ? (() => { try { return new URL(ref).hostname; } catch { return ref; } })() : null;
-    // Resolve approximate (city-level) location from edge geo headers, then log
-    // the session. Geo is best-effort — never block or fail the page view on it.
-    const logView = (geo) => {
-      const base = {
-        user_id: user?.id ?? null,
-        session_id: getSessionId(),
-        path: window.location.pathname,
-        referrer: refDomain,
-        utm_source: params.get('utm_source') || null,
-        utm_medium: params.get('utm_medium') || null,
-        utm_campaign: params.get('utm_campaign') || null,
-        device: /Mobi|Android/i.test(navigator.userAgent) ? 'mobile' : 'desktop',
-      };
-      const withGeo = { ...base, lat: geo?.lat ?? null, lng: geo?.lng ?? null, city: geo?.city ?? null, country: geo?.country ?? null };
-      supabase.from('page_views').insert(withGeo).then(({ error }) => {
-        // If the geo columns aren't in the schema yet, fall back to the base row.
-        if (error) {
-          supabase.from('page_views').insert(base).then(({ error: fallbackError }) => {
-            if (fallbackError) console.warn('[page_views] insert failed:', fallbackError.message);
-          });
-        }
-      }).catch((err) => console.warn('[page_views] insert failed:', err.message));
-    };
-    let geoController;
-    try {
-      geoController = new AbortController();
-      setTimeout(() => geoController.abort(), 4000);
-    } catch { geoController = null; }
-    fetch('/api/geo', geoController ? { signal: geoController.signal } : undefined)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((geo) => logView(geo))
-      .catch(() => logView(null));
-  }, [user]);
+    trackPageView({
+      path: window.location.pathname,
+      referrer: refDomain,
+      utmSource: params.get('utm_source'),
+      utmMedium: params.get('utm_medium'),
+      utmCampaign: params.get('utm_campaign'),
+      device: /Mobi|Android/i.test(navigator.userAgent) ? 'mobile' : 'desktop',
+    });
+  }, []);
 
-  // Live-presence heartbeat: upsert this tab's location every ~25s while the
-  // page is visible, so the admin "live visitors" map reflects who's actually
-  // on the site right now (a single once-per-session page_view goes stale
-  // within minutes and can't represent "live").
+  // Live-presence heartbeat: ping /api/track every ~25s while the page is
+  // visible, so the admin "live visitors" map reflects who's actually on the
+  // site right now. The server derives location from edge headers and writes
+  // live_pings with the service role — the table is no longer readable or
+  // writable from the browser.
   useEffect(() => {
-    if (!supabase) return;
-    const sessionId = getSessionId();
-    let geo = null;
-    let geoFetched = false;
-    let timer = null;
     const ping = () => {
       if (document.visibilityState !== 'visible') return;
-      supabase.from('live_pings').upsert(
-        { session_id: sessionId, lat: geo?.lat ?? null, lng: geo?.lng ?? null, city: geo?.city ?? null, region: geo?.region ?? null, country: geo?.country ?? null, created_at: new Date().toISOString() },
-        { onConflict: 'session_id' }
-      ).then(({ error }) => { if (error) console.warn('[live-ping] upsert failed:', error.message); });
+      trackPing();
     };
-    const fetchGeo = () => {
-      // AbortSignal.timeout() is unsupported on iOS Safari < 16.4 and would
-      // throw synchronously, breaking this effect before any catch runs —
-      // build the controller manually instead.
-      const controller = new AbortController();
-      const t = setTimeout(() => controller.abort(), 4000);
-      return fetch('/api/geo', { signal: controller.signal })
-        .then((r) => (r.ok ? r.json() : null))
-        .catch(() => null)
-        .finally(() => clearTimeout(t));
-    };
-    const ensureGeoThenPing = () => {
-      if (geoFetched) { ping(); return; }
-      fetchGeo().then((g) => { geo = g; geoFetched = true; ping(); });
-    };
-    ensureGeoThenPing();
-    timer = setInterval(ping, 25000);
+    ping();
+    const timer = setInterval(ping, 25000);
     const onVisible = () => { if (document.visibilityState === 'visible') ping(); };
     document.addEventListener('visibilitychange', onVisible);
     return () => {
@@ -1925,6 +1946,8 @@ export default function App() {
 
   const loadAreaClaims = async (radiusKm) => {
     const province = areaClaimsProvince;
+    const reqId = ++areaClaimsReqRef.current;
+    const stillCurrent = () => areaClaimsReqRef.current === reqId;
     setAreaClaims({ status: 'loading', radius: radiusKm, visible: true, features: [], ownerColors: {}, message: 'Searching for nearby claims…' });
 
     try {
@@ -1963,9 +1986,11 @@ export default function App() {
           + '&count=2000'
           + `&BBOX=${bboxStr},EPSG:4326`;
 
-        // Try direct browser fetch first (public endpoint, usually allows CORS);
-        // fall back to the Vercel serverless proxy if it fails (e.g. local dev)
+        // Direct browser fetch is only possible in local dev: production CSP
+        // (connect-src) does not include openmaps.gov.bc.ca, so attempting it
+        // there is a guaranteed CSP failure before the proxy fallback.
         try {
+          if (!import.meta.env.DEV) throw new Error('prod: use proxy');
           const directResp = await fetch(wfsBase, { signal: AbortSignal.timeout(30000) });
           if (!directResp.ok) throw new Error(`WFS ${directResp.status}`);
           data = await directResp.json();
@@ -1993,6 +2018,7 @@ export default function App() {
         data = await proxyResp.json();
       }
 
+      if (!stillCurrent()) return; // a newer nearby search (or reset) took over
       const features = (data.features || []).filter((f) => f.geometry);
       trackSearch({ kind: 'nearby', province, mode: 'radius', resultCount: features.length });
       if (features.length === 0) {
@@ -2000,18 +2026,26 @@ export default function App() {
         return;
       }
 
-      // BC WFS field for owner/holder is OWNER_NAME; fall back to scanning properties
+      // BC WFS field for owner/holder is OWNER_NAME; fall back to scanning
+      // properties. US federal claims carry no claimant in the spatial data —
+      // group the overlay by claim name instead so the legend stays useful.
       const sampleProps = features[0]?.properties || {};
       const ownerField = 'OWNER_NAME' in sampleProps ? 'OWNER_NAME'
         : 'TENURE_HOLDER_NAME' in sampleProps ? 'TENURE_HOLDER_NAME'
+        : 'CLAIM_NAME' in sampleProps ? 'CLAIM_NAME'
         : Object.keys(sampleProps).find((k) => /owner|holder|client/i.test(k)) || null;
 
       const owners = [...new Set(features.map((f) => (ownerField ? f.properties?.[ownerField] : null) || 'Unknown'))];
       const ownerColors = {};
       owners.forEach((owner, i) => { ownerColors[owner] = AREA_CLAIMS_COLORS[i % AREA_CLAIMS_COLORS.length]; });
 
-      setAreaClaims({ status: 'loaded', radius: radiusKm, visible: true, features, ownerColors, ownerLabels: {}, hiddenOwners: [], showInLegend: false, ownerField, center: { lat: centerLat, lng: centerLng }, message: `${features.length} claims found within ${radiusKm} km` });
+      if (!stillCurrent()) return;
+      const truncNote = data.meta?.truncated
+        ? ` (large area — showing the first ${features.length}${data.meta.totalKnown ? ` of ${data.meta.totalKnown}` : ''}; try a smaller radius)`
+        : '';
+      setAreaClaims({ status: 'loaded', radius: radiusKm, visible: true, features, ownerColors, ownerLabels: {}, hiddenOwners: [], showInLegend: false, ownerField, center: { lat: centerLat, lng: centerLng }, message: `${features.length} claims found within ${radiusKm} km${truncNote}` });
     } catch (err) {
+      if (!stillCurrent()) return;
       setAreaClaims((prev) => ({
         ...prev, status: 'error',
         message: err.name === 'TimeoutError' ? 'Request timed out. Try a smaller radius.' : `Failed to load: ${String(err.message || err).slice(0, 160)}`,
@@ -2154,12 +2188,17 @@ export default function App() {
     return () => { pin.remove(); areaClaimsPinRef.current = null; };
   }, [areaClaimsPickCenter, mapReady]);
 
-  const addGeoJSONAsLayer = async (geojson, fileName) => {
+  // `source` distinguishes user-supplied data (upload/csv/registry — real
+  // value) from curated content (demo/template/deeplink). It feeds the
+  // layer_added analytics event and, via the activation taxonomy, decides
+  // whether adding a layer counts toward activation (only upload/csv do).
+  const addGeoJSONAsLayer = async (geojson, fileName, source = 'upload') => {
     const id = crypto.randomUUID();
     const baseName = fileName.replace(/\.(zip|geojson|json|kml|kmz|csv)$/i, '') || 'Layer';
     const kind = detectLayerKind(geojson);
     const role = inferRoleFromLayer({ name: baseName, type: kind });
     const displayName = cleanLayerName(baseName, role);
+    trackEvent('layer_added', { source, role, kind, feature_count: geojson?.features?.length ?? 0 });
 
     const baseLayer = {
       id,
@@ -2220,7 +2259,10 @@ export default function App() {
         if (result.needsMapping) {
           setCsvMappingData({ headers: result.headers, rows: result.rows, filename: file.name, guesses: result.guesses, hint: result.hint });
         } else {
-          await addGeoJSONAsLayer(result, file.name);
+          await addGeoJSONAsLayer(result, file.name, 'csv');
+          if (result.meta?.skippedRows) {
+            setUploadStatus({ type: 'info', message: `Imported ${result.features.length} points — ${result.meta.skippedRows} row${result.meta.skippedRows === 1 ? '' : 's'} skipped (missing or invalid coordinates).` });
+          }
           if (screen !== 'editor') setScreen('editor');
         }
       } else {
@@ -2251,6 +2293,7 @@ export default function App() {
 
   const loadSampleData = async (styleId) => {
     const makeFile = (json, name) => new File([JSON.stringify(json)], name, { type: 'application/json' });
+    saveCoordRef.current.switchWorkspace();
     resetHistory();
     setProject(createInitialProjectState());
     try {
@@ -2292,7 +2335,7 @@ export default function App() {
   // map matches the style the gallery card advertises.
   const loadGalleryDemo = async (recipe) => {
     for (const layer of recipe.layers) {
-      await addGeoJSONAsLayer(layer.data, layer.name);
+      await addGeoJSONAsLayer(layer.data, layer.name, 'demo');
     }
     setProject((prev) => ({
       ...prev,
@@ -2330,9 +2373,9 @@ export default function App() {
   // landing page investor map: dissolved teal claims on satellite, drill
   // collars, gold dashed target areas, and intercept callouts.
   const loadAuroraDemo = async () => {
-    await addGeoJSONAsLayer(auroraClaims, 'Claims.geojson');
-    await addGeoJSONAsLayer(auroraDrillholes, 'Drill Collars.geojson');
-    await addGeoJSONAsLayer(auroraTargets, 'Target Areas.geojson');
+    await addGeoJSONAsLayer(auroraClaims, 'Claims.geojson', 'demo');
+    await addGeoJSONAsLayer(auroraDrillholes, 'Drill Collars.geojson', 'demo');
+    await addGeoJSONAsLayer(auroraTargets, 'Target Areas.geojson', 'demo');
     setProject((prev) => ({
       ...prev,
       layers: prev.layers.map((layer) => {
@@ -2435,6 +2478,7 @@ export default function App() {
 
       // Start a fresh, unowned workspace either way so Save/autosave creates a
       // NEW map rather than overwriting whatever project was last open.
+      saveCoordRef.current.switchWorkspace();
       resetHistory();
       setProject(createInitialProjectState());
       setProjectId(null);
@@ -2447,7 +2491,7 @@ export default function App() {
       clearActiveProjectContext();
 
       if (geojson) {
-        await addGeoJSONAsLayer(geojson, `${label} Claims.geojson`);
+        await addGeoJSONAsLayer(geojson, `${label} Claims.geojson`, 'deeplink');
         updateLayout({
           title: `${label} — Mineral Claims`,
           exportSettings: { filename: `${ticker.toLowerCase()}-claims`, pixelRatio: 2 },
@@ -2815,6 +2859,7 @@ export default function App() {
   };
 
   const addCalloutAtAnchor = ({ text, subtext = '', type = 'leader', anchor, featureId, layerId, style = {}, boxWidth = 188, badgeValue, badgeColor }) => {
+    trackEventOnce('element_added', 'callout', { type: 'callout' });
     const calloutId = crypto.randomUUID();
     setProject((prev) => {
       const accent = prev.layout?.accentColor || null;
@@ -2943,6 +2988,7 @@ export default function App() {
   };
 
   const addMarkerAt = (latlng) => {
+    trackEventOnce('element_added', 'marker', { type: 'marker' });
     const id = crypto.randomUUID();
     setProject((prev) => ({
       ...prev,
@@ -2963,6 +3009,7 @@ export default function App() {
   };
 
   const addEllipseAt = (latlng) => {
+    trackEventOnce('element_added', 'ellipse', { type: 'ellipse' });
     const id = crypto.randomUUID();
     setProject((prev) => {
       const accent = prev.layout?.accentColor || null;
@@ -2987,6 +3034,7 @@ export default function App() {
   };
 
   const addRingAt = (latlng) => {
+    trackEventOnce('element_added', 'ring', { type: 'ring' });
     const id = crypto.randomUUID();
     let radiusKm = 10;
     if (leafletMapRef.current) {
@@ -3021,6 +3069,7 @@ export default function App() {
   };
 
   const addDistanceLine = (p1, p2) => {
+    trackEventOnce('element_added', 'distance', { type: 'distance' });
     const id = crypto.randomUUID();
     setProject(prev => ({
       ...prev,
@@ -3127,6 +3176,7 @@ export default function App() {
 
   const finishPolygon = () => {
     if (pendingPolygonPoints.length < 3) return;
+    trackEventOnce('element_added', 'polygon', { type: 'polygon' });
     const id = crypto.randomUUID();
     setProject((prev) => ({
       ...prev,
@@ -3247,6 +3297,7 @@ export default function App() {
         } catch { setShowPostExportSignup(true); }
       }
     } catch (err) {
+      trackEvent('export_failed', { format, message: String(err?.message ?? err).slice(0, 120) });
       setExportError(`Export failed: ${err.message}`);
       setUploadStatus({ type: 'error', message: `Export failed: ${err.message}` });
     } finally {
@@ -3311,27 +3362,46 @@ export default function App() {
   const saveCurrentProject = async (nextName = null) => {
     const nameToSave = (nextName || projectName || project.layout?.title || 'Untitled map').trim();
     if (user) {
-      try {
-        // Pass projectId as-is: when it's null (a new or deep-linked map),
-        // saveCloudProject INSERTS a fresh row and returns its id. Fabricating
-        // a random id here would send it down the UPDATE path, which matches no
-        // row and silently saves nothing while the UI reports success.
-        const cloudId = await saveCloudProject({ id: projectId, name: nameToSave, payload: project });
+      // Snapshot + ticket BEFORE the await: edits made while the save is in
+      // flight must not be masked (dirty stays set), and a workspace switch
+      // mid-save must detach this completion entirely.
+      const snapshot = JSON.stringify(project);
+      const payloadToSave = project;
+      const ticket = saveCoordRef.current.begin();
+      // Pass projectId as-is: when it's null (a new or deep-linked map),
+      // saveCloudProject INSERTS a fresh row and returns its id. Fabricating
+      // a random id here would send it down the UPDATE path, which matches no
+      // row and silently saves nothing while the UI reports success.
+      const outcome = await runGuardedSave({
+        ticket,
+        snapshot,
+        doSave: () => saveCloudProject({ id: projectId, name: nameToSave, payload: payloadToSave }),
+        getCurrentSerialized: () => lastSerializedRef.current,
+        onSaved: () => { lastSavedSnapshotRef.current = snapshot; setIsDirty(false); },
+        onMismatch: () => { lastSavedSnapshotRef.current = snapshot; },
+        onError: (err) => {
+          setUploadStatus({ type: 'error', message: `Cloud save failed: ${err.message}. Your work is still saved in this browser.` });
+        },
+      });
+      if ((outcome.status === 'saved' || outcome.status === 'saved-but-dirty') && ticket.stillCurrent()) {
+        const cloudId = outcome.result;
         setProjectId(cloudId);
         setProjectName(nameToSave);
-        lastSavedSnapshotRef.current = JSON.stringify(project);
-        setIsDirty(false);
-        saveDraft({ payload: project, projectId: cloudId, projectName: nameToSave });
+        saveDraft({ payload: payloadToSave, projectId: cloudId, projectName: nameToSave });
         listCloudProjects().then(setRecentProjects).catch(() => {});
         setUploadStatus({ type: 'success', message: `Saved to cloud: ${nameToSave}` });
         captureAndStoreThumbnail(cloudId, true);
-      } catch (err) {
-        setUploadStatus({ type: 'error', message: `Cloud save failed: ${err.message}` });
       }
     } else {
       // Local store needs an explicit id; reuse the current one or mint a new
       // record. (saveProjectRecord updates in place when the id already exists.)
       const saved = saveProjectRecord({ id: projectId || crypto.randomUUID(), name: nameToSave, payload: project });
+      if (!saved.storage?.ok) {
+        // The write FAILED — never claim success. The in-memory project is
+        // untouched and stays dirty so the user can free space and retry.
+        setUploadStatus({ type: 'error', message: `Couldn't save to this browser: ${saved.storage?.message || 'storage write failed.'} Your map is still open — free up space (delete an old project) and save again.` });
+        return;
+      }
       setProjectId(saved.id);
       setProjectName(saved.name);
       setRecentProjects(listProjects());
@@ -3357,21 +3427,35 @@ export default function App() {
     if (!nextName) return;
     const nameToSave = nextName.trim();
     if (user) {
-      try {
-        const cloudId = await saveCloudProject({ id: null, name: nameToSave, payload: project });
+      const snapshot = JSON.stringify(project);
+      const payloadToSave = project;
+      const ticket = saveCoordRef.current.begin();
+      const outcome = await runGuardedSave({
+        ticket,
+        snapshot,
+        doSave: () => saveCloudProject({ id: null, name: nameToSave, payload: payloadToSave }),
+        getCurrentSerialized: () => lastSerializedRef.current,
+        onSaved: () => { lastSavedSnapshotRef.current = snapshot; setIsDirty(false); },
+        onMismatch: () => { lastSavedSnapshotRef.current = snapshot; },
+        onError: (err) => {
+          setUploadStatus({ type: 'error', message: `Cloud save failed: ${err.message}. Your work is still saved in this browser.` });
+        },
+      });
+      if ((outcome.status === 'saved' || outcome.status === 'saved-but-dirty') && ticket.stillCurrent()) {
+        const cloudId = outcome.result;
         setProjectId(cloudId);
         setProjectName(nameToSave);
-        lastSavedSnapshotRef.current = JSON.stringify(project);
-        setIsDirty(false);
-        saveDraft({ payload: project, projectId: cloudId, projectName: nameToSave });
+        saveDraft({ payload: payloadToSave, projectId: cloudId, projectName: nameToSave });
         listCloudProjects().then(setRecentProjects).catch(() => {});
         setUploadStatus({ type: 'success', message: `Saved to cloud as: ${nameToSave}` });
         captureAndStoreThumbnail(cloudId, true);
-      } catch (err) {
-        setUploadStatus({ type: 'error', message: `Cloud save failed: ${err.message}` });
       }
     } else {
       const saved = saveProjectRecord({ id: crypto.randomUUID(), name: nameToSave, payload: project });
+      if (!saved.storage?.ok) {
+        setUploadStatus({ type: 'error', message: `Couldn't save to this browser: ${saved.storage?.message || 'storage write failed.'} Your map is still open — free up space and try again.` });
+        return;
+      }
       setProjectId(saved.id);
       setProjectName(saved.name);
       setRecentProjects(listProjects());
@@ -3384,17 +3468,24 @@ export default function App() {
   };
 
   const openProjectFromRecent = async (entry) => {
+    // Switching workspaces: detach every in-flight save completion from the
+    // UI immediately, and take a ticket so that if a SECOND open starts while
+    // this one is still fetching, the slower fetch cannot clobber it.
+    saveCoordRef.current.switchWorkspace();
+    const openTicket = saveCoordRef.current.begin();
     let payload = entry.payload;
     if (!payload && user) {
       try {
         const full = await loadCloudProject(entry.id);
         payload = full.payload;
       } catch (err) {
-        setUploadStatus({ type: 'error', message: `Failed to open project: ${err.message}` });
+        if (openTicket.stillCurrent()) {
+          setUploadStatus({ type: 'error', message: `Failed to open project: ${err.message}` });
+        }
         return;
       }
     }
-    if (!payload) return;
+    if (!payload || !openTicket.stillCurrent()) return;
     resetHistory();
     skipAutoFitRef.current = true;
     setProject(payload);
@@ -3411,6 +3502,7 @@ export default function App() {
     saveDraft({ payload, projectId: entry.id, projectName: entry.name });
     lastSavedSnapshotRef.current = JSON.stringify(payload);
     setIsDirty(false);
+    if (entry.id) trackEvent('project_opened', { project_id: entry.id, source: 'recent' });
     setUploadStatus({ type: 'success', message: `Opened project: ${entry.name}` });
   };
 
@@ -3443,6 +3535,7 @@ export default function App() {
     trackEvent('share_forked', { mapId: sharedMapId, mode: 'local' });
     try { window.history.replaceState({}, '', '/'); } catch { /* noop */ }
     setSharedMapId(null);
+    saveCoordRef.current.switchWorkspace();
     resetHistory();
     skipAutoFitRef.current = true;
     setProject(state);
@@ -3482,20 +3575,33 @@ export default function App() {
   const duplicateCurrentProject = async () => {
     const name = `${projectName || project.layout?.title || 'Untitled map'} Copy`;
     if (user) {
-      try {
-        const cloudId = await saveCloudProject({ id: null, name, payload: project });
-        setProjectId(cloudId);
+      const snapshot = JSON.stringify(project);
+      const payloadToSave = project;
+      const ticket = saveCoordRef.current.begin();
+      const outcome = await runGuardedSave({
+        ticket,
+        snapshot,
+        doSave: () => saveCloudProject({ id: null, name, payload: payloadToSave }),
+        getCurrentSerialized: () => lastSerializedRef.current,
+        onSaved: () => { lastSavedSnapshotRef.current = snapshot; setIsDirty(false); },
+        onMismatch: () => { lastSavedSnapshotRef.current = snapshot; },
+        onError: (err) => {
+          setUploadStatus({ type: 'error', message: `Cloud duplicate failed: ${err.message}` });
+        },
+      });
+      if ((outcome.status === 'saved' || outcome.status === 'saved-but-dirty') && ticket.stillCurrent()) {
+        setProjectId(outcome.result);
         setProjectName(name);
-        lastSavedSnapshotRef.current = JSON.stringify(project);
-        setIsDirty(false);
-        saveDraft({ payload: project, projectId: cloudId, projectName: name });
+        saveDraft({ payload: payloadToSave, projectId: outcome.result, projectName: name });
         listCloudProjects().then(setRecentProjects).catch(() => {});
         setUploadStatus({ type: 'success', message: `Duplicated to cloud as: ${name}` });
-      } catch (err) {
-        setUploadStatus({ type: 'error', message: `Cloud duplicate failed: ${err.message}` });
       }
     } else {
       const saved = duplicateProjectRecord({ sourcePayload: project, name });
+      if (!saved.storage?.ok) {
+        setUploadStatus({ type: 'error', message: `Couldn't duplicate in this browser: ${saved.storage?.message || 'storage write failed.'}` });
+        return;
+      }
       setProjectId(saved.id);
       setProjectName(saved.name);
       setRecentProjects(listProjects());
@@ -3510,6 +3616,7 @@ export default function App() {
   const startNewProject = () => {
     const base = createInitialProjectState();
     const blank = { ...base, layout: seedLayoutWithSettings(base.layout) };
+    saveCoordRef.current.switchWorkspace();
     resetHistory();
     setProject(blank);
     setProjectId(null);
@@ -3994,17 +4101,29 @@ export default function App() {
             <div className="control-grid">
               <p className="small-note">Load mineral tenure claims within a radius of your project area. Each claim owner is shown in a distinct colour.</p>
               <div className="control-row">
-                <label>Province</label>
+                <label>{US_CLAIMS_ENABLED ? 'Jurisdiction' : 'Province'}</label>
                 <select value={areaClaimsProvince} onChange={(e) => setAreaClaimsProvince(e.target.value)}>
-                  <option value="bc">British Columbia</option>
-                  <option value="on">Ontario</option>
-                  <option value="qc">Quebec</option>
-                  <option value="sk">Saskatchewan</option>
-                  <option value="mb">Manitoba</option>
-                  <option value="nl">Newfoundland &amp; Labrador</option>
-                  <option value="yt">Yukon</option>
+                  <optgroup label="Canada">
+                    <option value="bc">British Columbia</option>
+                    <option value="on">Ontario</option>
+                    <option value="qc">Quebec</option>
+                    <option value="sk">Saskatchewan</option>
+                    <option value="mb">Manitoba</option>
+                    <option value="nl">Newfoundland &amp; Labrador</option>
+                    <option value="yt">Yukon</option>
+                  </optgroup>
+                  {US_CLAIMS_ENABLED && (
+                    <optgroup label={US_GROUP_LABEL}>
+                      {US_STATES.map((st) => (
+                        <option key={st.value} value={st.value}>{st.label}</option>
+                      ))}
+                    </optgroup>
+                  )}
                 </select>
               </div>
+              {US_CLAIMS_ENABLED && isUsJurisdiction(areaClaimsProvince) && (
+                <p className="small-note">{US_GEOMETRY_DISCLAIMER}</p>
+              )}
               <div className="control-row inline-2">
                 <div>
                   <label>Search Radius</label>
@@ -5529,7 +5648,7 @@ export default function App() {
             autoSearch={addClaimsAutoSearch}
             onClose={() => { setShowAddClaimsModal(false); setAddClaimsModalPath(null); setAddClaimsProvince(null); setAddClaimsQuery(''); setAddClaimsAutoSearch(false); }}
             onImport={(geojson, name) => {
-              addGeoJSONAsLayer(geojson, `${name}.geojson`);
+              addGeoJSONAsLayer(geojson, `${name}.geojson`, 'registry');
               setShowAddClaimsModal(false);
               setAddClaimsModalPath(null);
               if (screen !== 'editor') setScreen('editor');
@@ -5675,7 +5794,7 @@ export default function App() {
             onImport={async (geojson) => {
               setCsvMappingData(null);
               try {
-                await addGeoJSONAsLayer(geojson, csvMappingData.filename);
+                await addGeoJSONAsLayer(geojson, csvMappingData.filename, 'csv');
                 if (screen !== 'editor') setScreen('editor');
               } catch (err) {
                 setUploadStatus({ type: 'error', message: `Import failed: ${err.message}` });

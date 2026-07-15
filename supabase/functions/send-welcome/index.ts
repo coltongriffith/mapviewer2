@@ -36,7 +36,7 @@ function welcomeHtml() {
     <h1 style="font-size:20px;color:#0f172a">Your map is ready to build on.</h1>
     <p>Thanks for trying Exploration Maps. You just exported a map — here's what else you can do with the same project:</p>
     <ul>
-      <li><strong>Search live claim registries</strong> (BC, Ontario, Quebec, Saskatchewan, Manitoba, Newfoundland &amp; Labrador, Yukon) and drop a company's claims straight onto the map.</li>
+      <li><strong>Search live claim registries</strong> — Canada (BC, Ontario, Quebec, Saskatchewan, Manitoba, Newfoundland &amp; Labrador, Yukon) plus U.S. federal mining claims (BLM) for Nevada, Arizona, Utah, Idaho, Montana, Wyoming, Colorado, New Mexico, California, Oregon and Washington — and drop claims straight onto the map.</li>
       <li><strong>Add drill results, targets, and infrastructure</strong>, then style them with one click.</li>
       <li><strong>Export NI 43-101-ready figures</strong> with scale bar, north arrow, and legend.</li>
     </ul>

@@ -334,6 +334,10 @@ function faqBlock(faqs) {
 const REGISTRY_REGION_SLUGS = new Set([
   'british-columbia', 'ontario', 'quebec', 'saskatchewan',
   'manitoba', 'newfoundland-labrador', 'yukon',
+  // U.S. federal (BLM MLRS) states — deep links open the US registry search.
+  // Keep in sync with REGION_TO_PROVINCE (App.jsx) + US_JURISDICTIONS (api).
+  'nevada', 'arizona', 'utah', 'idaho', 'montana', 'wyoming',
+  'colorado', 'new-mexico', 'california', 'oregon', 'washington',
 ]);
 
 // Deep link into the app with intent/region so SEO visitors land in a

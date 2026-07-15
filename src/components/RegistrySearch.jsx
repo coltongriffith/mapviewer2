@@ -1,6 +1,10 @@
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { useClaims } from '../hooks/useClaims';
-import { trackSearch } from '../utils/track';
+import { trackSearch, trackEvent } from '../utils/track';
+import {
+  US_CLAIMS_ENABLED, US_STATES, US_GROUP_LABEL, US_GEOMETRY_DISCLAIMER,
+  US_CLAIM_TYPES, isUsJurisdiction,
+} from '../utils/jurisdictions';
 
 // ── Spatial clustering helpers ─────────────────────────────────────────────
 
@@ -99,12 +103,17 @@ function clusterFeatures(features, thresholdKm = 50) {
       const avgLat = ctrs.reduce((s, c) => s + c[1], 0) / ctrs.length;
       const totalHa = feats.reduce((s, f) => s + (Number(f.properties?.AREA_IN_HECTARES) || 0), 0);
       const expiries = feats.map(f => f.properties?.GOOD_TO_DATE).filter(Boolean).sort();
+      const today = new Date().toISOString().slice(0, 10);
+      const upcoming = expiries.filter((d) => d.slice(0, 10) >= today);
       return {
         features: feats,
         centroid: [avgLng, avgLat],
         totalHa,
-        earliestExpiry: expiries[0]?.slice(0, 10),
+        // Soonest still-valid expiry (the risk-relevant date), the horizon,
+        // and how many claims are already expired.
+        earliestExpiry: upcoming[0]?.slice(0, 10),
         latestExpiry: expiries[expiries.length - 1]?.slice(0, 10),
+        expiredCount: expiries.length - upcoming.length,
       };
     })
     .sort((a, b) => b.features.length - a.features.length);
@@ -152,10 +161,30 @@ const PROVINCES = [
   },
 ];
 
+// U.S. federal (BLM MLRS) jurisdictions — searchable by claim name and MLRS
+// serial number. No claimant search in v1: the BLM spatial service publishes
+// no claimant data (it lives in separate MLRS reports; future enrichment).
+const US_JURISDICTION_ENTRIES = US_STATES.map((st) => ({
+  value: st.value,
+  label: st.label,
+  registry: 'BLM MLRS (federal)',
+  country: 'us',
+  modes: ['name', 'number'],
+  placeholders: { name: 'e.g. GOLDIE #12', number: 'e.g. NV101234567' },
+}));
+
+// All searchable jurisdictions. Canadian provinces keep their existing
+// behavior; US states appear only when the feature flag is on.
+const ALL_JURISDICTIONS = [
+  ...PROVINCES.map((p) => ({ ...p, country: 'ca' })),
+  ...(US_CLAIMS_ENABLED ? US_JURISDICTION_ENTRIES : []),
+];
+
 const MODE_LABELS = {
   company: 'Company',
   number: 'Claim #',
   map: 'Map Sheet',
+  name: 'Claim Name',
 };
 
 function autoDetectMode(q, allowedModes) {
@@ -165,6 +194,8 @@ function autoDetectMode(q, allowedModes) {
   if (!q) return fallback;
   const t = q.trim();
   if (/^\d+$/.test(t) && allowedModes.includes('number')) return 'number';
+  // US MLRS serials: two-letter state prefix + digits (NV105331298, "nv 105331298")
+  if (/^[A-Za-z]{2}[\s-]?\d{4,}$/.test(t) && allowedModes.includes('number')) return 'number';
   if (/^\d{3}[A-Za-z]/.test(t) && allowedModes.includes('map')) return 'map';
   return fallback;
 }
@@ -209,7 +240,7 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const provinceCfg = PROVINCES.find(p => p.value === province) || PROVINCES[0];
+  const provinceCfg = ALL_JURISDICTIONS.find(p => p.value === province) || ALL_JURISDICTIONS[0];
 
   // Record the outcome of a submitted search once it resolves (results or error).
   useEffect(() => {
@@ -227,7 +258,17 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
       // claims at all — check the other provinces in the background so a
       // wrong-province guess doesn't read as "search is broken".
       if (!error && results?.features?.length === 0 && pending.mode !== 'map') {
-        searchOtherProvinces(pending.query, pending.mode, pending.province, PROVINCES);
+        searchOtherProvinces(
+          pending.query,
+          pending.mode,
+          pending.province,
+          // Only fan out to jurisdictions in the SAME COUNTRY that support
+          // this search mode — a Canadian company search must not hit 11 BLM
+          // states, and a US claim-name search must not hit Canada.
+          ALL_JURISDICTIONS.filter((p) =>
+            p.country === (ALL_JURISDICTIONS.find((j) => j.value === pending.province)?.country || 'ca')
+            && p.modes.includes(pending.mode)),
+        );
       }
       pendingSearchRef.current = null;
     }
@@ -246,15 +287,26 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
     if (!manualMode) setMode(autoDetectMode(query, provinceCfg.modes));
   }, [query, manualMode, provinceCfg]);
 
+  // US-only claim-type filter (lode/placer/mill/tunnel). Client-side and
+  // exact: US result sets are complete (server paginates to the ceiling).
+  const [usTypeFilter, setUsTypeFilter] = useState('all');
+  const isUS = isUsJurisdiction(province);
+
   // Selections are index-based — never let them survive a results change
+  // OR a type-filter change (indices shift when the list is filtered).
   useEffect(() => {
     setSelectedOwner(null);
     setSelectedGroups(new Set());
     setExpandedGroups(new Set());
     setSelectedFlat(new Set());
-  }, [results]);
+  }, [results, usTypeFilter]);
+  useEffect(() => { setUsTypeFilter('all'); }, [province]);
 
-  const allFeatures = results?.features || [];
+  const allFeatures = useMemo(() => {
+    const feats = results?.features || [];
+    if (!isUS || usTypeFilter === 'all') return feats;
+    return feats.filter((f) => (f.properties?.CLAIM_TYPE || 'unknown') === usTypeFilter);
+  }, [results, isUS, usTypeFilter]);
 
   // ── Company mode: owner picker + clustering ──
   const owners = useMemo(() => {
@@ -383,15 +435,26 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
         name: groups.length > 1 ? `${holder} – ${g.label}` : `${holder} Claims`,
       };
     });
+    // Province + count only coexist here (lost before reaching App's layer add).
+    trackEvent('registry_claims_imported', {
+      province,
+      mode: 'groups',
+      groups: items.length,
+      features: items.reduce((n, it) => n + (it.geojson.features?.length || 0), 0),
+    });
     onImport(items);
   }
 
   function handleAddFlat() {
     const features = [...selectedFlat].sort((a, b) => a - b).map(i => allFeatures[i]);
     const holder = features[0]?.properties?.OWNER_NAME || query;
+    trackEvent('registry_claims_imported', { province, mode: 'flat', groups: 1, features: features.length });
+    const usName = features[0]?.properties?.CLAIM_NAME || query;
     onImport([{
       geojson: { type: 'FeatureCollection', features },
-      name: mode === 'number' ? `Claim ${query}` : `${holder} Claims`,
+      name: isUsJurisdiction(province)
+        ? `${(mode === 'number' ? features[0]?.properties?.TAG_NUMBER || query : usName)} Claims (BLM)`
+        : mode === 'number' ? `Claim ${query}` : `${holder} Claims`,
     }]);
   }
 
@@ -412,13 +475,24 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
           value={province}
           onChange={e => handleProvinceChange(e.target.value)}
         >
-          {PROVINCES.map(p => (
-            <option key={p.value} value={p.value}>{p.label} — {p.registry}</option>
-          ))}
+          <optgroup label="Canada">
+            {ALL_JURISDICTIONS.filter(p => p.country === 'ca').map(p => (
+              <option key={p.value} value={p.value}>{p.label} — {p.registry}</option>
+            ))}
+          </optgroup>
+          {US_CLAIMS_ENABLED && (
+            <optgroup label={US_GROUP_LABEL}>
+              {ALL_JURISDICTIONS.filter(p => p.country === 'us').map(p => (
+                <option key={p.value} value={p.value}>{p.label} — {p.registry}</option>
+              ))}
+            </optgroup>
+          )}
         </select>
       </div>
       <p className="claims-province-hint">
-        Not sure which province? Search any company name — we'll check the others automatically if nothing turns up here.
+        {isUS
+          ? "Federal BLM claims only — state-managed tenure isn't included yet. We'll check other states automatically if nothing turns up here."
+          : "Not sure which province? Search any company name — we'll check the others automatically if nothing turns up here."}
       </p>
 
       {/* Search mode tabs */}
@@ -456,6 +530,14 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
       </form>
 
       {error && <p className="claims-error">⚠ {error}</p>}
+
+      {results?.meta?.truncated && allFeatures.length > 0 && (
+        <p className="claims-error" role="status">
+          ⚠ Large result set — showing the first {allFeatures.length.toLocaleString()}
+          {results.meta.totalKnown ? ` of ${results.meta.totalKnown.toLocaleString()}` : ''} claims.
+          Narrow the search (full company name or claim number) to see everything.
+        </p>
+      )}
 
       {results && allFeatures.length === 0 && (
         <>
@@ -543,7 +625,7 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
                           <span className="claims-group-label">{group.label}</span>
                           <span className="claims-group-meta">
                             {group.features.length} claim{group.features.length !== 1 ? 's' : ''} · {group.totalHa > 0 ? `${group.totalHa.toFixed(0)} ha` : ''}
-                            {group.earliestExpiry ? ` · exp. ${group.latestExpiry}` : ''}
+                            {group.earliestExpiry ? ` · exp. ${group.earliestExpiry}${group.latestExpiry && group.latestExpiry !== group.earliestExpiry ? `–${group.latestExpiry}` : ''}` : ''}{group.expiredCount > 0 ? ` · ${group.expiredCount} expired` : ''}
                           </span>
                         </div>
                         <button className="claims-group-expand" type="button" onClick={e => toggleExpand(gi, e)} title={isExp ? 'Collapse' : 'Expand claims'}>
@@ -588,6 +670,20 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
       {/* Flat list for claim # and map sheet searches */}
       {showFlatList && (
         <>
+          {isUS && (
+            <div className="claims-mode-tabs" style={{ marginTop: 4 }}>
+              {[{ value: 'all', label: 'All types' }, ...US_CLAIM_TYPES].map((t) => (
+                <button
+                  key={t.value}
+                  type="button"
+                  className={`claims-mode-tab${usTypeFilter === t.value ? ' active' : ''}`}
+                  onClick={() => setUsTypeFilter(t.value)}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          )}
           <div className="claims-list-header">
             <label className="claims-select-all">
               <input type="checkbox" checked={allFlatSelected} onChange={e => handleSelectAllFlat(e.target.checked)} />
@@ -608,9 +704,9 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
                   <input type="checkbox" checked={isSel} onChange={() => toggleFlat(i)} />
                   <div className="claims-result-info">
                     <span className="claims-result-number">{p.TAG_NUMBER || p.TENURE_NUMBER_ID || '—'}</span>
-                    <span className="claims-result-holder">{p.OWNER_NAME || '—'}</span>
+                    <span className="claims-result-holder">{p.CLAIM_NAME || p.OWNER_NAME || '—'}</span>
                     <span className="claims-result-meta">
-                      {p.TITLE_TYPE_DESCRIPTION || ''} · {p.AREA_IN_HECTARES ? `${Number(p.AREA_IN_HECTARES).toFixed(1)} ha` : ''}
+                      {p.TITLE_TYPE_DESCRIPTION || ''}{p.STATUS ? ` · ${p.STATUS}` : ''} · {p.AREA_IN_HECTARES ? `${Number(p.AREA_IN_HECTARES).toFixed(1)} ha` : ''}
                       {p.GOOD_TO_DATE ? ` · exp. ${String(p.GOOD_TO_DATE).slice(0, 10)}` : ''}
                     </span>
                   </div>
@@ -625,6 +721,12 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
               : `Add ${selectedFlat.size} claim${selectedFlat.size !== 1 ? 's' : ''} to map`}
           </button>
         </>
+      )}
+
+      {isUS && results && (
+        <p className="claims-province-hint" style={{ marginTop: 10 }}>
+          {US_GEOMETRY_DISCLAIMER}
+        </p>
       )}
 
       <button className="export-hd-skip" onClick={onBack}>← Back</button>

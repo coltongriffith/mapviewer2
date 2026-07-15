@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { supabase } from '../lib/supabase';
-import { getSessionId } from '../utils/session';
+import { trackLandingClick } from '../utils/track';
+import { US_CLAIMS_ENABLED, US_COVERAGE_COPY } from '../utils/jurisdictions';
 import { useAuth } from '../hooks/useAuth.jsx';
 import AuthModal from './AuthModal';
 
@@ -82,7 +82,6 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
     const now = Date.now();
     if (now - clickThrottleRef.current < 500) return;
     clickThrottleRef.current = now;
-    if (!supabase) return;
     const tracked = e.target.closest('[data-track]');
     const interactive = e.target.closest('button, a');
     let element = null;
@@ -99,9 +98,7 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
     }
     const x_pct = Math.round((e.clientX / window.innerWidth) * 100);
     const y_pct = Math.round(((e.clientY + window.scrollY) / Math.max(document.body.scrollHeight, 1)) * 100);
-    const viewport_w = window.innerWidth;
-    const page_h = document.body.scrollHeight;
-    supabase.from('landing_clicks').insert({ session_id: getSessionId(), x_pct, y_pct, element, viewport_w, page_h }).then(() => {});
+    trackLandingClick({ xPct: x_pct, yPct: y_pct, element, viewportW: window.innerWidth, pageH: document.body.scrollHeight });
   }
 
   const scrollTo = (id) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -151,6 +148,11 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
               Search claims, plot projects, add infrastructure, and export polished maps
               for decks, news releases, and investor updates — no GIS required.
             </p>
+            {US_CLAIMS_ENABLED && (
+              <p className="lm-us-note" style={{ fontSize: 13, color: '#475569', maxWidth: 620 }}>
+                <strong style={{ color: '#2563eb' }}>New:</strong> {US_COVERAGE_COPY}
+              </p>
+            )}
             <div className="lm-hero-ctas">
               <button className="lm-btn lm-btn-primary lm-btn-lg" type="button" onClick={onOpenEditor} data-track="Hero: Start Mapping">
                 Start Mapping
@@ -304,7 +306,7 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
                   <div className="lm-sp-file">CSV · KML · GeoJSON · SHP</div>
                 </div>
                 <h3>Search or upload</h3>
-                <p>Search claims, companies, projects, or coordinates. Upload CSV, KML, GeoJSON, shapefiles, and more.</p>
+                <p>Search claims, companies, projects, or coordinates{US_CLAIMS_ENABLED ? ' across Canada and the U.S. (federal BLM claims)' : ''}. Upload CSV, KML, GeoJSON, shapefiles, and more.</p>
               </div>
               <div className="lm-step">
                 <div className="lm-step-num">2</div>
@@ -346,7 +348,9 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
             <h2 className="lm-h2">Everything a project map needs. Nothing you have to install.</h2>
             <div className="lm-grid-3 lm-feature-grid">
               {[
-                ['Claim & tenure search', 'Quickly search and map mineral claims by company, region, or project.', <svg key="i" width="19" height="19" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="1.8"/><path d="M20 20l-3.5-3.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/><rect x="8" y="8" width="6" height="6" stroke="currentColor" strokeWidth="1.5"/></svg>],
+                ['Claim & tenure search', US_CLAIMS_ENABLED
+                  ? 'Search and map mineral claims across 7 Canadian provinces and U.S. federal (BLM) claims in 11 western states.'
+                  : 'Quickly search and map mineral claims by company, region, or project.', <svg key="i" width="19" height="19" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="1.8"/><path d="M20 20l-3.5-3.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/><rect x="8" y="8" width="6" height="6" stroke="currentColor" strokeWidth="1.5"/></svg>],
                 ['Project location maps', 'Build polished location maps for decks, fact sheets, websites, and investor materials.', <svg key="i" width="19" height="19" viewBox="0 0 24 24" fill="none"><path d="M12 21s7-6.1 7-11a7 7 0 10-14 0c0 4.9 7 11 7 11z" stroke="currentColor" strokeWidth="1.8"/><circle cx="12" cy="10" r="2.6" stroke="currentColor" strokeWidth="1.8"/></svg>],
                 ['Infrastructure layers', 'Add roads, rail, power, ports, airports, towns, and nearby projects.', <svg key="i" width="19" height="19" viewBox="0 0 24 24" fill="none"><path d="M4 19L19 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeDasharray="4 3"/><path d="M4 8l6 6M14 4l6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>],
                 ['Data upload support', 'Import CSV, KML, KMZ, GeoJSON, shapefile, and coordinate-based data.', <svg key="i" width="19" height="19" viewBox="0 0 24 24" fill="none"><path d="M12 16V4m0 0l-4.5 4.5M12 4l4.5 4.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/><path d="M4 16v3a2 2 0 002 2h12a2 2 0 002-2v-3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>],
