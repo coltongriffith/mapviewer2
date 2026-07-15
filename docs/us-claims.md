@@ -43,14 +43,27 @@ only on explicit user searches or a bounded (area-capped) nearby-claims
 action — never on map move, never nationwide. This is the codebase's proven
 pattern; a parallel ingestion pipeline was deliberately not built for v1.
 
-**v2 path (when claimant enrichment or scale demands it):** mirror the QC
-pattern — a `us_claims` Supabase table + scheduled loader script
-(`scripts/update-qc-claims.js` is the template) + PostGIS bbox RPC, keyed by
-MLRS serial. Claimant data would join from official MLRS reports
-(Mining Claims / Customer reports) by case serial into separate
-`claimants` / `claim_ownership` tables (original claimant text preserved;
-company normalization as a reviewable enrichment layer, never auto-merged on
-loose similarity). Nothing in v1 needs restructuring for this: `TAG_NUMBER`
+**Claimant search — why it isn't live, and the interim UX (researched July
+2026):** no BLM GIS service publishes claimant/customer names — not the HUB
+FeatureServers, not `Mining_Claims/MiningClaims/MapServer` (its layers/tables
+are Case geometry + land-history attributes only). Claimant data exists only
+in the MLRS Reporting Application (reports.blm.gov): report 103 "Mining
+Claims — Customer Info Report" (search by customer name) and report 108
+"Serial Register Page" (per-serial detail, parameterized URLs). That app is
+human-facing (HTML output, no documented machine API), so live proxying would
+be scraping — brittle and deliberately avoided. The registry-search UI
+instead (a) suggests searching the company/person as a Claim Name (US
+operators typically name claims after themselves, so this works surprisingly
+often), and (b) links report 103 for exact claimant→serial lookup, feeding
+the serial search here.
+
+**v2 path (real claimant search):** mirror the QC pattern — a `us_claims`
+Supabase table + scheduled loader script (`scripts/update-qc-claims.js` is
+the template) + PostGIS bbox RPC, keyed by MLRS serial. Claimant data joins
+from MLRS report extracts by case serial into separate `claimants` /
+`claim_ownership` tables (original claimant text preserved; company
+normalization as a reviewable enrichment layer, never auto-merged on loose
+similarity). Nothing in v1 needs restructuring for this: `TAG_NUMBER`
 already carries the MLRS serial and `OWNER_NAME` is reserved/null for US
 records.
 

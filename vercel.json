@@ -1,4 +1,8 @@
 {
+  "functions": {
+    "api/claims.js": { "maxDuration": 60 },
+    "api/bc-claims.js": { "maxDuration": 60 }
+  },
   "rewrites": [
     {
       "source": "/map/:id",

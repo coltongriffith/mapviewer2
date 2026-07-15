@@ -518,9 +518,21 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
         </select>
       </div>
       <p className="claims-province-hint">
-        {isUS
-          ? "Federal BLM claims only — state-managed tenure isn't included yet. We'll check other states automatically if nothing turns up here."
-          : "Not sure which province? Search any company name — we'll check the others automatically if nothing turns up here."}
+        {isUS ? (
+          <>
+            Federal BLM claims only — state-managed tenure isn't included yet.
+            Looking for a company's or person's claims? BLM doesn't publish
+            claimant names in its public map data, but operators usually name
+            claims after themselves — try the name as a <strong>Claim Name</strong> search
+            (we'll check other states automatically). For an exact claimant
+            lookup, find their serial numbers in{' '}
+            <a href="https://reports.blm.gov/report/MLRS/103/Mining-Claims-Customer-Info-Report" target="_blank" rel="noreferrer">
+              BLM's Customer Info Report
+            </a>{' '}and search a serial here.
+          </>
+        ) : (
+          "Not sure which province? Search any company name — we'll check the others automatically if nothing turns up here."
+        )}
       </p>
 
       {/* Search mode tabs */}

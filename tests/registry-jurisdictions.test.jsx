@@ -63,9 +63,19 @@ describe('jurisdiction selector', () => {
     const { container } = await renderRegistry(true);
     fireEvent.change(container.querySelector('select'), { target: { value: 'us-nv' } });
     await waitFor(() => {
-      expect(screen.getByText('Claim Name')).toBeInTheDocument();
-      expect(screen.getByText('Claim #')).toBeInTheDocument();
-      expect(screen.queryByText('Company')).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Claim Name' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Claim #' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Company' })).not.toBeInTheDocument();
+    });
+  });
+
+  it('US states show company-lookup guidance with the BLM Customer Info Report link', async () => {
+    const { container } = await renderRegistry(true);
+    fireEvent.change(container.querySelector('select'), { target: { value: 'us-ut' } });
+    await waitFor(() => {
+      const link = screen.getByRole('link', { name: /Customer Info Report/i });
+      expect(link).toHaveAttribute('href', expect.stringContaining('reports.blm.gov'));
+      expect(screen.getByText(/name claims after themselves/i)).toBeInTheDocument();
     });
   });
 });

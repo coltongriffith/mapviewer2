@@ -152,6 +152,18 @@ const FALLBACK_FETCH_HEADERS = {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// Registry-proxy error → HTTP response. Distinguishes a slow upstream (the
+// query itself is too broad — a narrower term usually succeeds) from an
+// unreachable one, instead of labeling both "failed to reach".
+function upstreamErrorResponse(res, e, fallback) {
+  if (e?.name === 'TimeoutError' || /timed?\s?out/i.test(String(e?.message || ''))) {
+    return res.status(504).json({
+      error: 'The registry is responding slowly right now — try a more specific search (full claim name or exact serial number), or try again shortly.',
+    });
+  }
+  return res.status(502).json({ error: publicErrorMessage(e, fallback) });
+}
+
 function looksLikeHtml(body, contentType) {
   return /html/i.test(contentType || '') || /^\s*<(!doctype|html)/i.test(body || '');
 }
@@ -259,6 +271,10 @@ async function arcgisQueryAll(layerUrl, baseParams) {
       fetchPage: async (offset, count) => {
         const url = `${layerUrl}/query?${new URLSearchParams({
           ...baseParams,
+          // Deterministic paging: without an explicit sort, ArcGIS offset
+          // pages can repeat/skip rows under load on large layers (the BLM
+          // national layer especially), which surfaces as flaky errors.
+          orderByFields: idField,
           resultOffset: String(offset),
           resultRecordCount: String(count),
           f: 'geojson',
@@ -400,23 +416,37 @@ function esriToGeoJSON(esriResult) {
 
 // Fetch a query URL, trying f=geojson first and falling back to f=json + convert
 // if the server returns a non-2xx (older ArcGIS servers pre-10.3).
-async function fetchQueryGeoJSON(queryUrl) {
+async function fetchQueryGeoJSONOnce(queryUrl) {
   try {
     const data = await fetchJson(queryUrl);
-    if (data.error) throw new Error(JSON.stringify(data.error).slice(0, 500));
+    if (data.error) throw new Error(`ArcGIS error: ${JSON.stringify(data.error).slice(0, 480)}`);
     // Real GeoJSON has a `type` key; esri JSON has `objectIdFieldName` etc.
     if (data.type === 'FeatureCollection') return data;
     // Server returned esri JSON even though we asked for geojson — convert it
     return esriToGeoJSON(data);
   } catch (firstErr) {
-    // Only retry on 4xx/5xx (upstream errors), not on parse errors
+    // Only retry on 4xx/5xx (upstream errors), not on parse/in-body errors
     if (!firstErr.message?.startsWith('Upstream')) throw firstErr;
     // Replace f=geojson with f=json in the URL and retry
     const fallbackUrl = queryUrl.replace(/([?&])f=geojson(&|$)/, '$1f=json$2');
     if (fallbackUrl === queryUrl) throw firstErr; // no replacement → rethrow
     const data = await fetchJson(fallbackUrl);
-    if (data.error) throw new Error(JSON.stringify(data.error).slice(0, 500));
+    if (data.error) throw new Error(`ArcGIS error: ${JSON.stringify(data.error).slice(0, 480)}`);
     return esriToGeoJSON(data);
+  }
+}
+
+// SDE-backed ArcGIS servers (BLM's national layer especially) intermittently
+// return HTTP 200 with an in-body {error} on expensive scans; a single retry
+// after a short pause recovers most of them, so one flaky page doesn't fail
+// the whole search.
+async function fetchQueryGeoJSON(queryUrl) {
+  try {
+    return await fetchQueryGeoJSONOnce(queryUrl);
+  } catch (e) {
+    if (!/^ArcGIS error/.test(e?.message || '')) throw e;
+    await sleep(700);
+    return fetchQueryGeoJSONOnce(queryUrl);
   }
 }
 
@@ -817,7 +847,7 @@ export default async function handler(req, res) {
         meta,
       });
     } catch (e) {
-      return res.status(502).json({ error: publicErrorMessage(e, 'Failed to reach the provincial registry.') });
+      return upstreamErrorResponse(res, e, 'Failed to reach the provincial registry.');
     }
   }
 
@@ -907,6 +937,6 @@ export default async function handler(req, res) {
     return await searchArcgis(getArcgisJurisdiction(province), term, type, res);
   } catch (e) {
     if (process.env.NODE_ENV !== 'production') console.warn('[claims]', e?.message);
-    return res.status(502).json({ error: publicErrorMessage(e, 'Failed to reach the provincial registry.') });
+    return upstreamErrorResponse(res, e, 'Failed to reach the provincial registry.');
   }
 }

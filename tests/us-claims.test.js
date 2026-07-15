@@ -104,6 +104,9 @@ describe('US claim-name search (us-nv)', () => {
     const where = queryUrls[0];
     expect(where).toMatch(/UPPER\(CSE_NAME\) LIKE UPPER\('%goldie%'\)/i);
     expect(where).toMatch(/UPPER\(GEO_STATE\) = 'NV'/);
+    // Deterministic paging: an explicit sort keeps offset pages stable on
+    // the large national layer.
+    expect(where).toMatch(/orderByFields=OBJECTID/);
 
     const p = res.body.features[0].properties;
     expect(p.CLAIM_NAME).toBe('GOLDIE #1');
@@ -167,6 +170,50 @@ describe('US state-scoping resilience', () => {
     await h(req({ q: 'goldie', type: 'name', province: 'us-nv' }), res);
     expect(res.statusCode).toBe(502);
     expect(res.body.error).toMatch(/state filtering is unavailable/i);
+  });
+});
+
+describe('US upstream resilience', () => {
+  it('retries once when ArcGIS returns an in-body error, then succeeds', async () => {
+    // BLM's SDE backend intermittently returns HTTP 200 + {error} on
+    // expensive scans; a single retry must recover the search.
+    vi.resetModules();
+    installBlmMock();
+    let queryCalls = 0;
+    const prevFetch = global.fetch;
+    vi.stubGlobal('fetch', vi.fn(async (url) => {
+      if (/FeatureServer\/0\/query/.test(String(url)) && ++queryCalls === 1) {
+        const body = { error: { code: 500, message: 'Error performing query operation' } };
+        return { ok: true, headers: new Map([['content-type', 'application/json']]), json: async () => body, text: async () => JSON.stringify(body) };
+      }
+      return prevFetch(url);
+    }));
+    const { default: h } = await import('../api/claims.js');
+    const res = mockRes();
+    await h(req({ q: 'goldie', type: 'name', province: 'us-ut' }), res);
+    expect(res.statusCode).toBe(200);
+    expect(res.body.features.length).toBeGreaterThan(0);
+    expect(queryCalls).toBeGreaterThanOrEqual(2);
+  }, 15000);
+
+  it('maps upstream timeouts to 504 with actionable guidance (not "failed to reach")', async () => {
+    vi.resetModules();
+    installBlmMock();
+    const prevFetch = global.fetch;
+    vi.stubGlobal('fetch', vi.fn(async (url) => {
+      if (/FeatureServer\/0\/query/.test(String(url))) {
+        const e = new Error('The operation was aborted due to timeout');
+        e.name = 'TimeoutError';
+        throw e;
+      }
+      return prevFetch(url);
+    }));
+    const { default: h } = await import('../api/claims.js');
+    const res = mockRes();
+    await h(req({ q: 'goldie', type: 'name', province: 'us-ut' }), res);
+    expect(res.statusCode).toBe(504);
+    expect(res.body.error).toMatch(/responding slowly/i);
+    expect(res.body.error).toMatch(/more specific search/i);
   });
 });
 
