@@ -114,9 +114,15 @@ const US_JURISDICTIONS = Object.fromEntries(US_STATE_CODES.map((code) => [
     provider: 'blm-mlrs',
     usState: code,
     // Candidate field names, resolved against live metadata at runtime.
-    stateFields: ['STATE_GEO', 'ADMIN_ST', 'ADM_ST', 'STATE'],
+    // First names verified against the live layer's documented schema
+    // (July 2026): GEO_STATE / ADMIN_STATE / CSE_DISP / BLM_PROD / CSE_NR /
+    // CSE_NAME / RCRD_ACRS. GEO_STATE (where the land is) is preferred over
+    // ADMIN_STATE (which BLM office administers it — differs near borders).
+    stateFields: ['GEO_STATE', 'ADMIN_STATE', 'STATE_GEO', 'ADMIN_ST', 'ADM_ST', 'STATE'],
     nameFields: ['CSE_NAME', 'CLAIM_NAME', 'MC_NAME', 'CASE_NAME', 'NAME'],
     numberFields: ['CSE_NR', 'MLRS_CSE_NR', 'CASE_NR', 'SER_NR', 'SERIAL_NR'],
+    // Not published on the current Not Closed layer — kept so legacy search
+    // lights up automatically if BLM ever adds it (the OR clause is optional).
     legacyNumberFields: ['LGCY_CSE_NR', 'LEGACY_CASE_NR', 'LGCY_SER_NR'],
     ownerFields: [], // no claimant data in the spatial service (see above)
   },
@@ -452,8 +458,11 @@ function normalizeProps(props, cfg = null) {
     const serial = pick(cfg.numberFields);
     const legacy = pick(cfg.legacyNumberFields);
     const name = pick(cfg.nameFields);
-    const typeText = pick(['CSE_TYPE_TXT', 'CASETYPE_TXT', 'CSE_TYPE', 'CASE_TYPE', 'CASE_TYPE_TXT']);
-    const disp = pick(['CSE_DISP_TXT', 'DISP_TXT', 'CASE_DISP', 'DISPOSITION']);
+    // BLM_PROD ("BLM Product", e.g. lode/placer claim wording) and CSE_DISP
+    // ("Case Disposition") are the names on the live layer; the rest are
+    // drift tolerance.
+    const typeText = pick(['BLM_PROD', 'CSE_TYPE_TXT', 'CASETYPE_TXT', 'CSE_TYPE', 'CASE_TYPE', 'CASE_TYPE_TXT']);
+    const disp = pick(['CSE_DISP', 'CSE_DISP_TXT', 'DISP_TXT', 'CASE_DISP', 'DISPOSITION']);
     const acres = pick(['RCRD_ACRS', 'ACRES', 'RECORD_ACRES', 'RCRD_ACRES']);
     const stateVal = pick(cfg.stateFields);
 
@@ -526,11 +535,21 @@ function normalizeProps(props, cfg = null) {
 // returning nationwide results labeled as one state would be worse.
 function resolveBaseWhere(cfg, fields) {
   if (!cfg.usState) return null;
+  const stateCode = escapeSql(cfg.usState).toUpperCase();
   const stateField = pickField(cfg.stateFields, fields);
-  if (!stateField || !/^[A-Za-z0-9_.]+$/.test(stateField.name)) {
-    throw new Error('The BLM registry schema changed and state filtering is unavailable. Try again later.');
+  if (stateField && /^[A-Za-z0-9_.]+$/.test(stateField.name)) {
+    return `UPPER(${stateField.name}) = '${stateCode}'`;
   }
-  return `UPPER(${stateField.name}) = '${escapeSql(cfg.usState).toUpperCase()}'`;
+  // Degraded fallback if the state field ever drifts again: MLRS case serials
+  // begin with the two-letter admin state code (e.g. NV105331298), so scope by
+  // serial prefix. Slightly imprecise near borders (admin state can differ
+  // from geographic state) but far better than a hard failure — and honest:
+  // still never returns nationwide results labeled as one state.
+  const serialField = pickField(cfg.numberFields, fields);
+  if (serialField && /^[A-Za-z0-9_.]+$/.test(serialField.name) && isStringType(serialField)) {
+    return `UPPER(${serialField.name}) LIKE '${stateCode}%'`;
+  }
+  throw new Error('The BLM registry schema changed and state filtering is unavailable. Try again later.');
 }
 
 async function searchArcgis(cfg, term, type, res) {

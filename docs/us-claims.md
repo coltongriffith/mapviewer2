@@ -57,18 +57,20 @@ records.
 ## Field mapping (candidates → resolved at runtime)
 
 Field names are resolved at runtime against live layer metadata (the same
-mechanism as the Canadian ArcGIS provinces), from these candidate lists in
-`api/claims.js` (`US_JURISDICTIONS`):
+mechanism as the Canadian ArcGIS provinces), from candidate lists in
+`api/claims.js` (`US_JURISDICTIONS`). The first name in each list is the
+**verified live field** (checked July 2026 against the layer's documented
+schema); the rest are drift tolerance:
 
-| Purpose        | Candidates                                            | Normalized to |
-|----------------|-------------------------------------------------------|---------------|
-| MLRS serial    | CSE_NR, MLRS_CSE_NR, CASE_NR, SER_NR, SERIAL_NR       | `TAG_NUMBER` |
-| Legacy serial  | LGCY_CSE_NR, LEGACY_CASE_NR, LGCY_SER_NR              | `LEGACY_NR` |
-| Claim name     | CSE_NAME, CLAIM_NAME, MC_NAME, CASE_NAME, NAME        | `CLAIM_NAME` |
-| State          | STATE_GEO, ADMIN_ST, ADM_ST, STATE                    | `US_STATE` + query scoping |
-| Claim type     | CSE_TYPE_TXT, CASETYPE_TXT, CSE_TYPE, CASE_TYPE       | `TITLE_TYPE_DESCRIPTION` (original) + `CLAIM_TYPE` (normalized) |
-| Disposition    | CSE_DISP_TXT, DISP_TXT, CASE_DISP, DISPOSITION        | `STATUS` |
-| Recorded acres | RCRD_ACRS, ACRES, RECORD_ACRES                        | `AREA_IN_HECTARES` (÷2.47105; original preserved) |
+| Purpose        | Verified live field | Fallback candidates                        | Normalized to |
+|----------------|---------------------|--------------------------------------------|---------------|
+| MLRS serial    | `CSE_NR`            | MLRS_CSE_NR, CASE_NR, SER_NR, SERIAL_NR    | `TAG_NUMBER` |
+| Legacy serial  | *(not published)*   | LGCY_CSE_NR, LEGACY_CASE_NR, LGCY_SER_NR   | `LEGACY_NR` — activates automatically if BLM adds the field; until then serial search matches `CSE_NR` only |
+| Claim name     | `CSE_NAME`          | CLAIM_NAME, MC_NAME, CASE_NAME, NAME       | `CLAIM_NAME` |
+| State          | `GEO_STATE`         | ADMIN_STATE, STATE_GEO, ADMIN_ST, ADM_ST, STATE | `US_STATE` + query scoping (GEO_STATE = where the land is; ADMIN_STATE = administering office, differs near borders) |
+| Claim type     | `BLM_PROD`          | CSE_TYPE_TXT, CASETYPE_TXT, CSE_TYPE, CASE_TYPE | `TITLE_TYPE_DESCRIPTION` (original) + `CLAIM_TYPE` (normalized) |
+| Disposition    | `CSE_DISP`          | CSE_DISP_TXT, DISP_TXT, CASE_DISP, DISPOSITION | `STATUS` |
+| Recorded acres | `RCRD_ACRS`         | ACRES, RECORD_ACRES                        | `AREA_IN_HECTARES` (÷2.47105; original preserved) |
 
 Normalized claim types: `lode`, `placer`, `mill_site`, `tunnel_site`,
 `other`, `unknown` — mapped from official case-type text (substring match on
@@ -83,9 +85,12 @@ category is only added if the live schema exposes an official quality field
 (mapping must come from BLM's own metadata, not invented).
 
 State scoping: every attribute and bbox query is AND-ed with
-`UPPER(<state field>) = '<XX>'`. If the state field cannot be resolved the
-request **fails closed** with a clear error — nationwide results must never
-be mislabeled as one state.
+`UPPER(<state field>) = '<XX>'`. If no state field resolves (schema drift),
+scoping degrades to serial-prefix matching (`UPPER(CSE_NR) LIKE 'XX%'` —
+MLRS case serials begin with the two-letter admin state code; slightly
+imprecise near borders but never nationwide). Only when neither a state nor
+a serial field resolves does the request **fail closed** with a clear error —
+nationwide results must never be mislabeled as one state.
 
 ## Post-deploy verification checklist (REQUIRED — sandbox could not reach BLM)
 

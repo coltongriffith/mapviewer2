@@ -70,6 +70,39 @@ describe('jurisdiction selector', () => {
   });
 });
 
+describe('deep-link auto-search', () => {
+  it('auto-adopts the strongest cross-province hit when the deep-linked province is empty', async () => {
+    useClaimsState.search.mockClear();
+    useClaimsState.searchOtherProvinces.mockClear();
+    useClaimsState.adoptResults.mockClear();
+
+    vi.stubEnv('VITE_ENABLE_US_CLAIMS', '');
+    vi.resetModules();
+    const { default: RegistrySearch } = await import('../src/components/RegistrySearch.jsx');
+    const props = { onImport: vi.fn(), onBack: vi.fn(), initialProvince: 'bc', initialQuery: 'Goliath Resources', autoSearch: true };
+    const view = render(<RegistrySearch {...props} />);
+
+    // Mount effect fired the deep-link search against the page's province.
+    expect(useClaimsState.search).toHaveBeenCalledWith('Goliath Resources', 'company', 'bc');
+
+    // BC resolves empty → the cross-province sweep must start.
+    useClaimsState.results = { features: [], meta: {} };
+    view.rerender(<RegistrySearch {...props} />);
+    await waitFor(() => expect(useClaimsState.searchOtherProvinces).toHaveBeenCalled());
+
+    // Sweep lands hits → the strongest one is adopted automatically (no click).
+    const onData = { features: [usClaim(1, 'lode')], meta: {} };
+    useClaimsState.crossProvinceHits = [
+      { province: { value: 'sk', label: 'Saskatchewan', modes: ['company', 'number'] }, count: 2, data: { features: [], meta: {} } },
+      { province: { value: 'on', label: 'Ontario', modes: ['company', 'number'] }, count: 14, data: onData },
+    ];
+    view.rerender(<RegistrySearch {...props} />);
+    await waitFor(() => expect(useClaimsState.adoptResults).toHaveBeenCalledWith(onData));
+    expect(view.container.querySelector('select').value).toBe('on');
+    useClaimsState.crossProvinceHits = null;
+  });
+});
+
 describe('US results: type chips + disclaimer', () => {
   it('filters the flat list by claim type and shows the BLM disclaimer', async () => {
     useClaimsState.results = {

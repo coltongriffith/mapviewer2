@@ -235,7 +235,9 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
     const q = (initialQuery || '').trim();
     if (q.length < 2) return;
     autoSearchedRef.current = true;
-    pendingSearchRef.current = { province, mode: 'company', query: q };
+    // auto: true → a zero-result outcome may adopt a cross-province hit
+    // automatically (the visitor didn't choose this province, a deep link did).
+    pendingSearchRef.current = { province, mode: 'company', query: q, auto: true };
     search(q, 'company', province);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -258,6 +260,10 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
       // claims at all — check the other provinces in the background so a
       // wrong-province guess doesn't read as "search is broken".
       if (!error && results?.features?.length === 0 && pending.mode !== 'map') {
+        // Deep-link auto-searches adopt a cross-province hit automatically —
+        // the province was a page's guess, not the visitor's choice, so
+        // leaving them on "No claims found in <wrong province>" is a dead end.
+        autoAdoptRef.current = Boolean(pending.auto);
         searchOtherProvinces(
           pending.query,
           pending.mode,
@@ -273,6 +279,20 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
       pendingSearchRef.current = null;
     }
   }, [results, error, loading, searchOtherProvinces]);
+
+  // Auto-adopt the strongest cross-province hit for deep-link auto-searches.
+  // Manual searches keep the explicit "Switch & view" buttons — a user who
+  // picked a province themselves shouldn't be yanked to another one.
+  const autoAdoptRef = useRef(false);
+  useEffect(() => {
+    if (!autoAdoptRef.current || crossProvinceLoading) return;
+    autoAdoptRef.current = false;             // consume regardless of outcome
+    if (crossProvinceHits?.length) {
+      const top = crossProvinceHits.reduce((a, b) => (b.count > a.count ? b : a));
+      handleSwitchProvince(top);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [crossProvinceHits, crossProvinceLoading]);
 
   function handleSwitchProvince(hit) {
     setProvince(hit.province.value);

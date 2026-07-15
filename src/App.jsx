@@ -2524,10 +2524,17 @@ export default function App() {
         // and auto-run the search so they land on the company's live claims.
         // Cross-province fallback in RegistrySearch covers a wrong/absent region.
         const province = REGION_TO_PROVINCE[(params.get('region') || '').toLowerCase()] || null;
+        // Registries store holders in clipped legal form ("GOLIATH RESOURCES
+        // LTD") while the CTA carries the full issuer name ("Goliath Resources
+        // Limited") — an ILIKE on the full name misses. Search without the
+        // trailing corporate suffix; display labels keep the full name.
+        const searchQuery = (company || '')
+          .replace(/[,.]?\s+(limited|ltd|corp(oration)?|inc(orporated)?|company|co|plc)\.?\s*$/i, '')
+          .trim();
         setScreen('editor');
         setAddClaimsProvince(province);
-        setAddClaimsQuery(company || '');
-        setAddClaimsAutoSearch(Boolean(company));
+        setAddClaimsQuery(searchQuery);
+        setAddClaimsAutoSearch(Boolean(searchQuery));
         setAddClaimsModalPath('registry');
         setShowAddClaimsModal(true);
         setUploadStatus({ type: 'info', message: `Searching the live registry for ${label}'s claims…` });
