@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import RegistrySearch from './RegistrySearch';
 import ClaimsFileUpload from './ClaimsFileUpload';
+import { US_CLAIMS_ENABLED } from '../utils/jurisdictions';
 
 export default function AddClaimsModal({ onClose, onImport, defaultPath = null, initialProvince = null, initialQuery = '', autoSearch = false }) {
   const [path, setPath] = useState(defaultPath); // null | 'registry' | 'upload'
@@ -19,13 +20,15 @@ export default function AddClaimsModal({ onClose, onImport, defaultPath = null, 
             <div className="share-modal-icon-wrap" style={{ fontSize: 22 }}>🗺</div>
             <h3 className="export-hd-title">Add Claims</h3>
             <p className="export-hd-desc">
-              Load mineral claim boundaries onto your map — search a live provincial registry or upload a file.
+              Load mineral claim boundaries onto your map — search a live claims registry or upload a file.
             </p>
             <div className="claims-path-row">
               <button className="claims-path-btn" onClick={() => setPath('registry')}>
                 <span className="claims-path-icon">🔍</span>
                 <strong>Search Claims Registry</strong>
-                <span>BC · Ontario · Quebec · Saskatchewan · Manitoba · Newfoundland · Yukon</span>
+                <span>{US_CLAIMS_ENABLED
+                  ? 'Canada: BC · ON · QC · SK · MB · NL · Yukon  ·  U.S.: 11 western states (federal BLM)'
+                  : 'BC · Ontario · Quebec · Saskatchewan · Manitoba · Newfoundland · Yukon'}</span>
               </button>
               <button className="claims-path-btn" onClick={() => setPath('upload')}>
                 <span className="claims-path-icon">📁</span>
