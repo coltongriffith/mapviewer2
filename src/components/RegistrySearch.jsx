@@ -235,10 +235,16 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
     const q = (initialQuery || '').trim();
     if (q.length < 2) return;
     autoSearchedRef.current = true;
+    // Company search where supported (all Canadian provinces except MB); US
+    // jurisdictions have no claimant data, so fall back to their first
+    // supported mode (claim name) instead of firing a request the server
+    // rejects with 400.
+    const cfg = ALL_JURISDICTIONS.find((p) => p.value === province) || ALL_JURISDICTIONS[0];
+    const autoMode = cfg.modes.includes('company') ? 'company' : autoDetectMode(q, cfg.modes);
     // auto: true → a zero-result outcome may adopt a cross-province hit
     // automatically (the visitor didn't choose this province, a deep link did).
-    pendingSearchRef.current = { province, mode: 'company', query: q, auto: true };
-    search(q, 'company', province);
+    pendingSearchRef.current = { province, mode: autoMode, query: q, auto: true };
+    search(q, autoMode, province);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -397,7 +403,9 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
   function handleProvinceChange(val) {
     setProvince(val);
     setManualMode(false);
-    const cfg = PROVINCES.find(p => p.value === val) || PROVINCES[0];
+    // ALL_JURISDICTIONS, not PROVINCES: a US state must resolve its own modes
+    // (name/number), never fall back to BC's (company/number/map).
+    const cfg = ALL_JURISDICTIONS.find(p => p.value === val) || ALL_JURISDICTIONS[0];
     setMode(autoDetectMode(query, cfg.modes));
     reset();
     clearSelections();

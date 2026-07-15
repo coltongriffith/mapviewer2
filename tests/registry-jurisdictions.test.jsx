@@ -103,6 +103,19 @@ describe('deep-link auto-search', () => {
   });
 });
 
+describe('US deep-link auto-search', () => {
+  it('uses a supported mode (name) for US states instead of company', async () => {
+    useClaimsState.search.mockClear();
+    const { container } = await renderRegistry(true, {
+      initialProvince: 'us-nv', initialQuery: 'Goldie', autoSearch: true,
+    });
+    // US jurisdictions have no company mode — the server would 400. The
+    // auto-search must fall back to the state's first supported mode.
+    expect(useClaimsState.search).toHaveBeenCalledWith('Goldie', 'name', 'us-nv');
+    expect(container.querySelector('select').value).toBe('us-nv');
+  });
+});
+
 describe('US results: type chips + disclaimer', () => {
   it('filters the flat list by claim type and shows the BLM disclaimer', async () => {
     useClaimsState.results = {
