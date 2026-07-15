@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { trackEvent, trackEventOnce } from './track';
 
 function requireSupabase() {
   if (!supabase) throw new Error('Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to your environment.');
@@ -39,11 +40,15 @@ export async function updateProjectThumbnail(id, thumbnail) {
   if (error) throw error;
 }
 
-export async function saveCloudProject({ id, name, payload }) {
+// silent=true suppresses the analytics events — used by the sign-in bulk
+// migration, which creates cloud rows for projects made earlier and must not
+// count them as "created now" or flood the activity feed.
+export async function saveCloudProject({ id, name, payload, silent = false }) {
   const user = await currentUser();
 
   const now = new Date().toISOString();
-  const record = { name: name || payload?.layout?.title || 'Untitled map', payload, updated_at: now };
+  const cleanName = (name || payload?.layout?.title || 'Untitled map');
+  const record = { name: cleanName, payload, updated_at: now };
 
   if (id) {
     const { data, error } = await requireSupabase()
@@ -54,6 +59,9 @@ export async function saveCloudProject({ id, name, payload }) {
       .select('id');
     if (error) throw error;
     if (!data || !data.length) throw new Error('Project not found in cloud');
+    // "Worked on this project" — deduped per project per tab-session so the
+    // ~10s autosave cadence doesn't turn into keystroke-count noise.
+    if (!silent) trackEventOnce('project_saved', id, { project_id: id, name: cleanName.slice(0, 80) });
     return id;
   } else {
     const { data, error } = await requireSupabase()
@@ -62,6 +70,7 @@ export async function saveCloudProject({ id, name, payload }) {
       .select('id')
       .single();
     if (error) throw error;
+    if (!silent) trackEvent('project_created', { project_id: data.id, name: cleanName.slice(0, 80) });
     return data.id;
   }
 }
@@ -192,15 +201,12 @@ export async function shareMap(project, userId = null) {
 
 export async function loadSharedMap(id) {
   const sb = requireSupabase();
-  const { data, error } = await sb
-    .from('shared_maps')
-    .select('state')
-    .eq('id', id)
-    .single();
+  // Narrow lookup RPC (get_shared_map): returns only the map state for one
+  // id and bumps view_count server-side. Direct table SELECT is revoked —
+  // anonymous clients cannot enumerate shared_maps.
+  const { data, error } = await sb.rpc('get_shared_map', { share_id: id });
   if (error || !data) return null;
-  // Increment view count in the background (fire-and-forget)
-  sb.rpc('increment_shared_map_view', { map_id: id }).then(() => {});
-  return data.state;
+  return data;
 }
 
 // Fork a shared map's state into the signed-in user's own account as a brand-new

@@ -57,11 +57,26 @@ export async function loadGeoJSON(file) {
     } catch {
       throw new Error("Could not open KMZ file — it may be corrupt.");
     }
+    // Archive sanity limits: KMZ is attacker-suppliable, so bound the entry
+    // count, reject path-traversal names, and cap the uncompressed KML size
+    // (decompression-bomb guard) before parsing anything.
+    const entryNames = Object.keys(zip.files);
+    if (entryNames.length > 500) throw new Error("KMZ archive has too many files (max 500).");
+    if (entryNames.some((f) => f.includes("..") || f.startsWith("/") || /^[a-zA-Z]:/.test(f))) {
+      throw new Error("KMZ archive contains suspicious file paths and was rejected.");
+    }
     // KMZ is a ZIP; the main KML is conventionally doc.kml or the first .kml file
-    const kmlFiles = Object.keys(zip.files).filter((f) => f.toLowerCase().endsWith(".kml"));
+    const kmlFiles = entryNames.filter((f) => f.toLowerCase().endsWith(".kml"));
     const kmlName = kmlFiles.find((f) => f.toLowerCase() === "doc.kml") || kmlFiles[0];
     if (!kmlName) throw new Error("No .kml file found inside KMZ archive.");
+    const declaredSize = zip.files[kmlName]._data?.uncompressedSize;
+    if (declaredSize && declaredSize > 100 * 1024 * 1024) {
+      throw new Error("KMZ contains an unreasonably large KML (over 100 MB uncompressed).");
+    }
     const text = await zip.files[kmlName].async("string");
+    if (text.length > 100 * 1024 * 1024) {
+      throw new Error("KMZ contains an unreasonably large KML (over 100 MB uncompressed).");
+    }
     const doc = new DOMParser().parseFromString(text, "text/xml");
     const parserError = doc.querySelector("parsererror");
     if (parserError) throw new Error("KMZ contained an invalid KML file.");
@@ -72,9 +87,13 @@ export async function loadGeoJSON(file) {
 
   if (name.endsWith(".geojson") || name.endsWith(".json")) {
     const text = await file.text();
-    const data = JSON.parse(text);
-    if (!data || typeof data !== "object") throw new Error("Invalid GeoJSON file.");
-    return data;
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      throw new Error("Invalid JSON — the file could not be parsed.");
+    }
+    return validateGeoJSON(data);
   }
 
   if (name.endsWith(".shp")) {
@@ -83,10 +102,14 @@ export async function loadGeoJSON(file) {
     const { default: shp } = await import('shpjs');
     const geoms = shp.parseShp(buffer);
     if (!geoms?.length) throw new Error("Shapefile contained no geometry.");
-    return {
+    const fc = {
       type: "FeatureCollection",
       features: geoms.map((g) => ({ type: "Feature", geometry: g, properties: {} })),
     };
+    if (!coordsLookLikeLonLat(fc)) {
+      throw new Error("This shapefile's coordinates look projected (e.g. UTM metres), and no .prj file was included. Drop the .prj alongside the .shp so the projection can be converted to lat/long.");
+    }
+    return fc;
   }
 
   throw new Error("Unsupported file type. Use .zip (shapefile), .shp/.dbf (dropped together), .geojson, .json, .kml, or .kmz");
@@ -95,6 +118,7 @@ export async function loadGeoJSON(file) {
 // --- Multi-file shapefile import (.shp + .dbf + optional .prj/.shx) ---
 
 export async function loadShapefileSet(files) {
+  const base = (n) => n.replace(/\.[^.]+$/, '').toLowerCase();
   const byExt = {};
   for (const f of files) {
     const ext = f.name.toLowerCase().split('.').pop();
@@ -102,24 +126,143 @@ export async function loadShapefileSet(files) {
   }
   if (!byExt.shp) throw new Error("No .shp file found. Drop all shapefile parts together (.shp, .dbf, .prj, .shx).");
 
+  // Companion files must belong to the same shapefile: matching basenames.
+  const shpBase = base(byExt.shp.name);
+  for (const ext of ['dbf', 'prj', 'shx']) {
+    if (byExt[ext] && base(byExt[ext].name) !== shpBase) {
+      throw new Error(`Shapefile parts don't match: "${byExt[ext].name}" belongs to a different shapefile than "${byExt.shp.name}". Drop one shapefile's parts at a time.`);
+    }
+  }
+
   const { default: shp } = await import('shpjs');
   const shpBuf = await byExt.shp.arrayBuffer();
   const geoms = shp.parseShp(shpBuf);
 
+  let fc;
   if (byExt.dbf) {
     const dbfBuf = await byExt.dbf.arrayBuffer();
     const rows = shp.parseDbf(dbfBuf);
-    const result = shp.combine([geoms, rows]);
-    if (!result?.features?.length) throw new Error("Shapefile contained no features.");
-    return result;
+    fc = shp.combine([geoms, rows]);
+    if (!fc?.features?.length) throw new Error("Shapefile contained no features.");
+  } else {
+    // No .dbf — geometry only, no attributes
+    if (!geoms?.length) throw new Error("Shapefile contained no geometry.");
+    fc = {
+      type: "FeatureCollection",
+      features: geoms.map((g) => ({ type: "Feature", geometry: g, properties: {} })),
+    };
   }
 
-  // No .dbf — geometry only, no attributes
-  if (!geoms?.length) throw new Error("Shapefile contained no geometry.");
-  return {
-    type: "FeatureCollection",
-    features: geoms.map((g) => ({ type: "Feature", geometry: g, properties: {} })),
+  // Projection handling: the .prj declares the source CRS. Geographic WGS84
+  // (and near-identical NAD83) pass through; projected CRSs are reprojected
+  // to WGS84 with proj4. A projected file WITHOUT a .prj is rejected with a
+  // useful error rather than silently plotted at metre coordinates.
+  const prjText = byExt.prj ? (await byExt.prj.text()).trim() : null;
+  return applyShapefileProjection(fc, prjText);
+}
+
+// Exported for tests. Reprojects a FeatureCollection according to .prj WKT.
+export async function applyShapefileProjection(fc, prjText) {
+  if (prjText) {
+    if (isGeographicWgs84(prjText)) return fc;   // already lat/long
+    let converter;
+    try {
+      const { default: proj4 } = await import('proj4');
+      converter = proj4(prjText, 'EPSG:4326');
+    } catch {
+      throw new Error("This shapefile's .prj projection isn't supported. Re-export it in WGS84 (EPSG:4326) — most GIS tools and mapshaper.org can do this.");
+    }
+    return reprojectGeoJSON(fc, (xy) => converter.forward(xy));
+  }
+  // No .prj: accept only if the coordinates already look like lon/lat.
+  if (!coordsLookLikeLonLat(fc)) {
+    throw new Error("This shapefile's coordinates look projected (e.g. UTM metres), but no .prj file was included so the projection is unknown. Include the .prj, or re-export the file in WGS84 lat/long.");
+  }
+  return fc;
+}
+
+// GEOGCS roots (WGS84 / NAD83) are already latitude/longitude — no transform.
+function isGeographicWgs84(wkt) {
+  const head = wkt.slice(0, 20).toUpperCase();
+  if (head.startsWith('PROJCS')) return false;
+  return /^GEOGCS/i.test(wkt.trim()) && /WGS[_\s]?19?84|NAD[_\s]?19?83/i.test(wkt);
+}
+
+// Structure-preserving coordinate transform; never mutates the source.
+function reprojectGeoJSON(fc, transform) {
+  const mapCoords = (coords) => {
+    if (typeof coords[0] === 'number') {
+      const [x, y] = transform([coords[0], coords[1]]);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) {
+        throw new Error('Projection produced invalid coordinates — the .prj may not match this data.');
+      }
+      return coords.length > 2 ? [x, y, ...coords.slice(2)] : [x, y];
+    }
+    return coords.map(mapCoords);
   };
+  return {
+    ...fc,
+    features: (fc.features || []).map((f) => ({
+      ...f,
+      geometry: f.geometry ? { ...f.geometry, coordinates: mapCoords(f.geometry.coordinates) } : f.geometry,
+    })),
+  };
+}
+
+// Sample up to 50 coordinate pairs; true when all are plausible lon/lat.
+function coordsLookLikeLonLat(fc) {
+  const sample = [];
+  const visit = (coords) => {
+    if (sample.length >= 50) return;
+    if (typeof coords[0] === 'number') { sample.push(coords); return; }
+    for (const c of coords) visit(c);
+  };
+  for (const f of fc.features || []) {
+    if (f.geometry?.coordinates) visit(f.geometry.coordinates);
+    if (sample.length >= 50) break;
+  }
+  if (!sample.length) return true; // nothing to judge
+  return sample.every(([x, y]) => Math.abs(x) <= 180 && Math.abs(y) <= 90);
+}
+
+// ── GeoJSON validation ──────────────────────────────────────────────────────
+
+const GEOMETRY_TYPES = new Set(['Point', 'MultiPoint', 'LineString', 'MultiLineString', 'Polygon', 'MultiPolygon', 'GeometryCollection']);
+
+function validGeometry(g) {
+  if (g === null) return true; // null geometry is legal GeoJSON
+  if (!g || typeof g !== 'object' || !GEOMETRY_TYPES.has(g.type)) return false;
+  if (g.type === 'GeometryCollection') {
+    return Array.isArray(g.geometries) && g.geometries.every(validGeometry);
+  }
+  if (!Array.isArray(g.coordinates)) return false;
+  // Spot-check the first coordinate leaf: must bottom out in numbers.
+  let leaf = g.coordinates;
+  let depth = 0;
+  while (Array.isArray(leaf) && depth < 6) { leaf = leaf[0]; depth += 1; }
+  if (g.coordinates.length === 0) return g.type !== 'Point'; // empty multi-geoms are tolerable
+  return typeof leaf === 'number' && Number.isFinite(leaf);
+}
+
+// Exported for tests. Accepts FeatureCollection / Feature / bare geometry and
+// always returns a FeatureCollection; throws a clear error on anything else.
+export function validateGeoJSON(data) {
+  if (!data || typeof data !== 'object') throw new Error('Invalid GeoJSON file.');
+  if (data.type === 'FeatureCollection') {
+    if (!Array.isArray(data.features)) throw new Error('Invalid GeoJSON: FeatureCollection has no features array.');
+    const bad = data.features.find((f) => !f || f.type !== 'Feature' || !validGeometry(f.geometry ?? null));
+    if (bad) throw new Error('Invalid GeoJSON: a feature has a malformed or unrecognized geometry.');
+    return data;
+  }
+  if (data.type === 'Feature') {
+    if (!validGeometry(data.geometry ?? null)) throw new Error('Invalid GeoJSON: malformed geometry.');
+    return { type: 'FeatureCollection', features: [data] };
+  }
+  if (GEOMETRY_TYPES.has(data.type)) {
+    if (!validGeometry(data)) throw new Error('Invalid GeoJSON: malformed geometry.');
+    return { type: 'FeatureCollection', features: [{ type: 'Feature', geometry: data, properties: {} }] };
+  }
+  throw new Error(`Not a recognized GeoJSON file (root type "${data.type ?? 'missing'}").`);
 }
 
 // --- CSV drillhole import ---
@@ -154,24 +297,23 @@ function valuesLookLikeLonLat(rows, xHeader, yHeader) {
 }
 
 async function parseCsvText(text) {
-  const lines = text.split(/\r?\n/);
-  if (!lines.length) return { headers: [], rows: [] };
-  const delim = lines[0].includes('\t') ? '\t' : ',';
-  const headers = lines[0].split(delim).map((h) => h.trim().replace(/^["']|["']$/g, ''));
-  const rows = [];
-  const CHUNK = 2000;
-  for (let i = 1; i < lines.length; i += CHUNK) {
-    const end = Math.min(i + CHUNK, lines.length);
-    for (let j = i; j < end; j++) {
-      const line = lines[j].trim();
-      if (!line) continue;
-      const parts = line.split(delim).map((v) => v.trim().replace(/^["']|["']$/g, ''));
-      const row = {};
-      headers.forEach((h, k) => { row[h] = parts[k] ?? ''; });
-      rows.push(row);
-    }
-    if (i + CHUNK < lines.length) await new Promise((resolve) => setTimeout(resolve, 0));
-  }
+  // RFC 4180-compliant parsing (quoted commas, escaped quotes, blank fields,
+  // CRLF/LF, multiline quoted fields). Delimiter auto-detected from comma,
+  // tab, and semicolon so the existing TSV/semicolon workflows keep working.
+  const { default: Papa } = await import('papaparse');
+  const clean = text.charCodeAt(0) === 0xFEFF ? text.slice(1) : text; // strip UTF-8 BOM
+  const parsed = Papa.parse(clean, {
+    header: true,
+    skipEmptyLines: 'greedy',
+    delimitersToGuess: [',', '\t', ';'],
+    transformHeader: (h) => h.trim(),
+  });
+  const headers = (parsed.meta?.fields || []).filter((h) => h != null);
+  const rows = (parsed.data || []).map((row) => {
+    const out = {};
+    for (const h of headers) out[h] = typeof row[h] === 'string' ? row[h].trim() : (row[h] ?? '');
+    return out;
+  });
   return { headers, rows };
 }
 
@@ -192,7 +334,8 @@ export function csvToGeoJSON(rows, mapping) {
     });
   }
   if (!features.length) throw new Error("No valid coordinate rows found in CSV.");
-  return { type: 'FeatureCollection', features };
+  const skippedRows = rows.length - features.length;
+  return { type: 'FeatureCollection', features, ...(skippedRows > 0 ? { meta: { skippedRows } } : {}) };
 }
 
 export async function loadCSV(file) {

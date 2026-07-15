@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase';
-import { getSessionId } from './session';
+import { trackLead } from './track';
 
 const LEAD_KEY = 'mapviewer.hdLeadCaptures';
 
@@ -22,14 +22,11 @@ export function saveLead({ email, projectTitle = '' }) {
   } catch {
     // localStorage quota exceeded or unavailable — fail silently
   }
-  // Mirror to Supabase for admin dashboard visibility (fire-and-forget)
+  // Mirror to the backend for admin dashboard visibility (fire-and-forget).
+  // Goes through /api/track, which validates the email format, normalizes
+  // fields, and rate-limits — the leads table accepts no direct anon inserts.
+  trackLead({ email: entry.email, projectTitle: entry.projectTitle });
   if (supabase) {
-    supabase.from('leads').insert({
-      session_id: getSessionId(),
-      email: entry.email,
-      project_title: entry.projectTitle || null,
-      captured_at: entry.capturedAt,
-    }).then(() => {});
     // Trigger the welcome email. Ships inert: the send-welcome function no-ops
     // without a RESEND_API_KEY, and if it isn't deployed yet the invoke just
     // errors and is swallowed — nothing sends until email is configured.
