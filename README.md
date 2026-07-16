@@ -58,6 +58,10 @@ Documented in `.env.example`. Summary:
 - `SUPABASE_URL` / `SUPABASE_ANON_KEY` — optional server-side aliases; the
   `VITE_`-prefixed values are used as fallbacks by `api/claims.js` (Quebec)
   and `api/track.js`.
+- `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_MONTHLY_ID`,
+  `STRIPE_PRICE_YEARLY_ID` — Pro-subscription billing (see `docs/billing.md`).
+  Until set, billing endpoints return 503 and all plan checks fail open —
+  safe to deploy the code before configuring Stripe.
 
 ## Architecture notes
 
@@ -76,6 +80,10 @@ Documented in `.env.example`. Summary:
   Without `SUPABASE_SERVICE_ROLE_KEY` it accepts-and-drops so analytics can
   never break the app.
 - `api/geo.js` — echoes Vercel edge geolocation headers.
+- `api/stripe-checkout.js` / `api/stripe-portal.js` / `api/stripe-webhook.js`
+  — Pro-subscription billing (Stripe Checkout + customer portal + the
+  signature-verified webhook that syncs `public.user_plans`). Grandfathered
+  accounts (pre-launch) are never downgraded. See `docs/billing.md`.
 - `api/_lib/` — shared helpers (pagination, request guards, esri→GeoJSON);
   the underscore path means Vercel does not expose them as endpoints.
 

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { trackLandingClick } from '../utils/track';
 import { US_CLAIMS_ENABLED, US_COVERAGE_COPY } from '../utils/jurisdictions';
+import { PRICING, FREE_FEATURES, PRO_FEATURES } from '../utils/pricing';
 import { useAuth } from '../hooks/useAuth.jsx';
 import AuthModal from './AuthModal';
 
@@ -481,8 +482,45 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
           </div>
         </section>
 
+        {/* ── Pricing ────────────────────────────────────────────── */}
+        <section className="lm-pricing lm-reveal" id="pricing" data-section="pricing">
+          <h2 className="lm-h2" style={{ textAlign: 'center' }}>Simple pricing</h2>
+          <p className="lm-section-sub" style={{ textAlign: 'center' }}>
+            Start free — upgrade when your maps need to be presentation-clean.
+          </p>
+          <div className="lm-pricing-grid">
+            <div className="lm-price-card">
+              <h3>Free</h3>
+              <div className="lm-price-amount">$0</div>
+              <ul>
+                {FREE_FEATURES.map((f) => <li key={f}>✓ {f}</li>)}
+              </ul>
+              <button className="lm-btn lm-btn-ghost lm-btn-lg" type="button" onClick={onOpenEditor} data-track="Pricing: Start Free">
+                Start free
+              </button>
+            </div>
+            <div className="lm-price-card lm-price-card-pro">
+              <h3>Pro</h3>
+              <div className="lm-price-amount">
+                ${PRICING.monthly}<span className="lm-price-per">/month</span>
+              </div>
+              <div className="lm-price-alt">or ${PRICING.yearly}/year — 2 months free</div>
+              <ul>
+                {PRO_FEATURES.map((f) => <li key={f}>✓ {f}</li>)}
+              </ul>
+              <button className="lm-btn lm-btn-primary lm-btn-lg" type="button" onClick={onOpenEditor} data-track="Pricing: Go Pro">
+                Start free, upgrade in-app
+              </button>
+            </div>
+          </div>
+          <p className="lm-cta-pricing">
+            Early adopters keep full Pro access free, forever — every account created before paid plans
+            launched is grandfathered in. Secure checkout by Stripe; cancel anytime.
+          </p>
+        </section>
+
         {/* ── Final CTA ──────────────────────────────────────────── */}
-        <section className="lm-cta lm-reveal" id="pricing" data-section="bottom-cta">
+        <section className="lm-cta lm-reveal" data-section="bottom-cta">
           <div className="lm-cta-inner">
             <h2 className="lm-h2">Start building cleaner exploration maps.</h2>
             <p className="lm-section-sub lm-cta-sub">
@@ -496,7 +534,7 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
                 View Example Maps
               </button>
             </div>
-            <p className="lm-cta-pricing">Free during early access. Make your first map in minutes — create a free account to save it, reuse your branding, and export without a watermark. Team plans coming soon.</p>
+            <p className="lm-cta-pricing">Make your first map in minutes — create a free account to save it and reuse your branding. Pro removes the watermark and unlocks HD, SVG and PDF export.</p>
           </div>
         </section>
       </main>

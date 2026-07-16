@@ -20,6 +20,7 @@ const ExportHDModal = React.lazy(() => import('./components/ExportHDModal'));
 const HowToUseModal = React.lazy(() => import('./components/HowToUseModal'));
 const ColumnMapperModal = React.lazy(() => import('./components/ColumnMapperModal'));
 const AddClaimsModal = React.lazy(() => import('./components/AddClaimsModal'));
+const UpgradeModal = React.lazy(() => import('./components/UpgradeModal'));
 import { loadGeoJSON, loadCSV, loadShapefileSet } from './utils/importers';
 import sampleClaims from './assets/sampleClaims.json';
 import sampleDrillholes from './assets/sampleDrillholes.json';
@@ -53,6 +54,7 @@ import { saveLead, getLastLeadEmail } from './utils/leadCapture';
 import { trackSearch, trackEvent, trackEventOnce, trackPageView, trackPing } from './utils/track';
 import { createSaveCoordinator, runGuardedSave } from './utils/saveCoordinator';
 import { US_CLAIMS_ENABLED, US_STATES, US_GROUP_LABEL, US_GEOMETRY_DISCLAIMER, isUsJurisdiction } from './utils/jurisdictions';
+import { PRO_EXPORT_FORMATS, FREE_PROJECT_LIMIT } from './utils/pricing';
 import { runCloudMigration } from './utils/cloudMigration';
 import dissolveGeo from '@turf/dissolve';
 import {
@@ -697,7 +699,7 @@ export default function App() {
   const insetInputRef = useRef(null);
   const uploadInputRef = useRef(null);
 
-  const { user, signInWithMagicLink } = useAuth();
+  const { user, signInWithMagicLink, isPro, planDenied, refreshPlan } = useAuth();
   const [storageWarningDismissed, setStorageWarningDismissed] = useState(false);
   const [showBrandKitManager, setShowBrandKitManager] = useState(false);
   const [showAuthFromGate, setShowAuthFromGate] = useState(false);
@@ -727,6 +729,8 @@ export default function App() {
   const [recentProjects, setRecentProjects] = useState(() => listProjects());
   const [showRecentProjects, setShowRecentProjects] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
+  // Pro upsell: null | 'export' | 'projects' | 'watermark' | 'general'
+  const [upgradeReason, setUpgradeReason] = useState(null);
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [showAddClaimsModal, setShowAddClaimsModal] = useState(false);
@@ -2546,6 +2550,28 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Return from Stripe Checkout / billing portal. The webhook updates the
+  // plan server-side; refresh it here (twice — webhooks can lag a redirect
+  // by a few seconds) and confirm to the user.
+  useEffect(() => {
+    const billing = new URLSearchParams(window.location.search).get('billing');
+    if (!billing) return;
+    try { window.history.replaceState({}, '', window.location.pathname); } catch { /* noop */ }
+    if (billing === 'success') {
+      trackEvent('upgrade_checkout_completed', {}, user?.id);
+      setUploadStatus({ type: 'success', message: 'Welcome to Pro! Clean exports, HD formats, and unlimited projects are unlocked.' });
+      refreshPlan();
+      const t = setTimeout(() => refreshPlan(), 5000);
+      return () => clearTimeout(t);
+    }
+    if (billing === 'portal-return') refreshPlan();
+    if (billing === 'cancelled') {
+      setUploadStatus({ type: 'info', message: 'Checkout cancelled — no charge was made.' });
+    }
+    return undefined;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Deep links from blog/location SEO pages — lands visitors in a purposeful
   // editor instead of a blank one:
   //   /?intent=claims&region=british-columbia → editor + registry search with
@@ -3268,7 +3294,10 @@ export default function App() {
       // No paid tier yet — signed-in is the temporary stand-in so logged-in
       // users get a fully clean export now, ahead of billing. Revisit once
       // a real paid flag exists on the account.
-      const opts = { ...(project.layout?.exportSettings || {}), ...extraOptions, paidTier: Boolean(user) };
+      // Real plan flag: Pro (paid or grandfathered) exports are fully clean;
+      // free-plan exports keep the small corner credit. isPro fails open, so
+      // a transient plan-lookup problem can never watermark a paying user.
+      const opts = { ...(project.layout?.exportSettings || {}), ...extraOptions, paidTier: isPro };
       if (format === 'png') {
         await exportPNG(scene, opts);
       } else if (format === 'svg' || format === 'svg_ai') {
@@ -3313,6 +3342,15 @@ export default function App() {
   };
 
   const handleExportClick = (format) => {
+    // SVG / Illustrator / PDF are Pro features. Deny only on a DEFINITIVE
+    // free plan (planDenied) — grandfathered accounts and any user whose plan
+    // lookup hasn't resolved sail through (fail-open). Standard PNG is always
+    // available so export is never fully blocked.
+    if (PRO_EXPORT_FORMATS.includes(format) && planDenied) {
+      trackEvent('pro_gate_shown', { feature: 'export', format, signedIn: Boolean(user) }, user?.id);
+      setUpgradeReason('export');
+      return;
+    }
     // Signed-in users, or anyone who's already left an email, skip the gate for
     // raster/vector exports and get a clean file straight away. PDF always shows
     // the modal so the user can choose the page size.
@@ -5660,6 +5698,13 @@ export default function App() {
               setAddClaimsModalPath(null);
               if (screen !== 'editor') setScreen('editor');
             }}
+          />
+        )}
+        {upgradeReason && (
+          <UpgradeModal
+            reason={upgradeReason}
+            onClose={() => setUpgradeReason(null)}
+            onNeedSignIn={() => { setUpgradeReason(null); setScreen('account'); }}
           />
         )}
         {showExportModal ? (

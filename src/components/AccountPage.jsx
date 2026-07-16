@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
+import { PRICING, yearlyMonthlyEquivalent } from '../utils/pricing';
+import { startCheckout, openBillingPortal } from '../utils/billing';
 import {
   listCloudProjects,
   loadCloudProject,
@@ -172,6 +174,64 @@ function AccountSettingsCard({ settings, onSave }) {
   );
 }
 
+// Billing section: shows the current plan and routes to Stripe. Grandfathered
+// accounts see an explicit "free forever" note instead of upgrade buttons.
+function BillingSection({ onError }) {
+  const { isPro, planSource, planReady } = useAuth();
+  const [busy, setBusy] = useState(null); // 'month' | 'year' | 'portal'
+
+  const act = (kind, fn) => async () => {
+    setBusy(kind);
+    try {
+      await fn(); // redirects on success
+    } catch (err) {
+      onError(err);
+      setBusy(null);
+    }
+  };
+
+  const grandfathered = planSource === 'grandfathered';
+  return (
+    <section className="acct-section">
+      <div className="acct-section-header">
+        <h2>Plan &amp; Billing</h2>
+      </div>
+      {grandfathered ? (
+        <p className="acct-section-hint">
+          <strong>Pro — early adopter.</strong> You were here before paid plans existed, so you have
+          full Pro access, free, forever: clean exports, HD/SVG/PDF formats, and unlimited projects.
+          Nothing changes for your account.
+        </p>
+      ) : isPro ? (
+        <>
+          <p className="acct-section-hint">
+            <strong>Pro.</strong> Clean exports, HD/SVG/PDF formats, and unlimited cloud projects.
+          </p>
+          <button className="btn" type="button" disabled={busy === 'portal'} onClick={act('portal', openBillingPortal)}>
+            {busy === 'portal' ? 'Opening…' : 'Manage subscription'}
+          </button>
+        </>
+      ) : (
+        <>
+          <p className="acct-section-hint">
+            <strong>Free plan.</strong> Standard PNG export with a small credit, up to 3 cloud projects.
+            Pro unlocks clean exports, HD/SVG/PDF formats, and unlimited projects.
+          </p>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <button className="btn primary" type="button" disabled={Boolean(busy) || !planReady} onClick={act('year', () => startCheckout('year'))}>
+              {busy === 'year' ? 'Opening checkout…' : `Upgrade — $${PRICING.yearly}/yr (≈ $${yearlyMonthlyEquivalent()}/mo)`}
+            </button>
+            <button className="btn" type="button" disabled={Boolean(busy) || !planReady} onClick={act('month', () => startCheckout('month'))}>
+              {busy === 'month' ? 'Opening checkout…' : `$${PRICING.monthly}/month`}
+            </button>
+          </div>
+          <p className="acct-section-hint" style={{ marginTop: 8 }}>Secure checkout by Stripe. Cancel anytime.</p>
+        </>
+      )}
+    </section>
+  );
+}
+
 export default function AccountPage({ onOpenProject, onNewProject, onExit, onApplyBrandKit, onUseKit, accountSettings = {}, onSaveSettings }) {
   const { user, signOut } = useAuth();
   const [projects, setProjects] = useState([]);
@@ -248,6 +308,8 @@ export default function AccountPage({ onOpenProject, onNewProject, onExit, onApp
             <button type="button" className="secondary-btn" style={{ marginLeft: 10 }} onClick={() => setLoadError(null)}>Dismiss</button>
           </div>
         )}
+        <BillingSection onError={surfaceActionError('Billing')} />
+
         <section className="acct-section">
           <div className="acct-section-header">
             <h2>Brand defaults</h2>

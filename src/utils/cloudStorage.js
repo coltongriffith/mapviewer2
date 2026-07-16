@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase';
 import { trackEvent, trackEventOnce } from './track';
+import { FREE_PROJECT_LIMIT, isGrandfathered } from './pricing';
 
 function requireSupabase() {
   if (!supabase) throw new Error('Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to your environment.');
@@ -40,6 +41,31 @@ export async function updateProjectThumbnail(id, thumbnail) {
   if (error) throw error;
 }
 
+// Free-plan cap on NEW cloud projects. FAIL-OPEN by design: any error in
+// this check (plan row missing, lookup failed, count failed) allows the
+// save — a grandfathered or paying user must never lose a save to a
+// transient lookup problem. Only a definitive free plan at the limit denies.
+async function assertProjectQuota(user) {
+  try {
+    if (isGrandfathered(user)) return; // early accounts: unlimited, forever
+    const sb = requireSupabase();
+    const { data: planRow, error: planErr } = await sb
+      .from('user_plans').select('plan').eq('user_id', user.id).maybeSingle();
+    if (planErr || !planRow || planRow.plan === 'pro') return;
+    const { count, error: countErr } = await sb
+      .from('projects').select('id', { count: 'exact', head: true }).eq('user_id', user.id);
+    if (countErr || count == null || count < FREE_PROJECT_LIMIT) return;
+    const err = new Error(
+      `The free plan saves up to ${FREE_PROJECT_LIMIT} cloud projects — upgrade to Pro for unlimited projects. Your work is still safe in this browser.`,
+    );
+    err.code = 'PROJECT_LIMIT';
+    throw err;
+  } catch (e) {
+    if (e?.code === 'PROJECT_LIMIT') throw e;
+    // Anything else (network, schema) — fail open.
+  }
+}
+
 // silent=true suppresses the analytics events — used by the sign-in bulk
 // migration, which creates cloud rows for projects made earlier and must not
 // count them as "created now" or flood the activity feed.
@@ -64,6 +90,7 @@ export async function saveCloudProject({ id, name, payload, silent = false }) {
     if (!silent) trackEventOnce('project_saved', id, { project_id: id, name: cleanName.slice(0, 80) });
     return id;
   } else {
+    await assertProjectQuota(user); // free plan: capped new-project count
     const { data, error } = await requireSupabase()
       .from('projects')
       .insert({ user_id: user.id, ...record })
