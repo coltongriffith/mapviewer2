@@ -2383,6 +2383,20 @@ body.is-dragging .template-zone .panel-delete-btn { opacity: 0 !important; }
 .claims-scoping-warning { background: #fffbeb; border: 1px solid #fcd34d; color: #92400e; }
 .claims-scoping-warning span { color: #a1620a; font-size: 12px; }
 
+/* Claim-name match gate: ownership is not established, and the user has to
+   acknowledge that before these claims can enter the editor. */
+.claims-namematch-gate {
+  display: grid; gap: 5px; margin: 8px 0 0; padding: 9px 11px;
+  border-radius: 8px; font-size: 12.5px; line-height: 1.45;
+  background: #fef2f2; border: 1px solid #fca5a5; color: #991b1b;
+}
+.claims-namematch-gate > span { color: #b1382f; font-size: 12px; }
+.claims-namematch-check {
+  display: flex; align-items: flex-start; gap: 7px; margin-top: 2px;
+  font-size: 12px; font-weight: 600; color: #991b1b; cursor: pointer;
+}
+.claims-namematch-check input { margin-top: 1px; flex-shrink: 0; }
+
 /* ── Claim provenance banners (map view) ───────────────────────────────────── */
 .claims-provenance-banner {
   display: grid; gap: 2px;

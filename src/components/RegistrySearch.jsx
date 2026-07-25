@@ -7,6 +7,7 @@ import {
 } from '../utils/jurisdictions';
 import { bestJurisdictionHit, autoAdoptionNotice } from '../utils/claimRanking';
 import { scopingWarning, emptyResultMessage } from '../utils/scopingNotice';
+import { claimNamePrefix, sourceCredit, CLAIM_NAME_CAVEAT } from '../utils/claimProvenance';
 
 // ── Spatial clustering helpers ─────────────────────────────────────────────
 
@@ -163,20 +164,29 @@ const PROVINCES = [
   },
 ];
 
-// U.S. federal (BLM MLRS) jurisdictions — searchable by company, claim name and
-// MLRS serial number. Company search has no claimant field to query (the BLM
-// spatial service publishes none), so the server resolves a parent company
-// through its US-subsidiary alias ladder against claim names instead, and
-// reports how the link was made — see api/_lib/us-aliases.js. Company is listed
-// first so a parent-company deep link uses it.
+// U.S. federal (BLM MLRS) jurisdictions.
+//
+// The `company` mode is NOT a company search and must never be labelled as one.
+// The BLM spatial layer publishes no claimant field, so the server's alias
+// ladder resolves against CLAIM NAMES (see api/_lib/us-aliases.js). Claim names
+// are chosen by whoever located the claim: they frequently echo an operator's
+// name, but they are not an ownership record, and nothing about a name match —
+// fuzzy or exact — establishes who holds the ground. So the tab is labelled
+// "Project / claim name", results are titled by the matched claim name rather
+// than by a company, and importing such a set requires explicit confirmation.
+// Real company search needs a claimant source joined on serial number; see
+// docs/us-claims.md ("Claimant join").
 const US_JURISDICTION_ENTRIES = US_STATES.map((st) => ({
   value: st.value,
   label: st.label,
   registry: 'BLM MLRS (federal)',
   country: 'us',
   modes: ['company', 'name', 'number'],
+  // Per-jurisdiction label overrides — the mode KEYS stay as they are (they are
+  // the API's `type` param); only what the user reads changes.
+  modeLabels: { company: 'Project / claim name', name: 'Claim name (exact)' },
   placeholders: {
-    company: 'e.g. parent company or US subsidiary',
+    company: 'e.g. project name, operator name, or US subsidiary',
     name: 'e.g. GOLDIE #12',
     number: 'e.g. NV101234567',
   },
@@ -316,6 +326,12 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
       // by claim count — see utils/claimRanking.js.
       const top = bestJurisdictionHit(crossProvinceHits);
       if (!top) return;
+      // A claim-name-resolved hit is never adopted automatically. It has not
+      // been linked to an owner, so silently switching the user to it — and
+      // onward into the editor — would present a name coincidence as a
+      // company's ground. It stays in the "Found elsewhere" list for an
+      // explicit click instead.
+      if (top.data?.resolution?.resolvedAgainst === 'claim_name') return;
       const requestedLabel = ALL_JURISDICTIONS.find((p) => p.value === request.requestedProvince)?.label
         || request.requestedProvince;
       handleSwitchProvince(top, {
@@ -371,6 +387,15 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
 
   // Degraded-scoping warning for the current result set (null when precise).
   const claimsScopingWarning = useMemo(() => scopingWarning(results?.meta), [results]);
+
+  // True when these claims were linked to the search term by claim name rather
+  // than by a claimant record. Such a set may not be titled as a company's
+  // claims, and may not enter the editor without explicit confirmation.
+  const isClaimNameResolved = results?.resolution?.resolvedAgainst === 'claim_name';
+  const [claimNameConfirmed, setClaimNameConfirmed] = useState(false);
+  // Any new result set withdraws a previous confirmation.
+  useEffect(() => { setClaimNameConfirmed(false); }, [results]);
+  const importBlocked = isClaimNameResolved && !claimNameConfirmed;
 
   // Zero results: which of the two distinct reasons applies.
   const emptyMessage = useMemo(() => emptyResultMessage({
@@ -517,31 +542,59 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
   }
 
   // Everything that qualifies the claim set travels with the layer into the
-  // editor: which jurisdiction it came from, whether the app (not the user)
-  // chose that jurisdiction, and whether state scoping was degraded. The map
-  // renders it, and it persists into project state, so neither condition can
-  // reach an export unnoticed.
+  // editor and into the export credit line: the data source and when it was
+  // retrieved, how the state scope was resolved, how the company/name link was
+  // made, and whether the app (not the user) chose the jurisdiction. Always
+  // returns a value — the export credit needs a source and a date for every
+  // registry layer, not only the degraded ones.
   function importProvenance() {
     const warning = scopingWarning(results?.meta);
-    if (!warning && !adoptionNotice) return null;
+    const resolvedAgainst = results?.resolution?.resolvedAgainst || null;
     return {
       province,
       provinceLabel: provinceCfg.label,
       registry: provinceCfg.registry,
+      dataSource: sourceCredit(provinceCfg, results?.meta),
+      // Live-queried registries: the response IS the snapshot, so retrieval
+      // time is the snapshot time. A claimant source joined from a periodic
+      // extract carries its own snapshot date instead (see docs/us-claims.md).
+      retrievedAt: new Date().toISOString().slice(0, 10),
       ...(results?.meta?.scopingMethod ? { scopingMethod: results.meta.scopingMethod } : {}),
       ...(warning ? { scopingWarning: warning } : {}),
+      ...(resolvedAgainst ? { resolvedAgainst } : {}),
+      ...(results?.resolution?.method ? { resolutionMethod: results.resolution.method } : {}),
       ...(adoptionNotice ? { autoAdopted: adoptionNotice } : {}),
+      // Records that the user was shown the ownership caveat and accepted it.
+      ...(isClaimNameResolved ? { claimNameAcknowledged: true } : {}),
     };
+  }
+
+  // Layer title for a claim set. A claim-name-resolved set is titled by the
+  // matched CLAIM NAME, never "<Company> Claims" — the latter asserts ownership
+  // that a name match does not establish.
+  function layerTitle(features, groupLabel = null) {
+    if (isClaimNameResolved) {
+      const prefix = claimNamePrefix(features) || query.trim() || 'Claim-name match';
+      return groupLabel ? `${prefix} – ${groupLabel} (claim name)` : `${prefix} (claim name)`;
+    }
+    const holder = activeOwner || features[0]?.properties?.OWNER_NAME || query;
+    if (isUsJurisdiction(province)) {
+      const usName = mode === 'number'
+        ? features[0]?.properties?.TAG_NUMBER || query
+        : features[0]?.properties?.CLAIM_NAME || query;
+      return `${usName} Claims (BLM)`;
+    }
+    if (mode === 'number') return `Claim ${query}`;
+    return groupLabel ? `${holder} – ${groupLabel}` : `${holder} Claims`;
   }
 
   function handleAddGroups() {
     const provenance = importProvenance();
     const items = [...selectedGroups].sort((a, b) => a - b).map(i => {
       const g = groups[i];
-      const holder = activeOwner || g.features[0]?.properties?.OWNER_NAME || query;
       return {
         geojson: { type: 'FeatureCollection', features: g.features },
-        name: groups.length > 1 ? `${holder} – ${g.label}` : `${holder} Claims`,
+        name: layerTitle(g.features, groups.length > 1 ? g.label : null),
         provenance,
       };
     });
@@ -551,21 +604,22 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
       mode: 'groups',
       groups: items.length,
       features: items.reduce((n, it) => n + (it.geojson.features?.length || 0), 0),
+      resolved_against: provenance.resolvedAgainst || 'n/a',
     });
     onImport(items);
   }
 
   function handleAddFlat() {
     const features = [...selectedFlat].sort((a, b) => a - b).map(i => allFeatures[i]);
-    const holder = features[0]?.properties?.OWNER_NAME || query;
-    trackEvent('registry_claims_imported', { province, mode: 'flat', groups: 1, features: features.length });
-    const usName = features[0]?.properties?.CLAIM_NAME || query;
+    const provenance = importProvenance();
+    trackEvent('registry_claims_imported', {
+      province, mode: 'flat', groups: 1, features: features.length,
+      resolved_against: provenance.resolvedAgainst || 'n/a',
+    });
     onImport([{
       geojson: { type: 'FeatureCollection', features },
-      name: isUsJurisdiction(province)
-        ? `${(mode === 'number' ? features[0]?.properties?.TAG_NUMBER || query : usName)} Claims (BLM)`
-        : mode === 'number' ? `Claim ${query}` : `${holder} Claims`,
-      provenance: importProvenance(),
+      name: layerTitle(features),
+      provenance,
     }]);
   }
 
@@ -628,7 +682,7 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
             className={`claims-mode-tab${mode === m ? ' active' : ''}`}
             onClick={() => handleModeChange(m)}
           >
-            {MODE_LABELS[m]}
+            {provinceCfg.modeLabels?.[m] || MODE_LABELS[m]}
           </button>
         ))}
       </div>
@@ -665,6 +719,25 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
               : 'Chosen by claim count — no area published for these registries.'}
             {' '}This attribution stays on the layer when you add it to the map.
           </span>
+        </div>
+      )}
+
+      {/* Claim-name resolution is not an ownership finding. The user has to say
+          so out loud before these claims can enter the editor, because from
+          there they flow into an exported map that a reader will take as a
+          statement about who holds the ground. */}
+      {isClaimNameResolved && allFeatures.length > 0 && (
+        <div className="claims-namematch-gate" role="alert">
+          <strong>Matched by claim name — ownership not established</strong>
+          <span>{CLAIM_NAME_CAVEAT}</span>
+          <label className="claims-namematch-check">
+            <input
+              type="checkbox"
+              checked={claimNameConfirmed}
+              onChange={(e) => setClaimNameConfirmed(e.target.checked)}
+            />
+            I understand these are claim-name matches, not confirmed holdings.
+          </label>
         </div>
       )}
 
@@ -809,12 +882,14 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
                 })}
               </div>
 
-              <button className="share-generate-btn" disabled={selectedGroups.size === 0} onClick={handleAddGroups}>
-                {selectedGroups.size === 0
-                  ? 'Select areas to add'
-                  : selectedGroups.size === 1
-                    ? `Add ${totalSelectedClaims} claims to map`
-                    : `Add ${selectedGroups.size} areas to map (${totalSelectedClaims} claims)`}
+              <button className="share-generate-btn" disabled={selectedGroups.size === 0 || importBlocked} onClick={handleAddGroups}>
+                {importBlocked
+                  ? 'Confirm the claim-name notice above to continue'
+                  : selectedGroups.size === 0
+                    ? 'Select areas to add'
+                    : selectedGroups.size === 1
+                      ? `Add ${totalSelectedClaims} claims to map`
+                      : `Add ${selectedGroups.size} areas to map (${totalSelectedClaims} claims)`}
               </button>
             </>
           )}
@@ -869,10 +944,12 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
             })}
           </div>
 
-          <button className="share-generate-btn" disabled={selectedFlat.size === 0} onClick={handleAddFlat}>
-            {selectedFlat.size === 0
-              ? 'Select claims to add'
-              : `Add ${selectedFlat.size} claim${selectedFlat.size !== 1 ? 's' : ''} to map`}
+          <button className="share-generate-btn" disabled={selectedFlat.size === 0 || importBlocked} onClick={handleAddFlat}>
+            {importBlocked
+              ? 'Confirm the claim-name notice above to continue'
+              : selectedFlat.size === 0
+                ? 'Select claims to add'
+                : `Add ${selectedFlat.size} claim${selectedFlat.size !== 1 ? 's' : ''} to map`}
           </button>
         </>
       )}

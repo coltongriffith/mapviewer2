@@ -718,3 +718,90 @@ describe('scoping and empty-state messaging', () => {
     expect(msg.hint).toMatch(/subsidiary/i);
   });
 });
+
+// ── Claim-name resolution is not an ownership finding (Task A) ──────────────
+
+describe('claim-name titling and provenance helpers', () => {
+  it('titles a set by the matched claim-name prefix, dropping claim sequence numbers', async () => {
+    const { claimNamePrefix } = await import('../src/utils/claimProvenance.js');
+    const feats = (names) => names.map((CLAIM_NAME) => ({ properties: { CLAIM_NAME } }));
+    expect(claimNamePrefix(feats(['AWESOME GOLD NEVADA 1', 'AWESOME GOLD NEVADA 2'])))
+      .toBe('AWESOME GOLD NEVADA');
+    // A trailing "#12" is a claim number, not part of the project name.
+    expect(claimNamePrefix(feats(['GOLDIE #12', 'GOLDIE #13']))).toBe('GOLDIE');
+    // A single claim keeps its full name.
+    expect(claimNamePrefix(feats(['LONE PINE 4']))).toBe('LONE PINE 4');
+    // Heterogeneous names share no leading token — no honest single title.
+    expect(claimNamePrefix(feats(['GOLDIE 1', 'SILVER KING 2']))).toBeNull();
+    expect(claimNamePrefix([])).toBeNull();
+  });
+
+  it('states the ownership caveat once, for reuse everywhere', async () => {
+    const { CLAIM_NAME_CAVEAT } = await import('../src/utils/claimProvenance.js');
+    expect(CLAIM_NAME_CAVEAT).toMatch(/not by a claimant record/i);
+    expect(CLAIM_NAME_CAVEAT).toMatch(/does not establish who holds the ground/i);
+  });
+
+  it('credits the BLM source for US layers and the provincial registry for Canadian ones', async () => {
+    const { sourceCredit } = await import('../src/utils/claimProvenance.js');
+    expect(sourceCredit({ country: 'us', label: 'Nevada', registry: 'BLM MLRS (federal)' }))
+      .toMatch(/BLM MLRS/);
+    expect(sourceCredit({ country: 'ca', label: 'British Columbia', registry: 'Mineral Titles Online' }))
+      .toBe('British Columbia — Mineral Titles Online');
+  });
+});
+
+// ── Export credit line (Task C) ─────────────────────────────────────────────
+
+describe('export source credit', () => {
+  const layer = (provenance) => ({ id: 'l1', name: 'Claims', provenance });
+
+  it('renders source and retrieval date for a clean claim set', async () => {
+    const { exportCreditLines } = await import('../src/utils/claimProvenance.js');
+    const [line, ...rest] = exportCreditLines([layer({
+      dataSource: 'BLM MLRS — Mining Claims Not Closed (federal)',
+      retrievedAt: '2026-07-25',
+      scopingMethod: 'geo_state',
+    })]);
+    expect(rest).toHaveLength(0);
+    expect(line).toBe('Source: BLM MLRS — Mining Claims Not Closed (federal) · retrieved 2026-07-25 · state scope: geographic (GEO_STATE)');
+  });
+
+  it('states degraded scoping and a claim-name-only link explicitly', async () => {
+    const { exportCreditLines } = await import('../src/utils/claimProvenance.js');
+    const [line] = exportCreditLines([layer({
+      dataSource: 'BLM MLRS — Mining Claims Not Closed (federal)',
+      retrievedAt: '2026-07-25',
+      scopingMethod: 'serial_prefix',
+      resolvedAgainst: 'claim_name',
+    })]);
+    expect(line).toMatch(/case-serial prefix \(approximate\)/);
+    expect(line).toMatch(/claim name only — not an ownership record/);
+  });
+
+  it('credits a claimant-resolved set as an ownership record', async () => {
+    const { exportCreditLines } = await import('../src/utils/claimProvenance.js');
+    const [line] = exportCreditLines([layer({
+      dataSource: 'BLM MLRS + NDOM claimant extract',
+      snapshotDate: '2026-07-01',
+      scopingMethod: 'geo_state',
+      resolvedAgainst: 'claimant',
+    })]);
+    // A periodic claimant source credits its snapshot date, not "retrieved".
+    expect(line).toMatch(/snapshot 2026-07-01/);
+    expect(line).toMatch(/company link: claimant record/);
+  });
+
+  it('credits identical provenance once across many layers, and skips layers without any', async () => {
+    const { exportCreditLines } = await import('../src/utils/claimProvenance.js');
+    const p = { dataSource: 'BLM MLRS', retrievedAt: '2026-07-25' };
+    const lines = exportCreditLines([layer(p), layer({ ...p }), { id: 'x', name: 'Uploaded.kml' }]);
+    expect(lines).toHaveLength(1);
+  });
+
+  it('produces nothing when no layer carries provenance (uploads stay uncredited)', async () => {
+    const { exportCreditLines } = await import('../src/utils/claimProvenance.js');
+    expect(exportCreditLines([{ id: 'x', name: 'Uploaded.kml' }])).toEqual([]);
+    expect(exportCreditLines([])).toEqual([]);
+  });
+});

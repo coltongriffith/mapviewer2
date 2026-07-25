@@ -59,15 +59,25 @@ describe('jurisdiction selector', () => {
     expect(usOptions.some((o) => o.value === 'us-ak')).toBe(false); // no Alaska in v1
   });
 
-  it('switching to a US state shows Company + Claim Name + Claim # modes', async () => {
+  it('never labels a US mode "Company" — claim names are not an ownership record', async () => {
     const { container } = await renderRegistry(true);
     fireEvent.change(container.querySelector('select'), { target: { value: 'us-nv' } });
     await waitFor(() => {
-      // Company search resolves a parent through its US-subsidiary aliases
-      // server-side (api/_lib/us-aliases.js), so it is offered for US states.
-      expect(screen.getByRole('button', { name: 'Company' })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Claim Name' })).toBeInTheDocument();
+      // The BLM layer has no claimant field, so the mode that resolves against
+      // claim names must not present itself as a company search.
+      expect(screen.getByRole('button', { name: 'Project / claim name' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Claim name (exact)' })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Claim #' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Company' })).not.toBeInTheDocument();
+    });
+  });
+
+  it('keeps the Company label for Canadian registries, which do publish holders', async () => {
+    const { container } = await renderRegistry(true);
+    fireEvent.change(container.querySelector('select'), { target: { value: 'bc' } });
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Company' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Project / claim name' })).not.toBeInTheDocument();
     });
   });
 
@@ -137,7 +147,7 @@ describe('US results: type chips + disclaimer', () => {
     await renderRegistry(true, { initialProvince: 'us-nv' });
     // The flat list (and the type chips) render in non-company modes; US now
     // defaults to Company, so switch to Claim Name first.
-    fireEvent.click(screen.getByRole('button', { name: 'Claim Name' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Claim name (exact)' }));
     await waitFor(() => expect(screen.getByText('GOLDIE #1')).toBeInTheDocument());
     expect(screen.getByText('GOLDIE #3')).toBeInTheDocument();
 
@@ -224,6 +234,100 @@ describe('auto-adopted jurisdiction attribution', () => {
     fireEvent.click(screen.getByText(/Ontario — 3 claims found/));
     await waitFor(() => expect(useClaimsState.adoptResults).toHaveBeenCalled());
     expect(screen.queryByText(/^Showing Ontario —/)).not.toBeInTheDocument();
+    useClaimsState.crossProvinceHits = null;
+  });
+});
+
+describe('claim-name results require confirmation and are never titled as a company', () => {
+  const nameMatched = (n) => ({
+    features: Array.from({ length: n }, (_, i) => ({
+      type: 'Feature',
+      geometry: { type: 'Polygon', coordinates: [[[0, 0], [0, 1], [1, 1], [0, 0]]] },
+      properties: {
+        TAG_NUMBER: `NV10${i}`, CLAIM_NAME: `AWESOME GOLD NEVADA ${i + 1}`,
+        CLAIM_TYPE: 'lode', AREA_IN_HECTARES: 8.3,
+      },
+    })),
+    meta: { provider: 'blm-mlrs', scopingMethod: 'geo_state', scopingDegraded: false },
+    resolution: { status: 'resolved', method: 'alias', resolvedAgainst: 'claim_name', company: 'Awesome Gold Corp.' },
+  });
+
+  it('blocks the import until the ownership caveat is acknowledged', async () => {
+    const onImport = vi.fn();
+    useClaimsState.results = nameMatched(4);
+    vi.stubEnv('VITE_ENABLE_US_CLAIMS', '1');
+    vi.resetModules();
+    const { default: RegistrySearch } = await import('../src/components/RegistrySearch.jsx');
+    render(<RegistrySearch onImport={onImport} onBack={vi.fn()} initialProvince="us-nv" initialQuery="Awesome Gold Corp." />);
+
+    // The caveat is stated, not buried.
+    expect(screen.getByText(/ownership not established/i)).toBeInTheDocument();
+    expect(screen.getByText(/does not establish who holds the ground/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText(/Select All/));
+    const addBtn = screen.getByRole('button', { name: /Confirm the claim-name notice/i });
+    expect(addBtn).toBeDisabled();
+    fireEvent.click(addBtn);
+    expect(onImport).not.toHaveBeenCalled();
+
+    // Acknowledging unlocks it.
+    fireEvent.click(screen.getByRole('checkbox', { name: /claim-name matches, not confirmed holdings/i }));
+    const unlocked = screen.getByRole('button', { name: /Add 4 claims to map/ });
+    expect(unlocked).not.toBeDisabled();
+    fireEvent.click(unlocked);
+    expect(onImport).toHaveBeenCalledTimes(1);
+  });
+
+  it('titles the layer by the matched claim-name prefix, not "<Company> Claims"', async () => {
+    const onImport = vi.fn();
+    useClaimsState.results = nameMatched(3);
+    vi.stubEnv('VITE_ENABLE_US_CLAIMS', '1');
+    vi.resetModules();
+    const { default: RegistrySearch } = await import('../src/components/RegistrySearch.jsx');
+    render(<RegistrySearch onImport={onImport} onBack={vi.fn()} initialProvince="us-nv" initialQuery="Awesome Gold Corp." />);
+
+    fireEvent.click(screen.getByText(/Select All/));
+    fireEvent.click(screen.getByRole('checkbox', { name: /claim-name matches/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Add 3 claims to map/ }));
+
+    const [items] = onImport.mock.calls[0];
+    expect(items[0].name).toBe('AWESOME GOLD NEVADA (claim name)');
+    expect(items[0].name).not.toMatch(/Awesome Gold Corp/);
+    expect(items[0].name).not.toMatch(/Claims$/);
+    // Provenance records the weaker link and the acknowledgement, and carries a
+    // source + retrieval date for the export credit.
+    expect(items[0].provenance.resolvedAgainst).toBe('claim_name');
+    expect(items[0].provenance.resolutionMethod).toBe('alias');
+    expect(items[0].provenance.claimNameAcknowledged).toBe(true);
+    expect(items[0].provenance.dataSource).toMatch(/BLM MLRS/);
+    expect(items[0].provenance.retrievedAt).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it('refuses to auto-adopt a claim-name hit, leaving it as an explicit choice', async () => {
+    useClaimsState.search.mockClear();
+    useClaimsState.searchOtherProvinces.mockClear();
+    useClaimsState.adoptResults.mockClear();
+
+    vi.stubEnv('VITE_ENABLE_US_CLAIMS', '1');
+    vi.resetModules();
+    const { default: RegistrySearch } = await import('../src/components/RegistrySearch.jsx');
+    const props = { onImport: vi.fn(), onBack: vi.fn(), initialProvince: 'us-nv', initialQuery: 'Awesome Gold Corp.', autoSearch: true };
+    const view = render(<RegistrySearch {...props} />);
+
+    useClaimsState.results = { features: [], meta: {}, resolution: { status: 'unresolved' } };
+    view.rerender(<RegistrySearch {...props} />);
+    await waitFor(() => expect(useClaimsState.searchOtherProvinces).toHaveBeenCalled());
+
+    useClaimsState.crossProvinceHits = [
+      { province: { value: 'us-az', label: 'Arizona', modes: ['company', 'name', 'number'] }, count: 3, data: nameMatched(3) },
+    ];
+    view.rerender(<RegistrySearch {...props} />);
+
+    // A name match has not been linked to an owner — it must not be adopted for
+    // the user. The "Found elsewhere" row stays clickable instead.
+    await waitFor(() => expect(screen.getByText(/Arizona — 3 claims found/)).toBeInTheDocument());
+    expect(useClaimsState.adoptResults).not.toHaveBeenCalled();
+    expect(view.container.querySelector('select').value).toBe('us-nv');
     useClaimsState.crossProvinceHits = null;
   });
 });

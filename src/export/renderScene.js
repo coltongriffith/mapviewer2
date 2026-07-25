@@ -9,6 +9,7 @@ import { safeColor } from '../utils/colorUtils.js';
 import regionsNA from '../assets/regionsNA.json';
 import { estimateBox, intersects as intersectsCallout, leaderEndpoint } from '../utils/calloutLayout';
 import dissolveGeo from '@turf/dissolve';
+import { exportCreditLines } from '../utils/claimProvenance';
 
 let _exportWarnings = [];
 export function getExportWarnings() { return _exportWarnings; }
@@ -1731,6 +1732,7 @@ export async function renderSceneToCanvas(scene, options = {}) {
   const niFrame = isNI ? getNI43101MapFrame(scene, scale) : null;
   const wmX = niFrame ? niFrame.mapRight - 8 * scale : canvas.width - 8 * scale;
   const wmY = niFrame ? niFrame.mapBottom - 5 * scale : canvas.height - 5 * scale;
+  drawSourceCreditCanvas(ctx, scene, scale);
   const watermark = options.noWatermark
     ? (options.paidTier ? null : { text: 'explorationmaps.com', font: `${6.5 * scale}px Arial, sans-serif`, fill: 'rgba(148,163,184,0.6)', shadow: 'rgba(255,255,255,0.5)' })
     : { text: 'explorationmaps.com', font: `bold ${9 * scale}px Arial, sans-serif`, fill: 'rgba(100,116,139,0.72)', shadow: 'rgba(255,255,255,0.6)' };
@@ -1738,6 +1740,63 @@ export async function renderSceneToCanvas(scene, options = {}) {
     ctx.save(); ctx.font = watermark.font; ctx.fillStyle = watermark.fill; ctx.textAlign = 'right'; ctx.textBaseline = 'bottom'; ctx.shadowColor = watermark.shadow; ctx.shadowBlur = 3 * scale; ctx.fillText(watermark.text, wmX, wmY); ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.restore();
   }
   return canvas;
+}
+
+// ── Source credit (permanent, rendered INTO the export) ─────────────────────
+// The export is the filing artifact: it leaves the app and gets dropped into an
+// NI 43-101 report or an investor deck, where nobody can see the editor's
+// banners. So the qualifications that change how the claim set should be read
+// travel on the image itself — data source, retrieval/snapshot date, how the
+// state was scoped, and whether the company link is an ownership record or only
+// a claim-name match.
+//
+// Deliberately styled as a standard cartographic source credit (small, grey,
+// bottom-left, no icon or alert colour), not a warning: a source note is
+// expected on a technical map and survives review, whereas a red banner reads
+// as a defect and gets cropped out. The wording still states a degraded scope
+// or a name-only link outright — see utils/claimProvenance.js.
+const CREDIT_FONT_PX = 7.5;
+const CREDIT_LINE_PX = 9.5;
+
+function creditLinesFor(scene) {
+  return exportCreditLines(scene.project?.layers || []);
+}
+
+function drawSourceCreditCanvas(ctx, scene, scale) {
+  const lines = creditLinesFor(scene);
+  if (!lines.length) return;
+  const isNI = scene.template?.id === 'ni_43101_technical';
+  const frame = isNI ? getNI43101MapFrame(scene, scale) : null;
+  const left = (frame ? frame.mapLeft + 8 * scale : 8 * scale);
+  // Sit above the watermark line so the two never collide.
+  const bottom = (frame ? frame.mapBottom : scene.height * scale) - 14 * scale;
+  ctx.save();
+  ctx.font = `${CREDIT_FONT_PX * scale}px Arial, sans-serif`;
+  ctx.fillStyle = 'rgba(71,85,105,0.82)';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'bottom';
+  ctx.shadowColor = 'rgba(255,255,255,0.75)';
+  ctx.shadowBlur = 3 * scale;
+  lines.forEach((line, i) => {
+    const y = bottom - (lines.length - 1 - i) * CREDIT_LINE_PX * scale;
+    ctx.fillText(line, left, y);
+  });
+  ctx.shadowColor = 'transparent';
+  ctx.shadowBlur = 0;
+  ctx.restore();
+}
+
+function renderSourceCreditSvg(scene, scale) {
+  const lines = creditLinesFor(scene);
+  if (!lines.length) return '';
+  const isNI = scene.template?.id === 'ni_43101_technical';
+  const frame = isNI ? getNI43101MapFrame(scene, scale) : null;
+  const left = (frame ? frame.mapLeft + 8 * scale : 8 * scale);
+  const bottom = (frame ? frame.mapBottom : scene.height * scale) - 14 * scale;
+  return lines.map((line, i) => {
+    const y = bottom - (lines.length - 1 - i) * CREDIT_LINE_PX * scale;
+    return `<text x="${left.toFixed(1)}" y="${y.toFixed(1)}" font-family="Arial,sans-serif" font-size="${CREDIT_FONT_PX * scale}" fill="#475569" fill-opacity="0.82" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-opacity="0.7" stroke-width="${2 * scale}" stroke-linejoin="round">${escapeXml(line)}</text>`;
+  }).join('');
 }
 
 async function drawTilesCanvas(ctx, scene, scale) {
@@ -2266,14 +2325,14 @@ export async function renderSceneToSvg(scene, options = {}) {
       ? (options.paidTier ? '' : `<text x="${wmX}" y="${wmY}" font-family="Arial,sans-serif" font-size="${6.5 * scale}" font-weight="600" fill="#94a3b8" fill-opacity="0.6" text-anchor="end" dominant-baseline="auto" paint-order="stroke" stroke="#ffffff" stroke-opacity="0.5" stroke-width="${2 * scale}" stroke-linejoin="round">explorationmaps.com</text>`)
       : `<text x="${wmX}" y="${wmY}" font-family="Arial,sans-serif" font-size="${9 * scale}" font-weight="bold" fill="#64748b" fill-opacity="0.72" text-anchor="end" dominant-baseline="auto" paint-order="stroke" stroke="#ffffff" stroke-opacity="0.55" stroke-width="2.5" stroke-linejoin="round">explorationmaps.com</text>`;
     const panels = `<g id="em-overlay-panels">${renderLegendSvg(scene, scale, svgDefs)}${renderNorthArrowSvg(scene, scale, svgDefs)}${renderInsetSvg(scene, scale, svgDefs)}${renderLogoSvg(scene, scale)}${renderScaleBarSvg(scene, scale)}${renderDistanceTicksSvg(scene, scale)}${renderTitleStripSvg(scene, scale)}</g>`;
-    mapContent = `${clipped}${panels}${watermark}`;
+    mapContent = `${clipped}${panels}${renderSourceCreditSvg(scene, scale)}${watermark}`;
   } else {
     const watermark = options.noWatermark
       ? (options.paidTier ? '' : `<text x="${width - 8}" y="${height - 5}" font-family="Arial,sans-serif" font-size="6.5" font-weight="600" fill="#94a3b8" fill-opacity="0.6" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-opacity="0.5" stroke-width="2" stroke-linejoin="round">explorationmaps.com</text>`)
       : `<text x="${width - 8}" y="${height - 5}" font-family="Arial,sans-serif" font-size="9" font-weight="bold" fill="#64748b" fill-opacity="0.72" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-opacity="0.55" stroke-width="2.5" stroke-linejoin="round">explorationmaps.com</text>`;
     const mapLayers = `<g id="em-map-content">${basemapImage}${renderRegionHighlightsSvg(scene, scale)}${renderVectorsSvg(scene, scale)}${renderEllipsesSvg(scene, scale, svgDefs)}${renderPolygonsSvg(scene, scale)}${renderMarkersSvg(scene, scale)}${renderCalloutsSvg(scene, scale, svgDefs)}${renderDistanceLinesSvg(scene, scale)}</g>`;
     const panels = `<g id="em-overlay-panels">${renderTitleSvg(scene, scale, svgDefs)}${renderLegendSvg(scene, scale, svgDefs)}${renderNorthArrowSvg(scene, scale, svgDefs)}${renderInsetSvg(scene, scale, svgDefs)}${renderScaleBarSvg(scene, scale)}${renderFooterSvg(scene, scale)}${renderLogoSvg(scene, scale)}</g>`;
-    mapContent = `${mapLayers}${panels}${watermark}`;
+    mapContent = `${mapLayers}${panels}${renderSourceCreditSvg(scene, scale)}${watermark}`;
   }
 
   const defsBlock = svgDefs.length ? `<defs>${svgDefs.join('')}</defs>` : '';

@@ -57,6 +57,7 @@ import { US_CLAIMS_ENABLED, US_STATES, US_GROUP_LABEL, US_GEOMETRY_DISCLAIMER, i
 import { PRO_EXPORT_FORMATS, FREE_PROJECT_LIMIT } from './utils/pricing';
 import { runCloudMigration } from './utils/cloudMigration';
 import { scopingWarning } from './utils/scopingNotice';
+import { CLAIM_NAME_CAVEAT } from './utils/claimProvenance';
 import dissolveGeo from '@turf/dissolve';
 import {
   clearActiveProjectContext,
@@ -1291,6 +1292,17 @@ export default function App() {
           severity: 'warning',
           title: `⚠ ${p.scopingWarning.short} — ${p.provinceLabel}`,
           detail: p.scopingWarning.detail,
+        });
+      }
+      // Claims linked by claim name rather than by a claimant record. The map
+      // must not let a reader assume ownership the data does not establish.
+      if (p.resolvedAgainst === 'claim_name') {
+        out.push({
+          layerId: `${layer.id}-namematch`,
+          layerName: layer.displayName || layer.name,
+          severity: 'warning',
+          title: '⚠ Matched by claim name — ownership not established',
+          detail: CLAIM_NAME_CAVEAT,
         });
       }
       if (p.autoAdopted) {
