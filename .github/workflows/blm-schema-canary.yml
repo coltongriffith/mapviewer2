@@ -1,0 +1,40 @@
+name: BLM live-schema canary
+
+# Hits the live BLM MLRS mining-claims layer and asserts every field name
+# api/claims.js depends on still resolves. This is NOT part of the unit suite
+# and NOT part of any build gate: tests/us-claims.test.js runs against fixtures
+# copied from the live schema, so it stays green through exactly the drift that
+# breaks production. This job is the only thing that looks at reality.
+#
+# It never blocks a deploy. A government endpoint being unreachable (exit 2) is
+# reported as a neutral outcome, not a failure — only real schema drift
+# (exit 1, a required field gone) fails the run and names the field.
+
+on:
+  schedule:
+    - cron: '0 9 * * 1'   # 09:00 UTC every Monday
+  workflow_dispatch:
+
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # No npm install: the canary uses only Node built-ins (fetch).
+      - name: Check live BLM schema
+        run: |
+          set +e
+          node scripts/live-schema-canary.mjs
+          code=$?
+          set -e
+          if [ "$code" = "2" ]; then
+            echo "::warning title=BLM endpoint unreachable::No schema verdict — the service did not answer. Not treating as drift."
+            exit 0
+          fi
+          exit $code

@@ -34,7 +34,14 @@ function main() {
   const claims = loadClaims();
   const aliasesFile = FIXTURE ? path.join(PATHS.fixtures, 'aliases_fixture.csv') : PATHS.aliases;
   const aliases = fs.existsSync(aliasesFile) ? readCsv(aliasesFile) : [];
-  const aliasMap = new Map(aliases.map((a) => [normalizeName(a.owner_raw), a.ticker]));
+  // aliases.csv carries two kinds of row: Canadian registry-owner overrides
+  // (the original owner_raw→ticker pairs, untagged) and US-subsidiary claimant
+  // aliases (kind=us_subsidiary, jurisdiction=us*). This pipeline matches
+  // Canadian claim owners, so US-tagged rows are skipped — they are consumed at
+  // runtime by api/_lib/us-aliases.js instead.
+  const aliasMap = new Map(aliases
+    .filter((a) => !/^us/i.test(a.jurisdiction || '') && (a.kind || '') !== 'us_subsidiary')
+    .map((a) => [normalizeName(a.owner_raw), a.ticker]));
   const issuerByTicker = new Map(issuers.map((i) => [i.ticker, i]));
   const issuerNorms = issuers.map((i) => ({ ...i, norm: normalizeName(i.company) }));
 

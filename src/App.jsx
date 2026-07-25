@@ -56,6 +56,7 @@ import { createSaveCoordinator, runGuardedSave } from './utils/saveCoordinator';
 import { US_CLAIMS_ENABLED, US_STATES, US_GROUP_LABEL, US_GEOMETRY_DISCLAIMER, isUsJurisdiction } from './utils/jurisdictions';
 import { PRO_EXPORT_FORMATS, FREE_PROJECT_LIMIT } from './utils/pricing';
 import { runCloudMigration } from './utils/cloudMigration';
+import { scopingWarning } from './utils/scopingNotice';
 import dissolveGeo from '@turf/dissolve';
 import {
   clearActiveProjectContext,
@@ -1273,6 +1274,49 @@ export default function App() {
   // Show storage warning banner for anonymous users when local storage is getting full
   const showStorageWarning = !user && !storageWarningDismissed && estimateStorageUsedBytes() > 3_500_000;
 
+  // Claim-set qualifications carried on layers by the registry import: degraded
+  // US state scoping, and jurisdictions the app auto-adopted instead of the user
+  // picking them. Rendered over the map (see the editor-main banners) so they
+  // are visible wherever the claims are, and they follow the layer through save
+  // and reload because provenance lives in project state.
+  const claimProvenanceNotices = useMemo(() => {
+    const out = [];
+    for (const layer of project.layers) {
+      const p = layer.provenance;
+      if (!p) continue;
+      if (p.scopingWarning) {
+        out.push({
+          layerId: `${layer.id}-scope`,
+          layerName: layer.displayName || layer.name,
+          severity: 'warning',
+          title: `⚠ ${p.scopingWarning.short} — ${p.provinceLabel}`,
+          detail: p.scopingWarning.detail,
+        });
+      }
+      if (p.autoAdopted) {
+        out.push({
+          layerId: `${layer.id}-adopted`,
+          layerName: layer.displayName || layer.name,
+          severity: 'notice',
+          title: p.autoAdopted.message,
+          detail: `This jurisdiction was selected automatically because the requested one (${p.autoAdopted.requestedLabel}) returned no claims.`,
+        });
+      }
+    }
+    // The nearby-claims overlay isn't a layer, but it is claims drawn on the
+    // map, so a degraded scope has to be declared for it too.
+    if (areaClaims?.visible && areaClaims.scoping) {
+      out.push({
+        layerId: 'area-claims-scope',
+        layerName: `Nearby claims (${areaClaims.radius} km)`,
+        severity: 'warning',
+        title: `⚠ ${areaClaims.scoping.short}`,
+        detail: areaClaims.scoping.detail,
+      });
+    }
+    return out;
+  }, [project.layers, areaClaims]);
+
   // Sync local fields when project changes from an external action (open, duplicate, new).
   // Cancel pending debounce timers first to prevent cross-project writes.
   useEffect(() => {
@@ -2047,7 +2091,10 @@ export default function App() {
       const truncNote = data.meta?.truncated
         ? ` (large area — showing the first ${features.length}${data.meta.totalKnown ? ` of ${data.meta.totalKnown}` : ''}; try a smaller radius)`
         : '';
-      setAreaClaims({ status: 'loaded', radius: radiusKm, visible: true, features, ownerColors, ownerLabels: {}, hiddenOwners: [], showInLegend: false, ownerField, center: { lat: centerLat, lng: centerLng }, message: `${features.length} claims found within ${radiusKm} km${truncNote}` });
+      // The nearby overlay draws claims on the map, so it declares a degraded
+      // US state scope exactly like an imported claim layer does.
+      const scoping = scopingWarning(data.meta);
+      setAreaClaims({ status: 'loaded', radius: radiusKm, visible: true, features, ownerColors, ownerLabels: {}, hiddenOwners: [], showInLegend: false, ownerField, center: { lat: centerLat, lng: centerLng }, message: `${features.length} claims found within ${radiusKm} km${truncNote}`, scoping, province });
     } catch (err) {
       if (!stillCurrent()) return;
       setAreaClaims((prev) => ({
@@ -2196,7 +2243,11 @@ export default function App() {
   // value) from curated content (demo/template/deeplink). It feeds the
   // layer_added analytics event and, via the activation taxonomy, decides
   // whether adding a layer counts toward activation (only upload/csv do).
-  const addGeoJSONAsLayer = async (geojson, fileName, source = 'upload') => {
+  // provenance (optional): qualifications that must travel with the claim set —
+  // degraded state scoping, or a jurisdiction the app auto-adopted rather than
+  // the user choosing it. Stored on the layer so it persists into project state
+  // and is rendered over the map, not just in the search panel it came from.
+  const addGeoJSONAsLayer = async (geojson, fileName, source = 'upload', provenance = null) => {
     const id = crypto.randomUUID();
     const baseName = fileName.replace(/\.(zip|geojson|json|kml|kmz|csv)$/i, '') || 'Layer';
     const kind = detectLayerKind(geojson);
@@ -2215,6 +2266,7 @@ export default function App() {
       geojson,
       userStyled: false,
       legend: { enabled: true, label: displayName },
+      ...(provenance ? { provenance } : {}),
     };
 
     setProject((prev) => {
@@ -5139,6 +5191,18 @@ export default function App() {
             <button className="storage-warning-dismiss" onClick={() => setStorageWarningDismissed(true)}>✕</button>
           </div>
         )}
+        {/* Claim-set qualifications, over the map itself. These maps are placed
+            in NI 43-101 filings and investor decks, so a degraded state scope or
+            a jurisdiction the app chose on the user's behalf has to be visible
+            where the map is — not only in the search panel it came from. Not
+            dismissible: it describes the data currently on the map. */}
+        {claimProvenanceNotices.map((n) => (
+          <div key={n.layerId} className={`claims-provenance-banner${n.severity === 'warning' ? ' claims-provenance-banner--warning' : ''}`} role={n.severity === 'warning' ? 'alert' : 'status'}>
+            <strong>{n.title}</strong>
+            <span>{n.detail}</span>
+            <span className="claims-provenance-layer">Layer: {n.layerName}</span>
+          </div>
+        ))}
         <div className="map-topbar editor-toolbar">
           <div className="map-topbar-left">
             <div className="map-topbar-title">{project.layout.title || 'Project Map'}</div>
@@ -5692,8 +5756,8 @@ export default function App() {
             initialQuery={addClaimsQuery}
             autoSearch={addClaimsAutoSearch}
             onClose={() => { setShowAddClaimsModal(false); setAddClaimsModalPath(null); setAddClaimsProvince(null); setAddClaimsQuery(''); setAddClaimsAutoSearch(false); }}
-            onImport={(geojson, name) => {
-              addGeoJSONAsLayer(geojson, `${name}.geojson`, 'registry');
+            onImport={(geojson, name, provenance) => {
+              addGeoJSONAsLayer(geojson, `${name}.geojson`, 'registry', provenance);
               setShowAddClaimsModal(false);
               setAddClaimsModalPath(null);
               if (screen !== 'editor') setScreen('editor');

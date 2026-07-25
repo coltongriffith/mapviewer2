@@ -59,13 +59,15 @@ describe('jurisdiction selector', () => {
     expect(usOptions.some((o) => o.value === 'us-ak')).toBe(false); // no Alaska in v1
   });
 
-  it('switching to a US state shows Claim Name + Claim # modes (no Company)', async () => {
+  it('switching to a US state shows Company + Claim Name + Claim # modes', async () => {
     const { container } = await renderRegistry(true);
     fireEvent.change(container.querySelector('select'), { target: { value: 'us-nv' } });
     await waitFor(() => {
+      // Company search resolves a parent through its US-subsidiary aliases
+      // server-side (api/_lib/us-aliases.js), so it is offered for US states.
+      expect(screen.getByRole('button', { name: 'Company' })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Claim Name' })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Claim #' })).toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: 'Company' })).not.toBeInTheDocument();
     });
   });
 
@@ -114,14 +116,14 @@ describe('deep-link auto-search', () => {
 });
 
 describe('US deep-link auto-search', () => {
-  it('uses a supported mode (name) for US states instead of company', async () => {
+  it('uses company mode for a US parent-company deep link', async () => {
     useClaimsState.search.mockClear();
     const { container } = await renderRegistry(true, {
-      initialProvince: 'us-nv', initialQuery: 'Goldie', autoSearch: true,
+      initialProvince: 'us-nv', initialQuery: 'Goldie Gold Corp', autoSearch: true,
     });
-    // US jurisdictions have no company mode — the server would 400. The
-    // auto-search must fall back to the state's first supported mode.
-    expect(useClaimsState.search).toHaveBeenCalledWith('Goldie', 'name', 'us-nv');
+    // A company deep link must reach the server's alias ladder, which is what
+    // finds Nevada ground held under a US subsidiary of the parent.
+    expect(useClaimsState.search).toHaveBeenCalledWith('Goldie Gold Corp', 'company', 'us-nv');
     expect(container.querySelector('select').value).toBe('us-nv');
   });
 });
@@ -132,8 +134,10 @@ describe('US results: type chips + disclaimer', () => {
       features: [usClaim(1, 'lode'), usClaim(2, 'lode'), usClaim(3, 'placer')],
       meta: { provider: 'blm-mlrs', truncated: false },
     };
-    const { container } = await renderRegistry(true, { initialProvince: 'us-nv' });
-    // Non-company mode renders the flat list; default mode for US is 'name'.
+    await renderRegistry(true, { initialProvince: 'us-nv' });
+    // The flat list (and the type chips) render in non-company modes; US now
+    // defaults to Company, so switch to Claim Name first.
+    fireEvent.click(screen.getByRole('button', { name: 'Claim Name' }));
     await waitFor(() => expect(screen.getByText('GOLDIE #1')).toBeInTheDocument());
     expect(screen.getByText('GOLDIE #3')).toBeInTheDocument();
 
@@ -144,5 +148,82 @@ describe('US results: type chips + disclaimer', () => {
     });
 
     expect(screen.getByText(/not legal surveys/i)).toBeInTheDocument();
+  });
+});
+
+describe('auto-adopted jurisdiction attribution', () => {
+  it('renders attribution, ranks by area not count, and carries it onto the imported layer', async () => {
+    useClaimsState.search.mockClear();
+    useClaimsState.searchOtherProvinces.mockClear();
+    useClaimsState.adoptResults.mockClear();
+    const onImport = vi.fn();
+
+    vi.stubEnv('VITE_ENABLE_US_CLAIMS', '1');
+    vi.resetModules();
+    const { default: RegistrySearch } = await import('../src/components/RegistrySearch.jsx');
+    const props = { onImport, onBack: vi.fn(), initialProvince: 'bc', initialQuery: 'Awesome Gold Corp.', autoSearch: true };
+    const view = render(<RegistrySearch {...props} />);
+
+    // BC (the deep link's guess) comes back empty → cross-jurisdiction sweep.
+    useClaimsState.results = { features: [], meta: {} };
+    view.rerender(<RegistrySearch {...props} />);
+    await waitFor(() => expect(useClaimsState.searchOtherProvinces).toHaveBeenCalled());
+
+    // Ontario has more claims; Nevada has far more ground. Area must win.
+    const bigArea = (n, ha) => ({
+      features: Array.from({ length: n }, (_, i) => ({
+        type: 'Feature',
+        geometry: { type: 'Polygon', coordinates: [[[0, 0], [0, 1], [1, 1], [0, 0]]] },
+        properties: { TAG_NUMBER: `T${i}`, CLAIM_NAME: `AWESOME GOLD NEVADA ${i}`, AREA_IN_HECTARES: ha, CLAIM_TYPE: 'lode' },
+      })),
+      meta: { provider: 'blm-mlrs', scopingMethod: 'serial_prefix', scopingDegraded: true, scopingNote: 'Scoped by case-serial prefix because the BLM state fields are unavailable.' },
+    });
+    const nvData = bigArea(4, 500);   // 2,000 ha over 4 claims
+    useClaimsState.crossProvinceHits = [
+      { province: { value: 'on', label: 'Ontario', modes: ['company', 'number'] }, count: 40, data: bigArea(40, 8.4) },
+      { province: { value: 'us-nv', label: 'Nevada', modes: ['company', 'name', 'number'] }, count: 4, data: nvData },
+    ];
+    view.rerender(<RegistrySearch {...props} />);
+
+    await waitFor(() => expect(useClaimsState.adoptResults).toHaveBeenCalledWith(nvData));
+    expect(view.container.querySelector('select').value).toBe('us-nv');
+
+    // The switch attributes itself, naming both jurisdictions.
+    useClaimsState.results = nvData;
+    view.rerender(<RegistrySearch {...props} />);
+    await waitFor(() => expect(
+      screen.getByText('Showing Nevada — no British Columbia claims found for Awesome Gold Corp.')
+    ).toBeInTheDocument());
+
+    // Degraded scoping is warned about in the results panel too.
+    expect(screen.getByText(/Approximate state scoping/i)).toBeInTheDocument();
+
+    // …and both qualifications ride along with the import into the editor.
+    // Company mode: US records have no claimant, so the single holder bucket is
+    // labelled with the resolved company and its claims group normally.
+    fireEvent.click(screen.getByText(/Select All/));
+    fireEvent.click(screen.getByRole('button', { name: /Add 4 claims to map/ }));
+
+    expect(onImport).toHaveBeenCalledTimes(1);
+    const [items] = onImport.mock.calls[0];
+    expect(items[0].provenance.autoAdopted.message).toMatch(/^Showing Nevada — no British Columbia/);
+    expect(items[0].provenance.autoAdopted.requestedProvince).toBe('bc');
+    expect(items[0].provenance.scopingMethod).toBe('serial_prefix');
+    expect(items[0].provenance.scopingWarning.detail).toMatch(/serial/i);
+    useClaimsState.crossProvinceHits = null;
+  });
+
+  it('a manual "Switch & view" click adopts without attribution (behaviour unchanged)', async () => {
+    useClaimsState.adoptResults.mockClear();
+    useClaimsState.results = { features: [], meta: {} };
+    useClaimsState.crossProvinceHits = [
+      { province: { value: 'on', label: 'Ontario', modes: ['company', 'number'] }, count: 3, data: { features: [usClaim(1, 'lode')], meta: {} } },
+    ];
+    // No autoSearch → nothing was auto-adopted, so the row is a manual choice.
+    await renderRegistry(true, { initialProvince: 'bc', initialQuery: 'Awesome Gold Corp.' });
+    fireEvent.click(screen.getByText(/Ontario — 3 claims found/));
+    await waitFor(() => expect(useClaimsState.adoptResults).toHaveBeenCalled());
+    expect(screen.queryByText(/^Showing Ontario —/)).not.toBeInTheDocument();
+    useClaimsState.crossProvinceHits = null;
   });
 });

@@ -29,6 +29,7 @@
 import { fetchAllPages, fetchWfsAll, MAX_TOTAL_FEATURES, MAX_PAGES } from './_lib/paging.js';
 import { applyCors, handleMethods, queryTooLong, validateTerm, validateBbox, rateLimited, diagnosticsAllowed, publicErrorMessage } from './_lib/guard.js';
 import { esriGeometryToGeoJSON } from './_lib/esri.js';
+import { resolveUsCompanyTiers, matchesCompany } from './_lib/us-aliases.js';
 
 const ARCGIS_PROVINCES = {
   on: {
@@ -106,6 +107,47 @@ const BLM_MLRS_SERVICE = process.env.BLM_MLRS_SERVICE_URL
 
 const US_STATE_CODES = ['NV', 'AZ', 'UT', 'ID', 'MT', 'WY', 'CO', 'NM', 'CA', 'OR', 'WA'];
 
+// ── Serial-prefix scoping table (degraded fallback only) ─────────────────────
+// MLRS case serials and BLM legacy (LR2000) serials both carry a state-scoped
+// prefix, but they use DIFFERENT alphabets, and they live in different fields:
+//
+//   CSE_NR       MLRS serial          two-letter state code + digits   NV105331298
+//   LGCY_CSE_NR  legacy LR2000 serial state-office claim code + digits NMC1026884
+//
+// The office codes (verified July 2026 against the BLM MLRS serial-number-format
+// article at mlrs.blm.gov/s/article/What-is-the-Mining-Claim-serial-number-format-in-MLRS
+// and the per-state prefix list republished at
+// westernmininghistory.com/3729/researching-mining-claims-with-the-blm-mlrs/):
+//   AZ=AMC  CA=CAMC  CO=CMC  ID=IMC  MT=MMC  NM=NMMC  NV=NMC
+//   OR=ORMC UT=UMC   WY=WMC  (ES=ESMC, Eastern States)
+// Only the Nevada pairing (NV…/NMC…) was confirmable against actual serials
+// from that source; the other rows are documentary. See docs/us-claims.md.
+//
+// The two prefixes are never OR'd into the same field: 'NM%' on a serial field
+// carrying legacy values would also match Nevada's NMC…, so each prefix is
+// only ever applied to the field whose format it belongs to.
+//
+// OREGON AND WASHINGTON HAVE NO SERIAL FALLBACK, on purpose. A single BLM state
+// office (Oregon/Washington, in Portland — blm.gov/office/oregonwashington-state-office)
+// administers claims in both states, so an office-derived prefix cannot tell
+// Oregon ground from Washington ground: 'WA%' would return nothing and 'ORMC%'
+// would return Oregon claims labelled Washington. Those states get a hard error
+// instead. A wrong-but-plausible claim set is the worst outcome this product can
+// produce, so it is not on the menu.
+const US_SERIAL_PREFIXES = {
+  NV: { mlrs: 'NV', legacyOffice: 'NMC' },
+  AZ: { mlrs: 'AZ', legacyOffice: 'AMC' },
+  UT: { mlrs: 'UT', legacyOffice: 'UMC' },
+  ID: { mlrs: 'ID', legacyOffice: 'IMC' },
+  MT: { mlrs: 'MT', legacyOffice: 'MMC' },
+  WY: { mlrs: 'WY', legacyOffice: 'WMC' },
+  CO: { mlrs: 'CO', legacyOffice: 'CMC' },
+  NM: { mlrs: 'NM', legacyOffice: 'NMMC' },
+  CA: { mlrs: 'CA', legacyOffice: 'CAMC' },
+  OR: null,  // shared OR/WA state office — see comment above
+  WA: null,
+};
+
 const US_JURISDICTIONS = Object.fromEntries(US_STATE_CODES.map((code) => [
   `us-${code.toLowerCase()}`,
   {
@@ -116,15 +158,29 @@ const US_JURISDICTIONS = Object.fromEntries(US_STATE_CODES.map((code) => [
     // Candidate field names, resolved against live metadata at runtime.
     // First names verified against the live layer's documented schema
     // (July 2026): GEO_STATE / ADMIN_STATE / CSE_DISP / BLM_PROD / CSE_NR /
-    // CSE_NAME / RCRD_ACRS. GEO_STATE (where the land is) is preferred over
-    // ADMIN_STATE (which BLM office administers it — differs near borders).
-    stateFields: ['GEO_STATE', 'ADMIN_STATE', 'STATE_GEO', 'ADMIN_ST', 'ADM_ST', 'STATE'],
+    // CSE_NAME / RCRD_ACRS.
+    //
+    // Geographic and administrative state candidates are kept in SEPARATE
+    // lists because which one answered decides whether the result set is
+    // geographically scoped or merely administratively scoped — that
+    // distinction is reported to the client (see resolveUsScoping).
+    geoStateFields: ['GEO_STATE', 'STATE_GEO', 'GEOGRAPHIC_STATE'],
+    adminStateFields: ['ADMIN_STATE', 'ADMIN_ST', 'ADM_ST', 'STATE'],
     nameFields: ['CSE_NAME', 'CLAIM_NAME', 'MC_NAME', 'CASE_NAME', 'NAME'],
     numberFields: ['CSE_NR', 'MLRS_CSE_NR', 'CASE_NR', 'SER_NR', 'SERIAL_NR'],
     // Not published on the current Not Closed layer — kept so legacy search
     // lights up automatically if BLM ever adds it (the OR clause is optional).
     legacyNumberFields: ['LGCY_CSE_NR', 'LEGACY_CASE_NR', 'LGCY_SER_NR'],
-    ownerFields: [], // no claimant data in the spatial service (see above)
+    // Claimant candidates. The Not Closed spatial layer published none as of
+    // July 2026 (claimant names live in separate MLRS reports keyed by serial),
+    // so company search resolves through the alias layer against the claim-NAME
+    // field instead — see searchUsCompany. Listed anyway so an exact claimant
+    // search lights up automatically the day BLM publishes one.
+    ownerFields: ['CLAIMANT_NAME', 'CLAIMANT', 'CLMNT_NAME', 'CLAIMANT_TXT', 'CUST_NAME', 'CUSTOMER_NAME'],
+    // Recording-date candidates, used to break ties when ranking jurisdictions
+    // by area (see normalizeProps → RECORDED_DATE). Unverified against the live
+    // layer — absent fields simply mean no tie-breaker is available.
+    recordDateFields: ['CSE_RCRD_DT', 'RCRD_DT', 'CSE_FILE_DT', 'LOCATION_DT', 'LOC_DT'],
   },
 ]));
 
@@ -494,7 +550,8 @@ function normalizeProps(props, cfg = null) {
     const typeText = pick(['BLM_PROD', 'CSE_TYPE_TXT', 'CASETYPE_TXT', 'CSE_TYPE', 'CASE_TYPE', 'CASE_TYPE_TXT']);
     const disp = pick(['CSE_DISP', 'CSE_DISP_TXT', 'DISP_TXT', 'CASE_DISP', 'DISPOSITION']);
     const acres = pick(['RCRD_ACRS', 'ACRES', 'RECORD_ACRES', 'RCRD_ACRES']);
-    const stateVal = pick(cfg.stateFields);
+    const stateVal = pick([...(cfg.geoStateFields || []), ...(cfg.adminStateFields || [])]);
+    const recordDate = pick(cfg.recordDateFields);
 
     if (serial != null) out.TAG_NUMBER = String(serial);
     if (legacy != null) out.LEGACY_NR = String(legacy);
@@ -504,6 +561,14 @@ function normalizeProps(props, cfg = null) {
     if (disp != null) out.STATUS = String(disp);
     if (acres != null && Number.isFinite(Number(acres))) {
       out.AREA_IN_HECTARES = Number(acres) / ACRES_PER_HECTARE;
+    }
+    // Recording date — used only to break ties when ranking jurisdictions by
+    // area. Kept under its own key, never mapped onto GOOD_TO_DATE: this is
+    // when the case was recorded, not when anything expires.
+    if (recordDate != null) {
+      out.RECORDED_DATE = typeof recordDate === 'number' && recordDate > 1e10
+        ? new Date(recordDate).toISOString().slice(0, 10)
+        : String(recordDate);
     }
     out.US_STATE = stateVal != null ? String(stateVal) : cfg.usState;
     out.SOURCE_SYSTEM = 'BLM MLRS';
@@ -559,31 +624,200 @@ function normalizeProps(props, cfg = null) {
   return out;
 }
 
-// Resolve the per-jurisdiction scoping clause (US: state filter). Returns
-// null when the jurisdiction needs no scoping (Canadian provinces), or
-// throws a user-facing error when scoping is required but unresolvable —
-// returning nationwide results labeled as one state would be worse.
-function resolveBaseWhere(cfg, fields) {
+// Resolve the per-jurisdiction scoping clause (US: state filter). Returns null
+// when the jurisdiction needs no scoping (Canadian provinces), or throws a
+// user-facing error when scoping is required but unresolvable — returning
+// nationwide results labeled as one state would be worse.
+//
+// The returned `method` is reported to the client verbatim and drives the UI's
+// degraded-scoping banner. NOTHING may scope a US claim set without declaring
+// which of these three it used:
+//
+//   geo_state     GEO_STATE — where the land actually is. The only precise mode.
+//   admin_state   ADMIN_STATE — which BLM office administers the case. This is
+//                 ADMINISTRATIVE, NOT GEOGRAPHIC. The two diverge: one state
+//                 office can administer cases in another state (the Oregon/
+//                 Washington office covers both states, so Washington ground
+//                 carries an Oregon administering office). Under this mode a
+//                 state's claim set can therefore both omit claims inside its
+//                 borders and include claims outside them.
+//   serial_prefix Prefix of the case serial. Same administrative caveat, plus
+//                 it depends on the serial format itself not having drifted.
+//
+// Both degraded modes are surfaced to the user rather than silently applied.
+function resolveUsScoping(cfg, fields) {
   if (!cfg.usState) return null;
   const stateCode = escapeSql(cfg.usState).toUpperCase();
-  const stateField = pickField(cfg.stateFields, fields);
-  if (stateField && /^[A-Za-z0-9_.]+$/.test(stateField.name)) {
-    return `UPPER(${stateField.name}) = '${stateCode}'`;
+  const usable = (f) => f && /^[A-Za-z0-9_.]+$/.test(f.name);
+
+  const geoField = pickField(cfg.geoStateFields || [], fields);
+  if (usable(geoField)) {
+    return { where: `UPPER(${geoField.name}) = '${stateCode}'`, method: 'geo_state', field: geoField.name, degraded: false };
   }
-  // Degraded fallback if the state field ever drifts again: MLRS case serials
-  // begin with the two-letter admin state code (e.g. NV105331298), so scope by
-  // serial prefix. Slightly imprecise near borders (admin state can differ
-  // from geographic state) but far better than a hard failure — and honest:
-  // still never returns nationwide results labeled as one state.
-  const serialField = pickField(cfg.numberFields, fields);
-  if (serialField && /^[A-Za-z0-9_.]+$/.test(serialField.name) && isStringType(serialField)) {
-    return `UPPER(${serialField.name}) LIKE '${stateCode}%'`;
+
+  const adminField = pickField(cfg.adminStateFields || [], fields);
+  if (usable(adminField)) {
+    return {
+      where: `UPPER(${adminField.name}) = '${stateCode}'`,
+      method: 'admin_state',
+      field: adminField.name,
+      degraded: true,
+      note: `Scoped by administering BLM office (${adminField.name}), not by claim location — the geographic state field is unavailable. Claims just inside or outside the state line may be missing or extra.`,
+    };
+  }
+
+  // Degraded fallback when the state fields drift away entirely: scope by the
+  // state prefix on the case serial. Applied per field format — MLRS prefix on
+  // the MLRS serial, office prefix on the legacy serial (see US_SERIAL_PREFIXES).
+  const prefixes = US_SERIAL_PREFIXES[stateCode];
+  if (prefixes) {
+    const clauses = [];
+    const serialField = pickField(cfg.numberFields, fields);
+    if (usable(serialField) && isStringType(serialField) && prefixes.mlrs) {
+      clauses.push(`UPPER(${serialField.name}) LIKE '${prefixes.mlrs}%'`);
+    }
+    const legacyField = pickField(cfg.legacyNumberFields || [], fields);
+    if (usable(legacyField) && isStringType(legacyField) && prefixes.legacyOffice) {
+      clauses.push(`UPPER(${legacyField.name}) LIKE '${prefixes.legacyOffice}%'`);
+    }
+    if (clauses.length) {
+      return {
+        where: clauses.length > 1 ? `(${clauses.join(' OR ')})` : clauses[0],
+        method: 'serial_prefix',
+        field: clauses.length > 1 ? `${serialField.name}+${legacyField.name}` : (serialField?.name || legacyField.name),
+        degraded: true,
+        note: 'Scoped by case-serial prefix because the BLM state fields are unavailable. Serial prefixes follow the administering BLM office, not the claim location, so claims near a state line may be missing or extra.',
+      };
+    }
   }
   throw new Error('The BLM registry schema changed and state filtering is unavailable. Try again later.');
 }
 
+// Attach the scoping declaration to a response's meta. Canadian provinces pass
+// scoping=null and their meta is left exactly as it was.
+function withScopingMeta(meta, scoping) {
+  if (!scoping) return meta;
+  return {
+    ...meta,
+    scopingMethod: scoping.method,
+    scopingField: scoping.field,
+    scopingDegraded: Boolean(scoping.degraded),
+    ...(scoping.note ? { scopingNote: scoping.note } : {}),
+  };
+}
+
+// ── US company (claimant) search ────────────────────────────────────────────
+// Runs the alias ladder from _lib/us-aliases.js: exact claimant → alias table +
+// generated subsidiary variants → suffix-stripped fuzzy (score-filtered with
+// the pipeline's own NAME_MATCH.auto threshold). The first tier that returns
+// rows wins.
+//
+// The BLM Not Closed spatial layer published no claimant field as of July 2026,
+// so when none resolves the ladder runs against the claim-NAME field instead —
+// US operators overwhelmingly name claims after themselves or their subsidiary.
+// That substitution is reported in the response (`resolvedAgainst`) so it is
+// never mistaken for a real claimant match.
+//
+// A company that produces no rows in ANY tier comes back as
+// resolution.status='unresolved' — a different outcome from a company that
+// resolved and holds no ground here, and the UI must not merge the two.
+async function searchUsCompany(cfg, company, res, { layerUrl, fields, scoping }) {
+  const claimantField = pickField(cfg.ownerFields || [], fields);
+  const nameField = pickField(cfg.nameFields || [], fields);
+  const field = claimantField || nameField;
+  if (!field || !/^[A-Za-z0-9_.]+$/.test(field.name) || !isStringType(field)) {
+    return res.status(200).json({
+      type: 'FeatureCollection',
+      features: [],
+      meta: withScopingMeta({ provider: cfg.provider, returned: 0, totalKnown: 0, truncated: false, pagesFetched: 0 }, scoping),
+      resolution: {
+        status: 'unresolved',
+        reason: 'no_claimant_field',
+        company,
+        resolvedAgainst: null,
+        method: null,
+      },
+    });
+  }
+
+  const province = `us-${String(cfg.usState).toLowerCase()}`;
+  const tiers = resolveUsCompanyTiers(company, province);
+  const attempted = [];
+
+  for (const tier of tiers) {
+    const clauses = tier.terms.map((t) => `UPPER(${field.name}) LIKE UPPER('%${escapeSql(t)}%')`);
+    if (!clauses.length) continue;
+    let where = clauses.length > 1 ? `(${clauses.join(' OR ')})` : clauses[0];
+    if (scoping) where = `(${where}) AND ${scoping.where}`;
+    attempted.push({ method: tier.method, terms: tier.terms.length });
+
+    const { features, meta } = await arcgisQueryAll(layerUrl, {
+      where,
+      outFields: '*',
+      returnGeometry: 'true',
+      outSR: '4326',
+    });
+
+    // The fuzzy tier queries broadly on a two-token stem, so its rows are
+    // scored against the parent + every alias variant and anything below the
+    // pipeline's auto threshold is dropped rather than shown to the user.
+    const kept = tier.scored
+      ? features.filter((f) => {
+          const p = f.properties || {};
+          const candidate = (claimantField ? p[claimantField.name] : null) ?? p[field.name];
+          return matchesCompany(company, candidate, province);
+        })
+      : features;
+
+    if (!kept.length) continue;
+    if (cfg.provider) meta.provider = cfg.provider;
+    return res.status(200).json({
+      type: 'FeatureCollection',
+      features: kept.map((f) => ({ ...f, properties: normalizeProps(f.properties || {}, cfg) })),
+      meta: withScopingMeta({ ...meta, returned: kept.length }, scoping),
+      resolution: {
+        status: 'resolved',
+        company,
+        method: tier.method,
+        resolvedAgainst: claimantField ? 'claimant' : 'claim_name',
+        field: field.name,
+        tiersAttempted: attempted,
+      },
+    });
+  }
+
+  return res.status(200).json({
+    type: 'FeatureCollection',
+    features: [],
+    meta: withScopingMeta({ provider: cfg.provider, returned: 0, totalKnown: 0, truncated: false, pagesFetched: attempted.length }, scoping),
+    resolution: {
+      status: 'unresolved',
+      reason: claimantField ? 'no_claimant_match' : 'no_claim_name_match',
+      company,
+      resolvedAgainst: claimantField ? 'claimant' : 'claim_name',
+      field: field.name,
+      method: null,
+      tiersAttempted: attempted,
+    },
+  });
+}
+
 async function searchArcgis(cfg, term, type, res) {
   const { layerUrl, fields } = await resolveLayerAndFields(cfg, type);
+
+  // US state scoping is resolved before anything queries the layer, so every
+  // US path below carries its scoping declaration into the response.
+  let scoping;
+  try {
+    scoping = resolveUsScoping(cfg, fields);
+  } catch (e) {
+    return res.status(502).json({ error: e.message });
+  }
+
+  // US company search goes through the alias ladder rather than a single LIKE.
+  if (cfg.provider === 'blm-mlrs' && type === 'company') {
+    return searchUsCompany(cfg, term, res, { layerUrl, fields, scoping });
+  }
 
   const candidates = type === 'number' ? cfg.numberFields
     : type === 'name' ? (cfg.nameFields || [])
@@ -636,13 +870,7 @@ async function searchArcgis(cfg, term, type, res) {
     return res.status(400).json({ error: `${field.name} is numeric — enter digits only.` });
   }
 
-  let baseWhere;
-  try {
-    baseWhere = resolveBaseWhere(cfg, fields);
-  } catch (e) {
-    return res.status(502).json({ error: e.message });
-  }
-  if (baseWhere) where = `(${where}) AND ${baseWhere}`;
+  if (scoping) where = `(${where}) AND ${scoping.where}`;
 
   const { features, meta } = await arcgisQueryAll(layerUrl, {
     where,
@@ -655,7 +883,7 @@ async function searchArcgis(cfg, term, type, res) {
   return res.status(200).json({
     type: 'FeatureCollection',
     features: features.map((f) => ({ ...f, properties: normalizeProps(f.properties || {}, cfg) })),
-    meta,
+    meta: withScopingMeta(meta, scoping),
   });
 }
 
@@ -824,15 +1052,19 @@ export default async function handler(req, res) {
     try {
       // 'number' resolves for every jurisdiction (US has no owner fields);
       // the bbox path only needs a valid layer URL + field list.
-      const { layerUrl, fields } = await resolveLayerAndFields(cfg, cfg.ownerFields?.length ? 'company' : 'number');
-      let baseWhere = null;
+      // 'number' resolves for every jurisdiction; the bbox path only needs a
+      // valid layer URL + field list. US layers list claimant candidates that
+      // the live layer doesn't publish, so they resolve by number too.
+      const resolveType = (cfg.provider === 'blm-mlrs' || !cfg.ownerFields?.length) ? 'number' : 'company';
+      const { layerUrl, fields } = await resolveLayerAndFields(cfg, resolveType);
+      let scoping = null;
       try {
-        baseWhere = resolveBaseWhere(cfg, fields);
+        scoping = resolveUsScoping(cfg, fields);
       } catch (e) {
         return res.status(502).json({ error: e.message });
       }
       const { features, meta } = await arcgisQueryAll(layerUrl, {
-        ...(baseWhere ? { where: baseWhere } : {}),
+        ...(scoping ? { where: scoping.where } : {}),
         geometry: JSON.stringify({ xmin: minLng, ymin: minLat, xmax: maxLng, ymax: maxLat, spatialReference: { wkid: 4326 } }),
         geometryType: 'esriGeometryEnvelope',
         spatialRel: 'esriSpatialRelIntersects',
@@ -844,7 +1076,9 @@ export default async function handler(req, res) {
       return res.status(200).json({
         type: 'FeatureCollection',
         features: features.map((f) => ({ ...f, properties: normalizeProps(f.properties || {}, cfg) })),
-        meta,
+        // The nearby-claims overlay is a claim set like any other — it declares
+        // its scoping too, so a degraded scope can't slip onto the map here.
+        meta: withScopingMeta(meta, scoping),
       });
     } catch (e) {
       return upstreamErrorResponse(res, e, 'Failed to reach the provincial registry.');
@@ -909,8 +1143,21 @@ export default async function handler(req, res) {
             nameField: pickField(cfg.nameFields, nameResolved.fields)?.name || null,
           },
         } : {}),
-        ...(cfg.stateFields ? {
-          stateField: pickField(cfg.stateFields, numberResolved.fields)?.name || null,
+        // Which state field answered decides whether scoping is geographic or
+        // merely administrative — report the resolved scoping verbatim so a
+        // post-deploy check can see a degraded mode without guessing.
+        ...(cfg.usState ? {
+          scoping: (() => {
+            try {
+              const s = resolveUsScoping(cfg, numberResolved.fields);
+              return { method: s.method, field: s.field, degraded: s.degraded, where: s.where };
+            } catch (e) {
+              return { method: null, error: e.message };
+            }
+          })(),
+          geoStateField: pickField(cfg.geoStateFields || [], numberResolved.fields)?.name || null,
+          adminStateField: pickField(cfg.adminStateFields || [], numberResolved.fields)?.name || null,
+          recordDateField: pickField(cfg.recordDateFields || [], numberResolved.fields)?.name || null,
         } : {}),
       });
     } catch (e) {

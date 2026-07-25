@@ -45,8 +45,10 @@ export default function AddClaimsModal({ onClose, onImport, defaultPath = null, 
             initialQuery={initialQuery}
             autoSearch={autoSearch}
             onImport={(items) => {
-              // items is [{geojson, name}, ...] — one entry per geographic group
-              items.forEach(({ geojson, name }) => onImport(geojson, name));
+              // items is [{geojson, name, provenance}, ...] — one entry per
+              // geographic group. provenance carries degraded-scoping and
+              // auto-adopted-jurisdiction attribution onto the layer.
+              items.forEach(({ geojson, name, provenance }) => onImport(geojson, name, provenance));
               onClose();
             }}
             onBack={() => setPath(null)}

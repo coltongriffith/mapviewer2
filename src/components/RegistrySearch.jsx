@@ -5,6 +5,8 @@ import {
   US_CLAIMS_ENABLED, US_STATES, US_GROUP_LABEL, US_GEOMETRY_DISCLAIMER,
   US_CLAIM_TYPES, isUsJurisdiction,
 } from '../utils/jurisdictions';
+import { bestJurisdictionHit, autoAdoptionNotice } from '../utils/claimRanking';
+import { scopingWarning, emptyResultMessage } from '../utils/scopingNotice';
 
 // ── Spatial clustering helpers ─────────────────────────────────────────────
 
@@ -161,16 +163,23 @@ const PROVINCES = [
   },
 ];
 
-// U.S. federal (BLM MLRS) jurisdictions — searchable by claim name and MLRS
-// serial number. No claimant search in v1: the BLM spatial service publishes
-// no claimant data (it lives in separate MLRS reports; future enrichment).
+// U.S. federal (BLM MLRS) jurisdictions — searchable by company, claim name and
+// MLRS serial number. Company search has no claimant field to query (the BLM
+// spatial service publishes none), so the server resolves a parent company
+// through its US-subsidiary alias ladder against claim names instead, and
+// reports how the link was made — see api/_lib/us-aliases.js. Company is listed
+// first so a parent-company deep link uses it.
 const US_JURISDICTION_ENTRIES = US_STATES.map((st) => ({
   value: st.value,
   label: st.label,
   registry: 'BLM MLRS (federal)',
   country: 'us',
-  modes: ['name', 'number'],
-  placeholders: { name: 'e.g. GOLDIE #12', number: 'e.g. NV101234567' },
+  modes: ['company', 'name', 'number'],
+  placeholders: {
+    company: 'e.g. parent company or US subsidiary',
+    name: 'e.g. GOLDIE #12',
+    number: 'e.g. NV101234567',
+  },
 }));
 
 // All searchable jurisdictions. Canadian provinces keep their existing
@@ -269,7 +278,11 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
         // Deep-link auto-searches adopt a cross-province hit automatically —
         // the province was a page's guess, not the visitor's choice, so
         // leaving them on "No claims found in <wrong province>" is a dead end.
-        autoAdoptRef.current = Boolean(pending.auto);
+        // Remember what was ASKED for, so an adopted switch can attribute
+        // itself ("Showing Nevada — no BC claims found …").
+        autoAdoptRef.current = pending.auto
+          ? { requestedProvince: pending.province, query: pending.query }
+          : null;
         searchOtherProvinces(
           pending.query,
           pending.mode,
@@ -289,23 +302,45 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
   // Auto-adopt the strongest cross-province hit for deep-link auto-searches.
   // Manual searches keep the explicit "Switch & view" buttons — a user who
   // picked a province themselves shouldn't be yanked to another one.
-  const autoAdoptRef = useRef(false);
+  const autoAdoptRef = useRef(null);
+  // Attribution for a jurisdiction the app chose on the user's behalf. Rendered
+  // here AND attached to every imported layer, so an auto-adopted switch can't
+  // reach an export unnoticed.
+  const [adoptionNotice, setAdoptionNotice] = useState(null);
   useEffect(() => {
     if (!autoAdoptRef.current || crossProvinceLoading) return;
-    autoAdoptRef.current = false;             // consume regardless of outcome
+    const request = autoAdoptRef.current;
+    autoAdoptRef.current = null;              // consume regardless of outcome
     if (crossProvinceHits?.length) {
-      const top = crossProvinceHits.reduce((a, b) => (b.count > a.count ? b : a));
-      handleSwitchProvince(top);
+      // Rank by materiality (total area, then most recent recording date), not
+      // by claim count — see utils/claimRanking.js.
+      const top = bestJurisdictionHit(crossProvinceHits);
+      if (!top) return;
+      const requestedLabel = ALL_JURISDICTIONS.find((p) => p.value === request.requestedProvince)?.label
+        || request.requestedProvince;
+      handleSwitchProvince(top, {
+        message: autoAdoptionNotice(top.province.label, requestedLabel, request.query),
+        requestedProvince: request.requestedProvince,
+        requestedLabel,
+        adoptedProvince: top.province.value,
+        adoptedLabel: top.province.label,
+        rankedBy: top.rankedBy,
+        totalHa: top.totalHa,
+        query: request.query,
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [crossProvinceHits, crossProvinceLoading]);
 
-  function handleSwitchProvince(hit) {
+  // notice: set only for switches the app made itself. A manual "Switch & view"
+  // click passes nothing and behaves exactly as before.
+  function handleSwitchProvince(hit, notice = null) {
     setProvince(hit.province.value);
     setManualMode(false);
     setMode(autoDetectMode(query, hit.province.modes));
     adoptResults(hit.data);
     clearSelections();
+    setAdoptionNotice(notice);
   }
 
   // Auto-detect mode from query (unless user manually picked)
@@ -334,25 +369,49 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
     return feats.filter((f) => (f.properties?.CLAIM_TYPE || 'unknown') === usTypeFilter);
   }, [results, isUS, usTypeFilter]);
 
+  // Degraded-scoping warning for the current result set (null when precise).
+  const claimsScopingWarning = useMemo(() => scopingWarning(results?.meta), [results]);
+
+  // Zero results: which of the two distinct reasons applies.
+  const emptyMessage = useMemo(() => emptyResultMessage({
+    resolution: results?.resolution,
+    query,
+    jurisdictionLabel: provinceCfg.label,
+    isUs: isUS,
+  }), [results, query, provinceCfg, isUS]);
+
   // ── Company mode: owner picker + clustering ──
+  // Holder label for a feature. US federal records carry no claimant, so their
+  // bucket is labelled with the company the server actually resolved (falling
+  // back to what was typed) — never "Unknown", which would end up as the
+  // layer name on the map.
+  const ownerFallbackLabel = isUS
+    ? (results?.resolution?.company || query.trim() || 'Unknown')
+    : 'Unknown';
+  const ownerLabelOf = (f) => f?.properties?.OWNER_NAME || ownerFallbackLabel;
+
   const owners = useMemo(() => {
     if (!allFeatures.length || mode !== 'company') return [];
     const counts = new Map();
     const hectares = new Map();
     allFeatures.forEach(f => {
-      const name = f.properties?.OWNER_NAME || 'Unknown';
+      const name = ownerLabelOf(f);
       counts.set(name, (counts.get(name) || 0) + 1);
       hectares.set(name, (hectares.get(name) || 0) + (Number(f.properties?.AREA_IN_HECTARES) || 0));
     });
     return [...counts.entries()]
       .map(([name, count]) => ({ name, count, totalHa: hectares.get(name) || 0 }))
       .sort((a, b) => b.count - a.count);
-  }, [allFeatures, mode]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allFeatures, mode, ownerFallbackLabel]);
 
   const activeOwner = selectedOwner || (owners.length === 1 ? owners[0].name : null);
   const companyFeatures = useMemo(
-    () => activeOwner ? allFeatures.filter(f => f.properties?.OWNER_NAME === activeOwner) : [],
-    [allFeatures, activeOwner]
+    // Same label rule as the picker above — filtering on the raw field would
+    // drop every US record, whose OWNER_NAME is absent.
+    () => activeOwner ? allFeatures.filter(f => ownerLabelOf(f) === activeOwner) : [],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [allFeatures, activeOwner, ownerFallbackLabel]
   );
   const groups = useMemo(() => {
     const clusters = clusterFeatures(companyFeatures);
@@ -382,6 +441,9 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
     setSelectedGroups(new Set());
     setExpandedGroups(new Set());
     setSelectedFlat(new Set());
+    // A stale attribution is worse than none — any new search, province change
+    // or edited query drops it (handleSwitchProvince re-sets it after this).
+    setAdoptionNotice(null);
   }
 
   function handleSearch(e) {
@@ -454,13 +516,33 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
     setSelectedFlat(checked ? new Set(allFeatures.map((_, i) => i)) : new Set());
   }
 
+  // Everything that qualifies the claim set travels with the layer into the
+  // editor: which jurisdiction it came from, whether the app (not the user)
+  // chose that jurisdiction, and whether state scoping was degraded. The map
+  // renders it, and it persists into project state, so neither condition can
+  // reach an export unnoticed.
+  function importProvenance() {
+    const warning = scopingWarning(results?.meta);
+    if (!warning && !adoptionNotice) return null;
+    return {
+      province,
+      provinceLabel: provinceCfg.label,
+      registry: provinceCfg.registry,
+      ...(results?.meta?.scopingMethod ? { scopingMethod: results.meta.scopingMethod } : {}),
+      ...(warning ? { scopingWarning: warning } : {}),
+      ...(adoptionNotice ? { autoAdopted: adoptionNotice } : {}),
+    };
+  }
+
   function handleAddGroups() {
+    const provenance = importProvenance();
     const items = [...selectedGroups].sort((a, b) => a - b).map(i => {
       const g = groups[i];
       const holder = activeOwner || g.features[0]?.properties?.OWNER_NAME || query;
       return {
         geojson: { type: 'FeatureCollection', features: g.features },
         name: groups.length > 1 ? `${holder} – ${g.label}` : `${holder} Claims`,
+        provenance,
       };
     });
     // Province + count only coexist here (lost before reaching App's layer add).
@@ -483,6 +565,7 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
       name: isUsJurisdiction(province)
         ? `${(mode === 'number' ? features[0]?.properties?.TAG_NUMBER || query : usName)} Claims (BLM)`
         : mode === 'number' ? `Claim ${query}` : `${holder} Claims`,
+      provenance: importProvenance(),
     }]);
   }
 
@@ -521,11 +604,12 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
         {isUS ? (
           <>
             Federal BLM claims only — state-managed tenure isn't included yet.
-            Looking for a company's or person's claims? BLM doesn't publish
-            claimant names in its public map data, but operators usually name
-            claims after themselves — try the name as a <strong>Claim Name</strong> search
-            (we'll check other states automatically). For an exact claimant
-            lookup, find their serial numbers in{' '}
+            Looking for a company's claims? BLM publishes no claimant names in
+            its public map data, so a <strong>Company</strong> search matches the
+            company and its known US subsidiaries ("… US Inc.", "… Nevada LLC")
+            against claim names — US operators usually name claims after
+            themselves (we'll check other states automatically). For an exact
+            claimant lookup, find their serial numbers in{' '}
             <a href="https://reports.blm.gov/report/MLRS/103/Mining-Claims-Customer-Info-Report" target="_blank" rel="noreferrer">
               BLM's Customer Info Report
             </a>{' '}and search a serial here.
@@ -571,6 +655,28 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
 
       {error && <p className="claims-error">⚠ {error}</p>}
 
+      {/* The app picked this jurisdiction, not the user — say so, every time. */}
+      {adoptionNotice && (
+        <div className="claims-adoption-notice" role="status">
+          <strong>{adoptionNotice.message}</strong>
+          <span>
+            {adoptionNotice.rankedBy === 'area'
+              ? 'Chosen as the largest holding by area.'
+              : 'Chosen by claim count — no area published for these registries.'}
+            {' '}This attribution stays on the layer when you add it to the map.
+          </span>
+        </div>
+      )}
+
+      {/* Degraded state scoping. Never silent: claims shown under an
+          administrative scope are labelled as such wherever they appear. */}
+      {claimsScopingWarning && allFeatures.length > 0 && (
+        <div className="claims-scoping-warning" role="alert">
+          <strong>⚠ {claimsScopingWarning.short}</strong>
+          <span>{claimsScopingWarning.detail}</span>
+        </div>
+      )}
+
       {results?.meta?.truncated && allFeatures.length > 0 && (
         <p className="claims-error" role="status">
           ⚠ Large result set — showing the first {allFeatures.length.toLocaleString()}
@@ -581,7 +687,15 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
 
       {results && allFeatures.length === 0 && (
         <>
-          <p className="claims-empty">No active claims found for "{query}" in {provinceCfg.label}. Try a shorter name or check spelling.</p>
+          {/* Two different failures, two different messages — "we couldn't link
+              this company to a claim holder" is not "this company holds no
+              claims here", and a US issuer holding Nevada ground through a
+              subsidiary hits the first one. */}
+          <p className={emptyMessage.kind === 'unresolved' ? 'claims-empty claims-empty--unresolved' : 'claims-empty'}>
+            {emptyMessage.headline}
+            {emptyMessage.detail ? <><br /><span className="claims-empty-detail">{emptyMessage.detail}</span></> : null}
+            {emptyMessage.hint ? <><br /><span className="claims-empty-hint">{emptyMessage.hint}</span></> : null}
+          </p>
           {crossProvinceLoading && (
             <p className="claims-cross-province-checking">Checking other provinces…</p>
           )}

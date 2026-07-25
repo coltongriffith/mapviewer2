@@ -93,10 +93,11 @@ export const ON_ARCGIS = {
 
 // ── Matching thresholds ──────────────────────────────────────────────────────
 
-export const MATCH = {
-  auto: 92,       // ≥ auto-accept into matches.csv
-  review: 80,     // review..auto-1 → review_queue.csv
-};
+// Defined in api/_lib/name-match.js alongside the scorer they threshold, so the
+// runtime US claimant resolver and this pipeline cannot drift apart.
+//   auto:   92  ≥ auto-accept into matches.csv
+//   review: 80  review..auto-1 → review_queue.csv
+export { NAME_MATCH as MATCH } from '../../api/_lib/name-match.js';
 
 // ── Page-generation knobs ────────────────────────────────────────────────────
 

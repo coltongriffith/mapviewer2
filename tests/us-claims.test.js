@@ -56,10 +56,15 @@ const req = (query, method = 'GET') => ({
 let queryUrls;
 let totalClaims;
 let blmFields;
+// Optional per-test row source. Given a decoded WHERE clause it returns the rows
+// that clause should match, so tiered searches (the company alias ladder) can be
+// tested for real instead of always seeing the same canned rows.
+let rowsForWhere;
 function installBlmMock(fields = BLM_FIELDS) {
   queryUrls = [];
   totalClaims = 3;
   blmFields = fields;
+  rowsForWhere = null;
   vi.stubGlobal('fetch', vi.fn(async (url) => {
     const u = String(url);
     const json = (body) => ({ ok: true, headers: new Map([['content-type', 'application/json']]), json: async () => body, text: async () => JSON.stringify(body) });
@@ -74,7 +79,11 @@ function installBlmMock(fields = BLM_FIELDS) {
     }
     if (/FeatureServer\/0\/query/.test(u)) {
       // URLSearchParams encodes spaces as '+', which decodeURIComponent leaves alone
-      queryUrls.push(decodeURIComponent(u.replace(/\+/g, ' ')));
+      const decoded = decodeURIComponent(u.replace(/\+/g, ' '));
+      queryUrls.push(decoded);
+      if (rowsForWhere) {
+        return json({ type: 'FeatureCollection', features: rowsForWhere(decoded) });
+      }
       const offset = Number(u.match(/resultOffset=(\d+)/)?.[1]) || 0;
       const count = Number(u.match(/resultRecordCount=(\d+)/)?.[1]) || 2000;
       const features = [];
@@ -151,15 +160,77 @@ describe('US serial-number search', () => {
 });
 
 describe('US state-scoping resilience', () => {
-  it('falls back to serial-prefix scoping when no state field resolves', async () => {
+  it('declares precise geographic scoping on the happy path', async () => {
+    const res = mockRes();
+    await handler(req({ q: 'goldie', type: 'name', province: 'us-nv' }), res);
+    expect(res.statusCode).toBe(200);
+    expect(res.body.meta.scopingMethod).toBe('geo_state');
+    expect(res.body.meta.scopingField).toBe('GEO_STATE');
+    expect(res.body.meta.scopingDegraded).toBe(false);
+    expect(res.body.meta.scopingNote).toBeUndefined();
+  });
+
+  it('degrades to ADMIN_STATE and declares it as administrative, not geographic', async () => {
+    vi.resetModules();
+    installBlmMock(BLM_FIELDS.filter((f) => f.name !== 'GEO_STATE'));
+    const { default: h } = await import('../api/claims.js');
+    const res = mockRes();
+    await h(req({ q: 'goldie', type: 'name', province: 'us-nv' }), res);
+    expect(res.statusCode).toBe(200);
+    expect(queryUrls[0]).toMatch(/UPPER\(ADMIN_STATE\) = 'NV'/);
+    expect(res.body.meta.scopingMethod).toBe('admin_state');
+    expect(res.body.meta.scopingDegraded).toBe(true);
+    // The note must say the scope is administrative — a caller that renders it
+    // verbatim has to be able to warn a user without knowing BLM internals.
+    expect(res.body.meta.scopingNote).toMatch(/administering BLM office/i);
+    expect(res.body.meta.scopingNote).toMatch(/not by claim location/i);
+  });
+
+  it('falls back to serial-prefix scoping when no state field resolves, and declares it', async () => {
     vi.resetModules();
     installBlmMock(BLM_FIELDS.filter((f) => !/STATE/.test(f.name)));
     const { default: h } = await import('../api/claims.js');
     const res = mockRes();
     await h(req({ q: 'goldie', type: 'name', province: 'us-nv' }), res);
     expect(res.statusCode).toBe(200);
-    // MLRS serials are state-prefixed, so scoping degrades to CSE_NR LIKE 'NV%'
+    // MLRS serials carry the two-letter state code (NV105331298), so scoping
+    // degrades to CSE_NR LIKE 'NV%'. The NMC-style office code belongs to the
+    // LEGACY serial field and must not be applied to CSE_NR.
     expect(queryUrls[0]).toMatch(/UPPER\(CSE_NR\) LIKE 'NV%'/);
+    expect(queryUrls[0]).not.toMatch(/CSE_NR\) LIKE 'NMC%'/);
+    expect(res.body.meta.scopingMethod).toBe('serial_prefix');
+    expect(res.body.meta.scopingDegraded).toBe(true);
+    expect(res.body.meta.scopingNote).toMatch(/serial/i);
+  });
+
+  it('adds the legacy office prefix on the legacy field only', async () => {
+    vi.resetModules();
+    installBlmMock([
+      ...BLM_FIELDS.filter((f) => !/STATE/.test(f.name)),
+      { name: 'LGCY_CSE_NR', type: 'esriFieldTypeString' },
+    ]);
+    const { default: h } = await import('../api/claims.js');
+    const res = mockRes();
+    await h(req({ q: 'goldie', type: 'name', province: 'us-nv' }), res);
+    expect(res.statusCode).toBe(200);
+    expect(queryUrls[0]).toMatch(/UPPER\(CSE_NR\) LIKE 'NV%'/);
+    expect(queryUrls[0]).toMatch(/UPPER\(LGCY_CSE_NR\) LIKE 'NMC%'/);
+    expect(res.body.meta.scopingMethod).toBe('serial_prefix');
+  });
+
+  it('refuses serial-prefix scoping for Oregon and Washington (one shared BLM office)', async () => {
+    // The Oregon/Washington state office administers both states, so no serial
+    // prefix distinguishes them. Returning Oregon claims labelled Washington
+    // would be a plausible-looking wrong answer — a hard error is correct.
+    for (const province of ['us-or', 'us-wa']) {
+      vi.resetModules();
+      installBlmMock(BLM_FIELDS.filter((f) => !/STATE/.test(f.name)));
+      const { default: h } = await import('../api/claims.js');
+      const res = mockRes();
+      await h(req({ q: 'goldie', type: 'name', province }), res);
+      expect(res.statusCode, province).toBe(502);
+      expect(res.body.error).toMatch(/state filtering is unavailable/i);
+    }
   });
 
   it('surfaces the schema error only when neither state nor serial resolves', async () => {
@@ -170,6 +241,154 @@ describe('US state-scoping resilience', () => {
     await h(req({ q: 'goldie', type: 'name', province: 'us-nv' }), res);
     expect(res.statusCode).toBe(502);
     expect(res.body.error).toMatch(/state filtering is unavailable/i);
+  });
+
+  it('declares the scoping method on every US path, including bbox and company', async () => {
+    // Acceptance: no code path returns claims under degraded scoping without
+    // the response declaring it.
+    vi.resetModules();
+    installBlmMock(BLM_FIELDS.filter((f) => f.name !== 'GEO_STATE'));
+    const { default: h } = await import('../api/claims.js');
+
+    const bbox = mockRes();
+    await h(req({ bbox: '-116.5,39.5,-115.5,40.5', province: 'us-nv' }), bbox);
+    expect(bbox.statusCode).toBe(200);
+    expect(bbox.body.features.length).toBeGreaterThan(0);
+    expect(bbox.body.meta.scopingMethod).toBe('admin_state');
+    expect(bbox.body.meta.scopingDegraded).toBe(true);
+
+    const number = mockRes();
+    await h(req({ q: 'NV105000001', type: 'number', province: 'us-nv' }), number);
+    expect(number.body.meta.scopingDegraded).toBe(true);
+
+    const company = mockRes();
+    await h(req({ q: 'goldie', type: 'company', province: 'us-nv' }), company);
+    expect(company.body.meta.scopingMethod).toBe('admin_state');
+    expect(company.body.meta.scopingDegraded).toBe(true);
+  });
+
+  it('leaves Canadian responses free of US scoping fields', async () => {
+    const res = mockRes();
+    await handler(req({ q: 'goldie', type: 'name', province: 'us-nv' }), res);
+    expect(res.body.meta.scopingMethod).toBeDefined();   // US declares
+    // (the Canadian case is covered in "Canadian paths untouched" below)
+  });
+});
+
+describe('US company resolution via the subsidiary alias ladder', () => {
+  // Claim/claimant strings the mock will match a LIKE against.
+  const namedClaim = (i, name) => claim(i, { CSE_NAME: name });
+
+  function installNameMock(rows) {
+    vi.resetModules();
+    installBlmMock();
+    rowsForWhere = (where) => {
+      // Crude LIKE evaluator: pull each '%term%' out of the WHERE and match it
+      // against the row's claim name, the way the live service would.
+      const terms = [...where.matchAll(/LIKE UPPER\('%([^%]*)%'\)/g)].map((m) => m[1].toUpperCase());
+      const equals = [...where.matchAll(/UPPER\(CSE_NAME\) = UPPER\('([^']*)'\)/g)].map((m) => m[1].toUpperCase());
+      return rows
+        .filter((r) => {
+          const n = String(r.properties.CSE_NAME).toUpperCase();
+          return terms.some((t) => t && n.includes(t)) || equals.some((e) => n === e);
+        });
+    };
+  }
+
+  it('finds Nevada ground held under a US subsidiary from the parent-company name', async () => {
+    // Acceptance case: the issuer is "Awesome Gold Corp."; its Nevada claims are
+    // named after "AWESOME GOLD NEVADA LLC". The parent name alone matches
+    // nothing exactly, so tier 2 (alias variants) has to carry it.
+    installNameMock([
+      namedClaim(1, 'AWESOME GOLD NEVADA LLC 1'),
+      namedClaim(2, 'AWESOME GOLD NEVADA LLC 2'),
+      namedClaim(3, 'SOMEONE ELSE #7'),
+    ]);
+    const { default: h } = await import('../api/claims.js');
+    const res = mockRes();
+    await h(req({ q: 'Awesome Gold Corp.', type: 'company', province: 'us-nv' }), res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.resolution.status).toBe('resolved');
+    expect(res.body.resolution.method).toBe('alias');
+    // No claimant field on this layer, so the ladder ran against claim names —
+    // and says so, rather than implying a real claimant match.
+    expect(res.body.resolution.resolvedAgainst).toBe('claim_name');
+    expect(res.body.features).toHaveLength(2);
+    expect(res.body.features.map((f) => f.properties.CLAIM_NAME)).toEqual([
+      'AWESOME GOLD NEVADA LLC 1', 'AWESOME GOLD NEVADA LLC 2',
+    ]);
+  });
+
+  it('prefers an exact match and stops before the alias tier', async () => {
+    installNameMock([namedClaim(1, 'AWESOME GOLD CORP')]);
+    const { default: h } = await import('../api/claims.js');
+    const res = mockRes();
+    await h(req({ q: 'AWESOME GOLD CORP', type: 'company', province: 'us-nv' }), res);
+    expect(res.body.resolution.method).toBe('exact');
+    expect(res.body.resolution.tiersAttempted).toHaveLength(1);
+  });
+
+  it('score-filters the fuzzy tier and drops unrelated rows', async () => {
+    // Nothing matches the parent or a subsidiary variant, so the ladder reaches
+    // the fuzzy stem tier ('AWESOME GOLD'), whose broad rows are then scored.
+    installNameMock([
+      namedClaim(1, 'AWESOME GOLD #12'),           // same company, keep
+      namedClaim(2, 'AWESOME GOLDFINCH TRUCKING'), // stem collision, drop
+    ]);
+    const { default: h } = await import('../api/claims.js');
+    const res = mockRes();
+    await h(req({ q: 'Awesome Gold Corp.', type: 'company', province: 'us-nv' }), res);
+    expect(res.body.resolution.status).toBe('resolved');
+    expect(res.body.resolution.method).toBe('fuzzy');
+    expect(res.body.features.map((f) => f.properties.CLAIM_NAME)).toEqual(['AWESOME GOLD #12']);
+  });
+
+  it('reports UNRESOLVED — not "no claims found" — when nothing links the company', async () => {
+    // The defect this fixes: a US issuer holding ground under a subsidiary was
+    // indistinguishable from one holding no US ground at all.
+    installNameMock([namedClaim(1, 'TOTALLY UNRELATED CLAIM')]);
+    const { default: h } = await import('../api/claims.js');
+    const res = mockRes();
+    await h(req({ q: 'Awesome Gold Corp.', type: 'company', province: 'us-nv' }), res);
+    expect(res.statusCode).toBe(200);
+    expect(res.body.features).toHaveLength(0);
+    expect(res.body.resolution.status).toBe('unresolved');
+    expect(res.body.resolution.reason).toBe('no_claim_name_match');
+    // Every tier was tried before giving up.
+    expect(res.body.resolution.tiersAttempted.map((t) => t.method)).toEqual(['exact', 'alias', 'fuzzy']);
+  });
+
+  it('reports no_claimant_field when the layer publishes neither claimant nor name', async () => {
+    vi.resetModules();
+    installBlmMock(BLM_FIELDS.filter((f) => f.name !== 'CSE_NAME'));
+    const { default: h } = await import('../api/claims.js');
+    const res = mockRes();
+    await h(req({ q: 'Awesome Gold Corp.', type: 'company', province: 'us-nv' }), res);
+    expect(res.statusCode).toBe(200);
+    expect(res.body.resolution.status).toBe('unresolved');
+    expect(res.body.resolution.reason).toBe('no_claimant_field');
+    expect(res.body.features).toHaveLength(0);
+  });
+
+  it('uses a real claimant field when BLM publishes one, and says so', async () => {
+    vi.resetModules();
+    installBlmMock([...BLM_FIELDS, { name: 'CLAIMANT_NAME', type: 'esriFieldTypeString' }]);
+    const { default: h } = await import('../api/claims.js');
+    const res = mockRes();
+    await h(req({ q: 'Awesome Gold Corp.', type: 'company', province: 'us-nv' }), res);
+    expect(res.statusCode).toBe(200);
+    expect(queryUrls[0]).toMatch(/UPPER\(CLAIMANT_NAME\) LIKE/i);
+    expect(res.body.resolution.resolvedAgainst).toBe('claimant');
+  });
+
+  it('keeps the state scope on every tier of the ladder', async () => {
+    installNameMock([namedClaim(1, 'NOTHING MATCHES')]);
+    const { default: h } = await import('../api/claims.js');
+    const res = mockRes();
+    await h(req({ q: 'Awesome Gold Corp.', type: 'company', province: 'us-az' }), res);
+    expect(queryUrls.length).toBeGreaterThanOrEqual(3);
+    for (const u of queryUrls) expect(u).toMatch(/UPPER\(GEO_STATE\) = 'AZ'/);
   });
 });
 
@@ -245,11 +464,11 @@ describe('US jurisdiction validation', () => {
     expect(res.body.error).toMatch(/only available for BC/i);
   });
 
-  it('company/claimant search degrades cleanly (no claimant data in v1)', async () => {
+  it('company search resolves through the alias ladder instead of 400-ing', async () => {
     const res = mockRes();
     await handler(req({ q: 'barrick', type: 'company', province: 'us-nv' }), res);
-    expect(res.statusCode).toBe(400);
-    expect(res.body.error).toMatch(/not available here/i);
+    expect(res.statusCode).toBe(200);
+    expect(res.body.resolution).toBeTruthy();
   });
 
   it('name search is rejected for jurisdictions without name fields (Canadian)', async () => {
@@ -326,5 +545,176 @@ describe('Canadian paths untouched', () => {
     await h(req({ q: 'klondike', type: 'company', province: 'yt' }), res);
     expect(res.statusCode).toBe(200);
     expect(res.body.features).toHaveLength(1);
+  });
+});
+
+describe('Canadian responses carry no US scoping fields', () => {
+  it('a Yukon search reports no scopingMethod at all', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url) => {
+      const u = String(url);
+      const json = (body) => ({ ok: true, headers: new Map([['content-type', 'application/json']]), json: async () => body, text: async () => JSON.stringify(body) });
+      if (u.includes('GY_Mining/MapServer?f=json')) return json({ layers: [{ id: 5, name: 'Quartz Claims' }] });
+      if (u.includes('/MapServer/5?f=json')) {
+        return json({ maxRecordCount: 500, objectIdField: 'OBJECTID', advancedQueryCapabilities: { supportsPagination: true }, fields: [{ name: 'OBJECTID', type: 'esriFieldTypeOID' }, { name: 'OWNER', type: 'esriFieldTypeString' }] });
+      }
+      if (u.includes('/MapServer/5/query')) return json({ type: 'FeatureCollection', features: [claim(1, { OWNER: 'Klondike Gold' })] });
+      throw new Error(`unexpected ${u}`);
+    }));
+    vi.resetModules();
+    const { default: h } = await import('../api/claims.js');
+    const res = mockRes();
+    await h(req({ q: 'klondike', type: 'company', province: 'yt' }), res);
+    expect(res.statusCode).toBe(200);
+    expect(res.body.meta.scopingMethod).toBeUndefined();
+    expect(res.body.meta.scopingDegraded).toBeUndefined();
+    expect(res.body.resolution).toBeUndefined();
+  });
+});
+
+// ── Alias layer (unit) ──────────────────────────────────────────────────────
+
+describe('US subsidiary alias layer', () => {
+  it('generates jurisdiction-tagged subsidiary variants from a parent name', async () => {
+    const { usClaimantVariants } = await import('../api/_lib/us-aliases.js');
+    const nv = usClaimantVariants('Awesome Gold Corp.', 'NV');
+    expect(nv).toContain('AWESOME GOLD US');
+    expect(nv).toContain('AWESOME GOLD USA');
+    expect(nv).toContain('AWESOME GOLD NEVADA');
+    // The state token is jurisdiction-specific — an Arizona search must not
+    // look for a Nevada subsidiary.
+    expect(usClaimantVariants('Awesome Gold Corp.', 'AZ')).not.toContain('AWESOME GOLD NEVADA');
+    expect(usClaimantVariants('Awesome Gold Corp.', 'AZ')).toContain('AWESOME GOLD ARIZONA');
+  });
+
+  it('honours the resolution order: exact, then alias, then fuzzy', async () => {
+    const { resolveUsCompanyTiers } = await import('../api/_lib/us-aliases.js');
+    const tiers = resolveUsCompanyTiers('Awesome Gold Corp.', 'us-nv');
+    expect(tiers.map((t) => t.method)).toEqual(['exact', 'alias', 'fuzzy']);
+    // Only the fuzzy tier is score-filtered after the query.
+    expect(tiers.filter((t) => t.scored).map((t) => t.method)).toEqual(['fuzzy']);
+  });
+
+  it('scores candidates against the pipeline threshold, not a new one', async () => {
+    const { matchesCompany } = await import('../api/_lib/us-aliases.js');
+    const { NAME_MATCH } = await import('../api/_lib/name-match.js');
+    expect(NAME_MATCH.auto).toBe(92);              // unchanged pipeline threshold
+    expect(matchesCompany('Awesome Gold Corp.', 'AWESOME GOLD NEVADA LLC', 'us-nv')).toBe(true);
+    expect(matchesCompany('Awesome Gold Corp.', 'AWESOME GOLD US INC', 'us-nv')).toBe(true);
+    expect(matchesCompany('Awesome Gold Corp.', 'AWESOME GOLDFINCH TRUCKING', 'us-nv')).toBe(false);
+    expect(matchesCompany('Awesome Gold Corp.', 'BARRICK GOLD OF NEVADA', 'us-nv')).toBe(false);
+  });
+
+  it('refuses a fuzzy stem too short to be a search', async () => {
+    const { fuzzyStem } = await import('../api/_lib/us-aliases.js');
+    expect(fuzzyStem('Awesome Gold Corp.')).toBe('AWESOME GOLD');
+    expect(fuzzyStem('XY Inc.')).toBeNull();
+    expect(fuzzyStem('Ltd.')).toBeNull();
+  });
+
+  it('ships no curated aliases that were never human-verified', async () => {
+    const { CURATED_US_ALIASES } = await import('../api/_lib/us-aliases.js');
+    for (const row of CURATED_US_ALIASES) {
+      expect(row.verified, `${row.parent} → ${row.claimant}`).toBe('yes');
+      expect(row.source).toBeTruthy();
+    }
+  });
+});
+
+// ── Jurisdiction ranking (Task 4) ───────────────────────────────────────────
+
+describe('cross-jurisdiction ranking by materiality', () => {
+  const hit = (value, label, areas, dates = []) => ({
+    province: { value, label, modes: ['company', 'number'] },
+    count: areas.length,
+    data: {
+      features: areas.map((ha, i) => ({
+        type: 'Feature',
+        properties: {
+          AREA_IN_HECTARES: ha,
+          ...(dates[i] ? { RECORDED_DATE: dates[i] } : {}),
+        },
+      })),
+    },
+  });
+
+  it('ranks a four-claim flagship above forty dormant claims elsewhere', async () => {
+    const { bestJurisdictionHit } = await import('../src/utils/claimRanking.js');
+    // BC: 4 claims × 500 ha = 2,000 ha. Nevada: 40 lode claims × 8.4 ha = 336 ha.
+    const bc = hit('bc', 'British Columbia', Array(4).fill(500));
+    const nv = hit('us-nv', 'Nevada', Array(40).fill(8.4));
+    const best = bestJurisdictionHit([nv, bc]);
+    expect(best.province.value).toBe('bc');
+    expect(best.rankedBy).toBe('area');
+  });
+
+  it('breaks an area tie on the most recent recording date', async () => {
+    const { bestJurisdictionHit } = await import('../src/utils/claimRanking.js');
+    const older = hit('on', 'Ontario', [100], ['2016-03-01']);
+    const newer = hit('sk', 'Saskatchewan', [100], ['2025-11-20']);
+    expect(bestJurisdictionHit([older, newer]).province.value).toBe('sk');
+  });
+
+  it('falls back to claim count only when no candidate publishes area', async () => {
+    const { rankJurisdictionHits } = await import('../src/utils/claimRanking.js');
+    const few = hit('mb', 'Manitoba', [0, 0]);
+    const many = hit('nl', 'Newfoundland', [0, 0, 0, 0]);
+    const ranked = rankJurisdictionHits([few, many]);
+    expect(ranked[0].province.value).toBe('nl');
+    expect(ranked[0].rankedBy).toBe('count');
+  });
+
+  it('ranks a candidate with area above one without, and stays stable otherwise', async () => {
+    const { rankJurisdictionHits } = await import('../src/utils/claimRanking.js');
+    const noArea = hit('mb', 'Manitoba', [0, 0, 0, 0, 0]);
+    const withArea = hit('bc', 'British Columbia', [12]);
+    expect(rankJurisdictionHits([noArea, withArea])[0].province.value).toBe('bc');
+  });
+
+  it('attributes an auto-adopted switch in words the reader can act on', async () => {
+    const { autoAdoptionNotice } = await import('../src/utils/claimRanking.js');
+    expect(autoAdoptionNotice('Nevada', 'British Columbia', 'Awesome Gold Corp.'))
+      .toBe('Showing Nevada — no British Columbia claims found for Awesome Gold Corp.');
+  });
+});
+
+// ── Degraded-scoping + unresolved messaging (UI text contract) ──────────────
+
+describe('scoping and empty-state messaging', () => {
+  it('warns only when scoping is degraded, using the server note', async () => {
+    const { scopingWarning } = await import('../src/utils/scopingNotice.js');
+    expect(scopingWarning({ scopingMethod: 'geo_state', scopingDegraded: false })).toBeNull();
+    expect(scopingWarning(undefined)).toBeNull();
+    const warn = scopingWarning({ scopingMethod: 'serial_prefix', scopingDegraded: true, scopingNote: 'Scoped by case-serial prefix …' });
+    expect(warn.short).toMatch(/approximate/i);
+    expect(warn.detail).toMatch(/case-serial prefix/i);
+  });
+
+  it('never gives "unresolved" and "no claims" the same message', async () => {
+    const { emptyResultMessage } = await import('../src/utils/scopingNotice.js');
+    const unresolved = emptyResultMessage({
+      resolution: { status: 'unresolved', reason: 'no_claim_name_match' },
+      query: 'Awesome Gold Corp.', jurisdictionLabel: 'Nevada', isUs: true,
+    });
+    const empty = emptyResultMessage({
+      resolution: { status: 'resolved' },
+      query: 'Awesome Gold Corp.', jurisdictionLabel: 'Nevada', isUs: true,
+    });
+    expect(unresolved.kind).toBe('unresolved');
+    expect(empty.kind).toBe('empty');
+    expect(unresolved.headline).not.toBe(empty.headline);
+    expect(unresolved.headline).toMatch(/couldn't link/i);
+    // The unresolved case must not imply the company holds nothing.
+    expect(unresolved.detail).toMatch(/not a statement that the company holds no ground/i);
+    expect(empty.headline).toMatch(/No active claims found/i);
+  });
+
+  it('explains the missing-claimant-field case distinctly', async () => {
+    const { emptyResultMessage } = await import('../src/utils/scopingNotice.js');
+    const msg = emptyResultMessage({
+      resolution: { status: 'unresolved', reason: 'no_claimant_field' },
+      query: 'Awesome Gold Corp.', jurisdictionLabel: 'Nevada', isUs: true,
+    });
+    expect(msg.detail).toMatch(/publishes no claimant names/i);
+    expect(msg.hint).toMatch(/subsidiary/i);
   });
 });
