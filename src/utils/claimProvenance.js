@@ -41,9 +41,26 @@ export function claimNamePrefix(features) {
 }
 
 // Human-readable data-source credit for a jurisdiction's live registry.
-export function sourceCredit(jurisdictionCfg, meta = null) {
+// A claimant-resolved US set is a JOIN of two sources — BLM geometry plus a
+// claimant extract — and the credit names both, because a reader judging the
+// map needs to know where the ownership assertion came from, not just the
+// polygons.
+const CLAIMANT_SOURCE_LABELS = {
+  mlrs_report_120: 'BLM MLRS report 120 (customer↔serial)',
+  ndom: 'Nevada Division of Minerals claimant extract',
+  claims_hub: 'C.L.A.I.M.S. hub claimant extract (third-party)',
+};
+
+export function sourceCredit(jurisdictionCfg, meta = null, resolution = null) {
   if (meta?.provider === 'blm-mlrs' || jurisdictionCfg?.country === 'us') {
-    return 'BLM MLRS — Mining Claims Not Closed (federal)';
+    const base = 'BLM MLRS — Mining Claims Not Closed (federal)';
+    if (resolution?.resolvedAgainst === 'claimant') {
+      const sources = (resolution.claimantSources || [])
+        .map((s) => CLAIMANT_SOURCE_LABELS[s] || s)
+        .filter(Boolean);
+      if (sources.length) return `${base} + ${sources.join(' + ')}`;
+    }
+    return base;
   }
   const registry = jurisdictionCfg?.registry;
   const label = jurisdictionCfg?.label;

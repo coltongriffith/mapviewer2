@@ -60,11 +60,12 @@ in the MLRS Reporting Application (reports.blm.gov): report 103 "Mining
 Claims — Customer Info Report" (search by customer name) and report 108
 "Serial Register Page" (per-serial detail, parameterized URLs). That app is
 human-facing (HTML output, no documented machine API), so live proxying would
-be scraping — brittle and deliberately avoided. Instead, a **Company** search
-runs the parent→US-subsidiary alias ladder against claim names (US operators
-typically name claims after themselves or their subsidiary) and reports that it
-did so; the UI also links report 103 for exact claimant→serial lookup, feeding
-the serial search here. See "Company resolution" below.
+be scraping — brittle and deliberately avoided. Instead the **Project / claim
+name** mode runs the parent→US-subsidiary alias ladder against claim names (US
+operators typically name claims after themselves or their subsidiary) and
+reports that it did so; the UI also links report 103 for exact claimant→serial
+lookup, feeding the serial search here. Ownership proper comes from the claimant
+store — see "Claimant join via serial number" below.
 
 **v2 path (real claimant search):** evaluated in detail under "Claimant join via
 serial number" below — BLM spatial stays the geometry authority, a claimant
@@ -222,7 +223,12 @@ Everything downstream is built around that limit:
   (`modeLabels` on the US jurisdiction entries; the mode *key* stays `company`
   because it is the API's `type` param). A test asserts no US tab is ever
   labelled "Company", and that Canadian registries — which do publish holders —
-  keep theirs.
+  keep theirs. US shows **two** tabs, not three: the server still accepts
+  `type=name` (a literal substring match, used by deep links), but offering it
+  beside the ladder put two tabs on screen that both searched claim names, and
+  the ladder's first tier *is* the literal match. The US claim-type chips
+  therefore render above whichever list is showing, rather than inside the flat
+  list — US company results are grouped geographically, not by holder.
 - **Layer titles.** A claim-name-resolved set is titled by the matched claim-name
   prefix, e.g. `AWESOME GOLD NEVADA (claim name)` — never `<Company> Claims`.
   `claimNamePrefix()` (`src/utils/claimProvenance.js`) takes the longest common
@@ -330,8 +336,48 @@ public-read), because it already solves "no live API, periodic refresh":
    `us_claim_claimants` exists, point the script at it (or feed report 120 via
    `--claimants <csv>`, which it already accepts) and work the queue.
 
-**Not built in this change** — the join needs a live field list first (Task D,
-check 3) and an operator decision on which source of record to load.
+### Status: plumbing built, inert until a snapshot is loaded
+
+The source-agnostic parts are done and shipped OFF. Nothing changes until an
+operator runs the setup SQL and loads an extract:
+
+| Piece | File | State |
+|---|---|---|
+| Table, indexes, RLS, snapshot view | `supabase-us-claimants-setup.sql` | ready to run |
+| Loader (any CSV → table) | `scripts/update-us-claimants.mjs` | ready |
+| Claimant-first resolution + serial join | `api/claims.js` (`resolveClaimantSerials`) | ready, inert |
+| Snapshot date → export credit | `claimProvenance.js` | ready, tested |
+
+Why it could be built before the source decision: every candidate produces the
+same three facts — serial, claimant name, state — so the `source` column carries
+the difference and rows from several extracts coexist. The loader maps columns
+by name with explicit `--serial-col` / `--claimant-col` overrides and **fails
+loudly on an unmappable file** rather than guessing; loading the wrong column
+would attach one company's name to another's ground.
+
+Behaviour when unconfigured (the shipped default) is unchanged: no
+`SUPABASE_URL`, a missing table (404), or a store error all fall through to the
+claim-name ladder, and the response still says `resolvedAgainst: 'claim_name'`.
+Tests cover all three.
+
+To turn it on:
+
+```bash
+# 1. create the table (Supabase SQL editor)
+#    paste supabase-us-claimants-setup.sql, Run
+
+# 2. load an extract (dry-run first — it prints the column mapping it inferred)
+node scripts/update-us-claimants.mjs --file report120.csv   --source mlrs_report_120 --snapshot 2026-07-01 --dry-run
+node scripts/update-us-claimants.mjs --file report120.csv   --source mlrs_report_120 --snapshot 2026-07-01
+
+# 3. seed the subsidiary alias queue against real claimant strings
+node scripts/pseo/08_seed_us_aliases.mjs
+```
+
+**Still needs a decision:** which source is the record for ownership —
+`mlrs_report_120` (BLM's own, Login.gov export, monthly manual step) or `ndom`
+(automatable if it publishes a claimant field, which Task D check 3 settles).
+`claims_hub` is accepted by the loader as a cross-check source only.
 
 ## Company resolution (parent → claim name today, claimant later)
 

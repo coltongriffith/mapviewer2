@@ -805,3 +805,132 @@ describe('export source credit', () => {
     expect(exportCreditLines([])).toEqual([]);
   });
 });
+
+// ── Claimant join: ownership resolved by serial (inert until configured) ────
+
+describe('US claimant store join', () => {
+  const CLAIMANT_ROWS = [
+    { serial: 'NV105000001', claimant_name: 'AWESOME GOLD NEVADA LLC', claimant_role: 'owner of record', state: 'NV', source: 'mlrs_report_120', snapshot_date: '2026-07-01' },
+    { serial: 'NV105000002', claimant_name: 'AWESOME GOLD NEVADA LLC', claimant_role: 'owner of record', state: 'NV', source: 'mlrs_report_120', snapshot_date: '2026-07-01' },
+  ];
+
+  // Layers the claimant store answers for; `storeStatus` lets a test simulate
+  // "setup SQL never run" (404) and "store down" (500).
+  function installWithClaimantStore(rows, storeStatus = 200) {
+    vi.resetModules();
+    installBlmMock();
+    const blmFetch = global.fetch;
+    process.env.SUPABASE_URL = 'https://stub.supabase.co';
+    process.env.SUPABASE_ANON_KEY = 'anon-key';
+    vi.stubGlobal('fetch', vi.fn(async (url, init) => {
+      const u = String(url);
+      if (u.includes('/rest/v1/us_claim_claimants')) {
+        if (storeStatus !== 200) {
+          return { ok: false, status: storeStatus, json: async () => ({}), text: async () => 'err' };
+        }
+        // Honour the ilike terms so tier order is genuinely exercised.
+        const terms = [...u.matchAll(/claimant_name\.ilike\.\*([^*,)]+)\*/g)]
+          .map((m) => decodeURIComponent(m[1]).toUpperCase());
+        const matched = rows.filter((r) => terms.some((t) => r.claimant_name.toUpperCase().includes(t)));
+        return { ok: true, status: 200, json: async () => matched, text: async () => JSON.stringify(matched) };
+      }
+      return blmFetch(url, init);
+    }));
+  }
+
+  afterEach(() => {
+    delete process.env.SUPABASE_URL;
+    delete process.env.SUPABASE_ANON_KEY;
+  });
+
+  it('resolves ownership through the store and reports resolvedAgainst=claimant', async () => {
+    installWithClaimantStore(CLAIMANT_ROWS);
+    const { default: h } = await import('../api/claims.js');
+    const res = mockRes();
+    await h(req({ q: 'Awesome Gold Corp.', type: 'company', province: 'us-nv' }), res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.resolution.status).toBe('resolved');
+    // This is the ONLY value permitted to title a layer as a company's claims.
+    expect(res.body.resolution.resolvedAgainst).toBe('claimant');
+    expect(res.body.resolution.serialsMatched).toBe(2);
+    expect(res.body.resolution.claimants).toContain('AWESOME GOLD NEVADA LLC');
+    // Roles are preserved as BLM words them, never collapsed to "owner".
+    expect(res.body.resolution.claimantRoles).toEqual(['owner of record']);
+    // Geometry came from BLM, joined on the serial.
+    const joined = queryUrls.find((u) => /IN \(/.test(u));
+    expect(joined).toMatch(/UPPER\(CSE_NR\) IN \('NV105000001','NV105000002'\)/);
+    // State scoping still applies to the geometry fetch.
+    expect(joined).toMatch(/UPPER\(GEO_STATE\) = 'NV'/);
+  });
+
+  it('carries the extract snapshot date, so ownership cannot read as live', async () => {
+    installWithClaimantStore(CLAIMANT_ROWS);
+    const { default: h } = await import('../api/claims.js');
+    const res = mockRes();
+    await h(req({ q: 'Awesome Gold Corp.', type: 'company', province: 'us-nv' }), res);
+    expect(res.body.resolution.snapshotDate).toBe('2026-07-01');
+    expect(res.body.resolution.claimantSources).toEqual(['mlrs_report_120']);
+  });
+
+  it('stays inert when the store is not configured (the shipped default)', async () => {
+    // No SUPABASE_URL → claim-name path, exactly as before the join existed.
+    vi.resetModules();
+    installBlmMock();
+    const { default: h } = await import('../api/claims.js');
+    const res = mockRes();
+    await h(req({ q: 'goldie', type: 'company', province: 'us-nv' }), res);
+    expect(res.statusCode).toBe(200);
+    expect(res.body.resolution.resolvedAgainst).toBe('claim_name');
+    expect(res.body.resolution.snapshotDate).toBeUndefined();
+  });
+
+  it('falls back to claim names when the table is absent (setup SQL not run)', async () => {
+    installWithClaimantStore(CLAIMANT_ROWS, 404);
+    const { default: h } = await import('../api/claims.js');
+    const res = mockRes();
+    await h(req({ q: 'goldie', type: 'company', province: 'us-nv' }), res);
+    expect(res.statusCode).toBe(200);
+    expect(res.body.resolution.resolvedAgainst).toBe('claim_name');
+  });
+
+  it('falls back to claim names when the store errors, rather than failing the search', async () => {
+    installWithClaimantStore(CLAIMANT_ROWS, 500);
+    const { default: h } = await import('../api/claims.js');
+    const res = mockRes();
+    await h(req({ q: 'goldie', type: 'company', province: 'us-nv' }), res);
+    expect(res.statusCode).toBe(200);
+    expect(res.body.resolution.resolvedAgainst).toBe('claim_name');
+  });
+
+  it('does not claim ownership for a company the store has never heard of', async () => {
+    installWithClaimantStore(CLAIMANT_ROWS);
+    const { default: h } = await import('../api/claims.js');
+    const res = mockRes();
+    await h(req({ q: 'Unrelated Mining Corp.', type: 'company', province: 'us-nv' }), res);
+    // Store had no match → falls through to the claim-name ladder, which must
+    // not be labelled as an ownership result.
+    expect(res.body.resolution.resolvedAgainst).toBe('claim_name');
+  });
+});
+
+describe('claimant-resolved export credit', () => {
+  it('names both sources and prefers the snapshot date', async () => {
+    const { sourceCredit, exportCreditLines } = await import('../src/utils/claimProvenance.js');
+    const dataSource = sourceCredit(
+      { country: 'us', label: 'Nevada', registry: 'BLM MLRS (federal)' },
+      { provider: 'blm-mlrs' },
+      { resolvedAgainst: 'claimant', claimantSources: ['mlrs_report_120'] },
+    );
+    expect(dataSource).toMatch(/BLM MLRS — Mining Claims Not Closed/);
+    expect(dataSource).toMatch(/report 120/);
+
+    const [line] = exportCreditLines([{
+      id: 'l1',
+      provenance: { dataSource, retrievedAt: '2026-07-25', snapshotDate: '2026-07-01', scopingMethod: 'geo_state', resolvedAgainst: 'claimant' },
+    }]);
+    expect(line).toMatch(/snapshot 2026-07-01/);
+    expect(line).not.toMatch(/retrieved/);
+    expect(line).toMatch(/company link: claimant record/);
+  });
+});

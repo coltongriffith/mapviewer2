@@ -181,13 +181,16 @@ const US_JURISDICTION_ENTRIES = US_STATES.map((st) => ({
   label: st.label,
   registry: 'BLM MLRS (federal)',
   country: 'us',
-  modes: ['company', 'name', 'number'],
+  // Two tabs, not three. The server still accepts type=name (a literal
+  // substring on the claim-name field, used by deep links), but offering it
+  // beside the ladder put two tabs on screen that both searched claim names —
+  // the ladder is a superset, since its first tier is the literal match.
+  modes: ['company', 'number'],
   // Per-jurisdiction label overrides — the mode KEYS stay as they are (they are
   // the API's `type` param); only what the user reads changes.
-  modeLabels: { company: 'Project / claim name', name: 'Claim name (exact)' },
+  modeLabels: { company: 'Project / claim name' },
   placeholders: {
     company: 'e.g. project name, operator name, or US subsidiary',
-    name: 'e.g. GOLDIE #12',
     number: 'e.g. NV101234567',
   },
 }));
@@ -554,11 +557,13 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
       province,
       provinceLabel: provinceCfg.label,
       registry: provinceCfg.registry,
-      dataSource: sourceCredit(provinceCfg, results?.meta),
+      dataSource: sourceCredit(provinceCfg, results?.meta, results?.resolution),
       // Live-queried registries: the response IS the snapshot, so retrieval
-      // time is the snapshot time. A claimant source joined from a periodic
-      // extract carries its own snapshot date instead (see docs/us-claims.md).
+      // time is the snapshot time. A claimant-resolved set also carries the
+      // claimant extract's own snapshot date, which the export credit prefers —
+      // ownership from a month-old extract must not read as current.
       retrievedAt: new Date().toISOString().slice(0, 10),
+      ...(results?.resolution?.snapshotDate ? { snapshotDate: results.resolution.snapshotDate } : {}),
       ...(results?.meta?.scopingMethod ? { scopingMethod: results.meta.scopingMethod } : {}),
       ...(warning ? { scopingWarning: warning } : {}),
       ...(resolvedAgainst ? { resolvedAgainst } : {}),
@@ -795,6 +800,24 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
         <p className="claims-limit-warning">⚠ Showing first 500 results — try a more specific search if your target is missing.</p>
       )}
 
+      {/* US claim-type filter (lode/placer/mill/tunnel). Applies to whichever
+          list renders below — US company results are grouped geographically,
+          not by holder, so the chips can't live inside the flat list. */}
+      {isUS && results && (allFeatures.length > 0 || usTypeFilter !== 'all') && (
+        <div className="claims-mode-tabs" style={{ marginTop: 4 }}>
+          {[{ value: 'all', label: 'All types' }, ...US_CLAIM_TYPES].map((t) => (
+            <button
+              key={t.value}
+              type="button"
+              className={`claims-mode-tab${usTypeFilter === t.value ? ' active' : ''}`}
+              onClick={() => setUsTypeFilter(t.value)}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Company mode: owner picker */}
       {showOwnerPicker && (
         <>
@@ -899,20 +922,6 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
       {/* Flat list for claim # and map sheet searches */}
       {showFlatList && (
         <>
-          {isUS && (
-            <div className="claims-mode-tabs" style={{ marginTop: 4 }}>
-              {[{ value: 'all', label: 'All types' }, ...US_CLAIM_TYPES].map((t) => (
-                <button
-                  key={t.value}
-                  type="button"
-                  className={`claims-mode-tab${usTypeFilter === t.value ? ' active' : ''}`}
-                  onClick={() => setUsTypeFilter(t.value)}
-                >
-                  {t.label}
-                </button>
-              ))}
-            </div>
-          )}
           <div className="claims-list-header">
             <label className="claims-select-all">
               <input type="checkbox" checked={allFlatSelected} onChange={e => handleSelectAllFlat(e.target.checked)} />

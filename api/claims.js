@@ -706,22 +706,140 @@ function withScopingMeta(meta, scoping) {
   };
 }
 
-// ── US company (claimant) search ────────────────────────────────────────────
-// Runs the alias ladder from _lib/us-aliases.js: exact claimant → alias table +
-// generated subsidiary variants → suffix-stripped fuzzy (score-filtered with
-// the pipeline's own NAME_MATCH.auto threshold). The first tier that returns
-// rows wins.
+// ── US claimant store (ownership, joined to BLM geometry by serial) ─────────
+// BLM's spatial layer publishes geometry but no claimant names, so ownership
+// lives in the us_claim_claimants table (supabase-us-claimants-setup.sql,
+// loaded by scripts/update-us-claimants.mjs from an MLRS report 120 export or
+// an equivalent extract). This resolves company → claimant rows → MLRS serials;
+// the caller then fetches geometry for those serials from BLM.
 //
-// The BLM Not Closed spatial layer published no claimant field as of July 2026,
-// so when none resolves the ladder runs against the claim-NAME field instead —
-// US operators overwhelmingly name claims after themselves or their subsidiary.
-// That substitution is reported in the response (`resolvedAgainst`) so it is
-// never mistaken for a real claimant match.
+// Returns null when the store isn't configured or holds nothing for this state,
+// which is the shipped default: the whole path is inert until an operator loads
+// a snapshot, and until then US company search degrades to claim names exactly
+// as before.
+async function resolveClaimantSerials(cfg, company, tiers) {
+  const creds = qcSupabaseCreds();   // same project/env vars as the QC store
+  if (!creds) return null;
+  const { base, key } = creds;
+  const stateCode = String(cfg.usState || '').toUpperCase();
+
+  const select = 'serial,claimant_name,claimant_role,state,source,snapshot_date';
+  const get = async (qs) => {
+    const r = await fetch(`${base}/rest/v1/us_claim_claimants?${qs}`, {
+      headers: { apikey: key, Authorization: `Bearer ${key}`, Accept: 'application/json' },
+      signal: AbortSignal.timeout(15000),
+    });
+    // 404 = table not created yet (setup SQL not run). Treated as "not
+    // configured", never as an error: the claim-name path still works.
+    if (r.status === 404) return null;
+    if (!r.ok) throw new Error(`US claimant store ${r.status}`);
+    return r.json();
+  };
+
+  // PostgREST treats * as the ilike wildcard; strip user-supplied wildcards so
+  // a term can only ever match literally.
+  const clean = (t) => String(t).replace(/[*%,()]/g, ' ').trim();
+
+  for (const tier of tiers) {
+    const terms = tier.terms.map(clean).filter((t) => t.length >= 2);
+    if (!terms.length) continue;
+    // or=(claimant_name.ilike.*a*,claimant_name.ilike.*b*)
+    const or = terms.map((t) => `claimant_name.ilike.*${encodeURIComponent(t)}*`).join(',');
+    const qs = `select=${select}&or=(${or})&state=eq.${encodeURIComponent(stateCode)}&limit=5000`;
+    let rows;
+    try {
+      rows = await get(qs);
+    } catch {
+      return null;   // store unreachable — fall through to the claim-name path
+    }
+    if (rows === null) return null;   // table absent
+    const kept = tier.scored
+      ? rows.filter((row) => matchesCompany(company, row.claimant_name, `us-${stateCode.toLowerCase()}`))
+      : rows;
+    if (!kept.length) continue;
+    const serials = [...new Set(kept.map((r) => String(r.serial || '').trim().toUpperCase()).filter(Boolean))];
+    if (!serials.length) continue;
+    // Newest snapshot among the matched rows — what the export credit shows.
+    const snapshotDate = kept.map((r) => r.snapshot_date).filter(Boolean).sort().pop() || null;
+    return {
+      serials,
+      method: tier.method,
+      snapshotDate,
+      sources: [...new Set(kept.map((r) => r.source).filter(Boolean))],
+      claimants: [...new Set(kept.map((r) => r.claimant_name).filter(Boolean))].slice(0, 25),
+      roles: [...new Set(kept.map((r) => r.claimant_role).filter(Boolean))],
+      matchedRows: kept.length,
+    };
+  }
+  return { serials: [], method: null, snapshotDate: null, sources: [], claimants: [], roles: [], matchedRows: 0 };
+}
+
+// ── US company search ───────────────────────────────────────────────────────
+// Two paths, and which one ran is always reported:
+//
+//   claimant    the claimant store answered — an OWNERSHIP record. This is the
+//               only result the UI may title as a company's claims.
+//   claim_name  no claimant store (the shipped default), so the alias ladder
+//               runs against the claim-NAME field. US operators overwhelmingly
+//               name claims after themselves, which makes this useful, but a
+//               name is chosen by whoever located the claim and establishes
+//               NOTHING about ownership.
+//
+// Both use the same ladder from _lib/us-aliases.js: exact → alias table +
+// generated subsidiary variants → suffix-stripped fuzzy (score-filtered with
+// the pipeline's own NAME_MATCH.auto threshold). First tier with rows wins.
 //
 // A company that produces no rows in ANY tier comes back as
 // resolution.status='unresolved' — a different outcome from a company that
 // resolved and holds no ground here, and the UI must not merge the two.
 async function searchUsCompany(cfg, company, res, { layerUrl, fields, scoping }) {
+  const province = `us-${String(cfg.usState).toLowerCase()}`;
+  const ladder = resolveUsCompanyTiers(company, province);
+
+  // Ownership first, when a snapshot is loaded.
+  const claimantHit = await resolveClaimantSerials(cfg, company, ladder).catch(() => null);
+  if (claimantHit && claimantHit.serials.length) {
+    const serialField = pickField(cfg.numberFields, fields);
+    if (serialField && /^[A-Za-z0-9_.]+$/.test(serialField.name)) {
+      // Chunk the IN list so a large holding can't build an unbounded WHERE.
+      const CHUNK = 500;
+      const all = [];
+      let metaAcc = null;
+      for (let i = 0; i < claimantHit.serials.length && i < 5000; i += CHUNK) {
+        const chunk = claimantHit.serials.slice(i, i + CHUNK)
+          .map((s) => `'${escapeSql(s)}'`).join(',');
+        let where = `UPPER(${serialField.name}) IN (${chunk})`;
+        if (scoping) where = `(${where}) AND ${scoping.where}`;
+        const { features, meta } = await arcgisQueryAll(layerUrl, {
+          where, outFields: '*', returnGeometry: 'true', outSR: '4326',
+        });
+        for (const f of features) all.push(f);
+        metaAcc = metaAcc
+          ? { ...meta, returned: all.length, truncated: metaAcc.truncated || meta.truncated, pagesFetched: (metaAcc.pagesFetched || 0) + (meta.pagesFetched || 0) }
+          : { ...meta, returned: all.length };
+      }
+      return res.status(200).json({
+        type: 'FeatureCollection',
+        features: all.map((f) => ({ ...f, properties: normalizeProps(f.properties || {}, cfg) })),
+        meta: withScopingMeta({ ...(metaAcc || {}), provider: cfg.provider, returned: all.length }, scoping),
+        resolution: {
+          status: 'resolved',
+          company,
+          method: claimantHit.method,
+          // The one value that permits titling a layer as a company's claims.
+          resolvedAgainst: 'claimant',
+          claimants: claimantHit.claimants,
+          claimantRoles: claimantHit.roles,
+          serialsMatched: claimantHit.serials.length,
+          // A snapshot, not live data — carried into the export credit so a
+          // stale extract can never read as current ownership.
+          snapshotDate: claimantHit.snapshotDate,
+          claimantSources: claimantHit.sources,
+        },
+      });
+    }
+  }
+
   const claimantField = pickField(cfg.ownerFields || [], fields);
   const nameField = pickField(cfg.nameFields || [], fields);
   const field = claimantField || nameField;
@@ -740,8 +858,7 @@ async function searchUsCompany(cfg, company, res, { layerUrl, fields, scoping })
     });
   }
 
-  const province = `us-${String(cfg.usState).toLowerCase()}`;
-  const tiers = resolveUsCompanyTiers(company, province);
+  const tiers = ladder;
   const attempted = [];
 
   for (const tier of tiers) {

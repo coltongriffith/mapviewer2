@@ -66,9 +66,11 @@ describe('jurisdiction selector', () => {
       // The BLM layer has no claimant field, so the mode that resolves against
       // claim names must not present itself as a company search.
       expect(screen.getByRole('button', { name: 'Project / claim name' })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Claim name (exact)' })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Claim #' })).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: 'Company' })).not.toBeInTheDocument();
+      // One claim-name tab, not two: the ladder's first tier IS the literal
+      // match, so a separate "exact" tab searched the same field twice.
+      expect(screen.queryByRole('button', { name: /Claim name \(exact\)/ })).not.toBeInTheDocument();
     });
   });
 
@@ -145,9 +147,10 @@ describe('US results: type chips + disclaimer', () => {
       meta: { provider: 'blm-mlrs', truncated: false },
     };
     await renderRegistry(true, { initialProvince: 'us-nv' });
-    // The flat list (and the type chips) render in non-company modes; US now
-    // defaults to Company, so switch to Claim Name first.
-    fireEvent.click(screen.getByRole('button', { name: 'Claim name (exact)' }));
+    // The flat list renders in non-company modes; the type chips now render for
+    // ANY US result set, because US company results are grouped geographically
+    // and the chips can't live inside the flat list.
+    fireEvent.click(screen.getByRole('button', { name: 'Claim #' }));
     await waitFor(() => expect(screen.getByText('GOLDIE #1')).toBeInTheDocument());
     expect(screen.getByText('GOLDIE #3')).toBeInTheDocument();
 
