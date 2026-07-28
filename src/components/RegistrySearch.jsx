@@ -287,7 +287,16 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
       // A miss in the selected province doesn't mean the company has no
       // claims at all — check the other provinces in the background so a
       // wrong-province guess doesn't read as "search is broken".
-      if (!error && results?.features?.length === 0 && pending.mode !== 'map') {
+      //
+      // US jurisdictions are excluded. The sweep earns its keep in Canada,
+      // where registries publish holders and a hit in another province is a
+      // real finding about the same company. In the US it would fan a
+      // claim-NAME query across eleven states and surface name coincidences in
+      // states the visitor never asked about — the widest wrong-but-plausible
+      // surface in the feature, for the weakest kind of match. Restore it once
+      // company search resolves against claimant records.
+      const sweepable = !isUsJurisdiction(pending.province);
+      if (!error && sweepable && results?.features?.length === 0 && pending.mode !== 'map') {
         // Deep-link auto-searches adopt a cross-province hit automatically —
         // the province was a page's guess, not the visitor's choice, so
         // leaving them on "No claims found in <wrong province>" is a dead end.

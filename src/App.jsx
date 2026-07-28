@@ -2592,6 +2592,15 @@ export default function App() {
         // and auto-run the search so they land on the company's live claims.
         // Cross-province fallback in RegistrySearch covers a wrong/absent region.
         const province = REGION_TO_PROVINCE[(params.get('region') || '').toLowerCase()] || null;
+        // US states are the exception: BLM publishes no claimant names, so a
+        // company search there resolves against CLAIM NAMES, which establishes
+        // nothing about ownership (see docs/us-claims.md). Auto-running it from
+        // a page titled with the company's name would present a name
+        // coincidence as that company's ground — the one thing this must not
+        // do. Pre-fill the state and the name, then let the visitor press
+        // Search themselves. Restore the auto-search once the claimant join is
+        // loaded and results come back resolvedAgainst: 'claimant'.
+        const autoSearchable = !isUsJurisdiction(province);
         // Registries store holders in clipped legal form ("GOLIATH RESOURCES
         // LTD") while the CTA carries the full issuer name ("Goliath Resources
         // Limited") — an ILIKE on the full name misses. Search without the
@@ -2602,7 +2611,7 @@ export default function App() {
         setScreen('editor');
         setAddClaimsProvince(province);
         setAddClaimsQuery(searchQuery);
-        setAddClaimsAutoSearch(Boolean(searchQuery));
+        setAddClaimsAutoSearch(Boolean(searchQuery) && autoSearchable);
         setAddClaimsModalPath('registry');
         setShowAddClaimsModal(true);
         setUploadStatus({ type: 'info', message: `Searching the live registry for ${label}'s claims…` });

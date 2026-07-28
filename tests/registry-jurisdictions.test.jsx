@@ -306,7 +306,7 @@ describe('claim-name results require confirmation and are never titled as a comp
     expect(items[0].provenance.retrievedAt).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 
-  it('refuses to auto-adopt a claim-name hit, leaving it as an explicit choice', async () => {
+  it('does not fan a US search out across the other states at all', async () => {
     useClaimsState.search.mockClear();
     useClaimsState.searchOtherProvinces.mockClear();
     useClaimsState.adoptResults.mockClear();
@@ -319,18 +319,50 @@ describe('claim-name results require confirmation and are never titled as a comp
 
     useClaimsState.results = { features: [], meta: {}, resolution: { status: 'unresolved' } };
     view.rerender(<RegistrySearch {...props} />);
+
+    // Sweeping a claim-NAME query across eleven states would surface name
+    // coincidences in states nobody asked about. Canada still sweeps.
+    await waitFor(() => expect(screen.getByText(/couldn't link/i)).toBeInTheDocument());
+    expect(useClaimsState.searchOtherProvinces).not.toHaveBeenCalled();
+    expect(useClaimsState.adoptResults).not.toHaveBeenCalled();
+  });
+
+  it('still sweeps for Canadian provinces, which do publish holders', async () => {
+    useClaimsState.searchOtherProvinces.mockClear();
+    vi.stubEnv('VITE_ENABLE_US_CLAIMS', '1');
+    vi.resetModules();
+    const { default: RegistrySearch } = await import('../src/components/RegistrySearch.jsx');
+    const props = { onImport: vi.fn(), onBack: vi.fn(), initialProvince: 'bc', initialQuery: 'Goliath Resources', autoSearch: true };
+    const view = render(<RegistrySearch {...props} />);
+    useClaimsState.results = { features: [], meta: {} };
+    view.rerender(<RegistrySearch {...props} />);
+    await waitFor(() => expect(useClaimsState.searchOtherProvinces).toHaveBeenCalled());
+  });
+
+  it('guards auto-adoption against a claim-name hit even if a sweep produces one', async () => {
+    // Defense in depth: the US sweep is off, so this path is unreachable today,
+    // but the guard must survive the sweep being restored once company search
+    // resolves against claimant records.
+    useClaimsState.searchOtherProvinces.mockClear();
+    useClaimsState.adoptResults.mockClear();
+
+    vi.stubEnv('VITE_ENABLE_US_CLAIMS', '1');
+    vi.resetModules();
+    const { default: RegistrySearch } = await import('../src/components/RegistrySearch.jsx');
+    const props = { onImport: vi.fn(), onBack: vi.fn(), initialProvince: 'bc', initialQuery: 'Awesome Gold Corp.', autoSearch: true };
+    const view = render(<RegistrySearch {...props} />);
+
+    useClaimsState.results = { features: [], meta: {} };
+    view.rerender(<RegistrySearch {...props} />);
     await waitFor(() => expect(useClaimsState.searchOtherProvinces).toHaveBeenCalled());
 
     useClaimsState.crossProvinceHits = [
-      { province: { value: 'us-az', label: 'Arizona', modes: ['company', 'name', 'number'] }, count: 3, data: nameMatched(3) },
+      { province: { value: 'on', label: 'Ontario', modes: ['company', 'number'] }, count: 3, data: nameMatched(3) },
     ];
     view.rerender(<RegistrySearch {...props} />);
 
-    // A name match has not been linked to an owner — it must not be adopted for
-    // the user. The "Found elsewhere" row stays clickable instead.
-    await waitFor(() => expect(screen.getByText(/Arizona — 3 claims found/)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/Ontario — 3 claims found/)).toBeInTheDocument());
     expect(useClaimsState.adoptResults).not.toHaveBeenCalled();
-    expect(view.container.querySelector('select').value).toBe('us-nv');
     useClaimsState.crossProvinceHits = null;
   });
 });

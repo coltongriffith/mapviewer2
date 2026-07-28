@@ -435,6 +435,30 @@ lives in `src/utils/scopingNotice.js`.
   field list — feed it an export of MLRS report 103 via `--claimants <csv>`
   instead.
 
+## Deliberately narrowed while company search is name-only
+
+Two behaviours are switched off until results come back
+`resolvedAgainst: 'claimant'`. Both are one-line restorations, and both are
+marked in code with why.
+
+1. **US company deep links do not auto-search.** A pSEO company page's "Open
+   interactive version" pre-fills the state and the company name but does NOT
+   run the search for US states (`autoSearchable` in `App.jsx`). Auto-running a
+   claim-NAME query from a page titled with the company's name would present a
+   name coincidence as that company's ground. Canadian deep links, whose
+   registries publish holders, still auto-search.
+2. **US searches do not fan out across states.** The cross-jurisdiction sweep
+   earns its keep in Canada — a hit in another province is a real finding about
+   the same company. In the US it would fan a claim-name query across eleven
+   states and surface coincidences in states the visitor never asked about: the
+   widest wrong-but-plausible surface in the feature, for the weakest kind of
+   match. `intent=claims&region=nevada` (a user-chosen region with no company
+   attached) is unaffected and still opens Nevada directly.
+
+The auto-adopt guard that rejects a claim-name hit stays in place as defense in
+depth, with a test, so restoring the sweep can't quietly reintroduce the
+problem.
+
 ## Jurisdiction ranking for auto-adopted switches
 
 When a company deep link lands on a jurisdiction with no claims, the app fans
