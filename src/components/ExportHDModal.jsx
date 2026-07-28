@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { getLastLeadEmail } from '../utils/leadCapture';
 import { PDF_SIZES } from '../export/exportPDF';
 import { EXPORT_RATIOS } from '../constants';
+import { FREE_MAX_EXPORT_PIXELS } from '../utils/entitlements';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -12,7 +13,13 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 //     sign-in link that saves the map to a new account. Same one-field friction
 //     as the old lead capture, but the prize is an account, not a spreadsheet row.
 // "Download with watermark" always stays one click away so export is never blocked.
-export default function ExportHDModal({ format = 'png', activeRatio = null, isSignedIn = false, userEmail = '', onConfirm, onWithWatermark, onClose }) {
+export default function ExportHDModal({
+  format = 'png', activeRatio = null, isSignedIn = false, userEmail = '',
+  // Entitlement-driven: a signed-in FREE user is NOT getting a clean file, so
+  // the copy must not promise one. Only clean_export removes the credit.
+  cleanExport = false, maxExportPixels = FREE_MAX_EXPORT_PIXELS,
+  onConfirm, onWithWatermark, onClose,
+}) {
   const [email, setEmail] = useState(() => userEmail || getLastLeadEmail() || '');
   const [error, setError] = useState('');
   const suggestedPdfSize = activeRatio ? (EXPORT_RATIOS[activeRatio]?.suggestedPdfSize || 'letter_landscape') : 'letter_landscape';
@@ -77,15 +84,19 @@ export default function ExportHDModal({ format = 'png', activeRatio = null, isSi
 
         {isSignedIn ? (
           <>
-            <h3 id="hd-modal-title" className="export-hd-title">Export clean {formatLabel}</h3>
+            <h3 id="hd-modal-title" className="export-hd-title">
+              Export {cleanExport ? 'clean ' : ''}{formatLabel}
+            </h3>
             <p className="export-hd-desc">
-              No watermark — you're signed in. Choose your options and download.
+              {cleanExport
+                ? "No watermark or credit — you're on Pro. Choose your options and download."
+                : `The large watermark is removed. A small explorationmaps.com credit stays in the corner, and output is capped at ${maxExportPixels.toLocaleString()} px on the free plan.`}
             </p>
             {ratioBadge}
             {pdfSizeField}
             <div className="export-hd-actions">
               <button className="btn primary export-hd-btn-primary" type="button" onClick={handleSignedInExport} autoFocus>
-                Download clean {formatLabel}
+                Download {cleanExport ? 'clean ' : ''}{formatLabel}
               </button>
               {!isPdf && (
                 <button className="export-hd-skip" type="button" onClick={onWithWatermark}>
@@ -98,10 +109,11 @@ export default function ExportHDModal({ format = 'png', activeRatio = null, isSi
           <>
             <h3 id="hd-modal-title" className="export-hd-title">Export {formatLabel} — remove the watermark</h3>
             <p className="export-hd-desc">
-              Enter your email to remove the large watermark and unlock full-resolution exports now.
-              A small <em>explorationmaps.com</em> credit stays in the corner on the free plan.
-              We'll also email you a one-click sign-in link (no password) so this map is saved to your
-              free account and ready to reuse.
+              Enter your email to remove the large watermark. A small <em>explorationmaps.com</em>
+              credit stays in the corner on the free plan, and free exports are capped at{' '}
+              {FREE_MAX_EXPORT_PIXELS.toLocaleString()} px — Pro removes the credit and raises the
+              resolution. We'll also email you a one-click sign-in link (no password) so this map is
+              saved to your free account and ready to reuse.
             </p>
 
             {ratioBadge}

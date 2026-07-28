@@ -500,7 +500,7 @@ function DayDetail({ day, summary, sessions, loading, onOpenSession }) {
             <KPI label="Signups" value={fmtNum(summary?.signups ?? 0)} accent="#6366f1" />
             <KPI label="Searches" value={fmtNum(summary?.searches ?? 0)} accent="#0ea5e9" />
             <KPI label="Exports" value={fmtNum(summary?.exports ?? 0)} accent="#8b5cf6" />
-            <KPI label="Paid intent" value={fmtNum(summary?.premium_exports ?? 0)} accent="#10b981" />
+            <KPI label="Watermark-suppressed exports" value={fmtNum(summary?.premium_exports ?? 0)} accent="#10b981" />
             <KPI label="Leads" value={fmtNum(summary?.leads ?? 0)} accent="#f59e0b" />
           </div>
           {sessions.length === 0 ? (
@@ -890,7 +890,7 @@ export default function AdminPage({ onExit }) {
           <KPI label="Signups" value={dataLoading ? null : fmtNum(cur('signups') ?? 0)} trend={trendMap.signups} detail="last 30 days" accent="#6366f1" />
           <KPI label="Searches" value={dataLoading ? null : fmtNum(cur('searches') ?? 0)} trend={trendMap.searches} detail="registry + nearby" accent="#0ea5e9" />
           <KPI label="Exports" value={dataLoading ? null : fmtNum(exports30d)} trend={trendMap.exports} detail={exportBreakdown || 'last 30 days'} accent="#8b5cf6" />
-          <KPI label="Paid intent" value={dataLoading ? null : fmtNum(cur('premium_exports') ?? 0)} trend={trendMap.premium_exports} detail="no-watermark exports" accent="#10b981" />
+          <KPI label="Watermark-suppressed exports" value={dataLoading ? null : fmtNum(cur('premium_exports') ?? 0)} trend={trendMap.premium_exports} detail="mostly FREE exports — still carry the small credit; not a paid signal" accent="#10b981" />
           <KPI label="Email leads" value={dataLoading ? null : fmtNum(cur('leads') ?? (d.leads || []).length)} trend={trendMap.leads} detail="last 30 days" accent="#f59e0b" />
         </div>
         )}
@@ -1019,7 +1019,7 @@ export default function AdminPage({ onExit }) {
         {tab === 'revenue' && (
           <>
             <div className="adm-grid-2-1">
-              <Card title="Path to revenue" eyebrow="Visitor → signup → activated → paid intent">
+              <Card title="Path to revenue" eyebrow="Visitor → signup → activated → export">
                 <Funnel steps={funnelSteps} />
                 <p className="adm-note">
                   <strong>Paid intent</strong> = users who exported without a watermark. These are your warmest candidates when you launch paid plans —

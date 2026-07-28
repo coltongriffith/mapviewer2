@@ -56,6 +56,7 @@ import { createSaveCoordinator, runGuardedSave } from './utils/saveCoordinator';
 import { US_CLAIMS_ENABLED, US_STATES, US_GROUP_LABEL, US_GEOMETRY_DISCLAIMER, isUsJurisdiction } from './utils/jurisdictions';
 import { PRO_EXPORT_FORMATS, FREE_PROJECT_LIMIT } from './utils/pricing';
 import { clampExportSize, canExportFormat, maxPixelRatioFor, PRO_MAX_EXPORT_PIXELS } from './utils/entitlements';
+import { verifyCheckoutSession } from './utils/billing';
 import { runCloudMigration } from './utils/cloudMigration';
 import { scopingWarning } from './utils/scopingNotice';
 import { CLAIM_NAME_CAVEAT } from './utils/claimProvenance';
@@ -2624,19 +2625,52 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Return from Stripe Checkout / billing portal. The webhook updates the
-  // plan server-side; refresh it here (twice — webhooks can lag a redirect
-  // by a few seconds) and confirm to the user.
+  // Return from Stripe Checkout / billing portal. `?billing=success` is NOT
+  // proof of payment — anyone can type it, and a real customer can land here
+  // while the webhook has failed. Verify the session server-side and report
+  // confirmed / still-processing / unpaid honestly.
   useEffect(() => {
-    const billing = new URLSearchParams(window.location.search).get('billing');
+    const params = new URLSearchParams(window.location.search);
+    const billing = params.get('billing');
+    const sessionId = params.get('session_id');
     if (!billing) return;
     try { window.history.replaceState({}, '', window.location.pathname); } catch { /* noop */ }
     if (billing === 'success') {
-      trackEvent('upgrade_checkout_completed', {}, user?.id);
-      setUploadStatus({ type: 'success', message: 'Welcome to Pro! Clean exports, HD formats, and unlimited projects are unlocked.' });
-      refreshPlan();
-      const t = setTimeout(() => refreshPlan(), 5000);
-      return () => clearTimeout(t);
+      let cancelled = false;
+      const timers = [];
+      (async () => {
+        // No session id (older link, or hand-typed) → never claim Pro; just
+        // re-read the authoritative plan.
+        if (!sessionId) { refreshPlan(); return; }
+        setUploadStatus({ type: 'info', message: 'Confirming your upgrade…' });
+        try {
+          let result = await verifyCheckoutSession(sessionId);
+          // The webhook can lag the redirect by a few seconds — poll briefly
+          // before settling on "processing".
+          for (let i = 0; i < 4 && !cancelled && result.status === 'processing'; i += 1) {
+            await new Promise((r) => { timers.push(setTimeout(r, 2500)); });
+            if (cancelled) return;
+            result = await verifyCheckoutSession(sessionId);
+          }
+          if (cancelled) return;
+          await refreshPlan();
+          if (result.status === 'paid') {
+            trackEvent('upgrade_verified_paid', {}, user?.id);
+            setUploadStatus({ type: 'success', message: 'Welcome to Pro! Clean exports, HD formats, and unlimited projects are unlocked.' });
+          } else if (result.status === 'processing') {
+            trackEvent('upgrade_processing', {}, user?.id);
+            setUploadStatus({ type: 'info', message: 'Payment received — we’re still activating your account. This usually takes a few seconds; reload if it doesn’t appear shortly.' });
+          } else {
+            setUploadStatus({ type: 'info', message: 'That checkout wasn’t completed, so no charge was made.' });
+          }
+        } catch {
+          if (!cancelled) {
+            refreshPlan();
+            setUploadStatus({ type: 'info', message: 'We couldn’t confirm the upgrade automatically. Reload in a moment, or check Account → Plan & Billing.' });
+          }
+        }
+      })();
+      return () => { cancelled = true; timers.forEach(clearTimeout); };
     }
     if (billing === 'portal-return') refreshPlan();
     if (billing === 'cancelled') {
@@ -3411,17 +3445,33 @@ export default function App() {
       } else if (warnings.length > 0) {
         setUploadStatus({ type: 'info', message: `Export complete — note: ${warnings.join('; ')}.` });
       }
-      // Track export event (fire-and-forget — doesn't block export)
+      // Describe what the file ACTUALLY is. `noWatermark` only means "the big
+      // watermark was suppressed" — free exports still carry the small
+      // explorationmaps.com credit, so treating that flag as paid behaviour
+      // inflated the admin "paid intent" cohort with ordinary free exports.
+      const outputBranding = entitlements.clean_export
+        ? 'clean'
+        : (extraOptions.noWatermark ? 'small_credit' : 'large_mark');
       if (supabase) {
         supabase.from('export_events').insert({
           user_id: user?.id ?? null,
           session_id: getSessionId(),
           format,
           project_name: project.layout?.title || projectName || 'Untitled',
+          // Kept for backwards compatibility with existing rows/queries, but
+          // it is NOT a paid signal — output_branding is the truthful field.
           noWatermark: Boolean(extraOptions.noWatermark),
+          output_branding: outputBranding,
+          entitlement_plan: tier,
         }).then(() => {});
       }
-      trackEvent('export_completed', { format, noWatermark: Boolean(extraOptions.noWatermark) }, user?.id);
+      trackEvent('export_completed', {
+        format,
+        output_branding: outputBranding,
+        entitlement_plan: tier,
+        resolution_clamped: resolutionClamped,
+        noWatermark: Boolean(extraOptions.noWatermark),
+      }, user?.id);
       setHasExported(true);
       // Anonymous exporter just got value — nudge them to save it to an account.
       // Once per session, and not while an auth modal is already up.
@@ -5840,6 +5890,8 @@ export default function App() {
             activeRatio={activeRatio}
             isSignedIn={Boolean(user)}
             userEmail={user?.email || ''}
+            cleanExport={entitlements.clean_export}
+            maxExportPixels={entitlements.max_export_pixels}
             onConfirm={handleExportModalConfirm}
             onWithWatermark={handleExportModalWithWatermark}
             onClose={() => setShowExportModal(false)}

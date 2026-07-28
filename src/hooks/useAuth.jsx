@@ -35,6 +35,8 @@ export function AuthProvider({ children }) {
   // never silently upgraded (the old fail-open behaviour handed Pro to
   // anyone whose plan request failed).
   const [planState, setPlanState] = useState({ plan: null, source: null, ready: false });
+  // True between following a recovery link and setting the new password.
+  const [recovering, setRecovering] = useState(false);
 
   const refreshPlan = useCallback(async (u) => {
     const target = u || user;
@@ -91,6 +93,9 @@ export function AuthProvider({ children }) {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
+      // Recovery link followed → the app must show a set-a-new-password form.
+      // Without this the reset email led nowhere.
+      if (_event === 'PASSWORD_RECOVERY') setRecovering(true);
       if (_event === 'SIGNED_IN' && session?.user) trackSignupOnce(session.user);
       if (session?.user) refreshPlan(session.user);
       else {
@@ -138,8 +143,15 @@ export function AuthProvider({ children }) {
 
   async function resetPassword(email) {
     if (!supabase) throw new Error('Auth not configured');
-    const { error } = await supabase.auth.resetPasswordForEmail(email);
-    if (error) throw error;
+    // Send the user back to this origin so the PASSWORD_RECOVERY listener and
+    // the reset form can pick the session up. Without redirectTo, Supabase
+    // falls back to the project's Site URL, which may not be this deployment.
+    const redirectTo = typeof window !== 'undefined' ? `${window.location.origin}/` : undefined;
+    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+    // Do NOT surface "user not found" — that discloses whether an address has
+    // an account. Supabase already returns success for unknown addresses;
+    // this guard covers rate-limit style errors leaking the same signal.
+    if (error && !/user not found|not found/i.test(error.message || '')) throw error;
   }
 
   // THE resolved tier + entitlement object. Every gate reads `entitlements`;
@@ -156,6 +168,7 @@ export function AuthProvider({ children }) {
   return (
     <AuthContext.Provider value={{
       user, loading, signIn, signUp, signInWithMagicLink, signOut, resetPassword,
+      recovering, endRecovery: () => setRecovering(false),
       tier, entitlements,
       isPro, planDenied, planSource: planState.source, planReady: planState.ready, refreshPlan,
     }}>

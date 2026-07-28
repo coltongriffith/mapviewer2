@@ -36,3 +36,21 @@ export async function openBillingPortal() {
   if (!url) throw new Error('Could not open the billing portal.');
   window.location.assign(url);
 }
+
+/**
+ * Ask the server what actually happened to a Checkout Session, instead of
+ * trusting the ?billing=success query parameter.
+ * @returns {Promise<{status:'paid'|'processing'|'unpaid', plan:string}>}
+ */
+export async function verifyCheckoutSession(sessionId) {
+  if (!supabase) throw new Error('Sign in is not configured.');
+  const { data } = await supabase.auth.getSession();
+  const token = data?.session?.access_token || null;
+  if (!token) throw new Error('Sign in to confirm your upgrade.');
+  const res = await fetch(`/api/stripe-session?session_id=${encodeURIComponent(sessionId)}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.error || `Verification failed (${res.status})`);
+  return json;
+}

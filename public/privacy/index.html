@@ -54,45 +54,61 @@ li{margin-bottom:6px;color:#374151;line-height:1.7}
 <div class="page-wrap">
   <div class="page-content">
     <h1>Privacy Policy</h1>
-    <p class="effective-date">Effective date: May 5, 2026</p>
+    <p class="effective-date">Effective date: July 28, 2026</p>
 
     <p>This policy describes how Exploration Maps ("we", "us") collects and uses information when you use explorationmaps.com.</p>
 
     <h2>What we collect</h2>
-    <p>When you use the map editor, we collect:</p>
+    <p>How much we hold depends on whether you create an account.</p>
+    <p><strong>Without an account</strong>, your map stays in your browser. We collect:</p>
     <ul>
-      <li><strong>Email address</strong> — entered voluntarily when you unlock watermark-free exports. Used only to process your export request. Not added to any mailing list.</li>
-      <li><strong>Map data you import</strong> — GeoJSON, CSV, and other files you upload are processed in your browser. Files are not stored on our servers.</li>
-      <li><strong>Usage data</strong> — standard server logs (IP address, browser type, pages visited, timestamps) collected automatically by our hosting provider (Vercel). We use this to understand usage patterns and diagnose issues.</li>
+      <li><strong>Usage data</strong> — standard server logs (IP address, browser type, pages visited, timestamps) from our hosting provider (Vercel), plus first-party product analytics: pages viewed, searches run, features used, exports completed, and an anonymous session identifier. We use these to understand usage and diagnose issues.</li>
+      <li><strong>Email address</strong> — if you enter one to remove the large export watermark. It is also used to email you a sign-in link.</li>
+      <li><strong>Map data you import</strong> — files you upload are processed in your browser and are not sent to our servers unless you save a project, publish a share link, or sign in.</li>
+    </ul>
+    <p><strong>With an account</strong>, we additionally store, on our infrastructure:</p>
+    <ul>
+      <li><strong>Account records</strong> — your email address, authentication credentials, and sign-in timestamps.</li>
+      <li><strong>Saved projects</strong> — the full map you save to the cloud, including imported geodata, styling, any logo or images you add, and a preview thumbnail.</li>
+      <li><strong>Account settings and brand kits</strong> — such as company name, Qualified Person name and credentials, projection defaults, and reusable styling.</li>
+      <li><strong>Product activity</strong> — which features you use, projects created, exports produced (and whether the file was branded or clean), all linked to your account.</li>
+    </ul>
+    <p><strong>If you publish a share link</strong>, a snapshot of that project — its geodata, styling, titles, company/QP metadata, and any embedded images — is stored on our servers and is readable by anyone who has the link. Share links are public and unlisted, not private. Do not publish material you cannot disclose.</p>
+    <p><strong>If you subscribe or are invoiced</strong>, our payment processor (Stripe) handles your payment details; we never receive or store full card numbers. We store your Stripe customer and subscription identifiers, plan status, and — for invoiced work — invoice identifiers, amounts, status, and the hosted invoice link.</p>
+
+    <h2>What we don't do</h2>
+    <ul>
+      <li>We don't require an account to build and export a map — the editor works without signing in.</li>
+      <li>We don't sell your personal information, or share it with third parties for their own marketing.</li>
+      <li>We don't use advertising networks or third-party advertising trackers.</li>
+      <li>We don't receive or store your full payment card details.</li>
     </ul>
 
-    <h2>What we don't collect</h2>
-    <ul>
-      <li>We don't require account creation or login to use the tool</li>
-      <li>We don't sell or share your personal information with third parties for marketing purposes</li>
-      <li>We don't use tracking pixels, advertising networks, or third-party analytics beyond what Vercel logs by default</li>
-      <li>We don't store the map files or geodata you work with</li>
-    </ul>
-
-    <h2>Cookies</h2>
-    <p>The site uses no cookies for tracking or advertising. Your browser may store local data (localStorage) to preserve your map state between sessions — this data stays in your browser and is never transmitted to us.</p>
+    <h2>Cookies and local storage</h2>
+    <p>We use no advertising or cross-site tracking cookies. If you sign in, your browser stores a session token so you stay signed in. Your browser also stores local data (localStorage) to preserve your map between sessions and to remember your plan status briefly while offline.</p>
 
     <h2>Third-party services</h2>
-    <p>The map editor loads basemap tiles from third-party tile providers (CartoCDN, Esri, OpenStreetMap contributors, OpenTopoMap, OpenRailwayMap). When tiles load, your browser makes requests to those providers' servers. Their respective privacy policies apply to those requests.</p>
-    <p>The site uses Google Fonts for typography. Loading fonts involves a request to Google's servers. See Google's privacy policy for details.</p>
-    <p>The site is hosted on Vercel. Vercel's infrastructure collects standard server logs as described above.</p>
+    <p>We rely on the following providers, who process data on our behalf or as independent controllers:</p>
+    <ul>
+      <li><strong>Vercel</strong> — hosting, server logs, and site analytics.</li>
+      <li><strong>Supabase</strong> — authentication, database, and storage for accounts, projects, settings, and share links.</li>
+      <li><strong>Stripe</strong> — subscription and invoice payment processing.</li>
+      <li><strong>Basemap tile providers</strong> (CartoCDN, Esri, OpenStreetMap contributors, OpenTopoMap, OpenRailwayMap, USGS) — your browser requests map tiles directly from them.</li>
+      <li><strong>Mineral claim registries</strong> — public registry services we query on your behalf when you search for claims.</li>
+      <li><strong>Google Fonts</strong> — typography; loading fonts involves a request to Google's servers.</li>
+    </ul>
 
     <h2>Data retention</h2>
-    <p>Email addresses collected for export unlocks are retained only as long as necessary to process the export. We don't maintain a marketing database. Server logs are retained per Vercel's standard retention policies.</p>
+    <p>Account records, saved projects, settings, and brand kits are retained until you delete them or ask us to delete your account. Share-link snapshots are retained until the share is removed. Billing and invoice records are retained as long as required for tax and accounting purposes. Product analytics and server logs are retained on a rolling basis for operational analysis.</p>
 
     <h2>Your rights</h2>
-    <p>You can request access to, correction of, or deletion of any personal information we hold about you. Email <a href="mailto:coltongriffith@live.ca">coltongriffith@live.ca</a> with your request.</p>
+    <p>You can request access to, correction of, export of, or deletion of the personal information we hold about you, including deletion of your account and its associated projects and shares. Email <a href="mailto:privacy@explorationmaps.com">privacy@explorationmaps.com</a> and we will respond within 30 days.</p>
 
     <h2>Changes to this policy</h2>
     <p>If we make material changes to this policy, we'll update the effective date at the top of this page. Continued use of the site after changes constitutes acceptance.</p>
 
     <h2>Contact</h2>
-    <p>Questions about this policy: <a href="mailto:coltongriffith@live.ca">coltongriffith@live.ca</a></p>
+    <p>Questions about this policy: <a href="mailto:privacy@explorationmaps.com">privacy@explorationmaps.com</a></p>
   </div>
 </div>
 

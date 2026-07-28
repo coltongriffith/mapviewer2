@@ -119,7 +119,7 @@ export default function UsersTab({ data, loading, detail, onLoadDetail, onOpenSe
                     <td title={u.last_sign_in_at ? `last login ${fmtDate(u.last_sign_in_at)}` : ''}>{u.last_event_at ? relTime(u.last_event_at) : <span className="adm-muted">—</span>}</td>
                     <td><ActivityDots dots={u.dots || []} /></td>
                     <td>{fmtNum(u.projects)}</td>
-                    <td>{fmtNum(u.exports_total)}{u.premium_exports > 0 && <span className="admx-tag-clean"> {u.premium_exports} clean</span>}</td>
+                    <td>{fmtNum(u.exports_total)}{u.premium_exports > 0 && <span className="admx-tag-clean" title="Large watermark suppressed. Free-plan files still carry the small credit — not a paid signal."> {u.premium_exports} unmarked</span>}</td>
                     <td><StatusBadge status={u.status} /></td>
                     <td><button className="admx-details-btn" onClick={() => toggle(u.user_id)}>{openUser === u.user_id ? 'Hide' : 'Details'}</button></td>
                   </tr>

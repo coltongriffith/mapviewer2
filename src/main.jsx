@@ -6,6 +6,7 @@ import "leaflet/dist/leaflet.css";
 import { exportLeadsCsv } from "./utils/leadCapture";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { AuthProvider } from "./hooks/useAuth.jsx";
+import RecoveryGate from "./components/RecoveryGate";
 import { captureAttribution } from "./utils/attribution";
 import { inject } from "@vercel/analytics";
 
@@ -31,6 +32,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
     <ErrorBoundary>
       <AuthProvider>
         <App />
+        <RecoveryGate />
       </AuthProvider>
     </ErrorBoundary>
   </React.StrictMode>
