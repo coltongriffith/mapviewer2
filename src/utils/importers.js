@@ -2,6 +2,52 @@ import * as toGeoJSON from "@tmcw/togeojson";
 
 const MAX_UPLOAD_SIZE = 50 * 1024 * 1024; // 50 MB
 
+// Complexity ceilings applied to EVERY importer, not just the compressed
+// byte count. A 3 MB zip can hold a million-vertex polygon that freezes the
+// browser and bloats every later save, share, and export (audit P0-12).
+export const MAX_FEATURES = 200_000;
+export const MAX_VERTICES = 3_000_000;
+export const MAX_ZIP_ENTRIES = 500;
+export const MAX_UNCOMPRESSED_BYTES = 300 * 1024 * 1024; // decompression-bomb ceiling
+
+/** Count vertices without materialising an array — bails out at the cap. */
+function countVertices(geom, budget) {
+  if (!geom) return 0;
+  const walk = (c, depth) => {
+    if (budget.n > MAX_VERTICES) return;
+    if (depth === 0) { budget.n += 1; return; }
+    if (!Array.isArray(c)) return;
+    for (const item of c) {
+      walk(item, depth - 1);
+      if (budget.n > MAX_VERTICES) return;
+    }
+  };
+  const depthMap = { Point: 0, LineString: 1, MultiPoint: 1, Polygon: 2, MultiLineString: 2, MultiPolygon: 3 };
+  const depth = depthMap[geom.type];
+  if (depth == null) return 0;
+  walk(geom.coordinates, depth);
+  return budget.n;
+}
+
+/**
+ * Reject collections that are too large to render or store, whatever their
+ * compressed size. Runs on the parsed result of every import path.
+ */
+export function assertWithinComplexityLimits(fc) {
+  const features = fc?.features || (fc?.type === 'Feature' ? [fc] : []);
+  if (features.length > MAX_FEATURES) {
+    throw new Error(`This file has ${features.length.toLocaleString()} features — the maximum is ${MAX_FEATURES.toLocaleString()}. Filter or simplify it before importing.`);
+  }
+  const budget = { n: 0 };
+  for (const f of features) {
+    countVertices(f?.geometry, budget);
+    if (budget.n > MAX_VERTICES) {
+      throw new Error(`This file has more than ${MAX_VERTICES.toLocaleString()} coordinates, which is too detailed to display. Simplify the geometry (for example in mapshaper.org) and try again.`);
+    }
+  }
+  return fc;
+}
+
 // Column name synonyms for CSV drillhole detection
 const COL_SYNONYMS = {
   x:  ['easting', 'x', 'lon', 'longitude', 'long', 'east', 'utm_e', 'utm_easting'],
@@ -11,6 +57,38 @@ const COL_SYNONYMS = {
   azimuth: ['azimuth', 'azi', 'az', 'bearing'],
   dip: ['dip', 'inclination', 'incl'],
 };
+
+/**
+ * Read a ZIP's central directory and reject decompression bombs and unsafe
+ * entry names BEFORE any data is expanded.
+ */
+export async function assertArchiveSane(buffer, label = 'Archive') {
+  const { default: JSZip } = await import('jszip');
+  let zip;
+  try {
+    zip = await JSZip.loadAsync(buffer);
+  } catch {
+    throw new Error(`Could not open the ${label} — it may be corrupt.`);
+  }
+  const names = Object.keys(zip.files);
+  if (names.length > MAX_ZIP_ENTRIES) {
+    throw new Error(`${label} has too many files (${names.length}; max ${MAX_ZIP_ENTRIES}).`);
+  }
+  if (names.some((f) => f.includes('..') || f.startsWith('/') || /^[a-zA-Z]:/.test(f))) {
+    throw new Error(`${label} contains suspicious file paths and was rejected.`);
+  }
+  let declaredTotal = 0;
+  for (const n of names) {
+    // JSZip exposes the declared uncompressed size on the internal record;
+    // treat a missing value as unknown rather than zero.
+    const size = zip.files[n]?._data?.uncompressedSize;
+    if (typeof size === 'number') declaredTotal += size;
+  }
+  if (declaredTotal > MAX_UNCOMPRESSED_BYTES) {
+    throw new Error(`${label} expands to ${(declaredTotal / 1024 / 1024).toFixed(0)} MB, over the ${(MAX_UNCOMPRESSED_BYTES / 1024 / 1024).toFixed(0)} MB limit.`);
+  }
+  return zip;
+}
 
 export async function loadGeoJSON(file) {
   if (!file) throw new Error("No file provided.");
@@ -22,10 +100,15 @@ export async function loadGeoJSON(file) {
 
   if (name.endsWith(".zip")) {
     const buffer = await file.arrayBuffer();
+    // Inspect the archive BEFORE handing it to shpjs, which decompresses
+    // everything eagerly. Previously a zipped shapefile went straight in with
+    // no entry-count, path, or uncompressed-size check.
+    await assertArchiveSane(buffer, 'ZIP');
     const { default: shp } = await import('shpjs');
     const result = await shp(buffer);
+    let fc;
     if (Array.isArray(result)) {
-      return {
+      fc = {
         type: "FeatureCollection",
         features: result.flatMap((item) => {
           if (item?.type === "FeatureCollection") return item.features || [];
@@ -33,9 +116,12 @@ export async function loadGeoJSON(file) {
           return [];
         }),
       };
+    } else if (result?.type === "FeatureCollection" || result?.type === "Feature") {
+      fc = result;
+    } else {
+      throw new Error("ZIP imported, but no valid shapefile data was found.");
     }
-    if (result?.type === "FeatureCollection" || result?.type === "Feature") return result;
-    throw new Error("ZIP imported, but no valid shapefile data was found.");
+    return assertWithinComplexityLimits(fc);
   }
 
   if (name.endsWith(".kml")) {
@@ -45,7 +131,7 @@ export async function loadGeoJSON(file) {
     if (parserError) throw new Error("Invalid KML file — could not parse XML.");
     const fc = toGeoJSON.kml(doc);
     if (!fc?.features?.length) throw new Error("KML file contained no readable features.");
-    return fc;
+    return assertWithinComplexityLimits(fc);
   }
 
   if (name.endsWith(".kmz")) {
@@ -82,7 +168,7 @@ export async function loadGeoJSON(file) {
     if (parserError) throw new Error("KMZ contained an invalid KML file.");
     const fc = toGeoJSON.kml(doc);
     if (!fc?.features?.length) throw new Error("KMZ file contained no readable features.");
-    return fc;
+    return assertWithinComplexityLimits(fc);
   }
 
   if (name.endsWith(".geojson") || name.endsWith(".json")) {
@@ -93,7 +179,7 @@ export async function loadGeoJSON(file) {
     } catch {
       throw new Error("Invalid JSON — the file could not be parsed.");
     }
-    return validateGeoJSON(data);
+    return assertWithinComplexityLimits(validateGeoJSON(data));
   }
 
   if (name.endsWith(".shp")) {
@@ -109,7 +195,7 @@ export async function loadGeoJSON(file) {
     if (!coordsLookLikeLonLat(fc)) {
       throw new Error("This shapefile's coordinates look projected (e.g. UTM metres), and no .prj file was included. Drop the .prj alongside the .shp so the projection can be converted to lat/long.");
     }
-    return fc;
+    return assertWithinComplexityLimits(fc);
   }
 
   throw new Error("Unsupported file type. Use .zip (shapefile), .shp/.dbf (dropped together), .geojson, .json, .kml, or .kmz");
@@ -132,6 +218,18 @@ export async function loadShapefileSet(files) {
     if (byExt[ext] && base(byExt[ext].name) !== shpBase) {
       throw new Error(`Shapefile parts don't match: "${byExt[ext].name}" belongs to a different shapefile than "${byExt.shp.name}". Drop one shapefile's parts at a time.`);
     }
+  }
+
+  // Loose shapefile parts had no per-file or total-size check at all.
+  let totalBytes = 0;
+  for (const f of files) {
+    if (f.size > MAX_UPLOAD_SIZE) {
+      throw new Error(`"${f.name}" is too large (${(f.size / 1024 / 1024).toFixed(0)} MB). Maximum is 50 MB per file.`);
+    }
+    totalBytes += f.size;
+  }
+  if (totalBytes > MAX_UPLOAD_SIZE) {
+    throw new Error(`These shapefile parts total ${(totalBytes / 1024 / 1024).toFixed(0)} MB, over the 50 MB limit.`);
   }
 
   const { default: shp } = await import('shpjs');
@@ -158,7 +256,7 @@ export async function loadShapefileSet(files) {
   // to WGS84 with proj4. A projected file WITHOUT a .prj is rejected with a
   // useful error rather than silently plotted at metre coordinates.
   const prjText = byExt.prj ? (await byExt.prj.text()).trim() : null;
-  return applyShapefileProjection(fc, prjText);
+  return assertWithinComplexityLimits(await applyShapefileProjection(fc, prjText));
 }
 
 // Exported for tests. Reprojects a FeatureCollection according to .prj WKT.
