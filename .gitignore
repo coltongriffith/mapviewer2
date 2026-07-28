@@ -5,8 +5,10 @@ node_modules/
 dist/
 build/
 
-# Lockfiles (optional — remove if you want to track these)
-package-lock.json
+# Lockfiles ARE tracked. package-lock.json is committed so `npm ci` installs
+# an identical dependency tree on every machine and in CI — without it, caret
+# ranges resolve differently per install and the shipped build is not
+# reproducible (audit P0-10).
 yarn.lock
 pnpm-lock.yaml
 

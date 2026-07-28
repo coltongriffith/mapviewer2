@@ -13,6 +13,8 @@ import {
   setDefaultBrandKit,
   updateBrandKit,
   deleteBrandKit,
+  listMySharedMaps,
+  revokeSharedMap,
 } from '../utils/cloudStorage';
 import { renderBrandKitSwatch } from '../utils/brandKitSwatch';
 
@@ -171,6 +173,82 @@ function AccountSettingsCard({ settings, onSave }) {
         {saved && <span className="acct-settings-saved">✓ Saved</span>}
       </div>
     </div>
+  );
+}
+
+/**
+ * Shared links the account owns, with revocation.
+ *
+ * Until now a published share was permanent and invisible: users could not
+ * list, expire, or revoke a link that contained a full snapshot of their
+ * project — geometry, company/QP metadata, embedded images (audit P0-08).
+ * Revoking clears the stored payload, it does not merely hide the row.
+ */
+function SharedLinksSection({ onError }) {
+  const [shares, setShares] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState(null);
+  const [confirmId, setConfirmId] = useState(null);
+
+  const refresh = React.useCallback(() => {
+    setLoading(true);
+    listMySharedMaps()
+      .then(setShares)
+      .catch(onError)
+      .finally(() => setLoading(false));
+  }, [onError]);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  const live = shares.filter((s) => !s.revoked_at && (!s.expires_at || new Date(s.expires_at) > new Date()));
+
+  return (
+    <section className="acct-section">
+      <div className="acct-section-header">
+        <h2>Shared links</h2>
+      </div>
+      <p className="acct-section-hint">
+        Anyone with a share link can view that map, including its data, company and QP details,
+        and any images you added. Revoking a link deletes the shared copy immediately.
+      </p>
+      {loading ? (
+        <p className="acct-empty">Loading…</p>
+      ) : live.length === 0 ? (
+        <p className="acct-empty">No active share links.</p>
+      ) : (
+        <ul className="acct-share-list">
+          {live.map((s) => (
+            <li key={s.id} className="acct-share-row">
+              <div>
+                <a href={`/map/${s.id}`} target="_blank" rel="noopener noreferrer">
+                  {s.title || 'Untitled map'}
+                </a>
+                <span className="adm-muted">
+                  {' '}· shared {fmtRelative(s.created_at)} · {s.view_count || 0} view{(s.view_count || 0) === 1 ? '' : 's'}
+                  {s.expires_at ? ` · expires ${fmtRelative(s.expires_at)}` : ''}
+                </span>
+              </div>
+              {confirmId === s.id ? (
+                <span>
+                  <button
+                    className="secondary-btn"
+                    type="button"
+                    disabled={busyId === s.id}
+                    onClick={async () => {
+                      setBusyId(s.id);
+                      try { await revokeSharedMap(s.id); refresh(); } catch (e) { onError(e); } finally { setBusyId(null); setConfirmId(null); }
+                    }}
+                  >{busyId === s.id ? 'Revoking…' : 'Confirm revoke'}</button>
+                  <button className="secondary-btn" type="button" onClick={() => setConfirmId(null)}>Cancel</button>
+                </span>
+              ) : (
+                <button className="secondary-btn" type="button" onClick={() => setConfirmId(s.id)}>Revoke</button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 
@@ -342,6 +420,8 @@ export default function AccountPage({ onOpenProject, onNewProject, onExit, onApp
             </div>
           )}
         </section>
+
+        <SharedLinksSection onError={surfaceActionError('Shared links')} />
 
         <section className="acct-section">
           <div className="acct-section-header">

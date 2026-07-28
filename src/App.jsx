@@ -5973,7 +5973,7 @@ export default function App() {
                         });
                         shareProject = { ...project, layers: [...project.layers, ...claimLayers] };
                       }
-                      const id = await shareMap(shareProject, user?.id ?? null);
+                      const id = await shareMap(shareProject);
                       const base = window.location.origin;
                       // ?ref ties later share_viewed/share_forked events back to
                       // this sharer's session so the viral loop is measurable.

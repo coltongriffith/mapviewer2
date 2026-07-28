@@ -1,26 +1,34 @@
 import React, { useRef, useState } from 'react';
-import { useFileParser } from '../hooks/useFileParser';
+import { useFileParser, SUPPORTED_CRS } from '../hooks/useFileParser';
 
 const ACCEPTED = '.geojson,.json,.kml,.kmz,.zip';
 
 export default function ClaimsFileUpload({ onImport, onBack }) {
-  const { parseFile, parsing, error: parseError, setError } = useFileParser();
-  const [preview, setPreview] = useState(null); // { geojson, name, count }
+  const { parseFile, parsing, error: parseError, setError, needsCRS, setNeedsCRS } = useFileParser();
+  const [preview, setPreview] = useState(null); // { geojson, name, count, crs }
   const [dragOver, setDragOver] = useState(false);
+  const [pendingFile, setPendingFile] = useState(null);
+  const [chosenCRS, setChosenCRS] = useState('');
   const inputRef = useRef(null);
 
-  async function handleFile(file) {
+  async function handleFile(file, opts) {
     setPreview(null);
     setError(null);
-    const geojson = await parseFile(file);
-    if (!geojson) return;
+    const geojson = await parseFile(file, opts);
+    if (!geojson) {
+      // parseFile sets needsCRS when it cannot safely determine the CRS.
+      setPendingFile(file);
+      return;
+    }
     const featureCount = geojson.features?.length ?? (geojson.type === 'Feature' ? 1 : 0);
     if (!featureCount) {
       setError('File parsed but contained no valid geometry.');
       return;
     }
     const name = file.name.replace(/\.(zip|geojson|json|kml|kmz)$/i, '');
-    setPreview({ geojson, name, count: featureCount });
+    setPreview({ geojson, name, count: featureCount, crs: geojson.__crs?.from || null });
+    setPendingFile(null);
+    setNeedsCRS(null);
   }
 
   function handleDrop(e) {
@@ -86,11 +94,43 @@ export default function ClaimsFileUpload({ onImport, onBack }) {
 
       {parseError && <p className="claims-error">⚠ {parseError}</p>}
 
+      {/* No silent guessing: a projected file with no declared CRS stops here
+          until the user says what it is. Placing exploration data in the wrong
+          country is worse than one extra question. */}
+      {needsCRS && pendingFile && (
+        <div className="claims-preview-block">
+          <label className="auth-label" htmlFor="crs-pick">
+            Coordinate system of "{pendingFile.name}"
+            <select
+              id="crs-pick"
+              className="auth-input"
+              value={chosenCRS}
+              onChange={(e) => setChosenCRS(e.target.value)}
+            >
+              <option value="">Select…</option>
+              {SUPPORTED_CRS.filter((c) => c.projected).map((c) => (
+                <option key={c.code} value={c.code}>{c.label}</option>
+              ))}
+            </select>
+          </label>
+          <button
+            className="share-generate-btn"
+            disabled={!chosenCRS}
+            onClick={() => handleFile(pendingFile, { crs: chosenCRS })}
+          >
+            Convert and preview
+          </button>
+        </div>
+      )}
+
       {preview && !parseError && (
         <div className="claims-preview-block">
           <span className="claims-preview-count">
             ✓ {preview.count} feature{preview.count !== 1 ? 's' : ''} found in "{preview.name}"
           </span>
+          {preview.crs && (
+            <span className="claims-dropzone-hint">Converted from {preview.crs} to WGS84.</span>
+          )}
           <button className="share-generate-btn" onClick={handleAdd}>
             Add to map
           </button>

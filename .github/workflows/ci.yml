@@ -1,0 +1,50 @@
+name: CI
+
+# Gates ordinary changes on install / test / build. Previously the only
+# workflows drove data and social pipelines, so a failing test or a broken
+# build could reach production unchallenged (audit P0-10).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      # `npm ci` requires the committed lockfile and installs it exactly —
+      # this is what makes the build reproducible across machines.
+      - name: Install (locked)
+        run: npm ci
+
+      - name: Unit and component tests
+        run: npm test
+
+      - name: Production build
+        run: npm run build
+
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      # Fail only on high/critical advisories in production dependencies —
+      # dev-only and low findings should not block a deploy.
+      - name: Dependency policy
+        run: npm audit --omit=dev --audit-level=high

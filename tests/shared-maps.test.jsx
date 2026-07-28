@@ -35,9 +35,12 @@ describe('loadSharedMap', () => {
     expect(await loadSharedMap('doesnotexist123')).toBeNull();
   });
 
-  it('returns null instead of throwing on RPC errors', async () => {
+  // A service failure must be DISTINGUISHABLE from a removed link, so the
+  // viewer can offer a retry instead of telling the user the map is gone
+  // (audit P1-04). It therefore throws rather than collapsing to null.
+  it('throws on RPC errors instead of masking them as not-found', async () => {
     rpcMock.mockResolvedValue({ data: null, error: { message: 'boom' } });
-    expect(await loadSharedMap('abc123def456')).toBeNull();
+    await expect(loadSharedMap('abc123def456')).rejects.toThrow(/could not load/i);
   });
 
   it('legacy 32-char hex ids remain usable as-is', async () => {
@@ -57,10 +60,18 @@ describe('SharedMapViewer', () => {
     await waitFor(() => expect(screen.getByTestId('stage')).toBeInTheDocument());
   });
 
-  it('shows not-found for an invalid identifier', async () => {
+  it('shows not-available for an invalid, expired, or revoked identifier', async () => {
     rpcMock.mockResolvedValue({ data: null, error: null });
     render(<SharedMapViewer mapId="nope12345" onExit={() => {}} user={null} />);
-    await waitFor(() => expect(screen.getByText('Map not found')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Map not available')).toBeInTheDocument());
+    expect(screen.getByText(/expired, or was revoked/i)).toBeInTheDocument();
+  });
+
+  it('offers a retry — not a "removed" message — when the service is unreachable', async () => {
+    rpcMock.mockResolvedValue({ data: null, error: { message: 'network down' } });
+    render(<SharedMapViewer mapId="abc123def456" onExit={() => {}} user={null} />);
+    await waitFor(() => expect(screen.getByText('Couldn’t load this map')).toBeInTheDocument());
+    expect(screen.getByRole('button', { name: /try again/i })).toBeInTheDocument();
   });
 
   it('a stale response for a previous mapId does not clobber the current map', async () => {

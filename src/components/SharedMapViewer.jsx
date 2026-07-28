@@ -41,7 +41,9 @@ export default function SharedMapViewer({ mapId, onExit, user, onEditCopy }) {
         try { ref = new URLSearchParams(window.location.search).get('ref'); } catch { /* noop */ }
         trackEvent('share_viewed', { mapId, ref }, user?.id);
       })
-      .catch(e => { if (!cancelled) { setError(e.message); setLoading(false); } });
+      // A service/network failure must NOT read as "this link was removed" —
+      // that hides incidents and misleads the viewer (audit P1-04).
+      .catch(() => { if (!cancelled) { setError('unavailable'); setLoading(false); } });
     return () => { cancelled = true; };
   }, [mapId]);
 
@@ -55,12 +57,22 @@ export default function SharedMapViewer({ mapId, onExit, user, onEditCopy }) {
   }
 
   if (error) {
+    const unavailable = error === 'unavailable';
     return (
       <div className="shared-map-error">
         <div className="shared-map-error-icon">🗺</div>
-        <h2>{error === 'not_found' ? 'Map not found' : 'Something went wrong'}</h2>
-        <p>{error === 'not_found' ? 'This shared map link may be invalid or has been removed.' : error}</p>
-        <button className="shared-map-cta-btn" onClick={onExit}>Go to ExplorationMaps</button>
+        <h2>{unavailable ? 'Couldn’t load this map' : 'Map not available'}</h2>
+        <p>
+          {unavailable
+            ? 'We couldn’t reach the server. The link may still be fine — check your connection and try again.'
+            : 'This link is invalid, has expired, or was revoked by its owner.'}
+        </p>
+        <div className="shared-map-bar-actions">
+          {unavailable && (
+            <button className="shared-map-edit-btn" onClick={() => window.location.reload()}>Try again</button>
+          )}
+          <button className="shared-map-cta-btn" onClick={onExit}>Go to ExplorationMaps</button>
+        </div>
       </div>
     );
   }

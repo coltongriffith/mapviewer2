@@ -203,26 +203,70 @@ export async function getDefaultBrandKit() {
 
 // ── Shared Maps ──────────────────────────────────────────────────────────────
 
-export async function shareMap(project, userId = null) {
-  const sb = requireSupabase();
-  const id = crypto.randomUUID().replace(/-/g, '');
-  const { error } = await sb.from('shared_maps').insert({
-    id,
-    state: project,
-    user_id: userId ?? null,
-  });
-  if (error) throw error;
-  return id;
+// Opaque per-browser key used ONLY to rate-limit anonymous share creation.
+// Not an identity and never shown to readers.
+function creatorKey() {
+  try {
+    let k = localStorage.getItem('em_share_key');
+    if (!k) {
+      k = crypto.randomUUID().replace(/-/g, '');
+      localStorage.setItem('em_share_key', k);
+    }
+    return k;
+  } catch {
+    return crypto.randomUUID().replace(/-/g, '');
+  }
 }
+
+export async function shareMap(project) {
+  const sb = requireSupabase();
+  // Creation goes through a validating RPC (size, shape, feature count, rate
+  // limit, expiry). Direct INSERT on shared_maps is revoked, so the public
+  // anon key can no longer be used as an unmetered write API.
+  const { data, error } = await sb.rpc('create_shared_map', {
+    p_state: project,
+    p_creator_key: creatorKey(),
+  });
+  if (error) {
+    const msg = error.message || '';
+    if (msg.includes('SHARE_TOO_LARGE')) throw new Error('This map is too large to share — remove some layers or simplify the geometry and try again.');
+    if (msg.includes('SHARE_TOO_COMPLEX')) throw new Error('This map has too many features to share. Simplify or split it and try again.');
+    if (msg.includes('SHARE_RATE_LIMIT')) throw new Error('You’ve created several share links recently. Please wait a few minutes and try again.');
+    if (msg.includes('SHARE_INVALID')) throw new Error('This map could not be shared. Save it and try again.');
+    throw error;
+  }
+  return data;
+}
+
+/** Statuses distinguish "gone" from "we couldn't reach the service" (P1-04). */
+export const SHARE_LOAD = { OK: 'ok', UNAVAILABLE: 'unavailable', ERROR: 'error' };
 
 export async function loadSharedMap(id) {
   const sb = requireSupabase();
   // Narrow lookup RPC (get_shared_map): returns only the map state for one
   // id and bumps view_count server-side. Direct table SELECT is revoked —
-  // anonymous clients cannot enumerate shared_maps.
+  // anonymous clients cannot enumerate shared_maps. Revoked and expired
+  // shares return null.
   const { data, error } = await sb.rpc('get_shared_map', { share_id: id });
-  if (error || !data) return null;
-  return data;
+  if (error) {
+    // A transport/database failure is NOT the same as a removed link.
+    const e = new Error('Could not load this shared map right now.');
+    e.status = SHARE_LOAD.ERROR;
+    throw e;
+  }
+  return data ?? null;
+}
+
+export async function listMySharedMaps() {
+  const { data, error } = await requireSupabase().rpc('list_my_shared_maps');
+  if (error) throw error;
+  return data || [];
+}
+
+export async function revokeSharedMap(id) {
+  const { data, error } = await requireSupabase().rpc('revoke_shared_map', { p_id: id });
+  if (error) throw error;
+  return Boolean(data);
 }
 
 // Fork a shared map's state into the signed-in user's own account as a brand-new
