@@ -143,6 +143,57 @@ describe('webhook plan sync', () => {
   });
 });
 
+describe('webhook invoicing sync (custom_invoices)', () => {
+  it('invoice.paid on a standalone invoice upserts custom_invoices', async () => {
+    const { default: handler } = await import('../api/stripe-webhook.js');
+    const body = JSON.stringify({
+      type: 'invoice.paid',
+      data: { object: {
+        id: 'in_1', customer: 'cus_1', amount_due: 500000, amount_paid: 500000,
+        currency: 'usd', number: 'EM-0001', hosted_invoice_url: 'https://invoice.stripe.com/i/x',
+      } },
+    });
+    const res = mockRes();
+    await handler({ method: 'POST', body, headers: signedHeaders(body) }, res);
+    expect(res.statusCode).toBe(200);
+    const upsert = dbCalls.find((c) => c.table === 'custom_invoices' && c.ops.some((o) => o[0] === 'upsert'));
+    expect(upsert).toBeTruthy();
+    const [, values] = upsert.ops.find((o) => o[0] === 'upsert');
+    expect(values).toMatchObject({ stripe_invoice_id: 'in_1', status: 'paid', amount_paid: 500000 });
+  });
+
+  it('invoice.paid on a SUBSCRIPTION invoice is ignored (no custom_invoices write)', async () => {
+    const { default: handler } = await import('../api/stripe-webhook.js');
+    const body = JSON.stringify({
+      type: 'invoice.paid',
+      data: { object: { id: 'in_2', customer: 'cus_1', subscription: 'sub_1', amount_paid: 2900 } },
+    });
+    const res = mockRes();
+    await handler({ method: 'POST', body, headers: signedHeaders(body) }, res);
+    expect(res.statusCode).toBe(200);
+    expect(dbCalls.some((c) => c.table === 'custom_invoices')).toBe(false);
+  });
+
+  it('credit_note.created marks the referenced invoice credited', async () => {
+    const { default: handler } = await import('../api/stripe-webhook.js');
+    const body = JSON.stringify({ type: 'credit_note.created', data: { object: { invoice: 'in_1' } } });
+    const res = mockRes();
+    await handler({ method: 'POST', body, headers: signedHeaders(body) }, res);
+    const update = dbCalls.find((c) => c.table === 'custom_invoices' && c.ops.some((o) => o[0] === 'update'));
+    expect(update.ops.find((o) => o[0] === 'update')[1]).toMatchObject({ status: 'credited' });
+    expect(update.ops).toContainEqual(['eq', 'stripe_invoice_id', 'in_1']);
+  });
+
+  it('charge.refunded marks the referenced invoice refunded', async () => {
+    const { default: handler } = await import('../api/stripe-webhook.js');
+    const body = JSON.stringify({ type: 'charge.refunded', data: { object: { invoice: 'in_1' } } });
+    const res = mockRes();
+    await handler({ method: 'POST', body, headers: signedHeaders(body) }, res);
+    const update = dbCalls.find((c) => c.table === 'custom_invoices' && c.ops.some((o) => o[0] === 'update'));
+    expect(update.ops.find((o) => o[0] === 'update')[1]).toMatchObject({ status: 'refunded' });
+  });
+});
+
 describe('checkout / portal endpoint guards', () => {
   it('checkout 401s without a valid token', async () => {
     const { default: handler } = await import('../api/stripe-checkout.js');

@@ -1,7 +1,7 @@
 # Billing (Stripe) — setup & operations
 
-Status: v1. Pro subscription via Stripe Checkout + customer portal.
-Last updated: 2026-07-16.
+Status: v1. Pro subscription via Stripe Checkout + customer portal, plus
+one-off Invoicing for bespoke work. Last updated: 2026-07-28.
 
 ## Plans
 
@@ -100,3 +100,63 @@ future expiry/CVC. Verify: checkout → `user_plans` row flips to
 - [ ] Checkout with the test card upgrades the account within seconds.
 - [ ] Customer portal opens from Account → Plan & Billing.
 - [ ] Stripe dashboard → webhook shows 200s.
+
+## Invoicing (one-off custom work)
+
+For bespoke work outside the self-serve subscription — a custom map package,
+an enterprise/annual deal — send a **Stripe Invoice** instead of Checkout.
+This is deliberately Dashboard-first, not API-automated: each of these deals
+is unique (different scope/amount/terms), so the Stripe Dashboard is the
+right tool, not custom checkout code.
+
+**Creating an invoice (Stripe Dashboard → Invoices → Create invoice):**
+1. Pick or create the Customer. If they already have an Exploration Maps
+   account, set invoice metadata `supabase_user_id` = their Supabase user id
+   (Account page → their user id, or the admin Users tab) so the webhook can
+   link the invoice back to their account. If they don't have an account
+   (pure one-off client), skip it — the invoice still gets tracked, just
+   without a `user_id`.
+2. Add line item(s), memo/footer as needed, then **Send invoice**. Stripe
+   emails the customer a link to the Hosted Invoice Page — handles card, ACH
+   bank transfer, and 3DS automatically. No code involved.
+3. Once, in **Settings → Branding**: upload the Exploration Maps logo and
+   accent color so invoices (and Checkout/Portal) carry the brand — applies
+   to every future invoice automatically.
+
+**Webhook events** (added to the same endpoint as Billing — see
+`api/stripe-webhook.js`): `invoice.paid`, `invoice.payment_failed`,
+`invoice.voided`, `invoice.marked_uncollectible`, `credit_note.created`,
+`charge.refunded`. These sync into `public.custom_invoices` — a separate,
+read-mostly mirror table, **never** `user_plans`. A standalone invoice
+carries no `subscription` id; any invoice event that DOES carry one is a
+subscription-renewal invoice and is ignored here (already handled by the
+`customer.subscription.*` sync above). This keeps one-off invoices from ever
+touching subscription/grandfathering state.
+
+`custom_invoices` rows are visible in the admin Users tab drawer (if the
+invoice was linked to a `supabase_user_id`), and RLS lets a signed-in user
+read their own rows directly (same pattern as `user_plans`) if you ever want
+to surface "billing history" in the Account page. The Stripe Dashboard
+Invoices tab remains the source of truth for search, CSV export, and
+resending/voiding — `custom_invoices` is only for in-app visibility.
+
+**ACH note:** bank-transfer payments land in Stripe's customer cash balance
+before being applied to the invoice (1–5 business days to settle); `invoice.paid`
+only fires once Stripe auto-applies the funds, so don't expect it instantly for
+ACH-paid invoices.
+
+**Setup already done for this account** (2026-07-28, live mode):
+- Product `Exploration Maps Pro` (`prod_UyCFuwTqnX4HoQ`) with monthly
+  (`price_1TyFqXRHvZfpRjJxies5Npoj`, $29) and yearly
+  (`price_1TyFvPRHvZfpRjJxascNqRXz`, $290) prices — matching
+  `src/utils/pricing.js`. Set these as `STRIPE_PRICE_MONTHLY_ID` /
+  `STRIPE_PRICE_YEARLY_ID` in Vercel.
+- Webhook endpoint `we_1TyFvjRHvZfpRjJxhNjo0b85` →
+  `https://www.explorationmaps.com/api/stripe-webhook`, subscribed to all
+  events listed above (Billing + Invoicing). Set its signing secret as
+  `STRIPE_WEBHOOK_SECRET` in Vercel (Dashboard → Webhooks → this endpoint →
+  reveal signing secret — it's not repeated here since it's a live secret).
+- Still to do in the Dashboard: enable the **Customer Portal** (Settings →
+  Billing → Customer portal) and set **Branding** (Settings → Branding).
+- Still to do in Vercel: set `STRIPE_SECRET_KEY` (live secret key from
+  Dashboard → Developers → API keys) and the three vars above, then redeploy.

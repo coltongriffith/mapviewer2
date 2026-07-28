@@ -167,6 +167,19 @@ function UserDrawer({ d, loading, onOpenSession }) {
         {(d.exports_by_format || []).length > 0 && (
           <div className="admx-drawer-exports">{d.exports_by_format.map((x) => <span key={x.format}>{String(x.format).toUpperCase()} {x.n}</span>)}</div>
         )}
+        {(d.custom_invoices || []).length > 0 && (
+          <>
+            <div className="admx-drawer-h" style={{ marginTop: 10 }}>Custom invoices</div>
+            <ul className="admx-drawer-projects">
+              {d.custom_invoices.map((inv) => (
+                <li key={inv.stripe_invoice_id}>
+                  <span className="adm-truncate">{inv.number || inv.stripe_invoice_id} — {(inv.amount_due / 100).toFixed(2)} {inv.currency?.toUpperCase()}</span>
+                  <span className={inv.status === 'paid' ? 'admx-tag-clean' : 'adm-muted'}>{inv.status}</span>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
       </div>
       <div className="admx-drawer-col">
         <div className="admx-drawer-h">Recent activity</div>
