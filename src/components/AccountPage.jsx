@@ -15,6 +15,8 @@ import {
   deleteBrandKit,
   listMySharedMaps,
   revokeSharedMap,
+  listTrashedProjects,
+  restoreCloudProject,
 } from '../utils/cloudStorage';
 import { renderBrandKitSwatch } from '../utils/brandKitSwatch';
 
@@ -184,6 +186,58 @@ function AccountSettingsCard({ settings, onSave }) {
  * project — geometry, company/QP metadata, embedded images (audit P0-08).
  * Revoking clears the stored payload, it does not merely hide the row.
  */
+/**
+ * Recently deleted projects, restorable for 30 days.
+ * Deletion used to be immediate and permanent (audit P1-27).
+ */
+function TrashSection({ onError, onRestored }) {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState(null);
+
+  const refresh = React.useCallback(() => {
+    setLoading(true);
+    listTrashedProjects()
+      .then(setItems)
+      .catch(onError)
+      .finally(() => setLoading(false));
+  }, [onError]);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  if (loading || items.length === 0) return null; // stay out of the way when empty
+
+  return (
+    <section className="acct-section">
+      <div className="acct-section-header">
+        <h2>Recently deleted</h2>
+      </div>
+      <p className="acct-section-hint">Deleted projects stay here for 30 days, then are removed permanently.</p>
+      <ul className="acct-share-list">
+        {items.map((t) => (
+          <li key={t.id} className="acct-share-row">
+            <div>
+              <strong>{t.name || 'Untitled map'}</strong>
+              <span className="adm-muted"> · deleted {fmtRelative(t.deleted_at)}</span>
+            </div>
+            <button
+              className="secondary-btn"
+              type="button"
+              disabled={busyId === t.id}
+              onClick={async () => {
+                setBusyId(t.id);
+                try { await restoreCloudProject(t.id); refresh(); onRestored?.(); }
+                catch (e) { onError(e); }
+                finally { setBusyId(null); }
+              }}
+            >{busyId === t.id ? 'Restoring…' : 'Restore'}</button>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 function SharedLinksSection({ onError }) {
   const [shares, setShares] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -420,6 +474,8 @@ export default function AccountPage({ onOpenProject, onNewProject, onExit, onApp
             </div>
           )}
         </section>
+
+        <TrashSection onError={surfaceActionError('Recently deleted')} onRestored={refreshProjects} />
 
         <SharedLinksSection onError={surfaceActionError('Shared links')} />
 

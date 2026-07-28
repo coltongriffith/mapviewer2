@@ -799,6 +799,12 @@ export default function App() {
   const bootstrappedRef = useRef(false);
   const draftWriteFailedRef = useRef(false);
   const lastSavedSnapshotRef = useRef(JSON.stringify(project));
+  // Revision of the cloud row this tab last read/wrote. Sent with every
+  // update so the server can refuse a save that would clobber another
+  // tab's work (P1-01). null = no expectation (deliberate overwrite).
+  const projectRevisionRef = useRef(null);
+  // Set when a save is refused because the row changed elsewhere.
+  const [saveConflict, setSaveConflict] = useState(null);
   // Always-fresh serialization of the current project, updated by the local
   // autosave effect. Save completions compare against this to decide whether
   // dirty state may be cleared (see utils/saveCoordinator.js).
@@ -989,17 +995,25 @@ export default function App() {
       const outcome = await runGuardedSave({
         ticket,
         snapshot,
-        doSave: () => saveCloudProject({ id: projectId, name: projectName, payload: project }),
+        doSave: () => saveCloudProject({ id: projectId, name: projectName, payload: project, expectedRevision: projectRevisionRef.current }),
         getCurrentSerialized: () => lastSerializedRef.current,
-        onSaved: () => { lastSavedSnapshotRef.current = snapshot; setIsDirty(false); flashSaved(); },
+        onSaved: (r) => { projectRevisionRef.current = r?.revision ?? null; lastSavedSnapshotRef.current = snapshot; setIsDirty(false); flashSaved(); },
         // Saved, but the user kept editing: advance the baseline to what the
         // cloud now holds and stay dirty so the newer edits save next pass.
-        onMismatch: () => { lastSavedSnapshotRef.current = snapshot; },
+        onMismatch: (r) => { projectRevisionRef.current = r?.revision ?? null; lastSavedSnapshotRef.current = snapshot; },
         onError: () => {},
       });
       if (outcome.status === 'error') {
         const err = outcome.err;
-        if (String(err?.message || '').includes('not found')) {
+        if (err?.code === 'SAVE_CONFLICT') {
+          // Another tab/device saved since we loaded. Never silently clobber:
+          // stop autosaving and let the user choose (P1-01).
+          setSaveConflict({ name: projectName });
+          setUploadStatus({
+            type: 'error',
+            message: 'This project was changed in another tab or device. Your edits here are unsaved — reload it, or choose Overwrite to keep this version.',
+          });
+        } else if (String(err?.message || '').includes('not found')) {
           // projectId exists locally but not in cloud (draft migration case):
           // create it as a new cloud project instead of failing silently.
           const created = await runGuardedSave({
@@ -1015,7 +1029,8 @@ export default function App() {
           });
           // Re-point the workspace at the new row only if we're still in it.
           if ((created.status === 'saved' || created.status === 'saved-but-dirty') && ticket.stillCurrent()) {
-            setProjectId(created.result);
+            setProjectId(created.result.id);
+            projectRevisionRef.current = created.result.revision ?? 1;
           }
         } else {
           setUploadStatus({ type: 'error', message: `Couldn't auto-save to the cloud (${err.message}). Your work is safe in this browser — click Save to retry.` });
@@ -3595,16 +3610,22 @@ export default function App() {
       const outcome = await runGuardedSave({
         ticket,
         snapshot,
-        doSave: () => saveCloudProject({ id: projectId, name: nameToSave, payload: payloadToSave }),
+        doSave: () => saveCloudProject({ id: projectId, name: nameToSave, payload: payloadToSave, expectedRevision: projectRevisionRef.current }),
         getCurrentSerialized: () => lastSerializedRef.current,
         onSaved: () => { lastSavedSnapshotRef.current = snapshot; setIsDirty(false); },
         onMismatch: () => { lastSavedSnapshotRef.current = snapshot; },
         onError: (err) => {
-          setUploadStatus({ type: 'error', message: `Cloud save failed: ${err.message}. Your work is still saved in this browser.` });
+          if (err?.code === 'SAVE_CONFLICT') {
+            setSaveConflict({ name: nameToSave });
+            setUploadStatus({ type: 'error', message: 'This project was changed elsewhere. Reload it, or choose Overwrite to keep this version.' });
+          } else {
+            setUploadStatus({ type: 'error', message: `Cloud save failed: ${err.message}. Your work is still saved in this browser.` });
+          }
         },
       });
       if ((outcome.status === 'saved' || outcome.status === 'saved-but-dirty') && ticket.stillCurrent()) {
-        const cloudId = outcome.result;
+        const cloudId = outcome.result.id;
+        projectRevisionRef.current = outcome.result.revision ?? 1;
         setProjectId(cloudId);
         setProjectName(nameToSave);
         saveDraft({ payload: payloadToSave, projectId: cloudId, projectName: nameToSave });
@@ -3662,7 +3683,8 @@ export default function App() {
         },
       });
       if ((outcome.status === 'saved' || outcome.status === 'saved-but-dirty') && ticket.stillCurrent()) {
-        const cloudId = outcome.result;
+        const cloudId = outcome.result.id;
+        projectRevisionRef.current = outcome.result.revision ?? 1;
         setProjectId(cloudId);
         setProjectName(nameToSave);
         saveDraft({ payload: payloadToSave, projectId: cloudId, projectName: nameToSave });
@@ -3698,6 +3720,7 @@ export default function App() {
       try {
         const full = await loadCloudProject(entry.id);
         payload = full.payload;
+        projectRevisionRef.current = full.revision ?? null;
       } catch (err) {
         if (openTicket.stillCurrent()) {
           setUploadStatus({ type: 'error', message: `Failed to open project: ${err.message}` });
@@ -3708,6 +3731,9 @@ export default function App() {
     if (!payload || !openTicket.stillCurrent()) return;
     resetHistory();
     skipAutoFitRef.current = true;
+    // entry.revision comes from listCloudProjects; a locally-cached entry has
+    // none, in which case we save without an expectation.
+    if (entry.revision != null) projectRevisionRef.current = entry.revision;
     setProject(payload);
     setProjectId(entry.id);
     setProjectName(entry.name);
@@ -3810,9 +3836,10 @@ export default function App() {
         },
       });
       if ((outcome.status === 'saved' || outcome.status === 'saved-but-dirty') && ticket.stillCurrent()) {
-        setProjectId(outcome.result);
+        setProjectId(outcome.result.id);
+        projectRevisionRef.current = outcome.result.revision ?? 1;
         setProjectName(name);
-        saveDraft({ payload: payloadToSave, projectId: outcome.result, projectName: name });
+        saveDraft({ payload: payloadToSave, projectId: outcome.result.id, projectName: name });
         listCloudProjects().then(setRecentProjects).catch(() => {});
         setUploadStatus({ type: 'success', message: `Duplicated to cloud as: ${name}` });
       }
@@ -5835,6 +5862,79 @@ export default function App() {
           height: dragging.ghostH,
         }} />
       )}
+      {/* Save conflict — another tab or device changed this project. The
+          user chooses; we never silently pick a winner (audit P1-01). */}
+      {saveConflict && (
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="conflict-title">
+          <div className="modal-panel auth-modal">
+            <h2 className="auth-modal-title" id="conflict-title">This project changed elsewhere</h2>
+            <p className="auth-modal-sub">
+              “{saveConflict.name}” was saved in another tab or on another device after you opened it.
+              Saving now would overwrite that version.
+            </p>
+            <div className="export-hd-actions">
+              <button
+                className="btn primary"
+                type="button"
+                autoFocus
+                onClick={async () => {
+                  // Take the other version: reload it and discard local edits.
+                  try {
+                    const full = await loadCloudProject(projectId);
+                    saveCoordRef.current.switchWorkspace();
+                    resetHistory();
+                    setProject(full.payload);
+                    projectRevisionRef.current = full.revision ?? null;
+                    lastSavedSnapshotRef.current = JSON.stringify(full.payload);
+                    setIsDirty(false);
+                    setUploadStatus({ type: 'success', message: 'Reloaded the newer version from the cloud.' });
+                  } catch (e) {
+                    setUploadStatus({ type: 'error', message: `Couldn't reload: ${e.message}` });
+                  }
+                  setSaveConflict(null);
+                }}
+              >Reload the newer version</button>
+              <button
+                className="btn"
+                type="button"
+                onClick={async () => {
+                  // Keep both: save these edits as a separate project.
+                  setSaveConflict(null);
+                  const copyName = `${saveConflict.name} (this device)`;
+                  try {
+                    const created = await saveCloudProject({ id: null, name: copyName, payload: project });
+                    setProjectId(created.id);
+                    projectRevisionRef.current = created.revision ?? 1;
+                    setProjectName(copyName);
+                    setIsDirty(false);
+                    listCloudProjects().then(setRecentProjects).catch(() => {});
+                    setUploadStatus({ type: 'success', message: `Saved your version separately as “${copyName}”.` });
+                  } catch (e) {
+                    setUploadStatus({ type: 'error', message: `Couldn't save a copy: ${e.message}` });
+                  }
+                }}
+              >Save mine as a copy</button>
+              <button
+                className="export-hd-skip"
+                type="button"
+                onClick={async () => {
+                  // Deliberate overwrite: null expectation skips the check.
+                  setSaveConflict(null);
+                  try {
+                    const res = await saveCloudProject({ id: projectId, name: projectName, payload: project, expectedRevision: null });
+                    projectRevisionRef.current = res.revision ?? null;
+                    setIsDirty(false);
+                    setUploadStatus({ type: 'success', message: 'Overwrote the cloud version with this one.' });
+                  } catch (e) {
+                    setUploadStatus({ type: 'error', message: `Overwrite failed: ${e.message}` });
+                  }
+                }}
+              >Overwrite with mine</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Brand Kit Manager Modal */}
       {showBrandKitManager && (
         <BrandKitStudio

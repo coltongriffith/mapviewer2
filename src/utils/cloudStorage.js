@@ -19,8 +19,9 @@ export async function listCloudProjects() {
   const user = await currentUser();
   const { data, error } = await requireSupabase()
     .from('projects')
-    .select('id, name, updated_at, thumbnail')
+    .select('id, name, updated_at, thumbnail, revision')
     .eq('user_id', user.id)
+    .is('deleted_at', null)   // trashed projects are restorable, not listed
     .order('updated_at', { ascending: false });
   if (error) throw error;
   return (data || []).map((r) => ({
@@ -28,7 +29,27 @@ export async function listCloudProjects() {
     name: r.name,
     updatedAt: r.updated_at,
     thumbnail: r.thumbnail || null,
+    revision: r.revision ?? 1,
   }));
+}
+
+/** Trashed projects still inside the 30-day restore window. */
+export async function listTrashedProjects() {
+  const user = await currentUser();
+  const { data, error } = await requireSupabase()
+    .from('projects')
+    .select('id, name, updated_at, deleted_at')
+    .eq('user_id', user.id)
+    .not('deleted_at', 'is', null)
+    .order('deleted_at', { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+
+export async function restoreCloudProject(id) {
+  const { data, error } = await requireSupabase().rpc('restore_cloud_project', { p_id: id });
+  if (error) throw error;
+  return Boolean(data);
 }
 
 export async function updateProjectThumbnail(id, thumbnail) {
@@ -57,26 +78,41 @@ function projectLimitError() {
 // silent=true suppresses the analytics events — used by the sign-in bulk
 // migration, which creates cloud rows for projects made earlier and must not
 // count them as "created now" or flood the activity feed.
-export async function saveCloudProject({ id, name, payload, silent = false }) {
+/**
+ * @param {object} opts
+ * @param {number|null} [opts.expectedRevision] The revision this client last
+ *   read. The server refuses the write if the row moved on since — which is
+ *   what stops two tabs silently overwriting each other. Pass null to
+ *   deliberately overwrite (the user chose to after being warned).
+ * @returns {Promise<string|{id:string, revision:number}>}
+ */
+export async function saveCloudProject({ id, name, payload, silent = false, expectedRevision }) {
   const user = await currentUser();
 
-  const now = new Date().toISOString();
   const cleanName = (name || payload?.layout?.title || 'Untitled map');
-  const record = { name: cleanName, payload, updated_at: now };
 
   if (id) {
-    const { data, error } = await requireSupabase()
-      .from('projects')
-      .update(record)
-      .eq('id', id)
-      .eq('user_id', user.id)
-      .select('id');
-    if (error) throw error;
-    if (!data || !data.length) throw new Error('Project not found in cloud');
+    // Compare-and-swap in the database (see 20260728000006). Last-write-wins
+    // updates used to discard the other editor's work with no signal.
+    const { data, error } = await requireSupabase().rpc('save_cloud_project', {
+      p_id: id,
+      p_name: cleanName,
+      p_payload: payload,
+      p_expected_revision: expectedRevision === undefined ? null : expectedRevision,
+    });
+    if (error) {
+      if (/SAVE_CONFLICT/.test(error.message || '')) {
+        const e = new Error('This project was changed somewhere else — reload it, save a copy, or overwrite.');
+        e.code = 'SAVE_CONFLICT';
+        throw e;
+      }
+      if (/PROJECT_NOT_FOUND/.test(error.message || '')) throw new Error('Project not found in cloud');
+      throw error;
+    }
     // "Worked on this project" — deduped per project per tab-session so the
     // ~10s autosave cadence doesn't turn into keystroke-count noise.
     if (!silent) trackEventOnce('project_saved', id, { project_id: id, name: cleanName.slice(0, 80) });
-    return id;
+    return { id, revision: data };
   } else {
     // Transactional create + quota check. Direct INSERT on projects is
     // revoked, so this RPC is the only way a new row can appear.
@@ -87,7 +123,7 @@ export async function saveCloudProject({ id, name, payload, silent = false }) {
       throw error;
     }
     if (!silent) trackEvent('project_created', { project_id: data, name: cleanName.slice(0, 80) });
-    return data;
+    return { id: data, revision: 1 };
   }
 }
 
@@ -103,14 +139,12 @@ export async function loadCloudProject(id) {
   return data;
 }
 
+// Soft delete: the project moves to trash and is restorable for 30 days.
+// Permanent deletion on a mis-click was unrecoverable customer data loss.
 export async function deleteCloudProject(id) {
-  const user = await currentUser();
-  const { error } = await requireSupabase()
-    .from('projects')
-    .delete()
-    .eq('id', id)
-    .eq('user_id', user.id);
+  const { data, error } = await requireSupabase().rpc('trash_cloud_project', { p_id: id });
   if (error) throw error;
+  if (!data) throw new Error('Project not found');
 }
 
 export async function renameCloudProject(id, name) {
