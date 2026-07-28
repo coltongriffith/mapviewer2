@@ -343,7 +343,7 @@ operator runs the setup SQL and loads an extract:
 
 | Piece | File | State |
 |---|---|---|
-| Table, indexes, RLS, snapshot view | `supabase-us-claimants-setup.sql` | ready to run |
+| Table, indexes, RLS, snapshot view | `supabase-us-claimants-setup.sql` | **APPLIED** to project `ibuzjzoqnkwjfecftzxn` ("Exploration Maps") on 2026-07-25 — empty, 5 indexes, RLS on, public-read policy, snapshot view + replace function live. Smoke-tested end to end (upsert de-dupes on the unique key, the API's OR'd-ilike + state query returns the right serials, roles stay distinct, `replace_us_claimants_source` clears cleanly); the test rows were removed and the table is back to 0. The file stays in the repo as the reproducible definition. |
 | Loader (any CSV → table) | `scripts/update-us-claimants.mjs` | ready |
 | Claimant-first resolution + serial join | `api/claims.js` (`resolveClaimantSerials`) | ready, inert |
 | Snapshot date → export credit | `claimProvenance.js` | ready, tested |
@@ -363,8 +363,9 @@ Tests cover all three.
 To turn it on:
 
 ```bash
-# 1. create the table (Supabase SQL editor)
-#    paste supabase-us-claimants-setup.sql, Run
+# 1. create the table — ALREADY DONE on the live project (see the table above).
+#    Only needed for a new environment: paste supabase-us-claimants-setup.sql
+#    into the Supabase SQL editor and Run. It is idempotent.
 
 # 2. load an extract (dry-run first — it prints the column mapping it inferred)
 node scripts/update-us-claimants.mjs --file report120.csv   --source mlrs_report_120 --snapshot 2026-07-01 --dry-run
