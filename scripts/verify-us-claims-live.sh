@@ -15,6 +15,10 @@
 
 set -uo pipefail
 
+# Resolve paths against THIS script's location, not the caller's cwd.
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CANARY="$HERE/live-schema-canary.mjs"
+
 BLM="${BLM_MLRS_SERVICE_URL:-https://gis.blm.gov/nlsdb/rest/services/HUB/BLM_Natl_MLRS_Mining_Claims_Not_Closed/FeatureServer}"
 LAYER="$BLM/0"
 UA='ExplorationMaps-verify/1.0'
@@ -111,12 +115,22 @@ fi
 hr
 echo "CHECK 4 — Live-schema canary against the real endpoint."
 echo
-echo "node scripts/live-schema-canary.mjs"
-node scripts/live-schema-canary.mjs
-C4=$?
-if [ "$C4" = "0" ]; then ok "every required BLM field still resolves."
-elif [ "$C4" = "1" ]; then bad "schema drift — see the named field(s) above."
-else meh "endpoint unreachable — not a schema verdict."; fi
+if [ ! -f "$CANARY" ]; then
+  meh "canary not found at $CANARY — cannot run check 4."
+else
+  echo "node $CANARY"
+  node "$CANARY"
+  C4=$?
+  case "$C4" in
+    0) ok "every required BLM field still resolves." ;;
+    1) bad "schema drift — see the named field(s) above." ;;
+    2) meh "endpoint unreachable — not a schema verdict." ;;
+    # Any other code is node failing to run at all (missing file, syntax error,
+    # bad node version). That is NOT a schema verdict and must never be
+    # reported as drift.
+    *) meh "canary could not run (exit $C4) — not a schema verdict." ;;
+  esac
+fi
 
 hr
 echo "SUMMARY: $pass verified-live, $fail failed, $inconc inconclusive"
