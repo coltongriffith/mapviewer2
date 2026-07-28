@@ -49,3 +49,6 @@ create trigger enforce_brand_kit_quota
 --   -- as a free user: insert into public.templates (user_id, name, config)
 --   --   values (auth.uid(), 'x', '{}');   -- expect BRAND_KIT_LIMIT
 --   -- as a grandfathered/pro user the same insert succeeds.
+
+-- Trigger function: never called directly.
+revoke all on function public.check_brand_kit_quota() from public, anon, authenticated;

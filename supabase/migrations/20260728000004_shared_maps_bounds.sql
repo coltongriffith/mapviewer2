@@ -190,3 +190,10 @@ grant execute on function public.get_shared_map(text) to anon, authenticated;
 --   select public.get_shared_map('<id>');       -- returns state
 --   select public.revoke_shared_map('<id>');    -- true, as the owner
 --   select public.get_shared_map('<id>');       -- now null
+
+-- ── Grant hygiene ───────────────────────────────────────────────────────────
+-- Supabase's default privileges grant EXECUTE on new public functions to both
+-- anon and authenticated; `revoke ... from public` does not remove those
+-- explicit role grants. Only genuinely public functions keep anon.
+revoke execute on function public.revoke_shared_map(text) from anon;
+revoke execute on function public.list_my_shared_maps() from anon;

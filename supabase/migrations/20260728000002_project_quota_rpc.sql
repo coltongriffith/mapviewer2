@@ -85,3 +85,5 @@ revoke insert on public.projects from authenticated;
 --   select public.create_cloud_project('third', '{}'::jsonb);  -- expect PROJECT_LIMIT
 --   -- direct insert must now be refused for everyone:
 --   insert into public.projects (user_id, name, payload) values (auth.uid(), 'x', '{}');
+
+revoke execute on function public.create_cloud_project(text, jsonb) from anon;
