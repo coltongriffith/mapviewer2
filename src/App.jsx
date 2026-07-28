@@ -1383,17 +1383,41 @@ export default function App() {
   }, [screen]);
 
   // Sync URL bar with screen state
+  // Keep the URL in step with the current screen. pushState (not replaceState)
+  // so Back and Forward actually move between landing / editor / account /
+  // admin / shared map — previously every transition overwrote the same entry
+  // and browser navigation did nothing useful (audit P1-17).
   useEffect(() => {
-    if (screen === 'admin') {
-      if (window.location.pathname !== '/admin') window.history.replaceState({}, '', '/admin');
-    } else if (screen === 'account') {
-      if (window.location.pathname !== '/account') window.history.replaceState({}, '', '/account');
-    } else if (screen === 'shared_view' && sharedMapId) {
-      window.history.replaceState({}, '', `/map/${sharedMapId}`);
-    } else if (window.location.pathname === '/admin' || window.location.pathname === '/account' || window.location.pathname.startsWith('/map/')) {
-      window.history.replaceState({}, '', '/');
-    }
+    const target = screen === 'admin' ? '/admin'
+      : screen === 'account' ? '/account'
+        : (screen === 'shared_view' && sharedMapId) ? `/map/${sharedMapId}`
+          : '/';
+    if (window.location.pathname === target) return;
+    try {
+      window.history.pushState({ screen, sharedMapId: sharedMapId || null }, '', target);
+    } catch { /* history unavailable — URL simply won't track */ }
   }, [screen, sharedMapId]);
+
+  // Respond to Back/Forward by deriving the screen from the URL the browser
+  // restored, rather than leaving the app on a screen the URL disagrees with.
+  useEffect(() => {
+    const onPop = (e) => {
+      const path = window.location.pathname;
+      const fromState = e.state?.screen;
+      if (path === '/admin') setScreen('admin');
+      else if (path === '/account') setScreen('account');
+      else if (path.startsWith('/map/')) {
+        setSharedMapId(path.slice(5));
+        setScreen('shared_view');
+      } else {
+        // '/' is either the landing page or the editor depending on how the
+        // user got there; the pushed state remembers which.
+        setScreen(fromState === 'editor' ? 'editor' : 'landing');
+      }
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
 
   const customExportW = project.layout.exportSettings?.customWidth || 0;
   const customExportH = project.layout.exportSettings?.customHeight || 0;

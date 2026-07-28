@@ -15,6 +15,7 @@ function makeChain(table) {
   const rec = { table, ops: [] };
   dbCalls.push(rec);
   const obj = {
+    insert: (v) => { rec.ops.push(['insert', v]); return obj; },
     upsert: (v, o) => { rec.ops.push(['upsert', v, o]); return obj; },
     update: (v) => { rec.ops.push(['update', v]); return obj; },
     select: (...a) => { rec.ops.push(['select', ...a]); return obj; },
@@ -307,23 +308,127 @@ describe('webhook invoicing sync (custom_invoices)', () => {
     expect(dbCalls.some((c) => c.table === 'custom_invoices')).toBe(false);
   });
 
-  it('credit_note.created marks the referenced invoice credited', async () => {
+  it('a FULL credit note marks the invoice credited', async () => {
     const { default: handler } = await import('../api/stripe-webhook.js');
-    const body = JSON.stringify({ type: 'credit_note.created', data: { object: { invoice: 'in_1' } } });
+    // Existing mirrored row: $100 invoice, fully paid.
+    dbResults.custom_invoices = [
+      { data: { amount_credited: 0, amount_refunded: 0, amount_paid: 10000, amount_due: 10000 } },
+      {},
+    ];
+    const body = JSON.stringify({ type: 'credit_note.created', data: { object: { invoice: 'in_1', amount: 10000 } } });
     const res = mockRes();
     await handler({ method: 'POST', body, headers: signedHeaders(body) }, res);
     const update = dbCalls.find((c) => c.table === 'custom_invoices' && c.ops.some((o) => o[0] === 'update'));
-    expect(update.ops.find((o) => o[0] === 'update')[1]).toMatchObject({ status: 'credited' });
+    expect(update.ops.find((o) => o[0] === 'update')[1]).toMatchObject({ status: 'credited', amount_credited: 10000 });
     expect(update.ops).toContainEqual(['eq', 'stripe_invoice_id', 'in_1']);
   });
 
-  it('charge.refunded marks the referenced invoice refunded', async () => {
+  it('a PARTIAL credit note does NOT mark the invoice fully credited', async () => {
     const { default: handler } = await import('../api/stripe-webhook.js');
-    const body = JSON.stringify({ type: 'charge.refunded', data: { object: { invoice: 'in_1' } } });
+    dbResults.custom_invoices = [
+      { data: { amount_credited: 0, amount_refunded: 0, amount_paid: 10000, amount_due: 10000 } },
+      {},
+    ];
+    const body = JSON.stringify({ type: 'credit_note.created', data: { object: { invoice: 'in_1', amount: 1500 } } });
     const res = mockRes();
     await handler({ method: 'POST', body, headers: signedHeaders(body) }, res);
     const update = dbCalls.find((c) => c.table === 'custom_invoices' && c.ops.some((o) => o[0] === 'update'));
-    expect(update.ops.find((o) => o[0] === 'update')[1]).toMatchObject({ status: 'refunded' });
+    expect(update.ops.find((o) => o[0] === 'update')[1]).toMatchObject({
+      status: 'partially_credited', amount_credited: 1500,
+    });
+  });
+
+  it('a credit note against an invoice we do not mirror is ignored', async () => {
+    const { default: handler } = await import('../api/stripe-webhook.js');
+    dbResults.custom_invoices = [{ data: null }]; // subscription invoice
+    const body = JSON.stringify({ type: 'credit_note.created', data: { object: { invoice: 'in_sub', amount: 100 } } });
+    const res = mockRes();
+    await handler({ method: 'POST', body, headers: signedHeaders(body) }, res);
+    expect(res.statusCode).toBe(200);
+    expect(dbCalls.some((c) => c.table === 'custom_invoices' && c.ops.some((o) => o[0] === 'update'))).toBe(false);
+  });
+
+  it('a FULL refund marks the invoice refunded', async () => {
+    const { default: handler } = await import('../api/stripe-webhook.js');
+    dbResults.custom_invoices = [
+      { data: { amount_credited: 0, amount_paid: 10000, amount_due: 10000 } },
+      {},
+    ];
+    const body = JSON.stringify({ type: 'charge.refunded', data: { object: { invoice: 'in_1', amount_refunded: 10000 } } });
+    const res = mockRes();
+    await handler({ method: 'POST', body, headers: signedHeaders(body) }, res);
+    const update = dbCalls.find((c) => c.table === 'custom_invoices' && c.ops.some((o) => o[0] === 'update'));
+    expect(update.ops.find((o) => o[0] === 'update')[1]).toMatchObject({ status: 'refunded', amount_refunded: 10000 });
+  });
+
+  it('a PARTIAL refund does NOT mark the invoice fully refunded', async () => {
+    const { default: handler } = await import('../api/stripe-webhook.js');
+    dbResults.custom_invoices = [
+      { data: { amount_credited: 0, amount_paid: 10000, amount_due: 10000 } },
+      {},
+    ];
+    const body = JSON.stringify({ type: 'charge.refunded', data: { object: { invoice: 'in_1', amount_refunded: 2500 } } });
+    const res = mockRes();
+    await handler({ method: 'POST', body, headers: signedHeaders(body) }, res);
+    const update = dbCalls.find((c) => c.table === 'custom_invoices' && c.ops.some((o) => o[0] === 'update'));
+    expect(update.ops.find((o) => o[0] === 'update')[1]).toMatchObject({
+      status: 'partially_refunded', amount_refunded: 2500,
+    });
+  });
+
+  it('finds the invoice through the Basil payment-intent shape', async () => {
+    const { default: handler } = await import('../api/stripe-webhook.js');
+    dbResults.custom_invoices = [
+      { data: { amount_credited: 0, amount_paid: 5000, amount_due: 5000 } },
+      {},
+    ];
+    const body = JSON.stringify({
+      type: 'charge.refunded',
+      data: { object: { payment_intent: { invoice: 'in_basil' }, amount_refunded: 5000 } },
+    });
+    const res = mockRes();
+    await handler({ method: 'POST', body, headers: signedHeaders(body) }, res);
+    const update = dbCalls.find((c) => c.table === 'custom_invoices' && c.ops.some((o) => o[0] === 'update'));
+    expect(update.ops).toContainEqual(['eq', 'stripe_invoice_id', 'in_basil']);
+  });
+});
+
+describe('event ledger and idempotency (P1-08)', () => {
+  it('records the event id before processing', async () => {
+    const { default: handler } = await import('../api/stripe-webhook.js');
+    const body = JSON.stringify({
+      id: 'evt_1', created: 1780000000, type: 'invoice.paid',
+      data: { object: { id: 'in_1', customer: 'cus_1', amount_paid: 100 } },
+    });
+    const res = mockRes();
+    await handler({ method: 'POST', body, headers: signedHeaders(body) }, res);
+    const ledger = dbCalls.find((c) => c.table === 'stripe_events');
+    expect(ledger).toBeTruthy();
+    expect(ledger.ops.find((o) => o[0] === 'insert')[1]).toMatchObject({ event_id: 'evt_1', event_type: 'invoice.paid' });
+  });
+
+  it('acks a REDELIVERED event without reprocessing it', async () => {
+    const { default: handler } = await import('../api/stripe-webhook.js');
+    dbResults.stripe_events = { error: { code: '23505', message: 'duplicate key' } };
+    const body = JSON.stringify({
+      id: 'evt_1', created: 1780000000, type: 'checkout.session.completed',
+      data: { object: { mode: 'subscription', client_reference_id: 'u1', customer: 'cus_1' } },
+    });
+    const res = mockRes();
+    await handler({ method: 'POST', body, headers: signedHeaders(body) }, res);
+    expect(res.statusCode).toBe(200);
+    expect(res.body.duplicate).toBe(true);
+    // Crucially: no entitlement write happened on the replay.
+    expect(dbCalls.some((c) => c.table === 'user_plans')).toBe(false);
+  });
+
+  it('returns 500 when the ledger itself is unavailable', async () => {
+    const { default: handler } = await import('../api/stripe-webhook.js');
+    dbResults.stripe_events = { error: { code: '08006', message: 'connection reset' } };
+    const body = JSON.stringify({ id: 'evt_2', created: 1780000000, type: 'invoice.paid', data: { object: {} } });
+    const res = mockRes();
+    await handler({ method: 'POST', body, headers: signedHeaders(body) }, res);
+    expect(res.statusCode).toBe(500);
   });
 });
 

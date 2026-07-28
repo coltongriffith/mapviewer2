@@ -4,7 +4,9 @@
 //   endpoint: https://www.explorationmaps.com/api/stripe-webhook
 //   events:   checkout.session.completed,
 //             customer.subscription.updated, customer.subscription.deleted,
-//             invoice.paid, invoice.payment_failed, invoice.voided,
+//             invoice.finalized, invoice.sent, invoice.paid,
+//             invoice.payment_succeeded, invoice.payment_failed,
+//             invoice.updated, invoice.overdue, invoice.voided,
 //             invoice.marked_uncollectible, credit_note.created,
 //             charge.refunded
 //
@@ -66,10 +68,52 @@ function must(result, what) {
   return result;
 }
 
+/**
+ * Is this invoice attached to a subscription?
+ *
+ * Stripe moved this relationship in the 2025-03-31 "Basil" release: the
+ * top-level `subscription` field became
+ * `parent.subscription_details.subscription`. We pin an older API version,
+ * but an endpoint's version can be changed in the dashboard independently,
+ * so read BOTH shapes — otherwise a subscription renewal invoice gets
+ * mirrored as bespoke custom work (audit P1-28).
+ */
+export function invoiceSubscriptionId(invoice) {
+  return invoice?.subscription
+    || invoice?.parent?.subscription_details?.subscription
+    || null;
+}
+
+/**
+ * The invoice a Charge belongs to. Basil removed `Charge.invoice`, moving the
+ * link to Invoice Payments, so fall back to the expanded payment intent.
+ */
+export function chargeInvoiceId(charge) {
+  return charge?.invoice
+    || charge?.payment_intent?.invoice
+    || charge?.invoice_payment?.invoice
+    || null;
+}
+
+/**
+ * Derive the status label from authoritative AMOUNTS so a partial credit or
+ * partial refund is never shown as a full one (audit P1-29).
+ */
+export function deriveInvoiceStatus({ stripeStatus, total, amountPaid, amountRefunded, amountCredited, paymentFailed }) {
+  if (stripeStatus === 'void') return 'void';
+  if (stripeStatus === 'uncollectible') return 'uncollectible';
+  if (stripeStatus === 'draft') return 'draft';
+  if (amountRefunded > 0) return amountRefunded >= total && total > 0 ? 'refunded' : 'partially_refunded';
+  if (amountCredited > 0) return amountCredited >= total && total > 0 ? 'credited' : 'partially_credited';
+  if (paymentFailed) return 'payment_failed';
+  if (stripeStatus === 'paid' || (total > 0 && amountPaid >= total)) return 'paid';
+  return 'open';
+}
+
 // Standalone (Dashboard-created) invoice → public.custom_invoices. Never
-// runs for subscription invoices (those carry an `invoice.subscription`).
-async function syncCustomInvoice(sb, invoice, status) {
-  if (!invoice?.id || invoice.subscription) return;
+// runs for subscription invoices.
+async function syncCustomInvoice(sb, invoice, { paymentFailed = false, eventAt = null } = {}) {
+  if (!invoice?.id || invoiceSubscriptionId(invoice)) return;
   let userId = invoice.metadata?.supabase_user_id || null;
   if (!userId && invoice.customer) {
     const lookup = must(
@@ -79,17 +123,49 @@ async function syncCustomInvoice(sb, invoice, status) {
     );
     userId = lookup.data?.user_id || null;
   }
+  // Existing row: needed for stale-event rejection and to carry forward
+  // refund/credit totals that this event does not itself restate.
+  const prior = must(
+    await sb.from('custom_invoices')
+      .select('amount_refunded, amount_credited, last_event_at')
+      .eq('stripe_invoice_id', invoice.id).maybeSingle(),
+    'custom_invoice prior lookup',
+  ).data;
+
+  // Out-of-order delivery: an older event must not overwrite newer state.
+  if (eventAt && prior?.last_event_at && new Date(eventAt) < new Date(prior.last_event_at)) {
+    return;
+  }
+
+  const total = invoice.total ?? invoice.amount_due ?? 0;
+  const amountRefunded = prior?.amount_refunded ?? 0;
+  const amountCredited = invoice.post_payment_credit_notes_amount != null
+    || invoice.pre_payment_credit_notes_amount != null
+    ? (invoice.post_payment_credit_notes_amount ?? 0) + (invoice.pre_payment_credit_notes_amount ?? 0)
+    : (prior?.amount_credited ?? 0);
+
   must(await sb.from('custom_invoices').upsert({
     stripe_invoice_id: invoice.id,
     user_id: userId,
     stripe_customer_id: invoice.customer || null,
-    status,
+    status: deriveInvoiceStatus({
+      stripeStatus: invoice.status,
+      total,
+      amountPaid: invoice.amount_paid ?? 0,
+      amountRefunded,
+      amountCredited,
+      paymentFailed,
+    }),
     amount_due: invoice.amount_due ?? 0,
     amount_paid: invoice.amount_paid ?? 0,
+    amount_remaining: invoice.amount_remaining ?? Math.max(0, total - (invoice.amount_paid ?? 0)),
+    amount_refunded: amountRefunded,
+    amount_credited: amountCredited,
     currency: invoice.currency || 'usd',
     description: invoice.description || null,
     number: invoice.number || null,
     hosted_invoice_url: invoice.hosted_invoice_url || null,
+    last_event_at: eventAt,
     updated_at: new Date().toISOString(),
   }, { onConflict: 'stripe_invoice_id' }), 'custom_invoice upsert');
 }
@@ -125,6 +201,30 @@ export default async function handler(req, res) {
   }
 
   const sb = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
+
+  // Idempotency: Stripe redelivers on any non-2xx, and at-least-once delivery
+  // means the same event can arrive twice even after success. Claim the event
+  // id first; a duplicate insert means we already processed it (audit P1-08).
+  const eventAt = event.created ? new Date(event.created * 1000).toISOString() : null;
+  if (event.id) {
+    const claim = await sb.from('stripe_events').insert({
+      event_id: event.id,
+      event_type: event.type || 'unknown',
+      event_created: eventAt || new Date().toISOString(),
+    });
+    if (claim.error) {
+      // 23505 = unique violation → already handled; ack so Stripe stops.
+      if (claim.error.code === '23505') {
+        return res.status(200).json({ received: true, duplicate: true });
+      }
+      // Any other ledger failure is a real database problem — retry.
+      console.error(JSON.stringify({
+        at: 'stripe-webhook', outcome: 'ledger_failed',
+        stripe_event_id: event.id, message: String(claim.error.message).slice(0, 200),
+      }));
+      return res.status(500).json({ error: 'ledger unavailable' });
+    }
+  }
 
   try {
     if (event.type === 'checkout.session.completed') {
@@ -202,29 +302,76 @@ export default async function handler(req, res) {
           .eq(match.column, match.value)
           .eq('source', 'stripe'), 'subscription downgrade');
       }
-    } else if (event.type === 'invoice.paid') {
-      await syncCustomInvoice(sb, event.data?.object, 'paid');
+    } else if (
+      // Every material invoice event restates the whole row from the invoice
+      // object, so `open` and `sent` invoices are now visible too — previously
+      // no handler created a row until the invoice was already paid.
+      event.type === 'invoice.finalized' || event.type === 'invoice.sent'
+      || event.type === 'invoice.paid' || event.type === 'invoice.payment_succeeded'
+      || event.type === 'invoice.voided' || event.type === 'invoice.marked_uncollectible'
+      || event.type === 'invoice.updated' || event.type === 'invoice.overdue'
+    ) {
+      await syncCustomInvoice(sb, event.data?.object, { eventAt });
     } else if (event.type === 'invoice.payment_failed') {
-      await syncCustomInvoice(sb, event.data?.object, 'payment_failed');
-    } else if (event.type === 'invoice.voided') {
-      await syncCustomInvoice(sb, event.data?.object, 'void');
-    } else if (event.type === 'invoice.marked_uncollectible') {
-      await syncCustomInvoice(sb, event.data?.object, 'uncollectible');
+      await syncCustomInvoice(sb, event.data?.object, { paymentFailed: true, eventAt });
     } else if (event.type === 'credit_note.created') {
-      // Credit notes reference the invoice they were issued against; only
-      // updates a row we already track (no-op if it's a subscription invoice).
+      // Record the CREDITED AMOUNT, not a blanket 'credited' label — a $10
+      // credit on a $10,000 invoice is not a fully credited invoice.
       const note = event.data?.object || {};
-      if (note.invoice) {
-        must(await sb.from('custom_invoices')
-          .update({ status: 'credited', updated_at: new Date().toISOString() })
-          .eq('stripe_invoice_id', note.invoice), 'credit note update');
+      const invoiceId = note.invoice;
+      if (invoiceId) {
+        const row = must(
+          await sb.from('custom_invoices')
+            .select('amount_credited, amount_refunded, amount_paid, amount_due, last_event_at')
+            .eq('stripe_invoice_id', invoiceId).maybeSingle(),
+          'credit note lookup',
+        ).data;
+        // Only touch invoices we actually mirror (subscription invoices aren't).
+        if (row) {
+          const credited = (row.amount_credited ?? 0) + (note.amount ?? 0);
+          const total = row.amount_due ?? 0;
+          must(await sb.from('custom_invoices').update({
+            amount_credited: credited,
+            status: deriveInvoiceStatus({
+              stripeStatus: null,
+              total,
+              amountPaid: row.amount_paid ?? 0,
+              amountRefunded: row.amount_refunded ?? 0,
+              amountCredited: credited,
+            }),
+            last_event_at: eventAt,
+            updated_at: new Date().toISOString(),
+          }).eq('stripe_invoice_id', invoiceId), 'credit note update');
+        }
       }
     } else if (event.type === 'charge.refunded') {
       const charge = event.data?.object || {};
-      if (charge.invoice) {
-        must(await sb.from('custom_invoices')
-          .update({ status: 'refunded', updated_at: new Date().toISOString() })
-          .eq('stripe_invoice_id', charge.invoice), 'refund update');
+      const invoiceId = chargeInvoiceId(charge);
+      if (invoiceId) {
+        const row = must(
+          await sb.from('custom_invoices')
+            .select('amount_credited, amount_paid, amount_due')
+            .eq('stripe_invoice_id', invoiceId).maybeSingle(),
+          'refund lookup',
+        ).data;
+        if (row) {
+          // Stripe reports the cumulative refunded amount on the charge, so
+          // this is idempotent and correct for multiple partial refunds.
+          const refunded = charge.amount_refunded ?? 0;
+          const total = row.amount_due ?? 0;
+          must(await sb.from('custom_invoices').update({
+            amount_refunded: refunded,
+            status: deriveInvoiceStatus({
+              stripeStatus: null,
+              total,
+              amountPaid: row.amount_paid ?? 0,
+              amountRefunded: refunded,
+              amountCredited: row.amount_credited ?? 0,
+            }),
+            last_event_at: eventAt,
+            updated_at: new Date().toISOString(),
+          }).eq('stripe_invoice_id', invoiceId), 'refund update');
+        }
       }
     }
     // Unhandled event types are acknowledged so Stripe stops retrying them.

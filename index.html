@@ -22,8 +22,11 @@
 <!-- Preconnect to font origins so the connection is ready when fonts are requested -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<!-- Load fonts asynchronously: media="print" trick defers render-blocking, onload switches to all -->
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Lato:wght@400;700&family=Montserrat:wght@500;600;700&family=Open+Sans:wght@400;600;700&family=Roboto:wght@400;500;700&display=swap" media="print" onload="this.media='all'">
+<!-- Fonts load via preload+onload-free pattern: an inline onload handler is
+     blocked by our CSP (script-src 'self'), which previously left this
+     stylesheet stuck at media="print" so the fonts never applied. -->
+<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Lato:wght@400;700&family=Montserrat:wght@500;600;700&family=Open+Sans:wght@400;600;700&family=Roboto:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Lato:wght@400;700&family=Montserrat:wght@500;600;700&family=Open+Sans:wght@400;600;700&family=Roboto:wght@400;500;700&display=swap">
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Lato:wght@400;700&family=Montserrat:wght@500;600;700&family=Open+Sans:wght@400;600;700&family=Roboto:wght@400;500;700&display=swap"></noscript>
 <script type="application/ld+json">
 {
@@ -48,11 +51,17 @@
       "operatingSystem": "Web",
       "url": "https://www.explorationmaps.com",
       "description": "Create investor-ready mining exploration maps — claims, drillholes, targets — and export as PNG, SVG, or PDF in minutes. No GIS experience required.",
-      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+      "offers": [
+        { "@type": "Offer", "name": "Free", "price": "0", "priceCurrency": "USD" },
+        { "@type": "Offer", "name": "Pro (monthly)", "price": "29", "priceCurrency": "USD",
+          "priceSpecification": { "@type": "UnitPriceSpecification", "price": "29", "priceCurrency": "USD", "billingDuration": 1, "billingIncrement": 1, "unitCode": "MON" } },
+        { "@type": "Offer", "name": "Pro (annual)", "price": "290", "priceCurrency": "USD",
+          "priceSpecification": { "@type": "UnitPriceSpecification", "price": "290", "priceCurrency": "USD", "billingDuration": 1, "billingIncrement": 1, "unitCode": "ANN" } }
+      ],
       "featureList": [
         "Mining claims map creation",
         "Drill results map with callout labels",
-        "NI 43-101 compliant exports",
+        "NI 43-101-ready figure layouts",
         "PNG, SVG, and PDF export",
         "5 professional mining map themes",
         "No GIS training required"

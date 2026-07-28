@@ -75,7 +75,15 @@ export default function UpgradeModal({ reason = 'general', onClose, onNeedSignIn
           </button>
           <button className="export-hd-skip" type="button" onClick={onClose}>Not now</button>
         </div>
-        <p className="export-hd-small">Secure checkout by Stripe. Cancel anytime from your account page.</p>
+        {/* Renewal, cancellation and refund terms must be visible BEFORE
+            payment, and linked from checkout (audit P0-09). */}
+        <p className="export-hd-small">
+          Secure checkout by Stripe. {interval === 'year' ? 'Renews annually' : 'Renews monthly'} until cancelled;
+          cancel anytime from your account page and keep access to the end of the period you’ve paid for.
+          {' '}By subscribing you agree to our <a href="/terms/" target="_blank" rel="noopener noreferrer">Terms</a>,
+          {' '}<a href="/privacy/" target="_blank" rel="noopener noreferrer">Privacy Policy</a>, and
+          {' '}<a href="/refunds/" target="_blank" rel="noopener noreferrer">Billing &amp; Refund Policy</a>.
+        </p>
       </div>
     </div>
   );

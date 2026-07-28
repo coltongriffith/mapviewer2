@@ -4,14 +4,12 @@
     "api/bc-claims.js": { "maxDuration": 60 }
   },
   "rewrites": [
-    {
-      "source": "/map/:id",
-      "destination": "/index.html"
-    },
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
-    }
+    { "source": "/", "destination": "/index.html" },
+    { "source": "/map/:id", "destination": "/index.html" },
+    { "source": "/admin", "destination": "/index.html" },
+    { "source": "/admin/:path*", "destination": "/index.html" },
+    { "source": "/account", "destination": "/index.html" },
+    { "source": "/account/:path*", "destination": "/index.html" }
   ],
   "headers": [
     {

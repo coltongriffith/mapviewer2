@@ -13,7 +13,7 @@
   - Other provinces query their official ArcGIS REST registries live (Ontario MLAS, Saskatchewan, Manitoba iMaQs Mineral Dispositions, NL GeoAtlas, GeoYukon)
   - Nearby Claims radius search: pin a location or use an uploaded claims layer's centroid, pick a radius, and see surrounding claims from any of the 7 jurisdictions — including Quebec, via the PostGIS-backed dataset
   - Upload shapefiles (.shp/.zip), KML, GeoJSON — auto-reprojects provincial projections (e.g. BC Albers EPSG:3005, Quebec Lambert EPSG:32198) to WGS84
-  - Add map elements: labels, scale bars, north arrows, legends (NI 43-101 compliant)
+  - Add map elements: labels, scale bars, north arrows, legends (NI 43-101-ready layouts; a Qualified Person must verify content and compliance)
   - Export high-resolution PNG and PDF maps
   - Cross-province fallback: if a company search returns nothing in the selected province, the app automatically checks the other provinces and offers to switch
 
