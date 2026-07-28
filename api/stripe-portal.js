@@ -38,8 +38,18 @@ export default async function handler(req, res) {
   if (!user) return res.status(401).json({ error: 'Sign in first.' });
 
   try {
-    const { data: planRow } = await sb
+    const { data: planRow, error: planErr } = await sb
       .from('user_plans').select('stripe_customer_id').eq('user_id', user.id).maybeSingle();
+    // Distinguish "lookup failed" from "definitely has no customer" — telling
+    // a paying user they have no billing account during an outage is worse
+    // than telling them to retry.
+    if (planErr) {
+      console.error(JSON.stringify({
+        at: 'stripe-portal', outcome: 'plan_lookup_failed',
+        user_id: user.id, message: String(planErr.message).slice(0, 200),
+      }));
+      return res.status(503).json({ error: 'Billing is temporarily unavailable. Please try again.' });
+    }
     if (!planRow?.stripe_customer_id) {
       return res.status(400).json({ error: 'No billing account yet — upgrade first.' });
     }

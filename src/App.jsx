@@ -55,6 +55,7 @@ import { trackSearch, trackEvent, trackEventOnce, trackPageView, trackPing } fro
 import { createSaveCoordinator, runGuardedSave } from './utils/saveCoordinator';
 import { US_CLAIMS_ENABLED, US_STATES, US_GROUP_LABEL, US_GEOMETRY_DISCLAIMER, isUsJurisdiction } from './utils/jurisdictions';
 import { PRO_EXPORT_FORMATS, FREE_PROJECT_LIMIT } from './utils/pricing';
+import { clampExportSize, canExportFormat, maxPixelRatioFor, PRO_MAX_EXPORT_PIXELS } from './utils/entitlements';
 import { runCloudMigration } from './utils/cloudMigration';
 import { scopingWarning } from './utils/scopingNotice';
 import { CLAIM_NAME_CAVEAT } from './utils/claimProvenance';
@@ -701,7 +702,7 @@ export default function App() {
   const insetInputRef = useRef(null);
   const uploadInputRef = useRef(null);
 
-  const { user, signInWithMagicLink, isPro, planDenied, refreshPlan } = useAuth();
+  const { user, signInWithMagicLink, isPro, planDenied, entitlements, tier, refreshPlan } = useAuth();
   const [storageWarningDismissed, setStorageWarningDismissed] = useState(false);
   const [showBrandKitManager, setShowBrandKitManager] = useState(false);
   const [showAuthFromGate, setShowAuthFromGate] = useState(false);
@@ -3364,13 +3365,34 @@ export default function App() {
         exportLayers = [...project.layers, ...claimLayers];
       }
       const scene = buildScene(mapContainerRef.current, { ...project, layers: exportLayers, layout: { ...project.layout, legendItems: allLegendItems } }, leafletMapRef.current);
-      // No paid tier yet — signed-in is the temporary stand-in so logged-in
-      // users get a fully clean export now, ahead of billing. Revisit once
-      // a real paid flag exists on the account.
-      // Real plan flag: Pro (paid or grandfathered) exports are fully clean;
-      // free-plan exports keep the small corner credit. isPro fails open, so
-      // a transient plan-lookup problem can never watermark a paying user.
-      const opts = { ...(project.layout?.exportSettings || {}), ...extraOptions, paidTier: isPro };
+      // Entitlements decide the OUTPUT, not just which buttons are visible.
+      // clean_export removes the corner credit; max_export_pixels caps the
+      // raster size here in the render path so a free account cannot reach a
+      // Pro-only resolution by editing state, replaying a request, or
+      // restoring a project saved while on Pro.
+      const baseSettings = project.layout?.exportSettings || {};
+      const opts = { ...baseSettings, ...extraOptions, paidTier: entitlements.clean_export };
+      let resolutionClamped = false;
+      if (format === 'png') {
+        const frame = mapContainerRef.current;
+        const baseW = (opts.customWidth || 0) > 0 ? opts.customWidth : (frame?.clientWidth || viewportSize.width || 1600);
+        const baseH = (opts.customHeight || 0) > 0 ? opts.customHeight : (frame?.clientHeight || viewportSize.height || 1000);
+        const ratio = (opts.customWidth || 0) > 0 ? 1 : (Number(opts.pixelRatio) || 1);
+        const fit = clampExportSize(entitlements, baseW * ratio, baseH * ratio);
+        resolutionClamped = fit.clamped;
+        if (fit.clamped) {
+          // Render at the plan's ceiling rather than refusing the export —
+          // the user still gets their map, plus an explicit upgrade nudge.
+          opts.customWidth = fit.width;
+          opts.customHeight = fit.height;
+          opts.pixelRatio = 1;
+          trackEvent('pro_gate_shown', {
+            feature: 'export_resolution', format,
+            requested_px: Math.max(Math.round(baseW * ratio), Math.round(baseH * ratio)),
+            allowed_px: entitlements.max_export_pixels,
+          }, user?.id);
+        }
+      }
       if (format === 'png') {
         await exportPNG(scene, opts);
       } else if (format === 'svg' || format === 'svg_ai') {
@@ -3380,7 +3402,13 @@ export default function App() {
         await exportPDF(scene, opts);
       }
       const warnings = getExportWarnings();
-      if (warnings.length > 0) {
+      if (resolutionClamped) {
+        setUpgradeReason('export_resolution');
+        setUploadStatus({
+          type: 'info',
+          message: `Exported at ${entitlements.max_export_pixels.toLocaleString()} px — the free plan's maximum. Upgrade to Pro for high-resolution output up to ${PRO_MAX_EXPORT_PIXELS.toLocaleString()} px.`,
+        });
+      } else if (warnings.length > 0) {
         setUploadStatus({ type: 'info', message: `Export complete — note: ${warnings.join('; ')}.` });
       }
       // Track export event (fire-and-forget — doesn't block export)
@@ -3415,12 +3443,12 @@ export default function App() {
   };
 
   const handleExportClick = (format) => {
-    // SVG / Illustrator / PDF are Pro features. Deny only on a DEFINITIVE
-    // free plan (planDenied) — grandfathered accounts and any user whose plan
-    // lookup hasn't resolved sail through (fail-open). Standard PNG is always
-    // available so export is never fully blocked.
-    if (PRO_EXPORT_FORMATS.includes(format) && planDenied) {
-      trackEvent('pro_gate_shown', { feature: 'export', format, signedIn: Boolean(user) }, user?.id);
+    // Format gate reads the entitlement matrix directly. Standard PNG is in
+    // every tier's allowed list, so export is never fully blocked — but SVG /
+    // Illustrator / PDF now require a resolved Pro entitlement (or the
+    // confirmed-Pro grace window), rather than merely an unresolved plan.
+    if (!canExportFormat(entitlements, format)) {
+      trackEvent('pro_gate_shown', { feature: 'export_format', format, tier, signedIn: Boolean(user) }, user?.id);
       setUpgradeReason('export');
       return;
     }
@@ -5157,10 +5185,18 @@ export default function App() {
                     }
                   }}
                 >
-                  <option value={1}>1× — Screen</option>
-                  <option value={2}>2× — Print</option>
-                  <option value={3}>3× — Large format</option>
-                  <option value="custom">Custom (px)</option>
+                  {[1, 2, 3].map((r) => {
+                    const el = mapContainerRef.current;
+                    const baseLong = Math.max(el?.clientWidth || viewportSize.width || 1600, el?.clientHeight || viewportSize.height || 1000);
+                    const allowed = r <= maxPixelRatioFor(entitlements, baseLong);
+                    const label = { 1: '1× — Screen', 2: '2× — Print', 3: '3× — Large format' }[r];
+                    return (
+                      <option key={r} value={r} disabled={!allowed}>
+                        {label}{allowed ? '' : ' (Pro)'}
+                      </option>
+                    );
+                  })}
+                  <option value="custom">Custom (px){entitlements.max_export_pixels < PRO_MAX_EXPORT_PIXELS ? ` — up to ${entitlements.max_export_pixels.toLocaleString()}px` : ''}</option>
                 </select>
               </div>
             </div>
@@ -5172,10 +5208,10 @@ export default function App() {
                     <input
                       type="number"
                       min="200"
-                      max="12000"
+                      max={entitlements.max_export_pixels}
                       step="50"
                       value={project.layout.exportSettings.customWidth || 0}
-                      onChange={(e) => updateLayout({ exportSettings: { customWidth: Math.max(200, Math.min(12000, Math.round(Number(e.target.value) || 200))) } })}
+                      onChange={(e) => updateLayout({ exportSettings: { customWidth: Math.max(200, Math.min(entitlements.max_export_pixels, Math.round(Number(e.target.value) || 200))) } })}
                     />
                   </div>
                   <div>
@@ -5183,10 +5219,10 @@ export default function App() {
                     <input
                       type="number"
                       min="200"
-                      max="12000"
+                      max={entitlements.max_export_pixels}
                       step="50"
                       value={project.layout.exportSettings.customHeight || 0}
-                      onChange={(e) => updateLayout({ exportSettings: { customHeight: Math.max(200, Math.min(12000, Math.round(Number(e.target.value) || 200))) } })}
+                      onChange={(e) => updateLayout({ exportSettings: { customHeight: Math.max(200, Math.min(entitlements.max_export_pixels, Math.round(Number(e.target.value) || 200))) } })}
                     />
                   </div>
                 </div>
@@ -5734,6 +5770,12 @@ export default function App() {
           brandColors={brandColors}
           project={project}
           onReload={() => listBrandKits().then(setCloudTemplates).catch(() => {})}
+          entitlements={entitlements}
+          onRequestUpgrade={(feature) => {
+            trackEvent('pro_gate_shown', { feature, tier, signedIn: Boolean(user) }, user?.id);
+            setShowBrandKitManager(false);
+            setUpgradeReason('brand_kit');
+          }}
           applyToProject={(config) => {
             const newLayout = applyBrandKitConfig(config || {}, project.layout);
             updateLayout(Object.fromEntries(Object.entries(newLayout).filter(([k]) => newLayout[k] !== project.layout[k])));

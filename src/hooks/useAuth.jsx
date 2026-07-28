@@ -3,6 +3,9 @@ import { supabase } from '../lib/supabase';
 import { trackEvent } from '../utils/track';
 import { getAttribution } from '../utils/attribution';
 import { isGrandfathered } from '../utils/pricing';
+import {
+  resolveTier, entitlementsFor, rememberProGrace, clearProGrace, TIERS,
+} from '../utils/entitlements';
 
 const AuthContext = createContext(null);
 
@@ -25,11 +28,12 @@ function trackSignupOnce(user) {
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  // Billing plan. FAIL-OPEN by design: while the plan is unknown (loading, or
-  // the lookup errored) a signed-in user is treated as Pro — a paying or
-  // grandfathered account must never be denied a feature because of a
-  // transient fetch problem. `planReady` is true only after a definitive
-  // answer, and gates deny ONLY when planReady && plan === 'free'.
+  // Billing plan. FAILS CLOSED: while the plan is unknown (loading, or the
+  // lookup errored) the user falls back to FREE entitlements — unless this
+  // exact account was recently CONFIRMED Pro, in which case a bounded grace
+  // window keeps their access during an outage. An unconfirmed account is
+  // never silently upgraded (the old fail-open behaviour handed Pro to
+  // anyone whose plan request failed).
   const [planState, setPlanState] = useState({ plan: null, source: null, ready: false });
 
   const refreshPlan = useCallback(async (u) => {
@@ -41,6 +45,7 @@ export function AuthProvider({ children }) {
     // Grandfather backstop: any account created before the billing launch is
     // Pro forever, even if its user_plans row is missing for some reason.
     if (isGrandfathered(target)) {
+      rememberProGrace(target.id);
       setPlanState({ plan: 'pro', source: 'grandfathered', ready: true });
       return;
     }
@@ -51,15 +56,20 @@ export function AuthProvider({ children }) {
         .eq('user_id', target.id)
         .maybeSingle();
       if (error) {
-        // Lookup failed → fail open (treated as Pro until we know better).
+        // Lookup failed → unresolved. Entitlements fall back to free unless a
+        // prior confirmed-Pro grace record covers this user.
         setPlanState({ plan: null, source: null, ready: false });
         return;
       }
       if (!data) {
         // No row (trigger raced the lookup) — a post-launch account is free.
+        clearProGrace();
         setPlanState({ plan: 'free', source: 'signup', ready: true });
         return;
       }
+      // Definitive answer — refresh or revoke the offline grace record.
+      if (data.plan === 'pro') rememberProGrace(target.id);
+      else clearProGrace();
       setPlanState({ plan: data.plan, source: data.source, ready: true });
     } catch {
       setPlanState({ plan: null, source: null, ready: false });
@@ -83,7 +93,12 @@ export function AuthProvider({ children }) {
       setUser(session?.user ?? null);
       if (_event === 'SIGNED_IN' && session?.user) trackSignupOnce(session.user);
       if (session?.user) refreshPlan(session.user);
-      else setPlanState({ plan: null, source: null, ready: false });
+      else {
+        // Signed out — drop the offline Pro grace so the next account on this
+        // browser cannot inherit it.
+        clearProGrace();
+        setPlanState({ plan: null, source: null, ready: false });
+      }
     });
 
     return () => subscription.unsubscribe();
@@ -127,14 +142,21 @@ export function AuthProvider({ children }) {
     if (error) throw error;
   }
 
-  // isPro fails OPEN for signed-in users: unknown plan (not ready) → Pro.
-  // Anonymous visitors are never Pro. Gates must deny only on planDenied.
-  const isPro = Boolean(user) && (!planState.ready || planState.plan === 'pro');
-  const planDenied = Boolean(user) ? (planState.ready && planState.plan === 'free') : true;
+  // THE resolved tier + entitlement object. Every gate reads `entitlements`;
+  // `tier` is for copy/telemetry. Unknown plans resolve to free unless the
+  // grace record proves a recent confirmed Pro (see resolveTier).
+  const tier = resolveTier(user, planState);
+  const entitlements = entitlementsFor(tier);
+
+  // Kept for existing call sites and pricing copy. isPro now means "entitled
+  // to Pro", not "not yet proven free" — it no longer fails open.
+  const isPro = tier === TIERS.PRO;
+  const planDenied = tier !== TIERS.PRO;
 
   return (
     <AuthContext.Provider value={{
       user, loading, signIn, signUp, signInWithMagicLink, signOut, resetPassword,
+      tier, entitlements,
       isPro, planDenied, planSource: planState.source, planReady: planState.ready, refreshPlan,
     }}>
       {children}

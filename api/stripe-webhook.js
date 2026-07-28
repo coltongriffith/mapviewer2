@@ -8,9 +8,16 @@
 //             invoice.marked_uncollectible, credit_note.created,
 //             charge.refunded
 //
-// INVARIANT: rows with source='grandfathered' are NEVER downgraded here.
-// Grandfathered accounts keep full Pro access no matter what Stripe says —
-// every downgrade path below is scoped to source='stripe' rows only.
+// INVARIANT: rows with source='grandfathered' (or 'admin') are NEVER
+// downgraded OR overwritten here. Grandfathered accounts keep full Pro access
+// no matter what Stripe says. This holds even if such a user also subscribes:
+// checkout records the Stripe relationship WITHOUT replacing `source`, so a
+// later cancellation cannot demote them. Every downgrade path is additionally
+// scoped to source='stripe' rows only.
+//
+// ERROR HANDLING: every Supabase call is checked. A database failure returns
+// HTTP 500 so Stripe retries — acknowledging a write that did not happen
+// would permanently lose the event and leave entitlements wrong.
 //
 // Invoicing events only ever touch custom_invoices, never user_plans: a
 // standalone invoice (created by hand in the Dashboard for bespoke work) is
@@ -46,17 +53,33 @@ function mapSubscription(sub) {
   return { plan: 'free', status: 'canceled' };
 }
 
+// Throw on a Supabase error so the handler's catch turns it into a 500 and
+// Stripe retries. Supabase returns { error } rather than rejecting, so an
+// unchecked await silently swallows outages, constraint violations, and
+// permission mistakes.
+function must(result, what) {
+  if (result?.error) {
+    const err = new Error(`${what}: ${result.error.message || 'supabase error'}`);
+    err.supabaseCode = result.error.code;
+    throw err;
+  }
+  return result;
+}
+
 // Standalone (Dashboard-created) invoice → public.custom_invoices. Never
 // runs for subscription invoices (those carry an `invoice.subscription`).
 async function syncCustomInvoice(sb, invoice, status) {
   if (!invoice?.id || invoice.subscription) return;
   let userId = invoice.metadata?.supabase_user_id || null;
   if (!userId && invoice.customer) {
-    const { data } = await sb.from('user_plans')
-      .select('user_id').eq('stripe_customer_id', invoice.customer).maybeSingle();
-    userId = data?.user_id || null;
+    const lookup = must(
+      await sb.from('user_plans')
+        .select('user_id').eq('stripe_customer_id', invoice.customer).maybeSingle(),
+      'custom_invoice user lookup',
+    );
+    userId = lookup.data?.user_id || null;
   }
-  await sb.from('custom_invoices').upsert({
+  must(await sb.from('custom_invoices').upsert({
     stripe_invoice_id: invoice.id,
     user_id: userId,
     stripe_customer_id: invoice.customer || null,
@@ -68,7 +91,7 @@ async function syncCustomInvoice(sb, invoice, status) {
     number: invoice.number || null,
     hosted_invoice_url: invoice.hosted_invoice_url || null,
     updated_at: new Date().toISOString(),
-  }, { onConflict: 'stripe_invoice_id' });
+  }, { onConflict: 'stripe_invoice_id' }), 'custom_invoice upsert');
 }
 
 export default async function handler(req, res) {
@@ -108,16 +131,26 @@ export default async function handler(req, res) {
       const session = event.data?.object || {};
       const userId = session.client_reference_id || null;
       if (userId && session.mode === 'subscription') {
-        // Upgrade is always safe to apply regardless of source.
-        await sb.from('user_plans').upsert({
+        // Read the existing row first: a grandfathered/admin account that
+        // chooses to subscribe must KEEP its protected entitlement source.
+        // Blindly upserting source='stripe' here was the bug that let a later
+        // cancellation downgrade a "Pro forever" account.
+        const existing = must(
+          await sb.from('user_plans').select('source').eq('user_id', userId).maybeSingle(),
+          'checkout plan lookup',
+        );
+        const protectedSource = ['grandfathered', 'admin'].includes(existing.data?.source);
+        must(await sb.from('user_plans').upsert({
           user_id: userId,
           plan: 'pro',
           status: 'active',
-          source: 'stripe',
+          // Preserve a protected origin; only a previously unprotected row
+          // becomes stripe-sourced.
+          source: protectedSource ? existing.data.source : 'stripe',
           stripe_customer_id: session.customer || null,
           stripe_subscription_id: session.subscription || null,
           updated_at: new Date().toISOString(),
-        }, { onConflict: 'user_id' });
+        }, { onConflict: 'user_id' }), 'checkout plan upsert');
       }
     } else if (event.type === 'customer.subscription.updated'
       || event.type === 'customer.subscription.deleted') {
@@ -136,20 +169,30 @@ export default async function handler(req, res) {
       if (!match.value) return res.status(200).json({ received: true, skipped: 'no user match' });
 
       if (mapped.plan === 'pro') {
-        await sb.from('user_plans')
+        // Protected origins (grandfathered/admin) keep their source. Anything
+        // else becomes stripe-sourced so the downgrade path below can later
+        // match it — important when subscription.updated arrives BEFORE
+        // checkout.session.completed, which would otherwise leave the row as
+        // source='signup' and permanently unrevocable.
+        const existing = must(
+          await sb.from('user_plans').select('source').eq(match.column, match.value).maybeSingle(),
+          'subscription plan lookup',
+        );
+        const protectedSource = ['grandfathered', 'admin'].includes(existing.data?.source);
+        must(await sb.from('user_plans')
           .update({
             plan: 'pro',
             status: mapped.status,
-            source: 'stripe',
+            ...(protectedSource ? {} : { source: 'stripe' }),
             stripe_subscription_id: sub.id || null,
             current_period_end: periodEnd,
             updated_at: new Date().toISOString(),
           })
-          .eq(match.column, match.value);
+          .eq(match.column, match.value), 'subscription upgrade');
       } else {
         // Downgrade path — NEVER touches grandfathered (or admin-granted)
         // rows. Only subscriptions we created may be revoked.
-        await sb.from('user_plans')
+        must(await sb.from('user_plans')
           .update({
             plan: 'free',
             status: 'canceled',
@@ -157,7 +200,7 @@ export default async function handler(req, res) {
             updated_at: new Date().toISOString(),
           })
           .eq(match.column, match.value)
-          .eq('source', 'stripe');
+          .eq('source', 'stripe'), 'subscription downgrade');
       }
     } else if (event.type === 'invoice.paid') {
       await syncCustomInvoice(sb, event.data?.object, 'paid');
@@ -172,22 +215,31 @@ export default async function handler(req, res) {
       // updates a row we already track (no-op if it's a subscription invoice).
       const note = event.data?.object || {};
       if (note.invoice) {
-        await sb.from('custom_invoices')
+        must(await sb.from('custom_invoices')
           .update({ status: 'credited', updated_at: new Date().toISOString() })
-          .eq('stripe_invoice_id', note.invoice);
+          .eq('stripe_invoice_id', note.invoice), 'credit note update');
       }
     } else if (event.type === 'charge.refunded') {
       const charge = event.data?.object || {};
       if (charge.invoice) {
-        await sb.from('custom_invoices')
+        must(await sb.from('custom_invoices')
           .update({ status: 'refunded', updated_at: new Date().toISOString() })
-          .eq('stripe_invoice_id', charge.invoice);
+          .eq('stripe_invoice_id', charge.invoice), 'refund update');
       }
     }
     // Unhandled event types are acknowledged so Stripe stops retrying them.
     return res.status(200).json({ received: true });
   } catch (e) {
-    if (process.env.NODE_ENV !== 'production') console.warn('[stripe-webhook]', e?.message);
+    // Structured, non-sensitive log so a failed billing write is greppable and
+    // alertable — never a silent 200.
+    console.error(JSON.stringify({
+      at: 'stripe-webhook',
+      outcome: 'failed',
+      stripe_event_id: event?.id || null,
+      stripe_event_type: event?.type || null,
+      supabase_code: e?.supabaseCode || null,
+      message: String(e?.message || e).slice(0, 300),
+    }));
     // 500 → Stripe retries with backoff, which is what we want on a DB blip.
     return res.status(500).json({ error: 'processing failed' });
   }

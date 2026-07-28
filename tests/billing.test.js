@@ -7,6 +7,10 @@ import crypto from 'node:crypto';
 
 // ── Mock @supabase/supabase-js with a recording, thenable query builder ──
 let dbCalls;
+// Per-test overrides: queue a result ({data}/{error}) that the next chain on a
+// given table resolves with. Lets a test simulate an existing plan row or a
+// forced Supabase failure.
+let dbResults;
 function makeChain(table) {
   const rec = { table, ops: [] };
   dbCalls.push(rec);
@@ -16,7 +20,11 @@ function makeChain(table) {
     select: (...a) => { rec.ops.push(['select', ...a]); return obj; },
     eq: (c, v) => { rec.ops.push(['eq', c, v]); return obj; },
     maybeSingle: () => { rec.ops.push(['maybeSingle']); return obj; },
-    then: (resolve) => resolve({ data: null, error: null, count: 0 }),
+    then: (resolve) => {
+      const queued = dbResults[table];
+      const next = Array.isArray(queued) ? queued.shift() : queued;
+      return resolve({ data: null, error: null, count: 0, ...(next || {}) });
+    },
   };
   return obj;
 }
@@ -47,6 +55,7 @@ function signedHeaders(body, { secret = WH_SECRET, at = Math.floor(Date.now() / 
 
 beforeEach(() => {
   dbCalls = [];
+  dbResults = {};
   vi.resetModules();
   vi.stubEnv('SUPABASE_URL', 'https://test.supabase.co');
   vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'service-key');
@@ -143,6 +152,130 @@ describe('webhook plan sync', () => {
   });
 });
 
+describe('grandfathering invariant (P0-02)', () => {
+  it('checkout on a GRANDFATHERED account preserves source=grandfathered', async () => {
+    const { default: handler } = await import('../api/stripe-webhook.js');
+    // First chain = the lookup of the existing row.
+    dbResults.user_plans = [{ data: { source: 'grandfathered' } }, {}];
+    const body = JSON.stringify({
+      type: 'checkout.session.completed',
+      data: { object: { mode: 'subscription', client_reference_id: 'gf-1', customer: 'cus_1', subscription: 'sub_1' } },
+    });
+    const res = mockRes();
+    await handler({ method: 'POST', body, headers: signedHeaders(body) }, res);
+    expect(res.statusCode).toBe(200);
+    const upsert = dbCalls.find((c) => c.ops.some((o) => o[0] === 'upsert'));
+    const [, values] = upsert.ops.find((o) => o[0] === 'upsert');
+    // THE fix: still Pro, still grandfathered — NOT rewritten to 'stripe'.
+    expect(values.plan).toBe('pro');
+    expect(values.source).toBe('grandfathered');
+  });
+
+  it('checkout on an ADMIN-granted account preserves source=admin', async () => {
+    const { default: handler } = await import('../api/stripe-webhook.js');
+    dbResults.user_plans = [{ data: { source: 'admin' } }, {}];
+    const body = JSON.stringify({
+      type: 'checkout.session.completed',
+      data: { object: { mode: 'subscription', client_reference_id: 'ad-1', customer: 'cus_2', subscription: 'sub_2' } },
+    });
+    const res = mockRes();
+    await handler({ method: 'POST', body, headers: signedHeaders(body) }, res);
+    const [, values] = dbCalls.find((c) => c.ops.some((o) => o[0] === 'upsert')).ops.find((o) => o[0] === 'upsert');
+    expect(values.source).toBe('admin');
+  });
+
+  it('checkout on an ORDINARY account still becomes source=stripe', async () => {
+    const { default: handler } = await import('../api/stripe-webhook.js');
+    dbResults.user_plans = [{ data: { source: 'signup' } }, {}];
+    const body = JSON.stringify({
+      type: 'checkout.session.completed',
+      data: { object: { mode: 'subscription', client_reference_id: 'u-1', customer: 'cus_3', subscription: 'sub_3' } },
+    });
+    const res = mockRes();
+    await handler({ method: 'POST', body, headers: signedHeaders(body) }, res);
+    const [, values] = dbCalls.find((c) => c.ops.some((o) => o[0] === 'upsert')).ops.find((o) => o[0] === 'upsert');
+    expect(values.source).toBe('stripe');
+  });
+
+  it('an active subscription update does NOT rewrite a grandfathered source', async () => {
+    const { default: handler } = await import('../api/stripe-webhook.js');
+    dbResults.user_plans = [{ data: { source: 'grandfathered' } }, {}];
+    const body = JSON.stringify({
+      type: 'customer.subscription.updated',
+      data: { object: { id: 'sub_1', status: 'active', customer: 'cus_1', metadata: { supabase_user_id: 'gf-1' } } },
+    });
+    const res = mockRes();
+    await handler({ method: 'POST', body, headers: signedHeaders(body) }, res);
+    const update = dbCalls.find((c) => c.ops.some((o) => o[0] === 'update'));
+    const [, values] = update.ops.find((o) => o[0] === 'update');
+    expect(values.plan).toBe('pro');
+    expect(values.source).toBeUndefined(); // left alone
+  });
+
+  it('an active subscription update DOES set source=stripe for an ordinary row', async () => {
+    const { default: handler } = await import('../api/stripe-webhook.js');
+    dbResults.user_plans = [{ data: { source: 'signup' } }, {}];
+    const body = JSON.stringify({
+      type: 'customer.subscription.updated',
+      data: { object: { id: 'sub_9', status: 'active', customer: 'cus_9', metadata: { supabase_user_id: 'u-9' } } },
+    });
+    const res = mockRes();
+    await handler({ method: 'POST', body, headers: signedHeaders(body) }, res);
+    const update = dbCalls.find((c) => c.ops.some((o) => o[0] === 'update'));
+    const [, values] = update.ops.find((o) => o[0] === 'update');
+    // Without this the later cancellation (scoped to source='stripe') would
+    // never match and the account would keep Pro forever.
+    expect(values.source).toBe('stripe');
+  });
+});
+
+describe('webhook DB failures are NOT silently acknowledged (P0-01)', () => {
+  it('a failed plan upsert returns 500 so Stripe retries', async () => {
+    const { default: handler } = await import('../api/stripe-webhook.js');
+    dbResults.user_plans = [{ data: { source: 'signup' } }, { error: { message: 'connection reset', code: '08006' } }];
+    const body = JSON.stringify({
+      type: 'checkout.session.completed',
+      data: { object: { mode: 'subscription', client_reference_id: 'u-1', customer: 'cus_1', subscription: 'sub_1' } },
+    });
+    const res = mockRes();
+    await handler({ method: 'POST', body, headers: signedHeaders(body) }, res);
+    expect(res.statusCode).toBe(500);
+  });
+
+  it('a failed custom-invoice upsert returns 500', async () => {
+    const { default: handler } = await import('../api/stripe-webhook.js');
+    dbResults.custom_invoices = { error: { message: 'permission denied', code: '42501' } };
+    const body = JSON.stringify({
+      type: 'invoice.paid',
+      data: { object: { id: 'in_1', customer: 'cus_1', amount_paid: 1000 } },
+    });
+    const res = mockRes();
+    await handler({ method: 'POST', body, headers: signedHeaders(body) }, res);
+    expect(res.statusCode).toBe(500);
+  });
+
+  it('a failed subscription downgrade returns 500', async () => {
+    const { default: handler } = await import('../api/stripe-webhook.js');
+    dbResults.user_plans = { error: { message: 'deadlock detected', code: '40P01' } };
+    const body = JSON.stringify({
+      type: 'customer.subscription.deleted',
+      data: { object: { id: 'sub_1', status: 'canceled', customer: 'cus_1', metadata: {} } },
+    });
+    const res = mockRes();
+    await handler({ method: 'POST', body, headers: signedHeaders(body) }, res);
+    expect(res.statusCode).toBe(500);
+  });
+
+  it('a failed credit-note update returns 500', async () => {
+    const { default: handler } = await import('../api/stripe-webhook.js');
+    dbResults.custom_invoices = { error: { message: 'timeout', code: '57014' } };
+    const body = JSON.stringify({ type: 'credit_note.created', data: { object: { invoice: 'in_1' } } });
+    const res = mockRes();
+    await handler({ method: 'POST', body, headers: signedHeaders(body) }, res);
+    expect(res.statusCode).toBe(500);
+  });
+});
+
 describe('webhook invoicing sync (custom_invoices)', () => {
   it('invoice.paid on a standalone invoice upserts custom_invoices', async () => {
     const { default: handler } = await import('../api/stripe-webhook.js');
@@ -210,6 +343,15 @@ describe('checkout / portal endpoint guards', () => {
     await handler({ method: 'POST', body: { interval: 'month' }, headers: { 'x-forwarded-for': nextIp() }, url: '/api/stripe-checkout' }, res);
     expect(res.statusCode).toBe(503);
     expect(res.body.error).toMatch(/not configured/i);
+  });
+
+  it('checkout 400s on an invalid interval instead of defaulting to monthly (P1-09)', async () => {
+    const { default: handler } = await import('../api/stripe-checkout.js');
+    for (const interval of ['weekly', '', null, 'MONTH', 1]) {
+      const res = mockRes();
+      await handler({ method: 'POST', body: { interval }, headers: { 'x-forwarded-for': nextIp() }, url: '/api/stripe-checkout' }, res);
+      expect(res.statusCode).toBe(400);
+    }
   });
 
   it('portal 401s without a valid token', async () => {

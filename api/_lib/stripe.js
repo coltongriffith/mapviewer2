@@ -32,7 +32,21 @@ function formEncode(obj, prefix = '', out = new URLSearchParams()) {
   return out;
 }
 
-export async function stripeRequest(path, params = null, { method = 'POST' } = {}) {
+// Pin the Stripe API version so object shapes cannot change under us when the
+// account's default version is upgraded in the dashboard. The webhook endpoint
+// must be pinned to the SAME version — see docs/billing.md.
+export const STRIPE_API_VERSION = '2024-06-20';
+
+/**
+ * @param {string} path
+ * @param {object|null} params
+ * @param {{method?: string, idempotencyKey?: string}} opts
+ *   idempotencyKey — REQUIRED for any call that creates a billable object.
+ *   Stripe replays the original response for a repeated key, so a double
+ *   click, retry, or duplicate tab cannot create a second customer or
+ *   subscription.
+ */
+export async function stripeRequest(path, params = null, { method = 'POST', idempotencyKey } = {}) {
   const key = process.env.STRIPE_SECRET_KEY;
   if (!key) throw new Error('STRIPE_SECRET_KEY is not configured');
   const r = await fetch(`${STRIPE_API}${path}`, {
@@ -40,6 +54,8 @@ export async function stripeRequest(path, params = null, { method = 'POST' } = {
     headers: {
       Authorization: `Bearer ${key}`,
       'Content-Type': 'application/x-www-form-urlencoded',
+      'Stripe-Version': STRIPE_API_VERSION,
+      ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
     },
     body: params ? formEncode(params).toString() : undefined,
     signal: AbortSignal.timeout(20000),

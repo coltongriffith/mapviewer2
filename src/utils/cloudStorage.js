@@ -41,29 +41,17 @@ export async function updateProjectThumbnail(id, thumbnail) {
   if (error) throw error;
 }
 
-// Free-plan cap on NEW cloud projects. FAIL-OPEN by design: any error in
-// this check (plan row missing, lookup failed, count failed) allows the
-// save — a grandfathered or paying user must never lose a save to a
-// transient lookup problem. Only a definitive free plan at the limit denies.
-async function assertProjectQuota(user) {
-  try {
-    if (isGrandfathered(user)) return; // early accounts: unlimited, forever
-    const sb = requireSupabase();
-    const { data: planRow, error: planErr } = await sb
-      .from('user_plans').select('plan').eq('user_id', user.id).maybeSingle();
-    if (planErr || !planRow || planRow.plan === 'pro') return;
-    const { count, error: countErr } = await sb
-      .from('projects').select('id', { count: 'exact', head: true }).eq('user_id', user.id);
-    if (countErr || count == null || count < FREE_PROJECT_LIMIT) return;
-    const err = new Error(
-      `The free plan saves up to ${FREE_PROJECT_LIMIT} cloud projects — upgrade to Pro for unlimited projects. Your work is still safe in this browser.`,
-    );
-    err.code = 'PROJECT_LIMIT';
-    throw err;
-  } catch (e) {
-    if (e?.code === 'PROJECT_LIMIT') throw e;
-    // Anything else (network, schema) — fail open.
-  }
+// Quota enforcement lives in the create_cloud_project RPC (see
+// 20260728000002_project_quota_rpc.sql) — the database evaluates the limit in
+// the same transaction as the insert, so it cannot be bypassed with a direct
+// Supabase call or raced by two tabs. The client's only job is to turn the
+// server's PROJECT_LIMIT error into the upgrade message.
+function projectLimitError() {
+  const err = new Error(
+    `The free plan saves up to ${FREE_PROJECT_LIMIT} cloud projects — upgrade to Pro for unlimited projects. Your work is still safe in this browser.`,
+  );
+  err.code = 'PROJECT_LIMIT';
+  return err;
 }
 
 // silent=true suppresses the analytics events — used by the sign-in bulk
@@ -90,15 +78,16 @@ export async function saveCloudProject({ id, name, payload, silent = false }) {
     if (!silent) trackEventOnce('project_saved', id, { project_id: id, name: cleanName.slice(0, 80) });
     return id;
   } else {
-    await assertProjectQuota(user); // free plan: capped new-project count
+    // Transactional create + quota check. Direct INSERT on projects is
+    // revoked, so this RPC is the only way a new row can appear.
     const { data, error } = await requireSupabase()
-      .from('projects')
-      .insert({ user_id: user.id, ...record })
-      .select('id')
-      .single();
-    if (error) throw error;
-    if (!silent) trackEvent('project_created', { project_id: data.id, name: cleanName.slice(0, 80) });
-    return data.id;
+      .rpc('create_cloud_project', { p_name: cleanName, p_payload: payload });
+    if (error) {
+      if (/PROJECT_LIMIT/.test(error.message || '')) throw projectLimitError();
+      throw error;
+    }
+    if (!silent) trackEvent('project_created', { project_id: data, name: cleanName.slice(0, 80) });
+    return data;
   }
 }
 

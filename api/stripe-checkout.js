@@ -35,7 +35,13 @@ export default async function handler(req, res) {
     return res.status(503).json({ error: 'Billing is not configured yet.' });
   }
 
-  const priceId = (req.body?.interval === 'year')
+  // Explicit enum — an unrecognised interval is a client bug, not a reason to
+  // silently start the monthly plan the user did not choose.
+  const interval = req.body?.interval;
+  if (interval !== 'month' && interval !== 'year') {
+    return res.status(400).json({ error: "interval must be 'month' or 'year'." });
+  }
+  const priceId = interval === 'year'
     ? process.env.STRIPE_PRICE_YEARLY_ID
     : process.env.STRIPE_PRICE_MONTHLY_ID;
   if (!priceId) return res.status(503).json({ error: 'Billing is not configured yet.' });
@@ -47,20 +53,46 @@ export default async function handler(req, res) {
   try {
     // Reuse the user's Stripe customer if they have one; create + persist
     // otherwise so future portal/checkout calls hit the same customer.
-    const { data: planRow } = await sb
-      .from('user_plans').select('stripe_customer_id, plan, source').eq('user_id', user.id).maybeSingle();
+    const { data: planRow, error: planErr } = await sb
+      .from('user_plans')
+      .select('stripe_customer_id, plan, source, status, stripe_subscription_id')
+      .eq('user_id', user.id).maybeSingle();
+    // A failed plan lookup must not be treated as "no subscription" — that is
+    // how duplicate subscriptions get created.
+    if (planErr) return res.status(503).json({ error: 'Billing is temporarily unavailable. Please try again.' });
+
+    // Already paying? Send them to the portal instead of selling a second
+    // subscription. Covers double-clicks, two tabs, and stale UI.
+    if (['active', 'trialing', 'past_due'].includes(planRow?.status) && planRow?.stripe_subscription_id) {
+      return res.status(409).json({
+        error: 'You already have an active subscription. Manage it in the billing portal.',
+        code: 'ALREADY_SUBSCRIBED',
+      });
+    }
 
     let customerId = planRow?.stripe_customer_id || null;
     if (!customerId) {
+      // Deterministic key: concurrent requests for the same user replay one
+      // customer rather than creating several.
       const customer = await stripeRequest('/customers', {
         email: user.email,
         metadata: { supabase_user_id: user.id },
-      });
+      }, { idempotencyKey: `customer:${user.id}` });
       customerId = customer.id;
-      await sb.from('user_plans').upsert(
+      const { error: upsertErr } = await sb.from('user_plans').upsert(
         { user_id: user.id, stripe_customer_id: customerId, updated_at: new Date().toISOString() },
         { onConflict: 'user_id' },
       );
+      if (upsertErr) {
+        // The customer exists in Stripe but we could not record it. Failing
+        // here (rather than proceeding) keeps the next attempt idempotent —
+        // the same key returns the same customer.
+        console.error(JSON.stringify({
+          at: 'stripe-checkout', outcome: 'customer_persist_failed',
+          user_id: user.id, message: String(upsertErr.message).slice(0, 200),
+        }));
+        return res.status(503).json({ error: 'Billing is temporarily unavailable. Please try again.' });
+      }
     }
 
     const session = await stripeRequest('/checkout/sessions', {
@@ -70,12 +102,17 @@ export default async function handler(req, res) {
       line_items: [{ price: priceId, quantity: 1 }],
       subscription_data: { metadata: { supabase_user_id: user.id } },
       allow_promotion_codes: 'true',
-      success_url: `${SITE_URL}/?billing=success`,
+      // The session id lets the client verify completion server-side instead
+      // of trusting ?billing=success (see /api/stripe-session).
+      success_url: `${SITE_URL}/?billing=success&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${SITE_URL}/?billing=cancelled`,
-    });
+    }, { idempotencyKey: `checkout:${user.id}:${interval}:${priceId}` });
     return res.status(200).json({ url: session.url });
   } catch (e) {
-    if (process.env.NODE_ENV !== 'production') console.warn('[stripe-checkout]', e?.message);
+    console.error(JSON.stringify({
+      at: 'stripe-checkout', outcome: 'failed',
+      user_id: user.id, message: String(e?.message || e).slice(0, 200),
+    }));
     return res.status(502).json({ error: 'Could not start checkout. Please try again.' });
   }
 }

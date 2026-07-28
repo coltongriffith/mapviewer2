@@ -76,6 +76,12 @@ export default function BrandKitStudio({
   onReload,
   applyToProject,
   onRequestAuth,
+  // Entitlement matrix (src/utils/entitlements.js). max_brand_kits is 0 on the
+  // free plan: a free user may still open the studio, capture their current
+  // look, and Apply it to the map — but SAVING a reusable kit is the Pro
+  // repeat-workflow benefit the pricing page sells.
+  entitlements = { max_brand_kits: 0 },
+  onRequestUpgrade,
 }) {
   const [selectedKitId, setSelectedKitId] = useState(
     () => kits.find((k) => k.is_default)?.id ?? kits[0]?.id ?? null,
@@ -171,37 +177,54 @@ export default function BrandKitStudio({
     setDraft((d) => (d ? { ...d, name } : d));
   }, []);
 
+  // One gate for every path that would persist a kit. Returns true when the
+  // save may proceed; otherwise raises the upgrade prompt and returns false.
+  const allowSave = useCallback(() => {
+    if (kits.length < (entitlements.max_brand_kits ?? 0)) return true;
+    onRequestUpgrade?.('brand_kit');
+    return false;
+  }, [kits.length, entitlements.max_brand_kits, onRequestUpgrade]);
+
   const createKit = useCallback(async () => {
+    if (!allowSave()) return;
     try {
       const row = await saveBrandKit({ name: 'Untitled kit', config: {} });
       justCreatedRef.current = true;
       onReload?.();
       setSelectedKitId(row.id);
     } catch { /* surfaced via the absence of a new card */ }
-  }, [onReload]);
+  }, [onReload, allowSave]);
+
+  // Capture builds the config from the current map. Free users can still do
+  // this and Apply it — they just can't persist it as a reusable kit.
+  const currentLookConfig = useCallback(() => {
+    const config = {};
+    for (const k of BRAND_KIT_SAVEABLE_KEYS) {
+      if (project?.layout?.[k] !== undefined) config[k] = project.layout[k];
+    }
+    if (project?.layout?.fonts) config.fonts = project.layout.fonts;
+    return config;
+  }, [project]);
 
   const captureKit = useCallback(async () => {
+    if (!allowSave()) return;
     try {
-      const config = {};
-      for (const k of BRAND_KIT_SAVEABLE_KEYS) {
-        if (project?.layout?.[k] !== undefined) config[k] = project.layout[k];
-      }
-      if (project?.layout?.fonts) config.fonts = project.layout.fonts;
-      const row = await saveBrandKit({ name: project?.layout?.title || 'Captured kit', config });
+      const row = await saveBrandKit({ name: project?.layout?.title || 'Captured kit', config: currentLookConfig() });
       justCreatedRef.current = true;
       onReload?.();
       setSelectedKitId(row.id);
     } catch { /* ignore */ }
-  }, [onReload, project]);
+  }, [onReload, project, currentLookConfig, allowSave]);
 
   const duplicateKit = useCallback(async () => {
     if (!draft) return;
+    if (!allowSave()) return;
     try {
       const row = await saveBrandKit({ name: `${draft.name || 'Untitled kit'} copy`, config: draft.config || {} });
       onReload?.();
       setSelectedKitId(row.id);
     } catch { /* ignore */ }
-  }, [draft, onReload]);
+  }, [draft, onReload, allowSave]);
 
   const makeDefault = useCallback(async (id) => {
     try { await setDefaultBrandKit(id); onReload?.(); } catch { /* ignore */ }
@@ -258,6 +281,24 @@ export default function BrandKitStudio({
                 <button className="btn compact" type="button" onClick={createKit}>+ New brand kit</button>
                 <button className="btn compact secondary" type="button" onClick={captureKit} title="Save this project's current look as a new kit">Capture current settings</button>
               </div>
+              {(entitlements.max_brand_kits ?? 0) === 0 && (
+                <div className="bks-rail-empty">
+                  <p>
+                    Styling this map — colours, logo, fonts — is free and always will be.
+                    <strong> Saving that look as a reusable kit</strong> for your next map is a Pro feature.
+                  </p>
+                  <button
+                    className="btn compact"
+                    type="button"
+                    onClick={() => { applyToProject?.(currentLookConfig()); onClose?.(); }}
+                  >Apply current look to this map</button>
+                  {onRequestUpgrade && (
+                    <button className="btn compact secondary" type="button" onClick={() => onRequestUpgrade('brand_kit')}>
+                      Upgrade to save kits
+                    </button>
+                  )}
+                </div>
+              )}
               {kits.length === 0 ? (
                 <p className="bks-rail-empty">No brand kits yet. Create one or capture your current project.</p>
               ) : (
