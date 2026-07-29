@@ -197,3 +197,40 @@ grant execute on function public.get_shared_map(text) to anon, authenticated;
 -- explicit role grants. Only genuinely public functions keep anon.
 revoke execute on function public.revoke_shared_map(text) from anon;
 revoke execute on function public.list_my_shared_maps() from anon;
+
+-- ── View-count throttle (P1-05) ────────────────────────────────────────────
+-- get_shared_map used to UPDATE on EVERY public read: unbounded write
+-- amplification on a table anyone can reach, plus inflated metrics. Throttle
+-- to at most one increment per share per minute.
+alter table public.shared_maps add column if not exists last_viewed_at timestamptz;
+
+create or replace function public.get_shared_map(share_id text)
+returns jsonb
+language plpgsql security definer set search_path = public, pg_temp
+as $$
+declare
+  v_state jsonb;
+  v_last timestamptz;
+begin
+  select state, last_viewed_at into v_state, v_last
+  from public.shared_maps
+  where id = share_id
+    and revoked_at is null
+    and (expires_at is null or expires_at > now());
+
+  if v_state is null then
+    return null;
+  end if;
+
+  if v_last is null or v_last < now() - interval '1 minute' then
+    update public.shared_maps
+       set view_count = coalesce(view_count, 0) + 1, last_viewed_at = now()
+     where id = share_id;
+  end if;
+
+  return v_state;
+end;
+$$;
+
+revoke all on function public.get_shared_map(text) from public;
+grant execute on function public.get_shared_map(text) to anon, authenticated;

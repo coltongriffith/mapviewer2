@@ -118,7 +118,8 @@ export function MarkerSvgIcon({ type, size, color, fillColor }) {
       xmlns="http://www.w3.org/2000/svg"
       style={{ display: 'block', flexShrink: 0 }}
       aria-hidden="true"
-      // eslint-disable-next-line react/no-danger
+      // Inner SVG markup is built from our own icon table below —
+      // never from user input.
       dangerouslySetInnerHTML={{ __html: inner }}
     />
   );

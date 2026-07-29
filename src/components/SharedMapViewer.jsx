@@ -35,11 +35,9 @@ export default function SharedMapViewer({ mapId, onExit, user, onEditCopy }) {
         if (!state) { setError('not_found'); setLoading(false); return; }
         setProject(state);
         setLoading(false);
-        // ?ref carries the sharer's session id — joins this view (and any fork
-        // that follows) back to the share_created event.
-        let ref = null;
-        try { ref = new URLSearchParams(window.location.search).get('ref'); } catch { /* noop */ }
-        trackEvent('share_viewed', { mapId, ref }, user?.id);
+        // mapId alone joins this view (and any fork that follows) back to the
+        // share_created event; no sharer session id travels in the URL.
+        trackEvent('share_viewed', { mapId }, user?.id);
       })
       // A service/network failure must NOT read as "this link was removed" —
       // that hides incidents and misleads the viewer (audit P1-04).

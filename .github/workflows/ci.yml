@@ -29,6 +29,11 @@ jobs:
       - name: Install (locked)
         run: npm ci
 
+      # Errors fail the build; the accessibility/unused-variable backlog is
+      # reported as warnings so it stays visible without blocking unrelated work.
+      - name: Lint
+        run: npm run lint
+
       - name: Unit and component tests
         run: npm test
 

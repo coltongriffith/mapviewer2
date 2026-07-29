@@ -23,7 +23,7 @@ export function writeCsv(file, rows, headers) {
 
 export function readCsv(file) {
   if (!fs.existsSync(file)) throw new Error(`Missing input file: ${file}`);
-  const text = fs.readFileSync(file, 'utf8').replace(/^﻿/, '');
+  const text = fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, '');
   const rows = [];
   let row = [], field = '', inQ = false;
   const pushField = () => { row.push(field); field = ''; };

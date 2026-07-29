@@ -2555,7 +2555,7 @@ export default function App() {
     const raw = params.get('claims');
     if (!raw) return;
     const ticker = raw.toUpperCase();
-    if (!/^[A-Z0-9.\-]{1,12}$/.test(ticker)) return;
+    if (!/^[A-Z0-9.-]{1,12}$/.test(ticker)) return;
     const company = params.get('company');
     // "Claim this page" links carry &claim=1 — after the claims load we prompt
     // account creation so the map is saved to the visitor's own account.
@@ -6099,9 +6099,12 @@ export default function App() {
                       }
                       const id = await shareMap(shareProject);
                       const base = window.location.origin;
-                      // ?ref ties later share_viewed/share_forked events back to
-                      // this sharer's session so the viral loop is measurable.
-                      setShareUrl(`${base}/map/${id}?ref=${getSessionId()}`);
+                      // No ?ref: the share id is already a unique opaque token,
+                      // so share_viewed/share_forked join back to share_created
+                      // on mapId alone. Embedding the sharer's live session id
+                      // in a durable public URL correlated their analytics
+                      // identity to anyone who ever saw the link (audit P1-06).
+                      setShareUrl(`${base}/map/${id}`);
                       trackEvent('share_created', { mapId: id }, user?.id);
                     } catch (e) {
                       alert('Failed to create share link: ' + e.message);
