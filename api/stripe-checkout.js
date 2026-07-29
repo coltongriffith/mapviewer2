@@ -4,7 +4,7 @@
 // page, so no card data ever touches this app.
 
 import { createClient } from '@supabase/supabase-js';
-import { applyCors, handleMethods, rateLimited } from './_lib/guard.js';
+import { applyCors, handleMethods, rateLimited, rateLimitedShared } from './_lib/guard.js';
 import { stripeRequest, stripeConfigured } from './_lib/stripe.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
@@ -49,6 +49,12 @@ export default async function handler(req, res) {
   const sb = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
   const user = await resolveUser(req, sb);
   if (!user) return res.status(401).json({ error: 'Sign in to upgrade.' });
+
+  // Cross-instance limit keyed on the ACCOUNT, not the IP: the in-memory
+  // limiter above does not hold across serverless instances (audit P1-10).
+  if (await rateLimitedShared(sb, req, { bucket: 'stripe-checkout', subject: user.id, max: 10, windowSeconds: 300 })) {
+    return res.status(429).json({ error: 'Too many checkout attempts — please wait a few minutes.' });
+  }
 
   try {
     // Reuse the user's Stripe customer if they have one; create + persist

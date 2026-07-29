@@ -5,10 +5,11 @@ import landTopo from 'world-atlas/land-110m.json';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import OverviewTab from './admin/OverviewTab';
+import HealthTab from './admin/HealthTab';
 import UsersTab from './admin/UsersTab';
 import ProductTab from './admin/ProductTab';
 import {
-  useDashboardWindow, useOverview, useEngagement, useUsersOverview, useUserDetail,
+  useDashboardWindow, useOverview, useEngagement, useUsersOverview, useUserDetail, useErrorSummary,
 } from './admin/useDashboardData';
 
 // Real coastline geometry (110m resolution — plenty of detail for a 240px
@@ -616,6 +617,7 @@ const TABS = [
   ['product', 'Product'],
   ['growth', 'Acquisition'],
   ['revenue', 'Monetization'],
+  ['health', 'Health'],
 ];
 const LEGACY_TABS = new Set(['growth', 'revenue']);
 
@@ -663,6 +665,7 @@ export default function AdminPage({ onExit }) {
   const overview = useOverview(dashWindow, isAdmin && tab === 'overview');
   const engagement = useEngagement(dashWindow, isAdmin && tab === 'product');
   const usersOverview = useUsersOverview(isAdmin && tab === 'users');
+  const errorSummary = useErrorSummary(isAdmin && tab === 'health');
   const userDetail = useUserDetail();
 
   useEffect(() => {
@@ -950,6 +953,10 @@ export default function AdminPage({ onExit }) {
         {/* ───────── PRODUCT (v2) ───────── */}
         {tab === 'product' && (
           <ProductTab data={engagement.data} loading={engagement.loading} range={range} />
+        )}
+
+        {tab === 'health' && (
+          <HealthTab data={errorSummary.data} loading={errorSummary.loading} error={errorSummary.error} />
         )}
 
         {/* ───────── ACQUISITION ───────── */}

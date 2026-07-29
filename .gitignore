@@ -40,3 +40,9 @@ data/pseo/.cse_raw.csv
 # never land in the tracked production paths above.
 data/pseo/.fixture-demo/
 public/.pseo-fixture-demo/
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/

@@ -9,7 +9,9 @@
     "pseo:fixture": "node scripts/pseo/01_fetch_issuers.mjs --fixture && node scripts/pseo/02_fetch_claims_bc.mjs --fixture && node scripts/pseo/03_fetch_claims_on.mjs --fixture && node scripts/pseo/04_match_owners.mjs --fixture && node scripts/pseo/05_fetch_geometry.mjs --fixture && node scripts/pseo/06_render_maps.mjs --fixture --skip-og && node scripts/pseo/07_generate_pages.mjs --fixture",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test:e2e": "playwright test",
+    "budgets": "node scripts/check-budgets.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.104.1",
@@ -32,6 +34,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
+    "@playwright/test": "^1.62.0",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",

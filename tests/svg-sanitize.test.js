@@ -59,7 +59,6 @@ describe('external resource loading', () => {
   });
 
   it('strips javascript: hrefs', () => {
-    // eslint-disable-next-line no-script-url
     const out = clean(wrap('<a href="javascript:alert(1)"><rect/></a>'));
     expect(out).not.toMatch(/javascript:/i);
   });

@@ -60,6 +60,11 @@ export function useUsersOverview(enabled) {
   return useRpc('admin_get_users_overview', {}, enabled);
 }
 
+// Recent client/API failures, grouped by fingerprint (audit P1-12).
+export function useErrorSummary(enabled, hours = 24) {
+  return useRpc('admin_get_error_summary', { p_hours: hours }, enabled);
+}
+
 // On-demand single-user detail (drawer). Not a hook-per-render; call load(id).
 export function useUserDetail() {
   const [byId, setById] = useState({});

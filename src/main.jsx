@@ -9,6 +9,7 @@ import { AuthProvider } from "./hooks/useAuth.jsx";
 import RecoveryGate from "./components/RecoveryGate";
 import { captureAttribution } from "./utils/attribution";
 import { inject } from "@vercel/analytics";
+import { installErrorReporting } from "./utils/errorReporter";
 
 // Record first-touch acquisition context immediately, before any deep-link
 // effect strips the query string, so signup_completed can be attributed.
@@ -26,6 +27,9 @@ if (import.meta.env.DEV) {
 }
 
 inject();
+
+// Capture uncaught errors and unhandled rejections (audit P1-12).
+installErrorReporting();
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>

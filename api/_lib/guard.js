@@ -83,10 +83,16 @@ export function validateBbox(raw) {
   return { ok: true, bbox: parts };
 }
 
-// Best-effort per-instance rate limiting (same approach as /api/track).
+/**
+ * Per-instance rate limiting. Serverless instances do NOT share this Map and
+ * are recycled frequently, so it only blunts casual bursts from one instance.
+ * Prefer rateLimitedShared() for anything that matters; this remains as a
+ * synchronous first line of defence and as the fallback when the shared
+ * limiter is unavailable (audit P1-10).
+ */
 const buckets = new Map();
 export function rateLimited(req, { max = 30, windowMs = 60_000, bucket = 'claims' } = {}) {
-  const ip = (req.headers?.['x-forwarded-for'] || '').split(',')[0].trim() || 'unknown';
+  const ip = clientIp(req);
   const key = `${bucket}:${ip}`;
   const now = Date.now();
   let b = buckets.get(key);
@@ -99,6 +105,43 @@ export function rateLimited(req, { max = 30, windowMs = 60_000, bucket = 'claims
     for (const [k, v] of buckets) { if (now > v.resetAt) buckets.delete(k); }
   }
   return b.count > max;
+}
+
+/**
+ * Trusted client IP. On Vercel, x-forwarded-for is set by the platform and its
+ * FIRST entry is the real client; anything the client sends is appended after.
+ */
+export function clientIp(req) {
+  const xff = req.headers?.['x-real-ip'] || req.headers?.['x-forwarded-for'] || '';
+  return String(xff).split(',')[0].trim() || 'unknown';
+}
+
+/**
+ * Shared, cross-instance rate limit backed by Postgres (public.rate_limits).
+ *
+ * @returns {Promise<boolean>} true when the caller is OVER the limit.
+ *
+ * Fails OPEN: if the limiter itself is unreachable we allow the request rather
+ * than take the product down. The per-instance limiter above still applies, so
+ * an outage degrades to the old behaviour instead of to no limit at all.
+ */
+export async function rateLimitedShared(sb, req, {
+  max = 30, windowSeconds = 60, bucket = 'default', subject = null,
+} = {}) {
+  const who = subject || clientIp(req);
+  if (!sb || who === 'unknown') return false;
+  try {
+    const { data, error } = await sb.rpc('check_rate_limit', {
+      p_bucket: bucket,
+      p_subject: who,
+      p_max: max,
+      p_window_seconds: windowSeconds,
+    });
+    if (error) return false;
+    return Boolean(data);
+  } catch {
+    return false;
+  }
 }
 
 /**

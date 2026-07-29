@@ -1,4 +1,5 @@
 import React from 'react';
+import { reportError } from '../utils/errorReporter';
 
 export default class ErrorBoundary extends React.Component {
   state = { error: null };
@@ -9,6 +10,9 @@ export default class ErrorBoundary extends React.Component {
 
   componentDidCatch(error, info) {
     console.error('App error:', error, info);
+    // A render crash is the most severe client failure there is — make sure
+    // it reaches our error sink, not just the user's console.
+    reportError(error, { kind: 'react', context: { componentStack: String(info?.componentStack || '').slice(0, 2000) } });
   }
 
   render() {

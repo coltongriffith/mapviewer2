@@ -2,7 +2,7 @@
 // see invoices). POST with a Supabase bearer token → { url }.
 
 import { createClient } from '@supabase/supabase-js';
-import { applyCors, handleMethods, rateLimited } from './_lib/guard.js';
+import { applyCors, handleMethods, rateLimited, rateLimitedShared } from './_lib/guard.js';
 import { stripeRequest, stripeConfigured } from './_lib/stripe.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
@@ -36,6 +36,10 @@ export default async function handler(req, res) {
   const sb = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
   const user = await resolveUser(req, sb);
   if (!user) return res.status(401).json({ error: 'Sign in first.' });
+
+  if (await rateLimitedShared(sb, req, { bucket: 'stripe-portal', subject: user.id, max: 20, windowSeconds: 300 })) {
+    return res.status(429).json({ error: 'Too many requests — please wait a moment.' });
+  }
 
   try {
     const { data: planRow, error: planErr } = await sb
