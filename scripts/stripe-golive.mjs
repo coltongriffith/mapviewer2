@@ -113,6 +113,25 @@ for (const [label, spec] of Object.entries(EXPECTED)) {
     if (price.unit_amount !== spec.amount) parts.push(`amount=${price.unit_amount} (app advertises ${spec.amount})`);
     if (parts.length) fail(`${label}: ${id} — ${parts.join(', ')}`);
     else ok(`${label}: ${id} — $${(price.unit_amount / 100).toFixed(2)}/${spec.interval}, active`);
+
+    // Accounts with Managed Payments enabled (Stripe's default for newer
+    // accounts) reject Checkout Session creation at request time unless the
+    // underlying product has an eligible tax_code. This has no relation to
+    // the key/price/webhook checks above and produces a generic "Could not
+    // start checkout" with no other symptom, so check it explicitly.
+    if (typeof price.product === 'string') {
+      try {
+        const product = await stripe(`/products/${price.product}`);
+        if (!product.tax_code) {
+          fail(`${label}: product ${product.id} has no tax_code — Checkout will fail if Managed Payments is enabled`);
+          warn('  Dashboard → Product catalog → this product → Tax code → "Software as a service (SaaS) — Business use" (txcd_10103001)');
+        } else {
+          ok(`${label}: product tax_code set (${product.tax_code})`);
+        }
+      } catch (e) {
+        warn(`${label}: could not read product ${price.product} — ${e.message}`);
+      }
+    }
   } catch (e) {
     // This is THE failure mode: key and price belong to different accounts
     // or different modes.

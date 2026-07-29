@@ -145,6 +145,15 @@ Dashboard → Product catalog → "Exploration Maps Pro". It was briefly archive
 during setup and then reactivated; confirm both prices show as active before
 relying on them.
 
+**2a. Set the product's tax code (Managed Payments).**
+Accounts with Managed Payments enabled (Stripe's default for newer accounts)
+reject Checkout Session creation with a generic error unless the product has
+an eligible tax code — this surfaced in production as "Could not start
+checkout" with everything else (keys, prices, webhook) configured correctly.
+Dashboard → Product catalog → "Exploration Maps Pro" → **Tax code** →
+"Software as a service (SaaS) — Business use" (`txcd_10103001`). `npm run
+stripe:check` now verifies this.
+
 **3. Add the missing webhook events.**
 The endpoint was created before the invoice-lifecycle work landed. Dashboard →
 Developers → Webhooks → `we_1TyFvjRHvZfpRjJxhNjo0b85` → **Update details** and
