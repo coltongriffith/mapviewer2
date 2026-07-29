@@ -16,6 +16,7 @@ These need no external account and are working now:
 | Admin view | Admin → **Health** tab | Errors in the last 24h, grouped by fingerprint, with count, affected users, release, and a sample stack. |
 | API error logs | `api/stripe-*.js`, `api/client-error.js` | Structured single-line JSON to stdout, visible in Vercel runtime logs. Billing failures log unconditionally (they used to log only outside production, which is why the checkout failure was invisible). |
 | Release tagging | `vite.config.js` `__APP_VERSION__` | Every report carries the package version, so "did my last deploy break this" is answerable. |
+| New-signup email | `supabase/migrations/20260729000001_new_signup_notification.sql` | A trigger on `auth.users` emails coltongriffith@live.ca via Resend the moment a new account is created. Wrapped in an exception handler so a Resend outage or bad key can never fail a real signup — it just silently skips. The API key lives in Supabase Vault (`select vault.create_secret(...)`), never in a migration file or table. To change the destination address or sender, edit `public.send_signup_notification` (a plain SQL function, no redeploy needed) and re-run it as a migration. |
 
 **The gap this leaves:** the Health tab is *pull*, not *push*. Somebody has to
 look at it. Nothing pages you at 2am when the error rate spikes or when the
