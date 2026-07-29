@@ -4412,9 +4412,17 @@ export default function App() {
 
         {/* ── Nearby Claims Overlay ── */}
         <section className="control-section cs-collapsible">
-          <h2 className="section-toggle-btn" onClick={() => toggleSection('areaClaims')}>Nearby Claims <span className={`section-chevron${collapsedSections.areaClaims ? '' : ' open'}`}>›</span></h2>
+          <h2 className="control-section-heading">
+            <button
+              type="button"
+              className="section-toggle-btn"
+              onClick={() => toggleSection('areaClaims')}
+              aria-expanded={!collapsedSections.areaClaims}
+              aria-controls="section-areaClaims"
+            >Nearby Claims <span aria-hidden="true" className={`section-chevron${collapsedSections.areaClaims ? '' : ' open'}`}>›</span></button>
+          </h2>
           {!collapsedSections.areaClaims && (
-            <div className="control-grid">
+            <div id="section-areaClaims" className="control-grid">
               <p className="small-note">Load mineral tenure claims within a radius of your project area. Each claim owner is shown in a distinct colour.</p>
               <div className="control-row">
                 <label>{US_CLAIMS_ENABLED ? 'Jurisdiction' : 'Province'}</label>
@@ -4552,9 +4560,17 @@ export default function App() {
         </section>
 
         <section className="control-section cs-collapsible" ref={drillholeSectionRef}>
-          <h2 className="section-toggle-btn" onClick={() => toggleSection('drillhole')}>Drillhole Labels <span className={`section-chevron${collapsedSections.drillhole ? '' : ' open'}`}>›</span></h2>
+          <h2 className="control-section-heading">
+            <button
+              type="button"
+              className="section-toggle-btn"
+              onClick={() => toggleSection('drillhole')}
+              aria-expanded={!collapsedSections.drillhole}
+              aria-controls="section-drillhole"
+            >Drillhole Labels <span aria-hidden="true" className={`section-chevron${collapsedSections.drillhole ? '' : ' open'}`}>›</span></button>
+          </h2>
           {!collapsedSections.drillhole && selectedFeature ? (
-            <div className="control-grid">
+            <div id="section-drillhole" className="control-grid">
               <div className="feature-chip">Selected: {selectedFeature.layerName}</div>
               <div className="small-note">Click a drillhole on the map, then refine the callout here. The selected hole is editable before you add the callout.</div>
               <div className="control-row">
@@ -5272,8 +5288,16 @@ export default function App() {
         </section>
 
         <section className="control-section cs-collapsible">
-          <h2 className="section-toggle-btn" onClick={() => toggleSection('elements')}>Inset <span className={`section-chevron${collapsedSections.elements ? '' : ' open'}`}>›</span></h2>
-          {!collapsedSections.elements && <div className="control-grid">
+          <h2 className="control-section-heading">
+            <button
+              type="button"
+              className="section-toggle-btn"
+              onClick={() => toggleSection('elements')}
+              aria-expanded={!collapsedSections.elements}
+              aria-controls="section-elements"
+            >Inset <span aria-hidden="true" className={`section-chevron${collapsedSections.elements ? '' : ' open'}`}>›</span></button>
+          </h2>
+          {!collapsedSections.elements && <div id="section-elements" className="control-grid">
             <div className="button-row three">
               <button className="btn" type="button" onClick={() => insetInputRef.current?.click()}>Upload Inset</button>
             </div>
@@ -5311,8 +5335,16 @@ export default function App() {
         </section>
 
         <section className="control-section cs-collapsible">
-          <h2 className="section-toggle-btn" onClick={() => toggleSection('refoverlays')}>Reference Overlays <span className={`section-chevron${collapsedSections.refoverlays ? '' : ' open'}`}>›</span></h2>
-          {!collapsedSections.refoverlays && <div className="toggle-grid">
+          <h2 className="control-section-heading">
+            <button
+              type="button"
+              className="section-toggle-btn"
+              onClick={() => toggleSection('refoverlays')}
+              aria-expanded={!collapsedSections.refoverlays}
+              aria-controls="section-refoverlays"
+            >Reference Overlays <span aria-hidden="true" className={`section-chevron${collapsedSections.refoverlays ? '' : ' open'}`}>›</span></button>
+          </h2>
+          {!collapsedSections.refoverlays && <div id="section-refoverlays" className="toggle-grid">
             <div className="control-row inline-2">
               <div>
                 <label>Overlay Opacity</label>
@@ -5328,8 +5360,16 @@ export default function App() {
         </section>
 
         <section className="control-section cs-collapsible">
-          <h2 className="section-toggle-btn" onClick={() => toggleSection('export')}>Export <span className={`section-chevron${collapsedSections.export ? '' : ' open'}`}>›</span></h2>
-          {!collapsedSections.export && <div className="control-grid">
+          <h2 className="control-section-heading">
+            <button
+              type="button"
+              className="section-toggle-btn"
+              onClick={() => toggleSection('export')}
+              aria-expanded={!collapsedSections.export}
+              aria-controls="section-export"
+            >Export <span aria-hidden="true" className={`section-chevron${collapsedSections.export ? '' : ' open'}`}>›</span></button>
+          </h2>
+          {!collapsedSections.export && <div id="section-export" className="control-grid">
             <RatioSwitcher activeRatio={activeRatio} onRatioChange={handleRatioChange} />
             <div className="control-row inline-2">
               <div>

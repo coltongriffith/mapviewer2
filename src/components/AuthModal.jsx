@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
+import Dialog from './Dialog';
 
 export default function AuthModal({ onClose, context = '' }) {
   const { signIn, signUp, signInWithMagicLink, resetPassword } = useAuth();
@@ -50,10 +51,14 @@ export default function AuthModal({ onClose, context = '' }) {
   const submitLabel = mode === 'magic' ? (linkSent ? 'Resend link' : 'Email me a sign-in link') : title;
 
   return (
-    <div className="modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal-panel auth-modal">
+    <Dialog
+      onClose={onClose}
+      title={title}
+      titleId="auth-modal-title"
+      panelClassName="modal-panel auth-modal"
+    >
+      <>
         <button className="modal-close-btn" onClick={onClose} aria-label="Close">×</button>
-        <h2 className="auth-modal-title">{title}</h2>
         {context && !linkSent && (
           <p className="auth-modal-context">{context}</p>
         )}
@@ -145,7 +150,7 @@ export default function AuthModal({ onClose, context = '' }) {
             </button>
           )}
         </div>
-      </div>
-    </div>
+      </>
+    </Dialog>
   );
 }

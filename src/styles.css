@@ -3341,3 +3341,29 @@ body.is-dragging .template-zone .panel-delete-btn { opacity: 0 !important; }
   flex-wrap: wrap;
 }
 .acct-share-row a { font-weight: 600; color: #1e293b; }
+
+/* Disclosure headings: the control is a real <button> inside the <h2>, so it
+   is keyboard-reachable. Reset the button chrome so it looks exactly like the
+   heading it replaced. */
+.control-section-heading { margin: 0 0 10px; }
+.control-section-heading .section-toggle-btn {
+  all: unset;
+  box-sizing: border-box;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #64748b;
+  font-weight: 700;
+  user-select: none;
+}
+.control-section-heading .section-toggle-btn:hover { color: #334155; }
+.control-section-heading .section-toggle-btn:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+  border-radius: 3px;
+}

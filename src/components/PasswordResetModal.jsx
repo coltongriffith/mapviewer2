@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { supabase } from '../lib/supabase';
+import Dialog from './Dialog';
 
 /**
  * Completes password recovery.
@@ -53,23 +54,18 @@ export default function PasswordResetModal({ onDone }) {
 
   if (done) {
     return (
-      <div className="modal-backdrop">
-        <div className="modal-panel auth-modal">
-          <h2 className="auth-modal-title">Password updated</h2>
+      <Dialog title="Password updated" titleId="pwdone-title" panelClassName="modal-panel auth-modal" dismissible={false}>
           <div className="auth-info-msg">
             Your password has been changed. If you didn’t request this, change it again
             immediately and sign out of other devices from your account settings.
           </div>
-          <button className="btn primary" type="button" onClick={onDone} autoFocus>Continue</button>
-        </div>
-      </div>
+        <button className="btn primary" type="button" onClick={onDone} autoFocus>Continue</button>
+      </Dialog>
     );
   }
 
   return (
-    <div className="modal-backdrop">
-      <div className="modal-panel auth-modal" role="dialog" aria-modal="true" aria-labelledby="pwreset-title">
-        <h2 className="auth-modal-title" id="pwreset-title">Choose a new password</h2>
+    <Dialog title="Choose a new password" titleId="pwreset-title" panelClassName="modal-panel auth-modal" dismissible={false}>
         <p className="auth-modal-sub">You followed a password reset link. Set a new password to finish.</p>
         {error && <div className="auth-error-msg">{error}</div>}
         <form onSubmit={handleSubmit} className="auth-form">
@@ -101,8 +97,7 @@ export default function PasswordResetModal({ onDone }) {
           <button className="btn primary auth-submit" type="submit" disabled={busy}>
             {busy ? 'Updating…' : 'Update password'}
           </button>
-        </form>
-      </div>
-    </div>
+      </form>
+    </Dialog>
   );
 }
