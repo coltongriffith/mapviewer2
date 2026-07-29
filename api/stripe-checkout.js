@@ -112,7 +112,14 @@ export default async function handler(req, res) {
       // of trusting ?billing=success (see /api/stripe-session).
       success_url: `${SITE_URL}/?billing=success&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${SITE_URL}/?billing=cancelled`,
-    }, { idempotencyKey: `checkout:${user.id}:${interval}:${priceId}` });
+    }, {
+      // Bucketed by a 10-minute window: still collapses double-clicks/duplicate
+      // tabs into one session, but a genuine retry after a failure (a config
+      // fix, a transient error) gets a fresh key instead of Stripe replaying a
+      // stale cached error for up to 24 hours (confirmed via Stripe's own docs
+      // — POST results, including 4xx errors, are cached per idempotency key).
+      idempotencyKey: `checkout:${user.id}:${interval}:${priceId}:${Math.floor(Date.now() / 600_000)}`,
+    });
     return res.status(200).json({ url: session.url });
   } catch (e) {
     console.error(JSON.stringify({

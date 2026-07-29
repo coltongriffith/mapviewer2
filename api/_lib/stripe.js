@@ -35,7 +35,14 @@ function formEncode(obj, prefix = '', out = new URLSearchParams()) {
 // Pin the Stripe API version so object shapes cannot change under us when the
 // account's default version is upgraded in the dashboard. The webhook endpoint
 // must be pinned to the SAME version — see docs/billing.md.
-export const STRIPE_API_VERSION = '2024-06-20';
+//
+// 2025-03-31.basil or later is REQUIRED on this account: Managed Payments
+// (enabled by default) rejects Checkout Session creation outright on older
+// versions ("Managed Payments is not supported on API version 2024-06-20").
+// The webhook handler already reads both the pre- and post-Basil object
+// shapes (see invoiceSubscriptionId/chargeInvoiceId in stripe-webhook.js),
+// so this bump does not require any other code change.
+export const STRIPE_API_VERSION = '2025-03-31.basil';
 
 /**
  * @param {string} path

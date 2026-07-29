@@ -27,7 +27,7 @@
 const KEY = process.env.STRIPE_SECRET_KEY;
 const FIX = process.argv.includes('--fix');
 const API = 'https://api.stripe.com/v1';
-const API_VERSION = '2024-06-20'; // must match api/_lib/stripe.js
+const API_VERSION = '2025-03-31.basil'; // must match api/_lib/stripe.js
 
 // Every event api/stripe-webhook.js branches on.
 const REQUIRED_EVENTS = [
