@@ -8,8 +8,9 @@ import OverviewTab from './admin/OverviewTab';
 import HealthTab from './admin/HealthTab';
 import UsersTab from './admin/UsersTab';
 import ProductTab from './admin/ProductTab';
+import RevenueTab from './admin/RevenueTab';
 import {
-  useDashboardWindow, useOverview, useEngagement, useUsersOverview, useUserDetail, useErrorSummary,
+  useDashboardWindow, useOverview, useEngagement, useUsersOverview, useUserDetail, useErrorSummary, useRevenue,
 } from './admin/useDashboardData';
 
 // Real coastline geometry (110m resolution — plenty of detail for a 240px
@@ -119,12 +120,6 @@ function RangeToggle({ value, onChange, options }) {
 
 function Empty({ message }) {
   return <p className="adm-empty">{message}</p>;
-}
-
-function FormatBadge({ format }) {
-  const colors = { png: '#0ea5e9', svg: '#8b5cf6', pdf: '#f59e0b' };
-  const bg = colors[format?.toLowerCase()] || '#64748b';
-  return <span className="adm-format-badge" style={{ background: bg + '20', color: bg }}>{format?.toUpperCase()}</span>;
 }
 
 // ── Charts ──────────────────────────────────────────────────────────────────────
@@ -243,33 +238,6 @@ function HBars({ rows, color = '#3b82f6', emptyMsg }) {
           <div className="adm-hbar-pct">{pct(r.value, total)}%</div>
         </div>
       ))}
-    </div>
-  );
-}
-
-function Funnel({ steps }) {
-  const top = steps[0]?.value || 1;
-  return (
-    <div className="adm-funnel">
-      {steps.map((s, i) => {
-        const conv = i > 0 ? pct(s.value, steps[i - 1].value) : null;
-        return (
-          <div key={i} className="adm-funnel-step">
-            <div className="adm-funnel-meta">
-              <span className="adm-funnel-label">{s.label}</span>
-              <span className="adm-funnel-val">{fmtNum(s.value)}</span>
-            </div>
-            <div className="adm-funnel-track">
-              <div className="adm-funnel-bar" style={{ width: `${Math.max(3, pct(s.value, top))}%`, background: s.color }} />
-            </div>
-            {conv != null && (
-              <div className="adm-funnel-conv">
-                <span className="adm-funnel-arrow">↳</span> {conv}% convert from {steps[i - 1].label.toLowerCase()}
-              </div>
-            )}
-          </div>
-        );
-      })}
     </div>
   );
 }
@@ -597,13 +565,10 @@ const RPC_CALLS = [
   ['users', 'admin_get_users'],
   ['exportStats', 'admin_get_export_stats'],
   ['leads', 'admin_get_leads', true],
-  ['recentExports', 'admin_get_recent_exports', true],
   ['dailyVisitors', 'admin_get_daily_visitors'],
   ['referrerStats', 'admin_get_referrer_stats', true],
   ['deviceStats', 'admin_get_device_stats', true],
-  ['exportsByUser', 'admin_get_exports_by_user'],
   ['kpiTrends', 'admin_get_kpi_trends'],
-  ['funnel', 'admin_get_funnel'],
   ['productFunnel', 'admin_get_product_funnel'],
   ['campaignStats', 'admin_get_campaign_stats', true],
   ['searchStats', 'admin_get_search_stats', true],
@@ -616,10 +581,14 @@ const TABS = [
   ['users', 'Users'],
   ['product', 'Product'],
   ['growth', 'Acquisition'],
-  ['revenue', 'Monetization'],
+  ['revenue', 'Revenue'],
   ['health', 'Health'],
 ];
-const LEGACY_TABS = new Set(['growth', 'revenue']);
+// 'revenue' used to run the same legacy 15-RPC batch as 'growth', framed
+// around "no-watermark export = paid intent" because there was no real
+// subscriber to look at yet. Now that Stripe is live, it's a real,
+// self-contained RPC (admin_get_revenue) like the other v2 tabs.
+const LEGACY_TABS = new Set(['growth']);
 
 export default function AdminPage({ onExit }) {
   const { user, loading: authLoading, signIn, signOut } = useAuth();
@@ -666,6 +635,7 @@ export default function AdminPage({ onExit }) {
   const engagement = useEngagement(dashWindow, isAdmin && tab === 'product');
   const usersOverview = useUsersOverview(isAdmin && tab === 'users');
   const errorSummary = useErrorSummary(isAdmin && tab === 'health');
+  const revenue = useRevenue(isAdmin && tab === 'revenue');
   const userDetail = useUserDetail();
 
   useEffect(() => {
@@ -748,8 +718,6 @@ export default function AdminPage({ onExit }) {
   }
 
   // Pagination hooks (must run unconditionally, before any early return)
-  const exportsByUserPag = usePagination(d.exportsByUser, 10);
-  const recentExportsPag = usePagination(d.recentExports, 10);
   const usersPag = usePagination(d.users, 10);
   const leadsPag = usePagination(d.leads, 10);
   const campaignPag = usePagination(d.campaignStats, 10);
@@ -767,12 +735,6 @@ export default function AdminPage({ onExit }) {
     (d.searchStats || []).forEach((r) => m.set(r.province, (m.get(r.province) || 0) + Number(r.searches)));
     return [...m.entries()].map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value);
   }, [d.searchStats]);
-
-  const premiumUsers = useMemo(
-    () => (d.exportsByUser || []).filter((r) => Number(r.premium_count) > 0)
-      .sort((a, b) => Number(b.premium_count) - Number(a.premium_count)),
-    [d.exportsByUser]
-  );
 
   // ── Pre-auth screens ──────────────────────────────────────────────────────
   if (!supabase) return (
@@ -830,14 +792,6 @@ export default function AdminPage({ onExit }) {
     const loggedIn = rangeDaily.reduce((s, r) => s + Number(r.logged_in_sessions || 0), 0);
     return { sessions, loggedIn, avg: rangeDaily.length ? Math.round(sessions / rangeDaily.length) : 0 };
   })();
-
-  const f = (d.funnel || [])[0] || {};
-  const funnelSteps = [
-    { label: 'Visitors', value: Number(f.visitors) || visitors30d || 0, color: '#3b82f6' },
-    { label: 'Signups', value: Number(f.signups) || cur('signups') || 0, color: '#6366f1' },
-    { label: 'Activated (exported)', value: Number(f.exporters) || 0, color: '#8b5cf6' },
-    { label: 'Paid intent (no-watermark)', value: Number(f.premium_exporters) || 0, color: '#10b981' },
-  ];
 
   // Session-level activation funnel from product_events (last 30 days).
   const pf = Object.fromEntries((d.productFunnel || []).map((r) => [r.event, Number(r.sessions) || 0]));
@@ -1022,90 +976,10 @@ export default function AdminPage({ onExit }) {
           </>
         )}
 
-        {/* ───────── MONETIZATION ───────── */}
+        {/* ───────── REVENUE ───────── */}
         {tab === 'revenue' && (
-          <>
-            <div className="adm-grid-2-1">
-              <Card title="Path to revenue" eyebrow="Visitor → signup → activated → export">
-                <Funnel steps={funnelSteps} />
-                <p className="adm-note">
-                  <strong>Paid intent</strong> = users who exported without a watermark. These are your warmest candidates when you launch paid plans —
-                  watermark removal is the most natural upgrade trigger.
-                </p>
-              </Card>
-              <Card title="Conversion rates" eyebrow="Last 30 days">
-                <div className="adm-stat-list">
-                  <div className="adm-stat-row"><span>Visitor → Signup</span><strong>{pct(funnelSteps[1].value, funnelSteps[0].value)}%</strong></div>
-                  <div className="adm-stat-row"><span>Signup → Activated</span><strong>{pct(funnelSteps[2].value, funnelSteps[1].value)}%</strong></div>
-                  <div className="adm-stat-row"><span>Activated → Paid intent</span><strong>{pct(funnelSteps[3].value, funnelSteps[2].value)}%</strong></div>
-                  <div className="adm-stat-row adm-stat-total"><span>Visitor → Paid intent</span><strong>{pct(funnelSteps[3].value, funnelSteps[0].value)}%</strong></div>
-                </div>
-              </Card>
-            </div>
-            <Card title="Paid-intent users" eyebrow="Exported without watermark — your upgrade list" count={premiumUsers.length} full>
-              {premiumUsers.length > 0 ? (
-                <table className="adm-table">
-                  <thead><tr><th>User</th><th>No-watermark</th><th>Total exports</th><th>Intent rate</th><th>Last export</th></tr></thead>
-                  <tbody>
-                    {premiumUsers.slice(0, 25).map((r, i) => (
-                      <tr key={i}>
-                        <td className="adm-mono">{r.user_email || <span className="adm-muted">Anonymous</span>}</td>
-                        <td><strong>{fmtNum(r.premium_count)}</strong></td>
-                        <td>{fmtNum(r.total_exports)}</td>
-                        <td className="adm-muted">{pct(r.premium_count, r.total_exports)}%</td>
-                        <td className="adm-muted">{fmt(r.last_export)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              ) : <Empty message="No watermark-free exports yet." />}
-            </Card>
-            <div className="adm-grid-2">
-              <Card title="Exports by user" eyebrow="Power users" count={d.exportsByUser?.length}>
-                {d.exportsByUser && d.exportsByUser.length > 0 ? (
-                  <>
-                    <table className="adm-table">
-                      <thead><tr><th>User</th><th>PNG</th><th>SVG</th><th>PDF</th><th>Total</th></tr></thead>
-                      <tbody>
-                        {exportsByUserPag.slice.map((r, i) => (
-                          <tr key={i}>
-                            <td className="adm-mono adm-truncate">{r.user_email || <span className="adm-muted">Anon</span>}</td>
-                            <td>{r.png_count ?? 0}</td>
-                            <td>{r.svg_count ?? 0}</td>
-                            <td>{r.pdf_count ?? 0}</td>
-                            <td><strong>{r.total_exports}</strong></td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                    <Pagination {...exportsByUserPag} />
-                  </>
-                ) : <Empty message="No exports tracked yet." />}
-              </Card>
-              <Card title="Recent exports" eyebrow="Live feed" count={d.recentExports?.length}>
-                {d.recentExports && d.recentExports.length > 0 ? (
-                  <>
-                    <table className="adm-table">
-                      <thead><tr><th>Format</th><th>Project</th><th>When</th></tr></thead>
-                      <tbody>
-                        {recentExportsPag.slice.map((r, i) => (
-                          <tr key={i}>
-                            <td><FormatBadge format={r.format} />{r.no_watermark && <span className="adm-tag adm-tag-green" style={{ marginLeft: 6 }}>clean</span>}</td>
-                            <td className="adm-muted adm-truncate">{r.project_name || '—'}</td>
-                            <td className="adm-muted" style={{ whiteSpace: 'nowrap' }}>{fmtTime(r.created_at)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                    <Pagination {...recentExportsPag} />
-                  </>
-                ) : <Empty message="No exports yet." />}
-              </Card>
-            </div>
-          </>
+          <RevenueTab data={revenue.data} loading={revenue.loading} />
         )}
-
-        {/* ───────── USERS ───────── */}
       </main>
       {openSessionId && (
         <SessionTimelineModal

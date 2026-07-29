@@ -236,7 +236,7 @@ export default async function handler(req, res) {
         // Blindly upserting source='stripe' here was the bug that let a later
         // cancellation downgrade a "Pro forever" account.
         const existing = must(
-          await sb.from('user_plans').select('source').eq('user_id', userId).maybeSingle(),
+          await sb.from('user_plans').select('source, pro_since').eq('user_id', userId).maybeSingle(),
           'checkout plan lookup',
         );
         const protectedSource = ['grandfathered', 'admin'].includes(existing.data?.source);
@@ -249,6 +249,12 @@ export default async function handler(req, res) {
           source: protectedSource ? existing.data.source : 'stripe',
           stripe_customer_id: session.customer || null,
           stripe_subscription_id: session.subscription || null,
+          // Set once, here — the checkout redirect is the most reliably-fired
+          // event for a brand-new subscription; customer.subscription.updated
+          // also sets this (also once-only) as a second guaranteed path, and
+          // fills in billing_interval, which isn't available on the Checkout
+          // Session object without an expand.
+          ...(existing.data?.pro_since ? {} : { pro_since: new Date().toISOString() }),
           updated_at: new Date().toISOString(),
         }, { onConflict: 'user_id' }), 'checkout plan upsert');
       }
@@ -261,6 +267,10 @@ export default async function handler(req, res) {
       const periodEnd = sub.current_period_end
         ? new Date(sub.current_period_end * 1000).toISOString()
         : null;
+      // Subscription `items` (unlike Checkout Session line items) is a
+      // standard field present on every subscription object, no expand
+      // needed — safe to read directly for admin MRR reporting.
+      const interval = sub.items?.data?.[0]?.price?.recurring?.interval || null;
 
       const userId = sub.metadata?.supabase_user_id || null;
       const match = userId
@@ -275,7 +285,7 @@ export default async function handler(req, res) {
         // checkout.session.completed, which would otherwise leave the row as
         // source='signup' and permanently unrevocable.
         const existing = must(
-          await sb.from('user_plans').select('source').eq(match.column, match.value).maybeSingle(),
+          await sb.from('user_plans').select('source, pro_since').eq(match.column, match.value).maybeSingle(),
           'subscription plan lookup',
         );
         const protectedSource = ['grandfathered', 'admin'].includes(existing.data?.source);
@@ -286,6 +296,10 @@ export default async function handler(req, res) {
             ...(protectedSource ? {} : { source: 'stripe' }),
             stripe_subscription_id: sub.id || null,
             current_period_end: periodEnd,
+            billing_interval: interval,
+            // Set once — a renewal or plan-detail update must not reset when
+            // the admin dashboard considers this subscriber "new".
+            ...(existing.data?.pro_since ? {} : { pro_since: new Date().toISOString() }),
             updated_at: new Date().toISOString(),
           })
           .eq(match.column, match.value), 'subscription upgrade');

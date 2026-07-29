@@ -118,6 +118,7 @@ describe('webhook plan sync', () => {
     expect(upsert.table).toBe('user_plans');
     const [, values] = upsert.ops.find((o) => o[0] === 'upsert');
     expect(values).toMatchObject({ user_id: 'user-1', plan: 'pro', status: 'active', source: 'stripe' });
+    expect(values.pro_since).toBeTruthy(); // first time going pro — stamped here too
   });
 
   it('subscription.deleted downgrades ONLY source=stripe rows (grandfathered untouchable)', async () => {
@@ -196,6 +197,36 @@ describe('grandfathering invariant (P0-02)', () => {
     await handler({ method: 'POST', body, headers: signedHeaders(body) }, res);
     const [, values] = dbCalls.find((c) => c.ops.some((o) => o[0] === 'upsert')).ops.find((o) => o[0] === 'upsert');
     expect(values.source).toBe('stripe');
+  });
+
+  it('captures billing_interval from the subscription items on update', async () => {
+    const { default: handler } = await import('../api/stripe-webhook.js');
+    dbResults.user_plans = [{ data: { source: 'signup', pro_since: null } }, {}];
+    const body = JSON.stringify({
+      type: 'customer.subscription.updated',
+      data: { object: {
+        id: 'sub_1', status: 'active', customer: 'cus_1', metadata: { supabase_user_id: 'u-1' },
+        items: { data: [{ price: { recurring: { interval: 'year' } } }] },
+      } },
+    });
+    const res = mockRes();
+    await handler({ method: 'POST', body, headers: signedHeaders(body) }, res);
+    const [, values] = dbCalls.find((c) => c.ops.some((o) => o[0] === 'update')).ops.find((o) => o[0] === 'update');
+    expect(values.billing_interval).toBe('year');
+    expect(values.pro_since).toBeTruthy(); // first time going pro — stamped
+  });
+
+  it('does not re-stamp pro_since on a renewal update', async () => {
+    const { default: handler } = await import('../api/stripe-webhook.js');
+    dbResults.user_plans = [{ data: { source: 'stripe', pro_since: '2026-01-01T00:00:00.000Z' } }, {}];
+    const body = JSON.stringify({
+      type: 'customer.subscription.updated',
+      data: { object: { id: 'sub_1', status: 'active', customer: 'cus_1', metadata: { supabase_user_id: 'u-1' } } },
+    });
+    const res = mockRes();
+    await handler({ method: 'POST', body, headers: signedHeaders(body) }, res);
+    const [, values] = dbCalls.find((c) => c.ops.some((o) => o[0] === 'update')).ops.find((o) => o[0] === 'update');
+    expect(values.pro_since).toBeUndefined(); // already set — left alone
   });
 
   it('an active subscription update does NOT rewrite a grandfathered source', async () => {

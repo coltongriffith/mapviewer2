@@ -60,6 +60,11 @@ export function useUsersOverview(enabled) {
   return useRpc('admin_get_users_overview', {}, enabled);
 }
 
+// Real Stripe-backed billing analytics (subscribers, MRR, invoices).
+export function useRevenue(enabled) {
+  return useRpc('admin_get_revenue', {}, enabled);
+}
+
 // Recent client/API failures, grouped by fingerprint (audit P1-12).
 export function useErrorSummary(enabled, hours = 24) {
   return useRpc('admin_get_error_summary', { p_hours: hours }, enabled);

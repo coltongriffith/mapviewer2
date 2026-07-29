@@ -2,6 +2,18 @@ import React, { useState, useMemo } from 'react';
 import { RetentionLadder, StatTile, StatusBadge, ActivityDots, EmptyHint, InfoTip } from './primitives';
 import { METRIC_DEFS, formatRate, fmtNum, fmtDate, relTime } from './metrics';
 
+const PLAN_SOURCE_LABEL = { stripe: 'Paid', grandfathered: 'Grandfathered', admin: 'Admin-granted' };
+function PlanChip({ plan, source, status }) {
+  if (plan !== 'pro') return <span className="admx-badge" style={{ color: '#64748b', background: '#64748b1a' }}>Free</span>;
+  const bad = status && !['active', 'trialing'].includes(status);
+  const color = bad ? '#dc2626' : '#16a34a';
+  return (
+    <span className="admx-badge" style={{ color, background: `${color}1a` }} title={status}>
+      Pro · {PLAN_SOURCE_LABEL[source] || source || '—'}
+    </span>
+  );
+}
+
 const Card = ({ title, tip, eyebrow, action, children, full }) => (
   <section className={`adm-card${full ? ' adm-card-full' : ''}`}>
     <div className="adm-card-head">
@@ -106,7 +118,7 @@ export default function UsersTab({ data, loading, detail, onLoadDetail, onOpenSe
         }>
         {filtered.length === 0 ? <EmptyHint>No users match this filter.</EmptyHint> : (
           <table className="adm-table">
-            <thead><tr><th>User</th><th>Signed up</th><th>Last active</th><th>Activity (14d)</th><th>Projects</th><th>Exports</th><th>Status</th><th /></tr></thead>
+            <thead><tr><th>User</th><th>Plan</th><th>Signed up</th><th>Last active</th><th>Activity (14d)</th><th>Projects</th><th>Exports</th><th>Status</th><th /></tr></thead>
             <tbody>
               {filtered.map((u) => (
                 <React.Fragment key={u.user_id}>
@@ -115,6 +127,7 @@ export default function UsersTab({ data, loading, detail, onLoadDetail, onOpenSe
                       <div className="adm-truncate" title={u.email}>{u.email}</div>
                       {u.company && <div className="adm-muted admx-user-co">{u.company}</div>}
                     </td>
+                    <td><PlanChip plan={u.plan} source={u.plan_source} status={u.plan_status} /></td>
                     <td>{fmtDate(u.created_at)}{u.status === 'new' && <span className="admx-tag-new">New</span>}</td>
                     <td title={u.last_sign_in_at ? `last login ${fmtDate(u.last_sign_in_at)}` : ''}>{u.last_event_at ? relTime(u.last_event_at) : <span className="adm-muted">—</span>}</td>
                     <td><ActivityDots dots={u.dots || []} /></td>
@@ -124,7 +137,7 @@ export default function UsersTab({ data, loading, detail, onLoadDetail, onOpenSe
                     <td><button className="admx-details-btn" onClick={() => toggle(u.user_id)}>{openUser === u.user_id ? 'Hide' : 'Details'}</button></td>
                   </tr>
                   {openUser === u.user_id && (
-                    <tr className="admx-drawer-row"><td colSpan={8}>
+                    <tr className="admx-drawer-row"><td colSpan={9}>
                       <UserDrawer d={detail.byId[u.user_id]} loading={detail.loadingId === u.user_id} onOpenSession={onOpenSession} />
                     </td></tr>
                   )}
@@ -151,6 +164,15 @@ function UserDrawer({ d, loading, onOpenSession }) {
         {id.qp_name && <div className="admx-kv"><span>QP</span><b>{id.qp_name}{id.qp_credentials ? `, ${id.qp_credentials}` : ''}</b></div>}
         <div className="admx-kv"><span>Joined</span><b>{fmtDate(id.created_at)}</b></div>
         <div className="admx-kv"><span>Last login</span><b>{id.last_sign_in_at ? relTime(id.last_sign_in_at) : '—'}</b></div>
+        <div className="admx-drawer-h" style={{ marginTop: 10 }}>Billing</div>
+        <div className="admx-kv"><span>Plan</span><PlanChip plan={id.plan} source={id.plan_source} status={id.plan_status} /></div>
+        {id.plan === 'pro' && (
+          <>
+            {id.billing_interval && <div className="admx-kv"><span>Interval</span><b>{id.billing_interval === 'year' ? 'Yearly' : 'Monthly'}</b></div>}
+            {id.pro_since && <div className="admx-kv"><span>Pro since</span><b>{fmtDate(id.pro_since)}</b></div>}
+            {id.stripe_customer_id && <div className="admx-kv"><span>Stripe customer</span><b className="adm-mono">{id.stripe_customer_id}</b></div>}
+          </>
+        )}
         <div className="admx-drawer-h" style={{ marginTop: 10 }}>Activation</div>
         <div className="admx-drawer-checks">
           {[['Opened', ck.opened], ['Added data', ck.added_data], ['Map work', ck.map_work], ['Exported/shared', ck.artifact]].map(([l, on]) => (
