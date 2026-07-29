@@ -37,7 +37,7 @@ begin
       'Content-Type', 'application/json'
     ),
     body := jsonb_build_object(
-      'from', 'Exploration Maps <onboarding@resend.dev>',
+      'from', 'Exploration Maps <notifications@explorationmaps.com>',
       'to', 'coltongriffith@live.ca',
       'subject', 'New signup: ' || coalesce(p_user_email, p_user_id::text),
       'html', '<p>New account created on explorationmaps.com.</p>'
