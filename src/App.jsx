@@ -203,38 +203,92 @@ function readFileAsDataURL(file) {
   });
 }
 
-function sanitizeSvgDataUrl(dataUrl) {
-  // Strip scripts, event handlers, and external references from SVG before storage.
+// Uploaded SVG is embedded into saved projects, public share snapshots, and
+// exported files, so it must not be able to execute script or pull in an
+// external resource. The earlier version handled <script>, inline event
+// handlers, and external <use> only — it still allowed <style> blocks, CSS
+// url() references, external <image>/filter/mask references, javascript: URLs,
+// and SMIL animation that can set attributes after load (audit P1-24).
+const SVG_MAX_BYTES = 2 * 1024 * 1024;
+const EXTERNAL_URL_RE = /^\s*(?:https?:)?\/\//i;
+const DANGEROUS_URL_RE = /^\s*(?:javascript|data:text\/html|vbscript)/i;
+// Attributes that can reference another resource.
+const URL_ATTRS = ['href', 'xlink:href', 'src', 'filter', 'mask', 'clip-path',
+  'fill', 'stroke', 'style', 'marker-start', 'marker-mid', 'marker-end'];
+
+export function sanitizeSvgDataUrl(dataUrl) {
   const prefix = 'data:image/svg+xml';
-  if (!dataUrl.startsWith(prefix)) return dataUrl;
+  if (typeof dataUrl !== 'string' || !dataUrl.startsWith(prefix)) return dataUrl;
 
   let svgText;
-  if (dataUrl.startsWith('data:image/svg+xml;base64,')) {
-    svgText = atob(dataUrl.slice('data:image/svg+xml;base64,'.length));
-  } else {
-    svgText = decodeURIComponent(dataUrl.slice(dataUrl.indexOf(',') + 1));
+  try {
+    if (dataUrl.startsWith('data:image/svg+xml;base64,')) {
+      svgText = atob(dataUrl.slice('data:image/svg+xml;base64,'.length));
+    } else {
+      svgText = decodeURIComponent(dataUrl.slice(dataUrl.indexOf(',') + 1));
+    }
+  } catch {
+    return null; // undecodable — reject rather than pass through
   }
+  if (svgText.length > SVG_MAX_BYTES) return null;
 
   const doc = new DOMParser().parseFromString(svgText, 'image/svg+xml');
+  if (doc.querySelector('parsererror') || !doc.documentElement
+      || doc.documentElement.nodeName.toLowerCase() !== 'svg') {
+    return null;
+  }
 
-  // Remove dangerous elements
-  doc.querySelectorAll('script, foreignObject').forEach(el => el.remove());
+  // Elements that execute, embed foreign content, load resources, or mutate
+  // the document after load.
+  doc.querySelectorAll(
+    'script, foreignObject, style, iframe, object, embed, audio, video, '
+    + 'animate, animateTransform, animateMotion, set, handler',
+  ).forEach((el) => el.remove());
 
-  // Remove <use> pointing to external resources
-  doc.querySelectorAll('use').forEach(el => {
-    const href = el.getAttribute('href') || el.getAttributeNS('http://www.w3.org/1999/xlink', 'href') || '';
-    if (href.startsWith('http') || href.startsWith('//')) el.remove();
-  });
+  doc.querySelectorAll('*').forEach((el) => {
+    [...el.attributes].forEach((attr) => {
+      const name = attr.name.toLowerCase();
+      const value = attr.value || '';
 
-  // Strip event handler attributes from every element
-  doc.querySelectorAll('*').forEach(el => {
-    [...el.attributes].forEach(attr => {
-      if (attr.name.startsWith('on')) el.removeAttribute(attr.name);
+      // Inline event handlers.
+      if (name.startsWith('on')) { el.removeAttribute(attr.name); return; }
+
+      // Any CSS that can fetch a resource, including via style="".
+      if (name === 'style') {
+        if (/url\s*\(/i.test(value) || /@import/i.test(value) || /expression\s*\(/i.test(value)) {
+          el.removeAttribute(attr.name);
+        }
+        return;
+      }
+
+      if (URL_ATTRS.includes(name) || name.endsWith(':href')) {
+        if (DANGEROUS_URL_RE.test(value) || EXTERNAL_URL_RE.test(value)) {
+          el.removeAttribute(attr.name);
+          return;
+        }
+        // Paint/filter servers referencing anything outside this document.
+        if (/url\s*\(\s*['"]?\s*(?:https?:)?\/\//i.test(value)) {
+          el.removeAttribute(attr.name);
+        }
+      }
     });
   });
 
+  // An <image> with no usable href left is dead weight that may still hold a
+  // stale reference in a serializer; drop it.
+  doc.querySelectorAll('image').forEach((el) => {
+    const href = el.getAttribute('href') || el.getAttributeNS('http://www.w3.org/1999/xlink', 'href');
+    if (!href || EXTERNAL_URL_RE.test(href)) el.remove();
+  });
+
   const clean = new XMLSerializer().serializeToString(doc.documentElement);
+  if (clean.length > SVG_MAX_BYTES) return null;
   return `data:image/svg+xml,${encodeURIComponent(clean)}`;
+}
+
+/** True when the file is an SVG by MIME type or extension. */
+function isSvgFile(file) {
+  return file?.type === 'image/svg+xml' || (file?.name || '').toLowerCase().endsWith('.svg');
 }
 
 function zoneStyle(zone) {
@@ -2848,8 +2902,13 @@ export default function App() {
     }
     try {
       let dataUrl = await readFileAsDataURL(file);
-      if (file.type === 'image/svg+xml' || file.name.toLowerCase().endsWith('.svg')) {
+      if (isSvgFile(file)) {
         dataUrl = sanitizeSvgDataUrl(dataUrl);
+        if (!dataUrl) {
+          setUploadStatus({ type: 'error', message: 'That SVG could not be used safely — try exporting it as a PNG.' });
+          e.target.value = '';
+          return;
+        }
       }
       const img = new Image();
       img.onload = () => {
@@ -2898,7 +2957,17 @@ export default function App() {
       return;
     }
     try {
-      const dataUrl = await readFileAsDataURL(file);
+      let dataUrl = await readFileAsDataURL(file);
+      // Inset SVG lands in saved projects, public shares, and exports exactly
+      // like the logo does, so it gets the same treatment.
+      if (isSvgFile(file)) {
+        dataUrl = sanitizeSvgDataUrl(dataUrl);
+        if (!dataUrl) {
+          setUploadStatus({ type: 'error', message: 'That SVG could not be used safely — try exporting it as a PNG.' });
+          e.target.value = '';
+          return;
+        }
+      }
       const aspectRatio = await new Promise((resolve) => {
         const img = new Image();
         img.onload = () => resolve(img.naturalWidth && img.naturalHeight ? img.naturalWidth / img.naturalHeight : null);
