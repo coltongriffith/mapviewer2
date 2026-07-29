@@ -93,13 +93,71 @@ future expiry/CVC. Verify: checkout → `user_plans` row flips to
 
 ## Verification checklist (after configuring)
 
-- [ ] Existing account: exports stay clean, SVG/PDF work, >3 projects save. 
+- [ ] Existing account: exports stay clean, SVG/PDF work, unlimited projects.
 - [ ] Account page shows "Pro — early adopter" for a grandfathered user.
-- [ ] New (post-launch) test account: PNG has small credit; SVG/PDF opens the
-      upgrade modal; 4th project save is blocked with the upgrade message.
-- [ ] Checkout with the test card upgrades the account within seconds.
+- [ ] New account: PNG carries the small credit and is capped at 2,000 px;
+      SVG/PDF opens the upgrade modal; 3rd project save is blocked.
+- [ ] Checkout upgrades the account within seconds.
 - [ ] Customer portal opens from Account → Plan & Billing.
 - [ ] Stripe dashboard → webhook shows 200s.
+
+## GO-LIVE CHECKLIST (live mode)
+
+Ordered. Nothing here is optional before taking a real payment.
+
+**1. Point the env vars at ONE account in ONE mode.**
+All four must come from the same Stripe account and the same mode. A key from
+one account with price IDs from another is the single most common cause of
+"Could not start checkout" — Stripe answers "No such price".
+
+Live objects already created on `acct_1TyFaVRHvZfpRjJx`:
+
+| Variable | Value |
+|---|---|
+| `STRIPE_PRICE_MONTHLY_ID` | `price_1TyFqXRHvZfpRjJxies5Npoj` ($29/mo) |
+| `STRIPE_PRICE_YEARLY_ID` | `price_1TyFvPRHvZfpRjJxascNqRXz` ($290/yr) |
+| `STRIPE_SECRET_KEY` | Dashboard → Developers → API keys → `sk_live_…` (Stripe never re-shows this; copy it yourself) |
+| `STRIPE_WEBHOOK_SECRET` | Dashboard → Developers → Webhooks → `we_1TyFvjRHvZfpRjJxhNjo0b85` → reveal signing secret |
+
+Set them in Vercel → Settings → Environment Variables → **Production**, then
+redeploy.
+
+**2. Confirm the product and prices are ACTIVE.**
+Dashboard → Product catalog → "Exploration Maps Pro". It was briefly archived
+during setup and then reactivated; confirm both prices show as active before
+relying on them.
+
+**3. Add the missing webhook events.**
+The endpoint was created before the invoice-lifecycle work landed. Dashboard →
+Developers → Webhooks → `we_1TyFvjRHvZfpRjJxhNjo0b85` → **Update details** and
+add, if absent:
+`invoice.finalized`, `invoice.sent`, `invoice.payment_succeeded`,
+`invoice.updated`, `invoice.overdue`.
+Without these, an issued invoice stays invisible until it is paid.
+
+**4. Enable the Customer Portal.** Settings → Billing → Customer portal →
+enable, allowing cancel and payment-method update. **Required**: our published
+refund policy promises self-serve cancellation, and without the portal
+`/api/stripe-portal` has nothing to open.
+
+**5. Set Branding.** Settings → Branding — logo and accent colour. Applies to
+Checkout, the portal, and every invoice.
+
+**6. Turn on webhook failure email.** Developers → Webhooks → notify on failed
+delivery. Safe to act on: the `stripe_events` ledger makes redelivery
+idempotent.
+
+**7. Smoke test with a real card**, then refund yourself:
+   - new account → upgrade → pay
+   - `user_plans` flips to `pro / active / stripe`
+   - clean SVG export works, project cap lifts
+   - portal opens; cancel; access persists to period end
+   - Stripe → Webhooks shows 200s
+
+**Security note:** the webhook signing secret for `we_1TyFvj…` was surfaced in
+a chat transcript during setup. Anyone holding it could forge webhook events
+and grant themselves Pro. Roll it (Dashboard → Webhooks → endpoint → roll
+secret) and update `STRIPE_WEBHOOK_SECRET` if that transcript is not private.
 
 ## Invoicing (one-off custom work)
 
@@ -124,9 +182,11 @@ right tool, not custom checkout code.
    to every future invoice automatically.
 
 **Webhook events** (added to the same endpoint as Billing — see
-`api/stripe-webhook.js`): `invoice.paid`, `invoice.payment_failed`,
-`invoice.voided`, `invoice.marked_uncollectible`, `credit_note.created`,
-`charge.refunded`. These sync into `public.custom_invoices` — a separate,
+`api/stripe-webhook.js`): `invoice.finalized`, `invoice.sent`, `invoice.paid`,
+`invoice.payment_succeeded`, `invoice.payment_failed`, `invoice.updated`,
+`invoice.overdue`, `invoice.voided`, `invoice.marked_uncollectible`,
+`credit_note.created`, `charge.refunded`. These sync into
+`public.custom_invoices` — a separate,
 read-mostly mirror table, **never** `user_plans`. A standalone invoice
 carries no `subscription` id; any invoice event that DOES carry one is a
 subscription-renewal invoice and is ignored here (already handled by the
