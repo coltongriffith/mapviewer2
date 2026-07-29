@@ -804,6 +804,11 @@ export default function App() {
   const [linkCopied, setLinkCopied] = useState(false);
   const shareElapsedRef = useRef(null);
   const [pendingExportFormat, setPendingExportFormat] = useState(null);
+  // Format the user was trying to export when the Pro paywall blocked them —
+  // stashed across the Stripe Checkout redirect (sessionStorage survives full
+  // navigation; component state does not) so the export can resume once
+  // they're back and confirmed Pro, instead of silently dropping the intent.
+  const [pendingProGateExport, setPendingProGateExport] = useState(null);
   const [isDirty, setIsDirty] = useState(false);
   const [selectedLayerId, setSelectedLayerId] = useState(null);
   const [selectedCalloutId, setSelectedCalloutId] = useState(null);
@@ -2729,6 +2734,11 @@ export default function App() {
     if (!billing) return;
     try { window.history.replaceState({}, '', window.location.pathname); } catch { /* noop */ }
     if (billing === 'success') {
+      // Checkout always starts from the editor (the upgrade prompt only shows
+      // there), but Stripe's redirect lands on '/' — send them back rather
+      // than stranding them on the landing page. The draft they were editing
+      // is already restored into `project` state independently of `screen`.
+      setScreen('editor');
       let cancelled = false;
       const timers = [];
       (async () => {
@@ -2761,6 +2771,14 @@ export default function App() {
               });
             }
             setUploadStatus({ type: 'success', message: 'Welcome to Pro! Clean exports, HD formats, and unlimited projects are unlocked.' });
+            // Resume the export that triggered the paywall, once entitlements
+            // actually reflect Pro (see the effect below) — not immediately,
+            // since `entitlements` here is still the stale value from when
+            // this effect was created on mount.
+            try {
+              const fmt = sessionStorage.getItem('em_pro_gate_export_format');
+              if (fmt) { sessionStorage.removeItem('em_pro_gate_export_format'); setPendingProGateExport(fmt); }
+            } catch { /* noop */ }
           } else if (result.status === 'processing') {
             trackEvent('upgrade_processing', {}, user?.id);
             setUploadStatus({ type: 'info', message: 'Payment received — we’re still activating your account. This usually takes a few seconds; reload if it doesn’t appear shortly.' });
@@ -3619,6 +3637,7 @@ export default function App() {
     if (!canExportFormat(entitlements, format)) {
       trackEvent('pro_gate_shown', { feature: 'export_format', format, tier, signedIn: Boolean(user) }, user?.id);
       setUpgradeReason('export');
+      try { sessionStorage.setItem('em_pro_gate_export_format', format); } catch { /* noop */ }
       return;
     }
     // Signed-in users, or anyone who's already left an email, skip the gate for
@@ -3634,6 +3653,20 @@ export default function App() {
       trackEvent('export_gate_shown', { format, signedIn: Boolean(user) }, user?.id);
     }
   };
+
+  // Resumes an export that was interrupted by the Pro paywall, once
+  // entitlements actually reflect the new plan. Waiting on `entitlements`
+  // itself (rather than firing right after the checkout-success handler
+  // above) avoids resuming with the stale, pre-upgrade entitlements that
+  // effect closed over on mount.
+  useEffect(() => {
+    if (!pendingProGateExport) return;
+    if (!canExportFormat(entitlements, pendingProGateExport)) return;
+    const format = pendingProGateExport;
+    setPendingProGateExport(null);
+    handleExportClick(format);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingProGateExport, entitlements]);
 
   const handleExportModalConfirm = async (email, extraOpts = {}) => {
     setShowExportModal(false);
@@ -6124,8 +6157,15 @@ export default function App() {
         {upgradeReason && (
           <UpgradeModal
             reason={upgradeReason}
-            onClose={() => setUpgradeReason(null)}
-            onNeedSignIn={() => { setUpgradeReason(null); setScreen('account'); }}
+            onClose={() => {
+              setUpgradeReason(null);
+              try { sessionStorage.removeItem('em_pro_gate_export_format'); } catch { /* noop */ }
+            }}
+            onNeedSignIn={() => {
+              setUpgradeReason(null);
+              try { sessionStorage.removeItem('em_pro_gate_export_format'); } catch { /* noop */ }
+              setScreen('account');
+            }}
           />
         )}
         {showExportModal ? (
