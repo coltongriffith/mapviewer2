@@ -503,9 +503,9 @@ function selectValue(options, value, fallback = 'Inter') {
 // Font dropdown that surfaces the default brand kit's fonts in a "Brand kit"
 // optgroup at the top, so applying a brand font is one click. Falls back to the
 // plain FONT_OPTIONS list when no brand fonts are available.
-function FontSelect({ value, brandFonts = [], onChange }) {
+function FontSelect({ value, brandFonts = [], onChange, id }) {
   return (
-    <select value={selectValue(FONT_OPTIONS, value)} onChange={onChange}>
+    <select id={id} value={selectValue(FONT_OPTIONS, value)} onChange={onChange}>
       {brandFonts.length > 0 && (
         <optgroup label="Brand kit">
           {brandFonts.map((f) => <option key={`brand-${f}`} value={f}>{f} (brand)</option>)}
@@ -4139,8 +4139,8 @@ export default function App() {
           <h2>Content</h2>
           <div className="control-grid">
             <div className="control-row">
-              <label>Template</label>
-              <select
+              <label htmlFor="f-template-4142">Template</label>
+              <select id="f-template-4142"
                 value={project.layout.templateId || 'technical_results_v2'}
                 onChange={(e) => {
                   const tid = e.target.value;
@@ -4173,21 +4173,21 @@ export default function App() {
               </div>
             )}
             <hr style={{ margin: '4px 0 8px', border: 'none', borderTop: '1px solid #e8eef6' }} />
-            <div className="control-row"><label>Title</label><input value={localTitle} onChange={(e) => {
+            <div className="control-row"><label htmlFor="f-title-4176">Title</label><input id="f-title-4176" value={localTitle} onChange={(e) => {
               const val = e.target.value;
               setLocalTitle(val);
               clearTimeout(titleDebounceRef.current);
               titleDebounceRef.current = setTimeout(() => updateLayout({ title: val }), 300);
             }} /></div>
-            <div className="control-row"><label>Subtitle</label><input value={localSubtitle} onChange={(e) => {
+            <div className="control-row"><label htmlFor="f-subtitle-4182">Subtitle</label><input id="f-subtitle-4182" value={localSubtitle} onChange={(e) => {
               const val = e.target.value;
               setLocalSubtitle(val);
               clearTimeout(subtitleDebounceRef.current);
               subtitleDebounceRef.current = setTimeout(() => updateLayout({ subtitle: val }), 300);
             }} /></div>
             <div className="control-row" style={{ alignItems: 'center' }}>
-              <label>Title Size</label>
-              <input type="range" min="0.6" max="1.5" step="0.05" value={project.layout.titleFontScale ?? 1} onChange={(e) => updateLayout({ titleFontScale: parseFloat(e.target.value) })} style={{ flex: 1 }} />
+              <label htmlFor="f-title-size-4189">Title Size</label>
+              <input id="f-title-size-4189" type="range" min="0.6" max="1.5" step="0.05" value={project.layout.titleFontScale ?? 1} onChange={(e) => updateLayout({ titleFontScale: parseFloat(e.target.value) })} style={{ flex: 1 }} />
               <span style={{ fontSize: 11, marginLeft: 6, minWidth: 32 }}>{Math.round((project.layout.titleFontScale ?? 1) * 100)}%</span>
             </div>
             <div className="control-row-stack">
@@ -4213,8 +4213,8 @@ export default function App() {
               </div>
               {(project.layout.basemap === 'blank') && (
                 <div className="control-row inline-2" style={{ marginTop: 8 }}>
-                  <label>Background Color</label>
-                  <ColorField value={project.layout.blankBg || '#ffffff'} onChange={(e) => updateLayout({ blankBg: e.target.value })} brandColors={brandColors} />
+                  <label htmlFor="f-background-color-4216">Background Color</label>
+                  <ColorField id="f-background-color-4216" value={project.layout.blankBg || '#ffffff'} onChange={(e) => updateLayout({ blankBg: e.target.value })} brandColors={brandColors} />
                 </div>
               )}
             </div>
@@ -4251,8 +4251,8 @@ export default function App() {
             {/* Corner radius */}
             <div className="control-row inline-2" style={{ marginTop: 10 }}>
               <div>
-                <label>Panel Corners</label>
-                <input type="range" min="0" max="24" step="1"
+                <label htmlFor="f-panel-corners-4254">Panel Corners</label>
+                <input id="f-panel-corners-4254" type="range" min="0" max="24" step="1"
                   value={project.layout.cornerRadius ?? themeTokens.panelRadius ?? 10}
                   onChange={(e) => updateLayout({ cornerRadius: Number(e.target.value) })} />
               </div>
@@ -4283,12 +4283,12 @@ export default function App() {
           {selectedLayer ? (
             <div className="control-grid" style={{ marginTop: 10 }}>
               <div className="control-row">
-                <label>Display Label</label>
-                <input value={selectedLayer.displayName || selectedLayer.legend?.label || ''} onChange={(e) => setDisplayLabel(selectedLayer.id, e.target.value)} />
+                <label htmlFor="f-display-label-4286">Display Label</label>
+                <input id="f-display-label-4286" value={selectedLayer.displayName || selectedLayer.legend?.label || ''} onChange={(e) => setDisplayLabel(selectedLayer.id, e.target.value)} />
               </div>
               <div className="control-row">
-                <label>Layer Role</label>
-                <select value={selectedLayer.role} onChange={(e) => changeLayerRole(selectedLayer.id, e.target.value)}>
+                <label htmlFor="f-layer-role-4290">Layer Role</label>
+                <select id="f-layer-role-4290" value={selectedLayer.role} onChange={(e) => changeLayerRole(selectedLayer.id, e.target.value)}>
                   {Object.entries(ROLE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                 </select>
               </div>
@@ -4313,8 +4313,8 @@ export default function App() {
                 <>
                   <div className="control-row inline-2">
                     <div>
-                      <label>Point Size</label>
-                      <input type="range" min="6" max="24" step="1" value={selectedLayer.style?.markerSize ?? 12} onChange={(e) => updateLayer(selectedLayer.id, { style: { markerSize: Number(e.target.value) } })} />
+                      <label htmlFor="f-point-size-4316">Point Size</label>
+                      <input id="f-point-size-4316" type="range" min="6" max="24" step="1" value={selectedLayer.style?.markerSize ?? 12} onChange={(e) => updateLayer(selectedLayer.id, { style: { markerSize: Number(e.target.value) } })} />
                     </div>
                     <div className="range-value">{selectedLayer.style?.markerSize ?? 12}px</div>
                   </div>
@@ -4368,15 +4368,15 @@ export default function App() {
                 <>
                   <div className="control-row inline-2">
                     <div>
-                      <label>Fill Opacity</label>
-                      <input type="range" min="0" max="1" step="0.05" value={selectedLayer.style?.fillOpacity ?? 0.22} onChange={(e) => { const id = selectedLayer.id, val = Number(e.target.value); clearTimeout(layerStyleDebounceRef.current); layerStyleDebounceRef.current = setTimeout(() => updateLayer(id, { style: { fillOpacity: val } }), 50); }} />
+                      <label htmlFor="f-fill-opacity-4371">Fill Opacity</label>
+                      <input id="f-fill-opacity-4371" type="range" min="0" max="1" step="0.05" value={selectedLayer.style?.fillOpacity ?? 0.22} onChange={(e) => { const id = selectedLayer.id, val = Number(e.target.value); clearTimeout(layerStyleDebounceRef.current); layerStyleDebounceRef.current = setTimeout(() => updateLayer(id, { style: { fillOpacity: val } }), 50); }} />
                     </div>
                     <div className="range-value">{Math.round((selectedLayer.style?.fillOpacity ?? 0.22) * 100)}%</div>
                   </div>
                   <div className="control-row inline-2">
                     <div>
-                      <label>Layer Opacity</label>
-                      <input type="range" min="0" max="1" step="0.05" value={selectedLayer.style?.layerOpacity ?? 1} onChange={(e) => { const id = selectedLayer.id, val = Number(e.target.value); clearTimeout(layerStyleDebounceRef.current); layerStyleDebounceRef.current = setTimeout(() => updateLayer(id, { style: { layerOpacity: val } }), 50); }} />
+                      <label htmlFor="f-layer-opacity-4378">Layer Opacity</label>
+                      <input id="f-layer-opacity-4378" type="range" min="0" max="1" step="0.05" value={selectedLayer.style?.layerOpacity ?? 1} onChange={(e) => { const id = selectedLayer.id, val = Number(e.target.value); clearTimeout(layerStyleDebounceRef.current); layerStyleDebounceRef.current = setTimeout(() => updateLayer(id, { style: { layerOpacity: val } }), 50); }} />
                     </div>
                     <div className="range-value">{Math.round((selectedLayer.style?.layerOpacity ?? 1) * 100)}%</div>
                   </div>
@@ -4450,8 +4450,8 @@ export default function App() {
               )}
               <div className="control-row inline-2">
                 <div>
-                  <label>Search Radius</label>
-                  <select
+                  <label htmlFor="f-search-radius-4453">Search Radius</label>
+                  <select id="f-search-radius-4453"
                     value={areaClaims?.radius ?? 25}
                     onChange={(e) => setAreaClaims((prev) => ({ ...(prev || {}), radius: Number(e.target.value) }))}
                   >
@@ -4509,8 +4509,8 @@ export default function App() {
                         <span>Dissolve inner borders</span>
                       </label>
                       <div className="acl-opacity-row">
-                        <label>Fill opacity</label>
-                        <input
+                        <label htmlFor="f-fill-opacity-4512">Fill opacity</label>
+                        <input id="f-fill-opacity-4512"
                           type="range" min="0" max="1" step="0.05"
                           value={areaClaims.fillOpacity ?? 0.22}
                           onChange={(e) => setAreaClaims((prev) => ({ ...prev, fillOpacity: Number(e.target.value) }))}
@@ -4574,17 +4574,17 @@ export default function App() {
               <div className="feature-chip">Selected: {selectedFeature.layerName}</div>
               <div className="small-note">Click a drillhole on the map, then refine the callout here. The selected hole is editable before you add the callout.</div>
               <div className="control-row">
-                <label>Title</label>
-                <input value={selectedFeature.suggestedLabel} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, suggestedLabel: e.target.value }))} />
+                <label htmlFor="f-title-4577">Title</label>
+                <input id="f-title-4577" value={selectedFeature.suggestedLabel} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, suggestedLabel: e.target.value }))} />
               </div>
               <div className="control-row">
-                <label>Subtext</label>
-                <input value={selectedFeature.suggestedSubtext || ''} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, suggestedSubtext: e.target.value }))} />
+                <label htmlFor="f-subtext-4581">Subtext</label>
+                <input id="f-subtext-4581" value={selectedFeature.suggestedSubtext || ''} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, suggestedSubtext: e.target.value }))} />
               </div>
               <div className="control-row inline-2">
                 <div>
-                  <label>Callout Type</label>
-                  <select value={selectedFeature.calloutType || 'leader'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, calloutType: e.target.value }))}>
+                  <label htmlFor="f-callout-type-4586">Callout Type</label>
+                  <select id="f-callout-type-4586" value={selectedFeature.calloutType || 'leader'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, calloutType: e.target.value }))}>
                     {Object.entries(CALLOUT_TYPES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                   </select>
                 </div>
@@ -4592,39 +4592,39 @@ export default function App() {
               {selectedFeature.calloutType === 'badge' && (
                 <div className="control-row inline-2">
                   <div>
-                    <label>Chip Text</label>
-                    <input value={selectedFeature.badgeValue || ''} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, badgeValue: e.target.value }))} placeholder=">14 Moz" />
+                    <label htmlFor="f-chip-text-4595">Chip Text</label>
+                    <input id="f-chip-text-4595" value={selectedFeature.badgeValue || ''} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, badgeValue: e.target.value }))} placeholder=">14 Moz" />
                   </div>
                   <div>
-                    <label>Chip Color</label>
-                    <ColorField value={selectedFeature.badgeColor || '#d97706'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, badgeColor: e.target.value }))} brandColors={brandColors} />
+                    <label htmlFor="f-chip-color-4599">Chip Color</label>
+                    <ColorField id="f-chip-color-4599" value={selectedFeature.badgeColor || '#d97706'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, badgeColor: e.target.value }))} brandColors={brandColors} />
                   </div>
                 </div>
               )}
               <div className="control-row inline-2">
                 <div>
-                  <label>Background</label>
-                  <ColorField value={selectedFeature.style?.background || '#ffffff'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, style: { ...(prev.style || {}), background: e.target.value } }))} brandColors={brandColors} />
+                  <label htmlFor="f-background-4606">Background</label>
+                  <ColorField id="f-background-4606" value={selectedFeature.style?.background || '#ffffff'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, style: { ...(prev.style || {}), background: e.target.value } }))} brandColors={brandColors} />
                 </div>
                 <div>
-                  <label>Border</label>
-                  <ColorField value={selectedFeature.style?.border || '#102640'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, style: { ...(prev.style || {}), border: e.target.value } }))} brandColors={brandColors} />
-                </div>
-              </div>
-              <div className="control-row inline-2">
-                <div>
-                  <label>Text</label>
-                  <ColorField value={selectedFeature.style?.textColor || '#0f172a'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, style: { ...(prev.style || {}), textColor: e.target.value } }))} brandColors={brandColors} />
-                </div>
-                <div>
-                  <label>Subtext</label>
-                  <ColorField value={selectedFeature.style?.subtextColor || '#475569'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, style: { ...(prev.style || {}), subtextColor: e.target.value } }))} brandColors={brandColors} />
+                  <label htmlFor="f-border-4610">Border</label>
+                  <ColorField id="f-border-4610" value={selectedFeature.style?.border || '#102640'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, style: { ...(prev.style || {}), border: e.target.value } }))} brandColors={brandColors} />
                 </div>
               </div>
               <div className="control-row inline-2">
                 <div>
-                  <label>Font Size</label>
-                  <input type="range" min="11" max="16" step="1" value={selectedFeature.style?.fontSize || 12} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, style: { ...(prev.style || {}), fontSize: Number(e.target.value) } }))} />
+                  <label htmlFor="f-text-4616">Text</label>
+                  <ColorField id="f-text-4616" value={selectedFeature.style?.textColor || '#0f172a'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, style: { ...(prev.style || {}), textColor: e.target.value } }))} brandColors={brandColors} />
+                </div>
+                <div>
+                  <label htmlFor="f-subtext-4620">Subtext</label>
+                  <ColorField id="f-subtext-4620" value={selectedFeature.style?.subtextColor || '#475569'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, style: { ...(prev.style || {}), subtextColor: e.target.value } }))} brandColors={brandColors} />
+                </div>
+              </div>
+              <div className="control-row inline-2">
+                <div>
+                  <label htmlFor="f-font-size-4626">Font Size</label>
+                  <input id="f-font-size-4626" type="range" min="11" max="16" step="1" value={selectedFeature.style?.fontSize || 12} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, style: { ...(prev.style || {}), fontSize: Number(e.target.value) } }))} />
                 </div>
                 <div className="range-value">{selectedFeature.style?.fontSize || 12}px</div>
               </div>
@@ -4654,18 +4654,18 @@ export default function App() {
                   </div>
                   {isOpen && (
                     <div className="control-grid">
-                      <div className="control-row"><label>Text</label><input autoFocus value={callout.text} onChange={(e) => updateCallout(callout.id, { text: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter') setSelectedCalloutId(null); }} /></div>
-                      <div className="control-row"><label>Subtext</label><input value={callout.subtext || ''} placeholder="Details / result…" onChange={(e) => updateCallout(callout.id, { subtext: e.target.value })} /></div>
+                      <div className="control-row"><label htmlFor="f-text-4657">Text</label><input id="f-text-4657" autoFocus value={callout.text} onChange={(e) => updateCallout(callout.id, { text: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter') setSelectedCalloutId(null); }} /></div>
+                      <div className="control-row"><label htmlFor="f-subtext-4658">Subtext</label><input id="f-subtext-4658" value={callout.subtext || ''} placeholder="Details / result…" onChange={(e) => updateCallout(callout.id, { subtext: e.target.value })} /></div>
                       <div className="control-row inline-2">
                         <div>
-                          <label>Type</label>
-                          <select value={callout.type} onChange={(e) => updateCallout(callout.id, { type: e.target.value })}>
+                          <label htmlFor="f-type-4661">Type</label>
+                          <select id="f-type-4661" value={callout.type} onChange={(e) => updateCallout(callout.id, { type: e.target.value })}>
                             {Object.entries(CALLOUT_TYPES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                           </select>
                         </div>
                         <div>
-                          <label>Priority</label>
-                          <select value={callout.priority} onChange={(e) => updateCallout(callout.id, { priority: Number(e.target.value) })}>
+                          <label htmlFor="f-priority-4667">Priority</label>
+                          <select id="f-priority-4667" value={callout.priority} onChange={(e) => updateCallout(callout.id, { priority: Number(e.target.value) })}>
                             <option value={1}>High</option>
                             <option value={2}>Medium</option>
                             <option value={3}>Low</option>
@@ -4675,12 +4675,12 @@ export default function App() {
                       {callout.type === 'badge' && (
                         <div className="control-row inline-2">
                           <div>
-                            <label>Chip Text</label>
-                            <input value={callout.badgeValue || ''} onChange={(e) => updateCallout(callout.id, { badgeValue: e.target.value })} placeholder=">14 Moz" />
+                            <label htmlFor="f-chip-text-4678">Chip Text</label>
+                            <input id="f-chip-text-4678" value={callout.badgeValue || ''} onChange={(e) => updateCallout(callout.id, { badgeValue: e.target.value })} placeholder=">14 Moz" />
                           </div>
                           <div>
-                            <label>Chip Color</label>
-                            <ColorField value={callout.badgeColor || '#d97706'} onChange={(e) => updateCallout(callout.id, { badgeColor: e.target.value })} brandColors={brandColors} />
+                            <label htmlFor="f-chip-color-4682">Chip Color</label>
+                            <ColorField id="f-chip-color-4682" value={callout.badgeColor || '#d97706'} onChange={(e) => updateCallout(callout.id, { badgeColor: e.target.value })} brandColors={brandColors} />
                           </div>
                         </div>
                       )}
@@ -4688,35 +4688,35 @@ export default function App() {
                         <>
                           <div className="control-row inline-2">
                             <div>
-                              <label>Background</label>
-                              <ColorField value={callout.style?.background || '#ffffff'} onChange={(e) => updateCallout(callout.id, { style: { ...(callout.style || {}), background: e.target.value } })} brandColors={brandColors} />
+                              <label htmlFor="f-background-4691">Background</label>
+                              <ColorField id="f-background-4691" value={callout.style?.background || '#ffffff'} onChange={(e) => updateCallout(callout.id, { style: { ...(callout.style || {}), background: e.target.value } })} brandColors={brandColors} />
                             </div>
                             <div>
-                              <label>Border / Line</label>
-                              <ColorField value={callout.style?.border || '#102640'} onChange={(e) => updateCallout(callout.id, { style: { ...(callout.style || {}), border: e.target.value } })} brandColors={brandColors} />
-                            </div>
-                          </div>
-                          <div className="control-row inline-2">
-                            <div>
-                              <label>Text Color</label>
-                              <ColorField value={callout.style?.textColor || '#0f172a'} onChange={(e) => updateCallout(callout.id, { style: { ...(callout.style || {}), textColor: e.target.value } })} brandColors={brandColors} />
-                            </div>
-                            <div>
-                              <label>Subtext Color</label>
-                              <ColorField value={callout.style?.subtextColor || '#475569'} onChange={(e) => updateCallout(callout.id, { style: { ...(callout.style || {}), subtextColor: e.target.value } })} brandColors={brandColors} />
+                              <label htmlFor="f-border-line-4695">Border / Line</label>
+                              <ColorField id="f-border-line-4695" value={callout.style?.border || '#102640'} onChange={(e) => updateCallout(callout.id, { style: { ...(callout.style || {}), border: e.target.value } })} brandColors={brandColors} />
                             </div>
                           </div>
                           <div className="control-row inline-2">
                             <div>
-                              <label>Font Size</label>
-                              <input type="range" min="9" max="18" step="1" value={callout.style?.fontSize || 12} onChange={(e) => updateCallout(callout.id, { style: { ...(callout.style || {}), fontSize: Number(e.target.value) } })} />
+                              <label htmlFor="f-text-color-4701">Text Color</label>
+                              <ColorField id="f-text-color-4701" value={callout.style?.textColor || '#0f172a'} onChange={(e) => updateCallout(callout.id, { style: { ...(callout.style || {}), textColor: e.target.value } })} brandColors={brandColors} />
+                            </div>
+                            <div>
+                              <label htmlFor="f-subtext-color-4705">Subtext Color</label>
+                              <ColorField id="f-subtext-color-4705" value={callout.style?.subtextColor || '#475569'} onChange={(e) => updateCallout(callout.id, { style: { ...(callout.style || {}), subtextColor: e.target.value } })} brandColors={brandColors} />
+                            </div>
+                          </div>
+                          <div className="control-row inline-2">
+                            <div>
+                              <label htmlFor="f-font-size-4711">Font Size</label>
+                              <input id="f-font-size-4711" type="range" min="9" max="18" step="1" value={callout.style?.fontSize || 12} onChange={(e) => updateCallout(callout.id, { style: { ...(callout.style || {}), fontSize: Number(e.target.value) } })} />
                             </div>
                             <div className="range-value">{callout.style?.fontSize || 12}px</div>
                           </div>
                           <div className="control-row">
                             <div>
-                              <label>Text Align</label>
-                              <select value={callout.style?.textAlign || 'left'} onChange={(e) => updateCallout(callout.id, { style: { ...(callout.style || {}), textAlign: e.target.value } })}>
+                              <label htmlFor="f-text-align-4718">Text Align</label>
+                              <select id="f-text-align-4718" value={callout.style?.textAlign || 'left'} onChange={(e) => updateCallout(callout.id, { style: { ...(callout.style || {}), textAlign: e.target.value } })}>
                                 <option value="left">Left</option>
                                 <option value="center">Center</option>
                               </select>
@@ -4768,29 +4768,29 @@ export default function App() {
           {selectedMarker?.type === 'maplabel' ? (
             <div className="control-grid" style={{ marginTop: 10 }}>
               <div className="selected-note">Map Label</div>
-              <div className="control-row"><label>Text</label><input value={selectedMarker.label || ''} onChange={(e) => updateMarker(selectedMarker.id, { label: e.target.value })} placeholder="BRITISH COLUMBIA" /></div>
+              <div className="control-row"><label htmlFor="f-text-4771">Text</label><input id="f-text-4771" value={selectedMarker.label || ''} onChange={(e) => updateMarker(selectedMarker.id, { label: e.target.value })} placeholder="BRITISH COLUMBIA" /></div>
               <div className="control-row inline-2">
                 <div>
-                  <label>Size</label>
-                  <input type="range" min="14" max="72" step="1" value={selectedMarker.size || 28} onChange={(e) => updateMarker(selectedMarker.id, { size: Number(e.target.value) })} />
+                  <label htmlFor="f-size-4774">Size</label>
+                  <input id="f-size-4774" type="range" min="14" max="72" step="1" value={selectedMarker.size || 28} onChange={(e) => updateMarker(selectedMarker.id, { size: Number(e.target.value) })} />
                 </div>
                 <div className="range-value">{selectedMarker.size || 28}pt</div>
               </div>
               <div className="control-row inline-2">
                 <div>
-                  <label>Opacity</label>
-                  <input type="range" min="0.05" max="1" step="0.05" value={selectedMarker.opacity ?? 0.35} onChange={(e) => updateMarker(selectedMarker.id, { opacity: Number(e.target.value) })} />
+                  <label htmlFor="f-opacity-4781">Opacity</label>
+                  <input id="f-opacity-4781" type="range" min="0.05" max="1" step="0.05" value={selectedMarker.opacity ?? 0.35} onChange={(e) => updateMarker(selectedMarker.id, { opacity: Number(e.target.value) })} />
                 </div>
                 <div className="range-value">{Math.round((selectedMarker.opacity ?? 0.35) * 100)}%</div>
               </div>
               <div className="control-row inline-2">
                 <div>
-                  <label>Rotation</label>
-                  <input type="number" min="-180" max="180" step="1" value={selectedMarker.rotation || 0} onChange={(e) => updateMarker(selectedMarker.id, { rotation: Number(e.target.value) })} />
+                  <label htmlFor="f-rotation-4788">Rotation</label>
+                  <input id="f-rotation-4788" type="number" min="-180" max="180" step="1" value={selectedMarker.rotation || 0} onChange={(e) => updateMarker(selectedMarker.id, { rotation: Number(e.target.value) })} />
                 </div>
                 <div>
-                  <label>Color</label>
-                  <ColorField value={selectedMarker.color || '#1e293b'} onChange={(e) => updateMarker(selectedMarker.id, { color: e.target.value })} brandColors={brandColors} />
+                  <label htmlFor="f-color-4792">Color</label>
+                  <ColorField id="f-color-4792" value={selectedMarker.color || '#1e293b'} onChange={(e) => updateMarker(selectedMarker.id, { color: e.target.value })} brandColors={brandColors} />
                 </div>
               </div>
               <button className="secondary-btn" type="button" onClick={() => { setProject((prev) => ({ ...prev, markers: prev.markers.filter((m) => m.id !== selectedMarker.id) })); setSelectedFeature(null); }}>Remove Label</button>
@@ -4798,23 +4798,23 @@ export default function App() {
           ) : selectedMarker ? (
             <div className="control-grid" style={{ marginTop: 10 }}>
               <div className="selected-note">Selected marker</div>
-              <div className="control-row"><label>Label</label><input value={selectedMarker.label || ''} onChange={(e) => updateMarker(selectedMarker.id, { label: e.target.value })} /></div>
+              <div className="control-row"><label htmlFor="f-label-4801">Label</label><input id="f-label-4801" value={selectedMarker.label || ''} onChange={(e) => updateMarker(selectedMarker.id, { label: e.target.value })} /></div>
               <div className="control-row inline-2">
                 <div>
-                  <label>Marker Type</label>
-                  <select value={selectedMarker.type} onChange={(e) => updateMarker(selectedMarker.id, { type: e.target.value })}>
+                  <label htmlFor="f-marker-type-4804">Marker Type</label>
+                  <select id="f-marker-type-4804" value={selectedMarker.type} onChange={(e) => updateMarker(selectedMarker.id, { type: e.target.value })}>
                     {Object.entries(MARKER_TYPES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label>Color</label>
-                  <ColorField value={selectedMarker.color} onChange={(e) => updateMarker(selectedMarker.id, { color: e.target.value })} brandColors={brandColors} />
+                  <label htmlFor="f-color-4810">Color</label>
+                  <ColorField id="f-color-4810" value={selectedMarker.color} onChange={(e) => updateMarker(selectedMarker.id, { color: e.target.value })} brandColors={brandColors} />
                 </div>
               </div>
               <div className="control-row inline-2">
                 <div>
-                  <label>Size</label>
-                  <input type="range" min="12" max="36" step="1" value={selectedMarker.size} onChange={(e) => updateMarker(selectedMarker.id, { size: Number(e.target.value) })} />
+                  <label htmlFor="f-size-4816">Size</label>
+                  <input id="f-size-4816" type="range" min="12" max="36" step="1" value={selectedMarker.size} onChange={(e) => updateMarker(selectedMarker.id, { size: Number(e.target.value) })} />
                 </div>
                 <div className="range-value">{selectedMarker.size}px</div>
               </div>
@@ -4825,7 +4825,7 @@ export default function App() {
           {selectedEllipse ? (
             <div className="control-grid" style={{ marginTop: 10 }}>
               <div className="selected-note">{selectedEllipse.isRing ? 'Selected distance ring' : 'Selected highlight area'}</div>
-              <div className="control-row"><label>Label</label><input value={selectedEllipse.label || ''} onChange={(e) => updateEllipse(selectedEllipse.id, { label: e.target.value })} placeholder={selectedEllipse.isRing ? (selectedEllipse.units === 'mi' ? `${(selectedEllipse.radiusKm * 0.621371).toFixed(1)} mi` : `${selectedEllipse.radiusKm} km`) : ''} /></div>
+              <div className="control-row"><label htmlFor="f-label-4828">Label</label><input id="f-label-4828" value={selectedEllipse.label || ''} onChange={(e) => updateEllipse(selectedEllipse.id, { label: e.target.value })} placeholder={selectedEllipse.isRing ? (selectedEllipse.units === 'mi' ? `${(selectedEllipse.radiusKm * 0.621371).toFixed(1)} mi` : `${selectedEllipse.radiusKm} km`) : ''} /></div>
               {selectedEllipse.isRing ? (
                 <>
                   <div className="control-row inline-2">
@@ -4839,8 +4839,8 @@ export default function App() {
                         }} />
                     </div>
                     <div>
-                      <label>Ring Color</label>
-                      <ColorField value={selectedEllipse.color || '#dc2626'} onChange={(e) => updateEllipse(selectedEllipse.id, { color: e.target.value })} brandColors={brandColors} />
+                      <label htmlFor="f-ring-color-4842">Ring Color</label>
+                      <ColorField id="f-ring-color-4842" value={selectedEllipse.color || '#dc2626'} onChange={(e) => updateEllipse(selectedEllipse.id, { color: e.target.value })} brandColors={brandColors} />
                     </div>
                   </div>
                   <div className="control-row">
@@ -4852,15 +4852,15 @@ export default function App() {
                   </div>
                   <div className="control-row inline-2">
                     <div>
-                      <label>Label Size</label>
-                      <input type="range" min="9" max="22" step="1" value={selectedEllipse.labelFontSize || 11} onChange={(e) => updateEllipse(selectedEllipse.id, { labelFontSize: Number(e.target.value) })} />
+                      <label htmlFor="f-label-size-4855">Label Size</label>
+                      <input id="f-label-size-4855" type="range" min="9" max="22" step="1" value={selectedEllipse.labelFontSize || 11} onChange={(e) => updateEllipse(selectedEllipse.id, { labelFontSize: Number(e.target.value) })} />
                     </div>
                     <div className="range-value">{selectedEllipse.labelFontSize || 11}px</div>
                   </div>
                   <div className="control-row inline-2">
                     <div>
-                      <label>Label Color</label>
-                      <ColorField value={selectedEllipse.labelColor || selectedEllipse.color || '#dc2626'} onChange={(e) => updateEllipse(selectedEllipse.id, { labelColor: e.target.value })} brandColors={brandColors} />
+                      <label htmlFor="f-label-color-4862">Label Color</label>
+                      <ColorField id="f-label-color-4862" value={selectedEllipse.labelColor || selectedEllipse.color || '#dc2626'} onChange={(e) => updateEllipse(selectedEllipse.id, { labelColor: e.target.value })} brandColors={brandColors} />
                     </div>
                     <label className="toggle-row" style={{ marginTop: 0 }}>
                       <input type="checkbox" checked={selectedEllipse.labelBold !== false} onChange={(e) => updateEllipse(selectedEllipse.id, { labelBold: e.target.checked })} />
@@ -4874,8 +4874,8 @@ export default function App() {
                   {selectedEllipse.labelArc && (
                     <div className="control-row inline-2">
                       <div>
-                        <label>Angle (0° = top)</label>
-                        <input type="range" min="0" max="359" step="1" value={selectedEllipse.labelAngle ?? 0} onChange={(e) => updateEllipse(selectedEllipse.id, { labelAngle: Number(e.target.value) })} />
+                        <label htmlFor="f-angle-0-top-4877">Angle (0° = top)</label>
+                        <input id="f-angle-0-top-4877" type="range" min="0" max="359" step="1" value={selectedEllipse.labelAngle ?? 0} onChange={(e) => updateEllipse(selectedEllipse.id, { labelAngle: Number(e.target.value) })} />
                       </div>
                       <div className="range-value">{selectedEllipse.labelAngle ?? 0}°</div>
                     </div>
@@ -4885,22 +4885,22 @@ export default function App() {
                 <>
                   <div className="control-row inline-2">
                     <div>
-                      <label>Width</label>
-                      <input type="number" min="24" max="320" step="1" value={selectedEllipse.width} onChange={(e) => updateEllipse(selectedEllipse.id, { width: Number(e.target.value) })} />
+                      <label htmlFor="f-width-4888">Width</label>
+                      <input id="f-width-4888" type="number" min="24" max="320" step="1" value={selectedEllipse.width} onChange={(e) => updateEllipse(selectedEllipse.id, { width: Number(e.target.value) })} />
                     </div>
                     <div>
-                      <label>Height</label>
-                      <input type="number" min="24" max="320" step="1" value={selectedEllipse.height} onChange={(e) => updateEllipse(selectedEllipse.id, { height: Number(e.target.value) })} />
+                      <label htmlFor="f-height-4892">Height</label>
+                      <input id="f-height-4892" type="number" min="24" max="320" step="1" value={selectedEllipse.height} onChange={(e) => updateEllipse(selectedEllipse.id, { height: Number(e.target.value) })} />
                     </div>
                   </div>
                   <div className="control-row inline-2">
                     <div>
-                      <label>Rotation</label>
-                      <input type="number" min="-180" max="180" step="1" value={selectedEllipse.rotation} onChange={(e) => updateEllipse(selectedEllipse.id, { rotation: Number(e.target.value) })} />
+                      <label htmlFor="f-rotation-4898">Rotation</label>
+                      <input id="f-rotation-4898" type="number" min="-180" max="180" step="1" value={selectedEllipse.rotation} onChange={(e) => updateEllipse(selectedEllipse.id, { rotation: Number(e.target.value) })} />
                     </div>
                     <div>
-                      <label>Color</label>
-                      <ColorField value={selectedEllipse.color} onChange={(e) => updateEllipse(selectedEllipse.id, { color: e.target.value })} brandColors={brandColors} />
+                      <label htmlFor="f-color-4902">Color</label>
+                      <ColorField id="f-color-4902" value={selectedEllipse.color} onChange={(e) => updateEllipse(selectedEllipse.id, { color: e.target.value })} brandColors={brandColors} />
                     </div>
                   </div>
                 </>
@@ -4919,12 +4919,12 @@ export default function App() {
                   </div>
                   <div className="control-row inline-2">
                     <div>
-                      <label>Shade Color</label>
-                      <ColorField value={selectedEllipse.outsideShadeColor || '#000000'} onChange={(e) => updateEllipse(selectedEllipse.id, { outsideShadeColor: e.target.value })} brandColors={brandColors} />
+                      <label htmlFor="f-shade-color-4922">Shade Color</label>
+                      <ColorField id="f-shade-color-4922" value={selectedEllipse.outsideShadeColor || '#000000'} onChange={(e) => updateEllipse(selectedEllipse.id, { outsideShadeColor: e.target.value })} brandColors={brandColors} />
                     </div>
                     <div>
-                      <label>Opacity</label>
-                      <input type="range" min="0.05" max="0.75" step="0.05" value={selectedEllipse.outsideShadeOpacity ?? 0.35} onChange={(e) => updateEllipse(selectedEllipse.id, { outsideShadeOpacity: Number(e.target.value) })} />
+                      <label htmlFor="f-opacity-4926">Opacity</label>
+                      <input id="f-opacity-4926" type="range" min="0.05" max="0.75" step="0.05" value={selectedEllipse.outsideShadeOpacity ?? 0.35} onChange={(e) => updateEllipse(selectedEllipse.id, { outsideShadeOpacity: Number(e.target.value) })} />
                     </div>
                   </div>
                 </>
@@ -4936,7 +4936,7 @@ export default function App() {
           {selectedPolygon ? (
             <div className="control-grid" style={{ marginTop: 10 }}>
               <div className="selected-note">Selected boundary</div>
-              <div className="control-row"><label>Label</label><input value={selectedPolygon.label || ''} onChange={(e) => updatePolygon(selectedPolygon.id, { label: e.target.value })} placeholder="e.g. Target Zone" /></div>
+              <div className="control-row"><label htmlFor="f-label-4939">Label</label><input id="f-label-4939" value={selectedPolygon.label || ''} onChange={(e) => updatePolygon(selectedPolygon.id, { label: e.target.value })} placeholder="e.g. Target Zone" /></div>
               <label className="toggle-row">
                 <input type="checkbox" checked={!!selectedPolygon.arcLabel} onChange={(e) => updatePolygon(selectedPolygon.id, { arcLabel: e.target.checked })} />
                 <span>Arc label along boundary</span>
@@ -4944,26 +4944,26 @@ export default function App() {
               {selectedPolygon.arcLabel && (
                 <div className="control-row inline-2">
                   <div>
-                    <label>Position (0° = start)</label>
-                    <input type="range" min="0" max="359" step="1" value={selectedPolygon.labelAngle ?? 0} onChange={(e) => updatePolygon(selectedPolygon.id, { labelAngle: Number(e.target.value) })} />
+                    <label htmlFor="f-position-0-start-4947">Position (0° = start)</label>
+                    <input id="f-position-0-start-4947" type="range" min="0" max="359" step="1" value={selectedPolygon.labelAngle ?? 0} onChange={(e) => updatePolygon(selectedPolygon.id, { labelAngle: Number(e.target.value) })} />
                   </div>
                   <div className="range-value">{selectedPolygon.labelAngle ?? 0}°</div>
                 </div>
               )}
               <div className="control-row inline-2">
                 <div>
-                  <label>Color</label>
-                  <ColorField value={selectedPolygon.color || '#000000'} onChange={(e) => updatePolygon(selectedPolygon.id, { color: e.target.value })} brandColors={brandColors} />
+                  <label htmlFor="f-color-4955">Color</label>
+                  <ColorField id="f-color-4955" value={selectedPolygon.color || '#000000'} onChange={(e) => updatePolygon(selectedPolygon.id, { color: e.target.value })} brandColors={brandColors} />
                 </div>
                 <div>
-                  <label>Stroke Width</label>
-                  <input type="range" min="1" max="8" step="0.5" value={selectedPolygon.strokeWidth ?? 2} onChange={(e) => updatePolygon(selectedPolygon.id, { strokeWidth: Number(e.target.value) })} />
+                  <label htmlFor="f-stroke-width-4959">Stroke Width</label>
+                  <input id="f-stroke-width-4959" type="range" min="1" max="8" step="0.5" value={selectedPolygon.strokeWidth ?? 2} onChange={(e) => updatePolygon(selectedPolygon.id, { strokeWidth: Number(e.target.value) })} />
                 </div>
               </div>
               <div className="control-row inline-2">
                 <div>
-                  <label>Label Size</label>
-                  <input type="range" min="9" max="28" step="1" value={selectedPolygon.labelFontSize || 12} onChange={(e) => updatePolygon(selectedPolygon.id, { labelFontSize: Number(e.target.value) })} />
+                  <label htmlFor="f-label-size-4965">Label Size</label>
+                  <input id="f-label-size-4965" type="range" min="9" max="28" step="1" value={selectedPolygon.labelFontSize || 12} onChange={(e) => updatePolygon(selectedPolygon.id, { labelFontSize: Number(e.target.value) })} />
                 </div>
                 <div className="range-value">{selectedPolygon.labelFontSize || 12}px</div>
               </div>
@@ -4988,12 +4988,12 @@ export default function App() {
                   </div>
                   <div className="control-row inline-2">
                     <div>
-                      <label>Shade Color</label>
-                      <ColorField value={selectedPolygon.outsideShadeColor || '#000000'} onChange={(e) => updatePolygon(selectedPolygon.id, { outsideShadeColor: e.target.value })} brandColors={brandColors} />
+                      <label htmlFor="f-shade-color-4991">Shade Color</label>
+                      <ColorField id="f-shade-color-4991" value={selectedPolygon.outsideShadeColor || '#000000'} onChange={(e) => updatePolygon(selectedPolygon.id, { outsideShadeColor: e.target.value })} brandColors={brandColors} />
                     </div>
                     <div>
-                      <label>Opacity</label>
-                      <input type="range" min="0.05" max="0.75" step="0.05" value={selectedPolygon.outsideShadeOpacity ?? 0.35} onChange={(e) => updatePolygon(selectedPolygon.id, { outsideShadeOpacity: Number(e.target.value) })} />
+                      <label htmlFor="f-opacity-4995">Opacity</label>
+                      <input id="f-opacity-4995" type="range" min="0.05" max="0.75" step="0.05" value={selectedPolygon.outsideShadeOpacity ?? 0.35} onChange={(e) => updatePolygon(selectedPolygon.id, { outsideShadeOpacity: Number(e.target.value) })} />
                     </div>
                   </div>
                 </>
@@ -5009,8 +5009,8 @@ export default function App() {
               <div className="control-section">
                 <div className="control-section-title">Distance Line</div>
                 <div className="control-row">
-                  <label>Color</label>
-                  <ColorField value={dl.color || '#e11d48'}
+                  <label htmlFor="f-color-5012">Color</label>
+                  <ColorField id="f-color-5012" value={dl.color || '#e11d48'}
                     onChange={(e) => updateDistanceLine(dl.id, { color: e.target.value })} brandColors={brandColors} />
                 </div>
                 <div className="control-row">
@@ -5035,16 +5035,16 @@ export default function App() {
           <h2>Design</h2>
           <div className="control-grid">
             <div className="control-row">
-              <label>Mode</label>
-              <select value={project.layout.mode} onChange={(e) => applyMode(e.target.value)}>
+              <label htmlFor="f-mode-5038">Mode</label>
+              <select id="f-mode-5038" value={project.layout.mode} onChange={(e) => applyMode(e.target.value)}>
                 {Object.entries(TEMPLATE_MODES).map(([value, label]) => (
                   <option key={value} value={value}>{label}</option>
                 ))}
               </select>
             </div>
             <div className="control-row">
-              <label>Design Theme</label>
-              <select value={project.layout.themeId || 'investor_clean'} onChange={(e) => updateLayout({ themeId: e.target.value })}>
+              <label htmlFor="f-design-theme-5046">Design Theme</label>
+              <select id="f-design-theme-5046" value={project.layout.themeId || 'investor_clean'} onChange={(e) => updateLayout({ themeId: e.target.value })}>
                 {Object.entries(TEMPLATE_THEMES).map(([value, label]) => (
                   <option key={value} value={value}>{label}</option>
                 ))}
@@ -5052,8 +5052,8 @@ export default function App() {
             </div>
             <div className="color-overrides-grid">
               <div className="color-override-cell">
-                <label>Title bg</label>
-                <ColorField
+                <label htmlFor="f-title-bg-5055">Title bg</label>
+                <ColorField id="f-title-bg-5055"
                   value={project.layout.titleBgColor || themeTokens.titleFill?.replace(/rgba?\([^)]+\)/i, '') || '#0c1a35'}
                   onChange={(e) => updateLayout({ titleBgColor: e.target.value })}
                   title="Title block background"
@@ -5062,8 +5062,8 @@ export default function App() {
                 />
               </div>
               <div className="color-override-cell">
-                <label>Title text</label>
-                <ColorField
+                <label htmlFor="f-title-text-5065">Title text</label>
+                <ColorField id="f-title-text-5065"
                   value={project.layout.titleFgColor || themeTokens.titleText || '#ffffff'}
                   onChange={(e) => updateLayout({ titleFgColor: e.target.value })}
                   title="Title text color"
@@ -5072,8 +5072,8 @@ export default function App() {
                 />
               </div>
               <div className="color-override-cell">
-                <label>Panel bg</label>
-                <ColorField
+                <label htmlFor="f-panel-bg-5075">Panel bg</label>
+                <ColorField id="f-panel-bg-5075"
                   value={project.layout.panelBgColor || '#ffffff'}
                   onChange={(e) => updateLayout({ panelBgColor: e.target.value })}
                   title="Overlay panel background"
@@ -5082,8 +5082,8 @@ export default function App() {
                 />
               </div>
               <div className="color-override-cell">
-                <label>Panel text</label>
-                <ColorField
+                <label htmlFor="f-panel-text-5085">Panel text</label>
+                <ColorField id="f-panel-text-5085"
                   value={project.layout.panelFgColor || themeTokens.bodyText || '#1e293b'}
                   onChange={(e) => updateLayout({ panelFgColor: e.target.value })}
                   title="Panel text color"
@@ -5092,8 +5092,8 @@ export default function App() {
                 />
               </div>
               <div className="color-override-cell">
-                <label>Accent</label>
-                <ColorField
+                <label htmlFor="f-accent-5095">Accent</label>
+                <ColorField id="f-accent-5095"
                   value={project.layout.accentColor || themeTokens.titleAccent || '#2563eb'}
                   onChange={(e) => updateLayout({ accentColor: e.target.value })}
                   title="Accent color (stripe, callout borders)"
@@ -5118,12 +5118,12 @@ export default function App() {
               <summary>Fonts</summary>
               <div className="sub-details-body">
                 <div className="control-row inline-2">
-                  <div><label>Title</label><FontSelect value={project.layout.fonts?.title} brandFonts={brandFonts} onChange={(e) => updateLayout({ fonts: { title: e.target.value } })} /></div>
-                  <div><label>Legend</label><FontSelect value={project.layout.fonts?.legend} brandFonts={brandFonts} onChange={(e) => updateLayout({ fonts: { legend: e.target.value } })} /></div>
+                  <div><label htmlFor="f-title-5121">Title</label><FontSelect id="f-title-5121" value={project.layout.fonts?.title} brandFonts={brandFonts} onChange={(e) => updateLayout({ fonts: { title: e.target.value } })} /></div>
+                  <div><label htmlFor="f-legend-5122">Legend</label><FontSelect id="f-legend-5122" value={project.layout.fonts?.legend} brandFonts={brandFonts} onChange={(e) => updateLayout({ fonts: { legend: e.target.value } })} /></div>
                 </div>
                 <div className="control-row inline-2">
-                  <div><label>Labels</label><FontSelect value={project.layout.fonts?.label} brandFonts={brandFonts} onChange={(e) => updateLayout({ fonts: { label: e.target.value } })} /></div>
-                  <div><label>Callouts</label><FontSelect value={project.layout.fonts?.callout} brandFonts={brandFonts} onChange={(e) => updateLayout({ fonts: { callout: e.target.value } })} /></div>
+                  <div><label htmlFor="f-labels-5125">Labels</label><FontSelect id="f-labels-5125" value={project.layout.fonts?.label} brandFonts={brandFonts} onChange={(e) => updateLayout({ fonts: { label: e.target.value } })} /></div>
+                  <div><label htmlFor="f-callouts-5126">Callouts</label><FontSelect id="f-callouts-5126" value={project.layout.fonts?.callout} brandFonts={brandFonts} onChange={(e) => updateLayout({ fonts: { callout: e.target.value } })} /></div>
                 </div>
               </div>
             </details>
@@ -5134,52 +5134,52 @@ export default function App() {
                 <summary>NI 43-101 Title Strip</summary>
                 <div className="sub-details-body">
                   <div className="control-row">
-                    <label>Figure Title</label>
-                    <input type="text" value={project.layout.stripTitle || ''} placeholder="(leave blank to hide)" onChange={(e) => updateLayout({ stripTitle: e.target.value })} />
+                    <label htmlFor="f-figure-title-5137">Figure Title</label>
+                    <input id="f-figure-title-5137" type="text" value={project.layout.stripTitle || ''} placeholder="(leave blank to hide)" onChange={(e) => updateLayout({ stripTitle: e.target.value })} />
                   </div>
                   <div className="control-row">
-                    <label>Subtitle / Property</label>
-                    <input type="text" value={project.layout.stripSubtitle || ''} placeholder="(optional)" onChange={(e) => updateLayout({ stripSubtitle: e.target.value })} />
+                    <label htmlFor="f-subtitle-property-5141">Subtitle / Property</label>
+                    <input id="f-subtitle-property-5141" type="text" value={project.layout.stripSubtitle || ''} placeholder="(optional)" onChange={(e) => updateLayout({ stripSubtitle: e.target.value })} />
                   </div>
                   <div className="control-row">
-                    <label>Strip Position</label>
-                    <select value={project.layout.titleStripPosition || 'bottom'} onChange={(e) => updateLayout({ titleStripPosition: e.target.value })}>
+                    <label htmlFor="f-strip-position-5145">Strip Position</label>
+                    <select id="f-strip-position-5145" value={project.layout.titleStripPosition || 'bottom'} onChange={(e) => updateLayout({ titleStripPosition: e.target.value })}>
                       <option value="bottom">Bottom</option>
                       <option value="top">Top</option>
                     </select>
                   </div>
                   <div className="control-row">
-                    <label>Scale Override</label>
-                    <input type="text" value={project.layout.manualScaleDenom || ''} placeholder="e.g. 25000 (auto if blank)" onChange={(e) => updateLayout({ manualScaleDenom: e.target.value })} />
+                    <label htmlFor="f-scale-override-5152">Scale Override</label>
+                    <input id="f-scale-override-5152" type="text" value={project.layout.manualScaleDenom || ''} placeholder="e.g. 25000 (auto if blank)" onChange={(e) => updateLayout({ manualScaleDenom: e.target.value })} />
                   </div>
                   <div className="control-row" style={{ alignItems: 'center' }}>
-                    <label>Text Size</label>
-                    <input type="range" min="0.7" max="1.4" step="0.05" value={project.layout.stripFontScale || 1} onChange={(e) => updateLayout({ stripFontScale: parseFloat(e.target.value) })} style={{ flex: 1 }} />
+                    <label htmlFor="f-text-size-5156">Text Size</label>
+                    <input id="f-text-size-5156" type="range" min="0.7" max="1.4" step="0.05" value={project.layout.stripFontScale || 1} onChange={(e) => updateLayout({ stripFontScale: parseFloat(e.target.value) })} style={{ flex: 1 }} />
                     <span style={{ fontSize: 11, marginLeft: 6, minWidth: 32 }}>{Math.round((project.layout.stripFontScale || 1) * 100)}%</span>
                   </div>
                   <div className="control-row">
-                    <label>Qualified Person</label>
-                    <input type="text" value={project.layout.qpName || ''} placeholder="Name, P.Geo." onChange={(e) => updateLayout({ qpName: e.target.value })} />
+                    <label htmlFor="f-qualified-person-5161">Qualified Person</label>
+                    <input id="f-qualified-person-5161" type="text" value={project.layout.qpName || ''} placeholder="Name, P.Geo." onChange={(e) => updateLayout({ qpName: e.target.value })} />
                   </div>
                   <div className="control-row">
-                    <label>QP Credentials</label>
-                    <input type="text" value={project.layout.qpCredentials || ''} placeholder="P.Geo., M.Sc." onChange={(e) => updateLayout({ qpCredentials: e.target.value })} />
+                    <label htmlFor="f-qp-credentials-5165">QP Credentials</label>
+                    <input id="f-qp-credentials-5165" type="text" value={project.layout.qpCredentials || ''} placeholder="P.Geo., M.Sc." onChange={(e) => updateLayout({ qpCredentials: e.target.value })} />
                   </div>
                   <div className="control-row">
-                    <label>Company</label>
-                    <input type="text" value={project.layout.companyName || ''} placeholder="Company Name" onChange={(e) => updateLayout({ companyName: e.target.value })} />
+                    <label htmlFor="f-company-5169">Company</label>
+                    <input id="f-company-5169" type="text" value={project.layout.companyName || ''} placeholder="Company Name" onChange={(e) => updateLayout({ companyName: e.target.value })} />
                   </div>
                   <div className="control-row">
-                    <label>Figure No.</label>
-                    <input type="text" value={project.layout.figureNumber || ''} placeholder="Fig. 3-2" onChange={(e) => updateLayout({ figureNumber: e.target.value })} />
+                    <label htmlFor="f-figure-no-5173">Figure No.</label>
+                    <input id="f-figure-no-5173" type="text" value={project.layout.figureNumber || ''} placeholder="Fig. 3-2" onChange={(e) => updateLayout({ figureNumber: e.target.value })} />
                   </div>
                   <div className="control-row">
-                    <label>Revision</label>
-                    <input type="text" value={project.layout.figureRevision || ''} placeholder="Rev. A" onChange={(e) => updateLayout({ figureRevision: e.target.value })} />
+                    <label htmlFor="f-revision-5177">Revision</label>
+                    <input id="f-revision-5177" type="text" value={project.layout.figureRevision || ''} placeholder="Rev. A" onChange={(e) => updateLayout({ figureRevision: e.target.value })} />
                   </div>
                   <div className="control-row">
-                    <label>Projection</label>
-                    <input
+                    <label htmlFor="f-projection-5181">Projection</label>
+                    <input id="f-projection-5181"
                       type="text"
                       value={project.layout.projectionName || ''}
                       placeholder="e.g. NAD83 / UTM Zone 10N"
@@ -5205,18 +5205,18 @@ export default function App() {
             <details className="sub-details">
               <summary>Text & Metadata</summary>
               <div className="sub-details-body">
-                <div className="control-row"><label>Legend Title</label><input value={localLegendTitle} onChange={(e) => { const val = e.target.value; setLocalLegendTitle(val); metaDirtyRef.current.legendTitle = true; clearTimeout(legendTitleDebounceRef.current); legendTitleDebounceRef.current = setTimeout(() => { updateLayout({ legendTitle: val }); metaDirtyRef.current.legendTitle = false; }, 300); }} placeholder="Legend" /></div>
+                <div className="control-row"><label htmlFor="f-legend-title-5208">Legend Title</label><input id="f-legend-title-5208" value={localLegendTitle} onChange={(e) => { const val = e.target.value; setLocalLegendTitle(val); metaDirtyRef.current.legendTitle = true; clearTimeout(legendTitleDebounceRef.current); legendTitleDebounceRef.current = setTimeout(() => { updateLayout({ legendTitle: val }); metaDirtyRef.current.legendTitle = false; }, 300); }} placeholder="Legend" /></div>
                 <div className="control-row" style={{ alignItems: 'center' }}>
-                  <label>Text Size</label>
-                  <input type="range" min="0.6" max="1.5" step="0.05" value={project.layout.legendFontScale ?? 1} onChange={(e) => updateLayout({ legendFontScale: parseFloat(e.target.value) })} style={{ flex: 1 }} />
+                  <label htmlFor="f-text-size-5210">Text Size</label>
+                  <input id="f-text-size-5210" type="range" min="0.6" max="1.5" step="0.05" value={project.layout.legendFontScale ?? 1} onChange={(e) => updateLayout({ legendFontScale: parseFloat(e.target.value) })} style={{ flex: 1 }} />
                   <span style={{ fontSize: 11, marginLeft: 6, minWidth: 32 }}>{Math.round((project.layout.legendFontScale ?? 1) * 100)}%</span>
                 </div>
-                <div className="control-row"><label>Footer / Disclaimer</label><input value={localFooterText} onChange={(e) => { const val = e.target.value; setLocalFooterText(val); metaDirtyRef.current.footerText = true; clearTimeout(footerTextDebounceRef.current); footerTextDebounceRef.current = setTimeout(() => { updateLayout({ footerText: val }); metaDirtyRef.current.footerText = false; }, 300); }} placeholder="e.g. For internal use only" /></div>
+                <div className="control-row"><label htmlFor="f-footer-disclaimer-5214">Footer / Disclaimer</label><input id="f-footer-disclaimer-5214" value={localFooterText} onChange={(e) => { const val = e.target.value; setLocalFooterText(val); metaDirtyRef.current.footerText = true; clearTimeout(footerTextDebounceRef.current); footerTextDebounceRef.current = setTimeout(() => { updateLayout({ footerText: val }); metaDirtyRef.current.footerText = false; }, 300); }} placeholder="e.g. For internal use only" /></div>
                 <div className="control-row inline-2">
-                  <div><label>Map Date</label><input value={localMapDate} onChange={(e) => { const val = e.target.value; setLocalMapDate(val); metaDirtyRef.current.mapDate = true; clearTimeout(mapDateDebounceRef.current); mapDateDebounceRef.current = setTimeout(() => { updateLayout({ mapDate: val }); metaDirtyRef.current.mapDate = false; }, 300); }} placeholder="e.g. April 2025" /></div>
-                  <div><label>Project #</label><input value={localProjectNumber} onChange={(e) => { const val = e.target.value; setLocalProjectNumber(val); metaDirtyRef.current.projectNumber = true; clearTimeout(projectNumberDebounceRef.current); projectNumberDebounceRef.current = setTimeout(() => { updateLayout({ projectNumber: val }); metaDirtyRef.current.projectNumber = false; }, 300); }} placeholder="e.g. P-2024-01" /></div>
+                  <div><label htmlFor="f-map-date-5216">Map Date</label><input id="f-map-date-5216" value={localMapDate} onChange={(e) => { const val = e.target.value; setLocalMapDate(val); metaDirtyRef.current.mapDate = true; clearTimeout(mapDateDebounceRef.current); mapDateDebounceRef.current = setTimeout(() => { updateLayout({ mapDate: val }); metaDirtyRef.current.mapDate = false; }, 300); }} placeholder="e.g. April 2025" /></div>
+                  <div><label htmlFor="f-project-5217">Project #</label><input id="f-project-5217" value={localProjectNumber} onChange={(e) => { const val = e.target.value; setLocalProjectNumber(val); metaDirtyRef.current.projectNumber = true; clearTimeout(projectNumberDebounceRef.current); projectNumberDebounceRef.current = setTimeout(() => { updateLayout({ projectNumber: val }); metaDirtyRef.current.projectNumber = false; }, 300); }} placeholder="e.g. P-2024-01" /></div>
                 </div>
-                <div className="control-row"><label>Scale Note</label><input value={localMapScaleNote} onChange={(e) => { const val = e.target.value; setLocalMapScaleNote(val); metaDirtyRef.current.mapScaleNote = true; clearTimeout(mapScaleNoteDebounceRef.current); mapScaleNoteDebounceRef.current = setTimeout(() => { updateLayout({ mapScaleNote: val }); metaDirtyRef.current.mapScaleNote = false; }, 300); }} placeholder="e.g. 1:50,000" /></div>
+                <div className="control-row"><label htmlFor="f-scale-note-5219">Scale Note</label><input id="f-scale-note-5219" value={localMapScaleNote} onChange={(e) => { const val = e.target.value; setLocalMapScaleNote(val); metaDirtyRef.current.mapScaleNote = true; clearTimeout(mapScaleNoteDebounceRef.current); mapScaleNoteDebounceRef.current = setTimeout(() => { updateLayout({ mapScaleNote: val }); metaDirtyRef.current.mapScaleNote = false; }, 300); }} placeholder="e.g. 1:50,000" /></div>
               </div>
             </details>
 
@@ -5311,22 +5311,22 @@ export default function App() {
               <div className="inset-detected-badge">Detected: {project.layout.autoInsetRegion.name}</div>
             )}
             <div className="control-row inline-2">
-              <div><label>Inset Title</label><input value={project.layout.insetTitle ?? 'Project Locator'} onChange={(e) => updateLayout({ insetTitle: e.target.value })} placeholder="Project Locator" /></div>
-              <div><label>Inset Label</label><input value={project.layout.insetLabel ?? ''} onChange={(e) => updateLayout({ insetLabel: e.target.value })} placeholder={project.layout.autoInsetRegion?.name || 'Province / State'} /></div>
+              <div><label htmlFor="f-inset-title-5314">Inset Title</label><input id="f-inset-title-5314" value={project.layout.insetTitle ?? 'Project Locator'} onChange={(e) => updateLayout({ insetTitle: e.target.value })} placeholder="Project Locator" /></div>
+              <div><label htmlFor="f-inset-label-5315">Inset Label</label><input id="f-inset-label-5315" value={project.layout.insetLabel ?? ''} onChange={(e) => updateLayout({ insetLabel: e.target.value })} placeholder={project.layout.autoInsetRegion?.name || 'Province / State'} /></div>
             </div>
             {project.layout.autoInsetRegion && !project.layout.insetImage && (
               <div className="control-row inline-2" style={{ flexWrap: 'wrap', gap: 8 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <label style={{ marginBottom: 0 }}>Region</label>
-                  <ColorField value={project.layout.insetRegionFill || '#dce8f5'} onChange={(e) => updateLayout({ insetRegionFill: e.target.value })} title="Region fill" brandColors={brandColors} />
+                  <label htmlFor="f-region-5320" style={{ marginBottom: 0 }}>Region</label>
+                  <ColorField id="f-region-5320" value={project.layout.insetRegionFill || '#dce8f5'} onChange={(e) => updateLayout({ insetRegionFill: e.target.value })} title="Region fill" brandColors={brandColors} />
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <label style={{ marginBottom: 0 }}>Background</label>
-                  <ColorField value={project.layout.insetBgFill || '#f0f4f8'} onChange={(e) => updateLayout({ insetBgFill: e.target.value })} title="Background" brandColors={brandColors} />
+                  <label htmlFor="f-background-5324" style={{ marginBottom: 0 }}>Background</label>
+                  <ColorField id="f-background-5324" value={project.layout.insetBgFill || '#f0f4f8'} onChange={(e) => updateLayout({ insetBgFill: e.target.value })} title="Background" brandColors={brandColors} />
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <label style={{ marginBottom: 0 }}>Marker</label>
-                  <ColorField value={project.layout.insetMarkerColor || '#2563eb'} onChange={(e) => updateLayout({ insetMarkerColor: e.target.value })} title="Marker color" brandColors={brandColors} />
+                  <label htmlFor="f-marker-5328" style={{ marginBottom: 0 }}>Marker</label>
+                  <ColorField id="f-marker-5328" value={project.layout.insetMarkerColor || '#2563eb'} onChange={(e) => updateLayout({ insetMarkerColor: e.target.value })} title="Marker color" brandColors={brandColors} />
                 </div>
               </div>
             )}
@@ -5347,8 +5347,8 @@ export default function App() {
           {!collapsedSections.refoverlays && <div id="section-refoverlays" className="toggle-grid">
             <div className="control-row inline-2">
               <div>
-                <label>Overlay Opacity</label>
-                <input type="range" min="0.2" max="1" step="0.05" value={project.layout.referenceOpacity ?? 0.65} onChange={(e) => updateLayout({ referenceOpacity: Number(e.target.value) })} />
+                <label htmlFor="f-overlay-opacity-5350">Overlay Opacity</label>
+                <input id="f-overlay-opacity-5350" type="range" min="0.2" max="1" step="0.05" value={project.layout.referenceOpacity ?? 0.65} onChange={(e) => updateLayout({ referenceOpacity: Number(e.target.value) })} />
               </div>
               <div className="range-value">{Math.round((project.layout.referenceOpacity ?? 0.65) * 100)}%</div>
             </div>
@@ -5373,12 +5373,12 @@ export default function App() {
             <RatioSwitcher activeRatio={activeRatio} onRatioChange={handleRatioChange} />
             <div className="control-row inline-2">
               <div>
-                <label>Filename</label>
-                <input value={project.layout.exportSettings.filename} onChange={(e) => updateLayout({ exportSettings: { filename: e.target.value } })} />
+                <label htmlFor="f-filename-5376">Filename</label>
+                <input id="f-filename-5376" value={project.layout.exportSettings.filename} onChange={(e) => updateLayout({ exportSettings: { filename: e.target.value } })} />
               </div>
               <div>
-                <label>Scale</label>
-                <select
+                <label htmlFor="f-scale-5380">Scale</label>
+                <select id="f-scale-5380"
                   value={(project.layout.exportSettings.customWidth || 0) > 0 ? 'custom' : project.layout.exportSettings.pixelRatio}
                   onChange={(e) => {
                     if (e.target.value === 'custom') {
@@ -5414,8 +5414,8 @@ export default function App() {
               <div className="export-custom-size">
                 <div className="control-row inline-2">
                   <div>
-                    <label>Width (px)</label>
-                    <input
+                    <label htmlFor="f-width-px-5417">Width (px)</label>
+                    <input id="f-width-px-5417"
                       type="number"
                       min="200"
                       max={entitlements.max_export_pixels}
@@ -5425,8 +5425,8 @@ export default function App() {
                     />
                   </div>
                   <div>
-                    <label>Height (px)</label>
-                    <input
+                    <label htmlFor="f-height-px-5428">Height (px)</label>
+                    <input id="f-height-px-5428"
                       type="number"
                       min="200"
                       max={entitlements.max_export_pixels}
@@ -5804,17 +5804,17 @@ export default function App() {
               <button className="drillhole-inline-close" type="button" onClick={() => setSelectedFeature(null)}>×</button>
             </div>
             <div className="control-row">
-              <label>Title</label>
-              <input value={selectedFeature.suggestedLabel} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, suggestedLabel: e.target.value }))} placeholder="Title" />
+              <label htmlFor="f-title-5807">Title</label>
+              <input id="f-title-5807" value={selectedFeature.suggestedLabel} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, suggestedLabel: e.target.value }))} placeholder="Title" />
             </div>
             <div className="control-row">
-              <label>Subtext</label>
-              <input value={selectedFeature.suggestedSubtext || ''} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, suggestedSubtext: e.target.value }))} placeholder="Subtext" />
+              <label htmlFor="f-subtext-5811">Subtext</label>
+              <input id="f-subtext-5811" value={selectedFeature.suggestedSubtext || ''} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, suggestedSubtext: e.target.value }))} placeholder="Subtext" />
             </div>
             <div className="drillhole-inline-row2">
               <div className="control-row">
-                <label>Type</label>
-                <select value={selectedFeature.calloutType || 'leader'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, calloutType: e.target.value }))}>
+                <label htmlFor="f-type-5816">Type</label>
+                <select id="f-type-5816" value={selectedFeature.calloutType || 'leader'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, calloutType: e.target.value }))}>
                   {Object.entries(CALLOUT_TYPES).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                 </select>
               </div>
@@ -5822,27 +5822,27 @@ export default function App() {
             {selectedFeature.calloutType === 'badge' && (
               <div className="drillhole-inline-row2">
                 <div className="control-row">
-                  <label>Chip Text</label>
-                  <input value={selectedFeature.badgeValue || ''} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, badgeValue: e.target.value }))} placeholder=">14 Moz" />
+                  <label htmlFor="f-chip-text-5825">Chip Text</label>
+                  <input id="f-chip-text-5825" value={selectedFeature.badgeValue || ''} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, badgeValue: e.target.value }))} placeholder=">14 Moz" />
                 </div>
                 <div className="control-row">
-                  <label>Chip Color</label>
-                  <ColorField value={selectedFeature.badgeColor || '#d97706'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, badgeColor: e.target.value }))} brandColors={brandColors} />
+                  <label htmlFor="f-chip-color-5829">Chip Color</label>
+                  <ColorField id="f-chip-color-5829" value={selectedFeature.badgeColor || '#d97706'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, badgeColor: e.target.value }))} brandColors={brandColors} />
                 </div>
               </div>
             )}
             <div className="drillhole-inline-row2">
               <div className="control-row">
-                <label>BG</label>
-                <ColorField value={selectedFeature.style?.background || '#ffffff'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, style: { ...(prev.style || {}), background: e.target.value } }))} brandColors={brandColors} />
+                <label htmlFor="f-bg-5836">BG</label>
+                <ColorField id="f-bg-5836" value={selectedFeature.style?.background || '#ffffff'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, style: { ...(prev.style || {}), background: e.target.value } }))} brandColors={brandColors} />
               </div>
               <div className="control-row">
-                <label>Border</label>
-                <ColorField value={selectedFeature.style?.border || '#102640'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, style: { ...(prev.style || {}), border: e.target.value } }))} brandColors={brandColors} />
+                <label htmlFor="f-border-5840">Border</label>
+                <ColorField id="f-border-5840" value={selectedFeature.style?.border || '#102640'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, style: { ...(prev.style || {}), border: e.target.value } }))} brandColors={brandColors} />
               </div>
               <div className="control-row">
-                <label>Text</label>
-                <ColorField value={selectedFeature.style?.textColor || '#0f172a'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, style: { ...(prev.style || {}), textColor: e.target.value } }))} brandColors={brandColors} />
+                <label htmlFor="f-text-5844">Text</label>
+                <ColorField id="f-text-5844" value={selectedFeature.style?.textColor || '#0f172a'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, style: { ...(prev.style || {}), textColor: e.target.value } }))} brandColors={brandColors} />
               </div>
             </div>
             <div className="control-row" style={{ marginTop: 6 }}>

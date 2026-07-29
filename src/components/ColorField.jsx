@@ -25,6 +25,9 @@ const HEX_RE = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
  * the control collapses to a plain native color input — no popover, no trigger.
  */
 export default function ColorField({
+  // Forwarded to the rendered control so an external <label htmlFor> can
+  // point at it (audit P1-20).
+  id,
   value,
   onChange,
   title,
@@ -92,7 +95,7 @@ export default function ColorField({
     return (
       <div className="color-field">
         <div className="color-swatch-wrap">
-          <input type="color" className={className} value={value} onChange={onChange} title={title} />
+          <input id={id} type="color" className={className} value={value} onChange={onChange} title={title} />
           {onReset && (
             <button className="swatch-reset" type="button" onClick={onReset} title="Reset">✕</button>
           )}
@@ -107,6 +110,7 @@ export default function ColorField({
     <div className="color-field">
       <div className="color-swatch-wrap" ref={wrapRef}>
         <button
+          id={id}
           ref={triggerRef}
           type="button"
           className={`${className} color-trigger`}
