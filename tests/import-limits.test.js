@@ -48,11 +48,28 @@ describe('vertex ceiling', () => {
       .toThrow(/too detailed/i);
   });
 
-  it('bails out early rather than walking the whole payload', () => {
-    const started = Date.now();
-    expect(() => assertWithinComplexityLimits(hugePolygon(MAX_VERTICES * 2))).toThrow();
-    // Should short-circuit at the cap, not traverse twice the budget.
-    expect(Date.now() - started).toBeLessThan(5000);
+  it('bails out at the cap instead of walking the whole payload', () => {
+    // Deterministic instead of wall-clock: a lazy coordinate array records how
+    // many entries the validator actually touched. A timing assertion here
+    // flakes under CI load, which is worse than no assertion.
+    let touched = 0;
+    const probe = new Proxy([], {
+      get(target, prop) {
+        if (prop === 'length') return MAX_VERTICES * 2;
+        if (typeof prop === 'string' && /^\d+$/.test(prop)) {
+          touched += 1;
+          return [0, 0];
+        }
+        return Reflect.get(target, prop);
+      },
+    });
+    const fc = {
+      type: 'FeatureCollection',
+      features: [{ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [probe] } }],
+    };
+    expect(() => assertWithinComplexityLimits(fc)).toThrow(/too detailed/i);
+    // Stops shortly after the cap rather than traversing all 6M entries.
+    expect(touched).toBeLessThanOrEqual(MAX_VERTICES + 10);
   });
 });
 
