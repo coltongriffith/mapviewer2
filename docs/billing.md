@@ -105,6 +105,24 @@ future expiry/CVC. Verify: checkout → `user_plans` row flips to
 
 Ordered. Nothing here is optional before taking a real payment.
 
+**Fastest path — run the preflight.** It verifies the key, the prices, the
+webhook events and the portal in one shot, and tells you exactly which value
+is wrong rather than making you guess:
+
+```sh
+export STRIPE_SECRET_KEY=sk_live_...
+export STRIPE_PRICE_MONTHLY_ID=price_1TyFqXRHvZfpRjJxies5Npoj
+export STRIPE_PRICE_YEARLY_ID=price_1TyFvPRHvZfpRjJxascNqRXz
+
+npm run stripe:check     # report only
+npm run stripe:fix       # also adds any missing webhook events
+```
+
+Run it on your own machine — it needs outbound access to api.stripe.com and
+your live secret key. It never prints the key, never creates prices, and never
+deletes anything. Steps 1-3 and 6 below are what it checks; work through the
+rest by hand.
+
 **1. Point the env vars at ONE account in ONE mode.**
 All four must come from the same Stripe account and the same mode. A key from
 one account with price IDs from another is the single most common cause of
