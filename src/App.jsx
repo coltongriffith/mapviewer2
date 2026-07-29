@@ -2749,6 +2749,17 @@ export default function App() {
           await refreshPlan();
           if (result.status === 'paid') {
             trackEvent('upgrade_verified_paid', {}, user?.id);
+            // Google Ads conversion — fired on the server-verified paid
+            // result, not the raw ?billing=success query param, since that
+            // param is user-typeable/reloadable and would inflate/corrupt
+            // the Ads account's conversion data.
+            if (typeof window.gtag === 'function') {
+              window.gtag('event', 'conversion', {
+                send_to: 'AW-18358773663/2_5ZCOf43dgcEJ_PkrJE',
+                value: 1.0,
+                currency: 'CAD',
+              });
+            }
             setUploadStatus({ type: 'success', message: 'Welcome to Pro! Clean exports, HD formats, and unlimited projects are unlocked.' });
           } else if (result.status === 'processing') {
             trackEvent('upgrade_processing', {}, user?.id);
