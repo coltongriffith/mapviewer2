@@ -9,8 +9,9 @@ import HealthTab from './admin/HealthTab';
 import UsersTab from './admin/UsersTab';
 import ProductTab from './admin/ProductTab';
 import RevenueTab from './admin/RevenueTab';
+import TenureTab from './admin/TenureTab';
 import {
-  useDashboardWindow, useOverview, useEngagement, useUsersOverview, useUserDetail, useErrorSummary, useRevenue,
+  useDashboardWindow, useOverview, useEngagement, useUsersOverview, useUserDetail, useErrorSummary, useRevenue, useTenureOps,
 } from './admin/useDashboardData';
 
 // Real coastline geometry (110m resolution — plenty of detail for a 240px
@@ -582,6 +583,7 @@ const TABS = [
   ['product', 'Product'],
   ['growth', 'Acquisition'],
   ['revenue', 'Revenue'],
+  ['tenure', 'Tenure'],
   ['health', 'Health'],
 ];
 // 'revenue' used to run the same legacy 15-RPC batch as 'growth', framed
@@ -636,6 +638,7 @@ export default function AdminPage({ onExit }) {
   const usersOverview = useUsersOverview(isAdmin && tab === 'users');
   const errorSummary = useErrorSummary(isAdmin && tab === 'health');
   const revenue = useRevenue(isAdmin && tab === 'revenue');
+  const tenureOps = useTenureOps(isAdmin && tab === 'tenure');
   const userDetail = useUserDetail();
 
   useEffect(() => {
@@ -977,6 +980,9 @@ export default function AdminPage({ onExit }) {
         )}
 
         {/* ───────── REVENUE ───────── */}
+        {tab === 'tenure' && (
+          <TenureTab data={tenureOps.data} loading={tenureOps.loading} onReload={tenureOps.reload} />
+        )}
         {tab === 'revenue' && (
           <RevenueTab data={revenue.data} loading={revenue.loading} />
         )}

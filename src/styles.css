@@ -3760,3 +3760,44 @@ body.is-dragging .template-zone .panel-delete-btn { opacity: 0 !important; }
   .tm-toolbar { flex-direction: column; align-items: stretch; }
   .tm-map { height: 320px; }
 }
+
+/* ── Tenure Monitor: activity view ──────────────────────────────────────── */
+.tm-activity { display: flex; flex-direction: column; gap: 22px; }
+.tm-activity-section h3 { margin: 0 0 4px; font-size: 15px; font-weight: 700; }
+
+.tm-timeline { list-style: none; margin: 8px 0 0; padding: 0; }
+.tm-timeline-item {
+  display: flex; gap: 12px; padding: 9px 0; border-bottom: 1px solid #f1f5f9;
+  font-size: 13px;
+}
+.tm-timeline-date {
+  flex: 0 0 92px; color: #94a3b8; font-size: 12px; font-variant-numeric: tabular-nums;
+}
+.tm-timeline-body { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.tm-timeline-what { font-weight: 600; }
+.tm-timeline-values { font-size: 12px; color: #475569; }
+.tm-timeline-item.tm-change--critical .tm-timeline-what { color: #b91c1c; }
+.tm-timeline-item.tm-change--notable .tm-timeline-what { color: #b45309; }
+
+.tm-view-badge {
+  display: inline-block; margin-left: 6px; min-width: 16px; padding: 0 5px;
+  border-radius: 999px; background: #0891b2; color: #fff;
+  font-size: 10px; font-weight: 700; line-height: 16px; text-align: center;
+}
+.tm-view-toggle button.is-active .tm-view-badge { background: #fff; color: #2563eb; }
+
+/* ── Admin: Tenure tab ──────────────────────────────────────────────────── */
+/* Wrappers the tenure tables need. The other admin tabs render fixed-width
+   card content; the import-run and portfolio tables are wide enough to need a
+   scroll container of their own so the page body never scrolls sideways. */
+.adm-table-wrap { width: 100%; overflow-x: auto; }
+.adm-card-note { font-size: 12px; color: #64748b; margin: 10px 0 0; line-height: 1.55; }
+.adm-card-note code {
+  background: #f1f5f9; border-radius: 4px; padding: 1px 5px; font-size: 11.5px;
+}
+.adm-list { margin: 8px 0 0; padding-left: 18px; font-size: 12.5px; color: #475569; }
+.adm-list li { margin-bottom: 4px; }
+.adm-flash {
+  font-size: 13px; background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534;
+  border-radius: 8px; padding: 10px 12px; margin: 0 0 14px;
+}

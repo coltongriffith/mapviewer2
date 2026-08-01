@@ -65,6 +65,11 @@ export function useRevenue(enabled) {
   return useRpc('admin_get_revenue', {}, enabled);
 }
 
+// Tenure Monitor operations: import-run history, alert queue, portfolios.
+export function useTenureOps(enabled) {
+  return useRpc('admin_get_tenure_ops', {}, enabled);
+}
+
 // Recent client/API failures, grouped by fingerprint (audit P1-12).
 export function useErrorSummary(enabled, hours = 24) {
   return useRpc('admin_get_error_summary', { p_hours: hours }, enabled);

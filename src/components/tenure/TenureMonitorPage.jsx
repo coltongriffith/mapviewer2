@@ -15,6 +15,7 @@ import TenureMap, { COLOUR_BY } from './TenureMap';
 import TenureDetailPanel from './TenureDetailPanel';
 import AddTenuresModal from './AddTenuresModal';
 import AlertSettings from './AlertSettings';
+import PortfolioActivity from './PortfolioActivity';
 import {
   VerificationNotice, LastSyncLine, SystemNoticeBanner, DataAttribution,
 } from './TenureNotices';
@@ -441,6 +442,17 @@ export default function TenureMonitorPage({ onExit, onOpenTenuresInEditor, onUpg
                   >
                     Map
                   </button>
+                  <button
+                    type="button"
+                    className={view === 'activity' ? 'is-active' : ''}
+                    aria-pressed={view === 'activity'}
+                    onClick={() => setView('activity')}
+                  >
+                    Activity
+                    {summary.changed_recently > 0 && (
+                      <span className="tm-view-badge">{summary.changed_recently}</span>
+                    )}
+                  </button>
                 </div>
                 <button className="secondary-btn" type="button" onClick={handleExportCsv} disabled={!visibleRows.length}>
                   Export CSV
@@ -482,6 +494,13 @@ export default function TenureMonitorPage({ onExit, onOpenTenuresInEditor, onUpg
               </>
             )}
 
+            {view === 'activity' ? (
+              <PortfolioActivity
+                portfolioId={activeId}
+                rows={rows}
+                onSelectTenure={(row) => { if (row) { setSelected(row); setView('table'); } }}
+              />
+            ) : (
             <div className="tm-content">
               <div className="tm-content-main">
                 {loading && !rows.length ? (
@@ -519,6 +538,7 @@ export default function TenureMonitorPage({ onExit, onOpenTenuresInEditor, onUpg
                 />
               )}
             </div>
+            )}
 
             <VerificationNotice />
             <DataAttribution />
