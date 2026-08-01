@@ -16,6 +16,7 @@ import NorthArrow, { NORTH_ARROW_STYLES } from './components/NorthArrow';
 const MapCanvas = React.lazy(() => import('./components/MapCanvas'));
 const AdminPage = React.lazy(() => import('./components/AdminPage'));
 const AccountPage = React.lazy(() => import('./components/AccountPage'));
+const TenureMonitorPage = React.lazy(() => import('./components/tenure/TenureMonitorPage'));
 const ExportHDModal = React.lazy(() => import('./components/ExportHDModal'));
 const HowToUseModal = React.lazy(() => import('./components/HowToUseModal'));
 const ColumnMapperModal = React.lazy(() => import('./components/ColumnMapperModal'));
@@ -773,6 +774,7 @@ export default function App() {
   const [screen, setScreen] = useState(() => {
     if (window.location.pathname === '/admin') return 'admin';
     if (window.location.pathname === '/account') return 'account';
+    if (window.location.pathname === '/tenure-monitor') return 'tenure';
     if (window.location.pathname.startsWith('/map/')) return 'shared_view';
     return 'landing';
   });
@@ -1464,8 +1466,9 @@ export default function App() {
   useEffect(() => {
     const target = screen === 'admin' ? '/admin'
       : screen === 'account' ? '/account'
-        : (screen === 'shared_view' && sharedMapId) ? `/map/${sharedMapId}`
-          : '/';
+        : screen === 'tenure' ? '/tenure-monitor'
+          : (screen === 'shared_view' && sharedMapId) ? `/map/${sharedMapId}`
+            : '/';
     if (window.location.pathname === target) return;
     try {
       window.history.pushState({ screen, sharedMapId: sharedMapId || null }, '', target);
@@ -1480,6 +1483,7 @@ export default function App() {
       const fromState = e.state?.screen;
       if (path === '/admin') setScreen('admin');
       else if (path === '/account') setScreen('account');
+      else if (path === '/tenure-monitor') setScreen('tenure');
       else if (path.startsWith('/map/')) {
         setSharedMapId(path.slice(5));
         setScreen('shared_view');
@@ -2412,6 +2416,45 @@ export default function App() {
 
     setSelectedLayerId(id);
     setUploadStatus({ type: 'success', message: `Imported ${fileName}. ${kind === 'points' ? 'Point layer detected.' : 'Layer added successfully.'}` });
+  };
+
+  // Hand a monitored portfolio (or one claim) to the map editor.
+  //
+  // Tenure Monitor deliberately does not contain a map editor. It answers
+  // operational questions — what is due, what changed, what did we decide —
+  // and hands off here for everything about presentation. The claims arrive as
+  // an ordinary layer, so every existing tool (styling, labels, callouts,
+  // legend, templates, brand kits, exports) works on them unchanged.
+  //
+  // `provenance` records where the boundaries came from and how fresh they
+  // were at import. That is what later lets a saved project notice its claim
+  // outlines are older than the current tenure dataset, rather than silently
+  // presenting last quarter's boundaries as today's.
+  const handleOpenTenuresInEditor = async (geojson, info = {}) => {
+    if (!geojson?.features?.length) {
+      setUploadStatus({ type: 'error', message: 'Those claims have no boundaries in the current dataset.' });
+      return;
+    }
+    const label = info.name || 'Monitored claims';
+    setScreen('editor');
+    await addGeoJSONAsLayer(geojson, `${label}.geojson`, 'tenure_monitor', {
+      source: 'BC Mineral Titles (via Exploration Maps Tenure Monitor)',
+      syncedAt: info.syncedAt || null,
+      tenureNumbers: info.tenureNumbers || [],
+      attribution: 'Contains information licensed under the Open Government Licence – British Columbia.',
+    });
+    // Only title the map when it is a fresh workspace — overwriting the title
+    // of a project the user has been working on would be rude and surprising.
+    if (!projectId && !project.layers.length) {
+      updateLayout({
+        title: label,
+        exportSettings: { filename: label.replace(/[^a-z0-9]+/gi, '-').toLowerCase(), pixelRatio: 2 },
+      });
+    }
+    setUploadStatus({
+      type: 'success',
+      message: `Loaded ${geojson.features.length} monitored ${geojson.features.length === 1 ? 'claim' : 'claims'} — style and export your map.`,
+    });
   };
 
   const addGeoJSONLayer = async (file) => {
@@ -4039,6 +4082,19 @@ export default function App() {
           accountSettings={accountSettings}
           onSaveSettings={handleSaveAccountSettings}
         />
+      </React.Suspense>
+    );
+  }
+
+  if (screen === 'tenure') {
+    return (
+      <React.Suspense fallback={null}>
+        <TenureMonitorPage
+          onExit={() => setScreen('landing')}
+          onOpenTenuresInEditor={handleOpenTenuresInEditor}
+          onUpgrade={(reason) => setUpgradeReason(reason || 'general')}
+        />
+        {showAuthFromGate && <AuthModal onClose={() => setShowAuthFromGate(false)} />}
       </React.Suspense>
     );
   }
