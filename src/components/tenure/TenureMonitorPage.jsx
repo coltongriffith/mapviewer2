@@ -185,7 +185,9 @@ export default function TenureMonitorPage({ onExit, onOpenTenuresInEditor, onUpg
       setShowAdd(false);
       await refresh(activeId);
       // Report the partial outcome honestly rather than showing a success
-      // toast for a batch that was trimmed.
+      // toast for a batch that was trimmed. The two reasons a title can be
+      // skipped are kept apart: only one of them is a plan limit, and offering
+      // an upgrade for the other would be a paywall raised on a false pretext.
       if (result?.skipped_over_limit > 0) {
         setFlash({
           tone: 'warn',
@@ -194,6 +196,12 @@ export default function TenureMonitorPage({ onExit, onOpenTenuresInEditor, onUpg
           action: onUpgrade ? { label: 'See plans', run: () => onUpgrade('tenure_limit') } : null,
         });
         trackEvent('tenure_upgrade_viewed', { reason: 'tenure_limit' });
+      } else if (result?.skipped_unknown > 0) {
+        setFlash({
+          tone: 'warn',
+          text: `Added ${result.added}. ${result.skipped_unknown} could not be found in the `
+            + 'latest B.C. dataset and were not added. Verify them in Mineral Titles Online.',
+        });
       } else {
         setFlash({ tone: 'ok', text: `Now monitoring ${result?.added || 0} more claims.` });
       }

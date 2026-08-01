@@ -122,8 +122,20 @@ public.tenure_import_staging ──guardrails──► tenures, tenure_owners
 | `20260801000002_tenure_portfolios.sql` | portfolios, memberships, alert policies, recipients, alert instances, audit log, `owns_portfolio()` |
 | `20260801000003_tenure_quota_and_admin.sql` | `tenure_plan_limits()`, quota-bearing write RPCs, membership audit trigger, admin RPCs, system notices |
 | `20260801000004_tenure_change_history.sql` | change-history RPCs, `tenure_boundaries_changed_since()` |
+| `20260801000005_tenure_grant_hardening.sql` | revokes the anon EXECUTE grant that default privileges added behind the `revoke ... from public` in 3 and 4 |
+| `20260801000006_tenure_table_grants.sql` | reduces `tenures` and `tenure_owners` to SELECT for anon/authenticated |
+| `20260801000007_tenure_add_result_accuracy.sql` | `add_portfolio_tenures` counts an unknown id separately from a plan limit |
 
 Apply in order. Each carries a `Rollback:` block and verification queries.
+
+Migrations 5 and 6 exist because this project carries a bootstrap
+`alter default privileges in schema public grant all ... to anon, authenticated`.
+Every function and table is therefore created with an **explicit** anon grant
+already in its ACL, so `revoke all ... from public` — which removes only the
+PUBLIC pseudo-role entry — reads like it locks a function down and does not.
+Anything added here later must revoke from `anon` by name, not from `public`.
+`supabase-fix-rls-public-tables.sql` does this correctly for `qc_claims`; use it
+as the reference.
 
 ---
 
@@ -281,8 +293,15 @@ Vercel needs nothing new: `api/tenure-search.js` reuses `SUPABASE_URL` /
 
 ## Deployment and first run
 
-1. **Apply the four migrations** in the Supabase SQL editor, in order. Run the
+1. **Apply the seven migrations** in the Supabase SQL editor, in order. Run the
    verification queries at the foot of each.
+
+   > Already done on the production project (`ibuzjzoqnkwjfecftzxn`) on
+   > 2026-08-01: all seven are applied, the grant matrix was verified table by
+   > table and function by function, and the quota, ownership-isolation and
+   > admin-authorization paths were exercised inside a rolled-back transaction.
+   > Steps 2 onwards are what remain.
+
 2. **Discover the live schema** — run the sync workflow with `mode: discover`.
    It writes nothing. Paste the output into *Verified field list* above and
    answer the three open questions.

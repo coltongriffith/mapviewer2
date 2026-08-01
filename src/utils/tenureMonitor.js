@@ -202,7 +202,12 @@ async function ownersFor(tenureIds) {
  * claims AND an honest upgrade prompt, which is a better outcome than an
  * error dialog and nothing.
  *
- * @returns {{added, already_present, skipped_over_limit, max_monitored_tenures, current_total}}
+ * `skipped_unknown` is counted separately from `skipped_over_limit` so a title
+ * the mirror does not hold is never reported as a plan limit the user did not
+ * hit — see 20260801000007.
+ *
+ * @returns {{added, already_present, skipped_over_limit, skipped_unknown,
+ *   max_monitored_tenures, current_total}}
  */
 export async function addTenures(portfolioId, tenureIds) {
   const { data, error } = await requireSupabase().rpc('add_portfolio_tenures', {
