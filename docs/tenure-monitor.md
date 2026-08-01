@@ -237,6 +237,18 @@ revoked, so the quota cannot be raced by two tabs or bypassed by a direct call.
 Adding more titles than remain is **partial**: it adds what fits and reports the
 rest, rather than failing the batch.
 
+Alert recipients are the exception to the RPC pattern — "add a colleague's
+address" is a plain form, so the `INSERT` grant stays and a `BEFORE INSERT`
+trigger (`tenure_recipient_guard`) enforces `max_alert_recipients` and validates
+the address shape instead. It is the one chokepoint every insert passes through,
+including from a screen nobody has written yet. Service-role callers
+(`auth.uid()` null) are exempt, as everywhere else.
+
+`monitored_portfolios.name` carries a length `CHECK` at the column, and
+`internal_project_name` is bounded in the membership audit trigger, because both
+are rendered into reminder emails and the rename path is a direct `UPDATE` that
+bypasses the validation in `create_monitored_portfolio`.
+
 The `company` tier exists in the entitlement matrix and the `user_plans` check
 constraint but has no price and nothing writes it.
 
@@ -283,7 +295,19 @@ Vercel needs nothing new: `api/tenure-search.js` reuses `SUPABASE_URL` /
    aborts, the administrator is emailed, and `select count(*) from tenures` is
    unchanged.
 6. **Verify permissions**: sign in as a second account and confirm the first
-   account's portfolio is inaccessible by direct id.
+   account's portfolio is inaccessible by direct id. While there, confirm the
+   two limits that are enforced by triggers rather than RPCs, since a direct
+   call is exactly what they exist to stop:
+
+   ```sql
+   -- as a free user whose policy already has its 1 recipient:
+   insert into public.tenure_alert_recipients (policy_id, email)
+     values ('<their policy id>', 'someone@example.com');   -- expect RECIPIENT_LIMIT
+   insert into public.tenure_alert_recipients (policy_id, email)
+     values ('<their policy id>', 'not an address');        -- expect invalid recipient email
+   update public.monitored_portfolios set name = repeat('A', 500)
+     where id = '<their portfolio id>';                     -- expect a CHECK violation
+   ```
 7. **Dry-run the alerts**: run the alerts workflow with `mode: dry-run` and read
    the rendered emails in the job log. Then run it for real, and run it a second
    time to confirm **zero** duplicates.
@@ -357,12 +381,21 @@ assumptions.
    organization-scoped plan.
 5. **Bounce detection is inferred**, from Resend's 422 response, not from a
    webhook. A soft bounce that later becomes permanent is not detected.
-6. **No PDF or Excel export.** CSV only, because it can be produced reliably
+6. **No double opt-in for alert recipients.** An address added to a policy starts
+   receiving reminders without confirming. The abuse ceiling is bounded — the
+   recipient cap is enforced server-side (1 free / 2 Pro), the portfolio cap
+   bounds how many policies are live, the HTML body escapes user text, the
+   plain-text part is flattened to one line, the subject is derived from
+   government data rather than chosen, and every mail carries a provenance
+   footer — so the residual is a small volume of unsolicited but honest-looking
+   reminders. A `confirmed_at` column plus a signed confirmation link is the
+   right next step before recipient limits are raised for a Company plan.
+7. **No PDF or Excel export.** CSV only, because it can be produced reliably
    with what is already here.
-7. **Map-extent search is a bounding-box prompt**, not a draw-on-the-map tool.
-8. **Change detection cannot see history before a tenure was first imported.**
+8. **Map-extent search is a bounding-box prompt**, not a draw-on-the-map tool.
+9. **Change detection cannot see history before a tenure was first imported.**
    The first sighting of a title produces no events, by design.
-9. **Snapshots do not store geometry**, only its fingerprint and the change
+10. **Snapshots do not store geometry**, only its fingerprint and the change
    event. Reconstructing an exact historical polygon is not possible yet — this
    is the one thing a future Released Claim Radar would want revisited.
 

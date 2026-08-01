@@ -78,7 +78,24 @@ function styleFor(row, mode, categoryIndex, now, changesByTenure) {
   return { colour: CATEGORY_COLOURS[idx % CATEGORY_COLOURS.length], hatch: false };
 }
 
-function popupHtml(row, now) {
+/**
+ * Tooltip content for one claim.
+ *
+ * MUST escape. Leaflet's DivOverlay._updateContent assigns a string payload
+ * straight to node.innerHTML, so bindTooltip/bindPopup are HTML sinks — React's
+ * auto-escaping never sees these strings. And `tenure_name` is not our text:
+ * it is the free-text CLAIM_NAME chosen by whoever staked the title in MTO,
+ * stored verbatim by the importer and served to anonymous callers by
+ * /api/tenure-search. Treat it as hostile.
+ *
+ * Exported so tests can assert the escaping without standing up a map.
+ */
+export function tooltipHtml(row) {
+  const t = row.tenure;
+  return `${esc(t.tenure_number)} — ${esc(t.tenure_name || 'Unnamed')}`;
+}
+
+export function popupHtml(row, now) {
   const t = row.tenure;
   const days = daysRemaining(t.good_to_date, now);
   const band = urgencyBand(days, t.status);
@@ -165,10 +182,7 @@ export default function TenureMap({
           dashArray: hatch ? '5,3' : undefined,
         },
       });
-      layer.bindTooltip(
-        `${row.tenure.tenure_number} — ${row.tenure.tenure_name || 'Unnamed'}`,
-        { sticky: true },
-      );
+      layer.bindTooltip(tooltipHtml(row), { sticky: true });
       layer.bindPopup(popupHtml(row, now));
       layer.on('click', () => onSelect?.(row));
       layer.addTo(group);

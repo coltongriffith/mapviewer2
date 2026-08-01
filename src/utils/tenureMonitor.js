@@ -81,9 +81,17 @@ export async function createPortfolio(name, offsets = null) {
 export async function renamePortfolio(id, name) {
   const { error } = await requireSupabase()
     .from('monitored_portfolios')
-    .update({ name, updated_at: new Date().toISOString() })
+    .update({ name: String(name ?? '').trim(), updated_at: new Date().toISOString() })
     .eq('id', id);
-  if (error) throw error;
+  if (error) {
+    // A CHECK constraint bounds the name at the column (migration
+    // 20260801000003), because this rename path bypasses the validation in
+    // create_monitored_portfolio and the name is rendered into every reminder.
+    if (/monitored_portfolios_name_len/.test(error.message || '')) {
+      throw new Error('A portfolio name must be between 1 and 120 characters.');
+    }
+    throw error;
+  }
 }
 
 export async function deletePortfolio(id) {
@@ -278,8 +286,23 @@ export async function addRecipient(policyId, email) {
     .from('tenure_alert_recipients')
     .insert({ policy_id: policyId, email: email.trim().toLowerCase() });
   if (error) {
-    if (/duplicate key/i.test(error.message || '')) {
+    const msg = error.message || '';
+    if (/duplicate key/i.test(msg)) {
       throw new Error('That address is already receiving alerts for this portfolio.');
+    }
+    // The recipient cap is enforced by a trigger (migration 20260801000003),
+    // not by the check in AlertSettings — so it also fires for anything that
+    // reaches the table another way. Turn it into the same upgrade sentence.
+    if (/RECIPIENT_LIMIT/.test(msg)) {
+      const e = new Error(
+        'Your plan has no reminder-recipient slots left. Upgrade to Pro to send '
+        + 'reminders to a colleague as well.',
+      );
+      e.code = 'RECIPIENT_LIMIT';
+      throw e;
+    }
+    if (/invalid recipient email/i.test(msg)) {
+      throw new Error('That does not look like an email address.');
     }
     throw error;
   }

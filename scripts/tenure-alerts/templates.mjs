@@ -37,6 +37,19 @@ function esc(s) {
     .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+/**
+ * Flatten a user-supplied string for the PLAIN-TEXT part of an email.
+ *
+ * esc() protects the HTML body, but the text/plain alternative has no markup
+ * to escape — there, the dangerous character is the newline. A portfolio name
+ * containing line breaks could otherwise compose what looks like additional
+ * paragraphs of our message, in a mail that carries our domain's SPF and DKIM.
+ * Collapse whitespace and bound the length so the name stays a name.
+ */
+function oneLine(s, max = 120) {
+  return String(s ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
+}
+
 const WRAP = (inner) => `
 <div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:0 auto;color:#1e293b;line-height:1.6">
 ${inner}
@@ -121,7 +134,7 @@ export function expiryEmail({ tenure, owners, portfolioName, membership, lastSyn
   ${FOOTER(lastSyncedAt)}`);
 
   const text = [
-    `${portfolioName || 'Tenure Monitor'}`,
+    oneLine(portfolioName) || 'Tenure Monitor',
     '',
     `${name} — tenure ${tenure.tenure_number}`,
     `${days === 0 ? 'Good-to-date is TODAY' : `${days} days remaining`}`,

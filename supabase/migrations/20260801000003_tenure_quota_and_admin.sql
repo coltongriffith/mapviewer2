@@ -31,6 +31,9 @@
 --   drop function if exists public.tenure_plan_limits();
 --   drop trigger if exists tenure_membership_audit on public.monitored_portfolio_tenures;
 --   drop function if exists public.tenure_membership_audit();
+--   drop trigger if exists tenure_recipient_guard on public.tenure_alert_recipients;
+--   drop function if exists public.tenure_recipient_guard();
+--   alter table public.monitored_portfolios drop constraint if exists monitored_portfolios_name_len;
 --   drop table if exists public.tenure_system_notices;
 --   alter table public.user_plans drop constraint if exists user_plans_plan_check;
 --   alter table public.user_plans add constraint user_plans_plan_check
@@ -365,6 +368,91 @@ $$;
 revoke all on function public.remove_portfolio_tenure(uuid, uuid) from public;
 grant execute on function public.remove_portfolio_tenure(uuid, uuid) to authenticated;
 
+-- ── Alert-recipient limit and address validation ───────────────────────────
+--
+-- Recipients are created by a direct INSERT under RLS, because "add a
+-- colleague's address" is a plain form and an RPC would buy nothing. But that
+-- left `max_alert_recipients` as the one plan limit this feature returned from
+-- tenure_plan_limits() and then never enforced — a limit that lived only in
+-- src/utils/entitlements.js, which is exactly what the header of this file says
+-- a limit must never be. One supabase-js call bypassed it.
+--
+-- That matters for more than billing. The alert engine fans one email out to
+-- every row here, from a domain with valid SPF/DKIM, so an unbounded recipient
+-- list is an outbound-mail primitive pointed at addresses that never opted in.
+--
+-- A BEFORE INSERT trigger rather than an RPC: it is the one chokepoint every
+-- insert passes through, including any future screen, and it leaves the
+-- existing client call working unchanged.
+create or replace function public.tenure_recipient_guard()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_limit int;
+  v_count int;
+begin
+  new.email := lower(btrim(coalesce(new.email, '')));
+
+  -- Shape check only. This is not an attempt to decide whether an address is
+  -- deliverable — the dispatcher records a hard bounce and stops using it.
+  -- The point is to reject obvious junk and, importantly, anything carrying
+  -- whitespace or a control character that could be smuggled into a header.
+  if new.email !~ '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$'
+     or length(new.email) > 254 then
+    raise exception 'invalid recipient email address' using errcode = '22023';
+  end if;
+
+  -- Service-role callers (the importer, the alert engine, migrations) are not
+  -- subject to a customer plan limit, and auth.uid() is null for them.
+  if auth.uid() is null then
+    return new;
+  end if;
+
+  select nullif(public.tenure_plan_limits()->>'max_alert_recipients', '')::int into v_limit;
+  if v_limit is null then
+    return new;   -- unlimited
+  end if;
+
+  -- Lock this policy's existing rows so two concurrent inserts at the limit
+  -- serialize, the same way create_monitored_portfolio locks before counting.
+  perform 1 from public.tenure_alert_recipients where policy_id = new.policy_id for update;
+  select count(*) into v_count
+  from public.tenure_alert_recipients where policy_id = new.policy_id;
+
+  if v_count >= v_limit then
+    raise exception 'RECIPIENT_LIMIT: this plan allows % alert recipient(s)', v_limit
+      using errcode = 'P0001';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists tenure_recipient_guard on public.tenure_alert_recipients;
+create trigger tenure_recipient_guard
+  before insert on public.tenure_alert_recipients
+  for each row execute function public.tenure_recipient_guard();
+
+-- ── Portfolio name bounds ──────────────────────────────────────────────────
+-- create_monitored_portfolio validates the name on creation, but renaming is a
+-- direct UPDATE under RLS, so that validation was bypassable by the very path
+-- the UI uses. The name is rendered into every reminder email, so bound it at
+-- the column where neither path can miss it.
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'monitored_portfolios_name_len'
+  ) then
+    alter table public.monitored_portfolios
+      add constraint monitored_portfolios_name_len
+      check (length(btrim(name)) between 1 and 120);
+  end if;
+end
+$$;
+
 -- ── Membership audit trigger ───────────────────────────────────────────────
 -- Decisions and notes are edited by direct UPDATE under RLS (part 2), which is
 -- the right shape for a form. A trigger — not a wrapper function — is what
@@ -385,6 +473,11 @@ begin
   end if;
   if new.internal_notes is not null and length(new.internal_notes) > 5000 then
     raise exception 'internal notes too long' using errcode = '22023';
+  end if;
+  -- Also rendered into reminder emails, so bounded here for the same reason
+  -- the portfolio name is bounded at its column.
+  if new.internal_project_name is not null and length(new.internal_project_name) > 120 then
+    raise exception 'internal project name too long' using errcode = '22023';
   end if;
 
   if new.maintenance_decision is distinct from old.maintenance_decision then

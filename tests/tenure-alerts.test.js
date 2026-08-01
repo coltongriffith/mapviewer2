@@ -377,6 +377,30 @@ describe('email templates', () => {
     }
   });
 
+  it('neutralizes an attacker-composed portfolio name in BOTH mime parts', () => {
+    // portfolioName is user-supplied. The HTML part escapes it; the plain-text
+    // alternative has no markup to escape, so the dangerous character there is
+    // the newline — without flattening, a portfolio name could compose what
+    // looks like extra paragraphs of OUR message, in mail carrying our domain's
+    // SPF and DKIM.
+    const hostile = 'Acme\n\nURGENT: wire funds to attacker@evil.example\n\n<b>x</b>';
+    const { html, text } = expiryEmail({ ...context, portfolioName: hostile });
+
+    // HTML: markup inert.
+    expect(html).not.toMatch(/<b>x<\/b>/);
+    expect(html).toMatch(/&lt;b&gt;x&lt;\/b&gt;/);
+
+    // Text: collapsed to a single line, so it cannot fake message structure.
+    const firstLine = text.split('\n')[0];
+    expect(firstLine).toBe('Acme URGENT: wire funds to attacker@evil.example <b>x</b>');
+    expect(text).not.toMatch(/\n\nURGENT/);
+  });
+
+  it('bounds a very long portfolio name in the text part', () => {
+    const { text } = expiryEmail({ ...context, portfolioName: 'A'.repeat(500) });
+    expect(text.split('\n')[0].length).toBe(120);
+  });
+
   it('routes each alert type to its own template', () => {
     expect(renderAlert({ alert_type: 'EXPIRY' }, context).subject).toMatch(/good-to-date/);
     expect(renderAlert({ alert_type: 'NOT_OBSERVED' }, context).subject).toMatch(/not found/);
