@@ -1,0 +1,80 @@
+name: Tenure Monitor — expiry and change reminders
+
+# Recomputes the reminder schedule and sends whatever is due.
+#
+# Runs once a day at 15:00 UTC = 08:00 Pacific, so a reminder lands at the top
+# of a working morning in British Columbia rather than overnight.
+#
+# BOTH HALVES ARE IDEMPOTENT, which is what makes a daily cron safe:
+#   * scheduling reconciles — it inserts what is missing and retires what no
+#     longer matches; running it twice changes nothing the second time, and a
+#     duplicate insert loses to a unique index rather than to a code path.
+#   * dispatch claims each row with a compare-and-swap before calling the email
+#     provider, so a re-fired job finds nothing left to take.
+#
+# A skipped run does not lose reminders: the dispatcher sends anything with
+# scheduled_for <= today, so a missed day delays a notice rather than dropping
+# it. GitHub's scheduler is best-effort and this is designed around that.
+
+on:
+  schedule:
+    - cron: '0 15 * * *'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'send = schedule and send; schedule-only = recompute without sending; dry-run = render the emails to the log and send nothing'
+        required: false
+        default: send
+        type: choice
+        options: [send, schedule-only, dry-run]
+
+concurrency:
+  # Queue rather than cancel. Cancelling mid-dispatch would leave rows claimed
+  # as 'sending' with no worker behind them; letting the run finish keeps the
+  # queue in a state the next run can reason about.
+  group: tenure-alerts
+  cancel-in-progress: false
+
+jobs:
+  alerts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install (locked)
+        run: npm ci
+
+      - name: Schedule and send reminders
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          TENURE_ALERT_FROM: ${{ vars.TENURE_ALERT_FROM }}
+          SITE_URL: ${{ vars.SITE_URL }}
+          # Repository-level kill switch. Set TENURE_ALERTS_PAUSED=1 in
+          # Settings → Variables to stop all sending during an incident without
+          # editing code or disabling the workflow (which would also stop the
+          # scheduling half, and the schedule is what keeps the queue correct).
+          TENURE_ALERTS_PAUSED: ${{ vars.TENURE_ALERTS_PAUSED }}
+        run: |
+          case "${{ inputs.mode }}" in
+            schedule-only) node scripts/tenure-alerts/run.mjs --schedule-only ;;
+            dry-run)       node scripts/tenure-alerts/run.mjs --dry-run ;;
+            *)             node scripts/tenure-alerts/run.mjs ;;
+          esac
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "### Tenure reminders" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Outcome: ${{ job.status }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Delivery records and failures are in Admin → Tenure, or:" >> "$GITHUB_STEP_SUMMARY"
+          echo '`select status, count(*) from public.tenure_alert_instances group by status;`' >> "$GITHUB_STEP_SUMMARY"

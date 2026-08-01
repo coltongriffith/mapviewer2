@@ -186,6 +186,13 @@ create table if not exists public.tenure_alert_instances (
 
   status text not null default 'pending' check (status in (
     'pending',     -- scheduled, not yet due or not yet sent
+    -- Claimed by a dispatcher and being delivered right now. The dispatcher
+    -- flips 'pending' → 'sending' with a compare-and-swap BEFORE it calls the
+    -- email provider, so a second worker (or the same job re-fired by a flaky
+    -- scheduler) finds nothing left to take. Sending first and marking after
+    -- would send twice whenever the marking step lost a race, and a duplicate
+    -- deadline email undermines trust in every other one.
+    'sending',
     'sent',
     'failed',      -- delivery attempted and rejected; retried up to the cap
     'superseded',  -- the good-to-date moved; this notice is no longer correct
