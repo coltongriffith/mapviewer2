@@ -1,0 +1,107 @@
+name: Tenure Monitor — B.C. tenure sync
+
+# Keeps the Exploration Maps mirror of the B.C. mineral tenure registry current.
+#
+# Two cadences, on purpose:
+#   * A nightly FULL run reconciles the whole province. It is the only run
+#     allowed to conclude anything about a title that has stopped appearing,
+#     because only a complete pull makes "absent" mean anything.
+#   * Two TARGETED runs a day refresh just the tenures somebody is actually
+#     monitoring. Cheap for us and for the province, and it keeps the claims
+#     people care about fresher than a once-a-day full sweep would.
+#
+# The product never implies real-time government data: every view shows the
+# real timestamp of the last successful run (public.tenure_last_sync).
+#
+# A failed or partial government response does NOT damage stored data. The
+# importer stages every page, judges the run as a whole, and on any doubt
+# clears the staging table and leaves the trusted records exactly as they were
+# (see scripts/tenure-sync/guardrails.mjs).
+
+on:
+  schedule:
+    # 11:00 UTC = 03:00 Pacific (PDT) / 04:00 (PST) — off-peak for DataBC.
+    - cron: '0 11 * * *'
+    # 15:00 and 23:00 UTC — targeted refresh of monitored tenures only.
+    - cron: '0 15,23 * * *'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'full = whole province + reconciliation; targeted = monitored tenures only; discover = print the live schema and write nothing'
+        required: false
+        default: full
+        type: choice
+        options: [full, targeted, discover]
+      dry_run:
+        description: 'Fetch and evaluate, but promote nothing'
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  # Two importers writing the same tables would interleave their staging and
+  # confuse reconciliation. Queue rather than cancel: a half-finished run that
+  # is killed mid-promotion is exactly the state this feature must not enter.
+  group: tenure-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install (locked)
+        run: npm ci
+
+      - name: Decide the run mode
+        id: mode
+        env:
+          # A scheduled run carries the cron line that triggered it, which is
+          # how one workflow serves two cadences without duplicating the job.
+          TRIGGER_CRON: ${{ github.event.schedule }}
+          INPUT_MODE: ${{ inputs.mode }}
+        run: |
+          if [ -n "$INPUT_MODE" ]; then
+            MODE="$INPUT_MODE"
+          elif [ "$TRIGGER_CRON" = "0 11 * * *" ]; then
+            MODE="full"
+          else
+            MODE="targeted"
+          fi
+          echo "mode=$MODE" >> "$GITHUB_OUTPUT"
+          echo "Running in $MODE mode"
+
+      - name: Sync B.C. mineral tenures
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          # Optional: without it the abort/failure emails are skipped and the
+          # failure is still durably recorded in tenure_import_runs.
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          TENURE_ADMIN_EMAIL: ${{ secrets.TENURE_ADMIN_EMAIL }}
+          # Optional guardrail overrides, for use during a known provincial
+          # data event. Unset = the defaults in guardrails.mjs.
+          TENURE_SYNC_MIN_RECORD_RATIO: ${{ vars.TENURE_SYNC_MIN_RECORD_RATIO }}
+          TENURE_SYNC_MAX_REJECT_RATIO: ${{ vars.TENURE_SYNC_MAX_REJECT_RATIO }}
+        run: |
+          ARGS="--mode=${{ steps.mode.outputs.mode }}"
+          if [ "${{ inputs.dry_run }}" = "true" ]; then ARGS="$ARGS --dry-run"; fi
+          if [ "${{ steps.mode.outputs.mode }}" = "discover" ]; then ARGS="--discover"; fi
+          node scripts/tenure-sync/run.mjs $ARGS
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "### B.C. tenure sync (${{ steps.mode.outputs.mode }})" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Outcome: ${{ job.status }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Full run history is in Admin → Tenure, or:" >> "$GITHUB_STEP_SUMMARY"
+          echo '`select * from public.tenure_import_runs order by started_at desc limit 10;`' >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,134 @@
+{
+  "_comment": [
+    "Fixture standing in for a page of pub:WHSE_MINERAL_TENURE.MTA_ACQUIRED_TENURE_SVW.",
+    "",
+    "Field names are the ones this repository has already confirmed against the",
+    "live layer (scripts/pseo/config.mjs, api/bc-claims.js, src/utils/claimInfo.js).",
+    "Values are invented — these are not real tenures and the geometry is a made-up",
+    "box in central B.C. Tests must never hit the live government endpoint: a test",
+    "suite that depends on DataBC being up is a test suite that goes red for reasons",
+    "that have nothing to do with the code.",
+    "",
+    "Deliberately includes the awkward cases: a claim with no good-to-date, a",
+    "cancelled title, a jointly-held title, and a record with unusable geometry."
+  ],
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "id": "MTA_ACQUIRED_TENURE_SVW.1",
+      "properties": {
+        "TENURE_NUMBER_ID": "1044501",
+        "TAG_NUMBER": "1044501",
+        "CLAIM_NAME": "Crystal Lake North",
+        "OWNER_NAME": "GOLIATH RESOURCES LTD.",
+        "TENURE_TYPE_DESCRIPTION": "Mineral",
+        "TENURE_SUBTYPE_DESCRIPTION": "Claim",
+        "TENURE_STATUS": "GOOD",
+        "ISSUE_DATE": "2019-04-11T00:00:00Z",
+        "GOOD_TO_DATE": "2027-03-14T00:00:00Z",
+        "AREA_IN_HECTARES": 418.7,
+        "MAP_UNIT_NO": "093K"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-121.5701234567, 53.0701234567],
+          [-121.5601234567, 53.0701234567],
+          [-121.5601234567, 53.0761234567],
+          [-121.5701234567, 53.0761234567],
+          [-121.5701234567, 53.0701234567]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "MTA_ACQUIRED_TENURE_SVW.2",
+      "properties": {
+        "TENURE_NUMBER_ID": "1044502",
+        "TAG_NUMBER": "1044502",
+        "CLAIM_NAME": "Crystal Lake South",
+        "OWNER_NAME": "Goliath Resources Limited; Beta Minerals Inc",
+        "TENURE_TYPE_DESCRIPTION": "Mineral",
+        "TENURE_SUBTYPE_DESCRIPTION": "Claim",
+        "TENURE_STATUS": "GOOD",
+        "ISSUE_DATE": "2020-06-02",
+        "GOOD_TO_DATE": "2026-09-30",
+        "AREA_IN_HECTARES": 209.35,
+        "MAP_UNIT_NO": "093K"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-121.56, 53.07], [-121.55, 53.07], [-121.55, 53.076],
+          [-121.56, 53.076], [-121.56, 53.07]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "MTA_ACQUIRED_TENURE_SVW.3",
+      "properties": {
+        "TENURE_NUMBER_ID": "1044503",
+        "TAG_NUMBER": "1044503",
+        "CLAIM_NAME": "Bear Creek",
+        "OWNER_NAME": "Northern Prospecting Co.",
+        "TENURE_TYPE_DESCRIPTION": "Placer",
+        "TENURE_SUBTYPE_DESCRIPTION": "Claim",
+        "TENURE_STATUS": "CANCELLED",
+        "ISSUE_DATE": "2015-01-20",
+        "GOOD_TO_DATE": "2024-01-19",
+        "AREA_IN_HECTARES": 21.0,
+        "MAP_UNIT_NO": "093L"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-122.10, 53.50], [-122.09, 53.50], [-122.09, 53.51],
+          [-122.10, 53.51], [-122.10, 53.50]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "MTA_ACQUIRED_TENURE_SVW.4",
+      "properties": {
+        "TENURE_NUMBER_ID": "1044504",
+        "TAG_NUMBER": "1044504",
+        "CLAIM_NAME": "Undated Ridge",
+        "OWNER_NAME": "Northern Prospecting Co.",
+        "TENURE_TYPE_DESCRIPTION": "Mineral",
+        "TENURE_STATUS": "GOOD",
+        "ISSUE_DATE": "2021-11-05",
+        "GOOD_TO_DATE": null,
+        "AREA_IN_HECTARES": 105.2,
+        "MAP_UNIT_NO": "093L"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-122.20, 53.60], [-122.19, 53.60], [-122.19, 53.61],
+          [-122.20, 53.61], [-122.20, 53.60]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "MTA_ACQUIRED_TENURE_SVW.5",
+      "properties": {
+        "TENURE_NUMBER_ID": "1044505",
+        "TAG_NUMBER": "1044505",
+        "CLAIM_NAME": "Broken Geometry",
+        "OWNER_NAME": "Northern Prospecting Co.",
+        "TENURE_TYPE_DESCRIPTION": "Mineral",
+        "TENURE_STATUS": "GOOD",
+        "GOOD_TO_DATE": "2028-05-01",
+        "AREA_IN_HECTARES": 40.0
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[-122.3, 53.7], [-122.29, 53.7]]]
+      }
+    }
+  ]
+}
