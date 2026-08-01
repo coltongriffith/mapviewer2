@@ -16,6 +16,7 @@ These need no external account and are working now:
 | Admin view | Admin → **Health** tab | Errors in the last 24h, grouped by fingerprint, with count, affected users, release, and a sample stack. |
 | API error logs | `api/stripe-*.js`, `api/client-error.js` | Structured single-line JSON to stdout, visible in Vercel runtime logs. Billing failures log unconditionally (they used to log only outside production, which is why the checkout failure was invisible). |
 | Release tagging | `vite.config.js` `__APP_VERSION__` | Every report carries the package version, so "did my last deploy break this" is answerable. |
+| Tenure sync + reminder failures | `.github/workflows/tenure-sync.yml`, `.github/workflows/tenure-alerts.yml` | An aborted or failed B.C. tenure import emails the administrator via Resend and exits non-zero, so the Actions run goes red as well. Every run — success or not — is durably recorded in `tenure_import_runs` and shown in Admin → **Tenure**, so a Resend outage cannot lose the signal. Per-alert delivery outcomes are recorded in `tenure_alert_instances`. |
 | New-signup email | `supabase/migrations/20260729000001_new_signup_notification.sql` | A trigger on `auth.users` emails coltongriffith@live.ca via Resend the moment a new account is created. Wrapped in an exception handler so a Resend outage or bad key can never fail a real signup — it just silently skips. The API key lives in Supabase Vault (`select vault.create_secret(...)`), never in a migration file or table. To change the destination address or sender, edit `public.send_signup_notification` (a plain SQL function, no redeploy needed) and re-run it as a migration. |
 
 **The gap this leaves:** the Health tab is *pull*, not *push*. Somebody has to
@@ -172,6 +173,30 @@ pressure, and the first time you run it should not be during an incident.
 1. Supabase → Database → Backups.
 2. Restore into a *new* project first (never in place) and verify before any
    cutover, exactly as rehearsed in the drill above.
+
+**Tenure Monitor: the B.C. sync is failing**
+1. Admin -> **Tenure** shows the run history and each run's guardrail report. An
+   `aborted` run wrote nothing — stored tenure data is still the last good
+   dataset, and customer portfolios are unaffected.
+2. If `error_summary` names a required field, the province changed the layer:
+   run the sync workflow with `mode: discover`, then update `FIELD_CANDIDATES`
+   in `scripts/tenure-sync/resolveFields.mjs`.
+3. Reminders keep going out from the last good dataset, carrying an honest
+   "last synchronized" timestamp. Change notices are withheld automatically
+   until a clean run — you do not need to pause anything to prevent false
+   alarms.
+4. Full runbook: `docs/tenure-monitor.md` § Administrative recovery.
+
+**Tenure Monitor: reminders are going out wrongly**
+1. Set repository variable `TENURE_ALERTS_PAUSED=1`, or use Admin -> Tenure ->
+   **Pause all reminders** (recorded in `tenure_audit_log` with your user id).
+   Do NOT disable the workflow: its scheduling half is what keeps the queue
+   correct, and only the sending half needs to stop.
+2. Post an incident banner from the same tab so users see why.
+3. Duplicate reminders should be impossible — they are prevented by a unique
+   index, not by application logic. If one is reported, capture both
+   `tenure_alert_instances` ids: that is a database-level bug, not a
+   configuration problem.
 
 **A share link is leaking something it should not**
 Revoke it immediately — Account → Shared links → Revoke, which clears the
