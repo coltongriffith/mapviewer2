@@ -61,7 +61,7 @@ function formatRelativeDate(iso) {
 }
 
 
-export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleStyle, recentProjects = [], onOpenProject, onShowHelp, onSearchBCClaims, onUploadFile, onOpenAccount }) {
+export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleStyle, recentProjects = [], onOpenProject, onShowHelp, onSearchBCClaims, onUploadFile, onOpenAccount, onOpenTenureMonitor }) {
   const { user } = useAuth();
   const [showAuth, setShowAuth] = useState(false);
   const clickThrottleRef = useRef(0);
@@ -122,6 +122,11 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
             <button type="button" onClick={() => scrollTo('use-cases')} data-track="Nav: Use Cases">Use Cases</button>
             <button type="button" onClick={() => scrollTo('examples')} data-track="Nav: Examples">Examples</button>
             <button type="button" onClick={() => scrollTo('pricing')} data-track="Nav: Pricing">Pricing</button>
+            {onOpenTenureMonitor && (
+              <button type="button" onClick={onOpenTenureMonitor} data-track="Nav: Tenure Monitor">
+                Tenure Monitor
+              </button>
+            )}
             {user ? (
               <button type="button" onClick={onOpenAccount} data-track="Nav: Dashboard">Dashboard</button>
             ) : (
@@ -570,6 +575,9 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
             <a href="/about/">About</a>
             <a href="/blog/">Guides</a>
             <a href="/contact/">Contact</a>
+            {onOpenTenureMonitor && (
+              <button type="button" onClick={onOpenTenureMonitor}>Tenure Monitor</button>
+            )}
             {user ? (
               <button type="button" onClick={onOpenAccount}>Dashboard</button>
             ) : (

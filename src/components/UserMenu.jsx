@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useAuth } from '../hooks/useAuth.jsx';
 import AuthModal from './AuthModal';
 
-export default function UserMenu({ onOpenTemplates, onOpenAccount }) {
+export default function UserMenu({ onOpenTemplates, onOpenAccount, onOpenTenureMonitor }) {
   const { user, signOut } = useAuth();
   const [showAuth, setShowAuth] = useState(false);
 
@@ -35,6 +35,15 @@ export default function UserMenu({ onOpenTemplates, onOpenAccount }) {
         <button className="sidebar-account-action-btn" onClick={onOpenTemplates}>
           Brand Kits
         </button>
+        {onOpenTenureMonitor && (
+          <button
+            className="sidebar-account-action-btn"
+            onClick={onOpenTenureMonitor}
+            title="Watch your B.C. mineral claims for approaching good-to-dates"
+          >
+            Tenure Monitor
+          </button>
+        )}
         <button className="sidebar-account-action-btn muted" onClick={signOut}>
           Sign out
         </button>

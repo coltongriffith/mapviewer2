@@ -11,6 +11,12 @@ const REASON_COPY = {
   export: 'High-resolution SVG, Illustrator and PDF export are part of Pro.',
   projects: 'The free plan saves up to 3 cloud projects — Pro is unlimited.',
   watermark: 'Pro exports are fully clean — no watermark or corner credit.',
+  // Tenure Monitor gates. Each names the specific limit the user just hit,
+  // rather than a generic upsell — somebody who selected 30 claims wants to
+  // know how many they can actually watch, not a feature list.
+  tenure_limit: 'The free plan monitors up to 10 B.C. tenures — Pro monitors 50.',
+  tenure_portfolios: 'The free plan keeps one portfolio — Pro lets you organise claims into several.',
+  tenure_alerts: 'Pro adds a final 7-day reminder and a second alert recipient.',
   general: 'Unlock the full toolkit for investor-ready maps.',
 };
 
