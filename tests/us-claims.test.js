@@ -218,6 +218,27 @@ describe('US state-scoping resilience', () => {
     expect(res.body.meta.scopingMethod).toBe('serial_prefix');
   });
 
+  it('resolves the legacy serial under its August 2026 name, LEG_CSE_NR', async () => {
+    // BLM renamed LGCY_CSE_NR to LEG_CSE_NR; the live-schema canary caught it.
+    // This matters more than a rename normally would: with GEO_STATE and
+    // ADMIN_STATE both gone from the layer, serial_prefix is the ONLY scoping
+    // mode left, and the legacy field carries half of it. A claim whose MLRS
+    // serial does not start with the state code is found only through this
+    // clause.
+    vi.resetModules();
+    installBlmMock([
+      ...BLM_FIELDS.filter((f) => !/STATE/.test(f.name)),
+      { name: 'LEG_CSE_NR', type: 'esriFieldTypeString' },
+    ]);
+    const { default: h } = await import('../api/claims.js');
+    const res = mockRes();
+    await h(req({ q: 'goldie', type: 'name', province: 'us-nv' }), res);
+    expect(res.statusCode).toBe(200);
+    expect(queryUrls[0]).toMatch(/UPPER\(CSE_NR\) LIKE 'NV%'/);
+    expect(queryUrls[0]).toMatch(/UPPER\(LEG_CSE_NR\) LIKE 'NMC%'/);
+    expect(res.body.meta.scopingMethod).toBe('serial_prefix');
+  });
+
   it('refuses serial-prefix scoping for Oregon and Washington (one shared BLM office)', async () => {
     // The Oregon/Washington state office administers both states, so no serial
     // prefix distinguishes them. Returning Oregon claims labelled Washington
