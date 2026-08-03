@@ -174,6 +174,42 @@ describe('reconcileAlerts — idempotency and recalculation', () => {
     expect(toInsert).toEqual([]);
     expect(toSupersede).toHaveLength(1);
   });
+
+  // ── Suppressed alerts must come back ─────────────────────────────────────
+  // A held alert keeps its key, so it is correctly not re-inserted — but the
+  // dispatcher only ever loads `pending`. Without revival the pause lifts, the
+  // sync goes clean, and the reminder still never goes out.
+
+  it('hands a suppressed alert back to pending while the plan still wants it', () => {
+    const existing = planned().map((p, i) => ({ ...p, id: `s${i}`, status: 'suppressed' }));
+    const { toInsert, toSupersede, toRevive } = reconcileAlerts(planned(), existing);
+    expect(toRevive).toEqual(['s0', 's1', 's2']);
+    expect(toInsert).toEqual([]);      // still no duplicates
+    expect(toSupersede).toEqual([]);   // and not retired either
+  });
+
+  it('does not revive a suppressed alert whose good-to-date has moved', () => {
+    // The province changed the deadline, so the held reminder is wrong rather
+    // than overdue. It stays suppressed and a fresh set is planned.
+    const stale = planExpiryAlerts(membership(), [90, 30, 7], [recipient()], NOW)
+      .map((p, i) => ({ ...p, id: `s${i}`, status: 'suppressed' }));
+    const moved = planExpiryAlerts(
+      membership({ tenure: { good_to_date: '2027-06-14' } }), [90, 30, 7], [recipient()], NOW,
+    );
+    const { toInsert, toRevive } = reconcileAlerts(moved, stale);
+    expect(toRevive).toEqual([]);
+    expect(toInsert).toHaveLength(3);
+  });
+
+  it('leaves sent, failed and superseded rows alone', () => {
+    // Only `suppressed` is a held obligation. A sent alert is history, a failed
+    // one is an administrator's to retry, a superseded one was retired on
+    // purpose — reviving any of them would re-send a deadline.
+    for (const status of ['sent', 'failed', 'superseded']) {
+      const existing = planned().map((p, i) => ({ ...p, id: `${status}${i}`, status }));
+      expect(reconcileAlerts(planned(), existing).toRevive).toEqual([]);
+    }
+  });
 });
 
 describe('alertKey', () => {

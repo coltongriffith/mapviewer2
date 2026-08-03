@@ -3409,6 +3409,9 @@ body.is-dragging .template-zone .panel-delete-btn { opacity: 0 !important; }
 }
 .tm-signin-gate h1 { margin: 0; font-size: 26px; }
 .tm-signin-gate p { margin: 0; max-width: 520px; font-size: 14px; color: #475569; }
+.tm-gate-actions {
+  display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 4px;
+}
 
 /* ── Onboarding ─────────────────────────────────────────────────────────── */
 .tm-onboard {

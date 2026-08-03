@@ -284,3 +284,41 @@ describe('splitOwnerField', () => {
     expect(splitOwnerField(null)).toEqual([]);
   });
 });
+
+// ── The property that makes an interrupted promotion recoverable ───────────
+//
+// Promotion is not atomic — PostgREST cannot hold one transaction across the
+// round trips a province-sized promotion takes — so a crash can leave some
+// batches applied. The recovery re-runs promoteStaging over the SAME retained
+// staging rows, which is only safe because re-applying a batch that already
+// landed does nothing at all.
+//
+// promoteStaging diffs the STORED row against the STAGED row. For a batch that
+// already promoted, those are the same values, so detectChanges must return
+// nothing and shouldSnapshot must decline. If that ever stopped holding, a
+// resume would manufacture a second wave of change events — and every one of
+// them would trigger a change email about something the province never did.
+describe('resume safety — re-applying an already-promoted batch', () => {
+  it('emits no change events when the stored row already equals the staged row', () => {
+    expect(detectChanges({ ...BASE }, { ...BASE })).toEqual([]);
+  });
+
+  it('emits nothing even when the owners are also unchanged', () => {
+    const owners = [owner('GOLIATH RESOURCES LTD.'), owner('Silver Ridge Exploration Inc.')];
+    expect(detectChanges({ ...BASE }, { ...BASE }, {
+      previousOwners: owners,
+      currentOwners: owners.map((o) => ({ ...o })),
+    })).toEqual([]);
+  });
+
+  it('takes no snapshot for a no-op re-application', () => {
+    expect(shouldSnapshot({ ...BASE }, { ...BASE }, [])).toBe(false);
+  });
+
+  it('still reports a real change, so the no-op case is not vacuous', () => {
+    // Proves the three assertions above detect equality rather than a detector
+    // that has quietly stopped detecting anything.
+    const moved = { ...BASE, good_to_date: '2028-03-14' };
+    expect(detectChanges({ ...BASE }, moved).length).toBeGreaterThan(0);
+  });
+});

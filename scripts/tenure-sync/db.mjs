@@ -47,6 +47,53 @@ export async function finishRun(sb, runId, patch) {
   if (error) throw new Error(`Could not close import run ${runId}: ${error.message}`);
 }
 
+/**
+ * Mark the moment this run stops being a pure reader.
+ *
+ * Everything before this point writes only to tenure_import_staging, so a
+ * failure genuinely leaves the trusted tables alone. After it, batches are
+ * landing one round trip at a time and a crash can leave the promotion
+ * half-done — which is a different situation and has to be reported as one.
+ */
+export async function markPromotionStarted(sb, runId) {
+  const { error } = await sb
+    .from('tenure_import_runs')
+    .update({ promotion_started_at: new Date().toISOString() })
+    .eq('id', runId);
+  // Not fatal: failing to record the marker must not stop a promotion that is
+  // otherwise fine. It only costs us the automatic resume.
+  if (error) console.warn(`[tenure-sync] could not mark promotion start: ${error.message}`);
+}
+
+/**
+ * A previous run that died part-way through promotion and still holds staging.
+ *
+ * Its rows were deliberately NOT cleared, because they are the input the resume
+ * needs. Re-promoting them is a no-op for every batch that already landed.
+ */
+export async function interruptedRun(sb, { source }) {
+  const { data, error } = await sb
+    .from('tenure_import_runs')
+    .select('id, started_at, mode, error_summary')
+    .eq('status', 'failed')
+    .eq('source', source)
+    .not('promotion_started_at', 'is', null)
+    .order('started_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(`Could not check for an interrupted run: ${error.message}`);
+  if (!data) return null;
+
+  // A failed run whose staging has since been cleared by hand is finished, not
+  // interrupted. Confirm there is actually something left to promote.
+  const { count, error: countErr } = await sb
+    .from('tenure_import_staging')
+    .select('id', { count: 'exact', head: true })
+    .eq('import_run_id', data.id);
+  if (countErr) throw new Error(`Could not size the retained staging: ${countErr.message}`);
+  return count > 0 ? { ...data, staged: count } : null;
+}
+
 /** The baseline the guardrails compare against. */
 export async function lastSuccessfulRun(sb, { source, mode = 'full' }) {
   const { data, error } = await sb

@@ -58,7 +58,8 @@ async function main() {
 
   const scheduled = await schedule(sb, { now, alertsSafe });
   console.log(`[tenure-alerts] scheduled ${scheduled.inserted} new, `
-    + `superseded ${scheduled.superseded} obsolete.`);
+    + `superseded ${scheduled.superseded} obsolete, `
+    + `requeued ${scheduled.revived} previously held.`);
 
   if (scheduleOnly) return;
 
@@ -73,6 +74,7 @@ async function schedule(sb, { now, alertsSafe }) {
   const portfolios = await loadPortfolios(sb);
   let inserted = 0;
   let superseded = 0;
+  let revived = 0;
 
   for (const portfolio of portfolios) {
     const [memberships, recipients, existing] = await Promise.all([
@@ -100,10 +102,28 @@ async function schedule(sb, { now, alertsSafe }) {
       }
     }
 
-    const { toInsert, toSupersede } = reconcileAlerts(planned, existing);
+    const { toInsert, toSupersede, toRevive } = reconcileAlerts(planned, existing);
 
     if (toInsert.length) {
       inserted += await insertIgnoringDuplicates(sb, toInsert);
+    }
+
+    // Hand held alerts back to the dispatcher, which re-evaluates the block and
+    // either sends or holds again. Without this a suppressed reminder is never
+    // looked at again — see reconcileAlerts.
+    if (toRevive.length) {
+      const { error } = await sb.from('tenure_alert_instances')
+        .update({
+          status: 'pending',
+          delivery_metadata: { requeued_at: new Date().toISOString() },
+          updated_at: new Date().toISOString(),
+        })
+        .in('id', toRevive);
+      if (error) {
+        console.warn(`[tenure-alerts] requeue failed: ${error.message}`);
+      } else {
+        revived += toRevive.length;
+      }
     }
 
     if (toSupersede.length) {
@@ -118,7 +138,7 @@ async function schedule(sb, { now, alertsSafe }) {
     }
   }
 
-  return { inserted, superseded };
+  return { inserted, superseded, revived };
 }
 
 // ── Dispatch ───────────────────────────────────────────────────────────────
@@ -141,8 +161,10 @@ async function dispatch(sb, { now, alertsSafe, sync, dryRun }) {
     });
 
     if (!verdict.send) {
-      // Held, not cancelled: an administrator can re-queue it, and the next
-      // clean run picks it up.
+      // Held, not cancelled. The next scheduling pass hands it back to pending
+      // (reconcileAlerts → toRevive) so this same check runs again against
+      // fresh conditions; an administrator can also force it with
+      // admin_retry_tenure_alert. Nothing here is a terminal state.
       await sb.from('tenure_alert_instances').update({
         status: 'suppressed',
         delivery_metadata: { held_reason: verdict.reason, held_at: new Date().toISOString() },

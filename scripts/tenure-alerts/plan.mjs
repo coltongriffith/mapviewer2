@@ -160,9 +160,28 @@ export function alertKey(row) {
  * Only PENDING rows are ever superseded. A sent alert is history; a failed one
  * is an administrator's to retry.
  *
+ * SUPPRESSED ROWS MUST BE REVIVED, and this is the only place that can do it.
+ * A held alert keeps its key, so the clause above correctly declines to insert
+ * a duplicate — but the dispatcher only ever loads `pending`, so without a
+ * third bucket a suppressed alert is stranded: the pause lifts, the sync comes
+ * back clean, and the reminder still never goes out. That is the precise
+ * failure this whole feature exists to prevent, arrived at from the inside.
+ *
+ * Revival is unconditional rather than conditional on the block having
+ * cleared. The scheduler would have to re-derive "is the portfolio still
+ * paused, was the last import trustworthy" to decide, and it would be deriving
+ * it from the same inputs the dispatcher is about to evaluate anyway. So it
+ * re-offers the alert and lets `maySend` be the single authority: if the block
+ * still stands, dispatch simply holds it again the same day. A permanently
+ * paused portfolio churns one UPDATE per alert per run, which is a cheap price
+ * for having exactly one place that decides whether a reminder may go out.
+ *
+ * A suppressed row whose key has LEFT the plan is not revived — a good-to-date
+ * that moved makes the old reminder wrong, not overdue.
+ *
  * @param {object[]} planned   from planExpiryAlerts / planChangeAlerts
  * @param {object[]} existing  rows already in the database, with `status`
- * @returns {{toInsert: object[], toSupersede: string[]}}
+ * @returns {{toInsert: object[], toSupersede: string[], toRevive: string[]}}
  */
 export function reconcileAlerts(planned, existing) {
   const plannedByKey = new Map(planned.map((p) => [alertKey(p), p]));
@@ -181,7 +200,12 @@ export function reconcileAlerts(planned, existing) {
     .filter((e) => !plannedByKey.has(alertKey(e)))
     .map((e) => e.id);
 
-  return { toInsert, toSupersede };
+  const toRevive = existing
+    .filter((e) => e.status === 'suppressed')
+    .filter((e) => plannedByKey.has(alertKey(e)))
+    .map((e) => e.id);
+
+  return { toInsert, toSupersede, toRevive };
 }
 
 /**

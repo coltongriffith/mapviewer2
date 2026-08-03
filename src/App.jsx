@@ -4222,7 +4222,25 @@ export default function App() {
           onExit={() => setScreen('landing')}
           onOpenTenuresInEditor={handleOpenTenuresInEditor}
           onUpgrade={(reason) => setUpgradeReason(reason || 'general')}
+          onSignIn={() => setShowAuthFromGate(true)}
         />
+        {/* This screen returns before the editor's overlay block, so the
+            modals it can raise have to be rendered here too. Without the
+            upgrade modal, every limit and reminder-tier button in Tenure
+            Monitor sets state and appears to do nothing. */}
+        {upgradeReason && (
+          <UpgradeModal
+            reason={upgradeReason}
+            onClose={() => setUpgradeReason(null)}
+            onNeedSignIn={() => {
+              // Sign in over the portfolio rather than routing to /account —
+              // the user came here to act on a claim, and sending them to a
+              // different screen loses that thread.
+              setUpgradeReason(null);
+              setShowAuthFromGate(true);
+            }}
+          />
+        )}
         {showAuthFromGate && <AuthModal onClose={() => setShowAuthFromGate(false)} />}
       </React.Suspense>
     );

@@ -20,6 +20,24 @@
 // Step 4 is the entire point. Every other part of this file exists to make
 // sure that when the province has a bad night, the answer is "we did not sync
 // today" rather than "forty of your claims disappeared".
+//
+// WHAT "TOUCH NOTHING ELSE" ACTUALLY GUARANTEES
+//   Up to and including step 3, this is a pure reader: the only writes go to
+//   tenure_import_staging. Any failure there — a dropped connection, a renamed
+//   field, a guardrail verdict — really does leave every trusted row alone.
+//
+//   Promotion is not atomic, and pretending otherwise would be the dangerous
+//   kind of comment. PostgREST cannot hold one transaction across the many
+//   round trips a province-sized promotion takes, so a crash at batch 7 of 40
+//   leaves batches 1-6 committed. That case is handled rather than denied:
+//   promotion_started_at marks the boundary, the staged rows are KEPT instead
+//   of cleared, the administrator is told what actually happened, and the next
+//   run finishes the promotion before staging anything of its own.
+//
+//   Re-applying a batch that already landed is a no-op, which is what makes
+//   the resume safe: promoteStaging diffs the stored row against the staged
+//   row, so an already-promoted batch compares equal and emits no change event
+//   and no snapshot. See resumeInterruptedPromotion.
 
 import {
   SOURCE_ID, SOURCE_METADATA, fetchSampleFeature, streamFeatures, tenureNumberFilter,
@@ -36,6 +54,7 @@ import {
   createServiceClient, startRun, finishRun, lastSuccessfulRun, loadExisting,
   upsertTenures, upsertOwners, pruneOwners, insertSnapshots, insertChangeEvents,
   reconcile, monitoredTenureNumbers, notifyAdmin, stageRows, readStaged, clearStaging,
+  markPromotionStarted, interruptedRun,
   BATCH_SIZE,
 } from './db.mjs';
 
@@ -100,8 +119,15 @@ async function main() {
     mode: opts.mode,
   };
   const rejectSamples = [];
+  let promotionStarted = false;
 
   try {
+    // ── 1b. Finish anything a previous run left half-written ───────────────
+    // Before this run stages a single row, an earlier interrupted promotion is
+    // completed, so the diff below is taken against a settled dataset rather
+    // than one that is part old and part new.
+    await resumeInterruptedPromotion(sb, { log });
+
     // ── 2. Stream into staging ─────────────────────────────────────────────
     let cqlFilter = null;
     if (opts.mode === 'targeted') {
@@ -181,6 +207,11 @@ async function main() {
     }
 
     // ── 4b. Promote ────────────────────────────────────────────────────────
+    // Past this line the run is no longer a pure reader, so a failure can no
+    // longer claim stored records are untouched. The marker is what lets the
+    // catch block below tell the two cases apart.
+    promotionStarted = true;
+    await markPromotionStarted(sb, run.id);
     const promoted = await promoteStaging(sb, run.id, {
       observedAt, log, alertsSafe: evaluation.alertsSafe,
     });
@@ -232,24 +263,96 @@ async function main() {
       });
     }
   } catch (e) {
-    // Any unexpected failure leaves trusted data alone by construction: the
-    // only writes before this point go to staging, which is cleared here.
-    await clearStaging(sb, run.id).catch(() => {});
-    await finishRun(sb, run.id, {
-      status: 'failed',
-      alerts_safe: false,
-      records_received: stats.recordsReceived,
-      records_rejected: stats.recordsRejected,
-      schema_fingerprint: resolution?.fingerprint || null,
-      error_summary: String(e?.message || e).slice(0, 2000),
-    }).catch(() => {});
-    await notifyAdmin(sb, {
-      subject: 'Tenure Monitor: B.C. sync failed',
-      body: `<p>Run <code>${run.id}</code> failed.</p><pre>${escapeHtml(String(e?.message || e))}</pre>`
-        + '<p>Stored tenure records are unchanged.</p>',
-    }).catch(() => {});
+    const detail = String(e?.message || e);
+
+    // Two different failures, and they must not be reported as one.
+    //
+    // Before promotion the only writes went to staging, so "stored records are
+    // unchanged" is simply true and staging is dropped. During promotion it is
+    // not true — batches already committed — and clearing staging would throw
+    // away the one input a resume needs. So the rows stay, and the next run
+    // finishes the job before starting its own.
+    if (promotionStarted) {
+      await finishRun(sb, run.id, {
+        status: 'failed',
+        alerts_safe: false,
+        records_received: stats.recordsReceived,
+        records_rejected: stats.recordsRejected,
+        schema_fingerprint: resolution?.fingerprint || null,
+        error_summary: `Interrupted during promotion — some records were updated before the `
+          + `failure. Staging retained for the next run to finish. ${detail}`.slice(0, 2000),
+      }).catch(() => {});
+      await notifyAdmin(sb, {
+        subject: 'Tenure Monitor: B.C. sync interrupted part-way through writing',
+        body: `<p>Run <code>${run.id}</code> failed <strong>after</strong> it had begun promoting `
+          + 'records, so some tenures were updated and some were not.</p>'
+          + `<pre>${escapeHtml(detail)}</pre>`
+          + '<p>Its staged rows have been kept on purpose. The next sync finishes this '
+          + 'promotion before starting its own, and re-applying a batch that already landed '
+          + 'produces no duplicate change events. No reminder is sent off a run in this state.</p>'
+          + '<p>Nothing was deleted. If you would rather discard it, clear '
+          + '<code>tenure_import_staging</code> for this run id and the next sync will '
+          + 'simply re-read the province.</p>',
+      }).catch(() => {});
+    } else {
+      await clearStaging(sb, run.id).catch(() => {});
+      await finishRun(sb, run.id, {
+        status: 'failed',
+        alerts_safe: false,
+        records_received: stats.recordsReceived,
+        records_rejected: stats.recordsRejected,
+        schema_fingerprint: resolution?.fingerprint || null,
+        error_summary: detail.slice(0, 2000),
+      }).catch(() => {});
+      await notifyAdmin(sb, {
+        subject: 'Tenure Monitor: B.C. sync failed',
+        body: `<p>Run <code>${run.id}</code> failed before it wrote anything.</p>`
+          + `<pre>${escapeHtml(detail)}</pre>`
+          + '<p>Stored tenure records are unchanged.</p>',
+      }).catch(() => {});
+    }
     throw e;
   }
+}
+
+/**
+ * Complete a promotion an earlier run died in the middle of.
+ *
+ * Safe to re-run over rows that already landed, and that is the whole reason
+ * this works: promoteStaging diffs the STORED row against the STAGED row, so a
+ * batch that already promoted compares equal — no change event, no snapshot,
+ * and the tenure upsert is keyed on (jurisdiction, source, source_record_id)
+ * so it rewrites the same values. Only the batches that never made it do
+ * anything.
+ *
+ * Deliberately does not reconcile. Reconciliation concludes things about
+ * titles that were ABSENT from a dataset, and the retained staging is a
+ * dataset we already know is incompletely applied. The next full run draws
+ * that conclusion, from a complete pull.
+ */
+async function resumeInterruptedPromotion(sb, { log }) {
+  let prior;
+  try {
+    prior = await interruptedRun(sb, { source: SOURCE_ID });
+  } catch (e) {
+    // Never let recovery bookkeeping stop tonight's sync from running.
+    log(`[tenure-sync] could not check for an interrupted run: ${e.message}`);
+    return;
+  }
+  if (!prior) return;
+
+  log(`[tenure-sync] resuming interrupted run ${prior.id} — ${prior.staged} staged rows retained.`);
+  const promoted = await promoteStaging(sb, prior.id, {
+    observedAt: new Date().toISOString(), log, alertsSafe: false,
+  });
+  await clearStaging(sb, prior.id);
+  await finishRun(sb, prior.id, {
+    error_summary: `${prior.error_summary || 'Interrupted during promotion.'} `
+      + `Resumed and completed: ${promoted.processed} records applied, `
+      + `${promoted.changeEvents} change events.`.slice(0, 2000),
+  }).catch(() => {});
+  log(`[tenure-sync] resume complete: ${promoted.processed} applied, `
+    + `${promoted.changeEvents} change events.`);
 }
 
 /**

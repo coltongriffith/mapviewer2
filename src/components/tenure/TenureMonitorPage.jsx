@@ -46,7 +46,7 @@ function matchesFilter(row, filter, now) {
   }
 }
 
-export default function TenureMonitorPage({ onExit, onOpenTenuresInEditor, onUpgrade }) {
+export default function TenureMonitorPage({ onExit, onOpenTenuresInEditor, onUpgrade, onSignIn }) {
   const { user, entitlements, tier } = useAuth();
 
   const [portfolios, setPortfolios] = useState([]);
@@ -314,7 +314,19 @@ export default function TenureMonitorPage({ onExit, onOpenTenuresInEditor, onUpg
             their good-to-date.
           </p>
           <LastSyncLine sync={sync} />
-          <button className="btn primary" type="button" onClick={onExit}>Back to Exploration Maps</button>
+          <div className="tm-gate-actions">
+            {/* The gate asks for a sign-in, so it has to offer one. Sending a
+                visitor back to the landing page to find it separately is how a
+                deep link into /tenure-monitor becomes a dead end. */}
+            {onSignIn && (
+              <button className="btn primary" type="button" onClick={onSignIn}>
+                Sign in / Create account
+              </button>
+            )}
+            <button className="secondary-btn" type="button" onClick={onExit}>
+              ← Back to Exploration Maps
+            </button>
+          </div>
         </div>
       </div>
     );

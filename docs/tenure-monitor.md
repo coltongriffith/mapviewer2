@@ -199,6 +199,41 @@ latest successful dataset. Verify its status in MTO."* — never that it expired
 On abort: `tenure_import_runs.status = 'aborted'`, guardrail report stored, the
 administrator emailed via Resend, existing data untouched, exit code 1.
 
+### What "untouched" covers, precisely
+
+Up to and including the guardrail verdict the importer is a **pure reader** —
+the only writes go to `tenure_import_staging`. A dropped connection, a renamed
+field or an abort verdict there genuinely leaves every trusted row alone.
+
+**Promotion is not atomic**, and the code no longer claims it is. PostgREST
+cannot hold one transaction across the many round trips a province-sized
+promotion takes, so a process death at batch 7 of 40 leaves batches 1–6
+committed. That case is handled rather than denied:
+
+- `tenure_import_runs.promotion_started_at` marks the moment the run stops
+  being a reader and splits the failure path in two.
+- A failure **before** it: staging cleared, and the administrator is told
+  stored records are unchanged, because they are.
+- A failure **during** it: staging is deliberately **kept** — it is the input a
+  resume needs — the run records what actually happened, and the email says
+  some tenures were updated and some were not.
+- The next run calls `resumeInterruptedPromotion` before staging anything of
+  its own, so its diff is taken against a settled dataset.
+
+Re-applying a batch that already landed is a no-op, which is what makes the
+resume safe rather than merely hopeful: `promoteStaging` diffs the **stored**
+row against the **staged** row, so an already-promoted batch compares equal and
+emits no change event and no snapshot. The tenure upsert is keyed on
+`(jurisdiction, source, source_record_id)` and idempotent on its own. The
+resume deliberately does **not** reconcile — reconciliation draws conclusions
+about titles absent from a dataset, and a retained staging set is one we
+already know was incompletely applied.
+
+Full atomicity would mean moving the whole diff into a database function, which
+means reimplementing `changeDetect.mjs` in PL/pgSQL and keeping two copies of
+the most correctness-critical logic in the feature. That is a deliberate future
+decision, recorded under Known limitations rather than half-done.
+
 ---
 
 ## Alert scheduling
@@ -417,6 +452,12 @@ assumptions.
 10. **Snapshots do not store geometry**, only its fingerprint and the change
    event. Reconstructing an exact historical polygon is not possible yet — this
    is the one thing a future Released Claim Radar would want revisited.
+11. **Promotion is recoverable, not atomic.** A crash part-way through writing
+   leaves some batches applied; the next run finishes the job and the operator
+   is told the truth in the meantime (see *What "untouched" covers*). Making it
+   genuinely atomic means moving the diff into a database function and keeping
+   a second copy of `changeDetect.mjs` in PL/pgSQL — a real decision, not an
+   oversight, and not one to take under review pressure.
 
 ---
 

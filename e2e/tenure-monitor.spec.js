@@ -44,6 +44,20 @@ test.describe('/tenure-monitor', () => {
     expect(body).toMatch(/reminders|good-to-date/i);
   });
 
+  test('offers a sign-in the visitor can actually act on', async ({ page }) => {
+    // The gate asks for an account, so it has to provide the way in. Without
+    // this the only control is "Back to Exploration Maps", and a deep link
+    // into /tenure-monitor — the link every reminder email contains — becomes
+    // a dead end for anyone not already signed in.
+    await page.goto('/tenure-monitor');
+    const signIn = page.getByRole('button', { name: /sign in/i });
+    await expect(signIn).toBeVisible();
+    await signIn.click();
+    // The auth modal opens over the portfolio rather than routing elsewhere.
+    await expect(page.locator('input[type="email"]').first()).toBeVisible();
+    expect(new URL(page.url()).pathname).toBe('/tenure-monitor');
+  });
+
   test('states how fresh the government data is, even signed out', async ({ page }) => {
     // "How current is this?" must never be gated behind an account — somebody
     // looking at a deadline needs to know when we last heard from the province.
