@@ -22,7 +22,7 @@ const URL_ = 'SUPABASE_URL';
 const saved = {};
 
 beforeEach(() => {
-  for (const k of [KEY, URL_, 'VITE_SUPABASE_URL', 'TEST_CRED']) saved[k] = process.env[k];
+  for (const k of [KEY, URL_, 'VITE_SUPABASE_URL', 'TEST_CRED', 'RESEND_API_KEY']) saved[k] = process.env[k];
 });
 afterEach(() => {
   for (const [k, v] of Object.entries(saved)) {
@@ -111,5 +111,50 @@ describe('supabaseCredentials', () => {
     process.env[KEY] = 'eyJhbGciOiJIUzI1NiJ9.payload.sig\n';
     const { key } = supabaseCredentials();
     expect(() => new Headers({ Authorization: `Bearer ${key}` })).not.toThrow();
+  });
+});
+
+// ── The best-effort paths credential() can throw into ──────────────────────
+//
+// credential() replaced a `process.env.X` read that could never throw. Two of
+// the sites it replaced are documented best-effort, and both were reached
+// AFTER a state change that a throw would leave stranded:
+//
+//   send()         runs after claim() has moved the row to 'sending'.
+//                  loadAllDue selects only 'pending' and
+//                  admin_retry_tenure_alert requeues only 'failed'/'suppressed',
+//                  so a throw here lost the reminder permanently.
+//
+//   notifyAdmin()  is awaited on the abort path straight after writing
+//                  status='aborted', without a catch. A throw landed in the
+//                  outer handler, rewrote the run as 'failed', and replaced the
+//                  guardrail reason with an email-configuration error.
+//
+// Both now read the credential inside their try. These tests pin the property
+// that matters: a malformed key produces a recorded, retryable outcome rather
+// than an escaping exception.
+describe('a malformed RESEND_API_KEY does not escape the best-effort paths', () => {
+  const BAD = 'rese\nnd_key_with_a_wrapped_paste';
+
+  it('credential() genuinely throws on it — the tests below are not vacuous', () => {
+    process.env.TEST_CRED = BAD;
+    expect(() => credential('TEST_CRED')).toThrow();
+  });
+
+  it('send() reports it as a retryable delivery failure', async () => {
+    process.env.RESEND_API_KEY = BAD;
+    const { send } = await import('../scripts/tenure-alerts/send.mjs');
+    const result = await send('a@b.com', { subject: 's', html: 'h', text: 't' });
+    expect(result.ok).toBe(false);
+    // Not a hard bounce: the address is fine, our configuration is not, so the
+    // recipient must not be marked bounced and burn every future alert.
+    expect(result.hardBounce).toBe(false);
+    expect(result.error).toMatch(/line break|control character/i);
+  });
+
+  it('notifyAdmin() returns false rather than throwing into the abort path', async () => {
+    process.env.RESEND_API_KEY = BAD;
+    const { notifyAdmin } = await import('../scripts/tenure-sync/db.mjs');
+    await expect(notifyAdmin(null, { subject: 's', body: 'b' })).resolves.toBe(false);
   });
 });
