@@ -295,15 +295,21 @@ export async function monitoredTenureNumbers(sb) {
  * Tenure; this is the push half of that.
  */
 export async function notifyAdmin(sb, { subject, body }) {
-  const apiKey = credential('RESEND_API_KEY');
   const to = process.env.TENURE_ADMIN_EMAIL || 'coltongriffith@live.ca';
   const from = process.env.TENURE_ALERT_FROM
     || 'Exploration Maps <notifications@explorationmaps.com>';
-  if (!apiKey) {
-    console.warn('[tenure-sync] RESEND_API_KEY not set — administrator email skipped.');
-    return false;
-  }
   try {
+    // INSIDE the try, because credential() throws on a malformed key and this
+    // function is documented best-effort. The abort path awaits it without a
+    // catch straight after writing status='aborted', so a throw here landed in
+    // the outer handler, rewrote the run as 'failed', and replaced the real
+    // guardrail reason with an email-configuration error — hiding exactly the
+    // message the operator needed.
+    const apiKey = credential('RESEND_API_KEY');
+    if (!apiKey) {
+      console.warn('[tenure-sync] RESEND_API_KEY not set — administrator email skipped.');
+      return false;
+    }
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },

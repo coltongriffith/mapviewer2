@@ -19,12 +19,13 @@
 // Reads SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY and RESEND_API_KEY.
 
 import { createClient } from '@supabase/supabase-js';
-import { credential, supabaseCredentials } from '../lib/env.mjs';
+import { supabaseCredentials } from '../lib/env.mjs';
 import { bcToday } from '../../src/utils/tenureDates.js';
 import {
   planExpiryAlerts, planChangeAlerts, reconcileAlerts, dueNow, maySend,
 } from './plan.mjs';
 import { renderAlert } from './templates.mjs';
+import { send } from './send.mjs';
 
 const MAX_ATTEMPTS = 3;
 const CHANGE_LOOKBACK_DAYS = 7;
@@ -185,53 +186,71 @@ async function dispatch(sb, { now, alertsSafe, sync, dryRun }) {
     const claimed = await claim(sb, alert);
     if (!claimed) continue;
 
-    const context = {
-      tenure: alert.tenure,
-      owners: alert.owners,
-      portfolioName: alert.portfolio?.name,
-      membership: alert.membership,
-      change: alert.change,
-      lastSyncedAt: sync?.completed_at,
-      now,
-    };
-    const email = renderAlert(alert, context);
+    // Everything from here on runs on a row that is already OUT of 'pending'.
+    // Any throw that escapes leaves it in 'sending' — a status nothing selects
+    // and nothing requeues — so the reminder is silently lost rather than
+    // retried. renderAlert and the credential read are both capable of it, so
+    // the guarantee is made structurally here rather than one call at a time.
+    try {
+      const context = {
+        tenure: alert.tenure,
+        owners: alert.owners,
+        portfolioName: alert.portfolio?.name,
+        membership: alert.membership,
+        change: alert.change,
+        lastSyncedAt: sync?.completed_at,
+        now,
+      };
+      const email = renderAlert(alert, context);
 
-    if (dryRun) {
-      console.log(`\n--- to ${alert.recipient.email}\nSubject: ${email.subject}\n`);
-      console.log(email.text);
-      // Put it back so a dry run leaves the queue exactly as it found it.
-      await sb.from('tenure_alert_instances')
-        .update({ status: 'pending', attempt_count: alert.attempt_count })
-        .eq('id', alert.id);
-      continue;
-    }
+      if (dryRun) {
+        console.log(`\n--- to ${alert.recipient.email}\nSubject: ${email.subject}\n`);
+        console.log(email.text);
+        // Put it back so a dry run leaves the queue exactly as it found it.
+        await sb.from('tenure_alert_instances')
+          .update({ status: 'pending', attempt_count: alert.attempt_count })
+          .eq('id', alert.id);
+        continue;
+      }
 
-    const result = await send(alert.recipient.email, email);
-    if (result.ok) {
-      await sb.from('tenure_alert_instances').update({
-        status: 'sent',
-        sent_at: new Date().toISOString(),
-        delivery_metadata: { provider: 'resend', message_id: result.id },
-        updated_at: new Date().toISOString(),
-      }).eq('id', alert.id);
-      sent += 1;
-    } else if (result.hardBounce) {
-      // A permanently bad address should stop consuming retries for every
-      // future alert, not just this one.
-      await sb.from('tenure_alert_recipients').update({
-        bounced_at: new Date().toISOString(),
-        bounce_reason: result.error?.slice(0, 300),
-      }).eq('id', alert.recipient_id);
-      await markFailed(sb, alert, result.error);
-      failed += 1;
-    } else {
-      // Transient: back to pending, attempt counted, retried next run.
+      const result = await send(alert.recipient.email, email);
+      if (result.ok) {
+        await sb.from('tenure_alert_instances').update({
+          status: 'sent',
+          sent_at: new Date().toISOString(),
+          delivery_metadata: { provider: 'resend', message_id: result.id },
+          updated_at: new Date().toISOString(),
+        }).eq('id', alert.id);
+        sent += 1;
+      } else if (result.hardBounce) {
+        // A permanently bad address should stop consuming retries for every
+        // future alert, not just this one.
+        await sb.from('tenure_alert_recipients').update({
+          bounced_at: new Date().toISOString(),
+          bounce_reason: result.error?.slice(0, 300),
+        }).eq('id', alert.recipient_id);
+        await markFailed(sb, alert, result.error);
+        failed += 1;
+      } else {
+        // Transient: back to pending, attempt counted, retried next run.
+        await sb.from('tenure_alert_instances').update({
+          status: 'pending',
+          last_attempt_at: new Date().toISOString(),
+          delivery_metadata: { last_error: String(result.error).slice(0, 300) },
+          updated_at: new Date().toISOString(),
+        }).eq('id', alert.id);
+        failed += 1;
+      }
+    } catch (e) {
+      // Put it back. An unexpected fault is a reason to try again next run,
+      // never a reason to drop a deadline reminder on the floor.
       await sb.from('tenure_alert_instances').update({
         status: 'pending',
         last_attempt_at: new Date().toISOString(),
-        delivery_metadata: { last_error: String(result.error).slice(0, 300) },
+        delivery_metadata: { last_error: String(e?.message || e).slice(0, 300) },
         updated_at: new Date().toISOString(),
       }).eq('id', alert.id);
+      console.warn(`[tenure-alerts] alert ${alert.id} requeued after an unexpected fault: ${e?.message || e}`);
       failed += 1;
     }
   }
@@ -262,29 +281,6 @@ async function markFailed(sb, alert, reason) {
     delivery_metadata: { error: String(reason).slice(0, 300) },
     updated_at: new Date().toISOString(),
   }).eq('id', alert.id);
-}
-
-async function send(to, { subject, html, text }) {
-  const apiKey = credential('RESEND_API_KEY');
-  const from = process.env.TENURE_ALERT_FROM
-    || 'Exploration Maps <notifications@explorationmaps.com>';
-  if (!apiKey) {
-    return { ok: false, error: 'RESEND_API_KEY not configured', hardBounce: false };
-  }
-  try {
-    const res = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from, to, subject, html, text }),
-    });
-    const body = await res.json().catch(() => ({}));
-    if (res.ok) return { ok: true, id: body.id };
-    // 422 from Resend means the address itself is unusable — retrying will
-    // fail identically forever.
-    return { ok: false, error: body.message || `resend ${res.status}`, hardBounce: res.status === 422 };
-  } catch (e) {
-    return { ok: false, error: String(e?.message || e), hardBounce: false };
-  }
 }
 
 // ── Loading ────────────────────────────────────────────────────────────────
