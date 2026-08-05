@@ -529,6 +529,33 @@ function escapeSql(term) {
   return term.replace(/'/g, "''");
 }
 
+/**
+ * Build a case-insensitive LIKE clause with the pattern metacharacters escaped.
+ *
+ * escapeSql only doubles quotes, which stops injection but leaves `%` and `_`
+ * live as wildcards. A term of `%` therefore became `LIKE UPPER('%%%')` — a
+ * match-everything pattern that asks a provincial server for its entire claim
+ * layer, from an endpoint anonymous callers can reach. Not an injection, but an
+ * amplifier: one short request turning into a full-layer scan upstream.
+ *
+ * searchBc in this same file has always escaped these (`.replace(/%/g, '\\%')`
+ * for its CQL filter) and so does api/tenure-search.js. The ArcGIS path simply
+ * never did, so this brings it in line rather than inventing a convention.
+ *
+ * THE ESCAPE CLAUSE IS ONLY EMITTED WHEN THE TERM ACTUALLY NEEDS IT. Support
+ * for `ESCAPE` varies across the seven provincial ArcGIS servers this talks to,
+ * none of which are reachable from CI, and appending it unconditionally would
+ * risk turning every working search into a 400 to fix a case that almost never
+ * occurs. A term with no metacharacter produces byte-identical SQL to before.
+ */
+function likeClause(fieldName, rawTerm, { prefix = false } = {}) {
+  const raw = String(rawTerm);
+  const escaped = raw.replace(/[\\%_]/g, '\\$&');
+  const body = escapeSql(escaped);
+  const pattern = prefix ? `${body}%` : `%${body}%`;
+  return `UPPER(${fieldName}) LIKE UPPER('${pattern}')${escaped === raw ? '' : " ESCAPE '\\'"}`;
+}
+
 function isStringType(field) {
   return field.type === 'esriFieldTypeString';
 }
@@ -938,7 +965,7 @@ async function searchUsCompany(cfg, company, res, { layerUrl, fields, scoping })
   const attempted = [];
 
   for (const tier of tiers) {
-    const clauses = tier.terms.map((t) => `UPPER(${field.name}) LIKE UPPER('%${escapeSql(t)}%')`);
+    const clauses = tier.terms.map((t) => likeClause(field.name, t));
     if (!clauses.length) continue;
     let where = clauses.length > 1 ? `(${clauses.join(' OR ')})` : clauses[0];
     if (scoping) where = `(${where}) AND ${scoping.where}`;
@@ -1049,7 +1076,6 @@ async function searchArcgis(cfg, term, type, res) {
     : term;
 
   let where;
-  const safe = escapeSql(effectiveTerm);
 
   if (type === 'number') {
     // OR across every identifier column on the layer. A string column takes a
@@ -1064,7 +1090,7 @@ async function searchArcgis(cfg, term, type, res) {
       .filter((f) => /^[A-Za-z0-9_.]+$/.test(f.name));
     const clauses = [];
     for (const f of numberFields) {
-      if (isStringType(f)) clauses.push(`UPPER(${f.name}) LIKE UPPER('%${safe}%')`);
+      if (isStringType(f)) clauses.push(likeClause(f.name, effectiveTerm));
       else if (/^\d+$/.test(effectiveTerm)) clauses.push(`${f.name} = ${effectiveTerm}`);
     }
     if (!clauses.length) {
@@ -1076,7 +1102,7 @@ async function searchArcgis(cfg, term, type, res) {
     }
     where = clauses.length > 1 ? `(${clauses.join(' OR ')})` : clauses[0];
   } else if (isStringType(field)) {
-    where = `UPPER(${field.name}) LIKE UPPER('%${safe}%')`;
+    where = likeClause(field.name, effectiveTerm);
   } else if (/^\d+$/.test(effectiveTerm)) {
     where = `${field.name} = ${effectiveTerm}`;
   } else {

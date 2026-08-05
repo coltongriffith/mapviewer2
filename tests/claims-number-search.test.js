@@ -149,3 +149,120 @@ describe('Manitoba claim-number search', () => {
     expect(res.body.features).toEqual([]);
   });
 });
+
+// ── LIKE metacharacters ────────────────────────────────────────────────────
+//
+// escapeSql only doubles quotes, so `%` and `_` stayed live as wildcards. That
+// was never an injection — field names are validated and quotes are escaped —
+// but it was an amplifier: `q=%%` builds a match-everything pattern and asks a
+// provincial server for its whole claim layer, from an endpoint anonymous
+// callers can reach.
+//
+// Manitoba is where it started to matter. Its primary identifier is numeric, so
+// a wildcard term used to be turned away by the digits-only check; now that the
+// search reaches the string TAG_NUMBER column, that accidental shield is gone.
+//
+// searchBc in the same file has always escaped these for its CQL filter. This
+// brings the ArcGIS path in line.
+describe('LIKE wildcards in a claim-number term', () => {
+  it('escapes % so a wildcard term cannot become a full-layer scan', async () => {
+    const res = await run({ q: '%%', type: 'number', province: 'mb' });
+    expect(res.statusCode).toBe(200);
+    const where = queryUrls[0];
+    expect(where).toMatch(/\\%/);              // escaped, not live
+    expect(where).toMatch(/ESCAPE '\\'/);      // and declared to the server
+    // The give-away of the old behaviour: four unescaped %% in a row.
+    expect(where).not.toMatch(/LIKE UPPER\('%%%%'\)/);
+  });
+
+  it('escapes the single-character wildcard too', async () => {
+    const res = await run({ q: 'CB_2345', type: 'number', province: 'mb' });
+    expect(res.statusCode).toBe(200);
+    expect(queryUrls[0]).toMatch(/CB\\_2345/);
+    expect(queryUrls[0]).toMatch(/ESCAPE '\\'/);
+  });
+
+  it('escapes a backslash, so the escape character cannot itself be smuggled', async () => {
+    const res = await run({ q: 'CB\\%45', type: 'number', province: 'mb' });
+    expect(res.statusCode).toBe(200);
+    expect(queryUrls[0]).toMatch(/CB\\\\\\%45/);
+  });
+
+  it('leaves an ordinary term byte-identical, with no ESCAPE clause', async () => {
+    // The portability guard. ESCAPE support varies across the provincial ArcGIS
+    // servers and none are reachable from CI, so emitting it unconditionally
+    // would risk turning every working search into a 400 to fix a case that
+    // almost never happens. Only a term that needs escaping gets the clause.
+    const res = await run({ q: 'CB12345', type: 'number', province: 'mb' });
+    expect(res.statusCode).toBe(200);
+    expect(queryUrls[0]).not.toMatch(/ESCAPE/);
+    expect(queryUrls[0]).toMatch(/UPPER\(TAG_NUMBER\) LIKE UPPER\('%CB12345%'\)/);
+  });
+
+  it('still doubles quotes — the original escaping is not lost', async () => {
+    const res = await run({ q: "CB'12", type: 'number', province: 'mb' });
+    expect(res.statusCode).toBe(200);
+    expect(queryUrls[0]).toMatch(/CB''12/);
+  });
+});
+
+// The same defect lived on the company/holder path long before the number
+// search reached a string column — any province whose holder field is a string
+// (all of them) took a wildcard term straight into the pattern. Fixing only the
+// clause this PR touched would have been arbitrary, so the shared helper covers
+// every user-supplied LIKE in the file.
+describe('LIKE wildcards in a company/holder term', () => {
+  const ON_SERVICE = 'https://ws.lioservices.lrc.gov.on.ca/arcgis2/rest/services/MLAS/mlas_op/MapServer';
+
+  async function runOn(q) {
+    vi.resetModules();
+    queryUrls = [];
+    vi.stubGlobal('fetch', vi.fn(async (url) => {
+      const u = String(url);
+      const json = (body) => ({
+        ok: true,
+        headers: new Map([['content-type', 'application/json']]),
+        json: async () => body,
+        text: async () => JSON.stringify(body),
+      });
+      if (u === `${ON_SERVICE}?f=json`) return json({ layers: [{ id: 1, name: 'Mining Claims' }] });
+      if (/MapServer\/1\?f=json/.test(u)) {
+        return json({
+          name: 'Mining Claims',
+          maxRecordCount: 1000,
+          objectIdField: 'OBJECTID',
+          advancedQueryCapabilities: { supportsPagination: true },
+          fields: [
+            { name: 'OBJECTID', type: 'esriFieldTypeOID' },
+            { name: 'HOLDER', type: 'esriFieldTypeString' },
+            { name: 'TENURE_NUMBER_ID', type: 'esriFieldTypeString' },
+          ],
+        });
+      }
+      if (/MapServer\/1\/query/.test(u)) {
+        queryUrls.push(decodeURIComponent(u.replace(/\+/g, ' ')));
+        return json({ type: 'FeatureCollection', features: [] });
+      }
+      throw new Error(`unexpected url ${u}`);
+    }));
+    const { default: handler } = await import('../api/claims.js');
+    const res = mockRes();
+    await handler(req({ q, type: 'company', province: 'on' }), res);
+    return res;
+  }
+
+  it('escapes a wildcard holder term', async () => {
+    const res = await runOn('%%');
+    expect(res.statusCode).toBe(200);
+    expect(queryUrls[0]).toMatch(/\\%/);
+    expect(queryUrls[0]).toMatch(/ESCAPE '\\'/);
+    expect(queryUrls[0]).not.toMatch(/LIKE UPPER\('%%%%'\)/);
+  });
+
+  it('leaves a real company name untouched', async () => {
+    const res = await runOn('Glencore');
+    expect(res.statusCode).toBe(200);
+    expect(queryUrls[0]).toMatch(/UPPER\(HOLDER\) LIKE UPPER\('%Glencore%'\)/);
+    expect(queryUrls[0]).not.toMatch(/ESCAPE/);
+  });
+});
