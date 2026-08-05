@@ -149,7 +149,11 @@ export function expiryEmail({ tenure, owners, portfolioName, membership, lastSyn
     // The HTML part special-cases 1; the text part did not, so the new 1-day
     // reminder — the most urgent mail this product sends — would have read
     // "1 days remaining" to everyone whose client blocks HTML.
-    days === 0 ? 'Good-to-date is TODAY'
+    // dateLabel, not a hard-coded "Good-to-date" — on an application this line
+    // is the whole message on the day the recipient is most likely to act, and
+    // hard-coding it here would reintroduce the maintenance-deadline wording
+    // the subject and the HTML both went to the trouble of avoiding.
+    days === 0 ? `${dateLabel.toUpperCase()} IS TODAY`
       : days === 1 ? '1 day remaining'
         : `${days} days remaining`,
     `${dateLabel}: ${formatGovernmentDate(tenure.good_to_date)}`,

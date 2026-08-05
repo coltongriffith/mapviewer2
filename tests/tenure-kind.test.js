@@ -101,6 +101,27 @@ describe('an expiry reminder for an application', () => {
     expect(mail.text).not.toMatch(/not held ground/i);
   });
 
+  it('keeps the application wording in the text part on day zero', () => {
+    // The day the recipient is most likely to act, and the day the plain-text
+    // line IS the message. Hard-coding "Good-to-date is TODAY" here would put
+    // the maintenance-deadline wording back on an application after the
+    // subject and the HTML had both avoided it.
+    const mail = expiryEmail({
+      ...context('APPLICATION'),
+      tenure: { ...base, tenure_subtype: 'APPLICATION', good_to_date: '2026-08-05' },
+    });
+    expect(mail.text).not.toMatch(/good-to-date/i);
+    expect(mail.text).toContain('PUBLISHED DATE IS TODAY');
+  });
+
+  it('still says good-to-date on day zero for a granted claim', () => {
+    const mail = expiryEmail({
+      ...context('CLAIM'),
+      tenure: { ...base, tenure_subtype: 'CLAIM', good_to_date: '2026-08-05' },
+    });
+    expect(mail.text).toContain('GOOD-TO-DATE IS TODAY');
+  });
+
   it('says "1 day remaining" in the plain-text part, not "1 days"', () => {
     // The 1-day reminder is the most urgent mail this product sends, and the
     // text/plain alternative is what reaches a phone with HTML blocked.

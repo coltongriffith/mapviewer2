@@ -36,7 +36,13 @@
 // inventing a government fact, and the one thing Tenure Monitor may never do
 // is put words in the registry's mouth.
 
-import { FIELD_NOT_PUBLISHED } from './tenureDisclaimer';
+// The .js extension is REQUIRED, not stylistic. This module is imported by
+// scripts/tenure-alerts/templates.mjs, which Node runs directly in the alert
+// job. package.json sets type: "module", and Node's ESM resolver does not
+// complete extensionless relative specifiers — Vite and Vitest do, which is
+// exactly why the unit tests passed while `node` could not load the templates
+// at all. Everything under src/utils that a script imports must keep it.
+import { FIELD_NOT_PUBLISHED } from './tenureDisclaimer.js';
 
 export const TENURE_KIND = {
   APPLICATION: 'application',
