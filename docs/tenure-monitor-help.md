@@ -65,6 +65,18 @@ product. Check MTO.
 
 ---
 
+## Groups of claims
+
+A portfolio is a **group of claims** — a project, a region, a joint venture, or
+just "everything we hold". Each group has its own reminder settings, its own
+recipients, its own map and its own CSV export, so a reminder about your Cariboo
+ground doesn't arrive mixed in with the Golden Triangle.
+
+Use **New group** in the header to start another, and the picker beside it to
+switch. Free plans keep one group; Pro keeps several.
+
+---
+
 ## Watching ground you don't own
 
 A portfolio is a watch list, not an ownership record. You can monitor **any**
