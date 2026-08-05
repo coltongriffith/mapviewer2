@@ -224,8 +224,36 @@ function looksLikeHtml(body, contentType) {
   return /html/i.test(contentType || '') || /^\s*<(!doctype|html)/i.test(body || '');
 }
 
-// Module-scope metadata cache (persists across warm invocations)
+// Module-scope metadata cache (persists across warm invocations).
+//
+// EVERY ENTRY EXPIRES, and a degraded one expires fast. Without a TTL this Map
+// turns a momentary upstream problem into a lasting one: if a provincial
+// service is slow or blocking for the few seconds we resolve its layer,
+// resolveLayerAndFields falls back to a layer that has no usable search field,
+// caches that, and every later request on the same warm instance answers
+// "search is not available here" until the instance recycles. A thirty-second
+// blip becomes hours of "no results" — with nothing in the logs, because from
+// the handler's point of view it answered successfully.
+//
+// So a good resolution is cached for a while, and anything degraded is cached
+// only long enough to avoid hammering a struggling service.
 const metaCache = new Map();
+const META_TTL_MS = 10 * 60 * 1000;         // healthy metadata
+const META_DEGRADED_TTL_MS = 60 * 1000;     // a fallback we would rather retry
+
+function cacheGet(key) {
+  const hit = metaCache.get(key);
+  if (!hit) return undefined;
+  if (Date.now() > hit.expires) {
+    metaCache.delete(key);
+    return undefined;
+  }
+  return hit.value;
+}
+
+function cacheSet(key, value, ttl = META_TTL_MS) {
+  metaCache.set(key, { value, expires: Date.now() + ttl });
+}
 
 async function fetchJson(url) {
   // Try the URL as given, then (only if it fails outright) with the opposite
@@ -284,14 +312,15 @@ async function fetchJsonOnce(url) {
 
 async function resolveFields(layerUrl) {
   const cacheKey = `fields:${layerUrl}`;
-  if (metaCache.has(cacheKey)) return metaCache.get(cacheKey);
+  const cached = cacheGet(cacheKey);
+  if (cached) return cached;
   const meta = await fetchJson(`${layerUrl}?f=json`);
   const fields = (meta?.fields || []).map((f) => ({ name: f.name, type: f.type }));
   if (!fields.length) throw new Error('Layer has no queryable fields');
-  metaCache.set(cacheKey, fields);
+  cacheSet(cacheKey, fields);
   // Stash the paging-relevant layer capabilities under a sibling key so the
   // pagination code can respect the server's own limits.
-  metaCache.set(`layermeta:${layerUrl}`, {
+  cacheSet(`layermeta:${layerUrl}`, {
     maxRecordCount: Number(meta?.maxRecordCount) || 1000,
     supportsPagination: Boolean(meta?.advancedQueryCapabilities?.supportsPagination),
     objectIdField: meta?.objectIdField || (meta?.fields || []).find((f) => f.type === 'esriFieldTypeOID')?.name || 'OBJECTID',
@@ -302,10 +331,10 @@ async function resolveFields(layerUrl) {
 // Layer paging capabilities; safe defaults when metadata was unreadable.
 async function resolveLayerMeta(layerUrl) {
   const key = `layermeta:${layerUrl}`;
-  if (!metaCache.has(key)) {
+  if (cacheGet(key) === undefined) {
     try { await resolveFields(layerUrl); } catch { /* url-only fallback layers */ }
   }
-  return metaCache.get(key) || { maxRecordCount: 1000, supportsPagination: false, objectIdField: 'OBJECTID' };
+  return cacheGet(key) || { maxRecordCount: 1000, supportsPagination: false, objectIdField: 'OBJECTID' };
 }
 
 // Fetch EVERY page of an ArcGIS query (attribute or spatial), honoring the
@@ -390,6 +419,23 @@ async function arcgisQueryAll(layerUrl, baseParams) {
   }
 }
 
+/**
+ * The service's real layer catalogue, for diagnostics only.
+ *
+ * Never used to resolve a query — a wrong guess here must not change what a
+ * user gets back. It exists so `?schema=1` can answer "is layer 3 still the
+ * Mining Claim leaf?" without anybody having to open the ArcGIS endpoint by
+ * hand, which is the check that would have caught a silent reindex.
+ */
+async function describeServiceLayers(cfg) {
+  try {
+    const svc = await fetchJson(`${cfg.service}?f=json`);
+    return (svc?.layers || []).map((l) => `${l.id}: ${l.name}${l.subLayerIds ? ' (group)' : ''}`);
+  } catch (e) {
+    return [`unavailable: ${String(e?.message || e).slice(0, 200)}`];
+  }
+}
+
 async function listCandidateLayers(cfg) {
   if (cfg.layerId != null) return [{ id: cfg.layerId, name: `layer ${cfg.layerId}` }];
   const svc = await fetchJson(`${cfg.service}?f=json`);
@@ -411,7 +457,8 @@ async function resolveLayerAndFields(cfg, type) {
     : cfg.ownerFields;
   const variant = type === 'number' ? 'number' : type === 'name' ? 'name' : 'owner';
   const cacheKey = `resolved:${cfg.service}:${cfg.layerMatch || cfg.layerId}:${variant}`;
-  if (metaCache.has(cacheKey)) return metaCache.get(cacheKey);
+  const cached = cacheGet(cacheKey);
+  if (cached) return cached;
   const candidates = await listCandidateLayers(cfg);
   let fallback = null;       // layer that resolved fields but didn't have the wanted field
   let urlOnlyFallback = null; // layer whose field metadata failed — URL still usable for bbox
@@ -428,15 +475,19 @@ async function resolveLayerAndFields(cfg, type) {
     }
     const resolved = { layerUrl, layerName: layer.name, fields };
     if (pickField(wanted, fields)) {
-      metaCache.set(cacheKey, resolved);
+      cacheSet(cacheKey, resolved);
       return resolved;
     }
     if (!fallback) fallback = resolved;
   }
+  // Nothing carried the field we wanted. Answer with the best we have, but
+  // cache it only briefly and mark it: this is the state that used to stick for
+  // the life of the instance and report "search is not available here" long
+  // after the service recovered.
   const best = fallback || urlOnlyFallback;
   if (best) {
-    metaCache.set(cacheKey, best);
-    return best;
+    cacheSet(cacheKey, { ...best, degraded: true }, META_DEGRADED_TTL_MS);
+    return { ...best, degraded: true };
   }
   throw new Error('No usable claims layer found in service');
 }
@@ -447,6 +498,31 @@ function pickField(candidates, fields) {
     if (hit) return hit;
   }
   return null;
+}
+
+/**
+ * Every candidate that exists on the layer, in candidate order.
+ *
+ * pickField answers "which one field do we search", which is right for an owner
+ * or a claim name — those are one value with several possible column names.
+ * A claim NUMBER is not that. A title routinely carries more than one
+ * identifier, published in more than one column, and the registry's users know
+ * it by whichever one they were given.
+ *
+ * Manitoba is the case that showed this up: numberFields is
+ * ['TENURE_NUMBER_ID', 'TAG_NUMBER'], both exist on the layer, and pickField
+ * returns the first — so TAG_NUMBER was unreachable, while the search box
+ * placeholder told people to type exactly a staking tag ("e.g. CB12345").
+ * BLM had already needed the same thing and got it as a hard-coded special
+ * case for its legacy serial; this generalizes that rather than repeating it.
+ */
+function pickFields(candidates, fields) {
+  const out = [];
+  for (const cand of candidates) {
+    const hit = fields.find((f) => f.name.toUpperCase() === cand.toUpperCase());
+    if (hit && !out.some((o) => o.name.toUpperCase() === hit.name.toUpperCase())) out.push(hit);
+  }
+  return out;
 }
 
 function escapeSql(term) {
@@ -936,7 +1012,10 @@ async function searchArcgis(cfg, term, type, res) {
     return searchUsCompany(cfg, term, res, { layerUrl, fields, scoping });
   }
 
-  const candidates = type === 'number' ? cfg.numberFields
+  // A number search runs against every identifier the layer publishes, so the
+  // legacy/tag column is reachable too — see pickFields. Owner and name stay
+  // single-field: those are one value with several possible column names.
+  const candidates = type === 'number' ? [...cfg.numberFields, ...(cfg.legacyNumberFields || [])]
     : type === 'name' ? (cfg.nameFields || [])
     : cfg.ownerFields;
   const field = pickField(candidates, fields);
@@ -971,16 +1050,33 @@ async function searchArcgis(cfg, term, type, res) {
 
   let where;
   const safe = escapeSql(effectiveTerm);
-  if (isStringType(field)) {
-    where = `UPPER(${field.name}) LIKE UPPER('%${safe}%')`;
-    // MLRS serial search also matches the legacy case serial when that
-    // field exists on the layer (older claims are often known by it).
-    if (cfg.provider === 'blm-mlrs' && type === 'number') {
-      const legacyField = pickField(cfg.legacyNumberFields, fields);
-      if (legacyField && /^[A-Za-z0-9_.]+$/.test(legacyField.name)) {
-        where = `(${where} OR UPPER(${legacyField.name}) LIKE UPPER('%${safe}%'))`;
-      }
+
+  if (type === 'number') {
+    // OR across every identifier column on the layer. A string column takes a
+    // substring LIKE; a numeric one can only take equality, so it contributes a
+    // clause only when the term is all digits.
+    //
+    // The clause list can therefore come out shorter than the field list — a
+    // tag like "CB12345" against a numeric TENURE_NUMBER_ID has no valid
+    // comparison. That used to be a hard 400 telling the user to "enter digits
+    // only", even when a perfectly good string column sat right beside it.
+    const numberFields = pickFields(candidates, fields)
+      .filter((f) => /^[A-Za-z0-9_.]+$/.test(f.name));
+    const clauses = [];
+    for (const f of numberFields) {
+      if (isStringType(f)) clauses.push(`UPPER(${f.name}) LIKE UPPER('%${safe}%')`);
+      else if (/^\d+$/.test(effectiveTerm)) clauses.push(`${f.name} = ${effectiveTerm}`);
     }
+    if (!clauses.length) {
+      // Every identifier on this layer is numeric and the term is not.
+      return res.status(400).json({
+        error: `${numberFields.map((f) => f.name).join(' and ')} `
+          + `${numberFields.length > 1 ? 'are' : 'is'} numeric — enter digits only.`,
+      });
+    }
+    where = clauses.length > 1 ? `(${clauses.join(' OR ')})` : clauses[0];
+  } else if (isStringType(field)) {
+    where = `UPPER(${field.name}) LIKE UPPER('%${safe}%')`;
   } else if (/^\d+$/.test(effectiveTerm)) {
     where = `${field.name} = ${effectiveTerm}`;
   } else {
@@ -1239,6 +1335,16 @@ export default async function handler(req, res) {
       const nameResolved = cfg.nameFields?.length ? await resolveLayerAndFields(cfg, 'name') : null;
       return res.status(200).json({
         candidateLayers: candidates.map((l) => `${l.id}: ${l.name}`),
+        // What the service ACTUALLY publishes at each index. A config that pins
+        // layerId never reads the catalogue — listCandidateLayers short-circuits
+        // to a synthetic "layer N" — so a service that reorders its leaves would
+        // be queried at the wrong index and answer, plausibly, with the wrong
+        // claims. MB pins layer 3 ("Mining Claim", with 4 Patent, 5 Exploration
+        // Licence and 8 Cancelled beside it) and SK pins layer 0. This is the
+        // one place that can show a human whether those pins still point where
+        // they were meant to.
+        serviceLayers: await describeServiceLayers(cfg),
+        pinnedLayerId: cfg.layerId ?? null,
         ...(ownerResolved ? {
           company: {
             layerUrl: ownerResolved.layerUrl,
