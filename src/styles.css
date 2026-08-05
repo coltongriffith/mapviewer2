@@ -3597,6 +3597,18 @@ button.claim-notices-chip[aria-expanded="true"] { border-color: #cbd5e1; backgro
   padding: 1px 5px; margin-left: 6px; white-space: nowrap;
 }
 .tm-flag--missing { background: #fef3c7; color: #92400e; }
+/* An application is a different instrument, not a problem — slate rather than
+   the amber the exception flags use, so it reads as a category and does not
+   compete with "not in latest dataset" sitting next to it. */
+.tm-flag--application { background: #e2e8f0; color: #334155; }
+.tm-flag--unknown { background: #fef3c7; color: #92400e; }
+
+/* Same badge, panel-title scale. */
+.tm-kind-badge {
+  display: inline-block; vertical-align: middle; margin-left: 8px;
+  font-size: 11px; font-weight: 600; border-radius: 4px; padding: 2px 7px;
+  background: #e2e8f0; color: #334155;
+}
 
 .tm-action {
   background: none; border: none; padding: 0 8px 0 0; cursor: pointer;
@@ -3792,6 +3804,18 @@ button.claim-notices-chip[aria-expanded="true"] { border-color: #cbd5e1; backgro
 /* ── Tenure Monitor: activity view ──────────────────────────────────────── */
 .tm-activity { display: flex; flex-direction: column; gap: 22px; }
 .tm-activity-section h3 { margin: 0 0 4px; font-size: 15px; font-weight: 700; }
+
+/* Material changes, lifted above the timeline. Bordered rather than filled:
+   this is a prompt to look, not an alarm, and the wording inside it is
+   deliberately careful about what the data does and does not prove. */
+.tm-material-changes {
+  margin: 10px 0 4px; padding: 12px 14px; border: 1px solid #fecaca;
+  border-left: 3px solid #dc2626; border-radius: 8px; background: #fef2f2;
+}
+.tm-material-head { margin: 0 0 6px; font-size: 13px; color: #7f1d1d; }
+.tm-material-list { list-style: none; margin: 0 0 8px; padding: 0; font-size: 13px; }
+.tm-material-list li { padding: 3px 0; }
+.tm-material-changes .tm-field-hint { margin: 0; }
 
 .tm-timeline { list-style: none; margin: 8px 0 0; padding: 0; }
 .tm-timeline-item {

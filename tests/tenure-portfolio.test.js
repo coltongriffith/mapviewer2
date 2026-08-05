@@ -224,12 +224,28 @@ describe('Tenure Monitor entitlements', () => {
     expect(free.max_monitored_tenures).toBe(10);
     expect(free.max_portfolios).toBe(1);
     expect(free.max_alert_recipients).toBe(1);
-    expect(free.alert_offsets_days).toEqual([90, 30]);
+    expect(free.alert_offsets_days).toEqual([90, 30, 1]);
 
     expect(pro.max_monitored_tenures).toBe(50);
     expect(pro.max_portfolios).toBe(Infinity);
     expect(pro.max_alert_recipients).toBe(2);
-    expect(pro.alert_offsets_days).toEqual([90, 30, 7]);
+    expect(pro.alert_offsets_days).toEqual([90, 30, 7, 1]);
+  });
+
+  it('gives every plan the final 1-day reminder', () => {
+    // Not a Pro feature. Going quiet about a real deadline is the failure this
+    // product exists to prevent — the same reasoning that makes expiry alerts
+    // send even when an import is untrusted (plan.mjs maySend). The 7-day
+    // offset carries the Pro distinction instead.
+    //
+    // This must stay in step with tenure_plan_limits() in migration
+    // 20260807000001: tenure_policy_offsets_guard intersects every saved policy
+    // against the DATABASE ladder, so a 1 present only here would be ticked in
+    // the settings screen and silently stripped on save.
+    for (const tier of [TIERS.FREE, TIERS.PRO, TIERS.COMPANY]) {
+      expect(ENTITLEMENTS[tier].alert_offsets_days).toContain(1);
+    }
+    expect(ENTITLEMENTS[TIERS.ANONYMOUS].alert_offsets_days).toEqual([]);
   });
 
   it('lets an anonymous visitor search but not monitor', () => {
@@ -260,12 +276,14 @@ describe('Tenure Monitor entitlements', () => {
   });
 
   it('orders reminder thresholds longest lead time first', () => {
-    expect(alertOffsetsFor(pro)).toEqual([90, 30, 7]);
+    expect(alertOffsetsFor(pro)).toEqual([90, 30, 7, 1]);
+    expect(alertOffsetsFor(free)).toEqual([90, 30, 1]);
   });
 
   it('names the thresholds an upgrade would unlock', () => {
     // Shown as locked rather than hidden: a free user should be able to see a
-    // 7-day reminder exists.
+    // 7-day reminder exists. Only the 7 — free now has the 1-day itself, so
+    // advertising it as an upgrade would be selling something already owned.
     expect(lockedAlertOffsets(free)).toEqual([7]);
     expect(lockedAlertOffsets(pro)).toEqual([]);
   });

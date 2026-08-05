@@ -5,6 +5,7 @@ import {
 } from '../../utils/tenureDates';
 import { MAINTENANCE_DECISIONS } from '../../utils/tenureCsv';
 import { TENURE_NOT_OBSERVED_NOTICE } from '../../utils/tenureDisclaimer';
+import { isApplication, kindLabel, APPLICATION_NOTICE } from '../../utils/tenureKind';
 import { VerifyInMtoLink, SourceValue, VerificationNotice } from './TenureNotices';
 import { changeLabel } from './TenureTable';
 
@@ -71,6 +72,7 @@ export default function TenureDetailPanel({
   const days = daysRemaining(t.good_to_date, now);
   const band = urgencyBand(days, t.status);
   const notObserved = (t.missing_run_count || 0) >= 2;
+  const application = isApplication(t);
   const dirty = draft.internalProjectName !== (row.internalProjectName || '')
     || draft.internalNotes !== (row.internalNotes || '')
     || draft.maintenanceDecision !== (row.maintenanceDecision || 'UNDECIDED')
@@ -93,7 +95,10 @@ export default function TenureDetailPanel({
     >
       <header className="tm-panel-head">
         <div>
-          <h2 className="tm-panel-title">{t.tenure_name || 'Unnamed claim'}</h2>
+          <h2 className="tm-panel-title">
+            {t.tenure_name || 'Unnamed claim'}
+            {application && <span className="tm-kind-badge">Application</span>}
+          </h2>
           <p className="tm-panel-sub">Tenure {t.tenure_number}</p>
         </div>
         <button ref={closeRef} type="button" className="tm-panel-close" onClick={onClose} aria-label="Close details">✕</button>
@@ -111,12 +116,20 @@ export default function TenureDetailPanel({
         </div>
       </div>
 
-      <p className="tm-help">
-        The <strong>good-to-date</strong> is the date by which the claim must be maintained
-        — assessment work recorded, or cash paid in lieu — to stay in good standing.
-        Exploration Maps calculates days remaining in Pacific time from the date the
-        province publishes. It does not file or pay anything on your behalf.
-      </p>
+      {application ? (
+        <p className="tm-help">
+          {APPLICATION_NOTICE} The date above comes from the same government column as a
+          granted title's good-to-date, so Exploration Maps shows it — but it is not a
+          confirmed maintenance deadline on ground you hold.
+        </p>
+      ) : (
+        <p className="tm-help">
+          The <strong>good-to-date</strong> is the date by which the claim must be maintained
+          — assessment work recorded, or cash paid in lieu — to stay in good standing.
+          Exploration Maps calculates days remaining in Pacific time from the date the
+          province publishes. It does not file or pay anything on your behalf.
+        </p>
+      )}
 
       {notObserved && (
         <p className="tm-panel-warning" role="status">
@@ -148,7 +161,9 @@ export default function TenureDetailPanel({
           </Field>
         )}
         <Field label="Type">
-          <SourceValue value={[t.tenure_type, t.tenure_subtype].filter(Boolean).join(' — ') || null} />
+          {/* The province's own words for the instrument, not our paraphrase:
+              "Mineral — Granted — claim", "Placer — Application". */}
+          <SourceValue value={[t.tenure_type, kindLabel(t)].filter(Boolean).join(' — ') || null} />
         </Field>
         <Field label="Area">
           {t.area_hectares == null
@@ -207,6 +222,15 @@ export default function TenureDetailPanel({
           onChange={set('internalNotes')}
           placeholder="Private to your account."
         />
+        {/* When the note was last touched, not when the row was. `updated_at`
+            moves on any edit, so a note from March would read as fresh because
+            somebody changed the decision this morning — and a stale note that
+            looks current is worse than no note. */}
+        {row.notesUpdatedAt && (
+          <p className="tm-field-hint">
+            Note last edited {formatSyncTimestamp(row.notesUpdatedAt)}.
+          </p>
+        )}
 
         <label className="tm-label" htmlFor="tm-ref">Reference note</label>
         <input

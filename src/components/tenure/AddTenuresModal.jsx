@@ -7,6 +7,7 @@ import {
 import { formatGovernmentDate, daysRemaining, formatDaysRemaining, urgencyBand } from '../../utils/tenureDates';
 import { trackEvent } from '../../utils/track';
 import { VerificationNotice } from './TenureNotices';
+import { kindBadge } from '../../utils/tenureKind';
 
 // Building a portfolio.
 //
@@ -24,7 +25,9 @@ import { VerificationNotice } from './TenureNotices';
 const MODES = [
   { id: 'number', label: 'Tenure number', hint: 'One tenure number.' },
   { id: 'numbers', label: 'Several numbers', hint: 'Paste a list — commas, spaces or one per line.' },
-  { id: 'owner', label: 'Registered owner', hint: 'Company or individual name on the title.' },
+  // Said plainly, because people assume a portfolio means ownership: you can
+  // watch any registered title, including ground held by somebody else.
+  { id: 'owner', label: 'Registered owner', hint: 'Company or individual name on the title. You can watch any B.C. title, including ground you do not hold.' },
   { id: 'client', label: 'Client number', hint: 'B.C. government client number.' },
   { id: 'csv', label: 'Upload CSV', hint: 'A claim schedule exported from anywhere.' },
 ];
@@ -32,12 +35,20 @@ const MODES = [
 function ResultRow({ tenure, checked, onToggle, extra }) {
   const days = daysRemaining(tenure.good_to_date);
   const band = urgencyBand(days, tenure.status);
+  const badge = kindBadge(tenure);
   const id = `pick-${tenure.id}`;
   return (
     <li className="tm-pick-row">
       <input id={id} type="checkbox" checked={checked} onChange={onToggle} />
       <label htmlFor={id}>
-        <span className="tm-pick-number">{tenure.tenure_number}</span>
+        <span className="tm-pick-number">
+          {tenure.tenure_number}
+          {badge && (
+            <span className={`tm-flag tm-flag--${badge.id}`} title={badge.title}>
+              {badge.label.toLowerCase()}
+            </span>
+          )}
+        </span>
         <span className="tm-pick-name">{tenure.tenure_name || 'Unnamed claim'}</span>
         <span className="tm-pick-meta">
           {extra || tenure.owner_name || (tenure.owners || []).map((o) => o.owner_name).join('; ') || 'Owner not published'}
@@ -150,6 +161,29 @@ export default function AddTenuresModal({
 
   const overLimit = selected.size > remainingSlots;
 
+  // Every tenure currently on screen, so the footer can total what is selected
+  // and the group headers can offer select-all. Owner search is the bulk path —
+  // a company with forty claims should not have to tick forty boxes — but the
+  // rule that the user confirms what enters the portfolio is unchanged: this is
+  // one deliberate click on one named group, not an automatic add.
+  const visibleTenures = useMemo(() => {
+    const all = [
+      ...(result?.results || []),
+      ...(result?.candidates || []),
+      ...(csvReport?.entries || []).flatMap((e) => (e.tenure ? [e.tenure] : e.candidates || [])),
+    ];
+    return new Map(all.map((t) => [t.id, t]));
+  }, [result, csvReport]);
+
+  const selectedHectares = [...selected]
+    .reduce((sum, id) => sum + (Number(visibleTenures.get(id)?.area_hectares) || 0), 0);
+
+  const selectGroup = (group, on) => setSelected((s) => {
+    const next = new Set(s);
+    for (const c of group) { if (on) next.add(c.id); else next.delete(c.id); }
+    return next;
+  });
+
   async function commit() {
     if (!selected.size) return;
     setAdding(true);
@@ -247,7 +281,18 @@ export default function AddTenuresModal({
               ['Weak match — probably a different company', ownerGroups.weak],
             ].map(([heading, group]) => group.length > 0 && (
               <section key={heading} className="tm-result-group">
-                <h3 className="tm-result-group-title">{heading} ({group.length})</h3>
+                <h3 className="tm-result-group-title">
+                  {heading} ({group.length})
+                  {' '}
+                  <button
+                    type="button"
+                    className="tm-link-btn"
+                    onClick={() => selectGroup(group, !group.every((c) => selected.has(c.id)))}
+                  >
+                    {group.every((c) => selected.has(c.id)) ? 'Clear' : 'Select all'}
+                    <span className="tm-sr-only">{` — ${heading.toLowerCase()}`}</span>
+                  </button>
+                </h3>
                 <ul className="tm-pick-list">
                   {group.map((c) => (
                     <ResultRow
@@ -372,6 +417,14 @@ export default function AddTenuresModal({
           <footer className="tm-add-foot">
             <div className="tm-add-count">
               <strong>{selected.size}</strong> selected
+              {/* Hectares alongside the count, because "37 claims" and
+                  "37 claims, 18,400 ha" are different decisions. */}
+              {selectedHectares > 0 && (
+                <span className="tm-muted">
+                  {' · '}
+                  {selectedHectares.toLocaleString(undefined, { maximumFractionDigits: 0 })} ha
+                </span>
+              )}
               {Number.isFinite(remainingSlots) && (
                 <span className={overLimit ? 'tm-over-limit' : 'tm-muted'}>
                   {' · '}{remainingSlots} {remainingSlots === 1 ? 'slot' : 'slots'} left on {planLabel}

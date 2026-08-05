@@ -86,6 +86,13 @@ export default function PortfolioActivity({ portfolioId, onSelectTenure, rows = 
 
   const rowByTenure = new Map(rows.map((r) => [r.tenure.id, r]));
 
+  // Changes the importer itself judged critical — a title terminated, a status
+  // gone terminal, an owner added or removed, a good-to-date pulled EARLIER, a
+  // title absent from two consecutive clean runs. The severity is assigned in
+  // changeDetect.mjs against the government values, so this reads the
+  // importer's judgement rather than inventing a second, divergent one here.
+  const materialChanges = changes.filter((c) => c.severity === 'critical');
+
   async function acknowledge(alert) {
     setBusyId(alert.id);
     try {
@@ -110,6 +117,46 @@ export default function PortfolioActivity({ portfolioId, onSelectTenure, rows = 
               what it held before. Confirm anything material in MTO — the government record
               is the one that governs."
       >
+        {/* The material ones, lifted out of the timeline.
+            A termination and a boundary tweak are both "a change", and a feed
+            sorted only by date buries the first under the second. These are the
+            events that decide whether somebody acts this week.
+            The caution is not decoration: a title leaving the dataset, or
+            showing a termination date, is what our copy of the registry says.
+            It is not a determination that ground is open, and this product must
+            never be the reason somebody staked over live title. */}
+        {materialChanges.length > 0 && (
+          <div className="tm-material-changes">
+            <p className="tm-material-head">
+              <strong>{materialChanges.length}</strong>
+              {materialChanges.length === 1 ? ' change needs' : ' changes need'} a look
+            </p>
+            <ul className="tm-material-list">
+              {materialChanges.map((c) => (
+                <li key={c.id}>
+                  <button
+                    type="button"
+                    className="tm-link-btn"
+                    onClick={() => onSelectTenure?.(rowByTenure.get(c.tenure_id))}
+                    disabled={!rowByTenure.has(c.tenure_id)}
+                  >
+                    {c.tenure_number}
+                  </button>
+                  {c.tenure_name ? ` — ${c.tenure_name}` : ''}
+                  {': '}
+                  <strong>{changeLabel(c)}</strong>
+                  <span className="tm-muted">{` · ${String(c.detected_at).slice(0, 10)}`}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="tm-field-hint">
+              A status change, a termination date, or a title dropping out of the dataset is
+              what the published government data shows — it is not confirmation that the
+              ground is available. Check the tenure in MTO before acting on it.
+            </p>
+          </div>
+        )}
+
         {changes.length === 0 ? (
           <p className="tm-muted">
             No changes detected on these claims. Change detection began when each claim was

@@ -151,6 +151,7 @@ export async function listPortfolioTenures(portfolioId) {
     .select(`
       id, internal_project_name, internal_notes, maintenance_decision, decision_due_date,
       maintenance_reference, assigned_user_id, monitoring_enabled, added_at,
+      notes_updated_at, notes_updated_by,
       tenures!inner (
         id, tenure_number, tenure_name, tenure_type, tenure_subtype, status,
         issue_date, good_to_date, termination_date, area_hectares, map_unit,
@@ -168,6 +169,13 @@ export async function listPortfolioTenures(portfolioId) {
     membershipId: r.id,
     internalProjectName: r.internal_project_name,
     internalNotes: r.internal_notes,
+    // Stamped by the membership audit trigger, never by this client — a caller
+    // that could set its own attribution could credit a note to somebody else.
+    // `notesUpdatedBy` is carried but not yet rendered: portfolios are
+    // single-owner today, so it would always be the reader. It is stored now so
+    // the history exists when org-scoped portfolios turn the reserved org_id on.
+    notesUpdatedAt: r.notes_updated_at,
+    notesUpdatedBy: r.notes_updated_by,
     maintenanceDecision: r.maintenance_decision,
     decisionDueDate: r.decision_due_date,
     maintenanceReference: r.maintenance_reference,
