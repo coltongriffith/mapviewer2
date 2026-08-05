@@ -2842,7 +2842,7 @@ export default function App() {
       setAddClaimsModalPath('upload');
       setShowAddClaimsModal(true);
     } else if (intent === 'drill-results' || intent === 'csv') {
-      setUploadStatus({ type: 'info', message: 'Import your drill hole or sample CSV to get started — drag it into the upload area.' });
+      setUploadStatus({ type: 'info', message: 'Start with your drill hole or sample CSV.' });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

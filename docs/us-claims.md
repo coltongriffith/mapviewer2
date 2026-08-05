@@ -1,6 +1,6 @@
 # U.S. Federal Mining Claims (BLM MLRS) Integration
 
-Status: v1 (proxy integration, feature-flagged). Last updated: 2026-07-25.
+Status: v1 (proxy integration, feature-flagged). Last updated: 2026-08-06.
 
 ## What this is
 
@@ -84,10 +84,10 @@ schema); the rest are drift tolerance:
 | Purpose        | Verified live field | Fallback candidates                        | Normalized to |
 |----------------|---------------------|--------------------------------------------|---------------|
 | MLRS serial    | `CSE_NR`            | MLRS_CSE_NR, CASE_NR, SER_NR, SERIAL_NR    | `TAG_NUMBER` |
-| Legacy serial  | *(not published)*   | LGCY_CSE_NR, LEGACY_CASE_NR, LGCY_SER_NR   | `LEGACY_NR` — activates automatically if BLM adds the field; until then serial search matches `CSE_NR` only |
+| Legacy serial  | `LEG_CSE_NR`        | LGCY_CSE_NR, LEGACY_CASE_NR, LGCY_SER_NR   | `LEGACY_NR` — published as `LGCY_CSE_NR` before Aug 2026; carries half of `serial_prefix` scoping, which is the only scoping mode still standing |
 | Claim name     | `CSE_NAME`          | CLAIM_NAME, MC_NAME, CASE_NAME, NAME       | `CLAIM_NAME` |
-| State (geographic) | `GEO_STATE`     | STATE_GEO, GEOGRAPHIC_STATE                | `US_STATE` + precise query scoping (`scopingMethod: geo_state`) |
-| State (administrative) | `ADMIN_STATE` | ADMIN_ST, ADM_ST, STATE                  | fallback scoping only (`scopingMethod: admin_state`) — administering BLM office, **not** where the land is |
+| State (geographic) | **gone since Aug 2026** | GEO_STATE, STATE_GEO, GEOGRAPHIC_STATE | `US_STATE` + precise scoping (`geo_state`) — none of these resolve on the current layer; see *Currently acknowledged* below |
+| State (administrative) | **also gone** | ADMIN_STATE, ADMIN_ST, ADM_ST, STATE     | fallback scoping (`admin_state`) — administering BLM office, **not** where the land is. Absent too, so scoping falls through to `serial_prefix` |
 | Claimant       | *(not published)*   | CLAIMANT_NAME, CLAIMANT, CLMNT_NAME, CLAIMANT_TXT, CUST_NAME, CUSTOMER_NAME | `OWNER_NAME` — activates automatically if BLM publishes one; until then company search resolves against `CSE_NAME` |
 | Recorded date  | *(unverified)*      | CSE_RCRD_DT, RCRD_DT, CSE_FILE_DT, LOCATION_DT, LOC_DT | `RECORDED_DATE` — used only as the area tie-break when ranking jurisdictions; never mapped to `GOOD_TO_DATE` |
 | Claim type     | `BLM_PROD`          | CSE_TYPE_TXT, CASETYPE_TXT, CSE_TYPE, CASE_TYPE | `TITLE_TYPE_DESCRIPTION` (original) + `CLAIM_TYPE` (normalized) |

@@ -1,0 +1,47 @@
+-- ============================================================
+-- Take the registry loader's destructive functions away from anon.
+--
+-- WHAT WAS EXPOSED
+--   public.truncate_qc_claims()             truncate table public.qc_claims
+--   public.replace_us_claimants_source(text) delete from public.us_claim_claimants
+--
+--   Both are SECURITY DEFINER, both carry an EXECUTE grant for `anon` and
+--   `authenticated`, and neither checks who is calling. The anon key is
+--   published in the frontend bundle by design, so any visitor could read it
+--   out of the page and POST to /rest/v1/rpc/truncate_qc_claims to empty the
+--   entire Quebec claims mirror. No sign-in, no rate limit that matters, and
+--   nothing in the logs that would look like an attack rather than a loader run.
+--
+--   Recovery would mean re-running the weekly registry job, and until it ran
+--   every Quebec map in the product would come back empty.
+--
+-- WHY IT HAPPENED
+--   The same mechanism as 20260801000005: this project carries a bootstrap
+--   `alter default privileges in schema public grant execute on functions to
+--   anon, authenticated, service_role`, so every function is created with an
+--   explicit anon grant already in its ACL. These two were written for the
+--   service-role loader in scripts/update-qc-claims.js and simply never had
+--   that default grant taken back off them.
+--
+-- THE FIX
+--   Revoke, rather than add an is_admin() check inside the bodies. The only
+--   legitimate caller is the GitHub Action holding the service-role key, and
+--   service_role is unaffected by a revoke from anon/authenticated — so this
+--   removes the exposure without touching a code path that currently works.
+--
+-- qc_claims_in_bbox() is deliberately left alone: it is a read used by the map
+-- for signed-out visitors, which is exactly what the anon key is for.
+--
+-- Rollback: do not. If a browser session ever needs to truncate a registry
+-- mirror, that is a different design problem.
+-- ============================================================
+
+revoke execute on function public.truncate_qc_claims() from public, anon, authenticated;
+revoke execute on function public.replace_us_claimants_source(text) from public, anon, authenticated;
+
+-- ── Post-migration verification (run manually) ─────────────────────────────
+--   select p.proname, p.proacl
+--   from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+--   where n.nspname = 'public'
+--     and p.proname in ('truncate_qc_claims', 'replace_us_claimants_source');
+--   -- expect service_role only (plus the owner). No anon=X, no authenticated=X.

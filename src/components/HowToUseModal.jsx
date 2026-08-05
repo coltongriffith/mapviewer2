@@ -80,23 +80,8 @@ export default function HowToUseModal({ onClose }) {
 
           {/* ── 1. Welcome ── */}
           <section id="welcome">
-            <h2>Welcome & Overview</h2>
-            <p><strong>Exploration Maps</strong> is a professional map-making tool built for mining and exploration companies. Import your spatial data, style it with industry-standard themes, add annotations and callouts, and export publication-ready maps as PNG, SVG, or PDF — all in the browser, with no GIS software required.</p>
-            <h3>What you can create</h3>
-            <ul>
-              <li>Regional location maps showing project context</li>
-              <li>Claims and property boundary maps</li>
-              <li>Drill plan and drill results maps</li>
-              <li>Target generation and anomaly maps</li>
-              <li>Access and infrastructure maps</li>
-            </ul>
-            <h3>The interface at a glance</h3>
-            <ul>
-              <li><strong>Sidebar (left)</strong> — all controls: layers, styling, annotations, design, export settings</li>
-              <li><strong>Map canvas (right)</strong> — live preview of your map exactly as it will export</li>
-              <li><strong>Toolbar (top of canvas)</strong> — save, open, zoom, and export buttons</li>
-            </ul>
-            <p>Everything you see on the canvas is what you get in the export — panel positions, styling, annotations, and all.</p>
+            <h2>Overview</h2>
+            <p>The canvas is the export: panel positions, styling and annotations all appear exactly as shown.</p>
           </section>
 
           {/* ── 2. New Project ── */}
