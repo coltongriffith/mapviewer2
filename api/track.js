@@ -42,6 +42,16 @@ const EVENT_ALLOWLIST = new Set([
   'element_added',
   'registry_claims_imported',
   'export_failed',
+  // Tenure Monitor funnel. Server-side allowlisting means a client change
+  // without this list is silently dropped — the two ship together.
+  'tenure_search_started',
+  'tenure_search_completed',
+  'tenure_portfolio_created',
+  'tenure_added',
+  'tenure_alerts_configured',
+  'tenure_opened_in_editor',
+  'tenure_export_attempted',
+  'tenure_upgrade_viewed',
 ]);
 
 const MAX_BODY_BYTES = 8 * 1024;

@@ -1,7 +1,8 @@
 {
   "functions": {
     "api/claims.js": { "maxDuration": 60 },
-    "api/bc-claims.js": { "maxDuration": 60 }
+    "api/bc-claims.js": { "maxDuration": 60 },
+    "api/tenure-search.js": { "maxDuration": 30 }
   },
   "rewrites": [
     { "source": "/", "destination": "/index.html" },
@@ -9,7 +10,9 @@
     { "source": "/admin", "destination": "/index.html" },
     { "source": "/admin/:path*", "destination": "/index.html" },
     { "source": "/account", "destination": "/index.html" },
-    { "source": "/account/:path*", "destination": "/index.html" }
+    { "source": "/account/:path*", "destination": "/index.html" },
+    { "source": "/tenure-monitor", "destination": "/index.html" },
+    { "source": "/tenure-monitor/:path*", "destination": "/index.html" }
   ],
   "headers": [
     {

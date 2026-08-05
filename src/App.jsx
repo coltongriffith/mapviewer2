@@ -16,6 +16,7 @@ import NorthArrow, { NORTH_ARROW_STYLES } from './components/NorthArrow';
 const MapCanvas = React.lazy(() => import('./components/MapCanvas'));
 const AdminPage = React.lazy(() => import('./components/AdminPage'));
 const AccountPage = React.lazy(() => import('./components/AccountPage'));
+const TenureMonitorPage = React.lazy(() => import('./components/tenure/TenureMonitorPage'));
 const ExportHDModal = React.lazy(() => import('./components/ExportHDModal'));
 const HowToUseModal = React.lazy(() => import('./components/HowToUseModal'));
 const ColumnMapperModal = React.lazy(() => import('./components/ColumnMapperModal'));
@@ -773,6 +774,7 @@ export default function App() {
   const [screen, setScreen] = useState(() => {
     if (window.location.pathname === '/admin') return 'admin';
     if (window.location.pathname === '/account') return 'account';
+    if (window.location.pathname === '/tenure-monitor') return 'tenure';
     if (window.location.pathname.startsWith('/map/')) return 'shared_view';
     return 'landing';
   });
@@ -1356,6 +1358,51 @@ export default function App() {
   // picking them. Rendered over the map (see the editor-main banners) so they
   // are visible wherever the claims are, and they follow the layer through save
   // and reload because provenance lives in project state.
+  // Tenure layers whose claim boundaries the province has redrawn since the
+  // map was built. Keyed by layer id → { changed: string[], since: string }.
+  const [staleTenureLayers, setStaleTenureLayers] = useState({});
+
+  // A map saved in March carries March's claim outlines. When the province
+  // redraws a boundary that saved map quietly becomes wrong — and it is exactly
+  // the artefact that ends up in an investor deck or a technical report, long
+  // after anybody remembers when it was made. So every claim layer that came
+  // from Tenure Monitor is checked against the change log, and a mismatch is
+  // stated on the map rather than left for the reader to discover.
+  useEffect(() => {
+    if (!supabase) return undefined;
+    const candidates = project.layers.filter(
+      (l) => l.provenance?.tenureNumbers?.length && l.provenance?.syncedAt,
+    );
+    if (!candidates.length) {
+      setStaleTenureLayers((prev) => (Object.keys(prev).length ? {} : prev));
+      return undefined;
+    }
+    let cancelled = false;
+    (async () => {
+      const next = {};
+      for (const layer of candidates) {
+        try {
+          const { data, error } = await supabase.rpc('tenure_boundaries_changed_since', {
+            p_tenure_numbers: layer.provenance.tenureNumbers,
+            p_since: layer.provenance.syncedAt,
+          });
+          if (error || !data?.length) continue;
+          next[layer.id] = {
+            changed: [...new Set(data.map((r) => r.tenure_number))],
+            since: layer.provenance.syncedAt,
+          };
+        } catch {
+          // Best effort. A failed check must never block the editor — the
+          // worst case is that the notice does not appear, which is the same
+          // state the product was in before this existed.
+        }
+      }
+      if (!cancelled) setStaleTenureLayers(next);
+    })();
+    return () => { cancelled = true; };
+    // Only the identity of the tenure layers matters, not every style edit.
+  }, [project.layers.map((l) => `${l.id}:${l.provenance?.syncedAt || ''}`).join('|')]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const claimProvenanceNotices = useMemo(() => {
     const out = [];
     for (const layer of project.layers) {
@@ -1381,6 +1428,20 @@ export default function App() {
           detail: CLAIM_NAME_CAVEAT,
         });
       }
+      const stale = staleTenureLayers[layer.id];
+      if (stale) {
+        const n = stale.changed.length;
+        out.push({
+          layerId: `${layer.id}-stale`,
+          layerName: layer.displayName || layer.name,
+          severity: 'warning',
+          title: `⚠ ${n} claim ${n === 1 ? 'boundary has' : 'boundaries have'} changed since this map was built`,
+          detail: `Tenure ${stale.changed.slice(0, 8).join(', ')}`
+            + `${n > 8 ? ` and ${n - 8} more` : ''} changed in the B.C. dataset after `
+            + `${String(stale.since).slice(0, 10)}. Re-import the layer from Tenure Monitor `
+            + 'to refresh the outlines, and verify in MTO before this map is used in a filing.',
+        });
+      }
       if (p.autoAdopted) {
         out.push({
           layerId: `${layer.id}-adopted`,
@@ -1403,7 +1464,7 @@ export default function App() {
       });
     }
     return out;
-  }, [project.layers, areaClaims]);
+  }, [project.layers, areaClaims, staleTenureLayers]);
 
   // Sync local fields when project changes from an external action (open, duplicate, new).
   // Cancel pending debounce timers first to prevent cross-project writes.
@@ -1464,8 +1525,9 @@ export default function App() {
   useEffect(() => {
     const target = screen === 'admin' ? '/admin'
       : screen === 'account' ? '/account'
-        : (screen === 'shared_view' && sharedMapId) ? `/map/${sharedMapId}`
-          : '/';
+        : screen === 'tenure' ? '/tenure-monitor'
+          : (screen === 'shared_view' && sharedMapId) ? `/map/${sharedMapId}`
+            : '/';
     if (window.location.pathname === target) return;
     try {
       window.history.pushState({ screen, sharedMapId: sharedMapId || null }, '', target);
@@ -1480,6 +1542,7 @@ export default function App() {
       const fromState = e.state?.screen;
       if (path === '/admin') setScreen('admin');
       else if (path === '/account') setScreen('account');
+      else if (path === '/tenure-monitor') setScreen('tenure');
       else if (path.startsWith('/map/')) {
         setSharedMapId(path.slice(5));
         setScreen('shared_view');
@@ -2421,6 +2484,45 @@ export default function App() {
     setUploadStatus({ type: 'success', message: `Imported ${fileName}. ${kind === 'points' ? 'Point layer detected.' : 'Layer added successfully.'}` });
   };
 
+  // Hand a monitored portfolio (or one claim) to the map editor.
+  //
+  // Tenure Monitor deliberately does not contain a map editor. It answers
+  // operational questions — what is due, what changed, what did we decide —
+  // and hands off here for everything about presentation. The claims arrive as
+  // an ordinary layer, so every existing tool (styling, labels, callouts,
+  // legend, templates, brand kits, exports) works on them unchanged.
+  //
+  // `provenance` records where the boundaries came from and how fresh they
+  // were at import. That is what later lets a saved project notice its claim
+  // outlines are older than the current tenure dataset, rather than silently
+  // presenting last quarter's boundaries as today's.
+  const handleOpenTenuresInEditor = async (geojson, info = {}) => {
+    if (!geojson?.features?.length) {
+      setUploadStatus({ type: 'error', message: 'Those claims have no boundaries in the current dataset.' });
+      return;
+    }
+    const label = info.name || 'Monitored claims';
+    setScreen('editor');
+    await addGeoJSONAsLayer(geojson, `${label}.geojson`, 'tenure_monitor', {
+      source: 'BC Mineral Titles (via Exploration Maps Tenure Monitor)',
+      syncedAt: info.syncedAt || null,
+      tenureNumbers: info.tenureNumbers || [],
+      attribution: 'Contains information licensed under the Open Government Licence – British Columbia.',
+    });
+    // Only title the map when it is a fresh workspace — overwriting the title
+    // of a project the user has been working on would be rude and surprising.
+    if (!projectId && !project.layers.length) {
+      updateLayout({
+        title: label,
+        exportSettings: { filename: label.replace(/[^a-z0-9]+/gi, '-').toLowerCase(), pixelRatio: 2 },
+      });
+    }
+    setUploadStatus({
+      type: 'success',
+      message: `Loaded ${geojson.features.length} monitored ${geojson.features.length === 1 ? 'claim' : 'claims'} — style and export your map.`,
+    });
+  };
+
   const addGeoJSONLayer = async (file) => {
     const geojson = await loadGeoJSON(file);
     await addGeoJSONAsLayer(geojson, file.name);
@@ -2725,6 +2827,76 @@ export default function App() {
       }
       // Drop the query string so a refresh doesn't re-trigger the load.
       if (!cancelled) window.history.replaceState({}, '', '/');
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Deep link from a Tenure Monitor reminder email's "Open map" button:
+  // "/?tenure=1044501". The email is often read on a phone days after it
+  // arrived, so this has to work from a cold start with no app state — it
+  // fetches the claim's current boundary and drops the reader straight into
+  // the editor with it.
+  //
+  // Uses the CURRENT geometry rather than whatever the email was generated
+  // from, and labels the layer with the sync timestamp, so the stale-boundary
+  // check above applies to it like any other tenure layer.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const raw = params.get('tenure');
+    if (!raw) return undefined;
+    // Registry numbers only. Anything else is dropped rather than sent to the
+    // API as a search term.
+    if (!/^[A-Za-z0-9-]{1,24}$/.test(raw)) return undefined;
+
+    let cancelled = false;
+    (async () => {
+      setUploadStatus({ type: 'info', message: `Loading tenure ${raw}…` });
+      try {
+        const res = await fetch(`/api/tenure-search?mode=number&q=${encodeURIComponent(raw)}`);
+        const body = await res.json().catch(() => ({}));
+        if (cancelled) return;
+        const hit = (body.results || [])[0];
+        if (!res.ok || !hit) {
+          // Do not dead-end. The claim may have been terminated, or our copy of
+          // the registry may not have caught up — either way the honest next
+          // step is MTO, and the editor still opens.
+          setScreen('editor');
+          setUploadStatus({
+            type: 'error',
+            message: `Tenure ${raw} is not in the latest B.C. dataset Exploration Maps holds. `
+              + 'Verify it in Mineral Titles Online.',
+          });
+          return;
+        }
+        const geoRes = await fetch(`/api/tenure-search?mode=geometry&q=${encodeURIComponent(hit.id)}`);
+        const geoBody = await geoRes.json().catch(() => ({}));
+        if (cancelled) return;
+        const fc = geoBody.featureCollection;
+        if (!fc?.features?.length) {
+          setScreen('editor');
+          setUploadStatus({
+            type: 'error',
+            message: `Tenure ${raw} has no boundary in the current dataset. Verify it in MTO.`,
+          });
+          return;
+        }
+        await handleOpenTenuresInEditor(fc, {
+          name: hit.tenure_name || `Tenure ${hit.tenure_number}`,
+          syncedAt: geoBody.meta?.lastSyncedAt || null,
+          tenureNumbers: [hit.tenure_number],
+        });
+      } catch {
+        if (!cancelled) {
+          setScreen('editor');
+          setUploadStatus({ type: 'error', message: `Could not load tenure ${raw}. Try again shortly.` });
+        }
+      } finally {
+        // Drop the query string so a refresh does not re-run the load.
+        if (!cancelled) {
+          try { window.history.replaceState({}, '', '/'); } catch { /* noop */ }
+        }
+      }
     })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -4050,6 +4222,37 @@ export default function App() {
     );
   }
 
+  if (screen === 'tenure') {
+    return (
+      <React.Suspense fallback={null}>
+        <TenureMonitorPage
+          onExit={() => setScreen('landing')}
+          onOpenTenuresInEditor={handleOpenTenuresInEditor}
+          onUpgrade={(reason) => setUpgradeReason(reason || 'general')}
+          onSignIn={() => setShowAuthFromGate(true)}
+        />
+        {/* This screen returns before the editor's overlay block, so the
+            modals it can raise have to be rendered here too. Without the
+            upgrade modal, every limit and reminder-tier button in Tenure
+            Monitor sets state and appears to do nothing. */}
+        {upgradeReason && (
+          <UpgradeModal
+            reason={upgradeReason}
+            onClose={() => setUpgradeReason(null)}
+            onNeedSignIn={() => {
+              // Sign in over the portfolio rather than routing to /account —
+              // the user came here to act on a claim, and sending them to a
+              // different screen loses that thread.
+              setUpgradeReason(null);
+              setShowAuthFromGate(true);
+            }}
+          />
+        )}
+        {showAuthFromGate && <AuthModal onClose={() => setShowAuthFromGate(false)} />}
+      </React.Suspense>
+    );
+  }
+
   if (screen === 'shared_view') {
     return (
       <>
@@ -4077,6 +4280,7 @@ export default function App() {
           onSearchBCClaims={() => { setScreen('editor'); setAddClaimsModalPath('registry'); setShowAddClaimsModal(true); }}
           onUploadFile={() => { setScreen('editor'); setAddClaimsModalPath('upload'); setShowAddClaimsModal(true); }}
           onOpenAccount={() => setScreen('account')}
+          onOpenTenureMonitor={() => setScreen('tenure')}
         />
         {showHelpModal && <React.Suspense fallback={null}><HowToUseModal onClose={() => setShowHelpModal(false)} /></React.Suspense>}
       </>
@@ -4091,7 +4295,7 @@ export default function App() {
           <button type="button" onClick={() => { setShowMobileBanner(false); try { sessionStorage.setItem('em_mobile_banner_dismissed', '1'); } catch { /* noop */ } }} aria-label="Dismiss">✕</button>
         </div>
       )}
-      <Sidebar footer={<UserMenu onOpenTemplates={() => setShowBrandKitManager(true)} onOpenAccount={() => setScreen('account')} />}>
+      <Sidebar footer={<UserMenu onOpenTemplates={() => setShowBrandKitManager(true)} onOpenAccount={() => setScreen('account')} onOpenTenureMonitor={() => setScreen('tenure')} />}>
         <div className="sidebar-header-row">
           <button className="sidebar-wordmark" type="button" onClick={() => setScreen('landing')}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">

@@ -65,6 +65,24 @@ Documented in `.env.example`. Summary:
 
 ## Architecture notes
 
+### Tenure Monitor (`/tenure-monitor`)
+
+Watches a saved portfolio of B.C. mineral tenures: days remaining against each
+claim's good-to-date, email reminders, change detection, and one-click hand-off
+into the map editor. Read-only with respect to government transactions — it
+never touches MTO on a user's behalf.
+
+- **Data**: a mirror of DataBC's `MTA_ACQUIRED_TENURE_SVW` layer, loaded by
+  `scripts/tenure-sync/` from GitHub Actions (nightly full + twice-daily
+  targeted). A partial or failed government response **aborts without writing**,
+  so a bad day at the province cannot damage stored portfolios.
+- **Reminders**: `scripts/tenure-alerts/`, daily. De-duplication is a unique
+  database constraint rather than application logic.
+- **Deadlines** are computed in `America/Vancouver` throughout
+  (`src/utils/tenureDates.js`), never in the browser's timezone.
+- Developer docs: [`docs/tenure-monitor.md`](docs/tenure-monitor.md).
+  User help: [`docs/tenure-monitor-help.md`](docs/tenure-monitor-help.md).
+
 ### Serverless APIs (`api/`)
 
 - `api/claims.js` — multi-province claims search proxy (BC WFS, ArcGIS
@@ -72,6 +90,11 @@ Documented in `.env.example`. Summary:
   pagination with honest `meta: { totalKnown, returned, truncated,
   pagesFetched, provider }`; rate-limited; CORS-restricted; sanitized errors.
 - `api/bc-claims.js` — BC-only WFS proxy (nearby-claims bbox + legacy search).
+- `api/tenure-search.js` — Tenure Monitor search over the Exploration Maps
+  mirror of the B.C. mineral tenure registry (tenure number, pasted list, owner
+  name, client number, map extent, geometry). Anonymous-safe, rate-limited, and
+  every response states when the mirror was last synchronized. Reads with the
+  ANON key under the public-read policy, never the service role.
 - `api/track.js` — all analytics ingestion (page views, live-presence pings,
   product/search events, landing clicks, leads). Enforces an event-name
   allowlist, payload size/depth limits, and session-id shape; derives geo
