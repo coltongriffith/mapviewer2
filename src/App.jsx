@@ -2243,7 +2243,10 @@ export default function App() {
 
       if (!stillCurrent()) return; // a newer nearby search (or reset) took over
       const features = (data.features || []).filter((f) => f.geometry);
-      trackSearch({ kind: 'nearby', province, mode: 'radius', resultCount: features.length });
+      trackSearch({
+        kind: 'nearby', province, mode: 'radius', resultCount: features.length,
+        outcome: features.length ? 'ok' : 'empty',
+      });
       if (features.length === 0) {
         setAreaClaims((prev) => ({ ...prev, status: 'loaded', features: [], message: `No claims found within ${radiusKm} km. Try a larger radius.` }));
         return;
@@ -2272,6 +2275,10 @@ export default function App() {
       setAreaClaims({ status: 'loaded', radius: radiusKm, visible: true, features, ownerColors, ownerLabels: {}, hiddenOwners: [], showInLegend: false, ownerField, center: { lat: centerLat, lng: centerLng }, message: `${features.length} claims found within ${radiusKm} km${truncNote}`, scoping, province });
     } catch (err) {
       if (!stillCurrent()) return;
+      // A failed nearby search used to record NOTHING — the throw above skips
+      // the trackSearch on the success path — so radius searches only ever
+      // reported their successes and a broken province looked simply quiet.
+      trackSearch({ kind: 'nearby', province, mode: 'radius', resultCount: 0, outcome: 'error' });
       setAreaClaims((prev) => ({
         ...prev, status: 'error',
         message: err.name === 'TimeoutError' ? 'Request timed out. Try a smaller radius.' : `Failed to load: ${String(err.message || err).slice(0, 160)}`,
@@ -3007,7 +3014,7 @@ export default function App() {
       setAddClaimsModalPath('upload');
       setShowAddClaimsModal(true);
     } else if (intent === 'drill-results' || intent === 'csv') {
-      setUploadStatus({ type: 'info', message: 'Import your drill hole or sample CSV to get started — drag it into the upload area.' });
+      setUploadStatus({ type: 'info', message: 'Start with your drill hole or sample CSV.' });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

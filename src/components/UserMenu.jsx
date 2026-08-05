@@ -10,7 +10,7 @@ export default function UserMenu({ onOpenTemplates, onOpenAccount, onOpenTenureM
     return (
       <>
         <div className="sidebar-account-panel">
-          <div className="sidebar-account-hint">Sign in to save projects to the cloud and use brand kits.</div>
+          <div className="sidebar-account-hint">Save projects to the cloud and use brand kits.</div>
           <button className="sidebar-account-signin-btn" onClick={() => setShowAuth(true)}>
             Sign in / Create account
           </button>

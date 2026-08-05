@@ -2373,6 +2373,31 @@ body.is-dragging .template-zone .panel-delete-btn { opacity: 0 !important; }
 /* Attribution for a jurisdiction the app chose, and for degraded state scoping.
    Both also render over the map (.claims-provenance-banner) — these maps end up
    in filings, so the qualification travels with the claims. */
+/* One notice region per result set. The lead notice keeps the old amber
+   treatment; everything that is true on every search collapses to a chip so it
+   stops competing with the thing that changed. */
+.claim-notices { margin: 8px 0 0; display: grid; gap: 6px; }
+.claim-notices-lead {
+  display: grid; gap: 3px; padding: 8px 10px;
+  border-radius: 8px; font-size: 12.5px; line-height: 1.45;
+  background: #fffbeb; border: 1px solid #fcd34d; color: #92400e;
+}
+.claim-notices-lead span { color: #a1620a; font-size: 12px; }
+.claim-notices-rest { display: flex; flex-wrap: wrap; gap: 6px; }
+.claim-notices-chip {
+  font: inherit; font-size: 11.5px; line-height: 1.3;
+  padding: 3px 8px; border-radius: 999px;
+  border: 1px solid #e2e8f0; background: #f8fafc; color: #64748b;
+}
+button.claim-notices-chip { cursor: pointer; }
+button.claim-notices-chip:hover { border-color: #cbd5e1; color: #475569; }
+button.claim-notices-chip[aria-expanded="true"] { border-color: #cbd5e1; background: #f1f5f9; color: #334155; }
+.claim-notices-chip--static { cursor: default; }
+.claim-notices-detail {
+  margin: 0; font-size: 12px; line-height: 1.5; color: #64748b;
+  padding: 6px 10px; background: #f8fafc; border-radius: 8px;
+}
+
 .claims-adoption-notice,
 .claims-scoping-warning {
   display: grid; gap: 3px; margin: 8px 0 0; padding: 8px 10px;

@@ -262,8 +262,8 @@ function SharedLinksSection({ onError }) {
         <h2>Shared links</h2>
       </div>
       <p className="acct-section-hint">
-        Anyone with a share link can view that map, including its data, company and QP details,
-        and any images you added. Revoking a link deletes the shared copy immediately.
+        Anyone with the link sees the map, its data, your company and QP details,
+        and any images you added. Revoking deletes the shared copy immediately.
       </p>
       {loading ? (
         <p className="acct-empty">Loading…</p>
@@ -330,9 +330,8 @@ function BillingSection({ onError }) {
       </div>
       {grandfathered ? (
         <p className="acct-section-hint">
-          <strong>Pro — early adopter.</strong> You were here before paid plans existed, so you have
-          full Pro access, free, forever: clean exports, HD/SVG/PDF formats, and unlimited projects.
-          Nothing changes for your account.
+          <strong>Pro — early adopter.</strong> Clean exports, HD/SVG/PDF formats, and unlimited
+          cloud projects. Free, permanently.
         </p>
       ) : isPro ? (
         <>
@@ -346,8 +345,7 @@ function BillingSection({ onError }) {
       ) : (
         <>
           <p className="acct-section-hint">
-            <strong>Free plan.</strong> Standard PNG export with a small credit, up to 3 cloud projects.
-            Pro unlocks clean exports, HD/SVG/PDF formats, and unlimited projects.
+            <strong>Free plan.</strong> PNG export with a small credit, up to 3 cloud projects.
           </p>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
             <button className="btn primary" type="button" disabled={Boolean(busy) || !planReady} onClick={act('year', () => startCheckout('year'))}>

@@ -79,7 +79,7 @@ export function trackEventOnce(event, dedupeKey, props = {}) {
  * in the admin dashboard (which provinces/registries people actually use).
  * Only the query LENGTH is stored, never the text.
  */
-export function trackSearch({ kind, province, mode, query, resultCount }) {
+export function trackSearch({ kind, province, mode, query, resultCount, outcome }) {
   post({
     kind: 'search',
     search_kind: kind || 'registry',
@@ -87,6 +87,10 @@ export function trackSearch({ kind, province, mode, query, resultCount }) {
     mode: mode || undefined,
     query_len: query ? query.trim().length : undefined,
     result_count: resultCount == null ? undefined : Number(resultCount),
+    // 'ok' | 'empty' | 'error'. A failed request and a genuine miss both carry
+    // result_count 0, so without this they are the same row and a broken
+    // province is invisible next to an unpopular one.
+    outcome: outcome || undefined,
   });
 }
 
