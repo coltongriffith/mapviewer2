@@ -189,6 +189,10 @@ export default async function handler(req, res) {
         mode: str(body.mode, 32),
         query_len: num(body.query_len),
         result_count: num(body.result_count),
+        // Allowlisted, like every other enum this endpoint accepts — the column
+        // has a CHECK constraint and an unexpected value would fail the insert
+        // and lose the event entirely.
+        outcome: ['ok', 'empty', 'error'].includes(body.outcome) ? body.outcome : null,
       });
       if (error) throw error;
       return res.status(204).end();

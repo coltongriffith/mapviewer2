@@ -285,6 +285,11 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
         mode: pending.mode,
         query: pending.query,
         resultCount: results?.features?.length ?? 0,
+        // A registry that refused the request and one that answered "no such
+        // claim" are not the same event, however alike they look on screen.
+        // Recording them identically is what made the Manitoba outage
+        // indistinguishable from Manitoba being unpopular.
+        outcome: error ? 'error' : (results?.features?.length ? 'ok' : 'empty'),
       });
       // A miss in the selected province doesn't mean the company has no
       // claims at all — check the other provinces in the background so a
