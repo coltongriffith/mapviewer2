@@ -27,6 +27,8 @@
 //   exported image, which is where it has to survive being screenshotted out of
 //   context. This module governs the search panel only.
 
+import { US_GEOMETRY_DISCLAIMER } from './jurisdictions';
+
 export const SEVERITY = {
   BLOCKING: 'blocking',
   ACCURACY: 'accuracy',
@@ -112,12 +114,21 @@ export function claimNotices({ adoption, scoping, isUs, hasResults, nameMatched 
   }
 
   if (isUs) {
-    // Standing truth, identical on every US search ever run. It earns a line,
-    // not a paragraph — and it still travels in full on the exported map.
+    // Standing truth, identical on every US search ever run. It earns a line
+    // rather than a paragraph — but the paragraph has to stay REACHABLE.
+    //
+    // The summary drops three things the full wording carries: that the
+    // boundaries come from public BLM records, that they must not be used to
+    // determine exact boundaries, and that they say nothing about ownership.
+    // Shipping the chip without `detail` made those unreachable in the panel
+    // where somebody decides which claims to import — a deletion dressed up as
+    // a layout change. `detail` is US_GEOMETRY_DISCLAIMER verbatim, so the
+    // spec wording in jurisdictions.js stays the single source.
     out.push({
       id: 'geometry',
       severity: SEVERITY.PROVENANCE,
       short: 'Boundaries are generalized, not legal surveys',
+      detail: US_GEOMETRY_DISCLAIMER,
     });
   }
 

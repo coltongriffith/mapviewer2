@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { claimNotices, rankNotices, SEVERITY } from '../src/utils/claimNotices';
+import { US_GEOMETRY_DISCLAIMER } from '../src/utils/jurisdictions';
 
 // These tests pin a design decision, not a calculation.
 //
@@ -82,6 +83,33 @@ describe('rankNotices', () => {
     const { expanded, collapsed } = rankNotices(all);
     expect([...expanded, ...collapsed].map((n) => n.id).sort())
       .toEqual(all.map((n) => n.id).sort());
+  });
+
+  it('every collapsed notice is REACHABLE, not just present', () => {
+    // The test above passed while the geometry disclaimer was unreadable, which
+    // is how it shipped: ClaimNoticeStrip only renders an expander when a
+    // notice has `detail`, so a collapsed notice without one is a dead label
+    // and its full wording is gone from the panel. Checking ids was never
+    // enough — "present in the array" is not "a user can read it".
+    const all = claimNotices({ hasResults: true, isUs: true, scoping, adoption, nameMatched: true });
+    const { collapsed } = rankNotices(all);
+    expect(collapsed.length).toBeGreaterThan(0);
+    for (const n of collapsed) {
+      expect(n.detail, `"${n.short}" collapses to a chip with nothing behind it`)
+        .toBeTruthy();
+    }
+  });
+
+  it('keeps the US geometry disclaimer verbatim from jurisdictions.js', () => {
+    // Regulated wording. The chip may summarise it; the summary may not become
+    // the only thing a user can read. Compared against the exported constant so
+    // a reword there cannot silently desync this panel.
+    const n = claimNotices({ hasResults: true, isUs: true }).find((x) => x.id === 'geometry');
+    expect(n.detail).toBe(US_GEOMETRY_DISCLAIMER);
+    // The three things the one-line summary drops.
+    expect(n.detail).toMatch(/BLM records/);
+    expect(n.detail).toMatch(/exact claim boundaries/);
+    expect(n.detail).toMatch(/ownership/);
   });
 
   it('is stable regardless of input order', () => {

@@ -262,8 +262,8 @@ function SharedLinksSection({ onError }) {
         <h2>Shared links</h2>
       </div>
       <p className="acct-section-hint">
-        Anyone with the link sees the map, its data, and your company and QP details.
-        Revoking deletes the shared copy immediately.
+        Anyone with the link sees the map, its data, your company and QP details,
+        and any images you added. Revoking deletes the shared copy immediately.
       </p>
       {loading ? (
         <p className="acct-empty">Loading…</p>
