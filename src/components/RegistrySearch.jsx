@@ -2,12 +2,14 @@ import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { useClaims } from '../hooks/useClaims';
 import { trackSearch, trackEvent } from '../utils/track';
 import {
-  US_CLAIMS_ENABLED, US_STATES, US_GROUP_LABEL, US_GEOMETRY_DISCLAIMER,
+  US_CLAIMS_ENABLED, US_STATES, US_GROUP_LABEL,
   US_CLAIM_TYPES, isUsJurisdiction,
 } from '../utils/jurisdictions';
 import { bestJurisdictionHit, autoAdoptionNotice } from '../utils/claimRanking';
 import { scopingWarning, emptyResultMessage } from '../utils/scopingNotice';
 import { claimNamePrefix, sourceCredit, CLAIM_NAME_CAVEAT } from '../utils/claimProvenance';
+import { claimNotices } from '../utils/claimNotices';
+import ClaimNoticeStrip from './ClaimNoticeStrip';
 
 // ── Spatial clustering helpers ─────────────────────────────────────────────
 
@@ -723,18 +725,6 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
 
       {error && <p className="claims-error">⚠ {error}</p>}
 
-      {/* The app picked this jurisdiction, not the user — say so, every time. */}
-      {adoptionNotice && (
-        <div className="claims-adoption-notice" role="status">
-          <strong>{adoptionNotice.message}</strong>
-          <span>
-            {adoptionNotice.rankedBy === 'area'
-              ? 'Chosen as the largest holding by area.'
-              : 'Chosen by claim count — no area published for these registries.'}
-            {' '}This attribution stays on the layer when you add it to the map.
-          </span>
-        </div>
-      )}
 
       {/* Claim-name resolution is not an ownership finding. The user has to say
           so out loud before these claims can enter the editor, because from
@@ -755,14 +745,19 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
         </div>
       )}
 
-      {/* Degraded state scoping. Never silent: claims shown under an
-          administrative scope are labelled as such wherever they appear. */}
-      {claimsScopingWarning && allFeatures.length > 0 && (
-        <div className="claims-scoping-warning" role="alert">
-          <strong>⚠ {claimsScopingWarning.short}</strong>
-          <span>{claimsScopingWarning.detail}</span>
-        </div>
-      )}
+      {/* One notice region, ranked. The claim-name gate above stays separate
+          and loud because it blocks an action; everything here is either true
+          of this result set (expanded) or true of every result set (a chip). */}
+      <ClaimNoticeStrip
+        notices={claimNotices({
+          adoption: adoptionNotice,
+          scoping: claimsScopingWarning,
+          isUs: isUS,
+          hasResults: allFeatures.length > 0,
+          // The gate renders itself; it is filtered out of the strip.
+          nameMatched: false,
+        })}
+      />
 
       {results?.meta?.truncated && allFeatures.length > 0 && (
         <p className="claims-error" role="status">
@@ -972,11 +967,6 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
         </>
       )}
 
-      {isUS && results && (
-        <p className="claims-province-hint" style={{ marginTop: 10 }}>
-          {US_GEOMETRY_DISCLAIMER}
-        </p>
-      )}
 
       <button className="export-hd-skip" onClick={onBack}>← Back</button>
     </>
