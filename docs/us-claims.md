@@ -526,10 +526,62 @@ green while production breaks.
   gate never run it. A government endpoint being down must not block a deploy.
 - Scheduled weekly via `.github/workflows/blm-schema-canary.yml`
   (Mondays 09:00 UTC) plus `workflow_dispatch`.
-- Exit codes: `0` schema intact · `1` **drift** — a required field is gone,
-  names it and fails the run · `2` endpoint unreachable, reported as a workflow
-  warning and explicitly *not* a schema verdict.
+- Exit codes: `0` no **new** drift · `1` **drift** — a required field is gone
+  and we did not already know, *or* an acknowledged absence resolved again ·
+  `2` endpoint unreachable, reported as a workflow warning and explicitly *not*
+  a schema verdict.
 - Run locally: `node scripts/live-schema-canary.mjs` (or `--json`).
+
+### Acknowledged absences
+
+`ACKNOWLEDGED_ABSENT` in the script records required fields that are **already**
+gone, already handled by a disclosed degraded mode, and already known. Those
+keep the run green while printing the degradation on every run and raising a
+workflow warning annotation.
+
+This is not a mute switch. Left as a plain failure, a permanently-absent field
+turns the canary into a weekly red check that everyone learns to scroll past —
+and the next drift, the one that matters, gets scrolled past with it. Green for
+"nothing changed", red for "something did", is the only split that keeps the
+signal worth reading. Three things still fail: any *other* required field going
+missing, an acknowledged field **coming back** (good news, but it needs a code
+change to act on, so it must not pass silently), and an acknowledgement that is
+no longer needed.
+
+Remove an entry the moment the field returns.
+
+### Currently acknowledged: `geoState`, since 2026-08-03
+
+The first scheduled canary run found BLM had republished the Not Closed layer
+with a much slimmer schema — 18 fields, with **no geographic state field and no
+`ADMIN_STATE` candidate either**:
+
+```
+OBJECTID, ID, CSE_NAME, STAGE_ID, BLM_PROD, CSE_TYPE_NR, CSE_NR, LEG_CSE_NR,
+SF_ID, CSE_DISP, SRC, QLTY, CSE_META, RCRD_ACRS, Created, Modified,
+Shape__Length, Shape__Area
+```
+
+Consequences, both of which are current production behaviour:
+
+- The nine states with a distinct serial prefix scope by `serial_prefix`, the
+  most degraded of the three modes, disclosed by the scoping banner.
+- **Oregon and Washington return an error.** One BLM office administers both, so
+  no serial prefix separates them (`US_SERIAL_PREFIXES` sets both to `null`) and
+  `resolveUsScoping` throws rather than return Oregon claims labelled
+  Washington. That is the correct outcome, and it means those two states are
+  unavailable until a geographic field exists again.
+
+The same run also caught `LGCY_CSE_NR` → **`LEG_CSE_NR`**. That rename matters
+more than it looks: the legacy serial carries half of the `serial_prefix`
+clause, which is the only scoping mode still standing.
+
+To resolve: find where state moved. `CSE_META` is the only plausible field left
+on the layer; a sibling layer or the MLRS reports may also carry it. Restoring a
+geographic field is what brings OR/WA back.
+
+`scripts/pseo/08_seed_us_aliases.mjs` reads `GEO_STATE` from the same layer and
+is degraded in the same way.
 
 ## Post-deploy verification checklist (REQUIRED — sandbox could not reach BLM)
 

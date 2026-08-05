@@ -112,7 +112,8 @@ const US_STATE_CODES = ['NV', 'AZ', 'UT', 'ID', 'MT', 'WY', 'CO', 'NM', 'CA', 'O
 // prefix, but they use DIFFERENT alphabets, and they live in different fields:
 //
 //   CSE_NR       MLRS serial          two-letter state code + digits   NV105331298
-//   LGCY_CSE_NR  legacy LR2000 serial state-office claim code + digits NMC1026884
+//   LEG_CSE_NR   legacy LR2000 serial state-office claim code + digits NMC1026884
+//                (published as LGCY_CSE_NR before August 2026)
 //
 // The office codes (verified July 2026 against the BLM MLRS serial-number-format
 // article at mlrs.blm.gov/s/article/What-is-the-Mining-Claim-serial-number-format-in-MLRS
@@ -168,9 +169,10 @@ const US_JURISDICTIONS = Object.fromEntries(US_STATE_CODES.map((code) => [
     adminStateFields: ['ADMIN_STATE', 'ADMIN_ST', 'ADM_ST', 'STATE'],
     nameFields: ['CSE_NAME', 'CLAIM_NAME', 'MC_NAME', 'CASE_NAME', 'NAME'],
     numberFields: ['CSE_NR', 'MLRS_CSE_NR', 'CASE_NR', 'SER_NR', 'SERIAL_NR'],
-    // Not published on the current Not Closed layer — kept so legacy search
-    // lights up automatically if BLM ever adds it (the OR clause is optional).
-    legacyNumberFields: ['LGCY_CSE_NR', 'LEGACY_CASE_NR', 'LGCY_SER_NR'],
+    // LEG_CSE_NR is what the layer actually publishes as of August 2026 — the
+    // schema canary caught it. The older LGCY_* spellings are kept behind it so
+    // a rollback on BLM's side resolves without a code change.
+    legacyNumberFields: ['LEG_CSE_NR', 'LGCY_CSE_NR', 'LEGACY_CASE_NR', 'LGCY_SER_NR'],
     // Claimant candidates. The Not Closed spatial layer published none as of
     // July 2026 (claimant names live in separate MLRS reports keyed by serial),
     // so company search resolves through the alias layer against the claim-NAME
