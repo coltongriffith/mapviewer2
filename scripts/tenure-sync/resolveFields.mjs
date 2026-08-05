@@ -73,14 +73,20 @@ export const FIELD_CANDIDATES = {
   areaHectares: { required: false, candidates: ['AREA_IN_HECTARES', 'AREA_HA', 'AREA_HECTARES'] },
   mapUnit: { required: false, candidates: ['MAP_UNIT_NO', 'MAP_NUMBER', 'MAP_SHEET'] },
 
-  // ── Optional, NOT confirmed to exist on this layer ───────────────────────
-  // Every one of these resolves to null today. That is a deliberate, visible
-  // gap rather than a fabricated value; see the header note.
+  // ── Optional ─────────────────────────────────────────────────────────────
+  // Verified against the live layer by the 2026-08-05 --discover run, which is
+  // recorded in docs/tenure-monitor.md. Four of these were listed as "not
+  // confirmed to exist" and are in fact published — under names my candidate
+  // lists did not contain. The layer names them the way MTO does, not the way
+  // the rest of DataBC does, which is exactly the guess a candidate list is
+  // supposed to survive and mine did not.
   status: {
     required: false,
-    // Note: an unresolved status is handled downstream by treating an unknown
-    // status as NOT active (src/utils/tenureDates.js#isActiveStatus), which
-    // pushes the user toward MTO rather than reassuring them falsely.
+    // GENUINELY absent: the layer publishes no status column at all. Active vs
+    // terminated has to be read from TERMINATION_DATE / TERMINATION_TYPE_
+    // DESCRIPTION instead. Downstream this degrades correctly — reconcileRows
+    // guards on `tenure.status &&` before judging good standing, so a null
+    // status reads as MATCHED rather than as "not in good standing".
     candidates: ['TENURE_STATUS', 'STATUS', 'TENURE_STATUS_DESCRIPTION', 'TITLE_STATUS'],
   },
   terminationDate: {
@@ -89,7 +95,10 @@ export const FIELD_CANDIDATES = {
   },
   clientNumber: {
     required: false,
-    candidates: ['CLIENT_NUMBER', 'OWNER_CLIENT_NUMBER', 'GOVERNMENT_CLIENT_NUMBER', 'CLIENT_NO'],
+    // CLIENT_NUMBER_ID is what the layer actually publishes (verified
+    // 2026-08-05). Without it, client-number search had nothing to match on
+    // and the docs said so — a shipped feature that was quietly inert.
+    candidates: ['CLIENT_NUMBER_ID', 'CLIENT_NUMBER', 'OWNER_CLIENT_NUMBER', 'GOVERNMENT_CLIENT_NUMBER', 'CLIENT_NO'],
   },
   ownershipPercentage: {
     required: false,
@@ -101,15 +110,15 @@ export const FIELD_CANDIDATES = {
   },
   workEventCount: {
     required: false,
-    candidates: ['NUMBER_OF_WORK_EVENTS', 'WORK_EVENT_COUNT', 'NUM_WORK_EVENTS'],
+    candidates: ['STATEMENT_OF_WORK_EVENT_COUNT', 'NUMBER_OF_WORK_EVENTS', 'WORK_EVENT_COUNT', 'NUM_WORK_EVENTS'],
   },
   transferEventCount: {
     required: false,
-    candidates: ['NUMBER_OF_TRANSFER_EVENTS', 'TRANSFER_EVENT_COUNT', 'NUM_TRANSFER_EVENTS'],
+    candidates: ['OWNERSHIP_TRANSFER_EVENT_COUNT', 'NUMBER_OF_TRANSFER_EVENTS', 'TRANSFER_EVENT_COUNT', 'NUM_TRANSFER_EVENTS'],
   },
   sourceUpdatedAt: {
     required: false,
-    candidates: ['UPDATE_DATE', 'LAST_UPDATE', 'MODIFIED_DATE', 'SE_ANNO_CAD_DATA_UPDATE_DATE'],
+    candidates: ['UPDATE_TIMESTAMP', 'UPDATE_DATE', 'LAST_UPDATE', 'MODIFIED_DATE', 'SE_ANNO_CAD_DATA_UPDATE_DATE'],
   },
 };
 
