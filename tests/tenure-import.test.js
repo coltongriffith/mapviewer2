@@ -13,6 +13,7 @@ import {
 import {
   evaluateRun, mayReconcile, thresholdsFromEnv, DEFAULTS, VERDICT, summarize,
 } from '../scripts/tenure-sync/guardrails.mjs';
+import { reconcileRows, ROW_STATUS } from '../src/utils/tenureCsv.js';
 
 const FEATURES = fixture.features;
 const SAMPLE = FEATURES[0];
@@ -375,5 +376,100 @@ describe('thresholdsFromEnv', () => {
   it('ignores unparseable overrides rather than disabling the guardrail', () => {
     expect(thresholdsFromEnv({ TENURE_SYNC_MIN_RECORD_RATIO: 'off' }).minRecordRatio)
       .toBe(DEFAULTS.minRecordRatio);
+  });
+});
+
+// ── The live B.C. schema, as of the 2026-08-05 --discover run ──────────────
+//
+// These are the 34 field names the layer actually publishes, copied verbatim
+// from the workflow log. The fixtures elsewhere in this file are shapes; this
+// one is a record of reality, and it exists because the first discover run
+// found four fields I had documented as "not confirmed to exist" sitting right
+// there under names my candidate lists did not contain.
+//
+// The most expensive of those was CLIENT_NUMBER_ID. Client-number search is a
+// shipped, user-visible feature, and it had nothing to match on — silently, for
+// as long as the docs kept asserting the province did not publish the field.
+const LIVE_BC_FIELDS = {
+  AREA_IN_HECTARES: 25,
+  CASH_IN_LIEU_EVENT_COUNT: 2,
+  CLAIM_NAME: 'VAL NO.12',
+  CLIENT_NUMBER_ID: 141999,
+  COMPLAINTS_EVENT_COUNT: null,
+  ENTRY_TIMESTAMP: '2004-09-30Z',
+  ENTRY_USERID: 'MIDA_LOAD',
+  FEATURE_AREA_SQM: 170928.5361,
+  FEATURE_CODE: null,
+  FEATURE_LENGTH_M: 1647.8104,
+  GOOD_TO_DATE: '2030-03-30Z',
+  ISSUE_DATE: '1966-03-18Z',
+  NUMBER_OF_OWNERS: 1,
+  OBJECTID: 59639053,
+  OWNERSHIP_TRANSFER_EVENT_COUNT: 2,
+  OWNER_NAME: 'GIBRALTAR MINES LTD.',
+  PERCENT_OWNERSHIP: 100,
+  PROTECTED_IND: 'N',
+  REDUCTION_EVENT_COUNT: null,
+  REVISION_NUMBER: 0,
+  SE_ANNO_CAD_DATA: null,
+  STATEMENT_OF_WORK_EVENT_COUNT: 18,
+  TAG_NUMBER: '656243M',
+  TENURE_NUMBER_ID: 207716,
+  TENURE_SUB_TYPE_CODE: 'C',
+  TENURE_SUB_TYPE_DESCRIPTION: 'CLAIM',
+  TENURE_TYPE_CODE: 'M',
+  TENURE_TYPE_DESCRIPTION: 'Mineral',
+  TERMINATION_DATE: null,
+  TERMINATION_TYPE_DESCRIPTION: null,
+  TITLE_TYPE_CODE: 'MC2',
+  TITLE_TYPE_DESCRIPTION: 'Two Post Claim',
+  UPDATE_TIMESTAMP: '2004-09-30Z',
+  UPDATE_USERID: 'MIDA_LOAD',
+};
+
+describe('the real B.C. layer schema', () => {
+  it('resolves all four required fields', () => {
+    const { fields } = resolveFields(LIVE_BC_FIELDS);
+    expect(fields.sourceRecordId).toBe('TENURE_NUMBER_ID');
+    expect(fields.tenureNumber).toBe('TENURE_NUMBER_ID');
+    expect(fields.goodToDate).toBe('GOOD_TO_DATE');
+    expect(fields.ownerName).toBe('OWNER_NAME');
+  });
+
+  it('resolves the four fields the first discover run caught me missing', () => {
+    const { fields } = resolveFields(LIVE_BC_FIELDS);
+    expect(fields.clientNumber).toBe('CLIENT_NUMBER_ID');
+    expect(fields.workEventCount).toBe('STATEMENT_OF_WORK_EVENT_COUNT');
+    expect(fields.transferEventCount).toBe('OWNERSHIP_TRANSFER_EVENT_COUNT');
+    expect(fields.sourceUpdatedAt).toBe('UPDATE_TIMESTAMP');
+  });
+
+  it('resolves ownership as real government data, not our inference', () => {
+    const { fields } = resolveFields(LIVE_BC_FIELDS);
+    expect(fields.ownershipPercentage).toBe('PERCENT_OWNERSHIP');
+    expect(fields.ownerCount).toBe('NUMBER_OF_OWNERS');
+    expect(fields.terminationDate).toBe('TERMINATION_DATE');
+  });
+
+  it('still reports status and mapUnit as genuinely absent', () => {
+    // Not every gap was a bad guess. The layer publishes no status column at
+    // all — active vs terminated lives in TERMINATION_DATE — and claiming
+    // otherwise would be the fabrication this whole mechanism exists to avoid.
+    const { fields, missingOptional } = resolveFields(LIVE_BC_FIELDS);
+    expect(fields.status).toBeNull();
+    expect(fields.mapUnit).toBeNull();
+    expect(missingOptional).toEqual(expect.arrayContaining(['status', 'mapUnit']));
+    expect(missingOptional).not.toContain('clientNumber');
+  });
+
+  it('a null status is treated as monitorable, not as "not in good standing"', () => {
+    // The safety property behind the absence above: with no status column,
+    // every claim would otherwise reconcile as inactive and the CSV importer
+    // would decline to pre-select any of them.
+    const { entries } = reconcileRows(
+      [{ tenureNumber: '207716', line: 1 }],
+      new Map([[1, [{ id: 't1', tenure_number: '207716', status: null }]]]),
+    );
+    expect(entries[0].status).toBe(ROW_STATUS.MATCHED);
   });
 });

@@ -3,7 +3,7 @@
 Developer and operator documentation. User-facing help lives in
 [`docs/tenure-monitor-help.md`](./tenure-monitor-help.md).
 
-Status: v1 (phases 1–5). Last updated 2026-08-01.
+Status: v1 (phases 1–5). Last updated 2026-08-05.
 
 ---
 
@@ -42,42 +42,95 @@ if the province renames it.
 
 ### Verified field list
 
-**Confirmed present** (by prior `--discover` runs recorded in
-`scripts/pseo/config.mjs` and by the live integrations in `src/utils/claimInfo.js`):
+**Verified against the live layer by the `--discover` run of 2026-08-05**
+(GitHub Actions run 31027735213). Schema fingerprint `93a271e8`, 34 fields,
+sample geometry type `Polygon`.
 
-`TENURE_NUMBER_ID`, `TAG_NUMBER`, `CLAIM_NAME`, `OWNER_NAME`,
-`AREA_IN_HECTARES`, `GOOD_TO_DATE`, `ISSUE_DATE`, `TENURE_TYPE_DESCRIPTION`,
-`TENURE_SUBTYPE_DESCRIPTION`, `TITLE_TYPE_DESCRIPTION`, `MAP_UNIT_NO`.
-
-**Not confirmed to exist.** Do not build a feature that depends on these until
-a `--discover` run says otherwise:
-
-- government client number
-- ownership percentage
-- number of owners
-- termination date
-- work-event / transfer-event counts
-- a record-update timestamp
-
-They are nullable in the schema, resolve to `null`, and render as
-*"Not published in the B.C. source"* rather than as blanks or zeroes.
-
-### Open questions to resolve on first discovery run
-
-Run this and paste the output into this section:
-
-```bash
-node scripts/tenure-sync/run.mjs --discover
+```
+AREA_IN_HECTARES              CASH_IN_LIEU_EVENT_COUNT      CLAIM_NAME
+CLIENT_NUMBER_ID              COMPLAINTS_EVENT_COUNT        ENTRY_TIMESTAMP
+ENTRY_USERID                  FEATURE_AREA_SQM              FEATURE_CODE
+FEATURE_LENGTH_M              GOOD_TO_DATE                  ISSUE_DATE
+NUMBER_OF_OWNERS              OBJECTID                      OWNERSHIP_TRANSFER_EVENT_COUNT
+OWNER_NAME                    PERCENT_OWNERSHIP             PROTECTED_IND
+REDUCTION_EVENT_COUNT         REVISION_NUMBER               SE_ANNO_CAD_DATA
+STATEMENT_OF_WORK_EVENT_COUNT TAG_NUMBER                    TENURE_NUMBER_ID
+TENURE_SUB_TYPE_CODE          TENURE_SUB_TYPE_DESCRIPTION   TENURE_TYPE_CODE
+TENURE_TYPE_DESCRIPTION       TERMINATION_DATE              TERMINATION_TYPE_DESCRIPTION
+TITLE_TYPE_CODE               TITLE_TYPE_DESCRIPTION        UPDATE_TIMESTAMP
+UPDATE_USERID
 ```
 
+Resolved mapping:
+
+| Field | Resolves to |
+|---|---|
+| `sourceRecordId`, `tenureNumber` | `TENURE_NUMBER_ID` |
+| `goodToDate` | `GOOD_TO_DATE` |
+| `ownerName` | `OWNER_NAME` |
+| `tenureName` | `CLAIM_NAME` |
+| `tenureType` / `tenureSubtype` | `TENURE_TYPE_DESCRIPTION` / `TENURE_SUB_TYPE_DESCRIPTION` |
+| `issueDate` | `ISSUE_DATE` |
+| `areaHectares` | `AREA_IN_HECTARES` |
+| `terminationDate` | `TERMINATION_DATE` |
+| `clientNumber` | `CLIENT_NUMBER_ID` |
+| `ownershipPercentage` | `PERCENT_OWNERSHIP` |
+| `ownerCount` | `NUMBER_OF_OWNERS` |
+| `workEventCount` | `STATEMENT_OF_WORK_EVENT_COUNT` |
+| `transferEventCount` | `OWNERSHIP_TRANSFER_EVENT_COUNT` |
+| `sourceUpdatedAt` | `UPDATE_TIMESTAMP` |
+
+**Genuinely not published — these render as *"Not published in the B.C. source"*:**
+
+- **`status`** — the layer has no status column at all. Active versus terminated
+  must be read from `TERMINATION_DATE` / `TERMINATION_TYPE_DESCRIPTION`. This
+  degrades correctly: `reconcileRows` guards on `tenure.status &&` before
+  judging good standing, so a null status reconciles as *matched* rather than
+  as *not in good standing*, and `isActiveStatus()` is currently unused.
+- **`mapUnit`** — no `MAP_UNIT_NO` on this layer, despite it appearing in
+  `scripts/pseo/config.mjs` for a different endpoint.
+
+#### What the first discover run corrected
+
+This section previously listed six fields as "not confirmed to exist" and told
+readers not to build on them. **Four of the six are published**, under names the
+candidate lists did not contain — the layer names them the way MTO does rather
+than the way the rest of DataBC does:
+
+| Documented as absent | Actually published as |
+|---|---|
+| government client number | `CLIENT_NUMBER_ID` |
+| work-event count | `STATEMENT_OF_WORK_EVENT_COUNT` |
+| transfer-event count | `OWNERSHIP_TRANSFER_EVENT_COUNT` |
+| record-update timestamp | `UPDATE_TIMESTAMP` |
+
+The client number is the one that cost something. **Client-number search is a
+shipped, user-visible feature**, and it had nothing to match on — silently, for
+as long as this document kept asserting the province did not publish the field.
+A candidate list is meant to survive exactly this kind of wrong guess, and this
+one did not, because every guess in it was wrong the same way.
+
+Ownership percentage and owner count are also real government values rather than
+our inference. `normalizeOwners` already attaches them only when the title has
+exactly one owner, which stays correct: they arrive as flat per-title fields and
+cannot be attributed to one of several co-owners.
+
+`tests/tenure-import.test.js` pins this schema verbatim so the mapping cannot
+drift back unnoticed.
+
+#### Still open
+
 1. Does the layer include expired / terminated titles, or only active ones?
-   (`scripts/pseo/02_fetch_claims_bc.mjs` filters out past-good-to-date rows,
-   which implies expired titles **are** retained — confirm before relying on it.)
-2. Are placer and coal titles in this layer or in separate ones?
-3. Is ownership ever published as discrete records rather than one flat
-   `OWNER_NAME`? If so, set `fields.ownersAreDiscrete = true` in
-   `scripts/tenure-sync/resolveFields.mjs` and owner rows upgrade to
-   `ownership_representation = 'multi_field'` with no migration.
+   `TERMINATION_DATE` and `TERMINATION_TYPE_DESCRIPTION` exist and were `null`
+   on the sampled feature, which is consistent with terminated titles being
+   retained — but one active sample cannot confirm it. Confirm on the first
+   full sync by counting rows with a non-null termination date.
+2. Are placer and coal titles in this layer or in separate ones? The sample was
+   `TENURE_TYPE_DESCRIPTION = "Mineral"`; a full sync will show the distinct
+   values.
+3. Ownership is published as one flat `OWNER_NAME` plus a `NUMBER_OF_OWNERS`
+   count, so `ownersAreDiscrete` stays `false` and any multi-owner split remains
+   marked as ours rather than the province's.
 
 ---
 
@@ -421,11 +474,14 @@ assumptions.
 1. **Ownership fidelity.** The B.C. layer publishes one flat `OWNER_NAME`.
    Where a title appears jointly held, the split is *derived* by us and marked
    `ownership_representation = 'single_field'` so the UI never presents an
-   inference as a government record. Percentages and a verified owner count are
-   not available.
-2. **Client-number search has nothing to match on** until the province publishes
-   the field. The endpoint says so explicitly rather than returning a bare
-   "no results".
+   inference as a government record. `PERCENT_OWNERSHIP` and `NUMBER_OF_OWNERS`
+   ARE published (confirmed 2026-08-05), but as flat per-title values, so they
+   are attached only when the title has exactly one owner — a percentage cannot
+   be assigned to whichever co-owner name happened to sort first.
+2. ~~**Client-number search has nothing to match on.**~~ **Resolved 2026-08-05.**
+   The field is published as `CLIENT_NUMBER_ID`; the candidate list simply did
+   not name it, so a shipped feature sat inert while this document asserted the
+   province was at fault. Live as of the next sync.
 3. **No MTO deep link.** MTO's public search is a stateful JSP application with
    no documented stable per-tenure URL, so we link to the registry's front door
    and state the number to search. A guessed URL that rots — or worse, lands on
