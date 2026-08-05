@@ -11,19 +11,17 @@
 // happens to a customer's portfolio is that it stops getting fresher.
 
 import { createClient } from '@supabase/supabase-js';
+import { credential, supabaseCredentials } from '../lib/env.mjs';
 
 /** Rows per write. Matches the batch size the Quebec loader settled on. */
 export const BATCH_SIZE = Number(process.env.TENURE_SYNC_BATCH_SIZE) || 500;
 
 export function createServiceClient() {
-  const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) {
-    throw new Error(
-      'SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required. '
-      + 'In CI these come from repository secrets; see .github/workflows/tenure-sync.yml.',
-    );
-  }
+  // Trimmed and checked before use — a credential saved with a trailing
+  // newline otherwise surfaces as "Headers.set: ... is an invalid header
+  // value" from inside supabase-js, which names neither the variable nor the
+  // problem. See scripts/lib/env.mjs.
+  const { url, key } = supabaseCredentials();
   return createClient(url, key, { auth: { persistSession: false } });
 }
 
@@ -297,7 +295,7 @@ export async function monitoredTenureNumbers(sb) {
  * Tenure; this is the push half of that.
  */
 export async function notifyAdmin(sb, { subject, body }) {
-  const apiKey = process.env.RESEND_API_KEY;
+  const apiKey = credential('RESEND_API_KEY');
   const to = process.env.TENURE_ADMIN_EMAIL || 'coltongriffith@live.ca';
   const from = process.env.TENURE_ALERT_FROM
     || 'Exploration Maps <notifications@explorationmaps.com>';

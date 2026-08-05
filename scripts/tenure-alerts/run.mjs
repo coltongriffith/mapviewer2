@@ -19,6 +19,7 @@
 // Reads SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY and RESEND_API_KEY.
 
 import { createClient } from '@supabase/supabase-js';
+import { credential, supabaseCredentials } from '../lib/env.mjs';
 import { bcToday } from '../../src/utils/tenureDates.js';
 import {
   planExpiryAlerts, planChangeAlerts, reconcileAlerts, dueNow, maySend,
@@ -29,11 +30,7 @@ const MAX_ATTEMPTS = 3;
 const CHANGE_LOOKBACK_DAYS = 7;
 
 function client() {
-  const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) {
-    throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required.');
-  }
+  const { url, key } = supabaseCredentials();
   return createClient(url, key, { auth: { persistSession: false } });
 }
 
@@ -268,7 +265,7 @@ async function markFailed(sb, alert, reason) {
 }
 
 async function send(to, { subject, html, text }) {
-  const apiKey = process.env.RESEND_API_KEY;
+  const apiKey = credential('RESEND_API_KEY');
   const from = process.env.TENURE_ALERT_FROM
     || 'Exploration Maps <notifications@explorationmaps.com>';
   if (!apiKey) {
