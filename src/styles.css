@@ -2662,6 +2662,149 @@ button.claim-notices-chip[aria-expanded="true"] { border-color: #cbd5e1; backgro
 .adm-timeline-lead .adm-timeline-icon { color: #f59e0b; }
 
 /* ── Account Dashboard ──────────────────────────────────────────── */
+/* ── Dashboard: the signed-in home ─────────────────────────────────────────
+   Reuses the account page's surface colours so signing in doesn't feel like
+   crossing into a different product. The layout is different on purpose:
+   work first at full width, context in a narrower column beside it. */
+.dash-shell {
+  min-height: 100vh; background: #f8fafc;
+  font-family: Inter, system-ui, Arial, sans-serif; color: #0f172a;
+}
+.dash-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 28px; height: 56px; background: #fff;
+  border-bottom: 1px solid #e2e8f0; position: sticky; top: 0; z-index: 100;
+}
+.dash-wordmark {
+  background: none; border: none; cursor: pointer; padding: 0;
+  font-size: 15px; font-weight: 700; color: #0f172a; font-family: inherit;
+}
+.dash-wordmark:hover { color: #2563eb; }
+.dash-header-nav { display: flex; align-items: center; gap: 18px; }
+.dash-link {
+  background: none; border: none; padding: 0; cursor: pointer;
+  color: #2563eb; font-size: 13px; font-family: inherit;
+}
+.dash-link:hover { text-decoration: underline; }
+.dash-link.muted { color: #94a3b8; }
+
+.dash-main { max-width: 1280px; margin: 0 auto; padding: 28px 28px 80px; }
+
+.dash-hero {
+  display: flex; align-items: flex-end; justify-content: space-between;
+  gap: 24px; flex-wrap: wrap; margin-bottom: 28px;
+}
+.dash-title { margin: 0 0 4px; font-size: 26px; font-weight: 800; letter-spacing: -0.02em; }
+.dash-subtitle { margin: 0; font-size: 14px; color: #64748b; }
+.dash-hero-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.dash-hero-actions .btn { width: auto; }
+
+/* Work column wide, context column fixed. Collapses to one column on a
+   tablet, where a 300px sidebar would squeeze the map tiles to nothing. */
+.dash-columns { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 28px; align-items: start; }
+@media (max-width: 1024px) { .dash-columns { grid-template-columns: 1fr; } }
+
+.dash-panel-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; margin-bottom: 14px; flex-wrap: wrap;
+}
+.dash-panel-head h2, .dash-panel h2 { margin: 0; font-size: 16px; font-weight: 700; }
+.dash-count {
+  display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 999px;
+  background: #eef2f7; color: #64748b; font-size: 12px; font-weight: 600; vertical-align: middle;
+}
+.dash-project-tools { display: flex; gap: 8px; }
+.dash-search, .dash-sort {
+  font-size: 13px; padding: 6px 10px; border: 1px solid #cbd5e1;
+  border-radius: 8px; background: #fff; font-family: inherit; color: #0f172a;
+}
+.dash-search { width: 190px; }
+.dash-search:focus, .dash-sort:focus { outline: 2px solid #2563eb; outline-offset: 1px; }
+
+.dash-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 18px; }
+.dash-tile {
+  background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;
+  display: flex; flex-direction: column; transition: box-shadow 0.12s, border-color 0.12s;
+}
+.dash-tile:hover { border-color: #cbd5e1; box-shadow: 0 4px 16px rgba(15,23,42,0.07); }
+.dash-tile-thumb {
+  border: none; padding: 0; cursor: pointer; background: #f1f5f9;
+  aspect-ratio: 16 / 10; display: flex; align-items: center; justify-content: center;
+}
+.dash-tile-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.dash-tile-placeholder { font-size: 22px; font-weight: 700; color: #94a3b8; }
+.dash-tile-body { padding: 10px 12px 4px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.dash-tile-name {
+  background: none; border: none; padding: 0; cursor: pointer; text-align: left;
+  font-size: 13px; font-weight: 600; color: #0f172a; font-family: inherit;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.dash-tile-name:hover { color: #2563eb; }
+.dash-tile-name-input {
+  font-size: 13px; font-weight: 600; font-family: inherit; width: 100%;
+  border: 1px solid #2563eb; border-radius: 6px; padding: 2px 6px;
+}
+.dash-tile-date { font-size: 11px; color: #94a3b8; }
+.dash-tile-actions { display: flex; align-items: center; gap: 2px; padding: 4px 8px 8px; }
+.dash-icon-btn {
+  background: none; border: none; cursor: pointer; color: #94a3b8;
+  font-size: 13px; padding: 3px 6px; border-radius: 5px; font-family: inherit;
+}
+.dash-icon-btn:hover { background: #f1f5f9; color: #334155; }
+.dash-icon-btn.danger:hover { background: #fef2f2; color: #dc2626; }
+.dash-confirm { font-size: 11px; color: #64748b; margin-right: 2px; }
+
+.dash-empty {
+  background: #fff; border: 1px dashed #cbd5e1; border-radius: 12px;
+  padding: 32px 28px; text-align: center;
+}
+.dash-empty p { margin: 0 0 8px; font-size: 14px; }
+.dash-empty .dash-hero-actions { justify-content: center; margin-top: 16px; }
+
+.dash-side { display: flex; flex-direction: column; gap: 20px; }
+.dash-panel { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 18px; }
+.dash-panel-lead { margin: 0 0 10px; font-size: 14px; color: #334155; }
+.dash-muted { color: #94a3b8; font-size: 13px; margin: 0; }
+
+/* Attention rows carry the count AND the words, so urgency never depends on
+   the colour alone — the same rule the tenure views follow. */
+.dash-attention { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.dash-attention-btn {
+  width: 100%; display: flex; align-items: center; gap: 10px; cursor: pointer;
+  background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;
+  padding: 8px 10px; font-size: 13px; color: #334155; font-family: inherit; text-align: left;
+}
+.dash-attention-btn:hover { background: #f1f5f9; border-color: #cbd5e1; }
+.dash-attention-n { font-weight: 700; font-size: 15px; min-width: 22px; }
+.dash-attention--urgent { border-left: 3px solid #ea580c; }
+.dash-attention--expired { border-left: 3px solid #7f1d1d; }
+.dash-attention--changed { border-left: 3px solid #2563eb; }
+.dash-attention--review { border-left: 3px solid #d97706; }
+.dash-sync { margin: 12px 0 0; font-size: 11px; color: #94a3b8; line-height: 1.5; }
+
+.dash-quick { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.dash-quick-btn {
+  display: block; width: 100%; text-align: left; background: none; border: none;
+  padding: 7px 8px; border-radius: 7px; cursor: pointer;
+  font-size: 13px; color: #334155; font-family: inherit; text-decoration: none;
+}
+.dash-quick-btn:hover { background: #f1f5f9; color: #0f172a; }
+
+.dash-sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+@media (max-width: 640px) {
+  .dash-header { padding: 0 16px; }
+  .dash-header-nav { gap: 12px; }
+  .dash-main { padding: 20px 16px 60px; }
+  .dash-title { font-size: 21px; }
+  .dash-project-tools { width: 100%; }
+  .dash-search { flex: 1; width: auto; }
+  .dash-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+}
+
 .acct-shell {
   min-height: 100vh;
   background: #f8fafc;

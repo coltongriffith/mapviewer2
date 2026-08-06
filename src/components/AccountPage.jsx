@@ -362,9 +362,10 @@ function BillingSection({ onError }) {
   );
 }
 
-export default function AccountPage({ onOpenProject, onNewProject, onExit, onApplyBrandKit, onUseKit, accountSettings = {}, onSaveSettings }) {
+export default function AccountPage({ onExit, onOpenDashboard, onApplyBrandKit, onUseKit, accountSettings = {}, onSaveSettings }) {
   const { user, signOut } = useAuth();
-  const [projects, setProjects] = useState([]);
+  // Count only — the dashboard owns the list, this page owns settings.
+  const [projectCount, setProjectCount] = useState(null);
   const [brandKits, setBrandKits] = useState([]);
   const [loading, setLoading] = useState(true);
   // Visible, non-destructive error banner. Failures never wipe data that
@@ -380,7 +381,7 @@ export default function AccountPage({ onOpenProject, onNewProject, onExit, onApp
     Promise.allSettled([listCloudProjects(), listBrandKits()])
       .then(([p, k]) => {
         if (cancelled) return;
-        if (p.status === 'fulfilled') setProjects(p.value);
+        if (p.status === 'fulfilled') setProjectCount(p.value.length);
         if (k.status === 'fulfilled') setBrandKits(k.value);
         const failures = [p.status === 'rejected' && 'projects', k.status === 'rejected' && 'brand kits'].filter(Boolean);
         if (failures.length) setLoadError(`Couldn't load your ${failures.join(' and ')} — check your connection and reload to retry.`);
@@ -389,24 +390,14 @@ export default function AccountPage({ onOpenProject, onNewProject, onExit, onApp
     return () => { cancelled = true; };
   }, [user]);
 
-  const refreshProjects = () => listCloudProjects().then((p) => { setProjects(p); }).catch(() => {
-    setLoadError("Couldn't refresh your projects — the last loaded list is shown.");
+  const refreshProjects = () => listCloudProjects().then((p) => { setProjectCount(p.length); }).catch(() => {
+    setLoadError("Couldn't refresh your projects — the last loaded count is shown.");
   });
   const refreshBrandKits = () => listBrandKits().then((k) => { setBrandKits(k); }).catch(() => {
     setLoadError("Couldn't refresh your brand kits — the last loaded list is shown.");
   });
   const surfaceActionError = (what) => (err) => {
     setLoadError(`${what} failed: ${String(err?.message || err).slice(0, 140)}`);
-  };
-
-  const duplicateProject = async (entry) => {
-    try {
-      const full = await loadCloudProject(entry.id);
-      await saveCloudProject({ id: null, name: `${entry.name} Copy`, payload: full.payload });
-      refreshProjects();
-    } catch (err) {
-      surfaceActionError('Duplicating the project')(err);
-    }
   };
 
   const duplicateKit = async (kit) => {
@@ -422,8 +413,8 @@ export default function AccountPage({ onOpenProject, onNewProject, onExit, onApp
     <div className="acct-shell">
       <header className="acct-header">
         <div className="acct-header-left">
-          <button className="acct-back-link" type="button" onClick={onExit}>← Back to editor</button>
-          <span className="acct-header-title">My Account</span>
+          <button className="acct-back-link" type="button" onClick={onExit}>← Dashboard</button>
+          <span className="acct-header-title">Settings &amp; billing</span>
         </div>
         <div className="acct-header-right">
           <span className="acct-header-email">{user?.email}</span>
@@ -450,27 +441,14 @@ export default function AccountPage({ onOpenProject, onNewProject, onExit, onApp
 
         <section className="acct-section">
           <div className="acct-section-header">
-            <h2>My Projects</h2>
-            <button className="btn" type="button" onClick={onNewProject}>+ New Project</button>
+            <h2>Your maps</h2>
+            <button className="btn" type="button" onClick={onOpenDashboard}>Open dashboard →</button>
           </div>
-          {loading ? (
-            <p className="acct-empty">Loading…</p>
-          ) : projects.length === 0 ? (
-            <p className="acct-empty">No saved projects yet — start a new one to see it here.</p>
-          ) : (
-            <div className="acct-grid">
-              {projects.map((entry) => (
-                <ProjectCard
-                  key={entry.id}
-                  entry={entry}
-                  onOpen={onOpenProject}
-                  onRename={(id, name) => { renameCloudProject(id, name).then(refreshProjects).catch(surfaceActionError('Renaming the project')); }}
-                  onDelete={(id) => { deleteCloudProject(id).then(refreshProjects).catch(surfaceActionError('Deleting the project')); }}
-                  onDuplicate={duplicateProject}
-                />
-              ))}
-            </div>
-          )}
+          <p className="acct-section-hint">
+            {projectCount == null
+              ? 'Your saved maps live on the dashboard.'
+              : `${projectCount} saved ${projectCount === 1 ? 'map' : 'maps'}. Open, rename and organise them on the dashboard.`}
+          </p>
         </section>
 
         <TrashSection onError={surfaceActionError('Recently deleted')} onRestored={refreshProjects} />
