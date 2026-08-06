@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
 import {
   reconcileRows, reconciliationSummary, mapColumns, buildScheduleCsv,
   ROW_STATUS, decisionLabel,
@@ -292,5 +293,64 @@ describe('Tenure Monitor entitlements', () => {
     const company = ENTITLEMENTS[TIERS.COMPANY];
     expect(company.max_monitored_tenures).toBe(500);
     expect(company.alert_offsets_days).toContain(1);
+  });
+});
+
+// ── "Changed recently" means the same thing in the stat and the filter ─────
+//
+// The summary pill counts distinct tenures with a change event in the LAST 30
+// DAYS (tenure_portfolio_summary, migration 20260801000003). The change feed
+// the filter reads is fetched at 90 days, because the table's last-change
+// column and the map's change colouring are both better with more history.
+//
+// Those two numbers disagreed. Clicking "2 changed recently" — or arriving on
+// that filter from the dashboard, which promises the number out loud — could
+// open a list of five: two from the last month and three from the two before
+// it. A dashboard row that names a count and then shows a different one is
+// worse than not offering the shortcut.
+describe('the changed-recently window', () => {
+  const DAY = 86_400_000;
+  const now = new Date('2026-08-06T12:00:00Z');
+  const ago = (days) => new Date(now.getTime() - days * DAY).toISOString();
+
+  // Mirrors changedWithinWindow in TenureMonitorPage.jsx.
+  const within = (change, days = 30) => {
+    if (!change?.detected_at) return false;
+    const at = new Date(change.detected_at).getTime();
+    if (Number.isNaN(at)) return false;
+    return now.getTime() - at <= days * DAY;
+  };
+
+  it('accepts a change inside the window and rejects one outside it', () => {
+    expect(within({ detected_at: ago(1) })).toBe(true);
+    expect(within({ detected_at: ago(29) })).toBe(true);
+    expect(within({ detected_at: ago(31) })).toBe(false);
+    expect(within({ detected_at: ago(89) })).toBe(false);
+  });
+
+  it('rejects a tenure with no change and an unparseable date', () => {
+    expect(within(undefined)).toBe(false);
+    expect(within({})).toBe(false);
+    expect(within({ detected_at: 'not a date' })).toBe(false);
+  });
+
+  it('uses the same 30 days the SQL counts over', () => {
+    // Read from both sides so the constant cannot drift from the migration
+    // that defines it. If somebody widens one, this fails rather than the
+    // pill quietly starting to disagree with the list again.
+    const sql = readFileSync('supabase/migrations/20260801000003_tenure_quota_and_admin.sql', 'utf8');
+    const changedBlock = sql.slice(sql.indexOf("'changed_recently'"), sql.indexOf("'changed_recently'") + 400);
+    const sqlDays = Number(/interval '(\d+) days'/.exec(changedBlock)?.[1]);
+    expect(sqlDays, 'the changed_recently window is not where this test expects it').toBe(30);
+
+    const page = readFileSync('src/components/tenure/TenureMonitorPage.jsx', 'utf8');
+    const uiDays = Number(/CHANGED_RECENTLY_DAYS\s*=\s*(\d+)/.exec(page)?.[1]);
+    expect(uiDays, 'the UI filter window disagrees with the SQL the pill counts over').toBe(sqlDays);
+
+    // And the filter must actually apply it — reading the feed's membership
+    // alone is what produced the mismatch in the first place.
+    expect(page, 'the changed filter no longer applies the window')
+      .toContain("if (filter === 'changed') {");
+    expect(page).toContain('changedWithinWindow(changesByTenure.get(r.tenure.id), now)');
   });
 });

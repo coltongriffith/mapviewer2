@@ -30,6 +30,24 @@ import {
 
 const EMPTY_SUMMARY = { total_tenures: 0, total_hectares: 0 };
 
+// The window `changed_recently` is counted over in tenure_portfolio_summary
+// (migration 20260801000003: `ce.detected_at > now() - interval '30 days'`).
+//
+// The filter has to use the SAME window or the pill lies. The change FEED is
+// fetched at 90 days because the table's "last change" column and the map's
+// change colouring are both more useful with the longer history — so the
+// filter narrows here rather than the feed narrowing for everyone. Before
+// this, "2 changed recently" could open a list of five: two from the last
+// month and three from the two before it.
+const CHANGED_RECENTLY_DAYS = 30;
+
+function changedWithinWindow(change, now) {
+  if (!change?.detected_at) return false;
+  const at = new Date(change.detected_at).getTime();
+  if (Number.isNaN(at)) return false;
+  return now.getTime() - at <= CHANGED_RECENTLY_DAYS * 86_400_000;
+}
+
 function matchesFilter(row, filter, now) {
   if (!filter) return true;
   const t = row.tenure;
@@ -137,7 +155,10 @@ export default function TenureMonitorPage({ onExit, onOpenTenuresInEditor, onUpg
     const q = search.trim().toLowerCase();
     return rows.filter((r) => {
       if (filter === 'changed') {
-        if (!changesByTenure.has(r.tenure.id)) return false;
+        // changesByTenure holds the MOST RECENT change per tenure (the feed is
+        // ordered detected_at desc), so if that one is outside the window none
+        // of them are.
+        if (!changedWithinWindow(changesByTenure.get(r.tenure.id), now)) return false;
       } else if (!matchesFilter(r, filter, now)) {
         return false;
       }
