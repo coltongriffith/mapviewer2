@@ -4,7 +4,7 @@
     "fullTitle": "Mining Map Software for Exploration Teams | Exploration Maps",
     "h1": "Mining Map Software for Exploration Teams",
     "label": "Mining Map Software",
-    "metaDescription": "Create clean mining and mineral exploration maps from claims, drillholes, targets, and GIS files. Export investor-ready maps without GIS software.",
+    "metaDescription": "Browser-based mining and mineral exploration map software. Build claim maps, drill collar plans, target and infrastructure maps from your own GIS files or public registry data, and export figures for decks, reports and news releases.",
     "intro": "Exploration Maps is browser-based mining map software for building clean, investor-ready project maps from claim boundaries, drillholes, targets, and your own GIS files — without learning a full desktop GIS system.",
     "softwareApp": true,
     "sections": [
@@ -31,6 +31,43 @@
       {
         "h2": "Import the data you already have",
         "html": "If you already work with GIS files, you can bring them straight in — see <a href=\"/shapefile-to-map/\">turning a Shapefile into a map</a>. Exploration Maps reads Shapefile, GeoJSON, KML, and CSV, so most exploration datasets import without conversion. You can also <a href=\"/mining-claim-search-by-company-name/\">search public mineral claim data</a> directly when you do not have a file to start from."
+      },
+      {
+        "h2": "What belongs on a mineral exploration project map",
+        "body": "Most exploration project maps are assembled from the same handful of layers. Which ones you show depends on the argument the map is making:",
+        "table": {
+          "headers": [
+            "Layer",
+            "What it answers"
+          ],
+          "rows": [
+            [
+              "Claim boundaries",
+              "Is the project on ground the company controls?"
+            ],
+            [
+              "Project location and inset",
+              "Where in the world is this?"
+            ],
+            [
+              "Access — roads, rail, port, power",
+              "How hard is it to get to and to service?"
+            ],
+            [
+              "Targets and anomalies",
+              "Why here, and what is being tested?"
+            ],
+            [
+              "Drill collars and intercepts",
+              "What has been drilled, and what came back?"
+            ],
+            [
+              "Nearby operations and infrastructure",
+              "What is the district context?"
+            ]
+          ]
+        },
+        "html": "A map that shows all six at once usually communicates less than one that shows three. See <a href=\"/blog/how-to-make-a-professional-exploration-map/\">how to make a professional exploration map</a> for the layout elements that go around them."
       }
     ],
     "disclaimer": null,
@@ -48,73 +85,20 @@
         "a": "You can export PNG images for presentations and websites and print-ready PDFs for technical reports. Common ratios such as 16:9 landscape and letter portrait are available for decks and report figures."
       }
     ],
-    "related": ["mining-exploration-map-software", "bc-mineral-claims-map", "mining-claim-search-by-company-name", "shapefile-to-map", "drill-results-map"]
-  },
-  {
-    "slug": "mining-exploration-map-software",
-    "fullTitle": "Mining Exploration Map Software | Build Project Maps Faster",
-    "h1": "Mining Exploration Map Software",
-    "label": "Exploration Mapping",
-    "metaDescription": "Build mineral exploration maps with claims, drillholes, targets, labels, roads, and project data. Create clean maps for decks, reports, and investor updates.",
-    "intro": "Exploration Maps is mining exploration map software for building complete project maps — claim boundaries, access roads, targets, drillholes, and assay callouts — and exporting them for decks, reports, and investor updates.",
-    "softwareApp": false,
-    "sections": [
-      {
-        "h2": "What to include on a mineral exploration map",
-        "body": "A useful mineral exploration map answers a few questions quickly: where is the project, what does the company control, how do you get there, and what has the exploration found so far. In practice that means claim boundaries, a project location reference, access roads and infrastructure, target areas, and drillholes or sample results. Not every map needs all of these — a location map keeps it simple, while a results map adds detail — but these are the standard building blocks."
-      },
-      {
-        "h2": "Claim boundaries",
-        "body": "Claim boundaries define the land position. Import them as a Shapefile, GeoJSON, or KML and tag the layer as claims to apply the conventional blue outline and light fill. Multiple claim blocks can be styled separately and labelled so a reader can tell optioned ground from staked ground."
-      },
-      {
-        "h2": "Project location",
-        "body": "A location reference places the property relative to towns, regional geography, and known deposits. This is what investors look for first: is the project in a recognized district, and how remote is it. A small inset or regional overview map provides this context."
-      },
-      {
-        "h2": "Access roads",
-        "body": "Roads and trails show how a property is reached and how advanced the infrastructure is. Add them as a context layer or import your own road data, then reduce the opacity so access lines support the map without competing with claims and results."
-      },
-      {
-        "h2": "Targets",
-        "body": "Target areas and anomalies show where the exploration thesis is focused. Draw target outlines or import them, then label each one. On a target generation map these become the visual centre of the story over the claim block."
-      },
-      {
-        "h2": "Drillholes and assay callouts",
-        "html": "Drill collars, intercepts, and assay highlights turn results into something a reader can interpret. Import collars from CSV or GeoJSON and add callouts for the best intervals. For a full walkthrough, see <a href=\"/drill-results-map/\">drill results map</a>."
-      },
-      {
-        "h2": "Nearby infrastructure",
-        "body": "Power, rail, ports, mills, and nearby operating mines all affect how a project is valued. Showing them on an infrastructure map makes the development case concrete rather than abstract."
-      },
-      {
-        "h2": "Export formats",
-        "body": "Export PNG for slides, websites, and email updates, or PDF for print-ready report figures. Use a 16:9 landscape ratio for presentations and a letter or A4 page for technical reports. Maps export with a legend, scale bar, north arrow, and title block."
-      },
-      {
-        "h2": "Investor communication use cases",
-        "body": "Exploration maps carry a lot of the investor story: corporate presentations, fact sheets, website project pages, drill-result news releases, and internal reviews ahead of a financing or a deal. Building them in one place keeps the visual style consistent across every document a company puts out."
-      }
-    ],
-    "disclaimer": null,
-    "faqs": [
-      {
-        "q": "What should a mineral exploration map include?",
-        "a": "Most exploration maps include claim boundaries, a project location reference, access roads, target areas, and drillholes or sample results. The exact mix depends on the map's purpose — a location map stays simple, while a drill results map adds collars and assay callouts."
-      },
-      {
-        "q": "Can I build different map types from the same project?",
-        "a": "Yes. You can reuse the same imported data to produce a claims map, a target map, a drill results map, and a location map with a consistent style, then export each one separately."
-      }
-    ],
-    "related": ["mining-map-software", "shapefile-to-map", "drill-results-map", "bc-mineral-claims-map"]
+    "related": [
+      "bc-mineral-claims-map",
+      "mineral-tenure-monitoring",
+      "mining-claim-search-by-company-name",
+      "drill-results-map",
+      "shapefile-to-map"
+    ]
   },
   {
     "slug": "bc-mineral-claims-map",
-    "fullTitle": "BC Mineral Claims Map Tool | Search Claims & Export Project Maps",
+    "fullTitle": "BC Mineral Claims Map & Claim Search | Exploration Maps",
     "h1": "BC Mineral Claims Map Tool",
     "label": "BC Mineral Claims",
-    "metaDescription": "Search public BC mineral claim data, style claim blocks, add project details, and export clean maps for decks, websites, and reports.",
+    "metaDescription": "Search British Columbia mineral claims by tenure number or registered owner, map the boundaries, and track good-to-dates. Public MTO tenure data — verify in Mineral Titles Online.",
     "intro": "Exploration Maps helps you turn public British Columbia mineral claim data into a clean project map — search claims, style the blocks, add project details, and export for decks, websites, and reports.",
     "softwareApp": false,
     "sections": [
@@ -158,14 +142,18 @@
         "a": "Yes. You can add access roads, target outlines, claim labels, a project title block, and your company logo to build a complete project map from the claim boundaries."
       }
     ],
-    "related": ["mining-claim-search-by-company-name", "mining-map-software", "mining-exploration-map-software"]
+    "related": [
+      "mineral-tenure-monitoring",
+      "mining-claim-search-by-company-name",
+      "mining-map-software"
+    ]
   },
   {
     "slug": "mining-claim-search-by-company-name",
     "fullTitle": "Mining Claim Search by Company Name | Exploration Maps",
     "h1": "Mining Claim Search by Company Name",
     "label": "Claim Search",
-    "metaDescription": "Search mineral claims by company name and turn public claim data into clean project maps for research, investor decks, and internal review.",
+    "metaDescription": "Search mineral claims by company or claimholder name across seven Canadian jurisdictions, then map the results. Confirm ownership with the responsible provincial registry.",
     "intro": "Exploration Maps lets you search public mineral claim data and turn the results into clean maps — useful for reviewing a company's land position, competitor research, deal review, and due diligence.",
     "softwareApp": false,
     "sections": [
@@ -213,7 +201,11 @@
         "a": "Common uses include reviewing land positions, competitor research, deal review, and project due diligence, with the output dropped into investor decks, reports, websites, or internal memos."
       }
     ],
-    "related": ["bc-mineral-claims-map", "mining-map-software", "mining-exploration-map-software"]
+    "related": [
+      "bc-mineral-claims-map",
+      "mining-map-software",
+      "mineral-tenure-monitoring"
+    ]
   },
   {
     "slug": "shapefile-to-map",
@@ -246,7 +238,7 @@
       },
       {
         "h2": "For users who do not want to work in full GIS software",
-        "html": "Desktop GIS is the right tool for heavy analysis, but it is overkill when you simply need a clean figure from data you already have. This tool focuses on presentation output. For the broader workflow, see <a href=\"/mining-exploration-map-software/\">mining exploration map software</a>."
+        "html": "Desktop GIS is the right tool for heavy analysis, but it is overkill when you simply need a clean figure from data you already have. This tool focuses on presentation output. For the broader workflow, see <a href=\"/mining-map-software/\">mining map software</a>."
       }
     ],
     "disclaimer": null,
@@ -264,7 +256,11 @@
         "a": "Data in WGS84 (EPSG:4326) imports most reliably. If your source is in another projection, convert it to WGS84 before importing."
       }
     ],
-    "related": ["mining-exploration-map-software", "mining-map-software", "drill-results-map"]
+    "related": [
+      "mining-map-software",
+      "drill-results-map",
+      "bc-mineral-claims-map"
+    ]
   },
   {
     "slug": "drill-results-map",
@@ -297,7 +293,7 @@
       },
       {
         "h2": "Export-ready visuals",
-        "html": "Export PNG for slides, websites, and news releases, or PDF for print-ready report figures, with a legend, scale bar, north arrow, and title block included. For the broader exploration map workflow, see <a href=\"/mining-exploration-map-software/\">mining exploration map software</a>."
+        "html": "Export PNG for slides, websites, and news releases, or PDF for print-ready report figures, with a legend, scale bar, north arrow, and title block included. For the broader exploration map workflow, see <a href=\"/mining-map-software/\">mining map software</a>."
       }
     ],
     "disclaimer": null,
@@ -315,6 +311,118 @@
         "a": "Yes. Because the project is saved, you can add new collars and intercepts and re-export the same layout as the program progresses."
       }
     ],
-    "related": ["mining-exploration-map-software", "mining-map-software", "shapefile-to-map"]
+    "related": [
+      "mining-map-software",
+      "shapefile-to-map",
+      "bc-mineral-claims-map"
+    ]
+  },
+  {
+    "slug": "mineral-tenure-monitoring",
+    "label": "Tenure Monitor",
+    "h1": "Mineral Tenure Monitoring & Claim Expiry Reminders",
+    "fullTitle": "Mineral Tenure Monitoring & Reminders",
+    "metaDescription": "Track mineral claim expiry dates and get email reminders before each good-to-date. Monitor 10 British Columbia claims free, including ground you do not own. Verify deadlines in Mineral Titles Online.",
+    "intro": "Tenure Monitor watches a saved group of British Columbia mineral claims, reads their published good-to-dates, and emails you before each deadline. It also tells you when the government record for a monitored claim changes — a date that moved, an owner added or removed, a title that stopped appearing in the published dataset.",
+    "softwareApp": true,
+    "sections": [
+      {
+        "h2": "What it does",
+        "checklist": [
+          "Saved groups of claims — a project, a region, a joint venture, or everything you hold",
+          "Email reminders at 90, 30 and 1 day before each good-to-date",
+          "Change detection on the published government record",
+          "A maintenance decision and note against each claim, with an audit trail",
+          "Claim table, portfolio map and CSV export",
+          "One click from any claim into the map editor"
+        ]
+      },
+      {
+        "h2": "Watch ground you do not own",
+        "body": "A monitored group is a watch list, not an ownership record. A competitor's claims, a property under evaluation, or the block next to yours can all be monitored with the same reminders as your own ground. Nothing about it is visible to the title holder."
+      },
+      {
+        "h2": "What it deliberately does not do",
+        "items": [
+          "It does not log into Mineral Titles Online, and never stores MTO credentials",
+          "It does not file assessment work or pay cash in lieu",
+          "It does not register, transfer or acquire title",
+          "It does not automatically stake released ground",
+          "A reminder from Exploration Maps is not a legal notice from the province"
+        ],
+        "body": "It reads public data, calculates dates, sends reminders, records what you decided, and links you to MTO. The transaction stays yours."
+      },
+      {
+        "h2": "Plans",
+        "table": {
+          "headers": [
+            "",
+            "Free",
+            "Pro"
+          ],
+          "rows": [
+            [
+              "Monitored BC claims",
+              "10",
+              "50"
+            ],
+            [
+              "Claim groups",
+              "1",
+              "Several"
+            ],
+            [
+              "Reminder thresholds",
+              "90, 30, 1 days",
+              "90, 30, 7, 1 days"
+            ],
+            [
+              "Reminder recipients",
+              "1",
+              "2"
+            ],
+            [
+              "Change detection, map, CSV export",
+              "Yes",
+              "Yes"
+            ]
+          ]
+        },
+        "html": "The final one-day reminder is on every plan, free included — going quiet the day before a deadline is the failure this exists to prevent. Read the <a href=\"/blog/how-to-track-bc-mineral-claim-good-to-dates/\">good-to-date guide</a> for how the dates work and what moves them."
+      },
+      {
+        "h2": "Coverage",
+        "body": "Tenure Monitor covers British Columbia. BC publishes a good-to-date as a structured field on every title, which is what makes a reliable countdown possible; other jurisdictions express maintenance obligations differently, and a reminder built on an inferred date would sometimes be wrong about a deadline.",
+        "html": "Claim <em>search</em> and mapping cover seven Canadian jurisdictions — see the <a href=\"/blog/canadian-mineral-claim-registries/\">Canadian registry guide</a>."
+      }
+    ],
+    "disclaimer": "Government title records and Exploration Maps monitoring results should be verified in the official Mineral Titles Online registry before a transaction or deadline decision.",
+    "faqs": [
+      {
+        "q": "How do I track mineral claim expiry dates?",
+        "a": "Save the claims you care about to a monitored group. Tenure Monitor reads each claim's published good-to-date, counts the days in Pacific time, and emails you at 90, 30 and 1 day beforehand. If the province moves a date, the reminders are recalculated and the outdated ones cancelled."
+      },
+      {
+        "q": "How many claims can I monitor free?",
+        "a": "Ten, in one group, with reminders to one address at 90, 30 and 1 day before each good-to-date. Pro is $29/month and raises that to 50 claims across several groups, with a 7-day reminder and a second recipient."
+      },
+      {
+        "q": "Does Exploration Maps file my assessment work?",
+        "a": "No. Tenure Monitor is read-only with respect to government transactions. It does not log into MTO, store MTO credentials, file work, pay cash in lieu or register title. You do those in Mineral Titles Online yourself; this tells you when they are due."
+      },
+      {
+        "q": "Can I monitor claims in provinces other than British Columbia?",
+        "a": "Not yet. Claim search and mapping cover seven Canadian jurisdictions, but monitoring is BC-only because BC publishes a structured good-to-date on every title. Building a countdown on a date we had to infer would mean sometimes being wrong about a deadline."
+      },
+      {
+        "q": "Is a reminder a legal notice?",
+        "a": "No. It is generated by Exploration Maps from public BC tenure data. It is not a notice from the province and it does not maintain, renew or register any title. Government records control, and important deadlines should be confirmed in MTO."
+      }
+    ],
+    "related": [
+      "bc-mineral-claims-map",
+      "mining-claim-search-by-company-name",
+      "mining-map-software"
+    ]
   }
 ]

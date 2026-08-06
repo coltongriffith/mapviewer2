@@ -1,18 +1,48 @@
 {
   "functions": {
-    "api/claims.js": { "maxDuration": 60 },
-    "api/bc-claims.js": { "maxDuration": 60 },
-    "api/tenure-search.js": { "maxDuration": 30 }
+    "api/claims.js": {
+      "maxDuration": 60
+    },
+    "api/bc-claims.js": {
+      "maxDuration": 60
+    },
+    "api/tenure-search.js": {
+      "maxDuration": 30
+    }
   },
   "rewrites": [
-    { "source": "/", "destination": "/index.html" },
-    { "source": "/map/:id", "destination": "/index.html" },
-    { "source": "/admin", "destination": "/index.html" },
-    { "source": "/admin/:path*", "destination": "/index.html" },
-    { "source": "/account", "destination": "/index.html" },
-    { "source": "/account/:path*", "destination": "/index.html" },
-    { "source": "/tenure-monitor", "destination": "/index.html" },
-    { "source": "/tenure-monitor/:path*", "destination": "/index.html" }
+    {
+      "source": "/",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/map/:id",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/admin",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/admin/:path*",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/account",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/account/:path*",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/tenure-monitor",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/tenure-monitor/:path*",
+      "destination": "/index.html"
+    }
   ],
   "headers": [
     {
@@ -68,6 +98,91 @@
     },
     {
       "source": "/blog/turn-public-mineral-claim-data-into-project-map{/}?",
+      "destination": "/blog/how-to-make-a-mining-claims-map/",
+      "permanent": true
+    },
+    {
+      "source": "/blog/mining-claims-map-british-columbia{/}?",
+      "destination": "/bc-mineral-claims-map/",
+      "permanent": true
+    },
+    {
+      "source": "/blog/mining-claims-map-ontario{/}?",
+      "destination": "/blog/how-to-search-ontario-mining-claims/",
+      "permanent": true
+    },
+    {
+      "source": "/blog/mining-claims-map-quebec{/}?",
+      "destination": "/blog/how-to-search-quebec-mining-claims/",
+      "permanent": true
+    },
+    {
+      "source": "/blog/mining-claims-map-saskatchewan{/}?",
+      "destination": "/blog/how-to-search-saskatchewan-mineral-claims/",
+      "permanent": true
+    },
+    {
+      "source": "/blog/mining-claims-map-manitoba{/}?",
+      "destination": "/blog/how-to-search-manitoba-mining-claims/",
+      "permanent": true
+    },
+    {
+      "source": "/blog/mining-claims-map-newfoundland-labrador{/}?",
+      "destination": "/blog/how-to-search-newfoundland-mineral-claims/",
+      "permanent": true
+    },
+    {
+      "source": "/blog/mining-claims-map-yukon{/}?",
+      "destination": "/blog/canadian-mineral-claim-registries/",
+      "permanent": true
+    },
+    {
+      "source": "/blog/how-to-choose-basemap-mining-map{/}?",
+      "destination": "/blog/how-to-make-a-professional-exploration-map/",
+      "permanent": true
+    },
+    {
+      "source": "/blog/how-to-export-mining-map-pdf{/}?",
+      "destination": "/blog/how-to-make-a-professional-exploration-map/",
+      "permanent": true
+    },
+    {
+      "source": "/blog/how-to-add-distance-ring-mining-map{/}?",
+      "destination": "/blog/how-to-make-a-professional-exploration-map/",
+      "permanent": true
+    },
+    {
+      "source": "/blog/how-to-add-scale-bar-north-arrow{/}?",
+      "destination": "/blog/how-to-make-a-professional-exploration-map/",
+      "permanent": true
+    },
+    {
+      "source": "/blog/what-to-include-on-a-mining-claim-map{/}?",
+      "destination": "/blog/how-to-make-a-mining-claims-map/",
+      "permanent": true
+    },
+    {
+      "source": "/blog/map-drill-results-for-junior-mining-news-release{/}?",
+      "destination": "/blog/how-to-make-a-drill-results-map/",
+      "permanent": true
+    },
+    {
+      "source": "/blog/locations{/}?",
+      "destination": "/blog/",
+      "permanent": true
+    },
+    {
+      "source": "/mining-exploration-map-software{/}?",
+      "destination": "/mining-map-software/",
+      "permanent": true
+    },
+    {
+      "source": "/blog/drill-results-map-:region{/}?",
+      "destination": "/blog/how-to-make-a-drill-results-map/",
+      "permanent": true
+    },
+    {
+      "source": "/blog/mining-claims-map-:region{/}?",
       "destination": "/blog/how-to-make-a-mining-claims-map/",
       "permanent": true
     }

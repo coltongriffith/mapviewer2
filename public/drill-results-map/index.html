@@ -17,7 +17,7 @@
 <meta name="twitter:title" content="Drill Results Map Tool for Exploration Updates | Exploration Maps">
 <meta name="twitter:description" content="Create clear drillhole and assay maps for mining presentations, reports, news releases, and investor updates.">
 <meta name="twitter:image" content="https://www.explorationmaps.com/og/drill-results-map.png">
-<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What data do I need for a drill results map?","acceptedAnswer":{"@type":"Answer","text":"At minimum, drill collar locations (hole ID, latitude, longitude), which you can import from CSV or GeoJSON. To highlight results, add the key intercepts (grade and width) as callouts, and include target outlines and claim boundaries for context."}},{"@type":"Question","name":"Can I use a drill results map in a news release?","acceptedAnswer":{"@type":"Answer","text":"Yes. Export a PNG or PDF figure with a legend, scale bar, north arrow, and title block, sized for a news release, slide, or report."}},{"@type":"Question","name":"Can I update the map when new holes come in?","acceptedAnswer":{"@type":"Answer","text":"Yes. Because the project is saved, you can add new collars and intercepts and re-export the same layout as the program progresses."}}],"speakable":{"@type":"SpeakableSpecification","cssSelector":[".direct-answer",".faq-a"]}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://www.explorationmaps.com"},{"@type":"ListItem","position":2,"name":"Drill Results Map Tool for Exploration Updates","item":"https://www.explorationmaps.com/drill-results-map/"}]}]}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://www.explorationmaps.com"},{"@type":"ListItem","position":2,"name":"Drill Results Map Tool for Exploration Updates","item":"https://www.explorationmaps.com/drill-results-map/"}]}]}</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
@@ -36,6 +36,10 @@ img{max-width:100%;height:auto}
 /* Layout */
 .page-wrap{max-width:1100px;margin:0 auto;padding:0 24px}
 .blog-layout{display:grid;grid-template-columns:1fr 280px;gap:48px;padding:48px 0 80px;align-items:start}
+/* Grid items default to min-width:auto, so a wide child sizes the column
+   instead of scrolling inside it — which is how one six-column table set
+   the page width on a phone and dragged every paragraph out with it. */
+.blog-layout>*{min-width:0}
 @media(max-width:768px){.blog-layout{grid-template-columns:1fr;padding:32px 0 60px}}
 /* Article */
 article h1{font-size:2rem;font-weight:800;line-height:1.2;color:#0f172a;margin-bottom:16px}
@@ -96,6 +100,12 @@ article strong{color:#0f172a}
 .index-section-head{display:flex;align-items:baseline;justify-content:space-between;margin:40px 0 4px;padding-top:8px;border-top:2px solid #e8edf3}
 .index-section-head h2{font-size:1.1rem;font-weight:700;color:#0f172a}
 .index-section-head a{font-size:13px;color:#2563eb}
+.table-scroll{overflow-x:auto;max-width:100%;-webkit-overflow-scrolling:touch;margin:16px 0}
+.table-scroll .data-table{margin:0;min-width:520px}
+.index-count{display:inline-block;margin-left:6px;padding:1px 8px;border-radius:999px;background:#eef2f7;color:#64748b;font-size:12px;font-weight:600;vertical-align:middle}
+.index-section-intro{margin:0 0 16px;color:#64748b;font-size:14px;max-width:60ch}
+.index-foot{text-align:center;color:#64748b;font-size:14px;padding:48px 0}
+.index-foot a{color:#2563eb}
 /* Index TOC */
 .index-toc{display:flex;flex-wrap:wrap;gap:8px;padding:24px 0 8px;border-bottom:1px solid #e8edf3;margin-bottom:8px}
 .index-toc a{font-size:13px;font-weight:600;color:#475569;background:#f1f5f9;padding:4px 12px;border-radius:999px;text-decoration:none}
@@ -194,7 +204,7 @@ article strong{color:#0f172a}
 <h2>Highlighting assays and intercepts</h2><p>Add callouts for the best intervals — grade and width — next to the relevant holes. Highlighting the intercepts that drive the story keeps attention on the results that matter instead of burying them among every hole drilled.</p>
 <h2>Showing targets and claim boundaries</h2><p>Place the drilling in context by including target outlines and claim boundaries. This shows whether holes are testing the intended target and confirms the results sit within the company's ground.</p>
 <h2>Using maps in news releases, decks, technical summaries, and investor updates</h2><p>The same drill map can serve a news release figure, a slide in a corporate deck, a technical summary, and an investor email update. Building it once and exporting per channel keeps the results presented consistently everywhere they appear.</p>
-<h2>Export-ready visuals</h2><p>Export PNG for slides, websites, and news releases, or PDF for print-ready report figures, with a legend, scale bar, north arrow, and title block included. For the broader exploration map workflow, see <a href="/mining-exploration-map-software/">mining exploration map software</a>.</p>
+<h2>Export-ready visuals</h2><p>Export PNG for slides, websites, and news releases, or PDF for print-ready report figures, with a legend, scale bar, north arrow, and title block included. For the broader exploration map workflow, see <a href="/mining-map-software/">mining map software</a>.</p>
     
     <div class="lp-cta">
       <h2>Start a map</h2>
@@ -216,16 +226,16 @@ article strong{color:#0f172a}
     <div class="faq-a">Yes. Because the project is saved, you can add new collars and intercepts and re-export the same layout as the program progresses.</div>
   </div>
 </section>
-    <section class="lp-related"><h2>Related tools and guides</h2><div class="lp-related-grid"><a class="lp-related-card" href="/mining-exploration-map-software/"><strong>Mining Exploration Map Software</strong><span>Build mineral exploration maps with claims, drillholes, targets, labels, roads, and project data. Create clean maps for decks, reports, and investor updates.</span></a>
-<a class="lp-related-card" href="/mining-map-software/"><strong>Mining Map Software for Exploration Teams</strong><span>Create clean mining and mineral exploration maps from claims, drillholes, targets, and GIS files. Export investor-ready maps without GIS software.</span></a>
-<a class="lp-related-card" href="/shapefile-to-map/"><strong>Shapefile to Map Tool for Mining Projects</strong><span>Upload Shapefile, GeoJSON, KML, or CSV data and create clean mineral exploration maps for presentations, reports, and investor materials.</span></a></div></section>
+    <section class="lp-related"><h2>Related tools and guides</h2><div class="lp-related-grid"><a class="lp-related-card" href="/mining-map-software/"><strong>Mining Map Software for Exploration Teams</strong><span>Browser-based mining and mineral exploration map software. Build claim maps, drill collar plans, target and infrastructure maps from your own GIS files or public registry data, and export figures for decks, reports and news releases.</span></a>
+<a class="lp-related-card" href="/shapefile-to-map/"><strong>Shapefile to Map Tool for Mining Projects</strong><span>Upload Shapefile, GeoJSON, KML, or CSV data and create clean mineral exploration maps for presentations, reports, and investor materials.</span></a>
+<a class="lp-related-card" href="/bc-mineral-claims-map/"><strong>BC Mineral Claims Map Tool</strong><span>Search British Columbia mineral claims by tenure number or registered owner, map the boundaries, and track good-to-dates. Public MTO tenure data — verify in Mineral Titles Online.</span></a></div></section>
   </article>
 </div>
 <footer class="site-footer">
   <div class="site-footer-links">
     <a href="/mining-map-software/">Mining Map Software</a>
     <span class="site-footer-sep">·</span>
-    <a href="/mining-exploration-map-software/">Exploration Map Software</a>
+    <a href="/mineral-tenure-monitoring/">Tenure Monitoring</a>
     <span class="site-footer-sep">·</span>
     <a href="/bc-mineral-claims-map/">BC Claims Map</a>
     <span class="site-footer-sep">·</span>

@@ -46,6 +46,12 @@ function toRegExp(source) {
   const REST = '\u0000REST\u0000';
 
   const pattern = source
+    // `{/}?` is path-to-regexp's optional-trailing-slash group. The final
+    // `/?$` below already allows it, but leaving it in the source means the
+    // escape pass turns it into a literal `\{\/\}\?` that matches nothing —
+    // which is why every redirect in vercel.json silently 404'd against this
+    // server, including the ones written long before it was noticed.
+    .replace(/\{\/\}\?/g, '')
     .replace(/\(\.\*\)/g, WILDCARD)
     .replace(/\/:(\w+)\*/g, REST)
     .replace(/:(\w+)/g, SEGMENT)

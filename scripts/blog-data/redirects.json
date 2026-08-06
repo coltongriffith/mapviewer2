@@ -1,0 +1,57 @@
+{
+  "_comment": [
+    "Retired content URLs and where their intent now lives.",
+    "",
+    "Every entry is a permanent 301 to the closest SEMANTIC replacement — never a",
+    "blanket sweep into /blog/. A reader who searched for 'mining claims map",
+    "Nevada' and lands on the blog index has been given a 404 with a nicer",
+    "status code.",
+    "",
+    "`patterns` are Vercel path-to-regexp sources, used where one rule can retire",
+    "a whole generated family. `exact` handles the individual pages.",
+    "",
+    "scripts/generate-blog.js reads this file to emit vercel.json's redirects AND",
+    "to assert that nothing it generates collides with a retired URL, so a page",
+    "cannot be resurrected by a data edit without the build failing."
+  ],
+
+  "exact": {
+    "_mining-claims-map: jurisdictions the product actually supports": null,
+    "/blog/mining-claims-map-british-columbia": "/bc-mineral-claims-map/",
+    "/blog/mining-claims-map-ontario": "/blog/how-to-search-ontario-mining-claims/",
+    "/blog/mining-claims-map-quebec": "/blog/how-to-search-quebec-mining-claims/",
+    "/blog/mining-claims-map-saskatchewan": "/blog/how-to-search-saskatchewan-mineral-claims/",
+    "/blog/mining-claims-map-manitoba": "/blog/how-to-search-manitoba-mining-claims/",
+    "/blog/mining-claims-map-newfoundland-labrador": "/blog/how-to-search-newfoundland-mineral-claims/",
+    "/blog/mining-claims-map-yukon": "/blog/canadian-mineral-claim-registries/",
+
+    "_small feature tutorials consolidated into one map-craft guide": null,
+    "/blog/how-to-choose-basemap-mining-map": "/blog/how-to-make-a-professional-exploration-map/",
+    "/blog/how-to-export-mining-map-pdf": "/blog/how-to-make-a-professional-exploration-map/",
+    "/blog/how-to-add-distance-ring-mining-map": "/blog/how-to-make-a-professional-exploration-map/",
+    "/blog/how-to-add-scale-bar-north-arrow": "/blog/how-to-make-a-professional-exploration-map/",
+
+    "_merged into the guide that already owned the intent": null,
+    "/blog/what-to-include-on-a-mining-claim-map": "/blog/how-to-make-a-mining-claims-map/",
+    "/blog/map-drill-results-for-junior-mining-news-release": "/blog/how-to-make-a-drill-results-map/",
+
+    "_retired hub for a page family that no longer exists": null,
+    "/blog/locations": "/blog/",
+
+    "_commercial landing consolidation": null,
+    "/mining-exploration-map-software": "/mining-map-software/"
+  },
+
+  "patterns": [
+    {
+      "_note": "28 geographic permutations of one drill template. Every one of them targeted the same job — plot collars, label intercepts, export a figure — with the region name swapped. That job is one guide.",
+      "source": "/blog/drill-results-map-:region",
+      "destination": "/blog/how-to-make-a-drill-results-map/"
+    },
+    {
+      "_note": "Catch-all for the 21 mining-claims-map regions where Exploration Maps has no jurisdiction-specific claim functionality: US states, Alberta, Nova Scotia, NWT, Western Australia, Chile, Peru, Mexico, South Africa, Ghana. The seven supported jurisdictions are listed in `exact` above and match first.",
+      "source": "/blog/mining-claims-map-:region",
+      "destination": "/blog/how-to-make-a-mining-claims-map/"
+    }
+  ]
+}

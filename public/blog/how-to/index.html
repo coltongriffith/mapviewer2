@@ -36,6 +36,10 @@ img{max-width:100%;height:auto}
 /* Layout */
 .page-wrap{max-width:1100px;margin:0 auto;padding:0 24px}
 .blog-layout{display:grid;grid-template-columns:1fr 280px;gap:48px;padding:48px 0 80px;align-items:start}
+/* Grid items default to min-width:auto, so a wide child sizes the column
+   instead of scrolling inside it — which is how one six-column table set
+   the page width on a phone and dragged every paragraph out with it. */
+.blog-layout>*{min-width:0}
 @media(max-width:768px){.blog-layout{grid-template-columns:1fr;padding:32px 0 60px}}
 /* Article */
 article h1{font-size:2rem;font-weight:800;line-height:1.2;color:#0f172a;margin-bottom:16px}
@@ -96,6 +100,12 @@ article strong{color:#0f172a}
 .index-section-head{display:flex;align-items:baseline;justify-content:space-between;margin:40px 0 4px;padding-top:8px;border-top:2px solid #e8edf3}
 .index-section-head h2{font-size:1.1rem;font-weight:700;color:#0f172a}
 .index-section-head a{font-size:13px;color:#2563eb}
+.table-scroll{overflow-x:auto;max-width:100%;-webkit-overflow-scrolling:touch;margin:16px 0}
+.table-scroll .data-table{margin:0;min-width:520px}
+.index-count{display:inline-block;margin-left:6px;padding:1px 8px;border-radius:999px;background:#eef2f7;color:#64748b;font-size:12px;font-weight:600;vertical-align:middle}
+.index-section-intro{margin:0 0 16px;color:#64748b;font-size:14px;max-width:60ch}
+.index-foot{text-align:center;color:#64748b;font-size:14px;padding:48px 0}
+.index-foot a{color:#2563eb}
 /* Index TOC */
 .index-toc{display:flex;flex-wrap:wrap;gap:8px;padding:24px 0 8px;border-bottom:1px solid #e8edf3;margin-bottom:8px}
 .index-toc a{font-size:13px;font-weight:600;color:#475569;background:#f1f5f9;padding:4px 12px;border-radius:999px;text-decoration:none}
@@ -195,8 +205,8 @@ article strong{color:#0f172a}
   <a href="/blog/how-to-map-bc-mineral-claims-live-registry/">Read guide →</a>
 </div>
 <div class="hub-card">
-  <h3>How to Track BC Mineral Claim Good-to-Dates Without a Spreadsheet</h3>
-  <p>Monitor British Columbia mineral tenure good-to-dates, get email reminders at 90, 30 and 1 day, and see when the public record changes. Free for 10 claims. Verify in Mineral Titles Online.</p>
+  <h3>BC Mineral Claim Expiry Dates: How to Track Good-to-Dates and Get Reminders</h3>
+  <p>Track British Columbia mineral claim expiry dates without a spreadsheet. How good-to-dates work, what moves them, and how to get email reminders at 90, 30 and 1 day. Free for 10 claims. Verify in Mineral Titles Online.</p>
   <a href="/blog/how-to-track-bc-mineral-claim-good-to-dates/">Read guide →</a>
 </div>
 <div class="hub-card">
@@ -206,7 +216,7 @@ article strong{color:#0f172a}
 </div>
 <div class="hub-card">
   <h3>How to Make a Drill Results Map</h3>
-  <p>Turn a drill collar CSV into a clean drill results map for news releases and NI 43-101 reports: required columns, fixing coordinate issues, hole-ID callouts and intercept labels, and a print-ready export.</p>
+  <p>Turn a drill collar CSV into a drill hole map for a news release or technical report: required columns, coordinate fixes, how to present assay intercepts, callout discipline, claims and target context, and export settings.</p>
   <a href="/blog/how-to-make-a-drill-results-map/">Read guide →</a>
 </div>
 <div class="hub-card">
@@ -218,26 +228,6 @@ article strong{color:#0f172a}
   <h3>How to Import GeoJSON Data into a Mining Map</h3>
   <p>Import GeoJSON into a mining map in one click. Convert Shapefiles free at mapshaper.org, assign layer roles for automatic styling, and fix common coordinate-system issues.</p>
   <a href="/blog/how-to-import-geojson-mining-map/">Read guide →</a>
-</div>
-<div class="hub-card">
-  <h3>How to Choose the Right Basemap for a Mining Map</h3>
-  <p>Which basemap for a mining map? Light for technical reports, Satellite for investor decks, Topographic for access maps, Dark for social — with a quick-reference table.</p>
-  <a href="/blog/how-to-choose-basemap-mining-map/">Read guide →</a>
-</div>
-<div class="hub-card">
-  <h3>How to Export a Mining Map as a PDF</h3>
-  <p>Export a mining map as a print-ready PDF: page sizes for NI 43-101 figures and news releases, 3× pixel ratio for print, and watermark-free download.</p>
-  <a href="/blog/how-to-export-mining-map-pdf/">Read guide →</a>
-</div>
-<div class="hub-card">
-  <h3>How to Add a Distance Ring to a Mining Map</h3>
-  <p>Add a distance ring to a mining map: place the centre, set a true-distance radius in km, label the arc, and use outside-shade to focus attention on your project.</p>
-  <a href="/blog/how-to-add-distance-ring-mining-map/">Read guide →</a>
-</div>
-<div class="hub-card">
-  <h3>How to Add a Scale Bar and North Arrow to a Mining Map</h3>
-  <p>Add a scale bar and north arrow to a mining map in two clicks, position them by corner, and meet the standard expectations for NI 43-101 report figures.</p>
-  <a href="/blog/how-to-add-scale-bar-north-arrow/">Read guide →</a>
 </div>
 <div class="hub-card">
   <h3>How to Create a Target Generation Map</h3>
@@ -255,8 +245,8 @@ article strong{color:#0f172a}
   <a href="/blog/how-to-import-csv-data-mining-map/">Read guide →</a>
 </div>
 <div class="hub-card">
-  <h3>How to Create an NI 43-101 Compliant Map</h3>
-  <p>Build NI 43-101-ready map figures: the standard element checklist (scale, north arrow, legend, datum, date), where each lives in Exploration Maps, and a print-quality export.</p>
+  <h3>How to Prepare Map Figures for an NI 43-101 Technical Report</h3>
+  <p>Practical guidance on preparing map figures for an NI 43-101 technical report — figure elements, coordinate system and datum labelling, captions and numbering. The QP determines what the report requires.</p>
   <a href="/blog/how-to-create-ni-43-101-compliant-map/">Read guide →</a>
 </div>
 <div class="hub-card">
@@ -285,26 +275,36 @@ article strong{color:#0f172a}
   <a href="/blog/how-to-search-quebec-mining-claims/">Read guide →</a>
 </div>
 <div class="hub-card">
-  <h3>What to Include on a Mining Claim Map</h3>
-  <p>The complete checklist for a professional mining claim map — boundaries, labels, title block, legend, scale, context, inset, and the verification note most maps forget.</p>
-  <a href="/blog/what-to-include-on-a-mining-claim-map/">Read guide →</a>
-</div>
-<div class="hub-card">
-  <h3>How to Map Drill Results for a Junior Mining News Release</h3>
-  <p>Build a clear drill results figure for a junior mining news release: plot collars, highlight the headline intercepts, show targets and claims for context, and export a clean PNG or PDF that reads on a phone.</p>
-  <a href="/blog/map-drill-results-for-junior-mining-news-release/">Read guide →</a>
-</div>
-<div class="hub-card">
   <h3>Shapefile, KML, GeoJSON, and CSV: Which File Types Matter for Exploration Mapping?</h3>
   <p>Shapefile vs GeoJSON vs KML vs CSV for exploration mapping — what each format is for, the gotchas (missing .prj, UTM coordinates), and how to convert between them free.</p>
   <a href="/blog/exploration-mapping-file-types-shapefile-kml-geojson-csv/">Read guide →</a>
+</div>
+<div class="hub-card">
+  <h3>How to Make a Professional Mineral Exploration Map</h3>
+  <p>The map elements that make an exploration figure look competent: basemap choice, scale bar, north arrow, distance rings, title block, and export settings for slides, reports and news releases.</p>
+  <a href="/blog/how-to-make-a-professional-exploration-map/">Read guide →</a>
+</div>
+<div class="hub-card">
+  <h3>BC Mineral Titles Online (MTO): How to Find, Map and Monitor Mineral Claims</h3>
+  <p>What Mineral Titles Online is, what it is the authority for, and how to search, map and monitor British Columbia mineral claims — including where Exploration Maps helps and where you still need MTO.</p>
+  <a href="/blog/bc-mineral-titles-online-guide/">Read guide →</a>
+</div>
+<div class="hub-card">
+  <h3>How to Find Mineral Claims Owned by a Company in British Columbia</h3>
+  <p>Search BC mineral claims by registered owner to see a company's land position — for competitor research, project generation, due diligence and neighbouring-ground checks. Verify ownership in MTO.</p>
+  <a href="/blog/find-mineral-claims-owned-by-company-bc/">Read guide →</a>
+</div>
+<div class="hub-card">
+  <h3>Canadian Mineral Claim &amp; Tenure Registry Guide</h3>
+  <p>The official mineral tenure registry for each Canadian jurisdiction Exploration Maps supports, what you can search in each, and which ones can be searched, mapped and monitored directly.</p>
+  <a href="/blog/canadian-mineral-claim-registries/">Read guide →</a>
 </div></div>
 </div>
 <footer class="site-footer">
   <div class="site-footer-links">
     <a href="/mining-map-software/">Mining Map Software</a>
     <span class="site-footer-sep">·</span>
-    <a href="/mining-exploration-map-software/">Exploration Map Software</a>
+    <a href="/mineral-tenure-monitoring/">Tenure Monitoring</a>
     <span class="site-footer-sep">·</span>
     <a href="/bc-mineral-claims-map/">BC Claims Map</a>
     <span class="site-footer-sep">·</span>

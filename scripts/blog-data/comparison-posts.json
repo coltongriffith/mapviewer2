@@ -2,7 +2,7 @@
   {
     "slug": "exploration-maps-vs-arcgis",
     "title": "Exploration Maps vs ArcGIS for Mining Maps",
-    "metaDescription": "Comparing Exploration Maps and ArcGIS for creating mining exploration maps. See which tool is faster, cheaper, and better for junior mining companies.",
+    "metaDescription": "ArcGIS versus Exploration Maps for mining exploration mapping — enterprise GIS capability and licensing against a focused tool for claim maps, drill figures and investor materials.",
     "directAnswer": "Exploration Maps is purpose-built for investor-ready mining maps and can produce a polished export in 15–30 minutes with no GIS training required. ArcGIS is a full GIS platform best suited for complex spatial analysis, but requires expensive licensing, significant training, and hours of configuration to produce presentation-quality map outputs.",
     "competitor": "ArcGIS",
     "competitorUrl": "https://www.esri.com/arcgis",
@@ -13,7 +13,7 @@
       },
       {
         "h2": "Speed to a Polished Map",
-        "body": "In ArcGIS, producing a presentation-quality map requires setting up a project, importing data, managing coordinate systems, configuring the layout view with title blocks and legends, and often several rounds of style adjustments. A first map typically takes 2–4 hours for someone experienced with the software. In Exploration Maps, importing data, applying a theme, and exporting a polished PNG takes 15–30 minutes on a first use — with no prior experience required."
+        "body": "In ArcGIS, producing a presentation-quality map requires setting up a project, importing data, managing coordinate systems, configuring the layout view with title blocks and legends, and often several rounds of style adjustments. A first map typically takes 2–4 hours for someone experienced with the software. In Exploration Maps, importing data, applying a theme, and exporting a polished PNG takes less timeutes on a first use — with no prior experience required."
       },
       {
         "h2": "Cost Comparison",
@@ -96,79 +96,82 @@
       "best-mining-map-software-junior-exploration",
       "how-to-make-a-mining-claims-map"
     ],
-    "publishedDate": "2026-01-12"
+    "publishedDate": "2026-01-12",
+    "category": "gis-data",
+    "cardSummary": "Enterprise GIS against a focused figure builder — what each is actually for."
   },
   {
     "slug": "exploration-maps-vs-qgis",
     "title": "Exploration Maps vs QGIS for Exploration Mapping",
-    "metaDescription": "Comparing Exploration Maps and QGIS for mining and exploration mapping. Which is better for investor presentations, news releases, and NI 43-101 maps?",
-    "directAnswer": "QGIS is a powerful free and open-source GIS platform ideal for spatial analysis and data processing. Exploration Maps is faster for producing polished investor-ready maps with no setup or GIS expertise required. Most exploration teams use both: QGIS for data preparation and analysis, Exploration Maps for final presentation-quality outputs.",
+    "metaDescription": "Where QGIS is the right tool for exploration work and where a focused map builder is — spatial analysis and projection management versus presentation-ready claim and drill figures.",
+    "directAnswer": "QGIS is a full open-source GIS and it is the better tool for spatial analysis, coordinate system management, raster and geophysical processing, and advanced cartography. Exploration Maps is narrower on purpose: it produces presentation-ready exploration figures — claim maps, drill collar plans, investor and news-release figures — without a desktop install or a layout composer. Most exploration teams end up using both, with QGIS for preparation and analysis and Exploration Maps for the figure that goes out.",
     "competitor": "QGIS",
     "competitorUrl": "https://qgis.org",
     "sections": [
       {
-        "h2": "QGIS: Powerful and Free, But Complex",
-        "body": "QGIS is an excellent free and open-source GIS platform that can do nearly everything ArcGIS can do. It handles coordinate system transformations, geospatial analysis, grid processing, and complex cartography. However, producing a polished map in QGIS — with a styled title block, legend, north arrow, scale bar, and company branding — requires significant configuration in the Print Layout module, a skill that takes time to develop."
+        "h2": "What QGIS is genuinely better at",
+        "body": "QGIS handles coordinate system transformation and CRS management properly, does real spatial analysis, processes rasters and geophysical grids, and its print layout composer will produce any cartographic output you can specify. It is free and open source, actively developed, and it is the correct answer for most serious GIS work in an exploration company. If your problem is analytical, use QGIS."
       },
       {
         "h2": "Exploration Maps: Fast Output, No Configuration",
-        "body": "Exploration Maps produces investor-ready maps in 15–30 minutes with zero configuration. Design themes handle all the styling automatically — title blocks, legends, panel colors, and fonts are all pre-configured. For a geologist who needs to produce a clean map for an investor deck on Friday afternoon, this is a significant practical advantage."
+        "body": "Exploration Maps is deliberately narrow. Design themes fix the title block, legend, panel colours and fonts, so producing a figure is a matter of adding data and framing it rather than composing a layout. That is a real constraint as well as a convenience — if you need a bespoke cartographic layout, a layout composer is the right tool and QGIS has one."
       },
       {
-        "h2": "The Best Workflow: Use Both",
+        "h2": "Using both",
         "body": "Most experienced exploration teams use a hybrid workflow: QGIS for data preparation, coordinate system management, and any spatial analysis (clipping, buffering, processing geophysical grids), then export the results as GeoJSON for import into Exploration Maps for final presentation-quality output. This leverages the strengths of both tools."
       },
       {
-        "h2": "Cost and Accessibility",
-        "body": "QGIS is free — a major advantage for bootstrapped junior companies. Exploration Maps is low-cost and browser-based, requiring no installation. For teams without an in-house GIS specialist, the time cost of learning QGIS for cartographic output often exceeds the value of the free license. Exploration Maps reduces that time cost significantly."
+        "h2": "Cost, and the honest version of the trade-off",
+        "body": "QGIS is free, which matters to a bootstrapped junior. Exploration Maps has a free tier and a $29/month Pro tier. The trade-off is not price, and it is not quality — a skilled GIS user will produce a better map in QGIS than in anything else, given time.",
+        "html": "The trade-off is who is doing the work and how often. A team with a GIS specialist should keep using QGIS. A team where the geologist is also the cartographer, producing the same kinds of figures repeatedly under deadline, generally finds a narrower tool gets the figure out. Both things can be true."
       }
     ],
     "comparisonTable": {
       "headers": [
-        "Feature",
-        "Exploration Maps",
-        "QGIS"
+        "",
+        "QGIS",
+        "Exploration Maps"
       ],
       "rows": [
         [
           "Cost",
-          "Low",
-          "Free"
+          "Free, open source",
+          "Free tier; Pro $29/month"
         ],
         [
-          "Setup required",
-          "None",
-          "Installation + plugins"
-        ],
-        [
-          "Learning curve",
-          "Minutes",
-          "Hours to days"
-        ],
-        [
-          "Time to polished map",
-          "15–30 min",
-          "1–3 hours"
+          "Install",
+          "Desktop application",
+          "Browser"
         ],
         [
           "Spatial analysis",
-          "Basic",
-          "Full-featured"
+          "Full — clipping, buffering, raster and geophysical processing",
+          "Not an analysis tool"
         ],
         [
-          "Investor-ready themes",
-          "Built-in",
-          "Manual layout config"
+          "Coordinate systems",
+          "Full reprojection and CRS management",
+          "Expects WGS84; converts common inputs"
         ],
         [
-          "Browser-based",
-          "Yes",
-          "No (desktop)"
+          "Cartography",
+          "Unlimited via the print layout composer",
+          "Themed layouts with fixed structure"
         ],
         [
-          "Best for",
-          "Presentation maps",
-          "Data analysis + maps"
+          "Mineral claim search",
+          "Manual — download and import registry data yourself",
+          "Built in for seven Canadian jurisdictions"
+        ],
+        [
+          "Tenure deadline tracking",
+          "Not a GIS function",
+          "Tenure Monitor (British Columbia)"
+        ],
+        [
+          "Best at",
+          "Analysis, data preparation, bespoke cartography",
+          "Repeatable presentation figures"
         ]
       ]
     },
@@ -187,7 +190,10 @@
       "how-to-import-geojson-mining-map",
       "best-mining-map-software-junior-exploration"
     ],
-    "publishedDate": "2026-01-19"
+    "publishedDate": "2026-01-19",
+    "category": "gis-data",
+    "cardSummary": "QGIS for analysis and projection management, Exploration Maps for presentation figures. Most teams use both.",
+    "fullTitle": "QGIS vs Exploration Maps"
   },
   {
     "slug": "best-mining-map-software-junior-exploration",
@@ -197,7 +203,10 @@
     "competitor": "Multiple",
     "sections": [
       {
-        "cta": { "text": "Turn public claim data into a clean map.", "sub": "See how fast an investor-ready map comes together — no GIS setup." }
+        "cta": {
+          "text": "Turn public claim data into a clean map.",
+          "sub": "See how fast an investor-ready map comes together — no GIS setup."
+        }
       },
       {
         "h2": "What junior mining companies actually need from a map tool",
@@ -216,7 +225,10 @@
       {
         "h2": "Exploration Maps: fastest path to a clean investor map",
         "body": "Exploration Maps is purpose-built for junior mining presentation maps. It ships investor-ready themes pre-configured with north arrow, scale bar, legend, and title block, searches public claim data, and imports shapefiles, KML, GeoJSON, and drillhole CSVs — browser-based, no GIS training. It is deliberately not a full GIS: for analysis you'll still want QGIS or ArcGIS.",
-        "cta": { "text": "Import your file and export an investor-ready map.", "sub": "Drop in a shapefile or CSV and export a clean PNG or PDF." }
+        "cta": {
+          "text": "Import your file and export an investor-ready map.",
+          "sub": "Drop in a shapefile or CSV and export a clean PNG or PDF."
+        }
       },
       {
         "h2": "QGIS: best free option with full GIS power",
@@ -235,7 +247,10 @@
         "body": "Some teams polish a GIS-exported map in Illustrator for a bespoke look. Illustrator produces beautiful output but can't handle geographic data natively — it's a finishing layer, not a mapping tool, and impractical for quick, repeatable investor maps."
       },
       {
-        "cta": { "text": "Search a claimholder and create a map.", "sub": "Try the fast path for your next deck or news-release figure." }
+        "cta": {
+          "text": "Search a claimholder and create a map.",
+          "sub": "Try the fast path for your next deck or news-release figure."
+        }
       }
     ],
     "comparisonTable": {
@@ -308,7 +323,9 @@
       "how-to-make-a-mining-claims-map",
       "how-to-create-exploration-map-investor-presentation"
     ],
-    "publishedDate": "2026-01-26"
+    "publishedDate": "2026-01-26",
+    "category": "exploration-mapping",
+    "fullTitle": "Best Mining Map Software for Junior Explorers | Exploration Maps"
   },
   {
     "slug": "exploration-maps-vs-mapinfo",
@@ -416,6 +433,7 @@
       "best-mining-map-software-junior-exploration",
       "how-to-make-a-mining-claims-map"
     ],
-    "publishedDate": "2026-02-02"
+    "publishedDate": "2026-02-02",
+    "category": "gis-data"
   }
 ]
