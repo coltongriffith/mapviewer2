@@ -780,6 +780,10 @@ export default function App() {
     if (window.location.pathname.startsWith('/map/')) return 'shared_view';
     return 'landing';
   });
+  // A filter the dashboard's attention rows asked the monitor to open on.
+  // Cleared on every other route into the monitor so it cannot linger and
+  // silently filter a later visit the user did not ask to be filtered.
+  const [tenureInitialFilter, setTenureInitialFilter] = useState(null);
   const [sharedMapId, setSharedMapId] = useState(() => {
     const m = window.location.pathname.match(/^\/map\/([^/]+)/);
     return m ? m[1] : null;
@@ -1539,7 +1543,7 @@ export default function App() {
 
   // A signed-in customer landing on "/" should see their work, not the pitch.
   //
-  // Five conditions, and every one of them is load-bearing:
+  // Five conditions on the redirect itself, and every one is load-bearing:
   //
   //   authLoading  — redirecting before auth resolves would bounce a signed-out
   //                  visitor off the marketing page for a moment, or worse,
@@ -1554,18 +1558,48 @@ export default function App() {
   //                  request. Checked as "any query string at all" rather than a
   //                  list, so a new parameter cannot silently start being eaten.
   //
-  // It runs once per sign-in rather than continuously: `redirectedHomeRef`
-  // means a user who clicks the wordmark to reach the landing page STAYS there
-  // instead of being bounced back, which would make the marketing site
-  // unreachable for anybody with an account.
-  const redirectedHomeRef = useRef(false);
+  // TWO SEPARATE PIECES OF STATE, because they answer different questions and
+  // an earlier version conflated them into one ref that got both wrong:
+  //
+  //   wantsLandingRef       did the user ASK for the marketing page? Set by
+  //                         goToLanding() at every deliberate navigation to it.
+  //                         Without this, somebody who entered through
+  //                         /dashboard — a bookmark, the usual case for a
+  //                         returning customer — could never reach the landing
+  //                         page at all: the ref had never been set, so the
+  //                         first click on the wordmark bounced straight back.
+  //
+  //   redirectedForUserRef  which account have we already redirected? Keyed by
+  //                         user id and cleared on sign-out, so this genuinely
+  //                         means "once per sign-in". A single boolean meant
+  //                         "once per page load", and a second sign-in in the
+  //                         same tab silently stopped redirecting.
+  const wantsLandingRef = useRef(false);
+  const redirectedForUserRef = useRef(null);
+
+  const goToLanding = useCallback(() => {
+    wantsLandingRef.current = true;
+    setScreen('landing');
+  }, []);
+
+  useEffect(() => {
+    // Signing out forgets both: the next sign-in is a fresh session and should
+    // be sent to its dashboard, and it should not inherit the previous user's
+    // decision to sit on the marketing page.
+    if (!user) {
+      redirectedForUserRef.current = null;
+      wantsLandingRef.current = false;
+    }
+  }, [user]);
+
   useEffect(() => {
     if (authLoading || !user) return;
-    if (redirectedHomeRef.current) return;
+    if (wantsLandingRef.current) return;
+    if (redirectedForUserRef.current === user.id) return;
     if (screen !== 'landing') return;
     if (window.location.pathname !== '/') return;
     if (window.location.search) return;
-    redirectedHomeRef.current = true;
+    redirectedForUserRef.current = user.id;
     setScreen('dashboard');
   }, [authLoading, user, screen]);
 
@@ -4215,7 +4249,7 @@ export default function App() {
   if (screen === 'admin') {
     return (
       <React.Suspense fallback={null}>
-        <AdminPage onExit={() => setScreen('landing')} />
+        <AdminPage onExit={goToLanding} />
       </React.Suspense>
     );
   }
@@ -4229,7 +4263,7 @@ export default function App() {
             <p className="acct-signin-hint">Your projects and brand kits live in your account.</p>
             <div className="acct-signin-actions">
               <button className="btn" type="button" onClick={() => setShowAuthFromGate(true)}>Sign in / Create account</button>
-              <button className="secondary-btn" type="button" onClick={() => setScreen('landing')}>← Back</button>
+              <button className="secondary-btn" type="button" onClick={goToLanding}>← Back</button>
             </div>
           </div>
           {showAuthFromGate && <AuthModal onClose={() => setShowAuthFromGate(false)} />}
@@ -4261,7 +4295,8 @@ export default function App() {
     return (
       <React.Suspense fallback={null}>
         <TenureMonitorPage
-          onExit={() => setScreen('landing')}
+          initialFilter={tenureInitialFilter}
+          onExit={goToLanding}
           onOpenTenuresInEditor={handleOpenTenuresInEditor}
           onUpgrade={(reason) => setUpgradeReason(reason || 'general')}
           onSignIn={() => setShowAuthFromGate(true)}
@@ -4314,7 +4349,7 @@ export default function App() {
             <p className="acct-signin-hint">Your saved maps and monitored claims live in your account.</p>
             <div className="acct-signin-actions">
               <button className="btn" type="button" onClick={() => setShowAuthFromGate(true)}>Sign in / Create account</button>
-              <button className="secondary-btn" type="button" onClick={() => setScreen('landing')}>← Back</button>
+              <button className="secondary-btn" type="button" onClick={goToLanding}>← Back</button>
             </div>
           </div>
           {showAuthFromGate && <AuthModal onClose={() => setShowAuthFromGate(false)} />}
@@ -4326,11 +4361,11 @@ export default function App() {
         onOpenProject={(entry) => { openProjectFromRecent(entry); setScreen('editor'); }}
         onNewProject={() => { startNewProject(); setScreen('editor'); }}
         onOpenEditor={() => setScreen('editor')}
-        onOpenTenureMonitor={() => setScreen('tenure')}
+        onOpenTenureMonitor={(filter = null) => { setTenureInitialFilter(filter); setScreen('tenure'); }}
         onOpenAccount={() => setScreen('account')}
         onOpenBrandKits={() => { setScreen('editor'); setShowBrandKitManager(true); }}
         onSearchClaims={() => { setScreen('editor'); setAddClaimsModalPath('registry'); setShowAddClaimsModal(true); }}
-        onExit={() => setScreen('landing')}
+        onExit={goToLanding}
       />
     );
   }
@@ -4348,7 +4383,7 @@ export default function App() {
           onSearchBCClaims={() => { setScreen('editor'); setAddClaimsModalPath('registry'); setShowAddClaimsModal(true); }}
           onUploadFile={() => { setScreen('editor'); setAddClaimsModalPath('upload'); setShowAddClaimsModal(true); }}
           onOpenAccount={() => setScreen('dashboard')}
-          onOpenTenureMonitor={() => setScreen('tenure')}
+          onOpenTenureMonitor={() => { setTenureInitialFilter(null); setScreen('tenure'); }}
         />
         {showHelpModal && <React.Suspense fallback={null}><HowToUseModal onClose={() => setShowHelpModal(false)} /></React.Suspense>}
       </>
@@ -4363,15 +4398,15 @@ export default function App() {
           <button type="button" onClick={() => { setShowMobileBanner(false); try { sessionStorage.setItem('em_mobile_banner_dismissed', '1'); } catch { /* noop */ } }} aria-label="Dismiss">✕</button>
         </div>
       )}
-      <Sidebar footer={<UserMenu onOpenTemplates={() => setShowBrandKitManager(true)} onOpenAccount={() => setScreen('dashboard')} onOpenTenureMonitor={() => setScreen('tenure')} />}>
+      <Sidebar footer={<UserMenu onOpenTemplates={() => setShowBrandKitManager(true)} onOpenAccount={() => setScreen('dashboard')} onOpenTenureMonitor={() => { setTenureInitialFilter(null); setScreen('tenure'); }} />}>
         <div className="sidebar-header-row">
-          <button className="sidebar-wordmark" type="button" onClick={() => setScreen('landing')}>
+          <button className="sidebar-wordmark" type="button" onClick={goToLanding}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" fill="#2563eb" />
             </svg>
             Exploration Maps
           </button>
-          <button className="sidebar-home-link" type="button" onClick={() => setScreen('landing')}>← Home</button>
+          <button className="sidebar-home-link" type="button" onClick={goToLanding}>← Home</button>
         </div>
 
         {showOnboarding ? (
