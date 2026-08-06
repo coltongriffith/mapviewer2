@@ -6,6 +6,7 @@ import LayerList from './components/LayerList';
 import LocatorInset from './components/LocatorInset';
 import CalloutsOverlay from './components/CalloutsOverlay';
 import LandingPage from './components/LandingPage';
+import DashboardPage from './components/DashboardPage';
 import SharedMapViewer from './components/SharedMapViewer';
 import UploadPanel from './components/UploadPanel';
 import AnnotationOverlay from './components/AnnotationOverlay';
@@ -758,7 +759,7 @@ export default function App() {
   const insetInputRef = useRef(null);
   const uploadInputRef = useRef(null);
 
-  const { user, signInWithMagicLink, isPro, planDenied, entitlements, tier, refreshPlan } = useAuth();
+  const { user, loading: authLoading, signInWithMagicLink, isPro, planDenied, entitlements, tier, refreshPlan } = useAuth();
   const [storageWarningDismissed, setStorageWarningDismissed] = useState(false);
   const [showBrandKitManager, setShowBrandKitManager] = useState(false);
   const [showAuthFromGate, setShowAuthFromGate] = useState(false);
@@ -773,6 +774,7 @@ export default function App() {
 
   const [screen, setScreen] = useState(() => {
     if (window.location.pathname === '/admin') return 'admin';
+    if (window.location.pathname === '/dashboard') return 'dashboard';
     if (window.location.pathname === '/account') return 'account';
     if (window.location.pathname === '/tenure-monitor') return 'tenure';
     if (window.location.pathname.startsWith('/map/')) return 'shared_view';
@@ -1524,15 +1526,48 @@ export default function App() {
   // and browser navigation did nothing useful (audit P1-17).
   useEffect(() => {
     const target = screen === 'admin' ? '/admin'
-      : screen === 'account' ? '/account'
-        : screen === 'tenure' ? '/tenure-monitor'
-          : (screen === 'shared_view' && sharedMapId) ? `/map/${sharedMapId}`
-            : '/';
+      : screen === 'dashboard' ? '/dashboard'
+        : screen === 'account' ? '/account'
+          : screen === 'tenure' ? '/tenure-monitor'
+            : (screen === 'shared_view' && sharedMapId) ? `/map/${sharedMapId}`
+              : '/';
     if (window.location.pathname === target) return;
     try {
       window.history.pushState({ screen, sharedMapId: sharedMapId || null }, '', target);
     } catch { /* history unavailable — URL simply won't track */ }
   }, [screen, sharedMapId]);
+
+  // A signed-in customer landing on "/" should see their work, not the pitch.
+  //
+  // Five conditions, and every one of them is load-bearing:
+  //
+  //   authLoading  — redirecting before auth resolves would bounce a signed-out
+  //                  visitor off the marketing page for a moment, or worse,
+  //                  land a signed-in one on the pitch and then yank it away.
+  //   user         — anonymous visitors must always get the landing page. It is
+  //                  the acquisition funnel and everything the SEO work points at.
+  //   screen       — only from 'landing'. Never interrupt the editor, a shared
+  //                  map, or a screen the user navigated to deliberately.
+  //   pathname     — only at exactly "/". A deep link is an explicit destination.
+  //   no params    — ?claims=, ?tenure=, ?intent= and friends all mean "open the
+  //                  editor and do this"; a dashboard redirect would swallow the
+  //                  request. Checked as "any query string at all" rather than a
+  //                  list, so a new parameter cannot silently start being eaten.
+  //
+  // It runs once per sign-in rather than continuously: `redirectedHomeRef`
+  // means a user who clicks the wordmark to reach the landing page STAYS there
+  // instead of being bounced back, which would make the marketing site
+  // unreachable for anybody with an account.
+  const redirectedHomeRef = useRef(false);
+  useEffect(() => {
+    if (authLoading || !user) return;
+    if (redirectedHomeRef.current) return;
+    if (screen !== 'landing') return;
+    if (window.location.pathname !== '/') return;
+    if (window.location.search) return;
+    redirectedHomeRef.current = true;
+    setScreen('dashboard');
+  }, [authLoading, user, screen]);
 
   // Respond to Back/Forward by deriving the screen from the URL the browser
   // restored, rather than leaving the app on a screen the URL disagrees with.
@@ -1541,6 +1576,7 @@ export default function App() {
       const path = window.location.pathname;
       const fromState = e.state?.screen;
       if (path === '/admin') setScreen('admin');
+      else if (path === '/dashboard') setScreen('dashboard');
       else if (path === '/account') setScreen('account');
       else if (path === '/tenure-monitor') setScreen('tenure');
       else if (path.startsWith('/map/')) {
@@ -4203,9 +4239,8 @@ export default function App() {
     return (
       <React.Suspense fallback={null}>
         <AccountPage
-          onOpenProject={(entry) => { openProjectFromRecent(entry); setScreen('editor'); }}
-          onNewProject={() => { startNewProject(); setScreen('editor'); }}
-          onExit={() => setScreen('landing')}
+          onExit={() => setScreen('dashboard')}
+          onOpenDashboard={() => setScreen('dashboard')}
           onApplyBrandKit={(config) => {
             updateLayout(applyBrandKitConfig(config, project.layout));
             setScreen('editor');
@@ -4267,6 +4302,39 @@ export default function App() {
     );
   }
 
+  if (screen === 'dashboard') {
+    // Same gate /account has. Somebody arriving on /dashboard signed out — a
+    // bookmark, a shared link, an expired session — gets an explanation and a
+    // way in, not an empty shell that looks like their work disappeared.
+    if (!user) {
+      return (
+        <div className="acct-signin-gate">
+          <div className="acct-signin-card">
+            <h2>Sign in to see your maps</h2>
+            <p className="acct-signin-hint">Your saved maps and monitored claims live in your account.</p>
+            <div className="acct-signin-actions">
+              <button className="btn" type="button" onClick={() => setShowAuthFromGate(true)}>Sign in / Create account</button>
+              <button className="secondary-btn" type="button" onClick={() => setScreen('landing')}>← Back</button>
+            </div>
+          </div>
+          {showAuthFromGate && <AuthModal onClose={() => setShowAuthFromGate(false)} />}
+        </div>
+      );
+    }
+    return (
+      <DashboardPage
+        onOpenProject={(entry) => { openProjectFromRecent(entry); setScreen('editor'); }}
+        onNewProject={() => { startNewProject(); setScreen('editor'); }}
+        onOpenEditor={() => setScreen('editor')}
+        onOpenTenureMonitor={() => setScreen('tenure')}
+        onOpenAccount={() => setScreen('account')}
+        onOpenBrandKits={() => { setScreen('editor'); setShowBrandKitManager(true); }}
+        onSearchClaims={() => { setScreen('editor'); setAddClaimsModalPath('registry'); setShowAddClaimsModal(true); }}
+        onExit={() => setScreen('landing')}
+      />
+    );
+  }
+
   if (screen === 'landing') {
     return (
       <>
@@ -4279,7 +4347,7 @@ export default function App() {
           onShowHelp={() => setShowHelpModal(true)}
           onSearchBCClaims={() => { setScreen('editor'); setAddClaimsModalPath('registry'); setShowAddClaimsModal(true); }}
           onUploadFile={() => { setScreen('editor'); setAddClaimsModalPath('upload'); setShowAddClaimsModal(true); }}
-          onOpenAccount={() => setScreen('account')}
+          onOpenAccount={() => setScreen('dashboard')}
           onOpenTenureMonitor={() => setScreen('tenure')}
         />
         {showHelpModal && <React.Suspense fallback={null}><HowToUseModal onClose={() => setShowHelpModal(false)} /></React.Suspense>}
@@ -4295,7 +4363,7 @@ export default function App() {
           <button type="button" onClick={() => { setShowMobileBanner(false); try { sessionStorage.setItem('em_mobile_banner_dismissed', '1'); } catch { /* noop */ } }} aria-label="Dismiss">✕</button>
         </div>
       )}
-      <Sidebar footer={<UserMenu onOpenTemplates={() => setShowBrandKitManager(true)} onOpenAccount={() => setScreen('account')} onOpenTenureMonitor={() => setScreen('tenure')} />}>
+      <Sidebar footer={<UserMenu onOpenTemplates={() => setShowBrandKitManager(true)} onOpenAccount={() => setScreen('dashboard')} onOpenTenureMonitor={() => setScreen('tenure')} />}>
         <div className="sidebar-header-row">
           <button className="sidebar-wordmark" type="button" onClick={() => setScreen('landing')}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
