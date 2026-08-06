@@ -39,6 +39,54 @@ Where the province publishes no good-to-date for a title, we show *"Date
 unavailable — verify in MTO"* rather than a number. We would rather tell you we
 don't know than invent a countdown.
 
+The same applies to the handful of records where the province has left a
+placeholder date in the feed. We treat those as no date rather than counting
+down from 1900.
+
+---
+
+## Applications are marked as applications
+
+The B.C. dataset publishes **applications alongside granted titles**, in the
+same feed and with the same columns — about 2,500 of them at the time of
+writing. Anything the province publishes as an application carries an
+**Application** tag in the table, in search results and on the claim panel.
+
+This matters because an application is not held ground. The date shown on one
+comes from the same government column as a granted claim's good-to-date, but it
+is **not a confirmed maintenance deadline**, and the reminder email for an
+application says so rather than telling you a claim is about to lapse.
+
+**What we don't show, and why.** This dataset publishes no application status,
+no stage, no expected decision date and nothing about consultation. So Tenure
+Monitor shows none of those. We would have to guess, and guessing about where a
+title application stands is not something you should be reading off a map
+product. Check MTO.
+
+---
+
+## Groups of claims
+
+A portfolio is a **group of claims** — a project, a region, a joint venture, or
+just "everything we hold". Each group has its own reminder settings, its own
+recipients, its own map and its own CSV export, so a reminder about your Cariboo
+ground doesn't arrive mixed in with the Golden Triangle.
+
+Use **New group** in the header to start another, and the picker beside it to
+switch. Free plans keep one group; Pro keeps several.
+
+---
+
+## Watching ground you don't own
+
+A portfolio is a watch list, not an ownership record. You can monitor **any**
+registered B.C. title — a competitor's ground, a property you are evaluating, a
+block next to your own — using exactly the same portfolios, groups and reminders
+as your own claims. Search by registered owner, select the titles, add them.
+
+Nothing about doing so is visible to the title holder, and nothing about it
+changes the title.
+
 ---
 
 ## Adding claims
@@ -81,8 +129,12 @@ otherwise be reminded about.
 
 By default, before each claim's good-to-date:
 
-- **Free plan** — 90 and 30 days
-- **Pro** — 90, 30 and 7 days
+- **Free plan** — 90, 30 and 1 day
+- **Pro** — 90, 30, 7 and 1 day
+
+The final one-day reminder is on every plan, free included. Going quiet the day
+before a deadline is the failure this feature exists to prevent, so it is not
+something we hold back for a paid tier.
 
 Reminders go out in the morning, Pacific time. Each one names the tenure number,
 the claim, the registered owner, the good-to-date, the days remaining, your
@@ -221,7 +273,7 @@ portfolio.
 |---|---|---|
 | Monitored B.C. tenures | 10 | 50 |
 | Portfolios | 1 | Several |
-| Reminder thresholds | 90, 30 days | 90, 30, 7 days |
+| Reminder thresholds | 90, 30, 1 days | 90, 30, 7, 1 days |
 | Alert recipients | 1 | 2 |
 | Claim table and portfolio map | ✓ | ✓ |
 | CSV claim schedule | ✓ | ✓ |

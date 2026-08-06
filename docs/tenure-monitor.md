@@ -118,19 +118,76 @@ cannot be attributed to one of several co-owners.
 `tests/tenure-import.test.js` pins this schema verbatim so the mapping cannot
 drift back unnoticed.
 
-#### Still open
+#### Answered by the first full sync (42,316 rows, 2026-08)
 
-1. Does the layer include expired / terminated titles, or only active ones?
-   `TERMINATION_DATE` and `TERMINATION_TYPE_DESCRIPTION` exist and were `null`
-   on the sampled feature, which is consistent with terminated titles being
-   retained — but one active sample cannot confirm it. Confirm on the first
-   full sync by counting rows with a non-null termination date.
-2. Are placer and coal titles in this layer or in separate ones? The sample was
-   `TENURE_TYPE_DESCRIPTION = "Mineral"`; a full sync will show the distinct
-   values.
-3. Ownership is published as one flat `OWNER_NAME` plus a `NUMBER_OF_OWNERS`
-   count, so `ownersAreDiscrete` stays `false` and any multi-owner split remains
-   marked as ours rather than the province's.
+The three questions the discover run left open are now settled against the
+live mirror.
+
+**1. Terminated titles are retained.** 23 rows carry a non-null
+`termination_date`, and 1,003 carry a `good_to_date` in the past. The layer is
+not filtered to titles in good standing, so the portfolio view must keep saying
+"verify in MTO" rather than reading absence as termination.
+
+**2. Placer and coal share the layer, and so do applications.**
+
+| `tenure_type` | `tenure_subtype` | Rows |
+|---|---|---:|
+| Mineral | CLAIM | 30,385 |
+| Placer | CLAIM | 7,853 |
+| Mineral | APPLICATION | 1,725 |
+| Coal | LICENSE | 858 |
+| Placer | APPLICATION | 783 |
+| Mineral | LEASE | 447 |
+| Placer | LEASE | 199 |
+| Coal | APPLICATION | 41 |
+| Coal | LEASE | 25 |
+
+**3. Ownership** is published as one flat `OWNER_NAME` plus a
+`NUMBER_OF_OWNERS` count, so `ownersAreDiscrete` stays `false` and any
+multi-owner split remains marked as ours rather than the province's.
+
+#### Applications share the layer with granted titles
+
+`TENURE_SUB_TYPE_DESCRIPTION = 'APPLICATION'` — **2,549 rows**, about 6% of the
+mirror. They arrive with the same columns as a granted claim, **including a
+`GOOD_TO_DATE`**, and for the first weeks of this feature nothing downstream
+told them apart: an application appeared in a portfolio, in the table, on the
+map and in a reminder email looking exactly like ground somebody held.
+
+`src/utils/tenureKind.js` is now the single discriminator. Two rules it exists
+to enforce:
+
+- **`TENURE_SUB_TYPE_DESCRIPTION` is the discriminator. `TITLE_TYPE_DESCRIPTION`
+  is not.** "Mineral Cell Title Submission" is carried by 25,401 granted
+  `CLAIM`s and 1,725 `APPLICATION`s alike — the word "Submission" describes how
+  a claim was staked, not whether it was granted. Anything reaching for the
+  title type would classify two-thirds of B.C.'s live mineral claims as
+  applications.
+- **We report the subtype and stop.** This layer publishes no application
+  status, stage, decision date or consultation state, so Tenure Monitor offers
+  none. No "under review", no expected-decision date, no progress indicator.
+  Inferring a stage from an issue date would be inventing a government fact.
+
+An unrecognised subtype classifies as `unknown`, not as granted — defaulting an
+unfamiliar value to "granted" would quietly reintroduce the same confusion the
+next time the province adds a category.
+
+#### Placeholder dates
+
+Three application rows carry `1900-01-01` in **both** `ISSUE_DATE` and
+`GOOD_TO_DATE`. That is a sentinel for a missing value, not a date from 1900,
+and rendering it as one produced "46,000 days ago" on a dashboard whose whole
+job is to be trusted about dates.
+
+`isPlaceholderDate()` in `src/utils/tenureDates.js` treats `1900-01-01`,
+`0001-01-01` and `9999-12-31` as absent: `daysRemaining` returns `null`, the
+urgency band becomes *"Date unavailable — verify in MTO"*, and
+`planExpiryAlerts` schedules nothing off a date we do not actually have.
+
+The rule is an **exact set, not a cutoff**. B.C.'s oldest genuine issue date in
+the mirror is 1891-07-29 and its oldest genuine good-to-date is 1991, so a
+"before 1950" heuristic would have discarded real records to catch three fake
+ones.
 
 ---
 
@@ -330,7 +387,7 @@ Enforced by `public.tenure_plan_limits()`; mirrored for the UI in
 | Monitored tenures | 10 | 50 | 500 |
 | Portfolios | 1 | unlimited | unlimited |
 | Alert recipients | 1 | 2 | 10 |
-| Reminder thresholds | 90, 30 | 90, 30, 7 | full ladder |
+| Reminder thresholds | 90, 30, 1 | 90, 30, 7, 1 | full ladder |
 
 Creating a portfolio and adding tenures go through RPCs; direct `INSERT` is
 revoked, so the quota cannot be raced by two tabs or bypassed by a direct call.

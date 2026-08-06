@@ -31,6 +31,11 @@ export default function AlertSettings({ portfolio, entitlements, onClose, onUpgr
 
   const allowed = alertOffsetsFor(entitlements);
   const locked = lockedAlertOffsets(entitlements);
+  // Every threshold this account could ever see, longest lead time first.
+  const rungs = [
+    ...allowed.map((days) => ({ days, isLocked: false })),
+    ...locked.map((days) => ({ days, isLocked: true })),
+  ].sort((a, b) => b.days - a.days);
 
   useEffect(() => {
     let cancelled = false;
@@ -132,26 +137,23 @@ export default function AlertSettings({ portfolio, entitlements, onClose, onUpgr
             automatically and the outdated ones are cancelled.
           </p>
 
+          {/* One list in lead-time order, locked thresholds in place rather
+              than appended. Free plans now include the 1-day reminder, so a
+              locked 7-day sitting below it would read as the shortest option
+              available and misrepresent both. */}
           <ul className="tm-offset-list">
-            {allowed.map((d) => (
-              <li key={d}>
+            {rungs.map(({ days, isLocked }) => (
+              <li key={days} className={isLocked ? 'tm-offset-locked' : undefined}>
                 <label className="tm-checkbox">
                   <input
                     type="checkbox"
-                    checked={current.has(d)}
-                    onChange={() => toggleOffset(d)}
+                    disabled={isLocked}
+                    checked={!isLocked && current.has(days)}
+                    onChange={isLocked ? undefined : () => toggleOffset(days)}
                   />
-                  <span>{OFFSET_LABEL(d)}</span>
-                </label>
-              </li>
-            ))}
-            {locked.map((d) => (
-              <li key={d} className="tm-offset-locked">
-                <label className="tm-checkbox">
-                  <input type="checkbox" disabled checked={false} />
                   <span>
-                    {OFFSET_LABEL(d)}
-                    <span className="tm-lock-tag">Pro</span>
+                    {OFFSET_LABEL(days)}
+                    {isLocked && <span className="tm-lock-tag">Pro</span>}
                   </span>
                 </label>
               </li>
@@ -162,7 +164,7 @@ export default function AlertSettings({ portfolio, entitlements, onClose, onUpgr
               <button type="button" className="tm-link-btn" onClick={onUpgrade}>
                 Upgrade to Pro
               </button>
-              {' '}for a final {OFFSET_LABEL(locked[locked.length - 1]).toLowerCase()} reminder.
+              {' '}to add {locked.map((d) => OFFSET_LABEL(d).toLowerCase()).join(' and ')}.
             </p>
           )}
 

@@ -4,6 +4,7 @@ import {
 } from '../../utils/tenureDates';
 import { decisionLabel, MAINTENANCE_DECISIONS } from '../../utils/tenureCsv';
 import { VerifyInMtoLink, SourceValue } from './TenureNotices';
+import { kindBadge } from '../../utils/tenureKind';
 
 // The claim schedule.
 //
@@ -130,6 +131,7 @@ export default function TenureTable({
             const band = urgencyBand(days, t.status);
             const change = changesByTenure.get(t.id);
             const notObserved = (t.missing_run_count || 0) >= 2;
+            const badge = kindBadge(t);
 
             return (
               <tr
@@ -148,6 +150,14 @@ export default function TenureTable({
                   {notObserved && (
                     <span className="tm-flag tm-flag--missing" title="Not present in the latest successful dataset. Verify in MTO.">
                       not in latest dataset
+                    </span>
+                  )}
+                  {/* Only the exceptional kinds are flagged. A badge on every
+                      granted claim would teach people to stop reading badges,
+                      which is the opposite of what this one is for. */}
+                  {badge && (
+                    <span className={`tm-flag tm-flag--${badge.id}`} title={badge.title}>
+                      {badge.label.toLowerCase()}
                     </span>
                   )}
                 </th>

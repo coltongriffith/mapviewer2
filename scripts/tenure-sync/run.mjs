@@ -55,7 +55,7 @@ import {
   upsertTenures, upsertOwners, pruneOwners, insertSnapshots, insertChangeEvents,
   reconcile, monitoredTenureNumbers, notifyAdmin, stageRows, readStaged, clearStaging,
   markPromotionStarted, interruptedRun,
-  BATCH_SIZE,
+  BATCH_SIZE, chunked,
 } from './db.mjs';
 
 const JURISDICTION = 'BC';
@@ -464,18 +464,42 @@ async function promoteStaging(sb, runId, { observedAt, log, alertsSafe }) {
   return { processed, created, updated, changeEvents };
 }
 
-/** Owner rows for a batch of tenure ids, grouped by tenure. One query. */
+/**
+ * Owner rows for a batch of tenure ids, grouped by tenure.
+ *
+ * CHUNKED, and the chunk size is not cosmetic. PostgREST puts `.in()` values
+ * in the query string, and these are UUIDs: 36 characters plus a separator
+ * each. A full BATCH_SIZE of 500 builds an ~18 KB URL, which the edge rejects
+ * before the request is served — surfacing as `TypeError: fetch failed`
+ * rather than as a PostgREST error, because nothing ever reached PostgREST.
+ *
+ * This took down the 2026-08-06 full sync at `records_processed = 0`, and it
+ * would have taken down every full sync after it. It hid until then for a
+ * reason worth remembering: `existingIds` holds only tenures that were ALREADY
+ * in the mirror, so on the very first full run — when every record was new —
+ * the list was empty, this function returned before issuing a request, and the
+ * import passed. The bug arrived the moment the run stopped being the first
+ * one.
+ *
+ * 200 matches pruneOwners, which chunks the same kind of id list. Every other
+ * bulk id query in db.mjs was already chunked; this one was the exception, and
+ * it was the exception because it lives here rather than beside them.
+ */
+const OWNER_LOOKUP_CHUNK = 200;
+
 async function loadOwnersFor(sb, tenureIds) {
   const byTenure = new Map();
   if (!tenureIds.length) return byTenure;
-  const { data, error } = await sb
-    .from('tenure_owners')
-    .select('tenure_id, normalized_owner_name, owner_name, ownership_percentage')
-    .in('tenure_id', tenureIds);
-  if (error) throw new Error(`Could not read existing owners: ${error.message}`);
-  for (const row of data || []) {
-    if (!byTenure.has(row.tenure_id)) byTenure.set(row.tenure_id, []);
-    byTenure.get(row.tenure_id).push(row);
+  for (const chunk of chunked(tenureIds, OWNER_LOOKUP_CHUNK)) {
+    const { data, error } = await sb
+      .from('tenure_owners')
+      .select('tenure_id, normalized_owner_name, owner_name, ownership_percentage')
+      .in('tenure_id', chunk);
+    if (error) throw new Error(`Could not read existing owners: ${error.message}`);
+    for (const row of data || []) {
+      if (!byTenure.has(row.tenure_id)) byTenure.set(row.tenure_id, []);
+      byTenure.get(row.tenure_id).push(row);
+    }
   }
   return byTenure;
 }

@@ -75,7 +75,8 @@
           "kind": "verify",
           "title": "Verify in BC Mineral Titles Online (MTO)",
           "html": "Always verify current ownership, status, expiry, good-to dates, and boundaries for each tenure number in <a href=\"https://www.mtonline.gov.bc.ca/\" rel=\"nofollow noopener\" target=\"_blank\">BC Mineral Titles Online</a> before relying on the map. Tenure status can change daily."
-        }
+        },
+        "html": "If you want to keep watching those good-to-dates after the map is built, <a href=\"/blog/how-to-track-bc-mineral-claim-good-to-dates/\">Tenure Monitor</a> saves a claim portfolio and emails you before each deadline. It still points you back to MTO — it reads the public dataset, it is not the registry."
       },
       {
         "h2": "Where the claim data comes from",
@@ -125,12 +126,192 @@
       }
     ],
     "relatedSlugs": [
+      "how-to-track-bc-mineral-claim-good-to-dates",
       "how-to-make-a-mining-claims-map",
-      "how-to-search-ontario-mining-claims",
-      "how-to-import-geojson-mining-map",
-      "how-to-export-mining-map-pdf"
+      "how-to-search-ontario-mining-claims"
     ],
     "publishedDate": "2025-11-20"
+  },
+  {
+    "slug": "how-to-track-bc-mineral-claim-good-to-dates",
+    "mapTypeId": "mining-claims-map",
+    "title": "How to Track BC Mineral Claim Good-to-Dates Without a Spreadsheet",
+    "metaDescription": "Monitor British Columbia mineral tenure good-to-dates, get email reminders at 90, 30 and 1 day, and see when the public record changes. Free for 10 claims. Verify in Mineral Titles Online.",
+    "directAnswer": "To track BC mineral claim good-to-dates, open Tenure Monitor in Exploration Maps, search by tenure number or registered owner, add the claims to a portfolio, and set reminder thresholds. Reminders are emailed at 90, 30 and 1 day before each good-to-date, and the portfolio flags claims whose government record has changed. Exploration Maps is not the official registry and does not file work or pay cash in lieu — confirm every deadline in BC Mineral Titles Online before acting on it.",
+    "ctaTop": {
+      "text": "Put your claims on a watch list.",
+      "sub": "Search by tenure number or owner, and get reminded before the good-to-date."
+    },
+    "ctaBottom": {
+      "text": "Start monitoring 10 claims free.",
+      "sub": "Reminders at 90, 30 and 1 day. No credit card."
+    },
+    "sections": [
+      {
+        "h2": "The problem with the spreadsheet",
+        "body": "Most junior explorers track good-to-dates in a spreadsheet somebody built years ago. It works until one of four things happens: the person who maintained it leaves, a good-to-date moves and nobody re-enters it, a claim is transferred and the row goes stale, or the reminder was a calendar entry that got dismissed on a busy morning. Every one of those is a normal week at a small company, and the cost of the failure is not a missed meeting — it is ground."
+      },
+      {
+        "h2": "What Tenure Monitor does",
+        "body": "It keeps a saved list of B.C. tenures, reads their published good-to-dates from the province's public dataset, counts the days in Pacific time, emails you before each deadline, and tells you when the government record for one of your claims changes.",
+        "checklist": [
+          "Search by tenure number, a pasted list of numbers, registered owner, client number, map extent, or an uploaded CSV",
+          "Reminders at 90, 30 and 1 day before each good-to-date — 7 days as well on Pro",
+          "Change detection: good-to-date moved, owner added or removed, status changed, boundary or area changed",
+          "A record of what you decided about each claim, and when",
+          "One click to open any claim in the map editor",
+          "CSV export of the whole claim schedule"
+        ]
+      },
+      {
+        "h2": "Step 1: Add your claims",
+        "body": "Open Tenure Monitor and choose Add claims. If you know your tenure numbers, paste the whole list at once. If you don't, search by registered owner — type the company name and you get back candidates grouped by how confident the match is, with the claim count and total hectares as you select them. Nothing is added until you confirm it.",
+        "html": "Owner names reach the registry in clipped legal form, so the search ranks candidates rather than deciding for you. That is deliberate: adding somebody else's title to your portfolio would put a deadline you don't own on your dashboard, and quietly drop the one you do."
+      },
+      {
+        "h2": "Step 2: Set when you want to be reminded",
+        "body": "Reminders are counted back from each claim's good-to-date in Pacific time, because a B.C. deadline is a B.C. deadline wherever you happen to be reading from. Pick the thresholds you want and add the people who should receive them.",
+        "box": {
+          "kind": "tip",
+          "title": "The 1-day reminder is on every plan",
+          "html": "Including free. Going quiet the day before a deadline is the exact failure this feature exists to prevent, so it isn't held back for a paid tier. Pro adds a 7-day reminder and a second recipient."
+        }
+      },
+      {
+        "h2": "Step 3: Record what you decided",
+        "body": "Against each claim you can record a maintenance decision — intend to maintain, intend to allow lapse, maintenance completed, needs verification — plus an internal project name, a note, and a reference number for after you file in MTO yourself. Every change is logged with who made it and when.",
+        "html": "This is the part that matters eighteen months later, when somebody asks why a claim was allowed to lapse. The activity log is written automatically and can't be edited from the screen that made the change."
+      },
+      {
+        "h2": "Step 4: Watch what changed",
+        "body": "After each government data import, the portfolio compares what the province now publishes against what it held before. Material changes — a title terminated, an owner added or removed, a good-to-date pulled earlier, a claim that has stopped appearing in the dataset — are lifted to the top of the activity view rather than buried in a date-ordered feed alongside a boundary tweak.",
+        "box": {
+          "kind": "verify",
+          "title": "A change is not a determination",
+          "html": "A status change, a termination date, or a title dropping out of the published dataset is what the government data shows. It is <strong>not</strong> confirmation that ground is available. Records leave a published dataset for several reasons, including a delayed or partial publication at the province. Check the tenure in <a href=\"https://www.mtonline.gov.bc.ca/\" rel=\"nofollow noopener\" target=\"_blank\">Mineral Titles Online</a> before acting on it."
+        }
+      },
+      {
+        "h2": "Applications are marked as applications",
+        "body": "The B.C. dataset publishes applications in the same feed as granted titles, with the same columns — around 2,500 of them at the time of writing. Anything the province publishes as an application carries an Application tag in the table, in search results, on the claim panel, and in the reminder email.",
+        "html": "This matters because an application is not held ground. The date on one comes from the same government column as a granted claim's good-to-date, but it is not a confirmed maintenance deadline, and treating it as one invites somebody to spend money defending ground that hasn't been granted. The dataset publishes no application status, stage or expected decision date, so Tenure Monitor shows none of those — guessing about where a title application stands is not something you should be reading off a map product."
+      },
+      {
+        "h2": "You can watch ground you don't own",
+        "body": "A portfolio is a watch list, not an ownership record. You can monitor any registered B.C. title — a competitor's ground, a property you're evaluating, a block adjacent to your own — using the same portfolios and reminders as your own claims. Search by registered owner, select the titles, add them. Nothing about doing so is visible to the title holder, and nothing about it changes the title."
+      },
+      {
+        "h2": "What it deliberately does not do",
+        "body": "Tenure Monitor is read-only with respect to government transactions. It reads public data, calculates dates, sends reminders, records what you decided, and links you to MTO.",
+        "items": [
+          "It does not log into MTO for you, and never stores MTO credentials",
+          "It does not file assessment work or pay cash in lieu",
+          "It does not register, transfer or acquire title",
+          "It does not automatically stake released ground",
+          "A reminder from Exploration Maps is not a legal notice from the province"
+        ],
+        "box": {
+          "kind": "capability",
+          "title": "What Exploration Maps can and cannot tell you",
+          "html": "It can tell you what the province's public tenure dataset said as of the last successful synchronization, and it shows you that timestamp. It cannot tell you the state of the registry right now, and it is not the registry. Government title records and Exploration Maps monitoring results should be verified in the official Mineral Titles Online registry before a transaction or deadline decision."
+        }
+      },
+      {
+        "h2": "Where the data comes from",
+        "box": {
+          "kind": "source",
+          "title": "Public B.C. tenure data",
+          "html": "Tenure Monitor reads the B.C. mineral tenure dataset published by DataBC. Contains information licensed under the Open Government Licence – British Columbia. The province does not document an update frequency, so the product never claims to be live — it shows the timestamp of the last successful synchronization and nothing stronger."
+        }
+      },
+      {
+        "h2": "What it costs",
+        "table": {
+          "headers": [
+            "",
+            "Free",
+            "Pro"
+          ],
+          "rows": [
+            [
+              "Monitored B.C. tenures",
+              "10",
+              "50"
+            ],
+            [
+              "Portfolios",
+              "1",
+              "Several"
+            ],
+            [
+              "Reminder thresholds",
+              "90, 30, 1 days",
+              "90, 30, 7, 1 days"
+            ],
+            [
+              "Reminder recipients",
+              "1",
+              "2"
+            ],
+            [
+              "Claim table, portfolio map, CSV export",
+              "Yes",
+              "Yes"
+            ],
+            [
+              "Open claims in the map editor",
+              "Yes",
+              "Yes"
+            ],
+            [
+              "Clean high-resolution map exports",
+              "—",
+              "Yes"
+            ]
+          ]
+        }
+      }
+    ],
+    "faqs": [
+      {
+        "q": "What is a good-to-date on a BC mineral claim?",
+        "a": "The good-to-date is the date by which a claim must be maintained — through recorded assessment work or a cash payment in lieu — to stay in good standing. It is the province's date, published in the public B.C. tenure dataset. Tenure Monitor counts days remaining against it in Pacific time and reminds you before it arrives."
+      },
+      {
+        "q": "Does Exploration Maps file my assessment work or pay cash in lieu?",
+        "a": "No, and it never will. Tenure Monitor is read-only with respect to government transactions. It reads public data, calculates dates, sends reminders, records your decisions, and links you to Mineral Titles Online. It does not log into MTO, store MTO credentials, file work, pay anything, or register title. You do those in MTO yourself."
+      },
+      {
+        "q": "How many claims can I monitor for free?",
+        "a": "Ten, in one portfolio, with reminders to one address at 90, 30 and 1 day before each good-to-date. Pro raises that to 50 claims across several portfolios, adds a 7-day reminder and a second recipient."
+      },
+      {
+        "q": "Can I monitor claims I don't own?",
+        "a": "Yes. A portfolio is a watch list, not an ownership record — you can monitor any registered B.C. title using the same portfolios and reminders as your own claims. Search by registered owner, select the titles, and add them. Nothing about doing so is visible to the title holder."
+      },
+      {
+        "q": "What happens if the province moves a good-to-date?",
+        "a": "The reminders for that claim are recalculated automatically and the outdated ones are cancelled, so you won't be reminded about a deadline that no longer exists. The change itself is also recorded and flagged in the portfolio's activity view."
+      },
+      {
+        "q": "Does a reminder mean my claim has lapsed?",
+        "a": "No. A reminder is generated by Exploration Maps from public B.C. tenure data. It is not a legal notice from the province, and it does not maintain, renew or register any title. Neither is a claim disappearing from the dataset proof that it lapsed — records drop out for several reasons, including partial publication at the province. Verify the current status in MTO."
+      },
+      {
+        "q": "How current is the data behind the reminders?",
+        "a": "It reflects the last successful synchronization with the public B.C. tenure dataset, and that timestamp is shown on the portfolio and in every reminder email. The province doesn't document an update frequency, so the product never claims to be live. Tenure status can change daily — verify in MTO before a transaction or deadline decision."
+      },
+      {
+        "q": "Are pending applications included?",
+        "a": "They appear in the B.C. dataset and can be monitored, but they are tagged as applications everywhere they're shown, including in the reminder email. An application is not held ground and its date is not a confirmed maintenance deadline. The dataset publishes no application status or expected decision date, so Exploration Maps shows none — check MTO."
+      }
+    ],
+    "relatedSlugs": [
+      "how-to-map-bc-mineral-claims-live-registry",
+      "how-to-make-a-mining-claims-map",
+      "what-to-include-on-a-mining-claim-map"
+    ],
+    "publishedDate": "2026-08-06"
   },
   {
     "slug": "how-to-make-a-mining-claims-map",

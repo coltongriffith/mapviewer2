@@ -24,6 +24,7 @@ import {
 import {
   TENURE_ALERT_DISCLAIMER, TENURE_NOT_OBSERVED_NOTICE, MTO_URL, BC_DATA_ATTRIBUTION,
 } from '../../src/utils/tenureDisclaimer.js';
+import { isApplication, APPLICATION_DATE_NOTICE } from '../../src/utils/tenureKind.js';
 
 const SITE = process.env.SITE_URL || 'https://www.explorationmaps.com';
 
@@ -92,7 +93,15 @@ export function expiryEmail({ tenure, owners, portfolioName, membership, lastSyn
   const when = days === 0 ? 'today'
     : days === 1 ? 'tomorrow'
       : `in ${days} days`;
-  const subject = `${name} reaches its good-to-date ${when}`;
+
+  // An application is not held ground, so the subject must not read as a
+  // maintenance deadline on a claim the recipient owns. Same date, stated as
+  // what it is: a date the province has on a submission.
+  const application = isApplication(tenure);
+  const dateLabel = application ? 'Published date' : 'Good-to-date';
+  const subject = application
+    ? `${name} (application) reaches its published date ${when}`
+    : `${name} reaches its good-to-date ${when}`;
 
   const decision = membership?.maintenance_decision && membership.maintenance_decision !== 'UNDECIDED'
     ? DECISION_LABELS[membership.maintenance_decision] || membership.maintenance_decision
@@ -106,10 +115,10 @@ export function expiryEmail({ tenure, owners, portfolioName, membership, lastSyn
   <div style="background:#f8fafc;border:1px solid #e2e8f0;border-left:4px solid ${band.color};
               border-radius:8px;padding:14px 16px;margin:0 0 18px">
     <div style="font-size:18px;font-weight:700;color:${band.color}">
-      ${esc(band.icon)} ${days === 0 ? 'Good-to-date is today' : days === 1 ? '1 day remaining' : `${days} days remaining`}
+      ${esc(band.icon)} ${days === 0 ? `${esc(dateLabel)} is today` : days === 1 ? '1 day remaining' : `${days} days remaining`}
     </div>
     <div style="font-size:14px;color:#334155;margin-top:4px">
-      Good-to-date: <strong>${esc(formatGovernmentDate(tenure.good_to_date))}</strong>
+      ${esc(dateLabel)}: <strong>${esc(formatGovernmentDate(tenure.good_to_date))}</strong>
     </div>
   </div>
 
@@ -122,8 +131,8 @@ export function expiryEmail({ tenure, owners, portfolioName, membership, lastSyn
   </table>
 
   <p style="font-size:13px;color:#475569;margin:0 0 14px">
-    The good-to-date is the date by which this claim must be maintained to stay in good
-    standing. Exploration Maps does not file assessment work, pay cash in lieu, or make any
+    ${application ? esc(APPLICATION_DATE_NOTICE) : `The good-to-date is the date by which this claim must be maintained to stay in good
+    standing.`} Exploration Maps does not file assessment work, pay cash in lieu, or make any
     change to your title — this is a reminder so you can act in time.
   </p>
 
@@ -137,14 +146,26 @@ export function expiryEmail({ tenure, owners, portfolioName, membership, lastSyn
     oneLine(portfolioName) || 'Tenure Monitor',
     '',
     `${name} — tenure ${tenure.tenure_number}`,
-    `${days === 0 ? 'Good-to-date is TODAY' : `${days} days remaining`}`,
-    `Good-to-date: ${formatGovernmentDate(tenure.good_to_date)}`,
+    // The HTML part special-cases 1; the text part did not, so the new 1-day
+    // reminder — the most urgent mail this product sends — would have read
+    // "1 days remaining" to everyone whose client blocks HTML.
+    // dateLabel, not a hard-coded "Good-to-date" — on an application this line
+    // is the whole message on the day the recipient is most likely to act, and
+    // hard-coding it here would reintroduce the maintenance-deadline wording
+    // the subject and the HTML both went to the trouble of avoiding.
+    days === 0 ? `${dateLabel.toUpperCase()} IS TODAY`
+      : days === 1 ? '1 day remaining'
+        : `${days} days remaining`,
+    `${dateLabel}: ${formatGovernmentDate(tenure.good_to_date)}`,
     `Registered owner: ${ownerLine}`,
     `Your decision: ${decision}`,
     '',
-    'The good-to-date is the date by which this claim must be maintained to stay in',
-    'good standing. Exploration Maps does not file work, pay cash in lieu, or change',
-    'your title — this is a reminder so you can act in time.',
+    application
+      ? APPLICATION_DATE_NOTICE
+      : 'The good-to-date is the date by which this claim must be maintained to stay in\n'
+        + 'good standing.',
+    'Exploration Maps does not file work, pay cash in lieu, or change your title —',
+    'this is a reminder so you can act in time.',
     '',
     `Review claim:  ${monitorUrl()}`,
     `Open map:      ${editorUrl(tenure.tenure_number)}`,

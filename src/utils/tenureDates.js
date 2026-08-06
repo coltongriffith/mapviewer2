@@ -85,6 +85,33 @@ export function toIsoDate(value) {
   return d.toISOString().slice(0, 10);
 }
 
+// ── Placeholder dates ──────────────────────────────────────────────────────
+//
+// The B.C. feed carries sentinel dates in place of missing ones. Three
+// application rows in the current mirror have 1900-01-01 in BOTH ISSUE_DATE and
+// GOOD_TO_DATE — that is a placeholder the province left in the feed, not a
+// date from 1900, and rendering it as one puts "46,000 days ago" on a dashboard
+// whose entire job is to be trusted about dates.
+//
+// Treated as "no date published" rather than as an old date. That is the
+// honest reading and it is also the safe one: daysRemaining returns null, the
+// urgency band becomes "Date unavailable — verify in MTO", and planExpiryAlerts
+// declines to schedule anything off a date we do not actually have.
+//
+// The set is exact values, not a cutoff. B.C.'s oldest genuine issue date in
+// the mirror is 1891-07-29 and its oldest genuine good-to-date is 1991, so a
+// "before 1950" heuristic would have discarded real records to catch three
+// fake ones.
+const PLACEHOLDER_DATES = new Set(['1900-01-01', '0001-01-01', '9999-12-31']);
+
+/**
+ * Whether a government date is a placeholder standing in for a missing value.
+ * @param {string|null|undefined} value
+ */
+export function isPlaceholderDate(value) {
+  return PLACEHOLDER_DATES.has(String(value ?? '').slice(0, 10));
+}
+
 /** Reject impossible dates that still match the pattern (2027-02-31). */
 function isRealCalendarDate(iso) {
   const m = ISO_DATE.exec(iso);
@@ -124,7 +151,10 @@ function utcNoon(iso) {
  */
 export function daysRemaining(goodToDate, now = new Date()) {
   const target = toIsoDate(goodToDate);
-  if (!target) return null;
+  // A placeholder is a missing date wearing a date's clothes. Answering null
+  // routes it to the "date unavailable — verify in MTO" band, which is what we
+  // actually know, instead of counting down from 1900.
+  if (!target || isPlaceholderDate(target)) return null;
   return diffDays(bcToday(now), target);
 }
 
@@ -266,7 +296,9 @@ export function formatDaysRemaining(days) {
  * other half, and this is a deadline.
  */
 export function formatGovernmentDate(iso) {
-  return toIsoDate(iso) || 'Not published in the B.C. source';
+  const value = toIsoDate(iso);
+  if (!value || isPlaceholderDate(value)) return 'Not published in the B.C. source';
+  return value;
 }
 
 /**

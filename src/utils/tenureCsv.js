@@ -13,8 +13,8 @@
 // ambiguous ones are resolved by the user rather than by a heuristic.
 
 import Papa from 'papaparse';
-import { daysRemaining, urgencyBand, formatGovernmentDate } from './tenureDates';
-import { TENURE_VERIFICATION_SHORT, BC_DATA_ATTRIBUTION } from './tenureDisclaimer';
+import { daysRemaining, urgencyBand, formatGovernmentDate } from './tenureDates.js';
+import { TENURE_VERIFICATION_SHORT, BC_DATA_ATTRIBUTION } from './tenureDisclaimer.js';
 
 /** Where a row can end up. Every parsed row gets exactly one of these. */
 export const ROW_STATUS = {

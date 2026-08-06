@@ -5,7 +5,7 @@ import {
   addTenures, removeTenure, updateMembership, lastSync, activeSystemNotice,
   portfolioChangeFeed, fetchTenureGeometry, searchTenures,
 } from '../../utils/tenureMonitor';
-import { remainingTenureSlots } from '../../utils/entitlements';
+import { remainingTenureSlots, canCreatePortfolio } from '../../utils/entitlements';
 import { buildScheduleCsv } from '../../utils/tenureCsv';
 import { daysRemaining, urgencyBand } from '../../utils/tenureDates';
 import { trackEvent } from '../../utils/track';
@@ -162,7 +162,17 @@ export default function TenureMonitorPage({ onExit, onOpenTenuresInEditor, onUpg
   // ── Actions ──────────────────────────────────────────────────────────────
 
   async function handleCreatePortfolio() {
-    const name = window.prompt('Name this portfolio', 'My B.C. claims');
+    // Check the limit BEFORE prompting, so a user at their plan's cap is not
+    // asked to name something that is about to be refused. The server stays
+    // the authority — the PORTFOLIO_LIMIT branch below is still what enforces
+    // it — this only avoids making somebody type first and be told after.
+    if (!canCreatePortfolio(entitlements, portfolios.length)) {
+      setError('Your plan monitors one group of claims. Upgrade to keep separate groups '
+        + 'with their own reminders.');
+      onUpgrade?.('tenure_portfolios');
+      return;
+    }
+    const name = window.prompt('Name this group of claims', 'My B.C. claims');
     if (!name) return;
     try {
       const id = await createPortfolio(name);
@@ -341,9 +351,15 @@ export default function TenureMonitorPage({ onExit, onOpenTenuresInEditor, onUpg
           <span className="tm-header-jurisdiction">British Columbia</span>
         </div>
         <div className="tm-header-right">
+          {/* Groups of claims. The picker appears as soon as there is a second
+              one; "New group" is here rather than only on the empty state,
+              which is where it used to live — once a first portfolio existed
+              the onboarding branch stopped rendering and there was no way to
+              make a second one from anywhere in the UI, on any plan, even
+              though the quota and the RPC both allowed it. */}
           {portfolios.length > 1 && (
             <>
-              <label className="tm-sr-only" htmlFor="tm-portfolio-picker">Portfolio</label>
+              <label className="tm-sr-only" htmlFor="tm-portfolio-picker">Claim group</label>
               <select
                 id="tm-portfolio-picker"
                 className="tm-select"
@@ -353,6 +369,18 @@ export default function TenureMonitorPage({ onExit, onOpenTenuresInEditor, onUpg
                 {portfolios.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </>
+          )}
+          {active && (
+            <button
+              className="secondary-btn"
+              type="button"
+              onClick={handleCreatePortfolio}
+              title={canCreatePortfolio(entitlements, portfolios.length)
+                ? 'Start another group of claims — separate reminders and its own map.'
+                : 'Your plan monitors one group of claims.'}
+            >
+              New group
+            </button>
           )}
           {active && (
             <button className="secondary-btn" type="button" onClick={() => setShowAlerts(true)}>
@@ -393,10 +421,11 @@ export default function TenureMonitorPage({ onExit, onOpenTenuresInEditor, onUpg
               <li>Find claims by tenure number, registered owner, client number or a CSV.</li>
               <li>See days remaining, area and status for the whole portfolio at a glance.</li>
               <li>Get reminders at {(entitlements.alert_offsets_days || []).join(', ')} days.</li>
-              <li>Turn the live portfolio into a presentation-ready project map.</li>
+              <li>Keep separate groups for separate projects, each with its own reminders.</li>
+              <li>Turn a live group into a presentation-ready project map.</li>
             </ul>
             <button className="btn primary" type="button" onClick={handleCreatePortfolio}>
-              Create a portfolio
+              Create a claim group
             </button>
             <LastSyncLine sync={sync} />
             <VerificationNotice />

@@ -63,7 +63,12 @@ export const ENTITLEMENTS = {
     max_monitored_tenures: 10,
     max_portfolios: 1,
     max_alert_recipients: 1,
-    alert_offsets_days: [90, 30],
+    // The final 1-day reminder is on every plan, free included. The product's
+    // position on deadlines is that going quiet about a real date is the worse
+    // failure — it is why expiry alerts still send when an import is untrusted.
+    // Charging for the last reminder before a claim lapses would contradict
+    // that, and the 7-day offset already carries the Pro distinction.
+    alert_offsets_days: [90, 30, 1],
   },
   [TIERS.PRO]: {
     clean_export: true,
@@ -74,7 +79,7 @@ export const ENTITLEMENTS = {
     max_monitored_tenures: 50,
     max_portfolios: Infinity,
     max_alert_recipients: 2,
-    alert_offsets_days: [90, 30, 7],
+    alert_offsets_days: [90, 30, 7, 1],
   },
   // Not sold — see TIERS.COMPANY.
   [TIERS.COMPANY]: {
