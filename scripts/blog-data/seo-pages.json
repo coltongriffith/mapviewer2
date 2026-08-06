@@ -153,7 +153,7 @@
     "fullTitle": "Mining Claim Search by Company Name | Exploration Maps",
     "h1": "Mining Claim Search by Company Name",
     "label": "Claim Search",
-    "metaDescription": "Search mineral claims by company or claimholder name across seven Canadian jurisdictions, then map the results. Confirm ownership with the responsible provincial registry.",
+    "metaDescription": "Search mineral claims by company or claimholder name in six Canadian jurisdictions — BC, Ontario, Quebec, Saskatchewan, Newfoundland & Labrador and Yukon — then map the results. Confirm ownership with the responsible provincial registry.",
     "intro": "Exploration Maps lets you search public mineral claim data and turn the results into clean maps — useful for reviewing a company's land position, competitor research, deal review, and due diligence.",
     "softwareApp": false,
     "sections": [
@@ -184,6 +184,55 @@
       {
         "h2": "Using the output in decks, reports, websites, and internal memos",
         "html": "Export the map as a PNG for slides, websites, and internal memos, or a PDF for formal reports. For a province-specific workflow, see the <a href=\"/bc-mineral-claims-map/\">BC mineral claims map tool</a>, and for the full feature set see <a href=\"/mining-map-software/\">mining map software</a>."
+      },
+      {
+        "h2": "Where company search works",
+        "body": "Company or claimholder-name search runs against the holder field each province publishes, so it is available wherever that field exists.",
+        "table": {
+          "headers": [
+            "Jurisdiction",
+            "Search by company",
+            "Search by claim number"
+          ],
+          "rows": [
+            [
+              "British Columbia",
+              "Yes",
+              "Yes"
+            ],
+            [
+              "Ontario",
+              "Yes",
+              "Yes"
+            ],
+            [
+              "Quebec",
+              "Yes",
+              "Yes"
+            ],
+            [
+              "Saskatchewan",
+              "Yes",
+              "Yes"
+            ],
+            [
+              "Newfoundland & Labrador",
+              "Yes",
+              "Yes"
+            ],
+            [
+              "Yukon",
+              "Yes",
+              "Yes"
+            ],
+            [
+              "Manitoba",
+              "No — no holder name published",
+              "Yes"
+            ]
+          ]
+        },
+        "html": "<strong>Manitoba</strong> is the exception. Its public mineral disposition layer carries no holder name, so there is nothing to match a company against and only claim-number lookup is offered. That is a limit of the published data rather than of the search — see the <a href=\"/blog/how-to-search-manitoba-mining-claims/\">Manitoba guide</a> and the <a href=\"/blog/canadian-mineral-claim-registries/\">Canadian registry guide</a>."
       }
     ],
     "disclaimer": "Claim search results and any maps built from them are for research and visualization only. Exploration Maps is not an official government registry. Always verify current claim ownership, status, boundaries, and tenure details through the applicable government mineral titles registry before relying on them for transactions, staking, or filings. Search-by-company-name is available where the underlying public claim data supports it.",
@@ -199,6 +248,10 @@
       {
         "q": "What can I use a company-name claim map for?",
         "a": "Common uses include reviewing land positions, competitor research, deal review, and project due diligence, with the output dropped into investor decks, reports, websites, or internal memos."
+      },
+      {
+        "q": "Which provinces support searching mineral claims by company name?",
+        "a": "British Columbia, Ontario, Quebec, Saskatchewan, Newfoundland & Labrador and Yukon. Manitoba is searchable by claim number only, because its public mineral disposition layer does not publish a holder name for a company search to match against."
       }
     ],
     "related": [

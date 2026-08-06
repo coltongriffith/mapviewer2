@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { globSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -251,7 +251,106 @@ describe('structured data', () => {
   });
 });
 
+describe('the redirect table is fully generated', () => {
+  // vercel.json's redirects used to be MERGED with whatever the file already
+  // held, using a source comparison to guess which rules were hand-written.
+  // A rule whose entry had been deleted from redirects.json was no longer in
+  // the generated set, so it looked hand-written and survived forever —
+  // meaning a restored page would be added to the sitemap while Vercel kept
+  // redirecting visitors away from it. assertNoRetiredCollisions could not
+  // catch it either, because it reads redirects.json rather than the config.
+  it('contains exactly what redirects.json describes, and nothing else', () => {
+    const map = JSON.parse(readFileSync(join(ROOT, 'scripts/blog-data/redirects.json'), 'utf8'));
+    const expected = new Set([
+      ...Object.entries(map.exact)
+        .filter(([k, v]) => !k.startsWith('_') && v)
+        .map(([from]) => `${from}{/}?`),
+      ...map.patterns.map(p => `${p.source}{/}?`),
+    ]);
+    const actual = new Set(redirects.map(r => r.source));
+    expect([...actual].filter(s => !expected.has(s)),
+      'vercel.json carries a redirect that redirects.json does not describe').toEqual([]);
+    expect([...expected].filter(s => !actual.has(s)),
+      'redirects.json describes a redirect that vercel.json does not carry').toEqual([]);
+  });
+
+  it('drops a rule when its entry is deleted from redirects.json', () => {
+    // THE REGRESSION, exercised rather than asserted. The previous merge kept
+    // any rule whose source was absent from the newly-generated set, which is
+    // exactly what a deleted entry looks like — so removing an entry here left
+    // the rule in vercel.json forever and a restored page would be live in the
+    // sitemap while Vercel redirected visitors away from it.
+    //
+    // Comparing the two files after a normal run cannot catch this: the
+    // generator rewrites vercel.json first, so they always agree. The only
+    // honest test is to delete an entry, regenerate, and look.
+    const mapPath = join(ROOT, 'scripts/blog-data/redirects.json');
+    const cfgPath = join(ROOT, 'vercel.json');
+    const mapBefore = readFileSync(mapPath, 'utf8');
+    const cfgBefore = readFileSync(cfgPath, 'utf8');
+    const VICTIM = '/blog/what-to-include-on-a-mining-claim-map';
+
+    try {
+      const map = JSON.parse(mapBefore);
+      expect(map.exact[VICTIM], `${VICTIM} is not in redirects.json to begin with`).toBeTruthy();
+      delete map.exact[VICTIM];
+      writeFileSync(mapPath, `${JSON.stringify(map, null, 2)}\n`);
+      execFileSync(process.execPath, ['scripts/generate-blog.js'], { cwd: ROOT, stdio: 'pipe' });
+
+      const after = JSON.parse(readFileSync(cfgPath, 'utf8')).redirects;
+      expect(after.some(r => r.source.startsWith(VICTIM)),
+        'the rule survived its entry being deleted').toBe(false);
+    } finally {
+      writeFileSync(mapPath, mapBefore);
+      writeFileSync(cfgPath, cfgBefore);
+      execFileSync(process.execPath, ['scripts/generate-blog.js'], { cwd: ROOT, stdio: 'pipe' });
+    }
+  }, 60_000);
+
+  it('keeps every rule in the source of truth, including the legacy ones', () => {
+    // The five pre-existing rules were moved into redirects.json so there is
+    // one place that decides what redirects exist. If they drift back out,
+    // deleting them becomes impossible again.
+    const map = JSON.parse(readFileSync(join(ROOT, 'scripts/blog-data/redirects.json'), 'utf8'));
+    const all = JSON.stringify(map);
+    for (const legacy of ['mineral-exploration-map-for-investor-deck',
+      'turn-public-mineral-claim-data-into-project-map',
+      'location-map-', 'target-generation-map-', 'infrastructure-map-']) {
+      expect(all.includes(legacy), `${legacy} is not in redirects.json`).toBe(true);
+    }
+  });
+});
+
 describe('claims about jurisdiction support match the product', () => {
+  // Read the product, not the copy. PROVINCES in RegistrySearch.jsx is what a
+  // user actually gets, and any page promising more than it offers is sending
+  // somebody to a workflow that does not exist.
+  const provinces = () => {
+    const src = readFileSync(join(ROOT, 'src/components/RegistrySearch.jsx'), 'utf8');
+    const block = src.slice(src.indexOf('const PROVINCES = ['), src.indexOf('// U.S. federal (BLM MLRS)'));
+    return [...block.matchAll(/value: '(\w+)', label: '([^']+)'[\s\S]*?modes: \[([^\]]*)\]/g)]
+      .map(m => ({ value: m[1], label: m[2], modes: m[3] }));
+  };
+
+  it('does not advertise company search where the product offers none', () => {
+    // Manitoba's public layer publishes no holder name, so RegistrySearch
+    // gives it modes: ['number']. The company-search landing page advertised
+    // "seven Canadian jurisdictions" in its meta description, which is the
+    // snippet a Manitoba searcher would click.
+    const withCompany = provinces().filter(p => p.modes.includes("'company'"));
+    const withoutCompany = provinces().filter(p => !p.modes.includes("'company'"));
+    expect(withCompany.length).toBe(6);
+    expect(withoutCompany.map(p => p.label)).toEqual(['Manitoba']);
+
+    const html = pages.get('/mining-claim-search-by-company-name/');
+    const meta = /<meta name="description" content="([^"]*)"/.exec(html)[1];
+    expect(/seven|all 7/i.test(meta),
+      'the company-search snippet promises more jurisdictions than support company search').toBe(false);
+    expect(meta).toMatch(/six/i);
+    // And the page must name the exception where a reader will see it.
+    expect(html).toMatch(/Manitoba/);
+  });
+
   it('never promises tenure monitoring outside British Columbia', () => {
     // Tenure Monitor is BC-only. A table row or sentence promising it for
     // Ontario would be a support claim the application cannot honour.
