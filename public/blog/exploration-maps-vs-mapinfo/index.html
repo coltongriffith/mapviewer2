@@ -17,7 +17,7 @@
 <meta name="twitter:title" content="Exploration Maps vs MapInfo for Mining Maps">
 <meta name="twitter:description" content="Comparing Exploration Maps and MapInfo Pro for creating mining exploration maps. See which tool is faster and more practical for junior mining companies in 2025.">
 <meta name="twitter:image" content="https://www.explorationmaps.com/og-image.png">
-<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Exploration Maps vs MapInfo for Mining Maps","description":"Comparing Exploration Maps and MapInfo Pro for creating mining exploration maps. See which tool is faster and more practical for junior mining companies in 2025.","url":"https://www.explorationmaps.com/blog/exploration-maps-vs-mapinfo/","datePublished":"2026-02-02","dateModified":"2026-08-01","author":{"@type":"Organization","name":"Exploration Maps","url":"https://www.explorationmaps.com"},"publisher":{"@type":"Organization","name":"Exploration Maps","url":"https://www.explorationmaps.com"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Can I import MapInfo TAB files into Exploration Maps?","acceptedAnswer":{"@type":"Answer","text":"Not directly — Exploration Maps imports GeoJSON and CSV. To use MapInfo TAB data in Exploration Maps, open the TAB file in QGIS (which reads TAB format natively), then export the layer as GeoJSON with CRS set to EPSG:4326. This takes about two minutes and preserves all attribute data from the TAB file."}},{"@type":"Question","name":"Is MapInfo still widely used in the mining industry?","acceptedAnswer":{"@type":"Answer","text":"MapInfo retains a meaningful user base at major mining companies and geological surveys, particularly in Canada and Australia where it has a long established history. It is less common at junior exploration companies, where ArcGIS and QGIS have largely displaced it for new deployments. Its native TAB format remains relevant because many government geoscience data portals distribute data in TAB or MIF/MID format."}},{"@type":"Question","name":"Can Exploration Maps replace MapInfo for investor-facing maps?","acceptedAnswer":{"@type":"Answer","text":"Yes — for investor presentations, NI 43-101 figures, news release maps, and property overview maps, Exploration Maps produces output that is equivalent or superior in presentation quality to MapInfo, in a fraction of the time. If your only MapInfo use case is producing these map types, Exploration Maps is a direct replacement. If you also use MapInfo for spatial analysis, TAB data management, or regulatory GIS deliverables, you would continue to use MapInfo for those workflows."}},{"@type":"Question","name":"Does the industry expect MapInfo-format deliverables for any submissions?","acceptedAnswer":{"@type":"Answer","text":"Some government bodies and regulatory agencies in Canada and Australia request or accept MapInfo TAB or MIF/MID format for GIS data submissions. These are data deliverables (the underlying geospatial data), not map figures. Exploration Maps produces map figures (PNG, PDF) — if you need to deliver raw GIS data in TAB format, you will still need MapInfo or QGIS with the appropriate export plugin for that specific requirement."}}],"speakable":{"@type":"SpeakableSpecification","cssSelector":[".direct-answer",".faq-a"]}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://www.explorationmaps.com"},{"@type":"ListItem","position":2,"name":"Blog","item":"https://www.explorationmaps.com/blog/"},{"@type":"ListItem","position":3,"name":"Exploration Maps vs MapInfo for Mining Maps","item":"https://www.explorationmaps.com/blog/exploration-maps-vs-mapinfo/"}]}]}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Exploration Maps vs MapInfo for Mining Maps","description":"Comparing Exploration Maps and MapInfo Pro for creating mining exploration maps. See which tool is faster and more practical for junior mining companies in 2025.","url":"https://www.explorationmaps.com/blog/exploration-maps-vs-mapinfo/","datePublished":"2026-02-02","dateModified":"2026-08-06","author":{"@type":"Organization","name":"Exploration Maps","url":"https://www.explorationmaps.com"},"publisher":{"@type":"Organization","name":"Exploration Maps","url":"https://www.explorationmaps.com"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://www.explorationmaps.com"},{"@type":"ListItem","position":2,"name":"Blog","item":"https://www.explorationmaps.com/blog/"},{"@type":"ListItem","position":3,"name":"Exploration Maps vs MapInfo for Mining Maps","item":"https://www.explorationmaps.com/blog/exploration-maps-vs-mapinfo/"}]}]}</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
@@ -36,6 +36,10 @@ img{max-width:100%;height:auto}
 /* Layout */
 .page-wrap{max-width:1100px;margin:0 auto;padding:0 24px}
 .blog-layout{display:grid;grid-template-columns:1fr 280px;gap:48px;padding:48px 0 80px;align-items:start}
+/* Grid items default to min-width:auto, so a wide child sizes the column
+   instead of scrolling inside it — which is how one six-column table set
+   the page width on a phone and dragged every paragraph out with it. */
+.blog-layout>*{min-width:0}
 @media(max-width:768px){.blog-layout{grid-template-columns:1fr;padding:32px 0 60px}}
 /* Article */
 article h1{font-size:2rem;font-weight:800;line-height:1.2;color:#0f172a;margin-bottom:16px}
@@ -96,6 +100,12 @@ article strong{color:#0f172a}
 .index-section-head{display:flex;align-items:baseline;justify-content:space-between;margin:40px 0 4px;padding-top:8px;border-top:2px solid #e8edf3}
 .index-section-head h2{font-size:1.1rem;font-weight:700;color:#0f172a}
 .index-section-head a{font-size:13px;color:#2563eb}
+.table-scroll{overflow-x:auto;max-width:100%;-webkit-overflow-scrolling:touch;margin:16px 0}
+.table-scroll .data-table{margin:0;min-width:520px}
+.index-count{display:inline-block;margin-left:6px;padding:1px 8px;border-radius:999px;background:#eef2f7;color:#64748b;font-size:12px;font-weight:600;vertical-align:middle}
+.index-section-intro{margin:0 0 16px;color:#64748b;font-size:14px;max-width:60ch}
+.index-foot{text-align:center;color:#64748b;font-size:14px;padding:48px 0}
+.index-foot a{color:#2563eb}
 /* Index TOC */
 .index-toc{display:flex;flex-wrap:wrap;gap:8px;padding:24px 0 8px;border-bottom:1px solid #e8edf3;margin-bottom:8px}
 .index-toc a{font-size:13px;font-weight:600;color:#475569;background:#f1f5f9;padding:4px 12px;border-radius:999px;text-decoration:none}
@@ -233,9 +243,9 @@ article strong{color:#0f172a}
 <li><a href="/blog/best-mining-map-software-junior-exploration/">Best Mining Map Software for Junior Exploration Companies</a></li>
 <li><a href="/blog/how-to-make-a-mining-claims-map/">How to Make a Mining Claims Map</a></li></ul></div>
   
-  <div class="sidebar-card"><h3>By Region</h3><ul><li><a href="/blog/mining-claims-map-british-columbia/">Mining Claims Map — BC</a></li>
-<li><a href="/blog/drill-results-map-nevada/">Drill Results Map — Nevada</a></li>
-<li><a href="/blog/mining-claims-map-ontario/">Mining Claims Map — Ontario</a></li></ul></div>
+  <div class="sidebar-card"><h3>By Region</h3><ul><li><a href="/blog/how-to-make-a-mining-claims-map/">How to make a mining claims map</a></li>
+<li><a href="/blog/how-to-make-a-drill-results-map/">How to make a drill results map</a></li>
+<li><a href="/blog/canadian-mineral-claim-registries/">Canadian claim registries</a></li></ul></div>
   <div class="sidebar-card">
     <h3>Map Types</h3>
     <ul>
@@ -253,7 +263,7 @@ article strong{color:#0f172a}
   <div class="site-footer-links">
     <a href="/mining-map-software/">Mining Map Software</a>
     <span class="site-footer-sep">·</span>
-    <a href="/mining-exploration-map-software/">Exploration Map Software</a>
+    <a href="/mineral-tenure-monitoring/">Tenure Monitoring</a>
     <span class="site-footer-sep">·</span>
     <a href="/bc-mineral-claims-map/">BC Claims Map</a>
     <span class="site-footer-sep">·</span>

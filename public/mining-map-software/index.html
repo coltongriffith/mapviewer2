@@ -4,20 +4,20 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Mining Map Software for Exploration Teams | Exploration Maps</title>
-<meta name="description" content="Create clean mining and mineral exploration maps from claims, drillholes, targets, and GIS files. Export investor-ready maps without GIS software.">
+<meta name="description" content="Browser-based mining and mineral exploration map software. Build claim maps, drill collar plans, target and infrastructure maps from your own GIS files or public registry data, and export figures for decks, reports and news releases.">
 <link rel="canonical" href="https://www.explorationmaps.com/mining-map-software/">
 
 <meta property="og:title" content="Mining Map Software for Exploration Teams | Exploration Maps">
-<meta property="og:description" content="Create clean mining and mineral exploration maps from claims, drillholes, targets, and GIS files. Export investor-ready maps without GIS software.">
+<meta property="og:description" content="Browser-based mining and mineral exploration map software. Build claim maps, drill collar plans, target and infrastructure maps from your own GIS files or public registry data, and export figures for decks, reports and news releases.">
 <meta property="og:url" content="https://www.explorationmaps.com/mining-map-software/">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Exploration Maps">
 <meta property="og:image" content="https://www.explorationmaps.com/og/mining-map-software.png">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Mining Map Software for Exploration Teams | Exploration Maps">
-<meta name="twitter:description" content="Create clean mining and mineral exploration maps from claims, drillholes, targets, and GIS files. Export investor-ready maps without GIS software.">
+<meta name="twitter:description" content="Browser-based mining and mineral exploration map software. Build claim maps, drill collar plans, target and infrastructure maps from your own GIS files or public registry data, and export figures for decks, reports and news releases.">
 <meta name="twitter:image" content="https://www.explorationmaps.com/og/mining-map-software.png">
-<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"SoftwareApplication","name":"Mining Map Software for Exploration Teams","description":"Create clean mining and mineral exploration maps from claims, drillholes, targets, and GIS files. Export investor-ready maps without GIS software.","url":"https://www.explorationmaps.com/mining-map-software/","applicationCategory":"BusinessApplication","operatingSystem":"Web browser","publisher":{"@type":"Organization","name":"Exploration Maps","url":"https://www.explorationmaps.com"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Do I need GIS experience to use mining map software?","acceptedAnswer":{"@type":"Answer","text":"No. Exploration Maps applies standard styling automatically when you assign a layer role (claims, drillholes, targets) and provides a layout with a legend, scale bar, north arrow, and title block already in place. It is designed for geologists, IR teams, and other non-GIS users."}},{"@type":"Question","name":"What file types can I import?","acceptedAnswer":{"@type":"Answer","text":"You can import Shapefile, GeoJSON, KML, and CSV. CSV files with coordinate columns are mapped using a column mapper so latitude and longitude are assigned correctly."}},{"@type":"Question","name":"What can I export?","acceptedAnswer":{"@type":"Answer","text":"You can export PNG images for presentations and websites and print-ready PDFs for technical reports. Common ratios such as 16:9 landscape and letter portrait are available for decks and report figures."}}],"speakable":{"@type":"SpeakableSpecification","cssSelector":[".direct-answer",".faq-a"]}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://www.explorationmaps.com"},{"@type":"ListItem","position":2,"name":"Mining Map Software for Exploration Teams","item":"https://www.explorationmaps.com/mining-map-software/"}]}]}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"SoftwareApplication","name":"Mining Map Software for Exploration Teams","description":"Browser-based mining and mineral exploration map software. Build claim maps, drill collar plans, target and infrastructure maps from your own GIS files or public registry data, and export figures for decks, reports and news releases.","url":"https://www.explorationmaps.com/mining-map-software/","applicationCategory":"BusinessApplication","operatingSystem":"Web browser","publisher":{"@type":"Organization","name":"Exploration Maps","url":"https://www.explorationmaps.com"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://www.explorationmaps.com"},{"@type":"ListItem","position":2,"name":"Mining Map Software for Exploration Teams","item":"https://www.explorationmaps.com/mining-map-software/"}]}]}</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
@@ -36,6 +36,10 @@ img{max-width:100%;height:auto}
 /* Layout */
 .page-wrap{max-width:1100px;margin:0 auto;padding:0 24px}
 .blog-layout{display:grid;grid-template-columns:1fr 280px;gap:48px;padding:48px 0 80px;align-items:start}
+/* Grid items default to min-width:auto, so a wide child sizes the column
+   instead of scrolling inside it — which is how one six-column table set
+   the page width on a phone and dragged every paragraph out with it. */
+.blog-layout>*{min-width:0}
 @media(max-width:768px){.blog-layout{grid-template-columns:1fr;padding:32px 0 60px}}
 /* Article */
 article h1{font-size:2rem;font-weight:800;line-height:1.2;color:#0f172a;margin-bottom:16px}
@@ -96,6 +100,12 @@ article strong{color:#0f172a}
 .index-section-head{display:flex;align-items:baseline;justify-content:space-between;margin:40px 0 4px;padding-top:8px;border-top:2px solid #e8edf3}
 .index-section-head h2{font-size:1.1rem;font-weight:700;color:#0f172a}
 .index-section-head a{font-size:13px;color:#2563eb}
+.table-scroll{overflow-x:auto;max-width:100%;-webkit-overflow-scrolling:touch;margin:16px 0}
+.table-scroll .data-table{margin:0;min-width:520px}
+.index-count{display:inline-block;margin-left:6px;padding:1px 8px;border-radius:999px;background:#eef2f7;color:#64748b;font-size:12px;font-weight:600;vertical-align:middle}
+.index-section-intro{margin:0 0 16px;color:#64748b;font-size:14px;max-width:60ch}
+.index-foot{text-align:center;color:#64748b;font-size:14px;padding:48px 0}
+.index-foot a{color:#2563eb}
 /* Index TOC */
 .index-toc{display:flex;flex-wrap:wrap;gap:8px;padding:24px 0 8px;border-bottom:1px solid #e8edf3;margin-bottom:8px}
 .index-toc a{font-size:13px;font-weight:600;color:#475569;background:#f1f5f9;padding:4px 12px;border-radius:999px;text-decoration:none}
@@ -195,6 +205,7 @@ article strong{color:#0f172a}
 <h2>From data to investor decks, websites, reports, and news releases</h2><p>Once a map is styled, you export it for the channel you need: a 16:9 PNG for an investor deck or PowerPoint slide, a high-resolution image for a company website, a print-ready PDF figure for a technical report, or a clear graphic for a drill-result news release. Because the underlying project is saved, you can update the data and re-export the same map layout when results change, keeping every channel consistent.</p>
 <h2>Built for non-GIS users</h2><p>Traditional GIS tools are powerful but assume you know about coordinate reference systems, symbology rules, layout composers, and projection handling. Exploration Maps assigns sensible styling automatically when you tag a layer as claims, drillholes, or targets, fits the view to your data, and gives you a layout with the standard map elements already in place. Most users produce a presentable map in their first session without prior GIS training.</p>
 <h2>Import the data you already have</h2><p>If you already work with GIS files, you can bring them straight in — see <a href="/shapefile-to-map/">turning a Shapefile into a map</a>. Exploration Maps reads Shapefile, GeoJSON, KML, and CSV, so most exploration datasets import without conversion. You can also <a href="/mining-claim-search-by-company-name/">search public mineral claim data</a> directly when you do not have a file to start from.</p>
+<h2>What belongs on a mineral exploration project map</h2><p>Most exploration project maps are assembled from the same handful of layers. Which ones you show depends on the argument the map is making:</p><p>A map that shows all six at once usually communicates less than one that shows three. See <a href="/blog/how-to-make-a-professional-exploration-map/">how to make a professional exploration map</a> for the layout elements that go around them.</p><div class="table-scroll"><table class="data-table"><thead><tr><th>Layer</th><th>What it answers</th></tr></thead><tbody><tr><td>Claim boundaries</td><td>Is the project on ground the company controls?</td></tr><tr><td>Project location and inset</td><td>Where in the world is this?</td></tr><tr><td>Access — roads, rail, port, power</td><td>How hard is it to get to and to service?</td></tr><tr><td>Targets and anomalies</td><td>Why here, and what is being tested?</td></tr><tr><td>Drill collars and intercepts</td><td>What has been drilled, and what came back?</td></tr><tr><td>Nearby operations and infrastructure</td><td>What is the district context?</td></tr></tbody></table></div>
     
     <div class="lp-cta">
       <h2>Start a map</h2>
@@ -216,18 +227,18 @@ article strong{color:#0f172a}
     <div class="faq-a">You can export PNG images for presentations and websites and print-ready PDFs for technical reports. Common ratios such as 16:9 landscape and letter portrait are available for decks and report figures.</div>
   </div>
 </section>
-    <section class="lp-related"><h2>Related tools and guides</h2><div class="lp-related-grid"><a class="lp-related-card" href="/mining-exploration-map-software/"><strong>Mining Exploration Map Software</strong><span>Build mineral exploration maps with claims, drillholes, targets, labels, roads, and project data. Create clean maps for decks, reports, and investor updates.</span></a>
-<a class="lp-related-card" href="/bc-mineral-claims-map/"><strong>BC Mineral Claims Map Tool</strong><span>Search public BC mineral claim data, style claim blocks, add project details, and export clean maps for decks, websites, and reports.</span></a>
-<a class="lp-related-card" href="/mining-claim-search-by-company-name/"><strong>Mining Claim Search by Company Name</strong><span>Search mineral claims by company name and turn public claim data into clean project maps for research, investor decks, and internal review.</span></a>
-<a class="lp-related-card" href="/shapefile-to-map/"><strong>Shapefile to Map Tool for Mining Projects</strong><span>Upload Shapefile, GeoJSON, KML, or CSV data and create clean mineral exploration maps for presentations, reports, and investor materials.</span></a>
-<a class="lp-related-card" href="/drill-results-map/"><strong>Drill Results Map Tool for Exploration Updates</strong><span>Create clear drillhole and assay maps for mining presentations, reports, news releases, and investor updates.</span></a></div></section>
+    <section class="lp-related"><h2>Related tools and guides</h2><div class="lp-related-grid"><a class="lp-related-card" href="/bc-mineral-claims-map/"><strong>BC Mineral Claims Map Tool</strong><span>Search British Columbia mineral claims by tenure number or registered owner, map the boundaries, and track good-to-dates. Public MTO tenure data — verify in Mineral Titles Online.</span></a>
+<a class="lp-related-card" href="/mineral-tenure-monitoring/"><strong>Mineral Tenure Monitoring &amp; Claim Expiry Reminders</strong><span>Track mineral claim expiry dates and get email reminders before each good-to-date. Monitor 10 British Columbia claims free, including ground you do not own. Verify deadlines in Mineral Titles Online.</span></a>
+<a class="lp-related-card" href="/mining-claim-search-by-company-name/"><strong>Mining Claim Search by Company Name</strong><span>Search mineral claims by company or claimholder name across seven Canadian jurisdictions, then map the results. Confirm ownership with the responsible provincial registry.</span></a>
+<a class="lp-related-card" href="/drill-results-map/"><strong>Drill Results Map Tool for Exploration Updates</strong><span>Create clear drillhole and assay maps for mining presentations, reports, news releases, and investor updates.</span></a>
+<a class="lp-related-card" href="/shapefile-to-map/"><strong>Shapefile to Map Tool for Mining Projects</strong><span>Upload Shapefile, GeoJSON, KML, or CSV data and create clean mineral exploration maps for presentations, reports, and investor materials.</span></a></div></section>
   </article>
 </div>
 <footer class="site-footer">
   <div class="site-footer-links">
     <a href="/mining-map-software/">Mining Map Software</a>
     <span class="site-footer-sep">·</span>
-    <a href="/mining-exploration-map-software/">Exploration Map Software</a>
+    <a href="/mineral-tenure-monitoring/">Tenure Monitoring</a>
     <span class="site-footer-sep">·</span>
     <a href="/bc-mineral-claims-map/">BC Claims Map</a>
     <span class="site-footer-sep">·</span>

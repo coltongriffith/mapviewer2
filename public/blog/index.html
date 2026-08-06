@@ -36,6 +36,10 @@ img{max-width:100%;height:auto}
 /* Layout */
 .page-wrap{max-width:1100px;margin:0 auto;padding:0 24px}
 .blog-layout{display:grid;grid-template-columns:1fr 280px;gap:48px;padding:48px 0 80px;align-items:start}
+/* Grid items default to min-width:auto, so a wide child sizes the column
+   instead of scrolling inside it — which is how one six-column table set
+   the page width on a phone and dragged every paragraph out with it. */
+.blog-layout>*{min-width:0}
 @media(max-width:768px){.blog-layout{grid-template-columns:1fr;padding:32px 0 60px}}
 /* Article */
 article h1{font-size:2rem;font-weight:800;line-height:1.2;color:#0f172a;margin-bottom:16px}
@@ -96,6 +100,12 @@ article strong{color:#0f172a}
 .index-section-head{display:flex;align-items:baseline;justify-content:space-between;margin:40px 0 4px;padding-top:8px;border-top:2px solid #e8edf3}
 .index-section-head h2{font-size:1.1rem;font-weight:700;color:#0f172a}
 .index-section-head a{font-size:13px;color:#2563eb}
+.table-scroll{overflow-x:auto;max-width:100%;-webkit-overflow-scrolling:touch;margin:16px 0}
+.table-scroll .data-table{margin:0;min-width:520px}
+.index-count{display:inline-block;margin-left:6px;padding:1px 8px;border-radius:999px;background:#eef2f7;color:#64748b;font-size:12px;font-weight:600;vertical-align:middle}
+.index-section-intro{margin:0 0 16px;color:#64748b;font-size:14px;max-width:60ch}
+.index-foot{text-align:center;color:#64748b;font-size:14px;padding:48px 0}
+.index-foot a{color:#2563eb}
 /* Index TOC */
 .index-toc{display:flex;flex-wrap:wrap;gap:8px;padding:24px 0 8px;border-bottom:1px solid #e8edf3;margin-bottom:8px}
 .index-toc a{font-size:13px;font-weight:600;color:#475569;background:#f1f5f9;padding:4px 12px;border-radius:999px;text-decoration:none}
@@ -184,601 +194,214 @@ article strong{color:#0f172a}
 
 <div class="page-wrap">
   <div class="page-hero">
-    <p class="page-hero-label">Resources</p>
-    <h1>Exploration Mapping Guides</h1>
-    <p>Step-by-step tutorials, software comparisons, and location-specific guides for creating professional mining exploration maps.</p>
+    <p class="page-hero-label">Guides</p>
+    <h1>Exploration Mapping &amp; Mineral Tenure Guides</h1>
+    <p>Practical guides for finding mineral claims, tracking tenure deadlines, and turning
+       exploration data into maps people can actually read.</p>
   </div>
   <nav class="index-toc" aria-label="Jump to section">
-  <a href="#how-to">How-to Guides</a>
-  <a href="#comparisons">Comparisons</a>
-  <a href="#mining-claims-map">Mining Claims Map</a>
-  <a href="#drill-results-map">Drill Results Map</a>
+  <a href="#mineral-claims">Mineral Claims</a>
+  <a href="#tenure-management">Tenure Management</a>
+  <a href="#exploration-mapping">Exploration Mapping</a>
+  <a href="#drill-results">Drill Results</a>
+  <a href="#gis-data">GIS &amp; Data</a>
 </nav>
-  <div class="index-section-head" id="how-to"><h2>How-to Guides</h2><a href="/blog/how-to/">View all →</a></div>
-  <div class="blog-index-grid">
+  <div class="index-section-head" id="mineral-claims">
+  <h2>Mineral Claims <span class="index-count">10</span></h2>
+</div>
+<p class="index-section-intro">Finding and mapping mineral claims from public registry data, jurisdiction by jurisdiction.</p>
+<div class="blog-index-grid">
 <div class="blog-card">
-  <span class="blog-card-tag">How-to Guide</span>
+  <span class="blog-card-tag">Claim search</span>
   <h3>How to Map BC Mineral Claims from the Public Registry</h3>
-  <p>To map BC mineral claims, open Exploration Maps, search a company or claimholder to pull their British Columbi…</p>
+  <p>Search British Columbia mineral claims by company or claimholder, import the tenures into Exploration Maps, style them, and export…</p>
   <a href="/blog/how-to-map-bc-mineral-claims-live-registry/">Read guide →</a>
 </div>
 
 <div class="blog-card">
-  <span class="blog-card-tag">How-to Guide</span>
-  <h3>How to Track BC Mineral Claim Good-to-Dates Without a Spreadsheet</h3>
-  <p>To track BC mineral claim good-to-dates, open Tenure Monitor in Exploration Maps, search by tenure number or r…</p>
-  <a href="/blog/how-to-track-bc-mineral-claim-good-to-dates/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">How-to Guide</span>
+  <span class="blog-card-tag">Claim search</span>
   <h3>How to Make a Mining Claims Map</h3>
-  <p>To make a mining claims map, get your claims into Exploration Maps — either search a claimholder to pull publi…</p>
+  <p>The complete guide to making a mining claims map: import public claim data, shapefiles, KML, GeoJSON, or drillhole CSVs, style you…</p>
   <a href="/blog/how-to-make-a-mining-claims-map/">Read guide →</a>
 </div>
 
 <div class="blog-card">
-  <span class="blog-card-tag">How-to Guide</span>
-  <h3>How to Make a Drill Results Map</h3>
-  <p>To make a drill results map, import your drill collar CSV, map the latitude/longitude (or easting/northing) co…</p>
-  <a href="/blog/how-to-make-a-drill-results-map/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">How-to Guide</span>
-  <h3>How to Create an Exploration Map for an Investor Presentation</h3>
-  <p>For an investor presentation map, use a branded theme (such as Investor — Navy &amp; White), the Landscape 16:9 ra…</p>
-  <a href="/blog/how-to-create-exploration-map-investor-presentation/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">How-to Guide</span>
-  <h3>How to Import GeoJSON Data into a Mining Map</h3>
-  <p>To import GeoJSON into Exploration Maps, click the import button in the Layers section, select your .geojson o…</p>
-  <a href="/blog/how-to-import-geojson-mining-map/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">How-to Guide</span>
-  <h3>How to Choose the Right Basemap for a Mining Map</h3>
-  <p>Use the Light basemap for NI 43-101 reports and regulatory filings, Satellite for investor presentations that …</p>
-  <a href="/blog/how-to-choose-basemap-mining-map/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">How-to Guide</span>
-  <h3>How to Export a Mining Map as a PDF</h3>
-  <p>To export a mining map as a PDF, set your ratio in the Export section (Letter, A4, or 16:9), click the PDF but…</p>
-  <a href="/blog/how-to-export-mining-map-pdf/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">How-to Guide</span>
-  <h3>How to Add a Distance Ring to a Mining Map</h3>
-  <p>Click 'Draw Distance Ring' in the Annotations section, click the centre point on the map, set the radius in ki…</p>
-  <a href="/blog/how-to-add-distance-ring-mining-map/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">How-to Guide</span>
-  <h3>How to Add a Scale Bar and North Arrow to a Mining Map</h3>
-  <p>Toggle Scale Bar and North Arrow on in the Design section of the sidebar. Both render on the map automatically…</p>
-  <a href="/blog/how-to-add-scale-bar-north-arrow/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">How-to Guide</span>
-  <h3>How to Create a Target Generation Map</h3>
-  <p>To make a target generation map, import your claims and target outlines, assign the Target Areas role for dash…</p>
-  <a href="/blog/how-to-create-target-generation-map/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">How-to Guide</span>
-  <h3>How to Create an Infrastructure Map for a Mining Property</h3>
-  <p>To make an infrastructure map, import your property boundary, add roads, powerlines, rail, and facilities as l…</p>
-  <a href="/blog/how-to-create-infrastructure-map/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">How-to Guide</span>
-  <h3>How to Import CSV Data into a Mining Map</h3>
-  <p>To import CSV data into a mining map, click import and select your CSV — the Column Mapper opens automatically…</p>
-  <a href="/blog/how-to-import-csv-data-mining-map/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">How-to Guide</span>
-  <h3>How to Create an NI 43-101 Compliant Map</h3>
-  <p>An NI 43-101 report map figure is expected to include a title with project and figure number, scale bar, north…</p>
-  <a href="/blog/how-to-create-ni-43-101-compliant-map/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">How-to Guide</span>
+  <span class="blog-card-tag">Claim search</span>
   <h3>How to Search Ontario Mining Claims and Map Them</h3>
-  <p>To search Ontario mining claims, open Exploration Maps, choose Add Claims → Search Claims Registry, select Ont…</p>
+  <p>Search Ontario mining claims by company name or claim number from public MLAS data, add them to a map, style them, and export a cl…</p>
   <a href="/blog/how-to-search-ontario-mining-claims/">Read guide →</a>
 </div>
 
 <div class="blog-card">
-  <span class="blog-card-tag">How-to Guide</span>
+  <span class="blog-card-tag">Claim search</span>
   <h3>Saskatchewan Mineral Claims Search — Map Dispositions from MARS Free</h3>
-  <p>To search Saskatchewan mineral claims, open Exploration Maps, click 'Add Claims → Search Claims Registry', sel…</p>
+  <p>Search Saskatchewan mineral dispositions by company or claim number and turn them into a styled, investor-ready map in minutes — t…</p>
   <a href="/blog/how-to-search-saskatchewan-mineral-claims/">Read guide →</a>
 </div>
 
 <div class="blog-card">
-  <span class="blog-card-tag">How-to Guide</span>
+  <span class="blog-card-tag">Claim search</span>
   <h3>Manitoba Mining Claims Search — Map Dispositions Free</h3>
-  <p>To map Manitoba mining claims, open Exploration Maps, click 'Add Claims → Search Claims Registry', choose Mani…</p>
+  <p>Map Manitoba mining claims by claim/tenure number: find numbers in iMaQs, pull boundaries into a styled map, and export — with hon…</p>
   <a href="/blog/how-to-search-manitoba-mining-claims/">Read guide →</a>
 </div>
 
 <div class="blog-card">
-  <span class="blog-card-tag">How-to Guide</span>
+  <span class="blog-card-tag">Claim search</span>
   <h3>How to Search Newfoundland Mineral Licences and Map a Project</h3>
-  <p>To map Newfoundland &amp; Labrador mineral claims (exploration licences), open Exploration Maps, choose Add Claims…</p>
+  <p>Search Newfoundland and Labrador mineral exploration licences by company or licence number from public GeoAtlas data, map a projec…</p>
   <a href="/blog/how-to-search-newfoundland-mineral-claims/">Read guide →</a>
 </div>
 
 <div class="blog-card">
-  <span class="blog-card-tag">How-to Guide</span>
+  <span class="blog-card-tag">Claim search</span>
   <h3>How to Search Quebec Mining Claims (GESTIM) and Map Them</h3>
-  <p>To map Quebec mining claims, open Exploration Maps, choose Add Claims → Search Claims Registry, select Quebec,…</p>
+  <p>Search Quebec mining claims (titres miniers) by titleholder or claim number from Quebec's public GESTIM dataset, map them, and exp…</p>
   <a href="/blog/how-to-search-quebec-mining-claims/">Read guide →</a>
 </div>
 
 <div class="blog-card">
-  <span class="blog-card-tag">How-to Guide</span>
-  <h3>What to Include on a Mining Claim Map</h3>
-  <p>A mining claim map needs: styled claim boundaries, claim labels, a title block with project/company/date, a le…</p>
-  <a href="/blog/what-to-include-on-a-mining-claim-map/">Read guide →</a>
+  <span class="blog-card-tag">Claim search</span>
+  <h3>BC Mineral Titles Online (MTO): How to Find, Map and Monitor Mineral Claims</h3>
+  <p>What MTO is, what it is authoritative for, and how to search, map and monitor BC mineral claims around it.…</p>
+  <a href="/blog/bc-mineral-titles-online-guide/">Read guide →</a>
 </div>
 
 <div class="blog-card">
-  <span class="blog-card-tag">How-to Guide</span>
-  <h3>How to Map Drill Results for a Junior Mining News Release</h3>
-  <p>For a news-release drill map, plot collars from a CSV or GeoJSON, label the holes, badge the headline intercep…</p>
-  <a href="/blog/map-drill-results-for-junior-mining-news-release/">Read guide →</a>
+  <span class="blog-card-tag">Claim search</span>
+  <h3>How to Find Mineral Claims Owned by a Company in British Columbia</h3>
+  <p>Search by registered owner to see a company's BC land position — competitor research, project generation and due diligence.…</p>
+  <a href="/blog/find-mineral-claims-owned-by-company-bc/">Read guide →</a>
 </div>
 
 <div class="blog-card">
-  <span class="blog-card-tag">How-to Guide</span>
-  <h3>Shapefile, KML, GeoJSON, and CSV: Which File Types Matter for Exploration Mapping?</h3>
-  <p>Shapefile and GeoJSON carry boundaries (claims, targets), KML comes from Google Earth and some government port…</p>
-  <a href="/blog/exploration-mapping-file-types-shapefile-kml-geojson-csv/">Read guide →</a>
+  <span class="blog-card-tag">Claim search</span>
+  <h3>Canadian Mineral Claim &amp; Tenure Registry Guide</h3>
+  <p>Official registry, searchable fields and Exploration Maps support for each Canadian jurisdiction — with links to the province-spec…</p>
+  <a href="/blog/canadian-mineral-claim-registries/">Read guide →</a>
 </div></div>
-  <div class="index-section-head" id="comparisons"><h2>Software Comparisons</h2><a href="/blog/comparisons/">View all →</a></div>
-  <div class="blog-index-grid">
+<div class="index-section-head" id="tenure-management">
+  <h2>Tenure Management <span class="index-count">1</span></h2>
+</div>
+<p class="index-section-intro">Tracking good-to-dates, expiry deadlines and changes to the government record.</p>
+<div class="blog-index-grid">
 <div class="blog-card">
-  <span class="blog-card-tag">Comparison</span>
-  <h3>Exploration Maps vs ArcGIS for Mining Maps</h3>
-  <p>Comparing Exploration Maps and ArcGIS for creating mining exploration maps. See which tool is faster, cheaper,…</p>
-  <a href="/blog/exploration-maps-vs-arcgis/">Read comparison →</a>
+  <span class="blog-card-tag">Tenure</span>
+  <h3>BC Mineral Claim Expiry Dates: How to Track Good-to-Dates and Get Reminders</h3>
+  <p>How BC good-to-dates work, what moves them, and how to get reminders before a claim lapses.…</p>
+  <a href="/blog/how-to-track-bc-mineral-claim-good-to-dates/">Read guide →</a>
+</div></div>
+<div class="index-section-head" id="exploration-mapping">
+  <h2>Exploration Mapping <span class="index-count">6</span></h2>
+</div>
+<p class="index-section-intro">Building maps that hold up in an investor deck, a news release or a technical report.</p>
+<div class="blog-index-grid">
+<div class="blog-card">
+  <span class="blog-card-tag">Mapping</span>
+  <h3>How to Create an Exploration Map for an Investor Presentation</h3>
+  <p>Build investor-ready exploration maps for decks, project overviews, and news releases: pick a branded theme, set a 16:9 layout, ke…</p>
+  <a href="/blog/how-to-create-exploration-map-investor-presentation/">Read guide →</a>
 </div>
 
 <div class="blog-card">
-  <span class="blog-card-tag">Comparison</span>
-  <h3>Exploration Maps vs QGIS for Exploration Mapping</h3>
-  <p>Comparing Exploration Maps and QGIS for mining and exploration mapping. Which is better for investor presentat…</p>
-  <a href="/blog/exploration-maps-vs-qgis/">Read comparison →</a>
+  <span class="blog-card-tag">Mapping</span>
+  <h3>How to Create a Target Generation Map</h3>
+  <p>Create a target generation map: dashed target outlines over claims, labelled rationale per target, disclosure-safe wording, and an…</p>
+  <a href="/blog/how-to-create-target-generation-map/">Read guide →</a>
 </div>
 
 <div class="blog-card">
-  <span class="blog-card-tag">Comparison</span>
+  <span class="blog-card-tag">Mapping</span>
+  <h3>How to Create an Infrastructure Map for a Mining Property</h3>
+  <p>Create a mining infrastructure map: roads, power, rail and facilities layered over your property, distance rings to ports and town…</p>
+  <a href="/blog/how-to-create-infrastructure-map/">Read guide →</a>
+</div>
+
+<div class="blog-card">
+  <span class="blog-card-tag">Mapping</span>
+  <h3>How to Prepare Map Figures for an NI 43-101 Technical Report</h3>
+  <p>Figure elements, datum labelling, captions and numbering for technical report maps — and why no software can make a map &quot;compliant…</p>
+  <a href="/blog/how-to-create-ni-43-101-compliant-map/">Read guide →</a>
+</div>
+
+<div class="blog-card">
+  <span class="blog-card-tag">Mapping</span>
+  <h3>How to Make a Professional Mineral Exploration Map</h3>
+  <p>Basemap choice, scale bar, north arrow, distance rings, title block and export settings — the elements that separate a figure from…</p>
+  <a href="/blog/how-to-make-a-professional-exploration-map/">Read guide →</a>
+</div>
+
+<div class="blog-card">
+  <span class="blog-card-tag">Mapping</span>
   <h3>Best Mining Map Software for Junior Exploration Companies</h3>
-  <p>An honest comparison of mining map tools for junior exploration teams: Exploration Maps, QGIS, ArcGIS, MapInfo…</p>
-  <a href="/blog/best-mining-map-software-junior-exploration/">Read comparison →</a>
+  <p>An honest comparison of mining map tools for junior exploration teams: Exploration Maps, QGIS, ArcGIS, MapInfo, and Illustrator. W…</p>
+  <a href="/blog/best-mining-map-software-junior-exploration/">Read guide →</a>
+</div></div>
+<div class="index-section-head" id="drill-results">
+  <h2>Drill Results <span class="index-count">1</span></h2>
+</div>
+<p class="index-section-intro">Turning collars, assays and intercepts into a figure people can read.</p>
+<div class="blog-index-grid">
+<div class="blog-card">
+  <span class="blog-card-tag">Drilling</span>
+  <h3>How to Make a Drill Results Map</h3>
+  <p>Collar CSV to finished drill hole map: columns, coordinate fixes, intercept callouts, target and claims context, and news-release …</p>
+  <a href="/blog/how-to-make-a-drill-results-map/">Read guide →</a>
+</div></div>
+<div class="index-section-head" id="gis-data">
+  <h2>GIS &amp; Data <span class="index-count">6</span></h2>
+</div>
+<p class="index-section-intro">File formats, imports, and where a full desktop GIS is still the right tool.</p>
+<div class="blog-index-grid">
+<div class="blog-card">
+  <span class="blog-card-tag">Data</span>
+  <h3>How to Import GeoJSON Data into a Mining Map</h3>
+  <p>Import GeoJSON into a mining map in one click. Convert Shapefiles free at mapshaper.org, assign layer roles for automatic styling,…</p>
+  <a href="/blog/how-to-import-geojson-mining-map/">Read guide →</a>
 </div>
 
 <div class="blog-card">
-  <span class="blog-card-tag">Comparison</span>
+  <span class="blog-card-tag">Data</span>
+  <h3>How to Import CSV Data into a Mining Map</h3>
+  <p>Import drill collars, soil geochem, and rock samples from a CSV into Exploration Maps: required columns, fixing UTM and lat/long c…</p>
+  <a href="/blog/how-to-import-csv-data-mining-map/">Read guide →</a>
+</div>
+
+<div class="blog-card">
+  <span class="blog-card-tag">Data</span>
+  <h3>Shapefile, KML, GeoJSON, and CSV: Which File Types Matter for Exploration Mapping?</h3>
+  <p>Shapefile vs GeoJSON vs KML vs CSV for exploration mapping — what each format is for, the gotchas (missing .prj, UTM coordinates),…</p>
+  <a href="/blog/exploration-mapping-file-types-shapefile-kml-geojson-csv/">Read guide →</a>
+</div>
+
+<div class="blog-card">
+  <span class="blog-card-tag">Data</span>
+  <h3>Exploration Maps vs ArcGIS for Mining Maps</h3>
+  <p>Enterprise GIS against a focused figure builder — what each is actually for.…</p>
+  <a href="/blog/exploration-maps-vs-arcgis/">Read guide →</a>
+</div>
+
+<div class="blog-card">
+  <span class="blog-card-tag">Data</span>
+  <h3>Exploration Maps vs QGIS for Exploration Mapping</h3>
+  <p>QGIS for analysis and projection management, Exploration Maps for presentation figures. Most teams use both.…</p>
+  <a href="/blog/exploration-maps-vs-qgis/">Read guide →</a>
+</div>
+
+<div class="blog-card">
+  <span class="blog-card-tag">Data</span>
   <h3>Exploration Maps vs MapInfo for Mining Maps</h3>
-  <p>Comparing Exploration Maps and MapInfo Pro for creating mining exploration maps. See which tool is faster and …</p>
-  <a href="/blog/exploration-maps-vs-mapinfo/">Read comparison →</a>
+  <p>Comparing Exploration Maps and MapInfo Pro for creating mining exploration maps. See which tool is faster and more practical for j…</p>
+  <a href="/blog/exploration-maps-vs-mapinfo/">Read guide →</a>
 </div></div>
-  <div class="index-section-head" id="mining-claims-map"><h2>Mining Claims Map (28 regions)</h2><a href="/blog/locations/">View all →</a></div>
-<div class="blog-index-grid">
-<div class="blog-card">
-  <span class="blog-card-tag">Location Guide</span>
-  <h3>Mining Claims Map — British Columbia</h3>
-  <p>Create a professional mining claims map for exploration projects in British Columbia.</p>
-  <a href="/blog/mining-claims-map-british-columbia/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">Location Guide</span>
-  <h3>Mining Claims Map — Ontario</h3>
-  <p>Create a professional mining claims map for exploration projects in Ontario.</p>
-  <a href="/blog/mining-claims-map-ontario/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">Location Guide</span>
-  <h3>Mining Claims Map — Quebec</h3>
-  <p>Create a professional mining claims map for exploration projects in Quebec.</p>
-  <a href="/blog/mining-claims-map-quebec/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">Location Guide</span>
-  <h3>Mining Claims Map — Alberta</h3>
-  <p>Create a professional mining claims map for exploration projects in Alberta.</p>
-  <a href="/blog/mining-claims-map-alberta/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">Location Guide</span>
-  <h3>Mining Claims Map — Saskatchewan</h3>
-  <p>Create a professional mining claims map for exploration projects in Saskatchewan.</p>
-  <a href="/blog/mining-claims-map-saskatchewan/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">Location Guide</span>
-  <h3>Mining Claims Map — Manitoba</h3>
-  <p>Create a professional mining claims map for exploration projects in Manitoba.</p>
-  <a href="/blog/mining-claims-map-manitoba/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">Location Guide</span>
-  <h3>Mining Claims Map — Nova Scotia</h3>
-  <p>Create a professional mining claims map for exploration projects in Nova Scotia.</p>
-  <a href="/blog/mining-claims-map-nova-scotia/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">Location Guide</span>
-  <h3>Mining Claims Map — Newfoundland and Labrador</h3>
-  <p>Create a professional mining claims map for exploration projects in Newfoundland and Labrador.</p>
-  <a href="/blog/mining-claims-map-newfoundland-labrador/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">Location Guide</span>
-  <h3>Mining Claims Map — Yukon</h3>
-  <p>Create a professional mining claims map for exploration projects in Yukon.</p>
-  <a href="/blog/mining-claims-map-yukon/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">Location Guide</span>
-  <h3>Mining Claims Map — Northwest Territories</h3>
-  <p>Create a professional mining claims map for exploration projects in Northwest Territories.</p>
-  <a href="/blog/mining-claims-map-northwest-territories/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">Location Guide</span>
-  <h3>Mining Claims Map — Nevada</h3>
-  <p>Create a professional mining claims map for exploration projects in Nevada.</p>
-  <a href="/blog/mining-claims-map-nevada/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">Location Guide</span>
-  <h3>Mining Claims Map — Colorado</h3>
-  <p>Create a professional mining claims map for exploration projects in Colorado.</p>
-  <a href="/blog/mining-claims-map-colorado/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">Location Guide</span>
-  <h3>Mining Claims Map — Alaska</h3>
-  <p>Create a professional mining claims map for exploration projects in Alaska.</p>
-  <a href="/blog/mining-claims-map-alaska/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">Location Guide</span>
-  <h3>Mining Claims Map — Arizona</h3>
-  <p>Create a professional mining claims map for exploration projects in Arizona.</p>
-  <a href="/blog/mining-claims-map-arizona/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">Location Guide</span>
-  <h3>Mining Claims Map — Montana</h3>
-  <p>Create a professional mining claims map for exploration projects in Montana.</p>
-  <a href="/blog/mining-claims-map-montana/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">Location Guide</span>
-  <h3>Mining Claims Map — Idaho</h3>
-  <p>Create a professional mining claims map for exploration projects in Idaho.</p>
-  <a href="/blog/mining-claims-map-idaho/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">Location Guide</span>
-  <h3>Mining Claims Map — Utah</h3>
-  <p>Create a professional mining claims map for exploration projects in Utah.</p>
-  <a href="/blog/mining-claims-map-utah/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">Location Guide</span>
-  <h3>Mining Claims Map — Wyoming</h3>
-  <p>Create a professional mining claims map for exploration projects in Wyoming.</p>
-  <a href="/blog/mining-claims-map-wyoming/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">Location Guide</span>
-  <h3>Mining Claims Map — New Mexico</h3>
-  <p>Create a professional mining claims map for exploration projects in New Mexico.</p>
-  <a href="/blog/mining-claims-map-new-mexico/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">Location Guide</span>
-  <h3>Mining Claims Map — Washington</h3>
-  <p>Create a professional mining claims map for exploration projects in Washington.</p>
-  <a href="/blog/mining-claims-map-washington/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">Location Guide</span>
-  <h3>Mining Claims Map — Oregon</h3>
-  <p>Create a professional mining claims map for exploration projects in Oregon.</p>
-  <a href="/blog/mining-claims-map-oregon/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">Location Guide</span>
-  <h3>Mining Claims Map — California</h3>
-  <p>Create a professional mining claims map for exploration projects in California.</p>
-  <a href="/blog/mining-claims-map-california/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">Location Guide</span>
-  <h3>Mining Claims Map — Western Australia</h3>
-  <p>Create a professional mining claims map for exploration projects in Western Australia.</p>
-  <a href="/blog/mining-claims-map-western-australia/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">Location Guide</span>
-  <h3>Mining Claims Map — Chile</h3>
-  <p>Create a professional mining claims map for exploration projects in Chile.</p>
-  <a href="/blog/mining-claims-map-chile/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">Location Guide</span>
-  <h3>Mining Claims Map — Peru</h3>
-  <p>Create a professional mining claims map for exploration projects in Peru.</p>
-  <a href="/blog/mining-claims-map-peru/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">Location Guide</span>
-  <h3>Mining Claims Map — Mexico</h3>
-  <p>Create a professional mining claims map for exploration projects in Mexico.</p>
-  <a href="/blog/mining-claims-map-mexico/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">Location Guide</span>
-  <h3>Mining Claims Map — South Africa</h3>
-  <p>Create a professional mining claims map for exploration projects in South Africa.</p>
-  <a href="/blog/mining-claims-map-south-africa/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">Location Guide</span>
-  <h3>Mining Claims Map — Ghana</h3>
-  <p>Create a professional mining claims map for exploration projects in Ghana.</p>
-  <a href="/blog/mining-claims-map-ghana/">Read guide →</a>
-</div></div>
-<div class="index-section-head" id="drill-results-map"><h2>Drill Results Map (28 regions)</h2><a href="/blog/locations/">View all →</a></div>
-<div class="blog-index-grid">
-<div class="blog-card">
-  <span class="blog-card-tag">Location Guide</span>
-  <h3>Drill Results Map — British Columbia</h3>
-  <p>Create a professional drill results map for exploration projects in British Columbia.</p>
-  <a href="/blog/drill-results-map-british-columbia/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">Location Guide</span>
-  <h3>Drill Results Map — Ontario</h3>
-  <p>Create a professional drill results map for exploration projects in Ontario.</p>
-  <a href="/blog/drill-results-map-ontario/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">Location Guide</span>
-  <h3>Drill Results Map — Quebec</h3>
-  <p>Create a professional drill results map for exploration projects in Quebec.</p>
-  <a href="/blog/drill-results-map-quebec/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">Location Guide</span>
-  <h3>Drill Results Map — Alberta</h3>
-  <p>Create a professional drill results map for exploration projects in Alberta.</p>
-  <a href="/blog/drill-results-map-alberta/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">Location Guide</span>
-  <h3>Drill Results Map — Saskatchewan</h3>
-  <p>Create a professional drill results map for exploration projects in Saskatchewan.</p>
-  <a href="/blog/drill-results-map-saskatchewan/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">Location Guide</span>
-  <h3>Drill Results Map — Manitoba</h3>
-  <p>Create a professional drill results map for exploration projects in Manitoba.</p>
-  <a href="/blog/drill-results-map-manitoba/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">Location Guide</span>
-  <h3>Drill Results Map — Nova Scotia</h3>
-  <p>Create a professional drill results map for exploration projects in Nova Scotia.</p>
-  <a href="/blog/drill-results-map-nova-scotia/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">Location Guide</span>
-  <h3>Drill Results Map — Newfoundland and Labrador</h3>
-  <p>Create a professional drill results map for exploration projects in Newfoundland and Labrador.</p>
-  <a href="/blog/drill-results-map-newfoundland-labrador/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">Location Guide</span>
-  <h3>Drill Results Map — Yukon</h3>
-  <p>Create a professional drill results map for exploration projects in Yukon.</p>
-  <a href="/blog/drill-results-map-yukon/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">Location Guide</span>
-  <h3>Drill Results Map — Northwest Territories</h3>
-  <p>Create a professional drill results map for exploration projects in Northwest Territories.</p>
-  <a href="/blog/drill-results-map-northwest-territories/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">Location Guide</span>
-  <h3>Drill Results Map — Nevada</h3>
-  <p>Create a professional drill results map for exploration projects in Nevada.</p>
-  <a href="/blog/drill-results-map-nevada/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">Location Guide</span>
-  <h3>Drill Results Map — Colorado</h3>
-  <p>Create a professional drill results map for exploration projects in Colorado.</p>
-  <a href="/blog/drill-results-map-colorado/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">Location Guide</span>
-  <h3>Drill Results Map — Alaska</h3>
-  <p>Create a professional drill results map for exploration projects in Alaska.</p>
-  <a href="/blog/drill-results-map-alaska/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">Location Guide</span>
-  <h3>Drill Results Map — Arizona</h3>
-  <p>Create a professional drill results map for exploration projects in Arizona.</p>
-  <a href="/blog/drill-results-map-arizona/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">Location Guide</span>
-  <h3>Drill Results Map — Montana</h3>
-  <p>Create a professional drill results map for exploration projects in Montana.</p>
-  <a href="/blog/drill-results-map-montana/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">Location Guide</span>
-  <h3>Drill Results Map — Idaho</h3>
-  <p>Create a professional drill results map for exploration projects in Idaho.</p>
-  <a href="/blog/drill-results-map-idaho/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">Location Guide</span>
-  <h3>Drill Results Map — Utah</h3>
-  <p>Create a professional drill results map for exploration projects in Utah.</p>
-  <a href="/blog/drill-results-map-utah/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">Location Guide</span>
-  <h3>Drill Results Map — Wyoming</h3>
-  <p>Create a professional drill results map for exploration projects in Wyoming.</p>
-  <a href="/blog/drill-results-map-wyoming/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">Location Guide</span>
-  <h3>Drill Results Map — New Mexico</h3>
-  <p>Create a professional drill results map for exploration projects in New Mexico.</p>
-  <a href="/blog/drill-results-map-new-mexico/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">Location Guide</span>
-  <h3>Drill Results Map — Washington</h3>
-  <p>Create a professional drill results map for exploration projects in Washington.</p>
-  <a href="/blog/drill-results-map-washington/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">Location Guide</span>
-  <h3>Drill Results Map — Oregon</h3>
-  <p>Create a professional drill results map for exploration projects in Oregon.</p>
-  <a href="/blog/drill-results-map-oregon/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">Location Guide</span>
-  <h3>Drill Results Map — California</h3>
-  <p>Create a professional drill results map for exploration projects in California.</p>
-  <a href="/blog/drill-results-map-california/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">Location Guide</span>
-  <h3>Drill Results Map — Western Australia</h3>
-  <p>Create a professional drill results map for exploration projects in Western Australia.</p>
-  <a href="/blog/drill-results-map-western-australia/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">Location Guide</span>
-  <h3>Drill Results Map — Chile</h3>
-  <p>Create a professional drill results map for exploration projects in Chile.</p>
-  <a href="/blog/drill-results-map-chile/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">Location Guide</span>
-  <h3>Drill Results Map — Peru</h3>
-  <p>Create a professional drill results map for exploration projects in Peru.</p>
-  <a href="/blog/drill-results-map-peru/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">Location Guide</span>
-  <h3>Drill Results Map — Mexico</h3>
-  <p>Create a professional drill results map for exploration projects in Mexico.</p>
-  <a href="/blog/drill-results-map-mexico/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">Location Guide</span>
-  <h3>Drill Results Map — South Africa</h3>
-  <p>Create a professional drill results map for exploration projects in South Africa.</p>
-  <a href="/blog/drill-results-map-south-africa/">Read guide →</a>
-</div>
-
-<div class="blog-card">
-  <span class="blog-card-tag">Location Guide</span>
-  <h3>Drill Results Map — Ghana</h3>
-  <p>Create a professional drill results map for exploration projects in Ghana.</p>
-  <a href="/blog/drill-results-map-ghana/">Read guide →</a>
-</div></div>
-  <p style="text-align:center;color:#64748b;font-size:14px;padding-bottom:48px">86 guides published · <a href="/sitemap.xml">Sitemap</a></p>
+  <p class="index-foot">24 guides · <a href="/blog/how-to/">How-to guides</a> ·
+     <a href="/blog/comparisons/">Software comparisons</a> · <a href="/sitemap.xml">Sitemap</a></p>
 </div>
 <footer class="site-footer">
   <div class="site-footer-links">
     <a href="/mining-map-software/">Mining Map Software</a>
     <span class="site-footer-sep">·</span>
-    <a href="/mining-exploration-map-software/">Exploration Map Software</a>
+    <a href="/mineral-tenure-monitoring/">Tenure Monitoring</a>
     <span class="site-footer-sep">·</span>
     <a href="/bc-mineral-claims-map/">BC Claims Map</a>
     <span class="site-footer-sep">·</span>

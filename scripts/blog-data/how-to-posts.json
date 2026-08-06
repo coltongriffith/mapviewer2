@@ -96,7 +96,7 @@
       },
       {
         "h2": "Related guides",
-        "html": "Next, see the broader <a href=\"/blog/how-to-make-a-mining-claims-map/\">how to make a mining claims map</a> guide, compare workflows in <a href=\"/blog/how-to-search-ontario-mining-claims/\">Ontario</a>, learn to <a href=\"/blog/how-to-import-geojson-mining-map/\">import a GeoJSON or Shapefile</a>, and when you're done, <a href=\"/blog/how-to-export-mining-map-pdf/\">export a print-ready PDF</a>. You can also start straight from the <a href=\"/bc-mineral-claims-map/\">BC mineral claims map</a> tool page."
+        "html": "Next, see the broader <a href=\"/blog/how-to-make-a-mining-claims-map/\">how to make a mining claims map</a> guide, compare workflows in <a href=\"/blog/how-to-search-ontario-mining-claims/\">Ontario</a>, learn to <a href=\"/blog/how-to-import-geojson-mining-map/\">import a GeoJSON or Shapefile</a>, and when you're done, <a href=\"/blog/how-to-make-a-professional-exploration-map/\">lay out and export the figure</a>. You can also start straight from the <a href=\"/bc-mineral-claims-map/\">BC mineral claims map</a> tool page."
       }
     ],
     "faqs": [
@@ -126,30 +126,46 @@
       }
     ],
     "relatedSlugs": [
-      "how-to-track-bc-mineral-claim-good-to-dates",
-      "how-to-make-a-mining-claims-map",
-      "how-to-search-ontario-mining-claims"
+      "bc-mineral-titles-online-guide",
+      "find-mineral-claims-owned-by-company-bc",
+      "how-to-track-bc-mineral-claim-good-to-dates"
     ],
-    "publishedDate": "2025-11-20"
+    "publishedDate": "2025-11-20",
+    "category": "mineral-claims",
+    "fullTitle": "How to Search & Map BC Mineral Claims | Exploration Maps"
   },
   {
     "slug": "how-to-track-bc-mineral-claim-good-to-dates",
     "mapTypeId": "mining-claims-map",
-    "title": "How to Track BC Mineral Claim Good-to-Dates Without a Spreadsheet",
-    "metaDescription": "Monitor British Columbia mineral tenure good-to-dates, get email reminders at 90, 30 and 1 day, and see when the public record changes. Free for 10 claims. Verify in Mineral Titles Online.",
+    "title": "BC Mineral Claim Expiry Dates: How to Track Good-to-Dates and Get Reminders",
+    "metaDescription": "Track British Columbia mineral claim expiry dates without a spreadsheet. How good-to-dates work, what moves them, and how to get email reminders at 90, 30 and 1 day. Free for 10 claims. Verify in Mineral Titles Online.",
     "directAnswer": "To track BC mineral claim good-to-dates, open Tenure Monitor in Exploration Maps, search by tenure number or registered owner, add the claims to a portfolio, and set reminder thresholds. Reminders are emailed at 90, 30 and 1 day before each good-to-date, and the portfolio flags claims whose government record has changed. Exploration Maps is not the official registry and does not file work or pay cash in lieu — confirm every deadline in BC Mineral Titles Online before acting on it.",
     "ctaTop": {
-      "text": "Put your claims on a watch list.",
-      "sub": "Search by tenure number or owner, and get reminded before the good-to-date."
+      "text": "Monitor up to 10 BC claims free.",
+      "sub": "Reminders at 90, 30 and 1 day before each good-to-date."
     },
     "ctaBottom": {
-      "text": "Start monitoring 10 claims free.",
-      "sub": "Reminders at 90, 30 and 1 day. No credit card."
+      "text": "Get reminders before your claims reach their good-to-dates.",
+      "sub": "10 claims free. Pro monitors 50 and adds a 7-day reminder."
     },
     "sections": [
       {
         "h2": "The problem with the spreadsheet",
         "body": "Most junior explorers track good-to-dates in a spreadsheet somebody built years ago. It works until one of four things happens: the person who maintained it leaves, a good-to-date moves and nobody re-enters it, a claim is transferred and the row goes stale, or the reminder was a calendar entry that got dismissed on a busy morning. Every one of those is a normal week at a small company, and the cost of the failure is not a missed meeting — it is ground."
+      },
+      {
+        "h2": "What a good-to-date is",
+        "body": "The good-to-date is the date by which a British Columbia mineral claim must be maintained to stay in good standing. Maintenance means recorded assessment work, or a cash payment in lieu of work, filed through Mineral Titles Online. Miss it and the claim can forfeit, and the ground becomes open.",
+        "html": "It is published as a date, not a timestamp, and Exploration Maps treats it that way — days remaining are counted in Pacific time, because a British Columbia deadline is a British Columbia deadline wherever you are reading from. Checking your claims at breakfast in London still shows you the province's date."
+      },
+      {
+        "h2": "What moves a good-to-date",
+        "items": [
+          "Registering a statement of work, which pushes the date forward by the value of work recorded",
+          "Paying cash in lieu of assessment work",
+          "Certain title transactions, which can change the date on the resulting tenure"
+        ],
+        "body": "All of those happen in MTO. The consequence for tracking is that a good-to-date is not a fixed annual date you can put in a calendar once — it moves, and a spreadsheet only knows it moved if somebody re-enters it. When the province moves a date, monitored reminders are recalculated automatically and the outdated ones are cancelled."
       },
       {
         "h2": "What Tenure Monitor does",
@@ -307,11 +323,14 @@
       }
     ],
     "relatedSlugs": [
-      "how-to-map-bc-mineral-claims-live-registry",
-      "how-to-make-a-mining-claims-map",
-      "what-to-include-on-a-mining-claim-map"
+      "bc-mineral-titles-online-guide",
+      "find-mineral-claims-owned-by-company-bc",
+      "how-to-map-bc-mineral-claims-live-registry"
     ],
-    "publishedDate": "2026-08-06"
+    "publishedDate": "2026-08-06",
+    "category": "tenure-management",
+    "fullTitle": "BC Mineral Claim Expiry Tracker",
+    "cardSummary": "How BC good-to-dates work, what moves them, and how to get reminders before a claim lapses."
   },
   {
     "slug": "how-to-make-a-mining-claims-map",
@@ -341,7 +360,7 @@
       {
         "h2": "Find your province's claim-search guide first",
         "body": "The fastest way to map claims is to search a claimholder and pull public registry data straight into the map. Each province's registry works a little differently — start with the guide for your jurisdiction, then come back here to style and export.",
-        "html": "Province guides: <a href=\"/blog/how-to-map-bc-mineral-claims-live-registry/\">British Columbia</a> · <a href=\"/blog/how-to-search-ontario-mining-claims/\">Ontario</a> · <a href=\"/blog/how-to-search-quebec-mining-claims/\">Quebec</a> · <a href=\"/blog/how-to-search-newfoundland-mineral-claims/\">Newfoundland &amp; Labrador</a> · <a href=\"/blog/how-to-search-saskatchewan-mineral-claims/\">Saskatchewan</a> · <a href=\"/blog/how-to-search-manitoba-mining-claims/\">Manitoba</a> · <a href=\"/blog/mining-claims-map-yukon/\">Yukon</a>."
+        "html": "Province guides: <a href=\"/blog/how-to-map-bc-mineral-claims-live-registry/\">British Columbia</a> · <a href=\"/blog/how-to-search-ontario-mining-claims/\">Ontario</a> · <a href=\"/blog/how-to-search-quebec-mining-claims/\">Quebec</a> · <a href=\"/blog/how-to-search-saskatchewan-mineral-claims/\">Saskatchewan</a> · <a href=\"/blog/how-to-search-manitoba-mining-claims/\">Manitoba</a> · <a href=\"/blog/how-to-search-newfoundland-mineral-claims/\">Newfoundland &amp; Labrador</a>. Yukon is searchable in the app; see the <a href=\"/blog/canadian-mineral-claim-registries/\">Canadian registry guide</a> for what each jurisdiction supports."
       },
       {
         "h2": "Step 1: Get your claims onto the map",
@@ -440,7 +459,7 @@
       },
       {
         "h2": "Related guides",
-        "html": "Build investor visuals with the <a href=\"/blog/how-to-create-exploration-map-investor-presentation/\">investor presentation guide</a>, add drill data with the <a href=\"/blog/how-to-make-a-drill-results-map/\">drill results map guide</a>, learn imports in the <a href=\"/blog/how-to-import-geojson-mining-map/\">GeoJSON / Shapefile guide</a>, and finish with the <a href=\"/blog/how-to-export-mining-map-pdf/\">export to PDF guide</a>."
+        "html": "Build investor visuals with the <a href=\"/blog/how-to-create-exploration-map-investor-presentation/\">investor presentation guide</a>, add drill data with the <a href=\"/blog/how-to-make-a-drill-results-map/\">drill results map guide</a>, learn imports in the <a href=\"/blog/how-to-import-geojson-mining-map/\">GeoJSON / Shapefile guide</a>, and finish with the <a href=\"/blog/how-to-make-a-professional-exploration-map/\">professional map guide</a>."
       }
     ],
     "faqs": [
@@ -472,24 +491,25 @@
     "relatedSlugs": [
       "how-to-map-bc-mineral-claims-live-registry",
       "how-to-create-exploration-map-investor-presentation",
-      "how-to-export-mining-map-pdf",
+      "how-to-make-a-professional-exploration-map",
       "how-to-import-geojson-mining-map"
     ],
-    "publishedDate": "2025-10-20"
+    "publishedDate": "2025-10-20",
+    "category": "mineral-claims"
   },
   {
     "slug": "how-to-make-a-drill-results-map",
     "mapTypeId": "drill-results-map",
     "title": "How to Make a Drill Results Map",
-    "metaDescription": "Turn a drill collar CSV into a clean drill results map for news releases and NI 43-101 reports: required columns, fixing coordinate issues, hole-ID callouts and intercept labels, and a print-ready export.",
+    "metaDescription": "Turn a drill collar CSV into a drill hole map for a news release or technical report: required columns, coordinate fixes, how to present assay intercepts, callout discipline, claims and target context, and export settings.",
     "directAnswer": "To make a drill results map, import your drill collar CSV, map the latitude/longitude (or easting/northing) columns, assign the Drillholes role, add callout labels showing hole ID and best intercept, add the property boundary, then export as a Landscape 16:9 PNG or a news-release figure PDF.",
     "ctaTop": {
-      "text": "Import your file and export an investor-ready map.",
-      "sub": "Drop in a collar CSV and label your best holes in minutes."
+      "text": "Turn a collar CSV into a drill map.",
+      "sub": "Map the columns, badge the intercepts that matter, export the figure."
     },
     "ctaBottom": {
-      "text": "Turn drill data into a clean map.",
-      "sub": "Open the editor, import your collars, and export a news-release figure."
+      "text": "Export a news-release figure.",
+      "sub": "Landscape 16:9 for the wire, portrait PDF if it is also a report figure."
     },
     "sections": [
       {
@@ -585,6 +605,28 @@
         "body": "Click a hole to open the inline feature editor. Enter the hole ID as the title and the best intercept as the subtext — for example '15.2m @ 4.8 g/t Au' — then Add / Update Callout. For your top results, switch the callout type to 'Badge Label' and put the grade in the badge chip so the standout holes pop. Use the Priority field to keep labels from colliding on dense programs."
       },
       {
+        "h2": "Presenting assay intercepts honestly",
+        "body": "An intercept label is a compressed technical claim, and the compression is where figures get into trouble. The convention readers expect is width, grade and element — \"32.0 m @ 6.1 g/t Au\" — with the width stated as drilled core length unless you say otherwise.",
+        "items": [
+          "Say \"drilled width\" or \"core length\" rather than implying true width unless true width is known",
+          "Give the interval depth (from–to) in the release body even if the map label omits it for space",
+          "Keep significant figures consistent between the map and the release text — a figure that disagrees with the body invites the wrong kind of attention",
+          "Composite intervals should be identifiable as composites, not presented as single continuous hits",
+          "If a hole is still pending, label it as pending rather than leaving it unlabelled and ambiguous"
+        ],
+        "html": "Disclosure requirements for reporting exploration results sit with the issuer and its qualified person, not with a mapping tool. Where a figure supports a public disclosure, the QP determines what the figure has to state."
+      },
+      {
+        "h2": "Callout discipline: label the story, not the dataset",
+        "body": "The strongest instinct on a drill map is to label every hole, and it is the one worth resisting. A map with forty labels has no emphasis, so the reader supplies their own — usually by looking at whichever label is largest or closest to the middle.",
+        "items": [
+          "Badge the two to four holes that actually drive the news",
+          "Leave the rest as plain collar symbols — the pattern is information on its own",
+          "Put the label on the side of the collar with empty space, not the side with the target outline",
+          "If two labels collide at the zoom you will export at, one of them is not important enough to keep"
+        ]
+      },
+      {
         "h2": "Step 4: Add the property boundary",
         "body": "Import your claims boundary as a second layer and assign the Claims role. This gives the drill pattern the property context investors and analysts expect to see.",
         "cta": {
@@ -595,6 +637,26 @@
       {
         "h2": "Step 5: Frame and export for a news release",
         "body": "Activate Landscape 16:9 — the standard for news-release figures — and frame so all holes and key callouts fit. The Investor — Navy & White theme with a Light or Satellite basemap is the convention. Export PNG at 2× for email and web, or the News Release Figure PDF (6\" × 4.5\") for print-ready delivery."
+      },
+      {
+        "h2": "Drill maps for a news release",
+        "body": "In a junior mining news release the drill map is often the first thing a reader looks at, before the body text and frequently instead of it. That makes the figure the part carrying the result to anyone who skims, and it changes what the map has to do: it has to be legible to a non-technical audience at email and phone size.",
+        "items": [
+          "Show the target outline and your claim boundaries so the holes are visibly testing the intended target, on your ground",
+          "Use a clear basemap — satellite for setting, light for a report-style figure",
+          "Title block with project, company and the release date",
+          "Scale bar and north arrow, always",
+          "Check legibility at the size it will appear, not at full screen"
+        ],
+        "html": "Reuse the same figure in the investor deck and on the website so the story stays visually consistent across the release. A reader who saw the map on Tuesday should recognise it on Thursday. See <a href=\"/blog/how-to-make-a-professional-exploration-map/\">making a professional exploration map</a> for the layout elements, and <a href=\"/blog/how-to-create-exploration-map-investor-presentation/\">the investor presentation guide</a> for deck framing.",
+        "cta": {
+          "text": "Build the release figure.",
+          "sub": "Import collars, badge the headline holes, export 16:9."
+        }
+      },
+      {
+        "h2": "Example: a discovery-hole release",
+        "body": "The release leads with one discovery hole and two strong step-outs. Plot all collars so the program reads as a program; badge only those three with width and grade; outline the target and the claim so the holes sit in context; switch to satellite so the setting is obvious; add a title block with the date; export Landscape 16:9 for the wire and the deck. Twelve holes, three labels, one point."
       },
       {
         "h2": "Example: a 12-hole discovery program",
@@ -610,42 +672,43 @@
       },
       {
         "h2": "Related guides",
-        "html": "See the <a href=\"/blog/map-drill-results-for-junior-mining-news-release/\">news-release figure workflow</a>, the broad <a href=\"/blog/how-to-make-a-mining-claims-map/\">mining claims map guide</a>, how to <a href=\"/blog/how-to-import-csv-data-mining-map/\">import CSV data</a>, and how to <a href=\"/blog/how-to-export-mining-map-pdf/\">export a print-ready PDF</a>."
+        "html": "See the <a href=\"/blog/how-to-make-a-drill-results-map/\">news-release figure section</a>, the broad <a href=\"/blog/how-to-make-a-mining-claims-map/\">mining claims map guide</a>, how to <a href=\"/blog/how-to-import-csv-data-mining-map/\">import CSV data</a>, and how to <a href=\"/blog/how-to-make-a-professional-exploration-map/\">lay out and export the figure</a>."
       }
     ],
     "faqs": [
       {
-        "q": "What columns does my drill collar CSV need?",
-        "a": "At minimum a hole ID and a latitude/longitude pair in decimal degrees (WGS84). If your collars are in UTM, convert them to decimal degrees first. Total depth and best intercept are recommended because they feed your callouts, and any extra columns are kept as feature properties you can display."
+        "q": "What columns does a drill collar CSV need?",
+        "a": "At minimum a hole ID and a coordinate pair — latitude and longitude in decimal degrees is the least error-prone form. Easting/northing works if you also know the UTM zone and datum. Azimuth, dip, total depth and any assay summary columns are preserved as feature properties and can be used for labels."
       },
       {
-        "q": "My holes plotted in the wrong place — what happened?",
-        "a": "Almost always a coordinate issue: latitude and longitude swapped, a missing negative sign on western/southern coordinates, or UTM easting/northing imported as if they were decimal degrees. Convert UTM to decimal degrees (WGS84) first, re-open the Column Mapper, confirm the columns, and re-import."
+        "q": "How should I label drill intercepts on a map?",
+        "a": "Width, grade and element — for example \"32.0 m @ 6.1 g/t Au\" — with the width identified as drilled core length unless true width is known and stated. Label only the holes that carry the news; a map that labels everything emphasises nothing."
       },
       {
-        "q": "What format should drill results be shown in on a map?",
-        "a": "The standard is '[width]m @ [grade] [unit] [element]' — for example '15.2m @ 4.8 g/t Au' or '82m @ 0.92% Cu'. Put the hole ID as the callout title and the intercept as the subtext."
+        "q": "My drill collars plotted in the wrong place. What went wrong?",
+        "a": "Almost always a coordinate problem rather than a styling one: latitude and longitude swapped, a missing negative on a western longitude, UTM easting/northing read as degrees, or a datum mismatch. Check that the plotted pattern has the right shape — if the holes form the correct pattern in the wrong place, it is a datum or sign error; if the pattern itself is wrong, the columns are mismatched."
       },
       {
-        "q": "How many drill holes should I label?",
-        "a": "Label all current-program holes plus key historical holes for context. If it gets crowded past ~20 holes, use the Priority field to control which callouts render on top and reserve Badge Labels for your top 3–5 intercepts."
+        "q": "What map should go in a drill results news release?",
+        "a": "A collar plan showing every hole in the program, with the headline intercepts badged, the target outline and your claim boundary for context, a title block with the release date, and a scale bar and north arrow. Export at Landscape 16:9 for the wire and the deck, and check it reads at phone size."
       },
       {
-        "q": "Should I use a satellite or light basemap?",
-        "a": "Both work. Satellite conveys terrain and setting and is popular for news releases; Light is cleaner for formal technical reports and PDF attachments in NI 43-101 documents."
+        "q": "Can I show drill traces rather than just collars?",
+        "a": "Collar plans are what most news releases and early-stage figures use, because they are unambiguous at map scale. Downhole traces are a section-view job — a plan-view projection of an inclined hole is easy to misread as a surface feature, which is a good reason to keep the plan map to collars and put the geometry in a section."
       },
       {
-        "q": "Can I show historical and current holes differently?",
-        "a": "Yes — import them as separate layers and style them differently (filled dark markers for current, hollow or lighter for historical). Name the layers so they appear as separate legend entries."
+        "q": "Do I need a scale bar on a drill results map?",
+        "a": "Yes. Without one a reader cannot tell whether the drill pattern spans 200 metres or two kilometres, and that is the first thing a technically literate reader wants to know. It is a toggle in the Design section and it updates as you zoom."
       }
     ],
     "relatedSlugs": [
-      "map-drill-results-for-junior-mining-news-release",
-      "how-to-make-a-mining-claims-map",
       "how-to-import-csv-data-mining-map",
-      "how-to-export-mining-map-pdf"
+      "how-to-make-a-professional-exploration-map",
+      "how-to-create-exploration-map-investor-presentation"
     ],
-    "publishedDate": "2025-10-22"
+    "publishedDate": "2025-10-22",
+    "category": "drill-results",
+    "cardSummary": "Collar CSV to finished drill hole map: columns, coordinate fixes, intercept callouts, target and claims context, and news-release export."
   },
   {
     "slug": "how-to-create-exploration-map-investor-presentation",
@@ -718,7 +781,7 @@
         "box": {
           "kind": "note",
           "title": "Exports &amp; commercial use",
-          "html": "Exploration Maps is built for commercial exploration work — investor decks, project overviews, and news-release figures. Watermark-free exports unlock with your email, and paid export/subscription options may be offered. See the <a href=\"/blog/how-to-export-mining-map-pdf/\">export guide</a> for formats and resolutions."
+          "html": "Exploration Maps is built for commercial exploration work — investor decks, project overviews, and news-release figures. Watermark-free exports unlock with your email, and paid export/subscription options may be offered. See the <a href=\"/blog/how-to-make-a-professional-exploration-map/\">professional map guide</a> for formats and resolutions."
         }
       },
       {
@@ -731,7 +794,7 @@
       },
       {
         "h2": "Related guides",
-        "html": "Build the underlying maps with the <a href=\"/blog/how-to-make-a-mining-claims-map/\">mining claims map guide</a> and the <a href=\"/blog/how-to-make-a-drill-results-map/\">drill results map guide</a>, prep a release figure with the <a href=\"/blog/map-drill-results-for-junior-mining-news-release/\">news-release guide</a>, and export with the <a href=\"/blog/how-to-export-mining-map-pdf/\">PDF export guide</a>."
+        "html": "Build the underlying maps with the <a href=\"/blog/how-to-make-a-mining-claims-map/\">mining claims map guide</a> and the <a href=\"/blog/how-to-make-a-drill-results-map/\">drill results map guide</a>, prep a release figure with the <a href=\"/blog/how-to-make-a-drill-results-map/\">drill results map guide</a>, and export with the <a href=\"/blog/how-to-make-a-professional-exploration-map/\">professional map guide</a>."
       }
     ],
     "faqs": [
@@ -759,10 +822,11 @@
     "relatedSlugs": [
       "how-to-make-a-mining-claims-map",
       "how-to-make-a-drill-results-map",
-      "map-drill-results-for-junior-mining-news-release",
-      "how-to-export-mining-map-pdf"
+      "how-to-make-a-professional-exploration-map"
     ],
-    "publishedDate": "2025-10-27"
+    "publishedDate": "2025-10-27",
+    "category": "exploration-mapping",
+    "fullTitle": "Exploration Maps for an Investor Presentation | Exploration Maps"
   },
   {
     "slug": "how-to-import-geojson-mining-map",
@@ -846,330 +910,10 @@
     "relatedSlugs": [
       "how-to-make-a-mining-claims-map",
       "how-to-make-a-drill-results-map",
-      "how-to-choose-basemap-mining-map"
+      "how-to-make-a-professional-exploration-map"
     ],
-    "publishedDate": "2025-11-03"
-  },
-  {
-    "slug": "how-to-choose-basemap-mining-map",
-    "title": "How to Choose the Right Basemap for a Mining Map",
-    "metaDescription": "Which basemap for a mining map? Light for technical reports, Satellite for investor decks, Topographic for access maps, Dark for social — with a quick-reference table.",
-    "directAnswer": "Use the Light basemap for NI 43-101 reports and regulatory filings, Satellite for investor presentations that benefit from terrain context, Topographic for access and infrastructure maps, and Dark for digital dashboards and social media. When in doubt: Light for print, Satellite for slides.",
-    "sections": [
-      {
-        "h2": "Quick reference",
-        "table": {
-          "headers": [
-            "Basemap",
-            "Best for",
-            "Avoid when"
-          ],
-          "rows": [
-            [
-              "Light",
-              "NI 43-101 figures, permitting, any printed document",
-              "You need terrain or vegetation context"
-            ],
-            [
-              "Satellite",
-              "Investor decks, location maps, showing access and topography",
-              "The document will be printed in black and white"
-            ],
-            [
-              "Topographic",
-              "Access roads, infrastructure planning, field maps",
-              "The audience is non-technical investors"
-            ],
-            [
-              "Dark",
-              "Websites, social posts, on-screen dashboards",
-              "Print of any kind — dark backgrounds waste ink and lose detail"
-            ]
-          ]
-        }
-      },
-      {
-        "h2": "Light — technical reports and regulatory filings",
-        "body": "A neutral light-grey canvas that makes data layers the star: claim boundaries, drill collars, and labels all read clearly, and it photocopies and prints without losing information. If the map is going into a technical report, a permit application, or anything a regulator will read, start here."
-      },
-      {
-        "h2": "Satellite — investor presentations and location maps",
-        "body": "Real imagery gives an audience instant context — terrain, vegetation, lakes, existing roads and disturbance. It answers the questions investors actually ask ('how remote is this?', 'is there access?') before they're asked. Pair it with white or light-coloured boundaries and labels so they hold contrast against the imagery."
-      },
-      {
-        "h2": "Topographic — access and infrastructure maps",
-        "body": "Contour lines and elevation shading make this the right choice when the story is physical: road access, proposed drill pads, powerline routes, camp locations. Field crews also find topo maps the easiest to orient with."
-      },
-      {
-        "h2": "Dark — digital-first content",
-        "body": "High contrast makes coloured layers glow on screen — striking for a website hero, a social post announcing results, or an on-screen dashboard. Never print it."
-      },
-      {
-        "h2": "Add context to any basemap",
-        "body": "Whichever basemap you pick, two overlays sharpen the story:",
-        "items": [
-          "Context overlay — roads, water bodies, and towns at low opacity",
-          "Reference Labels — place names that orient a reader instantly"
-        ],
-        "box": {
-          "kind": "tip",
-          "title": "One deck, one basemap",
-          "html": "If a presentation includes several maps, keep the basemap consistent across all of them — switching styles slide-to-slide reads as sloppy. Pick per document, not per map."
-        }
-      }
-    ],
-    "faqs": [
-      {
-        "q": "Which basemap is best for an NI 43-101 technical report?",
-        "a": "Light. It prints cleanly, keeps data layers legible, and matches the neutral presentation regulators and QPs expect in report figures. Use Satellite only for a supplementary location/access figure where imagery adds real information."
-      },
-      {
-        "q": "Can I change the basemap after styling my layers?",
-        "a": "Yes — basemap and data layers are independent, so you can switch any time. Do check label and boundary contrast after switching: white labels that pop on Satellite can disappear on Light."
-      },
-      {
-        "q": "Which basemap should I use for a drill results news release figure?",
-        "a": "Satellite or Light. Satellite gives context for a property-scale figure; Light is safer for a tight collar-map figure where grades and hole IDs must be unmissable."
-      },
-      {
-        "q": "Do the basemaps work at any zoom level?",
-        "a": "Yes, all four cover the globe at property to continental scales. Satellite resolution varies by region at very tight zooms — remote northern properties may show coarser imagery than populated areas."
-      },
-      {
-        "q": "Is there a blank/no-basemap option for clean claim plats?",
-        "a": "Use Light at low opacity or crop tightly — its neutral grey reads nearly blank in print while keeping just enough geographic anchoring."
-      }
-    ],
-    "relatedSlugs": [
-      "how-to-make-a-mining-claims-map",
-      "how-to-create-exploration-map-investor-presentation",
-      "how-to-export-mining-map-pdf"
-    ],
-    "publishedDate": "2025-11-10"
-  },
-  {
-    "slug": "how-to-export-mining-map-pdf",
-    "title": "How to Export a Mining Map as a PDF",
-    "metaDescription": "Export a mining map as a print-ready PDF: page sizes for NI 43-101 figures and news releases, 3× pixel ratio for print, and watermark-free download.",
-    "directAnswer": "To export a mining map as a PDF, set your ratio in the Export section (Letter, A4, or 16:9), click the PDF button in the toolbar, choose the matching page size, enter your work email to remove the watermark, and download. Use 3× pixel ratio for anything that will be printed.",
-    "sections": [
-      {
-        "h2": "Before you export",
-        "checklist": [
-          "Frame the view — everything important inside the ratio guides, nothing critical near the edges",
-          "Title block filled in: project, company, date",
-          "Legend, scale bar, and north arrow enabled",
-          "Ratio set to match your target page size (Portrait 3:4 for Letter Portrait, Landscape 16:9 for slides)"
-        ]
-      },
-      {
-        "h2": "PDF or PNG?",
-        "body": "Use PDF for anything printed or filed — technical report figures, permitting documents, news-release figures that go to a wire service. Use PNG for slides, websites, and email. PDFs preserve exact page dimensions; PNGs are lighter and drop straight into PowerPoint."
-      },
-      {
-        "h2": "Pick the right page size",
-        "table": {
-          "headers": [
-            "Page size",
-            "Dimensions",
-            "Use it for"
-          ],
-          "rows": [
-            [
-              "PowerPoint 16:9",
-              "13.33 × 7.5 in",
-              "Presentation-ready PDF slides"
-            ],
-            [
-              "Letter Landscape",
-              "11 × 8.5 in",
-              "North American report figures"
-            ],
-            [
-              "Letter Portrait",
-              "8.5 × 11 in",
-              "Full-page report figures, permit applications"
-            ],
-            [
-              "A4 Landscape",
-              "297 × 210 mm",
-              "International reports"
-            ],
-            [
-              "News Release Figure",
-              "8 × 6 in",
-              "Wire-service news release attachments"
-            ]
-          ]
-        }
-      },
-      {
-        "h2": "Set the ratio, then export",
-        "body": "Activate the matching ratio in the Export section first — the on-screen guides show exactly what the PDF will contain, so you frame once and export without surprises.",
-        "image": {
-          "src": "/blog-img/ratio-169.png",
-          "alt": "Selecting the Landscape 16:9 export ratio",
-          "caption": "Match the on-screen ratio to your PDF page size before exporting."
-        }
-      },
-      {
-        "h2": "Print quality: use 3× pixel ratio",
-        "box": {
-          "kind": "tip",
-          "title": "3× for print, 2× for screens",
-          "html": "In Export Settings, set Pixel Ratio to <strong>3×</strong> for any printed PDF — roughly 300 DPI equivalent, so fine claim boundaries and small labels stay crisp on paper. 2× is fine for PDFs that will only be viewed on screen."
-        }
-      },
-      {
-        "h2": "Removing the watermark",
-        "body": "Enter your work email in the export dialog to unlock clean, watermark-free exports. You only do this once per browser."
-      }
-    ],
-    "faqs": [
-      {
-        "q": "What resolution is the exported PDF?",
-        "a": "The map is embedded at your chosen pixel ratio: 2× is sharp on screens; 3× is print quality (~300 DPI equivalent at the chosen page size). For NI 43-101 report figures, use 3×."
-      },
-      {
-        "q": "Can I export a PDF sized for a news release?",
-        "a": "Yes — the News Release Figure size (8 × 6 in) matches what wire services and IR teams typically request, and pairs with the Landscape ratio guides for framing."
-      },
-      {
-        "q": "Is the PDF vector or raster?",
-        "a": "The map itself is a high-resolution raster embedded at exact page dimensions — consistent output regardless of layer complexity, and what report printers expect. Use 3× pixel ratio to keep it print-crisp."
-      },
-      {
-        "q": "Why does my exported PDF crop differently from my screen?",
-        "a": "The export follows the ratio guides, not your browser window. Activate the ratio that matches your page size before framing, and keep key content inside the guide lines."
-      },
-      {
-        "q": "Can I export multiple page sizes from the same map?",
-        "a": "Yes — the map isn't altered by exporting. Switch ratio/page size and export again; a common workflow is a 16:9 PNG for the deck plus a Letter PDF for the report from the same project."
-      }
-    ],
-    "relatedSlugs": [
-      "how-to-make-a-mining-claims-map",
-      "how-to-create-exploration-map-investor-presentation",
-      "how-to-choose-basemap-mining-map"
-    ],
-    "publishedDate": "2025-11-17"
-  },
-  {
-    "slug": "how-to-add-distance-ring-mining-map",
-    "title": "How to Add a Distance Ring to a Mining Map",
-    "metaDescription": "Add a distance ring to a mining map: place the centre, set a true-distance radius in km, label the arc, and use outside-shade to focus attention on your project.",
-    "directAnswer": "Click 'Draw Distance Ring' in the Annotations section, click the centre point on the map, set the radius in kilometres, and add a curved arc label such as '50 km from Port of Prince Rupert'. Rings are drawn as true great-circle distances.",
-    "sections": [
-      {
-        "h2": "When a distance ring earns its place",
-        "body": "Distance rings turn 'remote project' into a concrete number. Use one when proximity is part of the story:",
-        "items": [
-          "Distance to the nearest town, port, rail line, mill, or power line",
-          "'Within trucking distance' arguments for development-stage projects",
-          "Showing several projects within a set radius of shared infrastructure",
-          "District-scale maps — '25 km from the discovery' positioning"
-        ]
-      },
-      {
-        "h2": "Placing the ring",
-        "body": "Click 'Draw Distance Ring' in the Annotations section, then click the map where the ring should be centred — the infrastructure item is usually the better centre than your project, because the label then reads as the distance to it. Set the radius in kilometres in the ring controls; the ring is computed as a true great-circle distance, so it stays accurate at any latitude."
-      },
-      {
-        "h2": "Labelling the arc",
-        "body": "Enable 'Curved arc label' and type the text — e.g. '50 km from Port of Prince Rupert'. The label follows the arc, so it stays readable without covering your data. Keep it short: distance + landmark."
-      },
-      {
-        "h2": "Focusing with outside shade",
-        "box": {
-          "kind": "tip",
-          "title": "Outside shade",
-          "html": "Enable 'Outside shade' to dim everything beyond the ring with a translucent vignette. It pulls the eye inside the radius — effective on satellite basemaps where imagery competes with your data. Keep the shade subtle; the goal is focus, not blackout."
-        }
-      }
-    ],
-    "faqs": [
-      {
-        "q": "Is the ring a true distance circle or a screen circle?",
-        "a": "A true great-circle radius — 50 km on the ring is 50 km on the ground, regardless of latitude or how the web-mercator basemap stretches at high latitudes."
-      },
-      {
-        "q": "Can I add more than one distance ring?",
-        "a": "Yes. Concentric rings (e.g. 25/50/100 km) from one centre work well for regional context; separate rings around different infrastructure points each carry their own label."
-      },
-      {
-        "q": "Should the ring centre on my project or the infrastructure?",
-        "a": "Centre on the infrastructure when the message is 'we are X km from it' — the ring then passes through or near your project, which reads naturally. Centre on the project when showing everything available within a radius."
-      },
-      {
-        "q": "Does the ring appear in the exported PNG/PDF?",
-        "a": "Yes — rings, arc labels, and outside shade all render in exports exactly as on screen, at full export resolution."
-      }
-    ],
-    "relatedSlugs": [
-      "how-to-make-a-mining-claims-map",
-      "how-to-create-exploration-map-investor-presentation",
-      "how-to-add-scale-bar-north-arrow"
-    ],
-    "publishedDate": "2025-11-24"
-  },
-  {
-    "slug": "how-to-add-scale-bar-north-arrow",
-    "title": "How to Add a Scale Bar and North Arrow to a Mining Map",
-    "metaDescription": "Add a scale bar and north arrow to a mining map in two clicks, position them by corner, and meet the standard expectations for NI 43-101 report figures.",
-    "directAnswer": "Toggle Scale Bar and North Arrow on in the Design section of the sidebar. Both render on the map automatically — the scale bar computes true ground distance for your current view — and each can be assigned to any corner with the corner pickers.",
-    "sections": [
-      {
-        "h2": "Why these two elements are non-negotiable",
-        "body": "A map without a scale bar and north arrow isn't a figure — it's an illustration. Reviewers of technical reports expect both on every map figure, and investors subconsciously read their presence as competence. They cost two clicks; missing them costs credibility.",
-        "box": {
-          "kind": "note",
-          "title": "Report figures",
-          "html": "Preparing figures for a technical report? See the full checklist in <a href=\"/blog/how-to-create-ni-43-101-compliant-map/\">How to Create an NI 43-101 Map Figure</a>."
-        }
-      },
-      {
-        "h2": "Enable the scale bar",
-        "body": "Open the Design section and toggle Scale Bar on. It calculates real ground distance for the current view and picks a clean round number (1 km, 2 km, 5 km…) that updates as you zoom — you never hand-edit it."
-      },
-      {
-        "h2": "Enable the north arrow",
-        "body": "Toggle North Arrow on in the same section. Choose the style that matches the map's tone — the simple arrow suits technical figures; the compass style suits presentation maps."
-      },
-      {
-        "h2": "Position both with the corner pickers",
-        "body": "Each element gets a corner assignment. The conventions that keep a figure tidy:",
-        "items": [
-          "Scale bar: bottom-left or bottom-right, away from the legend",
-          "North arrow: a top corner, opposite the title block",
-          "Never let either overlap data, labels, or the inset map",
-          "Elements assigned to the same corner stack automatically with correct spacing"
-        ]
-      }
-    ],
-    "faqs": [
-      {
-        "q": "Does the scale bar stay accurate at high latitudes?",
-        "a": "Yes — it computes true ground distance at the map centre for the current view rather than assuming a fixed metres-per-pixel, which is exactly where naive scale bars go wrong on northern properties."
-      },
-      {
-        "q": "Can I set the scale bar to a specific distance like exactly 5 km?",
-        "a": "The bar auto-selects a clean round distance appropriate to your zoom. Adjust zoom slightly and it snaps between standard steps (1, 2, 5, 10 km…), so you can land on the figure you want."
-      },
-      {
-        "q": "Are the scale bar and north arrow included in exports?",
-        "a": "Yes, both render into PNG and PDF exports at full resolution, in the corners you assigned."
-      },
-      {
-        "q": "Do I need both for an NI 43-101 figure?",
-        "a": "Standard practice is yes — scale bar, north arrow, legend, and title information are the baseline expectations for technical report figures. Your QP has final say on the report's requirements."
-      }
-    ],
-    "relatedSlugs": [
-      "how-to-make-a-mining-claims-map",
-      "how-to-export-mining-map-pdf",
-      "how-to-create-exploration-map-investor-presentation"
-    ],
-    "publishedDate": "2025-12-01"
+    "publishedDate": "2025-11-03",
+    "category": "gis-data"
   },
   {
     "slug": "how-to-create-target-generation-map",
@@ -1272,7 +1016,8 @@
       "how-to-create-exploration-map-investor-presentation",
       "how-to-make-a-drill-results-map"
     ],
-    "publishedDate": "2025-12-08"
+    "publishedDate": "2025-12-08",
+    "category": "exploration-mapping"
   },
   {
     "slug": "how-to-create-infrastructure-map",
@@ -1344,7 +1089,7 @@
         "box": {
           "kind": "tip",
           "title": "Numbers beat lines",
-          "html": "Investors don't measure your map — they read it. A road on the map says access exists; a <a href=\"/blog/how-to-add-distance-ring-mining-map/\">distance ring</a> labelled '12 km to Highway 37' says what it costs. Put explicit distances on every piece of infrastructure that matters."
+          "html": "Investors don't measure your map — they read it. A road on the map says access exists; a <a href=\"/blog/how-to-make-a-professional-exploration-map/\">distance ring</a> labelled '12 km to Highway 37' says what it costs. Put explicit distances on every piece of infrastructure that matters."
         }
       },
       {
@@ -1381,7 +1126,9 @@
       "how-to-create-exploration-map-investor-presentation",
       "how-to-create-target-generation-map"
     ],
-    "publishedDate": "2025-12-15"
+    "publishedDate": "2025-12-15",
+    "category": "exploration-mapping",
+    "fullTitle": "How to Create a Mining Infrastructure Map | Exploration Maps"
   },
   {
     "slug": "how-to-import-csv-data-mining-map",
@@ -1513,7 +1260,7 @@
       },
       {
         "h2": "Related guides",
-        "html": "Use this with the <a href=\"/blog/how-to-make-a-drill-results-map/\">drill results map guide</a> and the <a href=\"/blog/how-to-make-a-mining-claims-map/\">mining claims map guide</a>, or import vector files with the <a href=\"/blog/how-to-import-geojson-mining-map/\">GeoJSON / Shapefile guide</a>. Finish with the <a href=\"/blog/how-to-export-mining-map-pdf/\">export to PDF guide</a>."
+        "html": "Use this with the <a href=\"/blog/how-to-make-a-drill-results-map/\">drill results map guide</a> and the <a href=\"/blog/how-to-make-a-mining-claims-map/\">mining claims map guide</a>, or import vector files with the <a href=\"/blog/how-to-import-geojson-mining-map/\">GeoJSON / Shapefile guide</a>. Finish with the <a href=\"/blog/how-to-make-a-professional-exploration-map/\">professional map guide</a>."
       }
     ],
     "faqs": [
@@ -1546,16 +1293,26 @@
       "how-to-make-a-drill-results-map",
       "how-to-make-a-mining-claims-map",
       "how-to-import-geojson-mining-map",
-      "how-to-export-mining-map-pdf"
+      "how-to-make-a-professional-exploration-map"
     ],
-    "publishedDate": "2025-12-22"
+    "publishedDate": "2025-12-22",
+    "category": "gis-data"
   },
   {
     "slug": "how-to-create-ni-43-101-compliant-map",
-    "title": "How to Create an NI 43-101 Compliant Map",
-    "metaDescription": "Build NI 43-101-ready map figures: the standard element checklist (scale, north arrow, legend, datum, date), where each lives in Exploration Maps, and a print-quality export.",
-    "directAnswer": "An NI 43-101 report map figure is expected to include a title with project and figure number, scale bar, north arrow, legend, coordinate/projection note, data source, effective date, and clean legible styling. Exploration Maps includes all of these elements — turn them on, fill in the title block, and export as PDF at 3× pixel ratio.",
+    "title": "How to Prepare Map Figures for an NI 43-101 Technical Report",
+    "metaDescription": "Practical guidance on preparing map figures for an NI 43-101 technical report — figure elements, coordinate system and datum labelling, captions and numbering. The QP determines what the report requires.",
+    "directAnswer": "Map figures in an NI 43-101 technical report are expected to carry a figure number and caption, a scale bar, a north arrow, a stated coordinate system and datum, a legend naming every element, and a source or date. No mapping software can make a figure compliant: NI 43-101 governs the disclosure and the report, and the qualified person responsible for the report determines what its figures must show. What a tool can do is make it straightforward to produce figures that carry those elements consistently.",
     "sections": [
+      {
+        "h2": "What this guide does not claim",
+        "box": {
+          "kind": "note",
+          "title": "Software cannot make a figure NI 43-101 compliant",
+          "html": "National Instrument 43-101 is a Canadian Securities Administrators instrument governing disclosure of scientific and technical information about mineral projects. It applies to the disclosure and to the technical report, and responsibility for meeting it rests with the issuer and the qualified person — not with a mapping tool. This guide covers figure conventions that are widely expected in technical reports. Consult the current instrument and companion policy, and your QP, for what your report actually requires: <a href=\"https://www.bcsc.bc.ca/securities-law/law-and-policy/instrument-list/43-101-standards-of-disclosure-for-mineral-projects\" rel=\"nofollow noopener\" target=\"_blank\">NI 43-101 on the BCSC site</a>."
+        },
+        "body": "That qualification is not throat-clearing. A map produced in any tool can fail a review for reasons that have nothing to do with the tool — a missing datum statement, an unlabelled figure, a scale that contradicts the text."
+      },
       {
         "h2": "The standard figure checklist",
         "body": "Technical report figures follow strong conventions. Before any map goes to your QP, it should carry:",
@@ -1664,11 +1421,14 @@
       }
     ],
     "relatedSlugs": [
-      "how-to-make-a-mining-claims-map",
-      "how-to-export-mining-map-pdf",
-      "how-to-create-exploration-map-investor-presentation"
+      "how-to-make-a-professional-exploration-map",
+      "how-to-create-exploration-map-investor-presentation",
+      "how-to-make-a-drill-results-map"
     ],
-    "publishedDate": "2026-01-05"
+    "publishedDate": "2026-01-05",
+    "category": "exploration-mapping",
+    "fullTitle": "Map Figures for an NI 43-101 Technical Report | Exploration Maps",
+    "cardSummary": "Figure elements, datum labelling, captions and numbering for technical report maps — and why no software can make a map \"compliant\"."
   },
   {
     "slug": "how-to-search-ontario-mining-claims",
@@ -1745,7 +1505,7 @@
       },
       {
         "h2": "Related guides",
-        "html": "See the broad <a href=\"/blog/how-to-make-a-mining-claims-map/\">mining claims map guide</a>, compare with <a href=\"/blog/how-to-map-bc-mineral-claims-live-registry/\">British Columbia</a> or <a href=\"/blog/how-to-search-quebec-mining-claims/\">Quebec</a>, import your own files with the <a href=\"/blog/how-to-import-geojson-mining-map/\">GeoJSON / Shapefile guide</a>, and finish with the <a href=\"/blog/how-to-export-mining-map-pdf/\">export to PDF guide</a>."
+        "html": "See the broad <a href=\"/blog/how-to-make-a-mining-claims-map/\">mining claims map guide</a>, compare with <a href=\"/blog/how-to-map-bc-mineral-claims-live-registry/\">British Columbia</a> or <a href=\"/blog/how-to-search-quebec-mining-claims/\">Quebec</a>, import your own files with the <a href=\"/blog/how-to-import-geojson-mining-map/\">GeoJSON / Shapefile guide</a>, and finish with the <a href=\"/blog/how-to-make-a-professional-exploration-map/\">professional map guide</a>."
       }
     ],
     "faqs": [
@@ -1771,11 +1531,12 @@
       }
     ],
     "relatedSlugs": [
+      "canadian-mineral-claim-registries",
       "how-to-make-a-mining-claims-map",
-      "how-to-map-bc-mineral-claims-live-registry",
-      "how-to-search-quebec-mining-claims",
-      "how-to-export-mining-map-pdf"
-    ]
+      "how-to-map-bc-mineral-claims-live-registry"
+    ],
+    "category": "mineral-claims",
+    "fullTitle": "Ontario Mining Claims Search (MLAS) | Exploration Maps"
   },
   {
     "slug": "how-to-search-saskatchewan-mineral-claims",
@@ -1844,11 +1605,13 @@
       }
     ],
     "relatedSlugs": [
+      "canadian-mineral-claim-registries",
       "how-to-make-a-mining-claims-map",
-      "how-to-search-ontario-mining-claims",
-      "how-to-map-bc-mineral-claims-live-registry"
+      "how-to-search-ontario-mining-claims"
     ],
-    "mapTypeId": "mining-claims-map"
+    "mapTypeId": "mining-claims-map",
+    "category": "mineral-claims",
+    "fullTitle": "Saskatchewan Mineral Claims Search (MARS) | Exploration Maps"
   },
   {
     "slug": "how-to-search-manitoba-mining-claims",
@@ -1918,11 +1681,13 @@
       }
     ],
     "relatedSlugs": [
+      "canadian-mineral-claim-registries",
       "how-to-make-a-mining-claims-map",
-      "how-to-search-ontario-mining-claims",
-      "how-to-search-saskatchewan-mineral-claims"
+      "how-to-search-ontario-mining-claims"
     ],
-    "mapTypeId": "mining-claims-map"
+    "mapTypeId": "mining-claims-map",
+    "category": "mineral-claims",
+    "fullTitle": "Manitoba Mining Claims Search | Exploration Maps"
   },
   {
     "slug": "how-to-search-newfoundland-mineral-claims",
@@ -1999,7 +1764,7 @@
       },
       {
         "h2": "Related guides",
-        "html": "See the broad <a href=\"/blog/how-to-make-a-mining-claims-map/\">mining claims map guide</a>, compare with <a href=\"/blog/how-to-search-ontario-mining-claims/\">Ontario</a> or <a href=\"/blog/how-to-search-quebec-mining-claims/\">Quebec</a>, import your own files with the <a href=\"/blog/how-to-import-geojson-mining-map/\">GeoJSON / Shapefile guide</a>, and finish with the <a href=\"/blog/how-to-export-mining-map-pdf/\">export to PDF guide</a>."
+        "html": "See the broad <a href=\"/blog/how-to-make-a-mining-claims-map/\">mining claims map guide</a>, compare with <a href=\"/blog/how-to-search-ontario-mining-claims/\">Ontario</a> or <a href=\"/blog/how-to-search-quebec-mining-claims/\">Quebec</a>, import your own files with the <a href=\"/blog/how-to-import-geojson-mining-map/\">GeoJSON / Shapefile guide</a>, and finish with the <a href=\"/blog/how-to-make-a-professional-exploration-map/\">professional map guide</a>."
       }
     ],
     "faqs": [
@@ -2025,11 +1790,12 @@
       }
     ],
     "relatedSlugs": [
+      "canadian-mineral-claim-registries",
       "how-to-make-a-mining-claims-map",
-      "how-to-search-ontario-mining-claims",
-      "how-to-search-quebec-mining-claims",
-      "how-to-export-mining-map-pdf"
-    ]
+      "how-to-search-ontario-mining-claims"
+    ],
+    "category": "mineral-claims",
+    "fullTitle": "Newfoundland Mineral Licence Search"
   },
   {
     "slug": "how-to-search-quebec-mining-claims",
@@ -2107,7 +1873,7 @@
       },
       {
         "h2": "Related guides",
-        "html": "See the broad <a href=\"/blog/how-to-make-a-mining-claims-map/\">mining claims map guide</a>, compare with <a href=\"/blog/how-to-search-ontario-mining-claims/\">Ontario</a> or <a href=\"/blog/how-to-map-bc-mineral-claims-live-registry/\">British Columbia</a>, import your own files with the <a href=\"/blog/how-to-import-geojson-mining-map/\">GeoJSON / Shapefile guide</a>, and finish with the <a href=\"/blog/how-to-export-mining-map-pdf/\">export to PDF guide</a>."
+        "html": "See the broad <a href=\"/blog/how-to-make-a-mining-claims-map/\">mining claims map guide</a>, compare with <a href=\"/blog/how-to-search-ontario-mining-claims/\">Ontario</a> or <a href=\"/blog/how-to-map-bc-mineral-claims-live-registry/\">British Columbia</a>, import your own files with the <a href=\"/blog/how-to-import-geojson-mining-map/\">GeoJSON / Shapefile guide</a>, and finish with the <a href=\"/blog/how-to-make-a-professional-exploration-map/\">professional map guide</a>."
       }
     ],
     "faqs": [
@@ -2133,199 +1899,12 @@
       }
     ],
     "relatedSlugs": [
+      "canadian-mineral-claim-registries",
       "how-to-make-a-mining-claims-map",
-      "how-to-search-ontario-mining-claims",
-      "how-to-search-newfoundland-mineral-claims",
-      "how-to-export-mining-map-pdf"
-    ]
-  },
-  {
-    "slug": "what-to-include-on-a-mining-claim-map",
-    "mapTypeId": "mining-claims-map",
-    "title": "What to Include on a Mining Claim Map",
-    "metaDescription": "The complete checklist for a professional mining claim map — boundaries, labels, title block, legend, scale, context, inset, and the verification note most maps forget.",
-    "directAnswer": "A mining claim map needs: styled claim boundaries, claim labels, a title block with project/company/date, a legend, scale bar and north arrow, geographic context (roads, water, place names), a location inset, and a registry-verification note. That combination makes it readable, credible, and safe to share.",
-    "sections": [
-      {
-        "h2": "The checklist",
-        "checklist": [
-          "Claim boundaries — the subject, styled conventionally",
-          "Claim labels — tenure numbers or block names",
-          "Title block — project, company, date",
-          "Legend — every symbol explained",
-          "Scale bar + north arrow",
-          "Geographic context — roads, water, towns at low opacity",
-          "Location inset — where in the province/state this sits",
-          "Registry note — where the data came from and when"
-        ]
-      },
-      {
-        "h2": "Boundaries: the one hard line",
-        "body": "Claims are the legal spine of the map — style them so nothing competes: the conventional treatment is a solid boundary with a light fill. If the property has multiple claim blocks or partners, colour by block/owner and let the legend explain."
-      },
-      {
-        "h2": "Labels: connect map to paperwork",
-        "body": "Label claims with tenure numbers (technical audiences) or block names (investor audiences). Unlabelled polygons force readers to cross-reference a table — label the map and the figure stands alone.",
-        "image": {
-          "src": "/blog-img/map-claims.png",
-          "alt": "A styled mining claims map with labels and legend",
-          "caption": "Boundaries, labels, and a legend — the core of a claim map that stands alone."
-        }
-      },
-      {
-        "h2": "Title block and date: the credibility markers",
-        "body": "Project name, company, and — critically — a date. Tenure changes monthly; an undated claim map is unusable to anyone careful. The date tells readers exactly how current the picture is."
-      },
-      {
-        "h2": "Scale, north, legend, context, inset",
-        "body": "These five turn a shape-drawing into a map: scale bar and north arrow orient it; the legend decodes it; low-opacity roads/water/towns place it locally; the inset places it regionally. All are toggles in the Design section — there's no excuse for a figure missing them."
-      },
-      {
-        "h2": "The note almost everyone forgets",
-        "box": {
-          "kind": "verify",
-          "title": "Say where the boundaries came from",
-          "html": "Add a footer note: source registry and retrieval date, plus 'verify current tenure with the official registry'. E.g. <em>'Claim boundaries: BC Mineral Titles Online, retrieved 2026-07-06. Not an official tenure record.'</em> It protects you, and sophisticated readers look for it."
-        }
-      }
+      "how-to-search-ontario-mining-claims"
     ],
-    "faqs": [
-      {
-        "q": "Should I show expired or pending claims on the map?",
-        "a": "Only with distinct styling and a legend entry — e.g. dashed grey for 'application pending'. Mixing expired ground into a solid claims layer misrepresents the holding; when in doubt, map active tenure only."
-      },
-      {
-        "q": "What colour should claim boundaries be?",
-        "a": "There's no rule, but the readable convention is a strong boundary colour (blue/red) with a light fill of the same hue at low opacity. On satellite basemaps, use white or a bright colour for contrast."
-      },
-      {
-        "q": "Do I label every claim or just blocks?",
-        "a": "Scale decides. A 10-claim property: label each tenure number. A 300-cell land package: label named blocks and provide the full tenure list in an accompanying table — 300 numbers on one figure is noise."
-      },
-      {
-        "q": "What goes in the legend of a claims-only map?",
-        "a": "Even a single-layer map benefits from a legend entry ('Mineral claims — Company X') plus entries for context layers if shown. If claims are coloured by owner or block, the legend is where that coding is explained."
-      },
-      {
-        "q": "Is a claim map from public registry data accurate enough to publish?",
-        "a": "For presentations and releases, yes, with the source-and-date note and registry verification of anything material. For legal or transaction purposes, always work from official registry records — public GIS layers can lag."
-      }
-    ],
-    "relatedSlugs": [
-      "how-to-make-a-mining-claims-map",
-      "how-to-create-exploration-map-investor-presentation",
-      "how-to-export-mining-map-pdf"
-    ],
-    "publishedDate": "2026-06-20"
-  },
-  {
-    "slug": "map-drill-results-for-junior-mining-news-release",
-    "mapTypeId": "drill-results-map",
-    "title": "How to Map Drill Results for a Junior Mining News Release",
-    "metaDescription": "Build a clear drill results figure for a junior mining news release: plot collars, highlight the headline intercepts, show targets and claims for context, and export a clean PNG or PDF that reads on a phone.",
-    "directAnswer": "For a news-release drill map, plot collars from a CSV or GeoJSON, label the holes, badge the headline intercepts (grade × width), add the target and claim boundaries for context, keep the legend and title block clean, and export a PNG for the release and website or a news-release figure PDF. The map should be legible at the small size it appears in an email or on a phone.",
-    "ctaTop": {
-      "text": "Import your file and export an investor-ready map.",
-      "sub": "Drop in your collars and build a release-ready figure in minutes."
-    },
-    "ctaBottom": {
-      "text": "Turn drill data into a clean news-release figure.",
-      "sub": "Open the editor, label your best holes, and export a clean figure."
-    },
-    "sections": [
-      {
-        "h2": "Why the map carries the news release",
-        "body": "In a junior mining news release, the drill map is often the first thing readers look at — before the body text. A clear map showing where the holes are and which intercepts matter helps the result land with investors who skim. A confusing map buries the news."
-      },
-      {
-        "h2": "What you need",
-        "checklist": [
-          "Drill collar locations (hole ID + decimal-degree coordinates) as CSV or GeoJSON",
-          "The headline intercepts you'll highlight (grade × width)",
-          "The target outline and your claim boundaries for context",
-          "Your logo, the date, and the project name"
-        ]
-      },
-      {
-        "h2": "Step 1: Plot the drill collars",
-        "body": "Import collars from a CSV or GeoJSON — typically hole ID, latitude, longitude — and assign the Drillholes role. Keep the symbols consistent so the drilling pattern is easy to follow. See the CSV import guide if your coordinates need attention.",
-        "image": {
-          "alt": "Drill collars plotted as consistent markers over a target area",
-          "caption": "Collars plotted with the Drillholes role",
-          "src": "/blog-img/map-claims.png"
-        }
-      },
-      {
-        "h2": "Step 2: Highlight the headline intercepts",
-        "body": "Add Badge Label callouts next to the holes that drive the story — grade over width, e.g. '32m @ 6.1 g/t Au'. Resist labelling every hole; spotlight the results investors should remember so attention goes where it should.",
-        "image": {
-          "alt": "Two holes badge-labelled with their best intercepts standing out from the pattern",
-          "caption": "Badging only the headline holes keeps the story clear",
-          "src": "/blog-img/badge-editor.png"
-        },
-        "cta": {
-          "text": "Turn drill data into a clean news-release figure.",
-          "sub": "Badge your best holes so the numbers stand out at a glance."
-        }
-      },
-      {
-        "h2": "Step 3: Show the target and claim context",
-        "body": "Add the target outline and your claim boundaries so readers can see the holes are testing the intended target and sit on the company's ground. Context is what turns a set of dots into an interpretable result."
-      },
-      {
-        "h2": "Step 4: Keep it clean for a wide audience",
-        "body": "News releases reach non-technical readers. Use a clear basemap, a concise legend, a readable title block with your logo, and a scale bar and north arrow. Check it's legible at the size it will appear in an email or on a phone."
-      },
-      {
-        "h2": "Step 5: Export the figure",
-        "body": "Export a PNG sized for email and web, or a news-release figure PDF if the map is also a report attachment. Reuse the same figure in your investor deck so the story stays visually consistent across the release, the website, and the presentation."
-      },
-      {
-        "h2": "Example: a discovery-hole release",
-        "body": "Your release leads with one discovery hole and two strong step-outs. Plot all collars, badge the three headline holes with grade × width, outline the target and your claim, switch to Satellite to show the setting, add a clean title block with the date, and export a PNG plus a figure PDF — ready for the wire, the website, and the deck."
-      },
-      {
-        "h2": "Disclosure and verification",
-        "box": {
-          "kind": "verify",
-          "title": "Follow your disclosure obligations",
-          "html": "The map reflects the data you enter — it does not validate assays, true widths, or QA/QC. Ensure intercepts and any claim/target context follow your QP's guidance and applicable securities disclosure rules, and verify claim boundaries with the official registry. Exploration Maps is a visualization tool, not the official registry."
-        }
-      },
-      {
-        "h2": "Related guides",
-        "html": "Build the underlying map with the <a href=\"/blog/how-to-make-a-drill-results-map/\">drill results map guide</a>, fix coordinate issues with the <a href=\"/blog/how-to-import-csv-data-mining-map/\">CSV import guide</a>, reuse the figure with the <a href=\"/blog/how-to-create-exploration-map-investor-presentation/\">investor presentation guide</a>, and export with the <a href=\"/blog/how-to-export-mining-map-pdf/\">PDF export guide</a>. The full feature set is on the <a href=\"/drill-results-map/\">drill results map tool</a> page."
-      }
-    ],
-    "faqs": [
-      {
-        "q": "What data do I need for a news-release drill map?",
-        "a": "At minimum the collar locations (hole ID and decimal-degree coordinates), plus the key intercepts you'll highlight as callouts, and ideally the target outline and claim boundaries for context."
-      },
-      {
-        "q": "What format should the figure be?",
-        "a": "A PNG sized for email and web works for most releases; a news-release figure PDF is useful when the map is also a report attachment. Include a legend, scale bar, north arrow, and title block."
-      },
-      {
-        "q": "How many holes should I label?",
-        "a": "Only the ones that carry the story. Badge your headline intercepts and keep the rest as plain markers, so the result a reader should remember is unmistakable at a small size."
-      },
-      {
-        "q": "How do I keep the map readable for investors?",
-        "a": "Use a clean basemap, a concise legend, and a readable title block, highlight only the intercepts that matter, and verify it's legible at the small size it appears in a release or on a phone."
-      },
-      {
-        "q": "Can I reuse the figure in my investor deck?",
-        "a": "Yes — that's recommended. Export the same map for the release and at 16:9 for the deck so your drilling story looks consistent everywhere. See the investor presentation guide."
-      }
-    ],
-    "relatedSlugs": [
-      "how-to-make-a-drill-results-map",
-      "how-to-import-csv-data-mining-map",
-      "how-to-create-exploration-map-investor-presentation",
-      "how-to-export-mining-map-pdf"
-    ],
-    "publishedDate": "2026-06-20"
+    "category": "mineral-claims",
+    "fullTitle": "Quebec Mining Claims Search (GESTIM) | Exploration Maps"
   },
   {
     "slug": "exploration-mapping-file-types-shapefile-kml-geojson-csv",
@@ -2423,6 +2002,585 @@
       "how-to-import-csv-data-mining-map",
       "how-to-make-a-mining-claims-map"
     ],
-    "publishedDate": "2026-06-20"
+    "publishedDate": "2026-06-20",
+    "category": "gis-data",
+    "fullTitle": "Shapefile, KML, GeoJSON & CSV for Mapping"
+  },
+  {
+    "slug": "how-to-make-a-professional-exploration-map",
+    "mapTypeId": "mining-claims-map",
+    "category": "exploration-mapping",
+    "title": "How to Make a Professional Mineral Exploration Map",
+    "metaDescription": "The map elements that make an exploration figure look competent: basemap choice, scale bar, north arrow, distance rings, title block, and export settings for slides, reports and news releases.",
+    "cardSummary": "Basemap choice, scale bar, north arrow, distance rings, title block and export settings — the elements that separate a figure from an illustration.",
+    "directAnswer": "A professional exploration map needs five things: a basemap that suits the audience, a legible title block with project name, company and date, a scale bar and north arrow, a legend that names every layer, and an export sized for where the map will actually be seen. Choose the basemap by output — light for reports, satellite for investor decks, topographic for access and infrastructure. Export PDF for anything printed or filed, PNG for slides and email.",
+    "ctaTop": {
+      "text": "Build the map, not the layout.",
+      "sub": "Title block, legend, scale bar and north arrow are toggles, not a page-layout exercise."
+    },
+    "ctaBottom": {
+      "text": "Export a figure at the size it will actually be seen.",
+      "sub": "Frame once against the ratio guides, then export PNG or PDF."
+    },
+    "sections": [
+      {
+        "h2": "What separates a figure from an illustration",
+        "body": "A map without a scale bar and a north arrow is an illustration. Reviewers of technical reports expect both on every figure, and investors read their presence as competence without consciously noticing them. The same is true of a legend that names every layer and a title block that says what the project is and when the map was made. None of this is difficult — it is just easy to forget under deadline, and its absence is the first thing an experienced reader notices."
+      },
+      {
+        "h2": "Choose the basemap by where the map is going",
+        "body": "The basemap is the single biggest decision, and it should be made by output rather than by taste.",
+        "table": {
+          "headers": [
+            "Basemap",
+            "Use it for",
+            "Why"
+          ],
+          "rows": [
+            [
+              "Light",
+              "Technical reports, permitting, regulatory filings",
+              "Neutral grey canvas keeps claim boundaries, collars and labels legible, and survives photocopying and greyscale printing"
+            ],
+            [
+              "Satellite",
+              "Investor presentations, location maps",
+              "Answers 'how remote is this?' and 'is there access?' before anyone asks. Pair with light-coloured layer strokes"
+            ],
+            [
+              "Topographic",
+              "Access, infrastructure, drill planning",
+              "Contours and elevation shading carry the story when it is physical — road access, pad locations, powerline routes"
+            ],
+            [
+              "Dark",
+              "Website heroes, social posts, on-screen dashboards",
+              "High contrast makes coloured layers glow on screen. Do not print it"
+            ]
+          ]
+        }
+      },
+      {
+        "h2": "Add context, then get out of the way",
+        "body": "Two overlays sharpen almost any exploration map: the Context overlay (roads, water bodies and towns) and Reference Labels (place names that orient a reader instantly). Drop the context opacity to roughly 40–60% so your own data stays dominant. The failure mode here is enthusiasm — a map carrying every available layer at full strength communicates less than one carrying three.",
+        "image": {
+          "alt": "Exploration map with claim boundaries over a satellite basemap, context overlay at reduced opacity",
+          "caption": "Context at reduced opacity: enough to orient, not enough to compete",
+          "src": "/blog-img/layer-claims-role.png"
+        }
+      },
+      {
+        "h2": "Scale bar and north arrow",
+        "body": "Both live in the Design section and both are toggles. The scale bar calculates real ground distance for the current view and picks a clean round number that updates as you zoom, so there is nothing to hand-edit and nothing to get wrong when you change the framing.",
+        "items": [
+          "Scale bar: bottom-left or bottom-right, away from the legend",
+          "North arrow: a top corner, opposite the title block",
+          "Neither should overlap data, labels, or an inset map",
+          "Elements assigned to the same corner stack automatically with correct spacing"
+        ]
+      },
+      {
+        "h2": "Distance rings, when proximity is the argument",
+        "body": "A distance ring turns 'remote project' into a number, and it earns its place whenever proximity is part of the story — distance to the nearest town, port, rail line, mill or power line, or a 'within trucking distance' argument for a development-stage project.",
+        "html": "Centre the ring on the <em>infrastructure</em> rather than on your project. The label then reads as the distance to it, which is the direction the argument runs. Enable the curved arc label and keep the text short — distance plus landmark, e.g. \"50 km from Port of Prince Rupert\"."
+      },
+      {
+        "h2": "The title block",
+        "body": "Project name, company name, and the map date. The date matters more than people expect: a claim map without one is undateable evidence, and tenure status changes. Click the title on the map to edit it, set the date in Design → Text & Metadata, and upload your logo at the bottom of the Layers section."
+      },
+      {
+        "h2": "Export: match the output before you frame",
+        "body": "Set the export ratio first. The on-screen guides then show exactly what the exported file will contain, so you frame once rather than exporting, checking, and re-framing.",
+        "table": {
+          "headers": [
+            "Going to",
+            "Format",
+            "Ratio"
+          ],
+          "rows": [
+            [
+              "Slide deck, website, email",
+              "PNG",
+              "Landscape 16:9"
+            ],
+            [
+              "Technical report figure, permitting document",
+              "PDF",
+              "Letter or A4 portrait"
+            ],
+            [
+              "News release attachment",
+              "PDF or PNG",
+              "Landscape 16:9 for the wire, portrait if it is also a report figure"
+            ],
+            [
+              "Print at size",
+              "PDF at 3× pixel ratio",
+              "Match the page"
+            ]
+          ]
+        }
+      },
+      {
+        "h2": "Check it at the size it will be seen",
+        "body": "The most common export mistake is judging a map at full screen when it will be viewed as a slide thumbnail, in an email on a phone, or as a half-page figure. Shrink the browser window, or open the exported file at its real display size, and confirm the labels and the scale bar are still readable. If they are not, the fix is fewer labels rather than smaller ones."
+      }
+    ],
+    "faqs": [
+      {
+        "q": "What map elements does an exploration map figure need?",
+        "a": "At minimum: a scale bar, a north arrow, a legend naming every layer, and a title block with the project name, company and date. Technical report figures are also usually expected to state the coordinate system and datum. Beyond that, include only what supports the point the figure is making."
+      },
+      {
+        "q": "Which basemap should I use for an investor presentation?",
+        "a": "Satellite, in most cases. It gives an audience immediate physical context — terrain, vegetation, water, existing roads and disturbance — which answers the access and remoteness questions investors ask early. Use light-coloured strokes on your layers so they stay visible over imagery."
+      },
+      {
+        "q": "Should I export PNG or PDF?",
+        "a": "PDF for anything printed or filed — technical report figures, permitting documents, formal attachments — because it preserves exact page dimensions. PNG for slides, websites and email, because it is lighter and drops straight into PowerPoint or a mail client."
+      },
+      {
+        "q": "How do I make a map readable when it is printed in greyscale?",
+        "a": "Use the light basemap, and make sure nothing important is distinguished by colour alone — vary line weight, dash pattern or fill hatching as well. Then print a test page in greyscale before you commit; it takes a minute and catches the layers that collapse into the same grey."
+      },
+      {
+        "q": "Where should the scale bar and north arrow go?",
+        "a": "Scale bar in a bottom corner away from the legend; north arrow in a top corner opposite the title block. The rule underneath both conventions is simply that neither should ever sit on top of data or labels."
+      }
+    ],
+    "relatedSlugs": [
+      "how-to-create-exploration-map-investor-presentation",
+      "how-to-create-ni-43-101-compliant-map",
+      "how-to-make-a-mining-claims-map"
+    ],
+    "publishedDate": "2026-08-06",
+    "fullTitle": "How to Make a Professional Exploration Map | Exploration Maps"
+  },
+  {
+    "slug": "bc-mineral-titles-online-guide",
+    "category": "mineral-claims",
+    "title": "BC Mineral Titles Online (MTO): How to Find, Map and Monitor Mineral Claims",
+    "metaDescription": "What Mineral Titles Online is, what it is the authority for, and how to search, map and monitor British Columbia mineral claims — including where Exploration Maps helps and where you still need MTO.",
+    "cardSummary": "What MTO is, what it is authoritative for, and how to search, map and monitor BC mineral claims around it.",
+    "directAnswer": "Mineral Titles Online (MTO) is the Province of British Columbia's official system for acquiring and administering mineral, placer and coal titles. It is where claims are staked, maintained, transferred and paid for, and it is the authoritative record of who holds a title and when it expires. Exploration Maps does not replace MTO — it reads the province's public tenure dataset so you can search claims by tenure number or registered owner, map them, and track good-to-dates, then sends you back to MTO for anything that governs a transaction or a deadline.",
+    "ctaTop": {
+      "text": "Search BC claims by tenure number or owner.",
+      "sub": "Map them in a couple of minutes, then verify in MTO."
+    },
+    "ctaBottom": {
+      "text": "Monitor up to 10 BC claims free.",
+      "sub": "Reminders at 90, 30 and 1 day before each good-to-date."
+    },
+    "sections": [
+      {
+        "h2": "What Mineral Titles Online actually is",
+        "body": "MTO is the Province of British Columbia's online system for mineral, placer and coal titles, run by the Mineral Titles Branch. It is a transactional system, not just a viewer: free miner certificate holders use it to acquire cell claims, register assessment work, pay cash in lieu, apply for leases, and transfer title.",
+        "html": "That transactional role is why MTO is the authority. A tenure's current status, its good-to-date, its registered owner and its boundaries are what MTO says they are. Any other source — including this one — is a copy of published data, and a copy can be stale, partial, or wrong. Start at <a href=\"https://www.mtonline.gov.bc.ca/\" rel=\"nofollow noopener\" target=\"_blank\">Mineral Titles Online</a>; background, rules and contacts are on the <a href=\"https://www2.gov.bc.ca/gov/content/industry/mineral-exploration-mining/mineral-titles\" rel=\"nofollow noopener\" target=\"_blank\">Mineral Titles Branch</a> site.",
+        "box": {
+          "kind": "verify",
+          "title": "What must be verified in MTO",
+          "html": "Current ownership, current status, good-to-date, and exact boundaries — before any transaction, filing, staking decision or deadline decision. Exploration Maps is not the official title registry and does not connect to your MTO account."
+        }
+      },
+      {
+        "h2": "What people actually use MTO for",
+        "items": [
+          "Acquiring cell claims (which requires a free miner certificate and an MTO account)",
+          "Registering statements of work, or paying cash in lieu, to push a good-to-date forward",
+          "Transferring title, and recording ownership changes",
+          "Applying for mineral or placer leases",
+          "Checking the authoritative status and expiry of a specific tenure number"
+        ],
+        "body": "Every one of those is a transaction or an authoritative lookup, and every one of them happens in MTO. Nothing in this guide changes that."
+      },
+      {
+        "h2": "Where MTO is hard work, and what to do instead",
+        "body": "MTO is built for administering titles, not for exploring the tenure landscape. Three jobs are noticeably awkward in it:",
+        "items": [
+          "Seeing a whole company's land position at once, rather than one tenure at a time",
+          "Getting claim boundaries out as a map you can put in a deck, a report or a news release",
+          "Remembering, months later, that a good-to-date is approaching"
+        ],
+        "html": "Those three gaps are what Exploration Maps is for. It reads the province's public mineral tenure dataset — the same DataBC layer that underlies most third-party BC claim maps — and puts a search, a map and a reminder system on top of it."
+      },
+      {
+        "h2": "Searching BC claims outside MTO",
+        "body": "In Exploration Maps, open Add Claims → Search Claims Registry and select British Columbia. Three search modes are available for BC:",
+        "table": {
+          "headers": [
+            "Search by",
+            "Use it when",
+            "Example"
+          ],
+          "rows": [
+            [
+              "Registered owner",
+              "You want a company's whole BC land position",
+              "Teck Resources"
+            ],
+            [
+              "Tenure number",
+              "You have a specific claim in hand",
+              "1012345"
+            ],
+            [
+              "Map sheet",
+              "You are working a NTS map area",
+              "082F056"
+            ]
+          ]
+        },
+        "html": "Owner search returns <em>candidates</em> grouped by match confidence rather than a finished answer, because company names reach the registry in clipped legal form, under previous names, and through subsidiaries and joint-venture partners. You confirm what enters your map. The <a href=\"/blog/find-mineral-claims-owned-by-company-bc/\">company claim-search guide</a> covers that workflow in detail."
+      },
+      {
+        "h2": "Mapping the results",
+        "body": "Select the tenures you want and add them to the map. They come in as a claims layer with the boundaries from the public dataset, and the map fits to their extent. Assign the Claims role for the blue stroke and semi-transparent fill convention that most NI 43-101 figures use, add a title block and your logo, and export.",
+        "html": "If you already have a tenure file from MTO or a GIS, import it instead — GeoJSON, zipped Shapefile and KML all work. See <a href=\"/blog/how-to-map-bc-mineral-claims-live-registry/\">how to map BC mineral claims from the public registry</a> for the full walkthrough."
+      },
+      {
+        "h2": "Tracking good-to-dates afterwards",
+        "body": "The good-to-date is the date by which a claim must be maintained — assessment work recorded, or cash paid in lieu — to stay in good standing. MTO is where you do that work. Exploration Maps is where you find out it is coming.",
+        "html": "Tenure Monitor saves a group of claims, reads their published good-to-dates, and emails reminders at 90, 30 and 1 day beforehand. It also flags changes it detects in the government record — a good-to-date that moved, an owner added or removed, a title that stopped appearing in the dataset. See the <a href=\"/blog/how-to-track-bc-mineral-claim-good-to-dates/\">BC claim expiry guide</a>.",
+        "cta": {
+          "text": "Monitor up to 10 BC claims free.",
+          "sub": "Reminders before each good-to-date. No credit card."
+        }
+      },
+      {
+        "h2": "How current the public data is",
+        "body": "Exploration Maps synchronizes the province's published tenure dataset on a schedule and displays the timestamp of the last successful synchronization on every portfolio view and in every reminder email. The province does not document an update frequency for the published dataset, so nothing here is described as live.",
+        "box": {
+          "kind": "source",
+          "title": "Data source",
+          "html": "BC mineral tenure data is published by DataBC. Contains information licensed under the Open Government Licence – British Columbia. Published data is a copy of the registry, not the registry."
+        }
+      },
+      {
+        "h2": "When to go back to MTO",
+        "items": [
+          "Before staking, or deciding not to re-stake ground",
+          "Before filing assessment work or paying cash in lieu",
+          "Before any transaction — option, purchase, transfer, or JV",
+          "When a reminder or a detected change tells you something moved",
+          "Any time the exact boundary or the exact expiry date matters"
+        ],
+        "body": "The short version: use Exploration Maps to notice things and to communicate them, and use MTO to decide and to act."
+      }
+    ],
+    "faqs": [
+      {
+        "q": "What is Mineral Titles Online?",
+        "a": "MTO is the Province of British Columbia's official online system for mineral, placer and coal titles, administered by the Mineral Titles Branch. Free miner certificate holders use it to acquire cell claims, register assessment work, pay cash in lieu, transfer title and apply for leases. It is the authoritative record of BC mineral title."
+      },
+      {
+        "q": "Do I need a free miner certificate to search BC mineral claims?",
+        "a": "No. A free miner certificate is required to acquire and hold mineral title in British Columbia, and to transact in MTO. Searching and viewing published tenure information — including in Exploration Maps — does not require one."
+      },
+      {
+        "q": "Can Exploration Maps replace MTO?",
+        "a": "No, and it is not intended to. Exploration Maps reads the province's published tenure dataset to make searching, mapping and deadline tracking easier. It does not log into MTO, store MTO credentials, file assessment work, pay cash in lieu, register title, or acquire ground. Ownership, status, boundaries and deadlines must be verified in MTO."
+      },
+      {
+        "q": "How do I find who owns a mineral claim in BC?",
+        "a": "Search by registered owner in Exploration Maps to see a company's published land position, or look up a specific tenure number. For authoritative ownership — the answer you would rely on for a transaction — check the tenure in MTO, which is the registry of record."
+      },
+      {
+        "q": "Is the claim data in Exploration Maps live?",
+        "a": "No. It reflects the last successful synchronization with the province's published dataset, and that timestamp is shown on every portfolio view and in every reminder email. Tenure status can change, so verify anything that matters in MTO."
+      },
+      {
+        "q": "What is a good-to-date?",
+        "a": "The date by which a mineral claim must be maintained — through recorded assessment work or a cash payment in lieu — to remain in good standing. It is published in the BC tenure dataset and is the date Tenure Monitor counts down to, in Pacific time."
+      }
+    ],
+    "relatedSlugs": [
+      "how-to-track-bc-mineral-claim-good-to-dates",
+      "find-mineral-claims-owned-by-company-bc",
+      "how-to-map-bc-mineral-claims-live-registry"
+    ],
+    "publishedDate": "2026-08-06",
+    "fullTitle": "BC Mineral Titles Online (MTO) Guide"
+  },
+  {
+    "slug": "find-mineral-claims-owned-by-company-bc",
+    "category": "mineral-claims",
+    "title": "How to Find Mineral Claims Owned by a Company in British Columbia",
+    "metaDescription": "Search BC mineral claims by registered owner to see a company's land position — for competitor research, project generation, due diligence and neighbouring-ground checks. Verify ownership in MTO.",
+    "cardSummary": "Search by registered owner to see a company's BC land position — competitor research, project generation and due diligence.",
+    "directAnswer": "To find mineral claims held by a company in British Columbia, search the province's published tenure data by registered owner. In Exploration Maps, open Add Claims → Search Claims Registry, select British Columbia, choose the registered-owner mode and enter the company name. Matches are returned as candidates grouped by confidence — company names reach the registry in clipped legal form and under previous names — so you confirm which titles are actually theirs before mapping them. Authoritative ownership must be confirmed in Mineral Titles Online.",
+    "ctaTop": {
+      "text": "See a company's BC land position.",
+      "sub": "Search by registered owner, select the matches, map them."
+    },
+    "ctaBottom": {
+      "text": "Map a competitor's ground in a few minutes.",
+      "sub": "Then watch it — Tenure Monitor tracks claims you don't own."
+    },
+    "sections": [
+      {
+        "h2": "Why you would want this",
+        "body": "Owner search answers a question that is genuinely hard to answer one tenure at a time.",
+        "table": {
+          "headers": [
+            "Job",
+            "What you are looking for"
+          ],
+          "rows": [
+            [
+              "Competitor research",
+              "How much ground a peer holds, where it is, and how it has moved"
+            ],
+            [
+              "Project generation",
+              "Who holds the ground around a showing or a geophysical anomaly"
+            ],
+            [
+              "Acquisition and due diligence",
+              "Whether a vendor's claimed land position matches the published record"
+            ],
+            [
+              "Neighbouring claims",
+              "Who you actually share a boundary with before you approach anyone"
+            ],
+            [
+              "Land-position review",
+              "Your own holdings, assembled in one view rather than tenure by tenure"
+            ]
+          ]
+        }
+      },
+      {
+        "h2": "The search, step by step",
+        "body": "Open Exploration Maps and choose Add Claims → Search Claims Registry. Select British Columbia, choose the registered-owner mode, and type the company name. Start with the distinctive part of the name rather than the full legal form — 'Goliath' will find more than 'Goliath Resources Limited' if the registry recorded it differently.",
+        "image": {
+          "alt": "Claim search panel with British Columbia selected and a company name entered",
+          "caption": "Searching BC tenures by registered owner",
+          "src": "/blog-img/registry-bc.png"
+        }
+      },
+      {
+        "h2": "Read the candidates properly",
+        "body": "Results come back grouped: exact name match, possible match, and weak match. That grouping is deliberate and it is worth respecting.",
+        "html": "Company names reach a title registry in clipped legal form, with inconsistent punctuation, under previous corporate names, through numbered subsidiaries, and in the name of one joint-venture partner rather than the operator everyone talks about. A name match ranks a candidate; it does not establish who holds the ground. Nothing enters your map until you tick it.",
+        "box": {
+          "kind": "capability",
+          "title": "What a name match is and is not",
+          "html": "Owner search matches the registered-owner field in the province's published tenure data. It is a search aid. It is not a determination of legal ownership, and a company's real land position may include titles held under a name you did not search. Confirm ownership in <a href=\"https://www.mtonline.gov.bc.ca/\" rel=\"nofollow noopener\" target=\"_blank\">Mineral Titles Online</a>."
+        }
+      },
+      {
+        "h2": "Select the whole position at once",
+        "body": "Each candidate group has a select-all control, and the footer totals what you have selected — claim count and hectares together. Those two numbers are the land position, and they are the numbers you will end up quoting, so it is worth reading them before you add rather than counting rows afterwards.",
+        "html": "Hectares in particular tends to surprise people: forty small cell claims and four large leases can describe very different companies."
+      },
+      {
+        "h2": "Map it",
+        "body": "Add the selected tenures and the map fits to their extent. Assign the Claims role for standard styling, and give the layer a name that will read in the legend — 'Peer Ground' or 'Optioned Claims' rather than the default. If you are comparing two companies, add each as its own layer with different stroke colours; they become separate legend entries automatically."
+      },
+      {
+        "h2": "Watch ground you don't own",
+        "body": "A monitored group of claims is a watch list, not an ownership record. You can add a competitor's titles to it and get told when the published record for them changes — a good-to-date that moved, an owner added or removed, a title that stopped appearing in the dataset.",
+        "html": "That is often more useful than the initial search. A neighbour's claim reaching its good-to-date, or changing hands, is exactly the kind of event you would rather learn about early. Nothing about monitoring is visible to the title holder, and nothing about it changes the title.",
+        "box": {
+          "kind": "verify",
+          "title": "A change is not an opportunity until you have checked",
+          "html": "A status change, a termination date, or a title dropping out of the published dataset is what the published data shows. It is not confirmation that ground is available. Records leave a published dataset for several reasons, including partial publication at the province. Check the tenure in MTO before acting on it."
+        },
+        "cta": {
+          "text": "Monitor up to 10 BC claims free.",
+          "sub": "Yours or anybody's. Reminders before each good-to-date."
+        }
+      },
+      {
+        "h2": "Where this workflow stops",
+        "items": [
+          "It reflects published data as of the last successful synchronization, not the live registry",
+          "It matches a registered-owner field, so beneficial ownership and option agreements are invisible to it",
+          "It cannot tell you about applications in progress beyond what the province publishes",
+          "It is not a substitute for a title search when money is changing hands"
+        ],
+        "body": "For a transaction, use it to build the picture and then verify every tenure in MTO."
+      }
+    ],
+    "faqs": [
+      {
+        "q": "Can I search BC mineral claims by company name?",
+        "a": "Yes. Exploration Maps searches the province's published tenure data by registered owner and returns candidates grouped by match confidence. Company names are often recorded in clipped legal form, so try the distinctive part of the name on its own. Confirm ownership in Mineral Titles Online before relying on it."
+      },
+      {
+        "q": "How do I find out who owns a mineral claim in BC?",
+        "a": "Look up the tenure number — in Exploration Maps for the published registered owner and a map of the boundary, or in Mineral Titles Online for the authoritative record. For anything that governs a transaction, MTO is the answer that counts."
+      },
+      {
+        "q": "Can I see a competitor's whole land position?",
+        "a": "You can see the titles published under a registered-owner name matching your search, with a claim count and total hectares. That is usually most of it, but it will miss ground held under a subsidiary, a previous corporate name, or a joint-venture partner's name — so treat the result as a strong starting point rather than a complete answer."
+      },
+      {
+        "q": "Is it legal to look up another company's mineral claims?",
+        "a": "Yes. BC mineral tenure information is public data published by the province under the Open Government Licence – British Columbia. Searching, mapping and monitoring it is ordinary competitive research, and nothing about doing so is visible to the title holder."
+      },
+      {
+        "q": "Can I monitor claims that belong to someone else?",
+        "a": "Yes. A monitored group is a watch list rather than an ownership record, so a competitor's ground, a property you are evaluating, or a block next to your own can all be added and tracked with the same reminders as your own claims."
+      }
+    ],
+    "relatedSlugs": [
+      "bc-mineral-titles-online-guide",
+      "how-to-track-bc-mineral-claim-good-to-dates",
+      "how-to-map-bc-mineral-claims-live-registry"
+    ],
+    "publishedDate": "2026-08-06",
+    "fullTitle": "Find BC Mineral Claims Owned by a Company | Exploration Maps"
+  },
+  {
+    "slug": "canadian-mineral-claim-registries",
+    "category": "mineral-claims",
+    "title": "Canadian Mineral Claim & Tenure Registry Guide",
+    "metaDescription": "The official mineral tenure registry for each Canadian jurisdiction Exploration Maps supports, what you can search in each, and which ones can be searched, mapped and monitored directly.",
+    "cardSummary": "Official registry, searchable fields and Exploration Maps support for each Canadian jurisdiction — with links to the province-specific guides.",
+    "directAnswer": "Each Canadian province and territory runs its own mineral tenure registry, and they differ in what they publish. Exploration Maps supports direct claim search for British Columbia, Ontario, Quebec, Saskatchewan, Manitoba, Newfoundland & Labrador and Yukon. All seven can be mapped. Tenure Monitor — saved claim groups with good-to-date reminders and change detection — currently covers British Columbia only. Every jurisdiction's official registry remains the authority for ownership, status and boundaries.",
+    "ctaTop": {
+      "text": "Search claims in seven Canadian jurisdictions.",
+      "sub": "Pick a province, search by owner or claim number, map the result."
+    },
+    "ctaBottom": {
+      "text": "Start with your own ground.",
+      "sub": "Search a province, add the claims, export a map."
+    },
+    "sections": [
+      {
+        "h2": "What each registry is, and what we support",
+        "body": "The table below reflects what the application actually does today. Where a column says no, it means the capability does not exist yet — not that it is coming.",
+        "table": {
+          "headers": [
+            "Jurisdiction",
+            "Official registry",
+            "Search by owner",
+            "Search by claim number",
+            "Map in Exploration Maps",
+            "Tenure Monitor"
+          ],
+          "rows": [
+            [
+              "British Columbia",
+              "Mineral Titles Online (MTO)",
+              "Yes",
+              "Yes",
+              "Yes",
+              "Yes"
+            ],
+            [
+              "Ontario",
+              "Mining Lands Administration System (MLAS)",
+              "Yes",
+              "Yes",
+              "Yes",
+              "Not yet"
+            ],
+            [
+              "Quebec",
+              "GESTIM",
+              "Yes",
+              "Yes",
+              "Yes",
+              "Not yet"
+            ],
+            [
+              "Saskatchewan",
+              "Mineral Administration Registry Saskatchewan (MARS)",
+              "Yes",
+              "Yes",
+              "Yes",
+              "Not yet"
+            ],
+            [
+              "Manitoba",
+              "Manitoba mineral dispositions (iMaQs)",
+              "No — see note",
+              "Yes",
+              "Yes",
+              "Not yet"
+            ],
+            [
+              "Newfoundland & Labrador",
+              "Mineral Rights / GeoAtlas",
+              "Yes",
+              "Yes",
+              "Yes",
+              "Not yet"
+            ],
+            [
+              "Yukon",
+              "Yukon quartz and placer claims",
+              "Yes",
+              "Yes",
+              "Yes",
+              "Not yet"
+            ]
+          ]
+        },
+        "html": "<strong>Manitoba:</strong> the public disposition layer does not publish a holder name, so only claim-number lookup is offered. That is a limit of the published data rather than a decision on our side, and it is the reason the Manitoba guide leads with the claim number."
+      },
+      {
+        "h2": "The jurisdiction guides",
+        "body": "Where a province has enough of its own quirks to be worth its own walkthrough, it has one:",
+        "html": "<ul><li><a href=\"/blog/how-to-map-bc-mineral-claims-live-registry/\">British Columbia</a> — owner, tenure number and map-sheet search, plus the strongest tenure tooling on the site</li><li><a href=\"/blog/how-to-search-ontario-mining-claims/\">Ontario</a> — MLAS cell claims and how holder names are recorded</li><li><a href=\"/blog/how-to-search-quebec-mining-claims/\">Quebec</a> — GESTIM claims (<em>claims désignés sur carte</em>) and titleholder search</li><li><a href=\"/blog/how-to-search-saskatchewan-mineral-claims/\">Saskatchewan</a> — MARS dispositions</li><li><a href=\"/blog/how-to-search-manitoba-mining-claims/\">Manitoba</a> — claim-number lookup, and why owner search is unavailable</li><li><a href=\"/blog/how-to-search-newfoundland-mineral-claims/\">Newfoundland &amp; Labrador</a> — licences rather than claims, and what that changes</li></ul>Yukon is searchable in the application but does not yet have its own guide."
+      },
+      {
+        "h2": "Why the registries differ so much",
+        "body": "Mineral tenure is administered provincially and territorially in Canada, so there is no national claim registry and no common data model. The practical consequences show up quickly:",
+        "items": [
+          "The unit of tenure differs — claims, cells, licences, dispositions and leases are not interchangeable terms",
+          "Holder or owner information is published in some jurisdictions and withheld in others",
+          "Expiry works differently: BC's good-to-date is not the same instrument as an anniversary date elsewhere",
+          "Boundary precision and coordinate reference systems vary by source",
+          "Update frequency for published datasets is often undocumented"
+        ],
+        "html": "This is why the guides are per-jurisdiction rather than one generic article. A single \"how to search Canadian mining claims\" page would have to be vague enough to be useless."
+      },
+      {
+        "h2": "What to verify, wherever you are working",
+        "box": {
+          "kind": "verify",
+          "title": "The registry governs",
+          "html": "Exploration Maps reads published tenure data and is not an official registry in any jurisdiction. Ownership, status, expiry and exact boundaries must be verified with the responsible provincial or territorial registry before a transaction, a filing, or a deadline decision."
+        },
+        "body": "Published datasets are copies. They can lag the registry, omit recent transactions, or carry generalized boundaries. That is manageable as long as you know which questions require the authoritative source — and all of the expensive ones do."
+      },
+      {
+        "h2": "Tenure monitoring, and why it is BC-first",
+        "body": "Tenure Monitor tracks good-to-dates, sends reminders before them, and detects changes in the published record. It covers British Columbia only at present.",
+        "html": "The reason is that BC publishes a good-to-date as a structured field on every title, which is what makes a reliable countdown possible. Other jurisdictions express maintenance obligations differently, and building a reminder system on a date we had to infer would be building a reminder system that is sometimes wrong about a deadline — which is worse than not having one. See the <a href=\"/blog/how-to-track-bc-mineral-claim-good-to-dates/\">BC good-to-date guide</a>."
+      }
+    ],
+    "faqs": [
+      {
+        "q": "Is there a national mineral claim registry in Canada?",
+        "a": "No. Mineral tenure is administered by each province and territory, so there is no single national registry and no common data format. Each jurisdiction runs its own system — MTO in British Columbia, MLAS in Ontario, GESTIM in Quebec, MARS in Saskatchewan, and so on."
+      },
+      {
+        "q": "Which Canadian jurisdictions can I search in Exploration Maps?",
+        "a": "British Columbia, Ontario, Quebec, Saskatchewan, Manitoba, Newfoundland & Labrador and Yukon. All seven support claim-number lookup and all but Manitoba support owner search — Manitoba's public layer does not publish a holder name."
+      },
+      {
+        "q": "Can I monitor claim expiry outside British Columbia?",
+        "a": "Not yet. Tenure Monitor covers British Columbia only, because BC publishes a good-to-date as a structured field on every title. Other jurisdictions express maintenance obligations differently, and a countdown built on an inferred date would sometimes be wrong about a deadline."
+      },
+      {
+        "q": "Why can't I search Manitoba claims by company?",
+        "a": "Manitoba's public mineral disposition layer does not publish a holder name field, so there is nothing to match a company against. Claim-number lookup works normally. This is a limit of the published data rather than of the search."
+      },
+      {
+        "q": "Are the claim boundaries accurate enough to stake from?",
+        "a": "No. Published boundaries are for visualization and planning. They are not legal surveys, precision varies by source, and they should never be used to determine an exact boundary. Use the responsible registry for anything that turns on where a line actually falls."
+      }
+    ],
+    "relatedSlugs": [
+      "bc-mineral-titles-online-guide",
+      "how-to-make-a-mining-claims-map",
+      "how-to-track-bc-mineral-claim-good-to-dates"
+    ],
+    "publishedDate": "2026-08-06",
+    "fullTitle": "Canadian Mineral Claim & Tenure Registries | Exploration Maps"
   }
 ]

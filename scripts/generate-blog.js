@@ -21,15 +21,51 @@ const TODAY = new Date().toISOString().split('T')[0];
 
 const howToPosts    = JSON.parse(readFileSync(join(__dirname, 'blog-data', 'how-to-posts.json'), 'utf8'));
 const compPosts     = JSON.parse(readFileSync(join(__dirname, 'blog-data', 'comparison-posts.json'), 'utf8'));
-const locations     = JSON.parse(readFileSync(join(__dirname, 'blog-data', 'locations.json'), 'utf8'));
 const mapTypes      = JSON.parse(readFileSync(join(__dirname, 'blog-data', 'map-types.json'), 'utf8'));
 const seoPages      = JSON.parse(readFileSync(join(__dirname, 'blog-data', 'seo-pages.json'), 'utf8'));
+const redirectMap   = JSON.parse(readFileSync(join(__dirname, 'blog-data', 'redirects.json'), 'utf8'));
+
+// The five clusters the site is organised around. Ordered by how close the
+// topic sits to what Exploration Maps actually does — mineral claim search and
+// tenure monitoring lead because that is where the product is genuinely
+// differentiated, not because the terms have the most volume.
+const CATEGORIES = [
+  {
+    id: 'mineral-claims',
+    name: 'Mineral Claims',
+    tag: 'Claim search',
+    blurb: 'Finding and mapping mineral claims from public registry data, jurisdiction by jurisdiction.',
+  },
+  {
+    id: 'tenure-management',
+    name: 'Tenure Management',
+    tag: 'Tenure',
+    blurb: 'Tracking good-to-dates, expiry deadlines and changes to the government record.',
+  },
+  {
+    id: 'exploration-mapping',
+    name: 'Exploration Mapping',
+    tag: 'Mapping',
+    blurb: 'Building maps that hold up in an investor deck, a news release or a technical report.',
+  },
+  {
+    id: 'drill-results',
+    name: 'Drill Results',
+    tag: 'Drilling',
+    blurb: 'Turning collars, assays and intercepts into a figure people can read.',
+  },
+  {
+    id: 'gis-data',
+    name: 'GIS & Data',
+    tag: 'Data',
+    blurb: 'File formats, imports, and where a full desktop GIS is still the right tool.',
+  },
+];
 
 // Region pages are only generated for map types with real regional search
 // intent (mining claims, drill results). Types flagged regionPages:false keep
 // their how-to guide but no 28-region template fan-out — those pages were thin
 // and near-duplicate. Removed URLs 301 via vercel.json.
-const REGION_MAP_TYPES = mapTypes.filter(t => t.regionPages !== false);
 
 // Fully generated output — wipe so removed posts/pages actually disappear.
 rmSync(OUT, { recursive: true, force: true });
@@ -70,6 +106,10 @@ img{max-width:100%;height:auto}
 /* Layout */
 .page-wrap{max-width:1100px;margin:0 auto;padding:0 24px}
 .blog-layout{display:grid;grid-template-columns:1fr 280px;gap:48px;padding:48px 0 80px;align-items:start}
+/* Grid items default to min-width:auto, so a wide child sizes the column
+   instead of scrolling inside it — which is how one six-column table set
+   the page width on a phone and dragged every paragraph out with it. */
+.blog-layout>*{min-width:0}
 @media(max-width:768px){.blog-layout{grid-template-columns:1fr;padding:32px 0 60px}}
 /* Article */
 article h1{font-size:2rem;font-weight:800;line-height:1.2;color:#0f172a;margin-bottom:16px}
@@ -130,6 +170,12 @@ article strong{color:#0f172a}
 .index-section-head{display:flex;align-items:baseline;justify-content:space-between;margin:40px 0 4px;padding-top:8px;border-top:2px solid #e8edf3}
 .index-section-head h2{font-size:1.1rem;font-weight:700;color:#0f172a}
 .index-section-head a{font-size:13px;color:#2563eb}
+.table-scroll{overflow-x:auto;max-width:100%;-webkit-overflow-scrolling:touch;margin:16px 0}
+.table-scroll .data-table{margin:0;min-width:520px}
+.index-count{display:inline-block;margin-left:6px;padding:1px 8px;border-radius:999px;background:#eef2f7;color:#64748b;font-size:12px;font-weight:600;vertical-align:middle}
+.index-section-intro{margin:0 0 16px;color:#64748b;font-size:14px;max-width:60ch}
+.index-foot{text-align:center;color:#64748b;font-size:14px;padding:48px 0}
+.index-foot a{color:#2563eb}
 /* Index TOC */
 .index-toc{display:flex;flex-wrap:wrap;gap:8px;padding:24px 0 8px;border-bottom:1px solid #e8edf3;margin-bottom:8px}
 .index-toc a{font-size:13px;font-weight:600;color:#475569;background:#f1f5f9;padding:4px 12px;border-radius:999px;text-decoration:none}
@@ -252,7 +298,7 @@ ${body}
   <div class="site-footer-links">
     <a href="/mining-map-software/">Mining Map Software</a>
     <span class="site-footer-sep">·</span>
-    <a href="/mining-exploration-map-software/">Exploration Map Software</a>
+    <a href="/mineral-tenure-monitoring/">Tenure Monitoring</a>
     <span class="site-footer-sep">·</span>
     <a href="/bc-mineral-claims-map/">BC Claims Map</a>
     <span class="site-footer-sep">·</span>
@@ -391,7 +437,11 @@ function tableBlock({ headers = [], rows = [] } = {}) {
   if (!headers.length && !rows.length) return '';
   const head = headers.length ? `<thead><tr>${headers.map(h => `<th>${esc(h)}</th>`).join('')}</tr></thead>` : '';
   const body = `<tbody>${rows.map(r => `<tr>${r.map(c => `<td>${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody>`;
-  return `<table class="data-table">${head}${body}</table>`;
+  // Wrapped so a wide table scrolls inside its own container. Without this a
+  // six-column table sets the page width on a phone and every paragraph on the
+  // page starts overflowing with it — the registry comparison table did exactly
+  // that at 390px.
+  return `<div class="table-scroll"><table class="data-table">${head}${body}</table></div>`;
 }
 
 // Callout boxes. `kind` selects the style/semantics:
@@ -453,20 +503,10 @@ function formatDate(isoDate) {
   return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' });
 }
 
-function faqSchema(faqs) {
-  return {
-    '@type': 'FAQPage',
-    mainEntity: faqs.map(f => ({
-      '@type': 'Question',
-      name: f.q,
-      acceptedAnswer: { '@type': 'Answer', text: f.a },
-    })),
-    speakable: {
-      '@type': 'SpeakableSpecification',
-      cssSelector: ['.direct-answer', '.faq-a'],
-    },
-  };
-}
+// faqSchema was removed deliberately. Google restricted FAQ rich results to
+// authoritative government and health sites in August 2023, so FAQPage markup
+// on a commercial site earns no treatment and is simply a second copy of the
+// visible content to keep in sync. The visible FAQ blocks remain.
 
 function breadcrumbSchema(title, url) {
   return {
@@ -485,19 +525,11 @@ function buildHowToPage(post, allPosts) {
   const url = `${SITE}/blog/${post.slug}/`;
   const related = relatedLinks(post.relatedSlugs || [], allPosts);
 
-  // Location cross-links for posts that map to a specific map type — only for
-  // types that still have region pages (pruned types would link to redirects).
-  let locationHtml = '';
-  if (post.mapTypeId && REGION_MAP_TYPES.some(t => t.slug === post.mapTypeId)) {
-    const topLocations = ['british-columbia', 'nevada', 'ontario'];
-    locationHtml = topLocations
-      .map(locSlug => {
-        const loc = locations.find(l => l.slug === locSlug);
-        return loc ? `<li><a href="/blog/${post.mapTypeId}-${loc.slug}/">${loc.name}</a></li>` : '';
-      })
-      .filter(Boolean)
-      .join('\n');
-  }
+  // No region cross-links. The 56 "[map type] — [region]" pages they pointed at
+  // were geographic permutations of two templates and have been retired; the
+  // jurisdiction pages that survive are the ones where the product actually
+  // does something different, and those are linked from the article body.
+  const locationHtml = '';
 
   const schema = {
     '@context': 'https://schema.org',
@@ -519,7 +551,6 @@ function buildHowToPage(post, allPosts) {
             text,
           })),
       },
-      ...(post.faqs?.length ? [faqSchema(post.faqs)] : []),
       breadcrumbSchema(post.title, url),
     ],
   };
@@ -559,7 +590,10 @@ function buildHowToPage(post, allPosts) {
   </div>
 </div>`;
 
-  return pageShell({ title: post.title, description: post.metaDescription, canonical: url, schema, body });
+  return pageShell({
+    title: post.title, fullTitle: post.fullTitle, description: post.metaDescription,
+    canonical: url, schema, body,
+  });
 }
 
 // ─── Comparison post page ─────────────────────────────────────────────────────
@@ -568,28 +602,20 @@ function buildCompPage(post, allPosts) {
   const url = `${SITE}/blog/${post.slug}/`;
   const related = relatedLinks(post.relatedSlugs || [], allPosts);
 
-  // Top location pages for the comparison sidebar
-  const topLocationHtml = ['mining-claims-map-british-columbia', 'drill-results-map-nevada', 'mining-claims-map-ontario']
-    .map(s => {
-      const [mtSlug, ...locParts] = s.split('-');
-      const locSlug = locParts.join('-');
-      // Rebuild properly from known slugs
-      return null;
-    })
-    .filter(Boolean).join('');
-
-  // Build location links properly
+  // Sidebar links for a comparison post. These used to point at three region
+  // pages ("Mining Claims Map — BC", "— Nevada", "— Ontario") that no longer
+  // exist; a reader comparing GIS tools is better served by the guides that
+  // show what the alternative actually does.
   const locLinksHtml = [
-    { mt: 'mining-claims-map', loc: 'british-columbia', label: 'Mining Claims Map — BC' },
-    { mt: 'drill-results-map', loc: 'nevada', label: 'Drill Results Map — Nevada' },
-    { mt: 'mining-claims-map', loc: 'ontario', label: 'Mining Claims Map — Ontario' },
-  ].map(({ mt, loc, label }) => `<li><a href="/blog/${mt}-${loc}/">${label}</a></li>`).join('\n');
+    { href: '/blog/how-to-make-a-mining-claims-map/', label: 'How to make a mining claims map' },
+    { href: '/blog/how-to-make-a-drill-results-map/', label: 'How to make a drill results map' },
+    { href: '/blog/canadian-mineral-claim-registries/', label: 'Canadian claim registries' },
+  ].map(({ href, label }) => `<li><a href="${href}">${label}</a></li>`).join('\n');
 
   const schema = {
     '@context': 'https://schema.org',
     '@graph': [
       articleSchema(post.title, post.metaDescription, url, post.publishedDate),
-      ...(post.faqs?.length ? [faqSchema(post.faqs)] : []),
       breadcrumbSchema(post.title, url),
     ],
   };
@@ -621,7 +647,10 @@ function buildCompPage(post, allPosts) {
   </div>
 </div>`;
 
-  return pageShell({ title: post.title, description: post.metaDescription, canonical: url, schema, body });
+  return pageShell({
+    title: post.title, fullTitle: post.fullTitle, description: post.metaDescription,
+    canonical: url, schema, body,
+  });
 }
 
 // ─── Location × map-type page ─────────────────────────────────────────────────
@@ -636,6 +665,34 @@ const HERO_BY_MAPTYPE = {
   'target-generation-map': '/gallery/target.png',
   'infrastructure-map': '/gallery/infrastructure.png',
 };
+
+// Hero figure for a how-to / comparison post that carries no image section of
+// its own — uses the post's map-type export when known, else a polished
+// finished-map default. Returns '' for posts that already embed screenshots,
+// ─── Category hub pages ───────────────────────────────────────────────────────
+
+function buildCategoryPage({ slug: pageSlug, title, description, label, body: contentBody }) {
+  const url = `${SITE}/blog/${pageSlug}/`;
+  const schema = {
+    '@context': 'https://schema.org',
+    '@type': 'CollectionPage',
+    name: title,
+    description,
+    url,
+    publisher: { '@type': 'Organization', name: SITE_NAME, url: SITE },
+  };
+  const body = `
+<div class="page-wrap">
+  <div class="page-hero">
+    <p class="page-hero-label">${esc(label)}</p>
+    <h1>${esc(title)}</h1>
+    <p>${esc(description)}</p>
+  </div>
+  ${contentBody}
+</div>`;
+  return { slug: pageSlug, html: pageShell({ title, description, canonical: url, schema, body }) };
+}
+
 // A secondary in-workflow screenshot per map type (real product UI/output).
 const INLINE_BY_MAPTYPE = {
   'mining-claims-map': { src: '/blog-img/map-claims.png', alt: 'Mineral claims styled on a map in Exploration Maps' },
@@ -661,186 +718,9 @@ function heroFigureForPost(post) {
   });
 }
 
-function buildLocationPage(location, mapType) {
-  const pageSlug = `${mapType.slug}-${location.slug}`;
-  const url = `${SITE}/blog/${pageSlug}/`;
-  const title = `${mapType.name} — ${location.name}`;
-  const reportingStandard = location.reportingStandard || 'NI 43-101';
-
-  const description = location.country === 'Canada'
-    ? `Create a ${mapType.primaryKeyword} for ${location.name} — includes ${reportingStandard} compliance, step-by-step data import, and export guide. No GIS experience needed.`
-    : `Professional ${mapType.primaryKeyword} for ${location.name} exploration projects. Import CSV or GeoJSON, style automatically, export presentation-ready PNG or PDF.`;
-
-  const mineralList = location.minerals.slice(0, 4).join(', ');
-  const depositList = location.famousDeposits.slice(0, 3).join(', ');
-  const districtList = location.miningDistricts.slice(0, 3).join(', ');
-
-  const contextLine = location.contextLine || `one of the most active junior mining jurisdictions`;
-  const directAnswer = `${location.name} — ${contextLine} — is a prime target for junior exploration companies. Here's how to create a professional ${mapType.primaryKeyword} using Exploration Maps in 15–30 minutes.`;
-
-  const steps = mapType.steps.map(step => `<li>${esc(step)}</li>`).join('');
-
-  const faqs = [
-    {
-      q: `What file format do I need for ${location.name} mineral claims data?`,
-      a: `${location.name} mineral claims boundaries are available from ${location.claimsPortal} and can typically be downloaded as Shapefiles or KML. Convert these to GeoJSON at mapshaper.org before importing into Exploration Maps.`,
-    },
-    {
-      q: `Who regulates mineral claims in ${location.name}?`,
-      a: `Mineral claims in ${location.name} are regulated by the ${location.regulatoryBody}. All tenure and claims data can be queried through ${location.claimsPortal}.`,
-    },
-    {
-      q: `What minerals are typically mapped in ${location.name}?`,
-      a: `${location.name} is known for its ${mineralList} deposits. Key producing and exploration-stage properties include ${depositList}. The main mining districts are ${districtList}.`,
-    },
-    {
-      q: `Can I export a ${location.name} ${mapType.primaryKeyword} for a ${reportingStandard} report?`,
-      a: `Yes. Exploration Maps exports PNG and PDF at 2–3× pixel ratio, suitable for inclusion in ${reportingStandard} technical reports as required figures. The export includes north arrow, scale bar, legend, and title block — all standard map elements required for ${reportingStandard} compliance.`,
-    },
-  ];
-
-  const schema = {
-    '@context': 'https://schema.org',
-    '@graph': [
-      articleSchema(title, description, url, location.publishedDate),
-      {
-        '@type': 'HowTo',
-        name: `How to Create a ${mapType.name} for ${location.name}`,
-        description: directAnswer,
-        step: mapType.steps.map((step, i) => ({
-          '@type': 'HowToStep',
-          position: i + 1,
-          name: `Step ${i + 1}`,
-          text: step,
-        })),
-      },
-      faqSchema(faqs),
-      breadcrumbSchema(title, url),
-    ],
-  };
-
-  // Sidebar: same location, other map types
-  const sameLocationLinks = REGION_MAP_TYPES
-    .filter(t => t.id !== mapType.id)
-    .slice(0, 4)
-    .map(t => `<li><a href="/blog/${t.slug}-${location.slug}/">${esc(t.name)} — ${esc(location.name)}</a></li>`)
-    .join('\n');
-
-  // Sidebar: same map type, nearby locations (same country)
-  const sameTypeLinks = locations
-    .filter(l => l.slug !== location.slug && l.country === location.country)
-    .slice(0, 4)
-    .map(l => `<li><a href="/blog/${mapType.slug}-${l.slug}/">${esc(mapType.name)} — ${esc(l.name)}</a></li>`)
-    .join('\n');
-
-  const relatedHtml = sameLocationLinks + sameTypeLinks;
-
-  // Sidebar: link back to parent how-to guide
-  const howToHtml = mapType.howToSlug
-    ? `<li><a href="/blog/${mapType.howToSlug}/">How to Make a ${esc(mapType.name)}</a></li>`
-    : '';
-
-  // Data sources section
-  const dataSourcesHtml = location.dataSourceUrl ? `
-      <h2>Getting Mining Data for ${esc(location.name)}</h2>
-      <div style="overflow-x:auto">
-      <table class="data-table">
-        <thead><tr><th>Portal</th><th>Formats</th><th>Notes</th></tr></thead>
-        <tbody><tr>
-          <td><a href="${esc(location.dataSourceUrl)}" rel="nofollow noopener noreferrer" target="_blank">${esc(location.claimsPortal)}</a></td>
-          <td>${esc(location.dataFormats || 'Shapefile, KML')}</td>
-          <td>${esc(location.dataNote || 'Convert to WGS84 (EPSG:4326) before importing into Exploration Maps.')}</td>
-        </tr></tbody>
-      </table>
-      </div>` : '';
-
-  // Workflow tip
-  const tipHtml = location.workflowTip
-    ? `<p class="tip-box"><strong>Tip for ${esc(location.name)}:</strong> ${esc(location.workflowTip)}</p>`
-    : '';
-
-  const locPubDate = location.publishedDate ? `<span class="post-date">· <time datetime="${esc(location.publishedDate)}">${formatDate(location.publishedDate)}</time></span>` : '';
-
-  const body = `
-<div class="page-wrap">
-  <div class="blog-layout">
-    <article>
-      <p class="breadcrumb"><a href="/">Home</a><span>›</span><a href="/blog/">Blog</a><span>›</span><a href="/blog/locations/">By Region</a><span>›</span>${esc(title)} ${locPubDate}</p>
-      <h1>${esc(title)}</h1>
-      <p class="direct-answer">${esc(directAnswer)}</p>
-      ${HERO_BY_MAPTYPE[mapType.slug] ? figureBlock({
-        src: HERO_BY_MAPTYPE[mapType.slug],
-        alt: `Example ${mapType.name.toLowerCase()} created in Exploration Maps`,
-        caption: `Example ${mapType.name.toLowerCase()} exported from Exploration Maps — style your ${location.name} data the same way.`,
-        eager: true,
-      }) : ''}
-
-      <h2>About Mining in ${esc(location.name)}</h2>
-      <p>${esc(location.description)}</p>
-      <p><strong>Key minerals:</strong> ${esc(location.minerals.join(', '))}. <strong>Notable deposits:</strong> ${esc(location.famousDeposits.join(', '))}. <strong>Mining districts:</strong> ${esc(location.miningDistricts.join(', '))}.</p>
-      <p>The ${esc(location.regulatoryBody)} administers mineral rights in ${esc(location.name)}. Claim data is accessible through ${esc(location.claimsPortal)}.</p>
-
-      ${dataSourcesHtml}
-
-      <h2>How to Create a ${esc(mapType.name)} for ${esc(location.name)}</h2>
-      <p>For a full step-by-step guide to ${esc(mapType.name.toLowerCase())}s, see <a href="/blog/${esc(mapType.howToSlug)}/">How to Make a ${esc(mapType.name)}</a>.</p>
-      <ol class="steps-list">${steps}</ol>
-      ${INLINE_BY_MAPTYPE[mapType.slug] ? figureBlock({ ...INLINE_BY_MAPTYPE[mapType.slug], caption: `${INLINE_BY_MAPTYPE[mapType.slug].alt}.` }) : ''}
-      ${tipHtml}
-
-      <h2>Recommended Settings for ${esc(location.name)}</h2>
-      <ul>
-        <li><strong>Basemap:</strong> ${esc(mapType.recommendedBasemap)}</li>
-        <li><strong>Design theme:</strong> ${esc(mapType.recommendedTheme)}</li>
-        <li><strong>Export format:</strong> PNG at 2× for investor presentations, PDF (Letter or A4) for ${esc(reportingStandard)} reports</li>
-        <li><strong>Coordinate system:</strong> Ensure source data is in WGS84 (EPSG:4326)</li>
-      </ul>
-
-      <h2>Common Use Cases in ${esc(location.name)}</h2>
-      <ul>${mapType.useCases.map(u => `<li>${esc(u)}</li>`).join('')}</ul>
-
-      ${faqBlock(faqs)}
-    </article>
-    ${sidebar({ relatedHtml, howToHtml, compareHtml: COMP_LINKS, appHref: appLink(
-      mapType.slug === 'drill-results-map'
-        ? { intent: 'drill-results', campaign: pageSlug }
-        : REGISTRY_REGION_SLUGS.has(location.slug)
-          ? { intent: 'claims', region: location.slug, campaign: pageSlug }
-          : { intent: 'claims-upload', campaign: pageSlug }
-    ) })}
-  </div>
-</div>`;
-
-  return { pageSlug, html: pageShell({ title, description, canonical: url, schema, body }) };
-}
-
-// ─── Category hub pages ───────────────────────────────────────────────────────
-
-function buildCategoryPage({ slug: pageSlug, title, description, label, body: contentBody }) {
-  const url = `${SITE}/blog/${pageSlug}/`;
-  const schema = {
-    '@context': 'https://schema.org',
-    '@type': 'CollectionPage',
-    name: title,
-    description,
-    url,
-    publisher: { '@type': 'Organization', name: SITE_NAME, url: SITE },
-  };
-  const body = `
-<div class="page-wrap">
-  <div class="page-hero">
-    <p class="page-hero-label">${esc(label)}</p>
-    <h1>${esc(title)}</h1>
-    <p>${esc(description)}</p>
-  </div>
-  ${contentBody}
-</div>`;
-  return { slug: pageSlug, html: pageShell({ title, description, canonical: url, schema, body }) };
-}
-
 // ─── Blog index page ──────────────────────────────────────────────────────────
 
-function buildBlogIndex(allUrls) {
+function buildBlogIndex() {
   const url = `${SITE}/blog/`;
 
   const schema = {
@@ -852,55 +732,55 @@ function buildBlogIndex(allUrls) {
     publisher: { '@type': 'Organization', name: SITE_NAME, url: SITE },
   };
 
-  const howToCards = howToPosts.map(p => `
-<div class="blog-card">
-  <span class="blog-card-tag">How-to Guide</span>
-  <h3>${esc(p.title)}</h3>
-  <p>${esc(p.directAnswer.slice(0, 110))}…</p>
-  <a href="/blog/${p.slug}/">Read guide →</a>
-</div>`).join('\n');
+  // Category order is editorial: what the product is strongest at comes first.
+  // Every article declares a `category`; CATEGORIES is the single place the
+  // set is defined, so a post with an unknown category fails the build loudly
+  // rather than quietly disappearing from the index.
+  const articles = [...howToPosts, ...compPosts];
+  const uncategorised = articles.filter(a => !CATEGORIES.some(c => c.id === a.category));
+  if (uncategorised.length) {
+    throw new Error(`Articles with no known category: ${uncategorised.map(a => a.slug).join(', ')}`);
+  }
 
-  const compCards = compPosts.map(p => `
+  const card = (a, tag) => `
 <div class="blog-card">
-  <span class="blog-card-tag">Comparison</span>
-  <h3>${esc(p.title)}</h3>
-  <p>${esc(p.metaDescription.slice(0, 110))}…</p>
-  <a href="/blog/${p.slug}/">Read comparison →</a>
-</div>`).join('\n');
+  <span class="blog-card-tag">${esc(tag)}</span>
+  <h3>${esc(a.title)}</h3>
+  <p>${esc((a.cardSummary || a.metaDescription).slice(0, 130))}…</p>
+  <a href="/blog/${a.slug}/">Read guide →</a>
+</div>`;
 
-  // All location pages, grouped by map type with anchor IDs
-  const locationSections = REGION_MAP_TYPES.map(mt => {
-    const cards = locations.map(loc => `
-<div class="blog-card">
-  <span class="blog-card-tag">Location Guide</span>
-  <h3>${esc(mt.name)} — ${esc(loc.name)}</h3>
-  <p>Create a professional ${esc(mt.primaryKeyword)} for exploration projects in ${esc(loc.name)}.</p>
-  <a href="/blog/${mt.slug}-${loc.slug}/">Read guide →</a>
-</div>`).join('\n');
-    return `<div class="index-section-head" id="${mt.slug}"><h2>${esc(mt.name)} (${locations.length} regions)</h2><a href="/blog/locations/">View all →</a></div>
+  const sections = CATEGORIES.map(c => {
+    const inCategory = articles.filter(a => a.category === c.id);
+    if (!inCategory.length) return '';
+    const cards = inCategory.map(a => card(a, c.tag)).join('\n');
+    // The count is derived from the rendered set, so it cannot drift from what
+    // is actually on the page — the previous index advertised "86 guides" by
+    // counting hub pages and the index itself alongside real articles.
+    return `<div class="index-section-head" id="${c.id}">
+  <h2>${esc(c.name)} <span class="index-count">${inCategory.length}</span></h2>
+</div>
+<p class="index-section-intro">${esc(c.blurb)}</p>
 <div class="blog-index-grid">${cards}</div>`;
-  }).join('\n');
+  }).filter(Boolean).join('\n');
 
   const toc = `<nav class="index-toc" aria-label="Jump to section">
-  <a href="#how-to">How-to Guides</a>
-  <a href="#comparisons">Comparisons</a>
-  ${REGION_MAP_TYPES.map(mt => `<a href="#${mt.slug}">${esc(mt.name)}</a>`).join('\n  ')}
+  ${CATEGORIES.filter(c => articles.some(a => a.category === c.id))
+    .map(c => `<a href="#${c.id}">${esc(c.name)}</a>`).join('\n  ')}
 </nav>`;
 
   const body = `
 <div class="page-wrap">
   <div class="page-hero">
-    <p class="page-hero-label">Resources</p>
-    <h1>Exploration Mapping Guides</h1>
-    <p>Step-by-step tutorials, software comparisons, and location-specific guides for creating professional mining exploration maps.</p>
+    <p class="page-hero-label">Guides</p>
+    <h1>Exploration Mapping &amp; Mineral Tenure Guides</h1>
+    <p>Practical guides for finding mineral claims, tracking tenure deadlines, and turning
+       exploration data into maps people can actually read.</p>
   </div>
   ${toc}
-  <div class="index-section-head" id="how-to"><h2>How-to Guides</h2><a href="/blog/how-to/">View all →</a></div>
-  <div class="blog-index-grid">${howToCards}</div>
-  <div class="index-section-head" id="comparisons"><h2>Software Comparisons</h2><a href="/blog/comparisons/">View all →</a></div>
-  <div class="blog-index-grid">${compCards}</div>
-  ${locationSections}
-  <p style="text-align:center;color:#64748b;font-size:14px;padding-bottom:48px">${allUrls.length} guides published · <a href="/sitemap.xml">Sitemap</a></p>
+  ${sections}
+  <p class="index-foot">${articles.length} guides · <a href="/blog/how-to/">How-to guides</a> ·
+     <a href="/blog/comparisons/">Software comparisons</a> · <a href="/sitemap.xml">Sitemap</a></p>
 </div>`;
 
   return pageShell({ title: 'Exploration Mapping Guides & Tutorials', description: 'Guides, tutorials, and comparisons for creating professional mining exploration maps — investor presentations, NI 43-101 figures, and news release maps.', canonical: url, schema, body });
@@ -927,7 +807,6 @@ function buildSeoLandingPage(page, allLandingPages) {
   if (page.softwareApp) {
     graph.push(softwareAppSchema(page.h1, page.metaDescription, url));
   }
-  if (page.faqs?.length) graph.push(faqSchema(page.faqs));
   graph.push({
     '@type': 'BreadcrumbList',
     itemListElement: [
@@ -994,7 +873,7 @@ function buildSitemap(allUrls, landingUrls = []) {
     .join('\n');
   const blogEntries = allUrls.map(u => {
     const isBlogIndex = u === `${SITE}/blog/`;
-    const isHub = /\/blog\/(how-to|comparisons|locations)\/$/.test(u);
+    const isHub = /\/blog\/(how-to|comparisons)\/$/.test(u);
     const priority = isBlogIndex ? '0.9' : isHub ? '0.8' : '0.7';
     const freq = isBlogIndex || isHub ? 'weekly' : 'monthly';
     return `  <url><loc>${esc(u)}</loc><lastmod>${today}</lastmod><changefreq>${freq}</changefreq><priority>${priority}</priority></url>`;
@@ -1004,6 +883,63 @@ function buildSitemap(allUrls, landingUrls = []) {
     `  <url><loc>${SITE}/contact/</loc><lastmod>${today}</lastmod><changefreq>yearly</changefreq><priority>0.5</priority></url>`,
   ].join('\n');
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${homepage}\n${landingEntries}\n${blogEntries}\n${staticEntries}\n</urlset>`;
+}
+
+// ─── Redirects ────────────────────────────────────────────────────────────────
+
+// Retired URLs live in blog-data/redirects.json and are written into
+// vercel.json by this script, so the redirect table and the pages that no
+// longer exist cannot drift apart by hand-editing one of them.
+//
+// `_`-prefixed keys are section comments in the JSON and are skipped.
+function retiredExactPaths() {
+  return Object.entries(redirectMap.exact)
+    .filter(([k, v]) => !k.startsWith('_') && v)
+    .map(([from, to]) => ({ from, to }));
+}
+
+function buildRedirects() {
+  const out = [];
+  for (const { from, to } of retiredExactPaths()) {
+    // `{/}?` makes the trailing slash optional, matching the existing entries.
+    out.push({ source: `${from}{/}?`, destination: to, permanent: true });
+  }
+  for (const p of redirectMap.patterns) {
+    out.push({ source: `${p.source}{/}?`, destination: p.destination, permanent: true });
+  }
+  return out;
+}
+
+// A generated page must never share a URL with a retired one. Without this,
+// re-adding a slug to a data file would produce a page that Vercel redirects
+// away from — live in the sitemap, unreachable in a browser, and invisible
+// until somebody clicked it.
+function assertNoRetiredCollisions(allUrls) {
+  const retired = new Set(retiredExactPaths().map(({ from }) => `${SITE}${from}/`));
+  const patterns = redirectMap.patterns.map(p => new RegExp(
+    `^${SITE}${p.source.replace(/:[A-Za-z]+/, '[^/]+')}/$`));
+  const clashes = allUrls.filter(u => retired.has(u) || patterns.some(re => re.test(u)));
+  if (clashes.length) {
+    throw new Error(
+      `These generated pages collide with a 301 in blog-data/redirects.json, so they would be `
+      + `live in the sitemap and unreachable in a browser:\n  ${clashes.join('\n  ')}`);
+  }
+}
+
+// Redirects are merged into vercel.json rather than replacing it: the file also
+// carries functions, rewrites and headers that this script knows nothing about.
+function writeRedirectsToVercelConfig() {
+  const path = join(ROOT, 'vercel.json');
+  const config = JSON.parse(readFileSync(path, 'utf8'));
+  const generated = buildRedirects();
+  // Hand-written redirects that predate this file are kept — they retire URLs
+  // whose pages were already gone before the redirect map existed.
+  const generatedSources = new Set(generated.map(r => r.source));
+  const preserved = (config.redirects || []).filter(r => !generatedSources.has(r.source)
+    && !generated.some(g => r.source.startsWith(g.source.replace('{/}?', ''))));
+  config.redirects = [...preserved, ...generated];
+  writeFile(path, `${JSON.stringify(config, null, 2)}\n`);
+  return config.redirects.length;
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
@@ -1029,18 +965,6 @@ async function main() {
     allUrls.push(`${SITE}/blog/${post.slug}/`);
     console.log(`  ✓ comparison: ${post.slug}`);
   }
-
-  // Location × map-type pages
-  let locationCount = 0;
-  for (const location of locations) {
-    for (const mapType of REGION_MAP_TYPES) {
-      const { pageSlug, html } = buildLocationPage(location, mapType);
-      writeFile(join(OUT, pageSlug, 'index.html'), html);
-      allUrls.push(`${SITE}/blog/${pageSlug}/`);
-      locationCount++;
-    }
-  }
-  console.log(`  ✓ location pages: ${locationCount}`);
 
   // Category hub pages
   const howToHub = buildCategoryPage({
@@ -1075,24 +999,8 @@ async function main() {
   allUrls.push(`${SITE}/blog/comparisons/`);
   console.log('  ✓ hub: comparisons');
 
-  const locTableRows = locations.map(loc => {
-    const links = REGION_MAP_TYPES.map(mt => `<a href="/blog/${mt.slug}-${loc.slug}/">${esc(mt.name)}</a>`).join(' · ');
-    return `<tr><td><strong>${esc(loc.name)}</strong></td><td>${links}</td></tr>`;
-  }).join('');
-
-  const locHub = buildCategoryPage({
-    slug: 'locations',
-    label: 'By Region',
-    title: 'Mining Map Guides by Region',
-    description: 'Location-specific guides for creating professional exploration maps in Canadian provinces and US mining states.',
-    body: `<div style="overflow-x:auto"><table class="location-table"><thead><tr><th>Region</th><th>Map Guides</th></tr></thead><tbody>${locTableRows}</tbody></table></div>`,
-  });
-  writeFile(join(OUT, 'locations', 'index.html'), locHub.html);
-  allUrls.push(`${SITE}/blog/locations/`);
-  console.log('  ✓ hub: locations');
-
   // Blog index
-  writeFile(join(OUT, 'index.html'), buildBlogIndex(allUrls));
+  writeFile(join(OUT, 'index.html'), buildBlogIndex());
   console.log('  ✓ blog index');
 
   // Top-level SEO landing pages (output to public/<slug>/, not public/blog/)
@@ -1104,12 +1012,30 @@ async function main() {
     console.log(`  ✓ landing: ${page.slug}`);
   }
 
+  // Nothing generated may sit on a retired URL. Checked before the sitemap is
+  // written so a collision fails the build rather than shipping a bad sitemap.
+  assertNoRetiredCollisions([...allUrls, ...landingUrls]);
+
   // Sitemap
   writeFile(join(ROOT, 'public', 'sitemap.xml'), buildSitemap(allUrls, landingUrls));
   console.log('  ✓ sitemap.xml');
 
+  const redirectCount = writeRedirectsToVercelConfig();
+  console.log(`  ✓ vercel.json redirects (${redirectCount})`);
+
   // robots.txt
-  const robots = `User-agent: *\nAllow: /\nSitemap: ${SITE}/sitemap.xml\n`;
+  // Both sitemaps are declared. sitemap-companies.xml is written by the pSEO
+  // pipeline (scripts/pseo/07_generate_pages.mjs) and held 35 URLs that robots
+  // .txt never referenced — real per-issuer claim maps that no crawler was
+  // being told about. They are not linked from the blog either; the only path
+  // in is the landing page, so the sitemap is how they get found.
+  const robots = [
+    'User-agent: *',
+    'Allow: /',
+    `Sitemap: ${SITE}/sitemap.xml`,
+    `Sitemap: ${SITE}/sitemap-companies.xml`,
+    '',
+  ].join('\n');
   writeFile(join(ROOT, 'public', 'robots.txt'), robots);
   console.log('  ✓ robots.txt');
 
