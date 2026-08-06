@@ -926,18 +926,24 @@ function assertNoRetiredCollisions(allUrls) {
   }
 }
 
-// Redirects are merged into vercel.json rather than replacing it: the file also
-// carries functions, rewrites and headers that this script knows nothing about.
+// vercel.json's `redirects` array is REPLACED, not merged.
+//
+// It used to be merged, with a filter that tried to tell generated rules from
+// hand-written ones by comparing sources. That filter could not see a rule
+// whose source had been DELETED from redirects.json: it was no longer in the
+// generated set, so it looked hand-written and was preserved forever. Restoring
+// a retired page would then add it to the sitemap while Vercel kept redirecting
+// visitors away from it — and assertNoRetiredCollisions could not catch that,
+// because it reads redirects.json rather than the config.
+//
+// Replacing wholesale removes the guessing. blog-data/redirects.json is the
+// complete set, including the five rules that predate it, so deleting an entry
+// there deletes the rule here. The rest of vercel.json — functions, rewrites,
+// headers — is untouched.
 function writeRedirectsToVercelConfig() {
   const path = join(ROOT, 'vercel.json');
   const config = JSON.parse(readFileSync(path, 'utf8'));
-  const generated = buildRedirects();
-  // Hand-written redirects that predate this file are kept — they retire URLs
-  // whose pages were already gone before the redirect map existed.
-  const generatedSources = new Set(generated.map(r => r.source));
-  const preserved = (config.redirects || []).filter(r => !generatedSources.has(r.source)
-    && !generated.some(g => r.source.startsWith(g.source.replace('{/}?', ''))));
-  config.redirects = [...preserved, ...generated];
+  config.redirects = buildRedirects();
   writeFile(path, `${JSON.stringify(config, null, 2)}\n`);
   return config.redirects.length;
 }

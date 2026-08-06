@@ -77,31 +77,6 @@
   ],
   "redirects": [
     {
-      "source": "/blog/location-map-:loc{/}?",
-      "destination": "/blog/how-to-create-exploration-map-investor-presentation/",
-      "permanent": true
-    },
-    {
-      "source": "/blog/target-generation-map-:loc{/}?",
-      "destination": "/blog/how-to-create-target-generation-map/",
-      "permanent": true
-    },
-    {
-      "source": "/blog/infrastructure-map-:loc{/}?",
-      "destination": "/blog/how-to-create-infrastructure-map/",
-      "permanent": true
-    },
-    {
-      "source": "/blog/mineral-exploration-map-for-investor-deck{/}?",
-      "destination": "/blog/how-to-create-exploration-map-investor-presentation/",
-      "permanent": true
-    },
-    {
-      "source": "/blog/turn-public-mineral-claim-data-into-project-map{/}?",
-      "destination": "/blog/how-to-make-a-mining-claims-map/",
-      "permanent": true
-    },
-    {
       "source": "/blog/mining-claims-map-british-columbia{/}?",
       "destination": "/bc-mineral-claims-map/",
       "permanent": true
@@ -177,6 +152,16 @@
       "permanent": true
     },
     {
+      "source": "/blog/mineral-exploration-map-for-investor-deck{/}?",
+      "destination": "/blog/how-to-create-exploration-map-investor-presentation/",
+      "permanent": true
+    },
+    {
+      "source": "/blog/turn-public-mineral-claim-data-into-project-map{/}?",
+      "destination": "/blog/how-to-make-a-mining-claims-map/",
+      "permanent": true
+    },
+    {
       "source": "/blog/drill-results-map-:region{/}?",
       "destination": "/blog/how-to-make-a-drill-results-map/",
       "permanent": true
@@ -184,6 +169,21 @@
     {
       "source": "/blog/mining-claims-map-:region{/}?",
       "destination": "/blog/how-to-make-a-mining-claims-map/",
+      "permanent": true
+    },
+    {
+      "source": "/blog/location-map-:region{/}?",
+      "destination": "/blog/how-to-create-exploration-map-investor-presentation/",
+      "permanent": true
+    },
+    {
+      "source": "/blog/target-generation-map-:region{/}?",
+      "destination": "/blog/how-to-create-target-generation-map/",
+      "permanent": true
+    },
+    {
+      "source": "/blog/infrastructure-map-:region{/}?",
+      "destination": "/blog/how-to-create-infrastructure-map/",
       "permanent": true
     }
   ]

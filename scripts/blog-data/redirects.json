@@ -2,19 +2,27 @@
   "_comment": [
     "Retired content URLs and where their intent now lives.",
     "",
+    "THIS FILE IS THE COMPLETE SET. scripts/generate-blog.js writes vercel.json's",
+    "`redirects` array from it wholesale — nothing is merged and nothing is",
+    "preserved from the previous file. That is deliberate: an earlier version",
+    "merged generated rules into whatever vercel.json already held, which meant",
+    "deleting an entry here left the old rule in place forever. Restoring a",
+    "retired page would then put it in the sitemap while Vercel kept redirecting",
+    "visitors away from it, and assertNoRetiredCollisions could not see the",
+    "problem because it reads this file rather than vercel.json.",
+    "",
+    "So: to bring a page back, delete its entry here and the redirect goes with it.",
+    "",
     "Every entry is a permanent 301 to the closest SEMANTIC replacement — never a",
     "blanket sweep into /blog/. A reader who searched for 'mining claims map",
     "Nevada' and lands on the blog index has been given a 404 with a nicer",
     "status code.",
     "",
-    "`patterns` are Vercel path-to-regexp sources, used where one rule can retire",
-    "a whole generated family. `exact` handles the individual pages.",
-    "",
-    "scripts/generate-blog.js reads this file to emit vercel.json's redirects AND",
-    "to assert that nothing it generates collides with a retired URL, so a page",
-    "cannot be resurrected by a data edit without the build failing."
+    "`patterns` are Vercel path-to-regexp sources, used where one rule retires a",
+    "whole generated family. `exact` handles individual pages. Order is preserved:",
+    "Vercel matches first-wins, so the specific jurisdiction entries in `exact`",
+    "must precede the catch-all patterns."
   ],
-
   "exact": {
     "_mining-claims-map: jurisdictions the product actually supports": null,
     "/blog/mining-claims-map-british-columbia": "/bc-mineral-claims-map/",
@@ -24,24 +32,22 @@
     "/blog/mining-claims-map-manitoba": "/blog/how-to-search-manitoba-mining-claims/",
     "/blog/mining-claims-map-newfoundland-labrador": "/blog/how-to-search-newfoundland-mineral-claims/",
     "/blog/mining-claims-map-yukon": "/blog/canadian-mineral-claim-registries/",
-
     "_small feature tutorials consolidated into one map-craft guide": null,
     "/blog/how-to-choose-basemap-mining-map": "/blog/how-to-make-a-professional-exploration-map/",
     "/blog/how-to-export-mining-map-pdf": "/blog/how-to-make-a-professional-exploration-map/",
     "/blog/how-to-add-distance-ring-mining-map": "/blog/how-to-make-a-professional-exploration-map/",
     "/blog/how-to-add-scale-bar-north-arrow": "/blog/how-to-make-a-professional-exploration-map/",
-
     "_merged into the guide that already owned the intent": null,
     "/blog/what-to-include-on-a-mining-claim-map": "/blog/how-to-make-a-mining-claims-map/",
     "/blog/map-drill-results-for-junior-mining-news-release": "/blog/how-to-make-a-drill-results-map/",
-
     "_retired hub for a page family that no longer exists": null,
     "/blog/locations": "/blog/",
-
     "_commercial landing consolidation": null,
-    "/mining-exploration-map-software": "/mining-map-software/"
+    "/mining-exploration-map-software": "/mining-map-software/",
+    "_predating this file — pages retired before the redirect map existed": null,
+    "/blog/mineral-exploration-map-for-investor-deck": "/blog/how-to-create-exploration-map-investor-presentation/",
+    "/blog/turn-public-mineral-claim-data-into-project-map": "/blog/how-to-make-a-mining-claims-map/"
   },
-
   "patterns": [
     {
       "_note": "28 geographic permutations of one drill template. Every one of them targeted the same job — plot collars, label intercepts, export a figure — with the region name swapped. That job is one guide.",
@@ -52,6 +58,21 @@
       "_note": "Catch-all for the 21 mining-claims-map regions where Exploration Maps has no jurisdiction-specific claim functionality: US states, Alberta, Nova Scotia, NWT, Western Australia, Chile, Peru, Mexico, South Africa, Ghana. The seven supported jurisdictions are listed in `exact` above and match first.",
       "source": "/blog/mining-claims-map-:region",
       "destination": "/blog/how-to-make-a-mining-claims-map/"
+    },
+    {
+      "_note": "Retired before this file existed: the location/target/infrastructure region families.",
+      "source": "/blog/location-map-:region",
+      "destination": "/blog/how-to-create-exploration-map-investor-presentation/"
+    },
+    {
+      "_note": "As above.",
+      "source": "/blog/target-generation-map-:region",
+      "destination": "/blog/how-to-create-target-generation-map/"
+    },
+    {
+      "_note": "As above.",
+      "source": "/blog/infrastructure-map-:region",
+      "destination": "/blog/how-to-create-infrastructure-map/"
     }
   ]
 }
