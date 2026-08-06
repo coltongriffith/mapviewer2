@@ -46,7 +46,7 @@ function matchesFilter(row, filter, now) {
   }
 }
 
-export default function TenureMonitorPage({ onExit, onOpenTenuresInEditor, onUpgrade, onSignIn }) {
+export default function TenureMonitorPage({ onExit, onOpenTenuresInEditor, onUpgrade, onSignIn, initialFilter = null }) {
   const { user, entitlements, tier } = useAuth();
 
   const [portfolios, setPortfolios] = useState([]);
@@ -62,7 +62,10 @@ export default function TenureMonitorPage({ onExit, onOpenTenuresInEditor, onUpg
   const [saving, setSaving] = useState(false);
   const [view, setView] = useState('table');           // 'table' | 'map'
   const [colourBy, setColourBy] = useState('urgency');
-  const [filter, setFilter] = useState(null);
+  // Seeded from the caller so arriving from the dashboard's "3 expiring in 30
+  // days" shows those three rather than everything. Only the INITIAL value —
+  // once here, the filter belongs to this screen and the pills drive it.
+  const [filter, setFilter] = useState(initialFilter);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState(null);
   const [showAdd, setShowAdd] = useState(false);
