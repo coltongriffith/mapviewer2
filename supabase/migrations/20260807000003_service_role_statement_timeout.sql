@@ -1,0 +1,66 @@
+-- ============================================================
+-- Give server-side batch work a timeout budget that is not the browser's.
+--
+-- THE ROOT CAUSE OF THREE CONSECUTIVE SYNC FAILURES
+--   PostgREST applies the role settings of the role it IMPERSONATES, not of the
+--   login role. Supabase sets those explicitly for the two roles a browser can
+--   reach:
+--
+--     anon           statement_timeout = 3s
+--     authenticated  statement_timeout = 8s
+--     authenticator  statement_timeout = 8s   (the login role's session default)
+--
+--   service_role was never given one. So it fell through to the authenticator
+--   default of EIGHT SECONDS — a ceiling designed for interactive browser
+--   requests, silently applied to a 42,000-record provincial import that runs
+--   in GitHub Actions and has no user waiting on it.
+--
+--   Every failure of the B.C. tenure sync since launch traces to this ceiling:
+--
+--     2026-08-06  Could not read existing owners: TypeError: fetch failed
+--                 (an unchunked .in() building an 18 KB URL — a different bug,
+--                  fixed separately, but the same root theme: batch-sized work
+--                  issued through an interactive-request API)
+--     2026-08-07  Reconciliation failed: canceling statement due to statement
+--                 timeout            (4 sequential scans, ~27s, against 8s)
+--     2026-08-07  Owner upsert failed: canceling statement due to statement
+--                 timeout            (42,695 of 42,704 owner rows written, then
+--                                     one 500-row batch ran long)
+--
+--   The second was patched with an index (20260807000002) and the third would
+--   have been patched with a smaller batch size. Both were the same bug wearing
+--   different clothes, and point-fixing them one at a time would have continued
+--   indefinitely — every batch statement in the importer sits under this
+--   ceiling, and batch cost is not uniform.
+--
+-- WHY 60s AND NOT "UNLIMITED"
+--   A batch statement that cannot finish inside a minute is a bug worth failing
+--   on — a missing index, a lock, a runaway join — and an unbounded timeout
+--   turns that into a hung job holding a connection.
+--
+-- WHAT ELSE THIS AFFECTS
+--   service_role is also used by api/claims.js, api/track.js, api/client-error.js
+--   and the four Stripe handlers. Those run inside Vercel functions with their
+--   own, shorter maxDuration, so they are bounded there regardless and this
+--   change cannot make a user-facing request hang. It does mean a pathological
+--   query from one of those routes now consumes a connection for up to a minute
+--   instead of eight seconds; that is the accepted cost, and it applies only to
+--   trusted server code, never to anything a browser can call directly.
+--
+-- Rollback:
+--   alter role service_role reset statement_timeout;
+--   notify pgrst, 'reload config';
+-- ============================================================
+
+alter role service_role set statement_timeout = '60s';
+
+-- Role settings are cached by PostgREST. Without this the change does not take
+-- effect until the connection pool happens to recycle.
+notify pgrst, 'reload config';
+
+-- ── Verification ───────────────────────────────────────────────────────────
+--   select r.rolname, s.setconfig
+--   from pg_db_role_setting s
+--   join pg_roles r on r.oid = s.setrole
+--   where r.rolname = 'service_role';
+--   -- expect: {statement_timeout=60s}

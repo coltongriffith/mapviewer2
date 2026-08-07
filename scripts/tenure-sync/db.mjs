@@ -16,6 +16,73 @@ import { credential, supabaseCredentials } from '../lib/env.mjs';
 /** Rows per write. Matches the batch size the Quebec loader settled on. */
 export const BATCH_SIZE = Number(process.env.TENURE_SYNC_BATCH_SIZE) || 500;
 
+/**
+ * Smallest batch worth retrying. Below this, a timeout is a real problem —
+ * a missing index or a lock — and splitting further only turns one clear
+ * failure into forty slow ones.
+ */
+const MIN_CHUNK = 25;
+
+/** How long a failed run stays eligible for an automatic resume. */
+export const RESUME_MAX_AGE_HOURS = Number(process.env.TENURE_SYNC_RESUME_MAX_AGE_HOURS) || 24;
+
+/**
+ * Postgres cancels a statement that outruns `statement_timeout` with SQLSTATE
+ * 57014. It reaches us as a PostgREST error whose message is the Postgres one.
+ */
+export function isStatementTimeout(error) {
+  if (!error) return false;
+  if (error.code === '57014') return true;
+  return /statement timeout/i.test(String(error.message || ''));
+}
+
+/**
+ * Write rows in batches, halving a batch that times out rather than failing.
+ *
+ * The importer runs as `service_role`, and PostgREST applies the settings of
+ * the role it impersonates. `anon` and `authenticated` have explicit timeouts;
+ * `service_role` never did, so it inherited the authenticator default of EIGHT
+ * SECONDS — a ceiling meant for interactive browser requests, applied to a
+ * 42,000-record provincial import. Three consecutive nightly failures came from
+ * that and nothing else.
+ *
+ * supabase/migrations/20260807000003 raises it to 60s, which is the actual fix.
+ * This is the belt to that braces: batch cost is not uniform (a page of claims
+ * held by one owner writes far more owner rows than a page of sole-owner
+ * claims), so a fixed batch size will always eventually meet a slow one. Halving
+ * on 57014 and only on 57014 means a transient slow batch costs a retry instead
+ * of a night, while a genuine error still surfaces immediately and unchanged.
+ */
+async function writeChunk(chunk, write, { label, log }, out) {
+  const { data, error } = await write(chunk);
+  if (!error) {
+    if (out && data) out.push(...data);
+    return;
+  }
+  if (!isStatementTimeout(error) || chunk.length <= MIN_CHUNK) {
+    throw new Error(`${label} failed: ${error.message}`);
+  }
+  const half = Math.ceil(chunk.length / 2);
+  log?.(`  [tenure-sync] ${label}: ${chunk.length} rows hit the statement timeout — `
+    + `retrying as ${half}-row halves.`);
+  for (const sub of chunked(chunk, half)) {
+    await writeChunk(sub, write, { label, log }, out);
+  }
+}
+
+/**
+ * @param rows   the full set to write
+ * @param write  (chunk) => PostgREST result — must NOT throw; return {data,error}
+ * @returns      the concatenated `data` of every successful write
+ */
+export async function writeInChunks(rows, write, { label, size = BATCH_SIZE, log } = {}) {
+  const out = [];
+  for (const chunk of chunked(rows, size)) {
+    await writeChunk(chunk, write, { label, log }, out);
+  }
+  return out;
+}
+
 export function createServiceClient() {
   // Trimmed and checked before use — a credential saved with a trailing
   // newline otherwise surfaces as "Headers.set: ... is an invalid header
@@ -69,13 +136,21 @@ export async function markPromotionStarted(sb, runId) {
  * Its rows were deliberately NOT cleared, because they are the input the resume
  * needs. Re-promoting them is a no-op for every batch that already landed.
  */
-export async function interruptedRun(sb, { source }) {
+export async function interruptedRun(sb, { source, maxAgeHours = RESUME_MAX_AGE_HOURS }) {
+  // Age-bounded on purpose. A resume re-promotes the whole province before the
+  // run does any of its own work, so a promotion that cannot complete would
+  // otherwise burn several minutes at the head of EVERY subsequent run, for
+  // ever. Past the cut-off the staged pull is stale enough that tonight's fresh
+  // one supersedes it anyway, and clearStaleStaging sweeps the rows on the next
+  // success.
+  const cutoff = new Date(Date.now() - maxAgeHours * 3600_000).toISOString();
   const { data, error } = await sb
     .from('tenure_import_runs')
     .select('id, started_at, mode, error_summary')
     .eq('status', 'failed')
     .eq('source', source)
     .not('promotion_started_at', 'is', null)
+    .gte('started_at', cutoff)
     .order('started_at', { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -113,17 +188,15 @@ export async function lastSuccessfulRun(sb, { source, mode = 'full' }) {
 // moves until the guardrails have seen the whole run — see the long note on
 // tenure_import_staging in migration 20260801000001.
 
-export async function stageRows(sb, runId, entries) {
+export async function stageRows(sb, runId, entries, { log } = {}) {
   if (!entries.length) return;
   const rows = entries.map((e) => ({
     import_run_id: runId,
     source_record_id: e.tenure.source_record_id,
     payload: { tenure: e.tenure, owners: e.owners },
   }));
-  for (const chunk of chunked(rows, BATCH_SIZE)) {
-    const { error } = await sb.from('tenure_import_staging').insert(chunk);
-    if (error) throw new Error(`Staging insert failed: ${error.message}`);
-  }
+  await writeInChunks(rows, (chunk) => sb.from('tenure_import_staging').insert(chunk),
+    { label: 'Staging insert', log });
 }
 
 /**
@@ -238,27 +311,22 @@ export async function loadExisting(sb, sourceRecordIds, { jurisdiction, source }
  * column is how the product can later say "we have been watching this title
  * since March" — overwriting it every night would quietly destroy that.
  */
-export async function upsertTenures(sb, rows) {
+export async function upsertTenures(sb, rows, { log } = {}) {
+  const written = await writeInChunks(rows, (chunk) => sb
+    .from('tenures')
+    .upsert(chunk, { onConflict: 'jurisdiction,source,source_record_id' })
+    .select('id, source_record_id'), { label: 'Tenure upsert', log });
   const ids = new Map();
-  for (const chunk of chunked(rows, BATCH_SIZE)) {
-    const { data, error } = await sb
-      .from('tenures')
-      .upsert(chunk, { onConflict: 'jurisdiction,source,source_record_id' })
-      .select('id, source_record_id');
-    if (error) throw new Error(`Tenure upsert failed: ${error.message}`);
-    for (const row of data || []) ids.set(row.source_record_id, row.id);
-  }
+  for (const row of written) ids.set(row.source_record_id, row.id);
   return ids;
 }
 
-export async function upsertOwners(sb, rows) {
+export async function upsertOwners(sb, rows, { log } = {}) {
   if (!rows.length) return;
-  for (const chunk of chunked(rows, BATCH_SIZE)) {
-    const { error } = await sb
-      .from('tenure_owners')
-      .upsert(chunk, { onConflict: 'tenure_id,normalized_owner_name' });
-    if (error) throw new Error(`Owner upsert failed: ${error.message}`);
-  }
+  await writeInChunks(rows, (chunk) => sb
+    .from('tenure_owners')
+    .upsert(chunk, { onConflict: 'tenure_id,normalized_owner_name' }),
+  { label: 'Owner upsert', log });
 }
 
 /**
@@ -268,38 +336,31 @@ export async function upsertOwners(sb, rows) {
  * guardrails passed — so a page that failed to arrive can never be read as
  * "this claim has no owners any more".
  */
-export async function pruneOwners(sb, tenureIds, observedAt) {
+export async function pruneOwners(sb, tenureIds, observedAt, { log } = {}) {
   if (!tenureIds.length) return 0;
-  let removed = 0;
-  for (const chunk of chunked(tenureIds, 200)) {
-    const { data, error } = await sb
-      .from('tenure_owners')
-      .delete()
-      .in('tenure_id', chunk)
-      .lt('last_observed_at', observedAt)
-      .select('id');
-    if (error) throw new Error(`Owner prune failed: ${error.message}`);
-    removed += (data || []).length;
-  }
-  return removed;
+  // Chunk of 200, not BATCH_SIZE: these are UUIDs in a query string. See the
+  // note on loadOwnersFor in run.mjs.
+  const removed = await writeInChunks(tenureIds, (chunk) => sb
+    .from('tenure_owners')
+    .delete()
+    .in('tenure_id', chunk)
+    .lt('last_observed_at', observedAt)
+    .select('id'), { label: 'Owner prune', size: 200, log });
+  return removed.length;
 }
 
 // ── History ────────────────────────────────────────────────────────────────
 
-export async function insertSnapshots(sb, rows) {
+export async function insertSnapshots(sb, rows, { log } = {}) {
   if (!rows.length) return;
-  for (const chunk of chunked(rows, BATCH_SIZE)) {
-    const { error } = await sb.from('tenure_snapshots').insert(chunk);
-    if (error) throw new Error(`Snapshot insert failed: ${error.message}`);
-  }
+  await writeInChunks(rows, (chunk) => sb.from('tenure_snapshots').insert(chunk),
+    { label: 'Snapshot insert', log });
 }
 
-export async function insertChangeEvents(sb, rows) {
+export async function insertChangeEvents(sb, rows, { log } = {}) {
   if (!rows.length) return;
-  for (const chunk of chunked(rows, BATCH_SIZE)) {
-    const { error } = await sb.from('tenure_change_events').insert(chunk);
-    if (error) throw new Error(`Change-event insert failed: ${error.message}`);
-  }
+  await writeInChunks(rows, (chunk) => sb.from('tenure_change_events').insert(chunk),
+    { label: 'Change-event insert', log });
 }
 
 export async function reconcile(sb, { runId, runStarted, jurisdiction, source }) {
