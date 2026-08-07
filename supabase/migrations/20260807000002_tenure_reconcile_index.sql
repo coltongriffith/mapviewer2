@@ -1,0 +1,49 @@
+-- ============================================================
+-- Make reconciliation survive a full sync.
+--
+-- WHAT WAS HAPPENING
+--   The 2026-08-07 full sync promoted all 42,323 records successfully and then
+--   died on the last step: "Reconciliation failed: canceling statement due to
+--   statement timeout". The run was marked `failed` with alerts_safe = false,
+--   so change notices stayed suppressed even though the data was fine and
+--   fresh — and its 42k staging rows were retained, on top of the previous
+--   failed run's, because clearStaging only ever deletes the current run's.
+--
+-- WHY IT WAS SLOW
+--   tenure_reconcile_run filters on (jurisdiction, source, last_synced_at) four
+--   times, and no index covered it. Each pass was a sequential scan of a table
+--   carrying `geometry jsonb`, `raw_source_data jsonb` and a generated PostGIS
+--   column — 17,096 buffers, about 133 MB, to return NINE rows:
+--
+--     Seq Scan on tenures  (actual time=1261.842..6748.045 rows=9)
+--       Rows Removed by Filter: 42323
+--       Buffers: shared hit=14375 read=2721
+--     Execution Time: 6750.187 ms
+--
+--   Four of those is ~27 seconds of pure scanning, on top of a 20-minute
+--   promotion, against a connection with a statement timeout.
+--
+--   With the index:
+--
+--     Index Only Scan using tenures_reconcile_idx  (actual time=3.726..9.229 rows=9)
+--       Buffers: shared hit=10 read=2
+--     Execution Time: 9.357 ms
+--
+--   6,750 ms → 9 ms. The row estimate was never the problem; reading the whole
+--   wide table to find nine rows was.
+--
+-- Rollback:
+--   drop index if exists public.tenures_reconcile_idx;
+-- ============================================================
+
+-- Column order matters: the two equality predicates lead so the range scan on
+-- last_synced_at happens inside a single narrow slice of the index.
+create index if not exists tenures_reconcile_idx
+  on public.tenures (jurisdiction, source, last_synced_at);
+
+-- ── Verification ───────────────────────────────────────────────────────────
+--   explain (analyze, buffers)
+--   select count(*) from public.tenures
+--   where jurisdiction = 'BC' and source = 'bc-wfs-mta-acquired-tenure-svw'
+--     and last_synced_at < now() - interval '1 hour';
+--   -- expect an Index Only Scan, not a Seq Scan.

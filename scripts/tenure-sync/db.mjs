@@ -157,6 +157,51 @@ export async function clearStaging(sb, runId) {
   if (error) console.warn(`[tenure-sync] could not clear staging for run ${runId}: ${error.message}`);
 }
 
+/**
+ * Drop staging rows left behind by runs that will never be resumed.
+ *
+ * A failed run KEEPS its staging on purpose, so the next run can finish the
+ * promotion it started. But clearStaging only ever deletes the CURRENT run's
+ * rows, so each failure left ~42,000 behind permanently — two consecutive
+ * failures had grown the table to 84,641 rows, none of which any future run
+ * would look at.
+ *
+ * Called only after a run SUCCEEDS. At that point the mirror is fully
+ * promoted, so every earlier run's staging is definitionally dead: there is
+ * nothing left for it to recover. Anything staged for a LATER run (a
+ * concurrent job, however unlikely) is untouched.
+ */
+export async function clearStaleStaging(sb, runId, runStartedAt) {
+  const { data: stale, error: findErr } = await sb
+    .from('tenure_import_runs')
+    .select('id')
+    .lt('started_at', runStartedAt)
+    .neq('id', runId);
+  if (findErr) {
+    console.warn(`[tenure-sync] could not look for stale staging: ${findErr.message}`);
+    return 0;
+  }
+  const ids = (stale || []).map((r) => r.id);
+  if (!ids.length) return 0;
+
+  let removed = 0;
+  // Chunked for the same reason loadOwnersFor is: these are UUIDs, and a
+  // whole run history in one `.in()` builds a URL the edge refuses.
+  for (const chunk of chunked(ids, 200)) {
+    const { data, error } = await sb
+      .from('tenure_import_staging')
+      .delete()
+      .in('import_run_id', chunk)
+      .select('id');
+    if (error) {
+      console.warn(`[tenure-sync] could not clear stale staging: ${error.message}`);
+      return removed;
+    }
+    removed += (data || []).length;
+  }
+  return removed;
+}
+
 // ── Tenures ────────────────────────────────────────────────────────────────
 
 /**

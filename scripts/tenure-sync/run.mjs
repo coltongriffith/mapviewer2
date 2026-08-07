@@ -54,6 +54,7 @@ import {
   createServiceClient, startRun, finishRun, lastSuccessfulRun, loadExisting,
   upsertTenures, upsertOwners, pruneOwners, insertSnapshots, insertChangeEvents,
   reconcile, monitoredTenureNumbers, notifyAdmin, stageRows, readStaged, clearStaging,
+  clearStaleStaging,
   markPromotionStarted, interruptedRun,
   BATCH_SIZE, chunked,
 } from './db.mjs';
@@ -231,6 +232,13 @@ async function main() {
     }
 
     await clearStaging(sb, run.id);
+    // A run that failed keeps its staging so the next one can finish its
+    // promotion — but nothing ever cleared it once that resume happened, so
+    // each failure leaked ~42,000 rows permanently. This run succeeded, so
+    // every earlier run's staging is now dead weight.
+    const swept = await clearStaleStaging(sb, run.id, run.started_at);
+    if (swept > 0) log(`[tenure-sync] cleared ${swept} staging rows from earlier runs.`);
+
     await finishRun(sb, run.id, {
       status: 'succeeded',
       alerts_safe: evaluation.alertsSafe,
