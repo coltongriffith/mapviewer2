@@ -38,7 +38,25 @@
 //   the resume safe: promoteStaging diffs the stored row against the staged
 //   row, so an already-promoted batch compares equal and emits no change event
 //   and no snapshot. See resumeInterruptedPromotion.
+//
+// THREE FAILURE POSITIONS, NOT TWO
+//   The first version of this file recognised only "before promotion" and
+//   "during promotion", and put everything after promotion into the second
+//   bucket. That mislabelled a whole class of failure: the 2026-08-07 run
+//   promoted all 42,323 records, failed in reconciliation, and was recorded as
+//   an interrupted promotion with records_processed = 0. It then kept 42,000
+//   staging rows for a resume with nothing to finish — and because a failing
+//   resume also killed the run that attempted it, every subsequent run died at
+//   records_received = 0 before fetching anything. A wedge, from one
+//   misclassification.
+//
+//   So the positions are now: before promotion (staging dropped, nothing
+//   touched), during promotion (staging kept, resume next run), and after
+//   promotion (staging dropped, real counts recorded, data is complete). And a
+//   resume is best-effort — recovering the last run is a courtesy, pulling
+//   today's data is the job.
 
+import { pathToFileURL } from 'node:url';
 import {
   SOURCE_ID, SOURCE_METADATA, fetchSampleFeature, streamFeatures, tenureNumberFilter,
 } from './bcSource.mjs';
@@ -121,6 +139,11 @@ async function main() {
   };
   const rejectSamples = [];
   let promotionStarted = false;
+  // The promotion's result once every staged row has landed, or null while it
+  // is still in flight. Distinguishes "died mid-write" from "died afterwards",
+  // which need opposite handling: the first retains staging for a resume, the
+  // second must not, because there is nothing left to resume.
+  let promotionComplete = null;
 
   try {
     // ── 1b. Finish anything a previous run left half-written ───────────────
@@ -167,7 +190,7 @@ async function main() {
             }
           }
         }
-        if (ok.length) await stageRows(sb, run.id, ok);
+        if (ok.length) await stageRows(sb, run.id, ok, { log });
       },
     });
     stats.recordsReceived = streamResult.received + stats.recordsRejected;
@@ -216,17 +239,42 @@ async function main() {
     const promoted = await promoteStaging(sb, run.id, {
       observedAt, log, alertsSafe: evaluation.alertsSafe,
     });
+    // Every staged row is now applied, so nothing after this line can leave the
+    // promotion half-written — and the catch block must not say that it did.
+    promotionComplete = promoted;
 
     // ── 5. Reconcile ───────────────────────────────────────────────────────
+    // Every record is now promoted and the mirror is complete and current.
+    // Reconciliation is enrichment on top of that: it only ever ADDS absence
+    // bookkeeping for titles the pull did not contain. It is one RPC, so a
+    // timeout rolls it back whole — there is no partial state to repair.
+    //
+    // So a reconciliation failure degrades this run, it does not fail it. The
+    // 2026-08-07 11:50 run proved why that distinction matters: it promoted all
+    // 42,323 records, died here, and was recorded as `failed` /
+    // `records_processed: 0` / "Interrupted during promotion" — every one of
+    // which was untrue. It kept 42,000 staging rows for a resume that had
+    // nothing to finish, and starved the alert engine (which reads the last
+    // `succeeded` run) of a baseline it already had.
+    //
+    // Absence detection needs two consecutive clean runs before it concludes
+    // anything, so skipping a night costs nothing but a night.
     let reconciliation = null;
+    let reconcileError = null;
     if (mayReconcile(evaluation, opts.mode)) {
-      reconciliation = await reconcile(sb, {
-        runId: run.id, runStarted, jurisdiction: JURISDICTION, source: SOURCE_ID,
-      });
-      const extra = await recordAbsenceEvents(sb, run.id, reconciliation);
-      promoted.changeEvents += extra;
-      log(`[tenure-sync] reconciliation: ${reconciliation.missing_total} not seen, `
-        + `${reconciliation.reobserved_total} back after an absence`);
+      try {
+        reconciliation = await reconcile(sb, {
+          runId: run.id, runStarted, jurisdiction: JURISDICTION, source: SOURCE_ID,
+        });
+        const extra = await recordAbsenceEvents(sb, run.id, reconciliation);
+        promoted.changeEvents += extra;
+        log(`[tenure-sync] reconciliation: ${reconciliation.missing_total} not seen, `
+          + `${reconciliation.reobserved_total} back after an absence`);
+      } catch (e) {
+        reconcileError = String(e?.message || e);
+        log(`[tenure-sync] reconciliation FAILED: ${reconcileError} — records are `
+          + 'promoted and current; absence detection is skipped for this run.');
+      }
     } else {
       log('[tenure-sync] reconciliation skipped — not a clean, complete, full run.');
     }
@@ -254,8 +302,15 @@ async function main() {
         ...evaluation.report,
         reject_samples: rejectSamples,
         reconciliation,
+        reconciliation_error: reconcileError,
       },
-      error_summary: evaluation.alertsSafe ? null : summarize(evaluation),
+      error_summary: [
+        evaluation.alertsSafe ? null : summarize(evaluation),
+        reconcileError
+          ? `Records promoted and current, but reconciliation failed, so titles absent `
+            + `from this pull were not counted: ${reconcileError}`
+          : null,
+      ].filter(Boolean).join(' ').slice(0, 2000) || null,
     });
 
     log(`[tenure-sync] done: ${promoted.processed} processed, ${promoted.created} new, `
@@ -280,7 +335,37 @@ async function main() {
     // not true — batches already committed — and clearing staging would throw
     // away the one input a resume needs. So the rows stay, and the next run
     // finishes the job before starting its own.
-    if (promotionStarted) {
+    if (promotionComplete) {
+      // Promotion finished; something after it did not. The mirror is complete
+      // and current, so retaining staging would only queue up a pointless
+      // 42,000-row re-promotion at the head of the next run — and reporting
+      // `records_processed: 0` would understate a run that processed the whole
+      // province. Both of those were real, and both misled the operator.
+      await clearStaging(sb, run.id).catch(() => {});
+      await finishRun(sb, run.id, {
+        status: 'failed',
+        alerts_safe: false,
+        records_received: stats.recordsReceived,
+        records_processed: promotionComplete.processed,
+        records_rejected: stats.recordsRejected,
+        records_created: promotionComplete.created,
+        records_updated: promotionComplete.updated,
+        material_changes_detected: promotionComplete.changeEvents,
+        schema_fingerprint: resolution?.fingerprint || null,
+        error_summary: `All ${promotionComplete.processed} records were promoted `
+          + `successfully; the run failed afterwards. Stored tenure data is complete `
+          + `and current. ${detail}`.slice(0, 2000),
+      }).catch(() => {});
+      await notifyAdmin(sb, {
+        subject: 'Tenure Monitor: B.C. sync finished writing, then failed',
+        body: `<p>Run <code>${run.id}</code> promoted all `
+          + `${promotionComplete.processed} records successfully and then failed on a `
+          + 'later step.</p>'
+          + `<pre>${escapeHtml(detail)}</pre>`
+          + '<p>Stored tenure data is complete and current — this is a failure of '
+          + 'bookkeeping, not of the import. Nothing needs to be recovered by hand.</p>',
+      }).catch(() => {});
+    } else if (promotionStarted) {
       await finishRun(sb, run.id, {
         status: 'failed',
         alerts_safe: false,
@@ -350,17 +435,39 @@ async function resumeInterruptedPromotion(sb, { log }) {
   if (!prior) return;
 
   log(`[tenure-sync] resuming interrupted run ${prior.id} — ${prior.staged} staged rows retained.`);
-  const promoted = await promoteStaging(sb, prior.id, {
-    observedAt: new Date().toISOString(), log, alertsSafe: false,
-  });
-  await clearStaging(sb, prior.id);
-  await finishRun(sb, prior.id, {
-    error_summary: `${prior.error_summary || 'Interrupted during promotion.'} `
-      + `Resumed and completed: ${promoted.processed} records applied, `
-      + `${promoted.changeEvents} change events.`.slice(0, 2000),
-  }).catch(() => {});
-  log(`[tenure-sync] resume complete: ${promoted.processed} applied, `
-    + `${promoted.changeEvents} change events.`);
+
+  // A resume that fails must NOT fail tonight's sync.
+  //
+  // This block used to run bare inside the caller's try, so a throw here ended
+  // the run at records_received = 0 — before it fetched a single feature —
+  // while leaving the prior run's staging in place and still flagged as
+  // interrupted. The next run then attempted the identical resume and died the
+  // identical way. That is a permanent wedge, not a transient failure, and it
+  // is exactly what happened on 2026-08-07: the 16:42 run got within nine rows
+  // of finishing the resume, hit the statement timeout on an owner upsert, and
+  // took the whole sync down with it.
+  //
+  // Recovering the previous run is a courtesy; pulling today's data is the job.
+  // Re-promoting is idempotent and a fresh full pull supersedes the staged one
+  // regardless, so abandoning a resume costs nothing but the change events the
+  // prior run would have detected — which the next clean run detects anyway,
+  // because it diffs against the same stored rows.
+  try {
+    const promoted = await promoteStaging(sb, prior.id, {
+      observedAt: new Date().toISOString(), log, alertsSafe: false,
+    });
+    await clearStaging(sb, prior.id);
+    await finishRun(sb, prior.id, {
+      error_summary: `${prior.error_summary || 'Interrupted during promotion.'} `
+        + `Resumed and completed: ${promoted.processed} records applied, `
+        + `${promoted.changeEvents} change events.`.slice(0, 2000),
+    }).catch(() => {});
+    log(`[tenure-sync] resume complete: ${promoted.processed} applied, `
+      + `${promoted.changeEvents} change events.`);
+  } catch (e) {
+    log(`[tenure-sync] resume of ${prior.id} failed (${e.message}) — continuing with `
+      + 'tonight\'s pull, which supersedes it.');
+  }
 }
 
 /**
@@ -408,7 +515,7 @@ async function promoteStaging(sb, runId, { observedAt, log, alertsSafe }) {
     const existingIds = diffs.map((d) => d.prev?.id).filter(Boolean);
     const previousOwnersByTenure = await loadOwnersFor(sb, existingIds);
 
-    const idBySourceId = await upsertTenures(sb, tenureRows);
+    const idBySourceId = await upsertTenures(sb, tenureRows, { log });
 
     const ownerRows = [];
     const touchedTenureIds = [];
@@ -456,13 +563,13 @@ async function promoteStaging(sb, runId, { observedAt, log, alertsSafe }) {
       }
     }
 
-    await upsertOwners(sb, ownerRows);
-    await insertSnapshots(sb, snapshots);
-    await insertChangeEvents(sb, events);
+    await upsertOwners(sb, ownerRows, { log });
+    await insertSnapshots(sb, snapshots, { log });
+    await insertChangeEvents(sb, events, { log });
     // Only prune owners on a run we trust; on an unsafe run an owner missing
     // from the response is far more likely to be a truncated field than a
     // transfer of title.
-    if (alertsSafe) await pruneOwners(sb, touchedTenureIds, observedAt);
+    if (alertsSafe) await pruneOwners(sb, touchedTenureIds, observedAt, { log });
 
     processed += batch.length;
     changeEvents += events.length;
@@ -592,7 +699,19 @@ function escapeHtml(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-main().catch((err) => {
-  console.error(`\n[tenure-sync] failed: ${err?.message || err}`);
-  process.exit(1);
-});
+export { main };
+
+// Only self-start when run as a script. Importing this module used to execute a
+// full provincial sync as a side effect, which meant the failure classification
+// below — the part that has now been wrong twice — could not be tested at all,
+// and was covered by reading the source instead. That is how the reconciliation
+// mislabelling survived review.
+const invokedDirectly = process.argv[1]
+  && import.meta.url === pathToFileURL(process.argv[1]).href;
+
+if (invokedDirectly) {
+  main().catch((err) => {
+    console.error(`\n[tenure-sync] failed: ${err?.message || err}`);
+    process.exit(1);
+  });
+}

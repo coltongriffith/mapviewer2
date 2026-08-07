@@ -321,14 +321,30 @@ promotion takes, so a process death at batch 7 of 40 leaves batches 1–6
 committed. That case is handled rather than denied:
 
 - `tenure_import_runs.promotion_started_at` marks the moment the run stops
-  being a reader and splits the failure path in two.
-- A failure **before** it: staging cleared, and the administrator is told
+  being a reader, and the promotion's own completion splits the failure path in
+  **three**.
+- A failure **before** promotion: staging cleared, and the administrator is told
   stored records are unchanged, because they are.
-- A failure **during** it: staging is deliberately **kept** — it is the input a
-  resume needs — the run records what actually happened, and the email says
-  some tenures were updated and some were not.
+- A failure **during** promotion: staging is deliberately **kept** — it is the
+  input a resume needs — the run records what actually happened, and the email
+  says some tenures were updated and some were not.
+- A failure **after** promotion (reconciliation, bookkeeping): staging is
+  cleared, the real counts are recorded, and the email says the data is complete
+  and current. There is nothing to resume, so keeping staging would only queue a
+  pointless 42,000-row re-promotion at the head of the next run.
 - The next run calls `resumeInterruptedPromotion` before staging anything of
-  its own, so its diff is taken against a settled dataset.
+  its own, so its diff is taken against a settled dataset. That resume is
+  **best-effort**: if it fails, the run logs it and carries on with tonight's
+  pull, which supersedes the staged one anyway.
+
+> **Why three and not two.** The first version had only the first two, and put
+> everything after promotion into the "during" bucket. On 2026-08-07 a run
+> promoted all 42,323 records, failed in reconciliation, and was recorded as an
+> interrupted promotion with `records_processed = 0` — every part of which was
+> untrue. It kept 42,000 staging rows for a resume with nothing to finish, and
+> because a failing resume *also* killed the run attempting it, the next run
+> died at `records_received = 0` before fetching anything. One
+> misclassification, and the sync was wedged until a human intervened.
 
 Re-applying a batch that already landed is a no-op, which is what makes the
 resume safe rather than merely hopeful: `promoteStaging` diffs the **stored**
@@ -343,6 +359,50 @@ Full atomicity would mean moving the whole diff into a database function, which
 means reimplementing `changeDetect.mjs` in PL/pgSQL and keeping two copies of
 the most correctness-critical logic in the feature. That is a deliberate future
 decision, recorded under Known limitations rather than half-done.
+
+### The statement timeout — read this before debugging a slow sync
+
+**PostgREST applies the statement timeout of the role it *impersonates*, not of
+the login role.** Supabase ships explicit settings for the roles a browser can
+reach, and `service_role` was not one of them:
+
+| Role | `statement_timeout` |
+|---|---|
+| `anon` | 3s |
+| `authenticated` | 8s |
+| `authenticator` (login role, session default) | 8s |
+| `service_role` | **none set → inherited 8s** |
+
+So every statement the importer issued — a 42,000-record provincial import
+running in GitHub Actions with nobody waiting on it — ran under a ceiling
+designed for interactive browser requests. All three of the sync's early
+failures were that one fact wearing different clothes:
+
+| Date | Reported as | Actually |
+|---|---|---|
+| 2026-08-06 | `Could not read existing owners: TypeError: fetch failed` | 500 UUIDs in one `.in()` → an 18 KB URL the edge refused |
+| 2026-08-07 | `Reconciliation failed: canceling statement due to statement timeout` | 4 sequential scans of a wide table, ~27s, against 8s |
+| 2026-08-07 | `Owner upsert failed: canceling statement due to statement timeout` | 42,695 of 42,704 owner rows written, then one 500-row batch ran long |
+
+Fixed in three places, and it needs all three:
+
+1. **`20260807000003_service_role_statement_timeout.sql`** raises `service_role`
+   to 60s. This is the actual fix. It requires `notify pgrst, 'reload config'`
+   — PostgREST caches role settings, so without it the change does not take
+   effect until the pool recycles.
+2. **`20260807000002_tenure_reconcile_index.sql`** indexes
+   `(jurisdiction, source, last_synced_at)`, taking the reconciliation scan from
+   6,750 ms to 9 ms.
+3. **`writeInChunks` in `db.mjs`** halves a batch that returns SQLSTATE 57014
+   and retries, down to a floor of 25 rows. Batch cost is not uniform — a page
+   of claims held by one owner writes far more owner rows than a page of
+   sole-owner claims — so any fixed batch size eventually meets a slow one. It
+   halves on 57014 **only**; retrying a constraint violation smaller would turn
+   one legible error into forty.
+
+If a future sync reports a statement timeout, check in this order: is
+`service_role`'s setting still present (`pg_db_role_setting`), does the slow
+statement have an index, and only then consider the batch size.
 
 ---
 
