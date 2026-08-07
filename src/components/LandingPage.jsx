@@ -151,12 +151,13 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
               Investor-ready mining maps <span className="lm-h1-accent">in minutes.</span>
             </h1>
             <p className="lm-hero-sub">
-              Search claims, plot projects, add infrastructure, and export polished maps
-              for decks, news releases, and investor updates — no GIS required.
+              Look up B.C. mineral claims by tenure number or company, map them alongside
+              your drilling and infrastructure, and export a figure for a deck, a news
+              release or a report.
             </p>
             {US_CLAIMS_ENABLED && (
-              <p className="lm-us-note" style={{ fontSize: 13, color: '#475569', maxWidth: 620 }}>
-                <strong style={{ color: '#2563eb' }}>New:</strong> {US_COVERAGE_COPY}
+              <p className="lm-us-note">
+                <strong>New:</strong> {US_COVERAGE_COPY}
               </p>
             )}
             <div className="lm-hero-ctas">
@@ -164,8 +165,21 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
                 Start Mapping
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14m0 0l-6-6m6 6l-6 6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
               </button>
-              <button className="lm-btn lm-btn-ghost lm-btn-lg" type="button" onClick={() => scrollTo('examples')} data-track="Hero: View Example Maps">
-                View Example Maps
+              {/* Claim search, not example maps.
+                  "Mineral Claims BC" is the highest-volume paid keyword, and
+                  somebody arriving on it wants to look up claims — not read
+                  about a mapping tool and not browse a gallery. Sending them
+                  two clicks deep to the thing they searched for is how a
+                  visit ends in 85 seconds.
+                  Examples are still reachable from the nav, the bottom CTA
+                  and the footer, so nothing is orphaned by this. */}
+              <button
+                className="lm-btn lm-btn-ghost lm-btn-lg"
+                type="button"
+                onClick={onSearchBCClaims}
+                data-track="Hero: Search BC Claims"
+              >
+                Search BC mineral claims
               </button>
             </div>
             <p className="lm-hero-trust">

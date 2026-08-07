@@ -130,7 +130,7 @@ const PROVINCES = [
   {
     value: 'bc', label: 'British Columbia', registry: 'Mineral Titles Online',
     modes: ['company', 'number', 'map'],
-    placeholders: { company: 'e.g. Teck Resources', number: 'e.g. 1012345', map: 'e.g. 082F056' },
+    placeholders: { company: 'e.g. Teck Resources', number: 'Tenure or tag number, e.g. 1012345', map: 'e.g. 082F056' },
   },
   {
     value: 'on', label: 'Ontario', registry: 'MLAS',

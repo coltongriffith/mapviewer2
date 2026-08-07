@@ -573,6 +573,7 @@ const RPC_CALLS = [
   ['productFunnel', 'admin_get_product_funnel'],
   ['campaignStats', 'admin_get_campaign_stats', true],
   ['searchStats', 'admin_get_search_stats', true],
+  ['searchDropoff', 'admin_get_search_dropoff', true],
   ['topSharedMaps', 'admin_get_top_shared_maps'],
   ['landingClicks', 'admin_get_landing_clicks', true],
 ];
@@ -724,7 +725,7 @@ export default function AdminPage({ onExit }) {
   const usersPag = usePagination(d.users, 10);
   const leadsPag = usePagination(d.leads, 10);
   const campaignPag = usePagination(d.campaignStats, 10);
-  const searchPag = usePagination(d.searchStats, 12);
+  const searchPag = usePagination(d.searchDropoff, 12);
 
   // Derived values (hooks before early returns)
   const trendMap = useMemo(() => {
@@ -950,6 +951,76 @@ export default function AdminPage({ onExit }) {
               ) : <Empty message="No UTM-tagged traffic yet. Tag marketing links with ?utm_source=…&utm_campaign=… to attribute campaigns here." />}
             </Card>
             <div className="adm-grid-2">
+              {/* Searches that found nothing.
+                  admin_get_search_stats averages result_count, and an average
+                  hides exactly the failure that matters: on 2026-08-07, 63
+                  healthy B.C. company searches drowned 3 B.C. number searches
+                  that were returning zero because the filter could not reach
+                  the field the placeholder told users to type. A rate cannot
+                  hide it, and `abandoned` — a zero-result search that was the
+                  last thing a session ever did — names the cost. */}
+              <Card
+                title="Searches that found nothing"
+                eyebrow="Zero-result rate by province and mode · worst first"
+                count={(d.searchDropoff || []).reduce((n, r) => n + Number(r.abandoned || 0), 0) || null}
+                full
+              >
+                {(d.searchDropoff || []).length === 0 ? (
+                  <Empty message="No searches in this window." />
+                ) : (
+                  <div className="adm-table-wrap">
+                    <table className="adm-table">
+                      <thead>
+                        <tr>
+                          <th scope="col">Province</th>
+                          <th scope="col">Mode</th>
+                          <th scope="col" className="adm-num">Searches</th>
+                          <th scope="col" className="adm-num">Found nothing</th>
+                          <th scope="col" className="adm-num">Errors</th>
+                          <th scope="col" className="adm-num">Sessions</th>
+                          <th scope="col" className="adm-num">Left after</th>
+                          <th scope="col">Last</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {searchPag.slice.map((r) => {
+                          const rate = Number(r.zero_rate) || 0;
+                          // Only flag a rate that is BOTH high and backed by
+                          // enough searches to mean something — two misses out
+                          // of two is noise, not a signal.
+                          const alarming = rate >= 60 && Number(r.searches) >= 3;
+                          return (
+                            <tr key={`${r.province}-${r.mode}`} className={alarming ? 'adm-row-alert' : undefined}>
+                              <th scope="row">{r.province}</th>
+                              <td>{r.mode}</td>
+                              <td className="adm-num">{r.searches}</td>
+                              <td className="adm-num">
+                                {r.zero_results}
+                                <span className={alarming ? 'adm-rate-bad' : 'adm-muted'}> ({rate}%)</span>
+                              </td>
+                              <td className="adm-num">{Number(r.errors) > 0 ? r.errors : <span className="adm-muted">—</span>}</td>
+                              <td className="adm-num">{r.sessions}</td>
+                              <td className="adm-num">
+                                {Number(r.abandoned) > 0
+                                  ? <strong className="adm-rate-bad">{r.abandoned}</strong>
+                                  : <span className="adm-muted">—</span>}
+                              </td>
+                              <td className="adm-muted">{fmt(r.last_search)}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                    <Pagination {...searchPag} />
+                  </div>
+                )}
+                <p className="adm-muted" style={{ marginTop: 10, fontSize: 12 }}>
+                  <strong>Left after</strong> counts sessions whose last recorded action was a
+                  search that found nothing. A high rate with people leaving is usually a broken
+                  search rather than empty ground — open the session timeline to see the sequence.
+                </p>
+              </Card>
+
               <Card title="All referrers" eyebrow="Last 90 days">
                 <HBars rows={(d.referrerStats || []).slice(0, 12).map((r) => ({ label: r.referrer, value: Number(r.sessions) }))} emptyMsg="No referrer data yet." />
               </Card>

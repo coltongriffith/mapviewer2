@@ -1237,12 +1237,48 @@ async function searchQcBbox(minLng, minLat, maxLng, maxLat, res) {
   return res.status(200).json({ type: 'FeatureCollection', features });
 }
 
+/**
+ * The CQL filter for a B.C. registry search.
+ *
+ * EXPORTED so it can be tested. The bug this function now carries a guard
+ * against was invisible from the outside: the request succeeded, the WFS
+ * server answered, and the UI said "no claims found" — so it read as ground
+ * nobody had staked rather than a query that could never match.
+ *
+ * @param {string} term  raw user input
+ * @param {'number'|'map'|'company'} type
+ * @returns {string} a CQL_FILTER expression
+ */
+export function bcCqlFilter(term, type) {
+  const safeTerm = String(term).replace(/'/g, "''").replace(/%/g, '\\%').replace(/_/g, '\\_');
+
+  if (type === 'number') {
+    // A B.C. claim has TWO numbers, and people arrive holding either one:
+    //
+    //   TENURE_NUMBER_ID  the tenure number. Numeric in the source, present on
+    //                     EVERY title, 6 or 7 digits. This is what MTO shows,
+    //                     what a claim schedule lists, and what our own
+    //                     placeholder tells the user to type ("e.g. 1012345").
+    //   TAG_NUMBER        the staking tag. A string, and NULL on 36,925 of the
+    //                     42,332 titles in the mirror — cell claims have none.
+    //
+    // This filter used to be TAG_NUMBER alone, so somebody typing exactly what
+    // the placeholder showed them got nothing across 87% of the province.
+    //
+    // TENURE_NUMBER_ID is numeric in the source, so its comparison must be
+    // UNQUOTED — quoting a numeric field makes the WFS server reject the whole
+    // filter. The tag clause is the only one used for a non-numeric term, so a
+    // claim name never produces a malformed numeric comparison.
+    return /^\d+$/.test(term)
+      ? `(TENURE_NUMBER_ID = ${term} OR TAG_NUMBER = '${safeTerm}')`
+      : `TAG_NUMBER = '${safeTerm}'`;
+  }
+  if (type === 'map') return `MAP_UNIT_NO ILIKE '${safeTerm}%'`;
+  return `OWNER_NAME ILIKE '%${safeTerm}%'`;
+}
+
 async function searchBc(term, type, res) {
-  const safeTerm = term.replace(/'/g, "''").replace(/%/g, '\\%').replace(/_/g, '\\_');
-  let cqlFilter;
-  if (type === 'number') cqlFilter = `TAG_NUMBER = '${safeTerm}'`;
-  else if (type === 'map') cqlFilter = `MAP_UNIT_NO ILIKE '${safeTerm}%'`;
-  else cqlFilter = `OWNER_NAME ILIKE '%${safeTerm}%'`;
+  const cqlFilter = bcCqlFilter(term, type);
 
   const buildUrl = (startIndex, count) => [
     'https://openmaps.gov.bc.ca/geo/pub/wfs',
