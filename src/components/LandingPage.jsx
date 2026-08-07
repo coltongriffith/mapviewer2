@@ -156,8 +156,8 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
               release or a report.
             </p>
             {US_CLAIMS_ENABLED && (
-              <p className="lm-us-note" style={{ fontSize: 13, color: '#475569', maxWidth: 620 }}>
-                <strong style={{ color: '#2563eb' }}>New:</strong> {US_COVERAGE_COPY}
+              <p className="lm-us-note">
+                <strong>New:</strong> {US_COVERAGE_COPY}
               </p>
             )}
             <div className="lm-hero-ctas">

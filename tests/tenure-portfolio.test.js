@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { changeGroup } from '../src/components/tenure/PortfolioActivity.jsx';
 import {
   reconcileRows, reconciliationSummary, mapColumns, buildScheduleCsv,
   ROW_STATUS, decisionLabel,
@@ -352,5 +353,56 @@ describe('the changed-recently window', () => {
     expect(page, 'the changed filter no longer applies the window')
       .toContain("if (filter === 'changed') {");
     expect(page).toContain('changedWithinWindow(changesByTenure.get(r.tenure.id), now)');
+  });
+});
+
+// ── Filtering the change feed by type ──────────────────────────────────────
+//
+// The feed mixes a termination and an area correction into one date-ordered
+// list. Expiry is the group that can cost ground, and it is exactly the group
+// that gets buried when a boundary tweak lands on top of it.
+describe('change-type grouping', () => {
+  it('puts every expiry-relevant event in the expiry group', () => {
+    // These four are the ways a title heads towards being lost. If one of them
+    // ever silently moves to another group, somebody filtering for "expiry"
+    // stops seeing it — which is the failure mode the filter exists to fix.
+    for (const t of ['GOOD_TO_DATE_CHANGED', 'TENURE_TERMINATED',
+      'STATUS_CHANGED', 'TENURE_NO_LONGER_OBSERVED']) {
+      expect(changeGroup({ event_type: t }), t).toBe('expiry');
+    }
+  });
+
+  it('separates ownership from boundary noise', () => {
+    expect(changeGroup({ event_type: 'OWNER_ADDED' })).toBe('ownership');
+    expect(changeGroup({ event_type: 'OWNER_REMOVED' })).toBe('ownership');
+    expect(changeGroup({ event_type: 'OWNERSHIP_PERCENTAGE_CHANGED' })).toBe('ownership');
+    expect(changeGroup({ event_type: 'GEOMETRY_CHANGED' })).toBe('boundary');
+    expect(changeGroup({ event_type: 'AREA_CHANGED' })).toBe('boundary');
+  });
+
+  it('never drops a change it does not recognise', () => {
+    // A filter that silently discards an event the importer knows how to
+    // detect is worse than no filter — this view's whole promise is that
+    // nothing the province did goes unseen.
+    expect(changeGroup({ event_type: 'SOMETHING_NEW' })).toBe('other');
+    expect(changeGroup({})).toBe('other');
+    expect(changeGroup(null)).toBe('other');
+  });
+
+  it('covers every event type the importer can emit', () => {
+    // Read from the importer rather than a hand-kept list, so a new event type
+    // added to changeDetect.mjs cannot quietly land in "other" forever.
+    const src = readFileSync('scripts/tenure-sync/changeDetect.mjs', 'utf8');
+    const block = src.slice(src.indexOf('export const EVENT'), src.indexOf('};', src.indexOf('export const EVENT')));
+    const emitted = [...block.matchAll(/(\w+):\s*'(\w+)'/g)].map((m) => m[2]);
+    expect(emitted.length).toBeGreaterThan(8);
+
+    const ungrouped = emitted.filter((t) => changeGroup({ event_type: t }) === 'other');
+    // 'other' is a real destination for cosmetic events, so this asserts the
+    // ones that MUST NOT be there rather than demanding an empty list.
+    for (const t of ungrouped) {
+      expect(['CLAIM_NAME_CHANGED', 'TENURE_REAPPEARED', 'SOURCE_DATA_DISCREPANCY'],
+        `${t} fell into "other" — decide which group it belongs in`).toContain(t);
+    }
   });
 });

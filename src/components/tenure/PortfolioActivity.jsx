@@ -31,6 +31,58 @@ const ALERT_STATUS_LABELS = {
   cancelled: 'Cancelled — monitoring stopped',
 };
 
+// Change types, grouped by the question being asked of them.
+//
+// EXPIRY LEADS because it is the one that costs ground. A good-to-date that
+// moved EARLIER, a title the province terminated, a status gone terminal, or
+// a claim that stopped appearing at all are the four ways a title heads
+// towards being lost — and they arrive in the feed mixed in with boundary
+// tweaks and area corrections, which is exactly where they get missed.
+//
+// The groups are deliberately coarse. Twelve individual checkboxes would be a
+// filter nobody uses; four answers the actual questions — is anything lapsing,
+// has anything changed hands, has a boundary moved, and what else.
+const CHANGE_GROUPS = [
+  {
+    id: 'expiry',
+    label: 'Expiry & status',
+    hint: 'Dates and standing — the changes that can cost ground.',
+    types: ['GOOD_TO_DATE_CHANGED', 'TENURE_TERMINATED', 'STATUS_CHANGED', 'TENURE_NO_LONGER_OBSERVED'],
+  },
+  {
+    id: 'ownership',
+    label: 'Ownership',
+    hint: 'Titles changing hands.',
+    types: ['OWNER_ADDED', 'OWNER_REMOVED', 'OWNERSHIP_PERCENTAGE_CHANGED'],
+  },
+  {
+    id: 'boundary',
+    label: 'Boundary & area',
+    types: ['GEOMETRY_CHANGED', 'AREA_CHANGED'],
+  },
+  {
+    id: 'other',
+    label: 'Other',
+    types: ['CLAIM_NAME_CHANGED', 'TENURE_REAPPEARED', 'SOURCE_DATA_DISCREPANCY'],
+  },
+];
+
+const GROUP_OF = new Map(
+  CHANGE_GROUPS.flatMap((g) => g.types.map((t) => [t, g.id])),
+);
+
+/**
+ * Which group a change belongs to.
+ *
+ * An unrecognised event_type falls into 'other' rather than disappearing. A
+ * filter that silently drops a change the importer knows how to detect would
+ * be worse than no filter — the whole point of this view is that nothing the
+ * province did goes unseen.
+ */
+export function changeGroup(change) {
+  return GROUP_OF.get(change?.event_type) || 'other';
+}
+
 const AUDIT_LABELS = {
   portfolio_created: 'Portfolio created',
   tenures_added: 'Claims added',
@@ -61,6 +113,8 @@ export default function PortfolioActivity({ portfolioId, onSelectTenure, rows = 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [busyId, setBusyId] = useState(null);
+  // null = every change. A group id narrows the timeline below.
+  const [changeGroupFilter, setChangeGroupFilter] = useState(null);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -92,6 +146,18 @@ export default function PortfolioActivity({ portfolioId, onSelectTenure, rows = 
   // changeDetect.mjs against the government values, so this reads the
   // importer's judgement rather than inventing a second, divergent one here.
   const materialChanges = changes.filter((c) => c.severity === 'critical');
+
+  // Counts come from the WHOLE feed, not the filtered one, so a group's number
+  // does not change as you click between groups — a count that moves when you
+  // filter by it is a count nobody can trust.
+  const groupCounts = CHANGE_GROUPS.reduce((acc, g) => {
+    acc[g.id] = changes.filter((c) => changeGroup(c) === g.id).length;
+    return acc;
+  }, {});
+  const visibleChanges = changeGroupFilter
+    ? changes.filter((c) => changeGroup(c) === changeGroupFilter)
+    : changes;
+  const activeGroup = CHANGE_GROUPS.find((g) => g.id === changeGroupFilter) || null;
 
   async function acknowledge(alert) {
     setBusyId(alert.id);
@@ -157,14 +223,52 @@ export default function PortfolioActivity({ portfolioId, onSelectTenure, rows = 
           </div>
         )}
 
+        {/* Group filter. Expiry first because it is the group that costs
+            ground, and a group with nothing in it is disabled rather than
+            hidden — "0 ownership changes" is a useful answer, and a control
+            that appears and disappears between visits is one nobody learns. */}
+        {changes.length > 0 && (
+          <div className="tm-change-filters" role="group" aria-label="Filter changes by type">
+            <button
+              type="button"
+              className={`tm-change-filter ${changeGroupFilter === null ? 'is-active' : ''}`.trim()}
+              aria-pressed={changeGroupFilter === null}
+              onClick={() => setChangeGroupFilter(null)}
+            >
+              All <span className="tm-change-filter-n">{changes.length}</span>
+            </button>
+            {CHANGE_GROUPS.map((g) => (
+              <button
+                key={g.id}
+                type="button"
+                className={`tm-change-filter tm-change-filter--${g.id} ${changeGroupFilter === g.id ? 'is-active' : ''}`.trim()}
+                aria-pressed={changeGroupFilter === g.id}
+                disabled={!groupCounts[g.id]}
+                title={g.hint || undefined}
+                onClick={() => setChangeGroupFilter(changeGroupFilter === g.id ? null : g.id)}
+              >
+                {g.label} <span className="tm-change-filter-n">{groupCounts[g.id]}</span>
+              </button>
+            ))}
+          </div>
+        )}
+        {activeGroup?.hint && <p className="tm-field-hint">{activeGroup.hint}</p>}
+
         {changes.length === 0 ? (
           <p className="tm-muted">
             No changes detected on these claims. Change detection began when each claim was
             first imported.
           </p>
+        ) : visibleChanges.length === 0 ? (
+          <p className="tm-muted">
+            No {activeGroup?.label.toLowerCase()} changes in this period.{' '}
+            <button type="button" className="tm-link-btn" onClick={() => setChangeGroupFilter(null)}>
+              Show all changes
+            </button>
+          </p>
         ) : (
           <ul className="tm-timeline">
-            {changes.map((c) => (
+            {visibleChanges.map((c) => (
               <li key={c.id} className={`tm-timeline-item tm-change--${c.severity}`}>
                 <span className="tm-timeline-date">{String(c.detected_at).slice(0, 10)}</span>
                 <span className="tm-timeline-body">

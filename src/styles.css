@@ -2999,6 +2999,17 @@ button.claim-notices-chip[aria-expanded="true"] { border-color: #cbd5e1; backgro
   font-size: clamp(15.5px, 1.8vw, 18px); color: var(--lm-muted); line-height: 1.65;
   max-width: 620px; margin: 0 auto 30px;
 }
+/* The U.S. coverage note. It was styled inline with a max-width and no
+   margin, and .lm-us-note had no rule at all — so inside the 780px centred
+   hero it sat flush left, 80px off centre from the paragraph directly above
+   it. Matching .lm-hero-sub is the whole fix: the `auto` is what centres a
+   block narrower than its parent. */
+.lm-us-note {
+  font-size: 13px; color: var(--lm-muted); line-height: 1.6;
+  max-width: 620px; margin: -14px auto 26px;
+}
+.lm-us-note strong { color: var(--lm-accent, #2563eb); }
+
 .lm-hero-ctas { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; }
 .lm-hero-trust { font-size: 12.5px; color: var(--lm-faint); margin: 20px 0 0; }
 
@@ -3951,6 +3962,22 @@ button.claim-notices-chip[aria-expanded="true"] { border-color: #cbd5e1; backgro
 /* Material changes, lifted above the timeline. Bordered rather than filled:
    this is a prompt to look, not an alarm, and the wording inside it is
    deliberately careful about what the data does and does not prove. */
+/* Change-type filter. Expiry carries a red edge because it is the group that
+   can cost ground; the others are neutral so the one that matters stands out
+   without every chip competing. */
+.tm-change-filters { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 6px; }
+.tm-change-filter {
+  cursor: pointer; font-family: inherit; font-size: 12px; font-weight: 600;
+  padding: 5px 11px; border-radius: 999px; border: 1px solid #e2e8f0;
+  background: #fff; color: #475569;
+}
+.tm-change-filter:hover:not(:disabled) { border-color: #cbd5e1; background: #f8fafc; }
+.tm-change-filter:disabled { opacity: .45; cursor: default; }
+.tm-change-filter.is-active { background: #0f172a; border-color: #0f172a; color: #fff; }
+.tm-change-filter-n { opacity: .65; margin-left: 3px; font-variant-numeric: tabular-nums; }
+.tm-change-filter--expiry { border-left: 3px solid #dc2626; }
+.tm-change-filter--expiry.is-active { border-left-color: #dc2626; }
+
 .tm-material-changes {
   margin: 10px 0 4px; padding: 12px 14px; border: 1px solid #fecaca;
   border-left: 3px solid #dc2626; border-radius: 8px; background: #fef2f2;
