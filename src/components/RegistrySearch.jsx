@@ -250,6 +250,33 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
     crossProvinceHits, crossProvinceLoading, searchOtherProvinces, adoptResults,
   } = useClaims();
   const pendingSearchRef = useRef(null);
+  // What the results on screen are answers to — not what the form now says.
+  //
+  // CAPTURED AT DISPATCH, alongside pendingSearchRef, and that timing is the
+  // point. Recording it when the request RESOLVED left one painted frame wrong:
+  // React commits the render carrying the new `results` first and runs passive
+  // effects after, so the empty state was drawn once from either nothing (first
+  // search) or the PREVIOUS search's query and jurisdiction (any repeat) before
+  // the effect corrected it. The stale-query flash is the uglier of the two —
+  // a plausible wrong answer reads as real in a way an obviously blank one does
+  // not.
+  //
+  // Dispatch-time capture is safe precisely because useClaims.search() calls
+  // setResults(null) synchronously before fetching: while a request is in
+  // flight there are no results, and the empty state is gated on results, so
+  // there is no window in which these describe something not on screen.
+  //
+  // handleModeChange only calls reset() when `results || error`, and while a
+  // request is in flight both are null. So switching tabs mid-request leaves the
+  // request running with `mode`, `query` and `province` already changed
+  // underneath it. Deriving the empty state from live form values then describes
+  // a search that never ran: an empty COMPANY search landing after the user hit
+  // the Claim # tab would offer claim-number advice, and the headline would
+  // quote whatever had since been typed into the box.
+  //
+  // The query half of that predates the mode work — the headline has always
+  // read from the live input.
+  const [submitted, setSubmitted] = useState(null);
   // Deep-link prefill (e.g. a company page with no published map): run the
   // company-name search once on mount so the visitor sees results immediately
   // instead of an empty box. Cross-province fallback then handles the province.
@@ -268,6 +295,7 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
     // auto: true → a zero-result outcome may adopt a cross-province hit
     // automatically (the visitor didn't choose this province, a deep link did).
     pendingSearchRef.current = { province, mode: autoMode, query: q, auto: true };
+    setSubmitted({ province, mode: autoMode, query: q });
     search(q, autoMode, province);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -417,13 +445,20 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
   const importBlocked = isClaimNameResolved && !claimNameConfirmed;
 
   // Zero results: which of the two distinct reasons applies.
-  const emptyMessage = useMemo(() => emptyResultMessage({
-    resolution: results?.resolution,
-    query,
-    jurisdictionLabel: provinceCfg.label,
-    isUs: isUS,
-    mode,
-  }), [results, query, provinceCfg, isUS, mode]);
+  const emptyMessage = useMemo(() => {
+    // Fall back to the live values only before anything has been submitted —
+    // at which point no empty state is rendered anyway, since it is gated on
+    // `results`.
+    const asked = submitted || { mode, query, province };
+    const askedCfg = ALL_JURISDICTIONS.find((p) => p.value === asked.province) || provinceCfg;
+    return emptyResultMessage({
+      resolution: results?.resolution,
+      query: asked.query,
+      jurisdictionLabel: askedCfg.label,
+      isUs: isUsJurisdiction(asked.province),
+      mode: asked.mode,
+    });
+  }, [results, submitted, query, mode, province, provinceCfg]);
 
   // ── Company mode: owner picker + clustering ──
   // Holder label for a feature. US federal records carry no claimant, so their
@@ -496,6 +531,7 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
     if (query.trim().length < 2) return;
     clearSelections();
     pendingSearchRef.current = { province, mode, query: query.trim() };
+    setSubmitted({ province, mode, query: query.trim() });
     search(query.trim(), mode, province);
   }
 
