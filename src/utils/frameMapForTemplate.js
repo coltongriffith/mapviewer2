@@ -1,4 +1,5 @@
 import L from 'leaflet';
+import { visibleGeojson } from './featureIdentity.js';
 
 const FOCUS_ROLES = new Set(['claims', 'drillholes', 'target_areas', 'anomalies']);
 
@@ -7,7 +8,11 @@ function getVisibleLayers(project) {
 }
 
 function buildBounds(layers) {
-  const collection = L.featureGroup(layers.map((layer) => L.geoJSON(layer.geojson)));
+  // visibleGeojson, not layer.geojson. Trimming a layer exists to tighten the
+  // frame — drop the southern block so the northern one can fill the page — so
+  // framing to the untrimmed extent would zoom straight back out over ground
+  // the user just removed, and undo the entire point of the feature.
+  const collection = L.featureGroup(layers.map((layer) => L.geoJSON(visibleGeojson(layer))));
   const bounds = collection.getBounds();
   return bounds?.isValid?.() ? bounds : null;
 }

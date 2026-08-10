@@ -127,6 +127,23 @@ export function hiddenCount(layer) {
 }
 
 /**
+ * Does this layer still put anything on the map?
+ *
+ * A layer whose every feature has been removed is not "a layer with no style" —
+ * it is absent. It must not claim a legend entry, because a legend is a promise
+ * that what it names is somewhere on the page.
+ *
+ * A layer with no features at all is treated as absent too: an empty upload has
+ * nothing to label either.
+ */
+export function hasVisibleFeatures(layer) {
+  const features = layerFeatures(layer);
+  if (!features.length) return false;
+  if (!layer?.featureOverrides) return true;
+  return features.some((f) => !isFeatureHidden(layer, f));
+}
+
+/**
  * Which features of a layer fall inside a dragged box.
  *
  * The test is the CENTRE of each feature, not any overlap with it. For the job

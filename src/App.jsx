@@ -62,7 +62,7 @@ import { verifyCheckoutSession } from './utils/billing';
 import { runCloudMigration } from './utils/cloudMigration';
 import { scopingWarning } from './utils/scopingNotice';
 import { CLAIM_NAME_CAVEAT } from './utils/claimProvenance';
-import { featureKey, layerFeatures, isFeatureHidden, hiddenCount, featuresInBounds } from './utils/featureIdentity.js';
+import { featureKey, layerFeatures, isFeatureHidden, hiddenCount, featuresInBounds, visibleGeojson } from './utils/featureIdentity.js';
 import FeatureTrimList from './components/FeatureTrimList.jsx';
 import dissolveGeo from '@turf/dissolve';
 import {
@@ -2264,7 +2264,11 @@ export default function App() {
           setAreaClaims((prev) => ({ ...prev, status: 'error', message: 'No claims layer found — upload one or set a search location pin.' }));
           return;
         }
-        const bounds = geojsonBounds(claimsLayer.geojson);
+        // Centre the nearby-claims search on what is actually on the map. If
+        // the southern block has been trimmed away, searching from the centre
+        // of the untrimmed extent looks for ground the user has said they do
+        // not care about.
+        const bounds = geojsonBounds(visibleGeojson(claimsLayer));
         if (!bounds) { setAreaClaims((prev) => ({ ...prev, status: 'error', message: 'Could not compute layer bounds.' })); return; }
         centerLat = (bounds.minLat + bounds.maxLat) / 2;
         centerLng = (bounds.minLng + bounds.maxLng) / 2;
@@ -3422,7 +3426,18 @@ export default function App() {
   // Both renderers read the same flag through visibleGeojson(), so the map and
   // the exported PDF cannot disagree about what is on the page.
   const setFeaturesHidden = (layerId, features, hidden) => {
-    const keys = features.map(featureKey).filter(Boolean);
+    // Only keys that belong to a feature this layer actually holds.
+    //
+    // Not paranoia: a click handler can be handed a SYNTHETIC feature. When a
+    // layer is dissolved, Leaflet is rendering turf's merged output, whose
+    // properties are empty — so featureKey falls back to the merged outline's
+    // coordinates, and writing that would leave an override matching nothing,
+    // hiding nothing, with no way for the user to tell why the click did
+    // nothing. Dissolve is now suspended while trimming so that shape never
+    // reaches here, and this is the backstop for the next such path.
+    const layer = project.layers.find((l) => l.id === layerId);
+    const known = new Set(layerFeatures(layer).map(featureKey).filter(Boolean));
+    const keys = features.map(featureKey).filter((k) => k && known.has(k));
     if (!keys.length) return 0;
     setProject((prev) => ({
       ...prev,
@@ -6119,7 +6134,7 @@ export default function App() {
             style={mapStageStyle}
           >
         <React.Suspense fallback={null}>
-          <MapCanvas onReady={onMapReady} project={project} template={template} onFeatureClick={handleFeatureClick} onMapClick={handleMapClick} annotationToolRef={annotationToolRef} />
+          <MapCanvas onReady={onMapReady} project={project} template={template} onFeatureClick={handleFeatureClick} onMapClick={handleMapClick} annotationToolRef={annotationToolRef} trimLayerId={trimLayerId} />
         </React.Suspense>
         {mapReady && (
           <>
