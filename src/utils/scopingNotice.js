@@ -44,7 +44,7 @@ export function scopingWarning(meta) {
 // Collapsing these into one "no claims found" is the bug: a US issuer whose
 // Nevada ground sits under a subsidiary looks identical to one that owns
 // nothing. Never merge them.
-export function emptyResultMessage({ resolution, query, jurisdictionLabel, isUs }) {
+export function emptyResultMessage({ resolution, query, jurisdictionLabel, isUs, mode }) {
   if (resolution?.status === 'unresolved') {
     const base = `We couldn't link "${query}" to a claim holder in ${jurisdictionLabel}.`;
     if (resolution.reason === 'no_claimant_field') {
@@ -79,6 +79,23 @@ export function emptyResultMessage({ resolution, query, jurisdictionLabel, isUs 
   //
   // Nothing here asserts a corporate relationship we have not verified — it
   // tells the user how title is recorded and lets them search accordingly.
+  // Guidance has to answer the question the user actually asked. Somebody whose
+  // CLAIM NUMBER or MAP SHEET found nothing is not helped by being told to try
+  // a subsidiary name — that is advice about a search they did not run, and it
+  // displaced the spelling hint that did apply to them.
+  const isCompanySearch = mode === undefined || mode === 'company';
+
+  if (!isCompanySearch) {
+    return {
+      kind: 'empty',
+      headline: `No active claims found for "${query}" in ${jurisdictionLabel}.`,
+      detail: null,
+      hint: mode === 'map'
+        ? 'Check the map sheet format, or search by claim number instead.'
+        : 'Check the number and try again, or search by company name instead.',
+    };
+  }
+
   return {
     kind: 'empty',
     headline: `No active claims found for "${query}" in ${jurisdictionLabel}.`,

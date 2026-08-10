@@ -422,7 +422,8 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
     query,
     jurisdictionLabel: provinceCfg.label,
     isUs: isUS,
-  }), [results, query, provinceCfg, isUS]);
+    mode,
+  }), [results, query, provinceCfg, isUS, mode]);
 
   // ── Company mode: owner picker + clustering ──
   // Holder label for a feature. US federal records carry no claimant, so their

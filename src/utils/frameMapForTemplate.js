@@ -1,10 +1,19 @@
 import L from 'leaflet';
-import { visibleGeojson } from './featureIdentity.js';
+import { visibleGeojson, hasVisibleFeatures } from './featureIdentity.js';
 
 const FOCUS_ROLES = new Set(['claims', 'drillholes', 'target_areas', 'anomalies']);
 
+// "Visible" has to mean visible on the map, not merely switched on.
+//
+// A layer the user has trimmed to nothing still has `visible !== false` and
+// still has a `geojson`, so it used to be picked as the focus layer and then
+// produce invalid bounds — at which point fitProjectToTemplate returned
+// without framing anything. Refit Map silently did nothing while roads and
+// drillholes sat on screen waiting to be framed.
 function getVisibleLayers(project) {
-  return (project?.layers || []).filter((layer) => layer.visible !== false && layer.geojson);
+  return (project?.layers || []).filter(
+    (layer) => layer.visible !== false && layer.geojson && hasVisibleFeatures(layer),
+  );
 }
 
 function buildBounds(layers) {
@@ -39,7 +48,15 @@ export function fitProjectToTemplate(project, map, template, mode = 'balanced', 
     targetLayers = visibleLayers;
   }
 
-  const bounds = buildBounds(targetLayers.length ? targetLayers : visibleLayers);
+  // Fall back to everything still on the map if the preferred selection cannot
+  // produce bounds. getVisibleLayers already drops fully-trimmed layers, so this
+  // is the second line of defence rather than the first — but "Refit Map does
+  // nothing" is a dead end for the user, and retrying with the wider set always
+  // beats returning silently.
+  let bounds = buildBounds(targetLayers.length ? targetLayers : visibleLayers);
+  if (!bounds && targetLayers.length && targetLayers.length !== visibleLayers.length) {
+    bounds = buildBounds(visibleLayers);
+  }
   if (!bounds) return;
 
   const zones = template?.zones || {};
