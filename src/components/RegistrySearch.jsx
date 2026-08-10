@@ -250,7 +250,21 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
     crossProvinceHits, crossProvinceLoading, searchOtherProvinces, adoptResults,
   } = useClaims();
   const pendingSearchRef = useRef(null);
-  // What the RESOLVED results are answers to — not what the form currently says.
+  // What the results on screen are answers to — not what the form now says.
+  //
+  // CAPTURED AT DISPATCH, alongside pendingSearchRef, and that timing is the
+  // point. Recording it when the request RESOLVED left one painted frame wrong:
+  // React commits the render carrying the new `results` first and runs passive
+  // effects after, so the empty state was drawn once from either nothing (first
+  // search) or the PREVIOUS search's query and jurisdiction (any repeat) before
+  // the effect corrected it. The stale-query flash is the uglier of the two —
+  // a plausible wrong answer reads as real in a way an obviously blank one does
+  // not.
+  //
+  // Dispatch-time capture is safe precisely because useClaims.search() calls
+  // setResults(null) synchronously before fetching: while a request is in
+  // flight there are no results, and the empty state is gated on results, so
+  // there is no window in which these describe something not on screen.
   //
   // handleModeChange only calls reset() when `results || error`, and while a
   // request is in flight both are null. So switching tabs mid-request leaves the
@@ -281,6 +295,7 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
     // auto: true → a zero-result outcome may adopt a cross-province hit
     // automatically (the visitor didn't choose this province, a deep link did).
     pendingSearchRef.current = { province, mode: autoMode, query: q, auto: true };
+    setSubmitted({ province, mode: autoMode, query: q });
     search(q, autoMode, province);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -337,9 +352,6 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
             && p.modes.includes(pending.mode)),
         );
       }
-      setSubmitted({
-        mode: pending.mode, query: pending.query, province: pending.province,
-      });
       pendingSearchRef.current = null;
     }
   }, [results, error, loading, searchOtherProvinces]);
@@ -519,6 +531,7 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
     if (query.trim().length < 2) return;
     clearSelections();
     pendingSearchRef.current = { province, mode, query: query.trim() };
+    setSubmitted({ province, mode, query: query.trim() });
     search(query.trim(), mode, province);
   }
 

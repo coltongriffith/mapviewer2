@@ -2,6 +2,7 @@ import {
   describe, it, expect, vi, beforeEach,
 } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
 import React from 'react';
 
 // The empty state must describe the search that RAN, not the one the form is
@@ -107,5 +108,55 @@ describe('empty-state guidance follows the submitted search', () => {
     const panel = screen.getByText(/No active claims found/).closest('p');
     expect(panel.textContent).toMatch(/check the number/i);
     expect(panel.textContent).not.toMatch(/subsidiary/i);
+  });
+});
+
+describe('the submitted search is captured at dispatch, not at resolution', () => {
+  // STRUCTURAL ON PURPOSE, and worth saying why rather than dressing it up as
+  // behaviour: the property is about WHICH FRAME gets painted. React commits
+  // the render carrying the new `results` first and runs passive effects after,
+  // so capturing in an effect drew the empty state once from the previous
+  // search's query and jurisdiction before correcting itself. React Testing
+  // Library flushes passive effects inside act(), so that frame does not exist
+  // for it to observe — the three behavioural tests above pass identically
+  // against both implementations, which is exactly why they are not enough
+  // here.
+  //
+  // Dispatch-time capture is safe because useClaims.search() calls
+  // setResults(null) synchronously before fetching, so nothing is on screen for
+  // these values to misdescribe while a request is in flight.
+  const src = readFileSync('src/components/RegistrySearch.jsx', 'utf8');
+
+  it('sets it beside every pendingSearchRef assignment', () => {
+    const dispatches = [...src.matchAll(/pendingSearchRef\.current = \{[^;]*;\n([^\n]*)/g)];
+    expect(dispatches.length, 'no search dispatch sites found').toBeGreaterThan(0);
+    for (const [, nextLine] of dispatches) {
+      expect(
+        nextLine,
+        'a search is dispatched without recording what it asked for — its empty '
+        + 'state would paint one frame describing the previous search',
+      ).toMatch(/setSubmitted\(/);
+    }
+  });
+
+  it('does not set it from the outcome effect', () => {
+    const effect = src.slice(
+      src.indexOf('// Record the outcome of a submitted search once it resolves'),
+      src.indexOf('}, [results, error, loading, searchOtherProvinces]);'),
+    );
+    expect(effect.length, 'outcome effect not found').toBeGreaterThan(0);
+    expect(
+      /setSubmitted\(/.test(effect),
+      'capturing here runs after the results have already been committed, which '
+      + 'is the one-frame flash this moved away from',
+    ).toBe(false);
+  });
+
+  it('relies on search() clearing results before it fetches', () => {
+    // If this stops being true, dispatch-time capture starts describing the
+    // PREVIOUS results, which are still on screen — the opposite error.
+    const hook = readFileSync('src/hooks/useClaims.js', 'utf8');
+    const search = hook.slice(hook.indexOf('const search = useCallback'), hook.indexOf('const searchOtherProvinces'));
+    expect(search).toMatch(/setResults\(null\)/);
   });
 });
