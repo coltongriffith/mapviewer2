@@ -62,6 +62,8 @@ import { verifyCheckoutSession } from './utils/billing';
 import { runCloudMigration } from './utils/cloudMigration';
 import { scopingWarning } from './utils/scopingNotice';
 import { CLAIM_NAME_CAVEAT } from './utils/claimProvenance';
+import { featureKey, layerFeatures, isFeatureHidden, hiddenCount, featuresInBounds } from './utils/featureIdentity.js';
+import FeatureTrimList from './components/FeatureTrimList.jsx';
 import dissolveGeo from '@turf/dissolve';
 import {
   clearActiveProjectContext,
@@ -819,6 +821,13 @@ export default function App() {
   const [pendingProGateExport, setPendingProGateExport] = useState(null);
   const [isDirty, setIsDirty] = useState(false);
   const [selectedLayerId, setSelectedLayerId] = useState(null);
+  // Id of the layer currently being trimmed, or null. Scoped to one layer so a
+  // drag can never remove features from a layer the user is not working on.
+  const [trimLayerId, setTrimLayerId] = useState(null);
+  // Whether the shape list is open, and for which layer. Independent of
+  // trimLayerId: the list is usable without arming the map, and arming the map
+  // does not force a 200-row list open.
+  const [trimListLayerId, setTrimListLayerId] = useState(null);
   const [selectedCalloutId, setSelectedCalloutId] = useState(null);
   const [selectedFeature, setSelectedFeature] = useState(null);
   const [selectedMarkerId, setSelectedMarkerId] = useState(null);
@@ -2476,6 +2485,108 @@ export default function App() {
     };
   }, [areaClaimsPicking, mapReady]);
 
+  // Leave trim mode when its layer stops being the one in front of the user.
+  // Without this the crosshair and the box-drag stay armed for a layer that is
+  // no longer selected — or has been deleted — and the next drag on the map
+  // silently cuts features out of it.
+  useEffect(() => {
+    if (!trimLayerId) return;
+    const stillThere = project.layers.some((l) => l.id === trimLayerId);
+    if (!stillThere || selectedLayerId !== trimLayerId) setTrimLayerId(null);
+  }, [trimLayerId, selectedLayerId, project.layers]);
+
+  useEffect(() => {
+    if (!trimListLayerId) return;
+    const stillThere = project.layers.some((l) => l.id === trimListLayerId);
+    if (!stillThere || selectedLayerId !== trimListLayerId) setTrimListLayerId(null);
+  }, [trimListLayerId, selectedLayerId, project.layers]);
+
+  // Drag a box to remove every feature inside it.
+  //
+  // Clicking claims off one at a time is fine for three and miserable for
+  // forty, and forty is the normal size of a block somebody wants gone. One
+  // drag around the southern group is the whole interaction.
+  //
+  // Leaflet's own dragging is suspended while the box is being drawn, otherwise
+  // the map pans out from under the rectangle. It is restored on cleanup even
+  // if the mode is left mid-drag.
+  useEffect(() => {
+    if (!trimLayerId || !mapReady || !leafletMapRef.current) return;
+    const map = leafletMapRef.current;
+    const container = map.getContainer();
+    const prevCursor = container.style.cursor;
+    container.style.cursor = 'crosshair';
+
+    let origin = null;
+    let box = null;
+
+    const clearBox = () => {
+      if (box) { try { box.remove(); } catch (_) { /* already gone */ } box = null; }
+    };
+
+    const onMouseDown = (e) => {
+      // Left button only: a right-drag is the browser's, and a middle-drag pans.
+      if (e.originalEvent?.button !== 0) return;
+      origin = e.latlng;
+      map.dragging.disable();
+      box = L.rectangle([origin, origin], {
+        className: 'trim-select-box', color: '#dc2626', weight: 1, dashArray: '4,3', fillOpacity: 0.08,
+      }).addTo(map);
+    };
+
+    const onMouseMove = (e) => {
+      if (!origin || !box) return;
+      box.setBounds(L.latLngBounds(origin, e.latlng));
+    };
+
+    const onMouseUp = (e) => {
+      if (!origin) return;
+      const end = e.latlng;
+      const started = origin;
+      origin = null;
+      clearBox();
+      map.dragging.enable();
+
+      // A click with no drag is the single-feature path, handled by the
+      // polygon's own click handler. Anything under a few pixels is a click.
+      const startPt = map.latLngToContainerPoint(started);
+      const endPt = map.latLngToContainerPoint(end);
+      if (Math.abs(startPt.x - endPt.x) < 4 && Math.abs(startPt.y - endPt.y) < 4) return;
+
+      const layer = project.layers.find((l) => l.id === trimLayerId);
+      if (!layer) return;
+      const bounds = {
+        minLng: Math.min(started.lng, end.lng),
+        maxLng: Math.max(started.lng, end.lng),
+        minLat: Math.min(started.lat, end.lat),
+        maxLat: Math.max(started.lat, end.lat),
+      };
+      const caught = featuresInBounds(layer, bounds);
+      if (!caught.length) {
+        setUploadStatus({ type: 'info', message: 'No features had their centre inside that box.' });
+        return;
+      }
+      setFeaturesHidden(trimLayerId, caught, true);
+      trackEvent('features_removed', { count: caught.length, method: 'box', role: layer.role });
+      setUploadStatus({
+        type: 'success',
+        message: `Removed ${caught.length} ${caught.length === 1 ? 'feature' : 'features'} from the map. Use Restore to bring them back.`,
+      });
+    };
+
+    map.on('mousedown', onMouseDown);
+    map.on('mousemove', onMouseMove);
+    map.on('mouseup', onMouseUp);
+    return () => {
+      map.off('mousedown', onMouseDown);
+      map.off('mousemove', onMouseMove);
+      map.off('mouseup', onMouseUp);
+      clearBox();
+      map.dragging.enable();
+      container.style.cursor = prevCursor;
+    };
+  }, [trimLayerId, mapReady, project.layers]);
+
   // Show a pin marker at the custom search origin
   useEffect(() => {
     if (areaClaimsPinRef.current) {
@@ -3279,14 +3390,6 @@ export default function App() {
     setSelectedLayerId((prev) => (prev === layerId ? null : prev));
   };
 
-  const featureKey = (feature) => {
-    if (!feature) return null;
-    return feature.id != null ? String(feature.id)
-      : feature.properties?.hole_id || feature.properties?.holeid
-      || feature.properties?.id || feature.properties?.name
-      || JSON.stringify(feature.geometry?.coordinates);
-  };
-
   const setFeatureOverride = (layerId, key, overrides) => {
     if (!key) return;
     setProject((prev) => ({
@@ -3302,6 +3405,59 @@ export default function App() {
         };
       }),
     }));
+  };
+
+  // ── Removing individual features from a layer ────────────────────────────
+  //
+  // A company's ground is rarely one tidy block. A search returns everything
+  // they hold, and the map usually wants a subset — the northern group, not the
+  // southern one 60 km away that would force the scale out until neither is
+  // legible.
+  //
+  // Removal sets `hidden` in featureOverrides rather than splicing
+  // layer.geojson.features. The feature stays in the project, so:
+  //   - it can be restored without going back to the registry,
+  //   - a saved project still records everything the search returned, and
+  //   - a layer handed over from Tenure Monitor still matches its portfolio.
+  // Both renderers read the same flag through visibleGeojson(), so the map and
+  // the exported PDF cannot disagree about what is on the page.
+  const setFeaturesHidden = (layerId, features, hidden) => {
+    const keys = features.map(featureKey).filter(Boolean);
+    if (!keys.length) return 0;
+    setProject((prev) => ({
+      ...prev,
+      layers: prev.layers.map((layer) => {
+        if (layer.id !== layerId) return layer;
+        const next = { ...(layer.featureOverrides || {}) };
+        for (const key of keys) {
+          if (hidden) {
+            next[key] = { ...(next[key] || {}), hidden: true };
+          } else if (next[key]) {
+            // Drop the flag rather than storing `hidden: false`, and drop the
+            // whole entry once nothing else is on it, so restoring everything
+            // leaves the project exactly as it was before any trimming.
+            const { hidden: _drop, ...rest } = next[key];
+            if (Object.keys(rest).length) next[key] = rest;
+            else delete next[key];
+          }
+        }
+        return { ...layer, featureOverrides: next };
+      }),
+    }));
+    return keys.length;
+  };
+
+  const restoreHiddenFeatures = (layerId) => {
+    const layer = project.layers.find((l) => l.id === layerId);
+    if (!layer) return;
+    const hiddenFeatures = layerFeatures(layer).filter((f) => isFeatureHidden(layer, f));
+    if (!hiddenFeatures.length) return;
+    setFeaturesHidden(layerId, hiddenFeatures, false);
+    trackEvent('features_restored', { count: hiddenFeatures.length, role: layer.role });
+    setUploadStatus({
+      type: 'success',
+      message: `Restored ${hiddenFeatures.length} ${hiddenFeatures.length === 1 ? 'feature' : 'features'} to the map.`,
+    });
   };
 
   const changeLayerRole = (layerId, role) => {
@@ -3464,6 +3620,17 @@ export default function App() {
   const handleFeatureClick = ({ layerId, feature, latlng, isLayerSelect }) => {
     const layer = project.layers.find((item) => item.id === layerId) || null;
     if (!layer) return;
+
+    // Trim mode owns the click, and only on the layer being trimmed. Clicking
+    // any other layer while trimming does nothing rather than silently
+    // switching which layer the next drag would cut into.
+    if (trimLayerId) {
+      if (layerId !== trimLayerId || !feature) return;
+      setFeaturesHidden(layerId, [feature], true);
+      trackEvent('features_removed', { count: 1, method: 'click', role: layer.role });
+      return;
+    }
+
     setAnnotationTool(null);
     annotationToolRef.current = null;
     setSelectedMarkerId(null);
@@ -4743,6 +4910,70 @@ export default function App() {
                       onChange={(e) => updateLayer(selectedLayer.id, { style: { dissolve: e.target.checked } })} />
                     <span>Dissolve inner borders</span>
                   </label>
+                  {(() => {
+                    const trimming = trimLayerId === selectedLayer.id;
+                    const listing = trimListLayerId === selectedLayer.id;
+                    const removed = hiddenCount(selectedLayer);
+                    const total = layerFeatures(selectedLayer).length;
+                    return (
+                      <div className="trim-panel">
+                        <div className="control-row">
+                          <label>Remove individual shapes</label>
+                        </div>
+                        <div className="trim-actions">
+                          <button
+                            type="button"
+                            className={`secondary-btn trim-toggle${trimming ? ' active' : ''}`}
+                            aria-pressed={trimming}
+                            onClick={() => setTrimLayerId(trimming ? null : selectedLayer.id)}
+                          >
+                            {trimming ? 'Done removing' : 'Select on map'}
+                          </button>
+                          <button
+                            type="button"
+                            className="secondary-btn trim-toggle"
+                            aria-expanded={listing}
+                            onClick={() => setTrimListLayerId(listing ? null : selectedLayer.id)}
+                          >
+                            {listing ? 'Hide list' : `List (${total})`}
+                          </button>
+                        </div>
+                        {trimming && (
+                          <p className="trim-hint">
+                            Click a shape to remove it, or drag a box to remove a whole
+                            group. A shape is caught when its centre is inside the box.
+                          </p>
+                        )}
+                        {removed > 0 && (
+                          <div className="trim-status">
+                            <span>
+                              {removed} of {total} removed — not shown on the map, in the
+                              legend or in exports.
+                            </span>
+                            <button
+                              type="button"
+                              className="link-btn"
+                              onClick={() => restoreHiddenFeatures(selectedLayer.id)}
+                            >
+                              Restore all
+                            </button>
+                          </div>
+                        )}
+                        {listing && (
+                          <FeatureTrimList
+                            layer={selectedLayer}
+                            onSetHidden={(features, hidden) => {
+                              const n = setFeaturesHidden(selectedLayer.id, features, hidden);
+                              if (n) {
+                                trackEvent(hidden ? 'features_removed' : 'features_restored',
+                                  { count: n, method: 'list', role: selectedLayer.role });
+                              }
+                            }}
+                          />
+                        )}
+                      </div>
+                    );
+                  })()}
                   <div className="control-row">
                     <label>Fill Pattern</label>
                     <div className="fill-pattern-picker">
