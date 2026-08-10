@@ -250,6 +250,19 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
     crossProvinceHits, crossProvinceLoading, searchOtherProvinces, adoptResults,
   } = useClaims();
   const pendingSearchRef = useRef(null);
+  // What the RESOLVED results are answers to — not what the form currently says.
+  //
+  // handleModeChange only calls reset() when `results || error`, and while a
+  // request is in flight both are null. So switching tabs mid-request leaves the
+  // request running with `mode`, `query` and `province` already changed
+  // underneath it. Deriving the empty state from live form values then describes
+  // a search that never ran: an empty COMPANY search landing after the user hit
+  // the Claim # tab would offer claim-number advice, and the headline would
+  // quote whatever had since been typed into the box.
+  //
+  // The query half of that predates the mode work — the headline has always
+  // read from the live input.
+  const [submitted, setSubmitted] = useState(null);
   // Deep-link prefill (e.g. a company page with no published map): run the
   // company-name search once on mount so the visitor sees results immediately
   // instead of an empty box. Cross-province fallback then handles the province.
@@ -324,6 +337,9 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
             && p.modes.includes(pending.mode)),
         );
       }
+      setSubmitted({
+        mode: pending.mode, query: pending.query, province: pending.province,
+      });
       pendingSearchRef.current = null;
     }
   }, [results, error, loading, searchOtherProvinces]);
@@ -417,13 +433,20 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
   const importBlocked = isClaimNameResolved && !claimNameConfirmed;
 
   // Zero results: which of the two distinct reasons applies.
-  const emptyMessage = useMemo(() => emptyResultMessage({
-    resolution: results?.resolution,
-    query,
-    jurisdictionLabel: provinceCfg.label,
-    isUs: isUS,
-    mode,
-  }), [results, query, provinceCfg, isUS, mode]);
+  const emptyMessage = useMemo(() => {
+    // Fall back to the live values only before anything has been submitted —
+    // at which point no empty state is rendered anyway, since it is gated on
+    // `results`.
+    const asked = submitted || { mode, query, province };
+    const askedCfg = ALL_JURISDICTIONS.find((p) => p.value === asked.province) || provinceCfg;
+    return emptyResultMessage({
+      resolution: results?.resolution,
+      query: asked.query,
+      jurisdictionLabel: askedCfg.label,
+      isUs: isUsJurisdiction(asked.province),
+      mode: asked.mode,
+    });
+  }, [results, submitted, query, mode, province, provinceCfg]);
 
   // ── Company mode: owner picker + clustering ──
   // Holder label for a feature. US federal records carry no claimant, so their
