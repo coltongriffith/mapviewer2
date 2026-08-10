@@ -4028,3 +4028,31 @@ button.claim-notices-chip[aria-expanded="true"] { border-color: #cbd5e1; backgro
   font-size: 13px; background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534;
   border-radius: 8px; padding: 10px 12px; margin: 0 0 14px;
 }
+
+/* ── Removing individual shapes from a layer ────────────────────────────── */
+/* Trimming is destructive-looking but reversible, so the affordance is warm
+   rather than alarming until it is actually armed. Once armed the button is
+   unmistakably on: a user who forgets they are in this mode and drags to pan
+   would otherwise delete a block by accident. */
+.trim-panel { margin-top: 8px; }
+.trim-toggle { width: auto; padding: 7px 12px; flex-shrink: 0; }
+.trim-toggle.active {
+  background: #dc2626; border-color: #dc2626; color: #ffffff; font-weight: 600;
+}
+.trim-toggle.active:hover { background: #b91c1c; border-color: #b91c1c; }
+.trim-hint {
+  font-size: 12px; color: #7c2d12; background: #fff7ed; border: 1px solid #fed7aa;
+  border-radius: 8px; padding: 8px 10px; margin: 8px 0 0; line-height: 1.5;
+}
+/* The count is the undo affordance. It stays visible whether or not trim mode
+   is on, because the state it reports — shapes missing from the export —
+   outlives the mode that created it, and a user who cannot see it has no way
+   to know why their map is short a claim. */
+.trim-status {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+  font-size: 12px; color: #475569; margin-top: 8px; line-height: 1.5;
+}
+.trim-status .link-btn { flex-shrink: 0; font-size: 12px; }
+/* The rubber-band box. Non-interactive so it never swallows the mouseup that
+   ends the drag. */
+.trim-select-box { pointer-events: none; }

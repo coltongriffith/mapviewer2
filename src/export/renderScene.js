@@ -10,6 +10,7 @@ import regionsNA from '../assets/regionsNA.json';
 import { estimateBox, intersects as intersectsCallout, leaderEndpoint } from '../utils/calloutLayout';
 import dissolveGeo from '@turf/dissolve';
 import { exportCreditLines } from '../utils/claimProvenance';
+import { featureKey, visibleGeojson } from '../utils/featureIdentity.js';
 
 let _exportWarnings = [];
 export function getExportWarnings() { return _exportWarnings; }
@@ -75,15 +76,9 @@ function getTemplateStyle(template, layer) {
   const base = template?.roleStyles?.[layer?.role] || template?.roleStyles?.other || {};
   return { ...base, ...(layer?.style || {}) };
 }
-function featureKeyExport(feature) {
-  if (!feature) return null;
-  if (feature.id != null) return String(feature.id);
-  const p = feature.properties || {};
-  return p.hole_id || p.holeid || p.id || p.name || JSON.stringify(feature.geometry?.coordinates);
-}
 function getFeatureStyle(template, layer, feature) {
   const base = getTemplateStyle(template, layer);
-  const key = featureKeyExport(feature);
+  const key = featureKey(feature);
   const override = key ? (layer.featureOverrides?.[key] || {}) : {};
   return { ...base, ...override };
 }
@@ -1934,14 +1929,19 @@ function renderRegionHighlightsSvg(scene, scale) {
   }).join('\n');
 }
 
-function getLayerGeojson(layer) {
-  if (!layer.style?.dissolve || layer.type === 'line' || layer.role === 'drillholes') return layer.geojson;
+export function getLayerGeojson(layer) {
+  // Removed features come out FIRST, before dissolve. Dissolve merges adjacent
+  // polygons into one outline, so filtering afterwards would be too late — a
+  // claim the user removed would already have been absorbed into the union and
+  // would print as part of the block's outer boundary.
+  const source = visibleGeojson(layer);
+  if (!layer.style?.dissolve || layer.type === 'line' || layer.role === 'drillholes') return source;
   try {
-    const fc = layer.geojson.type === 'FeatureCollection' ? layer.geojson : { type: 'FeatureCollection', features: [layer.geojson] };
+    const fc = source.type === 'FeatureCollection' ? source : { type: 'FeatureCollection', features: [source] };
     const dissolved = dissolveGeo(fc);
     if (dissolved?.features?.length) return dissolved;
   } catch (_) {}
-  return layer.geojson;
+  return source;
 }
 
 function renderVectorsSvg(scene, scale) {

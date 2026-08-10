@@ -6,6 +6,7 @@ import { claimTooltipHtml, claimPopupRowsHtml } from '../utils/claimInfo';
 import { POINT_ROLES } from '../projectState';
 import regionsNA from '../assets/regionsNA.json';
 import dissolveGeo from '@turf/dissolve';
+import { featureKey, visibleGeojson } from '../utils/featureIdentity.js';
 
 const BASEMAPS = {
   light: {
@@ -235,6 +236,12 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
         const ol = oldLayers[i];
         return ol && nl.id === ol.id && nl.geojson === ol.geojson &&
                nl.visible === ol.visible && nl.type !== 'points' &&
+               // Removing a feature changes featureOverrides, NOT geojson and
+               // NOT style — so without this the fast path would swallow it and
+               // the removed claim would stay on screen until some unrelated
+               // edit forced a rebuild. setFeatureOverride replaces the object,
+               // so reference equality is the right test.
+               nl.featureOverrides === ol.featureOverrides &&
                nl.style?.markerShape === ol.style?.markerShape &&
                nl.style?.markerSize === ol.style?.markerSize &&
                nl.style?.customMarkerDataUri === ol.style?.customMarkerDataUri &&
@@ -288,7 +295,10 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
       if (drillholeRenderer) svgRendererRefs.current.push(drillholeRenderer);
 
       // Dissolve adjacent polygons to remove internal shared borders
-      let geojsonData = layer.geojson;
+      // Features the user removed come out BEFORE dissolve — dissolve merges
+      // adjacent polygons into one outline, so filtering after it would leave a
+      // removed claim absorbed into the block's outer boundary.
+      let geojsonData = visibleGeojson(layer);
       if (style.dissolve && geomType !== 'line' && !isDrillholes) {
         try {
           const fc = geojsonData.type === 'FeatureCollection'
@@ -310,10 +320,7 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
           opacity: (style.opacity ?? 1) * lo,
         }),
         pointToLayer: (feature, latlng) => {
-          const fKey = feature?.id != null ? String(feature.id)
-            : feature?.properties?.hole_id || feature?.properties?.holeid
-            || feature?.properties?.id || feature?.properties?.name
-            || JSON.stringify(feature?.geometry?.coordinates);
+          const fKey = featureKey(feature);
           const featureOverride = layer.featureOverrides?.[fKey] || {};
           const markerShape = featureOverride.markerShape ?? style.markerShape;
           const markerColor = featureOverride.markerColor ?? style.markerColor ?? style.stroke ?? '#111111';
@@ -368,7 +375,17 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
           featureLayer.on('click', (e) => {
             if (annotationToolRef?.current) return;
             L.DomEvent.stopPropagation(e);
-            onFeatureClickRef.current?.({ layerId: layer.id, feature: null, latlng: null, isLayerSelect: true });
+            // `isLayerSelect` still means what it always did — a polygon click
+            // selects its layer, not the individual shape. But the feature and
+            // the click point ride along now, so trim mode can act on the one
+            // polygon that was actually clicked. Handlers that only read
+            // isLayerSelect are unaffected.
+            onFeatureClickRef.current?.({
+              layerId: layer.id,
+              feature,
+              latlng: e.latlng || null,
+              isLayerSelect: true,
+            });
           });
         },
       });
