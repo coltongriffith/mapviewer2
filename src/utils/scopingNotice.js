@@ -66,10 +66,29 @@ export function emptyResultMessage({ resolution, query, jurisdictionLabel, isUs 
         : 'Try a shorter name, an alternate spelling, or a claim number.',
     };
   }
+  // A Canadian registry records the legal entity ON TITLE, which for an
+  // operating company is very often a project subsidiary rather than the name
+  // on the news release — in B.C., Taseko's ground stands in the name of
+  // GIBRALTAR MINES LTD. and Artemis Gold's in that of BW GOLD LTD. So "no
+  // claims found" must not be allowed to read as "this company holds nothing
+  // here", for the same reason the US branch above refuses to conflate them.
+  //
+  // The hint leads with a shorter name because the telemetry is unambiguous
+  // about which move works: one-word searches returned something 74% of the
+  // time, while every search of a full legal name returned nothing.
+  //
+  // Nothing here asserts a corporate relationship we have not verified — it
+  // tells the user how title is recorded and lets them search accordingly.
   return {
     kind: 'empty',
     headline: `No active claims found for "${query}" in ${jurisdictionLabel}.`,
-    detail: null,
-    hint: 'Try a shorter name or check spelling.',
+    detail: isUs ? null
+      : 'Registries record the legal entity on title, which is often a project '
+        + 'subsidiary rather than the parent company. This is not a statement '
+        + 'that the company holds no ground here.',
+    hint: isUs
+      ? 'Try a shorter name or check spelling.'
+      : 'Try one distinctive word from the name, the subsidiary that holds the '
+        + 'project, or a claim number.',
   };
 }
