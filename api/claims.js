@@ -1180,7 +1180,22 @@ async function searchArcgis(cfg, term, type, res) {
     // Same tokenised match as B.C.: every meaningful word must appear, in any
     // order. A holder recorded as "EAGLE PLAINS RESOURCES LTD." is found by
     // "Eagle Plains Resources Ltd", "eagle plains" or "Resources Eagle Plains".
-    const tokens = type === 'number' ? [] : ownerSearchTokens(effectiveTerm);
+    //
+    // OWNER SEARCH ONLY. `type === 'name'` resolves cfg.nameFields — CSE_NAME,
+    // CLAIM_NAME — which are the names of CLAIMS, not of companies, and that is
+    // a literal substring search by design. Tokenising it would be wrong twice
+    // over: a search for "Gold Hill Company" would drop COMPANY as a legal
+    // suffix even though it is part of the claim's actual name, and would then
+    // match any claim carrying GOLD and HILL in any order, including "Hill of
+    // Gold". Claims are named, not incorporated; the reasoning behind
+    // ownerSearchTokens simply does not apply to them.
+    // Mirrors how resolveLayerAndFields picks the variant: anything that is not
+    // `number` or `name` resolves the OWNER fields, so anything that is not
+    // `number` or `name` gets owner matching. Keeping the two in step means a
+    // caller that omits `type` cannot end up searching an owner column with
+    // claim-name semantics.
+    const isOwnerSearch = type !== 'number' && type !== 'name';
+    const tokens = isOwnerSearch ? ownerSearchTokens(effectiveTerm) : [];
     where = tokens.length > 1
       ? `(${tokens.map((t) => likeClause(field.name, t)).join(' AND ')})`
       : likeClause(field.name, tokens[0] ?? effectiveTerm);
