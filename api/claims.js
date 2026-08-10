@@ -532,6 +532,79 @@ function escapeSql(term) {
 }
 
 /**
+ * Legal-entity suffixes, which identify the WRAPPER rather than the company.
+ *
+ * Deliberately short. Every entry here is a word that carries no identifying
+ * information, so dropping it can only widen a search. Words like HOLDINGS,
+ * MINING, RESOURCES, METALS or GOLD are NOT here even though they are common:
+ * they distinguish real companies from each other, and discarding them would
+ * make a search less precise rather than more forgiving.
+ */
+const LEGAL_SUFFIX_TOKENS = new Set([
+  'ltd', 'ltee', 'limited', 'limitee',
+  'inc', 'incorporated', 'incorporee',
+  'corp', 'corporation',
+  'co', 'company',
+  'ulc', 'llc', 'lp', 'llp', 'plc', 'pty', 'gmbh',
+]);
+
+/**
+ * Split a company name into the words a search should actually require.
+ *
+ * WHY THIS EXISTS — the numbers, from search_events on the live site:
+ *
+ *   query length      searches   returned nothing
+ *   1-8 chars (one word)    35         26%
+ *   9-15 chars              12         50%
+ *   16-24 chars             10         10%
+ *   25+ chars (full name)   10        100%
+ *
+ * EVERY search of a full legal company name failed. All ten of them. Matching
+ * was one contiguous `ILIKE '%term%'`, so the whole string — spacing,
+ * punctuation, word order and legal suffix — had to appear verbatim in the
+ * registry's own rendering of the name. Against the B.C. mirror:
+ *
+ *   'ximen mining corp.'  →  0 hits   (registry holds "XIMEN MINING CORP", no dot)
+ *   'ximen'               →  543 hits
+ *
+ * So the product punished users for being precise: type the company's real
+ * name and get nothing, type one word and it works. Nobody could have guessed
+ * that rule, and the drop-off report shows people leaving rather than retrying.
+ *
+ * Requiring each word separately fixes punctuation, spacing, word order and
+ * suffix mismatch in one move, and does NOT make the search vaguer: a name is
+ * still matched on all of its meaningful words.
+ *
+ * Returns [] when the term has nothing but suffixes in it (somebody searching
+ * "Ltd"), so callers fall back to the raw term rather than matching everything.
+ */
+export function ownerSearchTokens(term) {
+  const tokens = String(term || '')
+    // Punctuation to spaces: "B.C. LTD." and "BC LTD" become the same words,
+    // and a trailing comma in "SCOTT, STEVEN" stops gluing itself to a name.
+    //
+    // Apostrophes and hyphens are deliberately NOT in this set. They sit inside
+    // a word rather than between two, and both sides render them the same way,
+    // so splitting on them would turn "O'Brien" into a useless single letter
+    // plus "brien" — and searching for `%obrien%` instead would match nothing
+    // at all, since the registry holds O'BRIEN with the apostrophe.
+    .replace(/[.,"()/\\&]+/g, ' ')
+    .split(/\s+/)
+    .map((t) => t.trim())
+    .filter(Boolean);
+
+  // Case is preserved in the tokens themselves. Both callers are already
+  // case-insensitive — CQL `ILIKE` for B.C., `UPPER(f) LIKE UPPER(...)` for the
+  // ArcGIS provinces — so lowercasing would change nothing about what matches
+  // while making the generated filter harder to read against a server log.
+  // Only the suffix comparison is case-folded.
+  const meaningful = tokens.filter((t) => !LEGAL_SUFFIX_TOKENS.has(t.toLowerCase()));
+  // "Ltd" alone is all suffix — keep what was typed rather than dropping to a
+  // match-everything query.
+  return meaningful.length ? meaningful : tokens;
+}
+
+/**
  * Build a case-insensitive LIKE clause with the pattern metacharacters escaped.
  *
  * escapeSql only doubles quotes, which stops injection but leaves `%` and `_`
@@ -1104,7 +1177,13 @@ async function searchArcgis(cfg, term, type, res) {
     }
     where = clauses.length > 1 ? `(${clauses.join(' OR ')})` : clauses[0];
   } else if (isStringType(field)) {
-    where = likeClause(field.name, effectiveTerm);
+    // Same tokenised match as B.C.: every meaningful word must appear, in any
+    // order. A holder recorded as "EAGLE PLAINS RESOURCES LTD." is found by
+    // "Eagle Plains Resources Ltd", "eagle plains" or "Resources Eagle Plains".
+    const tokens = type === 'number' ? [] : ownerSearchTokens(effectiveTerm);
+    where = tokens.length > 1
+      ? `(${tokens.map((t) => likeClause(field.name, t)).join(' AND ')})`
+      : likeClause(field.name, tokens[0] ?? effectiveTerm);
   } else if (/^\d+$/.test(effectiveTerm)) {
     where = `${field.name} = ${effectiveTerm}`;
   } else {
@@ -1274,7 +1353,17 @@ export function bcCqlFilter(term, type) {
       : `TAG_NUMBER = '${safeTerm}'`;
   }
   if (type === 'map') return `MAP_UNIT_NO ILIKE '${safeTerm}%'`;
-  return `OWNER_NAME ILIKE '%${safeTerm}%'`;
+
+  // Owner search requires every meaningful word, in any order, rather than one
+  // contiguous string — see ownerSearchTokens for why (every full-legal-name
+  // search on the live site returned nothing).
+  const tokens = ownerSearchTokens(term);
+  const clauses = tokens.map((t) => {
+    const safe = t.replace(/'/g, "''").replace(/%/g, '\\%').replace(/_/g, '\\_');
+    return `OWNER_NAME ILIKE '%${safe}%'`;
+  });
+  if (!clauses.length) return `OWNER_NAME ILIKE '%${safeTerm}%'`;
+  return clauses.length > 1 ? `(${clauses.join(' AND ')})` : clauses[0];
 }
 
 async function searchBc(term, type, res) {

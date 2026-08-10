@@ -78,10 +78,11 @@ function detectGeomType(geojson) {
   return 'polygon';
 }
 
-export default function MapCanvas({ onReady, project, template, onFeatureClick, onMapClick, annotationToolRef }) {
+export default function MapCanvas({ onReady, project, template, onFeatureClick, onMapClick, annotationToolRef, trimLayerId = null }) {
   const mapRef = useRef(null);
   const onMapClickRef = useRef(onMapClick);
   const onFeatureClickRef = useRef(onFeatureClick);
+  const prevTrimLayerIdRef = useRef(null);
   const mapElRef = useRef(null);
   const baseLayerRef = useRef(null);
   const overlayGroupRef = useRef(null);
@@ -229,7 +230,13 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
 
     // Style-only fast path: if no layer was added/removed, no GeoJSON changed, no visibility
     // changed, and no fill pattern changed, skip the full rebuild and just update styles.
+    // Entering or leaving trim mode changes whether a layer is dissolved, which
+    // is a geometry change, not a style one. Rebuild.
+    const trimChanged = prevTrimLayerIdRef.current !== trimLayerId;
+    prevTrimLayerIdRef.current = trimLayerId;
+
     const isStyleOnly =
+      !trimChanged &&
       newLayers.length === oldLayers.length &&
       leafletLayerRefsMap.current.size > 0 &&
       newLayers.every((nl, i) => {
@@ -299,7 +306,19 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
       // adjacent polygons into one outline, so filtering after it would leave a
       // removed claim absorbed into the block's outer boundary.
       let geojsonData = visibleGeojson(layer);
-      if (style.dissolve && geomType !== 'line' && !isDrillholes) {
+
+      // Dissolve is suspended for the layer being trimmed, and this is a
+      // correctness fix rather than a nicety. dissolveGeo emits ONE feature with
+      // EMPTY properties, so the shape handed to a click handler carries no
+      // registry identity: featureKey falls through to the merged outline's
+      // coordinates, the override is written under a key no original feature
+      // has, and the click silently does nothing at all.
+      //
+      // Un-dissolving while trimming also happens to be what the user needs —
+      // you cannot pick individual cells out of a block whose internal borders
+      // have been erased.
+      const trimming = trimLayerId === layer.id;
+      if (style.dissolve && !trimming && geomType !== 'line' && !isDrillholes) {
         try {
           const fc = geojsonData.type === 'FeatureCollection'
             ? geojsonData
@@ -438,7 +457,7 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
       }
     });
     prevLayersRef.current = newLayers;
-  }, [project?.layers, template]);
+  }, [project?.layers, template, trimLayerId]);
 
   return <div ref={mapElRef} className="leaflet-map-canvas" />;
 }

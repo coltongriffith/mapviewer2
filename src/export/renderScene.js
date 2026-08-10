@@ -833,7 +833,7 @@ async function drawInsetCanvas(ctx, scene, scale) {
     return;
   }
   const visible = (scene.project.layers || []).filter((layer) => layer.visible !== false && layer.geojson);
-  const bounds = unionBounds(visible.map((layer) => geojsonBounds(layer.geojson)).filter(Boolean));
+  const bounds = unionBounds(visible.map((layer) => geojsonBounds(visibleGeojson(layer))).filter(Boolean));
   if (autoInsetRegion) {
     const insetColors = { bgFill: scene.project.layout?.insetBgFill, regionFill: scene.project.layout?.insetRegionFill, regionStroke: scene.project.layout?.insetRegionStroke, markerColor: scene.project.layout?.insetMarkerColor };
     drawAutoInsetCanvas(ctx, innerX, innerY, innerW, innerH, scale, autoInsetRegion, bounds, insetColors);
@@ -2237,7 +2237,7 @@ function renderInsetSvg(scene, scale, svgDefs) {
     return `<g id="em-inset" class="em-panel">${panelSvg}${titleSvg}<image href="${escapeXml(insetImage)}" x="${innerX}" y="${innerY}" width="${innerW}" height="${innerH}" preserveAspectRatio="xMidYMid slice" /></g>`;
   }
   const visible = (scene.project.layers || []).filter((layer) => layer.visible !== false && layer.geojson);
-  const bounds = unionBounds(visible.map((layer) => geojsonBounds(layer.geojson)).filter(Boolean));
+  const bounds = unionBounds(visible.map((layer) => geojsonBounds(visibleGeojson(layer))).filter(Boolean));
   if (autoInsetRegion) {
     const insetColors = { bgFill: scene.project.layout?.insetBgFill, regionFill: scene.project.layout?.insetRegionFill, regionStroke: scene.project.layout?.insetRegionStroke, markerColor: scene.project.layout?.insetMarkerColor };
     const innerSvg = autoInsetSvg(innerX, innerY, innerW, innerH, scale, autoInsetRegion, bounds, insetColors);

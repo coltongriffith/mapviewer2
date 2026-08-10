@@ -360,7 +360,7 @@
       {
         "h2": "Find your province's claim-search guide first",
         "body": "The fastest way to map claims is to search a claimholder and pull public registry data straight into the map. Each province's registry works a little differently — start with the guide for your jurisdiction, then come back here to style and export.",
-        "html": "Province guides: <a href=\"/blog/how-to-map-bc-mineral-claims-live-registry/\">British Columbia</a> · <a href=\"/blog/how-to-search-ontario-mining-claims/\">Ontario</a> · <a href=\"/blog/how-to-search-quebec-mining-claims/\">Quebec</a> · <a href=\"/blog/how-to-search-saskatchewan-mineral-claims/\">Saskatchewan</a> · <a href=\"/blog/how-to-search-manitoba-mining-claims/\">Manitoba</a> · <a href=\"/blog/how-to-search-newfoundland-mineral-claims/\">Newfoundland &amp; Labrador</a>. Yukon is searchable in the app; see the <a href=\"/blog/canadian-mineral-claim-registries/\">Canadian registry guide</a> for what each jurisdiction supports."
+        "html": "Province guides: <a href=\"/blog/how-to-map-bc-mineral-claims-live-registry/\">British Columbia</a> · <a href=\"/blog/how-to-search-ontario-mining-claims/\">Ontario</a> · <a href=\"/blog/how-to-search-quebec-mining-claims/\">Quebec</a> · <a href=\"/blog/how-to-search-saskatchewan-mineral-claims/\">Saskatchewan</a> · <a href=\"/blog/how-to-search-manitoba-mining-claims/\">Manitoba</a> · <a href=\"/blog/how-to-search-newfoundland-mineral-claims/\">Newfoundland &amp; Labrador</a>. <a href=\"/blog/how-to-search-yukon-quartz-claims/\">Yukon</a>. See the <a href=\"/blog/canadian-mineral-claim-registries/\">Canadian registry guide</a> for what each jurisdiction supports."
       },
       {
         "h2": "Step 1: Get your claims onto the map",
@@ -1907,6 +1907,87 @@
     "fullTitle": "Quebec Mining Claims Search (GESTIM) | Exploration Maps"
   },
   {
+    "slug": "how-to-search-yukon-quartz-claims",
+    "mapTypeId": "mining-claims-map",
+    "category": "mineral-claims",
+    "title": "Yukon Quartz Claims Search — Map Claims Free",
+    "fullTitle": "Yukon Quartz Claims Search | Exploration Maps",
+    "metaDescription": "Search Yukon quartz mining claims by owner or grant number, pull the boundaries into a styled map, and export — with honest notes on placer claims and what the public data covers.",
+    "directAnswer": "To map Yukon quartz claims, open Exploration Maps, click 'Add Claims → Search Claims Registry', choose Yukon, and search by owner name or grant number. Matching claims are grouped geographically so you can add one block rather than everything a company holds. Quartz claims only — placer claims are a separate Yukon registry and are not included.",
+    "publishedDate": "2026-08-10",
+    "sections": [
+      {
+        "h2": "Yukon tenure in 30 seconds",
+        "body": "Yukon runs two separate mineral tenure systems, and which one a property sits in decides almost everything about it. Quartz claims, under the Quartz Mining Act, cover hard-rock mineral rights — the White Gold district, the Dawson Range, Keno Hill. Placer claims, under the Placer Mining Act, cover the alluvial gold ground of the Klondike and the creeks around Dawson City. They are recorded separately, renewed separately, and published as separate datasets."
+      },
+      {
+        "h2": "What this app searches, and what it doesn't",
+        "body": "Exploration Maps searches Yukon's public quartz claims layer. You can search by owner name or by grant number, and both return claim boundaries you can style and export.",
+        "box": {
+          "kind": "capability",
+          "title": "What works for Yukon",
+          "html": "<strong>Works:</strong> owner-name search, grant-number search, mapping the boundaries, styling, and export.<br><strong>Doesn't:</strong> <strong>placer claims</strong> — they are a separate Yukon registry and this search does not reach them, so an empty result for a Klondike placer operator means the data was never searched, not that the ground is unheld.<br><strong>Not yet:</strong> Tenure Monitor — saved claim groups with expiry reminders and change detection — covers British Columbia only."
+        }
+      },
+      {
+        "h2": "Search by owner, or by grant number",
+        "body": "Owner search matches on each meaningful word in the name, in any order, so “Klondike Gold Corp.” and “klondike gold” find the same holder. Grant-number search takes the number recorded against the claim.",
+        "items": [
+          "In Exploration Maps: Add Claims → Search Claims Registry → Yukon",
+          "Search an owner name, or a grant number if you have one from a technical report",
+          "Results group geographically — a company with ground in two districts shows as two blocks you can add separately",
+          "Add to map: boundaries load as a styled claims layer",
+          "Trim what you don't need, add drillholes and targets, then export"
+        ]
+      },
+      {
+        "h2": "If an owner search comes back empty",
+        "body": "A registry records the legal entity on title, which for an operating company is very often a project subsidiary rather than the name on the news release. An empty result is not a statement that a company holds no ground in Yukon.",
+        "items": [
+          "Try one distinctive word from the name rather than the full legal name",
+          "Try the subsidiary that holds the project, if you know it",
+          "Try a grant number from a technical report or news release",
+          "Check whether the ground is placer rather than quartz — placer claims are not in this dataset"
+        ]
+      },
+      {
+        "h2": "Verify before you rely on it",
+        "box": {
+          "kind": "warning",
+          "title": "The registry is the record, not this map",
+          "html": "Claim boundaries here come from Yukon's published mapping data and are a snapshot, not a live view of the register. Ownership, good standing and expiry must be confirmed with the Yukon Mining Recorder before any transaction or deadline decision."
+        }
+      }
+    ],
+    "faqs": [
+      {
+        "q": "Can I search Yukon placer claims?",
+        "a": "Not in Exploration Maps. Yukon publishes placer claims as a separate dataset under a separate Act, and this search covers the quartz claims layer only. If you are looking at Klondike creek ground, an empty result here means the placer register was never searched — not that the ground is open."
+      },
+      {
+        "q": "What is the difference between a quartz claim and a placer claim?",
+        "a": "Quartz claims cover hard-rock mineral rights under the Quartz Mining Act; placer claims cover alluvial deposits under the Placer Mining Act. They are recorded, maintained and renewed under different rules, and the two can overlap the same ground."
+      },
+      {
+        "q": "Can I get expiry reminders for Yukon claims?",
+        "a": "Not yet. Tenure Monitor — saved claim portfolios with good-to-date reminders and change detection — covers British Columbia only. You can still map and export Yukon claims today."
+      },
+      {
+        "q": "Why does a company name return nothing?",
+        "a": "Most often because the claims stand in the name of a subsidiary rather than the parent, or because the ground is placer rather than quartz. Try one distinctive word from the name, or a grant number from a technical report."
+      },
+      {
+        "q": "Is the claim data live?",
+        "a": "It is read from Yukon's published mapping service when you search, so it is as current as that service. It is not the register itself — confirm anything that matters with the Yukon Mining Recorder."
+      }
+    ],
+    "relatedSlugs": [
+      "canadian-mineral-claim-registries",
+      "how-to-make-a-mining-claims-map",
+      "how-to-search-ontario-mining-claims"
+    ]
+  },
+  {
     "slug": "exploration-mapping-file-types-shapefile-kml-geojson-csv",
     "title": "Shapefile, KML, GeoJSON, and CSV: Which File Types Matter for Exploration Mapping?",
     "metaDescription": "Shapefile vs GeoJSON vs KML vs CSV for exploration mapping — what each format is for, the gotchas (missing .prj, UTM coordinates), and how to convert between them free.",
@@ -2511,7 +2592,7 @@
             ],
             [
               "Yukon",
-              "Yukon quartz and placer claims",
+              "Yukon quartz claims (placer not included)",
               "Yes",
               "Yes",
               "Yes",
@@ -2524,7 +2605,7 @@
       {
         "h2": "The jurisdiction guides",
         "body": "Where a province has enough of its own quirks to be worth its own walkthrough, it has one:",
-        "html": "<ul><li><a href=\"/blog/how-to-map-bc-mineral-claims-live-registry/\">British Columbia</a> — owner, tenure number and map-sheet search, plus the strongest tenure tooling on the site</li><li><a href=\"/blog/how-to-search-ontario-mining-claims/\">Ontario</a> — MLAS cell claims and how holder names are recorded</li><li><a href=\"/blog/how-to-search-quebec-mining-claims/\">Quebec</a> — GESTIM claims (<em>claims désignés sur carte</em>) and titleholder search</li><li><a href=\"/blog/how-to-search-saskatchewan-mineral-claims/\">Saskatchewan</a> — MARS dispositions</li><li><a href=\"/blog/how-to-search-manitoba-mining-claims/\">Manitoba</a> — claim-number lookup, and why owner search is unavailable</li><li><a href=\"/blog/how-to-search-newfoundland-mineral-claims/\">Newfoundland &amp; Labrador</a> — licences rather than claims, and what that changes</li></ul>Yukon is searchable in the application but does not yet have its own guide."
+        "html": "<ul><li><a href=\"/blog/how-to-map-bc-mineral-claims-live-registry/\">British Columbia</a> — owner, tenure number and map-sheet search, plus the strongest tenure tooling on the site</li><li><a href=\"/blog/how-to-search-ontario-mining-claims/\">Ontario</a> — MLAS cell claims and how holder names are recorded</li><li><a href=\"/blog/how-to-search-quebec-mining-claims/\">Quebec</a> — GESTIM claims (<em>claims désignés sur carte</em>) and titleholder search</li><li><a href=\"/blog/how-to-search-saskatchewan-mineral-claims/\">Saskatchewan</a> — MARS dispositions</li><li><a href=\"/blog/how-to-search-manitoba-mining-claims/\">Manitoba</a> — claim-number lookup, and why owner search is unavailable</li><li><a href=\"/blog/how-to-search-newfoundland-mineral-claims/\">Newfoundland &amp; Labrador</a> — licences rather than claims, and what that changes</li></ul><a href=\"/blog/how-to-search-yukon-quartz-claims/\">Yukon</a> — quartz claims only; placer is a separate register"
       },
       {
         "h2": "Why the registries differ so much",
@@ -2578,7 +2659,8 @@
     "relatedSlugs": [
       "bc-mineral-titles-online-guide",
       "how-to-make-a-mining-claims-map",
-      "how-to-track-bc-mineral-claim-good-to-dates"
+      "how-to-track-bc-mineral-claim-good-to-dates",
+      "how-to-search-yukon-quartz-claims"
     ],
     "publishedDate": "2026-08-06",
     "fullTitle": "Canadian Mineral Claim & Tenure Registries | Exploration Maps"

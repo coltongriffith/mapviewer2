@@ -351,6 +351,30 @@ describe('claims about jurisdiction support match the product', () => {
     expect(html).toMatch(/Manitoba/);
   });
 
+  it('does not imply Yukon placer claims are searchable', () => {
+    // The same overclaim class as Manitoba, and it survived the same way: the
+    // honesty tests read the registry hub's prose, so a wrong value sitting in
+    // the hub's TABLE went unnoticed. api/claims.js scopes Yukon to
+    // `layerMatch: /quartz\s*claims/i` — the placer register is a separate
+    // dataset this product never queries, so an empty result for a Klondike
+    // placer operator means the data was not searched, not that the ground is
+    // open. That is the worst possible thing to be vague about.
+    const api = readFileSync(join(ROOT, 'api/claims.js'), 'utf8');
+    const ytBlock = api.slice(api.indexOf('  yt: {'), api.indexOf('  yt: {') + 400);
+    expect(ytBlock, 'Yukon is no longer quartz-scoped — revisit the guide and the hub table')
+      .toMatch(/layerMatch:\s*\/quartz/);
+
+    const guide = pages.get('/blog/how-to-search-yukon-quartz-claims/');
+    expect(guide, 'the Yukon guide is missing').toBeTruthy();
+    expect(guide).toMatch(/placer/i);
+    expect(guide).toMatch(/not included|separate/i);
+
+    // And the hub's table must not name placer as something we cover.
+    const hub = pages.get('/blog/canadian-mineral-claim-registries/');
+    expect(/Yukon quartz and placer claims/.test(hub),
+      'the registry table still advertises placer coverage that does not exist').toBe(false);
+  });
+
   it('never promises tenure monitoring outside British Columbia', () => {
     // Tenure Monitor is BC-only. A table row or sentence promising it for
     // Ontario would be a support claim the application cannot honour.

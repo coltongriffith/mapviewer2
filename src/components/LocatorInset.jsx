@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { geojsonBounds, unionBounds } from '../utils/geometry';
+import { visibleGeojson } from '../utils/featureIdentity.js';
 import { INSET_MODES } from '../projectState';
 
 const REFERENCE_PRESETS = {
@@ -105,7 +106,9 @@ function buildAutoSvg(region, visibleBounds) {
 export default function LocatorInset({ layers, insetMode, mode, insetImage, autoInsetRegion, insetTitle, insetLabel, zone, regionFill, regionStroke, bgFill, markerColor }) {
   const { visibleBounds, referenceBounds } = useMemo(() => {
     const visible = (layers || []).filter((layer) => layer.visible !== false);
-    const visibleBounds = unionBounds(visible.map((layer) => geojsonBounds(layer.geojson)).filter(Boolean));
+    // Removed shapes are not part of the map's extent, so the locator must not
+    // draw its "you are here" box around them either.
+    const visibleBounds = unionBounds(visible.map((layer) => geojsonBounds(visibleGeojson(layer))).filter(Boolean));
     if (!visibleBounds) return { visibleBounds: null, referenceBounds: null };
     const preset = REFERENCE_PRESETS[insetMode] || REFERENCE_PRESETS.province_state;
     return { visibleBounds, referenceBounds: { ...expandBounds(visibleBounds, preset.expand), label: preset.label } };

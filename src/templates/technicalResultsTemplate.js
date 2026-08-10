@@ -1,4 +1,5 @@
 import { ROLE_LABELS, POINT_ROLES } from '../projectState';
+import { hasVisibleFeatures } from '../utils/featureIdentity.js';
 import { getCornerLayout } from '../utils/cornerLayout';
 
 const BASE_ZONES = {
@@ -281,13 +282,21 @@ function distinctShapesForLayer(layer) {
   const def = layer.style?.markerShape || 'circle';
   const seen = new Set([def]);
   for (const ov of Object.values(layer.featureOverrides || {})) {
-    if (ov.markerShape) seen.add(ov.markerShape);
+    // A removed point's marker shape is not on the map, so it must not earn a
+    // swatch of its own.
+    if (ov.markerShape && !ov.hidden) seen.add(ov.markerShape);
   }
   return [...seen];
 }
 
 export function buildLegendItems(template, layers, layout = {}) {
-  const visible = layers.filter((layer) => layer.visible !== false && layer.legend?.enabled !== false);
+  // A layer whose every shape has been removed contributes nothing to the map,
+  // so it must not contribute a legend entry either — an entry for an absent
+  // layer tells the reader that data is on the page when it is not, and the
+  // trim panel explicitly promises removed shapes are out of the legend.
+  const visible = layers.filter((layer) => layer.visible !== false
+    && layer.legend?.enabled !== false
+    && hasVisibleFeatures(layer));
   const byRole = new Map((template.roleOrder || []).map((role, idx) => [role, idx]));
 
   const layerItems = visible

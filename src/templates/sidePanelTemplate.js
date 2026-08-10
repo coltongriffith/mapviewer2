@@ -1,4 +1,5 @@
 import { ROLE_LABELS, POINT_ROLES } from '../projectState';
+import { hasVisibleFeatures } from '../utils/featureIdentity.js';
 
 const SIDEBAR_FRAC = 0.28;
 
@@ -233,6 +234,10 @@ export function buildSidePanelLegendItems(layers, layout) {
   for (const layer of (layers || [])) {
     if (!layer.visible || !layer.geojson) continue;
     if (layer.legend?.enabled === false) continue;
+    // A layer whose every shape has been removed is absent from the map, so it
+    // must not be named in the legend. Third builder with this rule — the other
+    // two are in technicalResultsTemplate and technicalReportTemplate.
+    if (!hasVisibleFeatures(layer)) continue;
     const label = layer.legend?.label || layer.displayName || layer.name;
     const baseStyle = sidePanelTemplate.roleStyles?.[layer.role] || sidePanelTemplate.roleStyles?.other || {};
     const style = { ...baseStyle, ...(layer.style || {}) };
