@@ -63,6 +63,7 @@ import { runCloudMigration } from './utils/cloudMigration';
 import { scopingWarning } from './utils/scopingNotice';
 import { CLAIM_NAME_CAVEAT } from './utils/claimProvenance';
 import { featureKey, layerFeatures, isFeatureHidden, hiddenCount, featuresInBounds } from './utils/featureIdentity.js';
+import FeatureTrimList from './components/FeatureTrimList.jsx';
 import dissolveGeo from '@turf/dissolve';
 import {
   clearActiveProjectContext,
@@ -823,6 +824,10 @@ export default function App() {
   // Id of the layer currently being trimmed, or null. Scoped to one layer so a
   // drag can never remove features from a layer the user is not working on.
   const [trimLayerId, setTrimLayerId] = useState(null);
+  // Whether the shape list is open, and for which layer. Independent of
+  // trimLayerId: the list is usable without arming the map, and arming the map
+  // does not force a 200-row list open.
+  const [trimListLayerId, setTrimListLayerId] = useState(null);
   const [selectedCalloutId, setSelectedCalloutId] = useState(null);
   const [selectedFeature, setSelectedFeature] = useState(null);
   const [selectedMarkerId, setSelectedMarkerId] = useState(null);
@@ -2489,6 +2494,12 @@ export default function App() {
     const stillThere = project.layers.some((l) => l.id === trimLayerId);
     if (!stillThere || selectedLayerId !== trimLayerId) setTrimLayerId(null);
   }, [trimLayerId, selectedLayerId, project.layers]);
+
+  useEffect(() => {
+    if (!trimListLayerId) return;
+    const stillThere = project.layers.some((l) => l.id === trimListLayerId);
+    if (!stillThere || selectedLayerId !== trimListLayerId) setTrimListLayerId(null);
+  }, [trimListLayerId, selectedLayerId, project.layers]);
 
   // Drag a box to remove every feature inside it.
   //
@@ -4901,12 +4912,15 @@ export default function App() {
                   </label>
                   {(() => {
                     const trimming = trimLayerId === selectedLayer.id;
+                    const listing = trimListLayerId === selectedLayer.id;
                     const removed = hiddenCount(selectedLayer);
                     const total = layerFeatures(selectedLayer).length;
                     return (
                       <div className="trim-panel">
                         <div className="control-row">
                           <label>Remove individual shapes</label>
+                        </div>
+                        <div className="trim-actions">
                           <button
                             type="button"
                             className={`secondary-btn trim-toggle${trimming ? ' active' : ''}`}
@@ -4914,6 +4928,14 @@ export default function App() {
                             onClick={() => setTrimLayerId(trimming ? null : selectedLayer.id)}
                           >
                             {trimming ? 'Done removing' : 'Select on map'}
+                          </button>
+                          <button
+                            type="button"
+                            className="secondary-btn trim-toggle"
+                            aria-expanded={listing}
+                            onClick={() => setTrimListLayerId(listing ? null : selectedLayer.id)}
+                          >
+                            {listing ? 'Hide list' : `List (${total})`}
                           </button>
                         </div>
                         {trimming && (
@@ -4936,6 +4958,18 @@ export default function App() {
                               Restore all
                             </button>
                           </div>
+                        )}
+                        {listing && (
+                          <FeatureTrimList
+                            layer={selectedLayer}
+                            onSetHidden={(features, hidden) => {
+                              const n = setFeaturesHidden(selectedLayer.id, features, hidden);
+                              if (n) {
+                                trackEvent(hidden ? 'features_removed' : 'features_restored',
+                                  { count: n, method: 'list', role: selectedLayer.role });
+                              }
+                            }}
+                          />
                         )}
                       </div>
                     );

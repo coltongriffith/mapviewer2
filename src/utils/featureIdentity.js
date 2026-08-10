@@ -61,6 +61,39 @@ export function featureKey(feature) {
     || JSON.stringify(feature.geometry?.coordinates);
 }
 
+/**
+ * How a feature should read in a list.
+ *
+ * Separate from getFeatureLabel() in App.jsx, which is drill-hole shaped — it
+ * ends at the LAYER's name and then the literal string 'Drillhole', which is
+ * the right answer for a callout on a collar and useless in a list of 200
+ * claims where every row would then read the same.
+ *
+ * A row has to be identifiable at a glance, so the title is whatever a person
+ * would call the shape and the subtitle is what distinguishes two shapes that
+ * share that name — which, for B.C. claims, is 1,719 names' worth of rows.
+ */
+export function featureLabel(feature) {
+  const p = feature?.properties || {};
+  const number = p.TENURE_NUMBER_ID ?? p.TAG_NUMBER ?? null;
+  const name = p.CLAIM_NAME || p.label || p.name || p.hole_id || p.holeid || null;
+  const hectares = Number(p.AREA_IN_HECTARES);
+
+  const parts = [];
+  if (number != null && number !== '') parts.push(`#${number}`);
+  if (Number.isFinite(hectares) && hectares > 0) parts.push(`${Math.round(hectares).toLocaleString()} ha`);
+
+  return {
+    // An unnamed title is common — 22% of B.C. claims — so the number carries
+    // the row rather than a blank or a repeated layer name.
+    title: name || (number != null && number !== '' ? `Claim ${number}` : 'Unnamed shape'),
+    subtitle: parts.join(' · '),
+    // What a search types against. Includes both, so a user can find a claim by
+    // its number when they cannot remember the name and vice versa.
+    search: `${name || ''} ${number ?? ''}`.toLowerCase().trim(),
+  };
+}
+
 /** Features of a layer, whatever shape its geojson takes. */
 export function layerFeatures(layer) {
   const geojson = layer?.geojson;
