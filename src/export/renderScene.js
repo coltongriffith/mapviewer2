@@ -501,18 +501,42 @@ function estimateWrapLines(text, maxWidth, fontSize, charFactor = 0.56) {
   return lines;
 }
 
-function legendSwatchSvg(item, x, y, scale) {
+// Canvas has textBaseline 'top'; SVG's equivalent (dominant-baseline
+// "text-before-edge") is unreliable outside a browser, and these files get
+// opened in Illustrator. So the alphabetic baseline is computed instead — but
+// from ONE constant shared by everything, because hand-written offsets are
+// exactly how the two renderers drifted: the legend title was pinned at y+24
+// whatever the font size, while the canvas kept its top edge at y+14, so any
+// legendFontScale but 1.0 moved the title in the SVG only.
+const TEXT_TOP_TO_BASELINE = 0.8;
+export function baselineFromTop(topY, fontSize) { return topY + fontSize * TEXT_TOP_TO_BASELINE; }
+
+// Row geometry, shared with drawLegendCanvas so a swatch cannot sit a pixel off
+// in one renderer and not the other.
+const LEGEND_ROW = {
+  markerCentreY: 9, lineY: 8, swatchY: 2, swatchW: 18, swatchH: 12, labelCentreY: 9, labelX: 30,
+};
+
+export function legendSwatchSvg(item, x, rowY, scale) {
   const style = item.style || {};
   if (item.type === 'points') {
     const shape = item.markerShape || style.markerShape || 'circle';
-    const cx = x + 8 * scale; const cy = y + 8 * scale; const r = 5 * scale;
+    const cx = x + 8 * scale; const cy = rowY + LEGEND_ROW.markerCentreY * scale; const r = 5 * scale;
     const fill = safeColor(style.markerFill || style.markerColor, '#ffffff');
     const stroke = safeColor(style.markerColor, '#111111');
     const sw = Math.max(1, scale).toFixed(2);
     return svgMarkerShape(shape, cx, cy, r, fill, stroke, sw, 1);
   }
-  if (item.type === 'line') return `<line x1="${x.toFixed(2)}" y1="${(y + 8 * scale).toFixed(2)}" x2="${(x + 18 * scale).toFixed(2)}" y2="${(y + 8 * scale).toFixed(2)}" stroke="${style.stroke || '#3b82f6'}" stroke-width="${Math.max(scale, (style.strokeWidth ?? 2) * 0.6).toFixed(2)}" stroke-dasharray="${style.dashArray || ''}" />`;
-  return `<rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${(18 * scale).toFixed(2)}" height="${(12 * scale).toFixed(2)}" fill="${style.fill || '#72a0ff'}" fill-opacity="${style.fillOpacity ?? 0.22}" stroke="${style.stroke || '#3b82f6'}" stroke-width="${Math.max(1, scale).toFixed(2)}" />`;
+  if (item.type === 'line') {
+    const lineY = (rowY + LEGEND_ROW.lineY * scale).toFixed(2);
+    // Both the width and the dash pattern are in export pixels, so both scale.
+    // The dash array did not, so a dashed legend line came out with a much
+    // finer pattern than the map's at any export scale above 1.
+    const dash = String(style.dashArray || '').split(/[ ,]+/).filter(Boolean)
+      .map((d) => Number(d) * scale).filter((d) => Number.isFinite(d));
+    return `<line x1="${x.toFixed(2)}" y1="${lineY}" x2="${(x + LEGEND_ROW.swatchW * scale).toFixed(2)}" y2="${lineY}" stroke="${safeColor(style.stroke, '#3b82f6')}" stroke-width="${Math.max(scale, (style.strokeWidth ?? 2) * 0.6 * scale).toFixed(2)}" stroke-dasharray="${dash.join(' ')}" />`;
+  }
+  return `<rect x="${x.toFixed(2)}" y="${(rowY + LEGEND_ROW.swatchY * scale).toFixed(2)}" width="${(LEGEND_ROW.swatchW * scale).toFixed(2)}" height="${(LEGEND_ROW.swatchH * scale).toFixed(2)}" fill="${safeColor(style.fill, '#93c5fd')}" fill-opacity="${style.fillOpacity ?? 0.22}" stroke="${safeColor(style.stroke, '#3b82f6')}" stroke-width="${Math.max(1, scale).toFixed(2)}" />`;
 }
 function drawLegendCanvas(ctx, scene, scale) {
   if (scene.project.layout?.showLegend === false) return;
@@ -534,7 +558,7 @@ function drawLegendCanvas(ctx, scene, scale) {
     group.items.forEach((item) => {
       if (item.type === 'points') {
         const shape = item.markerShape || item.style?.markerShape || 'circle';
-        const cx = x + lp + 8 * scale; const cy = rowY + 9 * scale; const r = 5 * scale;
+        const cx = x + lp + 8 * scale; const cy = rowY + LEGEND_ROW.markerCentreY * scale; const r = 5 * scale;
         ctx.save();
         drawCanvasMarkerShape(ctx, shape, cx, cy, r);
         ctx.fillStyle = item.style.markerFill || item.style.markerColor || '#ffffff';
@@ -550,14 +574,15 @@ function drawLegendCanvas(ctx, scene, scale) {
         const dash = (item.style.dashArray || '').split(/[ ,]+/).filter(Boolean).map(Number);
         ctx.setLineDash(dash.length ? dash.map((d) => d * scale) : []);
         ctx.beginPath();
-        ctx.moveTo(x + lp, rowY + 8 * scale);
-        ctx.lineTo(x + lp + 18 * scale, rowY + 8 * scale);
+        ctx.moveTo(x + lp, rowY + LEGEND_ROW.lineY * scale);
+        ctx.lineTo(x + lp + LEGEND_ROW.swatchW * scale, rowY + LEGEND_ROW.lineY * scale);
         ctx.stroke();
         ctx.restore();
       } else {
-        ctx.fillStyle = rgba(item.style.fill || '#93c5fd', item.style.fillOpacity ?? 0.22); ctx.fillRect(x + lp, rowY + 2 * scale, 18 * scale, 12 * scale); ctx.strokeStyle = item.style.stroke || '#3b82f6'; ctx.lineWidth = Math.max(1, scale); ctx.strokeRect(x + lp, rowY + 2 * scale, 18 * scale, 12 * scale);
+        const sy = rowY + LEGEND_ROW.swatchY * scale, sw = LEGEND_ROW.swatchW * scale, sh = LEGEND_ROW.swatchH * scale;
+        ctx.fillStyle = rgba(item.style.fill || '#93c5fd', item.style.fillOpacity ?? 0.22); ctx.fillRect(x + lp, sy, sw, sh); ctx.strokeStyle = item.style.stroke || '#3b82f6'; ctx.lineWidth = Math.max(1, scale); ctx.strokeRect(x + lp, sy, sw, sh);
       }
-      ctx.fillStyle = theme.bodyText; ctx.font = `${13 * scale * lfs}px ${legendFont}`; ctx.textBaseline = 'middle'; ctx.fillText(item.label || 'Layer', x + lp + 30 * scale, rowY + 9 * scale); rowY += 24 * scale;
+      ctx.fillStyle = theme.bodyText; ctx.font = `${13 * scale * lfs}px ${legendFont}`; ctx.textBaseline = 'middle'; ctx.fillText(item.label || 'Layer', x + lp + LEGEND_ROW.labelX * scale, rowY + LEGEND_ROW.labelCentreY * scale); rowY += 24 * scale;
     });
   });
   ctx.restore();
@@ -2273,7 +2298,7 @@ function svgPanelAccentLeft(x, y, h, theme, scale) {
   if (!theme.panelAccentLeft) return '';
   return `<rect x="${x}" y="${y}" width="${4 * scale}" height="${h}" fill="${theme.panelAccentLeft}" />`;
 }
-function renderLegendSvg(scene, scale, svgDefs) {
+export function renderLegendSvg(scene, scale, svgDefs) {
   if (scene.project.layout?.showLegend === false) return '';
   const { legend } = getOverlayMetrics(scene); const items = scene.project.layout?.legendItems || []; if (!items.length) return '';
   const x = legend.left * scale, y = legend.top * scale, w = legend.width * scale, h = legend.height * scale;
@@ -2281,9 +2306,19 @@ function renderLegendSvg(scene, scale, svgDefs) {
   const legendFont = `${scene.project.layout?.fonts?.legend || 'Inter'}, Arial, sans-serif`;
   const lfs = scene.project.layout?.legendFontScale ?? 1;
   const lp = (theme.panelAccentLeft ? 20 : 16) * scale;
-  const rows = items.map((item, index) => { const rowY = y + (40 + index * 24) * scale; return `<g id="em-legend-item-${index}" class="em-legend-item">${legendSwatchSvg(item, x + lp, rowY + 1 * scale, scale)}<text x="${x + lp + 30 * scale}" y="${rowY + 12 * scale}" fill="${theme.bodyText}" font-family="${legendFont}" font-size="${13 * scale * lfs}">${escapeXml(item.label || 'Layer')}</text></g>`; }).join('\n');
+  const rows = groupLegendItems(items).flatMap((group) => group.items).map((item, index) => {
+    const rowY = y + (40 + index * 24) * scale;
+    // Canvas centres the label on the row; matching that with the same y and an
+    // explicit middle baseline keeps the two in step at any legendFontScale.
+    return `<g id="em-legend-item-${index}" class="em-legend-item">${legendSwatchSvg(item, x + lp, rowY, scale)}<text x="${x + lp + LEGEND_ROW.labelX * scale}" y="${rowY + LEGEND_ROW.labelCentreY * scale}" dominant-baseline="middle" fill="${theme.bodyText}" font-family="${legendFont}" font-size="${13 * scale * lfs}">${escapeXml(item.label || 'Layer')}</text></g>`;
+  }).join('\n');
   const clipId = pushRoundedClip(svgDefs, x, y, w, h, (theme.panelRadius ?? 10) * scale);
-  return `<g id="em-legend" class="em-panel" clip-path="url(#${clipId})">${svgRect(x, y, w, h, (theme.panelRadius ?? 10) * scale, theme.panelFill, theme.panelBorder, scale)}${svgPanelAccentLeft(x, y, h, theme, scale)}<text x="${x + lp}" y="${y + 24 * scale}" fill="${theme.panelTitle}" font-family="${legendFont}" font-size="${15 * scale * lfs}" font-weight="700">${escapeXml(scene.project.layout?.legendTitle || 'Legend')}</text>${rows}</g>`;
+  // The canvas honours legendTransparent; the SVG drew the panel regardless, so
+  // a legend set to transparent came out with a filled card behind it.
+  const panel = scene.project.layout?.legendTransparent
+    ? '' : svgRect(x, y, w, h, (theme.panelRadius ?? 10) * scale, theme.panelFill, theme.panelBorder, scale);
+  const titleSize = 15 * scale * lfs;
+  return `<g id="em-legend" class="em-panel" clip-path="url(#${clipId})">${panel}${svgPanelAccentLeft(x, y, h, theme, scale)}<text x="${x + lp}" y="${baselineFromTop(y + 14 * scale, titleSize)}" fill="${theme.panelTitle}" font-family="${legendFont}" font-size="${titleSize}" font-weight="700">${escapeXml(scene.project.layout?.legendTitle || 'Legend')}</text>${rows}</g>`;
 }
 function renderNorthArrowSvg(scene, scale, svgDefs) {
   if (scene.project.layout?.showNorthArrow === false) return '';
@@ -2321,8 +2356,11 @@ function renderNorthArrowSvg(scene, scale, svgDefs) {
       `<path d="M ${cx + Re} ${dcy} L ${se2[0]} ${se2[1]} L ${cx} ${dcy} L ${ne2[0]} ${ne2[1]} Z" fill="${fg}" fill-opacity="0.25" />` +
       `<path d="M ${cx - Re} ${dcy} L ${nw2[0]} ${nw2[1]} L ${cx} ${dcy} L ${sw2[0]} ${sw2[1]} Z" fill="${fg}" fill-opacity="0.25" />` +
       `<circle cx="${cx}" cy="${dcy}" r="${h * 0.05}" fill="${bg}" stroke="${fg}" stroke-width="${h * 0.018}" />` +
-      `<text x="${cx}" y="${dcy - Ro - tickLen * 2.2}" text-anchor="middle" fill="${fg}" font-family="Arial" font-size="${h * 0.12}" font-weight="700">N</text>` +
-      `<text x="${cx}" y="${dcy + Ro + tickLen * 3.2}" text-anchor="middle" fill="${fg}" font-family="Arial" font-size="${h * 0.12}" font-weight="700">S</text>` +
+      // N and S were the only two of the four compass letters without an
+      // explicit baseline, so they fell back to alphabetic and sat low against
+      // the E/W pair the canvas had them level with.
+      `<text x="${cx}" y="${dcy - Ro - tickLen * 2.2}" text-anchor="middle" dominant-baseline="middle" fill="${fg}" font-family="Arial" font-size="${h * 0.12}" font-weight="700">N</text>` +
+      `<text x="${cx}" y="${dcy + Ro + tickLen * 3.2}" text-anchor="middle" dominant-baseline="middle" fill="${fg}" font-family="Arial" font-size="${h * 0.12}" font-weight="700">S</text>` +
       `<text x="${cx + Ro + tickLen * 2.8}" y="${dcy + h * 0.025}" text-anchor="middle" dominant-baseline="middle" fill="${fg}" font-family="Arial" font-size="${h * 0.12}" font-weight="700">E</text>` +
       `<text x="${cx - Ro - tickLen * 2.8}" y="${dcy + h * 0.025}" text-anchor="middle" dominant-baseline="middle" fill="${fg}" font-family="Arial" font-size="${h * 0.12}" font-weight="700">W</text>`;
   } else if (arrowStyle === 'surveyor') {
@@ -2334,7 +2372,9 @@ function renderNorthArrowSvg(scene, scale, svgDefs) {
       `<polygon points="${cx},${cy - R * 1.01} ${cx - R * 0.22},${cy - r2 * 0.3} ${cx + R * 0.22},${cy - r2 * 0.3}" fill="${fg}" />` +
       `<polygon points="${cx},${cy + R * 1.01} ${cx - R * 0.22},${cy + r2 * 0.3} ${cx + R * 0.22},${cy + r2 * 0.3}" fill="${bg}" stroke="${fg}" stroke-width="${h * 0.02}" />` +
       `<circle cx="${cx}" cy="${cy}" r="${R * 0.1}" fill="${fg}" />` +
-      `<text x="${cx}" y="${y + h * 0.09}" text-anchor="middle" dominant-baseline="middle" fill="${fg}" font-family="Arial" font-size="${h * 0.14}" font-weight="800" letter-spacing="0.06em">N</text>`;
+      // No letter-spacing: the canvas cannot apply it, and a single glyph gains
+      // nothing from it but a half-pixel of horizontal drift against the PNG.
+      `<text x="${cx}" y="${y + h * 0.09}" text-anchor="middle" dominant-baseline="middle" fill="${fg}" font-family="Arial" font-size="${h * 0.14}" font-weight="800">N</text>`;
   } else {
     // classic
     const nx = cx, ny = cy - R, sx = cx, sy = cy + R, ex = cx + Re, ey = cy, wx = cx - Re, wy = cy;
@@ -2352,9 +2392,22 @@ function renderScaleBarSvg(scene, scale) {
   const barWidth = Math.min(scaleState.widthPx * scale, w - 24 * scale);
   const startY = y + (h - (barH + gap + textH)) / 2;
   const barX = x + (w - barWidth) / 2;
-  return `<g id="em-scale-bar" class="em-panel">${svgRect(x, y, w, h, (theme.panelRadius ?? 10) * scale, theme.scaleFill, theme.panelBorder, scale)}${svgPanelAccentLeft(x, y, h, theme, scale)}<rect x="${barX}" y="${startY}" width="${barWidth / 2}" height="${barH}" fill="${theme.scaleStroke}" /><rect x="${barX + barWidth / 2}" y="${startY}" width="${barWidth / 2}" height="${barH}" fill="#ffffff" stroke="${theme.scaleStroke}" stroke-width="${Math.max(1, scale)}" /><rect x="${barX}" y="${startY}" width="${barWidth}" height="${barH}" fill="none" stroke="${theme.scaleStroke}" stroke-width="${Math.max(1, scale)}" /><text x="${x + w / 2}" y="${startY + barH + gap + textH * 0.85}" text-anchor="middle" fill="${theme.bodyText}" font-family="Arial" font-size="${12 * scale}">${escapeXml(scaleState.label)}</text></g>`;
+  // The canvas sets this label in the project's footer font and tops it at
+  // startY + barH + gap. Arial and a hand-picked 0.85 * textH put the SVG in a
+  // different typeface at a slightly different height.
+  const footerFont = `${scene.project.layout?.fonts?.footer || 'Inter'}, Arial, sans-serif`;
+  const labelSize = 12 * scale;
+  return `<g id="em-scale-bar" class="em-panel">${svgRect(x, y, w, h, (theme.panelRadius ?? 10) * scale, theme.scaleFill, theme.panelBorder, scale)}${svgPanelAccentLeft(x, y, h, theme, scale)}<rect x="${barX}" y="${startY}" width="${barWidth / 2}" height="${barH}" fill="${theme.scaleStroke}" /><rect x="${barX + barWidth / 2}" y="${startY}" width="${barWidth / 2}" height="${barH}" fill="#ffffff" stroke="${theme.scaleStroke}" stroke-width="${Math.max(1, scale)}" /><rect x="${barX}" y="${startY}" width="${barWidth}" height="${barH}" fill="none" stroke="${theme.scaleStroke}" stroke-width="${Math.max(1, scale)}" /><text x="${x + w / 2}" y="${baselineFromTop(startY + barH + gap, labelSize)}" text-anchor="middle" fill="${theme.bodyText}" font-family="${footerFont}" font-size="${labelSize}">${escapeXml(scaleState.label)}</text></g>`;
 }
-function renderFooterSvg(scene, scale) { const theme = getTheme(scene); const text = scene.project.layout?.footerText; const zone = getOverlayMetrics(scene).footer; if (!text || !zone || !zone.width || !zone.height) return ''; const x = zone.left * scale, y = zone.top * scale, w = zone.width * scale, h = zone.height * scale; return `<g id="em-footer" class="em-panel">${svgRect(x, y, w, h, (theme.panelRadius ?? 10) * scale, theme.footerFill, theme.panelBorder, scale)}<text x="${x + 12 * scale}" y="${y + 25 * scale}" fill="${theme.footerText}" font-family="Arial" font-size="${12 * scale}">${escapeXml(text)}</text></g>`; }
+function renderFooterSvg(scene, scale) {
+  const theme = getTheme(scene); const text = scene.project.layout?.footerText;
+  const zone = getOverlayMetrics(scene).footer; if (!text || !zone || !zone.width || !zone.height) return '';
+  const x = zone.left * scale, y = zone.top * scale, w = zone.width * scale, h = zone.height * scale;
+  // Centred in the panel and in the footer font, as the canvas does. A fixed
+  // y + 25 only agreed with it at one panel height, and Arial disagreed always.
+  const footerFont = `${scene.project.layout?.fonts?.footer || 'Inter'}, Arial, sans-serif`;
+  return `<g id="em-footer" class="em-panel">${svgRect(x, y, w, h, (theme.panelRadius ?? 10) * scale, theme.footerFill, theme.panelBorder, scale)}<text x="${x + 12 * scale}" y="${y + h / 2}" dominant-baseline="middle" fill="${theme.footerText}" font-family="${footerFont}" font-size="${12 * scale}">${escapeXml(text)}</text></g>`;
+}
 function insetBackdropSvg(innerX, innerY, innerW, innerH, scale, svgDefs) {
   const px = (n) => n / 100;
   const path1 = `M ${innerX + px(12) * innerW} ${innerY + px(20) * innerH} C ${innerX + px(20) * innerW} ${innerY + px(12) * innerH}, ${innerX + px(35) * innerW} ${innerY + px(10) * innerH}, ${innerX + px(45) * innerW} ${innerY + px(16) * innerH} C ${innerX + px(55) * innerW} ${innerY + px(22) * innerH}, ${innerX + px(60) * innerW} ${innerY + px(30) * innerH}, ${innerX + px(72) * innerW} ${innerY + px(32) * innerH} C ${innerX + px(82) * innerW} ${innerY + px(34) * innerH}, ${innerX + px(88) * innerW} ${innerY + px(40) * innerH}, ${innerX + px(88) * innerW} ${innerY + px(52) * innerH} C ${innerX + px(88) * innerW} ${innerY + px(68) * innerH}, ${innerX + px(76) * innerW} ${innerY + px(78) * innerH}, ${innerX + px(62) * innerW} ${innerY + px(82) * innerH} C ${innerX + px(50) * innerW} ${innerY + px(86) * innerH}, ${innerX + px(36) * innerW} ${innerY + px(88) * innerH}, ${innerX + px(22) * innerW} ${innerY + px(82) * innerH} C ${innerX + px(12) * innerW} ${innerY + px(78) * innerH}, ${innerX + px(8) * innerW} ${innerY + px(68) * innerH}, ${innerX + px(10) * innerW} ${innerY + px(54) * innerH} C ${innerX + px(12) * innerW} ${innerY + px(42) * innerH}, ${innerX + px(8) * innerW} ${innerY + px(30) * innerH}, ${innerX + px(12) * innerW} ${innerY + px(20) * innerH} Z`;
@@ -2366,19 +2419,63 @@ function insetBackdropSvg(innerX, innerY, innerW, innerH, scale, svgDefs) {
   const defsInline = svgDefs ? '' : `<defs>${gradDef}</defs>`;
   return `${defsInline}<rect x="${innerX}" y="${innerY}" width="${innerW}" height="${innerH}" fill="url(#locatorBg)" stroke="#d3dce8" rx="${8 * scale}" /><path d="${path1}" fill="#eef3f8" stroke="#c9d4df" stroke-width="${0.8 * scale}" /><path d="${path2}" fill="#f4f7fa" stroke="#c9d4df" stroke-width="${0.8 * scale}" />${roads}${river}`;
 }
-function renderInsetSvg(scene, scale, svgDefs) {
+// Rasterise the satellite locator once, for embedding in the SVG.
+//
+// The SVG exporter had no satellite branch at all, so a project using the
+// locator fell through to the `autoInsetRegion` case and silently exported the
+// old vector cartoon instead of the imagery on screen. Nothing errored; the
+// PNG and the SVG simply disagreed about what the map contained.
+//
+// Tiles are raster either way, so there is nothing to gain from emitting them
+// as individual <image> elements — and a good deal to lose, since each would
+// need its own clip against the panel. One canvas, drawn by exactly the code
+// the PNG uses, guarantees the two exports match.
+async function renderSatelliteInsetImageSvg(scene, scale) {
+  if ((scene.project.layout || {}).insetMode !== 'satellite_locator') return null;
+  const zone = getOverlayMetrics(scene).inset;
+  if (!zone || !zone.width || !zone.height) return null;
+  const innerW = Math.round((zone.width - 20) * scale), innerH = Math.round((zone.height - 56) * scale);
+  if (innerW <= 0 || innerH <= 0) return null;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = innerW; canvas.height = innerH;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+  const ok = await drawSatelliteInsetCanvas(ctx, 0, 0, innerW, innerH, scale);
+  if (!ok) return null;
+  try {
+    return canvas.toDataURL('image/png');
+  } catch {
+    // A tainted canvas means a tile came back without CORS headers.
+    _exportWarnings.push('satellite inset could not be embedded in the SVG');
+    return null;
+  }
+}
+
+// Exported for test: the SVG and canvas insets are two renderers of one panel,
+// and this one silently drew a different picture than the PNG for the whole
+// life of the satellite locator.
+export function renderInsetSvg(scene, scale, svgDefs, satelliteImage = null) {
   const zone = getOverlayMetrics(scene).inset; if (!zone || !zone.width || !zone.height) return '';
   const x = zone.left * scale, y = zone.top * scale, w = zone.width * scale, h = zone.height * scale, innerX = x + 10 * scale, innerY = y + 30 * scale, innerW = w - 20 * scale, innerH = h - 56 * scale;
   const { insetImage, insetMode, autoInsetRegion, insetTitle, insetLabel } = scene.project.layout || {};
   const customInset = insetMode === 'custom_image' && insetImage;
   const theme = getTheme(scene);
   const panelSvg = svgRect(x, y, w, h, (theme.panelRadius ?? 10) * scale, theme.insetFill, theme.insetBorder, scale);
-  const titleSvg = `<text x="${x + 12 * scale}" y="${y + 16 * scale}" fill="${theme.insetTitle}" font-family="Arial" font-size="${12 * scale}" font-weight="700">${escapeXml(insetTitle || 'Project Locator')}</text>`;
+  const titleSize = 12 * scale;
+  const titleSvg = `<text x="${x + 12 * scale}" y="${baselineFromTop(y + 10 * scale, titleSize)}" fill="${theme.insetTitle}" font-family="Arial" font-size="${titleSize}" font-weight="700">${escapeXml(insetTitle || 'Project Locator')}</text>`;
   if (customInset) {
     return `<g id="em-inset" class="em-panel">${panelSvg}${titleSvg}<image href="${escapeXml(insetImage)}" x="${innerX}" y="${innerY}" width="${innerW}" height="${innerH}" preserveAspectRatio="xMidYMid slice" /></g>`;
   }
   const visible = (scene.project.layers || []).filter((layer) => layer.visible !== false && layer.geojson);
   const bounds = unionBounds(visible.map((layer) => geojsonBounds(visibleGeojson(layer))).filter(Boolean));
+  if (insetMode === 'satellite_locator' && satelliteImage) {
+    const clipId = pushRoundedClip(svgDefs, innerX, innerY, innerW, innerH, 8 * scale);
+    const labelSvg = `<text x="${x + 12 * scale}" y="${y + h - 10 * scale}" fill="${theme.insetMuted}" font-family="Arial" font-size="${11 * scale}">${escapeXml(insetLabel || autoInsetRegion?.name || 'Satellite locator')}</text>`;
+    return `<g id="em-inset" class="em-panel">${panelSvg}${titleSvg}<image href="${satelliteImage}" x="${innerX}" y="${innerY}" width="${innerW}" height="${innerH}" clip-path="url(#${clipId})" />${labelSvg}</g>`;
+  }
+  // No image: fall through to the vector locator rather than an empty panel,
+  // exactly as the canvas path does.
   if (autoInsetRegion) {
     const insetColors = { bgFill: scene.project.layout?.insetBgFill, regionFill: scene.project.layout?.insetRegionFill, regionStroke: scene.project.layout?.insetRegionStroke, markerColor: scene.project.layout?.insetMarkerColor };
     const innerSvg = autoInsetSvg(innerX, innerY, innerW, innerH, scale, autoInsetRegion, bounds, insetColors);
@@ -2448,6 +2545,9 @@ export async function renderSceneToSvg(scene, options = {}) {
   const scale = resolveExportScale(scene, options); const width = Math.round(scene.width * scale), height = Math.round(scene.height * scale);
   const isNI = scene.template?.id === 'ni_43101_technical';
   const basemapImage = await renderBasemapImageSvg(scene, scale);
+  // Rasterised up front: renderInsetSvg is synchronous and threaded through two
+  // template branches, so the await belongs here rather than in either of them.
+  const satelliteInset = await renderSatelliteInsetImageSvg(scene, scale);
 
   const svgDefs = [];
   let mapContent;
@@ -2465,14 +2565,14 @@ export async function renderSceneToSvg(scene, options = {}) {
     const watermark = options.noWatermark
       ? (options.paidTier ? '' : `<text x="${wmX}" y="${wmY}" font-family="Arial,sans-serif" font-size="${6.5 * scale}" font-weight="600" fill="#94a3b8" fill-opacity="0.6" text-anchor="end" dominant-baseline="auto" paint-order="stroke" stroke="#ffffff" stroke-opacity="0.5" stroke-width="${2 * scale}" stroke-linejoin="round">explorationmaps.com</text>`)
       : `<text x="${wmX}" y="${wmY}" font-family="Arial,sans-serif" font-size="${9 * scale}" font-weight="bold" fill="#64748b" fill-opacity="0.72" text-anchor="end" dominant-baseline="auto" paint-order="stroke" stroke="#ffffff" stroke-opacity="0.55" stroke-width="2.5" stroke-linejoin="round">explorationmaps.com</text>`;
-    const panels = `<g id="em-overlay-panels">${renderLegendSvg(scene, scale, svgDefs)}${renderNorthArrowSvg(scene, scale, svgDefs)}${renderInsetSvg(scene, scale, svgDefs)}${renderLogoSvg(scene, scale)}${renderScaleBarSvg(scene, scale)}${renderDistanceTicksSvg(scene, scale)}${renderTitleStripSvg(scene, scale)}</g>`;
+    const panels = `<g id="em-overlay-panels">${renderLegendSvg(scene, scale, svgDefs)}${renderNorthArrowSvg(scene, scale, svgDefs)}${renderInsetSvg(scene, scale, svgDefs, satelliteInset)}${renderLogoSvg(scene, scale)}${renderScaleBarSvg(scene, scale)}${renderDistanceTicksSvg(scene, scale)}${renderTitleStripSvg(scene, scale)}</g>`;
     mapContent = `${clipped}${panels}${renderSourceCreditSvg(scene, scale)}${watermark}`;
   } else {
     const watermark = options.noWatermark
       ? (options.paidTier ? '' : `<text x="${width - 8}" y="${height - 5}" font-family="Arial,sans-serif" font-size="6.5" font-weight="600" fill="#94a3b8" fill-opacity="0.6" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-opacity="0.5" stroke-width="2" stroke-linejoin="round">explorationmaps.com</text>`)
       : `<text x="${width - 8}" y="${height - 5}" font-family="Arial,sans-serif" font-size="9" font-weight="bold" fill="#64748b" fill-opacity="0.72" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-opacity="0.55" stroke-width="2.5" stroke-linejoin="round">explorationmaps.com</text>`;
     const mapLayers = `<g id="em-map-content">${basemapImage}${renderRegionHighlightsSvg(scene, scale)}${renderVectorsSvg(scene, scale)}${renderEllipsesSvg(scene, scale, svgDefs)}${renderPolygonsSvg(scene, scale)}${renderMarkersSvg(scene, scale)}${renderCalloutsSvg(scene, scale, svgDefs)}${renderDistanceLinesSvg(scene, scale)}</g>`;
-    const panels = `<g id="em-overlay-panels">${renderTitleSvg(scene, scale, svgDefs)}${renderLegendSvg(scene, scale, svgDefs)}${renderNorthArrowSvg(scene, scale, svgDefs)}${renderInsetSvg(scene, scale, svgDefs)}${renderScaleBarSvg(scene, scale)}${renderFooterSvg(scene, scale)}${renderLogoSvg(scene, scale)}</g>`;
+    const panels = `<g id="em-overlay-panels">${renderTitleSvg(scene, scale, svgDefs)}${renderLegendSvg(scene, scale, svgDefs)}${renderNorthArrowSvg(scene, scale, svgDefs)}${renderInsetSvg(scene, scale, svgDefs, satelliteInset)}${renderScaleBarSvg(scene, scale)}${renderFooterSvg(scene, scale)}${renderLogoSvg(scene, scale)}</g>`;
     mapContent = `${mapLayers}${panels}${renderSourceCreditSvg(scene, scale)}${watermark}`;
   }
 
