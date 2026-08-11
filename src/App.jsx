@@ -63,6 +63,7 @@ import { verifyCheckoutSession } from './utils/billing';
 import { runCloudMigration } from './utils/cloudMigration';
 import { scopingWarning } from './utils/scopingNotice';
 import { CLAIM_NAME_CAVEAT } from './utils/claimProvenance';
+import { OVERLAY_DESCRIPTIONS } from './utils/referenceOverlayCredits.js';
 import { featureKey, layerFeatures, isFeatureHidden, hiddenCount, featuresInBounds, visibleGeojson } from './utils/featureIdentity.js';
 import { layerAnchorGroups, defaultAnchorForLayer, reanchorCalloutsForLayer } from './utils/featureClusters.js';
 import FeatureTrimList from './components/FeatureTrimList.jsx';
@@ -6064,6 +6065,9 @@ export default function App() {
             <label className="toggle-row"><input type="checkbox" checked={!!referenceOverlays.labels} onChange={(e) => updateLayout({ referenceOverlays: { labels: e.target.checked } })} /> <span>Reference Labels</span></label>
             <label className="toggle-row"><input type="checkbox" checked={!!referenceOverlays.rail} onChange={(e) => updateLayout({ referenceOverlays: { rail: e.target.checked } })} /> <span>Railways</span></label>
             <label className="toggle-row"><input type="checkbox" checked={!!referenceOverlays.geology} onChange={(e) => updateLayout({ referenceOverlays: { geology: e.target.checked } })} /> <span>Bedrock Geology (USGS)</span></label>
+            {referenceOverlays.geology && (
+              <p className="overlay-help-note">{OVERLAY_DESCRIPTIONS.geology}</p>
+            )}
             {Object.keys(overlayErrors).filter((k) => referenceOverlays[k]).length > 0 && (
               <p className="overlay-error-note">
                 {Object.keys(overlayErrors).filter((k) => referenceOverlays[k]).map((k) => OVERLAY_LABELS[k] || k).join(', ')}

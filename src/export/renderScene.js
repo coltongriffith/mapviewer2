@@ -10,6 +10,7 @@ import regionsNA from '../assets/regionsNA.json';
 import { estimateBox, intersects as intersectsCallout, leaderEndpoint } from '../utils/calloutLayout';
 import dissolveGeo from '@turf/dissolve';
 import { exportCreditLines } from '../utils/claimProvenance';
+import { referenceOverlayCredits } from '../utils/referenceOverlayCredits.js';
 import { featureKey, visibleGeojson } from '../utils/featureIdentity.js';
 
 let _exportWarnings = [];
@@ -1920,7 +1921,12 @@ const CREDIT_FONT_PX = 7.5;
 const CREDIT_LINE_PX = 9.5;
 
 function creditLinesFor(scene) {
-  return exportCreditLines(scene.project?.layers || []);
+  // Layer provenance first — it is about the map's subject. The reference
+  // overlays are backdrop, and say what the extra colours under the claims are.
+  return [
+    ...exportCreditLines(scene.project?.layers || []),
+    ...referenceOverlayCredits(scene.project?.layout?.referenceOverlays),
+  ];
 }
 
 function drawSourceCreditCanvas(ctx, scene, scale) {
