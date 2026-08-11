@@ -4,7 +4,6 @@ import RatioSwitcher from './components/RatioSwitcher';
 import Sidebar from './components/Sidebar';
 import LayerList from './components/LayerList';
 import LocatorInset from './components/LocatorInset';
-const SatelliteInset = React.lazy(() => import('./components/SatelliteInset'));
 import CalloutsOverlay from './components/CalloutsOverlay';
 import LandingPage from './components/LandingPage';
 
@@ -32,7 +31,6 @@ import { auroraClaims, auroraDrillholes, auroraTargets, auroraCallouts } from '.
 import { GALLERY_DEMOS } from './assets/galleryDemos';
 import {
   CALLOUT_TYPES,
-  INSET_MODES,
   createInitialProjectState,
   FONT_OPTIONS,
   ROLE_LABELS,
@@ -6001,29 +5999,23 @@ export default function App() {
               <div className="inset-detected-badge">Detected: {project.layout.autoInsetRegion.name}</div>
             )}
             {!project.layout.insetImage && (
-              <div className="control-row inline-2">
-                <div>
-                  <label htmlFor="f-inset-mode">Inset Style</label>
-                  <select id="f-inset-mode" value={project.layout.insetMode || 'province_state'}
-                    onChange={(e) => updateLayout({ insetMode: e.target.value })}>
-                    {Object.entries(INSET_MODES)
-                      .filter(([v]) => v !== 'custom_image')
-                      .map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                  </select>
-                </div>
-                {project.layout.insetMode === 'satellite_locator' && (
-                  <div>
-                    <label htmlFor="f-inset-basemap">Imagery</label>
-                    <select id="f-inset-basemap" value={project.layout.insetBasemap || 'satellite'}
-                      onChange={(e) => updateLayout({ insetBasemap: e.target.value })}>
-                      <option value="satellite">Satellite</option>
-                      <option value="terrain">Topographic</option>
-                      <option value="natgeo">Nat Geo</option>
-                      <option value="light">Street</option>
-                      <option value="dark">Dark</option>
-                    </select>
-                  </div>
-                )}
+              <div className="control-row">
+                <label htmlFor="f-inset-mode">Inset Style</label>
+                {/* Two choices, because there were only ever two ANSWERS. The
+                    old list offered province / country / regional / secondary
+                    zoom, which all render the same generic backdrop at slightly
+                    different zoom factors — indistinguishable in the panel, so
+                    the extra entries read as broken rather than as options.
+                    Standard keeps whichever of those a saved project already
+                    has; only an explicit change collapses it. */}
+                <select id="f-inset-mode"
+                  value={project.layout.insetMode === 'satellite_locator' ? 'satellite_locator' : 'standard'}
+                  onChange={(e) => updateLayout({
+                    insetMode: e.target.value === 'satellite_locator' ? 'satellite_locator' : 'province_state',
+                  })}>
+                  <option value="standard">Standard</option>
+                  <option value="satellite_locator">Satellite</option>
+                </select>
               </div>
             )}
             <div className="control-row inline-2">
@@ -6478,13 +6470,7 @@ export default function App() {
         {project.layout.insetEnabled !== false && resolvedZones.inset?.width ? (
           <div className="template-zone" style={{ ...zoneStyle(resolvedZones.inset), opacity: dragging?.id === 'inset' ? 0.3 : 1, cursor: 'grab' }} onMouseDown={makeDragHandler('inset', project.layout.insetWidthPx ?? 244, project.layout.insetHeightPx ?? 190)}>
             <button className="panel-delete-btn" title="Hide inset map" onClick={() => updateLayout({ insetEnabled: false })}>×</button>
-            {project.layout.insetMode === 'satellite_locator' ? (
-              <React.Suspense fallback={null}>
-                <SatelliteInset layers={project.layers} basemap={project.layout.insetBasemap || 'satellite'} markerColor={project.layout.insetMarkerColor} />
-              </React.Suspense>
-            ) : (
             <LocatorInset layers={project.layers} insetMode={project.layout.insetMode} insetImage={project.layout.insetImage} autoInsetRegion={project.layout.autoInsetRegion} insetTitle={project.layout.insetTitle} insetLabel={project.layout.insetLabel} mode={project.layout.mode} zone={{ width: '100%', height: '100%' }} regionFill={project.layout.insetRegionFill} regionStroke={project.layout.insetRegionStroke} bgFill={project.layout.insetBgFill} markerColor={project.layout.insetMarkerColor} />
-            )}
             {makeResizeHandles(project.layout.insetCorner || 'tr', {
               elemId: 'inset', startW: project.layout.insetWidthPx ?? 244, startH: project.layout.insetHeightPx ?? 190,
               minW: 100, maxW: 600, minH: 80, maxH: 500,

@@ -22,10 +22,41 @@ describe('the satellite locator is reachable', () => {
     expect(app).toMatch(/insetMode === 'satellite_locator'/);
   });
 
-  it('offers an imagery choice only in this mode', () => {
-    // A basemap picker beside the vector locator would do nothing.
-    const block = app.slice(app.indexOf('f-inset-basemap') - 400, app.indexOf('f-inset-basemap') + 200);
-    expect(block).toMatch(/insetMode === 'satellite_locator'/);
+  it('renders inside the locator card rather than replacing it', () => {
+    // As a bare full-bleed map it lost the frame, the header and the footer —
+    // and the exporter still drew a title the editor was not showing, so the
+    // preview and the artefact disagreed.
+    const locator = readFileSync('src/components/LocatorInset.jsx', 'utf8');
+    expect(locator).toMatch(/showSatellite/);
+    expect(locator).toMatch(/inset-satellite-wrap/);
+    expect(app, 'App still swaps the card out').not.toMatch(/<SatelliteInset/);
+  });
+
+  it('gives the map slot a real height', () => {
+    // .inset-card is a block, so `flex: 1` silently collapsed the map to zero
+    // height while it still reported tiles and paths.
+    const css = readFileSync('src/styles.css', 'utf8');
+    const start = css.indexOf('.inset-satellite-wrap {');
+    const rule = css.slice(start, css.indexOf('}', start)).replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(rule).toMatch(/height: calc\(100% - \d+px\)/);
+    expect(rule, 'flex does nothing inside .inset-card, which is a block').not.toMatch(/flex:\s*1/);
+  });
+
+  it('offers exactly two styles', () => {
+    // The old list had province / country / regional / secondary zoom, which
+    // all render the same generic backdrop at different zoom factors —
+    // indistinguishable in the panel, so the extra entries read as broken
+    // rather than as choices.
+    const block = app.slice(app.indexOf('f-inset-mode'), app.indexOf('</select>', app.indexOf('f-inset-mode')));
+    const options = [...block.matchAll(/<option value="([^"]+)">([^<]+)</g)].map((m) => m[2]);
+    expect(options).toEqual(['Standard', 'Satellite']);
+  });
+
+  it('does not offer a basemap picker', () => {
+    // Satellite is the only imagery that answers "what does this ground look
+    // like". Topographic and street duplicate the Standard locator.
+    expect(app).not.toMatch(/f-inset-basemap/);
+    expect(component).not.toMatch(/basemap/);
   });
 });
 
@@ -72,6 +103,15 @@ describe('the inset shows what is on the map', () => {
 
   it('requests tiles with CORS, or the export canvas is tainted', () => {
     expect(component).toMatch(/crossOrigin: true/);
+  });
+
+  it('draws the jurisdiction outline, which is the whole point', () => {
+    // Imagery alone cannot say WHERE — one patch of forest looks like any
+    // other. The outline supplies the place; the imagery supplies the terrain.
+    expect(component).toMatch(/coordinates/);
+    expect(component).toMatch(/L\.polyline/);
+    // Frames to the jurisdiction, not the claims, or there is nothing to see.
+    expect(component).toMatch(/activeRegion\?\.bbox/);
   });
 
   it('always sets a view, even with no layers', () => {

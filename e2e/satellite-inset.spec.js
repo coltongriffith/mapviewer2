@@ -45,9 +45,10 @@ test('choosing Satellite Locator mounts a map the exporter can find', async ({ p
 
   // A real Leaflet map, with the tile pane getTileImages() queries.
   await expect(inset.locator('.leaflet-tile-pane')).toHaveCount(1, { timeout: 15_000 });
-  // The "you are here" box the exporter redraws — a locator without it is
-  // just a photograph.
-  await expect(inset.locator('.leaflet-overlay-pane path')).toHaveCount(1, { timeout: 15_000 });
+  // The vector overlays the exporter redraws: the jurisdiction outline (a dark
+  // halo under a white line, so it survives both snow and water) and the
+  // project marker ring. A locator without them is just a photograph.
+  await expect(inset.locator('.leaflet-overlay-pane path')).toHaveCount(4, { timeout: 15_000 });
 
   const box = await inset.boundingBox();
   expect(box.width).toBeGreaterThan(10);
@@ -56,12 +57,9 @@ test('choosing Satellite Locator mounts a map the exporter can find', async ({ p
   expect(pageErrors, `page errors:\n${pageErrors.join('\n')}`).toEqual([]);
 });
 
-test('it requests satellite imagery, and switching imagery changes the request', async ({ page }) => {
-  const tileHosts = new Set();
-  page.on('request', (r) => {
-    const u = r.url();
-    if (/World_Imagery|World_Topo_Map|basemaps\.cartocdn/.test(u)) tileHosts.add(u.split('/MapServer')[0].split('/rastertiles')[0]);
-  });
+test('it requests satellite imagery', async ({ page }) => {
+  const tileUrls = [];
+  page.on('request', (r) => { if (/World_Imagery/.test(r.url())) tileUrls.push(r.url()); });
 
   const control = await openInsetPanel(page);
   await expect(control).toHaveCount(1, { timeout: 15_000 });
@@ -69,15 +67,48 @@ test('it requests satellite imagery, and switching imagery changes the request',
   await expect(page.locator('.satellite-inset-map')).toHaveCount(1, { timeout: 15_000 });
   await page.waitForTimeout(2000);
 
-  // It asked Esri for imagery, even though the request cannot succeed here.
-  expect([...tileHosts].some((h) => /World_Imagery/.test(h)), `saw: ${[...tileHosts].join(', ')}`).toBe(true);
+  expect(tileUrls.length, 'no imagery was requested').toBeGreaterThan(0);
+});
 
-  // And the Imagery picker actually changes the source.
-  const basemap = page.locator('#f-inset-basemap');
-  await expect(basemap, 'the Imagery picker did not appear for this mode').toHaveCount(1);
-  await basemap.selectOption('terrain');
-  await page.waitForTimeout(2000);
-  expect([...tileHosts].some((h) => /World_Topo_Map/.test(h)), `saw: ${[...tileHosts].join(', ')}`).toBe(true);
+test('offers exactly two styles, not five that look alike', async ({ page }) => {
+  // The old list had province / country / regional / secondary zoom, which all
+  // render the same generic backdrop at different zoom factors. Reported as
+  // "all the other dropdowns other than satellite are the same".
+  const control = await openInsetPanel(page);
+  await expect(control).toHaveCount(1, { timeout: 15_000 });
+  expect(await control.locator('option').allTextContents()).toEqual(['Standard', 'Satellite']);
+});
+
+test('the satellite inset keeps the locator card, its title and its label', async ({ page }) => {
+  // Reported as "no padding or anything, so if it's sitting on a satellite
+  // image it's hard to see". It was rendering as a bare full-bleed map in place
+  // of the card, so it lost the frame, the header and the footer — and the
+  // exporter drew a title the editor did not show.
+  const control = await openInsetPanel(page);
+  await expect(control).toHaveCount(1, { timeout: 15_000 });
+  await control.selectOption('satellite_locator');
+
+  const card = page.locator('.inset-card');
+  await expect(card.locator('.satellite-inset-map')).toHaveCount(1, { timeout: 15_000 });
+  await expect(card.locator('.inset-satellite-wrap')).toHaveCount(1);
+  await expect(card.locator('.inset-header')).toHaveText(/\S/);
+  await expect(card.locator('.inset-mode-label')).toHaveText(/\S/);
+});
+
+test('it draws the province outline over the imagery', async ({ page }) => {
+  // The point of a locator. Imagery alone cannot say WHERE — one patch of
+  // forest looks like any other.
+  const control = await openInsetPanel(page);
+  await expect(control).toHaveCount(1, { timeout: 15_000 });
+  await control.selectOption('satellite_locator');
+
+  const inset = page.locator('.satellite-inset-map');
+  await expect(inset).toHaveCount(1, { timeout: 15_000 });
+  // Two strokes for the outline (halo + line) and two for the marker ring.
+  await expect(inset.locator('.leaflet-overlay-pane path')).toHaveCount(4, { timeout: 15_000 });
+
+  // And the footer names the jurisdiction it drew.
+  await expect(page.locator('.inset-mode-label')).toHaveText(/British Columbia|Alberta|[A-Z]/);
 });
 
 test('the other inset styles still work', async ({ page }) => {
@@ -88,7 +119,7 @@ test('the other inset styles still work', async ({ page }) => {
 
   // Switching back must tear the Leaflet map down, or its tiles would be
   // captured into an export that is meant to show the vector locator.
-  await control.selectOption('province_state');
+  await control.selectOption('standard');
   await expect(page.locator('.satellite-inset-map')).toHaveCount(0, { timeout: 15_000 });
 });
 

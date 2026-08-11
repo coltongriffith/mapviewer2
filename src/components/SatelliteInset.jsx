@@ -2,51 +2,64 @@ import React, { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import { visibleGeojson } from '../utils/featureIdentity.js';
 import { geojsonBounds, unionBounds } from '../utils/geometry';
+import { detectRegion } from '../utils/detectRegion';
 import { reportError } from '../utils/errorReporter';
 
-// An imagery locator: satellite (or any basemap) with a box around the area the
-// main map is showing.
+// A satellite locator: imagery, the province or state outlined on top of it, and
+// a marker on the project.
 //
-// The other inset modes draw vector outlines — a province shape, a country. That
-// answers "where in B.C. is this?". This one answers "what does the ground
-// around it look like?", which is the question an investor deck usually wants:
-// valley, coastline, existing workings, road access.
+// The point of a locator is the ANSWER "which part of B.C. is this?", and
+// imagery alone cannot give it — one patch of forest looks like any other, and
+// a satellite inset floating on a satellite main map reads as a smudge. So the
+// jurisdiction boundary is drawn over the imagery and the view is framed to the
+// jurisdiction, not to the claims. The imagery supplies the terrain; the outline
+// supplies the place.
 //
 // EXPORT IS THE POINT, so the class name below is load-bearing. renderScene
 // finds this container by class and captures the tiles the browser has already
 // rendered, the same way it captures the main map. An inset that looks right in
 // the editor and comes out blank in the client's PDF would be worse than not
-// having it at all, so the two share one mechanism rather than two pipelines
-// that can drift.
+// having it, so the two share one mechanism rather than two that can drift.
 export const SATELLITE_INSET_CLASS = 'satellite-inset-map';
 
-const BASEMAPS = {
-  satellite: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-  terrain: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
-  natgeo: 'https://server.arcgisonline.com/ArcGIS/rest/services/NatGeo_World_Map/MapServer/tile/{z}/{y}/{x}',
-  light: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png',
-  dark: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-};
+const IMAGERY_URL = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
 
-// How much ground to show around the project. 4x the extent puts the property
-// in a recognisable setting without shrinking it to a dot.
-const CONTEXT_PAD = 4;
+// How much room to leave around the jurisdiction. Just enough that the outline
+// does not touch the frame.
+const REGION_PAD = 0.12;
 
-export default function SatelliteInset({ layers, basemap = 'satellite', markerColor }) {
+// Fallback when no province or state can be identified — offshore claims, or a
+// jurisdiction outside North America. Show the ground around the project rather
+// than nothing.
+const CLAIM_PAD = 4;
+
+export default function SatelliteInset({ layers, markerColor, region }) {
   const elRef = useRef(null);
   const mapRef = useRef(null);
-  const tileRef = useRef(null);
-  const rectRef = useRef(null);
+  const regionRef = useRef(null);
+  const markerRef = useRef(null);
   const reportedRef = useRef(false);
+  const [detected, setDetected] = React.useState(null);
 
-  // Bounds of what is actually on the map — visibleGeojson, so a trimmed block
-  // does not stretch the locator over ground the user removed.
+  // What is actually on the map — visibleGeojson, so a trimmed block does not
+  // drag the locator over ground the user removed.
   const bounds = unionBounds(
     (layers || [])
       .filter((l) => l.visible !== false && l.geojson)
       .map((l) => geojsonBounds(visibleGeojson(l)))
       .filter(Boolean),
   );
+
+  // The caller usually knows the region already (layout.autoInsetRegion). Detect
+  // only when it does not, so the common path costs nothing.
+  useEffect(() => {
+    if (region || !bounds) { setDetected(null); return; }
+    let cancelled = false;
+    detectRegion(bounds).then((r) => { if (!cancelled) setDetected(r || null); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [region, bounds?.minLat, bounds?.minLng, bounds?.maxLat, bounds?.maxLng]);
+
+  const activeRegion = region || detected;
 
   useEffect(() => {
     if (!elRef.current || mapRef.current) return;
@@ -62,21 +75,10 @@ export default function SatelliteInset({ layers, basemap = 'satellite', markerCo
       // canvas rendering would not produce.
       preferCanvas: false,
     });
-    return () => {
-      if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; }
-      tileRef.current = null;
-      rectRef.current = null;
-    };
-  }, []);
 
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-    if (tileRef.current) { map.removeLayer(tileRef.current); tileRef.current = null; }
-
-    const tiles = L.tileLayer(BASEMAPS[basemap] || BASEMAPS.satellite, {
+    const tiles = L.tileLayer(IMAGERY_URL, {
       // Required for the export canvas to read the pixels without tainting it.
-      // Esri's imagery sends the header, and the main map already relies on it.
+      // Esri sends the header, and the main map already relies on it.
       crossOrigin: true,
       maxZoom: 19,
       updateWhenIdle: true,
@@ -85,44 +87,79 @@ export default function SatelliteInset({ layers, basemap = 'satellite', markerCo
       if (reportedRef.current) return;
       reportedRef.current = true;
       reportError('Satellite inset failed to load tiles', {
-        kind: 'tile_error', context: { overlay: 'satellite_inset', basemap },
+        kind: 'tile_error', context: { overlay: 'satellite_inset' },
       });
     });
-    tiles.addTo(map);
-    tileRef.current = tiles;
-  }, [basemap]);
+    tiles.addTo(mapRef.current);
+
+    return () => {
+      if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; }
+      regionRef.current = null;
+      markerRef.current = null;
+    };
+  }, []);
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
     map.invalidateSize({ animate: false });
 
-    const ll = bounds && L.latLngBounds(
+    const claim = bounds && L.latLngBounds(
       [bounds.minLat, bounds.minLng],
       [bounds.maxLat, bounds.maxLng],
     );
 
-    // A Leaflet map with no view set is not merely empty — it is unusable, and
-    // later calls against it throw. An empty project, or one whose only layer
-    // has been trimmed away, has no bounds to fit, so give it a view anyway and
-    // let the imagery stand on its own until there is something to box.
-    if (!ll || !ll.isValid()) {
-      if (rectRef.current) { rectRef.current.remove(); rectRef.current = null; }
-      if (!map._loaded) map.setView([54, -123], 4, { animate: false });
-      return;
+    // ── The jurisdiction outline ─────────────────────────────────────────────
+    if (regionRef.current) { regionRef.current.remove(); regionRef.current = null; }
+    if (activeRegion?.coordinates?.length) {
+      // A bright halo under a dark line: imagery is busy and high-contrast in
+      // places, and a single-colour stroke disappears over snow or over water
+      // depending which colour it is. Two strokes survive both.
+      const rings = activeRegion.coordinates.map((ring) => ring.map(([lng, lat]) => [lat, lng]));
+      regionRef.current = L.layerGroup([
+        L.polyline(rings, { color: '#000000', weight: 4, opacity: 0.45, interactive: false }),
+        L.polyline(rings, { color: '#ffffff', weight: 1.8, opacity: 0.95, interactive: false }),
+      ]).addTo(map);
     }
 
-    map.fitBounds(ll.pad(CONTEXT_PAD), { animate: false });
-
-    if (!rectRef.current) {
-      rectRef.current = L.rectangle(ll, {
-        color: markerColor || '#cc2f2f', weight: 2, fillOpacity: 0.08,
-      }).addTo(map);
-    } else {
-      rectRef.current.setBounds(ll);
-      rectRef.current.setStyle({ color: markerColor || '#cc2f2f' });
+    // ── Framing ──────────────────────────────────────────────────────────────
+    // The jurisdiction, when we know it. That is what makes this a locator
+    // rather than an aerial photograph.
+    if (activeRegion?.bbox) {
+      const [w, s, e, n] = activeRegion.bbox;
+      const rb = L.latLngBounds([s, w], [n, e]);
+      if (rb.isValid()) map.fitBounds(rb.pad(REGION_PAD), { animate: false });
+    } else if (claim && claim.isValid()) {
+      map.fitBounds(claim.pad(CLAIM_PAD), { animate: false });
+    } else if (!map._loaded) {
+      // A Leaflet map with no view is not empty, it is unusable, and later
+      // calls against it throw.
+      map.setView([54, -123], 4, { animate: false });
     }
-  }, [bounds?.minLat, bounds?.minLng, bounds?.maxLat, bounds?.maxLng, markerColor]);
+
+    // ── The project marker ───────────────────────────────────────────────────
+    if (markerRef.current) { markerRef.current.remove(); markerRef.current = null; }
+    if (claim && claim.isValid()) {
+      const colour = markerColor || '#ff3b30';
+      const centre = claim.getCenter();
+      // At province scale a claim block is smaller than a pixel, so a rectangle
+      // of its true extent would be invisible. A fixed-size ring reads at any
+      // zoom, and does not overstate the property's size — which a scaled-up
+      // box would.
+      markerRef.current = L.layerGroup([
+        L.circleMarker(centre, {
+          radius: 7, color: '#ffffff', weight: 3, fillColor: colour, fillOpacity: 1, interactive: false,
+        }),
+        L.circleMarker(centre, {
+          radius: 7, color: colour, weight: 1.5, fill: false, interactive: false,
+        }),
+      ]).addTo(map);
+    }
+  }, [
+    activeRegion,
+    bounds?.minLat, bounds?.minLng, bounds?.maxLat, bounds?.maxLng,
+    markerColor,
+  ]);
 
   return <div ref={elRef} className={SATELLITE_INSET_CLASS} style={{ width: '100%', height: '100%' }} />;
 }

@@ -84,18 +84,35 @@ export function clusterFeatures(features, thresholdKm = 8) {
   // the data, because a degree of longitude shrinks towards the poles. Sizing
   // by the worst case keeps every cell at least thresholdKm wide, which is what
   // makes "check the eight neighbours" sufficient rather than approximate.
-  const latsAbs = centres.filter(Boolean).map((c) => Math.abs(c[1]));
-  const maxAbsLat = latsAbs.length ? Math.max(...latsAbs) : 0;
+  // A LOOP, not Math.max(...array). Spreading pushes one argument per element
+  // onto the stack, and V8 gives up somewhere around 130,000 — inside the
+  // 200,000 importers.js accepts. Opening the Anchor picker on a large but
+  // perfectly valid import would have thrown RangeError before any clustering
+  // happened, crashing the render in the name of making it faster.
+  let maxAbsLat = 0;
+  for (const c of centres) {
+    if (!c) continue;
+    const a = Math.abs(c[1]);
+    if (a > maxAbsLat) maxAbsLat = a;
+  }
   const KM_PER_DEG_LAT = 111.32;
   // Clamped so a dataset at the pole cannot produce an infinite cell width.
   const lngShrink = Math.max(Math.cos((maxAbsLat * Math.PI) / 180), 0.01);
   const dLat = thresholdKm / KM_PER_DEG_LAT;
   const dLng = thresholdKm / (KM_PER_DEG_LAT * lngShrink);
 
+  // Longitude columns WRAP at the antimeridian. Without this, 179.99 and
+  // -179.99 — about 2.2 km apart, one cluster under the old all-pairs code —
+  // land at opposite ends of the column range and are never compared, so the
+  // "optimisation" would quietly return a different answer than the code it
+  // replaced. The grid has to be a faster way to get the same result, not a
+  // faster way to get a nearly-right one.
+  const columns = Math.max(1, Math.ceil(360 / dLng));
   const cells = new Map();
   const cellKey = (row, col) => `${row}:${col}`;
+  const wrapCol = (col) => ((col % columns) + columns) % columns;
   const rowOf = (c) => Math.floor(c[1] / dLat);
-  const colOf = (c) => Math.floor(c[0] / dLng);
+  const colOf = (c) => wrapCol(Math.floor((c[0] + 180) / dLng));
 
   for (let i = 0; i < n; i += 1) {
     if (!centres[i]) continue;
@@ -110,7 +127,7 @@ export function clusterFeatures(features, thresholdKm = 8) {
     const col = colOf(centres[i]);
     for (let dr = -1; dr <= 1; dr += 1) {
       for (let dc = -1; dc <= 1; dc += 1) {
-        const bucket = cells.get(cellKey(row + dr, col + dc));
+        const bucket = cells.get(cellKey(row + dr, wrapCol(col + dc)));
         if (!bucket) continue;
         for (const j of bucket) {
           // Each unordered pair is considered once.
