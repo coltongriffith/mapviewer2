@@ -7,6 +7,7 @@ import { POINT_ROLES } from '../projectState';
 import regionsNA from '../assets/regionsNA.json';
 import dissolveGeo from '@turf/dissolve';
 import { featureKey, visibleGeojson } from '../utils/featureIdentity.js';
+import { reportError } from '../utils/errorReporter';
 
 const BASEMAPS = {
   light: {
@@ -55,19 +56,6 @@ const REFERENCE_OVERLAYS = {
     opacityFactor: 0.9,
     zIndex: 365,
   },
-  // Bedrock geology — USGS MRData world geologic map compilation (WMS, not
-  // XYZ). Global coverage, so it works over Canadian claims, at compilation
-  // scale: unit colors read well zoomed out but stay coarse at property scale.
-  geology: {
-    // USGS MRData "worldgeol" WMS — world geologic map compiled by the
-    // Geological Survey of Canada. Global coverage; layers verified from
-    // GetCapabilities: `geology` (bedrock units) + `contacts` (unit borders).
-    url: 'https://mrdata.usgs.gov/services/worldgeol',
-    wms: { layers: 'geology,contacts', format: 'image/png', transparent: true },
-    attribution: '&copy; USGS / GSC',
-    opacityFactor: 0.85,
-    zIndex: 345,
-  },
 };
 
 function detectGeomType(geojson) {
@@ -88,6 +76,7 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
   const overlayGroupRef = useRef(null);
   const regionHighlightGroupRef = useRef(null);
   const referenceRefs = useRef({});
+  const reportedTileErrors = useRef(new Set());
   const svgRendererRefs = useRef([]);
   const prevLayersRef = useRef([]);
   const leafletLayerRefsMap = useRef(new Map());
@@ -190,12 +179,32 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
           opacity: Math.max(0.2, Math.min(1, baseOpacity * cfg.opacityFactor)),
           zIndex: cfg.zIndex,
         };
-        // WMS overlays (e.g. USGS geology) still render as <img> tiles, so
-        // export capture treats them identically to XYZ layers.
-        referenceRefs.current[key] = cfg.wms
-          ? L.tileLayer.wms(cfg.url, { ...opts, ...cfg.wms })
-          : L.tileLayer(cfg.url, opts);
-        referenceRefs.current[key].addTo(map);
+        const tiles = L.tileLayer(cfg.url, opts);
+
+        // Say so when a tile service stops answering.
+        //
+        // Nothing used to listen for this, and the cost was concrete: the USGS
+        // bedrock-geology overlay died — for the SECOND time, after an earlier
+        // endpoint retirement — and the only symptom was a toggle that appeared
+        // to do nothing. A reference layer that silently fails is
+        // indistinguishable from one that is working but subtle, so nobody
+        // reports it and nobody notices. These are all third-party services
+        // outside our control; the next one will go the same way.
+        //
+        // Reported once per overlay per session (reportError de-duplicates by
+        // message), so it surfaces in Admin → Health rather than flooding it —
+        // a broken tile source produces an error for every tile in view.
+        tiles.on('tileerror', () => {
+          if (reportedTileErrors.current.has(key)) return;
+          reportedTileErrors.current.add(key);
+          reportError(`Reference overlay "${key}" failed to load tiles`, {
+            kind: 'tile_error',
+            context: { overlay: key, url: cfg.url },
+          });
+        });
+
+        referenceRefs.current[key] = tiles;
+        tiles.addTo(map);
         return;
       }
 
