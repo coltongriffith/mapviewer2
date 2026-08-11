@@ -169,6 +169,66 @@ test('the province fills the inset instead of floating in a continent', async ({
   expect(framing.centreY).toBeLessThan(0.75);
 });
 
+test('the inset\'s imagery does not leak into the main map capture', async ({ page }) => {
+  // Reported as "the satellite in the inset is bleeding outside the box".
+  //
+  // The locator is a SECOND Leaflet map nested inside the stage the main-map
+  // export captures, so a plain descendant query for tiles collected the
+  // inset's as well. The main pass then drew province-scale imagery at the
+  // inset's screen position, unclipped — a rectangle of foreign terrain
+  // around the inset card.
+  //
+  // Invisible in the editor, because the wrapper's overflow hides the spill
+  // while the tiles keep reporting full-size boxes. Only the export showed it.
+  const control = await openInsetPanel(page);
+  await expect(control).toHaveCount(1, { timeout: 15_000 });
+  await control.selectOption('satellite_locator');
+  await expect(page.locator('.satellite-inset-map')).toHaveCount(1, { timeout: 15_000 });
+  await page.waitForTimeout(2500);
+
+  // This test owns the PREMISE, not the filter. tests/export-tile-capture.test.js
+  // calls getTileImages directly and fails if the filter goes; reproducing the
+  // filter here would only re-test a copy of it and pass either way.
+  //
+  // What a browser uniquely settles is why the filter has to exist at all:
+  // that the locator really is a second Leaflet map inside the captured stage,
+  // with tiles that really do overflow its card. If a refactor ever moves the
+  // inset out of the stage, this fails and the filter can go with it.
+  const shape = await page.evaluate(() => {
+    const stage = document.querySelector('.map-stage');
+    const inset = document.querySelector('.satellite-inset-map');
+    if (!stage || !inset) return { ok: false, why: 'stage or inset missing' };
+    const insetTiles = [...inset.querySelectorAll('.leaflet-tile-pane img.leaflet-tile')];
+    const ir = inset.getBoundingClientRect();
+    const overflow = insetTiles.map((img) => {
+      const r = img.getBoundingClientRect();
+      return Math.max(
+        ir.left - r.left, r.right - ir.right,
+        ir.top - r.top, r.bottom - ir.bottom,
+      );
+    });
+    return {
+      ok: true,
+      insetInsideStage: stage.contains(inset),
+      insetTiles: insetTiles.length,
+      stageTiles: stage.querySelectorAll('.leaflet-tile-pane img.leaflet-tile').length,
+      maxOverflowPx: overflow.length ? Math.max(...overflow) : 0,
+    };
+  });
+
+  expect(shape.ok, shape.why).toBe(true);
+  expect(shape.insetTiles, 'the inset had no tiles, so this proves nothing').toBeGreaterThan(0);
+  expect(
+    shape.insetInsideStage,
+    'the inset is no longer inside the captured stage — the tile filter in renderScene may now be unnecessary',
+  ).toBe(true);
+  // Its tiles are inside the stage's query, which is the whole problem.
+  expect(shape.stageTiles).toBeGreaterThan(shape.insetTiles);
+  // And they genuinely hang outside the card, so a leak would be visible rather
+  // than a hairline.
+  expect(shape.maxOverflowPx, 'inset tiles no longer overflow the card').toBeGreaterThan(5);
+});
+
 test('the other inset styles still work', async ({ page }) => {
   const control = await openInsetPanel(page);
   await expect(control).toHaveCount(1, { timeout: 15_000 });
