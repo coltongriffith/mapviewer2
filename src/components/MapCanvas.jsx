@@ -8,6 +8,7 @@ import regionsNA from '../assets/regionsNA.json';
 import dissolveGeo from '@turf/dissolve';
 import { reportError } from '../utils/errorReporter';
 import { featureKey, visibleGeojson } from '../utils/featureIdentity.js';
+import { REFERENCE_OVERLAY_CONFIG, overlayAttribution } from '../utils/referenceOverlayConfig.js';
 
 const BASEMAPS = {
   light: {
@@ -37,39 +38,14 @@ const BASEMAPS = {
   },
 };
 
-const REFERENCE_OVERLAYS = {
-  context: {
-    url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-    attribution: '&copy; OpenStreetMap &copy; CARTO',
-    opacityFactor: 0.95,
-    zIndex: 350,
-  },
-  labels: {
-    url: 'https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png',
-    attribution: '&copy; OpenStreetMap &copy; CARTO',
-    opacityFactor: 0.95,
-    zIndex: 360,
-  },
-  rail: {
-    url: 'https://{s}.tiles.openrailwaymap.org/standard/{z}/{x}/{y}.png',
-    attribution: '&copy; OpenRailwayMap',
-    opacityFactor: 0.9,
-    zIndex: 365,
-  },
-  // Bedrock geology — USGS MRData world geologic map compilation (WMS, not
-  // XYZ). Global coverage, so it works over Canadian claims, at compilation
-  // scale: unit colors read well zoomed out but stay coarse at property scale.
-  geology: {
-    // USGS MRData "worldgeol" WMS — world geologic map compiled by the
-    // Geological Survey of Canada. Global coverage; layers verified from
-    // GetCapabilities: `geology` (bedrock units) + `contacts` (unit borders).
-    url: 'https://mrdata.usgs.gov/services/worldgeol',
-    wms: { layers: 'geology,contacts', format: 'image/png', transparent: true },
-    attribution: '&copy; USGS / GSC',
-    opacityFactor: 0.85,
-    zIndex: 345,
-  },
-};
+// Definitions live in utils/referenceOverlayConfig.js, shared with the
+// exporter's credit block. Keeping a second copy here is what let the two
+// disagree about who owns a tile: Leaflet credited CARTO, the export did not.
+const REFERENCE_OVERLAYS = Object.fromEntries(
+  Object.entries(REFERENCE_OVERLAY_CONFIG).map(([key, cfg]) => [
+    key, { ...cfg, attribution: overlayAttribution(key) },
+  ]),
+);
 
 function detectGeomType(geojson) {
   const features = geojson?.features || [];
