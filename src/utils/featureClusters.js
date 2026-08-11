@@ -65,11 +65,59 @@ export function clusterFeatures(features, thresholdKm = 8) {
     if (rx !== ry) parent[rx] = ry;
   }
 
+  // ── Spatial grid, not all-pairs ──────────────────────────────────────────
+  //
+  // The obvious version compares every shape with every other: n(n-1)/2
+  // haversines, on the UI thread, with the user waiting. importers.js accepts
+  // up to 200,000 features, and at that size this is 2×10^10 distance
+  // calculations — the browser does not come back. Even a 2,000-feature
+  // shapefile is two million, which is a visible stall every time the Anchor
+  // picker renders.
+  //
+  // Instead, bin the centres into cells at least `thresholdKm` across. Anything
+  // within the threshold of a shape must lie in that shape's own cell or one of
+  // the eight around it, so only those are compared. That makes the work
+  // proportional to the number of shapes times how many share their
+  // neighbourhood, rather than to the square of the total.
+  //
+  // Cell height is fixed; cell WIDTH is computed from the highest latitude in
+  // the data, because a degree of longitude shrinks towards the poles. Sizing
+  // by the worst case keeps every cell at least thresholdKm wide, which is what
+  // makes "check the eight neighbours" sufficient rather than approximate.
+  const latsAbs = centres.filter(Boolean).map((c) => Math.abs(c[1]));
+  const maxAbsLat = latsAbs.length ? Math.max(...latsAbs) : 0;
+  const KM_PER_DEG_LAT = 111.32;
+  // Clamped so a dataset at the pole cannot produce an infinite cell width.
+  const lngShrink = Math.max(Math.cos((maxAbsLat * Math.PI) / 180), 0.01);
+  const dLat = thresholdKm / KM_PER_DEG_LAT;
+  const dLng = thresholdKm / (KM_PER_DEG_LAT * lngShrink);
+
+  const cells = new Map();
+  const cellKey = (row, col) => `${row}:${col}`;
+  const rowOf = (c) => Math.floor(c[1] / dLat);
+  const colOf = (c) => Math.floor(c[0] / dLng);
+
   for (let i = 0; i < n; i += 1) {
     if (!centres[i]) continue;
-    for (let j = i + 1; j < n; j += 1) {
-      if (!centres[j]) continue;
-      if (haversineKm(centres[i], centres[j]) < thresholdKm) unite(i, j);
+    const key = cellKey(rowOf(centres[i]), colOf(centres[i]));
+    if (!cells.has(key)) cells.set(key, []);
+    cells.get(key).push(i);
+  }
+
+  for (let i = 0; i < n; i += 1) {
+    if (!centres[i]) continue;
+    const row = rowOf(centres[i]);
+    const col = colOf(centres[i]);
+    for (let dr = -1; dr <= 1; dr += 1) {
+      for (let dc = -1; dc <= 1; dc += 1) {
+        const bucket = cells.get(cellKey(row + dr, col + dc));
+        if (!bucket) continue;
+        for (const j of bucket) {
+          // Each unordered pair is considered once.
+          if (j <= i) continue;
+          if (haversineKm(centres[i], centres[j]) < thresholdKm) unite(i, j);
+        }
+      }
     }
   }
 
@@ -157,7 +205,28 @@ export function clusterLabels(clusters, grid = SHORT_COMPASS_GRID, singleLabel =
  * label may point: trimming the western block and then watching the label stay
  * out west, over ground now absent from the map, is the bug that prompted this.
  */
+// Grouping is pure and a layer object is replaced whenever it changes, so its
+// identity is a sound cache key — and a WeakMap forgets the entry as soon as
+// that version of the layer is unreachable.
+//
+// This is not a micro-optimisation. The Anchor picker calls this from render,
+// inside the callout list, so without a cache an open callout re-clusters the
+// whole layer on every keystroke in the text field.
+const anchorGroupCache = new WeakMap();
+
 export function layerAnchorGroups(layer, { thresholdKm } = {}) {
+  if (!layer) return [];
+  const byThreshold = anchorGroupCache.get(layer);
+  const cacheKey = thresholdKm ?? 'default';
+  if (byThreshold?.has(cacheKey)) return byThreshold.get(cacheKey);
+
+  const groups = computeAnchorGroups(layer, thresholdKm);
+  if (byThreshold) byThreshold.set(cacheKey, groups);
+  else anchorGroupCache.set(layer, new Map([[cacheKey, groups]]));
+  return groups;
+}
+
+function computeAnchorGroups(layer, thresholdKm) {
   const features = layerFeatures(layer).filter((f) => !isFeatureHidden(layer, f));
   if (!features.length) return [];
   const clusters = clusterFeatures(features, thresholdKm);
@@ -207,4 +276,59 @@ export function defaultAnchorForLayer(layer) {
   const features = geo?.features || [];
   const c = features.length ? featureCentroid(features[0]) : null;
   return c ? { lng: c[0], lat: c[1] } : null;
+}
+
+/**
+ * Move labels that a trim has left pointing at ground which is no longer there.
+ *
+ * Pure, and takes the projection as a parameter, so the rules below can be
+ * tested without a Leaflet map — they were written inline in a setProject
+ * callback first, where none of this was reachable.
+ *
+ * @param callouts  the project's callouts
+ * @param layer     the layer AFTER trimming
+ * @param project   (lat, lng) => {x, y} screen point, or null when unavailable
+ */
+export function reanchorCalloutsForLayer(callouts, layer, project = null) {
+  if (!layer) return callouts || [];
+  return (callouts || []).map((c) => {
+    if (c.layerId !== layer.id) return c;
+
+    // A callout made from ONE feature carries that feature's name and result
+    // text. Moving it to the largest remaining block would attach real,
+    // specific data to unrelated ground, in the map and in the exported PDF.
+    // That is a worse failure than a stale anchor the user can see and correct,
+    // and there is no honest place to relocate it to, so it stays put.
+    if (c.featureId) return c;
+
+    if (!isAnchorOrphaned(layer, c.anchor)) return c;
+    const anchor = defaultAnchorForLayer(layer);
+    if (!anchor) return c;
+
+    // isManualPosition is NOT a manually chosen anchor.
+    //
+    // `offset` is a pixel offset of the BOX from the anchor, so dragging a label
+    // moves the box and leaves the anchor — the leader line's endpoint —
+    // exactly where it was. Skipping these would leave the line pointing at the
+    // deleted block, which is the whole bug.
+    //
+    // What the user chose was where the BOX sits, and that is what is preserved:
+    // the anchor moves to real ground, and the offset absorbs the screen
+    // distance between the old and new anchors so the box does not budge.
+    if (!c.isManualPosition || !project) return { ...c, anchor };
+    try {
+      const from = project(c.anchor.lat, c.anchor.lng);
+      const to = project(anchor.lat, anchor.lng);
+      if (!from || !to) return { ...c, anchor };
+      const offset = c.offset || { x: 0, y: 0 };
+      return {
+        ...c,
+        anchor,
+        offset: { x: offset.x + (from.x - to.x), y: offset.y + (from.y - to.y) },
+      };
+    } catch (_) {
+      // A correct leader line matters more than an unmoved box.
+      return { ...c, anchor };
+    }
+  });
 }

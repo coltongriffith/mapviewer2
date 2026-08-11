@@ -4,9 +4,10 @@ import RatioSwitcher from './components/RatioSwitcher';
 import Sidebar from './components/Sidebar';
 import LayerList from './components/LayerList';
 import LocatorInset from './components/LocatorInset';
+const SatelliteInset = React.lazy(() => import('./components/SatelliteInset'));
 import CalloutsOverlay from './components/CalloutsOverlay';
 import LandingPage from './components/LandingPage';
-import DashboardPage from './components/DashboardPage';
+
 import SharedMapViewer from './components/SharedMapViewer';
 import UploadPanel from './components/UploadPanel';
 import AnnotationOverlay from './components/AnnotationOverlay';
@@ -15,6 +16,7 @@ import { getSessionId } from './utils/session';
 import NorthArrow, { NORTH_ARROW_STYLES } from './components/NorthArrow';
 
 const MapCanvas = React.lazy(() => import('./components/MapCanvas'));
+const DashboardPage = React.lazy(() => import('./components/DashboardPage'));
 const AdminPage = React.lazy(() => import('./components/AdminPage'));
 const AccountPage = React.lazy(() => import('./components/AccountPage'));
 const TenureMonitorPage = React.lazy(() => import('./components/tenure/TenureMonitorPage'));
@@ -30,6 +32,7 @@ import { auroraClaims, auroraDrillholes, auroraTargets, auroraCallouts } from '.
 import { GALLERY_DEMOS } from './assets/galleryDemos';
 import {
   CALLOUT_TYPES,
+  INSET_MODES,
   createInitialProjectState,
   FONT_OPTIONS,
   ROLE_LABELS,
@@ -63,7 +66,7 @@ import { runCloudMigration } from './utils/cloudMigration';
 import { scopingWarning } from './utils/scopingNotice';
 import { CLAIM_NAME_CAVEAT } from './utils/claimProvenance';
 import { featureKey, layerFeatures, isFeatureHidden, hiddenCount, featuresInBounds, visibleGeojson } from './utils/featureIdentity.js';
-import { layerAnchorGroups, defaultAnchorForLayer, isAnchorOrphaned } from './utils/featureClusters.js';
+import { layerAnchorGroups, defaultAnchorForLayer, reanchorCalloutsForLayer } from './utils/featureClusters.js';
 import FeatureTrimList from './components/FeatureTrimList.jsx';
 import dissolveGeo from '@turf/dissolve';
 import {
@@ -492,6 +495,16 @@ function renderLegendGroups(items) {
   return [{ heading: null, items }];
 }
 
+// Human names for the reference overlays, used when one fails to load. The
+// toggles read from JSX literals; this is the only place that needs to name an
+// overlay outside of its own control.
+const OVERLAY_LABELS = {
+  context: 'Roads + Settlements',
+  labels: 'Reference Labels',
+  rail: 'Railways',
+  geology: 'Bedrock Geology',
+};
+
 function getFeatureLabel(feature, layer) {
   const props = feature?.properties || {};
   return props.label || props.name || props.hole || props.hole_id || props.holeid || props.id || layer?.displayName || layer?.legend?.label || layer?.name || 'Drillhole';
@@ -829,6 +842,11 @@ export default function App() {
   // trimLayerId: the list is usable without arming the map, and arming the map
   // does not force a 200-row list open.
   const [trimListLayerId, setTrimListLayerId] = useState(null);
+  // Reference overlays whose tiles failed this session. These are third-party
+  // services, and when one stops answering the toggle simply does nothing —
+  // which reads as "the app is broken" rather than "the source is down". Saying
+  // which is the difference between a bug report and an informed shrug.
+  const [overlayErrors, setOverlayErrors] = useState({});
   const [selectedCalloutId, setSelectedCalloutId] = useState(null);
   const [selectedFeature, setSelectedFeature] = useState(null);
   const [selectedMarkerId, setSelectedMarkerId] = useState(null);
@@ -3460,22 +3478,14 @@ export default function App() {
       });
 
       // Bring back any label that is now pointing at ground that has gone.
-      //
-      // The reported symptom: trim the western claims, and the layer's label
-      // stays out west with its leader line drawn across empty country. The
-      // anchor was stored when the label was created, so nothing moved it.
-      //
-      // Deliberately narrow. A label the user DRAGGED somewhere is left alone —
-      // isManualPosition means they chose that spot and it is not ours to
-      // overrule — and so is one still near any remaining shape, since a label
-      // sitting in a gap inside a block is a normal thing to want.
+      // The rules live in reanchorCalloutsForLayer, which is pure and tested.
       const trimmed = layers.find((l) => l.id === layerId);
-      const callouts = (prev.callouts || []).map((c) => {
-        if (c.layerId !== layerId || c.isManualPosition) return c;
-        if (!isAnchorOrphaned(trimmed, c.anchor)) return c;
-        const anchor = defaultAnchorForLayer(trimmed);
-        return anchor ? { ...c, anchor } : c;
-      });
+      const map = leafletMapRef.current;
+      const callouts = reanchorCalloutsForLayer(
+        prev.callouts,
+        trimmed,
+        map ? (lat, lng) => map.latLngToContainerPoint([lat, lng]) : null,
+      );
 
       return { ...prev, layers, callouts };
     });
@@ -3659,6 +3669,10 @@ export default function App() {
     if (selectedCalloutId === calloutId) setSelectedCalloutId(null);
     setUploadStatus({ type: 'info', message: 'Callout deleted — press Ctrl+Z to undo.' });
   };
+
+  const handleOverlayError = useCallback((key) => {
+    setOverlayErrors((prev) => (prev[key] ? prev : { ...prev, [key]: true }));
+  }, []);
 
   const handleFeatureClick = ({ layerId, feature, latlng, isLayerSelect }) => {
     const layer = project.layers.find((item) => item.id === layerId) || null;
@@ -4567,6 +4581,7 @@ export default function App() {
       );
     }
     return (
+      <React.Suspense fallback={null}>
       <DashboardPage
         onOpenProject={(entry) => { openProjectFromRecent(entry); setScreen('editor'); }}
         onNewProject={() => { startNewProject(); setScreen('editor'); }}
@@ -4577,6 +4592,7 @@ export default function App() {
         onSearchClaims={() => { setScreen('editor'); setAddClaimsModalPath('registry'); setShowAddClaimsModal(true); }}
         onExit={goToLanding}
       />
+      </React.Suspense>
     );
   }
 
@@ -5984,6 +6000,32 @@ export default function App() {
             {project.layout.autoInsetRegion && !project.layout.insetImage && project.layout.insetEnabled !== false && (
               <div className="inset-detected-badge">Detected: {project.layout.autoInsetRegion.name}</div>
             )}
+            {!project.layout.insetImage && (
+              <div className="control-row inline-2">
+                <div>
+                  <label htmlFor="f-inset-mode">Inset Style</label>
+                  <select id="f-inset-mode" value={project.layout.insetMode || 'province_state'}
+                    onChange={(e) => updateLayout({ insetMode: e.target.value })}>
+                    {Object.entries(INSET_MODES)
+                      .filter(([v]) => v !== 'custom_image')
+                      .map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                  </select>
+                </div>
+                {project.layout.insetMode === 'satellite_locator' && (
+                  <div>
+                    <label htmlFor="f-inset-basemap">Imagery</label>
+                    <select id="f-inset-basemap" value={project.layout.insetBasemap || 'satellite'}
+                      onChange={(e) => updateLayout({ insetBasemap: e.target.value })}>
+                      <option value="satellite">Satellite</option>
+                      <option value="terrain">Topographic</option>
+                      <option value="natgeo">Nat Geo</option>
+                      <option value="light">Street</option>
+                      <option value="dark">Dark</option>
+                    </select>
+                  </div>
+                )}
+              </div>
+            )}
             <div className="control-row inline-2">
               <div><label htmlFor="f-inset-title-5314">Inset Title</label><input id="f-inset-title-5314" value={project.layout.insetTitle ?? 'Project Locator'} onChange={(e) => updateLayout({ insetTitle: e.target.value })} placeholder="Project Locator" /></div>
               <div><label htmlFor="f-inset-label-5315">Inset Label</label><input id="f-inset-label-5315" value={project.layout.insetLabel ?? ''} onChange={(e) => updateLayout({ insetLabel: e.target.value })} placeholder={project.layout.autoInsetRegion?.name || 'Province / State'} /></div>
@@ -6030,6 +6072,12 @@ export default function App() {
             <label className="toggle-row"><input type="checkbox" checked={!!referenceOverlays.labels} onChange={(e) => updateLayout({ referenceOverlays: { labels: e.target.checked } })} /> <span>Reference Labels</span></label>
             <label className="toggle-row"><input type="checkbox" checked={!!referenceOverlays.rail} onChange={(e) => updateLayout({ referenceOverlays: { rail: e.target.checked } })} /> <span>Railways</span></label>
             <label className="toggle-row"><input type="checkbox" checked={!!referenceOverlays.geology} onChange={(e) => updateLayout({ referenceOverlays: { geology: e.target.checked } })} /> <span>Bedrock Geology (USGS)</span></label>
+            {Object.keys(overlayErrors).filter((k) => referenceOverlays[k]).length > 0 && (
+              <p className="overlay-error-note">
+                {Object.keys(overlayErrors).filter((k) => referenceOverlays[k]).map((k) => OVERLAY_LABELS[k] || k).join(', ')}
+                {' '}could not be loaded — the map service did not respond. Your own layers are unaffected.
+              </p>
+            )}
           </div>}
         </section>
 
@@ -6204,7 +6252,7 @@ export default function App() {
             style={mapStageStyle}
           >
         <React.Suspense fallback={null}>
-          <MapCanvas onReady={onMapReady} project={project} template={template} onFeatureClick={handleFeatureClick} onMapClick={handleMapClick} annotationToolRef={annotationToolRef} trimLayerId={trimLayerId} />
+          <MapCanvas onReady={onMapReady} project={project} template={template} onFeatureClick={handleFeatureClick} onMapClick={handleMapClick} annotationToolRef={annotationToolRef} trimLayerId={trimLayerId} onOverlayError={handleOverlayError} />
         </React.Suspense>
         {mapReady && (
           <>
@@ -6430,7 +6478,13 @@ export default function App() {
         {project.layout.insetEnabled !== false && resolvedZones.inset?.width ? (
           <div className="template-zone" style={{ ...zoneStyle(resolvedZones.inset), opacity: dragging?.id === 'inset' ? 0.3 : 1, cursor: 'grab' }} onMouseDown={makeDragHandler('inset', project.layout.insetWidthPx ?? 244, project.layout.insetHeightPx ?? 190)}>
             <button className="panel-delete-btn" title="Hide inset map" onClick={() => updateLayout({ insetEnabled: false })}>×</button>
+            {project.layout.insetMode === 'satellite_locator' ? (
+              <React.Suspense fallback={null}>
+                <SatelliteInset layers={project.layers} basemap={project.layout.insetBasemap || 'satellite'} markerColor={project.layout.insetMarkerColor} />
+              </React.Suspense>
+            ) : (
             <LocatorInset layers={project.layers} insetMode={project.layout.insetMode} insetImage={project.layout.insetImage} autoInsetRegion={project.layout.autoInsetRegion} insetTitle={project.layout.insetTitle} insetLabel={project.layout.insetLabel} mode={project.layout.mode} zone={{ width: '100%', height: '100%' }} regionFill={project.layout.insetRegionFill} regionStroke={project.layout.insetRegionStroke} bgFill={project.layout.insetBgFill} markerColor={project.layout.insetMarkerColor} />
+            )}
             {makeResizeHandles(project.layout.insetCorner || 'tr', {
               elemId: 'inset', startW: project.layout.insetWidthPx ?? 244, startH: project.layout.insetHeightPx ?? 190,
               minW: 100, maxW: 600, minH: 80, maxH: 500,

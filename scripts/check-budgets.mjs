@@ -19,14 +19,25 @@ const PUBLIC = fileURLToPath(new URL('../public', import.meta.url));
 const KB = 1024;
 
 const BUDGETS = {
-  // Largest single JS chunk, gzipped. Today ~176 kB.
-  maxJsChunkGzipKb: 190,
-  // All JS shipped, gzipped, across every chunk. Measured at 690 kB today.
-  // Route-splitting means only a subset loads on first paint, but the total is
-  // what grows unnoticed, so that is what is capped. The audit's P1-22 work
-  // (splitting landing/account/admin/editor) should bring this down; lower the
-  // budget as it does.
-  totalJsGzipKb: 725,
+  // Largest single JS chunk, gzipped — in practice the entry chunk, which is
+  // what every visitor downloads before anything renders. This is the number
+  // that tracks what a user on a field connection actually waits for, so it is
+  // kept tight: measured at 185 kB after moving DashboardPage behind
+  // React.lazy, with 3 kB of slack for build-to-build variation.
+  maxJsChunkGzipKb: 188,
+  // All JS shipped, gzipped, across every chunk — including the lazy ones a
+  // given visit never loads.
+  //
+  // Raised from 725, deliberately, and worth recording why. Splitting a screen
+  // out of the entry chunk moves bytes rather than removing them, and adds a
+  // little per-chunk overhead — so lazy-loading the dashboard took 6 kB off
+  // first paint and put 1 kB ON this total. This metric penalises the change
+  // that made the product faster.
+  //
+  // So the two are not interchangeable: maxJsChunkGzipKb is the one to hold the
+  // line on, and this one exists to catch a dependency quietly arriving. The
+  // only way to lower it is to remove code or a package; splitting cannot.
+  totalJsGzipKb: 732,
   // Stylesheet, gzipped. Today ~29 kB.
   maxCssGzipKb: 40,
   // Any single image shipped from public/. The hero is currently 2.76 MB,

@@ -6,6 +6,7 @@ import { claimTooltipHtml, claimPopupRowsHtml } from '../utils/claimInfo';
 import { POINT_ROLES } from '../projectState';
 import regionsNA from '../assets/regionsNA.json';
 import dissolveGeo from '@turf/dissolve';
+import { reportError } from '../utils/errorReporter';
 import { featureKey, visibleGeojson } from '../utils/featureIdentity.js';
 
 const BASEMAPS = {
@@ -78,7 +79,7 @@ function detectGeomType(geojson) {
   return 'polygon';
 }
 
-export default function MapCanvas({ onReady, project, template, onFeatureClick, onMapClick, annotationToolRef, trimLayerId = null }) {
+export default function MapCanvas({ onReady, project, template, onFeatureClick, onMapClick, annotationToolRef, trimLayerId = null, onOverlayError }) {
   const mapRef = useRef(null);
   const onMapClickRef = useRef(onMapClick);
   const onFeatureClickRef = useRef(onFeatureClick);
@@ -88,12 +89,15 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
   const overlayGroupRef = useRef(null);
   const regionHighlightGroupRef = useRef(null);
   const referenceRefs = useRef({});
+  const reportedTileErrors = useRef(new Set());
+  const onOverlayErrorRef = useRef(onOverlayError);
   const svgRendererRefs = useRef([]);
   const prevLayersRef = useRef([]);
   const leafletLayerRefsMap = useRef(new Map());
 
   useEffect(() => { onMapClickRef.current = onMapClick; }, [onMapClick]);
   useEffect(() => { onFeatureClickRef.current = onFeatureClick; }, [onFeatureClick]);
+  useEffect(() => { onOverlayErrorRef.current = onOverlayError; }, [onOverlayError]);
 
   useEffect(() => {
     if (mapRef.current || !mapElRef.current) return;
@@ -192,10 +196,36 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
         };
         // WMS overlays (e.g. USGS geology) still render as <img> tiles, so
         // export capture treats them identically to XYZ layers.
-        referenceRefs.current[key] = cfg.wms
+        const tiles = cfg.wms
           ? L.tileLayer.wms(cfg.url, { ...opts, ...cfg.wms })
           : L.tileLayer(cfg.url, opts);
-        referenceRefs.current[key].addTo(map);
+
+        // Say so when a tile service stops answering.
+        //
+        // Nothing listened for this, and the cost was concrete. The bedrock
+        // geology overlay stopped rendering and the ONLY symptom was a toggle
+        // that appeared to do nothing — which is indistinguishable from a
+        // subtle layer that is working correctly. Users do not report that, so
+        // it went unnoticed, and when it was finally investigated the absence
+        // of any signal led to the wrong conclusion (that the upstream service
+        // was dead) and very nearly to deleting a working feature.
+        //
+        // Every one of these is a third-party service outside our control.
+        // Reported once per overlay per session — a broken source emits an
+        // error for every tile in view, and the guard is what keeps Admin →
+        // Health readable rather than flooded.
+        tiles.on('tileerror', () => {
+          if (reportedTileErrors.current.has(key)) return;
+          reportedTileErrors.current.add(key);
+          reportError(`Reference overlay "${key}" failed to load tiles`, {
+            kind: 'tile_error',
+            context: { overlay: key, url: cfg.url },
+          });
+          onOverlayErrorRef.current?.(key);
+        });
+
+        referenceRefs.current[key] = tiles;
+        tiles.addTo(map);
         return;
       }
 

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   clusterFeatures, anchorForCluster, layerAnchorGroups, defaultAnchorForLayer,
-  isAnchorOrphaned, featureCentroid, haversineKm, clusterLabels,
+  isAnchorOrphaned, featureCentroid, haversineKm, clusterLabels, reanchorCalloutsForLayer,
 } from '../src/utils/featureClusters.js';
 import { geojsonCenter } from '../src/utils/geometry.js';
 
@@ -205,5 +205,176 @@ describe('sharing the maths did not change the search wording', () => {
   it('keeps the single-group name each caller expects', () => {
     expect(clusterLabels([{ centroid: [-120, 56] }], SEARCH_GRID, 'Claim Area')).toEqual(['Claim Area']);
     expect(clusterLabels([{ centroid: [-120, 56] }])).toEqual(['Claim area']);
+  });
+});
+
+describe('clustering scales to the layers the importer accepts', () => {
+  // importers.js caps an import at 200,000 features. The first version compared
+  // every shape with every other — n(n-1)/2 haversines on the UI thread — which
+  // at that size is 2x10^10 distance calculations and a browser that does not
+  // come back. Even 2,000 features is two million, and the Anchor picker runs
+  // this from render.
+  const grid = (count, originLng, originLat) => Array.from({ length: count }, (_, i) => cell(
+    originLng + (i % 50) * 0.01,
+    originLat + Math.floor(i / 50) * 0.01,
+    i + 1,
+  ));
+
+  it('clusters 10,000 shapes without stalling', () => {
+    // Measured on this codebase, grid versus the all-pairs version it replaced:
+    //
+    //        n      grid    all-pairs
+    //    2,000     62 ms       143 ms
+    //    5,000    138 ms       895 ms
+    //   10,000    265 ms     3,534 ms
+    //   20,000    550 ms    14,153 ms
+    //
+    // Quadratic: four times the shapes, a hundred times the work. Extrapolated
+    // to the importer's 200,000 cap that is about 23 MINUTES on the UI thread.
+    //
+    // The bound is set between the two columns at n=10,000 with room either
+    // side — roughly 5x the grid's time and under half the all-pairs time — so
+    // it survives a slow CI box but still fails if the loop goes quadratic
+    // again. An earlier version of this test used 5,000 shapes and a 2,000 ms
+    // bound, which the quadratic version passed comfortably.
+    const features = grid(10000, -120, 55);
+    const started = Date.now();
+    const clusters = clusterFeatures(features);
+    const elapsed = Date.now() - started;
+    expect(elapsed).toBeLessThan(1500);
+    expect(clusters.length).toBeGreaterThan(0);
+  });
+
+  it('still separates distant blocks at that size', () => {
+    // Speed is worthless if the grid stopped grouping correctly.
+    const clusters = clusterFeatures([...grid(500, -120, 55), ...grid(500, -110, 45)]);
+    expect(clusters).toHaveLength(2);
+    expect(clusters.every((c) => c.count === 500)).toBe(true);
+  });
+
+  it('groups the same way the all-pairs version did', () => {
+    // The grid must be an optimisation, not a different answer. Two shapes
+    // either side of a cell boundary have to still find each other.
+    const straddling = [cell(-120.0, 55.0, 1), cell(-119.99, 55.0, 2)];
+    expect(clusterFeatures(straddling, 8)).toHaveLength(1);
+    expect(clusterFeatures([cell(-120, 55, 1), cell(-119.0, 55, 2)], 8)).toHaveLength(2);
+  });
+
+  it('does not divide by zero at the pole', () => {
+    // A degree of longitude vanishes at 90°, which would make the cell width
+    // infinite without the clamp.
+    expect(() => clusterFeatures([cell(0, 89.99, 1), cell(0.5, 89.99, 2)])).not.toThrow();
+  });
+
+  it('caches per layer, so rendering the picker does not re-cluster', () => {
+    const layer = layerOf(grid(3000, -120, 55));
+    const first = Date.now();
+    layerAnchorGroups(layer);
+    const cold = Date.now() - first;
+    const second = Date.now();
+    for (let i = 0; i < 50; i += 1) layerAnchorGroups(layer);
+    const warm = Date.now() - second;
+    // 50 further calls must cost far less than the one that did the work.
+    expect(warm).toBeLessThanOrEqual(Math.max(cold, 5));
+  });
+
+  it('re-clusters when the layer changes', () => {
+    // The cache is keyed on layer identity, so trimming must not serve a stale
+    // answer — layers are replaced, never mutated.
+    const features = [...NORTH, ...SOUTH];
+    expect(layerAnchorGroups(layerOf(features))).toHaveLength(2);
+    const trimmed = layerOf(features, {
+      'TENURE_NUMBER_ID:4': { hidden: true }, 'TENURE_NUMBER_ID:5': { hidden: true },
+    });
+    expect(layerAnchorGroups(trimmed)).toHaveLength(1);
+  });
+});
+
+describe('re-anchoring labels after a trim', () => {
+  // The layer after trimming: the northern block is gone, the southern remains.
+  const trimmed = layerOf([...NORTH, ...SOUTH], {
+    'TENURE_NUMBER_ID:1': { hidden: true },
+    'TENURE_NUMBER_ID:2': { hidden: true },
+    'TENURE_NUMBER_ID:3': { hidden: true },
+  });
+  const overNorth = { lat: 56.0, lng: -120.0 };
+  // A plate carrée stand-in for Leaflet's projection: enough to check that the
+  // offset absorbs exactly the screen distance the anchor moved.
+  const project = (lat, lng) => ({ x: lng * 1000, y: -lat * 1000 });
+
+  it('moves a layer label off ground that has been removed', () => {
+    const [c] = reanchorCalloutsForLayer(
+      [{ id: 'c1', layerId: 'l1', anchor: overNorth }], trimmed, project,
+    );
+    expect(nearestShapeKm(SOUTH, c.anchor)).toBeLessThan(1);
+  });
+
+  it('leaves a label that still sits over remaining ground', () => {
+    const stay = { id: 'c1', layerId: 'l1', anchor: { lat: 55.0, lng: -120.0 } };
+    expect(reanchorCalloutsForLayer([stay], trimmed, project)[0]).toBe(stay);
+  });
+
+  it('ignores callouts belonging to another layer', () => {
+    const other = { id: 'c1', layerId: 'other', anchor: overNorth };
+    expect(reanchorCalloutsForLayer([other], trimmed, project)[0]).toBe(other);
+  });
+
+  it('never moves a callout made from a single feature', () => {
+    // It carries that feature's name and result text. Relocating it to the
+    // largest remaining block would attach specific data to unrelated ground,
+    // on the map and in the exported PDF.
+    const featureCallout = {
+      id: 'c1', layerId: 'l1', featureId: 'TENURE_NUMBER_ID:1',
+      anchor: overNorth, text: 'CELL 1', subtext: '12.4 g/t over 3 m',
+    };
+    expect(reanchorCalloutsForLayer([featureCallout], trimmed, project)[0]).toBe(featureCallout);
+  });
+
+  it('re-anchors a DRAGGED label instead of leaving its line over nothing', () => {
+    // isManualPosition records a hand-placed BOX, not a hand-placed anchor:
+    // `offset` is a pixel offset from the anchor, so dragging never moved the
+    // leader line's endpoint. Skipping these left the line pointing at the
+    // deleted block — the very bug this is meant to fix.
+    const dragged = {
+      id: 'c1', layerId: 'l1', anchor: overNorth,
+      isManualPosition: true, offset: { x: 40, y: -25 },
+    };
+    const [c] = reanchorCalloutsForLayer([dragged], trimmed, project);
+    expect(nearestShapeKm(SOUTH, c.anchor)).toBeLessThan(1);
+  });
+
+  it('keeps a dragged box exactly where the user put it', () => {
+    const dragged = {
+      id: 'c1', layerId: 'l1', anchor: overNorth,
+      isManualPosition: true, offset: { x: 40, y: -25 },
+    };
+    const [c] = reanchorCalloutsForLayer([dragged], trimmed, project);
+
+    // Box position is projected anchor + offset. It must not move.
+    const before = project(dragged.anchor.lat, dragged.anchor.lng);
+    const after = project(c.anchor.lat, c.anchor.lng);
+    expect(after.x + c.offset.x).toBeCloseTo(before.x + dragged.offset.x, 6);
+    expect(after.y + c.offset.y).toBeCloseTo(before.y + dragged.offset.y, 6);
+  });
+
+  it('still fixes the line when no map is available to reproject', () => {
+    // A correct leader line matters more than an unmoved box.
+    const dragged = {
+      id: 'c1', layerId: 'l1', anchor: overNorth,
+      isManualPosition: true, offset: { x: 40, y: -25 },
+    };
+    const [c] = reanchorCalloutsForLayer([dragged], trimmed, null);
+    expect(nearestShapeKm(SOUTH, c.anchor)).toBeLessThan(1);
+    expect(c.offset).toEqual({ x: 40, y: -25 });
+  });
+
+  it('leaves labels alone when the layer has been trimmed to nothing', () => {
+    const empty = layerOf(NORTH, {
+      'TENURE_NUMBER_ID:1': { hidden: true },
+      'TENURE_NUMBER_ID:2': { hidden: true },
+      'TENURE_NUMBER_ID:3': { hidden: true },
+    });
+    const c = { id: 'c1', layerId: 'l1', anchor: overNorth };
+    expect(reanchorCalloutsForLayer([c], empty, project)[0]).toBe(c);
   });
 });
