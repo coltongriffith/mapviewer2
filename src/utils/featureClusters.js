@@ -99,7 +99,6 @@ export function clusterFeatures(features, thresholdKm = 8) {
   // Clamped so a dataset at the pole cannot produce an infinite cell width.
   const lngShrink = Math.max(Math.cos((maxAbsLat * Math.PI) / 180), 0.01);
   const dLat = thresholdKm / KM_PER_DEG_LAT;
-  const dLng = thresholdKm / (KM_PER_DEG_LAT * lngShrink);
 
   // Longitude columns WRAP at the antimeridian. Without this, 179.99 and
   // -179.99 — about 2.2 km apart, one cluster under the old all-pairs code —
@@ -107,7 +106,21 @@ export function clusterFeatures(features, thresholdKm = 8) {
   // "optimisation" would quietly return a different answer than the code it
   // replaced. The grid has to be a faster way to get the same result, not a
   // faster way to get a nearly-right one.
-  const columns = Math.max(1, Math.ceil(360 / dLng));
+  // Columns must tile 360 degrees EXACTLY, so the width is derived from an
+  // integer count rather than the other way round. Rounding the count up and
+  // keeping the raw width leaves a narrow partial column at the seam, and two
+  // points either side of it can then sit two wrapped columns apart — outside
+  // the ±1 search, never compared. That is not hypothetical: at the equator,
+  // 179.97 and -179.97 are 6.67 km apart, well inside the 8 km threshold, and
+  // came back as two clusters.
+  //
+  // Rounding the count DOWN makes each column slightly wider than the
+  // threshold, which is the safe direction: the guarantee needed is that a
+  // neighbour is never further than one column away, and wider columns can only
+  // help that.
+  const rawLng = thresholdKm / (KM_PER_DEG_LAT * lngShrink);
+  const columns = Math.max(1, Math.floor(360 / rawLng));
+  const dLng = 360 / columns;
   const cells = new Map();
   const cellKey = (row, col) => `${row}:${col}`;
   const wrapCol = (col) => ((col % columns) + columns) % columns;

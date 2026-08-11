@@ -111,6 +111,64 @@ test('it draws the province outline over the imagery', async ({ page }) => {
   await expect(page.locator('.inset-mode-label')).toHaveText(/British Columbia|Alberta|[A-Z]/);
 });
 
+test('the province fills the inset instead of floating in a continent', async ({ page }) => {
+  // The bug an exported map revealed: the locator was framed to the whole of
+  // North America, with British Columbia a small shape near the top and a
+  // marker somewhere in it. Every other test in this file passed — tiles
+  // loaded, four paths drew, the label said "British Columbia" — because they
+  // all check that things EXIST, and the framing was the one thing that was
+  // wrong.
+  //
+  // Cause: Leaflet derives zoom from the container's pixel size, and fitBounds
+  // ran before the panel had laid out. A fit computed against the wrong size
+  // stays wrong forever, since nothing recomputes it.
+  //
+  // So assert the outcome geometrically: how much of the container the drawn
+  // jurisdiction actually covers. A zoom number would be brittle (it depends
+  // on the panel's size and the province's shape); coverage is the thing a
+  // reader is looking at either way.
+  const control = await openInsetPanel(page);
+  await expect(control).toHaveCount(1, { timeout: 15_000 });
+  await control.selectOption('satellite_locator');
+
+  const inset = page.locator('.satellite-inset-map');
+  await expect(inset).toHaveCount(1, { timeout: 15_000 });
+  await expect(inset.locator('.leaflet-overlay-pane path')).toHaveCount(4, { timeout: 15_000 });
+
+  const framing = await page.evaluate(() => {
+    const container = document.querySelector('.satellite-inset-map');
+    const root = container.getBoundingClientRect();
+    // The outline is the first two paths (halo + line); the marker rings are
+    // fixed-radius and would drag the measurement toward zero.
+    const outline = container.querySelectorAll('.leaflet-overlay-pane path')[1];
+    const b = outline.getBoundingClientRect();
+    return {
+      containerW: root.width,
+      containerH: root.height,
+      fillW: b.width / root.width,
+      fillH: b.height / root.height,
+      // Where the shape sits, so a province wedged against an edge fails too.
+      centreX: (b.left + b.width / 2 - root.left) / root.width,
+      centreY: (b.top + b.height / 2 - root.top) / root.height,
+    };
+  });
+
+  // At the broken zoom the province covered roughly a third of the width. One
+  // zoom level is a factor of two, so 0.6 sits clearly between "fitted" and
+  // "one level too coarse" without demanding a pixel-exact fit.
+  expect(
+    Math.max(framing.fillW, framing.fillH),
+    `the jurisdiction covers only ${(framing.fillW * 100).toFixed(0)}%x${(framing.fillH * 100).toFixed(0)}% `
+      + `of a ${Math.round(framing.containerW)}x${Math.round(framing.containerH)} inset — it is framed too wide`,
+  ).toBeGreaterThan(0.6);
+
+  // And it is centred, not shoved into a corner.
+  expect(framing.centreX).toBeGreaterThan(0.25);
+  expect(framing.centreX).toBeLessThan(0.75);
+  expect(framing.centreY).toBeGreaterThan(0.25);
+  expect(framing.centreY).toBeLessThan(0.75);
+});
+
 test('the other inset styles still work', async ({ page }) => {
   const control = await openInsetPanel(page);
   await expect(control).toHaveCount(1, { timeout: 15_000 });
@@ -159,4 +217,119 @@ test('the exporter can find and place the inset tiles', async ({ page }) => {
   expect(capture.tileCount, 'no tile elements for the exporter to capture').toBeGreaterThan(0);
   expect(capture.allFromEsri, 'a captured tile came from somewhere unexpected').toBe(true);
   expect(capture.hasBox, 'the extent box the exporter redraws was missing').toBe(true);
+});
+
+test('the exported overlay really contains the outline and the marker', async ({ page }) => {
+  // The check that was missing last time, and the one that matters. The
+  // previous exporter took the FIRST overlay path and drew a rectangle around
+  // its bounding box — fine while the only overlay was an extent rectangle,
+  // silently wrong once the jurisdiction outline and marker ring were added.
+  // Every test then passed while the exported inset showed neither.
+  //
+  // This runs the exporter's actual overlay step — serialise the pane's <svg>,
+  // load it, draw it — and then reads the pixels back.
+  const control = await openInsetPanel(page);
+  await expect(control).toHaveCount(1, { timeout: 15_000 });
+  await control.selectOption('satellite_locator');
+  await expect(page.locator('.satellite-inset-map')).toHaveCount(1, { timeout: 15_000 });
+  await expect(page.locator('.satellite-inset-map .leaflet-overlay-pane path')).toHaveCount(4, { timeout: 15_000 });
+
+  const result = await page.evaluate(async () => {
+    const container = document.querySelector('.satellite-inset-map');
+    const root = container.getBoundingClientRect();
+    const svg = container.querySelector('.leaflet-overlay-pane svg');
+    if (!svg) return { ok: false, why: 'no overlay svg' };
+    const sb = svg.getBoundingClientRect();
+    if (!(sb.width > 0 && sb.height > 0)) return { ok: false, why: `overlay has no size: ${sb.width}x${sb.height}` };
+
+    // Where the outline sits on screen, relative to the container — the answer
+    // the export has to reproduce.
+    const live = container.querySelectorAll('.leaflet-overlay-pane path')[0].getBoundingClientRect();
+    const onScreen = {
+      x: live.left - root.left, y: live.top - root.top, w: live.width, h: live.height,
+    };
+
+    // NOTE: this reproduces the exporter's serialisation rather than calling
+    // it — the built bundle does not expose module internals to the page. So
+    // this test cannot catch renderScene.js dropping the transform strip;
+    // tests/export-overlay-svg.test.js calls serializeOverlaySvg directly and
+    // owns that regression. What THIS test is for is the assumption the strip
+    // rests on: that Leaflet's viewBox alone puts the drawing where the screen
+    // has it, in a real browser at a real fractional zoom. jsdom cannot
+    // rasterise, so only a browser can answer that.
+    const clone = svg.cloneNode(true);
+    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    clone.setAttribute('width', String(sb.width));
+    clone.setAttribute('height', String(sb.height));
+    clone.style.removeProperty('transform');
+    clone.style.removeProperty('-webkit-transform');
+    const uri = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(new XMLSerializer().serializeToString(clone))}`;
+
+    const img = await new Promise((resolve) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = () => resolve(null);
+      el.src = uri;
+    });
+    if (!img) return { ok: false, why: 'the serialised overlay would not load as an image' };
+
+    // Draw onto a canvas the size of the CONTAINER, at the same offset the
+    // exporter uses, so the result is directly comparable with the screen.
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.ceil(root.width);
+    canvas.height = Math.ceil(root.height);
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, sb.left - root.left, sb.top - root.top, sb.width, sb.height);
+
+    const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    let painted = 0;
+    let minX = Infinity; let minY = Infinity; let maxX = -1; let maxY = -1;
+    for (let py = 0; py < canvas.height; py += 1) {
+      for (let px = 0; px < canvas.width; px += 1) {
+        if (data[(py * canvas.width + px) * 4 + 3] > 16) {
+          painted += 1;
+          if (px < minX) minX = px;
+          if (px > maxX) maxX = px;
+          if (py < minY) minY = py;
+          if (py > maxY) maxY = py;
+        }
+      }
+    }
+    return {
+      ok: true,
+      painted,
+      total: canvas.width * canvas.height,
+      onScreen,
+      exported: { x: minX, y: minY, w: maxX - minX, h: maxY - minY },
+    };
+  });
+
+  expect(result.ok, result.why).toBe(true);
+  // A rectangle around the province bbox would also paint pixels, so a bare
+  // "> 0" would not have caught the old bug. The outline traces a coastline —
+  // far more ink than four straight edges — so require a real share of the
+  // canvas to be painted.
+  expect(result.painted, 'the serialised overlay came out blank').toBeGreaterThan(500);
+  expect(result.painted / result.total, 'suspiciously little ink for a coastline').toBeGreaterThan(0.002);
+
+  // And — the part ink alone cannot tell you — it has to land in the SAME
+  // PLACE as on screen, because the imagery underneath it does.
+  //
+  // This is how the double-offset bug got through: Leaflet gives the overlay
+  // <svg> both an inline transform and a matching viewBox origin, which
+  // compose correctly on the page but apply twice once the clone is
+  // rasterised alone. The overlay came out shifted by the pad — roughly a
+  // tenth of the panel — so the marker no longer sat on the ground it marks,
+  // while every ink-counting assertion stayed green.
+  //
+  // The tolerance covers the halo's 4px stroke, which the rasterised bbox
+  // includes and getBoundingClientRect reports differently.
+  const dx = Math.abs(result.exported.x - result.onScreen.x);
+  const dy = Math.abs(result.exported.y - result.onScreen.y);
+  const detail = `on screen at (${Math.round(result.onScreen.x)}, ${Math.round(result.onScreen.y)}) `
+    + `but exported at (${result.exported.x}, ${result.exported.y})`;
+  expect(dx, `the exported outline is displaced horizontally — ${detail}`).toBeLessThanOrEqual(4);
+  expect(dy, `the exported outline is displaced vertically — ${detail}`).toBeLessThanOrEqual(4);
+  expect(Math.abs(result.exported.w - result.onScreen.w), `exported outline is the wrong width — ${detail}`).toBeLessThanOrEqual(6);
+  expect(Math.abs(result.exported.h - result.onScreen.h), `exported outline is the wrong height — ${detail}`).toBeLessThanOrEqual(6);
 });

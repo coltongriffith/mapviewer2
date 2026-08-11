@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
 import {
   clusterFeatures, anchorForCluster, layerAnchorGroups, defaultAnchorForLayer,
   isAnchorOrphaned, featureCentroid, haversineKm, clusterLabels, reanchorCalloutsForLayer,
@@ -409,13 +410,26 @@ describe('the grid optimisation does not introduce its own failures', () => {
   }, 120_000);
 
   it('groups across the antimeridian, as all-pairs did', () => {
-    // 179.99 and -179.99 are about 2.2 km apart. Binning by raw longitude puts
-    // them at opposite ends of the column range so they are never compared, and
-    // the "optimisation" quietly returns a different answer than the code it
-    // replaced. A faster way to the same result, not to a nearly-right one.
-    const east = cell(179.99, 51.0, 1);
-    const west = cell(-179.99, 51.0, 2);
-    expect(clusterFeatures([east, west], 8)).toHaveLength(1);
+    // AT THE EQUATOR, and that matters. The first version of this test used
+    // latitude 51, where columns are wide enough that both points land in the
+    // same one — so it passed for the wrong reason and missed a real defect.
+    //
+    // 179.97 and -179.97 at the equator are 6.67 km apart, inside the 8 km
+    // threshold, and came back as TWO clusters: the column count was rounded up
+    // from the raw width, leaving a narrow partial column at the seam, and the
+    // two points sat two wrapped columns apart — outside the ±1 search.
+    expect(clusterFeatures([cell(179.97, 0, 1), cell(-179.97, 0, 2)], 8)).toHaveLength(1);
+    // And the milder case it used to cover.
+    expect(clusterFeatures([cell(179.99, 51.0, 1), cell(-179.99, 51.0, 2)], 8)).toHaveLength(1);
+  });
+
+  it('tiles the world in whole columns', () => {
+    // The property behind the seam fix: column width is derived from an integer
+    // count so the columns cover exactly 360 degrees, leaving no partial one to
+    // fall into.
+    const src = readFileSync('src/utils/featureClusters.js', 'utf8');
+    expect(src).toMatch(/const columns = Math\.max\(1, Math\.floor\(360 \/ rawLng\)\)/);
+    expect(src).toMatch(/const dLng = 360 \/ columns/);
   });
 
   it('still separates genuinely distant points near the antimeridian', () => {

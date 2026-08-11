@@ -830,6 +830,31 @@ function drawInsetBackdropCanvas(ctx, x, y, w, h, scale) {
  * Returns false when there is nothing to draw, so the caller can fall back to
  * the vector locator rather than leaving a blank panel in the PDF.
  */
+// Turn a live Leaflet overlay <svg> into a data URI that rasterises to the same
+// picture, in the same place, as the one on screen.
+//
+// Exported because it is the part that can be wrong invisibly. Leaflet offsets
+// this element TWICE over: an inline transform that moves the element, and a
+// matching viewBox origin that moves the drawing inside it. On the page those
+// compose into a single offset — the transform moves the box, the viewBox moves
+// the contents within it.
+//
+// Rasterised on its own the clone has no box to move, so a retained transform
+// shifts the contents a SECOND time. The symptom is an export whose outline and
+// marker sit about a tenth of a panel away from the imagery they describe,
+// while the imagery itself is fine — and a locator whose marker is not on the
+// ground it marks is worse than no locator. The caller positions the image from
+// the measured rect, so the element-level transform has no job left here.
+export function serializeOverlaySvg(svg, width, height) {
+  const clone = svg.cloneNode(true);
+  clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+  clone.setAttribute('width', String(width));
+  clone.setAttribute('height', String(height));
+  clone.style.removeProperty('transform');
+  clone.style.removeProperty('-webkit-transform');
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(new XMLSerializer().serializeToString(clone))}`;
+}
+
 async function drawSatelliteInsetCanvas(ctx, x, y, w, h, scale) {
   const container = document.querySelector('.satellite-inset-map');
   if (!container) return false;
@@ -857,18 +882,34 @@ async function drawSatelliteInsetCanvas(ctx, x, y, w, h, scale) {
   }
   ctx.globalAlpha = 1;
 
-  // The extent box is redrawn rather than captured: Leaflet renders it into an
-  // SVG/canvas overlay pane, which getTileImages does not collect, and a
-  // locator without its "you are here" marker is just a photograph.
-  const box = container.querySelector('.leaflet-overlay-pane path');
-  if (box) {
-    const b = box.getBoundingClientRect();
-    ctx.strokeStyle = getComputedStyle(box).stroke || '#cc2f2f';
-    ctx.lineWidth = Math.max(1, 2 * scale);
-    ctx.strokeRect(
-      x + (b.left - rect.left) * k, y + (b.top - rect.top) * k,
-      b.width * k, b.height * k,
-    );
+  // The vector overlays — jurisdiction outline and project marker — are
+  // captured WHOLE, by serialising Leaflet's overlay <svg> and drawing it as an
+  // image. getTileImages only collects the tile pane, so without this the
+  // export is an aerial photograph with no indication of where anything is.
+  //
+  // An earlier version took the FIRST path in the pane and drew a rectangle
+  // around its bounding box. That worked while the only overlay was a single
+  // extent rectangle, and broke silently the moment the outline and the marker
+  // were added: it started drawing a box around the province's bounding box and
+  // dropping both of the things worth showing. Reproducing shapes one at a time
+  // is a standing invitation to that bug, so nothing here knows or cares what
+  // the overlays are — whatever Leaflet drew is what gets exported.
+  const svg = container.querySelector('.leaflet-overlay-pane svg');
+  if (svg) {
+    const sb = svg.getBoundingClientRect();
+    if (sb.width > 0 && sb.height > 0) {
+      const uri = serializeOverlaySvg(svg, sb.width, sb.height);
+      const overlay = await loadImage(uri).catch(() => null);
+      if (overlay) {
+        ctx.drawImage(
+          overlay,
+          x + (sb.left - rect.left) * k, y + (sb.top - rect.top) * k,
+          sb.width * k, sb.height * k,
+        );
+      } else {
+        _exportWarnings.push('satellite inset outline could not be embedded');
+      }
+    }
   }
 
   ctx.restore();
@@ -896,7 +937,10 @@ async function drawInsetCanvas(ctx, scene, scale) {
     const ok = await drawSatelliteInsetCanvas(ctx, innerX, innerY, innerW, innerH, scale);
     if (ok) {
       ctx.fillStyle = theme.insetMuted; ctx.font = `${11 * scale}px Arial`; ctx.textBaseline = 'alphabetic';
-      ctx.fillText(insetLabel || 'Satellite locator', x + 12 * scale, y + h - 10 * scale);
+      // Same fallback chain the preview uses in LocatorInset: the detected
+      // region's name, then a generic label. Without this a preview reading
+      // "British Columbia" exported as "Satellite locator".
+      ctx.fillText(insetLabel || autoInsetRegion?.name || 'Satellite locator', x + 12 * scale, y + h - 10 * scale);
       return;
     }
     // Fall through to the vector locator rather than leaving the panel empty.
