@@ -819,6 +819,66 @@ function drawInsetBackdropCanvas(ctx, x, y, w, h, scale) {
   ctx.strokeStyle = '#cfd8e3'; ctx.lineWidth = 1.4 * scale; roads.forEach((line) => { ctx.beginPath(); line.forEach((pt, i) => { const [px, py] = mapPoint(pt[0], pt[1]); if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py); }); ctx.stroke(); });
   ctx.strokeStyle = '#b5d8f7'; ctx.lineWidth = 1.8 * scale; ctx.beginPath(); [[8,44],[18,36],[28,42],[38,36],[58,26],[70,36],[88,62],[95,56]].forEach((pt, i) => { const [px, py] = mapPoint(pt[0], pt[1]); if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py); }); ctx.stroke();
 }
+/**
+ * Draw the satellite locator inset by capturing the tiles already on screen.
+ *
+ * The same getTileImages() the main map export uses, pointed at the inset's own
+ * container. Reusing it is the whole design: an inset that renders from a
+ * second, independent tile pipeline is an inset that will eventually disagree
+ * with what the editor showed, and the export is the artefact the client sees.
+ *
+ * Returns false when there is nothing to draw, so the caller can fall back to
+ * the vector locator rather than leaving a blank panel in the PDF.
+ */
+async function drawSatelliteInsetCanvas(ctx, x, y, w, h, scale) {
+  const container = document.querySelector('.satellite-inset-map');
+  if (!container) return false;
+  const rect = container.getBoundingClientRect();
+  if (!rect.width || !rect.height) return false;
+
+  const tiles = getTileImages(container);
+  if (!tiles.length) return false;
+
+  // Container pixels → export pixels. The inset panel keeps its aspect ratio on
+  // screen, so a single factor is right for both axes.
+  const k = w / rect.width;
+
+  ctx.save();
+  drawRoundedRect(ctx, x, y, w, h, 8 * scale);
+  ctx.clip();
+
+  let drew = 0;
+  for (const tile of tiles) {
+    const img = await loadImage(tile.href, 'anonymous').catch(() => null);
+    if (!img) continue;
+    ctx.globalAlpha = tile.opacity;
+    ctx.drawImage(img, x + tile.x * k, y + tile.y * k, tile.width * k, tile.height * k);
+    drew += 1;
+  }
+  ctx.globalAlpha = 1;
+
+  // The extent box is redrawn rather than captured: Leaflet renders it into an
+  // SVG/canvas overlay pane, which getTileImages does not collect, and a
+  // locator without its "you are here" marker is just a photograph.
+  const box = container.querySelector('.leaflet-overlay-pane path');
+  if (box) {
+    const b = box.getBoundingClientRect();
+    ctx.strokeStyle = getComputedStyle(box).stroke || '#cc2f2f';
+    ctx.lineWidth = Math.max(1, 2 * scale);
+    ctx.strokeRect(
+      x + (b.left - rect.left) * k, y + (b.top - rect.top) * k,
+      b.width * k, b.height * k,
+    );
+  }
+
+  ctx.restore();
+  if (!drew) {
+    _exportWarnings.push('satellite inset tiles could not be embedded');
+    return false;
+  }
+  return true;
+}
+
 async function drawInsetCanvas(ctx, scene, scale) {
   const zone = getOverlayMetrics(scene).inset; if (!zone || !zone.width || !zone.height) return; const x = zone.left * scale, y = zone.top * scale, w = zone.width * scale, h = zone.height * scale;
   const theme = getTheme(scene);
@@ -831,6 +891,15 @@ async function drawInsetCanvas(ctx, scene, scale) {
     const img = await new Promise((resolve, reject) => { const el = new Image(); el.onload = () => resolve(el); el.onerror = reject; el.src = insetImage; }).catch(() => { _exportWarnings.push('inset image could not be embedded'); return null; });
     if (img) { ctx.save(); drawRoundedRect(ctx, innerX, innerY, innerW, innerH, 8 * scale); ctx.clip(); const lb = fitRect(img.naturalWidth || innerW, img.naturalHeight || innerH, innerW, innerH); ctx.drawImage(img, innerX + lb.x, innerY + lb.y, lb.w, lb.h); ctx.restore(); }
     return;
+  }
+  if (insetMode === 'satellite_locator') {
+    const ok = await drawSatelliteInsetCanvas(ctx, innerX, innerY, innerW, innerH, scale);
+    if (ok) {
+      ctx.fillStyle = theme.insetMuted; ctx.font = `${11 * scale}px Arial`; ctx.textBaseline = 'alphabetic';
+      ctx.fillText(insetLabel || 'Satellite locator', x + 12 * scale, y + h - 10 * scale);
+      return;
+    }
+    // Fall through to the vector locator rather than leaving the panel empty.
   }
   const visible = (scene.project.layers || []).filter((layer) => layer.visible !== false && layer.geojson);
   const bounds = unionBounds(visible.map((layer) => geojsonBounds(visibleGeojson(layer))).filter(Boolean));

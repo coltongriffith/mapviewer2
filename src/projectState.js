@@ -37,6 +37,7 @@ export const INSET_MODES = {
   country: 'Country',
   regional_district: 'Regional',
   secondary_zoom: 'Secondary Zoom',
+  satellite_locator: 'Satellite Locator',
   custom_image: 'Uploaded Inset',
 };
 
