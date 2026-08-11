@@ -4093,3 +4093,11 @@ button.claim-notices-chip[aria-expanded="true"] { border-color: #cbd5e1; backgro
 .ftl-off .ftl-title { text-decoration: line-through; color: #94a3b8; }
 .ftl-off .ftl-sub { color: #b0bccb; }
 .ftl-empty, .ftl-more { font-size: 12px; color: #64748b; margin: 8px 0 0; line-height: 1.5; }
+
+/* A reference overlay whose third-party tile service did not answer. Warning
+   tone, not error: the user's own data is untouched and there is nothing for
+   them to fix — the point is only to stop a dead toggle reading as a dead app. */
+.overlay-error-note {
+  font-size: 12px; color: #7c2d12; background: #fff7ed; border: 1px solid #fed7aa;
+  border-radius: 8px; padding: 8px 10px; margin: 8px 0 0; line-height: 1.5;
+}

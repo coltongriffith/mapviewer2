@@ -6,7 +6,7 @@ import LayerList from './components/LayerList';
 import LocatorInset from './components/LocatorInset';
 import CalloutsOverlay from './components/CalloutsOverlay';
 import LandingPage from './components/LandingPage';
-import DashboardPage from './components/DashboardPage';
+
 import SharedMapViewer from './components/SharedMapViewer';
 import UploadPanel from './components/UploadPanel';
 import AnnotationOverlay from './components/AnnotationOverlay';
@@ -15,6 +15,7 @@ import { getSessionId } from './utils/session';
 import NorthArrow, { NORTH_ARROW_STYLES } from './components/NorthArrow';
 
 const MapCanvas = React.lazy(() => import('./components/MapCanvas'));
+const DashboardPage = React.lazy(() => import('./components/DashboardPage'));
 const AdminPage = React.lazy(() => import('./components/AdminPage'));
 const AccountPage = React.lazy(() => import('./components/AccountPage'));
 const TenureMonitorPage = React.lazy(() => import('./components/tenure/TenureMonitorPage'));
@@ -492,6 +493,16 @@ function renderLegendGroups(items) {
   return [{ heading: null, items }];
 }
 
+// Human names for the reference overlays, used when one fails to load. The
+// toggles read from JSX literals; this is the only place that needs to name an
+// overlay outside of its own control.
+const OVERLAY_LABELS = {
+  context: 'Roads + Settlements',
+  labels: 'Reference Labels',
+  rail: 'Railways',
+  geology: 'Bedrock Geology',
+};
+
 function getFeatureLabel(feature, layer) {
   const props = feature?.properties || {};
   return props.label || props.name || props.hole || props.hole_id || props.holeid || props.id || layer?.displayName || layer?.legend?.label || layer?.name || 'Drillhole';
@@ -829,6 +840,11 @@ export default function App() {
   // trimLayerId: the list is usable without arming the map, and arming the map
   // does not force a 200-row list open.
   const [trimListLayerId, setTrimListLayerId] = useState(null);
+  // Reference overlays whose tiles failed this session. These are third-party
+  // services, and when one stops answering the toggle simply does nothing —
+  // which reads as "the app is broken" rather than "the source is down". Saying
+  // which is the difference between a bug report and an informed shrug.
+  const [overlayErrors, setOverlayErrors] = useState({});
   const [selectedCalloutId, setSelectedCalloutId] = useState(null);
   const [selectedFeature, setSelectedFeature] = useState(null);
   const [selectedMarkerId, setSelectedMarkerId] = useState(null);
@@ -3652,6 +3668,10 @@ export default function App() {
     setUploadStatus({ type: 'info', message: 'Callout deleted — press Ctrl+Z to undo.' });
   };
 
+  const handleOverlayError = useCallback((key) => {
+    setOverlayErrors((prev) => (prev[key] ? prev : { ...prev, [key]: true }));
+  }, []);
+
   const handleFeatureClick = ({ layerId, feature, latlng, isLayerSelect }) => {
     const layer = project.layers.find((item) => item.id === layerId) || null;
     if (!layer) return;
@@ -4559,6 +4579,7 @@ export default function App() {
       );
     }
     return (
+      <React.Suspense fallback={null}>
       <DashboardPage
         onOpenProject={(entry) => { openProjectFromRecent(entry); setScreen('editor'); }}
         onNewProject={() => { startNewProject(); setScreen('editor'); }}
@@ -4569,6 +4590,7 @@ export default function App() {
         onSearchClaims={() => { setScreen('editor'); setAddClaimsModalPath('registry'); setShowAddClaimsModal(true); }}
         onExit={goToLanding}
       />
+      </React.Suspense>
     );
   }
 
@@ -6021,6 +6043,13 @@ export default function App() {
             <label className="toggle-row"><input type="checkbox" checked={!!referenceOverlays.context} onChange={(e) => updateLayout({ referenceOverlays: { context: e.target.checked } })} /> <span>Roads + Settlements</span></label>
             <label className="toggle-row"><input type="checkbox" checked={!!referenceOverlays.labels} onChange={(e) => updateLayout({ referenceOverlays: { labels: e.target.checked } })} /> <span>Reference Labels</span></label>
             <label className="toggle-row"><input type="checkbox" checked={!!referenceOverlays.rail} onChange={(e) => updateLayout({ referenceOverlays: { rail: e.target.checked } })} /> <span>Railways</span></label>
+            <label className="toggle-row"><input type="checkbox" checked={!!referenceOverlays.geology} onChange={(e) => updateLayout({ referenceOverlays: { geology: e.target.checked } })} /> <span>Bedrock Geology (USGS)</span></label>
+            {Object.keys(overlayErrors).filter((k) => referenceOverlays[k]).length > 0 && (
+              <p className="overlay-error-note">
+                {Object.keys(overlayErrors).filter((k) => referenceOverlays[k]).map((k) => OVERLAY_LABELS[k] || k).join(', ')}
+                {' '}could not be loaded — the map service did not respond. Your own layers are unaffected.
+              </p>
+            )}
           </div>}
         </section>
 
@@ -6195,7 +6224,7 @@ export default function App() {
             style={mapStageStyle}
           >
         <React.Suspense fallback={null}>
-          <MapCanvas onReady={onMapReady} project={project} template={template} onFeatureClick={handleFeatureClick} onMapClick={handleMapClick} annotationToolRef={annotationToolRef} trimLayerId={trimLayerId} />
+          <MapCanvas onReady={onMapReady} project={project} template={template} onFeatureClick={handleFeatureClick} onMapClick={handleMapClick} annotationToolRef={annotationToolRef} trimLayerId={trimLayerId} onOverlayError={handleOverlayError} />
         </React.Suspense>
         {mapReady && (
           <>

@@ -6,8 +6,8 @@ import { claimTooltipHtml, claimPopupRowsHtml } from '../utils/claimInfo';
 import { POINT_ROLES } from '../projectState';
 import regionsNA from '../assets/regionsNA.json';
 import dissolveGeo from '@turf/dissolve';
-import { featureKey, visibleGeojson } from '../utils/featureIdentity.js';
 import { reportError } from '../utils/errorReporter';
+import { featureKey, visibleGeojson } from '../utils/featureIdentity.js';
 
 const BASEMAPS = {
   light: {
@@ -56,6 +56,19 @@ const REFERENCE_OVERLAYS = {
     opacityFactor: 0.9,
     zIndex: 365,
   },
+  // Bedrock geology — USGS MRData world geologic map compilation (WMS, not
+  // XYZ). Global coverage, so it works over Canadian claims, at compilation
+  // scale: unit colors read well zoomed out but stay coarse at property scale.
+  geology: {
+    // USGS MRData "worldgeol" WMS — world geologic map compiled by the
+    // Geological Survey of Canada. Global coverage; layers verified from
+    // GetCapabilities: `geology` (bedrock units) + `contacts` (unit borders).
+    url: 'https://mrdata.usgs.gov/services/worldgeol',
+    wms: { layers: 'geology,contacts', format: 'image/png', transparent: true },
+    attribution: '&copy; USGS / GSC',
+    opacityFactor: 0.85,
+    zIndex: 345,
+  },
 };
 
 function detectGeomType(geojson) {
@@ -66,7 +79,7 @@ function detectGeomType(geojson) {
   return 'polygon';
 }
 
-export default function MapCanvas({ onReady, project, template, onFeatureClick, onMapClick, annotationToolRef, trimLayerId = null }) {
+export default function MapCanvas({ onReady, project, template, onFeatureClick, onMapClick, annotationToolRef, trimLayerId = null, onOverlayError }) {
   const mapRef = useRef(null);
   const onMapClickRef = useRef(onMapClick);
   const onFeatureClickRef = useRef(onFeatureClick);
@@ -77,12 +90,14 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
   const regionHighlightGroupRef = useRef(null);
   const referenceRefs = useRef({});
   const reportedTileErrors = useRef(new Set());
+  const onOverlayErrorRef = useRef(onOverlayError);
   const svgRendererRefs = useRef([]);
   const prevLayersRef = useRef([]);
   const leafletLayerRefsMap = useRef(new Map());
 
   useEffect(() => { onMapClickRef.current = onMapClick; }, [onMapClick]);
   useEffect(() => { onFeatureClickRef.current = onFeatureClick; }, [onFeatureClick]);
+  useEffect(() => { onOverlayErrorRef.current = onOverlayError; }, [onOverlayError]);
 
   useEffect(() => {
     if (mapRef.current || !mapElRef.current) return;
@@ -179,21 +194,26 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
           opacity: Math.max(0.2, Math.min(1, baseOpacity * cfg.opacityFactor)),
           zIndex: cfg.zIndex,
         };
-        const tiles = L.tileLayer(cfg.url, opts);
+        // WMS overlays (e.g. USGS geology) still render as <img> tiles, so
+        // export capture treats them identically to XYZ layers.
+        const tiles = cfg.wms
+          ? L.tileLayer.wms(cfg.url, { ...opts, ...cfg.wms })
+          : L.tileLayer(cfg.url, opts);
 
         // Say so when a tile service stops answering.
         //
-        // Nothing used to listen for this, and the cost was concrete: the USGS
-        // bedrock-geology overlay died — for the SECOND time, after an earlier
-        // endpoint retirement — and the only symptom was a toggle that appeared
-        // to do nothing. A reference layer that silently fails is
-        // indistinguishable from one that is working but subtle, so nobody
-        // reports it and nobody notices. These are all third-party services
-        // outside our control; the next one will go the same way.
+        // Nothing listened for this, and the cost was concrete. The bedrock
+        // geology overlay stopped rendering and the ONLY symptom was a toggle
+        // that appeared to do nothing — which is indistinguishable from a
+        // subtle layer that is working correctly. Users do not report that, so
+        // it went unnoticed, and when it was finally investigated the absence
+        // of any signal led to the wrong conclusion (that the upstream service
+        // was dead) and very nearly to deleting a working feature.
         //
-        // Reported once per overlay per session (reportError de-duplicates by
-        // message), so it surfaces in Admin → Health rather than flooding it —
-        // a broken tile source produces an error for every tile in view.
+        // Every one of these is a third-party service outside our control.
+        // Reported once per overlay per session — a broken source emits an
+        // error for every tile in view, and the guard is what keeps Admin →
+        // Health readable rather than flooded.
         tiles.on('tileerror', () => {
           if (reportedTileErrors.current.has(key)) return;
           reportedTileErrors.current.add(key);
@@ -201,6 +221,7 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
             kind: 'tile_error',
             context: { overlay: key, url: cfg.url },
           });
+          onOverlayErrorRef.current?.(key);
         });
 
         referenceRefs.current[key] = tiles;
