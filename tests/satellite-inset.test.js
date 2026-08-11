@@ -82,10 +82,34 @@ describe('the screen and the export agree on where the tiles are', () => {
     expect(exporter).toMatch(/Fall through to the vector locator/);
   });
 
-  it('redraws the extent box, which tile capture cannot see', () => {
-    // Leaflet puts it in the overlay pane; getTileImages only reads the tile
-    // pane. A locator without its marker is just a photograph.
-    expect(exporter).toMatch(/leaflet-overlay-pane path/);
+  it('captures the whole overlay pane, not individual shapes', () => {
+    // The e2e pixel test proves the SERIALISE-AND-DRAW mechanism works in a
+    // browser; this pins that the exporter actually uses it.
+    //
+    // The previous version took the FIRST path in the pane and drew a rectangle
+    // around its bounding box. Correct while the only overlay was one extent
+    // rectangle — and silently wrong the moment the jurisdiction outline and
+    // marker ring were added, at which point it drew a box around the
+    // province's bbox and dropped both of the things worth showing. Every test
+    // still passed.
+    //
+    // Reproducing shapes one at a time invites exactly that, so the rule is:
+    // the exporter must not know what the overlays ARE.
+    expect(exporter).toMatch(/leaflet-overlay-pane svg/);
+    expect(exporter).toMatch(/XMLSerializer/);
+    expect(
+      /querySelector\('\.leaflet-overlay-pane path'\)/.test(exporter),
+      'the exporter is singling out one overlay path again',
+    ).toBe(false);
+    expect(
+      /strokeRect\(/.test(exporter.slice(exporter.indexOf('drawSatelliteInsetCanvas'), exporter.indexOf('async function drawInsetCanvas'))),
+      'the inset exporter is approximating an overlay with a rectangle again',
+    ).toBe(false);
+  });
+
+  it('labels the export the way the preview labels it', () => {
+    // A preview reading "British Columbia" exported as "Satellite locator".
+    expect(exporter).toMatch(/insetLabel \|\| autoInsetRegion\?\.name \|\| 'Satellite locator'/);
   });
 });
 

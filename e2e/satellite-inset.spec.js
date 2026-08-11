@@ -160,3 +160,63 @@ test('the exporter can find and place the inset tiles', async ({ page }) => {
   expect(capture.allFromEsri, 'a captured tile came from somewhere unexpected').toBe(true);
   expect(capture.hasBox, 'the extent box the exporter redraws was missing').toBe(true);
 });
+
+test('the exported overlay really contains the outline and the marker', async ({ page }) => {
+  // The check that was missing last time, and the one that matters. The
+  // previous exporter took the FIRST overlay path and drew a rectangle around
+  // its bounding box — fine while the only overlay was an extent rectangle,
+  // silently wrong once the jurisdiction outline and marker ring were added.
+  // Every test then passed while the exported inset showed neither.
+  //
+  // This runs the exporter's actual overlay step — serialise the pane's <svg>,
+  // load it, draw it — and then reads the pixels back.
+  const control = await openInsetPanel(page);
+  await expect(control).toHaveCount(1, { timeout: 15_000 });
+  await control.selectOption('satellite_locator');
+  await expect(page.locator('.satellite-inset-map')).toHaveCount(1, { timeout: 15_000 });
+  await expect(page.locator('.satellite-inset-map .leaflet-overlay-pane path')).toHaveCount(4, { timeout: 15_000 });
+
+  const result = await page.evaluate(async () => {
+    const container = document.querySelector('.satellite-inset-map');
+    const svg = container.querySelector('.leaflet-overlay-pane svg');
+    if (!svg) return { ok: false, why: 'no overlay svg' };
+    const sb = svg.getBoundingClientRect();
+    if (!(sb.width > 0 && sb.height > 0)) return { ok: false, why: `overlay has no size: ${sb.width}x${sb.height}` };
+
+    const clone = svg.cloneNode(true);
+    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    clone.setAttribute('width', String(sb.width));
+    clone.setAttribute('height', String(sb.height));
+    const uri = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(new XMLSerializer().serializeToString(clone))}`;
+
+    const img = await new Promise((resolve) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = () => resolve(null);
+      el.src = uri;
+    });
+    if (!img) return { ok: false, why: 'the serialised overlay would not load as an image' };
+
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.ceil(sb.width);
+    canvas.height = Math.ceil(sb.height);
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+    // Count what actually landed on the canvas, and how much of it is white —
+    // the outline's inner stroke and the marker's fill are both white-ish, so
+    // a drawn-but-blank image is distinguishable from a real one.
+    const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    let painted = 0;
+    for (let i = 3; i < data.length; i += 4) if (data[i] > 16) painted += 1;
+    return { ok: true, painted, total: canvas.width * canvas.height, w: canvas.width, h: canvas.height };
+  });
+
+  expect(result.ok, result.why).toBe(true);
+  // A rectangle around the province bbox would also paint pixels, so a bare
+  // "> 0" would not have caught the old bug. The outline traces a coastline —
+  // far more ink than four straight edges — so require a real share of the
+  // canvas to be painted.
+  expect(result.painted, 'the serialised overlay came out blank').toBeGreaterThan(500);
+  expect(result.painted / result.total, 'suspiciously little ink for a coastline').toBeGreaterThan(0.002);
+});
