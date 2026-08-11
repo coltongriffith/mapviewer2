@@ -63,7 +63,7 @@ import { runCloudMigration } from './utils/cloudMigration';
 import { scopingWarning } from './utils/scopingNotice';
 import { CLAIM_NAME_CAVEAT } from './utils/claimProvenance';
 import { featureKey, layerFeatures, isFeatureHidden, hiddenCount, featuresInBounds, visibleGeojson } from './utils/featureIdentity.js';
-import { layerAnchorGroups, defaultAnchorForLayer, isAnchorOrphaned } from './utils/featureClusters.js';
+import { layerAnchorGroups, defaultAnchorForLayer, reanchorCalloutsForLayer } from './utils/featureClusters.js';
 import FeatureTrimList from './components/FeatureTrimList.jsx';
 import dissolveGeo from '@turf/dissolve';
 import {
@@ -3460,22 +3460,14 @@ export default function App() {
       });
 
       // Bring back any label that is now pointing at ground that has gone.
-      //
-      // The reported symptom: trim the western claims, and the layer's label
-      // stays out west with its leader line drawn across empty country. The
-      // anchor was stored when the label was created, so nothing moved it.
-      //
-      // Deliberately narrow. A label the user DRAGGED somewhere is left alone —
-      // isManualPosition means they chose that spot and it is not ours to
-      // overrule — and so is one still near any remaining shape, since a label
-      // sitting in a gap inside a block is a normal thing to want.
+      // The rules live in reanchorCalloutsForLayer, which is pure and tested.
       const trimmed = layers.find((l) => l.id === layerId);
-      const callouts = (prev.callouts || []).map((c) => {
-        if (c.layerId !== layerId || c.isManualPosition) return c;
-        if (!isAnchorOrphaned(trimmed, c.anchor)) return c;
-        const anchor = defaultAnchorForLayer(trimmed);
-        return anchor ? { ...c, anchor } : c;
-      });
+      const map = leafletMapRef.current;
+      const callouts = reanchorCalloutsForLayer(
+        prev.callouts,
+        trimmed,
+        map ? (lat, lng) => map.latLngToContainerPoint([lat, lng]) : null,
+      );
 
       return { ...prev, layers, callouts };
     });
