@@ -830,6 +830,31 @@ function drawInsetBackdropCanvas(ctx, x, y, w, h, scale) {
  * Returns false when there is nothing to draw, so the caller can fall back to
  * the vector locator rather than leaving a blank panel in the PDF.
  */
+// Turn a live Leaflet overlay <svg> into a data URI that rasterises to the same
+// picture, in the same place, as the one on screen.
+//
+// Exported because it is the part that can be wrong invisibly. Leaflet offsets
+// this element TWICE over: an inline transform that moves the element, and a
+// matching viewBox origin that moves the drawing inside it. On the page those
+// compose into a single offset — the transform moves the box, the viewBox moves
+// the contents within it.
+//
+// Rasterised on its own the clone has no box to move, so a retained transform
+// shifts the contents a SECOND time. The symptom is an export whose outline and
+// marker sit about a tenth of a panel away from the imagery they describe,
+// while the imagery itself is fine — and a locator whose marker is not on the
+// ground it marks is worse than no locator. The caller positions the image from
+// the measured rect, so the element-level transform has no job left here.
+export function serializeOverlaySvg(svg, width, height) {
+  const clone = svg.cloneNode(true);
+  clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+  clone.setAttribute('width', String(width));
+  clone.setAttribute('height', String(height));
+  clone.style.removeProperty('transform');
+  clone.style.removeProperty('-webkit-transform');
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(new XMLSerializer().serializeToString(clone))}`;
+}
+
 async function drawSatelliteInsetCanvas(ctx, x, y, w, h, scale) {
   const container = document.querySelector('.satellite-inset-map');
   if (!container) return false;
@@ -873,11 +898,7 @@ async function drawSatelliteInsetCanvas(ctx, x, y, w, h, scale) {
   if (svg) {
     const sb = svg.getBoundingClientRect();
     if (sb.width > 0 && sb.height > 0) {
-      const clone = svg.cloneNode(true);
-      clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-      clone.setAttribute('width', String(sb.width));
-      clone.setAttribute('height', String(sb.height));
-      const uri = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(new XMLSerializer().serializeToString(clone))}`;
+      const uri = serializeOverlaySvg(svg, sb.width, sb.height);
       const overlay = await loadImage(uri).catch(() => null);
       if (overlay) {
         ctx.drawImage(

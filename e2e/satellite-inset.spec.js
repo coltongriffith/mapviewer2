@@ -236,15 +236,33 @@ test('the exported overlay really contains the outline and the marker', async ({
 
   const result = await page.evaluate(async () => {
     const container = document.querySelector('.satellite-inset-map');
+    const root = container.getBoundingClientRect();
     const svg = container.querySelector('.leaflet-overlay-pane svg');
     if (!svg) return { ok: false, why: 'no overlay svg' };
     const sb = svg.getBoundingClientRect();
     if (!(sb.width > 0 && sb.height > 0)) return { ok: false, why: `overlay has no size: ${sb.width}x${sb.height}` };
 
+    // Where the outline sits on screen, relative to the container — the answer
+    // the export has to reproduce.
+    const live = container.querySelectorAll('.leaflet-overlay-pane path')[0].getBoundingClientRect();
+    const onScreen = {
+      x: live.left - root.left, y: live.top - root.top, w: live.width, h: live.height,
+    };
+
+    // NOTE: this reproduces the exporter's serialisation rather than calling
+    // it — the built bundle does not expose module internals to the page. So
+    // this test cannot catch renderScene.js dropping the transform strip;
+    // tests/export-overlay-svg.test.js calls serializeOverlaySvg directly and
+    // owns that regression. What THIS test is for is the assumption the strip
+    // rests on: that Leaflet's viewBox alone puts the drawing where the screen
+    // has it, in a real browser at a real fractional zoom. jsdom cannot
+    // rasterise, so only a browser can answer that.
     const clone = svg.cloneNode(true);
     clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
     clone.setAttribute('width', String(sb.width));
     clone.setAttribute('height', String(sb.height));
+    clone.style.removeProperty('transform');
+    clone.style.removeProperty('-webkit-transform');
     const uri = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(new XMLSerializer().serializeToString(clone))}`;
 
     const img = await new Promise((resolve) => {
@@ -255,19 +273,35 @@ test('the exported overlay really contains the outline and the marker', async ({
     });
     if (!img) return { ok: false, why: 'the serialised overlay would not load as an image' };
 
+    // Draw onto a canvas the size of the CONTAINER, at the same offset the
+    // exporter uses, so the result is directly comparable with the screen.
     const canvas = document.createElement('canvas');
-    canvas.width = Math.ceil(sb.width);
-    canvas.height = Math.ceil(sb.height);
+    canvas.width = Math.ceil(root.width);
+    canvas.height = Math.ceil(root.height);
     const ctx = canvas.getContext('2d');
-    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, sb.left - root.left, sb.top - root.top, sb.width, sb.height);
 
-    // Count what actually landed on the canvas, and how much of it is white —
-    // the outline's inner stroke and the marker's fill are both white-ish, so
-    // a drawn-but-blank image is distinguishable from a real one.
     const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
     let painted = 0;
-    for (let i = 3; i < data.length; i += 4) if (data[i] > 16) painted += 1;
-    return { ok: true, painted, total: canvas.width * canvas.height, w: canvas.width, h: canvas.height };
+    let minX = Infinity; let minY = Infinity; let maxX = -1; let maxY = -1;
+    for (let py = 0; py < canvas.height; py += 1) {
+      for (let px = 0; px < canvas.width; px += 1) {
+        if (data[(py * canvas.width + px) * 4 + 3] > 16) {
+          painted += 1;
+          if (px < minX) minX = px;
+          if (px > maxX) maxX = px;
+          if (py < minY) minY = py;
+          if (py > maxY) maxY = py;
+        }
+      }
+    }
+    return {
+      ok: true,
+      painted,
+      total: canvas.width * canvas.height,
+      onScreen,
+      exported: { x: minX, y: minY, w: maxX - minX, h: maxY - minY },
+    };
   });
 
   expect(result.ok, result.why).toBe(true);
@@ -277,4 +311,25 @@ test('the exported overlay really contains the outline and the marker', async ({
   // canvas to be painted.
   expect(result.painted, 'the serialised overlay came out blank').toBeGreaterThan(500);
   expect(result.painted / result.total, 'suspiciously little ink for a coastline').toBeGreaterThan(0.002);
+
+  // And — the part ink alone cannot tell you — it has to land in the SAME
+  // PLACE as on screen, because the imagery underneath it does.
+  //
+  // This is how the double-offset bug got through: Leaflet gives the overlay
+  // <svg> both an inline transform and a matching viewBox origin, which
+  // compose correctly on the page but apply twice once the clone is
+  // rasterised alone. The overlay came out shifted by the pad — roughly a
+  // tenth of the panel — so the marker no longer sat on the ground it marks,
+  // while every ink-counting assertion stayed green.
+  //
+  // The tolerance covers the halo's 4px stroke, which the rasterised bbox
+  // includes and getBoundingClientRect reports differently.
+  const dx = Math.abs(result.exported.x - result.onScreen.x);
+  const dy = Math.abs(result.exported.y - result.onScreen.y);
+  const detail = `on screen at (${Math.round(result.onScreen.x)}, ${Math.round(result.onScreen.y)}) `
+    + `but exported at (${result.exported.x}, ${result.exported.y})`;
+  expect(dx, `the exported outline is displaced horizontally — ${detail}`).toBeLessThanOrEqual(4);
+  expect(dy, `the exported outline is displaced vertically — ${detail}`).toBeLessThanOrEqual(4);
+  expect(Math.abs(result.exported.w - result.onScreen.w), `exported outline is the wrong width — ${detail}`).toBeLessThanOrEqual(6);
+  expect(Math.abs(result.exported.h - result.onScreen.h), `exported outline is the wrong height — ${detail}`).toBeLessThanOrEqual(6);
 });
