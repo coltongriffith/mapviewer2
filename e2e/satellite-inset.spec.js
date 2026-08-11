@@ -111,6 +111,64 @@ test('it draws the province outline over the imagery', async ({ page }) => {
   await expect(page.locator('.inset-mode-label')).toHaveText(/British Columbia|Alberta|[A-Z]/);
 });
 
+test('the province fills the inset instead of floating in a continent', async ({ page }) => {
+  // The bug an exported map revealed: the locator was framed to the whole of
+  // North America, with British Columbia a small shape near the top and a
+  // marker somewhere in it. Every other test in this file passed — tiles
+  // loaded, four paths drew, the label said "British Columbia" — because they
+  // all check that things EXIST, and the framing was the one thing that was
+  // wrong.
+  //
+  // Cause: Leaflet derives zoom from the container's pixel size, and fitBounds
+  // ran before the panel had laid out. A fit computed against the wrong size
+  // stays wrong forever, since nothing recomputes it.
+  //
+  // So assert the outcome geometrically: how much of the container the drawn
+  // jurisdiction actually covers. A zoom number would be brittle (it depends
+  // on the panel's size and the province's shape); coverage is the thing a
+  // reader is looking at either way.
+  const control = await openInsetPanel(page);
+  await expect(control).toHaveCount(1, { timeout: 15_000 });
+  await control.selectOption('satellite_locator');
+
+  const inset = page.locator('.satellite-inset-map');
+  await expect(inset).toHaveCount(1, { timeout: 15_000 });
+  await expect(inset.locator('.leaflet-overlay-pane path')).toHaveCount(4, { timeout: 15_000 });
+
+  const framing = await page.evaluate(() => {
+    const container = document.querySelector('.satellite-inset-map');
+    const root = container.getBoundingClientRect();
+    // The outline is the first two paths (halo + line); the marker rings are
+    // fixed-radius and would drag the measurement toward zero.
+    const outline = container.querySelectorAll('.leaflet-overlay-pane path')[1];
+    const b = outline.getBoundingClientRect();
+    return {
+      containerW: root.width,
+      containerH: root.height,
+      fillW: b.width / root.width,
+      fillH: b.height / root.height,
+      // Where the shape sits, so a province wedged against an edge fails too.
+      centreX: (b.left + b.width / 2 - root.left) / root.width,
+      centreY: (b.top + b.height / 2 - root.top) / root.height,
+    };
+  });
+
+  // At the broken zoom the province covered roughly a third of the width. One
+  // zoom level is a factor of two, so 0.6 sits clearly between "fitted" and
+  // "one level too coarse" without demanding a pixel-exact fit.
+  expect(
+    Math.max(framing.fillW, framing.fillH),
+    `the jurisdiction covers only ${(framing.fillW * 100).toFixed(0)}%x${(framing.fillH * 100).toFixed(0)}% `
+      + `of a ${Math.round(framing.containerW)}x${Math.round(framing.containerH)} inset — it is framed too wide`,
+  ).toBeGreaterThan(0.6);
+
+  // And it is centred, not shoved into a corner.
+  expect(framing.centreX).toBeGreaterThan(0.25);
+  expect(framing.centreX).toBeLessThan(0.75);
+  expect(framing.centreY).toBeGreaterThan(0.25);
+  expect(framing.centreY).toBeLessThan(0.75);
+});
+
 test('the other inset styles still work', async ({ page }) => {
   const control = await openInsetPanel(page);
   await expect(control).toHaveCount(1, { timeout: 15_000 });

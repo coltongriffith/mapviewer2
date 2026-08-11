@@ -24,9 +24,17 @@ export const SATELLITE_INSET_CLASS = 'satellite-inset-map';
 
 const IMAGERY_URL = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
 
-// How much room to leave around the jurisdiction. Just enough that the outline
-// does not touch the frame.
-const REGION_PAD = 0.12;
+// Room around the jurisdiction, in PIXELS rather than as a fraction of the
+// bounds.
+//
+// A fractional pad was what broke the framing. The inset is small — around
+// 220x132 — so one Leaflet zoom level is an enormous step: at the fitted zoom
+// British Columbia filled the box, one level down it covered a third of it,
+// with Alaska and the Caribbean either side. fitBounds floors to an integer
+// zoom, the ideal fit here is about 3.2, and padding the bounds by 12% pushed
+// that to 2.9 — so a pad meant to keep the outline off the frame cost a factor
+// of two instead. In pixels the pad costs what it says it costs.
+const REGION_PAD_PX = 6;
 
 // Fallback when no province or state can be identified — offshore claims, or a
 // jurisdiction outside North America. Show the ground around the project rather
@@ -74,6 +82,12 @@ export default function SatelliteInset({ layers, markerColor, region }) {
       // Tiles must be <img> elements for the export capture to find them, which
       // canvas rendering would not produce.
       preferCanvas: false,
+      // Fractional zoom. In a panel this small an integer zoom step is the
+      // difference between "a province" and "a continent", and fitBounds can
+      // only round down. Nothing here zooms interactively, so there is no
+      // snapping behaviour to preserve — only a fit to get right.
+      zoomSnap: 0,
+      zoomAnimation: false,
     });
 
     const tiles = L.tileLayer(IMAGERY_URL, {
@@ -99,7 +113,10 @@ export default function SatelliteInset({ layers, markerColor, region }) {
     };
   }, []);
 
-  useEffect(() => {
+  // The view, reapplied whenever anything it depends on changes — including the
+  // container's size, since Leaflet derives zoom from pixels and nothing else
+  // here recomputes a fit.
+  const applyView = React.useCallback(() => {
     const map = mapRef.current;
     if (!map) return;
     map.invalidateSize({ animate: false });
@@ -126,10 +143,15 @@ export default function SatelliteInset({ layers, markerColor, region }) {
     // The jurisdiction, when we know it. That is what makes this a locator
     // rather than an aerial photograph.
     if (activeRegion?.bbox) {
-      const [w, s, e, n] = activeRegion.bbox;
-      const rb = L.latLngBounds([s, w], [n, e]);
-      if (rb.isValid()) map.fitBounds(rb.pad(REGION_PAD), { animate: false });
+      const [w, s2, e, n] = activeRegion.bbox;
+      const rb = L.latLngBounds([s2, w], [n, e]);
+      if (rb.isValid()) {
+        map.fitBounds(rb, { animate: false, padding: [REGION_PAD_PX, REGION_PAD_PX] });
+      }
     } else if (claim && claim.isValid()) {
+      // No jurisdiction to frame, so there is no fixed shape to fill — show
+      // the ground around the project. A fractional pad is the right tool
+      // here, because the claim block itself is the thing being padded.
       map.fitBounds(claim.pad(CLAIM_PAD), { animate: false });
     } else if (!map._loaded) {
       // A Leaflet map with no view is not empty, it is unusable, and later
@@ -155,11 +177,20 @@ export default function SatelliteInset({ layers, markerColor, region }) {
         }),
       ]).addTo(map);
     }
-  }, [
-    activeRegion,
-    bounds?.minLat, bounds?.minLng, bounds?.maxLat, bounds?.maxLng,
-    markerColor,
-  ]);
+  }, [activeRegion, bounds?.minLat, bounds?.minLng, bounds?.maxLat, bounds?.maxLng, markerColor]);
+
+  useEffect(() => { applyView(); }, [applyView]);
+
+  // Refit on resize. The panel lays out after mount and changes size with the
+  // template, and a fit computed against one size stays put at another — the
+  // dependency list above has no way to notice.
+  useEffect(() => {
+    const el = elRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => applyView());
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [applyView]);
 
   return <div ref={elRef} className={SATELLITE_INSET_CLASS} style={{ width: '100%', height: '100%' }} />;
 }
