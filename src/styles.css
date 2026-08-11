@@ -4101,3 +4101,19 @@ button.claim-notices-chip[aria-expanded="true"] { border-color: #cbd5e1; backgro
   font-size: 12px; color: #7c2d12; background: #fff7ed; border: 1px solid #fed7aa;
   border-radius: 8px; padding: 8px 10px; margin: 8px 0 0; line-height: 1.5;
 }
+
+/* The satellite locator sits in the same card as the vector one, so it inherits
+   the header, footer label and panel chrome. This is only the map slot.
+   The inset floats over a map that is often satellite itself, so it needs a
+   hard edge of its own — without one the two images run together and the inset
+   reads as a smudge rather than a panel. */
+.inset-satellite-wrap {
+  /* height:calc, NOT flex — .inset-card is a block, so `flex: 1` did nothing
+     and the map inside collapsed to zero height while still reporting tiles.
+     .inset-svg and .inset-image-wrap already size themselves this way; the
+     34px is the header row plus the footer label. */
+  position: relative; width: 100%; height: calc(100% - 34px); overflow: hidden;
+  border-radius: 8px; border: 1px solid #b8c6d6; background: #0b1a2b;
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.75);
+}
+.inset-satellite-wrap .leaflet-container { background: #0b1a2b; }

@@ -378,3 +378,48 @@ describe('re-anchoring labels after a trim', () => {
     expect(reanchorCalloutsForLayer([c], empty, project)[0]).toBe(c);
   });
 });
+
+describe('the grid optimisation does not introduce its own failures', () => {
+  it('survives a layer near the importer limit', () => {
+    // Math.max(...array) pushes one argument per element onto the stack and V8
+    // gives up somewhere around 130,000 — INSIDE the 200,000 importers.js
+    // accepts. Opening the Anchor picker on a large but valid import threw
+    // RangeError before any clustering happened, so the change meant to stop
+    // the tab freezing would instead have crashed the render.
+    //
+    // The points are spread WIDELY on purpose. What breaks the spread is the
+    // array's LENGTH, and this isolates that: at half a degree apart nothing is
+    // within the 8 km threshold, so each point is its own cluster and the grid
+    // does no comparison work. Packing the same count into a few kilometres
+    // would instead measure single-link clustering of 140,000 mutual
+    // neighbours, which is slow for reasons that have nothing to do with the
+    // bug under test.
+    const many = [];
+    for (let latStep = 0; latStep < 195; latStep += 1) {
+      for (let lngStep = 0; lngStep < 720; lngStep += 1) {
+        many.push({
+          type: 'Feature',
+          properties: { TENURE_NUMBER_ID: many.length },
+          geometry: { type: 'Point', coordinates: [-180 + lngStep * 0.5, -80 + latStep * 0.82] },
+        });
+      }
+    }
+    expect(many.length).toBeGreaterThan(130_000);
+    expect(() => clusterFeatures(many)).not.toThrow();
+  }, 120_000);
+
+  it('groups across the antimeridian, as all-pairs did', () => {
+    // 179.99 and -179.99 are about 2.2 km apart. Binning by raw longitude puts
+    // them at opposite ends of the column range so they are never compared, and
+    // the "optimisation" quietly returns a different answer than the code it
+    // replaced. A faster way to the same result, not to a nearly-right one.
+    const east = cell(179.99, 51.0, 1);
+    const west = cell(-179.99, 51.0, 2);
+    expect(clusterFeatures([east, west], 8)).toHaveLength(1);
+  });
+
+  it('still separates genuinely distant points near the antimeridian', () => {
+    // Wrapping must not glue together things that are actually far apart.
+    expect(clusterFeatures([cell(179.99, 51.0, 1), cell(-170.0, 51.0, 2)], 8)).toHaveLength(2);
+  });
+});

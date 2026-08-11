@@ -1,7 +1,8 @@
-import { useMemo } from 'react';
+import React, { useMemo } from 'react';
 import { geojsonBounds, unionBounds } from '../utils/geometry';
 import { visibleGeojson } from '../utils/featureIdentity.js';
 import { INSET_MODES } from '../projectState';
+const SatelliteInset = React.lazy(() => import('./SatelliteInset'));
 
 const REFERENCE_PRESETS = {
   province_state: { label: 'Project in State', expand: 3.8 },
@@ -118,7 +119,8 @@ export default function LocatorInset({ layers, insetMode, mode, insetImage, auto
   const backdrop = buildBackdrop(mode);
   const wantsCustom = insetMode === 'custom_image';
   const showCustom = wantsCustom && insetImage;
-  const showAuto = !showCustom && !!autoInsetRegion;
+  const showSatellite = !showCustom && insetMode === 'satellite_locator';
+  const showAuto = !showCustom && !showSatellite && !!autoInsetRegion;
 
   const autoSvg = useMemo(() => {
     if (!showAuto) return null;
@@ -133,6 +135,12 @@ export default function LocatorInset({ layers, insetMode, mode, insetImage, auto
       {showCustom ? (
         <div className="inset-image-wrap">
           <img src={insetImage} alt="Inset map" className="inset-image" />
+        </div>
+      ) : showSatellite ? (
+        <div className="inset-satellite-wrap">
+          <React.Suspense fallback={null}>
+            <SatelliteInset layers={layers} region={autoInsetRegion} markerColor={markerColor} />
+          </React.Suspense>
         </div>
       ) : showAuto ? (
         <svg viewBox={`0 0 ${autoSvg.svgW.toFixed(1)} ${autoSvg.svgH.toFixed(1)}`} className="inset-svg" preserveAspectRatio="xMidYMid meet">
@@ -208,7 +216,10 @@ export default function LocatorInset({ layers, insetMode, mode, insetImage, auto
       )}
       {!showCustom ? (
         <div className="inset-mode-label">
-          {insetLabel || (showAuto ? autoInsetRegion.name : (referenceBounds?.label || 'Project in State'))}
+          {insetLabel
+            || (showAuto ? autoInsetRegion.name : null)
+            || (showSatellite ? (autoInsetRegion?.name || 'Satellite locator') : null)
+            || referenceBounds?.label || 'Project in State'}
         </div>
       ) : null}
     </div>
