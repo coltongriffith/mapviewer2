@@ -10,32 +10,20 @@ import { scopingWarning, emptyResultMessage } from '../utils/scopingNotice';
 import { claimNamePrefix, sourceCredit, CLAIM_NAME_CAVEAT } from '../utils/claimProvenance';
 import { claimNotices } from '../utils/claimNotices';
 import ClaimNoticeStrip from './ClaimNoticeStrip';
+import { clusterFeatures, clusterLabels } from '../utils/featureClusters.js';
 
 // ── Spatial clustering helpers ─────────────────────────────────────────────
-
-function getCentroid(feature) {
-  const pts = [];
-  function walk(c) {
-    if (typeof c[0] === 'number') pts.push(c);
-    else c.forEach(walk);
-  }
-  const geom = feature.geometry;
-  if (geom?.coordinates) walk(geom.coordinates);
-  if (!pts.length) return [0, 0];
-  return [
-    pts.reduce((s, p) => s + p[0], 0) / pts.length,
-    pts.reduce((s, p) => s + p[1], 0) / pts.length,
-  ];
-}
-
-function haversineKm([lng1, lat1], [lng2, lat2]) {
-  const R = 6371;
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLng = (lng2 - lng1) * Math.PI / 180;
-  const a = Math.sin(dLat / 2) ** 2 +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
+//
+// The union-find core, the distance function and the centroid live in
+// utils/featureClusters.js, which label anchoring also uses. Only the parts
+// specific to a claim SEARCH stay here: the province-flavoured names, and the
+// area and expiry roll-ups shown on each group card.
+//
+// The 50 km threshold is passed explicitly and is not the shared default. It
+// answers a different question — "is this the same project?" across a province
+// — than label anchoring does, where the reader is deciding whether they are
+// looking at one block or two, and 20 km is plainly two.
+const SEARCH_CLUSTER_KM = 50;
 
 function bcRegionLabel([lng, lat]) {
   if (lat > 58) return 'Northwest BC';
@@ -46,73 +34,27 @@ function bcRegionLabel([lng, lat]) {
   return lng < -123 ? 'Vancouver Island Area' : 'West Kootenay';
 }
 
-// Compass-style labels relative to the spread of all clusters, for provinces
-// without hand-tuned region names.
+// The wording the group cards have always used. Passed in rather than derived,
+// so the de-duplication counter still lands at the end ("Southern Group 2").
+const SEARCH_GROUP_GRID = [
+  ['Southwest Group', 'Southern Group', 'Southeast Group'],
+  ['Western Group', 'Central Group', 'Eastern Group'],
+  ['Northwest Group', 'Northern Group', 'Northeast Group'],
+];
+
 function compassLabels(clusters) {
-  if (clusters.length <= 1) return clusters.map(() => 'Claim Area');
-  const lngs = clusters.map(c => c.centroid[0]);
-  const lats = clusters.map(c => c.centroid[1]);
-  const minLng = Math.min(...lngs), maxLng = Math.max(...lngs);
-  const minLat = Math.min(...lats), maxLat = Math.max(...lats);
-  const third = (v, min, max) => (max - min < 1e-6 ? 1 : Math.min(2, Math.floor(((v - min) / (max - min)) * 3)));
-  const GRID = [
-    ['Southwest Group', 'Southern Group', 'Southeast Group'],
-    ['Western Group', 'Central Group', 'Eastern Group'],
-    ['Northwest Group', 'Northern Group', 'Northeast Group'],
-  ];
-  const labels = clusters.map(c => GRID[third(c.centroid[1], minLat, maxLat)][third(c.centroid[0], minLng, maxLng)]);
-  // De-duplicate repeated labels with a counter
-  const totals = labels.reduce((m, l) => m.set(l, (m.get(l) || 0) + 1), new Map());
-  const seen = new Map();
-  return labels.map(l => {
-    if ((totals.get(l) || 0) <= 1) return l;
-    const n = (seen.get(l) || 0) + 1;
-    seen.set(l, n);
-    return `${l} ${n}`;
-  });
+  return clusterLabels(clusters, SEARCH_GROUP_GRID, 'Claim Area');
 }
 
-function clusterFeatures(features, thresholdKm = 50) {
-  const n = features.length;
-  if (!n) return [];
-  const centroids = features.map(getCentroid);
-  const parent = Array.from({ length: n }, (_, i) => i);
-
-  function find(x) {
-    while (parent[x] !== x) { parent[x] = parent[parent[x]]; x = parent[x]; }
-    return x;
-  }
-  function unite(x, y) {
-    const rx = find(x), ry = find(y);
-    if (rx !== ry) parent[rx] = ry;
-  }
-
-  for (let i = 0; i < n; i++) {
-    for (let j = i + 1; j < n; j++) {
-      if (haversineKm(centroids[i], centroids[j]) < thresholdKm) unite(i, j);
-    }
-  }
-
-  const map = new Map();
-  for (let i = 0; i < n; i++) {
-    const root = find(i);
-    if (!map.has(root)) map.set(root, []);
-    map.get(root).push(i);
-  }
-
-  return [...map.values()]
-    .map(indices => {
-      const feats = indices.map(i => features[i]);
-      const ctrs = indices.map(i => centroids[i]);
-      const avgLng = ctrs.reduce((s, c) => s + c[0], 0) / ctrs.length;
-      const avgLat = ctrs.reduce((s, c) => s + c[1], 0) / ctrs.length;
-      const totalHa = feats.reduce((s, f) => s + (Number(f.properties?.AREA_IN_HECTARES) || 0), 0);
-      const expiries = feats.map(f => f.properties?.GOOD_TO_DATE).filter(Boolean).sort();
-      const today = new Date().toISOString().slice(0, 10);
+function clusterClaims(features) {
+  const today = new Date().toISOString().slice(0, 10);
+  return clusterFeatures(features, SEARCH_CLUSTER_KM)
+    .map((c) => {
+      const totalHa = c.features.reduce((s, f) => s + (Number(f.properties?.AREA_IN_HECTARES) || 0), 0);
+      const expiries = c.features.map((f) => f.properties?.GOOD_TO_DATE).filter(Boolean).sort();
       const upcoming = expiries.filter((d) => d.slice(0, 10) >= today);
       return {
-        features: feats,
-        centroid: [avgLng, avgLat],
+        ...c,
         totalHa,
         // Soonest still-valid expiry (the risk-relevant date), the horizon,
         // and how many claims are already expired.
@@ -494,7 +436,7 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
     [allFeatures, activeOwner, ownerFallbackLabel]
   );
   const groups = useMemo(() => {
-    const clusters = clusterFeatures(companyFeatures);
+    const clusters = clusterClaims(companyFeatures);
     const labels = province === 'bc'
       ? clusters.map(c => bcRegionLabel(c.centroid))
       : compassLabels(clusters);

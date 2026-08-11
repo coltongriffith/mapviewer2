@@ -63,6 +63,7 @@ import { runCloudMigration } from './utils/cloudMigration';
 import { scopingWarning } from './utils/scopingNotice';
 import { CLAIM_NAME_CAVEAT } from './utils/claimProvenance';
 import { featureKey, layerFeatures, isFeatureHidden, hiddenCount, featuresInBounds, visibleGeojson } from './utils/featureIdentity.js';
+import { layerAnchorGroups, defaultAnchorForLayer, isAnchorOrphaned } from './utils/featureClusters.js';
 import FeatureTrimList from './components/FeatureTrimList.jsx';
 import dissolveGeo from '@turf/dissolve';
 import {
@@ -3439,9 +3440,8 @@ export default function App() {
     const known = new Set(layerFeatures(layer).map(featureKey).filter(Boolean));
     const keys = features.map(featureKey).filter((k) => k && known.has(k));
     if (!keys.length) return 0;
-    setProject((prev) => ({
-      ...prev,
-      layers: prev.layers.map((layer) => {
+    setProject((prev) => {
+      const layers = prev.layers.map((layer) => {
         if (layer.id !== layerId) return layer;
         const next = { ...(layer.featureOverrides || {}) };
         for (const key of keys) {
@@ -3457,8 +3457,28 @@ export default function App() {
           }
         }
         return { ...layer, featureOverrides: next };
-      }),
-    }));
+      });
+
+      // Bring back any label that is now pointing at ground that has gone.
+      //
+      // The reported symptom: trim the western claims, and the layer's label
+      // stays out west with its leader line drawn across empty country. The
+      // anchor was stored when the label was created, so nothing moved it.
+      //
+      // Deliberately narrow. A label the user DRAGGED somewhere is left alone —
+      // isManualPosition means they chose that spot and it is not ours to
+      // overrule — and so is one still near any remaining shape, since a label
+      // sitting in a gap inside a block is a normal thing to want.
+      const trimmed = layers.find((l) => l.id === layerId);
+      const callouts = (prev.callouts || []).map((c) => {
+        if (c.layerId !== layerId || c.isManualPosition) return c;
+        if (!isAnchorOrphaned(trimmed, c.anchor)) return c;
+        const anchor = defaultAnchorForLayer(trimmed);
+        return anchor ? { ...c, anchor } : c;
+      });
+
+      return { ...prev, layers, callouts };
+    });
     return keys.length;
   };
 
@@ -3597,7 +3617,15 @@ export default function App() {
 
   const addCalloutFromSelectedLayer = () => {
     if (!selectedLayer?.geojson) return;
-    const center = geojsonCenter(selectedLayer.geojson);
+    // NOT geojsonCenter(layer.geojson), which is the mean of every feature's
+    // centre and so fails twice over on split ground: it counts shapes the user
+    // has removed, and for a northern block plus a southern block it lands
+    // halfway between them, drawing a leader line to open country the company
+    // does not hold. The average of two places is generally not a place.
+    //
+    // This anchors on a real shape inside the largest visible block; the Anchor
+    // picker on the callout moves it to another block.
+    const center = defaultAnchorForLayer(selectedLayer);
     if (!center) return;
     addCalloutAtAnchor({
       text: selectedLayer.displayName || selectedLayer.legend?.label || selectedLayer.name,
@@ -5260,6 +5288,48 @@ export default function App() {
                     <div className="control-grid">
                       <div className="control-row"><label htmlFor="f-text-4657">Text</label><input id="f-text-4657" autoFocus value={callout.text} onChange={(e) => updateCallout(callout.id, { text: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter') setSelectedCalloutId(null); }} /></div>
                       <div className="control-row"><label htmlFor="f-subtext-4658">Subtext</label><input id="f-subtext-4658" value={callout.subtext || ''} placeholder="Details / result…" onChange={(e) => updateCallout(callout.id, { subtext: e.target.value })} /></div>
+                      {(() => {
+                        // Which block this label points at. Only shown when the
+                        // layer actually splits into more than one — a single
+                        // compact block has nothing to choose between, and an
+                        // inert dropdown is worse than no dropdown.
+                        const anchorLayer = project.layers.find((l) => l.id === callout.layerId);
+                        if (!anchorLayer) return null;
+                        const groups = layerAnchorGroups(anchorLayer);
+                        if (groups.length < 2) return null;
+                        // Match on the anchor point rather than an index, so the
+                        // selection survives trimming a block away — indices
+                        // shift, coordinates do not.
+                        const current = groups.findIndex(
+                          (g) => callout.anchor
+                            && Math.abs(g.anchor.lat - callout.anchor.lat) < 1e-9
+                            && Math.abs(g.anchor.lng - callout.anchor.lng) < 1e-9,
+                        );
+                        return (
+                          <div className="control-row">
+                            <label htmlFor={`f-anchor-${callout.id}`}>Anchor</label>
+                            <select
+                              id={`f-anchor-${callout.id}`}
+                              value={current}
+                              onChange={(e) => {
+                                const g = groups[Number(e.target.value)];
+                                if (!g) return;
+                                // isManualPosition is cleared so the leader line
+                                // re-lays itself against the new anchor instead
+                                // of keeping an offset measured from the old one.
+                                updateCallout(callout.id, { anchor: g.anchor, isManualPosition: false });
+                              }}
+                            >
+                              {current === -1 && <option value={-1}>Custom position</option>}
+                              {groups.map((g, gi) => (
+                                <option key={g.label} value={gi}>
+                                  {g.label} ({g.count} {g.count === 1 ? 'shape' : 'shapes'})
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        );
+                      })()}
                       <div className="control-row inline-2">
                         <div>
                           <label htmlFor="f-type-4661">Type</label>
