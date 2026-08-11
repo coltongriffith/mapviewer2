@@ -1,3 +1,5 @@
+import { REFERENCE_OVERLAY_CONFIG, REFERENCE_OVERLAY_KEYS } from './referenceOverlayConfig.js';
+
 // What the reference overlays are, in words, for the people who read the map
 // rather than build it.
 //
@@ -13,28 +15,30 @@
 // are third-party services whose licences require credit, and until now an
 // exported PNG or SVG carried none.
 //
+// The names come from the shared config rather than a list kept here. A hand-
+// kept list is what put the first version wrong: it credited "OpenStreetMap"
+// for the two CARTO-hosted layers, so CARTO went uncredited in exactly the
+// artifact this is meant to fix.
+//
 // Kept deliberately short. This sits in 7.5px type at the foot of the map,
 // alongside the claim-provenance lines, and a paragraph there would be noise.
-const OVERLAY_CREDITS = {
-  geology: 'Bedrock geology (coloured units): USGS / Geological Survey of Canada, world geologic map',
-  context: 'Roads and settlements: OpenStreetMap contributors',
-  labels: 'Place labels: OpenStreetMap contributors',
-  rail: 'Railways: OpenRailwayMap / OpenStreetMap contributors',
-};
-
-// Stable order, so the credit block does not reshuffle between exports of the
-// same map depending on which toggle was flipped last.
-const ORDER = ['geology', 'context', 'labels', 'rail'];
+export function overlayCreditLine(key) {
+  const cfg = REFERENCE_OVERLAY_CONFIG[key];
+  if (!cfg) return null;
+  const who = cfg.parties.join(' / ');
+  return `${cfg.creditLabel}: ${who}${cfg.creditDetail ? `, ${cfg.creditDetail}` : ''}`;
+}
 
 export function referenceOverlayCredits(referenceOverlays) {
   const enabled = referenceOverlays || {};
-  return ORDER.filter((key) => enabled[key] && OVERLAY_CREDITS[key]).map((key) => OVERLAY_CREDITS[key]);
+  return REFERENCE_OVERLAY_KEYS
+    .filter((key) => enabled[key])
+    .map(overlayCreditLine)
+    .filter(Boolean);
 }
 
-// The same text, for the editor, so the person turning the overlay on is told
-// what it is at the moment they turn it on.
+// For the editor, so the person turning the overlay on is told what it is at
+// the moment they turn it on.
 export const OVERLAY_DESCRIPTIONS = {
   geology: 'Colours show rock units from the USGS/GSC world geologic compilation — regional context, not property-scale mapping. The source is credited on your export.',
 };
-
-export { OVERLAY_CREDITS };

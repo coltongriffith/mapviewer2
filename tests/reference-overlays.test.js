@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { REFERENCE_OVERLAY_CONFIG } from '../src/utils/referenceOverlayConfig.js';
 
 // A reference overlay that stops rendering used to produce NO signal at all.
 // The only symptom was a toggle that appeared to do nothing — which looks
@@ -18,10 +19,23 @@ const vercel = readFileSync('vercel.json', 'utf8');
 
 describe('every reference overlay is still wired up', () => {
   it('keeps all four overlays', () => {
+    // Read from the config itself rather than grepped out of MapCanvas: the
+    // definitions moved to utils/referenceOverlayConfig.js so the exporter
+    // could credit them without importing Leaflet, and a source-text match
+    // called that a deleted overlay.
     for (const key of ['context', 'labels', 'rail', 'geology']) {
-      expect(mapCanvas).toMatch(new RegExp(`\\n  ${key}: \\{`));
+      expect(REFERENCE_OVERLAY_CONFIG[key], `${key} is no longer defined`).toBeTruthy();
+      expect(REFERENCE_OVERLAY_CONFIG[key].url, `${key} has no tile URL`).toBeTruthy();
       expect(app, `${key} has no toggle`).toMatch(new RegExp(`referenceOverlays\\.${key}`));
     }
+  });
+
+  it('builds its Leaflet layers from that config', () => {
+    // The point of the move is one definition, not two. If MapCanvas ever
+    // grows its own copy again, the credits can drift from the map — which is
+    // how CARTO went uncredited in exports.
+    expect(mapCanvas).toMatch(/REFERENCE_OVERLAY_CONFIG/);
+    expect(mapCanvas).not.toMatch(/\n {2}context: \{/);
   });
 
   it('allows the geology host in the Content-Security-Policy', () => {
