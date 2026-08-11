@@ -15,6 +15,12 @@ import { featureKey, visibleGeojson } from '../utils/featureIdentity.js';
 let _exportWarnings = [];
 export function getExportWarnings() { return _exportWarnings; }
 
+// Kept in step with SATELLITE_INSET_CLASS in components/SatelliteInset.jsx.
+// Deliberately duplicated rather than imported: that module pulls in Leaflet and
+// is lazy-loaded, so importing it here would drag Leaflet into the export chunk
+// for every export, satellite inset or not.
+export const SATELLITE_INSET_SELECTOR = '.satellite-inset-map';
+
 // Resolve the uniform render scale. A custom export width (in px) takes priority
 // and is converted to a scale relative to the on-screen composition width, so the
 // output is exactly that many pixels wide with the aspect ratio preserved. Falls
@@ -85,7 +91,9 @@ function getFeatureStyle(template, layer, feature) {
 function projectCoordinate(map, coord, scale) { return clonePoint(map.latLngToContainerPoint(toLatLng(coord)), scale); }
 function projectRing(map, ring, scale) { return ring.map((coord) => projectCoordinate(map, coord, scale)).filter(isFinitePoint); }
 function projectLine(map, coords, scale) { return coords.map((coord) => projectCoordinate(map, coord, scale)).filter(isFinitePoint); }
-function getTileImages(container) {
+// Exported for test: which tiles a capture claims is the part that fails
+// invisibly, and only a direct call can hold it.
+export function getTileImages(container) {
   const rootRect = container.getBoundingClientRect();
   const resolveEffectiveOpacity = (node) => {
     let opacity = 1;
@@ -99,6 +107,26 @@ function getTileImages(container) {
   };
 
   return Array.from(container.querySelectorAll('.leaflet-tile-pane img.leaflet-tile'))
+    // Only this map's tiles.
+    //
+    // The satellite locator is a SECOND Leaflet map nested inside the stage, so
+    // a plain descendant query hands the main-map pass the inset's tiles as
+    // well. They then get drawn at their screen positions across the page —
+    // unclipped, because only the inset panel clips — putting a rectangle of
+    // province-scale imagery around the inset card.
+    //
+    // Nothing looked wrong in the editor: the wrapper's `overflow: hidden`
+    // hides the spill on screen, but the tiles still report full-size boxes to
+    // getBoundingClientRect, so only the export showed it. Fractional zoom made
+    // it more obvious rather than causing it — tiles are scaled to ~294px, so
+    // they reach further past a 222x134 card.
+    //
+    // When the inset itself is the capture root this filter must not fire,
+    // hence the `!== container` rather than a blanket exclusion.
+    .filter((img) => {
+      const nested = img.closest(SATELLITE_INSET_SELECTOR);
+      return !nested || nested === container;
+    })
     .map((img) => {
       const rect = img.getBoundingClientRect();
       return {
@@ -856,7 +884,7 @@ export function serializeOverlaySvg(svg, width, height) {
 }
 
 async function drawSatelliteInsetCanvas(ctx, x, y, w, h, scale) {
-  const container = document.querySelector('.satellite-inset-map');
+  const container = document.querySelector(SATELLITE_INSET_SELECTOR);
   if (!container) return false;
   const rect = container.getBoundingClientRect();
   if (!rect.width || !rect.height) return false;
