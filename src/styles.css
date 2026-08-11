@@ -4102,6 +4102,14 @@ button.claim-notices-chip[aria-expanded="true"] { border-color: #cbd5e1; backgro
   border-radius: 8px; padding: 8px 10px; margin: 8px 0 0; line-height: 1.5;
 }
 
+/* Explains an overlay at the moment it is switched on. Informational, so it is
+   deliberately quieter than .overlay-error-note above — a neutral grey rather
+   than the amber of something that went wrong. */
+.overlay-help-note {
+  font-size: 12px; color: #475569; background: #f8fafc; border: 1px solid #e2e8f0;
+  border-radius: 8px; padding: 8px 10px; margin: 6px 0 2px; line-height: 1.5;
+}
+
 /* The satellite locator sits in the same card as the vector one, so it inherits
    the header, footer label and panel chrome. This is only the map slot.
    The inset floats over a map that is often satellite itself, so it needs a
