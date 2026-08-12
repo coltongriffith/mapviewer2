@@ -1,3 +1,5 @@
+import { safeColor } from './colorUtils.js';
+
 // Editing the legend.
 //
 // Legend entries are DERIVED from the layers on the map — that is what keeps
@@ -57,7 +59,11 @@ export function isLegendSymbol(value) {
 // renderer treats it as an ordinary row and none of them needs a special case.
 export function customLegendItem(custom) {
   const symbol = SYMBOL_BY_VALUE.get(custom?.symbol) || SYMBOL_BY_VALUE.get(DEFAULT_LEGEND_SYMBOL);
-  const color = custom?.color || DEFAULT_LEGEND_COLOR;
+  // Sanitised at the boundary as well as at every renderer. A shared map is
+  // replayed from a stored payload whose author is not necessarily its reader,
+  // and the share RPC validates only size and top-level shape — so this value
+  // is untrusted input by the time it gets here.
+  const color = safeColor(custom?.color, DEFAULT_LEGEND_COLOR);
   const base = {
     id: custom?.id,
     role: 'other',
