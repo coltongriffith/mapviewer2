@@ -3,6 +3,7 @@ import {
   applyLegendCustomization, customLegendItem, nextCustomLegendId,
   LEGEND_SYMBOLS, isLegendSymbol, DEFAULT_LEGEND_COLOR,
 } from '../src/utils/legendCustomization.js';
+import { markerShapeInner, MARKER_ICON_PATHS } from '../src/utils/markerIcons.jsx';
 
 // Legend entries are derived from the layers on the map, which is what keeps
 // them honest: delete a layer and its entry goes, trim every shape out of a
@@ -165,7 +166,6 @@ describe('the standard symbol set', () => {
     // Called, not grepped. A source-text search reported "star" as undrawable
     // because it is served from MARKER_ICON_PATHS rather than a switch case —
     // the string was absent, the capability was not.
-    const { markerShapeInner, MARKER_ICON_PATHS } = await import('../src/utils/markerIcons.jsx');
     const fallback = markerShapeInner('definitely-not-a-shape', 10, 10, 8, '#000', '#000');
     POINT_SHAPES.forEach((shape) => {
       if (shape === 'circle') return; // legitimately the fallback
@@ -199,6 +199,62 @@ describe('the standard symbol set', () => {
   it('recognises its own values', () => {
     LEGEND_SYMBOLS.forEach((s) => expect(isLegendSymbol(s.value)).toBe(true));
     expect(isLegendSymbol('nope')).toBe(false);
+  });
+
+  it('draws a visibly different swatch for every point shape', () => {
+    // Not just "is it handled" — two shapes that render identically would pass
+    // a handled check and still leave the reader unable to tell them apart.
+    const drawn = new Map();
+    POINT_SHAPES.forEach((shape) => {
+      const markup = markerShapeInner(shape, 10, 10, 8, '#000000', '#ffffff')
+        || `path:${shape}`;
+      const clash = drawn.get(markup);
+      expect(clash, `"${shape}" and "${clash}" render identically`).toBeUndefined();
+      drawn.set(markup, shape);
+    });
+  });
+});
+
+// Every surface that draws a legend point swatch must use the shared marker
+// renderer.
+//
+// There were FIVE hand-written copies of the shape table. Two had quietly
+// fallen behind — one drew a circle for every shape, another had never gained
+// hexagon or pin — so an author could pick hexagon, see it in the editor and
+// in the export, and have the public share page show a circle. Caught in
+// review on the share path, which is the copy that matters most and the one I
+// missed.
+//
+// This is a source check, deliberately: the components are not exported and
+// the failure is structural — someone writing a sixth copy — rather than
+// something a rendered assertion would notice.
+describe('legend swatches all come from one renderer', () => {
+  const LEGEND_SURFACES = [
+    'src/App.jsx',
+    'src/components/ReadOnlyMapStage.jsx',
+    'src/components/Legend.jsx',
+    'src/components/LegendEditor.jsx',
+  ];
+
+  it.each(LEGEND_SURFACES)('%s does not re-implement the shape table', async (file) => {
+    const { readFileSync } = await import('node:fs');
+    const src = readFileSync(file, 'utf8');
+    // The tell-tale of a hand-rolled swatch: branching on a shape name to pick
+    // geometry. Picker option lists name shapes too, but do not branch on them.
+    const branches = src.match(/shape === '/g) || [];
+    expect(
+      branches.length,
+      `${file} branches on marker shape itself — use MarkerSvgIcon so every symbol renders`,
+    ).toBe(0);
+  });
+
+  it('each legend surface uses the shared renderer', async () => {
+    const { readFileSync } = await import('node:fs');
+    LEGEND_SURFACES.forEach((file) => {
+      const src = readFileSync(file, 'utf8');
+      if (!/LegendPointSwatch|legend-symbol-marker|SymbolPreview/.test(src)) return;
+      expect(src, `${file} draws legend symbols without MarkerSvgIcon`).toContain('MarkerSvgIcon');
+    });
   });
 });
 
