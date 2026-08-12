@@ -11,6 +11,7 @@ import { resolveNI43101Zones } from '../templates/technicalReportTemplate';
 import { resolveSidePanelZones } from '../templates/sidePanelTemplate';
 import { getThemeTokens } from '../utils/themeTokens';
 import { applyLegendCustomization } from '../utils/legendCustomization.js';
+import { MarkerSvgIcon } from '../utils/markerIcons.jsx';
 import { fitProjectToTemplate } from '../utils/frameMapForTemplate';
 
 const MapCanvas = React.lazy(() => import('./MapCanvas'));
@@ -35,23 +36,23 @@ function renderLegendGroups(items) {
   return [{ heading: null, items }];
 }
 
+// The shared marker renderer, as in the editable stage.
+//
+// This was a fifth copy of the shape table and the last one still missing
+// hexagon and pin — on the worst possible surface, since a share link is what
+// a reader actually receives. An author could pick hexagon in the editor, see
+// it in the editor and in the export, and have the public page show a circle.
 function LegendPointSwatch({ style }) {
-  const shape = style?.markerShape || 'circle';
-  const fill = style?.markerFill || style?.markerColor || '#ffffff';
-  const stroke = style?.markerColor || '#111111';
-  const sw = 1.5;
-  let inner;
-  if (shape === 'triangle_down') inner = <polygon points="6,11 1,1 11,1" fill={fill} stroke={stroke} strokeWidth={sw} />;
-  else if (shape === 'triangle') inner = <polygon points="6,1 11,11 1,11" fill={fill} stroke={stroke} strokeWidth={sw} />;
-  else if (shape === 'square') inner = <rect x="1" y="1" width="10" height="10" fill={fill} stroke={stroke} strokeWidth={sw} />;
-  else if (shape === 'diamond') inner = <polygon points="6,1 11,6 6,11 1,6" fill={fill} stroke={stroke} strokeWidth={sw} />;
-  else if (shape === 'cross') inner = <><line x1="6" y1="1" x2="6" y2="11" stroke={stroke} strokeWidth={2} /><line x1="1" y1="6" x2="11" y2="6" stroke={stroke} strokeWidth={2} /></>;
-  else if (shape === 'drillhole') inner = <><polygon points="6,1 11,7 1,7" fill={fill} stroke={stroke} strokeWidth={sw} /><line x1="6" y1="7" x2="6" y2="11" stroke={stroke} strokeWidth={sw} /></>;
-  else if (shape === 'star') {
-    const pts = Array.from({ length: 10 }, (_, i) => { const a = (i * Math.PI) / 5 - Math.PI / 2; const r = i % 2 === 0 ? 5 : 2.2; return `${(6 + r * Math.cos(a)).toFixed(2)},${(6 + r * Math.sin(a)).toFixed(2)}`; }).join(' ');
-    inner = <polygon points={pts} fill={fill} stroke={stroke} strokeWidth={sw} />;
-  } else inner = <circle cx="6" cy="6" r="5" fill={fill} stroke={stroke} strokeWidth={sw} />;
-  return <svg width="14" height="14" viewBox="0 0 12 12" style={{ flexShrink: 0, overflow: 'visible' }} aria-hidden="true">{inner}</svg>;
+  return (
+    <span className="legend-symbol-marker" style={{ display: 'flex', flexShrink: 0 }}>
+      <MarkerSvgIcon
+        type={style?.markerShape || 'circle'}
+        size={14}
+        color={style?.markerColor || '#111111'}
+        fillColor={style?.markerFill || style?.markerColor || '#ffffff'}
+      />
+    </span>
+  );
 }
 
 // ── NI 43-101 UTM grid overlay helpers ───────────────────────────────────────
