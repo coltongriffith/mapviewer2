@@ -38,8 +38,18 @@ export const MARKER_ICON_PATHS = {
  * Used in AnnotationOverlay inline SVG and in renderScene export.
  */
 export function markerShapeInner(type, cx, cy, r, color, fillColor) {
-  const fc = fillColor || color;
-  const sc = color;
+  // Sanitised HERE, where the string is built, rather than at each call site.
+  //
+  // This returns raw SVG markup that MarkerSvgIcon installs with
+  // dangerouslySetInnerHTML, so a colour carrying a quote and a tag escapes its
+  // attribute and injects arbitrary elements — `#000" /><rect width="9999"
+  // height="9999" fill="red"` paints over the whole panel. Two of the three
+  // callers already sanitised and the third did not, which is precisely the
+  // kind of gap a per-call-site rule leaves. A public share page renders a
+  // payload its author controls and its reader trusts, so that gap was
+  // reachable by anyone who could create a share.
+  const sc = safeColor(color, '#111111');
+  const fc = safeColor(fillColor || color, sc);
   const sw = Math.max(1, r * 0.12);
   switch (type) {
     case 'circle':
@@ -95,7 +105,9 @@ export function MarkerSvgIcon({ type, size, color, fillColor }) {
         height={size}
         viewBox={icon.viewBox}
         fill="none"
-        stroke={color}
+        // A React attribute, so it cannot break out — but normalised anyway, so
+        // a junk value shows the fallback rather than no stroke at all.
+        stroke={safeColor(color, '#111111')}
         strokeWidth="2"
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -118,8 +130,11 @@ export function MarkerSvgIcon({ type, size, color, fillColor }) {
       xmlns="http://www.w3.org/2000/svg"
       style={{ display: 'block', flexShrink: 0 }}
       aria-hidden="true"
-      // Inner SVG markup is built from our own icon table below —
-      // never from user input.
+      // The shapes come from our own table, but the COLOURS do not: a legend
+      // item on a shared map carries whatever its author stored. They are
+      // sanitised inside markerShapeInner, which is the only thing that makes
+      // this safe — the previous note here claimed no user input reached it,
+      // and that was how the gap survived.
       dangerouslySetInnerHTML={{ __html: inner }}
     />
   );
