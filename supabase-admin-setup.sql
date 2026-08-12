@@ -182,11 +182,20 @@ $$;
 -- ────────────────────────────────────────────────────────────
 -- 2. ADMIN GATE
 -- ────────────────────────────────────────────────────────────
+-- SUPERSEDED by supabase/migrations/20260710000005_admin_authorization.sql,
+-- which replaced this with a table-driven, security-definer version reading
+-- public.admin_users. This copy is kept only so the historical script still
+-- runs end to end.
+--
+-- It used to hardcode an administrator's email address. That was two problems
+-- in one: a personal address committed to the repository forever, and a gate
+-- that silently reverts to a single hardcoded identity if anyone re-runs this
+-- file over the migration. Both go away by delegating to admin_users.
 create or replace function is_admin()
-returns boolean language sql security invoker stable as $$
+returns boolean language sql security definer stable
+set search_path = public, pg_catalog as $$
   select exists (
-    select 1 from auth.users
-    where id = auth.uid() and email = 'coltongriffith@live.ca'
+    select 1 from public.admin_users where user_id = auth.uid()
   );
 $$;
 

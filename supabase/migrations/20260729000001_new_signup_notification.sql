@@ -38,7 +38,14 @@ begin
     ),
     body := jsonb_build_object(
       'from', 'Exploration Maps <notifications@explorationmaps.com>',
-      'to', 'coltongriffith@live.ca',
+      -- Destination is not hardcoded: see the follow-up migration
+      -- 20260812000001, which moves it into Vault. A personal address here
+      -- would sit in every clone of this repository forever.
+      'to', coalesce(
+        (select decrypted_secret from vault.decrypted_secrets
+         where name = 'signup_notification_to' limit 1),
+        'support@explorationmaps.com'
+      ),
       'subject', 'New signup: ' || coalesce(p_user_email, p_user_id::text),
       'html', '<p>New account created on explorationmaps.com.</p>'
         || '<p><strong>Email:</strong> ' || coalesce(p_user_email, '(none)') || '</p>'

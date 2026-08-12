@@ -401,7 +401,10 @@ export async function monitoredTenureNumbers(sb) {
  * Tenure; this is the push half of that.
  */
 export async function notifyAdmin(sb, { subject, body }) {
-  const to = process.env.TENURE_ADMIN_EMAIL || 'coltongriffith@live.ca';
+  // No personal address as the default: a fallback in source is a permanent
+  // record in every clone. TENURE_ADMIN_EMAIL is the way to route these
+  // somewhere specific; support@ is the address the site already publishes.
+  const to = process.env.TENURE_ADMIN_EMAIL || 'support@explorationmaps.com';
   const from = process.env.TENURE_ALERT_FROM
     || 'Exploration Maps <notifications@explorationmaps.com>';
   try {

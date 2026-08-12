@@ -28,10 +28,18 @@ alter table public.admin_users enable row level security;
 revoke all on table public.admin_users from anon, authenticated;
 
 -- 2. Preserve the current legitimate admin (previously hardcoded in SQL).
+--
+-- The address this originally seeded from has been removed: a personal email in
+-- a migration is a permanent record in every clone of the repository, and this
+-- statement has already run. admin_users is the source of truth now, so the row
+-- it created still exists and no access changes by editing this file.
+--
+-- On a FRESH database this seeds nothing, which is deliberate — bootstrapping
+-- the first admin is a manual step, using the statement below.
 insert into public.admin_users (user_id, note)
-select id, 'seeded from legacy hardcoded admin email'
+select id, 'seeded from legacy admin bootstrap'
 from auth.users
-where email = 'coltongriffith@live.ca'
+where email = current_setting('app.bootstrap_admin_email', true)
 on conflict (user_id) do nothing;
 
 -- Bootstrap for future admins (run with service role / SQL editor):
