@@ -11,6 +11,8 @@ const SHOWCASE = [
     label: 'Regional project location map',
     desc: 'Property location in district context — neighbouring operators, district roads, and the town down the valley.',
     img: '/gallery/regional.png',
+    webp: '/gallery/regional.webp',
+    webp2x: '/gallery/regional@2x.webp',
     tags: ['Project boundary', 'Nearby operators', 'District roads'],
   },
   {
@@ -18,6 +20,8 @@ const SHOWCASE = [
     label: 'Claims & drill target map',
     desc: 'The claim block with priority target areas and collar locations, labelled with headline intercepts.',
     img: '/gallery/target.png',
+    webp: '/gallery/target.webp',
+    webp2x: '/gallery/target@2x.webp',
     tags: ['Claims', 'Target areas', 'Drill collars'],
   },
   {
@@ -25,6 +29,8 @@ const SHOWCASE = [
     label: 'Infrastructure & access map',
     desc: 'Access roads and the powerline corridor around the claims — the access story at a glance.',
     img: '/gallery/infrastructure.png',
+    webp: '/gallery/infrastructure.webp',
+    webp2x: '/gallery/infrastructure@2x.webp',
     tags: ['Access roads', 'Powerline corridor', 'Drill collars'],
   },
 ];
@@ -207,11 +213,32 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
                 data-track="Hero mockup: open live demo"
                 aria-label="Open this map as a live demo"
               >
-                <img
-                  className="lm-mock-img"
-                  src="/gallery/ba-after.png"
-                  alt="Cedar Ridge Project investor map — claims boundary, drill collars, target areas with assay callouts, legend, location inset, north arrow, and scale bar"
-                />
+                {/* The LCP element, and it was 2.7 MB of PNG — 78% of the whole
+                    page — shipped at 1448px into an 870px box. WebP at the size
+                    it is actually drawn is 136 kB.
+
+                    width/height are the intrinsic 1x dimensions: they give the
+                    browser the aspect ratio up front so the hero does not
+                    reflow when the image lands. fetchPriority raises it above
+                    the other subresources, since this is the thing the page is
+                    judged on. No loading="lazy" — lazy-loading your own LCP
+                    element delays the only paint that matters. */}
+                <picture>
+                  <source
+                    type="image/webp"
+                    srcSet="/gallery/ba-after.webp 870w, /gallery/ba-after@2x.webp 1448w"
+                    sizes="(max-width: 900px) 100vw, 870px"
+                  />
+                  <img
+                    className="lm-mock-img"
+                    src="/gallery/ba-after.png"
+                    width="870"
+                    height="653"
+                    fetchPriority="high"
+                    decoding="async"
+                    alt="Cedar Ridge Project investor map — claims boundary, drill collars, target areas with assay callouts, legend, location inset, north arrow, and scale bar"
+                  />
+                </picture>
                 <span className="lm-mock-live">Open this map live →</span>
               </button>
 
@@ -452,7 +479,19 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
                   onClick={() => (onLoadSampleStyle ? onLoadSampleStyle(ex.id) : onLoadSample?.())}
                   data-track={`Showcase: ${ex.label}`}
                 >
-                  <div className="lm-show-img"><img src={ex.img} alt={ex.label} loading="lazy" /></div>
+                  <div className="lm-show-img">
+                    {/* Below the fold, so these stay lazy — but they were still
+                        640 kB–1 MB PNGs each, which is real money on mobile
+                        data whether or not it moves the score. */}
+                    <picture>
+                      <source
+                        type="image/webp"
+                        srcSet={`${ex.webp} 640w, ${ex.webp2x} 1000w`}
+                        sizes="(max-width: 900px) 100vw, 640px"
+                      />
+                      <img src={ex.img} alt={ex.label} loading="lazy" decoding="async" width="640" height="400" />
+                    </picture>
+                  </div>
                   <div className="lm-show-body">
                     <h3>{ex.label}</h3>
                     <p>{ex.desc}</p>
@@ -571,21 +610,21 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
             <p>Clean, editable, investor-ready maps for mineral exploration teams.</p>
           </div>
           <div className="lm-footer-col">
-            <h4>Product</h4>
+            <h3>Product</h3>
             <button type="button" onClick={() => scrollTo('features')}>Features</button>
             <button type="button" onClick={() => scrollTo('examples')}>Examples</button>
             <button type="button" onClick={() => scrollTo('pricing')}>Pricing</button>
             {onShowHelp && <button type="button" onClick={onShowHelp}>How to use</button>}
           </div>
           <div className="lm-footer-col">
-            <h4>Popular tools</h4>
+            <h3>Popular tools</h3>
             <a href="/mining-map-software/">Mining map software</a>
             <a href="/bc-mineral-claims-map/">BC claims map</a>
             <a href="/mining-claim-search-by-company-name/">Claim search by company</a>
             <a href="/drill-results-map/">Drill results map</a>
           </div>
           <div className="lm-footer-col">
-            <h4>Company</h4>
+            <h3>Company</h3>
             <a href="/about/">About</a>
             <a href="/blog/">Guides</a>
             <a href="/contact/">Contact</a>

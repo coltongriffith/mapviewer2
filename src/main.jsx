@@ -2,7 +2,16 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import "./styles.css";
-import "leaflet/dist/leaflet.css";
+// Leaflet's stylesheet is not imported here: MapCanvas and TenureMap both
+// import it themselves, and both are React.lazy.
+//
+// NOTE this does not yet get it off the critical path. PageSpeed flags
+// vendor-leaflet CSS as render-blocking on the landing page, which has no map,
+// and it still is — App.jsx imports `leaflet` directly, so the vendor-leaflet
+// chunk stays in the initial graph and Vite links its stylesheet eagerly.
+// Removing the import here is a prerequisite for that fix, not the fix; the
+// remaining work is decoupling App.jsx from Leaflet, which is a real refactor
+// rather than a build tweak.
 import { exportLeadsCsv } from "./utils/leadCapture";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { AuthProvider } from "./hooks/useAuth.jsx";
