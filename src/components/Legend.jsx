@@ -1,18 +1,21 @@
 import React, { useState } from "react";
+import { MarkerSvgIcon } from "../utils/markerIcons.jsx";
 
 function Symbol({ item }) {
   if (item.type === "points") {
+    // The marker's real shape, via the same component the map markers use.
+    // This drew a circle for every point layer regardless of markerShape,
+    // while both exporters drew the actual shape — so a triangle layer read as
+    // a circle on screen and a triangle in the client's PDF.
     return (
-      <span
-        className="legend-symbol"
-        style={{
-          width: 12,
-          height: 12,
-          borderRadius: "999px",
-          border: `1.5px solid ${item.style?.markerColor || "#111"}`,
-          background: item.style?.markerFill || "#fff",
-        }}
-      />
+      <span className="legend-symbol legend-symbol-marker">
+        <MarkerSvgIcon
+          type={item.markerShape || item.style?.markerShape || "circle"}
+          size={13}
+          color={item.style?.markerColor || "#111"}
+          fillColor={item.style?.markerFill || item.style?.markerColor || "#fff"}
+        />
+      </span>
     );
   }
 

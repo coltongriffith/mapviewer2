@@ -10,6 +10,7 @@ import { buildLegendItems, resolveTemplateZones } from '../templates/technicalRe
 import { resolveNI43101Zones } from '../templates/technicalReportTemplate';
 import { resolveSidePanelZones } from '../templates/sidePanelTemplate';
 import { getThemeTokens } from '../utils/themeTokens';
+import { applyLegendCustomization } from '../utils/legendCustomization.js';
 import { fitProjectToTemplate } from '../utils/frameMapForTemplate';
 
 const MapCanvas = React.lazy(() => import('./MapCanvas'));
@@ -173,8 +174,11 @@ export default function ReadOnlyMapStage({ project }) {
     () => getTemplate(project.layout?.templateId || 'technical_results_v2'),
     [project.layout?.templateId]
   );
+  // A shared project has to show the legend its author edited, not the raw
+  // derivation — otherwise entries they renamed or removed reappear for the
+  // reader.
   const legendItems = useMemo(
-    () => buildLegendItems(template, project.layers, project.layout),
+    () => applyLegendCustomization(buildLegendItems(template, project.layers, project.layout), project.layout),
     [template, project.layers, project.layout]
   );
   const legendGroups = useMemo(() => renderLegendGroups(legendItems, project.layout), [legendItems, project.layout]);

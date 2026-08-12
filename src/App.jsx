@@ -4,6 +4,8 @@ import RatioSwitcher from './components/RatioSwitcher';
 import Sidebar from './components/Sidebar';
 import LayerList from './components/LayerList';
 import LocatorInset from './components/LocatorInset';
+import LegendEditor from './components/LegendEditor';
+import { MarkerSvgIcon } from './utils/markerIcons.jsx';
 import CalloutsOverlay from './components/CalloutsOverlay';
 import LandingPage from './components/LandingPage';
 
@@ -64,6 +66,10 @@ import { runCloudMigration } from './utils/cloudMigration';
 import { scopingWarning } from './utils/scopingNotice';
 import { CLAIM_NAME_CAVEAT } from './utils/claimProvenance';
 import { OVERLAY_DESCRIPTIONS } from './utils/referenceOverlayCredits.js';
+import {
+  applyLegendCustomization, customLegendItem, nextCustomLegendId,
+  LEGEND_SYMBOLS, DEFAULT_LEGEND_SYMBOL, DEFAULT_LEGEND_COLOR,
+} from './utils/legendCustomization.js';
 import { featureKey, layerFeatures, isFeatureHidden, hiddenCount, featuresInBounds, visibleGeojson } from './utils/featureIdentity.js';
 import { layerAnchorGroups, defaultAnchorForLayer, reanchorCalloutsForLayer } from './utils/featureClusters.js';
 import FeatureTrimList from './components/FeatureTrimList.jsx';
@@ -402,23 +408,24 @@ function LegendLabelEditable({ label, onSave }) {
   );
 }
 
+// The legend's point swatch, drawn by the same component as the map markers.
+//
+// This was a fourth hand-written copy of the shape table, and it had fallen
+// behind: hexagon and pin fell through to a circle here while both exporters
+// drew them properly, so a hexagon layer read as a circle on screen and a
+// hexagon in the client's PDF. Sharing MarkerSvgIcon means a shape added once
+// is available everywhere, and cannot be half-added again.
 function LegendPointSwatch({ style }) {
-  const shape = style?.markerShape || 'circle';
-  const fill = style?.markerFill || style?.markerColor || '#ffffff';
-  const stroke = style?.markerColor || '#111111';
-  const sw = 1.5;
-  let inner;
-  if (shape === 'triangle_down') inner = <polygon points="6,11 1,1 11,1" fill={fill} stroke={stroke} strokeWidth={sw} />;
-  else if (shape === 'triangle') inner = <polygon points="6,1 11,11 1,11" fill={fill} stroke={stroke} strokeWidth={sw} />;
-  else if (shape === 'square') inner = <rect x="1" y="1" width="10" height="10" fill={fill} stroke={stroke} strokeWidth={sw} />;
-  else if (shape === 'diamond') inner = <polygon points="6,1 11,6 6,11 1,6" fill={fill} stroke={stroke} strokeWidth={sw} />;
-  else if (shape === 'cross') inner = <><line x1="6" y1="1" x2="6" y2="11" stroke={stroke} strokeWidth={2} /><line x1="1" y1="6" x2="11" y2="6" stroke={stroke} strokeWidth={2} /></>;
-  else if (shape === 'drillhole') inner = <><polygon points="6,1 11,7 1,7" fill={fill} stroke={stroke} strokeWidth={sw} /><line x1="6" y1="7" x2="6" y2="11" stroke={stroke} strokeWidth={sw} /></>;
-  else if (shape === 'star') {
-    const pts = Array.from({ length: 10 }, (_, i) => { const a = (i * Math.PI) / 5 - Math.PI / 2; const r = i % 2 === 0 ? 5 : 2.2; return `${(6 + r * Math.cos(a)).toFixed(2)},${(6 + r * Math.sin(a)).toFixed(2)}`; }).join(' ');
-    inner = <polygon points={pts} fill={fill} stroke={stroke} strokeWidth={sw} />;
-  } else inner = <circle cx="6" cy="6" r="5" fill={fill} stroke={stroke} strokeWidth={sw} />;
-  return <svg width="14" height="14" viewBox="0 0 12 12" style={{ flexShrink: 0, overflow: 'visible' }} aria-hidden="true">{inner}</svg>;
+  return (
+    <span className="legend-symbol-marker" style={{ display: 'flex', flexShrink: 0 }}>
+      <MarkerSvgIcon
+        type={style?.markerShape || 'circle'}
+        size={14}
+        color={style?.markerColor || '#111111'}
+        fillColor={style?.markerFill || style?.markerColor || '#ffffff'}
+      />
+    </span>
+  );
 }
 
 function ProjectNameInput({ initialValue, onSave, onCancel }) {
@@ -958,7 +965,16 @@ export default function App() {
       }));
   }, [areaClaims]);
 
-  const allLegendItems = useMemo(() => [...legendItems, ...areaClaimsLegendItems], [legendItems, areaClaimsLegendItems]);
+  // Before customization — the editor needs this to offer a removed entry back,
+  // which it could not do from a list the removal has already been applied to.
+  const derivedLegendItems = useMemo(
+    () => [...legendItems, ...areaClaimsLegendItems],
+    [legendItems, areaClaimsLegendItems],
+  );
+  const allLegendItems = useMemo(
+    () => applyLegendCustomization(derivedLegendItems, project.layout),
+    [derivedLegendItems, project.layout],
+  );
   const legendGroups = useMemo(() => renderLegendGroups(allLegendItems, project.layout), [allLegendItems, project.layout]);
   const resolvedZones = useMemo(() => {
     if (project.layout?.templateId === 'ni_43101_technical') {
@@ -5887,6 +5903,20 @@ export default function App() {
                 <label className="toggle-row"><input type="checkbox" checked={!project.layout.titleTransparent} onChange={(e) => updateLayout({ titleTransparent: !e.target.checked })} /><span>Title box</span></label>
                 <label className="toggle-row"><input type="checkbox" checked={!project.layout.legendTransparent} onChange={(e) => updateLayout({ legendTransparent: !e.target.checked })} /><span>Legend box</span></label>
                 <label className="toggle-row"><input type="checkbox" checked={!project.layout.logoTransparent} onChange={(e) => updateLayout({ logoTransparent: !e.target.checked })} /><span>Logo box</span></label>
+              </div>
+            </details>
+
+            {/* Legend entries — rename, remove, add. Its own section rather
+                than buried in Text & Metadata: this edits what the legend
+                SAYS, which is a different job from how it is set. */}
+            <details className="sub-details">
+              <summary>Legend Items</summary>
+              <div className="sub-details-body">
+                <LegendEditor
+                  derivedItems={derivedLegendItems}
+                  layout={project.layout}
+                  updateLayout={updateLayout}
+                />
               </div>
             </details>
 
