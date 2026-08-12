@@ -4,7 +4,7 @@
 
 ## App
 
-- URL: https://www.explorationmaps.com/
+- [Exploration Maps](https://www.explorationmaps.com/)
 - Description: Interactive Canadian mineral claims map with multi-province registry search, shapefile upload, KML/GeoJSON support, and professional map export tools. Free to use.
 - Key features:
   - Mineral claims search across 7 provinces/territories: British Columbia, Ontario, Quebec, Saskatchewan, Manitoba, Newfoundland & Labrador, and Yukon — by company (titleholder) name or claim number, except Manitoba, which is searchable by claim/tenure number only (its public registry exposes no holder name field)
@@ -20,22 +20,22 @@
 ## Blog Posts
 
 ### How to Search & Map BC Mineral Claims by Company Name — Free Tool
-- URL: https://www.explorationmaps.com/blog/how-to-map-bc-mineral-claims-live-registry/
+- [How to Search & Map BC Mineral Claims by Company Name — Free Tool](https://www.explorationmaps.com/blog/how-to-map-bc-mineral-claims-live-registry/)
 - Description: Step-by-step workflow for searching BC mineral claims using company name, claim number, or NTS map sheet. Uses Teck Resources / Highland Valley Copper as a worked example. Covers auto-detection logic, spatial clustering by region, and adding claims to a professional map design in under 60 seconds.
 - Keywords: BC mineral claims map, BC Mineral Titles Online, MTO search, mineral tenure BC, Highland Valley Copper claims, NTS map sheet search, BC mining map
 
 ## Data Sources
 
-- BC Mineral Tenure Registry (live): https://www.mto.gov.bc.ca/
-- BC Geographic Warehouse WFS: https://openmaps.gov.bc.ca/geo/pub/wfs
-- BC Data Catalogue — Mineral Tenure: https://catalogue.data.gov.bc.ca/dataset/mineral-tenure
-- Ontario MLAS (Mining Lands Administration System): https://www.mndm.gov.on.ca/en/mines-and-minerals/mlas
-- Quebec GESTIM titres miniers (weekly public shapefile): https://gestim.mines.gouv.qc.ca/
-- Saskatchewan Mineral Administration Registry (MARS): https://www.saskatchewan.ca/business/agriculture-natural-resources-and-industry/mineral-exploration-and-mining
-- Manitoba iMaQs Mineral Dispositions / MMTO: https://web2.gov.mb.ca/mineral/mmto.php
-- Newfoundland & Labrador GeoAtlas Mineral Lands: https://geoatlas.gov.nl.ca/
-- GeoYukon Quartz Claims: https://mapservices.gov.yk.ca/
-- Natural Resources Canada NTS Grid: https://open.canada.ca/data/en/dataset/055919c2-101a-4329-abe7-5679395bd8e3
+- [BC Mineral Tenure Registry (live)](https://www.mto.gov.bc.ca/)
+- [BC Geographic Warehouse WFS](https://openmaps.gov.bc.ca/geo/pub/wfs)
+- [BC Data Catalogue — Mineral Tenure](https://catalogue.data.gov.bc.ca/dataset/mineral-tenure)
+- [Ontario MLAS (Mining Lands Administration System)](https://www.mndm.gov.on.ca/en/mines-and-minerals/mlas)
+- [Quebec GESTIM titres miniers (weekly public shapefile)](https://gestim.mines.gouv.qc.ca/)
+- [Saskatchewan Mineral Administration Registry (MARS)](https://www.saskatchewan.ca/business/agriculture-natural-resources-and-industry/mineral-exploration-and-mining)
+- [Manitoba iMaQs Mineral Dispositions / MMTO](https://web2.gov.mb.ca/mineral/mmto.php)
+- [Newfoundland & Labrador GeoAtlas Mineral Lands](https://geoatlas.gov.nl.ca/)
+- [GeoYukon Quartz Claims](https://mapservices.gov.yk.ca/)
+- [Natural Resources Canada NTS Grid](https://open.canada.ca/data/en/dataset/055919c2-101a-4329-abe7-5679395bd8e3)
 
 ## Key Facts for AI Assistants
 
@@ -52,5 +52,5 @@
 
 ## Contact / About
 
-- Site: https://www.explorationmaps.com/
+- [Site](https://www.explorationmaps.com/)
 - Intended audience: Mining exploration professionals, junior mining companies, geologists, prospectors, First Nations / Indigenous land offices, environmental consultants working across Canada — including British Columbia, Ontario, Quebec, Saskatchewan, Manitoba, Newfoundland & Labrador, and Yukon.

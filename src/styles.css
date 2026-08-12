@@ -2923,6 +2923,10 @@ button.claim-notices-chip[aria-expanded="true"] { border-color: #cbd5e1; backgro
   --lm-ink: #0f1b2d;
   --lm-muted: #566274;
   --lm-faint: #8b96a5;
+  /* 4.8:1 on white — --lm-faint is 3.0:1, which fails AA for body-size text.
+     Used where faint text sits on white and has to be readable, not just
+     quiet. */
+  --lm-faint-strong: #6b7280;
   --lm-hair: #e4e9f1;
   --lm-blue: #2563eb;
   --lm-blue-deep: #1d4ed8;
@@ -3261,17 +3265,21 @@ button.claim-notices-chip[aria-expanded="true"] { border-color: #cbd5e1; backgro
 }
 .lm-footer-brand p { font-size: 13px; color: var(--lm-muted); margin: 12px 0 0; max-width: 260px; line-height: 1.6; }
 .lm-footer-col { display: flex; flex-direction: column; gap: 9px; align-items: flex-start; }
-.lm-footer-col h4 { font-size: 11.5px; font-weight: 730; text-transform: uppercase; letter-spacing: .08em; color: var(--lm-faint); margin: 0 0 4px; }
+/* h3, not h4: the page runs h1 then h2 sections, so h4 here skipped a level
+   and screen-reader users lost the outline. Colour is --lm-faint-strong
+   because --lm-faint (#8b96a5) is 3.0:1 on white and fails AA for text this
+   small; #6b7280 is 4.8:1 and reads the same at a glance. */
+.lm-footer-col h3 { font-size: 11.5px; font-weight: 730; text-transform: uppercase; letter-spacing: .08em; color: var(--lm-faint-strong); margin: 0 0 4px; }
 .lm-footer-col a, .lm-footer-col button {
   font-size: 13.5px; color: var(--lm-muted); text-decoration: none; background: none; border: none;
   padding: 0; cursor: pointer; text-align: left; transition: color .12s;
 }
 .lm-footer-col a:hover, .lm-footer-col button:hover { color: var(--lm-blue-deep); }
 .lm-footer-base {
-  border-top: 1px solid var(--lm-hair); text-align: center; font-size: 12.5px; color: var(--lm-faint);
+  border-top: 1px solid var(--lm-hair); text-align: center; font-size: 12.5px; color: var(--lm-faint-strong);
   padding: 18px 28px 22px;
 }
-.lm-footer-base a { color: var(--lm-faint); }
+.lm-footer-base a { color: var(--lm-faint-strong); }
 
 /* Reveal */
 .lm-reveal { opacity: 0; transform: translateY(16px); transition: opacity .55s ease, transform .55s ease; }

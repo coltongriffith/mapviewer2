@@ -31,7 +31,10 @@
 <!-- Google tag (gtag.js) — config lives in /gtag-init.js (not inline) because
      our CSP is script-src 'self' with no 'unsafe-inline'. -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=AW-18358773663"></script>
-<script src="/gtag-init.js"></script>
+<!-- defer: this is analytics config, not something the first paint needs.
+     Without it the browser blocks rendering while it fetches and runs the file
+     — PageSpeed measured 240 ms of blocked render, and a 72 ms long task. -->
+<script defer src="/gtag-init.js"></script>
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
