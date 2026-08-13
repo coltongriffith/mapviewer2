@@ -72,6 +72,25 @@ describe('admin_get_search_dropoff', () => {
     expect(def.sql).not.toMatch(/grant\s+execute[^;]*admin_get_search_dropoff[^;]*\b(anon|public)\b/i);
   });
 
+  it('scopes the window half-open, so a midnight event lands on one day only', () => {
+    // AdminPage sends start = <day>T00:00Z and end = start + 24h, so p_end is
+    // exclusive by construction. `> p_start` / `<= p_end` drops a search at the
+    // selected day's midnight and counts one at the following midnight — the
+    // event lands on the wrong day, and is double-counted across two views.
+    const body = bodyOf(def.sql, 'admin_get_search_dropoff');
+    expect(body, 'lower bound must be inclusive').toMatch(/created_at\s*>=\s*coalesce\(p_start/);
+    expect(body, 'upper bound must be exclusive').toMatch(/created_at\s*<\s*coalesce\(p_end/);
+    expect(body).not.toMatch(/created_at\s*>\s+coalesce\(p_start/);
+    expect(body).not.toMatch(/created_at\s*<=\s*coalesce\(p_end/);
+  });
+
+  it('matches the half-open convention every other range RPC uses', () => {
+    const v2 = readFileSync(path.join(MIGRATIONS, '20260713000001_admin_dashboard_v2.sql'), 'utf8');
+    // Sanity: the convention is real and near-universal, not a lone example.
+    expect((v2.match(/created_at >= p_start/g) || []).length).toBeGreaterThan(5);
+    expect(v2).not.toMatch(/created_at <= p_end/);
+  });
+
   it('does not resolve names through a caller-writable temp schema', () => {
     // A security-definer function searching pg_temp can be made to run the
     // caller's objects instead of the intended ones.
@@ -104,17 +123,33 @@ describe('every admin_ RPC', () => {
   // internal helper called only from other gated RPCs, and the right fix there
   // was to revoke the grant rather than add a redundant check that would make
   // it silently return nothing if reused elsewhere.
-  function laterGrantsToAuthenticated(fn) {
-    // The LAST grant/revoke wins, so scan every migration in order.
-    let granted = false;
+  function reachableByAuthenticated(fn) {
+    // STARTS TRUE. This project carries a bootstrap default privilege —
+    // `alter default privileges in schema public grant execute on functions to
+    // anon, authenticated, service_role` — so every function is created with an
+    // explicit authenticated grant already in its ACL. See the note in
+    // 20260801000005_tenure_grant_hardening.sql.
+    //
+    // Assuming the opposite is how this check would have gone blind: a future
+    // ungated `security definer admin_*` function written with no GRANT line at
+    // all is reachable by every signed-in user, and a scanner that only counts
+    // explicit grants would call it unreachable and pass it.
+    //
+    // Only a statement NAMING the role moves the needle. `revoke ... from
+    // public` does not clear an explicit role grant — the same migration note
+    // records that this is exactly why the Supabase advisor kept reporting
+    // these functions as anon-executable.
+    let reachable = true;
     for (const file of migrationFiles()) {
       const sql = readFileSync(path.join(MIGRATIONS, file), 'utf8');
-      const re = new RegExp(`(grant|revoke)[^;]*\\b${fn}\\s*\\([^;]*?\\bauthenticated\\b[^;]*;`, 'gis');
+      const re = new RegExp(`\\b(grant|revoke)\\b[^;]*\\b${fn}\\s*\\([^;]*;`, 'gis');
       for (const m of sql.matchAll(re)) {
-        granted = /^grant/i.test(m[0].trim());
+        const stmt = m[0];
+        if (!/\bauthenticated\b/i.test(stmt)) continue;
+        reachable = /^\s*grant/i.test(stmt);
       }
     }
-    return granted;
+    return reachable;
   }
 
   it.each([...names])('%s is gated or unreachable — %s', (fn) => {
@@ -122,7 +157,7 @@ describe('every admin_ RPC', () => {
     const body = bodyOf(def.sql, fn);
     if (!/security\s+definer/i.test(body)) return; // invoker rights: RLS applies
     const gated = /is_admin\(\)/.test(body);
-    const reachable = laterGrantsToAuthenticated(fn);
+    const reachable = reachableByAuthenticated(fn);
     expect(
       gated || !reachable,
       `${fn} is security definer in ${def.file}, callable by any signed-in user, `
