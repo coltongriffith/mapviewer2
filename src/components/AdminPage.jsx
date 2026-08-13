@@ -977,6 +977,11 @@ export default function AdminPage({ onExit }) {
                           <th scope="col" className="adm-num">Searches</th>
                           <th scope="col" className="adm-num">Found nothing</th>
                           <th scope="col" className="adm-num">Errors</th>
+                          {/* Searches predating the outcome column (2026-08-05).
+                              Shown rather than folded into either bucket: pooling
+                              the two eras is what made Manitoba read as a 100%
+                              failure when it was refusing an unsupported mode. */}
+                          <th scope="col" className="adm-num">Unclassified</th>
                           <th scope="col" className="adm-num">Sessions</th>
                           <th scope="col" className="adm-num">Left after</th>
                           <th scope="col">Last</th>
@@ -988,7 +993,11 @@ export default function AdminPage({ onExit }) {
                           // Only flag a rate that is BOTH high and backed by
                           // enough searches to mean something — two misses out
                           // of two is noise, not a signal.
-                          const alarming = rate >= 60 && Number(r.searches) >= 3;
+                          // Rate is over CLASSIFIED searches only, so judge the
+                          // sample on those too — a row that is all unclassified
+                          // has no rate to be alarmed about.
+                          const classified = Number(r.searches) - Number(r.unclassified || 0);
+                          const alarming = rate >= 60 && classified >= 3;
                           return (
                             <tr key={`${r.province}-${r.mode}`} className={alarming ? 'adm-row-alert' : undefined}>
                               <th scope="row">{r.province}</th>
@@ -996,9 +1005,14 @@ export default function AdminPage({ onExit }) {
                               <td className="adm-num">{r.searches}</td>
                               <td className="adm-num">
                                 {r.zero_results}
-                                <span className={alarming ? 'adm-rate-bad' : 'adm-muted'}> ({rate}%)</span>
+                                {r.zero_rate === null
+                                  ? <span className="adm-muted"> (—)</span>
+                                  : <span className={alarming ? 'adm-rate-bad' : 'adm-muted'}> ({rate}%)</span>}
                               </td>
                               <td className="adm-num">{Number(r.errors) > 0 ? r.errors : <span className="adm-muted">—</span>}</td>
+                              <td className="adm-num">{Number(r.unclassified) > 0
+                                ? <span className="adm-muted">{r.unclassified}</span>
+                                : <span className="adm-muted">—</span>}</td>
                               <td className="adm-num">{r.sessions}</td>
                               <td className="adm-num">
                                 {Number(r.abandoned) > 0

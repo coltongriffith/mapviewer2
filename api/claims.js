@@ -1254,6 +1254,19 @@ function qcRowToFeature(row) {
   };
 }
 
+// Fold a search term the same way qc_claims.owner_name_norm is folded: strip
+// accents, lowercase. Both sides must agree or the comparison is meaningless —
+// "Aurifère" indexed folded and searched unfolded matches nothing.
+//
+// NFD splits an accented character into its base plus a combining mark, which
+// the range below then removes; anything without a decomposition is untouched.
+export function foldForSearch(value) {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase();
+}
+
 async function searchQc(term, type, res) {
   const creds = qcSupabaseCreds();
   if (!creds) {
@@ -1268,9 +1281,43 @@ async function searchQc(term, type, res) {
     return res.status(400).json({ error: 'q param required (min 2 chars)' });
   }
 
-  const filter = type === 'number'
-    ? `tag_number=ilike.${encodeURIComponent(cleaned)}`
-    : `owner_name=ilike.${encodeURIComponent(`*${cleaned}*`)}`;
+  // Holder search matches TOKENS against a folded column, not the raw name as
+  // one contiguous string.
+  //
+  // GESTIM is francophone: it stores "Exploration Azimut inc." for the company
+  // the market calls Azimut Exploration, and "Corporation Aurifère Vior Inc."
+  // for Vior. A single `%term%` could match neither the reversed word order nor
+  // a missing accent, so the province's two largest holders returned nothing
+  // for their own names — 0 rows where token matching returns 10,891 and 8,646.
+  // 96 owners holding 22% of Quebec's claims carry French-order names, and 282
+  // holding 20% carry accents.
+  //
+  // owner_name_norm is accent-stripped and lowercased (migration
+  // 20260813000001), so the needle is folded the same way here. The displayed
+  // OWNER_NAME still comes from the original column and keeps its real
+  // spelling.
+  //
+  // Repeated filter keys rather than PostgREST's `and=(...)` grouping: this is
+  // the identical `column=ilike.value` shape already proven in production, and
+  // PostgREST ANDs duplicate keys. The grouped form would put the tokens inside
+  // a comma-separated list, which is parsing surface for no benefit.
+  let filter;
+  if (type === 'number') {
+    filter = `tag_number=ilike.${encodeURIComponent(cleaned)}`;
+  } else {
+    const tokens = ownerSearchTokens(cleaned)
+      .map(foldForSearch)
+      .filter(Boolean);
+    // A term of only punctuation ("...") survives the length check above but
+    // tokenises to nothing. An empty filter string is not a harmless no-op —
+    // it would drop the WHERE clause entirely and page the whole table back.
+    if (!tokens.length) {
+      return res.status(400).json({ error: 'q param required (min 2 chars)' });
+    }
+    filter = tokens
+      .map((t) => `owner_name_norm=ilike.${encodeURIComponent(`*${t}*`)}`)
+      .join('&');
+  }
 
   const { features, meta } = await fetchAllPages({
     provider: 'qc-store',
