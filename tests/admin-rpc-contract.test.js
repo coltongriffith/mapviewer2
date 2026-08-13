@@ -100,6 +100,36 @@ describe('admin_get_search_dropoff', () => {
   });
 });
 
+describe('admin_get_overview feed fix', () => {
+  // This one is applied by rewriting the DEPLOYED definition rather than
+  // restating ~200 lines of plpgsql, so what needs pinning is not the SQL but
+  // the property that makes that safe: it must fail loudly rather than quietly
+  // do nothing if the text it expects is not there.
+  const file = 'supabase/migrations/20260813000006_fix_admin_overview_feed_ordering.sql';
+  const sql = readFileSync(file, 'utf8');
+
+  it('refuses to no-op when the fragment it patches is missing', () => {
+    // Without this, a future edit to admin_get_overview would make the
+    // migration silently skip, and the Overview tab would break again with a
+    // green migration history.
+    expect(sql).toMatch(/if\s+patched\s*=\s*def\s+then/i);
+    expect(sql).toMatch(/raise\s+exception/i);
+  });
+
+  it('errors rather than continuing if the function is absent', () => {
+    expect(sql).toMatch(/if\s+def\s+is\s+null\s+then/i);
+  });
+
+  it('moves the limit inside the derived table rather than deleting it', () => {
+    // The outer LIMIT 50 never limited the feed — the outer query returns one
+    // aggregate row. Dropping it entirely would have been a silent behaviour
+    // change; it belongs inside, where it selects the newest 50 before
+    // aggregation.
+    expect(sql).toMatch(/order by 1 desc/i);
+    expect(sql).toMatch(/limit 50/i);
+  });
+});
+
 describe('every admin_ RPC', () => {
   // The rule this class of bug breaks, applied to all of them rather than only
   // the one that was caught.
