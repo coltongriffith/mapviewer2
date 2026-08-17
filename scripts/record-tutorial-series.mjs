@@ -161,12 +161,13 @@ const tutorials = [
     await moveTo(search);
     await search.fill('Agnico Eagle Mines');
     await pause(page, 800);
-    await caption('Run the search and review the matching legal owner names and claim counts.', undefined, 6500);
+    await caption('Run the search to check the selected registry for matching legal owner names and claim counts.', undefined, 7000);
     await click(dialog.getByRole('button', { name: 'Search', exact: true }));
     const result = dialog.getByRole('button', { name: /AGNICO EAGLE MINES LIMITED.*claims/ }).first();
-    await Promise.race([result.waitFor({ timeout: 30_000 }).catch(() => null), pause(page, 14_000)]);
+    await Promise.race([result.waitFor({ timeout: 30_000 }).catch(() => null), pause(page, 9000)]);
     if (await result.isVisible().catch(() => false)) await moveTo(result);
-    await caption('Select the correct owner, choose the claim areas you need, and add them to the map.', undefined, 7200);
+    await caption('The live registry may take a few seconds while it checks current tenure records.', undefined, 6800);
+    await caption('When matches appear, select the correct owner, choose the claim areas you need, and add them to the map.', undefined, 7600);
   }],
 
   ['03-import-geojson-boundary', async ({ page, caption, moveTo, openBlankEditor }) => {
@@ -300,11 +301,12 @@ const tutorials = [
     await caption('PNG is ideal for presentations, while SVG, Illustrator, and PDF support publication workflows.', undefined, 7600);
     const exportPng = page.locator('#section-export').getByRole('button', { name: 'Export PNG' });
     await moveTo(exportPng);
-    await caption('Select Export PNG to generate the finished map.', undefined, 5200);
-    const download = page.waitForEvent('download', { timeout: 25_000 }).catch(() => null);
+    await caption('Select Export PNG to open the free download dialog.', undefined, 5400);
     await click(exportPng);
-    await Promise.race([download, pause(page, 12_000)]);
-    await caption('Your exploration map is ready to place in a deck, report, or investor update.', undefined, 6800);
+    await page.getByRole('dialog').waitFor({ timeout: 25_000 });
+    await pause(page, 1000);
+    await caption('Enter your email for a free watermarked PNG, or sign in for the full export options.', undefined, 8200);
+    await caption('The exported map is ready to place in a deck, report, or investor update.', undefined, 6900);
   }],
 ];
 
