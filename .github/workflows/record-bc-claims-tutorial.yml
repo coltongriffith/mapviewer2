@@ -46,9 +46,9 @@ jobs:
           mkdir -p tutorial-output/voice
           TTS=".voice-venv/bin/edge-tts"
           "$TTS" --voice en-CA-LiamNeural --rate=-12% --text "Here's how to search British Columbia mineral claims using Exploration Maps." --write-media tutorial-output/voice/01.mp3
-          "$TTS" --voice en-CA-LiamNeural --rate=-12% --text "Select Search B C mineral claims. Mineral Titles Online is already selected." --write-media tutorial-output/voice/02.mp3
-          "$TTS" --voice en-CA-LiamNeural --rate=-12% --text "You can search by company, claim number, or map sheet. For this example, enter Dolly Varden Silver and run the search." --write-media tutorial-output/voice/03.mp3
-          "$TTS" --voice en-CA-LiamNeural --rate=-12% --text "The matching claims appear with their claim count, total area, and expiry range." --write-media tutorial-output/voice/04.mp3
+          "$TTS" --voice en-CA-LiamNeural --rate=-12% --text "Select Search B C mineral claims; Mineral Titles Online is preselected." --write-media tutorial-output/voice/02.mp3
+          "$TTS" --voice en-CA-LiamNeural --rate=-12% --text "Search by company, claim number, or map sheet. Here, enter Dolly Varden Silver." --write-media tutorial-output/voice/03.mp3
+          "$TTS" --voice en-CA-LiamNeural --rate=-12% --text "The matching claims appear with their count, area, and expiry range." --write-media tutorial-output/voice/04.mp3
           "$TTS" --voice en-CA-LiamNeural --rate=-12% --text "Select the result, then add those claims directly to your map." --write-media tutorial-output/voice/05.mp3
           "$TTS" --voice en-CA-LiamNeural --rate=-12% --text "The map loads with the selected claims, ready to style, review in context, or export for your next step." --write-media tutorial-output/voice/06.mp3
 
@@ -57,7 +57,7 @@ jobs:
           for cue in 01 02 03 04 05 06; do
             ffmpeg -y \
               -i "tutorial-output/voice/${cue}.mp3" \
-              -af "silenceremove=start_periods=1:start_duration=0.03:start_threshold=-38dB:stop_periods=1:stop_duration=0.15:stop_threshold=-38dB" \
+              -af "silenceremove=start_periods=1:start_duration=0.03:start_threshold=-38dB,areverse,silenceremove=start_periods=1:start_duration=0.03:start_threshold=-38dB,areverse" \
               -c:a pcm_s16le "tutorial-output/voice/${cue}.wav"
           done
 
