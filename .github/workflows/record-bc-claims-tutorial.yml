@@ -67,7 +67,7 @@ jobs:
             -i tutorial-output/voice/05.wav \
             -i tutorial-output/voice/06.wav \
             -i tutorial-output/voice/07.wav \
-            -filter_complex "[1:a]adelay=500:all=1[a1];[2:a]adelay=4200:all=1[a2];[3:a]adelay=6800:all=1[a3];[4:a]adelay=10000:all=1[a4];[5:a]adelay=13500:all=1[a5];[6:a]adelay=19200:all=1[a6];[7:a]adelay=25600:all=1[a7];[a1][a2][a3][a4][a5][a6][a7]amix=inputs=7:duration=longest:normalize=0,volume=1.15[voice]" \
+            -filter_complex "[1:a]adelay=500:all=1[a1];[2:a]adelay=4200:all=1[a2];[3:a]adelay=6800:all=1[a3];[4:a]adelay=10000:all=1[a4];[5:a]adelay=13500:all=1[a5];[6:a]adelay=19200:all=1[a6];[7:a]adelay=25600:all=1[a7];[a1][a2][a3][a4][a5][a6][a7]amix=inputs=7:duration=longest:normalize=0,volume=0.98[voice]" \
             -map 0:v:0 -map "[voice]" -c:v copy -c:a aac -b:a 192k -shortest \
             tutorial-output/bc-mineral-claims-search-voiceover.mp4
 
