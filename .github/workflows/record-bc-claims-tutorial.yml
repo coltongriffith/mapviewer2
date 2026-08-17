@@ -45,15 +45,15 @@ jobs:
           .voice-venv/bin/pip install edge-tts==7.2.3
           .voice-venv/bin/edge-tts \
             --voice en-CA-LiamNeural \
-            --rate=-3% \
-            --text "Here's how to search British Columbia mineral claims using Exploration Maps. Start by selecting Search B C mineral claims. British Columbia Mineral Titles Online is selected automatically. You can search by company, claim number, or map sheet. For this example, search for Dolly Varden Silver. Select the matching area, then add the claims to your map. The claims are now ready to style, review, or export." \
+            --rate=-8% \
+            --text "Here's how to search British Columbia mineral claims using Exploration Maps. Start by selecting Search B C mineral claims from the available tools. British Columbia Mineral Titles Online is selected automatically, so you're ready to search. You can look up claims by company, claim number, or map sheet. For this example, enter Dolly Varden Silver and run the search. Select the matching area from the results, then add those claims directly to your map. They're now ready for you to style, review in context, or export for your next step." \
             --write-media tutorial-output/voiceover-continuous.mp3
 
       - name: Tighten narration pacing
         run: |
           ffmpeg -y \
             -i tutorial-output/voiceover-continuous.mp3 \
-            -af "silenceremove=start_periods=1:start_duration=0.05:start_threshold=-38dB:start_silence=0.08:stop_periods=-1:stop_duration=0.55:stop_threshold=-38dB:stop_silence=0.30" \
+            -af "silenceremove=start_periods=1:start_duration=0.05:start_threshold=-38dB:start_silence=0.08:stop_periods=-1:stop_duration=0.18:stop_threshold=-38dB:stop_silence=0.10" \
             -c:a libmp3lame -b:a 192k tutorial-output/voiceover-paced.mp3
 
       - name: Mix natural voiceover into MP4
