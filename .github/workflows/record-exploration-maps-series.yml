@@ -42,7 +42,7 @@ jobs:
         run: |
           find tutorial-series-output -mindepth 1 -maxdepth 1 -type d -print0 | while IFS= read -r -d '' dir; do
             slug="$(basename "$dir")"
-            ffmpeg -y -i "$dir/$slug.webm" -c:v libx264 -preset veryfast -crf 20 -pix_fmt yuv420p -movflags +faststart "$dir/$slug.mp4"
+            ffmpeg -nostdin -y -i "$dir/$slug.webm" -c:v libx264 -preset veryfast -crf 20 -pix_fmt yuv420p -movflags +faststart "$dir/$slug.mp4"
           done
 
       - name: Generate natural voiceovers from exact captions
@@ -55,7 +55,7 @@ jobs:
         run: |
           find tutorial-series-output -mindepth 1 -maxdepth 1 -type d -print0 | while IFS= read -r -d '' dir; do
             slug="$(basename "$dir")"
-            ffmpeg -y \
+            ffmpeg -nostdin -y \
               -i "$dir/$slug.mp4" \
               -i "$dir/voiceover-natural.wav" \
               -filter_complex "[1:a]volume=0.96,apad[voice]" \
