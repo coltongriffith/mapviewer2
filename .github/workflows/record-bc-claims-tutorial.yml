@@ -39,44 +39,31 @@ jobs:
       - name: Convert to MP4
         run: ffmpeg -y -i tutorial-output/bc-mineral-claims-search.webm -c:v libx264 -pix_fmt yuv420p -movflags +faststart tutorial-output/bc-mineral-claims-search.mp4
 
-      - name: Generate voiceover
+      - name: Generate continuous neural voiceover
         run: |
           python3 -m venv .voice-venv
-          .voice-venv/bin/pip install piper-tts==1.7.0
-          mkdir -p tutorial-output/voice
-          curl -L --fail --retry 3 -o tutorial-output/voice/en_US-ryan-high.onnx "https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_US/ryan/high/en_US-ryan-high.onnx?download=true"
-          curl -L --fail --retry 3 -o tutorial-output/voice/en_US-ryan-high.onnx.json "https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_US/ryan/high/en_US-ryan-high.onnx.json?download=true"
-          PIPER=".voice-venv/bin/piper"
-          MODEL="tutorial-output/voice/en_US-ryan-high.onnx"
-          "$PIPER" -m "$MODEL" -f tutorial-output/voice/01.wav -- "Here's how to search British Columbia mineral claims using Exploration Maps."
-          "$PIPER" -m "$MODEL" -f tutorial-output/voice/02.wav -- "Select Search B C mineral claims."
-          "$PIPER" -m "$MODEL" -f tutorial-output/voice/03.wav -- "British Columbia Mineral Titles Online is selected automatically."
-          "$PIPER" -m "$MODEL" -f tutorial-output/voice/04.wav -- "You can search by company, claim number, or map sheet."
-          "$PIPER" -m "$MODEL" -f tutorial-output/voice/05.wav -- "For this example, we'll search for Dolly Varden Silver."
-          "$PIPER" -m "$MODEL" -f tutorial-output/voice/06.wav -- "Select the matching area, then add the claims to your map."
-          "$PIPER" -m "$MODEL" -f tutorial-output/voice/07.wav -- "The claims are now ready to style, review, or export."
+          .voice-venv/bin/pip install edge-tts==7.2.3
+          .voice-venv/bin/edge-tts \
+            --voice en-CA-LiamNeural \
+            --rate=-3% \
+            --text "Here's how to search British Columbia mineral claims using Exploration Maps. Start by selecting Search B C mineral claims. British Columbia Mineral Titles Online is selected automatically. You can search by company, claim number, or map sheet. For this example, search for Dolly Varden Silver. Select the matching area, then add the claims to your map. The claims are now ready to style, review, or export." \
+            --write-media tutorial-output/voiceover-continuous.mp3
 
-      - name: Mix voiceover into MP4
+      - name: Mix natural voiceover into MP4
         run: |
           ffmpeg -y \
             -i tutorial-output/bc-mineral-claims-search.mp4 \
-            -i tutorial-output/voice/01.wav \
-            -i tutorial-output/voice/02.wav \
-            -i tutorial-output/voice/03.wav \
-            -i tutorial-output/voice/04.wav \
-            -i tutorial-output/voice/05.wav \
-            -i tutorial-output/voice/06.wav \
-            -i tutorial-output/voice/07.wav \
-            -filter_complex "[1:a]adelay=500:all=1[a1];[2:a]adelay=4200:all=1[a2];[3:a]adelay=6800:all=1[a3];[4:a]adelay=10000:all=1[a4];[5:a]adelay=13500:all=1[a5];[6:a]adelay=19200:all=1[a6];[7:a]adelay=25600:all=1[a7];[a1][a2][a3][a4][a5][a6][a7]amix=inputs=7:duration=longest:normalize=0,volume=0.98[voice]" \
+            -i tutorial-output/voiceover-continuous.mp3 \
+            -filter_complex "[1:a]adelay=450:all=1,volume=0.94,apad[voice]" \
             -map 0:v:0 -map "[voice]" -c:v copy -c:a aac -b:a 192k -shortest \
-            tutorial-output/bc-mineral-claims-search-voiceover.mp4
+            tutorial-output/bc-mineral-claims-search-natural-voiceover.mp4
 
       - name: Upload tutorial videos
         uses: actions/upload-artifact@v4
         with:
           name: bc-mineral-claims-tutorial
           path: |
-            tutorial-output/bc-mineral-claims-search-voiceover.mp4
+            tutorial-output/bc-mineral-claims-search-natural-voiceover.mp4
             tutorial-output/bc-mineral-claims-search.mp4
             tutorial-output/bc-mineral-claims-search.webm
           if-no-files-found: error
