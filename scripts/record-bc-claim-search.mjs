@@ -92,13 +92,13 @@ try {
   );
   await click(page.getByRole('button', { name: 'Search BC mineral claims' }));
   await page.getByRole('heading', { name: 'Claims Registry Search' }).waitFor();
-  await pause(3000);
+  await pause(4000);
 
   await caption(
     'British Columbia — Mineral Titles Online is selected automatically.',
     'British Columbia Mineral Titles Online is selected automatically.'
   );
-  await pause(4000);
+  await pause(5200);
 
   await caption('Search by company name, claim number, or map sheet.');
   await pause(3800);
