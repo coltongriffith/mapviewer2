@@ -1,0 +1,47 @@
+name: Record BC claims tutorial
+
+on:
+  pull_request:
+    paths:
+      - "scripts/record-bc-claim-search.mjs"
+      - ".github/workflows/record-bc-claims-tutorial.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Record tutorial
+        run: node scripts/record-bc-claim-search.mjs
+
+      - name: Convert to MP4
+        run: ffmpeg -y -i tutorial-output/bc-mineral-claims-search.webm -c:v libx264 -pix_fmt yuv420p -movflags +faststart tutorial-output/bc-mineral-claims-search.mp4
+
+      - name: Upload tutorial videos
+        uses: actions/upload-artifact@v4
+        with:
+          name: bc-mineral-claims-tutorial
+          path: |
+            tutorial-output/bc-mineral-claims-search.mp4
+            tutorial-output/bc-mineral-claims-search.webm
+          if-no-files-found: error
+          retention-days: 7
