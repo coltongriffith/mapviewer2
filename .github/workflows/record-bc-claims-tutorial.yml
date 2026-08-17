@@ -39,38 +39,39 @@ jobs:
       - name: Convert to MP4
         run: ffmpeg -y -i tutorial-output/bc-mineral-claims-search.webm -c:v libx264 -pix_fmt yuv420p -movflags +faststart tutorial-output/bc-mineral-claims-search.mp4
 
-      - name: Generate continuous neural voiceover
+      - name: Generate scene-matched neural narration
         run: |
           python3 -m venv .voice-venv
           .voice-venv/bin/pip install edge-tts==7.2.3
-          .voice-venv/bin/edge-tts \
-            --voice en-CA-LiamNeural \
-            --rate=-8% \
-            --text "Here's how to search British Columbia mineral claims using Exploration Maps. Start by selecting Search B C mineral claims from the available tools. British Columbia Mineral Titles Online is selected automatically, so you're ready to search. You can look up claims by company, claim number, or map sheet. For this example, enter Dolly Varden Silver and run the search. Select the matching area from the results, then add those claims directly to your map. They're now ready for you to style, review in context, or export for your next step." \
-            --write-media tutorial-output/voiceover-continuous.mp3
+          mkdir -p tutorial-output/voice
+          TTS=".voice-venv/bin/edge-tts"
+          "$TTS" --voice en-CA-LiamNeural --rate=-12% --text "Here's how to search British Columbia mineral claims using Exploration Maps." --write-media tutorial-output/voice/01.mp3
+          "$TTS" --voice en-CA-LiamNeural --rate=-12% --text "Select Search B C mineral claims. Mineral Titles Online is already selected." --write-media tutorial-output/voice/02.mp3
+          "$TTS" --voice en-CA-LiamNeural --rate=-12% --text "You can search by company, claim number, or map sheet. For this example, enter Dolly Varden Silver and run the search." --write-media tutorial-output/voice/03.mp3
+          "$TTS" --voice en-CA-LiamNeural --rate=-12% --text "The matching claims appear with their claim count, total area, and expiry range." --write-media tutorial-output/voice/04.mp3
+          "$TTS" --voice en-CA-LiamNeural --rate=-12% --text "Select the result, then add those claims directly to your map." --write-media tutorial-output/voice/05.mp3
+          "$TTS" --voice en-CA-LiamNeural --rate=-12% --text "The map loads with the selected claims, ready to style, review in context, or export for your next step." --write-media tutorial-output/voice/06.mp3
 
-      - name: Tighten narration pacing
-        run: |
-          ffmpeg -y \
-            -i tutorial-output/voiceover-continuous.mp3 \
-            -af "silenceremove=start_periods=1:start_duration=0.05:start_threshold=-38dB:start_silence=0.08:stop_periods=-1:stop_duration=0.18:stop_threshold=-38dB:stop_silence=0.10" \
-            -c:a libmp3lame -b:a 192k tutorial-output/voiceover-paced.mp3
-
-      - name: Mix natural voiceover into MP4
+      - name: Align narration to screen events
         run: |
           ffmpeg -y \
             -i tutorial-output/bc-mineral-claims-search.mp4 \
-            -i tutorial-output/voiceover-paced.mp3 \
-            -filter_complex "[1:a]adelay=450:all=1,volume=0.94,apad[voice]" \
+            -i tutorial-output/voice/01.mp3 \
+            -i tutorial-output/voice/02.mp3 \
+            -i tutorial-output/voice/03.mp3 \
+            -i tutorial-output/voice/04.mp3 \
+            -i tutorial-output/voice/05.mp3 \
+            -i tutorial-output/voice/06.mp3 \
+            -filter_complex "[1:a]silenceremove=start_periods=1:start_duration=0.03:start_threshold=-38dB:stop_periods=1:stop_duration=0.15:stop_threshold=-38dB,adelay=350:all=1[a1];[2:a]silenceremove=start_periods=1:start_duration=0.03:start_threshold=-38dB:stop_periods=1:stop_duration=0.15:stop_threshold=-38dB,adelay=4350:all=1[a2];[3:a]silenceremove=start_periods=1:start_duration=0.03:start_threshold=-38dB:stop_periods=1:stop_duration=0.15:stop_threshold=-38dB,adelay=7900:all=1[a3];[4:a]silenceremove=start_periods=1:start_duration=0.03:start_threshold=-38dB:stop_periods=1:stop_duration=0.15:stop_threshold=-38dB,adelay=14200:all=1[a4];[5:a]silenceremove=start_periods=1:start_duration=0.03:start_threshold=-38dB:stop_periods=1:stop_duration=0.15:stop_threshold=-38dB,adelay=18200:all=1[a5];[6:a]silenceremove=start_periods=1:start_duration=0.03:start_threshold=-38dB:stop_periods=1:stop_duration=0.15:stop_threshold=-38dB,adelay=21800:all=1[a6];[a1][a2][a3][a4][a5][a6]amix=inputs=6:duration=longest:normalize=0,volume=0.94,apad[voice]" \
             -map 0:v:0 -map "[voice]" -c:v copy -c:a aac -b:a 192k -shortest \
-            tutorial-output/bc-mineral-claims-search-natural-voiceover.mp4
+            tutorial-output/bc-mineral-claims-search-synced-voiceover.mp4
 
       - name: Upload tutorial videos
         uses: actions/upload-artifact@v4
         with:
           name: bc-mineral-claims-tutorial
           path: |
-            tutorial-output/bc-mineral-claims-search-natural-voiceover.mp4
+            tutorial-output/bc-mineral-claims-search-synced-voiceover.mp4
             tutorial-output/bc-mineral-claims-search.mp4
             tutorial-output/bc-mineral-claims-search.webm
           if-no-files-found: error
