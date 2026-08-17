@@ -52,17 +52,26 @@ jobs:
           "$TTS" --voice en-CA-LiamNeural --rate=-12% --text "Select the result, then add those claims directly to your map." --write-media tutorial-output/voice/05.mp3
           "$TTS" --voice en-CA-LiamNeural --rate=-12% --text "The map loads with the selected claims, ready to style, review in context, or export for your next step." --write-media tutorial-output/voice/06.mp3
 
+      - name: Normalize narration cue timestamps
+        run: |
+          for cue in 01 02 03 04 05 06; do
+            ffmpeg -y \
+              -i "tutorial-output/voice/${cue}.mp3" \
+              -af "silenceremove=start_periods=1:start_duration=0.03:start_threshold=-38dB:stop_periods=1:stop_duration=0.15:stop_threshold=-38dB" \
+              -c:a pcm_s16le "tutorial-output/voice/${cue}.wav"
+          done
+
       - name: Align narration to screen events
         run: |
           ffmpeg -y \
             -i tutorial-output/bc-mineral-claims-search.mp4 \
-            -i tutorial-output/voice/01.mp3 \
-            -i tutorial-output/voice/02.mp3 \
-            -i tutorial-output/voice/03.mp3 \
-            -i tutorial-output/voice/04.mp3 \
-            -i tutorial-output/voice/05.mp3 \
-            -i tutorial-output/voice/06.mp3 \
-            -filter_complex "[1:a]silenceremove=start_periods=1:start_duration=0.03:start_threshold=-38dB:stop_periods=1:stop_duration=0.15:stop_threshold=-38dB,adelay=350:all=1[a1];[2:a]silenceremove=start_periods=1:start_duration=0.03:start_threshold=-38dB:stop_periods=1:stop_duration=0.15:stop_threshold=-38dB,adelay=4350:all=1[a2];[3:a]silenceremove=start_periods=1:start_duration=0.03:start_threshold=-38dB:stop_periods=1:stop_duration=0.15:stop_threshold=-38dB,adelay=7900:all=1[a3];[4:a]silenceremove=start_periods=1:start_duration=0.03:start_threshold=-38dB:stop_periods=1:stop_duration=0.15:stop_threshold=-38dB,adelay=14200:all=1[a4];[5:a]silenceremove=start_periods=1:start_duration=0.03:start_threshold=-38dB:stop_periods=1:stop_duration=0.15:stop_threshold=-38dB,adelay=18200:all=1[a5];[6:a]silenceremove=start_periods=1:start_duration=0.03:start_threshold=-38dB:stop_periods=1:stop_duration=0.15:stop_threshold=-38dB,adelay=21800:all=1[a6];[a1][a2][a3][a4][a5][a6]amix=inputs=6:duration=longest:normalize=0,volume=0.94,apad[voice]" \
+            -i tutorial-output/voice/01.wav \
+            -i tutorial-output/voice/02.wav \
+            -i tutorial-output/voice/03.wav \
+            -i tutorial-output/voice/04.wav \
+            -i tutorial-output/voice/05.wav \
+            -i tutorial-output/voice/06.wav \
+            -filter_complex "[1:a]adelay=350:all=1[a1];[2:a]adelay=4350:all=1[a2];[3:a]adelay=7900:all=1[a3];[4:a]adelay=14200:all=1[a4];[5:a]adelay=18200:all=1[a5];[6:a]adelay=21800:all=1[a6];[a1][a2][a3][a4][a5][a6]amix=inputs=6:duration=longest:normalize=0,volume=0.94,apad[voice]" \
             -map 0:v:0 -map "[voice]" -c:v copy -c:a aac -b:a 192k -shortest \
             tutorial-output/bc-mineral-claims-search-synced-voiceover.mp4
 
