@@ -15,7 +15,7 @@ permissions:
 jobs:
   record:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -41,7 +41,7 @@ jobs:
       - name: Convert silent recordings to MP4
         run: |
           find tutorial-series-output -name '*.webm' -print0 | while IFS= read -r -d '' file; do
-            ffmpeg -y -i "$file" -c:v libx264 -pix_fmt yuv420p -movflags +faststart "${file%.webm}.mp4"
+            ffmpeg -y -i "$file" -c:v libx264 -preset veryfast -crf 20 -pix_fmt yuv420p -movflags +faststart "${file%.webm}.mp4"
           done
 
       - name: Generate natural voiceovers from exact captions
