@@ -40,8 +40,9 @@ jobs:
 
       - name: Convert silent recordings to MP4
         run: |
-          find tutorial-series-output -name '*.webm' -print0 | while IFS= read -r -d '' file; do
-            ffmpeg -y -i "$file" -c:v libx264 -preset veryfast -crf 20 -pix_fmt yuv420p -movflags +faststart "${file%.webm}.mp4"
+          find tutorial-series-output -mindepth 1 -maxdepth 1 -type d -print0 | while IFS= read -r -d '' dir; do
+            slug="$(basename "$dir")"
+            ffmpeg -y -i "$dir/$slug.webm" -c:v libx264 -preset veryfast -crf 20 -pix_fmt yuv420p -movflags +faststart "$dir/$slug.mp4"
           done
 
       - name: Generate natural voiceovers from exact captions
