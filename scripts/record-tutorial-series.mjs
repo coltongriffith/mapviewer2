@@ -102,7 +102,7 @@ async function runTutorial(slug, body) {
 
   const openDemo = async (name = 'Claims & drill target map') => {
     await click(page.getByRole('button', { name }));
-    await page.getByRole('textbox', { name: 'Title' }).waitFor();
+    await page.getByRole('textbox', { name: 'Title', exact: true }).waitFor();
     await pause(page, 1600);
   };
 
@@ -129,7 +129,7 @@ const tutorials = [
     await caption('Start with the claims and drill target sample.', undefined, 4800);
     await openDemo();
     await caption('The sample already includes claims, target areas, drill collars, a legend, and an inset map.', undefined, 7600);
-    const title = page.getByRole('textbox', { name: 'Title' });
+    const title = page.getByRole('textbox', { name: 'Title', exact: true });
     await caption('Replace the sample title and subtitle with your project information.', undefined, 6200);
     await moveTo(title);
     await title.fill('Cedar Ridge Gold Project');
@@ -184,19 +184,17 @@ const tutorials = [
     await caption('Select the layer to rename it, assign a role, and adjust its line and fill styling.', undefined, 7200);
   }],
 
-  ['04-import-drillhole-csv', async ({ page, caption, moveTo, click, openBlankEditor }) => {
+  ['04-import-drillhole-csv', async ({ page, caption, moveTo, openBlankEditor }) => {
     await caption('How to import drillhole collars from a CSV file', undefined, 4400);
     await openBlankEditor();
     const upload = page.getByRole('button', { name: 'Upload shapefile, GeoJSON, KML, or CSV file' });
     await caption('Upload a CSV that includes longitude, latitude, and a hole identifier.', undefined, 6600);
     await moveTo(upload);
     await page.locator('input[type="file"]').first().setInputFiles(path.join(ASSETS, 'sample-drillholes.csv'));
-    await page.getByRole('heading', { name: 'Map CSV columns' }).waitFor();
-    await caption('Exploration Maps detects the coordinate columns and previews the first rows.', undefined, 6800);
-    await caption('Confirm the longitude, latitude, and point-name assignments, then import.', undefined, 6600);
-    await click(page.getByRole('button', { name: 'Import drillholes' }));
     await page.getByText('sample-drillholes.csv', { exact: false }).first().waitFor({ timeout: 30_000 });
     await pause(page, 1200);
+    await caption('Exploration Maps detects standard coordinate columns and imports them automatically.', undefined, 6900);
+    await caption('If your headings are unusual, use the column mapper to assign longitude, latitude, and point name.', undefined, 7600);
     await caption('The drill collars now appear as a styled point layer, ready for labels and callouts.', undefined, 7600);
   }],
 
