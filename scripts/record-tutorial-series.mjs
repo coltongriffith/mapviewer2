@@ -90,7 +90,7 @@ async function runTutorial(slug, body) {
       cursor.style.top = `${cy - 13}px`;
     }, { x: px, y: py });
     await pause(page, 800);
-    await map.click({ position: { x, y } });
+    await map.click({ position: { x, y }, force: true });
     await pause(page, 500);
   };
 
@@ -298,10 +298,11 @@ const tutorials = [
     await filename.fill('cedar-ridge-investor-map');
     await pause(page, 700);
     await caption('PNG is ideal for presentations, while SVG, Illustrator, and PDF support publication workflows.', undefined, 7600);
-    await moveTo(page.getByRole('button', { name: 'Export PNG' }));
+    const exportPng = page.locator('#section-export').getByRole('button', { name: 'Export PNG' });
+    await moveTo(exportPng);
     await caption('Select Export PNG to generate the finished map.', undefined, 5200);
     const download = page.waitForEvent('download', { timeout: 25_000 }).catch(() => null);
-    await click(page.getByRole('button', { name: 'Export PNG' }));
+    await click(exportPng);
     await Promise.race([download, pause(page, 12_000)]);
     await caption('Your exploration map is ready to place in a deck, report, or investor update.', undefined, 6800);
   }],
