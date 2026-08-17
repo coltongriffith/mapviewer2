@@ -100,7 +100,7 @@ try {
 
   await caption('Select the result, then add the claims to your map.');
   await click(page.getByRole('checkbox', { name: 'Select All 1 area' }));
-  const addButton = page.getByRole('button', { name: /Select areas to add|Add .*claims/i });
+  const addButton = page.getByRole('button', { name: /^Add [0-9]+ claims to map$/ });
   await addButton.waitFor();
   await pause(600);
   await click(addButton);
