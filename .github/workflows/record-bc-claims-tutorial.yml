@@ -49,11 +49,18 @@ jobs:
             --text "Here's how to search British Columbia mineral claims using Exploration Maps. Start by selecting Search B C mineral claims. British Columbia Mineral Titles Online is selected automatically. You can search by company, claim number, or map sheet. For this example, search for Dolly Varden Silver. Select the matching area, then add the claims to your map. The claims are now ready to style, review, or export." \
             --write-media tutorial-output/voiceover-continuous.mp3
 
+      - name: Tighten narration pacing
+        run: |
+          ffmpeg -y \
+            -i tutorial-output/voiceover-continuous.mp3 \
+            -af "silenceremove=start_periods=1:start_duration=0.05:start_threshold=-38dB:start_silence=0.08:stop_periods=-1:stop_duration=0.55:stop_threshold=-38dB:stop_silence=0.30" \
+            -c:a libmp3lame -b:a 192k tutorial-output/voiceover-paced.mp3
+
       - name: Mix natural voiceover into MP4
         run: |
           ffmpeg -y \
             -i tutorial-output/bc-mineral-claims-search.mp4 \
-            -i tutorial-output/voiceover-continuous.mp3 \
+            -i tutorial-output/voiceover-paced.mp3 \
             -filter_complex "[1:a]adelay=450:all=1,volume=0.94,apad[voice]" \
             -map 0:v:0 -map "[voice]" -c:v copy -c:a aac -b:a 192k -shortest \
             tutorial-output/bc-mineral-claims-search-natural-voiceover.mp4
