@@ -96,7 +96,7 @@ async function runTutorial(slug, body) {
 
   const openHome = async () => {
     await page.goto(SITE, { waitUntil: 'domcontentloaded', timeout: 45_000 });
-    await page.getByRole('button', { name: 'Start Mapping' }).waitFor();
+    await page.getByRole('button', { name: 'Start Mapping' }).first().waitFor();
     await addOverlay(page);
   };
 
@@ -107,7 +107,7 @@ async function runTutorial(slug, body) {
   };
 
   const openBlankEditor = async () => {
-    await click(page.getByRole('button', { name: 'Start Mapping' }));
+    await click(page.getByRole('button', { name: 'Start Mapping' }).first());
     await page.getByRole('button', { name: 'Search public claims' }).waitFor();
     await pause(page, 900);
   };
@@ -323,4 +323,3 @@ await browser.close();
 if (failures.length) {
   throw new Error(`Tutorial recording failures:\n${failures.join('\n')}`);
 }
-
