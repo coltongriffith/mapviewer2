@@ -15,6 +15,8 @@ const context = await browser.newContext({
 });
 const page = await context.newPage();
 const video = page.video();
+const narrationCues = [];
+let narrationOriginAt = null;
 
 const pause = (ms) => page.waitForTimeout(ms);
 
@@ -34,7 +36,14 @@ async function addTutorialOverlay() {
   });
 }
 
-async function caption(text) {
+async function caption(text, spokenText = text) {
+  const now = Date.now();
+  if (narrationOriginAt === null) narrationOriginAt = now;
+  narrationCues.push({
+    text,
+    spokenText,
+    atMs: now - narrationOriginAt + 350,
+  });
   await page.evaluate((value) => {
     document.querySelector('#tutorial-caption').textContent = value;
   }, text);
@@ -71,19 +80,28 @@ try {
   await page.getByRole('button', { name: 'Search BC mineral claims' }).waitFor();
   await addTutorialOverlay();
 
-  await caption('How to search British Columbia mineral claims');
-  await pause(2200);
+  await caption(
+    'How to search British Columbia mineral claims',
+    'How to search British Columbia mineral claims.'
+  );
+  await pause(3200);
 
-  await caption('Open Exploration Maps and select “Search BC mineral claims.”');
+  await caption(
+    'Open Exploration Maps and select “Search BC mineral claims.”',
+    'Open Exploration Maps and select Search B C mineral claims.'
+  );
   await click(page.getByRole('button', { name: 'Search BC mineral claims' }));
   await page.getByRole('heading', { name: 'Claims Registry Search' }).waitFor();
-  await pause(1200);
+  await pause(3000);
 
-  await caption('British Columbia — Mineral Titles Online is selected automatically.');
-  await pause(1800);
+  await caption(
+    'British Columbia — Mineral Titles Online is selected automatically.',
+    'British Columbia Mineral Titles Online is selected automatically.'
+  );
+  await pause(4000);
 
   await caption('Search by company name, claim number, or map sheet.');
-  await pause(1800);
+  await pause(3800);
 
   await caption('For this example, search for Dolly Varden Silver.');
   const input = page.getByPlaceholder('e.g. Teck Resources');
@@ -96,7 +114,7 @@ try {
   await pause(1800);
 
   await caption('The matching claim area shows its claim count, area, and expiry range.');
-  await pause(2400);
+  await pause(5200);
 
   await caption('Select the result, then add the claims to your map.');
   await click(page.getByRole('checkbox', { name: 'Select All 1 area' }));
@@ -107,15 +125,23 @@ try {
   await page.getByRole('heading', { name: 'Claims Registry Search' }).waitFor({ state: 'hidden', timeout: 30_000 });
   await pause(3500);
 
-  await caption('The BC mineral claims are now loaded and ready to style or export.');
-  await pause(3500);
+  await caption(
+    'The BC mineral claims are now loaded and ready to style or export.',
+    'The B C mineral claims are now loaded and ready to style or export.'
+  );
+  await pause(5200);
 
-  await caption('explorationmaps.com');
-  await pause(1800);
+  await caption('explorationmaps.com', 'Exploration Maps dot com.');
+  await pause(2000);
 } finally {
+  await fs.writeFile(
+    path.join(outputDir, 'narration-cues.json'),
+    JSON.stringify(narrationCues, null, 2)
+  );
   await context.close();
 }
 
 await video.saveAs(path.join(outputDir, 'bc-mineral-claims-search.webm'));
 await browser.close();
 console.log('Saved tutorial-output/bc-mineral-claims-search.webm');
+console.log('Saved tutorial-output/narration-cues.json');

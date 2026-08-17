@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - "scripts/record-bc-claim-search.mjs"
+      - "scripts/generate-bc-claim-voiceover.py"
       - ".github/workflows/record-bc-claims-tutorial.yml"
   workflow_dispatch:
 
@@ -13,7 +14,7 @@ permissions:
 jobs:
   record:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -30,58 +31,37 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
 
-      - name: Record tutorial
-        run: node scripts/record-bc-claim-search.mjs
+      - name: Install media dependencies
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg espeak-ng
 
-      - name: Install FFmpeg
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Record tutorial and caption timing
+        run: node scripts/record-bc-claim-search.mjs
 
       - name: Convert to MP4
         run: ffmpeg -y -i tutorial-output/bc-mineral-claims-search.webm -c:v libx264 -pix_fmt yuv420p -movflags +faststart tutorial-output/bc-mineral-claims-search.mp4
 
-      - name: Generate scene-matched neural narration
+      - name: Generate natural voiceover from exact script
         run: |
           python3 -m venv .voice-venv
-          .voice-venv/bin/pip install edge-tts==7.2.3
-          mkdir -p tutorial-output/voice
-          TTS=".voice-venv/bin/edge-tts"
-          "$TTS" --voice en-CA-LiamNeural --rate=-12% --text "Here's how to search British Columbia mineral claims using Exploration Maps." --write-media tutorial-output/voice/01.mp3
-          "$TTS" --voice en-CA-LiamNeural --rate=-12% --text "Select Search B C mineral claims; Mineral Titles Online is preselected." --write-media tutorial-output/voice/02.mp3
-          "$TTS" --voice en-CA-LiamNeural --rate=-12% --text "Search by company, claim number, or map sheet. Here, enter Dolly Varden Silver." --write-media tutorial-output/voice/03.mp3
-          "$TTS" --voice en-CA-LiamNeural --rate=-12% --text "The matching claims appear with their count, area, and expiry range." --write-media tutorial-output/voice/04.mp3
-          "$TTS" --voice en-CA-LiamNeural --rate=-12% --text "Select the result, then add those claims directly to your map." --write-media tutorial-output/voice/05.mp3
-          "$TTS" --voice en-CA-LiamNeural --rate=-12% --text "The map loads with the selected claims, ready to style, review in context, or export for your next step." --write-media tutorial-output/voice/06.mp3
+          .voice-venv/bin/pip install "kokoro==0.9.4" "soundfile>=0.12" "numpy<3"
+          .voice-venv/bin/python scripts/generate-bc-claim-voiceover.py
 
-      - name: Normalize narration cue timestamps
-        run: |
-          for cue in 01 02 03 04 05 06; do
-            ffmpeg -y \
-              -i "tutorial-output/voice/${cue}.mp3" \
-              -af "silenceremove=start_periods=1:start_duration=0.03:start_threshold=-38dB,areverse,silenceremove=start_periods=1:start_duration=0.03:start_threshold=-38dB,areverse" \
-              -c:a pcm_s16le "tutorial-output/voice/${cue}.wav"
-          done
-
-      - name: Align narration to screen events
+      - name: Mix timestamped voiceover into MP4
         run: |
           ffmpeg -y \
             -i tutorial-output/bc-mineral-claims-search.mp4 \
-            -i tutorial-output/voice/01.wav \
-            -i tutorial-output/voice/02.wav \
-            -i tutorial-output/voice/03.wav \
-            -i tutorial-output/voice/04.wav \
-            -i tutorial-output/voice/05.wav \
-            -i tutorial-output/voice/06.wav \
-            -filter_complex "[1:a]adelay=350:all=1[a1];[2:a]adelay=4350:all=1[a2];[3:a]adelay=7900:all=1[a3];[4:a]adelay=14200:all=1[a4];[5:a]adelay=18200:all=1[a5];[6:a]adelay=21800:all=1[a6];[a1][a2][a3][a4][a5][a6]amix=inputs=6:duration=longest:normalize=0,volume=0.94,apad[voice]" \
+            -i tutorial-output/voiceover-natural.wav \
+            -filter_complex "[1:a]volume=0.96,apad[voice]" \
             -map 0:v:0 -map "[voice]" -c:v copy -c:a aac -b:a 192k -shortest \
-            tutorial-output/bc-mineral-claims-search-synced-voiceover.mp4
+            tutorial-output/bc-mineral-claims-search-natural-synced.mp4
 
       - name: Upload tutorial videos
         uses: actions/upload-artifact@v4
         with:
           name: bc-mineral-claims-tutorial
           path: |
-            tutorial-output/bc-mineral-claims-search-synced-voiceover.mp4
+            tutorial-output/bc-mineral-claims-search-natural-synced.mp4
             tutorial-output/bc-mineral-claims-search.mp4
-            tutorial-output/bc-mineral-claims-search.webm
+            tutorial-output/narration-cues.json
           if-no-files-found: error
           retention-days: 7
