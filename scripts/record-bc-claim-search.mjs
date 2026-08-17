@@ -114,8 +114,8 @@ try {
   await pause(1800);
 } finally {
   await context.close();
-  await browser.close();
 }
 
 await video.saveAs(path.join(outputDir, 'bc-mineral-claims-search.webm'));
+await browser.close();
 console.log('Saved tutorial-output/bc-mineral-claims-search.webm');
