@@ -1267,6 +1267,65 @@ export function foldForSearch(value) {
     .toLowerCase();
 }
 
+// Industry vocabulary that describes what a company DOES rather than who it is.
+//
+// These are the words that make an owner search narrower without making it more
+// specific. Requiring every token means each extra word is another chance to
+// miss, and in Quebec these are exactly the words most likely to differ: GESTIM
+// records "Corporation Aurifère Vior Inc.", so a search for "Vior Gold
+// Corporation" fails on GOLD — the registry's word for it is French. Measured
+// against the live table: "Vior" returns 4,658 and "Vior Gold Corporation"
+// returns 0; "Osisko" returns 1,514 and "Osisko Development Corporation" 0.
+//
+// Both spellings of each pair are listed because either side can appear: the
+// user types one language and the registry stores the other.
+const GENERIC_OWNER_WORDS = new Set([
+  'mining', 'miniere', 'minieres', 'minier', 'miniers', 'mines', 'mine',
+  'resources', 'ressources', 'resource', 'ressource',
+  'exploration', 'explorations',
+  'gold', 'aurifere', 'auriferes', 'or',
+  'silver', 'argent', 'copper', 'cuivre', 'iron', 'fer',
+  'metals', 'metaux', 'metal', 'minerals', 'mineral', 'mineraux',
+  'development', 'developpement', 'developments',
+  'group', 'groupe', 'holdings', 'holding', 'partners', 'partnership',
+  'energy', 'energie', 'royalty', 'royalties', 'ventures', 'venture',
+  'canada', 'quebec', 'america', 'american', 'north', 'international',
+]);
+
+// Progressively looser token sets, most specific first.
+//
+// Exported and pure so the strategy can be tested without a network: what
+// matters is WHICH searches are tried and in what order, not how they are
+// fetched.
+export function relaxedTokenSets(tokens) {
+  const sets = [tokens];
+  const distinctive = tokens.filter((t) => !GENERIC_OWNER_WORDS.has(t));
+
+  // Drop the industry words — but only if that leaves something, and only if it
+  // actually removed anything.
+  if (distinctive.length && distinctive.length < tokens.length) sets.push(distinctive);
+
+  // Last resort: the single most distinctive word. Longest is a decent proxy —
+  // "azimut" over "corp" — and it beats picking the first, which is usually the
+  // least specific word in an English company name.
+  const pool = distinctive.length ? distinctive : tokens;
+  if (pool.length > 1) {
+    const longest = pool.reduce((a, b) => (b.length > a.length ? b : a));
+    sets.push([longest]);
+  }
+
+  // De-duplicate while preserving order: a two-word name often collapses to the
+  // same set twice, and repeating a query that already returned nothing is pure
+  // latency.
+  const seen = new Set();
+  return sets.filter((s) => {
+    const key = s.join(' ');
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 async function searchQc(term, type, res) {
   const creds = qcSupabaseCreds();
   if (!creds) {
@@ -1301,25 +1360,7 @@ async function searchQc(term, type, res) {
   // the identical `column=ilike.value` shape already proven in production, and
   // PostgREST ANDs duplicate keys. The grouped form would put the tokens inside
   // a comma-separated list, which is parsing surface for no benefit.
-  let filter;
-  if (type === 'number') {
-    filter = `tag_number=ilike.${encodeURIComponent(cleaned)}`;
-  } else {
-    const tokens = ownerSearchTokens(cleaned)
-      .map(foldForSearch)
-      .filter(Boolean);
-    // A term of only punctuation ("...") survives the length check above but
-    // tokenises to nothing. An empty filter string is not a harmless no-op —
-    // it would drop the WHERE clause entirely and page the whole table back.
-    if (!tokens.length) {
-      return res.status(400).json({ error: 'q param required (min 2 chars)' });
-    }
-    filter = tokens
-      .map((t) => `owner_name_norm=ilike.${encodeURIComponent(`*${t}*`)}`)
-      .join('&');
-  }
-
-  const { features, meta } = await fetchAllPages({
+  const runQuery = async (filter) => fetchAllPages({
     provider: 'qc-store',
     pageSize: 1000,
     idField: 'TAG_NUMBER',
@@ -1340,7 +1381,57 @@ async function searchQc(term, type, res) {
       return { features: rows.map(qcRowToFeature) };
     },
   });
-  return res.status(200).json({ type: 'FeatureCollection', features, meta });
+
+  if (type === 'number') {
+    const { features, meta } = await runQuery(`tag_number=ilike.${encodeURIComponent(cleaned)}`);
+    return res.status(200).json({ type: 'FeatureCollection', features, meta });
+  }
+
+  const tokens = ownerSearchTokens(cleaned).map(foldForSearch).filter(Boolean);
+  // A term of only punctuation ("...") survives the length check above but
+  // tokenises to nothing. An empty filter string is not a harmless no-op — it
+  // would drop the WHERE clause entirely and page the whole table back.
+  if (!tokens.length) {
+    return res.status(400).json({ error: 'q param required (min 2 chars)' });
+  }
+
+  // Try the exact token set first, then progressively looser ones.
+  //
+  // Requiring every token is right when every token is right, and wrong the
+  // moment one word differs from the registry's — which in a bilingual
+  // jurisdiction is common. This does what the empty state used to ask the user
+  // to do by hand ("try one distinctive word"), and reports what it actually
+  // searched so a relaxed hit can never be read as an exact one.
+  //
+  // Order matters: an exact match always wins, and the loose sets only run when
+  // the stricter one found nothing, so a successful search costs no extra
+  // queries.
+  const attempts = relaxedTokenSets(tokens);
+  let result = null;
+  let usedTokens = tokens;
+  for (const set of attempts) {
+    const filter = set
+      .map((t) => `owner_name_norm=ilike.${encodeURIComponent(`*${t}*`)}`)
+      .join('&');
+    // eslint-disable-next-line no-await-in-loop -- deliberately sequential: each
+    // attempt only runs because the previous one found nothing.
+    const r = await runQuery(filter);
+    if (r.features.length) { result = r; usedTokens = set; break; }
+    result = r;
+  }
+
+  const relaxed = usedTokens.length !== tokens.length && result.features.length > 0;
+  return res.status(200).json({
+    type: 'FeatureCollection',
+    features: result.features,
+    meta: {
+      ...result.meta,
+      // Present only when the answer came from a looser search than the one
+      // asked for. The UI leads with this — results the user did not literally
+      // ask for have to say so.
+      ...(relaxed ? { relaxedFrom: cleaned, relaxedTo: usedTokens.join(' ') } : {}),
+    },
+  });
 }
 
 // Quebec nearby-radius (bbox) query. The store has no live ArcGIS service, so
