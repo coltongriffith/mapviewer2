@@ -1320,6 +1320,16 @@ function isInformativeToken(token) {
   return token.length >= MIN_RELAXED_TOKEN_LENGTH && !RELAXED_STOP_WORDS.has(token);
 }
 
+// What the caller is told when their term has nothing to search on.
+//
+// Exported so the wording is asserted against the real value rather than a
+// copy. useClaims concatenates `error: detail` and truncates at 200
+// characters, so this has to say the whole thing inside that budget.
+export const UNINFORMATIVE_TERM_ERROR = {
+  error: 'Search needs a more distinctive word',
+  detail: 'Single letters and words like "the" or "of" match too much of the registry to search alone. Add the distinctive part of the name.',
+};
+
 // Whether a token set is worth issuing as a query.
 //
 // The test is on the SET, not on each token: in ["a", "azimut"] the "a" costs
@@ -1442,8 +1452,14 @@ async function searchQc(term, type, res) {
   // 10,000-feature ceiling, from an endpoint anonymous callers can reach. The
   // relaxed sets below refuse such a search, and the exact set has to refuse it
   // too — otherwise the guard only covers the fallback and not the front door.
+  //
+  // The message must not be the length error. "the" and "AB" clear the
+  // two-character minimum the input enforces, so answering them with "min 2
+  // chars" states a condition the user has already met and leaves them with no
+  // way to work out what the search actually wants. useClaims renders this
+  // verbatim, so it is the entire explanation they get.
   if (!isInformativeTokenSet(tokens)) {
-    return res.status(400).json({ error: 'q param required (min 2 chars)' });
+    return res.status(400).json(UNINFORMATIVE_TERM_ERROR);
   }
 
   // Try the exact token set first, then progressively looser ones.
