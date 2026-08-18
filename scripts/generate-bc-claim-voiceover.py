@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import json
+import os
 from pathlib import Path
 
 import numpy as np
@@ -9,7 +10,7 @@ from kokoro import KPipeline
 SAMPLE_RATE = 24000
 VOICE = "af_heart"
 SPEED = 0.97
-OUTPUT_DIR = Path("tutorial-output")
+OUTPUT_DIR = Path(os.environ.get("VOICE_OUTPUT_DIR", "tutorial-output"))
 CUES_PATH = OUTPUT_DIR / "narration-cues.json"
 VOICE_DIR = OUTPUT_DIR / "voice"
 VOICE_DIR.mkdir(parents=True, exist_ok=True)
