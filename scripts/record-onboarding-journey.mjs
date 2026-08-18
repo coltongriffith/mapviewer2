@@ -225,6 +225,11 @@ try {
     badge.textContent = `Downloaded: ${name}`;
     document.body.appendChild(badge);
   }, await download.suggestedFilename());
+  const notNow = page.getByText('Not now', { exact: true });
+  if (await notNow.isVisible().catch(() => false)) {
+    await click(notNow);
+    await pause(500);
+  }
   await caption('The PNG downloads immediately. It is ready for a deck, website, report, or investor update.', undefined, 7600);
   await caption('Exploration Maps dot com.', 'Exploration Maps dot com.', 2800);
 
