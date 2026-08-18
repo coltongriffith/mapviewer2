@@ -399,6 +399,7 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
       jurisdictionLabel: askedCfg.label,
       isUs: isUsJurisdiction(asked.province),
       mode: asked.mode,
+      province: asked.province,
     });
   }, [results, submitted, query, mode, province, provinceCfg]);
 
@@ -742,6 +743,24 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
           nameMatched: false,
         })}
       />
+
+      {results?.meta?.relaxedTo && allFeatures.length > 0 && (
+        // These results are NOT what was typed, so they have to say so before
+        // the list rather than after it. A registry search that quietly widens
+        // itself and presents the answer as exact is the one failure this
+        // feature must not have — a reader could take a neighbouring company's
+        // ground for their own.
+        <p className="claims-relaxed" role="status">
+          No exact match for <strong>{results.meta.relaxedFrom}</strong>.
+          {' '}Showing holders matching <strong>{results.meta.relaxedTo}</strong>.
+          <br />
+          <span className="claims-empty-hint">
+            Quebec&rsquo;s registry records the legal name on title, often in French —
+            a company known for gold may be recorded as &ldquo;Aurif&egrave;re&rdquo;.
+            Check the holder names below before adding them to a map.
+          </span>
+        </p>
+      )}
 
       {results?.meta?.truncated && allFeatures.length > 0 && (
         <p className="claims-error" role="status">

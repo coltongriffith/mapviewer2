@@ -44,7 +44,7 @@ export function scopingWarning(meta) {
 // Collapsing these into one "no claims found" is the bug: a US issuer whose
 // Nevada ground sits under a subsidiary looks identical to one that owns
 // nothing. Never merge them.
-export function emptyResultMessage({ resolution, query, jurisdictionLabel, isUs, mode }) {
+export function emptyResultMessage({ resolution, query, jurisdictionLabel, isUs, mode, province }) {
   if (resolution?.status === 'unresolved') {
     const base = `We couldn't link "${query}" to a claim holder in ${jurisdictionLabel}.`;
     if (resolution.reason === 'no_claimant_field') {
@@ -93,6 +93,28 @@ export function emptyResultMessage({ resolution, query, jurisdictionLabel, isUs,
       hint: mode === 'map'
         ? 'Check the map sheet format, or search by claim number instead.'
         : 'Check the number and try again, or search by company name instead.',
+    };
+  }
+
+  // Quebec earns its own sentence. GESTIM is francophone and records the legal
+  // name on title, so the market's English name is frequently not the stored
+  // one — "Vior Gold Corporation" is on title as "Corporation Aurifere Vior
+  // Inc.", where the word for gold is aurifere. Roughly a quarter of Quebec's
+  // claims sit under French-vocabulary names.
+  //
+  // The search already retries with looser tokens before giving up, so reaching
+  // this message means even the distinctive word found nothing. The advice that
+  // remains is about the VOCABULARY, not about typing less.
+  if (province === 'qc') {
+    return {
+      kind: 'empty',
+      headline: `No active claims found for "${query}" in ${jurisdictionLabel}.`,
+      detail: 'Quebec records the legal name on title, usually in French, and often '
+        + 'a project subsidiary rather than the parent. This is not a statement that '
+        + 'the company holds no ground here.',
+      hint: 'Try the French form of the name (gold is often "aurifere", mining '
+        + '"miniere", resources "ressources"), the subsidiary that holds the project, '
+        + 'or a claim number.',
     };
   }
 

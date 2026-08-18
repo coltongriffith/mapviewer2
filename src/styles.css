@@ -2370,6 +2370,17 @@ body.is-dragging .template-zone .panel-delete-btn { opacity: 0 !important; }
 .claims-empty-detail { display: inline-block; margin-top: 4px; font-size: 12.5px; color: #64748b; }
 .claims-empty-hint { display: inline-block; margin-top: 4px; font-size: 12.5px; color: #94a3b8; }
 
+/* Results that came from a LOOSER search than the one typed. Deliberately
+   noticeable — amber, above the list — because the one thing this feature must
+   never do is present a widened match as an exact one. Someone could otherwise
+   take a neighbouring company's ground for their own. */
+.claims-relaxed {
+  margin: 10px 0 0; padding: 9px 11px; font-size: 13px; line-height: 1.5;
+  color: #7c2d12; background: #fff7ed; border: 1px solid #fed7aa; border-radius: 8px;
+}
+.claims-relaxed strong { font-weight: 700; }
+.claims-relaxed .claims-empty-hint { color: #9a5b3d; }
+
 /* Attribution for a jurisdiction the app chose, and for degraded state scoping.
    Both also render over the map (.claims-provenance-banner) — these maps end up
    in filings, so the qualification travels with the claims. */
