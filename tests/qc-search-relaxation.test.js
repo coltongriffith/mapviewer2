@@ -1,5 +1,9 @@
-import { describe, it, expect } from 'vitest';
-import { relaxedTokenSets, ownerSearchTokens, foldForSearch } from '../api/claims.js';
+import {
+  describe, it, expect, vi, beforeEach, afterEach,
+} from 'vitest';
+import {
+  relaxedTokenSets, ownerSearchTokens, foldForSearch, isInformativeTokenSet,
+} from '../api/claims.js';
 import { emptyResultMessage } from '../src/utils/scopingNotice.js';
 import { readFileSync } from 'node:fs';
 
@@ -88,6 +92,160 @@ describe('relaxedTokenSets', () => {
     for (let i = 1; i < attempts.length; i += 1) {
       expect(attempts[i].length).toBeLessThanOrEqual(attempts[i - 1].length);
     }
+  });
+});
+
+// Relaxing is only a rescue while the looser query is still a query.
+//
+// Stripping the industry words from "A Gold Corporation" leaves ["a"], and
+// `%a%` matches 185,863 of the 258,608 rows in the Quebec store across 987
+// unrelated holders — ten pages against the 10,000-feature ceiling, returning
+// an arbitrary slice presented as the company's ground. Measured live:
+//
+//   %a%      185,863 rows / 987 holders     %the%     1,811 rows
+//   %the% AND %of%     88 rows              total   258,608 rows
+//
+// A search that cannot narrow is worse than no results, because the user cannot
+// tell it apart from a real answer.
+describe('low-information token sets', () => {
+  it('refuses a relaxed set that would scan the table', () => {
+    // The whole point of the fix: "a" and "the" are all that survive dropping
+    // the industry words, so there is no looser query worth running.
+    expect(sets('A Gold Corporation')).toEqual([['a', 'gold']]);
+    expect(sets('The Gold Corporation')).toEqual([['the', 'gold']]);
+  });
+
+  it('refuses a single-word fallback that would scan the table', () => {
+    // Picking the longest token overall would take "the" out of ["the", "of"]
+    // and issue the same scan by a longer route.
+    expect(sets('The Mining Group of Canada')).toEqual([
+      ['the', 'mining', 'group', 'of', 'canada'],
+    ]);
+  });
+
+  it('rejects initials left behind by punctuation splitting', () => {
+    // "A.B.C. Mining Ltd" tokenises to a, b, c, mining. Dropping the industry
+    // word leaves three single letters.
+    expect(sets('A.B.C. Mining Ltd')).toEqual([['a', 'b', 'c', 'mining']]);
+  });
+
+  it('judges the set, not each token', () => {
+    // A stop word costs nothing beside an informative one — "azimut" still
+    // constrains the query, so this relaxation is worth running.
+    expect(sets('The Azimut Corporation')).toContainEqual(['azimut']);
+    expect(isInformativeTokenSet(['a', 'azimut'])).toBe(true);
+    expect(isInformativeTokenSet(['a', 'the'])).toBe(false);
+  });
+
+  it('catches both short fragments and three-letter stop words', () => {
+    // Neither rule subsumes the other: "of" is caught by length, "the" is not.
+    expect(isInformativeTokenSet(['of'])).toBe(false);
+    expect(isInformativeTokenSet(['the'])).toBe(false);
+    expect(isInformativeTokenSet(['ab'])).toBe(false);
+    expect(isInformativeTokenSet(['vior'])).toBe(true);
+  });
+
+  it('treats French articles like English ones', () => {
+    // GESTIM records "Les Ressources X" as readily as "X Resources".
+    expect(isInformativeTokenSet(['les', 'de'])).toBe(false);
+    expect(sets('Les Ressources Minieres')).toEqual([['les', 'ressources', 'minieres']]);
+  });
+
+  it('still relaxes every case the feature was built for', () => {
+    // The guard must not buy safety by disabling the rescue.
+    expect(sets('Vior Gold Corporation')).toContainEqual(['vior']);
+    expect(sets('Osisko Development Corporation')).toContainEqual(['osisko']);
+    expect(sets('Azimut Exploration Mining Corp')).toContainEqual(['azimut']);
+    expect(sets('Nouveau Monde Graphite')).toContainEqual(['graphite']);
+    expect(sets('Gold Mining Corporation')).toContainEqual(['mining']);
+  });
+});
+
+// The exact path has the identical failure, and worse: `?q=a.` passes the
+// two-character length check, tokenises to ["a"], and scans 72% of the store
+// from an endpoint anonymous callers can reach. Guarding only the fallback
+// would leave the front door open.
+describe('exact-path guard', () => {
+  const accepted = (q) => isInformativeTokenSet(terms(q));
+
+  const makeRes = () => ({
+    headers: {}, statusCode: null, body: null,
+    setHeader(k, v) { this.headers[k] = v; },
+    status(c) { this.statusCode = c; return this; },
+    json(b) { this.body = b; return this; },
+    end() { return this; },
+  });
+
+  beforeEach(() => {
+    vi.resetModules();
+    process.env.SUPABASE_URL = 'https://example.test';
+    process.env.SUPABASE_ANON_KEY = 'test-key';
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    delete process.env.SUPABASE_URL;
+    delete process.env.SUPABASE_ANON_KEY;
+  });
+
+  it('refuses a search that cannot narrow anything', () => {
+    expect(accepted('a.')).toBe(false);
+    expect(accepted('the')).toBe(false);
+    expect(accepted('of')).toBe(false);
+  });
+
+  it('accepts a search with one informative word beside a stop word', () => {
+    expect(accepted('A Gold Corporation')).toBe(true);
+    expect(accepted('vior')).toBe(true);
+  });
+
+  // Asserting isInformativeTokenSet in isolation proves the RULE, not that the
+  // handler applies it — the guard could be deleted from searchQc and every
+  // assertion above would still pass. This drives the real handler instead, and
+  // asserts on the one thing that matters: no query is issued at all.
+  it('rejects the request before issuing any query', async () => {
+    const fetchMock = vi.fn(async () => { throw new Error('must not query'); });
+    vi.stubGlobal('fetch', fetchMock);
+    const { default: handler } = await import('../api/claims.js');
+
+    const res = makeRes();
+    await handler(
+      { method: 'GET', query: { q: 'a.', type: 'company', province: 'qc' }, headers: {} },
+      res,
+    );
+
+    expect(res.statusCode).toBe(400);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('still lets an informative search through to the store', async () => {
+    // The mirror image: a guard that rejects everything would pass the test
+    // above and break the feature.
+    const fetchMock = vi.fn(async () => ({
+      ok: true, status: 200,
+      headers: { get: () => 'application/json' },
+      json: async () => [],
+      text: async () => '[]',
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    const { default: handler } = await import('../api/claims.js');
+
+    const res = makeRes();
+    await handler(
+      { method: 'GET', query: { q: 'vior', type: 'company', province: 'qc' }, headers: {} },
+      res,
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(fetchMock).toHaveBeenCalled();
+  });
+
+  it('costs no real holder', () => {
+    // Verified against the live store: zero of the 258,608 rows carry a holder
+    // name built only from stop words and shorter fragments, so nothing that
+    // exists becomes unsearchable.
+    ['Vior', 'Osisko', 'SOQUEM', 'Nouveau Monde Graphite', 'Les Ressources Minieres']
+      .forEach((q) => expect(accepted(q), q).toBe(true));
   });
 });
 

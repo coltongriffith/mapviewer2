@@ -1292,6 +1292,43 @@ const GENERIC_OWNER_WORDS = new Set([
   'canada', 'quebec', 'america', 'american', 'north', 'international',
 ]);
 
+// Words that carry no narrowing power of their own.
+//
+// A relaxed set is only worth issuing if something in it still constrains the
+// table. Strip the industry words from "A Gold Corporation" and what is left is
+// "a" — queried as `%a%`, which matches 185,863 of the 258,608 rows in the
+// Quebec store, across 987 unrelated holders. That is not a looser answer to
+// the question asked; it is 10 pages of arbitrary rows against the
+// 10,000-feature ceiling, presented as if it were the company's ground.
+//
+// Both a length floor and an explicit list are needed: "of" is caught by
+// length, "the" is three characters and is not. The French articles are here
+// for the same reason the industry vocabulary lists both languages — GESTIM
+// records "Les Ressources X" as readily as "X Resources".
+const RELAXED_STOP_WORDS = new Set([
+  'a', 'an', 'the', 'and', 'of', 'for', 'in', 'on', 'at', 'to', 'by',
+  'le', 'la', 'les', 'l', 'un', 'une', 'de', 'des', 'du', 'd', 'et', 'en', 'au', 'aux',
+]);
+
+// Three characters, because a two-character substring match is a scan wearing a
+// filter's clothing. Verified against the live store: no holder in the table
+// has a name built only from stop words and shorter fragments, so this floor
+// costs no real search.
+const MIN_RELAXED_TOKEN_LENGTH = 3;
+
+function isInformativeToken(token) {
+  return token.length >= MIN_RELAXED_TOKEN_LENGTH && !RELAXED_STOP_WORDS.has(token);
+}
+
+// Whether a token set is worth issuing as a query.
+//
+// The test is on the SET, not on each token: in ["a", "azimut"] the "a" costs
+// nothing, because "azimut" still constrains the result. Only a set with no
+// informative token anywhere is refused.
+export function isInformativeTokenSet(tokens) {
+  return tokens.length > 0 && tokens.some(isInformativeToken);
+}
+
 // Progressively looser token sets, most specific first.
 //
 // Exported and pure so the strategy can be tested without a network: what
@@ -1301,16 +1338,24 @@ export function relaxedTokenSets(tokens) {
   const sets = [tokens];
   const distinctive = tokens.filter((t) => !GENERIC_OWNER_WORDS.has(t));
 
-  // Drop the industry words — but only if that leaves something, and only if it
-  // actually removed anything.
-  if (distinctive.length && distinctive.length < tokens.length) sets.push(distinctive);
+  // Drop the industry words — but only if it actually removed anything, and
+  // only if what remains can still narrow the table. "A Gold Corporation"
+  // reduces to ["a"], which is not a search.
+  if (distinctive.length < tokens.length && isInformativeTokenSet(distinctive)) {
+    sets.push(distinctive);
+  }
 
   // Last resort: the single most distinctive word. Longest is a decent proxy —
   // "azimut" over "corp" — and it beats picking the first, which is usually the
   // least specific word in an English company name.
+  //
+  // Chosen from the informative tokens only. Taking the longest overall would
+  // pick "the" out of ["the", "of"] and issue the same table scan by a longer
+  // route. If nothing in the pool is informative there is no fallback to make.
   const pool = distinctive.length ? distinctive : tokens;
-  if (pool.length > 1) {
-    const longest = pool.reduce((a, b) => (b.length > a.length ? b : a));
+  const informative = pool.filter(isInformativeToken);
+  if (pool.length > 1 && informative.length) {
+    const longest = informative.reduce((a, b) => (b.length > a.length ? b : a));
     sets.push([longest]);
   }
 
@@ -1319,7 +1364,7 @@ export function relaxedTokenSets(tokens) {
   // latency.
   const seen = new Set();
   return sets.filter((s) => {
-    const key = s.join(' ');
+    const key = s.join(' ');
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
@@ -1391,7 +1436,13 @@ async function searchQc(term, type, res) {
   // A term of only punctuation ("...") survives the length check above but
   // tokenises to nothing. An empty filter string is not a harmless no-op — it
   // would drop the WHERE clause entirely and page the whole table back.
-  if (!tokens.length) {
+  //
+  // A term of only stop words ("a.", "the") is the same failure with a WHERE
+  // clause attached: `%a%` matches 72% of the store and pages to the
+  // 10,000-feature ceiling, from an endpoint anonymous callers can reach. The
+  // relaxed sets below refuse such a search, and the exact set has to refuse it
+  // too — otherwise the guard only covers the fallback and not the front door.
+  if (!isInformativeTokenSet(tokens)) {
     return res.status(400).json({ error: 'q param required (min 2 chars)' });
   }
 
