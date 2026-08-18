@@ -98,7 +98,7 @@ try {
   await addOverlay();
 
   await chapter('01-first-visit-and-start', 'First visit and start mapping');
-  await caption('Build your first Exploration Maps project — from first visit to download.', undefined, 5000);
+  await caption('Build your first Exploration Maps project — from first visit to download.', undefined, 5400);
   await caption('Select Start Mapping. You can explore the editor before creating an account.', undefined, 6200);
   await click(page.getByRole('button', { name: 'Start Mapping' }).first());
   await page.getByRole('button', { name: 'Search public claims' }).waitFor();
