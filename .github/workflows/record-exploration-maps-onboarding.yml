@@ -30,12 +30,6 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Install Chromium
-        run: npx playwright install --with-deps chromium
-
-      - name: Install media dependencies
-        run: sudo apt-get install -y ffmpeg espeak-ng
-
       - name: Record the complete customer journey
         run: node scripts/record-onboarding-journey.mjs
 

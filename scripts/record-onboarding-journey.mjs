@@ -11,6 +11,7 @@ const DEMO_EMAIL = 'demo@explorationmaps.com';
 await fs.mkdir(ROOT, { recursive: true });
 
 const browser = await chromium.launch({
+  channel: 'chrome',
   headless: true,
   args: ['--no-sandbox', '--disable-dev-shm-usage'],
 });
