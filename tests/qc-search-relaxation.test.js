@@ -3,6 +3,7 @@ import {
 } from 'vitest';
 import {
   relaxedTokenSets, ownerSearchTokens, foldForSearch, isInformativeTokenSet,
+  UNINFORMATIVE_TERM_ERROR,
 } from '../api/claims.js';
 import { emptyResultMessage } from '../src/utils/scopingNotice.js';
 import { readFileSync } from 'node:fs';
@@ -238,6 +239,54 @@ describe('exact-path guard', () => {
 
     expect(res.statusCode).toBe(200);
     expect(fetchMock).toHaveBeenCalled();
+  });
+
+  // The guard is only half the fix. "the" and "AB" clear the two-character
+  // minimum the input box enforces, so answering them with "q param required
+  // (min 2 chars)" tells the user to satisfy a condition they already satisfy
+  // — and useClaims renders the server error verbatim, so that sentence is the
+  // whole explanation they get. A correct rejection with a wrong reason leaves
+  // them retyping the same query.
+  it('does not answer a long-enough term with the length error', async () => {
+    for (const q of ['the', 'AB', 'a.']) {
+      vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('must not query'); }));
+      const { default: handler } = await import('../api/claims.js');
+      const res = makeRes();
+      // eslint-disable-next-line no-await-in-loop -- one assertion per term
+      await handler(
+        { method: 'GET', query: { q, type: 'company', province: 'qc' }, headers: {} },
+        res,
+      );
+      expect(res.statusCode, q).toBe(400);
+      expect(`${res.body.error} ${res.body.detail}`, q).not.toMatch(/min 2 chars/);
+      vi.resetModules();
+    }
+  });
+
+  it('names what the search actually needs', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('must not query'); }));
+    const { default: handler } = await import('../api/claims.js');
+    const res = makeRes();
+    await handler(
+      { method: 'GET', query: { q: 'the', type: 'company', province: 'qc' }, headers: {} },
+      res,
+    );
+    expect(res.body).toEqual(UNINFORMATIVE_TERM_ERROR);
+    // Actionable, not just accurate: it has to say what to do next.
+    expect(res.body.detail).toMatch(/distinctive/i);
+  });
+
+  it('fits the 200 characters useClaims will render', () => {
+    // useClaims builds `${error}: ${detail}` and slices at 200. A message that
+    // explains the requirement in its second half would be cut off mid-advice.
+    const rendered = `${UNINFORMATIVE_TERM_ERROR.error}: ${UNINFORMATIVE_TERM_ERROR.detail}`;
+    expect(rendered.length).toBeLessThanOrEqual(200);
+  });
+
+  it('still reports a genuinely too-short term as too short', () => {
+    // The length guard above it is not wrong and must keep its own message —
+    // "a*" cleans down to one usable character.
+    expect(UNINFORMATIVE_TERM_ERROR.error).not.toMatch(/min 2 chars/);
   });
 
   it('costs no real holder', () => {
