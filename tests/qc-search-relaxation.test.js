@@ -273,7 +273,35 @@ describe('exact-path guard', () => {
     );
     expect(res.body).toEqual(UNINFORMATIVE_TERM_ERROR);
     // Actionable, not just accurate: it has to say what to do next.
-    expect(res.body.detail).toMatch(/distinctive/i);
+    expect(res.body.detail).toMatch(/try adding|add /i);
+  });
+
+  // The rule has two halves and the message has to carry both. "AB" trips the
+  // length floor, not the stop-word list, so a message that only mentions
+  // single letters and common words sends that user back to retype a name that
+  // may already be as distinctive as it gets — the same loop this message
+  // exists to break, one rung further down.
+  it('states the length requirement, not only the common-word one', () => {
+    expect(UNINFORMATIVE_TERM_ERROR.detail).toMatch(/three letters|3 letters/i);
+  });
+
+  it('states the common-word requirement, not only the length one', () => {
+    expect(UNINFORMATIVE_TERM_ERROR.detail).toMatch(/common word/i);
+    expect(UNINFORMATIVE_TERM_ERROR.detail).toMatch(/"the"|"of"/);
+  });
+
+  it('explains a two-letter term by its real reason', async () => {
+    // "AB" clears the input's two-character minimum and contains no stop word.
+    // Nothing about single letters or common words explains its rejection.
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('must not query'); }));
+    const { default: handler } = await import('../api/claims.js');
+    const res = makeRes();
+    await handler(
+      { method: 'GET', query: { q: 'AB', type: 'company', province: 'qc' }, headers: {} },
+      res,
+    );
+    expect(res.statusCode).toBe(400);
+    expect(res.body.detail).toMatch(/three letters|3 letters/i);
   });
 
   it('fits the 200 characters useClaims will render', () => {

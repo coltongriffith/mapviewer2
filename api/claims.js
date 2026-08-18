@@ -1311,9 +1311,16 @@ const RELAXED_STOP_WORDS = new Set([
 ]);
 
 // Three characters, because a two-character substring match is a scan wearing a
-// filter's clothing. Verified against the live store: no holder in the table
-// has a name built only from stop words and shorter fragments, so this floor
-// costs no real search.
+// filter's clothing. Measured against the live store (258,608 rows):
+//
+//   %in%   153,165 rows (59.2%)      %on%    81,176 rows (31.4%)
+//   %or%   114,647 rows (44.3%)      %ab%     6,138 rows  (2.4%)
+//
+// The floor is uniform rather than per-pair because the guard cannot know which
+// two letters are cheap without running the query it is trying to avoid, and
+// the worst cases return most of the province. Verified that no holder in the
+// table has a name built only from stop words and shorter fragments, so this
+// costs no search for ground that exists.
 const MIN_RELAXED_TOKEN_LENGTH = 3;
 
 function isInformativeToken(token) {
@@ -1322,12 +1329,18 @@ function isInformativeToken(token) {
 
 // What the caller is told when their term has nothing to search on.
 //
+// This has to state BOTH halves of the rule. A term like "AB" is rejected by
+// the length floor, not the stop-word list, so a message that only mentions
+// single letters and common words tells that user to add the distinctive part
+// of the name when "AB" may already be exactly that — the same retry loop with
+// nothing learned, which is the failure this message exists to prevent.
+//
 // Exported so the wording is asserted against the real value rather than a
 // copy. useClaims concatenates `error: detail` and truncates at 200
-// characters, so this has to say the whole thing inside that budget.
+// characters, so the whole rule has to fit inside that budget.
 export const UNINFORMATIVE_TERM_ERROR = {
-  error: 'Search needs a more distinctive word',
-  detail: 'Single letters and words like "the" or "of" match too much of the registry to search alone. Add the distinctive part of the name.',
+  error: 'Search term is too short or too common',
+  detail: 'One word must be at least three letters and not a common word like "the" or "of". Try adding more of the company name.',
 };
 
 // Whether a token set is worth issuing as a query.
