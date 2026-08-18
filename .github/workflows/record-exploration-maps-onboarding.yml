@@ -30,6 +30,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Install Playwright video recorder
+        run: npx playwright install ffmpeg
+
       - name: Record the complete customer journey
         run: node scripts/record-onboarding-journey.mjs
 
