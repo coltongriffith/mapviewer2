@@ -1,0 +1,91 @@
+name: Record Exploration Maps complete onboarding
+
+on:
+  pull_request:
+    paths:
+      - "scripts/record-onboarding-journey.mjs"
+      - "scripts/generate-onboarding-voiceover.py"
+      - "scripts/build-onboarding-chapters.py"
+      - "scripts/tutorial-assets/**"
+      - ".github/workflows/record-exploration-maps-onboarding.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright video recorder
+        run: npx playwright install ffmpeg
+
+      - name: Install MP4 encoder
+        run: sudo apt-get install -y ffmpeg
+
+      - name: Record the complete customer journey
+        run: node scripts/record-onboarding-journey.mjs
+
+      - name: Convert the silent master to MP4
+        run: |
+          ffmpeg -nostdin -y -i onboarding-series-output/exploration-maps-complete-onboarding.webm \
+            -c:v libx264 -preset veryfast -crf 20 -pix_fmt yuv420p -movflags +faststart \
+            onboarding-series-output/exploration-maps-complete-onboarding.mp4
+
+      - name: Generate natural voiceover from exact captions
+        run: |
+          python3 -m venv .voice-venv
+          .voice-venv/bin/pip install "kokoro==0.9.4" "soundfile>=0.12" "numpy<3"
+          .voice-venv/bin/python scripts/generate-onboarding-voiceover.py
+
+      - name: Mix synchronized narration into the master
+        run: |
+          ffmpeg -nostdin -y \
+            -i onboarding-series-output/exploration-maps-complete-onboarding.mp4 \
+            -i onboarding-series-output/voiceover-natural.wav \
+            -filter_complex "[1:a]volume=0.96,apad[voice]" \
+            -map 0:v:0 -map "[voice]" -c:v copy -c:a aac -b:a 192k -shortest \
+            onboarding-series-output/exploration-maps-complete-onboarding-natural-synced.mp4
+
+      - name: Cut precise chapters and build QA contact sheets
+        run: python3 scripts/build-onboarding-chapters.py
+
+      - name: Validate every post-ready video
+        run: |
+          set -euo pipefail
+          while IFS= read -r -d '' video; do
+            width="$(ffprobe -v error -select_streams v:0 -show_entries stream=width -of csv=p=0 "$video")"
+            height="$(ffprobe -v error -select_streams v:0 -show_entries stream=height -of csv=p=0 "$video")"
+            audio="$(ffprobe -v error -select_streams a:0 -show_entries stream=codec_name -of csv=p=0 "$video")"
+            test "$width" = "1440"
+            test "$height" = "900"
+            test "$audio" = "aac"
+            ffmpeg -nostdin -v error -i "$video" -f null -
+          done < <(find onboarding-series-output -name '*-natural-synced.mp4' -print0)
+
+      - name: Upload the post-ready onboarding package
+        uses: actions/upload-artifact@v4
+        with:
+          name: exploration-maps-core-onboarding-videos
+          path: |
+            onboarding-series-output/exploration-maps-complete-onboarding-natural-synced.mp4
+            onboarding-series-output/chapters/*-natural-synced.mp4
+            onboarding-series-output/README.md
+            onboarding-series-output/narration-cues.json
+            onboarding-series-output/chapters.json
+            onboarding-series-output/qa-contact-sheets/*.jpg
+          if-no-files-found: error
+          retention-days: 7

@@ -1,0 +1,45 @@
+name: Record Aurora Ridge flagship tutorial
+
+on:
+  pull_request:
+    paths:
+      - "scripts/record-aurora-ridge-tutorial.mjs"
+      - "scripts/tutorial-assets/aurora-ridge-logo.b64"
+      - "scripts/generate-bc-claim-voiceover.py"
+      - ".github/workflows/record-aurora-ridge-tutorial.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: sudo apt-get install -y ffmpeg espeak-ng
+      - run: node scripts/record-aurora-ridge-tutorial.mjs
+      - run: |
+          ffmpeg -nostdin -y -i aurora-tutorial-output/aurora-ridge-project-map-tutorial.webm -c:v libx264 -preset veryfast -crf 20 -pix_fmt yuv420p -movflags +faststart aurora-tutorial-output/aurora-ridge-project-map-tutorial.mp4
+      - run: |
+          python3 -m venv .voice-venv
+          .voice-venv/bin/pip install "kokoro==0.9.4" "soundfile>=0.12" "numpy<3"
+          VOICE_OUTPUT_DIR=aurora-tutorial-output .voice-venv/bin/python scripts/generate-bc-claim-voiceover.py
+      - run: |
+          ffmpeg -nostdin -y -i aurora-tutorial-output/aurora-ridge-project-map-tutorial.mp4 -i aurora-tutorial-output/voiceover-natural.wav -filter_complex "[1:a]volume=0.96,apad[voice]" -map 0:v:0 -map "[voice]" -c:v copy -c:a aac -b:a 192k -shortest aurora-tutorial-output/aurora-ridge-project-map-tutorial-natural-synced.mp4
+          ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0 aurora-tutorial-output/aurora-ridge-project-map-tutorial-natural-synced.mp4 | grep -qx "1440,900"
+          ffprobe -v error -select_streams a:0 -show_entries stream=codec_name -of csv=p=0 aurora-tutorial-output/aurora-ridge-project-map-tutorial-natural-synced.mp4 | grep -qx aac
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aurora-ridge-project-map-tutorial
+          path: |
+            aurora-tutorial-output/aurora-ridge-project-map-tutorial-natural-synced.mp4
+            aurora-tutorial-output/narration-cues.json
+          retention-days: 7

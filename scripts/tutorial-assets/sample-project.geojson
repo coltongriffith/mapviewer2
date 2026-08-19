@@ -1,0 +1,18 @@
+{
+  "type": "FeatureCollection",
+  "name": "Cedar Ridge Project Boundary",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "name": "Cedar Ridge Project", "status": "Active" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-130.22, 56.55], [-130.03, 56.55], [-130.03, 56.67],
+          [-130.22, 56.67], [-130.22, 56.55]
+        ]]
+      }
+    }
+  ]
+}
+

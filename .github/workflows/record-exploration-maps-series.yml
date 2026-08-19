@@ -1,0 +1,86 @@
+name: Record Exploration Maps tutorial series
+
+on:
+  pull_request:
+    paths:
+      - "scripts/record-tutorial-series.mjs"
+      - "scripts/generate-tutorial-series-voiceovers.py"
+      - "scripts/tutorial-assets/**"
+      - ".github/workflows/record-exploration-maps-series.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Install media dependencies
+        run: sudo apt-get install -y ffmpeg espeak-ng
+
+      - name: Record all tutorials and caption timing
+        run: node scripts/record-tutorial-series.mjs
+
+      - name: Convert silent recordings to MP4
+        run: |
+          find tutorial-series-output -mindepth 1 -maxdepth 1 -type d -print0 | while IFS= read -r -d '' dir; do
+            slug="$(basename "$dir")"
+            ffmpeg -nostdin -y -i "$dir/$slug.webm" -c:v libx264 -preset veryfast -crf 20 -pix_fmt yuv420p -movflags +faststart "$dir/$slug.mp4"
+          done
+
+      - name: Generate natural voiceovers from exact captions
+        run: |
+          python3 -m venv .voice-venv
+          .voice-venv/bin/pip install "kokoro==0.9.4" "soundfile>=0.12" "numpy<3"
+          .voice-venv/bin/python scripts/generate-tutorial-series-voiceovers.py
+
+      - name: Mix timestamped voiceovers into every MP4
+        run: |
+          find tutorial-series-output -mindepth 1 -maxdepth 1 -type d -print0 | while IFS= read -r -d '' dir; do
+            slug="$(basename "$dir")"
+            ffmpeg -nostdin -y \
+              -i "$dir/$slug.mp4" \
+              -i "$dir/voiceover-natural.wav" \
+              -filter_complex "[1:a]volume=0.96,apad[voice]" \
+              -map 0:v:0 -map "[voice]" -c:v copy -c:a aac -b:a 192k -shortest \
+              "$dir/$slug-natural-synced.mp4"
+          done
+
+      - name: Build series index
+        run: |
+          {
+            echo "Exploration Maps How-To Series"
+            echo
+            echo "Natural voice: Kokoro af_heart at 0.97 speed"
+            echo "Resolution: 1440x900"
+            echo
+            find tutorial-series-output -name '*-natural-synced.mp4' -printf '%f\n' | sort
+          } > tutorial-series-output/README.txt
+
+      - name: Upload complete tutorial series
+        uses: actions/upload-artifact@v4
+        with:
+          name: exploration-maps-how-to-series
+          path: |
+            tutorial-series-output/**/*-natural-synced.mp4
+            tutorial-series-output/**/narration-cues.json
+            tutorial-series-output/README.txt
+          if-no-files-found: error
+          retention-days: 7
