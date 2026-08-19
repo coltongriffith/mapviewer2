@@ -92,7 +92,9 @@ export default async function handler(req, res) {
   if (type === 'number') {
     cqlFilter = `TAG_NUMBER = '${safeTerm}'`;
   } else if (type === 'map') {
-    cqlFilter = `MAP_UNIT_NO ILIKE '${safeTerm}%'`;
+    // The layer has no map sheet column — see api/claims.js. Refused rather
+    // than filtered on a field that does not exist.
+    return res.status(400).json({ error: 'Map sheet search is not available' });
   } else {
     cqlFilter = `OWNER_NAME ILIKE '%${safeTerm}%'`;
   }

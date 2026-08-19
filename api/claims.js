@@ -1585,8 +1585,6 @@ export function bcCqlFilter(term, type) {
       ? `(TENURE_NUMBER_ID = ${term} OR TAG_NUMBER = '${safeTerm}')`
       : `TAG_NUMBER = '${safeTerm}'`;
   }
-  if (type === 'map') return `MAP_UNIT_NO ILIKE '${safeTerm}%'`;
-
   // Owner search requires every meaningful word, in any order, rather than one
   // contiguous string — see ownerSearchTokens for why (every full-legal-name
   // search on the live site returned nothing).
@@ -1777,8 +1775,17 @@ export default async function handler(req, res) {
   if (province !== 'bc' && province !== 'qc' && !getArcgisJurisdiction(province)) {
     return res.status(400).json({ error: `Jurisdiction '${province}' is not supported yet.` });
   }
-  if (type === 'map' && province !== 'bc') {
-    return res.status(400).json({ error: 'Map sheet search is only available for BC.' });
+  // Map-sheet search is not available anywhere, BC included. The B.C. layer
+  // publishes no map sheet column (all 34 fields recorded by the --discover run
+  // of 2026-08-05; none is one), so the filter this used to build named a
+  // property that does not exist and the WFS rejected every request. It is
+  // refused here rather than left to fail upstream, so the answer is honest
+  // instead of a 502 that blames the provincial registry for our field name.
+  if (type === 'map') {
+    return res.status(400).json({
+      error: 'Map sheet search is not available',
+      detail: 'The provincial registries do not publish a map sheet field. Search by claim number, claim name, or company.',
+    });
   }
   if (type === 'name' && !getArcgisJurisdiction(province)?.nameFields?.length) {
     return res.status(400).json({ error: 'Claim-name search is not available for this jurisdiction.' });

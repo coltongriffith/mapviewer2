@@ -100,9 +100,8 @@ describe('bcCqlFilter owner clauses', () => {
     expect(filter).toContain('\\%');
   });
 
-  it('leaves number and map search alone', () => {
+  it('leaves number search alone', () => {
     expect(bcCqlFilter('1012345', 'number')).toContain('TENURE_NUMBER_ID = 1012345');
-    expect(bcCqlFilter('082F056', 'map')).toBe("MAP_UNIT_NO ILIKE '082F056%'");
   });
 });
 

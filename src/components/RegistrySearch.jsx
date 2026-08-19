@@ -71,8 +71,12 @@ function clusterClaims(features) {
 const PROVINCES = [
   {
     value: 'bc', label: 'British Columbia', registry: 'Mineral Titles Online',
-    modes: ['company', 'number', 'map'],
-    placeholders: { company: 'e.g. Teck Resources', number: 'Tenure or tag number, e.g. 1012345', map: 'e.g. 082F056' },
+    // No map-sheet mode. The MTA_ACQUIRED_TENURE_SVW layer publishes no map
+    // sheet column — the --discover run of 2026-08-05 recorded all 34 of its
+    // fields and none is one. The mode shipped anyway, filtering on a
+    // MAP_UNIT_NO that does not exist, so every map-sheet search errored.
+    modes: ['company', 'number'],
+    placeholders: { company: 'e.g. Teck Resources', number: 'Tenure or tag number, e.g. 1012345' },
   },
   {
     value: 'on', label: 'Ontario', registry: 'MLAS',
@@ -162,7 +166,6 @@ function autoDetectMode(q, allowedModes) {
   if (/^\d+$/.test(t) && allowedModes.includes('number')) return 'number';
   // US MLRS serials: two-letter state prefix + digits (NV105331298, "nv 105331298")
   if (/^[A-Za-z]{2}[\s-]?\d{4,}$/.test(t) && allowedModes.includes('number')) return 'number';
-  if (/^\d{3}[A-Za-z]/.test(t) && allowedModes.includes('map')) return 'map';
   return fallback;
 }
 
