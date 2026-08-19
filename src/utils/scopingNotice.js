@@ -44,6 +44,18 @@ export function scopingWarning(meta) {
 // Collapsing these into one "no claims found" is the bug: a US issuer whose
 // Nevada ground sits under a subsidiary looks identical to one that owns
 // nothing. Never merge them.
+// An NTS map sheet: three digits, a letter, and optionally a two-digit
+// subdivision — "093K", "082F056", "103I 09".
+//
+// B.C.'s registry layer publishes no map sheet column, so there is no search to
+// route this to. It still arrives, because typing your own sheet number is one
+// of the most natural things a prospector does, and it now lands in company
+// search where it will always find nothing. Left alone it reads as "no claims
+// on this sheet", which is the one thing it does not mean.
+export function looksLikeMapSheet(query) {
+  return /^\d{3}\s?[A-Za-z]\s?\d{0,3}$/.test(String(query ?? '').trim());
+}
+
 export function emptyResultMessage({ resolution, query, jurisdictionLabel, isUs, mode, province }) {
   if (resolution?.status === 'unresolved') {
     const base = `We couldn't link "${query}" to a claim holder in ${jurisdictionLabel}.`;
@@ -85,14 +97,24 @@ export function emptyResultMessage({ resolution, query, jurisdictionLabel, isUs,
   // displaced the spelling hint that did apply to them.
   const isCompanySearch = mode === undefined || mode === 'company';
 
+  if (looksLikeMapSheet(query)) {
+    return {
+      kind: 'empty',
+      headline: `Map sheet search is not available for ${jurisdictionLabel}.`,
+      detail: `"${query}" looks like an NTS map sheet. The registry does not publish `
+        + 'a map sheet field, so claims cannot be looked up by sheet number. This is '
+        + 'not a statement that the sheet holds no claims.',
+      hint: 'Search by company name or claim number, or pan the map to that area and '
+        + 'use the claims overlay to see what is staked there.',
+    };
+  }
+
   if (!isCompanySearch) {
     return {
       kind: 'empty',
       headline: `No active claims found for "${query}" in ${jurisdictionLabel}.`,
       detail: null,
-      hint: mode === 'map'
-        ? 'Check the map sheet format, or search by claim number instead.'
-        : 'Check the number and try again, or search by company name instead.',
+      hint: 'Check the number and try again, or search by company name instead.',
     };
   }
 

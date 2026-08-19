@@ -67,8 +67,15 @@ describe('the other B.C. search modes are unchanged', () => {
     expect(bcCqlFilter('Teck', 'company')).toBe("OWNER_NAME ILIKE '%Teck%'");
   });
 
-  it('searches map sheet as a prefix match', () => {
-    expect(bcCqlFilter('082F', 'map')).toBe("MAP_UNIT_NO ILIKE '082F%'");
+  // This test used to assert MAP_UNIT_NO ILIKE '082F%' — pinning the exact
+  // string of a filter that could never match, because the layer has no such
+  // column. It passed for the whole life of the bug: it checked that the code
+  // built the filter it was written to build, and never that the field existed.
+  // The one map-sheet search ever attempted in production errored.
+  it('never filters on a map sheet column the layer does not publish', () => {
+    ['082F', '082F056', '103I 09'].forEach((t) => {
+      expect(bcCqlFilter(t, 'map')).not.toMatch(/MAP_UNIT_NO/);
+    });
   });
 });
 

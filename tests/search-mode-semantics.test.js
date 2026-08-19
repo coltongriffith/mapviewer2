@@ -55,10 +55,16 @@ describe('the empty state answers the question that was asked', () => {
     expect(msg.hint).toMatch(/check the number/i);
   });
 
-  it('gives map-sheet guidance for a map-sheet search', () => {
+  // Map-sheet search was removed: no provincial layer publishes a map sheet
+  // column, so the mode could only ever error. The guidance it used to carry
+  // ("check the map sheet format") pointed at a search that cannot run, so the
+  // answer now leads with why rather than with how to retry.
+  it('tells a map-sheet search that the search does not exist', () => {
     const msg = emptyResultMessage({ ...base, query: '082F056', mode: 'map' });
-    expect(msg.hint).toMatch(/map sheet/i);
+    expect(msg.headline).toMatch(/map sheet search is not available/i);
     expect(msg.hint).not.toMatch(/subsidiary/i);
+    // Never advice to re-type a sheet number in a different format.
+    expect(msg.hint).not.toMatch(/format/i);
   });
 
   it('defaults to company guidance when no mode is supplied', () => {

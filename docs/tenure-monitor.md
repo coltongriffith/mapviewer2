@@ -88,7 +88,14 @@ Resolved mapping:
   judging good standing, so a null status reconciles as *matched* rather than
   as *not in good standing*, and `isActiveStatus()` is currently unused.
 - **`mapUnit`** — no `MAP_UNIT_NO` on this layer, despite it appearing in
-  `scripts/pseo/config.mjs` for a different endpoint.
+  `scripts/pseo/config.mjs` for a different endpoint. **The live claim search
+  filtered on it anyway** until 2026-08-19, so every BC map-sheet search was
+  rejected by the WFS and surfaced to the user as *"Failed to reach the
+  provincial registry"*. It was attempted once in production, by a visitor in
+  Terrace (NTS 103I), and never once succeeded. The mode has been removed from
+  the UI and the API; a sheet-shaped query now gets an explanation instead. If
+  a future layer publishes a map-sheet column, the search can come back — see
+  `tests/bc-map-sheet-search.test.js` for what it has to satisfy.
 
 #### What the first discover run corrected
 

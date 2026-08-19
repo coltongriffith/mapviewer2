@@ -478,11 +478,14 @@ describe('US jurisdiction validation', () => {
     expect(res.statusCode).toBe(400);
   });
 
-  it('rejects map-sheet search for US (BC-only)', async () => {
+  it('rejects map-sheet search, and no longer says BC can do it', async () => {
+    // This used to read "only available for BC", which was wrong in the
+    // direction that costs a user a search: BC could not do it either.
     const res = mockRes();
     await handler(req({ q: '082F', type: 'map', province: 'us-nv' }), res);
     expect(res.statusCode).toBe(400);
-    expect(res.body.error).toMatch(/only available for BC/i);
+    expect(res.body.error).toMatch(/not available/i);
+    expect(`${res.body.error} ${res.body.detail}`).not.toMatch(/only available for BC/i);
   });
 
   it('company search resolves through the alias ladder instead of 400-ing', async () => {
