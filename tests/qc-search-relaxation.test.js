@@ -6,6 +6,7 @@ import {
   UNINFORMATIVE_TERM_ERROR,
 } from '../api/claims.js';
 import { emptyResultMessage } from '../src/utils/scopingNotice.js';
+import { relaxationNotice } from '../src/utils/relaxationNotice.js';
 import { readFileSync } from 'node:fs';
 
 // Requiring every token is right when every token is right, and wrong the
@@ -335,17 +336,23 @@ describe('exact-path guard', () => {
 describe('relaxed-search meta contract', () => {
   const api = readFileSync('api/claims.js', 'utf8');
   const ui = readFileSync('src/components/RegistrySearch.jsx', 'utf8');
+  // The sentence itself moved to src/utils/relaxationNotice.js when relaxation
+  // stopped being Quebec-only: it now has to describe a widened HOLDER search,
+  // a claim-NUMBER near miss and a claim-NAME fallback, in whichever
+  // jurisdiction ran. The contract is unchanged — both keys still cross the
+  // wire, and the notice still only appears above real results.
+  const notice = readFileSync('src/utils/relaxationNotice.js', 'utf8');
 
   it('uses the same keys on both sides', () => {
     ['relaxedFrom', 'relaxedTo'].forEach((key) => {
       expect(api, `api/claims.js never sets meta.${key}`).toContain(key);
-      expect(ui, `RegistrySearch never reads meta.${key}`).toContain(key);
+      expect(notice, `the client never reads meta.${key}`).toContain(key);
     });
   });
 
   it('gates the notice on results actually being present', () => {
     // A notice about widened results, with no results under it, would be noise.
-    expect(ui).toMatch(/meta\?\.relaxedTo\s*&&\s*allFeatures\.length\s*>\s*0/);
+    expect(ui).toMatch(/relaxNotice\s*&&\s*allFeatures\.length\s*>\s*0/);
   });
 
   it('only flags relaxation when the search really was widened', () => {
@@ -356,9 +363,14 @@ describe('relaxed-search meta contract', () => {
 
   it('shows the user both what they typed and what was searched', () => {
     // "Showing results for X" without the original leaves them unable to tell
-    // whether the match is theirs.
-    expect(ui).toMatch(/relaxedFrom/);
-    expect(ui).toMatch(/relaxedTo/);
+    // whether the match is theirs. Asserted against the rendered sentence now,
+    // which is stronger than asserting the file mentions the keys.
+    const line = relaxationNotice(
+      { relaxedFrom: 'Vior Gold Corporation', relaxedTo: 'Vior', relaxedKind: 'owner' },
+      { jurisdictionLabel: 'Quebec', province: 'qc' },
+    );
+    expect(line.headline).toContain('Vior Gold Corporation');
+    expect(line.headline).toContain('Vior');
   });
 });
 

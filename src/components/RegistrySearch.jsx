@@ -7,6 +7,7 @@ import {
 } from '../utils/jurisdictions';
 import { bestJurisdictionHit, autoAdoptionNotice } from '../utils/claimRanking';
 import { scopingWarning, emptyResultMessage } from '../utils/scopingNotice';
+import { relaxationNotice } from '../utils/relaxationNotice';
 import { claimNamePrefix, sourceCredit, CLAIM_NAME_CAVEAT } from '../utils/claimProvenance';
 import { claimNotices } from '../utils/claimNotices';
 import ClaimNoticeStrip from './ClaimNoticeStrip';
@@ -324,6 +325,11 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
       // company's ground. It stays in the "Found elsewhere" list for an
       // explicit click instead.
       if (top.data?.resolution?.resolvedAgainst === 'claim_name') return;
+      // Nor is a claim-NUMBER near miss. Adopting one would put a DIFFERENT
+      // claim than the one typed on the map, and carry it onward into the
+      // editor, on the strength of a province the visitor never chose. It stays
+      // in the list above for an explicit click, where the row says what it is.
+      if (top.data?.meta?.relaxedKind === 'number') return;
       const requestedLabel = ALL_JURISDICTIONS.find((p) => p.value === request.requestedProvince)?.label
         || request.requestedProvince;
       handleSwitchProvince(top, {
@@ -379,6 +385,21 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
 
   // Degraded-scoping warning for the current result set (null when precise).
   const claimsScopingWarning = useMemo(() => scopingWarning(results?.meta), [results]);
+
+  // What the server actually searched, when it had to widen the query to answer
+  // at all. Reads from `submitted` — the search that RAN — for the same reason
+  // the empty state does: the live form values may already describe a different
+  // search by the time this renders.
+  const relaxNotice = useMemo(() => {
+    const asked = submitted || { mode, query, province };
+    const askedCfg = ALL_JURISDICTIONS.find((p) => p.value === asked.province) || provinceCfg;
+    return relaxationNotice(results?.meta, {
+      query: asked.query,
+      jurisdictionLabel: askedCfg.label,
+      province: asked.province,
+      count: allFeatures.length,
+    });
+  }, [results, submitted, allFeatures, query, mode, province, provinceCfg]);
 
   // True when these claims were linked to the search term by claim name rather
   // than by a claimant record. Such a set may not be titled as a company's
@@ -747,21 +768,20 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
         })}
       />
 
-      {results?.meta?.relaxedTo && allFeatures.length > 0 && (
+      {relaxNotice && allFeatures.length > 0 && (
         // These results are NOT what was typed, so they have to say so before
         // the list rather than after it. A registry search that quietly widens
         // itself and presents the answer as exact is the one failure this
         // feature must not have — a reader could take a neighbouring company's
-        // ground for their own.
+        // ground for their own, or a neighbouring claim number for theirs.
         <p className="claims-relaxed" role="status">
-          No exact match for <strong>{results.meta.relaxedFrom}</strong>.
-          {' '}Showing holders matching <strong>{results.meta.relaxedTo}</strong>.
-          <br />
-          <span className="claims-empty-hint">
-            Quebec&rsquo;s registry records the legal name on title, often in French —
-            a company known for gold may be recorded as &ldquo;Aurif&egrave;re&rdquo;.
-            Check the holder names below before adding them to a map.
-          </span>
+          {relaxNotice.headline}
+          {relaxNotice.detail ? (
+            <>
+              <br />
+              <span className="claims-empty-hint">{relaxNotice.detail}</span>
+            </>
+          ) : null}
         </p>
       )}
 
@@ -797,7 +817,18 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
                   className="claims-cross-province-row"
                   onClick={() => handleSwitchProvince(hit)}
                 >
-                  <span>{hit.province.label} — {hit.count} claim{hit.count !== 1 ? 's' : ''} found</span>
+                  <span>
+                    {hit.province.label} — {hit.count} claim{hit.count !== 1 ? 's' : ''} found
+                    {/* A hit found by a WIDENED search is not the thing that was
+                        typed, and this row is the first place it is offered.
+                        Saying it here keeps the qualifier attached from the
+                        first mention rather than only after the switch. */}
+                    {hit.data?.meta?.relaxedTo ? (
+                      <span className="claims-cross-province-approx">
+                        {' '}· closest match: {hit.data.meta.relaxedTo}
+                      </span>
+                    ) : null}
+                  </span>
                   <span className="claims-cross-province-switch">Switch &amp; view →</span>
                 </button>
               ))}

@@ -345,15 +345,16 @@ async function resolveLayerMeta(layerUrl) {
 //  1. supportsPagination → resultOffset/resultRecordCount loop
 //  2. otherwise         → returnIdsOnly (authoritative total) + objectIds batches
 //  3. ids query failed  → single legacy capped query, marked truncated if full
-async function arcgisQueryAll(layerUrl, baseParams) {
+async function arcgisQueryAll(layerUrl, baseParams, maxTotal = undefined) {
   const layerMeta = await resolveLayerMeta(layerUrl);
-  const pageSize = Math.min(Math.max(layerMeta.maxRecordCount, 1), 1000);
+  const pageSize = Math.min(Math.max(layerMeta.maxRecordCount, 1), 1000, maxTotal || Infinity);
   const idField = layerMeta.objectIdField;
 
   if (layerMeta.supportsPagination) {
     return fetchAllPages({
       provider: 'arcgis',
       pageSize,
+      ...(maxTotal ? { maxTotal } : {}),
       idField,
       fetchPage: async (offset, count) => {
         const url = `${layerUrl}/query?${new URLSearchParams({
@@ -1150,9 +1151,14 @@ async function searchArcgis(cfg, term, type, res) {
     ? term.replace(/[\s-]/g, '')
     : term;
 
-  let where;
+  // Every rung of the search ladder is phrased here. Rung 1 is exactly the
+  // query this function has always issued; the later rungs only run when the
+  // one before found nothing, so a search that works costs one request.
+  const numberFields = type === 'number'
+    ? pickFields(candidates, fields).filter((f) => /^[A-Za-z0-9_.]+$/.test(f.name))
+    : [];
 
-  if (type === 'number') {
+  function numberClauses(step) {
     // OR across every identifier column on the layer. A string column takes a
     // substring LIKE; a numeric one can only take equality, so it contributes a
     // clause only when the term is all digits.
@@ -1161,21 +1167,59 @@ async function searchArcgis(cfg, term, type, res) {
     // tag like "CB12345" against a numeric TENURE_NUMBER_ID has no valid
     // comparison. That used to be a hard 400 telling the user to "enter digits
     // only", even when a perfectly good string column sat right beside it.
-    const numberFields = pickFields(candidates, fields)
-      .filter((f) => /^[A-Za-z0-9_.]+$/.test(f.name));
     const clauses = [];
     for (const f of numberFields) {
-      if (isStringType(f)) clauses.push(likeClause(f.name, effectiveTerm));
-      else if (/^\d+$/.test(effectiveTerm)) clauses.push(`${f.name} = ${effectiveTerm}`);
+      if (isStringType(f)) {
+        clauses.push(likeClause(f.name, step.term, { prefix: step.match === 'prefix' }));
+      } else if (/^\d+$/.test(step.term) && !step.derived) {
+        clauses.push(`${f.name} = ${step.term}`);
+      }
+      // A numeric identifier cannot take a LIKE, so "starts with" becomes a set
+      // of ranges. Without this the widened rung would reach only the string
+      // columns — and on the layers where the numeric column is the one every
+      // title carries, that is the same dead end in a wider disguise.
+      // Digits only, and not a form we derived by dropping letters: stripping
+      // "CB" off a tag here would build the same numeric guess the derived rule
+      // above exists to prevent, just by a different route.
+      if (!isStringType(f) && step.match === 'prefix' && !step.derived && /^\d+$/.test(step.term)) {
+        for (const [lo, hi] of numericPrefixRanges(step.term)) {
+          clauses.push(`(${f.name} >= ${lo} AND ${f.name} <= ${hi})`);
+        }
+      }
     }
-    if (!clauses.length) {
+    return clauses;
+  }
+
+  const orJoin = (clauses) => (clauses.length > 1 ? `(${clauses.join(' OR ')})` : clauses[0]);
+
+  let steps;
+  let whereFor;
+
+  if (type === 'number') {
+    // Keep only the rungs that can add something on THIS layer.
+    //
+    // Two reasons a rung is dropped. It may be unphraseable — an alphanumeric
+    // tag has no comparison against an all-numeric layer. Or it may be
+    // subsumed: a string identifier column already takes a CONTAINS match on
+    // the first rung, so a later contains rung against the same column repeats
+    // a query that just returned nothing. Issuing either is a guaranteed-empty
+    // round trip on the exact searches that are already failing.
+    const issued = new Set();
+    steps = [];
+    for (const step of numberSearchLadder(effectiveTerm)) {
+      const clauses = numberClauses(step);
+      if (!clauses.length || clauses.every((c) => issued.has(c))) continue;
+      clauses.forEach((c) => issued.add(c));
+      steps.push({ ...step, where: orJoin(clauses) });
+    }
+    if (!steps.length) {
       // Every identifier on this layer is numeric and the term is not.
       return res.status(400).json({
         error: `${numberFields.map((f) => f.name).join(' and ')} `
           + `${numberFields.length > 1 ? 'are' : 'is'} numeric — enter digits only.`,
       });
     }
-    where = clauses.length > 1 ? `(${clauses.join(' OR ')})` : clauses[0];
+    whereFor = (step) => step.where;
   } else if (isStringType(field)) {
     // Same tokenised match as B.C.: every meaningful word must appear, in any
     // order. A holder recorded as "EAGLE PLAINS RESOURCES LTD." is found by
@@ -1196,29 +1240,68 @@ async function searchArcgis(cfg, term, type, res) {
     // claim-name semantics.
     const isOwnerSearch = type !== 'number' && type !== 'name';
     const tokens = isOwnerSearch ? ownerSearchTokens(effectiveTerm) : [];
-    where = tokens.length > 1
-      ? `(${tokens.map((t) => likeClause(field.name, t)).join(' AND ')})`
-      : likeClause(field.name, tokens[0] ?? effectiveTerm);
+    // The relaxation ladder Quebec has had since 20260813: every token, then
+    // the distinctive words, then the single most distinctive one. A holder
+    // search that requires every word is monotonically narrowing — each extra
+    // word the user types is another chance to miss — and that is as true in
+    // Ontario as in Quebec. Claim NAMES are never relaxed this way, for the
+    // reason stated above.
+    const sets = isOwnerSearch && tokens.length
+      ? relaxedTokenSetsPreservingSpelling(tokens)
+      : (type === 'name' ? claimNameFallbacks(effectiveTerm) : [tokens]);
+    steps = sets.map((set) => ({ match: 'tokens', term: set.join(' ') || effectiveTerm, tokens: set }));
+    whereFor = (step) => (step.tokens.length > 1
+      ? `(${step.tokens.map((t) => likeClause(field.name, t)).join(' AND ')})`
+      : likeClause(field.name, step.tokens[0] ?? effectiveTerm));
   } else if (/^\d+$/.test(effectiveTerm)) {
-    where = `${field.name} = ${effectiveTerm}`;
+    steps = [{ match: 'exact', term: effectiveTerm }];
+    whereFor = () => `${field.name} = ${effectiveTerm}`;
   } else {
     return res.status(400).json({ error: `${field.name} is numeric — enter digits only.` });
   }
 
-  if (scoping) where = `(${where}) AND ${scoping.where}`;
-
-  const { features, meta } = await arcgisQueryAll(layerUrl, {
-    where,
-    outFields: '*',
-    returnGeometry: 'true',
-    outSR: '4326',
+  const { features, meta, step } = await runLadder(steps, (attempt) => {
+    let where = whereFor(attempt);
+    if (scoping) where = `(${where}) AND ${scoping.where}`;
+    return arcgisQueryAll(layerUrl, {
+      where,
+      outFields: '*',
+      returnGeometry: 'true',
+      outSR: '4326',
+      // A widened NUMBER rung answers "the closest numbers we hold", and that
+      // answer is capped. Bounding it at FETCH time rather than slicing after
+      // means a three-digit prefix costs one page instead of paging a province
+      // back to throw most of it away.
+    }, attempt !== steps[0] && type === 'number' ? NEAR_MISS_LIMIT : undefined);
   });
   if (cfg.provider) meta.provider = cfg.provider;
 
+  // Widened only if the rung that answered was not the first one. The first
+  // rung is what the user asked for; anything past it has to say so.
+  const widened = step && step !== steps[0];
+  const shown = widened && type === 'number' ? features.slice(0, NEAR_MISS_LIMIT) : features;
+  // The near-miss list was cut short either here or at the fetch cap above —
+  // `truncated` is how fetchAllPages reports hitting a ceiling with more to
+  // come. Either way the user is told the list is the closest N, not all of it.
+  const nearMissLimited = widened && type === 'number'
+    && (features.length > shown.length || meta.truncated === true);
+
   return res.status(200).json({
     type: 'FeatureCollection',
-    features: features.map((f) => ({ ...f, properties: normalizeProps(f.properties || {}, cfg) })),
-    meta: withScopingMeta(meta, scoping),
+    features: shown.map((f) => ({ ...f, properties: normalizeProps(f.properties || {}, cfg) })),
+    meta: {
+      ...withScopingMeta(meta, scoping),
+      ...(widened ? relaxationMeta({
+        // 'name' is its own kind, not a quieter 'owner': a claim-name match
+        // says nothing about who holds the claim, and the sentence the UI
+        // writes for it has to say so.
+        kind: type === 'number' ? 'number' : (type === 'name' ? 'name' : 'owner'),
+        match: step.match,
+        from: term,
+        to: step.term,
+        limited: nearMissLimited,
+      }) : {}),
+    },
   });
 }
 
@@ -1394,6 +1477,205 @@ export function relaxedTokenSets(tokens) {
   });
 }
 
+// ── Near-miss ladders ──────────────────────────────────────────────────────
+//
+// A registry search that answers "0 results" and stops is the single worst
+// outcome this product has. Measured over 120 days of search_events: 33.5% of
+// all searches returned nothing, and every claim-NUMBER search on record did —
+// 10 of 10, across BC, QC and MB. A miner who types the number off their own
+// claim schedule and gets a blank page concludes the tool has no data, which is
+// the opposite of what happened.
+//
+// The rule these helpers implement: try the exact thing first, and only if it
+// finds nothing, widen — in an order that keeps the answer explainable, and
+// always reporting WHICH search actually answered so the UI can say so. A
+// widened result presented as an exact one would be far worse than the empty
+// page it replaces.
+
+// Below three characters a prefix or contains match stops being a near miss and
+// becomes a table scan: "1" as a prefix matches every number in the registry.
+export const MIN_NUMBER_PREFIX_LENGTH = 3;
+
+// A relaxed number search answers "the closest numbers we hold", not "here are
+// nine thousand claims". The cap is what makes the widened answer readable, and
+// what stops a two-digit-ish prefix from paging an entire province back.
+export const NEAR_MISS_LIMIT = 50;
+
+/**
+ * The ordered attempts for a claim-number search, widest last.
+ *
+ * Tiers before forms: every exact form is tried before any prefix, because an
+ * exact hit on the compact spelling ("CB 12345" → "CB12345") is a better answer
+ * than a prefix hit on the raw one. Registries differ on whether they store the
+ * separators people type, and on whether the tag carries its letter prefix, so
+ * the forms are all plausible spellings of the SAME number rather than
+ * different searches.
+ *
+ * Exported and pure: what matters is which searches run and in what order, not
+ * how any one provider phrases them.
+ *
+ * @param {string} term raw user input
+ * @returns {Array<{match: 'exact'|'prefix'|'contains', term: string}>}
+ */
+export function numberSearchLadder(term) {
+  const raw = String(term ?? '').trim();
+  if (!raw) return [];
+  const compact = raw.replace(/[\s-]/g, '');
+  // "CB12345" → "12345". Some layers store the letter prefix in a separate
+  // column, or not at all, so the bare digits are a real spelling of the same
+  // identifier — but only when they are not already the whole term.
+  const digits = compact.replace(/\D/g, '');
+  const forms = [...new Set([raw, compact, digits])].filter(Boolean).map((t) => ({
+    term: t,
+    // DERIVED means letters were removed to get here, and that changes what the
+    // form may be compared against. "CB12345" and its digits "12345" are the
+    // same string to a LIKE on a tag column, but as a NUMBER "12345" is a
+    // different claim — tenure 12345 has nothing to do with tag CB12345.
+    // Callers use this to keep a derived form away from numeric comparisons, so
+    // a layer that publishes only numeric identifiers still refuses an
+    // alphanumeric tag honestly instead of answering with somebody else's
+    // ground. Stripping spaces and dashes is not derivation: those are
+    // separators the registry may simply not store.
+    derived: t !== raw && t !== compact,
+  }));
+  const wide = forms.filter((f) => f.term.length >= MIN_NUMBER_PREFIX_LENGTH);
+
+  const steps = [
+    ...forms.map((f) => ({ ...f, match: 'exact' })),
+    ...wide.map((f) => ({ ...f, match: 'prefix' })),
+    ...wide.map((f) => ({ ...f, match: 'contains' })),
+  ];
+
+  const seen = new Set();
+  return steps.filter((s) => {
+    const key = `${s.match}:${s.term}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+/**
+ * Prefix match for a NUMERIC column, expressed as ranges.
+ *
+ * A numeric identifier cannot take a LIKE, so "starts with 26543" becomes
+ * "between 265430 and 265439, or between 2654300 and 2654399, …" — one range
+ * per possible total length. This is what makes the near-miss ladder reach the
+ * columns that carry most claim numbers: B.C.'s TENURE_NUMBER_ID is numeric and
+ * present on every title, while the string TAG_NUMBER is null on 87% of them.
+ *
+ * Leading zeros are refused rather than stripped: a numeric column cannot store
+ * "012345" distinctly from "12345", so treating them as the same search would
+ * quietly answer a different question than the one typed.
+ *
+ * @param {string} digits digits only
+ * @param {number} maxDigits longest identifier worth considering
+ */
+export function numericPrefixRanges(digits, maxDigits = 9) {
+  const d = String(digits ?? '');
+  if (!/^\d+$/.test(d) || d.startsWith('0')) return [];
+  const out = [];
+  for (let len = d.length + 1; len <= maxDigits; len += 1) {
+    const lo = Number(d + '0'.repeat(len - d.length));
+    const hi = Number(d + '9'.repeat(len - d.length));
+    if (!Number.isSafeInteger(lo) || !Number.isSafeInteger(hi)) break;
+    out.push([lo, hi]);
+  }
+  return out;
+}
+
+/**
+ * Run an ordered ladder until something answers, or the ladder runs out.
+ *
+ * Sequential on purpose: every attempt after the first only exists because the
+ * previous one found nothing, so a search that succeeds — the common case —
+ * costs exactly one upstream request.
+ *
+ * @param {Array} steps  attempts, most specific first
+ * @param {(step) => Promise<{features: Array, meta?: object}>} run
+ * @returns {{features, meta, step, stepIndex}} the first non-empty answer, or the last attempt
+ */
+export async function runLadder(steps, run) {
+  let last = { features: [], meta: {} };
+  for (let i = 0; i < steps.length; i += 1) {
+    // eslint-disable-next-line no-await-in-loop -- deliberately sequential
+    const r = await run(steps[i]);
+    if (r.features.length) return { ...r, step: steps[i], stepIndex: i };
+    last = r;
+  }
+  return { ...last, step: null, stepIndex: -1 };
+}
+
+/**
+ * The meta a widened answer must carry, or null when the exact search answered.
+ *
+ * The UI leads with this. `relaxedKind` says which dimension was widened and
+ * `relaxedMatch` how far, because "we matched fewer words of the company name"
+ * and "we matched claim numbers starting with yours" need different sentences —
+ * and a number near-miss must never be described as a holder match.
+ */
+export function relaxationMeta({ kind, match, from, to, limited = false }) {
+  if (!from || !to) return null;
+  // A same-TEXT widening is still a widening: "26543" as a prefix is a
+  // different search from "26543" exact, and returns claims whose number is not
+  // the one typed. Only a same-text EXACT/token match is a no-op worth
+  // suppressing, so the equality shortcut has to exclude the pattern matches or
+  // the most common near miss would ship unlabelled.
+  if (match !== 'prefix' && match !== 'contains' && String(from) === String(to)) return null;
+  return {
+    relaxedFrom: String(from),
+    relaxedTo: String(to),
+    relaxedKind: kind,
+    relaxedMatch: match,
+    ...(limited ? { relaxedLimited: NEAR_MISS_LIMIT } : {}),
+  };
+}
+
+/**
+ * Fallback attempts for a CLAIM-NAME search, widest last.
+ *
+ * Claim names are not company names and are never tokenised the way holders
+ * are — "Gold Hill Company" is the claim's actual name, and matching GOLD and
+ * HILL in any order would also match "Hill of Gold", a different piece of
+ * ground. So the only widening offered here is the single most distinctive
+ * word, as a contains match, and the UI says exactly that when it is used.
+ *
+ * Returned as term arrays so the caller can feed them to the same clause
+ * builder the exact rung uses. An empty array means "search the term as typed".
+ */
+export function claimNameFallbacks(term) {
+  const words = String(term ?? '').trim().split(/\s+/).filter(Boolean);
+  const sets = [[]];
+  if (words.length > 1) {
+    const informative = words.map(foldForSearch).filter(isInformativeToken);
+    if (informative.length) {
+      sets.push([informative.reduce((a, b) => (b.length > a.length ? b : a))]);
+    }
+  }
+  return sets;
+}
+
+/**
+ * The relaxation ladder for a column that stores names as the registry wrote
+ * them, rather than folded.
+ *
+ * relaxedTokenSets decides which words to drop by comparing against lists of
+ * lowercase, accent-free vocabulary, so it has to be fed FOLDED tokens —
+ * GENERIC_OWNER_WORDS holds "development", and "Development" is not in it.
+ * Quebec's store has a folded column to query, so it can use the folded tokens
+ * directly. Every other registry stores the real spelling, and querying
+ * "aurifere" against a column holding "Aurifère" would match nothing.
+ *
+ * So: decide on the folded text, query with the original. Position mapping,
+ * not re-folding, because folding is not reversible.
+ */
+export function relaxedTokenSetsPreservingSpelling(tokens) {
+  const folded = tokens.map(foldForSearch);
+  const original = new Map();
+  folded.forEach((f, i) => { if (!original.has(f)) original.set(f, tokens[i]); });
+  return relaxedTokenSets(folded).map((set) => set.map((f) => original.get(f) ?? f));
+}
+
 async function searchQc(term, type, res) {
   const creds = qcSupabaseCreds();
   if (!creds) {
@@ -1428,9 +1710,10 @@ async function searchQc(term, type, res) {
   // the identical `column=ilike.value` shape already proven in production, and
   // PostgREST ANDs duplicate keys. The grouped form would put the tokens inside
   // a comma-separated list, which is parsing surface for no benefit.
-  const runQuery = async (filter) => fetchAllPages({
+  const runQuery = async (filter, maxTotal = undefined) => fetchAllPages({
     provider: 'qc-store',
-    pageSize: 1000,
+    pageSize: Math.min(1000, maxTotal || 1000),
+    ...(maxTotal ? { maxTotal } : {}),
     idField: 'TAG_NUMBER',
     fetchPage: async (offset, count) => {
       const url = `${base}/rest/v1/qc_claims?` +
@@ -1451,11 +1734,47 @@ async function searchQc(term, type, res) {
   });
 
   if (type === 'number') {
-    const { features, meta } = await runQuery(`tag_number=ilike.${encodeURIComponent(cleaned)}`);
-    return res.status(200).json({ type: 'FeatureCollection', features, meta });
+    // Exact, then starts-with, then contains. Quebec's store holds 258,608 tag
+    // numbers of which 250,636 are seven digits, so somebody typing the first
+    // five digits off a claim schedule — or a number with a "CDC" prefix the
+    // store does not keep — used to get a blank page. Every QC number search on
+    // record returned nothing.
+    const ladder = numberSearchLadder(cleaned);
+    const { features, meta, step } = await runLadder(ladder, (s) => runQuery(
+      `tag_number=ilike.${encodeURIComponent(
+        s.match === 'prefix' ? `${s.term}*` : s.match === 'contains' ? `*${s.term}*` : s.term,
+      )}`,
+      // The widened rungs answer with the closest numbers, capped.
+      s.match === 'exact' ? undefined : NEAR_MISS_LIMIT,
+    ));
+    const widened = step && step.match !== 'exact';
+    const shown = widened ? features.slice(0, NEAR_MISS_LIMIT) : features;
+    return res.status(200).json({
+      type: 'FeatureCollection',
+      features: shown,
+      meta: {
+        ...meta,
+        ...(widened ? relaxationMeta({
+          kind: 'number',
+          match: step.match,
+          from: cleaned,
+          to: step.term,
+          limited: features.length > shown.length || meta.truncated === true,
+        }) : {}),
+      },
+    });
   }
 
-  const tokens = ownerSearchTokens(cleaned).map(foldForSearch).filter(Boolean);
+  const rawTokens = ownerSearchTokens(cleaned);
+  const tokens = rawTokens.map(foldForSearch).filter(Boolean);
+  // Folded for the query (owner_name_norm is folded), original for the banner:
+  // telling somebody who searched "Vior Gold Corporation" that we matched
+  // "vior" is accurate but reads like a different word than the one they typed.
+  const spellingOf = new Map();
+  rawTokens.forEach((t, i) => {
+    const f = foldForSearch(t);
+    if (f && !spellingOf.has(f)) spellingOf.set(f, rawTokens[i]);
+  });
   // A term of only punctuation ("...") survives the length check above but
   // tokenises to nothing. An empty filter string is not a harmless no-op — it
   // would drop the WHERE clause entirely and page the whole table back.
@@ -1509,7 +1828,12 @@ async function searchQc(term, type, res) {
       // Present only when the answer came from a looser search than the one
       // asked for. The UI leads with this — results the user did not literally
       // ask for have to say so.
-      ...(relaxed ? { relaxedFrom: cleaned, relaxedTo: usedTokens.join(' ') } : {}),
+      ...(relaxed ? relaxationMeta({
+        kind: 'owner',
+        match: 'tokens',
+        from: cleaned,
+        to: usedTokens.map((t) => spellingOf.get(t) ?? t).join(' '),
+      }) : {}),
     },
   });
 }
@@ -1561,10 +1885,31 @@ async function searchQcBbox(minLng, minLat, maxLng, maxLat, res) {
  * @param {'number'|'map'|'company'} type
  * @returns {string} a CQL_FILTER expression
  */
-export function bcCqlFilter(term, type) {
+export function bcCqlFilter(term, type, opts = {}) {
   const safeTerm = String(term).replace(/'/g, "''").replace(/%/g, '\\%').replace(/_/g, '\\_');
+  // `match` widens the NUMBER branch and `tokens` replaces the owner branch's
+  // token set. Both default to the exact behaviour this function has always
+  // had, so a caller that passes neither gets the same filter as before.
+  const { match = 'exact', tokens: ownerTokens = null, derived = false } = opts;
 
   if (type === 'number') {
+    if (match !== 'exact') {
+      // Starts-with / contains across BOTH identifiers.
+      //
+      // TAG_NUMBER is a string and takes a LIKE directly. TENURE_NUMBER_ID is
+      // numeric and cannot, so "starts with 26543" becomes a set of ranges —
+      // see numericPrefixRanges. Skipping the numeric column here would make
+      // the widened search reach 13% of B.C. titles: the tag is null on 36,925
+      // of 42,332, and the tenure number is the one every title carries.
+      const pattern = match === 'prefix' ? `${safeTerm}%` : `%${safeTerm}%`;
+      const clauses = [`TAG_NUMBER LIKE '${pattern}'`];
+      if (match === 'prefix' && !derived && /^\d+$/.test(String(term))) {
+        for (const [lo, hi] of numericPrefixRanges(String(term))) {
+          clauses.push(`(TENURE_NUMBER_ID >= ${lo} AND TENURE_NUMBER_ID <= ${hi})`);
+        }
+      }
+      return clauses.length > 1 ? `(${clauses.join(' OR ')})` : clauses[0];
+    }
     // A B.C. claim has TWO numbers, and people arrive holding either one:
     //
     //   TENURE_NUMBER_ID  the tenure number. Numeric in the source, present on
@@ -1581,14 +1926,18 @@ export function bcCqlFilter(term, type) {
     // UNQUOTED — quoting a numeric field makes the WFS server reject the whole
     // filter. The tag clause is the only one used for a non-numeric term, so a
     // claim name never produces a malformed numeric comparison.
-    return /^\d+$/.test(term)
+    return /^\d+$/.test(term) && !derived
       ? `(TENURE_NUMBER_ID = ${term} OR TAG_NUMBER = '${safeTerm}')`
       : `TAG_NUMBER = '${safeTerm}'`;
   }
   // Owner search requires every meaningful word, in any order, rather than one
   // contiguous string — see ownerSearchTokens for why (every full-legal-name
   // search on the live site returned nothing).
-  const tokens = ownerSearchTokens(term);
+  //
+  // The caller may pass an already-relaxed token set (searchBc walks the same
+  // ladder Quebec does). Nothing else changes: the clause shape, the escaping
+  // and the single-token fallback are identical whichever set arrives.
+  const tokens = ownerTokens || ownerSearchTokens(term);
   const clauses = tokens.map((t) => {
     const safe = t.replace(/'/g, "''").replace(/%/g, '\\%').replace(/_/g, '\\_');
     return `OWNER_NAME ILIKE '%${safe}%'`;
@@ -1598,21 +1947,85 @@ export function bcCqlFilter(term, type) {
 }
 
 async function searchBc(term, type, res) {
-  const cqlFilter = bcCqlFilter(term, type);
+  const runFilter = (cqlFilter, maxTotal = undefined) => {
+    const buildUrl = (startIndex, count) => [
+      'https://openmaps.gov.bc.ca/geo/pub/wfs',
+      '?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature',
+      '&outputFormat=application/json',
+      '&typeNames=pub:WHSE_MINERAL_TENURE.MTA_ACQUIRED_TENURE_SVW',
+      '&SRSNAME=EPSG:4326',
+      `&CQL_FILTER=${encodeURIComponent(cqlFilter)}`,
+      '&sortBy=TENURE_NUMBER_ID',   // WFS paging requires a stable sort
+      `&count=${count}`,
+      `&startIndex=${startIndex}`,
+    ].join('');
+    return fetchWfsAll({
+      fetchJson,
+      buildUrl,
+      pageSize: Math.min(1000, maxTotal || 1000),
+      provider: 'bc-wfs',
+      ...(maxTotal ? { maxTotal } : {}),
+    });
+  };
 
-  const buildUrl = (startIndex, count) => [
-    'https://openmaps.gov.bc.ca/geo/pub/wfs',
-    '?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature',
-    '&outputFormat=application/json',
-    '&typeNames=pub:WHSE_MINERAL_TENURE.MTA_ACQUIRED_TENURE_SVW',
-    '&SRSNAME=EPSG:4326',
-    `&CQL_FILTER=${encodeURIComponent(cqlFilter)}`,
-    '&sortBy=TENURE_NUMBER_ID',   // WFS paging requires a stable sort
-    `&count=${count}`,
-    `&startIndex=${startIndex}`,
-  ].join('');
+  if (type === 'number') {
+    // Exact on both identifiers, then starts-with, then contains. All three
+    // B.C. number searches on record returned nothing; a tenure number is 6 or
+    // 7 digits and people routinely arrive with a partial one off a schedule,
+    // a map margin, or a news release.
+    const ladder = numberSearchLadder(term);
+    const { features, meta, step } = await runLadder(
+      ladder,
+      (s) => runFilter(
+        bcCqlFilter(s.term, 'number', { match: s.match, derived: s.derived }),
+        // A widened rung answers "the closest numbers", capped — so fetch that
+        // many rather than paging the province back to discard most of it.
+        s.match === 'exact' ? undefined : NEAR_MISS_LIMIT,
+      ),
+    );
+    const widened = step && step.match !== 'exact';
+    const shown = widened ? features.slice(0, NEAR_MISS_LIMIT) : features;
+    return res.status(200).json({
+      type: 'FeatureCollection',
+      features: shown,
+      meta: {
+        ...meta,
+        ...(widened ? relaxationMeta({
+          kind: 'number',
+          match: step.match,
+          from: term,
+          to: step.term,
+          limited: features.length > shown.length || meta.truncated === true,
+        }) : {}),
+      },
+    });
+  }
 
-  const { features, meta } = await fetchWfsAll({ fetchJson, buildUrl, pageSize: 1000, provider: 'bc-wfs' });
+  if (type === 'company') {
+    // The same ladder Quebec has had: every token, then the distinctive words,
+    // then the single most distinctive one. B.C. is the busiest jurisdiction in
+    // the product and 24% of its company searches returned nothing — the
+    // relaxation was never province-specific, only the code was.
+    const tokens = ownerSearchTokens(term);
+    const attempts = tokens.length ? relaxedTokenSetsPreservingSpelling(tokens) : [[]];
+    const { features, meta, step } = await runLadder(
+      attempts.map((set) => ({ match: 'tokens', term: set.join(' '), tokens: set })),
+      (s) => runFilter(bcCqlFilter(term, 'company', { tokens: s.tokens.length ? s.tokens : null })),
+    );
+    const widened = step && step.tokens.length !== tokens.length;
+    return res.status(200).json({
+      type: 'FeatureCollection',
+      features,
+      meta: {
+        ...meta,
+        ...(widened ? relaxationMeta({
+          kind: 'owner', match: 'tokens', from: term, to: step.term,
+        }) : {}),
+      },
+    });
+  }
+
+  const { features, meta } = await runFilter(bcCqlFilter(term, type));
   return res.status(200).json({ type: 'FeatureCollection', features, meta });
 }
 

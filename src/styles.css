@@ -2359,6 +2359,9 @@ body.is-dragging .template-zone .panel-delete-btn { opacity: 0 !important; }
 }
 .claims-cross-province-row:hover { background: #dbeafe; border-color: #93c5fd; }
 .claims-cross-province-switch { font-weight: 600; white-space: nowrap; }
+/* A cross-province hit found by a WIDENED search says so on the row itself,
+   before the switch rather than only after it. */
+.claims-cross-province-approx { color: #7c2d12; font-weight: 600; }
 
 /* Unresolved company ≠ empty result: styled apart from the plain empty state so
    the two outcomes don't read the same at a glance either. */
