@@ -2671,6 +2671,7 @@ button.claim-notices-chip[aria-expanded="true"] { border-color: #cbd5e1; backgro
 .adm-timeline-export .adm-timeline-icon { color: #8b5cf6; }
 .adm-timeline-search .adm-timeline-icon { color: #0ea5e9; }
 .adm-timeline-lead .adm-timeline-icon { color: #f59e0b; }
+.adm-timeline-product .adm-timeline-icon { color: #10b981; }
 
 /* ── Account Dashboard ──────────────────────────────────────────── */
 /* ── Dashboard: the signed-in home ─────────────────────────────────────────

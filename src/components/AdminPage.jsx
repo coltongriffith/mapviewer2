@@ -436,6 +436,11 @@ const EVENT_KIND_META = {
   export: { icon: '⬇', label: 'Export' },
   lead: { icon: '✉', label: 'Lead' },
   click: { icon: '⊙', label: 'Click' },
+  // product_events — what the visitor did in the editor. The timeline RPC
+  // omitted this table entirely until migration 20260824000001, so sessions
+  // read as emptier than they were and the Timeline buttons on the feeds
+  // below (built from product_events) opened a view without the event clicked.
+  product: { icon: '▸', label: 'Action' },
 };
 
 function fmtDuration(seconds) {
@@ -527,7 +532,7 @@ function DayDetail({ day, summary, sessions, loading, onOpenSession }) {
   );
 }
 
-function SessionTimelineModal({ sessionId, events, onClose }) {
+function SessionTimelineModal({ sessionId, events, error, onClose }) {
   return (
     <div className="adm-modal-overlay" onClick={onClose}>
       <div className="adm-modal" onClick={(e) => e.stopPropagation()}>
@@ -536,7 +541,9 @@ function SessionTimelineModal({ sessionId, events, onClose }) {
           <button className="adm-btn adm-btn-ghost adm-btn-sm" onClick={onClose}>✕</button>
         </div>
         <p className="adm-muted adm-modal-sid">{sessionId}</p>
-        {events == null ? (
+        {error ? (
+          <Empty message={`Could not load this timeline — ${error}`} />
+        ) : events == null ? (
           <div className="adm-skeleton-block" />
         ) : events.length === 0 ? (
           <Empty message="No tracked events for this session." />
@@ -615,6 +622,7 @@ export default function AdminPage({ onExit }) {
   const [dayLoading, setDayLoading] = useState(false);
   const [openSessionId, setOpenSessionId] = useState(null);
   const [sessionTimeline, setSessionTimeline] = useState(null);
+  const [sessionTimelineError, setSessionTimelineError] = useState(null);
 
   const isAdmin = !!ADMIN_EMAIL && user?.email === ADMIN_EMAIL;
 
@@ -689,10 +697,18 @@ export default function AdminPage({ onExit }) {
   function openSession(sessionId) {
     setOpenSessionId(sessionId);
     setSessionTimeline(null);
+    setSessionTimelineError(null);
     if (!supabase) return;
-    supabase.rpc('admin_get_session_timeline', { p_session_id: sessionId }).then(({ data }) => {
-      setSessionTimeline(data || []);
-    });
+    // An RPC error used to land here as `data == null` and render as "No
+    // tracked events for this session" — a failed call and a session that did
+    // nothing looked identical, which is how a missing branch in the function
+    // stays invisible. Say which one it is.
+    supabase.rpc('admin_get_session_timeline', { p_session_id: sessionId })
+      .then(({ data, error }) => {
+        if (error) { setSessionTimelineError(error.message || 'Timeline unavailable.'); return; }
+        setSessionTimeline(data || []);
+      })
+      .catch((e) => setSessionTimelineError(e?.message || 'Timeline unavailable.'));
   }
 
   useEffect(() => {
@@ -1076,7 +1092,8 @@ export default function AdminPage({ onExit }) {
         <SessionTimelineModal
           sessionId={openSessionId}
           events={sessionTimeline}
-          onClose={() => { setOpenSessionId(null); setSessionTimeline(null); }}
+          error={sessionTimelineError}
+          onClose={() => { setOpenSessionId(null); setSessionTimeline(null); setSessionTimelineError(null); }}
         />
       )}
     </div>

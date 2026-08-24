@@ -618,7 +618,8 @@ $$;
 
 create or replace function admin_get_session_timeline(p_session_id text)
 returns table (event_time timestamptz, kind text, detail text)
-language sql security definer stable as $$
+language sql security definer stable
+set search_path = public, pg_catalog as $$
   select pv.created_at, 'page_view'::text,
     coalesce(pv.path, '/') || coalesce(' via ' || nullif(pv.referrer, ''), '')
   from public.page_views pv where pv.session_id = p_session_id and is_admin()
@@ -626,10 +627,11 @@ language sql security definer stable as $$
   select se.created_at, 'search'::text,
     coalesce(se.kind, 'registry') || ' search · ' || coalesce(upper(se.province), '?')
       || ' · ' || coalesce(se.result_count::text, '0') || ' results'
+      || coalesce(' (' || nullif(se.outcome, 'ok') || ')', '')
   from public.search_events se where se.session_id = p_session_id and is_admin()
   union all
   select ee.created_at, 'export'::text,
-    upper(ee.format) || ' export · ' || coalesce(ee.project_name, 'Untitled')
+    coalesce(upper(ee.format), '?') || ' export · ' || coalesce(ee.project_name, 'Untitled')
       || case when ee."noWatermark" then ' (no watermark)' else '' end
   from public.export_events ee where ee.session_id = p_session_id and is_admin()
   union all
@@ -638,6 +640,20 @@ language sql security definer stable as $$
   union all
   select lc.created_at, 'click'::text, 'Clicked ' || coalesce(lc.element, '(unlabeled)')
   from public.landing_clicks lc where lc.session_id = p_session_id and is_admin()
+  union all
+  -- product_events is the record of what somebody DID in the editor. Leaving it
+  -- out made every timeline under-report, and made the Timeline buttons on the
+  -- dashboard-v2 feeds (which are built FROM this table) open a view that could
+  -- not contain the event clicked. See migration
+  -- 20260824000001_session_timeline_product_events.sql.
+  select pe.created_at, 'product'::text,
+    replace(pe.event, '_', ' ')
+      || coalesce(' · ' || nullif(left((
+           select string_agg(k || '=' || left(coalesce(v #>> '{}', ''), 40), ', ' order by k)
+           from jsonb_each(case when jsonb_typeof(pe.props) = 'object'
+                                then pe.props else '{}'::jsonb end) as p(k, v)
+         ), 160), ''), '')
+  from public.product_events pe where pe.session_id = p_session_id and is_admin()
   order by 1 asc;
 $$;
 
