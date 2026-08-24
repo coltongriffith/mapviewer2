@@ -381,7 +381,10 @@ async function arcgisQueryAll(layerUrl, baseParams, maxTotal = undefined) {
     const ids = Array.isArray(idResp?.objectIds) ? idResp.objectIds : null;
     if (!ids) throw new Error('no objectIds');
     const oidField = idResp.objectIdFieldName || idField;
-    const capped = ids.slice(0, MAX_TOTAL_FEATURES);
+    // Honour the caller's ceiling here too. Without this a widened near-miss
+    // rung would fetch thousands of ids from a layer that cannot paginate, only
+    // for the caller to keep fifty.
+    const capped = ids.slice(0, Math.min(MAX_TOTAL_FEATURES, maxTotal || MAX_TOTAL_FEATURES));
     const features = [];
     let pagesFetched = 0;
     let failedLate = false;
@@ -412,12 +415,13 @@ async function arcgisQueryAll(layerUrl, baseParams, maxTotal = undefined) {
     };
   } catch {
     // Ids phase unavailable — single legacy query, honestly flagged when full.
-    const url = `${layerUrl}/query?${new URLSearchParams({ ...baseParams, resultRecordCount: '2000', f: 'geojson' })}`;
+    const url = `${layerUrl}/query?${new URLSearchParams({ ...baseParams, resultRecordCount: String(maxTotal || 2000), f: 'geojson' })}`;
     const data = await fetchQueryGeoJSON(url);
     if (!Array.isArray(data.features)) throw new Error('Unexpected response from provincial map service');
+    const limit = maxTotal || 2000;
     return {
       features: data.features,
-      meta: { totalKnown: null, returned: data.features.length, truncated: data.features.length >= 2000, pagesFetched: 1, provider: 'arcgis' },
+      meta: { totalKnown: null, returned: data.features.length, truncated: data.features.length >= limit, pagesFetched: 1, provider: 'arcgis' },
     };
   }
 }

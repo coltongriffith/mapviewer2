@@ -785,7 +785,11 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
         </p>
       )}
 
-      {results?.meta?.truncated && allFeatures.length > 0 && (
+      {/* Not shown when the near-miss cap is what cut the list short: the
+          relaxation notice above already says "capped at 50", and telling
+          somebody to "narrow the search" when the search was WIDENED to answer
+          them at all is advice pointing the wrong way. */}
+      {results?.meta?.truncated && !results?.meta?.relaxedLimited && allFeatures.length > 0 && (
         <p className="claims-error" role="status">
           ⚠ Large result set — showing the first {allFeatures.length.toLocaleString()}
           {results.meta.totalKnown ? ` of ${results.meta.totalKnown.toLocaleString()}` : ''} claims.

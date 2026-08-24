@@ -4,6 +4,7 @@ import {
   bcCqlFilter, runLadder, MIN_NUMBER_PREFIX_LENGTH, NEAR_MISS_LIMIT,
 } from '../api/claims.js';
 import { relaxationNotice } from '../src/utils/relaxationNotice.js';
+import { readFileSync } from 'node:fs';
 
 // A search that answers "0 results" and stops is the worst outcome this product
 // has. Measured over 120 days of search_events before this change:
@@ -341,6 +342,14 @@ describe('a provincial claim-number search that used to dead-end', () => {
     ));
     const widened = queryUrls.find((u) => />= 2650/.test(u));
     expect(widened).toMatch(new RegExp(`resultRecordCount=${NEAR_MISS_LIMIT}`));
+  });
+
+  it('does not tell the user to narrow a search that had to be widened', async () => {
+    // The "large result set — narrow the search" banner is gated off when the
+    // near-miss cap is what trimmed the list. Advising a narrower search after
+    // widening one to answer at all points the wrong way.
+    const ui = readFileSync('src/components/RegistrySearch.jsx', 'utf8');
+    expect(ui).toMatch(/meta\?\.truncated\s*&&\s*!results\?\.meta\?\.relaxedLimited/);
   });
 
   it('leaves an exact hit exactly as it was — one request, no banner', async () => {
