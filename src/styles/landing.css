@@ -145,21 +145,42 @@
   text-transform: uppercase;
   color: var(--ui-text-muted);
 }
-.lm-lookup-row { display: flex; gap: 8px; }
+.lm-lookup-row { display: flex; gap: 6px; }
 .lm-lookup-input {
   flex: 1;
   min-width: 0;
   height: 40px;
-  padding: 0 12px;
+  padding: 0 10px;
   border: 1px solid var(--ui-border-strong);
   border-radius: var(--r-md);
   background: var(--ui-surface);
   color: var(--ui-text);
-  font-size: var(--fs-md);
+  /* One notch down from the body size so the full placeholder — which names
+     all three things you can search by — fits the field beside the button. */
+  font-size: var(--fs-body);
+  text-overflow: ellipsis;
 }
 .lm-lookup-input:focus { outline: 2px solid var(--ui-focus); outline-offset: -1px; border-color: var(--ui-focus); }
-.lm-lookup-note { margin: 8px 0 0; font-size: var(--fs-sm); color: var(--ui-text-muted); line-height: 1.5; }
+/* Coverage: one line in the hero, the jurisdiction list on demand. */
+.lm-coverage { margin-top: 10px; font-size: var(--fs-sm); color: var(--ui-text-muted); line-height: 1.55; }
+.lm-coverage summary { cursor: pointer; list-style: none; }
+.lm-coverage summary::-webkit-details-marker { display: none; }
+.lm-coverage-more {
+  margin-left: 6px;
+  color: var(--ui-text);
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-color: var(--ui-border-strong);
+  text-underline-offset: 3px;
+  white-space: nowrap;
+}
+.lm-coverage summary:hover .lm-coverage-more { text-decoration-color: var(--ui-accent); }
+.lm-coverage[open] .lm-coverage-more { color: var(--ui-text-muted); }
+.lm-coverage p { margin: 8px 0 0; max-width: 60ch; }
 .lm-hero-ctas { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3); }
+/* The hero's actions sit above the search block, so they need the space that
+   separates two decisions rather than the space between two buttons. */
+.lm-hero-copy .lm-hero-ctas { margin-bottom: var(--sp-5); }
 
 /* Hero figure — the one framed element on the page */
 .lm-mock-wrap { margin: 0; min-width: 0; }

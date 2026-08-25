@@ -59,12 +59,12 @@ const COMPANY_PAGES = [
 // What actually goes on these maps. Stated as capabilities with the nouns a
 // geologist would use, not as feature-card headlines.
 const CAPABILITIES = [
-  ['Claims and tenure', 'Search the provincial registries by tenure number, claim name or registered owner, and drop the polygons straight onto the map.'],
+  ['Mineral claims', 'Search the public registries by claim number, property name or owner, and drop the boundaries straight onto the map.'],
   ['Drill collars and intercepts', 'Import a collar table as CSV and label the holes that matter with their intercepts.'],
   ['Targets and anomalies', 'Draw target outlines, geochemical anomalies and structural trends over the claim block.'],
-  ['Infrastructure and access', 'Roads, rail, transmission corridors, ports and the nearest town — the access story a financier asks about first.'],
-  ['Your own data', 'CSV, KML, KMZ, GeoJSON and shapefiles, including the multi-file kind, with coordinates in the projection they came in.'],
-  ['Report-grade output', 'PNG, SVG, an Illustrator bundle and PDF, from the same layout you edited — including an NI 43-101 figure with a coordinate frame and title block.'],
+  ['Infrastructure and access', 'Roads, rail, transmission corridors, ports and the nearest town — show project access and nearby infrastructure at a glance.'],
+  ['Your own data', 'CSV, KML, KMZ, GeoJSON and multi-file shapefiles, with coordinates in the projection they came in.'],
+  ['Export maps for reports and presentations', 'Export PNG, SVG, Illustrator-ready SVG and PDF from the same editable layout. Technical templates include coordinate frames, scales and title blocks for use in reports.'],
 ];
 
 const AUDIENCES = [
@@ -165,7 +165,7 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
             )}
           </nav>
           <button className="lm-btn lm-btn-primary lm-nav-cta" type="button" onClick={onOpenEditor} data-track="Nav: Start Mapping">
-            Start Mapping
+            Start a map
           </button>
         </div>
       </header>
@@ -176,18 +176,26 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
           <div className="lm-hero-copy">
             <p className="lm-eyebrow"><span className="lm-eyebrow-tick" aria-hidden="true" />Mapping for mineral exploration</p>
             <h1 className="lm-h1">
-              Claim maps, drill plans and report figures — drawn from the public registries.
+              Create professional exploration maps.
             </h1>
             <p className="lm-hero-sub">
-              Look up mineral claims by tenure number, claim name or registered owner. Put them on a
-              map with your collars, targets, roads and power, and export the figure for a deck, a
-              news release or an NI 43-101 report.
+              Find mineral claims, add your project data, and export a finished map—without GIS
+              software.
             </p>
+
+            <div className="lm-hero-ctas">
+              <button className="lm-btn lm-btn-primary" type="button" onClick={onOpenEditor} data-track="Hero: Start Mapping">
+                Start a map
+              </button>
+              <button className="lm-btn lm-btn-ghost" type="button" onClick={() => scrollTo('examples')} data-track="Hero: View an example">
+                View an example
+              </button>
+            </div>
 
             {/* Lead with the lookup: the thing most visitors arrive wanting. */}
             <form className="lm-lookup" onSubmit={submitLookup}>
               <label className="lm-lookup-label" htmlFor="lm-lookup-input">
-                Look up a claim, tenure number or company
+                Search mineral claims
               </label>
               <div className="lm-lookup-row">
                 <input
@@ -196,27 +204,33 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
                   type="search"
                   value={lookup}
                   onChange={(e) => setLookup(e.target.value)}
-                  placeholder="e.g. 1078412, Dolly Varden Silver, Cedar Ridge"
+                  placeholder="Enter a claim number, property name, or owner"
                   autoComplete="off"
                 />
                 <button className="lm-btn lm-btn-primary" type="submit" data-track="Hero: Search BC Claims">
-                  Search claims
+                  Search
                 </button>
               </div>
-              <p className="lm-lookup-note">
-                B.C., plus Ontario, Saskatchewan, Manitoba, Newfoundland, Yukon and Quebec
-                {US_CLAIMS_ENABLED ? `. ${US_COVERAGE_COPY}` : '.'}
-              </p>
+              {/* One line above the fold; the jurisdiction list is real detail
+                  a few visitors need, so it sits in a disclosure rather than
+                  crowding the hero. */}
+              <details className="lm-coverage">
+                <summary>
+                  Registry search is available across seven Canadian jurisdictions
+                  {US_CLAIMS_ENABLED ? ' and for U.S. federal mining claims in 11 western states' : ''}.
+                  <span className="lm-coverage-more">Available regions</span>
+                </summary>
+                <p>
+                  Canadian coverage includes B.C., Ontario, Saskatchewan, Manitoba, Newfoundland and
+                  Labrador, Yukon and Quebec.
+                  {US_CLAIMS_ENABLED
+                    ? ' U.S. coverage includes federal BLM MLRS claims only. State-managed tenure, including Alaska state claims, is not yet available.'
+                    : ''}
+                </p>
+              </details>
             </form>
 
-            <div className="lm-hero-ctas">
-              <button className="lm-btn lm-btn-ghost" type="button" onClick={onOpenEditor} data-track="Hero: Start Mapping">
-                Start Mapping
-              </button>
-              <button className="lm-btn lm-btn-quiet" type="button" onClick={onUploadFile} data-track="Hero: Upload data">
-                Upload a CSV or shapefile
-              </button>
-            </div>
+
           </div>
 
           {/* ── A real export from the product, shown as a figure ── */}
@@ -269,7 +283,8 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
               <span className="lm-flow-n">1</span>
               <div>
                 <h2>Search or upload</h2>
-                <p>Claims by tenure number, name or owner. CSV, KML, GeoJSON and shapefiles.</p>
+                <p>Claims by claim number, property name or owner. CSV, KML, GeoJSON and shapefiles.</p>
+                <button type="button" className="lm-inline-link" onClick={onUploadFile} data-track="Hero: Upload data">Upload a CSV or shapefile →</button>
               </div>
             </li>
             <li>
@@ -283,7 +298,7 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
               <span className="lm-flow-n">3</span>
               <div>
                 <h2>Export and share</h2>
-                <p>PNG, SVG, Illustrator and PDF — or a link that opens the same map.</p>
+                <p>PNG, SVG, Illustrator-ready SVG and PDF — or a link that opens the same map.</p>
               </div>
             </li>
           </ol>
@@ -293,8 +308,8 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
         <section className="lm-proof-strip lm-reveal" id="companies" data-section="companies">
           <div className="lm-section-inner">
             <p className="lm-proof-lead">
-              Claim maps are already built from registry data for TSXV and CSE issuers —
-              open yours, then claim it to get the editable version.
+              Company claim maps are available for selected TSXV and CSE issuers.
+              Open a map, then request the editable version.
             </p>
             <ul className="lm-ticker-list">
               {COMPANY_PAGES.map((c) => (
@@ -346,8 +361,13 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
         {/* ── Capabilities ───────────────────────────────────────── */}
         <section className="lm-section lm-reveal" id="features" data-section="features">
           <div className="lm-section-inner">
-            <p className="lm-eyebrow"><span className="lm-eyebrow-tick" aria-hidden="true" />What goes on the map</p>
-            <h2 className="lm-h2">Registry data, your data, and the furniture a figure needs.</h2>
+            <p className="lm-eyebrow"><span className="lm-eyebrow-tick" aria-hidden="true" />What you can map</p>
+            <h2 className="lm-h2">Everything you need to make a project map</h2>
+            <p className="lm-section-sub">
+              Search public mineral-claim records, upload your own data, and add roads, power,
+              targets, drill holes and labels. Export the finished map for presentations, news
+              releases and technical reports.
+            </p>
             <dl className="lm-deflist">
               {CAPABILITIES.map(([term, desc]) => (
                 <div className="lm-def" key={term}>
@@ -400,7 +420,9 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
                         srcSet={`${ex.webp} 640w, ${ex.webp2x} 1000w`}
                         sizes="(max-width: 900px) 100vw, 640px"
                       />
-                      <img src={ex.img} alt={ex.label} loading="lazy" decoding="async" width="640" height="400" />
+                      {/* The <h3> below names the map; repeating it here makes
+                          a screen reader announce the same words twice. */}
+                      <img src={ex.img} alt="" loading="lazy" decoding="async" width="640" height="400" />
                     </picture>
                   </div>
                   <div className="lm-show-body">
@@ -419,10 +441,10 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
         <section className="lm-section lm-section-rule lm-reveal" data-section="comparison">
           <div className="lm-section-inner">
             <p className="lm-eyebrow"><span className="lm-eyebrow-tick" aria-hidden="true" />Why teams switch</p>
-            <h2 className="lm-h2">The revision cycle is the whole problem.</h2>
+            <h2 className="lm-h2">Keep map revisions in the same workflow.</h2>
             <div className="lm-compare">
               <div className="lm-compare-col">
-                <h3>Sending it out</h3>
+                <h3>Traditional workflow</h3>
                 <ol>
                   <li>Send data to a GIS or design contractor</li>
                   <li>Wait for a draft</li>
@@ -432,16 +454,16 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
                 </ol>
               </div>
               <div className="lm-compare-col lm-compare-col-new">
-                <h3>Doing it here</h3>
+                <h3>In Exploration Maps</h3>
                 <ol>
                   <li>Search the registry or upload the file</li>
                   <li>Edit the layers and the layout directly</li>
-                  <li>Export PNG, SVG, AI or PDF</li>
-                  <li>Reopen the same project when the data moves</li>
+                  <li>Export PNG, SVG, Illustrator-ready SVG or PDF</li>
+                  <li>Reopen the same project when the data changes</li>
                   <li>Share a link instead of emailing an image</li>
                 </ol>
                 <button className="lm-btn lm-btn-primary" type="button" onClick={onOpenEditor} data-track="Comparison: Start Mapping">
-                  Start Mapping
+                  Start a map
                 </button>
               </div>
             </div>
@@ -491,7 +513,7 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
             <h2 className="lm-h2">Put your claims on a map.</h2>
             <div className="lm-hero-ctas">
               <button className="lm-btn lm-btn-primary" type="button" onClick={onOpenEditor} data-track="Bottom CTA: Start Mapping">
-                Start Mapping
+                Start a map
               </button>
               <button className="lm-btn lm-btn-ghost" type="button" onClick={() => scrollTo('examples')} data-track="Bottom CTA: View Example Maps">
                 View example maps
@@ -525,7 +547,7 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
           <div className="lm-footer-col">
             <h3>Popular tools</h3>
             <a href="/mining-map-software/">Mining map software</a>
-            <a href="/bc-mineral-claims-map/">BC claims map</a>
+            <a href="/bc-mineral-claims-map/">B.C. claims map</a>
             <a href="/mining-claim-search-by-company-name/">Claim search by company</a>
             <a href="/drill-results-map/">Drill results map</a>
           </div>

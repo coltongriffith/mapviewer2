@@ -2000,7 +2000,14 @@ export default function App() {
         const cursorX = me.clientX - containerRect.left - sbLeft - 16;
         const cursorY = me.clientY - containerRect.top - 16;
         const row = Math.max(0, Math.min(4, Math.floor(cursorY / (rowH + 6))));
-        const col = cursorX < colW + 4 ? 0 : 1;
+        // Three targets per row, not two: the outer thirds are the left and
+        // right halves, and dropping across the middle spans the row. Without
+        // the middle band every drop landed in a column, so a legend could
+        // only ever be half the rail wide.
+        const rowW = colW * 2 + 8;
+        const col = cursorX < rowW * 0.34 ? 0
+          : cursorX > rowW * 0.66 ? 1
+            : 'full';
         currentGridSlot = { row, col };
 
         let newMapSlot = null;
@@ -2094,7 +2101,7 @@ export default function App() {
         }, []);
 
       if (isInSidebar || (isSidePanel && SP_SIDEBAR_ELEMENTS.includes(id) && currentGridSlot !== null)) {
-        const baseGrid = layoutSnapshot.sidePanelGrid || layoutSnapshot.sidePanelOrder || ['inset', 'legend', 'logo'];
+        const baseGrid = layoutSnapshot.sidePanelGrid || layoutSnapshot.sidePanelOrder || DEFAULT_SIDE_PANEL_GRID;
 
         // northArrow/scaleBar dropping to map area
         if (['northArrow', 'scaleBar'].includes(id) && currentMapSlot) {
@@ -2126,7 +2133,15 @@ export default function App() {
           while (grid.length <= row) grid.push(null);
 
           const existingRow = grid[row];
-          if (col === 0) {
+          if (col === 'full') {
+            // Spanning the row takes it over. Whatever was there moves down
+            // rather than disappearing from the rail — an element that
+            // vanished on a drop would look like data loss.
+            const displaced = (Array.isArray(existingRow) ? existingRow : [existingRow])
+              .filter((x) => x && x !== id);
+            grid[row] = id;
+            for (const d of displaced) grid.push(d);
+          } else if (col === 0) {
             if (Array.isArray(existingRow)) {
               grid[row] = [id, existingRow[1]];
             } else if (existingRow && existingRow !== id) {
@@ -6812,6 +6827,22 @@ export default function App() {
           // Sidebar grid cells (shown for all SP_SIDEBAR_ELEMENTS drags)
           if (SP_SIDEBAR_ELEMENTS.includes(dragging.id)) {
             for (let r = 0; r < 5; r++) {
+              const spanning = dragging.hoverGridSlot?.row === r && dragging.hoverGridSlot?.col === 'full';
+              if (spanning) {
+                // One cell across the row, so "this will span both columns" is
+                // visible before the drop rather than discovered after it.
+                elements.push(
+                  <div key={`cell-${r}-full`}
+                    className="sp-grid-cell sp-grid-cell--active"
+                    style={{
+                      left: sbLeft + 16,
+                      top: 16 + r * (rowH + 6),
+                      width: colW * 2 + 8,
+                      height: rowH,
+                    }} />
+                );
+                continue;
+              }
               for (let c = 0; c < 2; c++) {
                 const isHov = dragging.hoverGridSlot?.row === r && dragging.hoverGridSlot?.col === c;
                 elements.push(

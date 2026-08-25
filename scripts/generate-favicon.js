@@ -1,8 +1,26 @@
 #!/usr/bin/env node
 /**
- * Generates /public/favicon.ico (16×16 + 32×32) and /public/apple-touch-icon.png (180×180)
- * from scratch — no external deps. Design: blue (#2563eb) rounded-square background
- * with a white map-pin shape, matching the existing nav icon.
+ * Generates the favicon set from scratch — no external deps:
+ *
+ *   public/favicon.ico          16 + 32 + 48
+ *   public/favicon.svg          the mark itself, for browsers that prefer it
+ *   public/apple-touch-icon.png 180
+ *
+ * The artwork is the Claim Matrix mark from the Exploration Maps Brand
+ * Package v1.0 (public/brand/exploration-maps-mark.svg): a stepped cadastral
+ * territory in Mineral Slate, crossed by a white geological channel, with one
+ * selected claim in Claim Copper.
+ *
+ * Two brand rules are obeyed here rather than approximated:
+ *   - Below 24px the internal copper square is dropped and the mark goes
+ *     one-colour, because a 44/480 square is well under a pixel at 16px and
+ *     only muddies the silhouette.
+ *   - The tile is Map White. "Mineral Slate and Claim Copper on Map White or
+ *     white" is an approved treatment; a transparent mark would disappear
+ *     into a dark browser tab strip.
+ *
+ * Everything is drawn at 4x and box-downsampled, which anti-aliases the
+ * polygon, the stroked channel and the tile corners with one mechanism.
  */
 
 import { writeFileSync } from 'fs';
@@ -72,50 +90,134 @@ function fillRoundRect(cv, x0, y0, x1, y1, rad, r, g, b) {
   fillCircle(cv, x1 - rad, y1 - rad, rad, r, g, b);
 }
 
-// Draw a map-pin shape centred at (cx, cy) scaled to pinH tall
-function drawPin(cv, cx, cy, pinH, r, g, b) {
-  // The pin: circle on top, teardrop point at bottom
-  // Circle radius ~38% of height, centre at 35% from top
-  const circR = pinH * 0.33;
-  const circCY = cy - pinH * 0.18;
-  fillCircle(cv, cx, circCY, circR, r, g, b);
+// ─── The Claim Matrix mark ───────────────────────────────────────────────────
+//
+// Coordinates are the mark's own viewBox (480 x 520), so this file and
+// public/brand/exploration-maps-mark.svg can be checked against each other.
 
-  // Triangle body: from circle centre down to a point
-  const tipY  = cy + pinH * 0.40;
-  const bodyTop = circCY;
-  const steps = Math.ceil(tipY - bodyTop);
-  for (let i = 0; i <= steps; i++) {
-    const t = i / steps;
-    const yw = bodyTop + i;
-    // Width tapers from circR*1.1 to 0
-    const halfW = circR * 1.1 * (1 - t);
-    for (let dx = -Math.ceil(halfW); dx <= Math.ceil(halfW); dx++) {
-      const alpha = Math.max(0, Math.min(1, halfW - Math.abs(dx) + 0.5));
-      cv.set(Math.round(cx + dx), Math.round(yw), r, g, b, Math.round(alpha * 255));
+const MARK_W = 480, MARK_H = 520;
+
+// The ink, not the artboard. The mark's viewBox carries ~15% empty margin,
+// and fitting the tile to that left a 16px favicon with a mark too small to
+// read. These are the bounds of what is actually drawn: the channel's left
+// tail at x=18, the territory's right edge at 445, its top at 40 and the
+// channel's bottom at 490.
+const MARK_BOX = { x: 18, y: 40, w: 427, h: 450 };
+
+// M60 40H180V85H410V250H445V480H30V385H60Z — a rectilinear polygon, so a
+// scanline crossing test fills it exactly.
+const TERRITORY = [
+  [60, 40], [180, 40], [180, 85], [410, 85], [410, 250],
+  [445, 250], [445, 480], [30, 480], [30, 385], [60, 385],
+];
+
+// The channel and its branch into the selected claim, stroked at 22 wide.
+const CHANNEL = [
+  [[18, 180], [132, 180]],
+  [[132, 180], [205, 250]],
+  [[205, 250], [240, 250]],
+  [[240, 250], [240, 325]],
+  [[240, 325], [320, 400]],
+  [[320, 400], [320, 490]],
+  [[205, 250], [260, 195]],
+];
+const CHANNEL_HALF = 11;
+
+const SLATE = [0x14, 0x21, 0x26];
+const COPPER = [0xc6, 0x53, 0x22];
+const MAP_WHITE = [0xfc, 0xfb, 0xf7];
+const CHANNEL_WHITE = [0xff, 0xff, 0xff];
+
+function insidePolygon(px, py, poly) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i];
+    const [xj, yj] = poly[j];
+    if ((yi > py) !== (yj > py) && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+function nearSegment(px, py, [[x1, y1], [x2, y2]], half) {
+  const dx = x2 - x1, dy = y2 - y1;
+  const len2 = dx * dx + dy * dy;
+  const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / len2));
+  const qx = x1 + t * dx, qy = y1 + t * dy;
+  return (px - qx) ** 2 + (py - qy) ** 2 <= half * half;
+}
+
+/** Paint the mark into `cv`, fitted into the box at (ox, oy) with the given scale. */
+function drawMark(cv, ox, oy, scale, { copper }) {
+  const x0 = Math.floor(ox), x1 = Math.ceil(ox + MARK_W * scale);
+  const y0 = Math.floor(oy), y1 = Math.ceil(oy + MARK_H * scale);
+
+  for (let y = y0; y < y1; y++) {
+    for (let x = x0; x < x1; x++) {
+      // Sample at the pixel centre, in mark coordinates.
+      const mx = (x + 0.5 - ox) / scale;
+      const my = (y + 0.5 - oy) / scale;
+
+      let colour = null;
+      if (insidePolygon(mx, my, TERRITORY)) colour = SLATE;
+
+      // The channel is drawn over the territory, exactly as the SVG stacks it.
+      if (CHANNEL.some((seg) => nearSegment(mx, my, seg, CHANNEL_HALF))) colour = CHANNEL_WHITE;
+
+      // Claim chamber, then the selected parcel inside it.
+      if (mx >= 250 && mx < 340 && my >= 145 && my < 235) colour = CHANNEL_WHITE;
+      if (copper && mx >= 273 && mx < 317 && my >= 168 && my < 212) colour = COPPER;
+
+      if (colour) cv.set(x, y, colour[0], colour[1], colour[2], 255);
     }
   }
-
-  // Punch inner circle (hole) for classic pin look
-  const holeR = circR * 0.38;
-  fillCircle(cv, cx, circCY, holeR, 0x25, 0x63, 0xeb); // bg colour
 }
 
 // ─── Render at a given size ───────────────────────────────────────────────────
 
-function renderIcon(size) {
+const SS = 4; // supersample factor
+
+function downsample(hi, size) {
   const cv = makeCanvas(size, size);
-  const pad = size * 0.07;
-  const rad = size * 0.22;
-  // Blue background
-  fillRoundRect(cv, Math.round(pad), Math.round(pad),
-                    Math.round(size - pad), Math.round(size - pad),
-                    Math.round(rad), 0x25, 0x63, 0xeb);
-  // White pin
-  const pinH = size * 0.58;
-  const cx = size / 2;
-  const cy = size / 2 + size * 0.03;
-  drawPin(cv, cx, cy, pinH, 255, 255, 255);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      let r = 0, g = 0, b = 0, a = 0;
+      for (let sy = 0; sy < SS; sy++) {
+        for (let sx = 0; sx < SS; sx++) {
+          const i = ((y * SS + sy) * hi.w + (x * SS + sx)) * 4;
+          const pa = hi.buf[i + 3] / 255;
+          r += hi.buf[i] * pa; g += hi.buf[i + 1] * pa; b += hi.buf[i + 2] * pa; a += pa;
+        }
+      }
+      const n = SS * SS;
+      const i = (y * size + x) * 4;
+      cv.buf[i]     = a > 0 ? Math.round(r / a) : 0;
+      cv.buf[i + 1] = a > 0 ? Math.round(g / a) : 0;
+      cv.buf[i + 2] = a > 0 ? Math.round(b / a) : 0;
+      cv.buf[i + 3] = Math.round((a / n) * 255);
+    }
+  }
   return cv;
+}
+
+const TILE_PAD = 0.11;   // share of the tile edge left clear around the mark
+const TILE_RADIUS = 0.16;
+
+function renderIcon(size) {
+  const W = size * SS;
+  const hi = makeCanvas(W, W);
+
+  // Map White tile. Rounded just enough to read as an icon rather than a crop.
+  fillRoundRect(hi, 0, 0, W, W, Math.round(W * TILE_RADIUS), MAP_WHITE[0], MAP_WHITE[1], MAP_WHITE[2]);
+
+  // Fit the drawn mark into the tile (xMidYMid meet).
+  const inner = W * (1 - TILE_PAD * 2);
+  const scale = Math.min(inner / MARK_BOX.w, inner / MARK_BOX.h);
+  // drawMark works in viewBox coordinates, so offset by the box origin.
+  const ox = (W - MARK_BOX.w * scale) / 2 - MARK_BOX.x * scale;
+  const oy = (W - MARK_BOX.h * scale) / 2 - MARK_BOX.y * scale;
+
+  drawMark(hi, ox, oy, scale, { copper: size >= 24 });
+  return downsample(hi, size);
 }
 
 // ─── PNG encoder (minimal, no compression — uses deflate store) ──────────────
@@ -236,15 +338,35 @@ function encodeICO(sizes) {
 
 const png16  = encodePNG(renderIcon(16));
 const png32  = encodePNG(renderIcon(32));
+const png48  = encodePNG(renderIcon(48));
 const png180 = encodePNG(renderIcon(180));
 
 const ico = encodeICO([
   { size: 16, pngData: png16 },
   { size: 32, pngData: png32 },
+  { size: 48, pngData: png48 },
 ]);
 
+// The vector favicon: the same mark, on the same tile, for browsers that take
+// one. Kept in step with the raster sizes above by construction.
+// The nested <svg> does the same fit the raster path does — content box into
+// a padded tile — without a hand-computed transform to keep in step.
+const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 480" role="img" aria-label="Exploration Maps">
+  <rect width="480" height="480" rx="${Math.round(480 * TILE_RADIUS)}" fill="#fcfbf7"/>
+  <svg x="${480 * TILE_PAD}" y="${480 * TILE_PAD}" width="${480 * (1 - TILE_PAD * 2)}" height="${480 * (1 - TILE_PAD * 2)}" viewBox="${MARK_BOX.x} ${MARK_BOX.y} ${MARK_BOX.w} ${MARK_BOX.h}" preserveAspectRatio="xMidYMid meet" overflow="visible">
+    <path fill="#142126" d="M60 40H180V85H410V250H445V480H30V385H60Z"/>
+    <path fill="none" stroke="#ffffff" stroke-width="22" stroke-linecap="butt" stroke-linejoin="miter" d="M18 180H132L205 250H240V325L320 400V490"/>
+    <path fill="none" stroke="#ffffff" stroke-width="22" stroke-linecap="butt" stroke-linejoin="miter" d="M205 250L260 195"/>
+    <rect x="250" y="145" width="90" height="90" fill="#ffffff"/>
+    <rect x="273" y="168" width="44" height="44" fill="#c65322"/>
+  </svg>
+</svg>
+`;
+
 writeFileSync(join(OUT, 'favicon.ico'), ico);
+writeFileSync(join(OUT, 'favicon.svg'), svg);
 writeFileSync(join(OUT, 'apple-touch-icon.png'), png180);
 
-console.log('✓ public/favicon.ico (16×16 + 32×32)');
+console.log('✓ public/favicon.ico (16 + 32 + 48)');
+console.log('✓ public/favicon.svg');
 console.log('✓ public/apple-touch-icon.png (180×180)');
