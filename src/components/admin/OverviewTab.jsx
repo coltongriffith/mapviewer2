@@ -65,29 +65,29 @@ export default function OverviewTab({ data, loading, range, onRange, onPickDay, 
     <>
       {/* Row 1 — 6 KPI tiles */}
       <div className="admx-tile-row">
-        <StatTile label="Active today" tip={METRIC_DEFS.active_today} accent="#2563eb" loading={loading}
+        <StatTile label="Active today" tip={METRIC_DEFS.active_today} accent="#142126" loading={loading}
           value={fmtNum(k.active_today ?? 0)}
           detail={`yesterday ${fmtNum(k.active_yesterday ?? 0)} · 7d avg ${k.active_7d_avg ?? 0}`}
           spark={<Sparkline points={spark.active} />} />
-        <StatTile label="New signups" tip={METRIC_DEFS.new_signups} accent="#6366f1" loading={loading}
+        <StatTile label="New signups" tip={METRIC_DEFS.new_signups} accent="#176b87" loading={loading}
           value={fmtNum(k.signups?.cur ?? 0)}
           delta={<DeltaChip cur={k.signups?.cur} prior={k.signups?.prev} />}
-          spark={<Sparkline points={spark.signups} accent="#6366f1" />}
+          spark={<Sparkline points={spark.signups} accent="#176b87" />}
           detail={`vs ${fmtNum(k.signups?.prev ?? 0)} prior`} />
-        <StatTile label="Activated" tip={METRIC_DEFS.activated} accent="#16a34a" loading={loading}
+        <StatTile label="Activated" tip={METRIC_DEFS.activated} accent="#287454" loading={loading}
           value={activatedRate.text}
           detail={`${fmtNum(k.activated?.pending ?? 0)} pending (signed up <7d ago)`} />
-        <StatTile label="Meaningful actions" tip={METRIC_DEFS.meaningful_actions} accent="#0ea5e9" loading={loading}
+        <StatTile label="Meaningful actions" tip={METRIC_DEFS.meaningful_actions} accent="#435459" loading={loading}
           value={<>{fmtNum(k.actions?.cur ?? 0)} <span className="admx-tile-sub">· {fmtNum(k.actions?.users ?? 0)} users</span></>}
           delta={<DeltaChip cur={k.actions?.cur} prior={k.actions?.prev} />}
-          spark={<Sparkline points={spark.actions} accent="#0ea5e9" />}
+          spark={<Sparkline points={spark.actions} accent="#435459" />}
           detail={actionKinds || 'no value actions yet'} />
-        <StatTile label="Maps & exports" tip={METRIC_DEFS.maps_exports} accent="#8b5cf6" loading={loading}
+        <StatTile label="Maps & exports" tip={METRIC_DEFS.maps_exports} accent="#c65322" loading={loading}
           value={<>{fmtNum(k.maps?.created ?? 0)} <span className="admx-tile-sub">created · {fmtNum(k.maps?.exports ?? 0)} exports</span></>}
           delta={<DeltaChip cur={k.maps?.exports} prior={k.maps?.prev_exports} />}
-          spark={<Sparkline points={spark.exports} accent="#8b5cf6" />}
+          spark={<Sparkline points={spark.exports} accent="#c65322" />}
           detail={Number(k.maps?.failures) > 0 ? <span className="admx-feed-warn">{k.maps.failures} failed export{k.maps.failures === 1 ? '' : 's'}</span> : `${fmtNum(k.maps?.worked_on ?? 0)} worked on`} />
-        <StatTile label="Returning users" tip={METRIC_DEFS.returning} accent="#0891b2" loading={loading}
+        <StatTile label="Returning users" tip={METRIC_DEFS.returning} accent="#5f6e72" loading={loading}
           value={formatRate(k.returning?.cur, k.returning?.of_active).text}
           delta={<DeltaChip cur={k.returning?.cur} prior={k.returning?.prev} />}
           detail="active who came back on a later day" />

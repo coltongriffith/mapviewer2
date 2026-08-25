@@ -41,7 +41,7 @@ export const COLOUR_BY = [
 // distinguishable against the light basemap and from each other.
 const CATEGORY_COLOURS = [
   '#2563eb', '#7c3aed', '#0891b2', '#65a30d', '#ca8a04',
-  '#dc2626', '#db2777', '#0f766e', '#4338ca', '#a16207',
+  '#aa3e3e', '#db2777', '#0f766e', '#4338ca', '#a16207',
 ];
 
 function categoryKey(row, mode) {
@@ -67,9 +67,9 @@ function styleFor(row, mode, categoryIndex, now, changesByTenure) {
   }
   if (mode === 'change') {
     const change = changesByTenure.get(row.tenure.id);
-    if (!change) return { colour: '#94a3b8', hatch: false };
+    if (!change) return { colour: '#7c898c', hatch: false };
     return {
-      colour: change.severity === 'critical' ? '#dc2626' : '#d97706',
+      colour: change.severity === 'critical' ? '#aa3e3e' : '#9a6715',
       hatch: change.severity === 'critical',
     };
   }
@@ -173,7 +173,7 @@ export default function TenureMap({
 
       const layer = L.geoJSON({ type: 'Feature', properties: {}, geometry }, {
         style: {
-          color: selected ? '#0f172a' : colour,
+          color: selected ? '#142126' : colour,
           weight: selected ? 3 : 1.5,
           opacity: 1,
           fillColor: colour,

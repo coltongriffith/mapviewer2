@@ -70,7 +70,7 @@ export default function ColumnMapperModal({ headers, rows, filename, onImport, o
           <strong>{filename}</strong> — tell us which columns hold the coordinates. We've pre-selected our best guess.
         </p>
         {hint && (
-          <p className="export-hd-desc" style={{ marginBottom: 12, background: '#fef9c3', border: '1px solid #fde047', borderRadius: 8, padding: '8px 12px', color: '#713f12' }}>
+          <p className="export-hd-desc" style={{ marginBottom: 12, background: 'var(--ui-surface-subtle)', border: '1px solid var(--ui-border)', borderLeft: '3px solid var(--ui-warning)', borderRadius: 'var(--r-md)', padding: '8px 12px', color: 'var(--ui-text)' }}>
             {hint}
           </p>
         )}
@@ -79,10 +79,10 @@ export default function ColumnMapperModal({ headers, rows, filename, onImport, o
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr>
-                <th style={{ textAlign: 'left', padding: '4px 8px', borderBottom: '1px solid #e2e8f0' }}>Column</th>
-                <th style={{ textAlign: 'left', padding: '4px 8px', borderBottom: '1px solid #e2e8f0' }}>Role</th>
+                <th style={{ textAlign: 'left', padding: '4px 8px', borderBottom: '1px solid var(--ui-border)' }}>Column</th>
+                <th style={{ textAlign: 'left', padding: '4px 8px', borderBottom: '1px solid var(--ui-border)' }}>Role</th>
                 {preview.map((_, i) => (
-                  <th key={i} style={{ textAlign: 'left', padding: '4px 8px', borderBottom: '1px solid #e2e8f0', color: '#64748b' }}>
+                  <th key={i} style={{ textAlign: 'left', padding: '4px 8px', borderBottom: '1px solid var(--ui-border)', color: 'var(--ui-text-muted)' }}>
                     Row {i + 1}
                   </th>
                 ))}
@@ -90,7 +90,7 @@ export default function ColumnMapperModal({ headers, rows, filename, onImport, o
             </thead>
             <tbody>
               {headers.map((h) => (
-                <tr key={h} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                <tr key={h} style={{ borderBottom: '1px solid var(--em-slate-100)' }}>
                   <td style={{ padding: '4px 8px', fontWeight: 500, whiteSpace: 'nowrap' }}>{h}</td>
                   <td style={{ padding: '4px 8px' }}>
                     <select
@@ -104,7 +104,7 @@ export default function ColumnMapperModal({ headers, rows, filename, onImport, o
                     </select>
                   </td>
                   {preview.map((row, i) => (
-                    <td key={i} style={{ padding: '4px 8px', color: '#475569', whiteSpace: 'nowrap' }}>
+                    <td key={i} style={{ padding: '4px 8px', color: 'var(--ui-text-muted)', whiteSpace: 'nowrap' }}>
                       {row[h] ?? ''}
                     </td>
                   ))}

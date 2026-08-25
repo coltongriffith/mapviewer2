@@ -40,7 +40,7 @@ export default function HealthTab({ data, loading, error }) {
             <div className="admx-eyebrow">Last {hours}h</div>
             <h3 className="adm-card-title">
               Errors{' '}
-              <span style={{ color: total > 0 ? '#dc2626' : '#16a34a' }}>
+              <span style={{ color: total > 0 ? '#aa3e3e' : '#287454' }}>
                 {fmtNum(total)}
               </span>
             </h3>
@@ -48,7 +48,7 @@ export default function HealthTab({ data, loading, error }) {
         </div>
 
         {groups.length === 0 ? (
-          <p className="adm-empty" style={{ color: '#16a34a' }}>
+          <p className="adm-empty" style={{ color: '#287454' }}>
             No errors reported in the last {hours} hours.
           </p>
         ) : (

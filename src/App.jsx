@@ -398,7 +398,7 @@ function LegendLabelEditable({ label, onSave }) {
         onBlur={commit}
         onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); if (e.key === 'Escape') { setDraft(label); setEditing(false); } }}
         onClick={(e) => e.stopPropagation()}
-        style={{ font: 'inherit', fontSize: 'inherit', border: 'none', background: 'transparent', outline: '1px solid #3b82f6', borderRadius: 2, padding: '0 2px', width: '100%', minWidth: 40 }}
+        style={{ font: 'inherit', fontSize: 'inherit', border: 'none', background: 'transparent', outline: '1px solid var(--ui-focus)', borderRadius: 2, padding: '0 2px', width: '100%', minWidth: 40 }}
       />
     );
   }
@@ -2605,7 +2605,7 @@ export default function App() {
       origin = e.latlng;
       map.dragging.disable();
       box = L.rectangle([origin, origin], {
-        className: 'trim-select-box', color: '#dc2626', weight: 1, dashArray: '4,3', fillOpacity: 0.08,
+        className: 'trim-select-box', color: '#c65322', weight: 1, dashArray: '4,3', fillOpacity: 0.08,
       }).addTo(map);
     };
 
@@ -2670,7 +2670,7 @@ export default function App() {
     }
     if (!areaClaimsPickCenter || !mapReady || !leafletMapRef.current) return;
     const pin = L.circleMarker([areaClaimsPickCenter.lat, areaClaimsPickCenter.lng], {
-      radius: 7, color: '#1d4ed8', fillColor: '#3b82f6', fillOpacity: 0.85, weight: 2,
+      radius: 7, color: '#a8451c', fillColor: '#c65322', fillOpacity: 0.85, weight: 2,
     }).bindTooltip('Claims search origin', { direction: 'top', offset: [0, -8] });
     pin.addTo(leafletMapRef.current);
     areaClaimsPinRef.current = pin;
@@ -5813,7 +5813,7 @@ export default function App() {
                         className={`north-arrow-style-btn${(project.layout.northArrowStyle || 'classic') === key ? ' active' : ''}`}
                         onClick={() => updateLayout({ northArrowStyle: key })}
                         title={label}>
-                        <NorthArrow scale={40} style={key} />
+                        <NorthArrow scale={52} style={key} />
                         <span>{label}</span>
                       </button>
                     ))}

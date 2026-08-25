@@ -27,14 +27,14 @@ const Card = ({ title, tip, eyebrow, count, children, full }) => (
 // and wrong; what matters is how long ago the stored data was last known good.
 
 const RUN_STATUS_COLOR = {
-  succeeded: '#16a34a',
-  running: '#0891b2',
-  aborted: '#d97706',   // stopped on purpose, data intact
-  failed: '#dc2626',
+  succeeded: '#287454',
+  running: '#176b87',
+  aborted: '#9a6715',   // stopped on purpose, data intact
+  failed: '#aa3e3e',
 };
 
 function RunStatus({ status, alertsSafe }) {
-  const color = RUN_STATUS_COLOR[status] || '#64748b';
+  const color = RUN_STATUS_COLOR[status] || '#5f6e72';
   return (
     <span className="admx-badge" style={{ color, background: `${color}1a` }}>
       {status}
@@ -109,7 +109,7 @@ export default function TenureTab({ data, loading, onReload }) {
       <div className="admx-tile-row">
         <StatTile
           label="Last successful sync"
-          accent={syncStale ? '#dc2626' : '#16a34a'}
+          accent={syncStale ? '#aa3e3e' : '#287454'}
           value={last?.completed_at ? relTime(last.completed_at) : 'never'}
           detail={last
             ? `${fmtNum(last.records_processed)} records · ${fmtNum(last.records_rejected)} rejected`
@@ -117,19 +117,19 @@ export default function TenureTab({ data, loading, onReload }) {
           tip="The age of the data customers are looking at. A failed run does not replace
                stored records, so this is what actually matters — not the last attempt."
         />
-        <StatTile label="Tenures held" accent="#2563eb" value={fmtNum(data?.tenure_count)}
+        <StatTile label="Tenures held" accent="#142126" value={fmtNum(data?.tenure_count)}
           detail={`${fmtNum(data?.owner_count)} owner records`} />
         <StatTile
           label="Not in latest dataset"
-          accent={data?.not_observed_count ? '#d97706' : '#64748b'}
+          accent={data?.not_observed_count ? '#9a6715' : '#5f6e72'}
           value={fmtNum(data?.not_observed_count)}
           detail="absent from 2+ successful imports"
           tip="Not evidence of a lapse — these are titles worth investigating in MTO." />
-        <StatTile label="Reminders due now" accent="#0891b2" value={fmtNum(alerts.due_now)}
+        <StatTile label="Reminders due now" accent="#176b87" value={fmtNum(alerts.due_now)}
           detail={`${fmtNum(alerts.pending)} scheduled · ${fmtNum(alerts.sent_7d)} sent in 7d`} />
         <StatTile
           label="Failed reminders"
-          accent={alerts.failed ? '#dc2626' : '#64748b'}
+          accent={alerts.failed ? '#aa3e3e' : '#5f6e72'}
           value={fmtNum(alerts.failed)}
           detail={`${fmtNum(alerts.suppressed)} held pending a clean import`} />
       </div>
@@ -196,7 +196,7 @@ export default function TenureTab({ data, loading, onReload }) {
                     <td><RunStatus status={r.status} alertsSafe={r.alerts_safe} /></td>
                     <td>{fmtNum(r.records_received)}</td>
                     <td>{fmtNum(r.records_processed)}</td>
-                    <td style={{ color: r.records_rejected > 0 ? '#d97706' : undefined }}>
+                    <td style={{ color: r.records_rejected > 0 ? '#9a6715' : undefined }}>
                       {fmtNum(r.records_rejected)}
                     </td>
                     <td>{fmtNum(r.material_changes_detected)}</td>
@@ -262,7 +262,7 @@ export default function TenureTab({ data, loading, onReload }) {
                     <tr key={p.portfolio_id}>
                       <td>{p.name}</td>
                       <td>{p.plan}</td>
-                      <td style={{ color: nearLimit ? '#d97706' : undefined }}>
+                      <td style={{ color: nearLimit ? '#9a6715' : undefined }}>
                         {p.monitored} / {limit}
                         {nearLimit && ' — near limit'}
                       </td>

@@ -53,13 +53,13 @@ export default function ProductTab({ data, loading, range }) {
 
       <div className="admx-grid-3">
         <Card title="Claim imports by province">
-          <HBarsV2 color="#0ea5e9" rows={(data?.registry_imports || []).map((r) => ({ label: r.province, value: r.imports, sub: `${fmtNum(r.features)} claims` }))} />
+          <HBarsV2 color="#435459" rows={(data?.registry_imports || []).map((r) => ({ label: r.province, value: r.imports, sub: `${fmtNum(r.features)} claims` }))} />
         </Card>
         <Card title="Annotations by type">
-          <HBarsV2 color="#8b5cf6" rows={(data?.elements || []).map((r) => ({ label: r.type, value: r.sessions, sub: 'sessions' }))} />
+          <HBarsV2 color="#5f6e72" rows={(data?.elements || []).map((r) => ({ label: r.type, value: r.sessions, sub: 'sessions' }))} />
         </Card>
         <Card title="Layers by source">
-          <HBarsV2 color="#6366f1" rows={(data?.layer_sources || []).map((r) => ({ label: r.source, value: r.count }))} />
+          <HBarsV2 color="#176b87" rows={(data?.layer_sources || []).map((r) => ({ label: r.source, value: r.count }))} />
         </Card>
       </div>
 

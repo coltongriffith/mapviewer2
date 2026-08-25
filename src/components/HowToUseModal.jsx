@@ -466,7 +466,7 @@ export default function HowToUseModal({ onClose }) {
           <section id="tips">
             <h2>Tips & Best Practices</h2>
             <h3>Recommended workflow for a new map</h3>
-            <ol style={{ paddingLeft: 20, lineHeight: 1.9, fontSize: 14, color: '#374151' }}>
+            <ol style={{ paddingLeft: 20, lineHeight: 1.9, fontSize: 14, color: 'var(--ui-text-muted)' }}>
               <li>Import your data layers and assign roles</li>
               <li>Choose a basemap and design theme</li>
               <li>Select a template mode that matches your map purpose</li>

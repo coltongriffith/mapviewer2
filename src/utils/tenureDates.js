@@ -170,6 +170,10 @@ export function addDays(iso, days) {
 
 // ── Urgency bands ──────────────────────────────────────────────────────────
 //
+// The ramp runs deep red -> amber -> olive -> green in the brand's muted
+// register, and deliberately avoids Claim Copper: copper means SELECTION
+// everywhere else, so an urgency band the colour of copper would lie.
+//
 // Both a colour AND a label/icon are carried here, because urgency must never
 // be communicated by colour alone (WCAG 1.4.1). The table view renders the
 // label, the map renders colour + pattern + the same label in its legend.
@@ -180,7 +184,7 @@ export const URGENCY_BANDS = [
     label: 'Expired or inactive',
     shortLabel: 'Expired',
     icon: '■',
-    color: '#7f1d1d',
+    color: '#6f2626',
     textColor: '#ffffff',
     description: 'The good-to-date has passed, or the title is not active.',
   },
@@ -189,7 +193,7 @@ export const URGENCY_BANDS = [
     label: '0–7 days',
     shortLabel: '0–7 d',
     icon: '▲',
-    color: '#dc2626',
+    color: '#a3342f',
     textColor: '#ffffff',
     description: 'Reaches its good-to-date within a week.',
   },
@@ -198,7 +202,7 @@ export const URGENCY_BANDS = [
     label: '8–30 days',
     shortLabel: '8–30 d',
     icon: '▲',
-    color: '#ea580c',
+    color: '#b0691a',
     textColor: '#ffffff',
     description: 'Reaches its good-to-date within a month.',
   },
@@ -207,7 +211,7 @@ export const URGENCY_BANDS = [
     label: '31–90 days',
     shortLabel: '31–90 d',
     icon: '●',
-    color: '#d97706',
+    color: '#8a7526',
     textColor: '#ffffff',
     description: 'Reaches its good-to-date within three months.',
   },
@@ -216,7 +220,7 @@ export const URGENCY_BANDS = [
     label: '91–180 days',
     shortLabel: '91–180 d',
     icon: '●',
-    color: '#65a30d',
+    color: '#5c7a36',
     textColor: '#ffffff',
     description: 'Reaches its good-to-date within six months.',
   },
@@ -225,7 +229,7 @@ export const URGENCY_BANDS = [
     label: 'More than 180 days',
     shortLabel: '180+ d',
     icon: '○',
-    color: '#16a34a',
+    color: '#287454',
     textColor: '#ffffff',
     description: 'No deadline inside the next six months.',
   },
@@ -234,7 +238,7 @@ export const URGENCY_BANDS = [
     label: 'Date unavailable — verify in MTO',
     shortLabel: 'No date',
     icon: '?',
-    color: '#64748b',
+    color: '#5f6e72',
     textColor: '#ffffff',
     description: 'The B.C. source did not publish a usable good-to-date for this title.',
   },
