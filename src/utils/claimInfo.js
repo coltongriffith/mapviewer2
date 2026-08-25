@@ -64,5 +64,5 @@ export function claimPopupRowsHtml(props, ownerName = null) {
     + row('Good until', s.goodTo)
     + (isUs ? row('Claimant', s.owner ? null : 'Not available in BLM spatial data') : '')
     + (isUs ? row('Source', 'BLM MLRS (federal)') : '')
-    + (s.generalized ? `<div class="acp-row acp-disclaimer" style="margin-top:6px;font-size:11px;color:#94a3b8">${esc(US_DISCLAIMER)}</div>` : '');
+    + (s.generalized ? `<div class="acp-row acp-disclaimer" style="margin-top:6px;font-size:11px;color:#7c898c">${esc(US_DISCLAIMER)}</div>` : '');
 }

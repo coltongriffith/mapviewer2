@@ -60,7 +60,7 @@ export default function ExportHDModal({
         id="hd-pdf-size"
         value={pdfSize}
         onChange={(e) => setPdfSize(e.target.value)}
-        style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1.5px solid #e2e8f0', fontSize: 14 }}
+        style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1.5px solid var(--ui-border)', fontSize: 14 }}
       >
         {Object.entries(PDF_SIZES).map(([key, val]) => (
           <option key={key} value={key}>{val.label} ({val.w}" × {val.h}")</option>

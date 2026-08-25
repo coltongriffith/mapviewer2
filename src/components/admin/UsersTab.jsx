@@ -4,9 +4,9 @@ import { METRIC_DEFS, formatRate, fmtNum, fmtDate, relTime } from './metrics';
 
 const PLAN_SOURCE_LABEL = { stripe: 'Paid', grandfathered: 'Grandfathered', admin: 'Admin-granted' };
 function PlanChip({ plan, source, status }) {
-  if (plan !== 'pro') return <span className="admx-badge" style={{ color: '#64748b', background: '#64748b1a' }}>Free</span>;
+  if (plan !== 'pro') return <span className="admx-badge" style={{ color: '#5f6e72', background: '#5f6e721a' }}>Free</span>;
   const bad = status && !['active', 'trialing'].includes(status);
-  const color = bad ? '#dc2626' : '#16a34a';
+  const color = bad ? '#aa3e3e' : '#287454';
   return (
     <span className="admx-badge" style={{ color, background: `${color}1a` }} title={status}>
       Pro · {PLAN_SOURCE_LABEL[source] || source || '—'}
@@ -72,11 +72,11 @@ export default function UsersTab({ data, loading, detail, onLoadDetail, onOpenSe
           }} />
         </Card>
         <div className="admx-mini-tiles">
-          <StatTile label="Returning this week" accent="#0891b2"
+          <StatTile label="Returning this week" accent="#176b87"
             value={formatRate(data?.returning_week?.n, data?.returning_week?.of).text}
             detail="active this week who used it before" />
           {Number(data?.activated_count) >= 5 && (
-            <StatTile label="Median days → first value" accent="#16a34a"
+            <StatTile label="Median days → first value" accent="#287454"
               value={data?.median_days_to_value != null ? `${data.median_days_to_value}d` : '—'}
               detail="signup to first meaningful action" />
           )}

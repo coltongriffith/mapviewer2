@@ -24,7 +24,7 @@ export function DeltaChip({ cur, prior, goodDirection = 'up' }) {
 }
 
 // ── Sparkline: up to 14 points, no axes; hidden when <3 nonzero points ───────
-export function Sparkline({ points = [], accent = '#2563eb' }) {
+export function Sparkline({ points = [], accent = '#142126' }) {
   const vals = points.map((p) => (typeof p === 'number' ? p : Number(p?.value) || 0));
   const nonzero = vals.filter((v) => v > 0).length;
   if (nonzero < 3) return <span className="admx-spark-empty" aria-hidden="true" />;
@@ -43,7 +43,7 @@ export function Sparkline({ points = [], accent = '#2563eb' }) {
 }
 
 // ── StatTile: label+InfoTip · value · DeltaChip · Sparkline · detail ─────────
-export function StatTile({ label, tip, value, loading, delta, spark, detail, accent = '#2563eb' }) {
+export function StatTile({ label, tip, value, loading, delta, spark, detail, accent = '#142126' }) {
   return (
     <div className="admx-tile" style={{ '--admx-accent': accent }}>
       <div className="admx-tile-head">
@@ -124,7 +124,7 @@ export function ColumnChart({ series = [], onPick }) {
       <svg viewBox={`0 0 ${W} ${H}`} className="admx-col" role="img" aria-label="Daily active users">
         {ticks.map((t) => (
           <g key={t}>
-            <line x1={padL} x2={W - padR} y1={y(t)} y2={y(t)} stroke="#eef2f7" />
+            <line x1={padL} x2={W - padR} y1={y(t)} y2={y(t)} stroke="var(--em-slate-100, #edf1f0)" />
             <text x={0} y={y(t) + 3} className="admx-col-tick">{t}</text>
           </g>
         ))}
@@ -138,9 +138,9 @@ export function ColumnChart({ series = [], onPick }) {
               onClick={() => onPick?.(String(s.d).slice(0, 10))} style={{ cursor: onPick ? 'pointer' : 'default' }} />
           );
         })}
-        <path d={sessPath} fill="none" stroke="#cbd5e1" strokeWidth="1.5" />
+        <path d={sessPath} fill="none" stroke="var(--em-slate-300, #c6cecf)" strokeWidth="1.5" />
         {hasSignups && series.map((s, i) => (Number(s.signups) > 0
-          ? <circle key={i} cx={x(i)} cy={y(Number(s.active_users) || 0)} r="2" fill="#6366f1" /> : null))}
+          ? <circle key={i} cx={x(i)} cy={y(Number(s.active_users) || 0)} r="2" fill="#176b87" /> : null))}
       </svg>
       {hover != null && (
         <div className="admx-col-tip">
@@ -159,7 +159,19 @@ export function ColumnChart({ series = [], onPick }) {
 }
 
 // ── RetentionLadder: one stacked bar of all accounts by recency bucket ───────
-const LADDER_COLORS = ['#1e40af', '#3b82f6', '#93c5fd', '#cbd5e1', '#fca5a5'];
+// One recency ramp, dark = most recent, with only the lapsed tail warmed so
+// the eye lands on it. A five-hue rainbow implied five unrelated categories.
+//
+// Each step carries its own ink: the count sits inside the segment, and white
+// on the two pale steps is unreadable.
+const LADDER_STEPS = [
+  { fill: '#142126', ink: '#ffffff' },
+  { fill: '#435459', ink: '#ffffff' },
+  { fill: '#7c898c', ink: '#ffffff' },
+  { fill: '#c6cecf', ink: '#142126' },
+  { fill: '#e5c3b2', ink: '#142126' },
+];
+const LADDER_FALLBACK = { fill: '#dde3e3', ink: '#142126' };
 export function RetentionLadder({ buckets = [], onPick }) {
   const total = buckets.reduce((s, b) => s + (Number(b.count) || 0), 0);
   if (!total) return <EmptyHint>No registered users yet. Signups will bucket here by how recently they did meaningful work.</EmptyHint>;
@@ -172,7 +184,12 @@ export function RetentionLadder({ buckets = [], onPick }) {
           const pct = (c / total) * 100;
           return (
             <div key={b.bucket} className="admx-ladder-seg" title={`${b.bucket}: ${c}`}
-              style={{ width: `${pct}%`, background: LADDER_COLORS[i] || '#e2e8f0', cursor: onPick ? 'pointer' : 'default' }}
+              style={{
+                width: `${pct}%`,
+                background: (LADDER_STEPS[i] || LADDER_FALLBACK).fill,
+                color: (LADDER_STEPS[i] || LADDER_FALLBACK).ink,
+                cursor: onPick ? 'pointer' : 'default',
+              }}
               onClick={() => onPick?.(b.bucket)}>
               {pct > 9 ? c : ''}
             </div>
@@ -182,7 +199,7 @@ export function RetentionLadder({ buckets = [], onPick }) {
       <div className="admx-ladder-legend">
         {buckets.map((b, i) => (
           <span key={b.bucket} className="admx-ladder-key">
-            <i style={{ background: LADDER_COLORS[i] || '#e2e8f0' }} />{b.bucket} <strong>{fmtNum(b.count)}</strong>
+            <i style={{ background: (LADDER_STEPS[i] || LADDER_FALLBACK).fill }} />{b.bucket} <strong>{fmtNum(b.count)}</strong>
           </span>
         ))}
       </div>
@@ -218,7 +235,7 @@ export function FunnelV2({ steps = [], unit = 'users', onPickStage }) {
 }
 
 // ── HBars: horizontal bars with "n · by k users" secondary ───────────────────
-export function HBarsV2({ rows = [], color = '#2563eb', empty }) {
+export function HBarsV2({ rows = [], color = '#142126', empty }) {
   const max = Math.max(...rows.map((r) => Number(r.value) || 0), 1);
   if (!rows.length) return empty || <EmptyHint>No data in this window yet.</EmptyHint>;
   return (

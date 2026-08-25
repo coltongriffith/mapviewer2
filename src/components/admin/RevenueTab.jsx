@@ -19,11 +19,11 @@ function fmtMoney(cents, currency = 'USD') {
 }
 
 const SOURCE_LABEL = { stripe: 'Paid', grandfathered: 'Grandfathered', admin: 'Admin-granted' };
-const STATUS_COLOR = { active: '#16a34a', trialing: '#0891b2', past_due: '#d97706', canceled: '#64748b', incomplete: '#94a3b8' };
+const STATUS_COLOR = { active: '#287454', trialing: '#176b87', past_due: '#9a6715', canceled: '#5f6e72', incomplete: '#7c898c' };
 
 function PlanBadge({ plan, source, status }) {
-  if (plan !== 'pro') return <span className="admx-badge" style={{ color: '#64748b', background: '#64748b1a' }}>Free</span>;
-  const color = STATUS_COLOR[status] || '#334155';
+  if (plan !== 'pro') return <span className="admx-badge" style={{ color: '#5f6e72', background: '#5f6e721a' }}>Free</span>;
+  const color = STATUS_COLOR[status] || '#435459';
   return (
     <span className="admx-badge" style={{ color, background: `${color}1a` }}>
       Pro — {SOURCE_LABEL[source] || source}{status && status !== 'active' ? ` (${status})` : ''}
@@ -53,14 +53,14 @@ export default function RevenueTab({ data, loading }) {
   return (
     <>
       <div className="admx-tile-row">
-        <StatTile label="MRR" accent="#16a34a"
+        <StatTile label="MRR" accent="#287454"
           value={fmtMoney(data?.mrr_cents)}
           detail={unknownInterval > 0 ? `${unknownInterval} subscriber${unknownInterval === 1 ? '' : 's'} missing billing interval — undercounted` : 'paying subscribers only'} />
-        <StatTile label="ARR" accent="#16a34a" value={fmtMoney((data?.mrr_cents || 0) * 12)} detail="MRR × 12" />
-        <StatTile label="Paying subscribers" accent="#2563eb" value={fmtNum(data?.paying_subscribers ?? 0)} detail="active + trialing, Stripe-sourced only" />
-        <StatTile label="New (30d)" accent="#0891b2" value={fmtNum(data?.new_subscribers_30d ?? 0)} />
-        <StatTile label="Canceled (30d)" accent="#dc2626" value={fmtNum(data?.canceled_30d ?? 0)} />
-        <StatTile label="Refunded" accent="#d97706" value={fmtMoney(data?.refunded_cents_total)} detail="lifetime, custom invoices" />
+        <StatTile label="ARR" accent="#287454" value={fmtMoney((data?.mrr_cents || 0) * 12)} detail="MRR × 12" />
+        <StatTile label="Paying subscribers" accent="#142126" value={fmtNum(data?.paying_subscribers ?? 0)} detail="active + trialing, Stripe-sourced only" />
+        <StatTile label="New (30d)" accent="#176b87" value={fmtNum(data?.new_subscribers_30d ?? 0)} />
+        <StatTile label="Canceled (30d)" accent="#aa3e3e" value={fmtNum(data?.canceled_30d ?? 0)} />
+        <StatTile label="Refunded" accent="#9a6715" value={fmtMoney(data?.refunded_cents_total)} detail="lifetime, custom invoices" />
       </div>
 
       <Card title="Plan breakdown" eyebrow="All registered accounts">

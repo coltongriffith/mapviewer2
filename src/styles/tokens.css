@@ -44,6 +44,9 @@
   --ui-border-strong: var(--em-slate-300);
   --ui-text: var(--em-slate-950);
   --ui-text-muted: var(--em-slate-600);
+  /* Third rank of type: axis labels, unit suffixes, a KPI's supporting line.
+     Named so a faint TEXT colour never has to borrow a border token. */
+  --ui-text-faint: var(--em-slate-500);
 
   /* ── Action: the primary control colour is slate, not the accent ──────── */
   --ui-action: var(--em-slate-950);
@@ -58,6 +61,7 @@
   --ui-focus: #1f78a8;
 
   /* ── Semantic — independent of the brand accent ───────────────────────── */
+  --ui-info: #176b87;
   --ui-success: #287454;
   --ui-warning: #9a6715;
   --ui-danger: #aa3e3e;

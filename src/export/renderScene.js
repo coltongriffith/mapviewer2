@@ -5,6 +5,7 @@ import { resolveTemplateZones } from '../templates/technicalResultsTemplate';
 import { resolveNI43101Zones, resolveTitleStripFields } from '../templates/technicalReportTemplate';
 import { resolveSidePanelZones } from '../templates/sidePanelTemplate';
 import { getThemeTokens } from '../utils/themeTokens';
+import { northArrowShapes, NORTH_ARROW_FONT } from '../utils/northArrowGeometry';
 import { markerIconSvgFragment, drawMarkerIconCanvas } from '../utils/markerIcons.jsx';
 import { safeColor } from '../utils/colorUtils.js';
 import regionsNA from '../assets/regionsNA.json';
@@ -600,92 +601,52 @@ function drawNorthArrowCanvas(ctx, scene, scale) {
     drawPanelRect(ctx, x, y, w, h, (theme.panelRadius ?? 10) * scale, theme.northArrowFill, theme.panelBorder, scale);
     drawPanelAccentLeft(ctx, x, y, h, theme, scale);
   }
-  const cx = x + w / 2;
-  const cy = y + h * 0.55;
-  // Slightly smaller rose so it doesn't crowd the panel edges in export.
-  const R = h * 0.24, Re = R * 0.71, rn = h * 0.078, r45 = rn * 0.707;
-  const fg = theme.northArrowText;
-  const bg = theme.northArrowFill;
-  const arrowStyle = scene.project.layout?.northArrowStyle || 'classic';
+
+  // Same primitives the editing stage draws, so the PNG cannot disagree with
+  // the preview about where the rose or its cardinal letters sit.
+  const paint = (token) => (token === 'bg' ? theme.northArrowFill : theme.northArrowText);
+  const shapes = northArrowShapes(scene.project.layout?.northArrowStyle || 'classic', w, h);
 
   ctx.save();
   drawRoundedRect(ctx, x, y, w, h, (theme.panelRadius ?? 10) * scale);
   ctx.clip();
+  ctx.translate(x, y);
 
-  if (arrowStyle === 'arrow') {
-    const tipY = cy - R, baseY = cy + R * 0.55, arrowW = R * 0.38, notchY = cy + R * 0.1;
-    ctx.beginPath(); ctx.moveTo(cx, tipY); ctx.lineTo(cx + arrowW, notchY); ctx.lineTo(cx, cy - R * 0.04); ctx.lineTo(cx - arrowW, notchY); ctx.closePath();
-    ctx.fillStyle = fg; ctx.fill();
-    ctx.beginPath(); ctx.moveTo(cx, cy - R * 0.04); ctx.lineTo(cx + arrowW, notchY); ctx.lineTo(cx + arrowW * 0.6, baseY); ctx.lineTo(cx - arrowW * 0.6, baseY); ctx.lineTo(cx - arrowW, notchY); ctx.closePath();
-    ctx.fillStyle = bg; ctx.fill(); ctx.strokeStyle = fg; ctx.lineWidth = h * 0.022; ctx.lineJoin = 'round'; ctx.stroke();
-    ctx.beginPath(); ctx.arc(cx, cy - R * 0.04, R * 0.09, 0, Math.PI * 2);
-    ctx.fillStyle = bg; ctx.fill(); ctx.strokeStyle = fg; ctx.lineWidth = h * 0.022; ctx.stroke();
-    ctx.fillStyle = fg; ctx.font = `700 ${h * 0.15}px Arial`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText('N', cx, y + h * 0.93); ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-  } else if (arrowStyle === 'decorative') {
-    const Ro = R * 1.22, tickLen = R * 0.1, dcy = y + h * 0.593;
-    ctx.save(); ctx.globalAlpha = 0.18;
-    ctx.beginPath(); ctx.arc(cx, dcy, Ro, 0, Math.PI * 2); ctx.strokeStyle = fg; ctx.lineWidth = h * 0.014; ctx.stroke();
-    ctx.globalAlpha = 0.1;
-    ctx.beginPath(); ctx.arc(cx, dcy, Ro - h * 0.028, 0, Math.PI * 2); ctx.lineWidth = h * 0.006; ctx.stroke();
+  for (const shape of shapes) {
+    ctx.save();
+    if (shape.kind === 'polygon') {
+      ctx.beginPath();
+      shape.points.forEach(([px, py], i) => (i ? ctx.lineTo(px, py) : ctx.moveTo(px, py)));
+      ctx.closePath();
+      if (shape.fill) { ctx.globalAlpha = shape.opacity ?? 1; ctx.fillStyle = paint(shape.fill); ctx.fill(); ctx.globalAlpha = 1; }
+      if (shape.stroke) { ctx.strokeStyle = paint(shape.stroke); ctx.lineWidth = shape.strokeWidth; ctx.lineJoin = 'round'; ctx.stroke(); }
+    } else if (shape.kind === 'circle') {
+      ctx.beginPath();
+      ctx.arc(shape.cx, shape.cy, shape.r, 0, Math.PI * 2);
+      if (shape.fill) { ctx.fillStyle = paint(shape.fill); ctx.fill(); }
+      if (shape.stroke) {
+        ctx.globalAlpha = shape.opacity ?? 1;
+        ctx.strokeStyle = paint(shape.stroke); ctx.lineWidth = shape.strokeWidth; ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+    } else if (shape.kind === 'line') {
+      ctx.globalAlpha = shape.opacity ?? 1;
+      ctx.beginPath(); ctx.moveTo(shape.x1, shape.y1); ctx.lineTo(shape.x2, shape.y2);
+      ctx.strokeStyle = paint(shape.stroke); ctx.lineWidth = shape.strokeWidth; ctx.stroke();
+      ctx.globalAlpha = 1;
+    } else if (shape.kind === 'text') {
+      ctx.fillStyle = theme.northArrowText;
+      ctx.font = `${shape.weight} ${shape.size}px ${NORTH_ARROW_FONT}`;
+      ctx.textAlign = shape.anchor === 'start' ? 'left' : shape.anchor === 'end' ? 'right' : 'center';
+      // The geometry gives an alphabetic baseline, which is what SVG uses too.
+      ctx.textBaseline = 'alphabetic';
+      ctx.fillText(shape.value, shape.x, shape.y);
+      ctx.textAlign = 'left';
+    }
     ctx.restore();
-    [0, 45, 90, 135, 180, 225, 270, 315].forEach((deg) => {
-      const rad = (deg - 90) * Math.PI / 180;
-      const len = deg % 90 === 0 ? tickLen * 1.6 : tickLen;
-      ctx.save(); ctx.globalAlpha = deg % 90 === 0 ? 0.5 : 0.25;
-      ctx.beginPath(); ctx.moveTo(cx + (Ro - len) * Math.cos(rad), dcy + (Ro - len) * Math.sin(rad));
-      ctx.lineTo(cx + Ro * Math.cos(rad), dcy + Ro * Math.sin(rad));
-      ctx.strokeStyle = fg; ctx.lineWidth = deg % 90 === 0 ? h * 0.016 : h * 0.008; ctx.stroke(); ctx.restore();
-    });
-    const ne2 = [cx + r45, dcy - r45], se2 = [cx + r45, dcy + r45], sw2 = [cx - r45, dcy + r45], nw2 = [cx - r45, dcy - r45];
-    const drawDPt = (pts, alpha) => {
-      ctx.save(); ctx.globalAlpha = alpha; ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]);
-      pts.slice(1).forEach((p) => ctx.lineTo(p[0], p[1])); ctx.closePath(); ctx.fillStyle = fg; ctx.fill(); ctx.restore();
-    };
-    drawDPt([[cx, dcy - R], ne2, [cx, dcy], nw2], 1.0);
-    drawDPt([[cx, dcy + R], sw2, [cx, dcy], se2], 0.4);
-    drawDPt([[cx + Re, dcy], se2, [cx, dcy], ne2], 0.25);
-    drawDPt([[cx - Re, dcy], nw2, [cx, dcy], sw2], 0.25);
-    ctx.beginPath(); ctx.arc(cx, dcy, h * 0.05, 0, Math.PI * 2); ctx.fillStyle = bg; ctx.fill(); ctx.strokeStyle = fg; ctx.lineWidth = h * 0.018; ctx.stroke();
-    ctx.fillStyle = fg; ctx.font = `700 ${h * 0.12}px Arial`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    [{ label: 'N', px: cx, py: dcy - Ro - tickLen * 2.2 }, { label: 'S', px: cx, py: dcy + Ro + tickLen * 3.2 },
-     { label: 'E', px: cx + Ro + tickLen * 2.8, py: dcy + h * 0.025 }, { label: 'W', px: cx - Ro - tickLen * 2.8, py: dcy + h * 0.025 }]
-      .forEach(({ label, px, py }) => { ctx.fillText(label, px, py); });
-    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-  } else if (arrowStyle === 'surveyor') {
-    const r2 = R * 0.55, tick = R * 0.18;
-    ctx.save(); ctx.globalAlpha = 0.22; ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.strokeStyle = fg; ctx.lineWidth = h * 0.025; ctx.stroke(); ctx.restore();
-    ctx.save(); ctx.globalAlpha = 0.15; ctx.beginPath(); ctx.arc(cx, cy, r2, 0, Math.PI * 2); ctx.strokeStyle = fg; ctx.lineWidth = h * 0.015; ctx.stroke(); ctx.restore();
-    ctx.save(); ctx.globalAlpha = 0.3; ctx.strokeStyle = fg; ctx.lineWidth = h * 0.02;
-    ctx.beginPath(); ctx.moveTo(cx, cy - R - tick); ctx.lineTo(cx, cy + R + tick); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(cx - R - tick, cy); ctx.lineTo(cx + R + tick, cy); ctx.stroke(); ctx.restore();
-    ctx.beginPath(); ctx.moveTo(cx, cy - R * 1.01); ctx.lineTo(cx - R * 0.22, cy - r2 * 0.3); ctx.lineTo(cx + R * 0.22, cy - r2 * 0.3); ctx.closePath(); ctx.fillStyle = fg; ctx.fill();
-    ctx.beginPath(); ctx.moveTo(cx, cy + R * 1.01); ctx.lineTo(cx - R * 0.22, cy + r2 * 0.3); ctx.lineTo(cx + R * 0.22, cy + r2 * 0.3); ctx.closePath(); ctx.fillStyle = bg; ctx.fill(); ctx.strokeStyle = fg; ctx.lineWidth = h * 0.02; ctx.stroke();
-    ctx.beginPath(); ctx.arc(cx, cy, R * 0.1, 0, Math.PI * 2); ctx.fillStyle = fg; ctx.fill();
-    ctx.fillStyle = fg; ctx.font = `800 ${h * 0.14}px Arial`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText('N', cx, y + h * 0.09); ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-  } else {
-    // classic
-    const drawPoint = (tipX, tipY, p1x, p1y, p2x, p2y, alpha) => {
-      ctx.save(); ctx.globalAlpha = alpha;
-      ctx.beginPath(); ctx.moveTo(tipX, tipY); ctx.lineTo(p1x, p1y); ctx.lineTo(cx, cy); ctx.lineTo(p2x, p2y); ctx.closePath();
-      ctx.fillStyle = fg; ctx.fill(); ctx.restore();
-    };
-    drawPoint(cx, cy - R, cx + r45, cy - r45, cx - r45, cy - r45, 1.0);
-    drawPoint(cx, cy + R, cx - r45, cy + r45, cx + r45, cy + r45, 0.55);
-    drawPoint(cx + Re, cy, cx + r45, cy + r45, cx + r45, cy - r45, 0.35);
-    drawPoint(cx - Re, cy, cx - r45, cy - r45, cx - r45, cy + r45, 0.35);
-    ctx.save(); ctx.globalAlpha = 0.2;
-    ctx.beginPath(); ctx.arc(cx, cy, R + rn * 0.5, 0, Math.PI * 2);
-    ctx.strokeStyle = fg; ctx.lineWidth = h * 0.012; ctx.stroke(); ctx.restore();
-    ctx.beginPath(); ctx.arc(cx, cy, h * 0.044, 0, Math.PI * 2);
-    ctx.fillStyle = bg; ctx.fill(); ctx.strokeStyle = fg; ctx.lineWidth = h * 0.018; ctx.stroke();
-    ctx.fillStyle = fg; ctx.font = `700 ${h * 0.16}px Arial`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText('N', cx, y + h * 0.14); ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
   }
   ctx.restore();
 }
-
 function pickScaleLabel(map) {
   const size = map.getSize();
   const cy = size.y / 2;
@@ -2329,64 +2290,42 @@ function renderNorthArrowSvg(scene, scale, svgDefs) {
   const theme = getTheme(scene);
   const { northArrow } = getOverlayMetrics(scene);
   const x = northArrow.left * scale, y = northArrow.top * scale, w = northArrow.width * scale, h = northArrow.height * scale;
-  const cx = x + w / 2;
-  const cy = y + h * 0.55;
-  // Slightly smaller rose so it doesn't crowd the panel edges in export.
-  const R = h * 0.24, Re = R * 0.71, rn = h * 0.078, r45 = rn * 0.707;
-  const fg = theme.northArrowText, bg = theme.northArrowFill;
   const transparent = scene.project.layout?.northArrowTransparent;
-  const panel = transparent ? '' : `${svgRect(x, y, w, h, (theme.panelRadius ?? 10) * scale, bg, theme.panelBorder, scale)}${svgPanelAccentLeft(x, y, h, theme, scale)}`;
-  const arrowStyle = scene.project.layout?.northArrowStyle || 'classic';
-  let rose = '';
+  const panel = transparent
+    ? ''
+    : `${svgRect(x, y, w, h, (theme.panelRadius ?? 10) * scale, theme.northArrowFill, theme.panelBorder, scale)}${svgPanelAccentLeft(x, y, h, theme, scale)}`;
 
-  if (arrowStyle === 'arrow') {
-    const tipY = cy - R, baseY = cy + R * 0.55, arrowW = R * 0.38, notchY = cy + R * 0.1;
-    rose = `<path d="M ${cx} ${tipY} L ${cx + arrowW} ${notchY} L ${cx} ${cy - R * 0.04} L ${cx - arrowW} ${notchY} Z" fill="${fg}" />` +
-      `<path d="M ${cx} ${cy - R * 0.04} L ${cx + arrowW} ${notchY} L ${cx + arrowW * 0.6} ${baseY} L ${cx - arrowW * 0.6} ${baseY} L ${cx - arrowW} ${notchY} Z" fill="${bg}" stroke="${fg}" stroke-width="${h * 0.022}" stroke-linejoin="round" />` +
-      `<circle cx="${cx}" cy="${cy - R * 0.04}" r="${R * 0.09}" fill="${bg}" stroke="${fg}" stroke-width="${h * 0.022}" />` +
-      `<text x="${cx}" y="${y + h * 0.93}" text-anchor="middle" dominant-baseline="middle" fill="${fg}" font-family="Arial" font-size="${h * 0.15}" font-weight="700">N</text>`;
-  } else if (arrowStyle === 'decorative') {
-    const Ro = R * 1.22, tickLen = R * 0.1, dcy = y + h * 0.593;
-    const ne2 = [cx + r45, dcy - r45], se2 = [cx + r45, dcy + r45], sw2 = [cx - r45, dcy + r45], nw2 = [cx - r45, dcy - r45];
-    const ticks = [0, 45, 90, 135, 180, 225, 270, 315].map((deg) => {
-      const rad = (deg - 90) * Math.PI / 180;
-      const len = deg % 90 === 0 ? tickLen * 1.6 : tickLen;
-      return `<line x1="${cx + (Ro - len) * Math.cos(rad)}" y1="${dcy + (Ro - len) * Math.sin(rad)}" x2="${cx + Ro * Math.cos(rad)}" y2="${dcy + Ro * Math.sin(rad)}" stroke="${fg}" stroke-opacity="${deg % 90 === 0 ? 0.5 : 0.25}" stroke-width="${deg % 90 === 0 ? h * 0.016 : h * 0.008}" />`;
-    }).join('');
-    rose = `<circle cx="${cx}" cy="${dcy}" r="${Ro}" fill="none" stroke="${fg}" stroke-opacity="0.18" stroke-width="${h * 0.014}" />` +
-      `<circle cx="${cx}" cy="${dcy}" r="${Ro - h * 0.028}" fill="none" stroke="${fg}" stroke-opacity="0.1" stroke-width="${h * 0.006}" />${ticks}` +
-      `<path d="M ${cx} ${dcy - R} L ${ne2[0]} ${ne2[1]} L ${cx} ${dcy} L ${nw2[0]} ${nw2[1]} Z" fill="${fg}" />` +
-      `<path d="M ${cx} ${dcy + R} L ${sw2[0]} ${sw2[1]} L ${cx} ${dcy} L ${se2[0]} ${se2[1]} Z" fill="${fg}" fill-opacity="0.4" />` +
-      `<path d="M ${cx + Re} ${dcy} L ${se2[0]} ${se2[1]} L ${cx} ${dcy} L ${ne2[0]} ${ne2[1]} Z" fill="${fg}" fill-opacity="0.25" />` +
-      `<path d="M ${cx - Re} ${dcy} L ${nw2[0]} ${nw2[1]} L ${cx} ${dcy} L ${sw2[0]} ${sw2[1]} Z" fill="${fg}" fill-opacity="0.25" />` +
-      `<circle cx="${cx}" cy="${dcy}" r="${h * 0.05}" fill="${bg}" stroke="${fg}" stroke-width="${h * 0.018}" />` +
-      // N and S were the only two of the four compass letters without an
-      // explicit baseline, so they fell back to alphabetic and sat low against
-      // the E/W pair the canvas had them level with.
-      `<text x="${cx}" y="${dcy - Ro - tickLen * 2.2}" text-anchor="middle" dominant-baseline="middle" fill="${fg}" font-family="Arial" font-size="${h * 0.12}" font-weight="700">N</text>` +
-      `<text x="${cx}" y="${dcy + Ro + tickLen * 3.2}" text-anchor="middle" dominant-baseline="middle" fill="${fg}" font-family="Arial" font-size="${h * 0.12}" font-weight="700">S</text>` +
-      `<text x="${cx + Ro + tickLen * 2.8}" y="${dcy + h * 0.025}" text-anchor="middle" dominant-baseline="middle" fill="${fg}" font-family="Arial" font-size="${h * 0.12}" font-weight="700">E</text>` +
-      `<text x="${cx - Ro - tickLen * 2.8}" y="${dcy + h * 0.025}" text-anchor="middle" dominant-baseline="middle" fill="${fg}" font-family="Arial" font-size="${h * 0.12}" font-weight="700">W</text>`;
-  } else if (arrowStyle === 'surveyor') {
-    const r2 = R * 0.55, tick = R * 0.18;
-    rose = `<circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="${fg}" stroke-opacity="0.22" stroke-width="${h * 0.025}" />` +
-      `<circle cx="${cx}" cy="${cy}" r="${r2}" fill="none" stroke="${fg}" stroke-opacity="0.15" stroke-width="${h * 0.015}" />` +
-      `<line x1="${cx}" y1="${cy - R - tick}" x2="${cx}" y2="${cy + R + tick}" stroke="${fg}" stroke-opacity="0.3" stroke-width="${h * 0.02}" />` +
-      `<line x1="${cx - R - tick}" y1="${cy}" x2="${cx + R + tick}" y2="${cy}" stroke="${fg}" stroke-opacity="0.3" stroke-width="${h * 0.02}" />` +
-      `<polygon points="${cx},${cy - R * 1.01} ${cx - R * 0.22},${cy - r2 * 0.3} ${cx + R * 0.22},${cy - r2 * 0.3}" fill="${fg}" />` +
-      `<polygon points="${cx},${cy + R * 1.01} ${cx - R * 0.22},${cy + r2 * 0.3} ${cx + R * 0.22},${cy + r2 * 0.3}" fill="${bg}" stroke="${fg}" stroke-width="${h * 0.02}" />` +
-      `<circle cx="${cx}" cy="${cy}" r="${R * 0.1}" fill="${fg}" />` +
-      // No letter-spacing: the canvas cannot apply it, and a single glyph gains
-      // nothing from it but a half-pixel of horizontal drift against the PNG.
-      `<text x="${cx}" y="${y + h * 0.09}" text-anchor="middle" dominant-baseline="middle" fill="${fg}" font-family="Arial" font-size="${h * 0.14}" font-weight="800">N</text>`;
-  } else {
-    // classic
-    const nx = cx, ny = cy - R, sx = cx, sy = cy + R, ex = cx + Re, ey = cy, wx = cx - Re, wy = cy;
-    const ne_x = cx + r45, ne_y = cy - r45, se_x = cx + r45, se_y = cy + r45, sw_x = cx - r45, sw_y = cy + r45, nw_x = cx - r45, nw_y = cy - r45;
-    rose = `<path d="M ${nx} ${ny} L ${ne_x} ${ne_y} L ${cx} ${cy} L ${nw_x} ${nw_y} Z" fill="${fg}" /><path d="M ${sx} ${sy} L ${sw_x} ${sw_y} L ${cx} ${cy} L ${se_x} ${se_y} Z" fill="${fg}" fill-opacity="0.55" /><path d="M ${ex} ${ey} L ${se_x} ${se_y} L ${cx} ${cy} L ${ne_x} ${ne_y} Z" fill="${fg}" fill-opacity="0.35" /><path d="M ${wx} ${wy} L ${nw_x} ${nw_y} L ${cx} ${cy} L ${sw_x} ${sw_y} Z" fill="${fg}" fill-opacity="0.35" /><circle cx="${cx}" cy="${cy}" r="${R + rn * 0.5}" fill="none" stroke="${fg}" stroke-opacity="0.2" stroke-width="${h * 0.012}" /><circle cx="${cx}" cy="${cy}" r="${h * 0.044}" fill="${bg}" stroke="${fg}" stroke-width="${h * 0.018}" /><text x="${cx}" y="${y + h * 0.14}" text-anchor="middle" dominant-baseline="middle" fill="${fg}" font-family="Arial" font-size="${h * 0.16}" font-weight="700">N</text>`;
-  }
+  // Same primitives the stage and the canvas exporter use.
+  const paint = (token) => (token === 'bg' ? theme.northArrowFill : theme.northArrowText);
+  const shapes = northArrowShapes(scene.project.layout?.northArrowStyle || 'classic', w, h);
+  const rose = shapes.map((shape) => {
+    if (shape.kind === 'polygon') {
+      const pts = shape.points.map(([px, py]) => `${px},${py}`).join(' ');
+      const strokeAttrs = shape.stroke
+        ? ` stroke="${paint(shape.stroke)}" stroke-width="${shape.strokeWidth}" stroke-linejoin="round"`
+        : '';
+      return `<polygon points="${pts}" fill="${paint(shape.fill)}" fill-opacity="${shape.opacity ?? 1}"${strokeAttrs} />`;
+    }
+    if (shape.kind === 'circle') {
+      const strokeAttrs = shape.stroke
+        ? ` stroke="${paint(shape.stroke)}" stroke-width="${shape.strokeWidth}" stroke-opacity="${shape.opacity ?? 1}"`
+        : '';
+      return `<circle cx="${shape.cx}" cy="${shape.cy}" r="${shape.r}" fill="${shape.fill ? paint(shape.fill) : 'none'}"${strokeAttrs} />`;
+    }
+    if (shape.kind === 'line') {
+      return `<line x1="${shape.x1}" y1="${shape.y1}" x2="${shape.x2}" y2="${shape.y2}" stroke="${paint(shape.stroke)}" stroke-width="${shape.strokeWidth}" stroke-opacity="${shape.opacity ?? 1}" />`;
+    }
+    if (shape.kind === 'text') {
+      // Alphabetic baseline, not dominant-baseline: Illustrator does not honour
+      // dominant-baseline, which is how the cardinal letters used to land in a
+      // different place in the vector export than in the PNG.
+      return `<text x="${shape.x}" y="${shape.y}" text-anchor="${shape.anchor}" fill="${theme.northArrowText}" font-family="${NORTH_ARROW_FONT}" font-size="${shape.size}" font-weight="${shape.weight}">${escapeXml(shape.value)}</text>`;
+    }
+    return '';
+  }).join('');
+
   const clipId = pushRoundedClip(svgDefs, x, y, w, h, (theme.panelRadius ?? 10) * scale);
-  return `<g id="em-north-arrow" class="em-panel" clip-path="url(#${clipId})">${panel}${rose}</g>`;
+  return `<g id="em-north-arrow" class="em-panel" clip-path="url(#${clipId})">${panel}<g transform="translate(${x} ${y})">${rose}</g></g>`;
 }
 function renderScaleBarSvg(scene, scale) {
   if (scene.project.layout?.showScaleBar === false) return '';

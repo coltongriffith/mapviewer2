@@ -19,6 +19,27 @@ import {
 const LAND_FEATURE = feature(landTopo, landTopo.objects.land);
 const GRATICULE = geoGraticule10();
 
+/**
+ * Dashboard series colours.
+ *
+ * The admin surface had drifted onto a nine-hue framework palette, which made
+ * it read as a different product from the map editor. These are the brand's
+ * neutrals plus the three semantic colours, ordered so neighbouring series stay
+ * apart at bar width, with Claim Copper spent once — on the live pulse — since
+ * copper is emphasis, never a series ramp.
+ */
+const SERIES = {
+  primary: '#142126',  // Mineral Slate
+  slate:   '#435459',
+  mid:     '#5f6e72',
+  faint:   '#7c898c',
+  pale:    '#c6cecf',
+  info:    '#176b87',
+  success: '#287454',
+  warning: '#9a6715',
+  accent:  '#c65322',  // Claim Copper
+};
+
 const ADMIN_EMAIL = import.meta.env.VITE_ADMIN_EMAIL;
 
 // ── Formatting helpers ─────────────────────────────────────────────────────────
@@ -156,8 +177,8 @@ function AreaChart({ data }) {
       <svg viewBox={`0 0 ${W} ${H}`} className="adm-area-svg" preserveAspectRatio="none">
         <defs>
           <linearGradient id="admArea" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.28" />
-            <stop offset="100%" stopColor="#3b82f6" stopOpacity="0" />
+            <stop offset="0%" stopColor={SERIES.primary} stopOpacity="0.22" />
+            <stop offset="100%" stopColor={SERIES.primary} stopOpacity="0" />
           </linearGradient>
         </defs>
         {[0.5, 1].map((f) => (
@@ -195,7 +216,7 @@ function Donut({ segments, centerLabel }) {
   return (
     <div className="adm-donut-wrap">
       <svg viewBox="0 0 100 100" className="adm-donut">
-        <circle cx="50" cy="50" r={R} fill="none" stroke="#f1f5f9" strokeWidth="14" />
+        <circle cx="50" cy="50" r={R} fill="none" stroke="var(--em-slate-100)" strokeWidth="14" />
         {segments.map((s, i) => {
           const frac = Number(s.value || 0) / total;
           const dash = frac * C;
@@ -223,7 +244,7 @@ function Donut({ segments, centerLabel }) {
   );
 }
 
-function HBars({ rows, color = '#3b82f6', emptyMsg }) {
+function HBars({ rows, color = SERIES.slate, emptyMsg }) {
   if (!rows || rows.length === 0) return <Empty message={emptyMsg || 'No data yet.'} />;
   const max = Math.max(...rows.map((r) => Number(r.value) || 0), 1);
   const total = rows.reduce((s, r) => s + (Number(r.value) || 0), 0);
@@ -363,14 +384,14 @@ function WorldMap({ locations }) {
         <svg viewBox={`${-R - 12} ${-R - 12} ${2 * R + 24} ${2 * R + 24}`} className="adm-globe-svg">
           <defs>
             <radialGradient id="admGlobeShade" cx="35%" cy="30%" r="75%">
-              <stop offset="0%" stopColor="#2f4d80" />
-              <stop offset="60%" stopColor="#16233f" />
-              <stop offset="100%" stopColor="#080b14" />
+              <stop offset="0%" stopColor="#3c5157" />
+              <stop offset="60%" stopColor="#1d2c31" />
+              <stop offset="100%" stopColor="#0b1417" />
             </radialGradient>
             <radialGradient id="admGlobeAtmo" cx="50%" cy="50%" r="50%">
-              <stop offset="78%" stopColor="#60a5fa" stopOpacity="0" />
-              <stop offset="92%" stopColor="#60a5fa" stopOpacity="0.18" />
-              <stop offset="100%" stopColor="#60a5fa" stopOpacity="0" />
+              <stop offset="78%" stopColor="#8fa3a8" stopOpacity="0" />
+              <stop offset="92%" stopColor="#8fa3a8" stopOpacity="0.18" />
+              <stop offset="100%" stopColor="#8fa3a8" stopOpacity="0" />
             </radialGradient>
           </defs>
           <circle cx="0" cy="0" r={R + 8} fill="url(#admGlobeAtmo)" />
@@ -470,13 +491,13 @@ function DayDetail({ day, summary, sessions, loading, onOpenSession }) {
       ) : (
         <>
           <div className="adm-day-summary-row">
-            <KPI label="Page views" value={fmtNum(summary?.page_views ?? 0)} accent="#3b82f6" />
-            <KPI label="Sessions" value={fmtNum(summary?.sessions ?? 0)} detail={`${real} look real`} accent="#0ea5e9" />
-            <KPI label="Signups" value={fmtNum(summary?.signups ?? 0)} accent="#6366f1" />
-            <KPI label="Searches" value={fmtNum(summary?.searches ?? 0)} accent="#0ea5e9" />
-            <KPI label="Exports" value={fmtNum(summary?.exports ?? 0)} accent="#8b5cf6" />
-            <KPI label="Watermark-suppressed exports" value={fmtNum(summary?.premium_exports ?? 0)} accent="#10b981" />
-            <KPI label="Leads" value={fmtNum(summary?.leads ?? 0)} accent="#f59e0b" />
+            <KPI label="Page views" value={fmtNum(summary?.page_views ?? 0)} accent={SERIES.primary} />
+            <KPI label="Sessions" value={fmtNum(summary?.sessions ?? 0)} detail={`${real} look real`} accent={SERIES.slate} />
+            <KPI label="Signups" value={fmtNum(summary?.signups ?? 0)} accent={SERIES.info} />
+            <KPI label="Searches" value={fmtNum(summary?.searches ?? 0)} accent={SERIES.mid} />
+            <KPI label="Exports" value={fmtNum(summary?.exports ?? 0)} accent={SERIES.success} />
+            <KPI label="Watermark-suppressed exports" value={fmtNum(summary?.premium_exports ?? 0)} accent={SERIES.faint} />
+            <KPI label="Leads" value={fmtNum(summary?.leads ?? 0)} accent={SERIES.warning} />
           </div>
           {sessions.length === 0 ? (
             <Empty message="No visitor sessions recorded for this day." />
@@ -816,24 +837,24 @@ export default function AdminPage({ onExit }) {
   // Session-level activation funnel from product_events (last 30 days).
   const pf = Object.fromEntries((d.productFunnel || []).map((r) => [r.event, Number(r.sessions) || 0]));
   const activationSteps = [
-    { label: 'Opened editor', value: pf.editor_opened || 0, color: '#3b82f6' },
-    { label: 'Added first layer', value: pf.first_layer_added || 0, color: '#6366f1' },
-    { label: 'Exported', value: pf.export_completed || 0, color: '#8b5cf6' },
+    { label: 'Opened editor', value: pf.editor_opened || 0, color: SERIES.faint },
+    { label: 'Added first layer', value: pf.first_layer_added || 0, color: SERIES.mid },
+    { label: 'Exported', value: pf.export_completed || 0, color: SERIES.primary },
   ];
   const shareLoop = [
-    { label: 'Shares created', value: pf.share_created || 0, color: '#0ea5e9' },
-    { label: 'Share views', value: pf.share_viewed || 0, color: '#38bdf8' },
-    { label: 'Forked a copy', value: pf.share_forked || 0, color: '#10b981' },
-    { label: 'Signed up', value: pf.signup_completed || 0, color: '#f59e0b' },
+    { label: 'Shares created', value: pf.share_created || 0, color: SERIES.faint },
+    { label: 'Share views', value: pf.share_viewed || 0, color: SERIES.mid },
+    { label: 'Forked a copy', value: pf.share_forked || 0, color: SERIES.slate },
+    { label: 'Signed up', value: pf.signup_completed || 0, color: SERIES.success },
   ];
   const hasProductEvents = Object.keys(pf).length > 0;
 
-  const formatColors = { png: '#0ea5e9', svg: '#8b5cf6', pdf: '#f59e0b' };
+  const formatColors = { png: SERIES.slate, svg: SERIES.info, pdf: SERIES.mid };
   const formatSegments = (d.exportStats || []).map((r) => ({
-    label: r.format?.toUpperCase(), value: Number(r.total), color: formatColors[r.format?.toLowerCase()] || '#64748b',
+    label: r.format?.toUpperCase(), value: Number(r.total), color: formatColors[r.format?.toLowerCase()] || SERIES.faint,
   }));
   const deviceSegments = (d.deviceStats || []).map((r, i) => ({
-    label: r.device || 'desktop', value: Number(r.sessions), color: ['#3b82f6', '#93c5fd', '#cbd5e1'][i] || '#e2e8f0',
+    label: r.device || 'desktop', value: Number(r.sessions), color: [SERIES.primary, SERIES.mid, SERIES.pale][i] || 'var(--em-slate-200)',
   }));
   const referrerBars = (d.referrerStats || []).slice(0, 8).map((r) => ({ label: r.referrer || 'Direct / Unknown', value: Number(r.sessions) }));
   const landingBars = (d.landingClicks || []).map((r) => ({ label: r.element || '(no label)', value: Number(r.count) }));
@@ -862,13 +883,13 @@ export default function AdminPage({ onExit }) {
             its own product-analytics StatTiles. */}
         {LEGACY_TABS.has(tab) && (
         <div className="adm-kpi-row">
-          <KPI label="Live now" value={liveVisitors != null ? String(liveVisitors) : null} detail="active · last 5 min" accent="#ef4444" />
-          <KPI label="Visitors" value={dataLoading ? null : fmtNum(visitors30d)} trend={trendMap.visitors} detail="last 30 days" accent="#3b82f6" />
-          <KPI label="Signups" value={dataLoading ? null : fmtNum(cur('signups') ?? 0)} trend={trendMap.signups} detail="last 30 days" accent="#6366f1" />
-          <KPI label="Searches" value={dataLoading ? null : fmtNum(cur('searches') ?? 0)} trend={trendMap.searches} detail="registry + nearby" accent="#0ea5e9" />
-          <KPI label="Exports" value={dataLoading ? null : fmtNum(exports30d)} trend={trendMap.exports} detail={exportBreakdown || 'last 30 days'} accent="#8b5cf6" />
-          <KPI label="Watermark-suppressed exports" value={dataLoading ? null : fmtNum(cur('premium_exports') ?? 0)} trend={trendMap.premium_exports} detail="mostly FREE exports — still carry the small credit; not a paid signal" accent="#10b981" />
-          <KPI label="Email leads" value={dataLoading ? null : fmtNum(cur('leads') ?? (d.leads || []).length)} trend={trendMap.leads} detail="last 30 days" accent="#f59e0b" />
+          <KPI label="Live now" value={liveVisitors != null ? String(liveVisitors) : null} detail="active · last 5 min" accent={SERIES.accent} />
+          <KPI label="Visitors" value={dataLoading ? null : fmtNum(visitors30d)} trend={trendMap.visitors} detail="last 30 days" accent={SERIES.primary} />
+          <KPI label="Signups" value={dataLoading ? null : fmtNum(cur('signups') ?? 0)} trend={trendMap.signups} detail="last 30 days" accent={SERIES.info} />
+          <KPI label="Searches" value={dataLoading ? null : fmtNum(cur('searches') ?? 0)} trend={trendMap.searches} detail="registry + nearby" accent={SERIES.mid} />
+          <KPI label="Exports" value={dataLoading ? null : fmtNum(exports30d)} trend={trendMap.exports} detail={exportBreakdown || 'last 30 days'} accent={SERIES.slate} />
+          <KPI label="Watermark-suppressed exports" value={dataLoading ? null : fmtNum(cur('premium_exports') ?? 0)} trend={trendMap.premium_exports} detail="mostly FREE exports — still carry the small credit; not a paid signal" accent={SERIES.success} />
+          <KPI label="Email leads" value={dataLoading ? null : fmtNum(cur('leads') ?? (d.leads || []).length)} trend={trendMap.leads} detail="last 30 days" accent={SERIES.warning} />
         </div>
         )}
 
@@ -1055,7 +1076,7 @@ export default function AdminPage({ onExit }) {
                 <HBars rows={(d.referrerStats || []).slice(0, 12).map((r) => ({ label: r.referrer, value: Number(r.sessions) }))} emptyMsg="No referrer data yet." />
               </Card>
               <Card title="Landing-page clicks" eyebrow="What visitors click" count={landingBars.reduce((s, r) => s + r.value, 0) || null}>
-                <HBars rows={landingBars} color="#6366f1" emptyMsg="No click data yet." />
+                <HBars rows={landingBars} color={SERIES.info} emptyMsg="No click data yet." />
               </Card>
             </div>
             <Card title="Email leads" eyebrow="Captured in export modal" count={d.leads?.length} full>
