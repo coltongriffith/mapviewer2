@@ -6,7 +6,7 @@ const SECTIONS = [
   { id: 'import-data',  label: 'Importing Your Data' },
   { id: 'layers',       label: 'Working with Layers' },
   { id: 'basemap',      label: 'Choosing a Basemap' },
-  { id: 'themes',       label: 'Choosing a Design Theme' },
+  { id: 'themes',       label: 'Map Type & Design Theme' },
   { id: 'layout',       label: 'Configuring the Layout' },
   { id: 'annotations',  label: 'Annotations' },
   { id: 'callouts',     label: 'Callouts' },
@@ -82,6 +82,13 @@ export default function HowToUseModal({ onClose }) {
           <section id="welcome">
             <h2>Overview</h2>
             <p>The canvas is the export: panel positions, styling and annotations all appear exactly as shown.</p>
+            <h3>Where things are</h3>
+            <ul>
+              <li><strong>Toolbar</strong> (across the top) — the <strong>Project</strong> menu, zoom, <strong>Preview</strong>, <strong>Share</strong> and the <strong>Export</strong> menu.</li>
+              <li><strong>Inspector</strong> (the rail beside the map) — every editing control, grouped into five tabs: <strong>Data</strong>, <strong>Layers</strong>, <strong>Labels</strong>, <strong>Layout</strong> and <strong>Export</strong>.</li>
+              <li><strong>Preview</strong> hides the editing controls so you can read the map as it will export. It changes nothing about the export itself.</li>
+            </ul>
+            <p>On a phone the inspector opens as a sheet from the bottom — tap <strong>Edit</strong> in the toolbar.</p>
           </section>
 
           {/* ── 2. New Project ── */}
@@ -89,17 +96,18 @@ export default function HowToUseModal({ onClose }) {
             <h2>Starting a New Project</h2>
             <h3>Creating or loading a project</h3>
             <ul>
-              <li>Click <strong>New</strong> in the toolbar to start a blank project</li>
-              <li>Click <strong>Open</strong> to load a recently saved project from the list</li>
-              <li>Projects auto-save to your browser — the <strong>✓ Saved</strong> indicator in the toolbar confirms the last save</li>
+              <li><strong>Project → New map</strong> starts a blank project</li>
+              <li><strong>Project → Open…</strong> loads a recently saved project from the list</li>
+              <li>Projects auto-save to your browser — the state beside the project name in the toolbar reads <strong>Unsaved</strong> or <strong>Saved</strong></li>
             </ul>
             <h3>The sample project</h3>
             <p>If you have no data yet, click <strong>"Or load sample mining data →"</strong> on the landing page to open a pre-built example (Buckhorn Creek Mining Corp.) with drillholes, claims, roads, and callouts already configured. This is the fastest way to explore what the tool can do.</p>
             <h3>Project management</h3>
+            <p>All of these live in the <strong>Project</strong> menu in the toolbar:</p>
             <ul>
               <li><strong>Save</strong> — immediately writes to browser storage</li>
-              <li><strong>Save As</strong> — saves a copy under a new name</li>
-              <li><strong>Dup</strong> — duplicates the current project</li>
+              <li><strong>Save As…</strong> — saves a copy under a new name</li>
+              <li><strong>Duplicate</strong> — duplicates the current project</li>
               <li>From the Open panel: rename or delete any saved project</li>
             </ul>
             <p>Projects are stored in your browser's local storage. They persist across sessions but are specific to this browser and device. To back up a project, export your map; project files cannot currently be downloaded directly.</p>
@@ -116,7 +124,7 @@ export default function HowToUseModal({ onClose }) {
             </ul>
             <h3>Importing a GeoJSON file</h3>
             <ul>
-              <li>In the <strong>Layers</strong> section of the sidebar, click the import/upload button</li>
+              <li>Open the <strong>Data</strong> tab and drop the file on the upload area, or click it to browse</li>
               <li>Select your .geojson or .json file</li>
               <li>The layer is added automatically and the map fits to your data bounds</li>
               <li>If your file contains multiple feature types (e.g., polygons and lines), they are split into separate layers automatically</li>
@@ -183,7 +191,7 @@ export default function HowToUseModal({ onClose }) {
               <li><strong>NatGeo</strong> — classic National Geographic cartography. Distinctive look for regional and overview maps.</li>
               <li><strong>Blank</strong> — no basemap, with a custom background color. Best for clean figures in technical reports.</li>
             </ul>
-            <p>Switch basemap from the <strong>Design</strong> section in the sidebar. Template modes also pre-select the most appropriate basemap for each map type.</p>
+            <p>Switch basemap under the <strong>Layout</strong> tab. Choosing a map type also pre-selects the basemap that suits it.</p>
             <h3>Reference overlays</h3>
             <p>Independently toggle additional reference layers on top of any basemap:</p>
             <ul>
@@ -196,18 +204,27 @@ export default function HowToUseModal({ onClose }) {
 
           {/* ── 6. Themes ── */}
           <section id="themes">
-            <h2>Choosing a Design Theme</h2>
-            <p>Themes control the color scheme for all map panels — title, legend, inset, logo — at once. Pick the one that fits your audience and document type.</p>
-            <h3>The five themes</h3>
+            <h2>Map Type &amp; Design Theme</h2>
+            <h3>Start with the map type</h3>
+            <p>One choice sets the template, the mode and the design theme together. It is the first control in the <strong>Layout</strong> tab:</p>
             <ul>
-              <li><strong>Investor — Navy & White</strong>: dark navy title block, white panels, soft shadows. Best for investor decks and corporate presentations.</li>
-              <li><strong>Technical — Sharp Borders</strong>: zero border radius, thick black borders, left navy accent bar. Best for technical reports and regulatory filings.</li>
-              <li><strong>Modern — Dark Indigo</strong>: deep indigo panels, cyan glow borders. Best for digital publications, dashboards, and social media.</li>
-              <li><strong>Terrain — Earthy & Warm</strong>: cream panels, earthy brown borders, burnt-sienna left accent. Best for environmental assessments, field geology, and ecology reports.</li>
-              <li><strong>Blueprint — Midnight Cyan</strong>: near-black steel-blue panels, crisp cyan accent bars. Best for engineering and scientific publications.</li>
+              <li><strong>Investor / presentation map</strong> — property in district context, for decks and news releases.</li>
+              <li><strong>Claims and tenure map</strong> — claim blocks and ownership over regional context.</li>
+              <li><strong>Drill results map</strong> — collars and intercepts, laid out with a technical data rail down the right.</li>
+              <li><strong>Infrastructure and access map</strong> — roads, rail, power and the route to the property.</li>
+              <li><strong>NI 43-101 figure</strong> — coordinate frame and technical title block for a report.</li>
+            </ul>
+            <p>Change any of the underlying pieces and the map type reads <em>Custom</em> — nothing is lost, it just means the combination is now your own.</p>
+            <h3>The design themes</h3>
+            <p>Themes control the colour scheme for all map panels — title, legend, inset, logo — at once.</p>
+            <ul>
+              <li><strong>Clean</strong>: dark navy title block, white panels, hairline rules. Best for investor decks and corporate presentations.</li>
+              <li><strong>Technical</strong>: square corners, hard black borders, navy left accent bar. Best for technical reports and regulatory filings.</li>
+              <li><strong>Dark</strong>: deep indigo panels, sky-blue accents. Best for digital publications and social media.</li>
+              <li><strong>Warm</strong>: cream panels, earthy brown borders, burnt-sienna accent. Best for environmental assessments and field geology.</li>
             </ul>
             <h3>Applying a theme</h3>
-            <p>Open the <strong>Design</strong> section in the sidebar and choose from the <strong>Design Theme</strong> dropdown. The change applies instantly to all panels.</p>
+            <p>Start with <strong>Map type</strong> at the top of the <strong>Layout</strong> tab — it sets the template, the mode and the design theme together. To override the theme on its own, open <strong>Layout → Customize design</strong> and use the <strong>Design Theme</strong> dropdown. The change applies instantly to all panels.</p>
             <h3>Overriding theme colors</h3>
             <p>Every theme color can be individually overridden without changing the theme:</p>
             <ul>
@@ -243,7 +260,7 @@ export default function HowToUseModal({ onClose }) {
             <h3>Legend panel</h3>
             <ul>
               <li>Switch between <strong>Auto</strong>, <strong>Compact</strong>, and <strong>Expanded</strong> legend display modes</li>
-              <li>Edit the legend title text from the Design section</li>
+              <li>Edit the legend title under <strong>Layout → Customize design → Text &amp; Metadata</strong></li>
               <li>Resize by dragging: right edge (width), bottom edge (height), or corner (both)</li>
               <li>Toggle <strong>"Legend box"</strong> off to remove the panel background</li>
             </ul>
@@ -272,12 +289,12 @@ export default function HowToUseModal({ onClose }) {
 
             <h3>North arrow & scale bar</h3>
             <ul>
-              <li>Toggle each on or off from the Design section</li>
+              <li>Toggle each on or off under the <strong>Layout</strong> tab</li>
               <li>The scale bar calculates the displayed distance automatically from the current zoom level</li>
             </ul>
 
             <h3>Positioning panels</h3>
-            <p>Every element can be placed in any of the four corners. Use the corner pickers in the Design section:</p>
+            <p>Every element can be placed in any of the four corners — drag it on the map, or use the corner pickers under <strong>Layout</strong>:</p>
             <ul>
               <li>Title, Logo, Legend, Inset, North Arrow, and Scale Bar each have their own corner selector</li>
               <li>Elements assigned to the same corner stack automatically without overlapping</li>
@@ -291,7 +308,7 @@ export default function HowToUseModal({ onClose }) {
           {/* ── 8. Annotations ── */}
           <section id="annotations">
             <h2>Annotations</h2>
-            <p>Annotations are free-form elements placed directly on the map — not tied to imported data layers. All annotation tools are in the <strong>Annotations</strong> section of the sidebar.</p>
+            <p>Annotations are free-form elements placed directly on the map — not tied to imported data layers. All annotation tools are in the <strong>Labels</strong> tab of the inspector.</p>
 
             <h3>Place Marker</h3>
             <ul>
@@ -322,7 +339,7 @@ export default function HowToUseModal({ onClose }) {
               <li>Click <strong>Draw Boundary</strong> to activate the polygon drawing tool</li>
               <li>Click on the map to place vertices one at a time — a live dashed preview builds with each click</li>
               <li>The blue circle marks the first vertex. Clicking it automatically closes and saves the polygon.</li>
-              <li>Alternatively, click <strong>"Close &amp; Save"</strong> in the sidebar once you have 3 or more points</li>
+              <li>Alternatively, click <strong>"Close &amp; Save"</strong> in the inspector once you have 3 or more points</li>
               <li>Click <strong>Cancel</strong> to discard an in-progress polygon</li>
             </ul>
             <p>After saving, select the polygon to edit:</p>
@@ -348,7 +365,7 @@ export default function HowToUseModal({ onClose }) {
             </ul>
 
             <h3>Deleting annotations</h3>
-            <p>Click an annotation to select it, then press <kbd>Delete</kbd>. Or use the <strong>Remove</strong> button in its sidebar controls panel.</p>
+            <p>Click an annotation to select it, then press <kbd>Delete</kbd>. Selecting it also brings its controls up in the <strong>Labels</strong> tab, which has a <strong>Remove</strong> button.</p>
           </section>
 
           {/* ── 9. Callouts ── */}
@@ -359,7 +376,7 @@ export default function HowToUseModal({ onClose }) {
             <h3>Adding callouts</h3>
             <ul>
               <li><strong>From a feature</strong>: click a drillhole or point on the map to open the inline editor. Fill in the title and subtext, then click <strong>"Add / Update Callout"</strong>.</li>
-              <li><strong>From a layer</strong>: select a layer in the sidebar, then click <strong>"Add From Selected Layer"</strong> to create callouts for all features at once (uses a property column as the label).</li>
+              <li><strong>From a layer</strong>: select a layer in the <strong>Layers</strong> tab, then open <strong>Labels</strong> and click <strong>"Add From Selected Layer"</strong> to create callouts for all features at once (uses a property column as the label).</li>
               <li>Use <strong>Auto Frame All</strong> to pan and zoom so all active callouts fit within the visible viewport.</li>
             </ul>
 
@@ -404,14 +421,16 @@ export default function HowToUseModal({ onClose }) {
           <section id="export">
             <h2>Exporting Your Map</h2>
             <h3>Export formats</h3>
+            <p>All formats are under the <strong>Export</strong> menu in the toolbar. Filename, size and ratio live in the <strong>Export</strong> tab of the inspector.</p>
             <ul>
-              <li><strong>PNG</strong> — raster image. Best for presentations, Word documents, email attachments, and web use. Click <strong>PNG</strong> in the toolbar.</li>
-              <li><strong>SVG</strong> — vector format. Best for editing in Adobe Illustrator or Inkscape, or when you need infinite scalability. Click <strong>SVG</strong> in the toolbar.</li>
-              <li><strong>PDF</strong> — document format. Best for print-ready deliverables, news releases, and regulatory submissions. Click <strong>PDF</strong> in the toolbar.</li>
+              <li><strong>Image for slides and web</strong> (PNG) — raster. Best for presentations, Word documents, email attachments and web use.</li>
+              <li><strong>Vector for editing</strong> (SVG) — best when you need infinite scalability.</li>
+              <li><strong>Vector for Illustrator</strong> (ZIP) — an SVG bundled with a separate basemap image, so it opens correctly in Adobe Illustrator.</li>
+              <li><strong>Document for reports</strong> (PDF) — best for print-ready deliverables, news releases and regulatory submissions.</li>
             </ul>
 
             <h3>Setting the export aspect ratio</h3>
-            <p>Use the <strong>Ratio</strong> buttons in the Export section to lock the canvas to a specific shape before exporting:</p>
+            <p>Use the <strong>Ratio</strong> buttons in the inspector's <strong>Export</strong> tab to lock the canvas to a specific shape before exporting:</p>
             <ul>
               <li><strong>Landscape 16:9</strong> — PowerPoint slides and widescreen presentations</li>
               <li><strong>Square 1:1</strong> — social media posts and equal-dimension formats</li>
@@ -475,10 +494,10 @@ export default function HowToUseModal({ onClose }) {
             </ul>
             <h3>Saving and sharing</h3>
             <ul>
-              <li>The project auto-saves continuously — watch for the <strong>✓ Saved</strong> flash in the toolbar</li>
+              <li>The project auto-saves continuously — watch the state beside the project name in the toolbar</li>
               <li>Projects live in your browser's local storage and are specific to this browser and device</li>
               <li>To share your work, export the map and share the image or PDF file</li>
-              <li>Use <strong>Save As</strong> or <strong>Dup</strong> to create variations of a project (e.g., different themes or ratios) without overwriting the original</li>
+              <li>Use <strong>Project → Save As…</strong> or <strong>Duplicate</strong> to create variations of a project (e.g. different themes or ratios) without overwriting the original</li>
             </ul>
           </section>
 
@@ -534,8 +553,11 @@ export default function HowToUseModal({ onClose }) {
               <dt>Layer Role</dt>
               <dd>The semantic category assigned to a data layer (e.g., Claims, Drillholes). Drives automatic styling, legend grouping, and template mode behavior.</dd>
 
-              <dt>Template Mode</dt>
-              <dd>A one-click preset that configures basemap, reference overlays, visible layer roles, inset type, and composition for common map types such as Claims Map or Drill Results Map.</dd>
+              <dt>Map Type</dt>
+              <dd>The single choice that configures the template, the mode and the design theme at once — Investor, Claims and tenure, Drill results, Infrastructure, or NI 43-101 figure. Each one sets basemap, reference overlays, visible layer roles, inset type and composition to suit that kind of map.</dd>
+
+              <dt>Customize design</dt>
+              <dd>The secondary panel under the Layout tab holding the individual template, mode, theme, font, palette and composition controls that a map type sets for you.</dd>
 
               <dt>Inset Map</dt>
               <dd>The small locator map shown in a corner of the main canvas, indicating where the project sits within a larger geographic area (province, country, or region).</dd>

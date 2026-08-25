@@ -17,45 +17,45 @@
 <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Organization","name":"Tudor Gold Corp.","tickerSymbol":"TSXV:TUD","url":"https://www.explorationmaps.com/companies/tud/"},{"@type":"Dataset","name":"Tudor Gold Corp. mineral claims","description":"Tudor Gold Corp. holds 47 mineral claims totalling 17,966 ha in British Columbia. Interactive claims map, claim list, and expiry dates from public registry data.","url":"https://www.explorationmaps.com/companies/tud/","creator":{"@type":"Organization","name":"Exploration Maps","url":"https://www.explorationmaps.com"},"dateModified":"2026-07-06","license":"https://www.mtonline.gov.bc.ca/","spatialCoverage":"British Columbia"}]}</script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Inter',system-ui,-apple-system,sans-serif;color:#18212e;background:#fafbfd;line-height:1.6}
-a{color:#2563eb;text-decoration:none}a:hover{text-decoration:underline}
-.nav{display:flex;align-items:center;justify-content:space-between;padding:0 24px;height:58px;border-bottom:1px solid #e4e9f1;background:#fff;position:sticky;top:0;z-index:50}
+body{font-family:'Source Sans 3','Segoe UI',system-ui,-apple-system,sans-serif;color:#18212e;background:#fafbfd;line-height:1.6}
+a{color:#142126;text-decoration:underline;text-decoration-color:#c6cecf;text-underline-offset:3px}a:hover{text-decoration-color:#c65322}
+.nav{display:flex;align-items:center;justify-content:space-between;padding:0 24px;height:58px;border-bottom:1px solid #dde3e3;background:#fff;position:sticky;top:0;z-index:50}
 .nav-brand{display:flex;align-items:center;gap:8px;font-weight:750;font-size:15px;color:#0f1b2d}
-.nav-cta{background:#2563eb;color:#fff;padding:8px 16px;border-radius:8px;font-size:13px;font-weight:650;white-space:nowrap}
-.nav-cta:hover{background:#1d4ed8;text-decoration:none}
+.nav-cta{background:#142126;color:#fff;padding:8px 16px;border-radius:8px;font-size:13px;font-weight:650;white-space:nowrap}
+.nav-cta:hover{background:#2c3d42;text-decoration:none}
 .wrap{max-width:960px;margin:0 auto;padding:36px 22px 70px}
-.crumb{font-size:12.5px;color:#8b96a5;margin-bottom:16px}
-.crumb a{color:#8b96a5}
+.crumb{font-size:12.5px;color:#5f6e72;margin-bottom:16px}
+.crumb a{color:#5f6e72}
 h1{font-size:clamp(22px,3.4vw,32px);line-height:1.15;letter-spacing:-.02em;margin-bottom:10px}
-.sub{color:#566274;font-size:15px;max-width:70ch;margin-bottom:8px}
-.updated{font-size:12px;color:#8b96a5;margin-bottom:22px}
-.map-card{background:#fff;border:1px solid #e4e9f1;border-radius:14px;overflow:hidden;box-shadow:0 10px 32px -14px rgba(15,27,45,.15);margin-bottom:14px}
+.sub{color:#5f6e72;font-size:15px;max-width:70ch;margin-bottom:8px}
+.updated{font-size:12px;color:#5f6e72;margin-bottom:22px}
+.map-card{background:#fff;border:1px solid #dde3e3;border-radius:14px;overflow:hidden;box-shadow:0 10px 32px -14px rgba(15,27,45,.15);margin-bottom:14px}
 .map-card img,.map-card object{display:block;width:100%;height:auto}
 .map-actions{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 30px}
 .btn{display:inline-flex;align-items:center;gap:7px;border-radius:9px;font-weight:640;font-size:13.5px;padding:9px 16px;border:1px solid transparent}
-.btn-primary{background:#2563eb;color:#fff}.btn-primary:hover{background:#1d4ed8;text-decoration:none}
+.btn-primary{background:#142126;color:#fff}.btn-primary:hover{background:#2c3d42;text-decoration:none}
 .btn-ghost{background:#fff;color:#18212e;border-color:#d4dce7}.btn-ghost:hover{border-color:#aebccf;text-decoration:none}
 .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:0 0 30px}
-.stat{background:#fff;border:1px solid #e4e9f1;border-radius:11px;padding:14px 16px}
+.stat{background:#fff;border:1px solid #dde3e3;border-radius:11px;padding:14px 16px}
 .stat b{display:block;font-size:21px;letter-spacing:-.01em;font-variant-numeric:tabular-nums}
-.stat span{font-size:12px;color:#8b96a5}
+.stat span{font-size:12px;color:#5f6e72}
 h2{font-size:18px;letter-spacing:-.01em;margin:34px 0 12px}
-table{width:100%;border-collapse:collapse;font-size:13px;background:#fff;border:1px solid #e4e9f1;border-radius:10px;overflow:hidden}
-th{background:#f3f6fa;text-align:left;padding:9px 12px;font-weight:650;color:#45566a;border-bottom:1px solid #e4e9f1}
+table{width:100%;border-collapse:collapse;font-size:13px;background:#fff;border:1px solid #dde3e3;border-radius:10px;overflow:hidden}
+th{background:#f3f6fa;text-align:left;padding:9px 12px;font-weight:650;color:#45566a;border-bottom:1px solid #dde3e3}
 td{padding:8px 12px;border-bottom:1px solid #eef2f7;font-variant-numeric:tabular-nums}
 tr:last-child td{border-bottom:none}
 .tbl-wrap{overflow-x:auto;border-radius:10px}
-.claim-cta{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;background:linear-gradient(135deg,#eff6ff,#e0e7ff);border:1px solid #c7d7fe;border-radius:12px;padding:16px 20px;margin:30px 0}
+.claim-cta{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;background:linear-gradient(135deg,#f6f8f7,#f6f8f7);border:1px solid #c7d7fe;border-radius:12px;padding:16px 20px;margin:30px 0}
 .claim-cta b{font-size:15px}
-.claim-cta span{display:block;font-size:13px;color:#566274}
+.claim-cta span{display:block;font-size:13px;color:#5f6e72}
 .neigh{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
-.neigh a{background:#fff;border:1px solid #e4e9f1;border-radius:11px;padding:13px 15px;display:block}
-.neigh a:hover{border-color:#2563eb;text-decoration:none}
+.neigh a{background:#fff;border:1px solid #dde3e3;border-radius:11px;padding:13px 15px;display:block}
+.neigh a:hover{border-color:#142126;text-decoration:none}
 .neigh b{display:block;font-size:13.5px;color:#0f1b2d}
-.neigh span{font-size:12px;color:#8b96a5}
-.disclaimer{background:#fffbeb;border-left:4px solid #d97706;border-radius:0 10px 10px 0;padding:13px 16px;font-size:13px;color:#57534e;line-height:1.65;margin:34px 0}
-.footer{border-top:1px solid #e4e9f1;padding:26px 22px;text-align:center;font-size:12.5px;color:#8b96a5;background:#fff}
-.footer a{color:#566274}
+.neigh span{font-size:12px;color:#5f6e72}
+.disclaimer{background:#faf5ea;border-left:4px solid #9a6715;border-radius:0 10px 10px 0;padding:13px 16px;font-size:13px;color:#57534e;line-height:1.65;margin:34px 0}
+.footer{border-top:1px solid #dde3e3;padding:26px 22px;text-align:center;font-size:12.5px;color:#5f6e72;background:#fff}
+.footer a{color:#5f6e72}
 .hub-list{columns:3;column-gap:26px;font-size:14px}
 .hub-list li{margin-bottom:7px;break-inside:avoid;list-style:none}
 @media(max-width:700px){.hub-list{columns:1}}
@@ -64,7 +64,7 @@ tr:last-child td{border-bottom:none}
 <body>
 <nav class="nav">
   <a class="nav-brand" href="/">
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" fill="#2563eb"/></svg>
+    <svg width="20" height="20" viewBox="0 0 480 520" fill="none" aria-hidden="true"><path fill="#142126" d="M60 40H180V85H410V250H445V480H30V385H60Z"/><path fill="none" stroke="#ffffff" stroke-width="22" d="M18 180H132L205 250H240V325L320 400V490"/><path fill="none" stroke="#ffffff" stroke-width="22" d="M205 250L260 195"/><rect x="250" y="145" width="90" height="90" fill="#ffffff"/><rect x="273" y="168" width="44" height="44" fill="#c65322"/></svg>
     Exploration Maps
   </a>
   <a class="nav-cta" href="/">Start Mapping</a>

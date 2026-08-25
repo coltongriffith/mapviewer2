@@ -49,6 +49,53 @@ export const CALLOUT_TYPES = {
 };
 
 
+/**
+ * The one decision a user actually makes about a map.
+ *
+ * Template, mode and design theme were three separate selectors describing
+ * overlapping things; picking a map type sets all three at once. Every value
+ * below is an id that already existed, so a project saved through this
+ * selector is indistinguishable from one saved through the individual
+ * controls — which remain available under Customize design.
+ */
+export const MAP_TYPES = {
+  investor: {
+    label: 'Investor / presentation map',
+    note: 'Property in district context for decks and news releases.',
+    templateId: 'technical_results_v2', mode: 'project_overview', themeId: 'investor_clean',
+  },
+  claims: {
+    label: 'Claims and tenure map',
+    note: 'Claim blocks and ownership over regional context.',
+    templateId: 'technical_results_v2', mode: 'regional_claims', themeId: 'investor_clean',
+  },
+  drill: {
+    label: 'Drill results map',
+    note: 'Collars and intercepts with a technical data rail.',
+    templateId: 'side_panel', mode: 'drill_plan', themeId: 'technical_sharp',
+  },
+  infrastructure: {
+    label: 'Infrastructure and access map',
+    note: 'Roads, rail, power and the route to the property.',
+    templateId: 'technical_results_v2', mode: 'access_location', themeId: 'investor_clean',
+  },
+  ni_43101: {
+    label: 'NI 43-101 figure',
+    note: 'Coordinate frame and technical title block for a report.',
+    templateId: 'ni_43101_technical', mode: 'project_overview', themeId: 'ni_43101',
+  },
+};
+
+/** Which map type a stored layout corresponds to, or 'custom' if none. */
+export function mapTypeOf(layout) {
+  const templateId = layout?.templateId || 'technical_results_v2';
+  const themeId = layout?.themeId || 'investor_clean';
+  const mode = layout?.mode || 'project_overview';
+  const hit = Object.entries(MAP_TYPES).find(([, t]) =>
+    t.templateId === templateId && t.mode === mode && t.themeId === themeId);
+  return hit ? hit[0] : 'custom';
+}
+
 export const TEMPLATE_THEMES = {
   investor_clean:  'Clean',
   technical_sharp: 'Technical',
@@ -121,14 +168,8 @@ export function createInitialProjectState() {
       cornerOrder: ['title', 'logo', 'inset', 'northArrow', 'scaleBar', 'legend'],
       cornerLayout: null,
       sidePanelPositions: {},
-      sidePanelOrder: ['inset', 'legend', 'logo'],
-      sidePanelGrid: [
-        'inset',
-        'legend',
-        'logo',
-        'title',
-        'footer',
-      ],
+      sidePanelOrder: ['logo', 'title', 'legend', 'inset'],
+      sidePanelGrid: ['logo', 'title', 'legend', 'inset', 'footer'],
       scaleBarHeightPx: 48,
       insetRegionFill: null,
       insetRegionStroke: null,
@@ -136,7 +177,11 @@ export function createInitialProjectState() {
       insetMarkerColor: null,
       northArrowHeightPx: 100,
       northArrowStyle: 'classic',
-      northArrowTransparent: false,
+      // The compass and the scale bar read fine straight on the map. Boxing
+      // them turns two small marks into two more floating cards; the panel is
+      // still one checkbox away under Customize design → Panel boxes.
+      northArrowTransparent: true,
+      scaleBarTransparent: true,
       cornerRadius: null,
       insetAspectRatio: null,
       safeMargins: { top: 18, right: 18, bottom: 18, left: 18 },
@@ -161,7 +206,10 @@ export function createInitialProjectState() {
       legendTransparent: false,
       logoWidthPx: 168,
       logoHeightPx: 74,
-      logoTransparent: false,
+      // The logo belongs to the title block, not to a box of its own: with the
+      // two on one row, a panel around the mark is what made them read as two
+      // unrelated cards. Reversible under Customize design → Panel boxes.
+      logoTransparent: true,
       insetWidthPx: 244,
       insetHeightPx: 190,
       exportSettings: {

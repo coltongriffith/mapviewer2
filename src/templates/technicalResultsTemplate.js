@@ -92,13 +92,19 @@ export const technicalResultsTemplate = {
   },
 };
 
-function legendHeightFor(layout, itemCount, groupCount = 0) {
+function legendHeightFor(layout, itemCount) {
   const mode = layout?.legendMode || 'auto';
   const compact = mode === 'compact' || (mode === 'auto' && itemCount <= 2);
   if (!itemCount) return 0;
-  const groupPx = groupCount * 22;
-  if (compact) return Math.max(84, Math.min(360, 42 + itemCount * 24 + groupPx));
-  return Math.max(110, Math.min(360, 52 + itemCount * 28 + groupPx));
+  // No group allowance: nothing renders legend group headings — not the stage
+  // (renderLegendGroups returns a single unheaded group) and not either
+  // exporter. Reserving a row per group padded every legend panel with dead
+  // space in the preview and in the export alike. If headings come back, the
+  // allowance comes back with them.
+  // Chrome (card padding + legend title + rule) plus the real row pitch the
+  // legend list renders at — a few pixels short per row clipped the last entry.
+  if (compact) return Math.max(84, Math.min(360, 48 + itemCount * 26));
+  return Math.max(110, Math.min(360, 58 + itemCount * 30));
 }
 
 function clampZone(zone, safe, width, height) {
@@ -127,10 +133,9 @@ export function resolveTemplateZones(template, layout, mapSize, legendItems) {
 
   const resolvedLegendItems = legendItems || layout?.legendItems || [];
   const legendCount = resolvedLegendItems.length;
-  const groupCount = new Set(resolvedLegendItems.map((item) => item.group).filter(Boolean)).size;
   const legendHeight = layout?.legendHeightPx != null
     ? Math.max(60, Math.min(500, layout.legendHeightPx))
-    : legendHeightFor(layout, legendCount, groupCount);
+    : legendHeightFor(layout, legendCount);
   const legendWidth = Math.max(180, Math.min(480, layout?.legendWidthPx ?? 300));
   const logoScale = Math.max(0.7, Math.min(1.2, Number(layout?.logoScale || 1)));
   const insetScale = Math.max(0.8, Math.min(1.2, Number(layout?.insetScale || 1)));
@@ -187,14 +192,21 @@ export function resolveTemplateZones(template, layout, mapSize, legendItems) {
   const cl = getCornerLayout(layout);
   const zones = {};
 
+  // How much of the canvas one corner may claim. Two elements side by side —
+  // the logo and the title now share a row by default — can otherwise run the
+  // full width of the map and slide underneath whatever sits in the opposite
+  // corner. The second element in a row gives up the space instead.
+  const cornerBudget = Math.max(240, Math.round(width * 0.62));
+
   for (const corner of ['tl', 'tr', 'bl', 'br']) {
     const rows = cl[corner] || [];
     for (const row of rows) {
       let rowH = 0;
       let hCursor = 0;
       for (const id of row) {
-        const [w, h] = sizeOf(id);
+        let [w, h] = sizeOf(id);
         if (w === 0 && h === 0) { zones[id] = { top: 0, left: 0, width: 0, height: 0 }; continue; }
+        if (hCursor > 0) w = Math.max(120, Math.min(w, cornerBudget - hCursor));
         let anchor;
         if (corner === 'tl') anchor = { top: safe.top + vOffset.tl, left: safe.left + hCursor };
         else if (corner === 'tr') anchor = { top: safe.top + vOffset.tr, right: safe.right + hCursor };

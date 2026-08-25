@@ -3,11 +3,30 @@ import { hasVisibleFeatures } from '../utils/featureIdentity.js';
 
 const SIDEBAR_FRAC = 0.28;
 
-function legendHeightFor(layout, itemCount, groupCount) {
+/**
+ * Reading order down the rail: brand, title (which carries the project
+ * metadata line), legend, locator, notes.
+ *
+ * The title used to be appended last, which put the single most important
+ * element at the bottom of the panel — below the locator inset. The order is
+ * data, not layout code: users can still drag any element to any row, and a
+ * saved project keeps whatever order it stored.
+ */
+export const DEFAULT_SIDE_PANEL_GRID = ['logo', 'title', 'legend', 'inset', 'footer'];
+
+function legendHeightFor(layout, itemCount) {
   const lfs = layout?.legendFontScale ?? 1;
-  const rowH = Math.round(28 * lfs);
-  const groupPx = groupCount * 18;
-  return Math.max(60, Math.min(400, 44 + itemCount * rowH + groupPx));
+  // Row pitch and chrome measured against what the legend card actually
+  // renders (title + 12px rule + 10px gaps + 14px padding top and bottom).
+  // The old numbers were a few pixels short per row, so a four-entry legend
+  // clipped its last line in the rail and in the export alike.
+  const rowH = Math.round(30 * lfs);
+  // No group allowance: nothing renders legend group headings — not the stage
+  // (renderLegendGroups returns a single unheaded group) and not either
+  // exporter. Reserving a row per group padded every legend panel with dead
+  // space in the preview and in the export alike. If headings come back, the
+  // allowance comes back with them.
+  return Math.max(60, Math.min(400, 58 + itemCount * rowH));
 }
 
 export const sidePanelTemplate = {
@@ -67,10 +86,9 @@ export function resolveSidePanelZones(template, layout, mapSize, legendItems) {
   // --- Element heights ---
   const resolvedItems = legendItems || layout?.legendItems || [];
   const itemCount = resolvedItems.length;
-  const groupCount = new Set(resolvedItems.map(i => i.group).filter(Boolean)).size;
   const legendHeight = layout?.legendHeightPx != null
     ? Math.max(60, Math.min(H - 320, layout.legendHeightPx))
-    : legendHeightFor(layout, itemCount, groupCount);
+    : legendHeightFor(layout, itemCount);
 
   const titleHeight = Math.max(72, Math.min(180, layout?.titleHeightPx ?? 108));
   const logoScale = Math.max(0.7, Math.min(1.2, Number(layout?.logoScale || 1)));
@@ -90,10 +108,17 @@ export function resolveSidePanelZones(template, layout, mapSize, legendItems) {
   const insetW = innerW;
 
   // Determine which elements are in the sidebar grid
-  const rawGrid = layout?.sidePanelGrid || layout?.sidePanelOrder || ['inset', 'legend', 'logo'];
-  // Migrate old saves that predate 'title' being included — always ensure it's present
+  const rawGrid = layout?.sidePanelGrid || layout?.sidePanelOrder || DEFAULT_SIDE_PANEL_GRID;
+  // Migrate old saves that predate 'title' being included. It goes to the top of
+  // the rail (under the logo when there is one), never appended to the bottom:
+  // appending is what buried the title below the locator in every legacy save.
   const gridHasId = (g, eid) => g.some(item => Array.isArray(item) ? item.includes(eid) : item === eid);
-  const grid = gridHasId(rawGrid, 'title') ? rawGrid : [...rawGrid, 'title'];
+  const grid = gridHasId(rawGrid, 'title')
+    ? rawGrid
+    : (() => {
+      const at = gridHasId([rawGrid[0]], 'logo') ? 1 : 0;
+      return [...rawGrid.slice(0, at), 'title', ...rawGrid.slice(at)];
+    })();
   const gridHas = (eid) => gridHasId(grid, eid);
   const northArrowInGrid = gridHas('northArrow');
   const scaleBarInGrid = gridHas('scaleBar');
@@ -108,8 +133,8 @@ export function resolveSidePanelZones(template, layout, mapSize, legendItems) {
   let scaleBarZone = { top: 0, left: 0, width: 0, height: 0 };
 
   const getElemH = (eid) => {
-    if (eid === 'inset') return insetEnabled ? insetH : 0;
-    if (eid === 'legend') return legendHeight;
+    if (eid === 'inset') return fittedInsetH;
+    if (eid === 'legend') return fittedLegendH;
     if (eid === 'logo') return layout?.logo ? logoH : 0;
     if (eid === 'title') return titleHeight;
     if (eid === 'footer') return layout?.footerEnabled && layout?.footerText ? footerH : 0;
@@ -128,9 +153,47 @@ export function resolveSidePanelZones(template, layout, mapSize, legendItems) {
     else if (eid === 'scaleBar') scaleBarZone = z;
   };
 
+  // --- Fit the stack to the rail -------------------------------------------
+  // Everything except the legend and the locator has a height it must keep
+  // (a title cannot be 12px tall, a footer line cannot be 4px). Those two are
+  // the elastic ones, so when the requested heights exceed the rail they give
+  // back space — in that order — instead of the last row falling off the
+  // bottom edge. This is why the footer no longer clips.
+  const rowHeightFor = (eid) => {
+    if (eid === 'inset') return insetEnabled ? insetH : 0;
+    if (eid === 'legend') return legendHeight;
+    if (eid === 'logo') return layout?.logo ? logoH : 0;
+    if (eid === 'title') return titleHeight;
+    if (eid === 'footer') return layout?.footerEnabled && layout?.footerText ? footerH : 0;
+    if (eid === 'northArrow') return northArrowInGrid ? naH : 0;
+    if (eid === 'scaleBar') return scaleBarInGrid ? scaleBarActualH : 0;
+    return 0;
+  };
+  const rows = grid.map((item) => {
+    if (!item) return { kind: 'spacer' };
+    const ids = Array.isArray(item) ? item : [item];
+    return { kind: 'row', ids, height: Math.max(...ids.map(rowHeightFor), 0) };
+  });
+  const emptyRowH = Math.floor((H - margin * 2) / 5);
+  const usedGaps = Math.max(0, rows.filter((r) => r.kind === 'spacer' || r.height > 0).length - 1) * gap;
+  const requested = rows.reduce((sum, r) => sum + (r.kind === 'spacer' ? emptyRowH : r.height), 0) + usedGaps;
+  let overflow = requested - (H - margin * 2);
+
+  let fittedLegendH = legendHeight;
+  let fittedInsetH = insetEnabled ? insetH : 0;
+  if (overflow > 0 && grid.some((i) => (Array.isArray(i) ? i : [i]).includes('legend'))) {
+    const give = Math.min(overflow, Math.max(0, fittedLegendH - 60));
+    fittedLegendH -= give;
+    overflow -= give;
+  }
+  if (overflow > 0 && fittedInsetH > 0) {
+    const give = Math.min(overflow, Math.max(0, fittedInsetH - 70));
+    fittedInsetH -= give;
+    overflow -= give;
+  }
+
   // --- Stack from TOP in configurable grid order ---
   // Null/undefined rows act as empty spacer rows contributing a fixed height
-  const emptyRowH = Math.floor((H - margin * 2) / 5);
   let stackY = margin;
   for (const item of grid) {
     if (!item) {

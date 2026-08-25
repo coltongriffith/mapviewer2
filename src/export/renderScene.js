@@ -1,7 +1,8 @@
 import { escapeXml, downloadBlob } from '../utils/svg';
 import { geojsonBounds, unionBounds } from '../utils/geometry';
+import { autoProjectionName, formatScaleDenom, scaleDenomFromMap } from '../utils/geo';
 import { resolveTemplateZones } from '../templates/technicalResultsTemplate';
-import { resolveNI43101Zones } from '../templates/technicalReportTemplate';
+import { resolveNI43101Zones, resolveTitleStripFields } from '../templates/technicalReportTemplate';
 import { resolveSidePanelZones } from '../templates/sidePanelTemplate';
 import { getThemeTokens } from '../utils/themeTokens';
 import { markerIconSvgFragment, drawMarkerIconCanvas } from '../utils/markerIcons.jsx';
@@ -702,8 +703,15 @@ function drawScaleBarCanvas(ctx, scene, scale) {
   if (scene.project.layout?.showScaleBar === false) return;
   const theme = getTheme(scene);
   const { scaleBar } = getOverlayMetrics(scene); const x = scaleBar.left * scale, y = scaleBar.top * scale, w = scaleBar.width * scale, h = scaleBar.height * scale, scaleState = pickScaleLabel(scene.map);
-  drawPanelRect(ctx, x, y, w, h, (theme.panelRadius ?? 10) * scale, theme.scaleFill, theme.panelBorder, scale);
-  drawPanelAccentLeft(ctx, x, y, h, theme, scale);
+  // No plate by default. A scale bar is a mark on the map, not a card floating
+  // over it — but without the plate it has to carry its own legibility, so the
+  // bar and the label get a halo in the panel colour (matches .panel--transparent
+  // .scale-bar on screen).
+  const scaleTransparent = scene.project.layout?.scaleBarTransparent;
+  if (!scaleTransparent) {
+    drawPanelRect(ctx, x, y, w, h, (theme.panelRadius ?? 10) * scale, theme.scaleFill, theme.panelBorder, scale);
+    drawPanelAccentLeft(ctx, x, y, h, theme, scale);
+  }
   // Center bar + label inside the panel (mirrors the editor's flex layout)
   const barH = 6 * scale, gap = 4 * scale, textH = 11 * scale;
   const barWidth = Math.min(scaleState.widthPx * scale, w - 24 * scale);
@@ -713,7 +721,12 @@ function drawScaleBarCanvas(ctx, scene, scale) {
   ctx.fillStyle = '#ffffff'; ctx.fillRect(barX + barWidth / 2, startY, barWidth / 2, barH);
   ctx.strokeStyle = theme.scaleStroke; ctx.lineWidth = Math.max(1, scale); ctx.strokeRect(barX, startY, barWidth, barH);
   const footerFont = `${scene.project.layout?.fonts?.footer || 'Inter'}, Arial, sans-serif`;
-  ctx.fillStyle = theme.bodyText; ctx.font = `${12 * scale}px ${footerFont}`; ctx.textBaseline = 'top'; ctx.textAlign = 'center';
+  ctx.font = `${12 * scale}px ${footerFont}`; ctx.textBaseline = 'top'; ctx.textAlign = 'center';
+  if (scaleTransparent) {
+    ctx.strokeStyle = theme.scaleFill; ctx.lineWidth = 3 * scale; ctx.lineJoin = 'round';
+    ctx.strokeText(scaleState.label, x + w / 2, startY + barH + gap);
+  }
+  ctx.fillStyle = theme.bodyText;
   ctx.fillText(scaleState.label, x + w / 2, startY + barH + gap);
   ctx.textAlign = 'left';
 }
@@ -1409,27 +1422,10 @@ function getNI43101MapFrame(scene, scale) {
   };
 }
 
+// Shared with the editing stage so the SCALE cell reads the same in the
+// preview and in every export (src/utils/geo.js).
 function calcMapScaleDenom(scene) {
-  const map = scene.map;
-  if (!map) return null;
-  try {
-    const size = map.getSize();
-    const pt1 = map.containerPointToLatLng([0, size.y / 2]);
-    const pt2 = map.containerPointToLatLng([100, size.y / 2]);
-    const meters = haversineMeters(pt1.lat, pt1.lng, pt2.lat, pt2.lng);
-    const rawDenom = meters / 100; // 100 container pixels = X meters in reality → scale 1:rawDenom
-    const mag = Math.pow(10, Math.floor(Math.log10(rawDenom)));
-    const candidates = [1, 2, 2.5, 5, 10].map((c) => c * mag);
-    const rounded = candidates.reduce((best, c) => Math.abs(c - rawDenom) < Math.abs(best - rawDenom) ? c : best);
-    return Math.round(rounded);
-  } catch {
-    return null;
-  }
-}
-
-function formatScaleDenom(denom) {
-  if (!denom) return '';
-  return `1:${denom.toLocaleString('en-US')}`;
+  return scaleDenomFromMap(scene.map);
 }
 
 function pickUTMInterval(totalMeters, targetTicks = 6) {
@@ -1470,15 +1466,6 @@ function fmtUTMNorthing(n) {
   const s = Math.round(n).toString();
   if (s.length <= 6) return s.slice(0, -3) + ' ' + s.slice(-3) + 'N';
   return s.slice(0, -6) + ' ' + s.slice(-6, -3) + ' ' + s.slice(-3) + 'N';
-}
-
-function autoProjectionName(map) {
-  try {
-    const c = map?.getCenter();
-    if (!c) return 'WGS84';
-    const zone = Math.floor((c.lng + 180) / 6) + 1;
-    return `WGS84 / UTM Zone ${zone}${c.lat >= 0 ? 'N' : 'S'}`;
-  } catch { return 'WGS84'; }
 }
 
 function displaceLng(lat, lng, meters) {
@@ -1528,62 +1515,63 @@ function drawTitleStripCanvas(ctx, scene, scale) {
   const labelY = stripY + 14 * scale;
   const valueY = stripY + 30 * scale;
 
+  const manualDenom = layout.manualScaleDenom ? parseInt(layout.manualScaleDenom.replace(/[^0-9]/g, ''), 10) : null;
+  const f = resolveTitleStripFields(layout, {
+    scaleText: formatScaleDenom(manualDenom || calcMapScaleDenom(scene)),
+    projectionText: autoProjectionName(scene.map),
+  });
+  // Placeholders are italic — monochrome, print-safe, and impossible to mistake
+  // for a filled-in value. Same treatment on screen and in the SVG.
+  const mono = (size, weight, missing) => `${missing ? 'italic ' : ''}${weight ? `${weight} ` : ''}${size}px ${monoFont}`;
+
   ctx.fillStyle = '#000000';
   ctx.textBaseline = 'middle';
 
-  // Cell 0: Figure title (uses stripTitle/stripSubtitle, not main title)
+  // Cell 0: Figure title — falls back to the project's own title/subtitle
   ctx.font = `700 ${labelSize}px ${monoFont}`;
   ctx.fillText('TITLE', pad, labelY);
-  const stripTitle = layout.stripTitle || '';
-  if (stripTitle) {
+  if (f.title) {
     ctx.font = `700 ${titleSize}px Arial, sans-serif`;
-    ctx.fillText(stripTitle, pad, valueY + 4 * scale);
+    ctx.fillText(f.title, pad, valueY + 4 * scale);
   }
-  const stripSubtitle = layout.stripSubtitle || '';
-  if (stripSubtitle) {
+  if (f.subtitle) {
     ctx.font = `${(labelSize) + 1 * scale}px Arial, sans-serif`;
-    ctx.fillText(stripSubtitle, pad, valueY + (stripTitle ? 20 : 4) * scale);
+    ctx.fillText(f.subtitle, pad, valueY + (f.title ? 20 : 4) * scale);
   }
 
   // Cell 1: Scale / Projection
   ctx.font = `700 ${labelSize}px ${monoFont}`;
   ctx.fillText('SCALE', cell1 + pad, labelY);
-  ctx.font = `${valueSize}px ${monoFont}`;
-  const manualDenom = layout.manualScaleDenom ? parseInt(layout.manualScaleDenom.replace(/[^0-9]/g, ''), 10) : null;
-  const scaleDenom = manualDenom || calcMapScaleDenom(scene);
-  ctx.fillText(formatScaleDenom(scaleDenom) || '—', cell1 + pad, valueY);
+  ctx.font = mono(valueSize, null, f.missing.scale);
+  ctx.fillText(f.scale, cell1 + pad, valueY);
   ctx.font = `700 ${labelSize}px ${monoFont}`;
   ctx.fillText('PROJECTION', cell1 + pad, valueY + 20 * scale);
   ctx.font = `${labelSize}px ${monoFont}`;
-  ctx.fillText(layout.projectionName || autoProjectionName(scene.map), cell1 + pad, valueY + 34 * scale);
+  ctx.fillText(f.projection, cell1 + pad, valueY + 34 * scale);
 
   // Cell 2: QP / Author
   ctx.font = `700 ${labelSize}px ${monoFont}`;
   ctx.fillText('QUALIFIED PERSON', cell2 + pad, labelY);
-  ctx.font = `${valueSize}px ${monoFont}`;
-  ctx.fillText(layout.qpName || '—', cell2 + pad, valueY);
-  if (layout.qpCredentials) {
+  ctx.font = mono(valueSize, null, f.missing.qpName);
+  ctx.fillText(f.qpName, cell2 + pad, valueY);
+  if (f.qpCredentials) {
     ctx.font = `${labelSize}px ${monoFont}`;
-    ctx.fillText(layout.qpCredentials, cell2 + pad, valueY + 18 * scale);
+    ctx.fillText(f.qpCredentials, cell2 + pad, valueY + 18 * scale);
   }
-  if (layout.companyName) {
+  if (f.companyName) {
     ctx.font = `${labelSize}px ${monoFont}`;
-    ctx.fillText(layout.companyName, cell2 + pad, valueY + 32 * scale);
+    ctx.fillText(f.companyName, cell2 + pad, valueY + 32 * scale);
   }
 
-  // Cell 3: Figure number / date
+  // Cell 3: Figure number / revision / date
   ctx.font = `700 ${labelSize}px ${monoFont}`;
   ctx.fillText('FIGURE', cell3 + pad, labelY);
-  ctx.font = `700 ${valueSize + 2 * scale}px ${monoFont}`;
-  ctx.fillText(layout.figureNumber || '—', cell3 + pad, valueY);
-  if (layout.figureRevision) {
-    ctx.font = `${labelSize}px ${monoFont}`;
-    ctx.fillText(layout.figureRevision, cell3 + pad, valueY + 18 * scale);
-  }
-  if (layout.mapDate) {
-    ctx.font = `${labelSize}px ${monoFont}`;
-    ctx.fillText(layout.mapDate, cell3 + pad, valueY + 32 * scale);
-  }
+  ctx.font = mono(valueSize + 2 * scale, 700, f.missing.figureNumber);
+  ctx.fillText(f.figureNumber, cell3 + pad, valueY);
+  ctx.font = mono(labelSize, null, f.missing.figureRevision);
+  ctx.fillText(f.figureRevision, cell3 + pad, valueY + 18 * scale);
+  ctx.font = mono(labelSize, null, f.missing.date);
+  ctx.fillText(f.date, cell3 + pad, valueY + 32 * scale);
 }
 
 function renderTitleStripSvg(scene, scale) {
@@ -1615,28 +1603,32 @@ function renderTitleStripSvg(scene, scale) {
   const manualDenom = layout.manualScaleDenom
     ? parseInt(String(layout.manualScaleDenom).replace(/[^0-9]/g, ''), 10) || null
     : null;
-  const scaleDenom = manualDenom || calcMapScaleDenom(scene);
-  const stripTitle = layout.stripTitle || '';
-  const stripSubtitle = layout.stripSubtitle || '';
+  // Same resolver as the canvas exporter and the editing stage, so the three
+  // never disagree about what the title block says.
+  const f = resolveTitleStripFields(layout, {
+    scaleText: formatScaleDenom(manualDenom || calcMapScaleDenom(scene)),
+    projectionText: autoProjectionName(scene.map),
+  });
+  const ital = (missing) => (missing ? ' font-style="italic"' : '');
 
   return `<g>
 <rect x="0" y="${stripY}" width="${canvasW}" height="${stripH}" fill="#ffffff" stroke="#000000" stroke-width="${1.5 * scale}" />
 ${dividers}
 <text x="${pad}" y="${labelY}" font-family="${monoFont}" font-size="${ls}" font-weight="700" fill="#000" dominant-baseline="middle">TITLE</text>
-${stripTitle ? `<text x="${pad}" y="${valueY + 4 * scale}" font-family="Arial,sans-serif" font-size="${ts}" font-weight="700" fill="#000" dominant-baseline="middle">${escapeXml(stripTitle)}</text>` : ''}
-${stripSubtitle ? `<text x="${pad}" y="${valueY + 20 * scale}" font-family="Arial,sans-serif" font-size="${ls + scale}" fill="#000" dominant-baseline="middle">${escapeXml(stripSubtitle)}</text>` : ''}
+${f.title ? `<text x="${pad}" y="${valueY + 4 * scale}" font-family="Arial,sans-serif" font-size="${ts}" font-weight="700" fill="#000" dominant-baseline="middle">${escapeXml(f.title)}</text>` : ''}
+${f.subtitle ? `<text x="${pad}" y="${valueY + 20 * scale}" font-family="Arial,sans-serif" font-size="${ls + scale}" fill="#000" dominant-baseline="middle">${escapeXml(f.subtitle)}</text>` : ''}
 <text x="${cell1 + pad}" y="${labelY}" font-family="${monoFont}" font-size="${ls}" font-weight="700" fill="#000" dominant-baseline="middle">SCALE</text>
-<text x="${cell1 + pad}" y="${valueY}" font-family="${monoFont}" font-size="${vs}" fill="#000" dominant-baseline="middle">${escapeXml(formatScaleDenom(scaleDenom) || '—')}</text>
+<text x="${cell1 + pad}" y="${valueY}" font-family="${monoFont}" font-size="${vs}" fill="#000" dominant-baseline="middle"${ital(f.missing.scale)}>${escapeXml(f.scale)}</text>
 <text x="${cell1 + pad}" y="${valueY + 20 * scale}" font-family="${monoFont}" font-size="${ls}" font-weight="700" fill="#000" dominant-baseline="middle">PROJECTION</text>
-<text x="${cell1 + pad}" y="${valueY + 34 * scale}" font-family="${monoFont}" font-size="${ls}" fill="#000" dominant-baseline="middle">${escapeXml(layout.projectionName || autoProjectionName(scene.map))}</text>
+<text x="${cell1 + pad}" y="${valueY + 34 * scale}" font-family="${monoFont}" font-size="${ls}" fill="#000" dominant-baseline="middle">${escapeXml(f.projection)}</text>
 <text x="${cell2 + pad}" y="${labelY}" font-family="${monoFont}" font-size="${ls}" font-weight="700" fill="#000" dominant-baseline="middle">QUALIFIED PERSON</text>
-<text x="${cell2 + pad}" y="${valueY}" font-family="${monoFont}" font-size="${vs}" fill="#000" dominant-baseline="middle">${escapeXml(layout.qpName || '—')}</text>
-${layout.qpCredentials ? `<text x="${cell2 + pad}" y="${valueY + 18 * scale}" font-family="${monoFont}" font-size="${ls}" fill="#000" dominant-baseline="middle">${escapeXml(layout.qpCredentials)}</text>` : ''}
-${layout.companyName ? `<text x="${cell2 + pad}" y="${valueY + 32 * scale}" font-family="${monoFont}" font-size="${ls}" fill="#000" dominant-baseline="middle">${escapeXml(layout.companyName)}</text>` : ''}
+<text x="${cell2 + pad}" y="${valueY}" font-family="${monoFont}" font-size="${vs}" fill="#000" dominant-baseline="middle"${ital(f.missing.qpName)}>${escapeXml(f.qpName)}</text>
+${f.qpCredentials ? `<text x="${cell2 + pad}" y="${valueY + 18 * scale}" font-family="${monoFont}" font-size="${ls}" fill="#000" dominant-baseline="middle">${escapeXml(f.qpCredentials)}</text>` : ''}
+${f.companyName ? `<text x="${cell2 + pad}" y="${valueY + 32 * scale}" font-family="${monoFont}" font-size="${ls}" fill="#000" dominant-baseline="middle">${escapeXml(f.companyName)}</text>` : ''}
 <text x="${cell3 + pad}" y="${labelY}" font-family="${monoFont}" font-size="${ls}" font-weight="700" fill="#000" dominant-baseline="middle">FIGURE</text>
-<text x="${cell3 + pad}" y="${valueY}" font-family="${monoFont}" font-size="${vs + 2 * fs}" font-weight="700" fill="#000" dominant-baseline="middle">${escapeXml(layout.figureNumber || '—')}</text>
-${layout.figureRevision ? `<text x="${cell3 + pad}" y="${valueY + 18 * scale}" font-family="${monoFont}" font-size="${ls}" fill="#000" dominant-baseline="middle">${escapeXml(layout.figureRevision)}</text>` : ''}
-${layout.mapDate ? `<text x="${cell3 + pad}" y="${valueY + 32 * scale}" font-family="${monoFont}" font-size="${ls}" fill="#000" dominant-baseline="middle">${escapeXml(layout.mapDate)}</text>` : ''}
+<text x="${cell3 + pad}" y="${valueY}" font-family="${monoFont}" font-size="${vs + 2 * fs}" font-weight="700" fill="#000" dominant-baseline="middle"${ital(f.missing.figureNumber)}>${escapeXml(f.figureNumber)}</text>
+<text x="${cell3 + pad}" y="${valueY + 18 * scale}" font-family="${monoFont}" font-size="${ls}" fill="#000" dominant-baseline="middle"${ital(f.missing.figureRevision)}>${escapeXml(f.figureRevision)}</text>
+<text x="${cell3 + pad}" y="${valueY + 32 * scale}" font-family="${monoFont}" font-size="${ls}" fill="#000" dominant-baseline="middle"${ital(f.missing.date)}>${escapeXml(f.date)}</text>
 </g>`;
 }
 
@@ -2031,17 +2023,23 @@ async function drawLogoCanvas(ctx, scene, scale) {
   const logo = scene.project.layout?.logo; if (!logo) return;
   const zone = getOverlayMetrics(scene).logo; const x = zone.left * scale, y = zone.top * scale, w = zone.width * scale, h = zone.height * scale, padding = 10 * scale;
   const theme = getTheme(scene);
-  if (!scene.project.layout?.logoTransparent) drawPanelRect(ctx, x, y, w, h, (theme.panelRadius ?? 10) * scale, theme.logoFill, theme.logoBorder, scale);
+  // In the technical rail the logo belongs to the title block, so it gets no
+  // plate and hangs off the rail's left rule — the same rule the on-screen
+  // stage applies through .map-stage[data-template="side_panel"] .logo-card.
+  const inRail = scene.project.layout?.templateId === 'side_panel';
+  const logoPlain = inRail || scene.project.layout?.logoTransparent;
+  if (!logoPlain) drawPanelRect(ctx, x, y, w, h, (theme.panelRadius ?? 10) * scale, theme.logoFill, theme.logoBorder, scale);
   const img = await new Promise((resolve, reject) => { const el = new Image(); el.onload = () => resolve(el); el.onerror = reject; el.src = logo; }).catch(() => { _exportWarnings.push('logo could not be embedded'); return null; });
   if (img) {
     // Aspect-fit: scale to fill available space preserving ratio, centered (mirrors SVG preserveAspectRatio="xMidYMid meet")
-    const availW = w - padding * 2;
-    const availH = h - padding * 2;
+    const pad = logoPlain ? 0 : padding;
+    const availW = w - pad * 2;
+    const availH = h - pad * 2;
     const ratio = Math.min(availW / img.naturalWidth, availH / img.naturalHeight);
     const dw = img.naturalWidth * ratio;
     const dh = img.naturalHeight * ratio;
-    const dx = x + padding + (availW - dw) / 2;
-    const dy = y + padding + (availH - dh) / 2;
+    const dx = x + pad + (inRail ? 0 : (availW - dw) / 2);
+    const dy = y + pad + (availH - dh) / 2;
     ctx.drawImage(img, dx, dy, dw, dh);
   }
 }
@@ -2403,7 +2401,14 @@ function renderScaleBarSvg(scene, scale) {
   // different typeface at a slightly different height.
   const footerFont = `${scene.project.layout?.fonts?.footer || 'Inter'}, Arial, sans-serif`;
   const labelSize = 12 * scale;
-  return `<g id="em-scale-bar" class="em-panel">${svgRect(x, y, w, h, (theme.panelRadius ?? 10) * scale, theme.scaleFill, theme.panelBorder, scale)}${svgPanelAccentLeft(x, y, h, theme, scale)}<rect x="${barX}" y="${startY}" width="${barWidth / 2}" height="${barH}" fill="${theme.scaleStroke}" /><rect x="${barX + barWidth / 2}" y="${startY}" width="${barWidth / 2}" height="${barH}" fill="#ffffff" stroke="${theme.scaleStroke}" stroke-width="${Math.max(1, scale)}" /><rect x="${barX}" y="${startY}" width="${barWidth}" height="${barH}" fill="none" stroke="${theme.scaleStroke}" stroke-width="${Math.max(1, scale)}" /><text x="${x + w / 2}" y="${baselineFromTop(startY + barH + gap, labelSize)}" text-anchor="middle" fill="${theme.bodyText}" font-family="${footerFont}" font-size="${labelSize}">${escapeXml(scaleState.label)}</text></g>`;
+  const scaleTransparent = scene.project.layout?.scaleBarTransparent;
+  const scalePanel = scaleTransparent
+    ? ''
+    : `${svgRect(x, y, w, h, (theme.panelRadius ?? 10) * scale, theme.scaleFill, theme.panelBorder, scale)}${svgPanelAccentLeft(x, y, h, theme, scale)}`;
+  const labelHalo = scaleTransparent
+    ? ` stroke="${theme.scaleFill}" stroke-width="${3 * scale}" stroke-linejoin="round" paint-order="stroke"`
+    : '';
+  return `<g id="em-scale-bar" class="em-panel">${scalePanel}<rect x="${barX}" y="${startY}" width="${barWidth / 2}" height="${barH}" fill="${theme.scaleStroke}" /><rect x="${barX + barWidth / 2}" y="${startY}" width="${barWidth / 2}" height="${barH}" fill="#ffffff" stroke="${theme.scaleStroke}" stroke-width="${Math.max(1, scale)}" /><rect x="${barX}" y="${startY}" width="${barWidth}" height="${barH}" fill="none" stroke="${theme.scaleStroke}" stroke-width="${Math.max(1, scale)}" /><text x="${x + w / 2}" y="${baselineFromTop(startY + barH + gap, labelSize)}" text-anchor="middle" fill="${theme.bodyText}" font-family="${footerFont}" font-size="${labelSize}"${labelHalo}>${escapeXml(scaleState.label)}</text></g>`;
 }
 function renderFooterSvg(scene, scale) {
   const theme = getTheme(scene); const text = scene.project.layout?.footerText;
@@ -2492,7 +2497,21 @@ export function renderInsetSvg(scene, scale, svgDefs, satelliteImage = null) {
   const markerSvg = marker ? `<rect x="${Math.max(innerX + 8 * scale, innerX + (marker.x / 100) * innerW)}" y="${Math.max(innerY + 8 * scale, innerY + (marker.y / 100) * innerH)}" width="${Math.max(8 * scale, Math.max(10 * scale, (marker.w / 100) * innerW))}" height="${Math.max(8 * scale, Math.max(10 * scale, (marker.h / 100) * innerH))}" fill="#60a5fa" fill-opacity="0.16" stroke="#2563eb" stroke-width="${1.5 * scale}" rx="${2 * scale}" /><circle cx="${Math.min(innerX + innerW - 8 * scale, Math.max(innerX + 8 * scale, innerX + (marker.x / 100) * innerW + Math.max(10 * scale, (marker.w / 100) * innerW) / 2))}" cy="${Math.min(innerY + innerH - 8 * scale, Math.max(innerY + 8 * scale, innerY + (marker.y / 100) * innerH + Math.max(10 * scale, (marker.h / 100) * innerH) / 2))}" r="${3.2 * scale}" fill="#0f2c56" stroke="#ffffff" stroke-width="${1.2 * scale}" />` : '';
   return `<g id="em-inset" class="em-panel">${panelSvg}${titleSvg}${insetBackdropSvg(innerX, innerY, innerW, innerH, scale, svgDefs)}${markerSvg}<text x="${x + 12 * scale}" y="${y + h - 10 * scale}" fill="${theme.insetMuted}" font-family="Arial" font-size="${11 * scale}">${escapeXml(insetLabel || ref.label)}</text></g>`;
 }
-function renderLogoSvg(scene, scale) { const theme = getTheme(scene); const logo = scene.project.layout?.logo; if (!logo) return ''; const zone = getOverlayMetrics(scene).logo; if (!zone?.width || !zone?.height) return '';  const x = zone.left * scale, y = zone.top * scale, w = zone.width * scale, h = zone.height * scale, padding = 10 * scale; return `<g id="em-logo" class="em-panel">${svgRect(x, y, w, h, (theme.panelRadius ?? 10) * scale, theme.logoFill, theme.logoBorder, scale)}<image href="${escapeXml(logo)}" x="${x + padding}" y="${y + padding}" width="${w - padding * 2}" height="${h - padding * 2}" preserveAspectRatio="xMidYMid meet" /></g>`; }
+function renderLogoSvg(scene, scale) {
+  const theme = getTheme(scene); const logo = scene.project.layout?.logo; if (!logo) return '';
+  const zone = getOverlayMetrics(scene).logo; if (!zone?.width || !zone?.height) return '';
+  const x = zone.left * scale, y = zone.top * scale, w = zone.width * scale, h = zone.height * scale;
+  // Mirrors drawLogoCanvas: no plate in the technical rail or when the user
+  // turned the logo box off, and left-aligned rather than centred in the rail.
+  // The SVG used to draw the plate unconditionally, so a boxless logo looked
+  // right in the PNG and wrong in the vector.
+  const inRail = scene.project.layout?.templateId === 'side_panel';
+  const logoPlain = inRail || scene.project.layout?.logoTransparent;
+  const padding = logoPlain ? 0 : 10 * scale;
+  const panel = logoPlain ? '' : svgRect(x, y, w, h, (theme.panelRadius ?? 10) * scale, theme.logoFill, theme.logoBorder, scale);
+  const align = inRail ? 'xMinYMid' : 'xMidYMid';
+  return `<g id="em-logo" class="em-panel">${panel}<image href="${escapeXml(logo)}" x="${x + padding}" y="${y + padding}" width="${w - padding * 2}" height="${h - padding * 2}" preserveAspectRatio="${align} meet" /></g>`;
+}
 function renderCalloutsSvg(scene, scale, svgDefs) {
   const calloutFont = `${scene.project.layout?.fonts?.callout || 'Inter'}, Arial, sans-serif`;
   return placeCallouts(scene, scale).map((c) => {

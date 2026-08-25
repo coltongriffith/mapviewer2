@@ -137,13 +137,17 @@ export const technicalReportTemplate = {
   },
 };
 
-function legendHeightFor(layout, itemCount, groupCount = 0) {
+function legendHeightFor(layout, itemCount) {
   const mode = layout?.legendMode || 'auto';
   const compact = mode === 'compact' || (mode === 'auto' && itemCount <= 2);
   if (!itemCount) return 0;
-  const groupPx = groupCount * 22;
-  if (compact) return Math.max(84, Math.min(360, 42 + itemCount * 24 + groupPx));
-  return Math.max(110, Math.min(360, 52 + itemCount * 28 + groupPx));
+  // No group allowance: nothing renders legend group headings — not the stage
+  // (renderLegendGroups returns a single unheaded group) and not either
+  // exporter. Reserving a row per group padded every legend panel with dead
+  // space in the preview and in the export alike. If headings come back, the
+  // allowance comes back with them.
+  if (compact) return Math.max(84, Math.min(360, 42 + itemCount * 24));
+  return Math.max(110, Math.min(360, 52 + itemCount * 28));
 }
 
 function clampZone(zone, safe, width, height) {
@@ -172,10 +176,9 @@ export function resolveNI43101Zones(template, layout, mapSize, legendItems) {
 
   const resolvedLegendItems = legendItems || layout?.legendItems || [];
   const legendCount = resolvedLegendItems.length;
-  const groupCount = new Set(resolvedLegendItems.map((item) => item.group).filter(Boolean)).size;
   const legendHeight = layout?.legendHeightPx != null
     ? Math.max(60, Math.min(500, layout.legendHeightPx))
-    : legendHeightFor(layout, legendCount, groupCount);
+    : legendHeightFor(layout, legendCount);
   const legendWidth = Math.max(180, Math.min(480, layout?.legendWidthPx ?? 300));
 
   const insetScale = Math.max(0.8, Math.min(1.2, Number(layout?.insetScale || 1)));
@@ -329,4 +332,59 @@ export function buildLegendItemsNI43101(template, layers, layout = {}) {
         style: baseStyle,
       }];
     });
+}
+
+/**
+ * The one place that decides what the NI 43-101 title block says.
+ *
+ * Three renderers draw this strip — the editing stage, the canvas exporter and
+ * the SVG exporter — and each used to read `layout` directly. That is how the
+ * TITLE cell ended up empty on a map that plainly had a title: switching to
+ * this template cleared `stripTitle`, and nothing fell back to the project's
+ * own title. Resolving the fields here means the preview and both exports
+ * cannot disagree.
+ *
+ * Nothing here writes to the project. A blank strip field means "use the
+ * project's value"; typing into the strip field still overrides it.
+ *
+ * @param {object} layout   project.layout
+ * @param {object} ctx      { scaleText, projectionText, now } — values only the
+ *                          caller can compute (map scale, UTM zone, today).
+ */
+export function resolveTitleStripFields(layout = {}, ctx = {}) {
+  const { scaleText = '', projectionText = '', now = new Date() } = ctx;
+
+  // A figure that has not been signed off says so. An em dash reads as
+  // "intentionally blank", which is the opposite of what an unfilled
+  // qualified-person or figure number means in a technical report.
+  const MISSING = 'NOT SET';
+
+  const isoDate = () => {
+    try { return now.toISOString().slice(0, 10); } catch { return ''; }
+  };
+
+  return {
+    title: layout.stripTitle || layout.title || '',
+    subtitle: layout.stripSubtitle || layout.subtitle || '',
+    scale: layout.manualScaleDenom
+      ? `1:${Number(String(layout.manualScaleDenom).replace(/[^0-9]/g, '')).toLocaleString('en-US')}`
+      : (scaleText || MISSING),
+    projection: layout.projectionName || projectionText || 'WGS84',
+    qpName: layout.qpName || MISSING,
+    qpCredentials: layout.qpCredentials || '',
+    companyName: layout.companyName || '',
+    figureNumber: layout.figureNumber || MISSING,
+    figureRevision: layout.figureRevision || `Rev. ${MISSING}`,
+    // A report figure is dated. When the project has not been given one, the
+    // date it was produced is the honest answer — and it is never written back
+    // to the project, so setting Map Date still wins.
+    date: layout.mapDate || isoDate(),
+    missing: {
+      scale: !layout.manualScaleDenom && !scaleText,
+      qpName: !layout.qpName,
+      figureNumber: !layout.figureNumber,
+      figureRevision: !layout.figureRevision,
+      date: !layout.mapDate,
+    },
+  };
 }

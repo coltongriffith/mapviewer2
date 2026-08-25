@@ -354,7 +354,8 @@ export const BRAND_KIT_SAVEABLE_KEYS = [
   // Inset
   'insetEnabled', 'insetSize', 'insetMode', 'insetCorner', 'insetTitle', 'insetWidthPx', 'insetHeightPx',
   // Navigation elements
-  'showNorthArrow', 'northArrowCorner', 'northArrowHeightPx', 'showScaleBar', 'scaleBarCorner',
+  'showNorthArrow', 'northArrowCorner', 'northArrowHeightPx', 'northArrowTransparent',
+  'showScaleBar', 'scaleBarCorner', 'scaleBarTransparent',
   // Element layout & stacking order
   'cornerLayout', 'cornerOrder',
   // Footer

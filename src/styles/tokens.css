@@ -1,0 +1,102 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Design tokens — the single source of truth for the EDITING UI.
+   ───────────────────────────────────────────────────────────────────────────
+   Values come from the Exploration Maps Brand Package v1.0
+   (Mineral Slate / Claim Copper / Map White). The package's own names are
+   kept alongside the interface names so the two can be checked against each
+   other, and so a brand revision is a one-file change.
+
+   The brand's operating rule drives the whole system: the map is the hero,
+   copper means SELECTION. Copper is never the colour of a primary button, a
+   warning or a link — the primary action is Mineral Slate, statuses have
+   their own semantic colours, and copper is reserved for what is currently
+   selected plus the logo target. Guideline budget: ~80% neutral surfaces,
+   ~15% slate structure, no more than 5% copper.
+
+   Scope note: these describe the application chrome (toolbar, inspector,
+   dialogs, marketing page). They deliberately do NOT describe the exported
+   map. Map design is themed per project through THEME_TOKENS
+   (src/utils/themeTokens.js), which drives both the on-screen stage and the
+   PNG/SVG/PDF renderers so the two cannot drift apart.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── Brand anchors ────────────────────────────────────────────────────── */
+  --em-slate-950: #142126;   /* Mineral Slate */
+  --em-copper-600: #c65322;  /* Claim Copper — selection only */
+  --em-map-white: #fcfbf7;
+
+  --em-slate-900: #1d2c31;
+  --em-slate-800: #2c3d42;
+  --em-slate-700: #435459;
+  --em-slate-600: #5f6e72;
+  --em-slate-500: #7c898c;
+  --em-slate-300: #c6cecf;
+  --em-slate-200: #dde3e3;
+  --em-slate-100: #edf1f0;
+  --em-slate-050: #f6f8f7;
+
+  /* ── Surfaces & ink ───────────────────────────────────────────────────── */
+  --ui-bg: var(--em-map-white);
+  --ui-surface: #ffffff;
+  --ui-surface-subtle: var(--em-slate-050);
+  --ui-border: var(--em-slate-200);
+  --ui-border-strong: var(--em-slate-300);
+  --ui-text: var(--em-slate-950);
+  --ui-text-muted: var(--em-slate-600);
+
+  /* ── Action: the primary control colour is slate, not the accent ──────── */
+  --ui-action: var(--em-slate-950);
+  --ui-action-hover: var(--em-slate-800);
+
+  /* ── Accent: selection and rare emphasis, nothing else ────────────────── */
+  --ui-accent: var(--em-copper-600);
+  --ui-accent-hover: #a8451c;
+  --ui-accent-soft: #fbf0ea;
+
+  /* ── Focus has its own colour so it never reads as selection ──────────── */
+  --ui-focus: #1f78a8;
+
+  /* ── Semantic — independent of the brand accent ───────────────────────── */
+  --ui-success: #287454;
+  --ui-warning: #9a6715;
+  --ui-danger: #aa3e3e;
+
+  /* ── Radii — three, and only three ────────────────────────────────────── */
+  --r-sm: 3px;
+  --r-md: 6px;
+  --r-lg: 10px;
+
+  /* ── Elevation — two levels, and only two ─────────────────────────────── */
+  --shadow-overlay: 0 1px 2px rgb(20 33 38 / 8%), 0 4px 14px rgb(20 33 38 / 10%);
+  --shadow-modal: 0 24px 60px rgb(20 33 38 / 26%);
+
+  /* ── Control heights — one system ─────────────────────────────────────── */
+  --ctl-h-sm: 26px;
+  --ctl-h: 30px;
+  --ctl-h-lg: 38px;
+  --ctl-h-touch: 44px;
+
+  /* ── Type ─────────────────────────────────────────────────────────────── */
+  --ui-font: "Source Sans 3", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  /* Coordinates, tenure numbers, scale values, timestamps — never paragraphs. */
+  --ui-font-mono: "IBM Plex Mono", "SFMono-Regular", Consolas, Menlo, monospace;
+  --fs-micro: 10.5px;
+  --fs-label: 11px;
+  --fs-sm: 12px;
+  --fs-body: 13px;
+  --fs-md: 14px;
+  --fs-lg: 17px;
+
+  /* ── Rhythm — the brand's 4px grid ────────────────────────────────────── */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+
+  /* ── Editor frame ─────────────────────────────────────────────────────── */
+  --toolbar-h: 50px;
+  --inspector-w: 312px;
+}

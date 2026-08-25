@@ -15,6 +15,8 @@ import AnnotationOverlay from './components/AnnotationOverlay';
 import ShadeOverlay from './components/ShadeOverlay';
 import { getSessionId } from './utils/session';
 import NorthArrow, { NORTH_ARROW_STYLES } from './components/NorthArrow';
+import Menu, { MenuItem, MenuSeparator, MenuLabel } from './components/Menu';
+import BrandMarkInline from './components/BrandMark';
 
 const MapCanvas = React.lazy(() => import('./components/MapCanvas'));
 const DashboardPage = React.lazy(() => import('./components/DashboardPage'));
@@ -35,6 +37,8 @@ import {
   CALLOUT_TYPES,
   createInitialProjectState,
   FONT_OPTIONS,
+  MAP_TYPES,
+  mapTypeOf,
   ROLE_LABELS,
   POINT_ROLES,
   TEMPLATE_MODES,
@@ -44,9 +48,10 @@ import { EXPORT_RATIOS, SNAP_THRESHOLD } from './constants';
 import { applyRoleToLayer, inferRoleFromLayer } from './mapPresets';
 import { getTemplate } from './templates';
 import { buildLegendItems, resolveTemplateZones } from './templates/technicalResultsTemplate';
-import { resolveNI43101Zones } from './templates/technicalReportTemplate';
-import { resolveSidePanelZones, mapSlotPositions } from './templates/sidePanelTemplate';
+import { resolveNI43101Zones, resolveTitleStripFields } from './templates/technicalReportTemplate';
+import { DEFAULT_SIDE_PANEL_GRID, resolveSidePanelZones, mapSlotPositions } from './templates/sidePanelTemplate';
 import { geojsonBounds, geojsonCenter, unionBounds } from './utils/geometry';
+import { autoProjectionName, formatScaleDenom, scaleDenomFromMap } from './utils/geo';
 import { markerSvgUrl } from './utils/leaflet';
 import { claimSummary, claimTooltipHtml, claimPopupRowsHtml, esc } from './utils/claimInfo';
 import L from 'leaflet';
@@ -828,6 +833,17 @@ export default function App() {
   const [addClaimsAutoSearch, setAddClaimsAutoSearch] = useState(false);
   const [hasExported, setHasExported] = useState(false);
   const [onboardingDismissed, setOnboardingDismissed] = useState(false);
+  // ── Inspector ─────────────────────────────────────────────────────────────
+  // Every editing control lives in one of five groups. The tab is only a view
+  // over the same controls that were always here — nothing was removed, and
+  // selecting something on the map reveals its group (see revealSection).
+  const [inspectorTab, setInspectorTab] = useState('data');
+  // Under 900px the inspector is a bottom sheet over a full-height map, so it
+  // starts closed: the map is the point, the controls are on demand.
+  const [inspectorOpen, setInspectorOpen] = useState(false);
+  // Preview hides editor-only chrome (inspector, handles, drop targets) so the
+  // stage reads as the exported figure. It changes nothing about the export.
+  const [previewMode, setPreviewMode] = useState(false);
   const [shareUrl, setShareUrl] = useState(null);
   const [shareLoading, setShareLoading] = useState(false);
   const [shareElapsed, setShareElapsed] = useState(0);
@@ -862,7 +878,7 @@ export default function App() {
   const [pendingDistanceP1, setPendingDistanceP1] = useState(null);
   const [selectedDistanceLineId, setSelectedDistanceLineId] = useState(null);
   const [annotationTool, setAnnotationTool] = useState(null);
-  const [uploadStatus, setUploadStatus] = useState({ type: 'info', message: 'Open the editor, then upload your first file from the left panel.' });
+  const [uploadStatus, setUploadStatus] = useState({ type: 'info', message: 'Drop a shapefile, GeoJSON, KML or CSV here to put your data on the map.' });
   const [exporting, setExporting] = useState(false);
   const [dragging, setDragging] = useState(null); // { id, hoverZone, ghostX, ghostY, ghostW, ghostH }
   const [resizeGuides, setResizeGuides] = useState([]);
@@ -941,7 +957,7 @@ export default function App() {
 
   const template = useMemo(() => getTemplate(project.layout?.templateId || 'technical_results_v2'), [project.layout?.templateId]);
   const selectedLayer = useMemo(() => project.layers.find((layer) => layer.id === selectedLayerId) || null, [project.layers, selectedLayerId]);
-  const [collapsedSections, setCollapsedSections] = useState({ drillhole: true, elements: true, refoverlays: true, export: true });
+  const [collapsedSections, setCollapsedSections] = useState({ drillhole: true, elements: true, refoverlays: true, export: true, customizeDesign: true });
   const toggleSection = (key) => setCollapsedSections((prev) => ({ ...prev, [key]: !prev[key] }));
 
   const selectedCallout = useMemo(() => project.callouts.find((callout) => callout.id === selectedCalloutId) || null, [project.callouts, selectedCalloutId]);
@@ -1881,25 +1897,31 @@ export default function App() {
     return () => window.removeEventListener('keydown', handler);
   }, [selectedMarkerId, selectedCalloutId, selectedEllipseId, selectedPolygonId]);
 
-  useEffect(() => {
-    if (selectedLayerId && layersSectionRef.current)
-      layersSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  }, [selectedLayerId]);
+  // Selecting something on the map has to bring its controls into view, and the
+  // controls now live behind a tab — so switch to the owning tab first, then
+  // scroll once React has actually rendered that panel.
+  const revealSection = useCallback((tabId, ref) => {
+    setInspectorTab(tabId);
+    requestAnimationFrame(() => {
+      ref?.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    });
+  }, []);
 
   useEffect(() => {
-    if (selectedMarkerId && markersSectionRef.current)
-      markersSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  }, [selectedMarkerId]);
+    if (selectedLayerId) revealSection('layers', layersSectionRef);
+  }, [selectedLayerId, revealSection]);
 
   useEffect(() => {
-    if (selectedEllipseId && markersSectionRef.current)
-      markersSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  }, [selectedEllipseId]);
+    if (selectedMarkerId) revealSection('labels', markersSectionRef);
+  }, [selectedMarkerId, revealSection]);
 
   useEffect(() => {
-    if (selectedCalloutId && calloutsSectionRef.current)
-      calloutsSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  }, [selectedCalloutId]);
+    if (selectedEllipseId) revealSection('labels', markersSectionRef);
+  }, [selectedEllipseId, revealSection]);
+
+  useEffect(() => {
+    if (selectedCalloutId) revealSection('labels', calloutsSectionRef);
+  }, [selectedCalloutId, revealSection]);
 
 
   const updateLayout = (patch) => {
@@ -1978,7 +2000,14 @@ export default function App() {
         const cursorX = me.clientX - containerRect.left - sbLeft - 16;
         const cursorY = me.clientY - containerRect.top - 16;
         const row = Math.max(0, Math.min(4, Math.floor(cursorY / (rowH + 6))));
-        const col = cursorX < colW + 4 ? 0 : 1;
+        // Three targets per row, not two: the outer thirds are the left and
+        // right halves, and dropping across the middle spans the row. Without
+        // the middle band every drop landed in a column, so a legend could
+        // only ever be half the rail wide.
+        const rowW = colW * 2 + 8;
+        const col = cursorX < rowW * 0.34 ? 0
+          : cursorX > rowW * 0.66 ? 1
+            : 'full';
         currentGridSlot = { row, col };
 
         let newMapSlot = null;
@@ -2072,7 +2101,7 @@ export default function App() {
         }, []);
 
       if (isInSidebar || (isSidePanel && SP_SIDEBAR_ELEMENTS.includes(id) && currentGridSlot !== null)) {
-        const baseGrid = layoutSnapshot.sidePanelGrid || layoutSnapshot.sidePanelOrder || ['inset', 'legend', 'logo'];
+        const baseGrid = layoutSnapshot.sidePanelGrid || layoutSnapshot.sidePanelOrder || DEFAULT_SIDE_PANEL_GRID;
 
         // northArrow/scaleBar dropping to map area
         if (['northArrow', 'scaleBar'].includes(id) && currentMapSlot) {
@@ -2104,7 +2133,15 @@ export default function App() {
           while (grid.length <= row) grid.push(null);
 
           const existingRow = grid[row];
-          if (col === 0) {
+          if (col === 'full') {
+            // Spanning the row takes it over. Whatever was there moves down
+            // rather than disappearing from the rail — an element that
+            // vanished on a drop would look like data loss.
+            const displaced = (Array.isArray(existingRow) ? existingRow : [existingRow])
+              .filter((x) => x && x !== id);
+            grid[row] = id;
+            for (const d of displaced) grid.push(d);
+          } else if (col === 0) {
             if (Array.isArray(existingRow)) {
               grid[row] = [id, existingRow[1]];
             } else if (existingRow && existingRow !== id) {
@@ -2923,7 +2960,7 @@ export default function App() {
       legendTitle: 'Legend',
       footerEnabled: false,
       northArrowStyle: 'arrow',
-      cornerRadius: 10,
+      cornerRadius: 3,
       exportSettings: { filename: 'cedar-ridge-investor-map', pixelRatio: 2 },
     });
     setScreen('editor');
@@ -3533,6 +3570,31 @@ export default function App() {
 
   const applyMode = (mode) => {
     setProject((prev) => applyModeToProject(prev, template, mode));
+  };
+
+  // Template + mode + theme in one move. The template has to be swapped before
+  // the mode preset is applied, because the presets belong to the template —
+  // reading them off the outgoing one is how a map type would silently apply
+  // the wrong basemap and framing.
+  const applyMapType = (typeId) => {
+    const t = MAP_TYPES[typeId];
+    if (!t) return;
+    setProject((prev) => {
+      const switchingToRail = t.templateId === 'side_panel' && prev.layout.templateId !== 'side_panel';
+      const extra = switchingToRail ? {
+        sidePanelPositions: {},
+        sidePanelGrid: DEFAULT_SIDE_PANEL_GRID,
+        insetEnabled: true,
+        insetHeightPx: null,
+        legendHeightPx: null,
+        titleHeightPx: 108,
+      } : {};
+      const withTemplate = {
+        ...prev,
+        layout: { ...prev.layout, templateId: t.templateId, themeId: t.themeId, ...extra },
+      };
+      return applyModeToProject(withTemplate, getTemplate(t.templateId), t.mode);
+    });
   };
 
 
@@ -4501,7 +4563,7 @@ export default function App() {
             <h2>Sign in to view your dashboard</h2>
             <p className="acct-signin-hint">Your projects and brand kits live in your account.</p>
             <div className="acct-signin-actions">
-              <button className="btn" type="button" onClick={() => setShowAuthFromGate(true)}>Sign in / Create account</button>
+              <button className="btn primary" type="button" onClick={() => setShowAuthFromGate(true)}>Sign in / Create account</button>
               <button className="secondary-btn" type="button" onClick={goToLanding}>← Back</button>
             </div>
           </div>
@@ -4587,7 +4649,7 @@ export default function App() {
             <h2>Sign in to see your maps</h2>
             <p className="acct-signin-hint">Your saved maps and monitored claims live in your account.</p>
             <div className="acct-signin-actions">
-              <button className="btn" type="button" onClick={() => setShowAuthFromGate(true)}>Sign in / Create account</button>
+              <button className="btn primary" type="button" onClick={() => setShowAuthFromGate(true)}>Sign in / Create account</button>
               <button className="secondary-btn" type="button" onClick={goToLanding}>← Back</button>
             </div>
           </div>
@@ -4621,7 +4683,17 @@ export default function App() {
           recentProjects={recentProjects}
           onOpenProject={(entry) => { openProjectFromRecent(entry); setScreen('editor'); }}
           onShowHelp={() => setShowHelpModal(true)}
-          onSearchBCClaims={() => { setScreen('editor'); setAddClaimsModalPath('registry'); setShowAddClaimsModal(true); }}
+          onSearchBCClaims={(query) => {
+            // The landing page's hero lookup passes the term the visitor typed;
+            // the plain CTAs pass a click event, hence the string check.
+            setScreen('editor');
+            setAddClaimsModalPath('registry');
+            if (typeof query === 'string' && query.trim()) {
+              setAddClaimsQuery(query.trim());
+              setAddClaimsAutoSearch(true);
+            }
+            setShowAddClaimsModal(true);
+          }}
           onUploadFile={() => { setScreen('editor'); setAddClaimsModalPath('upload'); setShowAddClaimsModal(true); }}
           onOpenAccount={() => setScreen('dashboard')}
           onOpenTenureMonitor={() => { setTenureInitialFilter(null); setScreen('tenure'); }}
@@ -4632,1570 +4704,1686 @@ export default function App() {
   }
 
   return (
-    <div className="app-shell">
+    <div className="app-shell" data-preview={previewMode ? 'true' : 'false'}>
       {showMobileBanner && (
         <div className="mobile-editor-banner" role="status">
           <span>The editor works best on a desktop. Touch mostly works, but for the full experience grab a bigger screen.</span>
           <button type="button" onClick={() => { setShowMobileBanner(false); try { sessionStorage.setItem('em_mobile_banner_dismissed', '1'); } catch { /* noop */ } }} aria-label="Dismiss">✕</button>
         </div>
       )}
-      <Sidebar footer={<UserMenu onOpenTemplates={() => setShowBrandKitManager(true)} onOpenAccount={() => setScreen('dashboard')} onOpenTenureMonitor={() => { setTenureInitialFilter(null); setScreen('tenure'); }} />}>
-        <div className="sidebar-header-row">
-          <button className="sidebar-wordmark" type="button" onClick={goToLanding}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" fill="#2563eb" />
-            </svg>
-            Exploration Maps
+      <header className="ed-toolbar">
+        <div className="ed-toolbar-left">
+          <button className="ed-brand" type="button" onClick={goToLanding} title="Back to Exploration Maps" aria-label="Exploration Maps — back to the home page">
+            <BrandMarkInline />
+            <span className="ed-wide-label em-wordmark">Exploration&nbsp;<b>Maps</b></span>
           </button>
-          <button className="sidebar-home-link" type="button" onClick={goToLanding}>← Home</button>
-        </div>
-
-        {showOnboarding ? (
-          <div className="onboarding-card">
-            <div className="onboarding-card-head">
-              <div className="onboarding-title">Make your first map</div>
-              <button className="onboarding-dismiss" type="button" aria-label="Dismiss" onClick={() => { setOnboardingDismissed(true); trackEvent('onboarding_dismissed', { step1: onbStep1, step2: onbStep2, step3: onbStep3 }); }}>✕</button>
-            </div>
-            <ol className="onboarding-checklist">
-              <li className={onbStep1 ? 'done' : ''}>
-                <span className="onb-tick">{onbStep1 ? '✓' : '1'}</span>
-                <div className="onb-body">
-                  <strong>Add your data</strong>
-                  {!onbStep1 && (
-                    <div className="onb-actions">
-                      <button type="button" onClick={() => { setAddClaimsModalPath(null); setShowAddClaimsModal(true); trackEvent('onboarding_step', { step: 'add_data', via: 'claims' }); }}>Search public claims</button>
-                      <button type="button" onClick={() => { uploadInputRef.current?.click(); trackEvent('onboarding_step', { step: 'add_data', via: 'upload' }); }}>Upload a file</button>
-                      <button type="button" className="onb-link" onClick={() => { loadSampleData(); trackEvent('onboarding_step', { step: 'add_data', via: 'sample' }); }}>Load sample data</button>
-                    </div>
-                  )}
-                </div>
-              </li>
-              <li className={onbStep2 ? 'done' : (onbStep1 ? '' : 'onb-locked')}>
-                <span className="onb-tick">{onbStep2 ? '✓' : '2'}</span>
-                <div className="onb-body">
-                  <strong>Style it</strong>
-                  {onbStep1 && !onbStep2 && (
-                    <div className="onb-actions">
-                      <button type="button" onClick={() => { layersSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); trackEvent('onboarding_step', { step: 'style' }); }}>Open layer styling</button>
-                    </div>
-                  )}
-                </div>
-              </li>
-              <li className={onbStep3 ? 'done' : (onbStep1 ? '' : 'onb-locked')}>
-                <span className="onb-tick">{onbStep3 ? '✓' : '3'}</span>
-                <div className="onb-body">
-                  <strong>Export &amp; share</strong>
-                  {onbStep1 && !onbStep3 && (
-                    <div className="onb-actions">
-                      <button type="button" onClick={() => { handleExportClick('png'); trackEvent('onboarding_step', { step: 'export' }); }}>Export PNG</button>
-                    </div>
-                  )}
-                </div>
-              </li>
-            </ol>
+          <span className="ed-toolbar-sep ed-desktop-only" />
+          <Menu label="Project" align="left" title="Project file actions">
+            <MenuItem onClick={startNewProject}>New map</MenuItem>
+            <MenuItem onClick={() => setShowRecentProjects(true)}>Open…</MenuItem>
+            <MenuSeparator />
+            <MenuItem onClick={() => saveCurrentProject()}>Save</MenuItem>
+            <MenuItem onClick={saveAsProject}>Save As…</MenuItem>
+            <MenuItem onClick={duplicateCurrentProject}>Duplicate</MenuItem>
+          </Menu>
+          <div className="ed-doc">
+            <span className="ed-doc-name" title={project.layout.title || 'Project Map'}>{project.layout.title || 'Project Map'}</span>
+            {!user && !isDirty ? (
+              <button
+                type="button"
+                className="ed-doc-state ed-doc-state--action"
+                onClick={() => setShowAuthFromGate(true)}
+                title="Saved only on this device — sign in to keep your maps"
+              >On this device — sign in to keep</button>
+            ) : (
+              <span className={`ed-doc-state${isDirty ? ' ed-doc-state--dirty' : saveFlash ? ' ed-doc-state--saved' : ''}`}>
+                {isDirty ? 'Unsaved' : saveFlash ? 'Saved' : user ? 'Saved to cloud' : 'Saved'}
+              </span>
+            )}
           </div>
-        ) : null}
-
-        <UploadPanel onUploadFile={handleUploadFile} onUploadFiles={handleUploadFiles} inputRef={uploadInputRef} status={uploadStatus} layers={project.layers} />
-        <div className="add-claims-sidebar-btn-wrap">
+        </div>
+        <div className="ed-toolbar-right">
+          <button className="ui-btn ui-btn--ghost ui-btn--icon ed-desktop-only" type="button" aria-label="Zoom out" onClick={() => leafletMapRef.current?.zoomOut(0.5)}>&#8722;</button>
+          <button className="ui-btn ui-btn--ghost ui-btn--icon ed-desktop-only" type="button" aria-label="Zoom in" onClick={() => leafletMapRef.current?.zoomIn(0.5)}>+</button>
+          <span className="ed-toolbar-sep ed-desktop-only" />
           <button
-            className="topbar-btn add-claims-sidebar-btn"
+            className="ui-btn"
             type="button"
-            onClick={() => { setAddClaimsModalPath(null); setShowAddClaimsModal(true); }}
+            aria-pressed={previewMode}
+            aria-label={previewMode ? 'Exit preview' : 'Preview'}
+            title="Hide the editing controls and show the map as it will export"
+            onClick={() => { setPreviewMode((v) => !v); setInspectorOpen(false); }}
           >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0 }}>
-              <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
-              <rect x="3" y="14" width="7" height="7" rx="1"/><path d="M17.5 14v6M14.5 17h6"/>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" aria-hidden="true">
+              <path d="M2 12s3.8-6.5 10-6.5S22 12 22 12s-3.8 6.5-10 6.5S2 12 2 12z" /><circle cx="12" cy="12" r="2.6" />
             </svg>
-            Add Claims
+            <span className="ed-wide-label">{previewMode ? 'Exit preview' : 'Preview'}</span>
           </button>
+          <button className="ui-btn ui-btn--ghost ui-btn--icon ed-desktop-only" type="button" title="How to use Exploration Maps" aria-label="How to use Exploration Maps" onClick={() => setShowHelpModal(true)}>?</button>
+          <span className="ed-toolbar-sep" />
+          <button className="ui-btn ui-btn--primary" type="button" title="Share map" aria-label="Share map" onClick={() => { setShareUrl(null); setShowShareModal(true); }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+              <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+            </svg>
+            <span className="ed-wide-label">Share</span>
+          </button>
+          <Menu
+            label={exporting ? 'Exporting…' : 'Export'}
+            align="right"
+            triggerClassName="ui-btn"
+            disabled={!mapReady || exporting}
+            title={!mapReady ? 'Map is initializing…' : 'Export this map'}
+          >
+            <MenuLabel>Export map</MenuLabel>
+            <MenuItem hint="PNG" onClick={() => { try { handleExportClick('png'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }}>Image for slides and web</MenuItem>
+            <MenuItem hint="SVG" onClick={() => { try { handleExportClick('svg'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }}>Vector for editing</MenuItem>
+            <MenuItem hint="ZIP" title="SVG bundled with a separate basemap PNG — opens correctly in Adobe Illustrator" onClick={() => { try { handleExportClick('svg_ai'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }}>Vector for Illustrator</MenuItem>
+            <MenuItem hint="PDF" onClick={() => { try { handleExportClick('pdf'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }}>Document for reports</MenuItem>
+            <MenuSeparator />
+            <MenuItem onClick={() => { setInspectorTab('export'); setInspectorOpen(true); }}>Export settings…</MenuItem>
+          </Menu>
+          <button
+            className="ui-btn ed-mobile-only"
+            type="button"
+            aria-expanded={inspectorOpen}
+            onClick={() => setInspectorOpen((v) => !v)}
+          >Edit</button>
         </div>
-
-        <div className={`logo-upload-card${project.layout.logo ? ' has-logo' : ''}`}>
-          {project.layout.logo ? (
-            <>
-              <img className="logo-thumb" src={project.layout.logo} alt="Logo" />
-              <div className="logo-card-info">
-                <span className="logo-card-status">Brand colors applied</span>
-                <div className="logo-card-actions">
-                  <button className="btn compact" type="button" onClick={() => logoInputRef.current?.click()}>Replace</button>
-                  <button className="secondary-btn compact" type="button" onClick={() => updateLayout({ logo: null, accentColor: null, titleBgColor: null, titleFgColor: null })}>Remove</button>
-                </div>
+      </header>
+      <div className="ed-body">
+      <Sidebar
+        tab={inspectorTab}
+        onTabChange={setInspectorTab}
+        open={inspectorOpen}
+        onClose={() => setInspectorOpen(false)}
+        footer={<UserMenu onOpenTemplates={() => setShowBrandKitManager(true)} onOpenAccount={() => setScreen('dashboard')} onOpenTenureMonitor={() => { setTenureInitialFilter(null); setScreen('tenure'); }} />}
+      >
+        {inspectorTab === 'data' && (
+          <>
+          {showOnboarding ? (
+            <div className="onboarding-card">
+              <div className="onboarding-card-head">
+                <div className="onboarding-title">Make your first map</div>
+                <button className="onboarding-dismiss" type="button" aria-label="Dismiss" onClick={() => { setOnboardingDismissed(true); trackEvent('onboarding_dismissed', { step1: onbStep1, step2: onbStep2, step3: onbStep3 }); }}>✕</button>
               </div>
-            </>
-          ) : (
-            <>
-              <button className="logo-upload-btn" type="button" onClick={() => logoInputRef.current?.click()}>
-                <span className="logo-upload-icon">↑</span> Upload Logo
-              </button>
-              <span className="logo-card-hint">Auto-applies your brand colors</span>
-            </>
-          )}
-        </div>
-        <input ref={logoInputRef} type="file" accept="image/*" onChange={handleLogoChange} hidden />
-
-        <section className="control-section">
-          <h2>Content</h2>
-          <div className="control-grid">
-            <div className="control-row">
-              <label htmlFor="f-template-4142">Template</label>
-              <select id="f-template-4142"
-                value={project.layout.templateId || 'technical_results_v2'}
-                onChange={(e) => {
-                  const tid = e.target.value;
-                  const themeMap = {
-                    'technical_results_v2': 'investor_clean',
-                    'ni_43101_technical': 'ni_43101',
-                    'side_panel': 'technical_sharp',
-                  };
-                  const extra = tid === 'side_panel' ? {
-                    sidePanelPositions: {},
-                    sidePanelGrid: ['inset', 'legend', 'logo', 'title', 'footer'],
-                    insetEnabled: true,
-                    insetHeightPx: null,
-                    legendHeightPx: null,
-                    titleHeightPx: 108,
-                  } : {};
-                  updateLayout({ templateId: tid, themeId: themeMap[tid] || 'investor_clean', stripTitle: '', stripSubtitle: '', ...extra });
-                }}
-              >
-                <option value="technical_results_v2">Standard</option>
-                <option value="ni_43101_technical">NI 43-101</option>
-                <option value="side_panel">Technical</option>
-              </select>
+              <ol className="onboarding-checklist">
+                <li className={onbStep1 ? 'done' : ''}>
+                  <span className="onb-tick">{onbStep1 ? '✓' : '1'}</span>
+                  <div className="onb-body">
+                    <strong>Add your data</strong>
+                    {!onbStep1 && (
+                      <div className="onb-actions">
+                        <button type="button" onClick={() => { setAddClaimsModalPath(null); setShowAddClaimsModal(true); trackEvent('onboarding_step', { step: 'add_data', via: 'claims' }); }}>Search public claims</button>
+                        <button type="button" onClick={() => { uploadInputRef.current?.click(); trackEvent('onboarding_step', { step: 'add_data', via: 'upload' }); }}>Upload a file</button>
+                        <button type="button" className="onb-link" onClick={() => { loadSampleData(); trackEvent('onboarding_step', { step: 'add_data', via: 'sample' }); }}>Load sample data</button>
+                      </div>
+                    )}
+                  </div>
+                </li>
+                <li className={onbStep2 ? 'done' : (onbStep1 ? '' : 'onb-locked')}>
+                  <span className="onb-tick">{onbStep2 ? '✓' : '2'}</span>
+                  <div className="onb-body">
+                    <strong>Style it</strong>
+                    {onbStep1 && !onbStep2 && (
+                      <div className="onb-actions">
+                        <button type="button" onClick={() => { layersSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); trackEvent('onboarding_step', { step: 'style' }); }}>Open layer styling</button>
+                      </div>
+                    )}
+                  </div>
+                </li>
+                <li className={onbStep3 ? 'done' : (onbStep1 ? '' : 'onb-locked')}>
+                  <span className="onb-tick">{onbStep3 ? '✓' : '3'}</span>
+                  <div className="onb-body">
+                    <strong>Export &amp; share</strong>
+                    {onbStep1 && !onbStep3 && (
+                      <div className="onb-actions">
+                        <button type="button" onClick={() => { handleExportClick('png'); trackEvent('onboarding_step', { step: 'export' }); }}>Export PNG</button>
+                      </div>
+                    )}
+                  </div>
+                </li>
+              </ol>
             </div>
-            {project.layout.templateId === 'side_panel' && Object.keys(project.layout.sidePanelPositions || {}).length > 0 && (
-              <div style={{ padding: '4px 0 6px' }}>
-                <button className="secondary-btn" style={{ width: '100%', fontSize: 12 }} onClick={() => updateLayout({ sidePanelPositions: {} })}>
-                  Reset Panel Layout
-                </button>
-              </div>
-            )}
-            <hr style={{ margin: '4px 0 8px', border: 'none', borderTop: '1px solid #e8eef6' }} />
-            <div className="control-row"><label htmlFor="f-title-4176">Title</label><input id="f-title-4176" value={localTitle} onChange={(e) => {
-              const val = e.target.value;
-              setLocalTitle(val);
-              clearTimeout(titleDebounceRef.current);
-              titleDebounceRef.current = setTimeout(() => updateLayout({ title: val }), 300);
-            }} /></div>
-            <div className="control-row"><label htmlFor="f-subtitle-4182">Subtitle</label><input id="f-subtitle-4182" value={localSubtitle} onChange={(e) => {
-              const val = e.target.value;
-              setLocalSubtitle(val);
-              clearTimeout(subtitleDebounceRef.current);
-              subtitleDebounceRef.current = setTimeout(() => updateLayout({ subtitle: val }), 300);
-            }} /></div>
-            <div className="control-row" style={{ alignItems: 'center' }}>
-              <label htmlFor="f-title-size-4189">Title Size</label>
-              <input id="f-title-size-4189" type="range" min="0.6" max="1.5" step="0.05" value={project.layout.titleFontScale ?? 1} onChange={(e) => updateLayout({ titleFontScale: parseFloat(e.target.value) })} style={{ flex: 1 }} />
-              <span style={{ fontSize: 11, marginLeft: 6, minWidth: 32 }}>{Math.round((project.layout.titleFontScale ?? 1) * 100)}%</span>
-            </div>
-            <div className="control-row-stack">
-              <label>Basemap</label>
-              <div className="basemap-picker">
-                {BASEMAP_OPTIONS.map(({ key, label, thumb }) => (
-                  <button
-                    key={key}
-                    type="button"
-                    className={`basemap-thumb${(project.layout.basemap || 'light') === key ? ' active' : ''}`}
-                    onClick={() => updateLayout({ basemap: key })}
-                    title={label}
-                  >
-                    <div className="basemap-thumb-swatch">
-                      {thumb
-                        ? <img src={thumb} alt={label} loading="lazy" draggable={false} />
-                        : <div className="basemap-thumb-blank" style={{ background: project.layout.blankBg || '#ffffff' }} />
-                      }
-                    </div>
-                    <span className="basemap-thumb-label">{label}</span>
-                  </button>
-                ))}
-              </div>
-              {(project.layout.basemap === 'blank') && (
-                <div className="control-row inline-2" style={{ marginTop: 8 }}>
-                  <label htmlFor="f-background-color-4216">Background Color</label>
-                  <ColorField id="f-background-color-4216" value={project.layout.blankBg || '#ffffff'} onChange={(e) => updateLayout({ blankBg: e.target.value })} brandColors={brandColors} />
-                </div>
-              )}
-            </div>
-            <div className="element-visibility-row">
-              <label className="toggle-row"><input type="checkbox" checked={project.layout.showTitle !== false} onChange={(e) => updateLayout({ showTitle: e.target.checked })} /><span>Title</span></label>
-              <label className="toggle-row"><input type="checkbox" checked={project.layout.showNorthArrow !== false} onChange={(e) => updateLayout({ showNorthArrow: e.target.checked })} /><span>North Arrow</span></label>
-              <label className="toggle-row"><input type="checkbox" checked={project.layout.showScaleBar !== false} onChange={(e) => updateLayout({ showScaleBar: e.target.checked })} /><span>Scale Bar</span></label>
-              <label className="toggle-row"><input type="checkbox" checked={project.layout.showLegend !== false} onChange={(e) => updateLayout({ showLegend: e.target.checked })} /><span>Legend</span></label>
-              <label className="toggle-row"><input type="checkbox" checked={project.layout.footerEnabled !== false} onChange={(e) => updateLayout({ footerEnabled: e.target.checked })} /><span>Footer</span></label>
-              <label className="toggle-row"><input type="checkbox" checked={project.layout.insetEnabled !== false} onChange={(e) => updateLayout({ insetEnabled: e.target.checked })} /><span>Inset Map</span></label>
-            </div>
-            {/* North arrow style picker */}
-            {project.layout.showNorthArrow !== false && (
-              <div className="control-row" style={{ marginTop: 10 }}>
-                <label>Compass Style</label>
-                <div className="north-arrow-style-picker">
-                  {NORTH_ARROW_STYLES.map(({ key, label }) => (
-                    <button key={key} type="button"
-                      className={`north-arrow-style-btn${(project.layout.northArrowStyle || 'classic') === key ? ' active' : ''}`}
-                      onClick={() => updateLayout({ northArrowStyle: key })}
-                      title={label}>
-                      <NorthArrow scale={40} style={key} />
-                      <span>{label}</span>
-                    </button>
-                  ))}
-                </div>
-                <label className="toggle-row" style={{ marginTop: 6 }}>
-                  <input type="checkbox" checked={!project.layout.northArrowTransparent} onChange={(e) => updateLayout({ northArrowTransparent: !e.target.checked })} />
-                  <span>Show panel box</span>
-                </label>
-              </div>
-            )}
-
-            {/* Corner radius */}
-            <div className="control-row inline-2" style={{ marginTop: 10 }}>
-              <div>
-                <label htmlFor="f-panel-corners-4254">Panel Corners</label>
-                <input id="f-panel-corners-4254" type="range" min="0" max="24" step="1"
-                  value={project.layout.cornerRadius ?? themeTokens.panelRadius ?? 10}
-                  onChange={(e) => updateLayout({ cornerRadius: Number(e.target.value) })} />
-              </div>
-              <div className="range-value" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-                <span>{project.layout.cornerRadius ?? themeTokens.panelRadius ?? 10}px</span>
-                {project.layout.cornerRadius != null && (
-                  <button type="button" style={{ fontSize: 10, padding: '1px 5px', background: 'none', border: '1px solid #cbd5e1', borderRadius: 4, cursor: 'pointer', color: '#64748b' }}
-                    onClick={() => updateLayout({ cornerRadius: null })} title="Reset to theme default">↺</button>
-                )}
-              </div>
-            </div>
-
+          ) : null}
+          <UploadPanel onUploadFile={handleUploadFile} onUploadFiles={handleUploadFiles} inputRef={uploadInputRef} status={uploadStatus} layers={project.layers} />
+          <div className="add-claims-sidebar-btn-wrap">
             <button
+              className="ui-btn ui-btn--primary ui-btn--block add-claims-sidebar-btn"
               type="button"
-              className="secondary-btn"
-              style={{ width: '100%', marginTop: 6, fontSize: 12 }}
-              onClick={() => updateLayout({ cornerLayout: null, titleCorner: 'tl', logoCorner: 'tl', insetCorner: 'tr', northArrowCorner: 'br', scaleBarCorner: 'bl', legendCorner: 'bl' })}
-              title="Move all elements back to their default corner positions"
+              onClick={() => { setAddClaimsModalPath(null); setShowAddClaimsModal(true); }}
             >
-              Reset Element Positions
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0 }}>
+                <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+                <rect x="3" y="14" width="7" height="7" rx="1"/><path d="M17.5 14v6M14.5 17h6"/>
+              </svg>
+              Add Claims
             </button>
           </div>
-        </section>
 
-        <section className="control-section cs-collapsible" ref={layersSectionRef}>
-          <h2>Layers</h2>
-          <LayerList layers={project.layers} selectedLayerId={selectedLayerId} onSelect={setSelectedLayerId} onToggleVisible={toggleLayerVisible} onRemove={removeLayer} />
-          {selectedLayer ? (
-            <div className="control-grid" style={{ marginTop: 10 }}>
-              <div className="control-row">
-                <label htmlFor="f-display-label-4286">Display Label</label>
-                <input id="f-display-label-4286" value={selectedLayer.displayName || selectedLayer.legend?.label || ''} onChange={(e) => setDisplayLabel(selectedLayer.id, e.target.value)} />
-              </div>
-              <div className="control-row">
-                <label htmlFor="f-layer-role-4290">Layer Role</label>
-                <select id="f-layer-role-4290" value={selectedLayer.role} onChange={(e) => changeLayerRole(selectedLayer.id, e.target.value)}>
-                  {Object.entries(ROLE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                </select>
-              </div>
-              <div className="button-row three">
-                <button className="secondary-btn" type="button" onClick={() => moveLayer(selectedLayer.id, 'down')}>Move Down</button>
-                <button className={`secondary-btn ${project.layout.primaryLayerId === selectedLayer.id ? 'active-toggle' : ''}`} type="button" onClick={() => setFramingLayer(selectedLayer.id)}>
-                  {project.layout.primaryLayerId === selectedLayer.id ? 'Framing Layer' : 'Use for Framing'}
-                </button>
-                <button className="secondary-btn" type="button" onClick={() => moveLayer(selectedLayer.id, 'up')}>Move Up</button>
-              </div>
-              <div className="control-row inline-2">
-                <div>
-                  <label>{isPointStyledLayer(selectedLayer) ? 'Point Border' : 'Outline Color'}</label>
-                  <ColorField value={selectedLayer.style?.stroke || selectedLayer.style?.markerColor || '#2563eb'} onChange={(e) => { const id = selectedLayer.id, val = e.target.value; clearTimeout(layerStyleDebounceRef.current); layerStyleDebounceRef.current = setTimeout(() => updateLayer(id, { style: { stroke: val, markerColor: val } }), 50); }} brandColors={brandColors} />
-                </div>
-                <div>
-                  <label>{isPointStyledLayer(selectedLayer) ? 'Point Fill' : 'Fill Color'}</label>
-                  <ColorField value={selectedLayer.style?.fill || selectedLayer.style?.markerFill || '#93c5fd'} onChange={(e) => { const id = selectedLayer.id, val = e.target.value; clearTimeout(layerStyleDebounceRef.current); layerStyleDebounceRef.current = setTimeout(() => updateLayer(id, { style: { fill: val, markerFill: val } }), 50); }} brandColors={brandColors} />
-                </div>
-              </div>
-              {isPointStyledLayer(selectedLayer) ? (
-                <>
-                  <div className="control-row inline-2">
-                    <div>
-                      <label htmlFor="f-point-size-4316">Point Size</label>
-                      <input id="f-point-size-4316" type="range" min="6" max="24" step="1" value={selectedLayer.style?.markerSize ?? 12} onChange={(e) => updateLayer(selectedLayer.id, { style: { markerSize: Number(e.target.value) } })} />
-                    </div>
-                    <div className="range-value">{selectedLayer.style?.markerSize ?? 12}px</div>
-                  </div>
-                  <div className="control-row">
-                    <label>Marker Shape</label>
-                    <div className="marker-shape-picker-visual">
-                      {[
-                        ['circle', 'Circle'], ['square', 'Square'], ['triangle', 'Tri ▲'], ['triangle_down', 'Tri ▼'],
-                        ['diamond', 'Diamond'], ['cross', 'Cross'], ['star', 'Star'], ['hexagon', 'Hexagon'],
-                        ['pin', 'Pin'], ['drillhole', 'DH Pin'],
-                      ].map(([val, label]) => {
-                        const color = selectedLayer.style?.markerColor || '#2563eb';
-                        const isActive = (selectedLayer.style?.markerShape || 'circle') === val;
-                        return (
-                          <button key={val} type="button" className={`shape-visual-btn${isActive ? ' active' : ''}`}
-                            onClick={() => updateLayer(selectedLayer.id, { style: { markerShape: val } })} title={label}>
-                            <img src={markerSvgUrl(val, isActive ? '#ffffff' : color, 18)} alt={label} width="18" height="18" />
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                  <div className="control-row">
-                    <label>Custom Icon</label>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      {selectedLayer.style?.customMarkerDataUri && (
-                        <img src={selectedLayer.style.customMarkerDataUri} alt="custom icon" style={{ width: 24, height: 24, objectFit: 'contain', border: '1px solid #d4deea', borderRadius: 4 }} />
-                      )}
-                      <button type="button" className="secondary-btn" style={{ flex: 1 }}
-                        onClick={() => {
-                          const input = document.createElement('input');
-                          input.type = 'file'; input.accept = 'image/png,image/svg+xml,image/jpeg,image/gif';
-                          input.onchange = (e) => {
-                            const file = e.target.files?.[0]; if (!file) return;
-                            const reader = new FileReader();
-                            reader.onload = (ev) => updateLayer(selectedLayer.id, { style: { customMarkerDataUri: ev.target.result } });
-                            reader.readAsDataURL(file);
-                          };
-                          input.click();
-                        }}>
-                        {selectedLayer.style?.customMarkerDataUri ? 'Change Icon' : 'Upload Icon'}
-                      </button>
-                      {selectedLayer.style?.customMarkerDataUri && (
-                        <button type="button" className="secondary-btn" style={{ flexShrink: 0 }}
-                          onClick={() => updateLayer(selectedLayer.id, { style: { customMarkerDataUri: null } })}>✕</button>
-                      )}
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="control-row inline-2">
-                    <div>
-                      <label htmlFor="f-fill-opacity-4371">Fill Opacity</label>
-                      <input id="f-fill-opacity-4371" type="range" min="0" max="1" step="0.05" value={selectedLayer.style?.fillOpacity ?? 0.22} onChange={(e) => { const id = selectedLayer.id, val = Number(e.target.value); clearTimeout(layerStyleDebounceRef.current); layerStyleDebounceRef.current = setTimeout(() => updateLayer(id, { style: { fillOpacity: val } }), 50); }} />
-                    </div>
-                    <div className="range-value">{Math.round((selectedLayer.style?.fillOpacity ?? 0.22) * 100)}%</div>
-                  </div>
-                  <div className="control-row inline-2">
-                    <div>
-                      <label htmlFor="f-layer-opacity-4378">Layer Opacity</label>
-                      <input id="f-layer-opacity-4378" type="range" min="0" max="1" step="0.05" value={selectedLayer.style?.layerOpacity ?? 1} onChange={(e) => { const id = selectedLayer.id, val = Number(e.target.value); clearTimeout(layerStyleDebounceRef.current); layerStyleDebounceRef.current = setTimeout(() => updateLayer(id, { style: { layerOpacity: val } }), 50); }} />
-                    </div>
-                    <div className="range-value">{Math.round((selectedLayer.style?.layerOpacity ?? 1) * 100)}%</div>
-                  </div>
-                  <label className="toggle-row" style={{ marginTop: 4 }}>
-                    <input type="checkbox" checked={!!selectedLayer.style?.dissolve}
-                      onChange={(e) => updateLayer(selectedLayer.id, { style: { dissolve: e.target.checked } })} />
-                    <span>Dissolve inner borders</span>
-                  </label>
-                  {(() => {
-                    const trimming = trimLayerId === selectedLayer.id;
-                    const listing = trimListLayerId === selectedLayer.id;
-                    const removed = hiddenCount(selectedLayer);
-                    const total = layerFeatures(selectedLayer).length;
-                    return (
-                      <div className="trim-panel">
-                        <div className="control-row">
-                          <label>Remove individual shapes</label>
-                        </div>
-                        <div className="trim-actions">
-                          <button
-                            type="button"
-                            className={`secondary-btn trim-toggle${trimming ? ' active' : ''}`}
-                            aria-pressed={trimming}
-                            onClick={() => setTrimLayerId(trimming ? null : selectedLayer.id)}
-                          >
-                            {trimming ? 'Done removing' : 'Select on map'}
-                          </button>
-                          <button
-                            type="button"
-                            className="secondary-btn trim-toggle"
-                            aria-expanded={listing}
-                            onClick={() => setTrimListLayerId(listing ? null : selectedLayer.id)}
-                          >
-                            {listing ? 'Hide list' : `List (${total})`}
-                          </button>
-                        </div>
-                        {trimming && (
-                          <p className="trim-hint">
-                            Click a shape to remove it, or drag a box to remove a whole
-                            group. A shape is caught when its centre is inside the box.
-                          </p>
-                        )}
-                        {removed > 0 && (
-                          <div className="trim-status">
-                            <span>
-                              {removed} of {total} removed — not shown on the map, in the
-                              legend or in exports.
-                            </span>
-                            <button
-                              type="button"
-                              className="link-btn"
-                              onClick={() => restoreHiddenFeatures(selectedLayer.id)}
-                            >
-                              Restore all
-                            </button>
-                          </div>
-                        )}
-                        {listing && (
-                          <FeatureTrimList
-                            layer={selectedLayer}
-                            onSetHidden={(features, hidden) => {
-                              const n = setFeaturesHidden(selectedLayer.id, features, hidden);
-                              if (n) {
-                                trackEvent(hidden ? 'features_removed' : 'features_restored',
-                                  { count: n, method: 'list', role: selectedLayer.role });
-                              }
-                            }}
-                          />
-                        )}
-                      </div>
-                    );
-                  })()}
-                  <div className="control-row">
-                    <label>Fill Pattern</label>
-                    <div className="fill-pattern-picker">
-                      {[['none', 'Solid'], ['hatch', 'Hatch'], ['cross', 'Cross'], ['dots', 'Dots']].map(([val, title]) => (
-                        <button
-                          key={val}
-                          type="button"
-                          title={title}
-                          className={`pattern-btn${(selectedLayer.style?.fillPattern || 'none') === val ? ' active' : ''}`}
-                          onClick={() => updateLayer(selectedLayer.id, { style: { fillPattern: val === 'none' ? undefined : val } })}
-                        >
-                          {val === 'none' && <svg width="24" height="18"><rect x="1" y="1" width="22" height="16" rx="2" fill="rgba(100,116,139,0.3)" /></svg>}
-                          {val === 'hatch' && <svg width="24" height="18"><rect x="1" y="1" width="22" height="16" rx="2" fill="none" stroke="#94a3b8" />{[0,6,12,18,24].map((o) => <line key={o} x1={o} y1={18} x2={o + 18} y2={0} stroke="#64748b" strokeWidth="1.2" />)}</svg>}
-                          {val === 'cross' && <svg width="24" height="18"><rect x="1" y="1" width="22" height="16" rx="2" fill="none" stroke="#94a3b8" />{[3,9,15,21].map((x) => <line key={`v${x}`} x1={x} y1={2} x2={x} y2={16} stroke="#64748b" strokeWidth="1.2" />)}{[4,10,16].map((y) => <line key={`h${y}`} x1={2} y1={y} x2={22} y2={y} stroke="#64748b" strokeWidth="1.2" />)}</svg>}
-                          {val === 'dots' && <svg width="24" height="18"><rect x="1" y="1" width="22" height="16" rx="2" fill="none" stroke="#94a3b8" />{[5,11,17].map((x) => [4,10,16].map((y) => <circle key={`${x}${y}`} cx={x} cy={y} r="1.8" fill="#64748b" />))}</svg>}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-          ) : <p className="small-note">Select a layer to edit its display label, role, order, and colors.</p>}
-        </section>
-
-        {/* ── Nearby Claims Overlay ── */}
-        <section className="control-section cs-collapsible">
-          <h2 className="control-section-heading">
-            <button
-              type="button"
-              className="section-toggle-btn"
-              onClick={() => toggleSection('areaClaims')}
-              aria-expanded={!collapsedSections.areaClaims}
-              aria-controls="section-areaClaims"
-            >Nearby Claims <span aria-hidden="true" className={`section-chevron${collapsedSections.areaClaims ? '' : ' open'}`}>›</span></button>
-          </h2>
-          {!collapsedSections.areaClaims && (
-            <div id="section-areaClaims" className="control-grid">
-              <p className="small-note">Load mineral tenure claims within a radius of your project area. Each claim owner is shown in a distinct colour.</p>
-              <div className="control-row">
-                <label>{US_CLAIMS_ENABLED ? 'Jurisdiction' : 'Province'}</label>
-                <select value={areaClaimsProvince} onChange={(e) => setAreaClaimsProvince(e.target.value)}>
-                  <optgroup label="Canada">
-                    <option value="bc">British Columbia</option>
-                    <option value="on">Ontario</option>
-                    <option value="qc">Quebec</option>
-                    <option value="sk">Saskatchewan</option>
-                    <option value="mb">Manitoba</option>
-                    <option value="nl">Newfoundland &amp; Labrador</option>
-                    <option value="yt">Yukon</option>
-                  </optgroup>
-                  {US_CLAIMS_ENABLED && (
-                    <optgroup label={US_GROUP_LABEL}>
-                      {US_STATES.map((st) => (
-                        <option key={st.value} value={st.value}>{st.label}</option>
-                      ))}
+          <section className="control-section cs-collapsible">
+            <h2 className="control-section-heading">
+              <button
+                type="button"
+                className="section-toggle-btn"
+                onClick={() => toggleSection('areaClaims')}
+                aria-expanded={!collapsedSections.areaClaims}
+                aria-controls="section-areaClaims"
+              >Nearby Claims <span aria-hidden="true" className={`section-chevron${collapsedSections.areaClaims ? '' : ' open'}`}>›</span></button>
+            </h2>
+            {!collapsedSections.areaClaims && (
+              <div id="section-areaClaims" className="control-grid">
+                <p className="small-note">Load mineral tenure claims within a radius of your project area. Each claim owner is shown in a distinct colour.</p>
+                <div className="control-row">
+                  <label>{US_CLAIMS_ENABLED ? 'Jurisdiction' : 'Province'}</label>
+                  <select value={areaClaimsProvince} onChange={(e) => setAreaClaimsProvince(e.target.value)}>
+                    <optgroup label="Canada">
+                      <option value="bc">British Columbia</option>
+                      <option value="on">Ontario</option>
+                      <option value="qc">Quebec</option>
+                      <option value="sk">Saskatchewan</option>
+                      <option value="mb">Manitoba</option>
+                      <option value="nl">Newfoundland &amp; Labrador</option>
+                      <option value="yt">Yukon</option>
                     </optgroup>
-                  )}
-                </select>
-              </div>
-              {US_CLAIMS_ENABLED && isUsJurisdiction(areaClaimsProvince) && (
-                <p className="small-note">{US_GEOMETRY_DISCLAIMER}</p>
-              )}
-              <div className="control-row inline-2">
-                <div>
-                  <label htmlFor="f-search-radius-4453">Search Radius</label>
-                  <select id="f-search-radius-4453"
-                    value={areaClaims?.radius ?? 25}
-                    onChange={(e) => setAreaClaims((prev) => ({ ...(prev || {}), radius: Number(e.target.value) }))}
-                  >
-                    {[10, 25, 50, 100].map((r) => <option key={r} value={r}>{r} km</option>)}
+                    {US_CLAIMS_ENABLED && (
+                      <optgroup label={US_GROUP_LABEL}>
+                        {US_STATES.map((st) => (
+                          <option key={st.value} value={st.value}>{st.label}</option>
+                        ))}
+                      </optgroup>
+                    )}
                   </select>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'flex-end' }}>
-                  <button
-                    className="btn primary"
-                    type="button"
-                    disabled={!mapReady || areaClaims?.status === 'loading'}
-                    onClick={() => loadAreaClaims(areaClaims?.radius ?? 25)}
-                  >
-                    {areaClaims?.status === 'loading' ? 'Loading…' : 'Load Claims'}
-                  </button>
-                </div>
-              </div>
-              <div className="control-row">
-                <label>Search Location</label>
-                <div className="acl-pick-row">
-                  <button
-                    className={`secondary-btn compact${areaClaimsPicking ? ' active-toggle' : ''}`}
-                    type="button"
-                    disabled={!mapReady}
-                    onClick={() => setAreaClaimsPicking((p) => !p)}
-                  >
-                    {areaClaimsPicking ? 'Click map…' : '📍 Pick on map'}
-                  </button>
-                  {areaClaimsPickCenter && (
-                    <>
-                      <span className="acl-pick-coords">{areaClaimsPickCenter.lat.toFixed(4)}, {areaClaimsPickCenter.lng.toFixed(4)}</span>
-                      <button className="acl-hide-btn" type="button" title="Clear pin — use claims layer instead" onClick={() => setAreaClaimsPickCenter(null)}>×</button>
-                    </>
-                  )}
-                </div>
-                {!areaClaimsPickCenter && <span className="small-note">Defaults to your claims layer. Drop a pin to search anywhere.</span>}
-              </div>
-              {areaClaims && (
-                <>
-                  <div className={`area-claims-status${areaClaims.status === 'error' ? ' error' : ''}`}>
-                    {areaClaims.message}
+                {US_CLAIMS_ENABLED && isUsJurisdiction(areaClaimsProvince) && (
+                  <p className="small-note">{US_GEOMETRY_DISCLAIMER}</p>
+                )}
+                <div className="control-row inline-2">
+                  <div>
+                    <label htmlFor="f-search-radius-4453">Search Radius</label>
+                    <select id="f-search-radius-4453"
+                      value={areaClaims?.radius ?? 25}
+                      onChange={(e) => setAreaClaims((prev) => ({ ...(prev || {}), radius: Number(e.target.value) }))}
+                    >
+                      {[10, 25, 50, 100].map((r) => <option key={r} value={r}>{r} km</option>)}
+                    </select>
                   </div>
-                  {areaClaims.status === 'loaded' && areaClaims.features.length > 0 && (
-                    <>
-                      <label className="toggle-row">
-                        <input type="checkbox" checked={!!areaClaims.visible} onChange={(e) => setAreaClaims((prev) => ({ ...prev, visible: e.target.checked }))} />
-                        <span>Show on map</span>
-                      </label>
-                      <label className="toggle-row">
-                        <input type="checkbox" checked={!!areaClaims.showInLegend} onChange={(e) => setAreaClaims((prev) => ({ ...prev, showInLegend: e.target.checked }))} />
-                        <span>Add to legend</span>
-                      </label>
-                      <label className="toggle-row">
-                        <input type="checkbox" checked={!!areaClaims.dissolve} onChange={(e) => setAreaClaims((prev) => ({ ...prev, dissolve: e.target.checked }))} />
-                        <span>Dissolve inner borders</span>
-                      </label>
-                      <div className="acl-opacity-row">
-                        <label htmlFor="f-fill-opacity-4512">Fill opacity</label>
-                        <input id="f-fill-opacity-4512"
-                          type="range" min="0" max="1" step="0.05"
-                          value={areaClaims.fillOpacity ?? 0.22}
-                          onChange={(e) => setAreaClaims((prev) => ({ ...prev, fillOpacity: Number(e.target.value) }))}
-                        />
-                        <span className="acl-opacity-val">{Math.round((areaClaims.fillOpacity ?? 0.22) * 100)}%</span>
+                  <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+                    <button
+                      className="btn primary"
+                      type="button"
+                      disabled={!mapReady || areaClaims?.status === 'loading'}
+                      onClick={() => loadAreaClaims(areaClaims?.radius ?? 25)}
+                    >
+                      {areaClaims?.status === 'loading' ? 'Loading…' : 'Load Claims'}
+                    </button>
+                  </div>
+                </div>
+                <div className="control-row">
+                  <label>Search Location</label>
+                  <div className="acl-pick-row">
+                    <button
+                      className={`secondary-btn compact${areaClaimsPicking ? ' active-toggle' : ''}`}
+                      type="button"
+                      disabled={!mapReady}
+                      onClick={() => setAreaClaimsPicking((p) => !p)}
+                    >
+                      {areaClaimsPicking ? 'Click map…' : '📍 Pick on map'}
+                    </button>
+                    {areaClaimsPickCenter && (
+                      <>
+                        <span className="acl-pick-coords">{areaClaimsPickCenter.lat.toFixed(4)}, {areaClaimsPickCenter.lng.toFixed(4)}</span>
+                        <button className="acl-hide-btn" type="button" title="Clear pin — use claims layer instead" onClick={() => setAreaClaimsPickCenter(null)}>×</button>
+                      </>
+                    )}
+                  </div>
+                  {!areaClaimsPickCenter && <span className="small-note">Defaults to your claims layer. Drop a pin to search anywhere.</span>}
+                </div>
+                {areaClaims && (
+                  <>
+                    <div className={`area-claims-status${areaClaims.status === 'error' ? ' error' : ''}`}>
+                      {areaClaims.message}
+                    </div>
+                    {areaClaims.status === 'loaded' && areaClaims.features.length > 0 && (
+                      <>
+                        <label className="toggle-row">
+                          <input type="checkbox" checked={!!areaClaims.visible} onChange={(e) => setAreaClaims((prev) => ({ ...prev, visible: e.target.checked }))} />
+                          <span>Show on map</span>
+                        </label>
+                        <label className="toggle-row">
+                          <input type="checkbox" checked={!!areaClaims.showInLegend} onChange={(e) => setAreaClaims((prev) => ({ ...prev, showInLegend: e.target.checked }))} />
+                          <span>Add to legend</span>
+                        </label>
+                        <label className="toggle-row">
+                          <input type="checkbox" checked={!!areaClaims.dissolve} onChange={(e) => setAreaClaims((prev) => ({ ...prev, dissolve: e.target.checked }))} />
+                          <span>Dissolve inner borders</span>
+                        </label>
+                        <div className="acl-opacity-row">
+                          <label htmlFor="f-fill-opacity-4512">Fill opacity</label>
+                          <input id="f-fill-opacity-4512"
+                            type="range" min="0" max="1" step="0.05"
+                            value={areaClaims.fillOpacity ?? 0.22}
+                            onChange={(e) => setAreaClaims((prev) => ({ ...prev, fillOpacity: Number(e.target.value) }))}
+                          />
+                          <span className="acl-opacity-val">{Math.round((areaClaims.fillOpacity ?? 0.22) * 100)}%</span>
+                        </div>
+                        <div className="acl-legend-label">Claim owners</div>
+                        <div className="area-claims-legend">
+                          {Object.entries(areaClaims.ownerColors).map(([owner, color]) => {
+                            const hidden = (areaClaims.hiddenOwners || []).includes(owner);
+                            return (
+                              <div key={owner} className={`acl-row${hidden ? ' acl-hidden' : ''}`}>
+                                <input
+                                  type="color"
+                                  value={color}
+                                  title="Change colour"
+                                  onChange={(e) => setAreaClaims((prev) => ({ ...prev, ownerColors: { ...prev.ownerColors, [owner]: e.target.value } }))}
+                                  className="acl-color-pick"
+                                />
+                                <input
+                                  type="text"
+                                  value={(areaClaims.ownerLabels || {})[owner] ?? owner}
+                                  onChange={(e) => setAreaClaims((prev) => ({ ...prev, ownerLabels: { ...(prev.ownerLabels || {}), [owner]: e.target.value } }))}
+                                  className="acl-name-input"
+                                  title="Edit display name"
+                                />
+                                <button
+                                  type="button"
+                                  className="acl-hide-btn"
+                                  title={hidden ? 'Show owner' : 'Hide owner'}
+                                  onClick={() => setAreaClaims((prev) => {
+                                    const h = prev.hiddenOwners || [];
+                                    return { ...prev, hiddenOwners: h.includes(owner) ? h.filter((o) => o !== owner) : [...h, owner] };
+                                  })}
+                                >{hidden ? '👁' : '×'}</button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <button className="secondary-btn" type="button" onClick={() => { setAreaClaims(null); }}>Clear All</button>
+                      </>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+          </section>
+          </>
+        )}
+
+        {inspectorTab === 'layers' && (
+          <>
+          <section className="control-section cs-collapsible" ref={layersSectionRef}>
+            <h2>Layers</h2>
+            <LayerList layers={project.layers} selectedLayerId={selectedLayerId} onSelect={setSelectedLayerId} onToggleVisible={toggleLayerVisible} onRemove={removeLayer} />
+            {selectedLayer ? (
+              <div className="control-grid" style={{ marginTop: 10 }}>
+                <div className="control-row">
+                  <label htmlFor="f-display-label-4286">Display Label</label>
+                  <input id="f-display-label-4286" value={selectedLayer.displayName || selectedLayer.legend?.label || ''} onChange={(e) => setDisplayLabel(selectedLayer.id, e.target.value)} />
+                </div>
+                <div className="control-row">
+                  <label htmlFor="f-layer-role-4290">Layer Role</label>
+                  <select id="f-layer-role-4290" value={selectedLayer.role} onChange={(e) => changeLayerRole(selectedLayer.id, e.target.value)}>
+                    {Object.entries(ROLE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                  </select>
+                </div>
+                <div className="button-row three">
+                  <button className="secondary-btn" type="button" onClick={() => moveLayer(selectedLayer.id, 'down')}>Move Down</button>
+                  <button className={`secondary-btn ${project.layout.primaryLayerId === selectedLayer.id ? 'active-toggle' : ''}`} type="button" onClick={() => setFramingLayer(selectedLayer.id)}>
+                    {project.layout.primaryLayerId === selectedLayer.id ? 'Framing Layer' : 'Use for Framing'}
+                  </button>
+                  <button className="secondary-btn" type="button" onClick={() => moveLayer(selectedLayer.id, 'up')}>Move Up</button>
+                </div>
+                <div className="control-row inline-2">
+                  <div>
+                    <label>{isPointStyledLayer(selectedLayer) ? 'Point Border' : 'Outline Color'}</label>
+                    <ColorField value={selectedLayer.style?.stroke || selectedLayer.style?.markerColor || '#2563eb'} onChange={(e) => { const id = selectedLayer.id, val = e.target.value; clearTimeout(layerStyleDebounceRef.current); layerStyleDebounceRef.current = setTimeout(() => updateLayer(id, { style: { stroke: val, markerColor: val } }), 50); }} brandColors={brandColors} />
+                  </div>
+                  <div>
+                    <label>{isPointStyledLayer(selectedLayer) ? 'Point Fill' : 'Fill Color'}</label>
+                    <ColorField value={selectedLayer.style?.fill || selectedLayer.style?.markerFill || '#93c5fd'} onChange={(e) => { const id = selectedLayer.id, val = e.target.value; clearTimeout(layerStyleDebounceRef.current); layerStyleDebounceRef.current = setTimeout(() => updateLayer(id, { style: { fill: val, markerFill: val } }), 50); }} brandColors={brandColors} />
+                  </div>
+                </div>
+                {isPointStyledLayer(selectedLayer) ? (
+                  <>
+                    <div className="control-row inline-2">
+                      <div>
+                        <label htmlFor="f-point-size-4316">Point Size</label>
+                        <input id="f-point-size-4316" type="range" min="6" max="24" step="1" value={selectedLayer.style?.markerSize ?? 12} onChange={(e) => updateLayer(selectedLayer.id, { style: { markerSize: Number(e.target.value) } })} />
                       </div>
-                      <div className="acl-legend-label">Claim owners</div>
-                      <div className="area-claims-legend">
-                        {Object.entries(areaClaims.ownerColors).map(([owner, color]) => {
-                          const hidden = (areaClaims.hiddenOwners || []).includes(owner);
+                      <div className="range-value">{selectedLayer.style?.markerSize ?? 12}px</div>
+                    </div>
+                    <div className="control-row">
+                      <label>Marker Shape</label>
+                      <div className="marker-shape-picker-visual">
+                        {[
+                          ['circle', 'Circle'], ['square', 'Square'], ['triangle', 'Tri ▲'], ['triangle_down', 'Tri ▼'],
+                          ['diamond', 'Diamond'], ['cross', 'Cross'], ['star', 'Star'], ['hexagon', 'Hexagon'],
+                          ['pin', 'Pin'], ['drillhole', 'DH Pin'],
+                        ].map(([val, label]) => {
+                          const color = selectedLayer.style?.markerColor || '#2563eb';
+                          const isActive = (selectedLayer.style?.markerShape || 'circle') === val;
                           return (
-                            <div key={owner} className={`acl-row${hidden ? ' acl-hidden' : ''}`}>
-                              <input
-                                type="color"
-                                value={color}
-                                title="Change colour"
-                                onChange={(e) => setAreaClaims((prev) => ({ ...prev, ownerColors: { ...prev.ownerColors, [owner]: e.target.value } }))}
-                                className="acl-color-pick"
-                              />
-                              <input
-                                type="text"
-                                value={(areaClaims.ownerLabels || {})[owner] ?? owner}
-                                onChange={(e) => setAreaClaims((prev) => ({ ...prev, ownerLabels: { ...(prev.ownerLabels || {}), [owner]: e.target.value } }))}
-                                className="acl-name-input"
-                                title="Edit display name"
-                              />
-                              <button
-                                type="button"
-                                className="acl-hide-btn"
-                                title={hidden ? 'Show owner' : 'Hide owner'}
-                                onClick={() => setAreaClaims((prev) => {
-                                  const h = prev.hiddenOwners || [];
-                                  return { ...prev, hiddenOwners: h.includes(owner) ? h.filter((o) => o !== owner) : [...h, owner] };
-                                })}
-                              >{hidden ? '👁' : '×'}</button>
-                            </div>
+                            <button key={val} type="button" className={`shape-visual-btn${isActive ? ' active' : ''}`}
+                              onClick={() => updateLayer(selectedLayer.id, { style: { markerShape: val } })} title={label}>
+                              <img src={markerSvgUrl(val, isActive ? '#ffffff' : color, 18)} alt={label} width="18" height="18" />
+                            </button>
                           );
                         })}
                       </div>
-                      <button className="secondary-btn" type="button" onClick={() => { setAreaClaims(null); }}>Clear All</button>
-                    </>
-                  )}
-                </>
-              )}
-            </div>
-          )}
-        </section>
+                    </div>
+                    <div className="control-row">
+                      <label>Custom Icon</label>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        {selectedLayer.style?.customMarkerDataUri && (
+                          <img src={selectedLayer.style.customMarkerDataUri} alt="custom icon" style={{ width: 24, height: 24, objectFit: 'contain', border: '1px solid #d4deea', borderRadius: 4 }} />
+                        )}
+                        <button type="button" className="secondary-btn" style={{ flex: 1 }}
+                          onClick={() => {
+                            const input = document.createElement('input');
+                            input.type = 'file'; input.accept = 'image/png,image/svg+xml,image/jpeg,image/gif';
+                            input.onchange = (e) => {
+                              const file = e.target.files?.[0]; if (!file) return;
+                              const reader = new FileReader();
+                              reader.onload = (ev) => updateLayer(selectedLayer.id, { style: { customMarkerDataUri: ev.target.result } });
+                              reader.readAsDataURL(file);
+                            };
+                            input.click();
+                          }}>
+                          {selectedLayer.style?.customMarkerDataUri ? 'Change Icon' : 'Upload Icon'}
+                        </button>
+                        {selectedLayer.style?.customMarkerDataUri && (
+                          <button type="button" className="secondary-btn" style={{ flexShrink: 0 }}
+                            onClick={() => updateLayer(selectedLayer.id, { style: { customMarkerDataUri: null } })}>✕</button>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="control-row inline-2">
+                      <div>
+                        <label htmlFor="f-fill-opacity-4371">Fill Opacity</label>
+                        <input id="f-fill-opacity-4371" type="range" min="0" max="1" step="0.05" value={selectedLayer.style?.fillOpacity ?? 0.22} onChange={(e) => { const id = selectedLayer.id, val = Number(e.target.value); clearTimeout(layerStyleDebounceRef.current); layerStyleDebounceRef.current = setTimeout(() => updateLayer(id, { style: { fillOpacity: val } }), 50); }} />
+                      </div>
+                      <div className="range-value">{Math.round((selectedLayer.style?.fillOpacity ?? 0.22) * 100)}%</div>
+                    </div>
+                    <div className="control-row inline-2">
+                      <div>
+                        <label htmlFor="f-layer-opacity-4378">Layer Opacity</label>
+                        <input id="f-layer-opacity-4378" type="range" min="0" max="1" step="0.05" value={selectedLayer.style?.layerOpacity ?? 1} onChange={(e) => { const id = selectedLayer.id, val = Number(e.target.value); clearTimeout(layerStyleDebounceRef.current); layerStyleDebounceRef.current = setTimeout(() => updateLayer(id, { style: { layerOpacity: val } }), 50); }} />
+                      </div>
+                      <div className="range-value">{Math.round((selectedLayer.style?.layerOpacity ?? 1) * 100)}%</div>
+                    </div>
+                    <label className="toggle-row" style={{ marginTop: 4 }}>
+                      <input type="checkbox" checked={!!selectedLayer.style?.dissolve}
+                        onChange={(e) => updateLayer(selectedLayer.id, { style: { dissolve: e.target.checked } })} />
+                      <span>Dissolve inner borders</span>
+                    </label>
+                    {(() => {
+                      const trimming = trimLayerId === selectedLayer.id;
+                      const listing = trimListLayerId === selectedLayer.id;
+                      const removed = hiddenCount(selectedLayer);
+                      const total = layerFeatures(selectedLayer).length;
+                      return (
+                        <div className="trim-panel">
+                          <div className="control-row">
+                            <label>Remove individual shapes</label>
+                          </div>
+                          <div className="trim-actions">
+                            <button
+                              type="button"
+                              className={`secondary-btn trim-toggle${trimming ? ' active' : ''}`}
+                              aria-pressed={trimming}
+                              onClick={() => setTrimLayerId(trimming ? null : selectedLayer.id)}
+                            >
+                              {trimming ? 'Done removing' : 'Select on map'}
+                            </button>
+                            <button
+                              type="button"
+                              className="secondary-btn trim-toggle"
+                              aria-expanded={listing}
+                              onClick={() => setTrimListLayerId(listing ? null : selectedLayer.id)}
+                            >
+                              {listing ? 'Hide list' : `List (${total})`}
+                            </button>
+                          </div>
+                          {trimming && (
+                            <p className="trim-hint">
+                              Click a shape to remove it, or drag a box to remove a whole
+                              group. A shape is caught when its centre is inside the box.
+                            </p>
+                          )}
+                          {removed > 0 && (
+                            <div className="trim-status">
+                              <span>
+                                {removed} of {total} removed — not shown on the map, in the
+                                legend or in exports.
+                              </span>
+                              <button
+                                type="button"
+                                className="link-btn"
+                                onClick={() => restoreHiddenFeatures(selectedLayer.id)}
+                              >
+                                Restore all
+                              </button>
+                            </div>
+                          )}
+                          {listing && (
+                            <FeatureTrimList
+                              layer={selectedLayer}
+                              onSetHidden={(features, hidden) => {
+                                const n = setFeaturesHidden(selectedLayer.id, features, hidden);
+                                if (n) {
+                                  trackEvent(hidden ? 'features_removed' : 'features_restored',
+                                    { count: n, method: 'list', role: selectedLayer.role });
+                                }
+                              }}
+                            />
+                          )}
+                        </div>
+                      );
+                    })()}
+                    <div className="control-row">
+                      <label>Fill Pattern</label>
+                      <div className="fill-pattern-picker">
+                        {[['none', 'Solid'], ['hatch', 'Hatch'], ['cross', 'Cross'], ['dots', 'Dots']].map(([val, title]) => (
+                          <button
+                            key={val}
+                            type="button"
+                            title={title}
+                            className={`pattern-btn${(selectedLayer.style?.fillPattern || 'none') === val ? ' active' : ''}`}
+                            onClick={() => updateLayer(selectedLayer.id, { style: { fillPattern: val === 'none' ? undefined : val } })}
+                          >
+                            {val === 'none' && <svg width="24" height="18"><rect x="1" y="1" width="22" height="16" rx="2" fill="rgba(100,116,139,0.3)" /></svg>}
+                            {val === 'hatch' && <svg width="24" height="18"><rect x="1" y="1" width="22" height="16" rx="2" fill="none" stroke="#94a3b8" />{[0,6,12,18,24].map((o) => <line key={o} x1={o} y1={18} x2={o + 18} y2={0} stroke="#64748b" strokeWidth="1.2" />)}</svg>}
+                            {val === 'cross' && <svg width="24" height="18"><rect x="1" y="1" width="22" height="16" rx="2" fill="none" stroke="#94a3b8" />{[3,9,15,21].map((x) => <line key={`v${x}`} x1={x} y1={2} x2={x} y2={16} stroke="#64748b" strokeWidth="1.2" />)}{[4,10,16].map((y) => <line key={`h${y}`} x1={2} y1={y} x2={22} y2={y} stroke="#64748b" strokeWidth="1.2" />)}</svg>}
+                            {val === 'dots' && <svg width="24" height="18"><rect x="1" y="1" width="22" height="16" rx="2" fill="none" stroke="#94a3b8" />{[5,11,17].map((x) => [4,10,16].map((y) => <circle key={`${x}${y}`} cx={x} cy={y} r="1.8" fill="#64748b" />))}</svg>}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            ) : <p className="small-note">Select a layer to edit its display label, role, order, and colors.</p>}
+          </section>
+          </>
+        )}
 
-        <section className="control-section cs-collapsible" ref={drillholeSectionRef}>
-          <h2 className="control-section-heading">
-            <button
-              type="button"
-              className="section-toggle-btn"
-              onClick={() => toggleSection('drillhole')}
-              aria-expanded={!collapsedSections.drillhole}
-              aria-controls="section-drillhole"
-            >Drillhole Labels <span aria-hidden="true" className={`section-chevron${collapsedSections.drillhole ? '' : ' open'}`}>›</span></button>
-          </h2>
-          {!collapsedSections.drillhole && selectedFeature ? (
-            <div id="section-drillhole" className="control-grid">
-              <div className="feature-chip">Selected: {selectedFeature.layerName}</div>
-              <div className="small-note">Click a drillhole on the map, then refine the callout here. The selected hole is editable before you add the callout.</div>
-              <div className="control-row">
-                <label htmlFor="f-title-4577">Title</label>
-                <input id="f-title-4577" value={selectedFeature.suggestedLabel} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, suggestedLabel: e.target.value }))} />
-              </div>
-              <div className="control-row">
-                <label htmlFor="f-subtext-4581">Subtext</label>
-                <input id="f-subtext-4581" value={selectedFeature.suggestedSubtext || ''} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, suggestedSubtext: e.target.value }))} />
-              </div>
-              <div className="control-row inline-2">
-                <div>
-                  <label htmlFor="f-callout-type-4586">Callout Type</label>
-                  <select id="f-callout-type-4586" value={selectedFeature.calloutType || 'leader'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, calloutType: e.target.value }))}>
-                    {Object.entries(CALLOUT_TYPES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                  </select>
+        {inspectorTab === 'labels' && (
+          <>
+          <section className="control-section cs-collapsible" ref={drillholeSectionRef}>
+            <h2 className="control-section-heading">
+              <button
+                type="button"
+                className="section-toggle-btn"
+                onClick={() => toggleSection('drillhole')}
+                aria-expanded={!collapsedSections.drillhole}
+                aria-controls="section-drillhole"
+              >Drillhole Labels <span aria-hidden="true" className={`section-chevron${collapsedSections.drillhole ? '' : ' open'}`}>›</span></button>
+            </h2>
+            {!collapsedSections.drillhole && selectedFeature ? (
+              <div id="section-drillhole" className="control-grid">
+                <div className="feature-chip">Selected: {selectedFeature.layerName}</div>
+                <div className="small-note">Click a drillhole on the map, then refine the callout here. The selected hole is editable before you add the callout.</div>
+                <div className="control-row">
+                  <label htmlFor="f-title-4577">Title</label>
+                  <input id="f-title-4577" value={selectedFeature.suggestedLabel} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, suggestedLabel: e.target.value }))} />
                 </div>
-              </div>
-              {selectedFeature.calloutType === 'badge' && (
+                <div className="control-row">
+                  <label htmlFor="f-subtext-4581">Subtext</label>
+                  <input id="f-subtext-4581" value={selectedFeature.suggestedSubtext || ''} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, suggestedSubtext: e.target.value }))} />
+                </div>
                 <div className="control-row inline-2">
                   <div>
-                    <label htmlFor="f-chip-text-4595">Chip Text</label>
-                    <input id="f-chip-text-4595" value={selectedFeature.badgeValue || ''} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, badgeValue: e.target.value }))} placeholder=">14 Moz" />
-                  </div>
-                  <div>
-                    <label htmlFor="f-chip-color-4599">Chip Color</label>
-                    <ColorField id="f-chip-color-4599" value={selectedFeature.badgeColor || '#d97706'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, badgeColor: e.target.value }))} brandColors={brandColors} />
+                    <label htmlFor="f-callout-type-4586">Callout Type</label>
+                    <select id="f-callout-type-4586" value={selectedFeature.calloutType || 'leader'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, calloutType: e.target.value }))}>
+                      {Object.entries(CALLOUT_TYPES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                    </select>
                   </div>
                 </div>
-              )}
-              <div className="control-row inline-2">
-                <div>
-                  <label htmlFor="f-background-4606">Background</label>
-                  <ColorField id="f-background-4606" value={selectedFeature.style?.background || '#ffffff'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, style: { ...(prev.style || {}), background: e.target.value } }))} brandColors={brandColors} />
-                </div>
-                <div>
-                  <label htmlFor="f-border-4610">Border</label>
-                  <ColorField id="f-border-4610" value={selectedFeature.style?.border || '#102640'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, style: { ...(prev.style || {}), border: e.target.value } }))} brandColors={brandColors} />
-                </div>
-              </div>
-              <div className="control-row inline-2">
-                <div>
-                  <label htmlFor="f-text-4616">Text</label>
-                  <ColorField id="f-text-4616" value={selectedFeature.style?.textColor || '#0f172a'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, style: { ...(prev.style || {}), textColor: e.target.value } }))} brandColors={brandColors} />
-                </div>
-                <div>
-                  <label htmlFor="f-subtext-4620">Subtext</label>
-                  <ColorField id="f-subtext-4620" value={selectedFeature.style?.subtextColor || '#475569'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, style: { ...(prev.style || {}), subtextColor: e.target.value } }))} brandColors={brandColors} />
-                </div>
-              </div>
-              <div className="control-row inline-2">
-                <div>
-                  <label htmlFor="f-font-size-4626">Font Size</label>
-                  <input id="f-font-size-4626" type="range" min="11" max="16" step="1" value={selectedFeature.style?.fontSize || 12} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, style: { ...(prev.style || {}), fontSize: Number(e.target.value) } }))} />
-                </div>
-                <div className="range-value">{selectedFeature.style?.fontSize || 12}px</div>
-              </div>
-              <button className="btn primary" type="button" onClick={addCalloutFromSelectedFeature}>Add / Update Callout</button>
-            </div>
-          ) : (!collapsedSections.drillhole &&
-            <div className="small-note">Click a drillhole point on the map to open its callout editor.</div>
-          )}
-        </section>
-
-        <section className="control-section cs-collapsible" ref={calloutsSectionRef}>
-          <h2>Callouts</h2>
-          <div className="button-row" style={{ marginBottom: 10 }}>
-            <button className="btn primary" type="button" onClick={addCalloutFromSelectedLayer} disabled={!selectedLayer}>Add From Selected Layer</button>
-            <button className="btn" type="button" onClick={autoFrameAll}>Auto Frame All</button>
-          </div>
-          <div className="callout-list">
-            {project.callouts.map((callout, index) => {
-              const isOpen = selectedCalloutId === callout.id;
-              return (
-                <div key={callout.id} className={`callout-card ${isOpen ? 'active' : ''}`}>
-                  <div className="callout-card-header" style={{ cursor: 'pointer', marginBottom: isOpen ? 8 : 0 }} onClick={() => setSelectedCalloutId(isOpen ? null : callout.id)}>
-                    <span>{callout.text ? callout.text.slice(0, 28) : `Callout ${index + 1}`}</span>
-                    <div className="callout-card-actions">
-                      <button className="secondary-btn" type="button" onClick={(e) => { e.stopPropagation(); removeCallout(callout.id); }}>Remove</button>
-                    </div>
-                  </div>
-                  {isOpen && (
-                    <div className="control-grid">
-                      <div className="control-row"><label htmlFor="f-text-4657">Text</label><input id="f-text-4657" autoFocus value={callout.text} onChange={(e) => updateCallout(callout.id, { text: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter') setSelectedCalloutId(null); }} /></div>
-                      <div className="control-row"><label htmlFor="f-subtext-4658">Subtext</label><input id="f-subtext-4658" value={callout.subtext || ''} placeholder="Details / result…" onChange={(e) => updateCallout(callout.id, { subtext: e.target.value })} /></div>
-                      {(() => {
-                        // Which block this label points at. Only shown when the
-                        // layer actually splits into more than one — a single
-                        // compact block has nothing to choose between, and an
-                        // inert dropdown is worse than no dropdown.
-                        const anchorLayer = project.layers.find((l) => l.id === callout.layerId);
-                        if (!anchorLayer) return null;
-                        const groups = layerAnchorGroups(anchorLayer);
-                        if (groups.length < 2) return null;
-                        // Match on the anchor point rather than an index, so the
-                        // selection survives trimming a block away — indices
-                        // shift, coordinates do not.
-                        const current = groups.findIndex(
-                          (g) => callout.anchor
-                            && Math.abs(g.anchor.lat - callout.anchor.lat) < 1e-9
-                            && Math.abs(g.anchor.lng - callout.anchor.lng) < 1e-9,
-                        );
-                        return (
-                          <div className="control-row">
-                            <label htmlFor={`f-anchor-${callout.id}`}>Anchor</label>
-                            <select
-                              id={`f-anchor-${callout.id}`}
-                              value={current}
-                              onChange={(e) => {
-                                const g = groups[Number(e.target.value)];
-                                if (!g) return;
-                                // isManualPosition is cleared so the leader line
-                                // re-lays itself against the new anchor instead
-                                // of keeping an offset measured from the old one.
-                                updateCallout(callout.id, { anchor: g.anchor, isManualPosition: false });
-                              }}
-                            >
-                              {current === -1 && <option value={-1}>Custom position</option>}
-                              {groups.map((g, gi) => (
-                                <option key={g.label} value={gi}>
-                                  {g.label} ({g.count} {g.count === 1 ? 'shape' : 'shapes'})
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        );
-                      })()}
-                      <div className="control-row inline-2">
-                        <div>
-                          <label htmlFor="f-type-4661">Type</label>
-                          <select id="f-type-4661" value={callout.type} onChange={(e) => updateCallout(callout.id, { type: e.target.value })}>
-                            {Object.entries(CALLOUT_TYPES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                          </select>
-                        </div>
-                        <div>
-                          <label htmlFor="f-priority-4667">Priority</label>
-                          <select id="f-priority-4667" value={callout.priority} onChange={(e) => updateCallout(callout.id, { priority: Number(e.target.value) })}>
-                            <option value={1}>High</option>
-                            <option value={2}>Medium</option>
-                            <option value={3}>Low</option>
-                          </select>
-                        </div>
-                      </div>
-                      {callout.type === 'badge' && (
-                        <div className="control-row inline-2">
-                          <div>
-                            <label htmlFor="f-chip-text-4678">Chip Text</label>
-                            <input id="f-chip-text-4678" value={callout.badgeValue || ''} onChange={(e) => updateCallout(callout.id, { badgeValue: e.target.value })} placeholder=">14 Moz" />
-                          </div>
-                          <div>
-                            <label htmlFor="f-chip-color-4682">Chip Color</label>
-                            <ColorField id="f-chip-color-4682" value={callout.badgeColor || '#d97706'} onChange={(e) => updateCallout(callout.id, { badgeColor: e.target.value })} brandColors={brandColors} />
-                          </div>
-                        </div>
-                      )}
-                      {callout.type !== 'plain' && (
-                        <>
-                          <div className="control-row inline-2">
-                            <div>
-                              <label htmlFor="f-background-4691">Background</label>
-                              <ColorField id="f-background-4691" value={callout.style?.background || '#ffffff'} onChange={(e) => updateCallout(callout.id, { style: { ...(callout.style || {}), background: e.target.value } })} brandColors={brandColors} />
-                            </div>
-                            <div>
-                              <label htmlFor="f-border-line-4695">Border / Line</label>
-                              <ColorField id="f-border-line-4695" value={callout.style?.border || '#102640'} onChange={(e) => updateCallout(callout.id, { style: { ...(callout.style || {}), border: e.target.value } })} brandColors={brandColors} />
-                            </div>
-                          </div>
-                          <div className="control-row inline-2">
-                            <div>
-                              <label htmlFor="f-text-color-4701">Text Color</label>
-                              <ColorField id="f-text-color-4701" value={callout.style?.textColor || '#0f172a'} onChange={(e) => updateCallout(callout.id, { style: { ...(callout.style || {}), textColor: e.target.value } })} brandColors={brandColors} />
-                            </div>
-                            <div>
-                              <label htmlFor="f-subtext-color-4705">Subtext Color</label>
-                              <ColorField id="f-subtext-color-4705" value={callout.style?.subtextColor || '#475569'} onChange={(e) => updateCallout(callout.id, { style: { ...(callout.style || {}), subtextColor: e.target.value } })} brandColors={brandColors} />
-                            </div>
-                          </div>
-                          <div className="control-row inline-2">
-                            <div>
-                              <label htmlFor="f-font-size-4711">Font Size</label>
-                              <input id="f-font-size-4711" type="range" min="9" max="18" step="1" value={callout.style?.fontSize || 12} onChange={(e) => updateCallout(callout.id, { style: { ...(callout.style || {}), fontSize: Number(e.target.value) } })} />
-                            </div>
-                            <div className="range-value">{callout.style?.fontSize || 12}px</div>
-                          </div>
-                          <div className="control-row">
-                            <div>
-                              <label htmlFor="f-text-align-4718">Text Align</label>
-                              <select id="f-text-align-4718" value={callout.style?.textAlign || 'left'} onChange={(e) => updateCallout(callout.id, { style: { ...(callout.style || {}), textAlign: e.target.value } })}>
-                                <option value="left">Left</option>
-                                <option value="center">Center</option>
-                              </select>
-                            </div>
-                          </div>
-                        </>
-                      )}
-                      <div className="control-label">Nudge</div>
-                      <div className="nudge-grid">
-                        <span />
-                        <button className="secondary-btn" type="button" onClick={() => nudgeCallout(callout.id, 0, -8)}>↑</button>
-                        <span />
-                        <button className="secondary-btn" type="button" onClick={() => nudgeCallout(callout.id, -8, 0)}>←</button>
-                        <button className="secondary-btn" type="button" onClick={() => nudgeCallout(callout.id, 0, 8)}>↓</button>
-                        <button className="secondary-btn" type="button" onClick={() => nudgeCallout(callout.id, 8, 0)}>→</button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </section>
-
-        <section className="control-section cs-collapsible" ref={markersSectionRef}>
-          <h2>Annotations</h2>
-          <div className="button-row">
-            <button className={`secondary-btn ${annotationTool === 'marker' ? 'active-toggle' : ''}`} type="button" onClick={() => { const next = annotationTool === 'marker' ? null : 'marker'; setAnnotationTool(next); annotationToolRef.current = next; setSelectedFeature(null); }}>Place Marker</button>
-            <button className={`secondary-btn ${annotationTool === 'ellipse' ? 'active-toggle' : ''}`} type="button" onClick={() => { const next = annotationTool === 'ellipse' ? null : 'ellipse'; setAnnotationTool(next); annotationToolRef.current = next; setSelectedFeature(null); }}>Draw Dashed Area</button>
-            <button className={`secondary-btn ${annotationTool === 'ring' ? 'active-toggle' : ''}`} type="button" onClick={() => { const next = annotationTool === 'ring' ? null : 'ring'; setAnnotationTool(next); annotationToolRef.current = next; setSelectedFeature(null); }}>Draw Distance Ring</button>
-            <button className={`secondary-btn ${annotationTool === 'maplabel' ? 'active-toggle' : ''}`} type="button" onClick={() => { const next = annotationTool === 'maplabel' ? null : 'maplabel'; setAnnotationTool(next); annotationToolRef.current = next; setSelectedFeature(null); }}>Place Map Label</button>
-            <button className={`secondary-btn ${annotationTool === 'polygon' ? 'active-toggle' : ''}`} type="button" onClick={() => { const next = annotationTool === 'polygon' ? null : 'polygon'; setAnnotationTool(next); annotationToolRef.current = next; setPendingPolygonPoints([]); setSelectedFeature(null); }}>Draw Boundary</button>
-            <button className={`secondary-btn ${annotationTool === 'distanceLine' ? 'active-toggle' : ''}`} type="button"
-              onClick={() => { const next = annotationTool === 'distanceLine' ? null : 'distanceLine'; setAnnotationTool(next); annotationToolRef.current = next; setPendingDistanceP1(null); setSelectedFeature(null); }}>
-              Measure Distance
-            </button>
-          </div>
-          {annotationTool === 'polygon' && (
-            <div className="polygon-drawing-status">
-              <span>{pendingPolygonPoints.length < 3 ? `Click map to add points (${pendingPolygonPoints.length} so far, need 3+)` : `${pendingPolygonPoints.length} points — click first point or Close to finish`}</span>
-              <div className="button-row" style={{ marginTop: 6 }}>
-                <button className="btn primary" type="button" disabled={pendingPolygonPoints.length < 3} onClick={finishPolygon}>Close & Save</button>
-                <button className="btn" type="button" onClick={() => { setPendingPolygonPoints([]); setAnnotationTool(null); annotationToolRef.current = null; }}>Cancel</button>
-              </div>
-            </div>
-          )}
-          <div className="small-note" style={{ marginTop: 8 }}>{annotationTool === 'polygon' ? '' : annotationTool ? 'Click anywhere on the map to place the selected annotation.' : 'Add highlight markers or dashed ellipses anywhere on the map.'}</div>
-
-          {selectedMarker?.type === 'maplabel' ? (
-            <div className="control-grid" style={{ marginTop: 10 }}>
-              <div className="selected-note">Map Label</div>
-              <div className="control-row"><label htmlFor="f-text-4771">Text</label><input id="f-text-4771" value={selectedMarker.label || ''} onChange={(e) => updateMarker(selectedMarker.id, { label: e.target.value })} placeholder="BRITISH COLUMBIA" /></div>
-              <div className="control-row inline-2">
-                <div>
-                  <label htmlFor="f-size-4774">Size</label>
-                  <input id="f-size-4774" type="range" min="14" max="72" step="1" value={selectedMarker.size || 28} onChange={(e) => updateMarker(selectedMarker.id, { size: Number(e.target.value) })} />
-                </div>
-                <div className="range-value">{selectedMarker.size || 28}pt</div>
-              </div>
-              <div className="control-row inline-2">
-                <div>
-                  <label htmlFor="f-opacity-4781">Opacity</label>
-                  <input id="f-opacity-4781" type="range" min="0.05" max="1" step="0.05" value={selectedMarker.opacity ?? 0.35} onChange={(e) => updateMarker(selectedMarker.id, { opacity: Number(e.target.value) })} />
-                </div>
-                <div className="range-value">{Math.round((selectedMarker.opacity ?? 0.35) * 100)}%</div>
-              </div>
-              <div className="control-row inline-2">
-                <div>
-                  <label htmlFor="f-rotation-4788">Rotation</label>
-                  <input id="f-rotation-4788" type="number" min="-180" max="180" step="1" value={selectedMarker.rotation || 0} onChange={(e) => updateMarker(selectedMarker.id, { rotation: Number(e.target.value) })} />
-                </div>
-                <div>
-                  <label htmlFor="f-color-4792">Color</label>
-                  <ColorField id="f-color-4792" value={selectedMarker.color || '#1e293b'} onChange={(e) => updateMarker(selectedMarker.id, { color: e.target.value })} brandColors={brandColors} />
-                </div>
-              </div>
-              <button className="secondary-btn" type="button" onClick={() => { setProject((prev) => ({ ...prev, markers: prev.markers.filter((m) => m.id !== selectedMarker.id) })); setSelectedFeature(null); }}>Remove Label</button>
-            </div>
-          ) : selectedMarker ? (
-            <div className="control-grid" style={{ marginTop: 10 }}>
-              <div className="selected-note">Selected marker</div>
-              <div className="control-row"><label htmlFor="f-label-4801">Label</label><input id="f-label-4801" value={selectedMarker.label || ''} onChange={(e) => updateMarker(selectedMarker.id, { label: e.target.value })} /></div>
-              <div className="control-row inline-2">
-                <div>
-                  <label htmlFor="f-marker-type-4804">Marker Type</label>
-                  <select id="f-marker-type-4804" value={selectedMarker.type} onChange={(e) => updateMarker(selectedMarker.id, { type: e.target.value })}>
-                    {Object.entries(MARKER_TYPES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label htmlFor="f-color-4810">Color</label>
-                  <ColorField id="f-color-4810" value={selectedMarker.color} onChange={(e) => updateMarker(selectedMarker.id, { color: e.target.value })} brandColors={brandColors} />
-                </div>
-              </div>
-              <div className="control-row inline-2">
-                <div>
-                  <label htmlFor="f-size-4816">Size</label>
-                  <input id="f-size-4816" type="range" min="12" max="36" step="1" value={selectedMarker.size} onChange={(e) => updateMarker(selectedMarker.id, { size: Number(e.target.value) })} />
-                </div>
-                <div className="range-value">{selectedMarker.size}px</div>
-              </div>
-              <button className="secondary-btn" type="button" onClick={() => removeMarker(selectedMarker.id)}>Remove Marker</button>
-            </div>
-          ) : null}
-
-          {selectedEllipse ? (
-            <div className="control-grid" style={{ marginTop: 10 }}>
-              <div className="selected-note">{selectedEllipse.isRing ? 'Selected distance ring' : 'Selected highlight area'}</div>
-              <div className="control-row"><label htmlFor="f-label-4828">Label</label><input id="f-label-4828" value={selectedEllipse.label || ''} onChange={(e) => updateEllipse(selectedEllipse.id, { label: e.target.value })} placeholder={selectedEllipse.isRing ? (selectedEllipse.units === 'mi' ? `${(selectedEllipse.radiusKm * 0.621371).toFixed(1)} mi` : `${selectedEllipse.radiusKm} km`) : ''} /></div>
-              {selectedEllipse.isRing ? (
-                <>
+                {selectedFeature.calloutType === 'badge' && (
                   <div className="control-row inline-2">
                     <div>
-                      <label>Radius ({selectedEllipse.units === 'mi' ? 'mi' : 'km'})</label>
-                      <input type="number" min="0.1" max="5000" step={selectedEllipse.units === 'mi' ? '0.1' : '1'}
-                        value={selectedEllipse.units === 'mi' ? Math.round((selectedEllipse.radiusKm ?? 50) * 0.621371 * 10) / 10 : (selectedEllipse.radiusKm ?? 50)}
-                        onChange={(e) => {
-                          const v = Number(e.target.value);
-                          updateEllipse(selectedEllipse.id, { radiusKm: selectedEllipse.units === 'mi' ? v / 0.621371 : v });
-                        }} />
+                      <label htmlFor="f-chip-text-4595">Chip Text</label>
+                      <input id="f-chip-text-4595" value={selectedFeature.badgeValue || ''} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, badgeValue: e.target.value }))} placeholder=">14 Moz" />
                     </div>
                     <div>
-                      <label htmlFor="f-ring-color-4842">Ring Color</label>
-                      <ColorField id="f-ring-color-4842" value={selectedEllipse.color || '#dc2626'} onChange={(e) => updateEllipse(selectedEllipse.id, { color: e.target.value })} brandColors={brandColors} />
+                      <label htmlFor="f-chip-color-4599">Chip Color</label>
+                      <ColorField id="f-chip-color-4599" value={selectedFeature.badgeColor || '#d97706'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, badgeColor: e.target.value }))} brandColors={brandColors} />
                     </div>
+                  </div>
+                )}
+                <div className="control-row inline-2">
+                  <div>
+                    <label htmlFor="f-background-4606">Background</label>
+                    <ColorField id="f-background-4606" value={selectedFeature.style?.background || '#ffffff'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, style: { ...(prev.style || {}), background: e.target.value } }))} brandColors={brandColors} />
+                  </div>
+                  <div>
+                    <label htmlFor="f-border-4610">Border</label>
+                    <ColorField id="f-border-4610" value={selectedFeature.style?.border || '#102640'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, style: { ...(prev.style || {}), border: e.target.value } }))} brandColors={brandColors} />
+                  </div>
+                </div>
+                <div className="control-row inline-2">
+                  <div>
+                    <label htmlFor="f-text-4616">Text</label>
+                    <ColorField id="f-text-4616" value={selectedFeature.style?.textColor || '#0f172a'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, style: { ...(prev.style || {}), textColor: e.target.value } }))} brandColors={brandColors} />
+                  </div>
+                  <div>
+                    <label htmlFor="f-subtext-4620">Subtext</label>
+                    <ColorField id="f-subtext-4620" value={selectedFeature.style?.subtextColor || '#475569'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, style: { ...(prev.style || {}), subtextColor: e.target.value } }))} brandColors={brandColors} />
+                  </div>
+                </div>
+                <div className="control-row inline-2">
+                  <div>
+                    <label htmlFor="f-font-size-4626">Font Size</label>
+                    <input id="f-font-size-4626" type="range" min="11" max="16" step="1" value={selectedFeature.style?.fontSize || 12} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, style: { ...(prev.style || {}), fontSize: Number(e.target.value) } }))} />
+                  </div>
+                  <div className="range-value">{selectedFeature.style?.fontSize || 12}px</div>
+                </div>
+                <button className="btn primary" type="button" onClick={addCalloutFromSelectedFeature}>Add / Update Callout</button>
+              </div>
+            ) : (!collapsedSections.drillhole &&
+              <div className="small-note">Click a drillhole point on the map to open its callout editor.</div>
+            )}
+          </section>
+          <section className="control-section cs-collapsible" ref={calloutsSectionRef}>
+            <h2>Callouts</h2>
+            <div className="button-row" style={{ marginBottom: 10 }}>
+              <button className="btn primary" type="button" onClick={addCalloutFromSelectedLayer} disabled={!selectedLayer}>Add From Selected Layer</button>
+              <button className="btn" type="button" onClick={autoFrameAll}>Auto Frame All</button>
+            </div>
+            <div className="callout-list">
+              {project.callouts.map((callout, index) => {
+                const isOpen = selectedCalloutId === callout.id;
+                return (
+                  <div key={callout.id} className={`callout-card ${isOpen ? 'active' : ''}`}>
+                    <div className="callout-card-header" style={{ cursor: 'pointer', marginBottom: isOpen ? 8 : 0 }} onClick={() => setSelectedCalloutId(isOpen ? null : callout.id)}>
+                      <span>{callout.text ? callout.text.slice(0, 28) : `Callout ${index + 1}`}</span>
+                      <div className="callout-card-actions">
+                        <button className="secondary-btn" type="button" onClick={(e) => { e.stopPropagation(); removeCallout(callout.id); }}>Remove</button>
+                      </div>
+                    </div>
+                    {isOpen && (
+                      <div className="control-grid">
+                        <div className="control-row"><label htmlFor="f-text-4657">Text</label><input id="f-text-4657" autoFocus value={callout.text} onChange={(e) => updateCallout(callout.id, { text: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter') setSelectedCalloutId(null); }} /></div>
+                        <div className="control-row"><label htmlFor="f-subtext-4658">Subtext</label><input id="f-subtext-4658" value={callout.subtext || ''} placeholder="Details / result…" onChange={(e) => updateCallout(callout.id, { subtext: e.target.value })} /></div>
+                        {(() => {
+                          // Which block this label points at. Only shown when the
+                          // layer actually splits into more than one — a single
+                          // compact block has nothing to choose between, and an
+                          // inert dropdown is worse than no dropdown.
+                          const anchorLayer = project.layers.find((l) => l.id === callout.layerId);
+                          if (!anchorLayer) return null;
+                          const groups = layerAnchorGroups(anchorLayer);
+                          if (groups.length < 2) return null;
+                          // Match on the anchor point rather than an index, so the
+                          // selection survives trimming a block away — indices
+                          // shift, coordinates do not.
+                          const current = groups.findIndex(
+                            (g) => callout.anchor
+                              && Math.abs(g.anchor.lat - callout.anchor.lat) < 1e-9
+                              && Math.abs(g.anchor.lng - callout.anchor.lng) < 1e-9,
+                          );
+                          return (
+                            <div className="control-row">
+                              <label htmlFor={`f-anchor-${callout.id}`}>Anchor</label>
+                              <select
+                                id={`f-anchor-${callout.id}`}
+                                value={current}
+                                onChange={(e) => {
+                                  const g = groups[Number(e.target.value)];
+                                  if (!g) return;
+                                  // isManualPosition is cleared so the leader line
+                                  // re-lays itself against the new anchor instead
+                                  // of keeping an offset measured from the old one.
+                                  updateCallout(callout.id, { anchor: g.anchor, isManualPosition: false });
+                                }}
+                              >
+                                {current === -1 && <option value={-1}>Custom position</option>}
+                                {groups.map((g, gi) => (
+                                  <option key={g.label} value={gi}>
+                                    {g.label} ({g.count} {g.count === 1 ? 'shape' : 'shapes'})
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          );
+                        })()}
+                        <div className="control-row inline-2">
+                          <div>
+                            <label htmlFor="f-type-4661">Type</label>
+                            <select id="f-type-4661" value={callout.type} onChange={(e) => updateCallout(callout.id, { type: e.target.value })}>
+                              {Object.entries(CALLOUT_TYPES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                            </select>
+                          </div>
+                          <div>
+                            <label htmlFor="f-priority-4667">Priority</label>
+                            <select id="f-priority-4667" value={callout.priority} onChange={(e) => updateCallout(callout.id, { priority: Number(e.target.value) })}>
+                              <option value={1}>High</option>
+                              <option value={2}>Medium</option>
+                              <option value={3}>Low</option>
+                            </select>
+                          </div>
+                        </div>
+                        {callout.type === 'badge' && (
+                          <div className="control-row inline-2">
+                            <div>
+                              <label htmlFor="f-chip-text-4678">Chip Text</label>
+                              <input id="f-chip-text-4678" value={callout.badgeValue || ''} onChange={(e) => updateCallout(callout.id, { badgeValue: e.target.value })} placeholder=">14 Moz" />
+                            </div>
+                            <div>
+                              <label htmlFor="f-chip-color-4682">Chip Color</label>
+                              <ColorField id="f-chip-color-4682" value={callout.badgeColor || '#d97706'} onChange={(e) => updateCallout(callout.id, { badgeColor: e.target.value })} brandColors={brandColors} />
+                            </div>
+                          </div>
+                        )}
+                        {callout.type !== 'plain' && (
+                          <>
+                            <div className="control-row inline-2">
+                              <div>
+                                <label htmlFor="f-background-4691">Background</label>
+                                <ColorField id="f-background-4691" value={callout.style?.background || '#ffffff'} onChange={(e) => updateCallout(callout.id, { style: { ...(callout.style || {}), background: e.target.value } })} brandColors={brandColors} />
+                              </div>
+                              <div>
+                                <label htmlFor="f-border-line-4695">Border / Line</label>
+                                <ColorField id="f-border-line-4695" value={callout.style?.border || '#102640'} onChange={(e) => updateCallout(callout.id, { style: { ...(callout.style || {}), border: e.target.value } })} brandColors={brandColors} />
+                              </div>
+                            </div>
+                            <div className="control-row inline-2">
+                              <div>
+                                <label htmlFor="f-text-color-4701">Text Color</label>
+                                <ColorField id="f-text-color-4701" value={callout.style?.textColor || '#0f172a'} onChange={(e) => updateCallout(callout.id, { style: { ...(callout.style || {}), textColor: e.target.value } })} brandColors={brandColors} />
+                              </div>
+                              <div>
+                                <label htmlFor="f-subtext-color-4705">Subtext Color</label>
+                                <ColorField id="f-subtext-color-4705" value={callout.style?.subtextColor || '#475569'} onChange={(e) => updateCallout(callout.id, { style: { ...(callout.style || {}), subtextColor: e.target.value } })} brandColors={brandColors} />
+                              </div>
+                            </div>
+                            <div className="control-row inline-2">
+                              <div>
+                                <label htmlFor="f-font-size-4711">Font Size</label>
+                                <input id="f-font-size-4711" type="range" min="9" max="18" step="1" value={callout.style?.fontSize || 12} onChange={(e) => updateCallout(callout.id, { style: { ...(callout.style || {}), fontSize: Number(e.target.value) } })} />
+                              </div>
+                              <div className="range-value">{callout.style?.fontSize || 12}px</div>
+                            </div>
+                            <div className="control-row">
+                              <div>
+                                <label htmlFor="f-text-align-4718">Text Align</label>
+                                <select id="f-text-align-4718" value={callout.style?.textAlign || 'left'} onChange={(e) => updateCallout(callout.id, { style: { ...(callout.style || {}), textAlign: e.target.value } })}>
+                                  <option value="left">Left</option>
+                                  <option value="center">Center</option>
+                                </select>
+                              </div>
+                            </div>
+                          </>
+                        )}
+                        <div className="control-label">Nudge</div>
+                        <div className="nudge-grid">
+                          <span />
+                          <button className="secondary-btn" type="button" onClick={() => nudgeCallout(callout.id, 0, -8)}>↑</button>
+                          <span />
+                          <button className="secondary-btn" type="button" onClick={() => nudgeCallout(callout.id, -8, 0)}>←</button>
+                          <button className="secondary-btn" type="button" onClick={() => nudgeCallout(callout.id, 0, 8)}>↓</button>
+                          <button className="secondary-btn" type="button" onClick={() => nudgeCallout(callout.id, 8, 0)}>→</button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+          <section className="control-section cs-collapsible" ref={markersSectionRef}>
+            <h2>Annotations</h2>
+            <div className="button-row">
+              <button className={`secondary-btn ${annotationTool === 'marker' ? 'active-toggle' : ''}`} type="button" onClick={() => { const next = annotationTool === 'marker' ? null : 'marker'; setAnnotationTool(next); annotationToolRef.current = next; setSelectedFeature(null); }}>Place Marker</button>
+              <button className={`secondary-btn ${annotationTool === 'ellipse' ? 'active-toggle' : ''}`} type="button" onClick={() => { const next = annotationTool === 'ellipse' ? null : 'ellipse'; setAnnotationTool(next); annotationToolRef.current = next; setSelectedFeature(null); }}>Draw Dashed Area</button>
+              <button className={`secondary-btn ${annotationTool === 'ring' ? 'active-toggle' : ''}`} type="button" onClick={() => { const next = annotationTool === 'ring' ? null : 'ring'; setAnnotationTool(next); annotationToolRef.current = next; setSelectedFeature(null); }}>Draw Distance Ring</button>
+              <button className={`secondary-btn ${annotationTool === 'maplabel' ? 'active-toggle' : ''}`} type="button" onClick={() => { const next = annotationTool === 'maplabel' ? null : 'maplabel'; setAnnotationTool(next); annotationToolRef.current = next; setSelectedFeature(null); }}>Place Map Label</button>
+              <button className={`secondary-btn ${annotationTool === 'polygon' ? 'active-toggle' : ''}`} type="button" onClick={() => { const next = annotationTool === 'polygon' ? null : 'polygon'; setAnnotationTool(next); annotationToolRef.current = next; setPendingPolygonPoints([]); setSelectedFeature(null); }}>Draw Boundary</button>
+              <button className={`secondary-btn ${annotationTool === 'distanceLine' ? 'active-toggle' : ''}`} type="button"
+                onClick={() => { const next = annotationTool === 'distanceLine' ? null : 'distanceLine'; setAnnotationTool(next); annotationToolRef.current = next; setPendingDistanceP1(null); setSelectedFeature(null); }}>
+                Measure Distance
+              </button>
+            </div>
+            {annotationTool === 'polygon' && (
+              <div className="polygon-drawing-status">
+                <span>{pendingPolygonPoints.length < 3 ? `Click map to add points (${pendingPolygonPoints.length} so far, need 3+)` : `${pendingPolygonPoints.length} points — click first point or Close to finish`}</span>
+                <div className="button-row" style={{ marginTop: 6 }}>
+                  <button className="btn primary" type="button" disabled={pendingPolygonPoints.length < 3} onClick={finishPolygon}>Close & Save</button>
+                  <button className="btn" type="button" onClick={() => { setPendingPolygonPoints([]); setAnnotationTool(null); annotationToolRef.current = null; }}>Cancel</button>
+                </div>
+              </div>
+            )}
+            <div className="small-note" style={{ marginTop: 8 }}>{annotationTool === 'polygon' ? '' : annotationTool ? 'Click anywhere on the map to place the selected annotation.' : 'Add highlight markers or dashed ellipses anywhere on the map.'}</div>
+
+            {selectedMarker?.type === 'maplabel' ? (
+              <div className="control-grid" style={{ marginTop: 10 }}>
+                <div className="selected-note">Map Label</div>
+                <div className="control-row"><label htmlFor="f-text-4771">Text</label><input id="f-text-4771" value={selectedMarker.label || ''} onChange={(e) => updateMarker(selectedMarker.id, { label: e.target.value })} placeholder="BRITISH COLUMBIA" /></div>
+                <div className="control-row inline-2">
+                  <div>
+                    <label htmlFor="f-size-4774">Size</label>
+                    <input id="f-size-4774" type="range" min="14" max="72" step="1" value={selectedMarker.size || 28} onChange={(e) => updateMarker(selectedMarker.id, { size: Number(e.target.value) })} />
+                  </div>
+                  <div className="range-value">{selectedMarker.size || 28}pt</div>
+                </div>
+                <div className="control-row inline-2">
+                  <div>
+                    <label htmlFor="f-opacity-4781">Opacity</label>
+                    <input id="f-opacity-4781" type="range" min="0.05" max="1" step="0.05" value={selectedMarker.opacity ?? 0.35} onChange={(e) => updateMarker(selectedMarker.id, { opacity: Number(e.target.value) })} />
+                  </div>
+                  <div className="range-value">{Math.round((selectedMarker.opacity ?? 0.35) * 100)}%</div>
+                </div>
+                <div className="control-row inline-2">
+                  <div>
+                    <label htmlFor="f-rotation-4788">Rotation</label>
+                    <input id="f-rotation-4788" type="number" min="-180" max="180" step="1" value={selectedMarker.rotation || 0} onChange={(e) => updateMarker(selectedMarker.id, { rotation: Number(e.target.value) })} />
+                  </div>
+                  <div>
+                    <label htmlFor="f-color-4792">Color</label>
+                    <ColorField id="f-color-4792" value={selectedMarker.color || '#1e293b'} onChange={(e) => updateMarker(selectedMarker.id, { color: e.target.value })} brandColors={brandColors} />
+                  </div>
+                </div>
+                <button className="secondary-btn" type="button" onClick={() => { setProject((prev) => ({ ...prev, markers: prev.markers.filter((m) => m.id !== selectedMarker.id) })); setSelectedFeature(null); }}>Remove Label</button>
+              </div>
+            ) : selectedMarker ? (
+              <div className="control-grid" style={{ marginTop: 10 }}>
+                <div className="selected-note">Selected marker</div>
+                <div className="control-row"><label htmlFor="f-label-4801">Label</label><input id="f-label-4801" value={selectedMarker.label || ''} onChange={(e) => updateMarker(selectedMarker.id, { label: e.target.value })} /></div>
+                <div className="control-row inline-2">
+                  <div>
+                    <label htmlFor="f-marker-type-4804">Marker Type</label>
+                    <select id="f-marker-type-4804" value={selectedMarker.type} onChange={(e) => updateMarker(selectedMarker.id, { type: e.target.value })}>
+                      {Object.entries(MARKER_TYPES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label htmlFor="f-color-4810">Color</label>
+                    <ColorField id="f-color-4810" value={selectedMarker.color} onChange={(e) => updateMarker(selectedMarker.id, { color: e.target.value })} brandColors={brandColors} />
+                  </div>
+                </div>
+                <div className="control-row inline-2">
+                  <div>
+                    <label htmlFor="f-size-4816">Size</label>
+                    <input id="f-size-4816" type="range" min="12" max="36" step="1" value={selectedMarker.size} onChange={(e) => updateMarker(selectedMarker.id, { size: Number(e.target.value) })} />
+                  </div>
+                  <div className="range-value">{selectedMarker.size}px</div>
+                </div>
+                <button className="secondary-btn" type="button" onClick={() => removeMarker(selectedMarker.id)}>Remove Marker</button>
+              </div>
+            ) : null}
+
+            {selectedEllipse ? (
+              <div className="control-grid" style={{ marginTop: 10 }}>
+                <div className="selected-note">{selectedEllipse.isRing ? 'Selected distance ring' : 'Selected highlight area'}</div>
+                <div className="control-row"><label htmlFor="f-label-4828">Label</label><input id="f-label-4828" value={selectedEllipse.label || ''} onChange={(e) => updateEllipse(selectedEllipse.id, { label: e.target.value })} placeholder={selectedEllipse.isRing ? (selectedEllipse.units === 'mi' ? `${(selectedEllipse.radiusKm * 0.621371).toFixed(1)} mi` : `${selectedEllipse.radiusKm} km`) : ''} /></div>
+                {selectedEllipse.isRing ? (
+                  <>
+                    <div className="control-row inline-2">
+                      <div>
+                        <label>Radius ({selectedEllipse.units === 'mi' ? 'mi' : 'km'})</label>
+                        <input type="number" min="0.1" max="5000" step={selectedEllipse.units === 'mi' ? '0.1' : '1'}
+                          value={selectedEllipse.units === 'mi' ? Math.round((selectedEllipse.radiusKm ?? 50) * 0.621371 * 10) / 10 : (selectedEllipse.radiusKm ?? 50)}
+                          onChange={(e) => {
+                            const v = Number(e.target.value);
+                            updateEllipse(selectedEllipse.id, { radiusKm: selectedEllipse.units === 'mi' ? v / 0.621371 : v });
+                          }} />
+                      </div>
+                      <div>
+                        <label htmlFor="f-ring-color-4842">Ring Color</label>
+                        <ColorField id="f-ring-color-4842" value={selectedEllipse.color || '#dc2626'} onChange={(e) => updateEllipse(selectedEllipse.id, { color: e.target.value })} brandColors={brandColors} />
+                      </div>
+                    </div>
+                    <div className="control-row">
+                      <label>Units</label>
+                      <div className="unit-toggle-row">
+                        <button type="button" className={`unit-toggle-btn${!selectedEllipse.units || selectedEllipse.units === 'km' ? ' active' : ''}`} onClick={() => updateEllipse(selectedEllipse.id, { units: 'km' })}>km</button>
+                        <button type="button" className={`unit-toggle-btn${selectedEllipse.units === 'mi' ? ' active' : ''}`} onClick={() => updateEllipse(selectedEllipse.id, { units: 'mi' })}>mi</button>
+                      </div>
+                    </div>
+                    <div className="control-row inline-2">
+                      <div>
+                        <label htmlFor="f-label-size-4855">Label Size</label>
+                        <input id="f-label-size-4855" type="range" min="9" max="22" step="1" value={selectedEllipse.labelFontSize || 11} onChange={(e) => updateEllipse(selectedEllipse.id, { labelFontSize: Number(e.target.value) })} />
+                      </div>
+                      <div className="range-value">{selectedEllipse.labelFontSize || 11}px</div>
+                    </div>
+                    <div className="control-row inline-2">
+                      <div>
+                        <label htmlFor="f-label-color-4862">Label Color</label>
+                        <ColorField id="f-label-color-4862" value={selectedEllipse.labelColor || selectedEllipse.color || '#dc2626'} onChange={(e) => updateEllipse(selectedEllipse.id, { labelColor: e.target.value })} brandColors={brandColors} />
+                      </div>
+                      <label className="toggle-row" style={{ marginTop: 0 }}>
+                        <input type="checkbox" checked={selectedEllipse.labelBold !== false} onChange={(e) => updateEllipse(selectedEllipse.id, { labelBold: e.target.checked })} />
+                        <span>Bold</span>
+                      </label>
+                    </div>
+                    <label className="toggle-row">
+                      <input type="checkbox" checked={!!selectedEllipse.labelArc} onChange={(e) => updateEllipse(selectedEllipse.id, { labelArc: e.target.checked })} />
+                      <span>Curved arc label</span>
+                    </label>
+                    {selectedEllipse.labelArc && (
+                      <div className="control-row inline-2">
+                        <div>
+                          <label htmlFor="f-angle-0-top-4877">Angle (0° = top)</label>
+                          <input id="f-angle-0-top-4877" type="range" min="0" max="359" step="1" value={selectedEllipse.labelAngle ?? 0} onChange={(e) => updateEllipse(selectedEllipse.id, { labelAngle: Number(e.target.value) })} />
+                        </div>
+                        <div className="range-value">{selectedEllipse.labelAngle ?? 0}°</div>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <div className="control-row inline-2">
+                      <div>
+                        <label htmlFor="f-width-4888">Width</label>
+                        <input id="f-width-4888" type="number" min="24" max="320" step="1" value={selectedEllipse.width} onChange={(e) => updateEllipse(selectedEllipse.id, { width: Number(e.target.value) })} />
+                      </div>
+                      <div>
+                        <label htmlFor="f-height-4892">Height</label>
+                        <input id="f-height-4892" type="number" min="24" max="320" step="1" value={selectedEllipse.height} onChange={(e) => updateEllipse(selectedEllipse.id, { height: Number(e.target.value) })} />
+                      </div>
+                    </div>
+                    <div className="control-row inline-2">
+                      <div>
+                        <label htmlFor="f-rotation-4898">Rotation</label>
+                        <input id="f-rotation-4898" type="number" min="-180" max="180" step="1" value={selectedEllipse.rotation} onChange={(e) => updateEllipse(selectedEllipse.id, { rotation: Number(e.target.value) })} />
+                      </div>
+                      <div>
+                        <label htmlFor="f-color-4902">Color</label>
+                        <ColorField id="f-color-4902" value={selectedEllipse.color} onChange={(e) => updateEllipse(selectedEllipse.id, { color: e.target.value })} brandColors={brandColors} />
+                      </div>
+                    </div>
+                  </>
+                )}
+                <label className="toggle-row"><input type="checkbox" checked={selectedEllipse.dashed !== false} onChange={(e) => updateEllipse(selectedEllipse.id, { dashed: e.target.checked })} /> <span>Dashed outline</span></label>
+                <label className="toggle-row">
+                  <input type="checkbox" checked={!!selectedEllipse.outsideShade} onChange={(e) => updateEllipse(selectedEllipse.id, { outsideShade: e.target.checked })} />
+                  <span>Outside shade</span>
+                </label>
+                {selectedEllipse.outsideShade && (
+                  <>
+                    <div className="shade-presets">
+                      {[{ label: 'Dark', c: '#000000', o: 0.35 }, { label: 'Light', c: '#ffffff', o: 0.30 }, { label: 'Warm', c: '#7c3b1a', o: 0.25 }].map(({ label, c, o }) => (
+                        <button key={label} className="shade-preset-btn" type="button" onClick={() => updateEllipse(selectedEllipse.id, { outsideShadeColor: c, outsideShadeOpacity: o })}>{label}</button>
+                      ))}
+                    </div>
+                    <div className="control-row inline-2">
+                      <div>
+                        <label htmlFor="f-shade-color-4922">Shade Color</label>
+                        <ColorField id="f-shade-color-4922" value={selectedEllipse.outsideShadeColor || '#000000'} onChange={(e) => updateEllipse(selectedEllipse.id, { outsideShadeColor: e.target.value })} brandColors={brandColors} />
+                      </div>
+                      <div>
+                        <label htmlFor="f-opacity-4926">Opacity</label>
+                        <input id="f-opacity-4926" type="range" min="0.05" max="0.75" step="0.05" value={selectedEllipse.outsideShadeOpacity ?? 0.35} onChange={(e) => updateEllipse(selectedEllipse.id, { outsideShadeOpacity: Number(e.target.value) })} />
+                      </div>
+                    </div>
+                  </>
+                )}
+                <button className="secondary-btn" type="button" onClick={() => removeEllipse(selectedEllipse.id)}>{selectedEllipse.isRing ? 'Remove Ring' : 'Remove Highlight Area'}</button>
+              </div>
+            ) : null}
+
+            {selectedPolygon ? (
+              <div className="control-grid" style={{ marginTop: 10 }}>
+                <div className="selected-note">Selected boundary</div>
+                <div className="control-row"><label htmlFor="f-label-4939">Label</label><input id="f-label-4939" value={selectedPolygon.label || ''} onChange={(e) => updatePolygon(selectedPolygon.id, { label: e.target.value })} placeholder="e.g. Target Zone" /></div>
+                <label className="toggle-row">
+                  <input type="checkbox" checked={!!selectedPolygon.arcLabel} onChange={(e) => updatePolygon(selectedPolygon.id, { arcLabel: e.target.checked })} />
+                  <span>Arc label along boundary</span>
+                </label>
+                {selectedPolygon.arcLabel && (
+                  <div className="control-row inline-2">
+                    <div>
+                      <label htmlFor="f-position-0-start-4947">Position (0° = start)</label>
+                      <input id="f-position-0-start-4947" type="range" min="0" max="359" step="1" value={selectedPolygon.labelAngle ?? 0} onChange={(e) => updatePolygon(selectedPolygon.id, { labelAngle: Number(e.target.value) })} />
+                    </div>
+                    <div className="range-value">{selectedPolygon.labelAngle ?? 0}°</div>
+                  </div>
+                )}
+                <div className="control-row inline-2">
+                  <div>
+                    <label htmlFor="f-color-4955">Color</label>
+                    <ColorField id="f-color-4955" value={selectedPolygon.color || '#000000'} onChange={(e) => updatePolygon(selectedPolygon.id, { color: e.target.value })} brandColors={brandColors} />
+                  </div>
+                  <div>
+                    <label htmlFor="f-stroke-width-4959">Stroke Width</label>
+                    <input id="f-stroke-width-4959" type="range" min="1" max="8" step="0.5" value={selectedPolygon.strokeWidth ?? 2} onChange={(e) => updatePolygon(selectedPolygon.id, { strokeWidth: Number(e.target.value) })} />
+                  </div>
+                </div>
+                <div className="control-row inline-2">
+                  <div>
+                    <label htmlFor="f-label-size-4965">Label Size</label>
+                    <input id="f-label-size-4965" type="range" min="9" max="28" step="1" value={selectedPolygon.labelFontSize || 12} onChange={(e) => updatePolygon(selectedPolygon.id, { labelFontSize: Number(e.target.value) })} />
+                  </div>
+                  <div className="range-value">{selectedPolygon.labelFontSize || 12}px</div>
+                </div>
+                <label className="toggle-row">
+                  <input type="checkbox" checked={selectedPolygon.dashed !== false} onChange={(e) => updatePolygon(selectedPolygon.id, { dashed: e.target.checked })} />
+                  <span>Dashed outline</span>
+                </label>
+                <label className="toggle-row">
+                  <input type="checkbox" checked={!!selectedPolygon.smoothed} onChange={(e) => updatePolygon(selectedPolygon.id, { smoothed: e.target.checked })} />
+                  <span>Smooth boundary</span>
+                </label>
+                <label className="toggle-row">
+                  <input type="checkbox" checked={!!selectedPolygon.outsideShade} onChange={(e) => updatePolygon(selectedPolygon.id, { outsideShade: e.target.checked })} />
+                  <span>Outside shade</span>
+                </label>
+                {selectedPolygon.outsideShade && (
+                  <>
+                    <div className="shade-presets">
+                      {[{ label: 'Dark', c: '#000000', o: 0.35 }, { label: 'Light', c: '#ffffff', o: 0.30 }, { label: 'Warm', c: '#7c3b1a', o: 0.25 }].map(({ label, c, o }) => (
+                        <button key={label} className="shade-preset-btn" type="button" onClick={() => updatePolygon(selectedPolygon.id, { outsideShadeColor: c, outsideShadeOpacity: o })}>{label}</button>
+                      ))}
+                    </div>
+                    <div className="control-row inline-2">
+                      <div>
+                        <label htmlFor="f-shade-color-4991">Shade Color</label>
+                        <ColorField id="f-shade-color-4991" value={selectedPolygon.outsideShadeColor || '#000000'} onChange={(e) => updatePolygon(selectedPolygon.id, { outsideShadeColor: e.target.value })} brandColors={brandColors} />
+                      </div>
+                      <div>
+                        <label htmlFor="f-opacity-4995">Opacity</label>
+                        <input id="f-opacity-4995" type="range" min="0.05" max="0.75" step="0.05" value={selectedPolygon.outsideShadeOpacity ?? 0.35} onChange={(e) => updatePolygon(selectedPolygon.id, { outsideShadeOpacity: Number(e.target.value) })} />
+                      </div>
+                    </div>
+                  </>
+                )}
+                <button className="secondary-btn" type="button" onClick={() => removePolygon(selectedPolygon.id)}>Remove Boundary</button>
+              </div>
+            ) : null}
+
+            {selectedDistanceLineId && (() => {
+              const dl = (project.distanceLines || []).find(d => d.id === selectedDistanceLineId);
+              if (!dl) return null;
+              return (
+                <div className="control-section">
+                  <div className="control-section-title">Distance Line</div>
+                  <div className="control-row">
+                    <label htmlFor="f-color-5012">Color</label>
+                    <ColorField id="f-color-5012" value={dl.color || '#e11d48'}
+                      onChange={(e) => updateDistanceLine(dl.id, { color: e.target.value })} brandColors={brandColors} />
                   </div>
                   <div className="control-row">
                     <label>Units</label>
                     <div className="unit-toggle-row">
-                      <button type="button" className={`unit-toggle-btn${!selectedEllipse.units || selectedEllipse.units === 'km' ? ' active' : ''}`} onClick={() => updateEllipse(selectedEllipse.id, { units: 'km' })}>km</button>
-                      <button type="button" className={`unit-toggle-btn${selectedEllipse.units === 'mi' ? ' active' : ''}`} onClick={() => updateEllipse(selectedEllipse.id, { units: 'mi' })}>mi</button>
+                      {['km', 'mi'].map(u => (
+                        <button key={u} className={`unit-toggle-btn${(dl.units || 'km') === u ? ' active' : ''}`}
+                          onClick={() => updateDistanceLine(dl.id, { units: u })}>{u}</button>
+                      ))}
                     </div>
                   </div>
-                  <div className="control-row inline-2">
-                    <div>
-                      <label htmlFor="f-label-size-4855">Label Size</label>
-                      <input id="f-label-size-4855" type="range" min="9" max="22" step="1" value={selectedEllipse.labelFontSize || 11} onChange={(e) => updateEllipse(selectedEllipse.id, { labelFontSize: Number(e.target.value) })} />
-                    </div>
-                    <div className="range-value">{selectedEllipse.labelFontSize || 11}px</div>
+                  <div className="control-row">
+                    <button className="secondary-btn" style={{ color: '#ef4444' }}
+                      onClick={() => removeDistanceLine(dl.id)}>Delete Distance Line</button>
                   </div>
-                  <div className="control-row inline-2">
-                    <div>
-                      <label htmlFor="f-label-color-4862">Label Color</label>
-                      <ColorField id="f-label-color-4862" value={selectedEllipse.labelColor || selectedEllipse.color || '#dc2626'} onChange={(e) => updateEllipse(selectedEllipse.id, { labelColor: e.target.value })} brandColors={brandColors} />
-                    </div>
-                    <label className="toggle-row" style={{ marginTop: 0 }}>
-                      <input type="checkbox" checked={selectedEllipse.labelBold !== false} onChange={(e) => updateEllipse(selectedEllipse.id, { labelBold: e.target.checked })} />
-                      <span>Bold</span>
-                    </label>
-                  </div>
-                  <label className="toggle-row">
-                    <input type="checkbox" checked={!!selectedEllipse.labelArc} onChange={(e) => updateEllipse(selectedEllipse.id, { labelArc: e.target.checked })} />
-                    <span>Curved arc label</span>
-                  </label>
-                  {selectedEllipse.labelArc && (
-                    <div className="control-row inline-2">
-                      <div>
-                        <label htmlFor="f-angle-0-top-4877">Angle (0° = top)</label>
-                        <input id="f-angle-0-top-4877" type="range" min="0" max="359" step="1" value={selectedEllipse.labelAngle ?? 0} onChange={(e) => updateEllipse(selectedEllipse.id, { labelAngle: Number(e.target.value) })} />
+                </div>
+              );
+            })()}
+          </section>
+          </>
+        )}
+
+        {inspectorTab === 'layout' && (
+          <>
+          <section className="control-section">
+            <h2>Map</h2>
+            <div className="control-grid">
+              <div className="control-row">
+                <label htmlFor="f-map-type">Map type</label>
+                <select
+                  id="f-map-type"
+                  value={mapTypeOf(project.layout)}
+                  onChange={(e) => applyMapType(e.target.value)}
+                >
+                  {mapTypeOf(project.layout) === 'custom' && <option value="custom">Custom — set under Customize design</option>}
+                  {Object.entries(MAP_TYPES).map(([value, t]) => (
+                    <option key={value} value={value}>{t.label}</option>
+                  ))}
+                </select>
+              </div>
+              <p className="small-note">
+                {MAP_TYPES[mapTypeOf(project.layout)]?.note
+                  || 'Template, mode and design theme are set individually. Change any of them under Customize design.'}
+              </p>
+              <div className="control-row"><label htmlFor="f-title-4176">Title</label><input id="f-title-4176" value={localTitle} onChange={(e) => {
+                const val = e.target.value;
+                setLocalTitle(val);
+                clearTimeout(titleDebounceRef.current);
+                titleDebounceRef.current = setTimeout(() => updateLayout({ title: val }), 300);
+              }} /></div>
+              <div className="control-row"><label htmlFor="f-subtitle-4182">Subtitle</label><input id="f-subtitle-4182" value={localSubtitle} onChange={(e) => {
+                const val = e.target.value;
+                setLocalSubtitle(val);
+                clearTimeout(subtitleDebounceRef.current);
+                subtitleDebounceRef.current = setTimeout(() => updateLayout({ subtitle: val }), 300);
+              }} /></div>
+              <div className="control-row slider">
+                <label htmlFor="f-title-size-4189">Title Size</label>
+                <input id="f-title-size-4189" type="range" min="0.6" max="1.5" step="0.05" value={project.layout.titleFontScale ?? 1} onChange={(e) => updateLayout({ titleFontScale: parseFloat(e.target.value) })} />
+                <span className="range-value">{Math.round((project.layout.titleFontScale ?? 1) * 100)}%</span>
+              </div>
+              <div className="control-row-stack">
+                <label>Basemap</label>
+                <div className="basemap-picker">
+                  {BASEMAP_OPTIONS.map(({ key, label, thumb }) => (
+                    <button
+                      key={key}
+                      type="button"
+                      className={`basemap-thumb${(project.layout.basemap || 'light') === key ? ' active' : ''}`}
+                      onClick={() => updateLayout({ basemap: key })}
+                      title={label}
+                    >
+                      <div className="basemap-thumb-swatch">
+                        {thumb
+                          ? <img src={thumb} alt={label} loading="lazy" draggable={false} />
+                          : <div className="basemap-thumb-blank" style={{ background: project.layout.blankBg || '#ffffff' }} />
+                        }
                       </div>
-                      <div className="range-value">{selectedEllipse.labelAngle ?? 0}°</div>
-                    </div>
+                      <span className="basemap-thumb-label">{label}</span>
+                    </button>
+                  ))}
+                </div>
+                {(project.layout.basemap === 'blank') && (
+                  <div className="control-row inline-2" style={{ marginTop: 8 }}>
+                    <label htmlFor="f-background-color-4216">Background Color</label>
+                    <ColorField id="f-background-color-4216" value={project.layout.blankBg || '#ffffff'} onChange={(e) => updateLayout({ blankBg: e.target.value })} brandColors={brandColors} />
+                  </div>
+                )}
+              </div>
+              <div className="element-visibility-row">
+                <label className="toggle-row"><input type="checkbox" checked={project.layout.showTitle !== false} onChange={(e) => updateLayout({ showTitle: e.target.checked })} /><span>Title</span></label>
+                <label className="toggle-row"><input type="checkbox" checked={project.layout.showNorthArrow !== false} onChange={(e) => updateLayout({ showNorthArrow: e.target.checked })} /><span>North Arrow</span></label>
+                <label className="toggle-row"><input type="checkbox" checked={project.layout.showScaleBar !== false} onChange={(e) => updateLayout({ showScaleBar: e.target.checked })} /><span>Scale Bar</span></label>
+                <label className="toggle-row"><input type="checkbox" checked={project.layout.showLegend !== false} onChange={(e) => updateLayout({ showLegend: e.target.checked })} /><span>Legend</span></label>
+                <label className="toggle-row"><input type="checkbox" checked={project.layout.footerEnabled !== false} onChange={(e) => updateLayout({ footerEnabled: e.target.checked })} /><span>Footer</span></label>
+                <label className="toggle-row"><input type="checkbox" checked={project.layout.insetEnabled !== false} onChange={(e) => updateLayout({ insetEnabled: e.target.checked })} /><span>Inset Map</span></label>
+              </div>
+              {/* North arrow style picker */}
+              {project.layout.showNorthArrow !== false && (
+                <div className="control-row" style={{ marginTop: 10 }}>
+                  <label>Compass Style</label>
+                  <div className="north-arrow-style-picker">
+                    {NORTH_ARROW_STYLES.map(({ key, label }) => (
+                      <button key={key} type="button"
+                        className={`north-arrow-style-btn${(project.layout.northArrowStyle || 'classic') === key ? ' active' : ''}`}
+                        onClick={() => updateLayout({ northArrowStyle: key })}
+                        title={label}>
+                        <NorthArrow scale={40} style={key} />
+                        <span>{label}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <label className="toggle-row" style={{ marginTop: 6 }}>
+                    <input type="checkbox" checked={!project.layout.northArrowTransparent} onChange={(e) => updateLayout({ northArrowTransparent: !e.target.checked })} />
+                    <span>Show panel box</span>
+                  </label>
+                </div>
+              )}
+
+              {/* Corner radius */}
+              <div className="control-row inline-2" style={{ marginTop: 10 }}>
+                <div>
+                  <label htmlFor="f-panel-corners-4254">Panel Corners</label>
+                  <input id="f-panel-corners-4254" type="range" min="0" max="24" step="1"
+                    value={project.layout.cornerRadius ?? themeTokens.panelRadius ?? 10}
+                    onChange={(e) => updateLayout({ cornerRadius: Number(e.target.value) })} />
+                </div>
+                <div className="range-value" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                  <span>{project.layout.cornerRadius ?? themeTokens.panelRadius ?? 10}px</span>
+                  {project.layout.cornerRadius != null && (
+                    <button type="button" style={{ fontSize: 10, padding: '1px 5px', background: 'none', border: '1px solid #cbd5e1', borderRadius: 4, cursor: 'pointer', color: '#64748b' }}
+                      onClick={() => updateLayout({ cornerRadius: null })} title="Reset to theme default">↺</button>
                   )}
-                </>
-              ) : (
-                <>
-                  <div className="control-row inline-2">
-                    <div>
-                      <label htmlFor="f-width-4888">Width</label>
-                      <input id="f-width-4888" type="number" min="24" max="320" step="1" value={selectedEllipse.width} onChange={(e) => updateEllipse(selectedEllipse.id, { width: Number(e.target.value) })} />
-                    </div>
-                    <div>
-                      <label htmlFor="f-height-4892">Height</label>
-                      <input id="f-height-4892" type="number" min="24" max="320" step="1" value={selectedEllipse.height} onChange={(e) => updateEllipse(selectedEllipse.id, { height: Number(e.target.value) })} />
-                    </div>
-                  </div>
-                  <div className="control-row inline-2">
-                    <div>
-                      <label htmlFor="f-rotation-4898">Rotation</label>
-                      <input id="f-rotation-4898" type="number" min="-180" max="180" step="1" value={selectedEllipse.rotation} onChange={(e) => updateEllipse(selectedEllipse.id, { rotation: Number(e.target.value) })} />
-                    </div>
-                    <div>
-                      <label htmlFor="f-color-4902">Color</label>
-                      <ColorField id="f-color-4902" value={selectedEllipse.color} onChange={(e) => updateEllipse(selectedEllipse.id, { color: e.target.value })} brandColors={brandColors} />
-                    </div>
-                  </div>
-                </>
-              )}
-              <label className="toggle-row"><input type="checkbox" checked={selectedEllipse.dashed !== false} onChange={(e) => updateEllipse(selectedEllipse.id, { dashed: e.target.checked })} /> <span>Dashed outline</span></label>
-              <label className="toggle-row">
-                <input type="checkbox" checked={!!selectedEllipse.outsideShade} onChange={(e) => updateEllipse(selectedEllipse.id, { outsideShade: e.target.checked })} />
-                <span>Outside shade</span>
-              </label>
-              {selectedEllipse.outsideShade && (
-                <>
-                  <div className="shade-presets">
-                    {[{ label: 'Dark', c: '#000000', o: 0.35 }, { label: 'Light', c: '#ffffff', o: 0.30 }, { label: 'Warm', c: '#7c3b1a', o: 0.25 }].map(({ label, c, o }) => (
-                      <button key={label} className="shade-preset-btn" type="button" onClick={() => updateEllipse(selectedEllipse.id, { outsideShadeColor: c, outsideShadeOpacity: o })}>{label}</button>
-                    ))}
-                  </div>
-                  <div className="control-row inline-2">
-                    <div>
-                      <label htmlFor="f-shade-color-4922">Shade Color</label>
-                      <ColorField id="f-shade-color-4922" value={selectedEllipse.outsideShadeColor || '#000000'} onChange={(e) => updateEllipse(selectedEllipse.id, { outsideShadeColor: e.target.value })} brandColors={brandColors} />
-                    </div>
-                    <div>
-                      <label htmlFor="f-opacity-4926">Opacity</label>
-                      <input id="f-opacity-4926" type="range" min="0.05" max="0.75" step="0.05" value={selectedEllipse.outsideShadeOpacity ?? 0.35} onChange={(e) => updateEllipse(selectedEllipse.id, { outsideShadeOpacity: Number(e.target.value) })} />
-                    </div>
-                  </div>
-                </>
-              )}
-              <button className="secondary-btn" type="button" onClick={() => removeEllipse(selectedEllipse.id)}>{selectedEllipse.isRing ? 'Remove Ring' : 'Remove Highlight Area'}</button>
-            </div>
-          ) : null}
+                </div>
+              </div>
 
-          {selectedPolygon ? (
-            <div className="control-grid" style={{ marginTop: 10 }}>
-              <div className="selected-note">Selected boundary</div>
-              <div className="control-row"><label htmlFor="f-label-4939">Label</label><input id="f-label-4939" value={selectedPolygon.label || ''} onChange={(e) => updatePolygon(selectedPolygon.id, { label: e.target.value })} placeholder="e.g. Target Zone" /></div>
-              <label className="toggle-row">
-                <input type="checkbox" checked={!!selectedPolygon.arcLabel} onChange={(e) => updatePolygon(selectedPolygon.id, { arcLabel: e.target.checked })} />
-                <span>Arc label along boundary</span>
-              </label>
-              {selectedPolygon.arcLabel && (
-                <div className="control-row inline-2">
-                  <div>
-                    <label htmlFor="f-position-0-start-4947">Position (0° = start)</label>
-                    <input id="f-position-0-start-4947" type="range" min="0" max="359" step="1" value={selectedPolygon.labelAngle ?? 0} onChange={(e) => updatePolygon(selectedPolygon.id, { labelAngle: Number(e.target.value) })} />
+              <button
+                type="button"
+                className="secondary-btn"
+                style={{ width: '100%', marginTop: 6, fontSize: 12 }}
+                onClick={() => updateLayout({ cornerLayout: null, titleCorner: 'tl', logoCorner: 'tl', insetCorner: 'tr', northArrowCorner: 'br', scaleBarCorner: 'bl', legendCorner: 'bl' })}
+                title="Move all elements back to their default corner positions"
+              >
+                Reset Element Positions
+              </button>
+            </div>
+          </section>
+          <div className={`logo-upload-card${project.layout.logo ? ' has-logo' : ''}`}>
+            {project.layout.logo ? (
+              <>
+                <img className="logo-thumb" src={project.layout.logo} alt="Logo" />
+                <div className="logo-card-info">
+                  <span className="logo-card-status">Brand colors applied</span>
+                  <div className="logo-card-actions">
+                    <button className="btn compact" type="button" onClick={() => logoInputRef.current?.click()}>Replace</button>
+                    <button className="secondary-btn compact" type="button" onClick={() => updateLayout({ logo: null, accentColor: null, titleBgColor: null, titleFgColor: null })}>Remove</button>
                   </div>
-                  <div className="range-value">{selectedPolygon.labelAngle ?? 0}°</div>
+                </div>
+              </>
+            ) : (
+              <>
+                <button className="logo-upload-btn" type="button" onClick={() => logoInputRef.current?.click()}>
+                  <span className="logo-upload-icon">↑</span> Upload Logo
+                </button>
+                <span className="logo-card-hint">Auto-applies your brand colors</span>
+              </>
+            )}
+          </div>
+          <input ref={logoInputRef} type="file" accept="image/*" onChange={handleLogoChange} hidden />
+          <section className="control-section cs-collapsible">
+            <h2 className="control-section-heading">
+              <button
+                type="button"
+                className="section-toggle-btn"
+                onClick={() => toggleSection('customizeDesign')}
+                aria-expanded={!collapsedSections.customizeDesign}
+                aria-controls="section-customizeDesign"
+              >Customize design <span aria-hidden="true" className={`section-chevron${collapsedSections.customizeDesign ? '' : ' open'}`}>›</span></button>
+            </h2>
+            {!collapsedSections.customizeDesign && <div id="section-customizeDesign" className="control-grid">
+              <p className="small-note">The pieces a map type sets for you. Change one and the map type reads “Custom”.</p>
+              <div className="control-row">
+                <label htmlFor="f-template-4142">Template</label>
+                <select id="f-template-4142"
+                  value={project.layout.templateId || 'technical_results_v2'}
+                  onChange={(e) => {
+                    const tid = e.target.value;
+                    const themeMap = {
+                      'technical_results_v2': 'investor_clean',
+                      'ni_43101_technical': 'ni_43101',
+                      'side_panel': 'technical_sharp',
+                    };
+                    const extra = tid === 'side_panel' ? {
+                      sidePanelPositions: {},
+                      sidePanelGrid: DEFAULT_SIDE_PANEL_GRID,
+                      insetEnabled: true,
+                      insetHeightPx: null,
+                      legendHeightPx: null,
+                      titleHeightPx: 108,
+                    } : {};
+                    updateLayout({ templateId: tid, themeId: themeMap[tid] || 'investor_clean', stripTitle: '', stripSubtitle: '', ...extra });
+                  }}
+                >
+                  <option value="technical_results_v2">Standard</option>
+                  <option value="ni_43101_technical">NI 43-101</option>
+                  <option value="side_panel">Technical</option>
+                </select>
+              </div>
+              {project.layout.templateId === 'side_panel' && Object.keys(project.layout.sidePanelPositions || {}).length > 0 && (
+                <div style={{ padding: '4px 0 6px' }}>
+                  <button className="secondary-btn" style={{ width: '100%', fontSize: 12 }} onClick={() => updateLayout({ sidePanelPositions: {} })}>
+                    Reset Panel Layout
+                  </button>
                 </div>
               )}
-              <div className="control-row inline-2">
-                <div>
-                  <label htmlFor="f-color-4955">Color</label>
-                  <ColorField id="f-color-4955" value={selectedPolygon.color || '#000000'} onChange={(e) => updatePolygon(selectedPolygon.id, { color: e.target.value })} brandColors={brandColors} />
-                </div>
-                <div>
-                  <label htmlFor="f-stroke-width-4959">Stroke Width</label>
-                  <input id="f-stroke-width-4959" type="range" min="1" max="8" step="0.5" value={selectedPolygon.strokeWidth ?? 2} onChange={(e) => updatePolygon(selectedPolygon.id, { strokeWidth: Number(e.target.value) })} />
-                </div>
+              <div className="control-row">
+                <label htmlFor="f-mode-5038">Mode</label>
+                <select id="f-mode-5038" value={project.layout.mode} onChange={(e) => applyMode(e.target.value)}>
+                  {Object.entries(TEMPLATE_MODES).map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
+                </select>
               </div>
-              <div className="control-row inline-2">
-                <div>
-                  <label htmlFor="f-label-size-4965">Label Size</label>
-                  <input id="f-label-size-4965" type="range" min="9" max="28" step="1" value={selectedPolygon.labelFontSize || 12} onChange={(e) => updatePolygon(selectedPolygon.id, { labelFontSize: Number(e.target.value) })} />
-                </div>
-                <div className="range-value">{selectedPolygon.labelFontSize || 12}px</div>
+              <div className="control-row">
+                <label htmlFor="f-design-theme-5046">Design Theme</label>
+                <select id="f-design-theme-5046" value={project.layout.themeId || 'investor_clean'} onChange={(e) => updateLayout({ themeId: e.target.value })}>
+                  {Object.entries(TEMPLATE_THEMES).map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
+                </select>
               </div>
-              <label className="toggle-row">
-                <input type="checkbox" checked={selectedPolygon.dashed !== false} onChange={(e) => updatePolygon(selectedPolygon.id, { dashed: e.target.checked })} />
-                <span>Dashed outline</span>
-              </label>
-              <label className="toggle-row">
-                <input type="checkbox" checked={!!selectedPolygon.smoothed} onChange={(e) => updatePolygon(selectedPolygon.id, { smoothed: e.target.checked })} />
-                <span>Smooth boundary</span>
-              </label>
-              <label className="toggle-row">
-                <input type="checkbox" checked={!!selectedPolygon.outsideShade} onChange={(e) => updatePolygon(selectedPolygon.id, { outsideShade: e.target.checked })} />
-                <span>Outside shade</span>
-              </label>
-              {selectedPolygon.outsideShade && (
-                <>
-                  <div className="shade-presets">
-                    {[{ label: 'Dark', c: '#000000', o: 0.35 }, { label: 'Light', c: '#ffffff', o: 0.30 }, { label: 'Warm', c: '#7c3b1a', o: 0.25 }].map(({ label, c, o }) => (
-                      <button key={label} className="shade-preset-btn" type="button" onClick={() => updatePolygon(selectedPolygon.id, { outsideShadeColor: c, outsideShadeOpacity: o })}>{label}</button>
-                    ))}
-                  </div>
-                  <div className="control-row inline-2">
-                    <div>
-                      <label htmlFor="f-shade-color-4991">Shade Color</label>
-                      <ColorField id="f-shade-color-4991" value={selectedPolygon.outsideShadeColor || '#000000'} onChange={(e) => updatePolygon(selectedPolygon.id, { outsideShadeColor: e.target.value })} brandColors={brandColors} />
-                    </div>
-                    <div>
-                      <label htmlFor="f-opacity-4995">Opacity</label>
-                      <input id="f-opacity-4995" type="range" min="0.05" max="0.75" step="0.05" value={selectedPolygon.outsideShadeOpacity ?? 0.35} onChange={(e) => updatePolygon(selectedPolygon.id, { outsideShadeOpacity: Number(e.target.value) })} />
-                    </div>
-                  </div>
-                </>
-              )}
-              <button className="secondary-btn" type="button" onClick={() => removePolygon(selectedPolygon.id)}>Remove Boundary</button>
-            </div>
-          ) : null}
-
-          {selectedDistanceLineId && (() => {
-            const dl = (project.distanceLines || []).find(d => d.id === selectedDistanceLineId);
-            if (!dl) return null;
-            return (
-              <div className="control-section">
-                <div className="control-section-title">Distance Line</div>
-                <div className="control-row">
-                  <label htmlFor="f-color-5012">Color</label>
-                  <ColorField id="f-color-5012" value={dl.color || '#e11d48'}
-                    onChange={(e) => updateDistanceLine(dl.id, { color: e.target.value })} brandColors={brandColors} />
-                </div>
-                <div className="control-row">
-                  <label>Units</label>
-                  <div className="unit-toggle-row">
-                    {['km', 'mi'].map(u => (
-                      <button key={u} className={`unit-toggle-btn${(dl.units || 'km') === u ? ' active' : ''}`}
-                        onClick={() => updateDistanceLine(dl.id, { units: u })}>{u}</button>
-                    ))}
-                  </div>
-                </div>
-                <div className="control-row">
-                  <button className="secondary-btn" style={{ color: '#ef4444' }}
-                    onClick={() => removeDistanceLine(dl.id)}>Delete Distance Line</button>
-                </div>
-              </div>
-            );
-          })()}
-        </section>
-
-        <section className="control-section cs-collapsible">
-          <h2>Design</h2>
-          <div className="control-grid">
-            <div className="control-row">
-              <label htmlFor="f-mode-5038">Mode</label>
-              <select id="f-mode-5038" value={project.layout.mode} onChange={(e) => applyMode(e.target.value)}>
-                {Object.entries(TEMPLATE_MODES).map(([value, label]) => (
-                  <option key={value} value={value}>{label}</option>
-                ))}
-              </select>
-            </div>
-            <div className="control-row">
-              <label htmlFor="f-design-theme-5046">Design Theme</label>
-              <select id="f-design-theme-5046" value={project.layout.themeId || 'investor_clean'} onChange={(e) => updateLayout({ themeId: e.target.value })}>
-                {Object.entries(TEMPLATE_THEMES).map(([value, label]) => (
-                  <option key={value} value={value}>{label}</option>
-                ))}
-              </select>
-            </div>
-            <div className="color-overrides-grid">
-              <div className="color-override-cell">
-                <label htmlFor="f-title-bg-5055">Title bg</label>
-                <ColorField id="f-title-bg-5055"
-                  value={project.layout.titleBgColor || themeTokens.titleFill?.replace(/rgba?\([^)]+\)/i, '') || '#0c1a35'}
-                  onChange={(e) => updateLayout({ titleBgColor: e.target.value })}
-                  title="Title block background"
-                  brandColors={brandColors}
-                  onReset={project.layout.titleBgColor ? () => updateLayout({ titleBgColor: null }) : undefined}
-                />
-              </div>
-              <div className="color-override-cell">
-                <label htmlFor="f-title-text-5065">Title text</label>
-                <ColorField id="f-title-text-5065"
-                  value={project.layout.titleFgColor || themeTokens.titleText || '#ffffff'}
-                  onChange={(e) => updateLayout({ titleFgColor: e.target.value })}
-                  title="Title text color"
-                  brandColors={brandColors}
-                  onReset={project.layout.titleFgColor ? () => updateLayout({ titleFgColor: null }) : undefined}
-                />
-              </div>
-              <div className="color-override-cell">
-                <label htmlFor="f-panel-bg-5075">Panel bg</label>
-                <ColorField id="f-panel-bg-5075"
-                  value={project.layout.panelBgColor || '#ffffff'}
-                  onChange={(e) => updateLayout({ panelBgColor: e.target.value })}
-                  title="Overlay panel background"
-                  brandColors={brandColors}
-                  onReset={project.layout.panelBgColor ? () => updateLayout({ panelBgColor: null }) : undefined}
-                />
-              </div>
-              <div className="color-override-cell">
-                <label htmlFor="f-panel-text-5085">Panel text</label>
-                <ColorField id="f-panel-text-5085"
-                  value={project.layout.panelFgColor || themeTokens.bodyText || '#1e293b'}
-                  onChange={(e) => updateLayout({ panelFgColor: e.target.value })}
-                  title="Panel text color"
-                  brandColors={brandColors}
-                  onReset={project.layout.panelFgColor ? () => updateLayout({ panelFgColor: null }) : undefined}
-                />
-              </div>
-              <div className="color-override-cell">
-                <label htmlFor="f-accent-5095">Accent</label>
-                <ColorField id="f-accent-5095"
-                  value={project.layout.accentColor || themeTokens.titleAccent || '#2563eb'}
-                  onChange={(e) => updateLayout({ accentColor: e.target.value })}
-                  title="Accent color (stripe, callout borders)"
-                  brandColors={brandColors}
-                  onReset={project.layout.accentColor ? () => updateLayout({ accentColor: null }) : undefined}
-                />
-              </div>
-              {(project.layout.titleBgColor || project.layout.titleFgColor || project.layout.panelBgColor || project.layout.panelFgColor || project.layout.accentColor) && (
+              <div className="color-overrides-grid">
                 <div className="color-override-cell">
-                  <label>&nbsp;</label>
-                  <button className="swatch-reset-all" type="button" onClick={() => updateLayout({ titleBgColor: null, titleFgColor: null, panelBgColor: null, panelFgColor: null, accentColor: null })}>Reset all</button>
+                  <label htmlFor="f-title-bg-5055">Title bg</label>
+                  <ColorField id="f-title-bg-5055"
+                    value={project.layout.titleBgColor || themeTokens.titleFill?.replace(/rgba?\([^)]+\)/i, '') || '#0c1a35'}
+                    onChange={(e) => updateLayout({ titleBgColor: e.target.value })}
+                    title="Title block background"
+                    brandColors={brandColors}
+                    onReset={project.layout.titleBgColor ? () => updateLayout({ titleBgColor: null }) : undefined}
+                  />
                 </div>
-              )}
-            </div>
-            <div className="button-row">
-              <button className="btn" type="button" onClick={autoFrameAll}>Refit Map</button>
-              <button className="btn primary" type="button" onClick={improveMap}>Improve Map</button>
-            </div>
-
-            {/* Fonts */}
-            <details className="sub-details">
-              <summary>Fonts</summary>
-              <div className="sub-details-body">
-                <div className="control-row inline-2">
-                  <div><label htmlFor="f-title-5121">Title</label><FontSelect id="f-title-5121" value={project.layout.fonts?.title} brandFonts={brandFonts} onChange={(e) => updateLayout({ fonts: { title: e.target.value } })} /></div>
-                  <div><label htmlFor="f-legend-5122">Legend</label><FontSelect id="f-legend-5122" value={project.layout.fonts?.legend} brandFonts={brandFonts} onChange={(e) => updateLayout({ fonts: { legend: e.target.value } })} /></div>
+                <div className="color-override-cell">
+                  <label htmlFor="f-title-text-5065">Title text</label>
+                  <ColorField id="f-title-text-5065"
+                    value={project.layout.titleFgColor || themeTokens.titleText || '#ffffff'}
+                    onChange={(e) => updateLayout({ titleFgColor: e.target.value })}
+                    title="Title text color"
+                    brandColors={brandColors}
+                    onReset={project.layout.titleFgColor ? () => updateLayout({ titleFgColor: null }) : undefined}
+                  />
                 </div>
-                <div className="control-row inline-2">
-                  <div><label htmlFor="f-labels-5125">Labels</label><FontSelect id="f-labels-5125" value={project.layout.fonts?.label} brandFonts={brandFonts} onChange={(e) => updateLayout({ fonts: { label: e.target.value } })} /></div>
-                  <div><label htmlFor="f-callouts-5126">Callouts</label><FontSelect id="f-callouts-5126" value={project.layout.fonts?.callout} brandFonts={brandFonts} onChange={(e) => updateLayout({ fonts: { callout: e.target.value } })} /></div>
+                <div className="color-override-cell">
+                  <label htmlFor="f-panel-bg-5075">Panel bg</label>
+                  <ColorField id="f-panel-bg-5075"
+                    value={project.layout.panelBgColor || '#ffffff'}
+                    onChange={(e) => updateLayout({ panelBgColor: e.target.value })}
+                    title="Overlay panel background"
+                    brandColors={brandColors}
+                    onReset={project.layout.panelBgColor ? () => updateLayout({ panelBgColor: null }) : undefined}
+                  />
                 </div>
+                <div className="color-override-cell">
+                  <label htmlFor="f-panel-text-5085">Panel text</label>
+                  <ColorField id="f-panel-text-5085"
+                    value={project.layout.panelFgColor || themeTokens.bodyText || '#1e293b'}
+                    onChange={(e) => updateLayout({ panelFgColor: e.target.value })}
+                    title="Panel text color"
+                    brandColors={brandColors}
+                    onReset={project.layout.panelFgColor ? () => updateLayout({ panelFgColor: null }) : undefined}
+                  />
+                </div>
+                <div className="color-override-cell">
+                  <label htmlFor="f-accent-5095">Accent</label>
+                  <ColorField id="f-accent-5095"
+                    value={project.layout.accentColor || themeTokens.titleAccent || '#2563eb'}
+                    onChange={(e) => updateLayout({ accentColor: e.target.value })}
+                    title="Accent color (stripe, callout borders)"
+                    brandColors={brandColors}
+                    onReset={project.layout.accentColor ? () => updateLayout({ accentColor: null }) : undefined}
+                  />
+                </div>
+                {(project.layout.titleBgColor || project.layout.titleFgColor || project.layout.panelBgColor || project.layout.panelFgColor || project.layout.accentColor) && (
+                  <div className="color-override-cell">
+                    <label>&nbsp;</label>
+                    <button className="swatch-reset-all" type="button" onClick={() => updateLayout({ titleBgColor: null, titleFgColor: null, panelBgColor: null, panelFgColor: null, accentColor: null })}>Reset all</button>
+                  </div>
+                )}
               </div>
-            </details>
+              <div className="button-row">
+                <button className="btn" type="button" onClick={autoFrameAll}>Refit Map</button>
+                <button className="btn primary" type="button" onClick={improveMap}>Improve Map</button>
+              </div>
 
-            {/* NI 43-101 Title Strip fields */}
-            {project.layout.templateId === 'ni_43101_technical' && (
-              <details className="sub-details" open>
-                <summary>NI 43-101 Title Strip</summary>
+              {/* Fonts */}
+              <details className="sub-details">
+                <summary>Fonts</summary>
                 <div className="sub-details-body">
-                  <div className="control-row">
-                    <label htmlFor="f-figure-title-5137">Figure Title</label>
-                    <input id="f-figure-title-5137" type="text" value={project.layout.stripTitle || ''} placeholder="(leave blank to hide)" onChange={(e) => updateLayout({ stripTitle: e.target.value })} />
+                  <div className="control-row inline-2">
+                    <div><label htmlFor="f-title-5121">Title</label><FontSelect id="f-title-5121" value={project.layout.fonts?.title} brandFonts={brandFonts} onChange={(e) => updateLayout({ fonts: { title: e.target.value } })} /></div>
+                    <div><label htmlFor="f-legend-5122">Legend</label><FontSelect id="f-legend-5122" value={project.layout.fonts?.legend} brandFonts={brandFonts} onChange={(e) => updateLayout({ fonts: { legend: e.target.value } })} /></div>
                   </div>
-                  <div className="control-row">
-                    <label htmlFor="f-subtitle-property-5141">Subtitle / Property</label>
-                    <input id="f-subtitle-property-5141" type="text" value={project.layout.stripSubtitle || ''} placeholder="(optional)" onChange={(e) => updateLayout({ stripSubtitle: e.target.value })} />
-                  </div>
-                  <div className="control-row">
-                    <label htmlFor="f-strip-position-5145">Strip Position</label>
-                    <select id="f-strip-position-5145" value={project.layout.titleStripPosition || 'bottom'} onChange={(e) => updateLayout({ titleStripPosition: e.target.value })}>
-                      <option value="bottom">Bottom</option>
-                      <option value="top">Top</option>
-                    </select>
-                  </div>
-                  <div className="control-row">
-                    <label htmlFor="f-scale-override-5152">Scale Override</label>
-                    <input id="f-scale-override-5152" type="text" value={project.layout.manualScaleDenom || ''} placeholder="e.g. 25000 (auto if blank)" onChange={(e) => updateLayout({ manualScaleDenom: e.target.value })} />
-                  </div>
-                  <div className="control-row" style={{ alignItems: 'center' }}>
-                    <label htmlFor="f-text-size-5156">Text Size</label>
-                    <input id="f-text-size-5156" type="range" min="0.7" max="1.4" step="0.05" value={project.layout.stripFontScale || 1} onChange={(e) => updateLayout({ stripFontScale: parseFloat(e.target.value) })} style={{ flex: 1 }} />
-                    <span style={{ fontSize: 11, marginLeft: 6, minWidth: 32 }}>{Math.round((project.layout.stripFontScale || 1) * 100)}%</span>
-                  </div>
-                  <div className="control-row">
-                    <label htmlFor="f-qualified-person-5161">Qualified Person</label>
-                    <input id="f-qualified-person-5161" type="text" value={project.layout.qpName || ''} placeholder="Name, P.Geo." onChange={(e) => updateLayout({ qpName: e.target.value })} />
-                  </div>
-                  <div className="control-row">
-                    <label htmlFor="f-qp-credentials-5165">QP Credentials</label>
-                    <input id="f-qp-credentials-5165" type="text" value={project.layout.qpCredentials || ''} placeholder="P.Geo., M.Sc." onChange={(e) => updateLayout({ qpCredentials: e.target.value })} />
-                  </div>
-                  <div className="control-row">
-                    <label htmlFor="f-company-5169">Company</label>
-                    <input id="f-company-5169" type="text" value={project.layout.companyName || ''} placeholder="Company Name" onChange={(e) => updateLayout({ companyName: e.target.value })} />
-                  </div>
-                  <div className="control-row">
-                    <label htmlFor="f-figure-no-5173">Figure No.</label>
-                    <input id="f-figure-no-5173" type="text" value={project.layout.figureNumber || ''} placeholder="Fig. 3-2" onChange={(e) => updateLayout({ figureNumber: e.target.value })} />
-                  </div>
-                  <div className="control-row">
-                    <label htmlFor="f-revision-5177">Revision</label>
-                    <input id="f-revision-5177" type="text" value={project.layout.figureRevision || ''} placeholder="Rev. A" onChange={(e) => updateLayout({ figureRevision: e.target.value })} />
-                  </div>
-                  <div className="control-row">
-                    <label htmlFor="f-projection-5181">Projection</label>
-                    <input id="f-projection-5181"
-                      type="text"
-                      value={project.layout.projectionName || ''}
-                      placeholder="e.g. NAD83 / UTM Zone 10N"
-                      onChange={(e) => updateLayout({ projectionName: e.target.value })}
-                    />
+                  <div className="control-row inline-2">
+                    <div><label htmlFor="f-labels-5125">Labels</label><FontSelect id="f-labels-5125" value={project.layout.fonts?.label} brandFonts={brandFonts} onChange={(e) => updateLayout({ fonts: { label: e.target.value } })} /></div>
+                    <div><label htmlFor="f-callouts-5126">Callouts</label><FontSelect id="f-callouts-5126" value={project.layout.fonts?.callout} brandFonts={brandFonts} onChange={(e) => updateLayout({ fonts: { callout: e.target.value } })} /></div>
                   </div>
                 </div>
               </details>
-            )}
 
-            {/* Panel box visibility */}
-            <details className="sub-details">
-              <summary>Panel Boxes</summary>
-              <div className="sub-details-body">
-                <div className="small-note" style={{ marginBottom: 8 }}>Hide the background box from any panel — text stays visible.</div>
-                <label className="toggle-row"><input type="checkbox" checked={!project.layout.titleTransparent} onChange={(e) => updateLayout({ titleTransparent: !e.target.checked })} /><span>Title box</span></label>
-                <label className="toggle-row"><input type="checkbox" checked={!project.layout.legendTransparent} onChange={(e) => updateLayout({ legendTransparent: !e.target.checked })} /><span>Legend box</span></label>
-                <label className="toggle-row"><input type="checkbox" checked={!project.layout.logoTransparent} onChange={(e) => updateLayout({ logoTransparent: !e.target.checked })} /><span>Logo box</span></label>
-              </div>
-            </details>
-
-            {/* Legend entries — rename, remove, add. Its own section rather
-                than buried in Text & Metadata: this edits what the legend
-                SAYS, which is a different job from how it is set. */}
-            <details className="sub-details">
-              <summary>Legend Items</summary>
-              <div className="sub-details-body">
-                <LegendEditor
-                  derivedItems={derivedLegendItems}
-                  layout={project.layout}
-                  updateLayout={updateLayout}
-                />
-              </div>
-            </details>
-
-            {/* Text & Metadata */}
-            <details className="sub-details">
-              <summary>Text & Metadata</summary>
-              <div className="sub-details-body">
-                <div className="control-row"><label htmlFor="f-legend-title-5208">Legend Title</label><input id="f-legend-title-5208" value={localLegendTitle} onChange={(e) => { const val = e.target.value; setLocalLegendTitle(val); metaDirtyRef.current.legendTitle = true; clearTimeout(legendTitleDebounceRef.current); legendTitleDebounceRef.current = setTimeout(() => { updateLayout({ legendTitle: val }); metaDirtyRef.current.legendTitle = false; }, 300); }} placeholder="Legend" /></div>
-                <div className="control-row" style={{ alignItems: 'center' }}>
-                  <label htmlFor="f-text-size-5210">Text Size</label>
-                  <input id="f-text-size-5210" type="range" min="0.6" max="1.5" step="0.05" value={project.layout.legendFontScale ?? 1} onChange={(e) => updateLayout({ legendFontScale: parseFloat(e.target.value) })} style={{ flex: 1 }} />
-                  <span style={{ fontSize: 11, marginLeft: 6, minWidth: 32 }}>{Math.round((project.layout.legendFontScale ?? 1) * 100)}%</span>
-                </div>
-                <div className="control-row"><label htmlFor="f-footer-disclaimer-5214">Footer / Disclaimer</label><input id="f-footer-disclaimer-5214" value={localFooterText} onChange={(e) => { const val = e.target.value; setLocalFooterText(val); metaDirtyRef.current.footerText = true; clearTimeout(footerTextDebounceRef.current); footerTextDebounceRef.current = setTimeout(() => { updateLayout({ footerText: val }); metaDirtyRef.current.footerText = false; }, 300); }} placeholder="e.g. For internal use only" /></div>
-                <div className="control-row inline-2">
-                  <div><label htmlFor="f-map-date-5216">Map Date</label><input id="f-map-date-5216" value={localMapDate} onChange={(e) => { const val = e.target.value; setLocalMapDate(val); metaDirtyRef.current.mapDate = true; clearTimeout(mapDateDebounceRef.current); mapDateDebounceRef.current = setTimeout(() => { updateLayout({ mapDate: val }); metaDirtyRef.current.mapDate = false; }, 300); }} placeholder="e.g. April 2025" /></div>
-                  <div><label htmlFor="f-project-5217">Project #</label><input id="f-project-5217" value={localProjectNumber} onChange={(e) => { const val = e.target.value; setLocalProjectNumber(val); metaDirtyRef.current.projectNumber = true; clearTimeout(projectNumberDebounceRef.current); projectNumberDebounceRef.current = setTimeout(() => { updateLayout({ projectNumber: val }); metaDirtyRef.current.projectNumber = false; }, 300); }} placeholder="e.g. P-2024-01" /></div>
-                </div>
-                <div className="control-row"><label htmlFor="f-scale-note-5219">Scale Note</label><input id="f-scale-note-5219" value={localMapScaleNote} onChange={(e) => { const val = e.target.value; setLocalMapScaleNote(val); metaDirtyRef.current.mapScaleNote = true; clearTimeout(mapScaleNoteDebounceRef.current); mapScaleNoteDebounceRef.current = setTimeout(() => { updateLayout({ mapScaleNote: val }); metaDirtyRef.current.mapScaleNote = false; }, 300); }} placeholder="e.g. 1:50,000" /></div>
-              </div>
-            </details>
-
-            {/* Region Highlights */}
-            <details className="sub-details">
-              <summary>Region Highlights {(project.layout.regionHighlights || []).length > 0 && <span className="sub-badge">{project.layout.regionHighlights.length}</span>}</summary>
-              <div className="sub-details-body">
-                {(project.layout.regionHighlights || []).map((h, i) => {
-                  const regionName = regionsNA.find((r) => r.id === h.regionId)?.name || h.regionId;
-                  return (
-                    <div key={h.regionId} className="region-highlight-row">
-                      <span className="region-highlight-name">{regionName}</span>
-                      <ColorField value={h.color || '#ef4444'} title="Color" onChange={(e) => updateLayout({ regionHighlights: project.layout.regionHighlights.map((x, j) => j === i ? { ...x, color: e.target.value } : x) })} brandColors={brandColors} />
-                      <input type="range" min="0.1" max="1" step="0.05" value={h.opacity ?? 0.45} title="Opacity" onChange={(e) => updateLayout({ regionHighlights: project.layout.regionHighlights.map((x, j) => j === i ? { ...x, opacity: Number(e.target.value) } : x) })} />
-                      <span className="range-label">{Math.round((h.opacity ?? 0.45) * 100)}%</span>
-                      <button className="icon-btn remove-btn" type="button" title="Remove" onClick={() => updateLayout({ regionHighlights: project.layout.regionHighlights.filter((_, j) => j !== i) })}>×</button>
+              {/* NI 43-101 Title Strip fields */}
+              {project.layout.templateId === 'ni_43101_technical' && (
+                <details className="sub-details" open>
+                  <summary>NI 43-101 Title Strip</summary>
+                  <div className="sub-details-body">
+                    <div className="control-row">
+                      <label htmlFor="f-figure-title-5137">Figure Title</label>
+                      <input id="f-figure-title-5137" type="text" value={project.layout.stripTitle || ''} placeholder="(leave blank to hide)" onChange={(e) => updateLayout({ stripTitle: e.target.value })} />
                     </div>
-                  );
-                })}
-                <div className="region-highlight-add-row">
-                  <select value="" onChange={(e) => { const id = e.target.value; if (!id || (project.layout.regionHighlights || []).some((h) => h.regionId === id)) return; updateLayout({ regionHighlights: [...(project.layout.regionHighlights || []), { regionId: id, color: '#ef4444', opacity: 0.45 }] }); }}>
-                    <option value="">+ Add Region…</option>
-                    {regionsNA.map((r) => <option key={r.id} value={r.id}>{r.name} ({r.abbrev})</option>)}
+                    <div className="control-row">
+                      <label htmlFor="f-subtitle-property-5141">Subtitle / Property</label>
+                      <input id="f-subtitle-property-5141" type="text" value={project.layout.stripSubtitle || ''} placeholder="(optional)" onChange={(e) => updateLayout({ stripSubtitle: e.target.value })} />
+                    </div>
+                    <div className="control-row">
+                      <label htmlFor="f-strip-position-5145">Strip Position</label>
+                      <select id="f-strip-position-5145" value={project.layout.titleStripPosition || 'bottom'} onChange={(e) => updateLayout({ titleStripPosition: e.target.value })}>
+                        <option value="bottom">Bottom</option>
+                        <option value="top">Top</option>
+                      </select>
+                    </div>
+                    <div className="control-row">
+                      <label htmlFor="f-scale-override-5152">Scale Override</label>
+                      <input id="f-scale-override-5152" type="text" value={project.layout.manualScaleDenom || ''} placeholder="e.g. 25000 (auto if blank)" onChange={(e) => updateLayout({ manualScaleDenom: e.target.value })} />
+                    </div>
+                    <div className="control-row slider">
+                      <label htmlFor="f-text-size-5156">Text Size</label>
+                      <input id="f-text-size-5156" type="range" min="0.7" max="1.4" step="0.05" value={project.layout.stripFontScale || 1} onChange={(e) => updateLayout({ stripFontScale: parseFloat(e.target.value) })} style={{ flex: 1 }} />
+                      <span className="range-value">{Math.round((project.layout.stripFontScale || 1) * 100)}%</span>
+                    </div>
+                    <div className="control-row">
+                      <label htmlFor="f-qualified-person-5161">Qualified Person</label>
+                      <input id="f-qualified-person-5161" type="text" value={project.layout.qpName || ''} placeholder="Name, P.Geo." onChange={(e) => updateLayout({ qpName: e.target.value })} />
+                    </div>
+                    <div className="control-row">
+                      <label htmlFor="f-qp-credentials-5165">QP Credentials</label>
+                      <input id="f-qp-credentials-5165" type="text" value={project.layout.qpCredentials || ''} placeholder="P.Geo., M.Sc." onChange={(e) => updateLayout({ qpCredentials: e.target.value })} />
+                    </div>
+                    <div className="control-row">
+                      <label htmlFor="f-company-5169">Company</label>
+                      <input id="f-company-5169" type="text" value={project.layout.companyName || ''} placeholder="Company Name" onChange={(e) => updateLayout({ companyName: e.target.value })} />
+                    </div>
+                    <div className="control-row">
+                      <label htmlFor="f-figure-no-5173">Figure No.</label>
+                      <input id="f-figure-no-5173" type="text" value={project.layout.figureNumber || ''} placeholder="Fig. 3-2" onChange={(e) => updateLayout({ figureNumber: e.target.value })} />
+                    </div>
+                    <div className="control-row">
+                      <label htmlFor="f-revision-5177">Revision</label>
+                      <input id="f-revision-5177" type="text" value={project.layout.figureRevision || ''} placeholder="Rev. A" onChange={(e) => updateLayout({ figureRevision: e.target.value })} />
+                    </div>
+                    <div className="control-row">
+                      <label htmlFor="f-projection-5181">Projection</label>
+                      <input id="f-projection-5181"
+                        type="text"
+                        value={project.layout.projectionName || ''}
+                        placeholder="e.g. NAD83 / UTM Zone 10N"
+                        onChange={(e) => updateLayout({ projectionName: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                </details>
+              )}
+
+              {/* Panel box visibility */}
+              <details className="sub-details">
+                <summary>Panel Boxes</summary>
+                <div className="sub-details-body">
+                  <div className="small-note" style={{ marginBottom: 8 }}>Hide the background box from any panel — text stays visible.</div>
+                  <label className="toggle-row"><input type="checkbox" checked={!project.layout.titleTransparent} onChange={(e) => updateLayout({ titleTransparent: !e.target.checked })} /><span>Title box</span></label>
+                  <label className="toggle-row"><input type="checkbox" checked={!project.layout.legendTransparent} onChange={(e) => updateLayout({ legendTransparent: !e.target.checked })} /><span>Legend box</span></label>
+                  <label className="toggle-row"><input type="checkbox" checked={!project.layout.logoTransparent} onChange={(e) => updateLayout({ logoTransparent: !e.target.checked })} /><span>Logo box</span></label>
+                  <label className="toggle-row"><input type="checkbox" checked={!project.layout.scaleBarTransparent} onChange={(e) => updateLayout({ scaleBarTransparent: !e.target.checked })} /><span>Scale bar box</span></label>
+                  <label className="toggle-row"><input type="checkbox" checked={!project.layout.northArrowTransparent} onChange={(e) => updateLayout({ northArrowTransparent: !e.target.checked })} /><span>Compass box</span></label>
+                </div>
+              </details>
+
+              {/* Legend entries — rename, remove, add. Its own section rather
+                  than buried in Text & Metadata: this edits what the legend
+                  SAYS, which is a different job from how it is set. */}
+              <details className="sub-details">
+                <summary>Legend Items</summary>
+                <div className="sub-details-body">
+                  <LegendEditor
+                    derivedItems={derivedLegendItems}
+                    layout={project.layout}
+                    updateLayout={updateLayout}
+                  />
+                </div>
+              </details>
+
+              {/* Text & Metadata */}
+              <details className="sub-details">
+                <summary>Text & Metadata</summary>
+                <div className="sub-details-body">
+                  <div className="control-row"><label htmlFor="f-legend-title-5208">Legend Title</label><input id="f-legend-title-5208" value={localLegendTitle} onChange={(e) => { const val = e.target.value; setLocalLegendTitle(val); metaDirtyRef.current.legendTitle = true; clearTimeout(legendTitleDebounceRef.current); legendTitleDebounceRef.current = setTimeout(() => { updateLayout({ legendTitle: val }); metaDirtyRef.current.legendTitle = false; }, 300); }} placeholder="Legend" /></div>
+                  <div className="control-row slider">
+                    <label htmlFor="f-text-size-5210">Text Size</label>
+                    <input id="f-text-size-5210" type="range" min="0.6" max="1.5" step="0.05" value={project.layout.legendFontScale ?? 1} onChange={(e) => updateLayout({ legendFontScale: parseFloat(e.target.value) })} style={{ flex: 1 }} />
+                    <span className="range-value">{Math.round((project.layout.legendFontScale ?? 1) * 100)}%</span>
+                  </div>
+                  <div className="control-row"><label htmlFor="f-footer-disclaimer-5214">Footer / Disclaimer</label><input id="f-footer-disclaimer-5214" value={localFooterText} onChange={(e) => { const val = e.target.value; setLocalFooterText(val); metaDirtyRef.current.footerText = true; clearTimeout(footerTextDebounceRef.current); footerTextDebounceRef.current = setTimeout(() => { updateLayout({ footerText: val }); metaDirtyRef.current.footerText = false; }, 300); }} placeholder="e.g. For internal use only" /></div>
+                  <div className="control-row inline-2">
+                    <div><label htmlFor="f-map-date-5216">Map Date</label><input id="f-map-date-5216" value={localMapDate} onChange={(e) => { const val = e.target.value; setLocalMapDate(val); metaDirtyRef.current.mapDate = true; clearTimeout(mapDateDebounceRef.current); mapDateDebounceRef.current = setTimeout(() => { updateLayout({ mapDate: val }); metaDirtyRef.current.mapDate = false; }, 300); }} placeholder="e.g. April 2025" /></div>
+                    <div><label htmlFor="f-project-5217">Project #</label><input id="f-project-5217" value={localProjectNumber} onChange={(e) => { const val = e.target.value; setLocalProjectNumber(val); metaDirtyRef.current.projectNumber = true; clearTimeout(projectNumberDebounceRef.current); projectNumberDebounceRef.current = setTimeout(() => { updateLayout({ projectNumber: val }); metaDirtyRef.current.projectNumber = false; }, 300); }} placeholder="e.g. P-2024-01" /></div>
+                  </div>
+                  <div className="control-row"><label htmlFor="f-scale-note-5219">Scale Note</label><input id="f-scale-note-5219" value={localMapScaleNote} onChange={(e) => { const val = e.target.value; setLocalMapScaleNote(val); metaDirtyRef.current.mapScaleNote = true; clearTimeout(mapScaleNoteDebounceRef.current); mapScaleNoteDebounceRef.current = setTimeout(() => { updateLayout({ mapScaleNote: val }); metaDirtyRef.current.mapScaleNote = false; }, 300); }} placeholder="e.g. 1:50,000" /></div>
+                </div>
+              </details>
+
+              {/* Region Highlights */}
+              <details className="sub-details">
+                <summary>Region Highlights {(project.layout.regionHighlights || []).length > 0 && <span className="sub-badge">{project.layout.regionHighlights.length}</span>}</summary>
+                <div className="sub-details-body">
+                  {(project.layout.regionHighlights || []).map((h, i) => {
+                    const regionName = regionsNA.find((r) => r.id === h.regionId)?.name || h.regionId;
+                    return (
+                      <div key={h.regionId} className="region-highlight-row">
+                        <span className="region-highlight-name">{regionName}</span>
+                        <ColorField value={h.color || '#ef4444'} title="Color" onChange={(e) => updateLayout({ regionHighlights: project.layout.regionHighlights.map((x, j) => j === i ? { ...x, color: e.target.value } : x) })} brandColors={brandColors} />
+                        <input type="range" min="0.1" max="1" step="0.05" value={h.opacity ?? 0.45} title="Opacity" onChange={(e) => updateLayout({ regionHighlights: project.layout.regionHighlights.map((x, j) => j === i ? { ...x, opacity: Number(e.target.value) } : x) })} />
+                        <span className="range-label">{Math.round((h.opacity ?? 0.45) * 100)}%</span>
+                        <button className="icon-btn remove-btn" type="button" title="Remove" onClick={() => updateLayout({ regionHighlights: project.layout.regionHighlights.filter((_, j) => j !== i) })}>×</button>
+                      </div>
+                    );
+                  })}
+                  <div className="region-highlight-add-row">
+                    <select value="" onChange={(e) => { const id = e.target.value; if (!id || (project.layout.regionHighlights || []).some((h) => h.regionId === id)) return; updateLayout({ regionHighlights: [...(project.layout.regionHighlights || []), { regionId: id, color: '#ef4444', opacity: 0.45 }] }); }}>
+                      <option value="">+ Add Region…</option>
+                      {regionsNA.map((r) => <option key={r.id} value={r.id}>{r.name} ({r.abbrev})</option>)}
+                    </select>
+                  </div>
+                </div>
+              </details>
+
+              {/* Brand Kits */}
+              <div className="template-manager-block">
+                <div className="template-manager-header">
+                  <span className="template-manager-label">Brand Kits</span>
+                  {user && (
+                    <button className="btn compact secondary" type="button" onClick={() => setShowBrandKitManager(true)}>
+                      {cloudTemplates.length > 0 ? 'Manage' : '+ New kit'}
+                    </button>
+                  )}
+                </div>
+                {!user ? (
+                  <p className="template-manager-hint">Sign in to save and apply brand kits.</p>
+                ) : cloudTemplates.length === 0 ? (
+                  <p className="template-manager-hint">No brand kits yet — open the studio to create one.</p>
+                ) : (
+                  <div className="bk-side-list">
+                    {cloudTemplates.map((tmpl) => (
+                      <div key={tmpl.id} className="bk-side-card">
+                        <img className="bk-side-swatch" src={renderBrandKitSwatch(tmpl.config || {}, { width: 132, height: 46 })} alt="" />
+                        <div className="bk-side-info">
+                          <span className="bk-side-name" title={tmpl.name}>
+                            {tmpl.name || 'Untitled kit'}
+                            {tmpl.is_default && <span className="bk-side-badge">Default</span>}
+                          </span>
+                          <button
+                            className="btn compact"
+                            type="button"
+                            onClick={() => {
+                              const newLayout = applyBrandKitConfig(tmpl.config || {}, project.layout);
+                              updateLayout(Object.fromEntries(Object.entries(newLayout).filter(([k]) => newLayout[k] !== project.layout[k])));
+                              setUploadStatus({ type: 'success', message: `"${tmpl.name}" applied.` });
+                            }}
+                          >Apply</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>}
+          </section>
+          <section className="control-section cs-collapsible">
+            <h2 className="control-section-heading">
+              <button
+                type="button"
+                className="section-toggle-btn"
+                onClick={() => toggleSection('elements')}
+                aria-expanded={!collapsedSections.elements}
+                aria-controls="section-elements"
+              >Inset <span aria-hidden="true" className={`section-chevron${collapsedSections.elements ? '' : ' open'}`}>›</span></button>
+            </h2>
+            {!collapsedSections.elements && <div id="section-elements" className="control-grid">
+              <div className="button-row three">
+                <button className="btn" type="button" onClick={() => insetInputRef.current?.click()}>Upload Inset</button>
+              </div>
+              {project.layout.insetImage ? (
+                <div className="inset-status-card">
+                  <div className="inset-preview"><img src={project.layout.insetImage} alt="Inset preview" /></div>
+                  <button className="secondary-btn" type="button" onClick={() => updateLayout({ insetImage: null, insetEnabled: true })}>Remove Inset Image</button>
+                </div>
+              ) : null}
+              {project.layout.autoInsetRegion && !project.layout.insetImage && project.layout.insetEnabled !== false && (
+                <div className="inset-detected-badge">Detected: {project.layout.autoInsetRegion.name}</div>
+              )}
+              {!project.layout.insetImage && (
+                <div className="control-row">
+                  <label htmlFor="f-inset-mode">Inset Style</label>
+                  {/* Two choices, because there were only ever two ANSWERS. The
+                      old list offered province / country / regional / secondary
+                      zoom, which all render the same generic backdrop at slightly
+                      different zoom factors — indistinguishable in the panel, so
+                      the extra entries read as broken rather than as options.
+                      Standard keeps whichever of those a saved project already
+                      has; only an explicit change collapses it. */}
+                  <select id="f-inset-mode"
+                    value={project.layout.insetMode === 'satellite_locator' ? 'satellite_locator' : 'standard'}
+                    onChange={(e) => updateLayout({
+                      insetMode: e.target.value === 'satellite_locator' ? 'satellite_locator' : 'province_state',
+                    })}>
+                    <option value="standard">Standard</option>
+                    <option value="satellite_locator">Satellite</option>
+                  </select>
+                </div>
+              )}
+              <div className="control-row inline-2">
+                <div><label htmlFor="f-inset-title-5314">Inset Title</label><input id="f-inset-title-5314" value={project.layout.insetTitle ?? 'Project Locator'} onChange={(e) => updateLayout({ insetTitle: e.target.value })} placeholder="Project Locator" /></div>
+                <div><label htmlFor="f-inset-label-5315">Inset Label</label><input id="f-inset-label-5315" value={project.layout.insetLabel ?? ''} onChange={(e) => updateLayout({ insetLabel: e.target.value })} placeholder={project.layout.autoInsetRegion?.name || 'Province / State'} /></div>
+              </div>
+              {project.layout.autoInsetRegion && !project.layout.insetImage && (
+                <div className="control-row inline-2" style={{ flexWrap: 'wrap', gap: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <label htmlFor="f-region-5320" style={{ marginBottom: 0 }}>Region</label>
+                    <ColorField id="f-region-5320" value={project.layout.insetRegionFill || '#dce8f5'} onChange={(e) => updateLayout({ insetRegionFill: e.target.value })} title="Region fill" brandColors={brandColors} />
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <label htmlFor="f-background-5324" style={{ marginBottom: 0 }}>Background</label>
+                    <ColorField id="f-background-5324" value={project.layout.insetBgFill || '#f0f4f8'} onChange={(e) => updateLayout({ insetBgFill: e.target.value })} title="Background" brandColors={brandColors} />
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <label htmlFor="f-marker-5328" style={{ marginBottom: 0 }}>Marker</label>
+                    <ColorField id="f-marker-5328" value={project.layout.insetMarkerColor || '#2563eb'} onChange={(e) => updateLayout({ insetMarkerColor: e.target.value })} title="Marker color" brandColors={brandColors} />
+                  </div>
+                </div>
+              )}
+              <input ref={insetInputRef} type="file" accept="image/*" onChange={handleInsetImageChange} hidden />
+            </div>}
+          </section>
+          <section className="control-section cs-collapsible">
+            <h2 className="control-section-heading">
+              <button
+                type="button"
+                className="section-toggle-btn"
+                onClick={() => toggleSection('refoverlays')}
+                aria-expanded={!collapsedSections.refoverlays}
+                aria-controls="section-refoverlays"
+              >Reference Overlays <span aria-hidden="true" className={`section-chevron${collapsedSections.refoverlays ? '' : ' open'}`}>›</span></button>
+            </h2>
+            {!collapsedSections.refoverlays && <div id="section-refoverlays" className="toggle-grid">
+              <div className="control-row inline-2">
+                <div>
+                  <label htmlFor="f-overlay-opacity-5350">Overlay Opacity</label>
+                  <input id="f-overlay-opacity-5350" type="range" min="0.2" max="1" step="0.05" value={project.layout.referenceOpacity ?? 0.65} onChange={(e) => updateLayout({ referenceOpacity: Number(e.target.value) })} />
+                </div>
+                <div className="range-value">{Math.round((project.layout.referenceOpacity ?? 0.65) * 100)}%</div>
+              </div>
+              <label className="toggle-row"><input type="checkbox" checked={!!referenceOverlays.context} onChange={(e) => updateLayout({ referenceOverlays: { context: e.target.checked } })} /> <span>Roads + Settlements</span></label>
+              <label className="toggle-row"><input type="checkbox" checked={!!referenceOverlays.labels} onChange={(e) => updateLayout({ referenceOverlays: { labels: e.target.checked } })} /> <span>Reference Labels</span></label>
+              <label className="toggle-row"><input type="checkbox" checked={!!referenceOverlays.rail} onChange={(e) => updateLayout({ referenceOverlays: { rail: e.target.checked } })} /> <span>Railways</span></label>
+              <label className="toggle-row"><input type="checkbox" checked={!!referenceOverlays.geology} onChange={(e) => updateLayout({ referenceOverlays: { geology: e.target.checked } })} /> <span>Bedrock Geology (USGS)</span></label>
+              {referenceOverlays.geology && (
+                <p className="overlay-help-note">{OVERLAY_DESCRIPTIONS.geology}</p>
+              )}
+              {Object.keys(overlayErrors).filter((k) => referenceOverlays[k]).length > 0 && (
+                <p className="overlay-error-note">
+                  {Object.keys(overlayErrors).filter((k) => referenceOverlays[k]).map((k) => OVERLAY_LABELS[k] || k).join(', ')}
+                  {' '}could not be loaded — the map service did not respond. Your own layers are unaffected.
+                </p>
+              )}
+            </div>}
+          </section>
+          </>
+        )}
+
+        {inspectorTab === 'export' && (
+          <>
+          <section className="control-section cs-collapsible">
+            <h2 className="control-section-heading">
+              <button
+                type="button"
+                className="section-toggle-btn"
+                onClick={() => toggleSection('export')}
+                aria-expanded={!collapsedSections.export}
+                aria-controls="section-export"
+              >Export <span aria-hidden="true" className={`section-chevron${collapsedSections.export ? '' : ' open'}`}>›</span></button>
+            </h2>
+            {!collapsedSections.export && <div id="section-export" className="control-grid">
+              <RatioSwitcher activeRatio={activeRatio} onRatioChange={handleRatioChange} />
+              <div className="control-row inline-2">
+                <div>
+                  <label htmlFor="f-filename-5376">Filename</label>
+                  <input id="f-filename-5376" value={project.layout.exportSettings.filename} onChange={(e) => updateLayout({ exportSettings: { filename: e.target.value } })} />
+                </div>
+                <div>
+                  <label htmlFor="f-scale-5380">Scale</label>
+                  <select id="f-scale-5380"
+                    value={(project.layout.exportSettings.customWidth || 0) > 0 ? 'custom' : project.layout.exportSettings.pixelRatio}
+                    onChange={(e) => {
+                      if (e.target.value === 'custom') {
+                        // Seed the custom size from the current on-screen frame, then
+                        // constrain the editing canvas to it (clearing any preset ratio).
+                        const el = mapContainerRef.current;
+                        const baseW = el?.clientWidth || viewportSize.width || 1600;
+                        const baseH = el?.clientHeight || viewportSize.height || 1000;
+                        activeRatioRef.current = null;
+                        setActiveRatio(null);
+                        updateLayout({ exportSettings: { customWidth: Math.round(baseW * 2), customHeight: Math.round(baseH * 2) } });
+                      } else {
+                        updateLayout({ exportSettings: { pixelRatio: Number(e.target.value), customWidth: 0, customHeight: 0 } });
+                      }
+                    }}
+                  >
+                    {[1, 2, 3].map((r) => {
+                      const el = mapContainerRef.current;
+                      const baseLong = Math.max(el?.clientWidth || viewportSize.width || 1600, el?.clientHeight || viewportSize.height || 1000);
+                      const allowed = r <= maxPixelRatioFor(entitlements, baseLong);
+                      const label = { 1: '1× — Screen', 2: '2× — Print', 3: '3× — Large format' }[r];
+                      return (
+                        <option key={r} value={r} disabled={!allowed}>
+                          {label}{allowed ? '' : ' (Pro)'}
+                        </option>
+                      );
+                    })}
+                    <option value="custom">Custom (px){entitlements.max_export_pixels < PRO_MAX_EXPORT_PIXELS ? ` — up to ${entitlements.max_export_pixels.toLocaleString()}px` : ''}</option>
                   </select>
                 </div>
               </div>
-            </details>
-
-            {/* Brand Kits */}
-            <div className="template-manager-block">
-              <div className="template-manager-header">
-                <span className="template-manager-label">Brand Kits</span>
-                {user && (
-                  <button className="btn compact secondary" type="button" onClick={() => setShowBrandKitManager(true)}>
-                    {cloudTemplates.length > 0 ? 'Manage' : '+ New kit'}
-                  </button>
-                )}
-              </div>
-              {!user ? (
-                <p className="template-manager-hint">Sign in to save and apply brand kits.</p>
-              ) : cloudTemplates.length === 0 ? (
-                <p className="template-manager-hint">No brand kits yet — open the studio to create one.</p>
-              ) : (
-                <div className="bk-side-list">
-                  {cloudTemplates.map((tmpl) => (
-                    <div key={tmpl.id} className="bk-side-card">
-                      <img className="bk-side-swatch" src={renderBrandKitSwatch(tmpl.config || {}, { width: 132, height: 46 })} alt="" />
-                      <div className="bk-side-info">
-                        <span className="bk-side-name" title={tmpl.name}>
-                          {tmpl.name || 'Untitled kit'}
-                          {tmpl.is_default && <span className="bk-side-badge">Default</span>}
-                        </span>
-                        <button
-                          className="btn compact"
-                          type="button"
-                          onClick={() => {
-                            const newLayout = applyBrandKitConfig(tmpl.config || {}, project.layout);
-                            updateLayout(Object.fromEntries(Object.entries(newLayout).filter(([k]) => newLayout[k] !== project.layout[k])));
-                            setUploadStatus({ type: 'success', message: `"${tmpl.name}" applied.` });
-                          }}
-                        >Apply</button>
-                      </div>
+              {(project.layout.exportSettings.customWidth || 0) > 0 && (
+                <div className="export-custom-size">
+                  <div className="control-row inline-2">
+                    <div>
+                      <label htmlFor="f-width-px-5417">Width (px)</label>
+                      <input id="f-width-px-5417"
+                        type="number"
+                        min="200"
+                        max={entitlements.max_export_pixels}
+                        step="50"
+                        value={project.layout.exportSettings.customWidth || 0}
+                        onChange={(e) => updateLayout({ exportSettings: { customWidth: Math.max(200, Math.min(entitlements.max_export_pixels, Math.round(Number(e.target.value) || 200))) } })}
+                      />
                     </div>
-                  ))}
+                    <div>
+                      <label htmlFor="f-height-px-5428">Height (px)</label>
+                      <input id="f-height-px-5428"
+                        type="number"
+                        min="200"
+                        max={entitlements.max_export_pixels}
+                        step="50"
+                        value={project.layout.exportSettings.customHeight || 0}
+                        onChange={(e) => updateLayout({ exportSettings: { customHeight: Math.max(200, Math.min(entitlements.max_export_pixels, Math.round(Number(e.target.value) || 200))) } })}
+                      />
+                    </div>
+                  </div>
+                  <p className="export-custom-hint">The editing canvas matches this size — pan &amp; zoom to frame, then export at exactly {project.layout.exportSettings.customWidth || 0}×{project.layout.exportSettings.customHeight || 0}px.</p>
                 </div>
               )}
-            </div>
-          </div>
-        </section>
-
-        <section className="control-section cs-collapsible">
-          <h2 className="control-section-heading">
-            <button
-              type="button"
-              className="section-toggle-btn"
-              onClick={() => toggleSection('elements')}
-              aria-expanded={!collapsedSections.elements}
-              aria-controls="section-elements"
-            >Inset <span aria-hidden="true" className={`section-chevron${collapsedSections.elements ? '' : ' open'}`}>›</span></button>
-          </h2>
-          {!collapsedSections.elements && <div id="section-elements" className="control-grid">
-            <div className="button-row three">
-              <button className="btn" type="button" onClick={() => insetInputRef.current?.click()}>Upload Inset</button>
-            </div>
-            {project.layout.insetImage ? (
-              <div className="inset-status-card">
-                <div className="inset-preview"><img src={project.layout.insetImage} alt="Inset preview" /></div>
-                <button className="secondary-btn" type="button" onClick={() => updateLayout({ insetImage: null, insetEnabled: true })}>Remove Inset Image</button>
+              <div className="button-row">
+                <button className={`btn primary${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('png'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export PNG'}</button>
+                <button className={`btn${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('svg'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export SVG'}</button>
+                <button className={`btn${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('svg_ai'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title="SVG bundled with separate basemap PNG — opens correctly in Adobe Illustrator">{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'SVG (Illustrator)'}</button>
+                <button className={`btn${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('pdf'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export PDF'}</button>
               </div>
-            ) : null}
-            {project.layout.autoInsetRegion && !project.layout.insetImage && project.layout.insetEnabled !== false && (
-              <div className="inset-detected-badge">Detected: {project.layout.autoInsetRegion.name}</div>
-            )}
-            {!project.layout.insetImage && (
-              <div className="control-row">
-                <label htmlFor="f-inset-mode">Inset Style</label>
-                {/* Two choices, because there were only ever two ANSWERS. The
-                    old list offered province / country / regional / secondary
-                    zoom, which all render the same generic backdrop at slightly
-                    different zoom factors — indistinguishable in the panel, so
-                    the extra entries read as broken rather than as options.
-                    Standard keeps whichever of those a saved project already
-                    has; only an explicit change collapses it. */}
-                <select id="f-inset-mode"
-                  value={project.layout.insetMode === 'satellite_locator' ? 'satellite_locator' : 'standard'}
-                  onChange={(e) => updateLayout({
-                    insetMode: e.target.value === 'satellite_locator' ? 'satellite_locator' : 'province_state',
-                  })}>
-                  <option value="standard">Standard</option>
-                  <option value="satellite_locator">Satellite</option>
-                </select>
-              </div>
-            )}
-            <div className="control-row inline-2">
-              <div><label htmlFor="f-inset-title-5314">Inset Title</label><input id="f-inset-title-5314" value={project.layout.insetTitle ?? 'Project Locator'} onChange={(e) => updateLayout({ insetTitle: e.target.value })} placeholder="Project Locator" /></div>
-              <div><label htmlFor="f-inset-label-5315">Inset Label</label><input id="f-inset-label-5315" value={project.layout.insetLabel ?? ''} onChange={(e) => updateLayout({ insetLabel: e.target.value })} placeholder={project.layout.autoInsetRegion?.name || 'Province / State'} /></div>
-            </div>
-            {project.layout.autoInsetRegion && !project.layout.insetImage && (
-              <div className="control-row inline-2" style={{ flexWrap: 'wrap', gap: 8 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <label htmlFor="f-region-5320" style={{ marginBottom: 0 }}>Region</label>
-                  <ColorField id="f-region-5320" value={project.layout.insetRegionFill || '#dce8f5'} onChange={(e) => updateLayout({ insetRegionFill: e.target.value })} title="Region fill" brandColors={brandColors} />
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <label htmlFor="f-background-5324" style={{ marginBottom: 0 }}>Background</label>
-                  <ColorField id="f-background-5324" value={project.layout.insetBgFill || '#f0f4f8'} onChange={(e) => updateLayout({ insetBgFill: e.target.value })} title="Background" brandColors={brandColors} />
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <label htmlFor="f-marker-5328" style={{ marginBottom: 0 }}>Marker</label>
-                  <ColorField id="f-marker-5328" value={project.layout.insetMarkerColor || '#2563eb'} onChange={(e) => updateLayout({ insetMarkerColor: e.target.value })} title="Marker color" brandColors={brandColors} />
-                </div>
-              </div>
-            )}
-            <input ref={insetInputRef} type="file" accept="image/*" onChange={handleInsetImageChange} hidden />
-          </div>}
-        </section>
-
-        <section className="control-section cs-collapsible">
-          <h2 className="control-section-heading">
-            <button
-              type="button"
-              className="section-toggle-btn"
-              onClick={() => toggleSection('refoverlays')}
-              aria-expanded={!collapsedSections.refoverlays}
-              aria-controls="section-refoverlays"
-            >Reference Overlays <span aria-hidden="true" className={`section-chevron${collapsedSections.refoverlays ? '' : ' open'}`}>›</span></button>
-          </h2>
-          {!collapsedSections.refoverlays && <div id="section-refoverlays" className="toggle-grid">
-            <div className="control-row inline-2">
-              <div>
-                <label htmlFor="f-overlay-opacity-5350">Overlay Opacity</label>
-                <input id="f-overlay-opacity-5350" type="range" min="0.2" max="1" step="0.05" value={project.layout.referenceOpacity ?? 0.65} onChange={(e) => updateLayout({ referenceOpacity: Number(e.target.value) })} />
-              </div>
-              <div className="range-value">{Math.round((project.layout.referenceOpacity ?? 0.65) * 100)}%</div>
-            </div>
-            <label className="toggle-row"><input type="checkbox" checked={!!referenceOverlays.context} onChange={(e) => updateLayout({ referenceOverlays: { context: e.target.checked } })} /> <span>Roads + Settlements</span></label>
-            <label className="toggle-row"><input type="checkbox" checked={!!referenceOverlays.labels} onChange={(e) => updateLayout({ referenceOverlays: { labels: e.target.checked } })} /> <span>Reference Labels</span></label>
-            <label className="toggle-row"><input type="checkbox" checked={!!referenceOverlays.rail} onChange={(e) => updateLayout({ referenceOverlays: { rail: e.target.checked } })} /> <span>Railways</span></label>
-            <label className="toggle-row"><input type="checkbox" checked={!!referenceOverlays.geology} onChange={(e) => updateLayout({ referenceOverlays: { geology: e.target.checked } })} /> <span>Bedrock Geology (USGS)</span></label>
-            {referenceOverlays.geology && (
-              <p className="overlay-help-note">{OVERLAY_DESCRIPTIONS.geology}</p>
-            )}
-            {Object.keys(overlayErrors).filter((k) => referenceOverlays[k]).length > 0 && (
-              <p className="overlay-error-note">
-                {Object.keys(overlayErrors).filter((k) => referenceOverlays[k]).map((k) => OVERLAY_LABELS[k] || k).join(', ')}
-                {' '}could not be loaded — the map service did not respond. Your own layers are unaffected.
-              </p>
-            )}
-          </div>}
-        </section>
-
-        <section className="control-section cs-collapsible">
-          <h2 className="control-section-heading">
-            <button
-              type="button"
-              className="section-toggle-btn"
-              onClick={() => toggleSection('export')}
-              aria-expanded={!collapsedSections.export}
-              aria-controls="section-export"
-            >Export <span aria-hidden="true" className={`section-chevron${collapsedSections.export ? '' : ' open'}`}>›</span></button>
-          </h2>
-          {!collapsedSections.export && <div id="section-export" className="control-grid">
-            <RatioSwitcher activeRatio={activeRatio} onRatioChange={handleRatioChange} />
-            <div className="control-row inline-2">
-              <div>
-                <label htmlFor="f-filename-5376">Filename</label>
-                <input id="f-filename-5376" value={project.layout.exportSettings.filename} onChange={(e) => updateLayout({ exportSettings: { filename: e.target.value } })} />
-              </div>
-              <div>
-                <label htmlFor="f-scale-5380">Scale</label>
-                <select id="f-scale-5380"
-                  value={(project.layout.exportSettings.customWidth || 0) > 0 ? 'custom' : project.layout.exportSettings.pixelRatio}
-                  onChange={(e) => {
-                    if (e.target.value === 'custom') {
-                      // Seed the custom size from the current on-screen frame, then
-                      // constrain the editing canvas to it (clearing any preset ratio).
-                      const el = mapContainerRef.current;
-                      const baseW = el?.clientWidth || viewportSize.width || 1600;
-                      const baseH = el?.clientHeight || viewportSize.height || 1000;
-                      activeRatioRef.current = null;
-                      setActiveRatio(null);
-                      updateLayout({ exportSettings: { customWidth: Math.round(baseW * 2), customHeight: Math.round(baseH * 2) } });
-                    } else {
-                      updateLayout({ exportSettings: { pixelRatio: Number(e.target.value), customWidth: 0, customHeight: 0 } });
-                    }
-                  }}
-                >
-                  {[1, 2, 3].map((r) => {
-                    const el = mapContainerRef.current;
-                    const baseLong = Math.max(el?.clientWidth || viewportSize.width || 1600, el?.clientHeight || viewportSize.height || 1000);
-                    const allowed = r <= maxPixelRatioFor(entitlements, baseLong);
-                    const label = { 1: '1× — Screen', 2: '2× — Print', 3: '3× — Large format' }[r];
-                    return (
-                      <option key={r} value={r} disabled={!allowed}>
-                        {label}{allowed ? '' : ' (Pro)'}
-                      </option>
-                    );
-                  })}
-                  <option value="custom">Custom (px){entitlements.max_export_pixels < PRO_MAX_EXPORT_PIXELS ? ` — up to ${entitlements.max_export_pixels.toLocaleString()}px` : ''}</option>
-                </select>
-              </div>
-            </div>
-            {(project.layout.exportSettings.customWidth || 0) > 0 && (
-              <div className="export-custom-size">
-                <div className="control-row inline-2">
-                  <div>
-                    <label htmlFor="f-width-px-5417">Width (px)</label>
-                    <input id="f-width-px-5417"
-                      type="number"
-                      min="200"
-                      max={entitlements.max_export_pixels}
-                      step="50"
-                      value={project.layout.exportSettings.customWidth || 0}
-                      onChange={(e) => updateLayout({ exportSettings: { customWidth: Math.max(200, Math.min(entitlements.max_export_pixels, Math.round(Number(e.target.value) || 200))) } })}
-                    />
-                  </div>
-                  <div>
-                    <label htmlFor="f-height-px-5428">Height (px)</label>
-                    <input id="f-height-px-5428"
-                      type="number"
-                      min="200"
-                      max={entitlements.max_export_pixels}
-                      step="50"
-                      value={project.layout.exportSettings.customHeight || 0}
-                      onChange={(e) => updateLayout({ exportSettings: { customHeight: Math.max(200, Math.min(entitlements.max_export_pixels, Math.round(Number(e.target.value) || 200))) } })}
-                    />
-                  </div>
-                </div>
-                <p className="export-custom-hint">The editing canvas matches this size — pan &amp; zoom to frame, then export at exactly {project.layout.exportSettings.customWidth || 0}×{project.layout.exportSettings.customHeight || 0}px.</p>
-              </div>
-            )}
-            <div className="button-row">
-              <button className={`btn primary${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('png'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export PNG'}</button>
-              <button className={`btn${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('svg'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export SVG'}</button>
-              <button className={`btn${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('svg_ai'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title="SVG bundled with separate basemap PNG — opens correctly in Adobe Illustrator">{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'SVG (Illustrator)'}</button>
-              <button className={`btn${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('pdf'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export PDF'}</button>
-            </div>
-            {exportError && <div className="export-error-msg">{exportError}</div>}
-          </div>}
-        </section>
+              {exportError && <div className="export-error-msg">{exportError}</div>}
+            </div>}
+          </section>
+          </>
+        )}
       </Sidebar>
 
       <div className="editor-main">
@@ -6218,49 +6406,12 @@ export default function App() {
             <span className="claims-provenance-layer">Layer: {n.layerName}</span>
           </div>
         ))}
-        <div className="map-topbar editor-toolbar">
-          <div className="map-topbar-left">
-            <div className="map-topbar-title">{project.layout.title || 'Project Map'}</div>
-            <div
-              className={`autosave-badge ${isDirty ? 'dirty' : saveFlash ? 'flash' : 'clean'}${!user && !isDirty ? ' local' : ''}`}
-              onClick={!user && !isDirty ? () => setShowAuthFromGate(true) : undefined}
-              role={!user && !isDirty ? 'button' : undefined}
-              title={!user && !isDirty ? 'Saved only on this device — sign in to keep your maps' : undefined}
-            >
-              {isDirty ? 'Unsaved' : saveFlash ? '✓ Saved' : user ? 'Cloud ✓' : 'On this device — sign in to keep'}
-            </div>
+        {exportError && (
+          <div className="ed-banner ed-banner--error" role="alert">
+            {exportError}
+            <button type="button" className="ui-btn ui-btn--sm" onClick={() => setExportError(null)}>Dismiss</button>
           </div>
-          <div className="map-topbar-right">
-            <div className="topbar-btn-group">
-              <button className="topbar-btn" type="button" onClick={() => saveCurrentProject()}>Save</button>
-              <button className="topbar-btn" type="button" onClick={saveAsProject}>Save As</button>
-              <button className="topbar-btn" type="button" onClick={() => setShowRecentProjects(true)}>Open</button>
-              <button className="topbar-btn" type="button" onClick={startNewProject}>New</button>
-              <button className="topbar-btn" type="button" onClick={duplicateCurrentProject}>Dup</button>
-            </div>
-            <div className="topbar-divider" />
-            <div className="topbar-btn-group">
-              <button className="topbar-btn" type="button" aria-label="Zoom out" onClick={() => leafletMapRef.current?.zoomOut(0.5)}>−</button>
-              <button className="topbar-btn" type="button" aria-label="Zoom in" onClick={() => leafletMapRef.current?.zoomIn(0.5)}>+</button>
-            </div>
-            <div className="topbar-divider" />
-            <button className="help-icon-btn" type="button" title="How to use Exploration Maps" onClick={() => setShowHelpModal(true)}>?</button>
-            <button className="topbar-btn primary topbar-share-btn" type="button" title="Share map" onClick={() => { setShareUrl(null); setShowShareModal(true); }}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{marginRight:5,verticalAlign:'middle',marginTop:-1}}>
-                <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
-                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
-              </svg>
-              Share
-            </button>
-            <div className="topbar-btn-group">
-              <button className={`topbar-btn primary${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('png'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing…' : ''}>{exporting ? 'Exporting…' : 'PNG'}</button>
-              <button className={`topbar-btn${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('svg'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting}>SVG</button>
-              <button className={`topbar-btn${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('svg_ai'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title="SVG for Illustrator (ZIP with separate basemap)">AI</button>
-              <button className={`topbar-btn${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('pdf'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting}>PDF</button>
-            </div>
-            {exportError && <div className="export-error-msg">{exportError}</div>}
-          </div>
-        </div>
+        )}
         <div ref={mapViewportRef} className={`map-viewport${constrainedStageSize ? ' map-viewport--ratio-active' : ''}`}>
           {constrainedStageSize && (
             <div className="ratio-frame-badge">
@@ -6273,6 +6424,7 @@ export default function App() {
             ref={mapContainerRef}
             className={`map-stage${constrainedStageSize ? ' map-stage--ratio-constrained' : ''}`}
             data-theme={project.layout.themeId || 'modern_rounded'}
+            data-template={project.layout.templateId || 'technical_results_v2'}
             data-title-accent-style={themeTokens.titleAccentStyle || 'top'}
             data-annotation-tool={annotationTool || ''}
             style={mapStageStyle}
@@ -6343,9 +6495,12 @@ export default function App() {
           const mapRight = stageW - TICK_M;
           const monoFont = "'Courier New', Courier, monospace";
           const fs = Math.max(0.7, Math.min(1.4, Number(project.layout.stripFontScale || 1)));
-          const scaleDisplay = project.layout.manualScaleDenom
-            ? '1:' + Number(String(project.layout.manualScaleDenom).replace(/[^0-9]/g, '')).toLocaleString()
-            : 'Auto';
+          // Exactly what the PNG and SVG exporters print, from the same resolver.
+          const strip = resolveTitleStripFields(project.layout, {
+            scaleText: formatScaleDenom(scaleDenomFromMap(leafletMapRef.current)),
+            projectionText: autoProjectionName(leafletMapRef.current),
+          });
+          const missingStyle = { fontStyle: 'italic' };
           return (
             <>
               {/* Tick margin overlays */}
@@ -6360,36 +6515,29 @@ export default function App() {
                 {/* Cell 0: Title */}
                 <div style={{ flex: '0 0 45%', borderRight: '1px solid #000', padding: '6px 8px', overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
                   <div style={{ fontSize: 8 * fs, fontWeight: 700, color: '#000', marginBottom: 2 }}>TITLE</div>
-                  {project.layout.stripTitle && <div style={{ fontSize: 14 * fs, fontWeight: 700, fontFamily: 'Arial, sans-serif', color: '#000', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{project.layout.stripTitle}</div>}
-                  {project.layout.stripSubtitle && <div style={{ fontSize: 9 * fs, fontFamily: 'Arial, sans-serif', color: '#222', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{project.layout.stripSubtitle}</div>}
+                  {strip.title && <div style={{ fontSize: 14 * fs, fontWeight: 700, fontFamily: 'Arial, sans-serif', color: '#000', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{strip.title}</div>}
+                  {strip.subtitle && <div style={{ fontSize: 9 * fs, fontFamily: 'Arial, sans-serif', color: '#222', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{strip.subtitle}</div>}
                 </div>
                 {/* Cell 1: Scale / Projection */}
                 <div style={{ flex: '0 0 20%', borderRight: '1px solid #000', padding: '6px 8px', overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
                   <div style={{ fontSize: 7 * fs, fontWeight: 700, color: '#000', marginBottom: 1 }}>SCALE</div>
-                  <div style={{ fontSize: 10 * fs, color: '#000', marginBottom: 4 }}>{scaleDisplay}</div>
+                  <div style={{ fontSize: 10 * fs, color: '#000', marginBottom: 4, ...(strip.missing.scale ? missingStyle : null) }}>{strip.scale}</div>
                   <div style={{ fontSize: 7 * fs, fontWeight: 700, color: '#000', marginBottom: 1 }}>PROJECTION</div>
-                  <div style={{ fontSize: 8 * fs, color: '#000' }}>{project.layout.projectionName || (() => {
-                    try {
-                      const c = leafletMapRef.current?.getCenter();
-                      if (!c) return 'WGS84';
-                      const z = Math.floor((c.lng + 180) / 6) + 1;
-                      return `WGS84 / UTM Zone ${z}${c.lat >= 0 ? 'N' : 'S'}`;
-                    } catch { return 'WGS84'; }
-                  })()}</div>
+                  <div style={{ fontSize: 8 * fs, color: '#000' }}>{strip.projection}</div>
                 </div>
                 {/* Cell 2: QP */}
                 <div style={{ flex: '0 0 20%', borderRight: '1px solid #000', padding: '6px 8px', overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
                   <div style={{ fontSize: 7 * fs, fontWeight: 700, color: '#000', marginBottom: 1 }}>QUALIFIED PERSON</div>
-                  <div style={{ fontSize: 10 * fs, color: '#000', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{project.layout.qpName || '—'}</div>
-                  {project.layout.qpCredentials && <div style={{ fontSize: 8 * fs, color: '#000' }}>{project.layout.qpCredentials}</div>}
-                  {project.layout.companyName && <div style={{ fontSize: 7 * fs, color: '#444', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{project.layout.companyName}</div>}
+                  <div style={{ fontSize: 10 * fs, color: '#000', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', ...(strip.missing.qpName ? missingStyle : null) }}>{strip.qpName}</div>
+                  {strip.qpCredentials && <div style={{ fontSize: 8 * fs, color: '#000' }}>{strip.qpCredentials}</div>}
+                  {strip.companyName && <div style={{ fontSize: 7 * fs, color: '#444', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{strip.companyName}</div>}
                 </div>
                 {/* Cell 3: Figure */}
                 <div style={{ flex: '0 0 15%', padding: '6px 8px', overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
                   <div style={{ fontSize: 7 * fs, fontWeight: 700, color: '#000', marginBottom: 1 }}>FIGURE</div>
-                  <div style={{ fontSize: 12 * fs, fontWeight: 700, color: '#000' }}>{project.layout.figureNumber || '—'}</div>
-                  {project.layout.figureRevision && <div style={{ fontSize: 8 * fs, color: '#000' }}>{project.layout.figureRevision}</div>}
-                  {project.layout.mapDate && <div style={{ fontSize: 7 * fs, color: '#444' }}>{project.layout.mapDate}</div>}
+                  <div style={{ fontSize: 12 * fs, fontWeight: 700, color: '#000', ...(strip.missing.figureNumber ? missingStyle : null) }}>{strip.figureNumber}</div>
+                  <div style={{ fontSize: 8 * fs, color: '#000', ...(strip.missing.figureRevision ? missingStyle : null) }}>{strip.figureRevision}</div>
+                  <div style={{ fontSize: 7 * fs, color: '#444', ...(strip.missing.date ? missingStyle : null) }}>{strip.date}</div>
                 </div>
               </div>
             </>
@@ -6513,7 +6661,7 @@ export default function App() {
           </div>
         ) : null}
         {project.layout.showScaleBar !== false && (
-          <div className="template-zone" style={{ ...zoneStyle(resolvedZones.scaleBar), width: project.layout.scaleBarWidthPx || resolvedZones.scaleBar?.width, opacity: dragging?.id === 'scaleBar' ? 0.3 : 1, cursor: 'grab' }} onMouseDown={makeDragHandler('scaleBar', project.layout.scaleBarWidthPx || resolvedZones.scaleBar?.width || 160, project.layout.scaleBarHeightPx ?? 48)}>
+          <div className={`template-zone${project.layout.scaleBarTransparent ? ' panel--transparent' : ''}`} style={{ ...zoneStyle(resolvedZones.scaleBar), width: project.layout.scaleBarWidthPx || resolvedZones.scaleBar?.width, opacity: dragging?.id === 'scaleBar' ? 0.3 : 1, cursor: 'grab' }} onMouseDown={makeDragHandler('scaleBar', project.layout.scaleBarWidthPx || resolvedZones.scaleBar?.width || 160, project.layout.scaleBarHeightPx ?? 48)}>
             <ScaleBar map={leafletMapRef.current} height={project.layout.scaleBarHeightPx ?? 48} />
             <button className="panel-delete-btn" title="Hide scale bar" onClick={() => updateLayout({ showScaleBar: false })}>×</button>
             {makeResizeHandles(project.layout.scaleBarCorner || 'bl', {
@@ -6679,6 +6827,22 @@ export default function App() {
           // Sidebar grid cells (shown for all SP_SIDEBAR_ELEMENTS drags)
           if (SP_SIDEBAR_ELEMENTS.includes(dragging.id)) {
             for (let r = 0; r < 5; r++) {
+              const spanning = dragging.hoverGridSlot?.row === r && dragging.hoverGridSlot?.col === 'full';
+              if (spanning) {
+                // One cell across the row, so "this will span both columns" is
+                // visible before the drop rather than discovered after it.
+                elements.push(
+                  <div key={`cell-${r}-full`}
+                    className="sp-grid-cell sp-grid-cell--active"
+                    style={{
+                      left: sbLeft + 16,
+                      top: 16 + r * (rowH + 6),
+                      width: colW * 2 + 8,
+                      height: rowH,
+                    }} />
+                );
+                continue;
+              }
               for (let c = 0; c < 2; c++) {
                 const isHov = dragging.hoverGridSlot?.row === r && dragging.hoverGridSlot?.col === c;
                 elements.push(
@@ -6712,6 +6876,7 @@ export default function App() {
         })()}
           </div>
         </div>
+      </div>
       </div>
       {dragging && (
         <div className="drag-ghost" style={{
