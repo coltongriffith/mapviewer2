@@ -1,11 +1,16 @@
 export const THEME_TOKENS = {
-  // Investor — deep navy title block, white panels, soft shadows
+  // Investor — deep navy title block, white panels, hairline rules.
+  //
+  // The soft drop shadow and the 10px radius are gone deliberately: they made
+  // every element read as a separate floating card stuck onto the map. What
+  // holds the layout together now is alignment and one hairline rule, which is
+  // how a printed figure does it.
   investor_clean: {
-    panelRadius: 10,
-    panelFill: 'rgba(255,255,255,0.98)',
-    panelBorder: 'rgba(148, 163, 184, 0.28)',
-    panelShadow: '0 4px 20px rgba(15, 23, 42, 0.09)',
-    titleRadius: 10,
+    panelRadius: 3,
+    panelFill: 'rgba(255,255,255,0.97)',
+    panelBorder: 'rgba(23, 32, 42, 0.24)',
+    panelShadow: 'none',
+    titleRadius: 3,
     titleFill: '#0c1a35',
     titleBorder: 'rgba(255,255,255,0.10)',
     titleAccent: null,
@@ -24,12 +29,12 @@ export const THEME_TOKENS = {
     northArrowText: '#0c1a35',
     scaleFill: 'rgba(255,255,255,0.98)',
     scaleStroke: '#0c1a35',
-    insetFill: 'rgba(255,255,255,0.98)',
-    insetBorder: 'rgba(148, 163, 184, 0.28)',
+    insetFill: 'rgba(255,255,255,0.97)',
+    insetBorder: 'rgba(23, 32, 42, 0.24)',
     insetTitle: '#0f172a',
     insetMuted: '#64748b',
-    logoFill: 'rgba(255,255,255,0.98)',
-    logoBorder: 'rgba(148, 163, 184, 0.28)',
+    logoFill: 'rgba(255,255,255,0.97)',
+    logoBorder: 'rgba(23, 32, 42, 0.24)',
     panelAccentLeft: null,
   },
 
@@ -69,11 +74,11 @@ export const THEME_TOKENS = {
 
   // Dark Mode — deep indigo panels, sky-blue accents, high contrast
   modern_dark: {
-    panelRadius: 9,
+    panelRadius: 3,
     panelFill: 'rgba(22,33,62,0.97)',
     panelBorder: 'rgba(56,189,248,0.30)',
-    panelShadow: '0 8px 32px rgba(0,0,0,0.50)',
-    titleRadius: 9,
+    panelShadow: 'none',
+    titleRadius: 3,
     titleFill: 'rgba(8,16,36,0.99)',
     titleBorder: 'rgba(56,189,248,0.35)',
     titleAccent: '#38bdf8',
@@ -103,11 +108,11 @@ export const THEME_TOKENS = {
 
   // Terrain — warm cream panels, earthy brown borders, chocolate title
   warm_terrain: {
-    panelRadius: 6,
+    panelRadius: 3,
     panelFill: 'rgba(255,251,240,1.0)',
     panelBorder: 'rgba(160,110,60,0.40)',
-    panelShadow: '0 3px 14px rgba(100,60,20,0.10)',
-    titleRadius: 6,
+    panelShadow: 'none',
+    titleRadius: 3,
     titleFill: '#3b2213',
     titleBorder: 'rgba(100,60,20,0.40)',
     titleAccent: '#b85c1a',
@@ -137,11 +142,11 @@ export const THEME_TOKENS = {
 
   // Forest — deep forest green panels, gold accents — on-brand for exploration
   forest_dark: {
-    panelRadius: 8,
+    panelRadius: 3,
     panelFill: 'rgba(14,28,14,0.97)',
     panelBorder: 'rgba(80,160,80,0.22)',
-    panelShadow: '0 4px 24px rgba(0,0,0,0.55)',
-    titleRadius: 8,
+    panelShadow: 'none',
+    titleRadius: 3,
     titleFill: 'rgba(8,18,8,0.99)',
     titleBorder: 'rgba(80,160,80,0.28)',
     titleAccent: '#c9a227',

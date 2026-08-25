@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../hooks/useAuth.jsx';
+import BrandMark from './BrandMark';
 import {
   listCloudProjects, loadCloudProject, saveCloudProject,
   renameCloudProject, deleteCloudProject,
@@ -259,13 +260,16 @@ export default function DashboardPage({
   };
 
   const firstName = (user?.email || '').split('@')[0];
+  // Two letters is the whole avatar: no photo to upload, nothing to load.
+  const initials = (user?.email || '?').slice(0, 2).toUpperCase();
 
   return (
     <div className="dash-shell">
       <header className="dash-header">
         <div className="dash-header-left">
           <button className="dash-wordmark" type="button" onClick={onExit} title="Exploration Maps home">
-            Exploration Maps
+            <BrandMark size={26} />
+            <span className="em-wordmark">Exploration&nbsp;<b>Maps</b></span>
           </button>
         </div>
         <nav className="dash-header-nav" aria-label="Account">
@@ -273,6 +277,7 @@ export default function DashboardPage({
           <button className="dash-link" type="button" onClick={onOpenBrandKits}>Brand kits</button>
           <button className="dash-link" type="button" onClick={onOpenAccount}>Settings &amp; billing</button>
           <button className="dash-link muted" type="button" onClick={signOut}>Sign out</button>
+          <span className="dash-avatar" aria-hidden="true">{initials}</span>
         </nav>
       </header>
 

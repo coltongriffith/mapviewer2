@@ -36,6 +36,10 @@ test('clicking a label focuses its control', async ({ page }) => {
   await page.goto('/?intent=drill-results');
   await expect(page.locator('.leaflet-container')).toBeVisible({ timeout: 30_000 });
 
+  // Layout is where the labelled text fields live (title, subtitle, metadata).
+  const layoutTab = page.getByRole('tab', { name: /^layout$/i });
+  if (await layoutTab.count()) await layoutTab.first().click();
+
   // Find a label whose target is a text input — the case a user notices.
   const pair = await page.evaluate(() => {
     for (const l of document.querySelectorAll('label[for]')) {

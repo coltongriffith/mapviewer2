@@ -80,12 +80,23 @@ export function getCornerLayout(layout) {
     }
   }
 
-  // Rebuild from scratch using individual corner keys, grouping each element
-  // into a single-element row (no "beside" grouping by default).
+  // Rebuild from scratch using individual corner keys, one element per row.
+  //
+  // Ordering within a corner is deliberate: where the logo and the title share
+  // one, the logo comes first, so the mark sits directly above the title and
+  // the two read as one block against the same margin. Keeping them in
+  // separate rows (rather than side by side) is what lets the title, the logo
+  // and the legend all hang off a single left rule — the alignment does the
+  // work that a box around each of them used to do.
   const result = { tl: [], tr: [], bl: [], br: [] };
   for (const corner of ['tl', 'tr', 'bl', 'br']) {
     const ids = allIds.filter((id) => assignedCorner[id] === corner);
-    result[corner] = ids.map((id) => [id]);
+    if (ids.includes('logo') && ids.includes('title')) {
+      const rest = ids.filter((id) => id !== 'logo' && id !== 'title');
+      result[corner] = [['logo'], ['title'], ...rest.map((id) => [id])];
+    } else {
+      result[corner] = ids.map((id) => [id]);
+    }
   }
   return result;
 }

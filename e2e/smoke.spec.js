@@ -106,8 +106,13 @@ test.describe('editor', () => {
     await page.goto('/?intent=drill-results');
     await expect(page.locator('.leaflet-container')).toBeVisible({ timeout: 30_000 });
 
-    // The Export section is collapsible; open it if it is not already.
+    // Export settings live in the inspector's Export tab, behind a collapsible
+    // section. Open both if they are not already open.
     const exportBtn = page.getByRole('button', { name: /export png/i });
+    if (!(await exportBtn.count())) {
+      const tab = page.getByRole('tab', { name: /^export$/i });
+      if (await tab.count()) await tab.first().click();
+    }
     if (!(await exportBtn.count())) {
       const toggle = page.getByRole('heading', { name: /^export/i }).first();
       if (await toggle.count()) await toggle.click();

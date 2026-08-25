@@ -722,7 +722,7 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
             autoFocus
           />
           <button
-            className="topbar-btn primary"
+            className="ui-btn ui-btn--primary"
             type="submit"
             disabled={loading || query.trim().length < 2}
             style={{ whiteSpace: 'nowrap' }}

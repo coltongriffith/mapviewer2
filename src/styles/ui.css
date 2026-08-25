@@ -1,0 +1,303 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   UI primitives — the shared control families for the editing interface.
+   One button family, one field family, one disclosure family, one menu,
+   one dialog. Everything here is expressed in tokens; nothing here styles
+   the exported map.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Focus: one visible ring everywhere ─────────────────────────────────────
+   Its own colour, per the brand rules: a focus ring must not read as a
+   selection, and copper means selection. */
+:where(button, a, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--ui-focus);
+  outline-offset: 1px;
+  border-radius: var(--r-sm);
+}
+
+/* ── Buttons ──────────────────────────────────────────────────────────────── */
+.ui-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: var(--ctl-h);
+  padding: 0 10px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--r-md);
+  background: var(--ui-surface);
+  color: var(--ui-text);
+  font-family: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.12s, border-color 0.12s, color 0.12s;
+}
+.ui-btn:hover:not(:disabled) { background: var(--ui-surface-subtle); border-color: var(--ui-border-strong); }
+.ui-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.ui-btn--primary { background: var(--ui-action); border-color: var(--ui-action); color: #fff; }
+.ui-btn--primary:hover:not(:disabled) { background: var(--ui-action-hover); border-color: var(--ui-action-hover); }
+
+.ui-btn--ghost { background: transparent; border-color: transparent; color: var(--ui-text-muted); }
+.ui-btn--ghost:hover:not(:disabled) { background: var(--ui-surface-subtle); border-color: var(--ui-border); color: var(--ui-text); }
+
+
+.ui-btn--sm { height: var(--ctl-h-sm); font-size: var(--fs-label); padding: 0 8px; }
+.ui-btn--block { width: 100%; }
+.ui-btn--icon { width: var(--ctl-h); padding: 0; }
+.ui-btn[aria-pressed='true'] { background: var(--ui-accent-soft); border-color: var(--ui-accent); color: var(--ui-text); }
+
+/* ── Menus (Project, Export, …) ───────────────────────────────────────────── */
+.ui-menu-wrap { position: relative; display: inline-flex; }
+.ui-menu-caret { width: 8px; height: 8px; flex: 0 0 auto; opacity: 0.7; }
+.ui-menu {
+  position: absolute;
+  top: calc(100% + 5px);
+  min-width: 210px;
+  padding: 4px;
+  background: var(--ui-surface);
+  border: 1px solid var(--ui-border);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-overlay);
+  z-index: 1200;
+}
+.ui-menu--right { right: 0; }
+.ui-menu--left { left: 0; }
+.ui-menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  width: 100%;
+  height: var(--ctl-h);
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--ui-text);
+  font-family: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+}
+.ui-menu-item:hover:not(:disabled) { background: var(--ui-surface-subtle); }
+.ui-menu-item:disabled { opacity: 0.45; cursor: not-allowed; }
+.ui-menu-item-hint { color: var(--ui-text-muted); font-size: var(--fs-micro); font-variant-numeric: tabular-nums; }
+.ui-menu-sep { height: 1px; margin: 4px 2px; background: var(--ui-border); }
+.ui-menu-label {
+  padding: 6px 8px 3px;
+  color: var(--ui-text-muted);
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* ── Editor frame ─────────────────────────────────────────────────────────── */
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 0;
+  background: var(--ui-bg);
+  overflow: hidden;
+}
+.ed-body {
+  display: grid;
+  grid-template-columns: var(--inspector-w) minmax(0, 1fr);
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+.app-shell[data-preview='true'] .ed-body { grid-template-columns: minmax(0, 1fr); }
+
+/* ── Toolbar ──────────────────────────────────────────────────────────────── */
+.ed-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  height: var(--toolbar-h);
+  flex: 0 0 auto;
+  padding: 0 var(--sp-3);
+  background: var(--ui-surface);
+  border-bottom: 1px solid var(--ui-border);
+  min-width: 0;
+}
+.ed-toolbar-left { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
+.ed-toolbar-right { display: flex; align-items: center; gap: 6px; margin-left: auto; flex: 0 0 auto; }
+.ed-toolbar-sep { width: 1px; height: 22px; background: var(--ui-border); flex: 0 0 auto; }
+
+.ed-brand {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: var(--ctl-h);
+  padding: 0 8px 0 4px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--ui-text);
+  font-family: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  white-space: nowrap;
+}
+/* The lockup is set, not drawn: "Exploration" light, "Maps" semibold, as in
+   exploration-maps-logo.svg. Building it in text keeps it crisp at 13px,
+   which an embedded <text> element in the SVG does not. */
+.em-wordmark { font-weight: 300; letter-spacing: -0.01em; }
+.em-wordmark b { font-weight: 650; }
+.em-mark { display: block; flex: 0 0 auto; }
+.ed-brand:hover { color: var(--ui-action-hover); }
+
+.ed-doc { display: flex; align-items: baseline; gap: var(--sp-2); min-width: 0; }
+.ed-doc-name {
+  font-size: var(--fs-body);
+  font-weight: 600;
+  color: var(--ui-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 260px;
+}
+.ed-doc-state {
+  font-size: var(--fs-micro);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ui-text-muted);
+  white-space: nowrap;
+  background: none;
+  border: 0;
+  padding: 0;
+  font-family: inherit;
+}
+.ed-doc-state--dirty { color: var(--ui-warning); }
+.ed-doc-state--saved { color: var(--ui-success); }
+.ed-doc-state--action { cursor: pointer; text-decoration: underline dotted; text-underline-offset: 2px; }
+
+/* ── Inspector ────────────────────────────────────────────────────────────── */
+.inspector {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  background: var(--ui-surface);
+  border-right: 1px solid var(--ui-border);
+}
+.ins-tabs {
+  display: flex;
+  flex: 0 0 auto;
+  border-bottom: 1px solid var(--ui-border);
+  background: var(--ui-surface-subtle);
+}
+.ins-tab {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 34px;
+  padding: 0 2px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--ui-text-muted);
+  font-family: inherit;
+  font-size: var(--fs-label);
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ins-tab:hover { color: var(--ui-text); }
+.ins-tab[aria-selected='true'] {
+  color: var(--ui-text);
+  background: var(--ui-surface);
+  border-bottom-color: var(--ui-accent);
+}
+.ins-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: var(--sp-3);
+}
+.ins-footer { flex: 0 0 auto; border-top: 1px solid var(--ui-border); }
+.ins-sheet-head { display: none; }
+
+/* ── Section headings inside the inspector ────────────────────────────────── */
+.ins-group-title {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ui-text-muted);
+}
+.ins-hint { margin: 0 0 var(--sp-3); font-size: var(--fs-sm); color: var(--ui-text-muted); line-height: 1.5; }
+
+/* ── Mobile: map-first, inspector as a bottom sheet ───────────────────────── */
+.ed-sheet-scrim { display: none; }
+.ed-mobile-only { display: none !important; }
+
+@media (max-width: 900px) {
+  .ed-mobile-only { display: inline-flex !important; }
+  .ed-desktop-only { display: none !important; }
+
+  .ed-body { grid-template-columns: minmax(0, 1fr); }
+  /* One row, no scroller: labels collapse to their icons so every action still
+     fits at 390px and nothing is pushed off the edge. */
+  .ed-toolbar { gap: 6px; padding: 0 6px; }
+  .ed-wide-label { display: none; }
+  .ed-doc { display: none; }
+  .ed-brand { padding: 0 4px; }
+
+  .ed-toolbar .ui-btn,
+  .ed-toolbar .ed-brand { height: var(--ctl-h-touch); min-width: var(--ctl-h-touch); }
+  .ed-toolbar .ui-btn { padding: 0 8px; }
+
+  .inspector {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    top: auto;
+    z-index: 1400;
+    height: min(74vh, 620px);
+    border-right: 0;
+    border-top: 1px solid var(--ui-border-strong);
+    border-radius: var(--r-lg) var(--r-lg) 0 0;
+    box-shadow: var(--shadow-overlay);
+    transform: translateY(calc(100% + 8px));
+    transition: transform 0.22s ease;
+    visibility: hidden;
+  }
+  .inspector[data-open='true'] { transform: translateY(0); visibility: visible; }
+
+  .ins-sheet-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-2);
+    flex: 0 0 auto;
+    padding: var(--sp-2) var(--sp-3);
+    border-bottom: 1px solid var(--ui-border);
+  }
+  .ins-sheet-grip { width: 36px; height: 4px; border-radius: 999px; background: var(--ui-border-strong); }
+  .ins-tab { height: var(--ctl-h-touch); font-size: var(--fs-sm); }
+  .ins-scroll { padding: var(--sp-3) var(--sp-3) var(--sp-6); }
+
+  .ed-sheet-scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 1390;
+    background: rgba(23, 32, 42, 0.32);
+    border: 0;
+  }
+}

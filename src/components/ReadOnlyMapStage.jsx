@@ -276,6 +276,7 @@ export default function ReadOnlyMapStage({ project }) {
       ref={containerRef}
       className="map-stage"
       data-theme={layout.themeId || 'modern_rounded'}
+      data-template={layout.templateId || 'technical_results_v2'}
       data-title-accent-style={themeTokens.titleAccentStyle || 'top'}
       style={mapStageStyle}
     >
@@ -431,7 +432,7 @@ export default function ReadOnlyMapStage({ project }) {
 
       {/* North arrow */}
       {layout.showNorthArrow !== false && resolvedZones.northArrow?.width > 0 && (
-        <div className="template-zone" style={zoneStyle(resolvedZones.northArrow)}>
+        <div className={`template-zone${layout.northArrowTransparent ? ' panel--transparent' : ''}`} style={zoneStyle(resolvedZones.northArrow)}>
           <NorthArrow scale={layout.northArrowHeightPx ?? 100} style={layout.northArrowStyle || 'classic'} />
         </div>
       )}
@@ -458,7 +459,7 @@ export default function ReadOnlyMapStage({ project }) {
 
       {/* Scale bar */}
       {layout.showScaleBar !== false && (
-        <div className="template-zone" style={{ ...zoneStyle(resolvedZones.scaleBar), width: layout.scaleBarWidthPx || resolvedZones.scaleBar?.width }}>
+        <div className={`template-zone${layout.scaleBarTransparent ? ' panel--transparent' : ''}`} style={{ ...zoneStyle(resolvedZones.scaleBar), width: layout.scaleBarWidthPx || resolvedZones.scaleBar?.width }}>
           <ScaleBar map={map} height={layout.scaleBarHeightPx ?? 48} />
         </div>
       )}

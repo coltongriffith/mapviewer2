@@ -37,7 +37,7 @@ const brand = (extra = {}) => ({
   insetTitle: 'Location Map',
   legendTitle: 'Legend',
   northArrowStyle: 'arrow',
-  cornerRadius: 10,
+  cornerRadius: 3,
   ...extra,
 });
 
