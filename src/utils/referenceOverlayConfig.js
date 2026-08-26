@@ -8,7 +8,7 @@
 // `parties` is the single source of truth for attribution. The Leaflet control
 // and the exported margin note are both DERIVED from it, because the two had
 // already drifted: the export credited "OpenStreetMap" for two layers that
-// Leaflet correctly credited to "OpenStreetMap © CARTO", leaving CARTO
+// Leaflet correctly credited to their host as well, leaving that host
 // uncredited in the one artifact a reader actually receives. A second hand-kept
 // list would just reintroduce that.
 export const REFERENCE_OVERLAY_CONFIG = {
@@ -31,17 +31,24 @@ export const REFERENCE_OVERLAY_CONFIG = {
     zIndex: 345,
   },
   context: {
-    url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-    parties: ['OpenStreetMap contributors', 'CARTO'],
+    // Esri World Street Map. It replaced CARTO's light_all, which — like every
+    // other basemaps.cartocdn.com layer — now answers with "API KEY REQUIRED"
+    // watermarked across the tile.
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+    parties: ['Esri', 'HERE', 'Garmin', 'OpenStreetMap contributors'],
     creditLabel: 'Roads and settlements',
     opacityFactor: 0.95,
+    maxNativeZoom: 19,
     zIndex: 350,
   },
   labels: {
-    url: 'https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png',
-    parties: ['OpenStreetMap contributors', 'CARTO'],
-    creditLabel: 'Place labels',
+    // Transparent: boundaries and place names only, so it annotates whatever
+    // basemap is underneath rather than covering it.
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+    parties: ['Esri', 'HERE', 'Garmin', 'OpenStreetMap contributors'],
+    creditLabel: 'Place labels and boundaries',
     opacityFactor: 0.95,
+    maxNativeZoom: 19,
     zIndex: 360,
   },
   rail: {

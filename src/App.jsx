@@ -71,6 +71,7 @@ import { runCloudMigration } from './utils/cloudMigration';
 import { scopingWarning } from './utils/scopingNotice';
 import { CLAIM_NAME_CAVEAT } from './utils/claimProvenance';
 import { OVERLAY_DESCRIPTIONS } from './utils/referenceOverlayCredits.js';
+import { BASEMAPS, BASEMAP_KEYS, basemapThumb } from './utils/basemapConfig.js';
 import {
   applyLegendCustomization, customLegendItem, nextCustomLegendId,
   LEGEND_SYMBOLS, DEFAULT_LEGEND_SYMBOL, DEFAULT_LEGEND_COLOR,
@@ -171,14 +172,14 @@ const legendFillRgba = (hex, alpha) => {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 };
 
-const BASEMAP_OPTIONS = [
-  { key: 'light',     label: 'Light',     thumb: 'https://a.basemaps.cartocdn.com/rastertiles/voyager_nolabels/4/2/5.png' },
-  { key: 'dark',      label: 'Dark',      thumb: 'https://a.basemaps.cartocdn.com/dark_all/4/2/5.png' },
-  { key: 'terrain',   label: 'Terrain',   thumb: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/4/5/2' },
-  { key: 'satellite', label: 'Satellite', thumb: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/4/5/2' },
-  { key: 'natgeo',    label: 'NatGeo',    thumb: 'https://server.arcgisonline.com/ArcGIS/rest/services/NatGeo_World_Map/MapServer/tile/4/5/2' },
-  { key: 'blank',     label: 'Blank',     thumb: null },
-];
+// Built from the same definitions the map draws with, so a preview cannot show
+// one basemap while the canvas shows another — a thumbnail left pointing at a
+// retired tile service still looks like a thumbnail, so nobody reports it.
+const BASEMAP_OPTIONS = BASEMAP_KEYS.map((key) => ({
+  key,
+  label: BASEMAPS[key].label,
+  thumb: basemapThumb(key),
+}));
 
 const MARKER_TYPES = {
   circle: 'Circle',

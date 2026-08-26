@@ -1,13 +1,6 @@
 import React, { useEffect, useRef } from "react";
 import L from "leaflet";
-
-const BASEMAPS = {
-  light:    'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png',
-  dark:     'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-  terrain:  'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
-  satellite:'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-  natgeo:   'https://server.arcgisonline.com/ArcGIS/rest/services/NatGeo_World_Map/MapServer/tile/{z}/{y}/{x}',
-};
+import { BASEMAPS } from "../utils/basemapConfig.js";
 
 export default function InsetMap({ mainMap, basemap }) {
   const elRef = useRef(null);
@@ -30,7 +23,11 @@ export default function InsetMap({ mainMap, basemap }) {
       map.removeLayer(tileRef.current);
       tileRef.current = null;
     }
-    tileRef.current = L.tileLayer(BASEMAPS[basemap] || BASEMAPS.light, { crossOrigin: true }).addTo(map);
+    const cfg = BASEMAPS[basemap]?.url ? BASEMAPS[basemap] : BASEMAPS.light;
+    tileRef.current = L.tileLayer(cfg.url, {
+      crossOrigin: true,
+      maxNativeZoom: cfg.maxNativeZoom,
+    }).addTo(map);
   }, [basemap]);
 
   useEffect(() => {

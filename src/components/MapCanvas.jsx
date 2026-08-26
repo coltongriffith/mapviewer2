@@ -9,34 +9,7 @@ import dissolveGeo from '@turf/dissolve';
 import { reportError } from '../utils/errorReporter';
 import { featureKey, visibleGeojson } from '../utils/featureIdentity.js';
 import { REFERENCE_OVERLAY_CONFIG, overlayAttribution } from '../utils/referenceOverlayConfig.js';
-
-const BASEMAPS = {
-  light: {
-    // Voyager variant: blue water, readable roads, no labels — cleaner for mining maps
-    url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png',
-    attribution: '&copy; OpenStreetMap &copy; CARTO',
-  },
-  dark: {
-    url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-    attribution: '&copy; OpenStreetMap &copy; CARTO',
-  },
-  terrain: {
-    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
-    attribution: '&copy; Esri',
-  },
-  satellite: {
-    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-    attribution: '&copy; Esri',
-  },
-  natgeo: {
-    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/NatGeo_World_Map/MapServer/tile/{z}/{y}/{x}',
-    attribution: '&copy; Esri, National Geographic Society',
-  },
-  blank: {
-    url: '',
-    attribution: '',
-  },
-};
+import { basemapConfig } from '../utils/basemapConfig.js';
 
 // Definitions live in utils/referenceOverlayConfig.js, shared with the
 // exporter's credit block. Keeping a second copy here is what let the two
@@ -121,7 +94,7 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
     if (!map) return;
 
     const key = project?.layout?.basemap || 'light';
-    const cfg = BASEMAPS[key] || BASEMAPS.light;
+    const cfg = basemapConfig(key);
 
     if (baseLayerRef.current) {
       map.removeLayer(baseLayerRef.current);
@@ -136,6 +109,11 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
     baseLayerRef.current = L.tileLayer(cfg.url, {
       attribution: cfg.attribution,
       maxZoom: 21,
+      // Every tile service stops publishing somewhere. Past that level Leaflet
+      // upscales the deepest tile it can actually get instead of requesting
+      // one that does not exist and leaving the basemap blank underneath the
+      // claims — which is indistinguishable from the Blank basemap.
+      maxNativeZoom: cfg.maxNativeZoom,
       crossOrigin: true,
       updateWhenIdle: true,
       keepBuffer: 4,
@@ -164,6 +142,9 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
         const opts = {
           attribution: cfg.attribution,
           maxZoom: cfg.maxZoom || 20,
+          // Same reason as the basemap: past a service's deepest published
+          // level, upscale rather than ask for tiles that do not exist.
+          maxNativeZoom: cfg.maxNativeZoom,
           crossOrigin: true,
           updateWhenIdle: true,
           keepBuffer: 3,

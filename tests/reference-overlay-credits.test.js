@@ -67,7 +67,7 @@ describe('referenceOverlayCredits', () => {
   // derive from that list, so dropping a name there changes both together and
   // every such assertion stays green. The URL is independent of both.
   const HOST_REQUIRES = [
-    { host: /cartocdn\.com/, parties: ['CARTO', 'OpenStreetMap'] },
+    { host: /arcgisonline\.com/, parties: ['Esri', 'OpenStreetMap'] },
     { host: /openrailwaymap\.org/, parties: ['OpenRailwayMap', 'OpenStreetMap'] },
     { host: /mrdata\.usgs\.gov/, parties: ['USGS'] },
   ];

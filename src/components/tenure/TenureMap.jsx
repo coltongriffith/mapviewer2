@@ -3,6 +3,8 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { daysRemaining, urgencyBand, formatDaysRemaining, formatGovernmentDate } from '../../utils/tenureDates';
 import { esc } from '../../utils/claimInfo';
+import { BASEMAPS } from '../../utils/basemapConfig.js';
+import { REFERENCE_OVERLAY_CONFIG, overlayAttribution } from '../../utils/referenceOverlayConfig.js';
 
 // The portfolio map.
 //
@@ -17,12 +19,11 @@ import { esc } from '../../utils/claimInfo';
 // separate red from orange, and the table beside it states the band in words.
 // Nothing here is the only way to learn a claim's status.
 
-const BASEMAP = {
-  // Same tiles as the editor's default, so the two views look like one product.
-  url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png',
-  attribution: '&copy; OpenStreetMap &copy; CARTO',
-};
-const LABELS = 'https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png';
+// Same tiles as the editor's default, so the two views look like one product —
+// imported rather than copied, because the copy is what left this map showing
+// watermarked tiles after the editor's had already been fixed.
+const BASEMAP = BASEMAPS.light;
+const LABELS = REFERENCE_OVERLAY_CONFIG.labels;
 
 // British Columbia, when there is nothing to fit to.
 const BC_CENTER = [54.5, -125.0];
@@ -146,8 +147,17 @@ export default function TenureMap({
       // Keyboard panning/zooming on, so the map is not a pointer-only island.
       keyboard: true,
     });
-    L.tileLayer(BASEMAP.url, { attribution: BASEMAP.attribution, maxZoom: 19 }).addTo(map);
-    L.tileLayer(LABELS, { attribution: '', maxZoom: 19, opacity: 0.9 }).addTo(map);
+    L.tileLayer(BASEMAP.url, {
+      attribution: BASEMAP.attribution,
+      maxZoom: 19,
+      maxNativeZoom: BASEMAP.maxNativeZoom,
+    }).addTo(map);
+    L.tileLayer(LABELS.url, {
+      attribution: overlayAttribution('labels'),
+      maxZoom: 19,
+      maxNativeZoom: LABELS.maxNativeZoom,
+      opacity: 0.9,
+    }).addTo(map);
     mapRef.current = map;
     return () => {
       map.remove();
