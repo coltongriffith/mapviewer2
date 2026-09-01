@@ -61,25 +61,35 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+          cache: npm
 
-      - name: Install dependencies
-        run: npm install
+      - name: Install (locked)
+        run: npm ci
 
+      # Free-text inputs reach the shell through the environment, never by
+      # inline `${{ }}` interpolation into the script — an input containing
+      # shell metacharacters would otherwise be executed as part of it.
       - name: 01 — Fetch issuers (manual list preferred; TSXV/CSE best-effort)
+        env:
+          ISSUERS_CSV_PATH: ${{ inputs.issuers_csv_path }}
+          TSXV_XLSX_PATH: ${{ inputs.tsxv_xlsx_path }}
+          CSE_CSV_PATH: ${{ inputs.cse_csv_path }}
         run: |
-          ARGS=""
-          if [ -n "${{ inputs.issuers_csv_path }}" ]; then ARGS="$ARGS --issuers-csv ${{ inputs.issuers_csv_path }}"; fi
-          if [ -n "${{ inputs.tsxv_xlsx_path }}" ]; then ARGS="$ARGS --xlsx ${{ inputs.tsxv_xlsx_path }}"; fi
-          if [ -n "${{ inputs.cse_csv_path }}" ]; then ARGS="$ARGS --cse-csv ${{ inputs.cse_csv_path }}"; fi
-          node scripts/pseo/01_fetch_issuers.mjs $ARGS
+          set -- 
+          if [ -n "$ISSUERS_CSV_PATH" ]; then set -- "$@" --issuers-csv "$ISSUERS_CSV_PATH"; fi
+          if [ -n "$TSXV_XLSX_PATH" ]; then set -- "$@" --xlsx "$TSXV_XLSX_PATH"; fi
+          if [ -n "$CSE_CSV_PATH" ]; then set -- "$@" --cse-csv "$CSE_CSV_PATH"; fi
+          node scripts/pseo/01_fetch_issuers.mjs "$@"
 
       - name: 02 — Fetch BC claims (full pull)
         run: node scripts/pseo/02_fetch_claims_bc.mjs
 
       - name: 03 — Fetch Ontario claims (full pull)
+        env:
+          ON_LAYER: ${{ inputs.on_layer }}
         run: |
-          if [ -n "${{ inputs.on_layer }}" ]; then
-            node scripts/pseo/03_fetch_claims_on.mjs --layer "${{ inputs.on_layer }}"
+          if [ -n "$ON_LAYER" ]; then
+            node scripts/pseo/03_fetch_claims_on.mjs --layer "$ON_LAYER"
           else
             node scripts/pseo/03_fetch_claims_on.mjs
           fi
@@ -88,9 +98,11 @@ jobs:
         run: node scripts/pseo/04_match_owners.mjs
 
       - name: 05 — Fetch per-ticker claim geometry
+        env:
+          ON_LAYER: ${{ inputs.on_layer }}
         run: |
-          if [ -n "${{ inputs.on_layer }}" ]; then
-            node scripts/pseo/05_fetch_geometry.mjs --layer "${{ inputs.on_layer }}"
+          if [ -n "$ON_LAYER" ]; then
+            node scripts/pseo/05_fetch_geometry.mjs --layer "$ON_LAYER"
           else
             node scripts/pseo/05_fetch_geometry.mjs
           fi

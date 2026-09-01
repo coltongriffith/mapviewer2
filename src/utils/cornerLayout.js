@@ -102,14 +102,6 @@ export function getCornerLayout(layout) {
 }
 
 /**
- * Return a flat ordered list of element IDs for a given corner,
- * in stacking order (row[0] first).
- */
-export function getCornerOrder(cornerLayout, corner) {
-  return (cornerLayout[corner] || []).flat();
-}
-
-/**
  * Find which corner and row index an element is in.
  * Returns { corner, rowIndex, colIndex } or null.
  */
@@ -122,76 +114,6 @@ export function findElement(cornerLayout, id) {
     }
   }
   return null;
-}
-
-/**
- * Move an element's row up (toward row 0) within its corner.
- * If the element is in a 2-element row, the whole row moves.
- * Returns a new cornerLayout (immutable).
- */
-export function moveRowUp(cornerLayout, id) {
-  const pos = findElement(cornerLayout, id);
-  if (!pos || pos.rowIndex === 0) return cornerLayout;
-  const { corner, rowIndex } = pos;
-  const rows = [...cornerLayout[corner]];
-  // Swap row with the one above
-  [rows[rowIndex - 1], rows[rowIndex]] = [rows[rowIndex], rows[rowIndex - 1]];
-  return { ...cornerLayout, [corner]: rows };
-}
-
-/**
- * Move an element's row down within its corner.
- */
-export function moveRowDown(cornerLayout, id) {
-  const pos = findElement(cornerLayout, id);
-  if (!pos) return cornerLayout;
-  const { corner, rowIndex } = pos;
-  const rows = [...cornerLayout[corner]];
-  if (rowIndex >= rows.length - 1) return cornerLayout;
-  [rows[rowIndex], rows[rowIndex + 1]] = [rows[rowIndex + 1], rows[rowIndex]];
-  return { ...cornerLayout, [corner]: rows };
-}
-
-/**
- * Toggle "beside" for an element with the previous element in the same corner.
- * "Previous" = last element of the row directly above this element's row.
- *
- * When toggling ON:  merge [prevRow] and [thisRow] into one 2-element row.
- * When toggling OFF: split a 2-element row back into two 1-element rows.
- *
- * Returns a new cornerLayout.
- */
-export function toggleBeside(cornerLayout, id) {
-  const pos = findElement(cornerLayout, id);
-  if (!pos) return cornerLayout;
-  const { corner, rowIndex, colIndex } = pos;
-  const rows = cornerLayout[corner];
-  const thisRow = rows[rowIndex];
-
-  if (thisRow.length === 2) {
-    // Currently beside → split into two rows
-    const newRows = [
-      ...rows.slice(0, rowIndex),
-      [thisRow[0]],
-      [thisRow[1]],
-      ...rows.slice(rowIndex + 1),
-    ];
-    return { ...cornerLayout, [corner]: newRows };
-  }
-
-  // Currently solo → try to merge with row above
-  if (rowIndex === 0) return cornerLayout; // no row above
-  const prevRow = rows[rowIndex - 1];
-  if (prevRow.length >= 2) return cornerLayout; // prev row already full
-
-  // Merge: put this element at end of prev row, remove this row
-  const merged = [...prevRow, id];
-  const newRows = [
-    ...rows.slice(0, rowIndex - 1),
-    merged,
-    ...rows.slice(rowIndex + 1),
-  ];
-  return { ...cornerLayout, [corner]: newRows };
 }
 
 /** Remove an element from wherever it is, returning cleaned rows for its old corner. */
@@ -268,37 +190,4 @@ export function moveToCornerBeside(cornerLayout, id, newCorner) {
     }
   }
   return { ...cleaned, [newCorner]: targetRows };
-}
-
-/**
- * Check whether the "beside" toggle should be enabled for an element.
- * Enabled when:
- *   - The element is currently a solo row (not already in a 2-element row as the first item)
- *     OR the element is already beside (to allow toggling off)
- *   - If the element is solo: the row above exists and has < 2 elements
- */
-export function besideEnabled(cornerLayout, id) {
-  const pos = findElement(cornerLayout, id);
-  if (!pos) return false;
-  const { corner, rowIndex } = pos;
-  const rows = cornerLayout[corner];
-  const thisRow = rows[rowIndex];
-
-  // If already in a 2-element row, beside is "active" (can toggle off)
-  if (thisRow.length === 2) return true;
-
-  // Solo: check if row above exists and has space
-  if (rowIndex === 0) return false;
-  const prevRow = rows[rowIndex - 1];
-  return prevRow.length < 2;
-}
-
-/**
- * Check whether "beside" is currently active for an element
- * (i.e. it's in a 2-element row).
- */
-export function besideActive(cornerLayout, id) {
-  const pos = findElement(cornerLayout, id);
-  if (!pos) return false;
-  return cornerLayout[pos.corner][pos.rowIndex].length === 2;
 }

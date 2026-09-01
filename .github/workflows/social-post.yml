@@ -8,6 +8,9 @@ on:
   # Allow manual trigger from the Actions tab (for testing)
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   post:
     runs-on: ubuntu-latest

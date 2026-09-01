@@ -81,10 +81,6 @@ const roleStyleMap = {
   },
 };
 
-export const LAYER_PRESETS = Object.fromEntries(
-  Object.entries(roleStyleMap).map(([key, style]) => [key, { label: key, style }])
-);
-
 export function getRoleDefaultStyle(role) {
   return { ...(roleStyleMap[role] || roleStyleMap.claims) };
 }

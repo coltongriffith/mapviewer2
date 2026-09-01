@@ -1,6 +1,6 @@
 import { supabase } from '../lib/supabase';
 import { trackEvent, trackEventOnce } from './track';
-import { FREE_PROJECT_LIMIT, isGrandfathered } from './pricing';
+import { FREE_PROJECT_LIMIT } from './pricing';
 
 function requireSupabase() {
   if (!supabase) throw new Error('Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to your environment.');
@@ -87,7 +87,7 @@ function projectLimitError() {
  * @returns {Promise<string|{id:string, revision:number}>}
  */
 export async function saveCloudProject({ id, name, payload, silent = false, expectedRevision }) {
-  const user = await currentUser();
+  await currentUser(); // throws when signed out — the guard is the point, not the value
 
   const cleanName = (name || payload?.layout?.title || 'Untitled map');
 

@@ -66,14 +66,21 @@ Deno.serve(async (req) => {
 
     const db = createClient(SUPABASE_URL, SERVICE_ROLE);
 
-    // Dedupe: only welcome an address once (requires leads.welcomed_at).
-    const { data: prior } = await db
+    // Only an address that actually came through lead capture may be
+    // welcomed. The lead row is written by /api/track, which validates the
+    // address and rate-limits by IP. Without this check the function is an
+    // open relay: anyone holding the (public) anon key could have our welcome
+    // email sent to any address they choose.
+    const { data: lead } = await db
       .from('leads')
-      .select('id')
+      .select('id, welcomed_at')
       .eq('email', addr)
-      .not('welcomed_at', 'is', null)
-      .limit(1);
-    if (prior && prior.length) return json({ skipped: 'already welcomed' });
+      .order('captured_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!lead) return json({ skipped: 'not a captured lead' });
+    // Dedupe: only welcome an address once (requires leads.welcomed_at).
+    if (lead.welcomed_at) return json({ skipped: 'already welcomed' });
 
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',

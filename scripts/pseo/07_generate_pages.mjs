@@ -108,7 +108,7 @@ ${body}
 </html>`;
 }
 
-function companyPage({ iss, claims, geo, neighbours, updated }) {
+function companyPage({ iss, claims, neighbours, updated }) {
   const provs = [...new Set(claims.map((c) => c.province))];
   const provNames = provs.map((p) => PROV_NAME[p] || p).join(' and ');
   // Some registries (Ontario MLAS) don't publish a claim area and the polygon
@@ -311,7 +311,7 @@ function main() {
   }
 
   const published = [];
-  for (const [ticker, owners] of ownersByTicker) {
+  for (const ticker of ownersByTicker.keys()) {
     const iss = issuerByTicker.get(ticker);
     if (!iss) { console.warn(`  ! ${ticker}: not in issuers.csv — skipped`); continue; }
     const liveClaims = liveClaimsByTicker.get(ticker);

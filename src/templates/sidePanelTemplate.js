@@ -1,4 +1,3 @@
-import { ROLE_LABELS, POINT_ROLES } from '../projectState';
 import { hasVisibleFeatures } from '../utils/featureIdentity.js';
 
 const SIDEBAR_FRAC = 0.28;
@@ -93,7 +92,6 @@ export function resolveSidePanelZones(template, layout, mapSize, legendItems) {
   const titleHeight = Math.max(72, Math.min(180, layout?.titleHeightPx ?? 108));
   const logoScale = Math.max(0.7, Math.min(1.2, Number(layout?.logoScale || 1)));
   const logoH = layout?.logo ? (layout?.logoHeightPx ? Math.max(20, Math.min(160, layout.logoHeightPx)) : Math.round(52 * logoScale)) : 0;
-  const logoW = layout?.logoWidthPx ? Math.max(40, Math.min(innerW, layout.logoWidthPx)) : Math.min(innerW, Math.round(innerW * 0.75));
   const naH = layout?.northArrowHeightPx ?? 72;
   const naW = Math.round(naH * 0.9);
   const footerH = layout?.footerHeightPx ? Math.max(22, Math.min(200, layout.footerHeightPx)) : 28;
@@ -105,7 +103,6 @@ export function resolveSidePanelZones(template, layout, mapSize, legendItems) {
   const insetH = layout?.insetHeightPx
     ? Math.max(80, Math.min(300, layout.insetHeightPx))
     : Math.round(H * 0.22);
-  const insetW = innerW;
 
   // Determine which elements are in the sidebar grid
   const rawGrid = layout?.sidePanelGrid || layout?.sidePanelOrder || DEFAULT_SIDE_PANEL_GRID;
@@ -292,7 +289,7 @@ export function mapSlotPositions(mapAreaW, mapH, elemW = 80, elemH = 80) {
   };
 }
 
-export function buildSidePanelLegendItems(layers, layout) {
+export function buildSidePanelLegendItems(layers, _layout) {
   const items = [];
   for (const layer of (layers || [])) {
     if (!layer.visible || !layer.geojson) continue;

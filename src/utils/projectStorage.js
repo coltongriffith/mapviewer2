@@ -239,10 +239,6 @@ export function duplicateProjectRecord({ sourcePayload, name }) {
   });
 }
 
-export function getProjectRecord(id) {
-  return listProjects().find((item) => item.id === id) || null;
-}
-
 // Cheap, targeted thumbnail-only update — doesn't bump updatedAt/sort order
 // or rewrite payload, so a background thumbnail refresh stays invisible.
 export function updateProjectThumbnailRecord(id, thumbnail) {

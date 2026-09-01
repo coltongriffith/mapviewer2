@@ -17,6 +17,22 @@ const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 const MAX_MESSAGE = 500;
 const MAX_STACK = 4000;
+// Whole-report ceiling. message + stack are capped individually below, but the
+// body also carries free-form `context`, and without a total bound a caller
+// could write megabyte rows into error_events at the rate limit.
+const MAX_BODY_BYTES = 16 * 1024;
+const MAX_CONTEXT_BYTES = 2 * 1024;
+
+// Free-form client context is stored as-is, so it is the one field a caller
+// could use to smuggle arbitrary large blobs into the table. Cap it.
+function boundedContext(value) {
+  if (!value || typeof value !== 'object') return null;
+  try {
+    return JSON.stringify(value).length <= MAX_CONTEXT_BYTES ? value : { truncated: true };
+  } catch {
+    return null;
+  }
+}
 
 // Strip anything that looks like a secret or personal identifier before the
 // report is stored. Stack traces and messages routinely contain URLs with
@@ -58,7 +74,10 @@ export default async function handler(req, res) {
   if (!SUPABASE_URL || !SERVICE_KEY) return res.status(204).end();
 
   try {
-    const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
+    const raw = req.body;
+    if (typeof raw === 'string' && raw.length > MAX_BODY_BYTES) return res.status(204).end();
+    const body = typeof raw === 'string' ? JSON.parse(raw) : (raw || {});
+    if (JSON.stringify(body).length > MAX_BODY_BYTES) return res.status(204).end();
     const kind = ['error', 'unhandledrejection', 'react', 'api'].includes(body.kind) ? body.kind : 'error';
     const message = redact(body.message)?.slice(0, MAX_MESSAGE);
     if (!message) return res.status(204).end();
@@ -105,7 +124,7 @@ export default async function handler(req, res) {
         session_id: sessionId,
         user_id: userId,
         user_agent: String(req.headers?.['user-agent'] || '').slice(0, 300),
-        context: body.context && typeof body.context === 'object' ? body.context : null,
+        context: boundedContext(body.context),
         fingerprint: fp,
       });
     }

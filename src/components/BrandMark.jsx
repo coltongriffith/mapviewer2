@@ -50,11 +50,3 @@ export default function BrandMark({ size = 20, reversed = false, className = '' 
 }
 
 /** The full lockup: mark plus the two-weight wordmark. */
-export function BrandLockup({ size = 20, reversed = false }) {
-  return (
-    <>
-      <BrandMark size={size} reversed={reversed} />
-      <span className="em-wordmark">Exploration&nbsp;<b>Maps</b></span>
-    </>
-  );
-}

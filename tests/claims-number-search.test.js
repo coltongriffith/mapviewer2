@@ -16,8 +16,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 // the point: the engine must behave correctly whichever way round the types
 // are, because it resolves them at runtime.
 
-const MB_SERVICE = 'https://rdmaps.gov.mb.ca/arcgis/rest/services/iMaQs/imaqsMining/MapServer';
-
 // Numeric primary identifier + string secondary. The combination that broke.
 const MB_FIELDS = [
   { name: 'OBJECTID', type: 'esriFieldTypeOID' },
@@ -111,7 +109,7 @@ describe('Manitoba claim-number search', () => {
   });
 
   it('does not inject a numeric comparison for a non-numeric term', async () => {
-    const res = await run({ q: 'CB12345', type: 'number', province: 'mb' });
+    await run({ q: 'CB12345', type: 'number', province: 'mb' });
     expect(queryUrls[0]).not.toMatch(/TENURE_NUMBER_ID *= *CB/i);
   });
 

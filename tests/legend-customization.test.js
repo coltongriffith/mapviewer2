@@ -232,7 +232,6 @@ describe('legend swatches all come from one renderer', () => {
   const LEGEND_SURFACES = [
     'src/App.jsx',
     'src/components/ReadOnlyMapStage.jsx',
-    'src/components/Legend.jsx',
     'src/components/LegendEditor.jsx',
   ];
 

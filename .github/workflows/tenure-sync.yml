@@ -45,6 +45,9 @@ concurrency:
   group: tenure-sync
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
   sync:
     runs-on: ubuntu-latest

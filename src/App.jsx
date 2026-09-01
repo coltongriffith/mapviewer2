@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import RatioSwitcher from './components/RatioSwitcher';
 import Sidebar from './components/Sidebar';
 import LayerList from './components/LayerList';
@@ -44,13 +43,13 @@ import {
   TEMPLATE_MODES,
   TEMPLATE_THEMES,
 } from './projectState';
-import { EXPORT_RATIOS, SNAP_THRESHOLD } from './constants';
+import { EXPORT_RATIOS } from './constants';
 import { applyRoleToLayer, inferRoleFromLayer } from './mapPresets';
 import { getTemplate } from './templates';
 import { buildLegendItems, resolveTemplateZones } from './templates/technicalResultsTemplate';
 import { resolveNI43101Zones, resolveTitleStripFields } from './templates/technicalReportTemplate';
 import { DEFAULT_SIDE_PANEL_GRID, resolveSidePanelZones, mapSlotPositions } from './templates/sidePanelTemplate';
-import { geojsonBounds, geojsonCenter, unionBounds } from './utils/geometry';
+import { geojsonBounds, geojsonCenter } from './utils/geometry';
 import { autoProjectionName, formatScaleDenom, scaleDenomFromMap } from './utils/geo';
 import { markerSvgUrl } from './utils/leaflet';
 import { claimSummary, claimTooltipHtml, claimPopupRowsHtml, esc } from './utils/claimInfo';
@@ -64,7 +63,6 @@ import { saveLead, getLastLeadEmail } from './utils/leadCapture';
 import { trackSearch, trackEvent, trackEventOnce, trackPageView, trackPing } from './utils/track';
 import { createSaveCoordinator, runGuardedSave } from './utils/saveCoordinator';
 import { US_CLAIMS_ENABLED, US_STATES, US_GROUP_LABEL, US_GEOMETRY_DISCLAIMER, isUsJurisdiction } from './utils/jurisdictions';
-import { PRO_EXPORT_FORMATS, FREE_PROJECT_LIMIT } from './utils/pricing';
 import { clampExportSize, canExportFormat, maxPixelRatioFor, PRO_MAX_EXPORT_PIXELS } from './utils/entitlements';
 import { verifyCheckoutSession } from './utils/billing';
 import { runCloudMigration } from './utils/cloudMigration';
@@ -72,10 +70,7 @@ import { scopingWarning } from './utils/scopingNotice';
 import { CLAIM_NAME_CAVEAT } from './utils/claimProvenance';
 import { OVERLAY_DESCRIPTIONS } from './utils/referenceOverlayCredits.js';
 import { BASEMAPS, BASEMAP_KEYS, basemapThumb } from './utils/basemapConfig.js';
-import {
-  applyLegendCustomization, customLegendItem, nextCustomLegendId,
-  LEGEND_SYMBOLS, DEFAULT_LEGEND_SYMBOL, DEFAULT_LEGEND_COLOR,
-} from './utils/legendCustomization.js';
+import { applyLegendCustomization } from './utils/legendCustomization.js';
 import { featureKey, layerFeatures, isFeatureHidden, hiddenCount, featuresInBounds, visibleGeojson } from './utils/featureIdentity.js';
 import { layerAnchorGroups, defaultAnchorForLayer, reanchorCalloutsForLayer } from './utils/featureClusters.js';
 import FeatureTrimList from './components/FeatureTrimList.jsx';
@@ -101,19 +96,14 @@ import {
 } from './utils/projectStorage';
 import {
   deleteCloudProject,
-  deleteBrandKit,
   getDefaultBrandKit,
   listCloudProjects,
   listBrandKits,
   loadCloudProject,
   renameCloudProject,
   saveCloudProject,
-  saveBrandKit,
-  setDefaultBrandKit,
-  updateBrandKit,
   updateProjectThumbnail,
   applyBrandKitConfig,
-  BRAND_KIT_SAVEABLE_KEYS,
   getAccountSettings,
   saveAccountSettings,
   ACCOUNT_SETTINGS_KEYS,
@@ -674,8 +664,6 @@ function NIMapOverlay({ map, mapSize, layout }) {
   const refLatR = centerLL.lat * Math.PI / 180;
   const N_ref = a / Math.sqrt(1 - e2 * Math.sin(refLatR) ** 2);
 
-  const leftUTM = _latlngToUTM(leftLL.lat, leftLL.lng);
-  const rightUTM = _latlngToUTM(rightLL.lat, rightLL.lng);
   const topUTM = _latlngToUTM(topLL.lat, topLL.lng);
   const botUTM = _latlngToUTM(botLL.lat, botLL.lng);
 
@@ -779,7 +767,6 @@ export default function App() {
   const mapViewportRef = useRef(null);
   const leafletMapRef = useRef(null);
   const skipAutoFitRef = useRef(false);
-  const ghostDomRef = useRef(null);       // direct DOM ref for drag ghost — avoids React re-renders on mousemove
   const dragHoverRef = useRef({});        // tracks last hover state so setDragging only fires on zone changes
   const mapSizeRef = useRef({ width: 1600, height: 1000 });
   const draggingActiveRef = useRef(false); // true while a template-zone drag is in progress; freezes ResizeObserver updates
@@ -787,7 +774,7 @@ export default function App() {
   const insetInputRef = useRef(null);
   const uploadInputRef = useRef(null);
 
-  const { user, loading: authLoading, signInWithMagicLink, isPro, planDenied, entitlements, tier, refreshPlan } = useAuth();
+  const { user, loading: authLoading, signInWithMagicLink, entitlements, tier, refreshPlan } = useAuth();
   const [storageWarningDismissed, setStorageWarningDismissed] = useState(false);
   const [showBrandKitManager, setShowBrandKitManager] = useState(false);
   const [showAuthFromGate, setShowAuthFromGate] = useState(false);
@@ -961,7 +948,6 @@ export default function App() {
   const [collapsedSections, setCollapsedSections] = useState({ drillhole: true, elements: true, refoverlays: true, export: true, customizeDesign: true });
   const toggleSection = (key) => setCollapsedSections((prev) => ({ ...prev, [key]: !prev[key] }));
 
-  const selectedCallout = useMemo(() => project.callouts.find((callout) => callout.id === selectedCalloutId) || null, [project.callouts, selectedCalloutId]);
   const selectedMarker = useMemo(() => project.markers?.find((marker) => marker.id === selectedMarkerId) || null, [project.markers, selectedMarkerId]);
   const selectedEllipse = useMemo(() => project.ellipses?.find((ellipse) => ellipse.id === selectedEllipseId) || null, [project.ellipses, selectedEllipseId]);
   const selectedPolygon = useMemo(() => project.polygons?.find((poly) => poly.id === selectedPolygonId) || null, [project.polygons, selectedPolygonId]);
@@ -1202,7 +1188,6 @@ export default function App() {
     if (dismissed || !isPhone) return;
     setShowMobileBanner(true);
     trackEvent('mobile_editor_banner_shown', { screenW: window.screen?.width, screenH: window.screen?.height });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [screen]);
 
   // ── Undo/redo ──────────────────────────────────────────────────────────────
@@ -1262,7 +1247,6 @@ export default function App() {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [screen]);
 
   // Local → cloud migration on sign-in, with per-project tracking and retries
@@ -1324,7 +1308,6 @@ export default function App() {
       type: 'error',
       message: 'A locally saved project record was corrupted and could not be opened. The original data was preserved — contact support, or use __exportRecovery() / __discardRecovery() in the browser console to export or remove it.',
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Track unique visitor sessions (once per browser session, fire-and-forget).
@@ -1767,7 +1750,6 @@ export default function App() {
     setActiveRatio(newRatio);
     // A preset ratio and a custom pixel size are mutually exclusive framing modes.
     if (newRatio) updateLayout({ exportSettings: { customWidth: 0, customHeight: 0 } });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -3955,7 +3937,6 @@ export default function App() {
     }
   };
 
-  const zoomDelta = Math.max(-8, Math.min(8, Number(project.layout.zoomDelta ?? 0)));
   const featureEditorPoint = useMemo(() => {
     if (!leafletMapRef.current || !selectedFeature?.latlng) return null;
     const pt = leafletMapRef.current.latLngToContainerPoint([selectedFeature.latlng.lat, selectedFeature.latlng.lng]);

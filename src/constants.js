@@ -1,11 +1,4 @@
-export const DEFAULT_MAP_CENTER = [49.2827, -123.1207];
 export const SNAP_THRESHOLD = 8;
-export const DEFAULT_ZOOM = 8;
-
-export const EXPORT_DEFAULTS = {
-  width: 1600,
-  height: 1000,
-};
 
 export const EXPORT_RATIOS = {
   landscape: { id: 'landscape', label: 'Landscape', description: '16:9', ratio: 16 / 9, suggestedPdfSize: 'ppt_169' },

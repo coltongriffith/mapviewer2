@@ -25,13 +25,6 @@ export const TEMPLATE_MODES = {
   access_location:  'Infrastructure Map',
 };
 
-export const COMPOSITION_PRESETS = {
-  tight: 'Tight',
-  balanced: 'Balanced',
-  regional: 'Regional',
-  access: 'Access',
-};
-
 export const INSET_MODES = {
   province_state: 'Province / State',
   country: 'Country',
