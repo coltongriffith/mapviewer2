@@ -91,14 +91,6 @@ export function EmptyHint({ children, since }) {
 }
 
 // ── Skeleton rows for tables/cards ───────────────────────────────────────────
-export function SkeletonRows({ rows = 4 }) {
-  return (
-    <div className="admx-skel-rows">
-      {Array.from({ length: rows }).map((_, i) => <span key={i} className="adm-skeleton adm-skeleton-block" />)}
-    </div>
-  );
-}
-
 // ── ColumnChart: integer y-axis columns + optional context/overlay lines ─────
 // series: [{ d, active_users, sessions, signups }]. Click a column → onPick(d).
 export function ColumnChart({ series = [], onPick }) {

@@ -11,7 +11,7 @@
 // toDataURL('image/webp') is the same encoder the browser ships.
 import { chromium } from '@playwright/test';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));

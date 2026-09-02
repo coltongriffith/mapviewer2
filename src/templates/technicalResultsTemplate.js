@@ -151,24 +151,8 @@ export function resolveTemplateZones(template, layout, mapSize, legendItems) {
       ? Math.round(insetWidth / layout.insetAspectRatio)
       : Math.round(BASE_ZONES.inset.height * insetScale * insetScaleBase);
 
-  const titleCorner    = layout?.titleCorner     || 'tl';
-  const logoCorner     = layout?.logoCorner      || 'tl';
-  const insetCorner    = layout?.insetCorner     || 'tr';
-  const northArrowCorner = layout?.northArrowCorner || 'br';
-  const scaleBarCorner = layout?.scaleBarCorner  || 'bl';
-  const legendCorner   = layout?.legendCorner    || 'bl';
-
   // Stacking accumulator — tracks space consumed at each corner (offset from that edge)
   const vOffset = { tl: 0, tr: 0, bl: 0, br: 0 };
-
-  function anchorAt(corner) {
-    switch (corner) {
-      case 'tr': return { top: safe.top + vOffset.tr, right: safe.right };
-      case 'bl': return { bottom: safe.bottom + vOffset.bl, left: safe.left };
-      case 'br': return { bottom: safe.bottom + vOffset.br, right: safe.right };
-      case 'tl': default: return { top: safe.top + vOffset.tl, left: safe.left };
-    }
-  }
 
   const logoW = layout?.logoWidthPx ? Math.max(40, Math.min(400, layout.logoWidthPx)) : Math.round(BASE_ZONES.logo.width * logoScale);
   const logoH = layout?.logoHeightPx ? Math.max(20, Math.min(300, layout.logoHeightPx)) : Math.round(BASE_ZONES.logo.height * logoScale);

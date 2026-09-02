@@ -1108,11 +1108,6 @@ function annotationLabelFont(scene, scale) {
   return `700 ${12 * scale}px ${scene.project.layout?.fonts?.label || 'Inter'}, Arial, sans-serif`;
 }
 
-function markerIsShape(type) {
-  return ['circle', 'square', 'triangle'].includes(type);
-}
-
-
 function drawMarkerLabelCanvas(ctx, scene, marker, point, scale) {
   if (!marker.label) return;
   const labelX = point.x + (marker.size || 18) * scale * 0.5 + 8 * scale;
@@ -1429,13 +1424,6 @@ function fmtUTMNorthing(n) {
   return s.slice(0, -6) + ' ' + s.slice(-6, -3) + ' ' + s.slice(-3) + 'N';
 }
 
-function displaceLng(lat, lng, meters) {
-  return lng + meters / (111320 * Math.cos(lat * Math.PI / 180));
-}
-function displaceLat(lat, meters) {
-  return lat - meters / 111320;
-}
-
 function drawTitleStripCanvas(ctx, scene, scale) {
   if (scene.project.layout?.showTitle === false) return;
   const layout = scene.project.layout || {};
@@ -1453,7 +1441,6 @@ function drawTitleStripCanvas(ctx, scene, scale) {
   ctx.strokeRect(0, stripY, canvasW, stripH);
 
   // Cell proportions: title 45%, scale/proj 20%, qp 20%, fignum 15%
-  const cell0 = 0;
   const cell1 = Math.round(canvasW * 0.45);
   const cell2 = Math.round(canvasW * 0.65);
   const cell3 = Math.round(canvasW * 0.85);
@@ -1638,8 +1625,6 @@ function drawDistanceTicksCanvas(ctx, scene, scale) {
   const k0 = 0.9996;
   const refLatR = centerLL.lat * Math.PI / 180;
   const N_ref = a / Math.sqrt(1 - e2 * Math.sin(refLatR) ** 2);
-  const leftUTM = latlngToUTM(leftLL.lat, leftLL.lng);
-  const rightUTM = latlngToUTM(rightLL.lat, rightLL.lng);
   const topUTM = latlngToUTM(topLL.lat, topLL.lng);
   const botUTM = latlngToUTM(botLL.lat, botLL.lng);
 
@@ -1736,8 +1721,6 @@ function renderDistanceTicksSvg(scene, scale) {
   const k0 = 0.9996;
   const refLatR = centerLL.lat * Math.PI / 180;
   const N_ref = a / Math.sqrt(1 - e2 * Math.sin(refLatR) ** 2);
-  const leftUTM = latlngToUTM(leftLL.lat, leftLL.lng);
-  const rightUTM = latlngToUTM(rightLL.lat, rightLL.lng);
   const topUTM = latlngToUTM(topLL.lat, topLL.lng);
   const botUTM = latlngToUTM(botLL.lat, botLL.lng);
 

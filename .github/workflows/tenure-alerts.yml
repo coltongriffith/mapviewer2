@@ -35,6 +35,9 @@ concurrency:
   group: tenure-alerts
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
   alerts:
     runs-on: ubuntu-latest

@@ -128,122 +128,11 @@ function Card({ title, count, eyebrow, children, full, action }) {
   );
 }
 
-function RangeToggle({ value, onChange, options }) {
-  return (
-    <div className="adm-range-toggle">
-      {options.map((o) => (
-        <button key={o} className={`adm-range-btn${value === o ? ' active' : ''}`} onClick={() => onChange(o)}>
-          {o}d
-        </button>
-      ))}
-    </div>
-  );
-}
-
 function Empty({ message }) {
   return <p className="adm-empty">{message}</p>;
 }
 
 // ── Charts ──────────────────────────────────────────────────────────────────────
-function AreaChart({ data }) {
-  const [hover, setHover] = useState(null); // index
-  if (!data || data.length === 0) {
-    return <Empty message="No visit data yet — sessions appear here once users land on the app." />;
-  }
-  const pts = [...data]; // oldest → newest
-  const n = pts.length;
-  const W = 720, H = 180, P = 8;
-  const vals = pts.map((p) => Number(p.sessions) || 0);
-  const max = Math.max(...vals, 1);
-  const stepX = n > 1 ? (W - 2 * P) / (n - 1) : 0;
-  const xAt = (i) => (n > 1 ? P + i * stepX : W / 2);
-  const yAt = (v) => H - P - (v / max) * (H - 2 * P - 14);
-  const line = pts.map((p, i) => `${xAt(i).toFixed(1)},${yAt(Number(p.sessions) || 0).toFixed(1)}`);
-  const linePath = 'M' + line.join(' L');
-  const areaPath = `M${xAt(0).toFixed(1)},${H - P} L` + line.join(' L') + ` L${xAt(n - 1).toFixed(1)},${H - P} Z`;
-  const lastIdx = n - 1;
-  const labelIdx = n > 2 ? [0, Math.floor(lastIdx / 2), lastIdx] : pts.map((_, i) => i);
-
-  function handleMove(e) {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const rel = (e.clientX - rect.left) / rect.width;
-    setHover(Math.max(0, Math.min(n - 1, Math.round(rel * (n - 1)))));
-  }
-  const hp = hover != null ? pts[hover] : null;
-  const hoverLeftPct = hover != null && n > 1 ? (hover / (n - 1)) * 100 : 50;
-
-  return (
-    <div className="adm-area-wrap" onMouseMove={handleMove} onMouseLeave={() => setHover(null)}>
-      <svg viewBox={`0 0 ${W} ${H}`} className="adm-area-svg" preserveAspectRatio="none">
-        <defs>
-          <linearGradient id="admArea" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={SERIES.primary} stopOpacity="0.22" />
-            <stop offset="100%" stopColor={SERIES.primary} stopOpacity="0" />
-          </linearGradient>
-        </defs>
-        {[0.5, 1].map((f) => (
-          <line key={f} x1={P} x2={W - P} y1={yAt(max * f)} y2={yAt(max * f)} className="adm-area-grid" />
-        ))}
-        <path d={areaPath} fill="url(#admArea)" />
-        <path d={linePath} className="adm-area-line" />
-        {hp && (
-          <line x1={xAt(hover)} x2={xAt(hover)} y1={P} y2={H - P} className="adm-area-guide" />
-        )}
-        <circle cx={xAt(lastIdx)} cy={yAt(vals[lastIdx])} r={3} className="adm-area-dot" />
-        {hp && (
-          <circle cx={xAt(hover)} cy={yAt(vals[hover])} r={4} className="adm-area-dot-hover" />
-        )}
-      </svg>
-      {hp && (
-        <div className="adm-area-tip" style={{ left: `${hoverLeftPct}%` }}>
-          <div className="adm-area-tip-date">{hp.visit_date}</div>
-          <div className="adm-area-tip-row"><span className="adm-area-tip-dot" />{fmtNum(hp.sessions)} sessions</div>
-          <div className="adm-area-tip-row adm-muted">{fmtNum(hp.logged_in_sessions ?? 0)} logged in</div>
-        </div>
-      )}
-      <div className="adm-area-axis">
-        {labelIdx.map((i) => <span key={i}>{pts[i].visit_date?.slice(5)}</span>)}
-      </div>
-    </div>
-  );
-}
-
-function Donut({ segments, centerLabel }) {
-  const total = segments.reduce((s, x) => s + Number(x.value || 0), 0);
-  if (!total) return <Empty message="No data yet." />;
-  const R = 42, C = 2 * Math.PI * R;
-  let acc = 0;
-  return (
-    <div className="adm-donut-wrap">
-      <svg viewBox="0 0 100 100" className="adm-donut">
-        <circle cx="50" cy="50" r={R} fill="none" stroke="var(--em-slate-100)" strokeWidth="14" />
-        {segments.map((s, i) => {
-          const frac = Number(s.value || 0) / total;
-          const dash = frac * C;
-          const el = (
-            <circle key={i} cx="50" cy="50" r={R} fill="none" stroke={s.color} strokeWidth="14"
-              strokeDasharray={`${dash} ${C - dash}`} strokeDashoffset={-acc * C}
-              transform="rotate(-90 50 50)" />
-          );
-          acc += frac;
-          return el;
-        })}
-        <text x="50" y="47" textAnchor="middle" className="adm-donut-num">{fmtNum(total)}</text>
-        <text x="50" y="60" textAnchor="middle" className="adm-donut-lbl">{centerLabel}</text>
-      </svg>
-      <div className="adm-donut-legend">
-        {segments.map((s, i) => (
-          <div key={i} className="adm-donut-leg-row">
-            <span className="adm-donut-dot" style={{ background: s.color }} />
-            <span className="adm-donut-leg-label">{s.label}</span>
-            <span className="adm-donut-leg-val">{pct(s.value, total)}%</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 function HBars({ rows, color = SERIES.slate, emptyMsg }) {
   if (!rows || rows.length === 0) return <Empty message={emptyMsg || 'No data yet.'} />;
   const max = Math.max(...rows.map((r) => Number(r.value) || 0), 1);
@@ -634,7 +523,6 @@ export default function AdminPage({ onExit }) {
   const [liveLocations, setLiveLocations] = useState([]);
   const [dataLoading, setDataLoading] = useState(false);
   const [dataError, setDataError] = useState('');
-  const [editingUser, setEditingUser] = useState(null);
   const [tab, setTab] = useState('overview');
   const [range, setRange] = useState(30);
   const [selectedDay, setSelectedDay] = useState(''); // '' = no day filter, else 'YYYY-MM-DD'
@@ -759,7 +647,6 @@ export default function AdminPage({ onExit }) {
   }
 
   // Pagination hooks (must run unconditionally, before any early return)
-  const usersPag = usePagination(d.users, 10);
   const leadsPag = usePagination(d.leads, 10);
   const campaignPag = usePagination(d.campaignStats, 10);
   const searchPag = usePagination(d.searchDropoff, 12);
@@ -770,12 +657,6 @@ export default function AdminPage({ onExit }) {
     (d.kpiTrends || []).forEach((r) => { m[r.metric] = { cur: Number(r.current_30d), prior: Number(r.prior_30d) }; });
     return m;
   }, [d.kpiTrends]);
-
-  const searchByProvince = useMemo(() => {
-    const m = new Map();
-    (d.searchStats || []).forEach((r) => m.set(r.province, (m.get(r.province) || 0) + Number(r.searches)));
-    return [...m.entries()].map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value);
-  }, [d.searchStats]);
 
   // ── Pre-auth screens ──────────────────────────────────────────────────────
   if (!supabase) return (
@@ -826,37 +707,6 @@ export default function AdminPage({ onExit }) {
   const exports30d = cur('exports') ?? (d.exportStats || []).reduce((s, r) => s + Number(r.last_30_days || 0), 0);
   const exportBreakdown = (d.exportStats || []).map((r) => `${r.format?.toUpperCase()} ${r.last_30_days}`).join(' · ');
 
-  // Date-range filtering for the traffic chart (daily visitors RPC returns up to 90 days)
-  const rangeDaily = (d.dailyVisitors || []).slice(-range);
-  const rangeTotals = (() => {
-    const sessions = rangeDaily.reduce((s, r) => s + Number(r.sessions || 0), 0);
-    const loggedIn = rangeDaily.reduce((s, r) => s + Number(r.logged_in_sessions || 0), 0);
-    return { sessions, loggedIn, avg: rangeDaily.length ? Math.round(sessions / rangeDaily.length) : 0 };
-  })();
-
-  // Session-level activation funnel from product_events (last 30 days).
-  const pf = Object.fromEntries((d.productFunnel || []).map((r) => [r.event, Number(r.sessions) || 0]));
-  const activationSteps = [
-    { label: 'Opened editor', value: pf.editor_opened || 0, color: SERIES.faint },
-    { label: 'Added first layer', value: pf.first_layer_added || 0, color: SERIES.mid },
-    { label: 'Exported', value: pf.export_completed || 0, color: SERIES.primary },
-  ];
-  const shareLoop = [
-    { label: 'Shares created', value: pf.share_created || 0, color: SERIES.faint },
-    { label: 'Share views', value: pf.share_viewed || 0, color: SERIES.mid },
-    { label: 'Forked a copy', value: pf.share_forked || 0, color: SERIES.slate },
-    { label: 'Signed up', value: pf.signup_completed || 0, color: SERIES.success },
-  ];
-  const hasProductEvents = Object.keys(pf).length > 0;
-
-  const formatColors = { png: SERIES.slate, svg: SERIES.info, pdf: SERIES.mid };
-  const formatSegments = (d.exportStats || []).map((r) => ({
-    label: r.format?.toUpperCase(), value: Number(r.total), color: formatColors[r.format?.toLowerCase()] || SERIES.faint,
-  }));
-  const deviceSegments = (d.deviceStats || []).map((r, i) => ({
-    label: r.device || 'desktop', value: Number(r.sessions), color: [SERIES.primary, SERIES.mid, SERIES.pale][i] || 'var(--em-slate-200)',
-  }));
-  const referrerBars = (d.referrerStats || []).slice(0, 8).map((r) => ({ label: r.referrer || 'Direct / Unknown', value: Number(r.sessions) }));
   const landingBars = (d.landingClicks || []).map((r) => ({ label: r.element || '(no label)', value: Number(r.count) }));
 
   // ── Dashboard ──────────────────────────────────────────────────────────────

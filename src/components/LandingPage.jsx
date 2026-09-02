@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { trackLandingClick } from '../utils/track';
-import { US_CLAIMS_ENABLED, US_COVERAGE_COPY } from '../utils/jurisdictions';
+import { US_CLAIMS_ENABLED } from '../utils/jurisdictions';
 import { PRICING, FREE_FEATURES, PRO_FEATURES } from '../utils/pricing';
 import { useAuth } from '../hooks/useAuth.jsx';
 import AuthModal from './AuthModal';

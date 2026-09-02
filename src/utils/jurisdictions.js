@@ -26,10 +26,6 @@ export const US_GROUP_LABEL = 'United States — federal claims (BLM)';
 export const US_GEOMETRY_DISCLAIMER =
   'U.S. mining-claim boundaries shown by Exploration Maps are generalized representations derived from public BLM records. They are not legal surveys and should not be relied upon to determine exact claim boundaries or ownership.';
 
-// Marketing copy string reused verbatim on the homepage, blog, and emails.
-export const US_COVERAGE_COPY =
-  'Now including U.S. federal mining claims (BLM MLRS) for Nevada, Arizona, Utah, Idaho, Montana, Wyoming, Colorado, New Mexico, California, Oregon and Washington. U.S. coverage is federal claims only — state-managed tenure (including Alaska state claims) is not yet included.';
-
 // Normalized U.S. claim types (mirrors normalizeUsClaimType in api/claims.js).
 export const US_CLAIM_TYPES = [
   { value: 'lode', label: 'Lode' },

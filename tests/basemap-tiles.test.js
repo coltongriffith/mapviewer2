@@ -101,7 +101,6 @@ describe('a basemap cannot be half-migrated', () => {
     const consumers = [
       'src/App.jsx',
       'src/components/MapCanvas.jsx',
-      'src/components/InsetMap.jsx',
       'src/components/tenure/TenureMap.jsx',
     ];
     for (const path of consumers) {
@@ -162,7 +161,6 @@ describe('the map keeps drawing past the end of a tile cache', () => {
     // map with more code.
     const mapCanvas = readFileSync('src/components/MapCanvas.jsx', 'utf8');
     expect(mapCanvas).toMatch(/maxNativeZoom: cfg\.maxNativeZoom/);
-    expect(readFileSync('src/components/InsetMap.jsx', 'utf8')).toMatch(/maxNativeZoom/);
     expect(readFileSync('src/components/tenure/TenureMap.jsx', 'utf8')).toMatch(/maxNativeZoom/);
   });
 });

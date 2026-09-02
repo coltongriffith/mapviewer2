@@ -52,6 +52,15 @@ const EVENT_ALLOWLIST = new Set([
   'tenure_opened_in_editor',
   'tenure_export_attempted',
   'tenure_upgrade_viewed',
+  // Upgrade funnel + feature-trim events the client already sends. They were
+  // missing here, so every one of them was answered 400 and never recorded.
+  'pro_gate_shown',
+  'upgrade_checkout_started',
+  'upgrade_needs_signin',
+  'upgrade_processing',
+  'upgrade_verified_paid',
+  'features_removed',
+  'features_restored',
 ]);
 
 const MAX_BODY_BYTES = 8 * 1024;

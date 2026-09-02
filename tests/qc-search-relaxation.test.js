@@ -253,7 +253,6 @@ describe('exact-path guard', () => {
       vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('must not query'); }));
       const { default: handler } = await import('../api/claims.js');
       const res = makeRes();
-      // eslint-disable-next-line no-await-in-loop -- one assertion per term
       await handler(
         { method: 'GET', query: { q, type: 'company', province: 'qc' }, headers: {} },
         res,

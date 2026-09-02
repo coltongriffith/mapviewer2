@@ -1,7 +1,6 @@
 import React, { useMemo } from 'react';
 import { geojsonBounds, unionBounds } from '../utils/geometry';
 import { visibleGeojson } from '../utils/featureIdentity.js';
-import { INSET_MODES } from '../projectState';
 const SatelliteInset = React.lazy(() => import('./SatelliteInset'));
 
 const REFERENCE_PRESETS = {

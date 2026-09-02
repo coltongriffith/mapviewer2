@@ -4,10 +4,6 @@ import { PRICING, yearlyMonthlyEquivalent } from '../utils/pricing';
 import { startCheckout, openBillingPortal } from '../utils/billing';
 import {
   listCloudProjects,
-  loadCloudProject,
-  saveCloudProject,
-  renameCloudProject,
-  deleteCloudProject,
   listBrandKits,
   saveBrandKit,
   setDefaultBrandKit,
@@ -29,54 +25,6 @@ function fmtRelative(iso) {
   if (days < 7) return `${days} days ago`;
   if (days < 30) return `${Math.floor(days / 7)} week${days < 14 ? '' : 's'} ago`;
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
-
-function ProjectCard({ entry, onOpen, onRename, onDelete, onDuplicate }) {
-  const [editing, setEditing] = useState(false);
-  const [name, setName] = useState(entry.name);
-  const [confirmDelete, setConfirmDelete] = useState(false);
-
-  return (
-    <div className="acct-card acct-project-card">
-      <button className="acct-card-thumb" type="button" aria-label={`Open ${entry.name || 'project'}`} onClick={() => !editing && onOpen(entry)}>
-        {entry.thumbnail ? (
-          <img src={entry.thumbnail} alt="" />
-        ) : (
-          <span className="acct-card-thumb-placeholder">{entry.name?.slice(0, 2).toUpperCase() || '?'}</span>
-        )}
-      </button>
-      <div className="acct-card-body">
-        {editing ? (
-          <input
-            autoFocus
-            className="acct-card-name-input"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            onBlur={() => { setEditing(false); if (name.trim() && name.trim() !== entry.name) onRename(entry.id, name.trim()); }}
-            onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); if (e.key === 'Escape') { setName(entry.name); setEditing(false); } }}
-          />
-        ) : (
-          <button className="acct-card-name" type="button" onClick={() => onOpen(entry)}>{entry.name}</button>
-        )}
-        <span className="acct-card-date">{fmtRelative(entry.updatedAt)}</span>
-      </div>
-      <div className="acct-card-actions">
-        {confirmDelete ? (
-          <>
-            <span className="acct-confirm-label">Delete?</span>
-            <button className="acct-icon-btn danger" type="button" onClick={() => { onDelete(entry.id); setConfirmDelete(false); }}>Yes</button>
-            <button className="acct-icon-btn" type="button" onClick={() => setConfirmDelete(false)}>No</button>
-          </>
-        ) : (
-          <>
-            <button className="acct-icon-btn" type="button" title="Rename" onClick={() => setEditing(true)}>✎</button>
-            <button className="acct-icon-btn" type="button" title="Duplicate" onClick={() => onDuplicate(entry)}>⧉</button>
-            <button className="acct-icon-btn danger" type="button" title="Delete" onClick={() => setConfirmDelete(true)}>✕</button>
-          </>
-        )}
-      </div>
-    </div>
-  );
 }
 
 function BrandKitCard({ kit, onApply, onUse, onSetDefault, onRename, onDelete, onDuplicate }) {

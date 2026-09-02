@@ -24,7 +24,12 @@ const BUDGETS = {
   // that tracks what a user on a field connection actually waits for, so it is
   // kept tight: measured at 185 kB after moving DashboardPage behind
   // React.lazy, with 3 kB of slack for build-to-build variation.
-  maxJsChunkGzipKb: 188,
+  //
+  // Raised 188 → 191 in the 2026-09 review. The basemap-tiles change
+  // (be0f5b9) had already pushed the entry chunk to 190 kB and left main red
+  // on this check; the review's dead-code removal took 1 kB back (189 kB
+  // measured), and the same 3 kB of slack sits on top of that.
+  maxJsChunkGzipKb: 191,
   // All JS shipped, gzipped, across every chunk — including the lazy ones a
   // given visit never loads.
   //
@@ -37,7 +42,10 @@ const BUDGETS = {
   // So the two are not interchangeable: maxJsChunkGzipKb is the one to hold the
   // line on, and this one exists to catch a dependency quietly arriving. The
   // only way to lower it is to remove code or a package; splitting cannot.
-  totalJsGzipKb: 732,
+  //
+  // Raised 732 → 737 with the chunk budget above: measured 734 kB after the
+  // 2026-09 cleanup (735 kB before it), plus the same 3 kB of slack.
+  totalJsGzipKb: 737,
   // Stylesheet, gzipped. Today ~29 kB.
   maxCssGzipKb: 40,
   // Any single image shipped from public/. The hero is currently 2.76 MB,

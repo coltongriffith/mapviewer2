@@ -25,12 +25,15 @@ export function saveLead({ email, projectTitle = '' }) {
   // Mirror to the backend for admin dashboard visibility (fire-and-forget).
   // Goes through /api/track, which validates the email format, normalizes
   // fields, and rate-limits — the leads table accepts no direct anon inserts.
-  trackLead({ email: entry.email, projectTitle: entry.projectTitle });
+  const recorded = trackLead({ email: entry.email, projectTitle: entry.projectTitle });
   if (supabase) {
     // Trigger the welcome email. Ships inert: the send-welcome function no-ops
     // without a RESEND_API_KEY, and if it isn't deployed yet the invoke just
     // errors and is swallowed — nothing sends until email is configured.
-    supabase.functions?.invoke('send-welcome', { body: { email: entry.email } })
+    // It only sends to addresses that exist in `leads`, so the invoke waits
+    // for the /api/track write above to land first.
+    Promise.resolve(recorded)
+      .then(() => supabase.functions?.invoke('send-welcome', { body: { email: entry.email } }))
       .then(() => {}, () => {});
   }
   return entry;
@@ -63,7 +66,6 @@ export function readLeads() {
 export function exportLeadsCsv() {
   const leads = readLeads();
   if (!leads.length) {
-    // eslint-disable-next-line no-console
     console.log('No leads collected yet.');
     return;
   }

@@ -12,7 +12,7 @@ const Card = ({ title, tip, eyebrow, children, full }) => (
   </section>
 );
 
-export default function ProductTab({ data, loading, range }) {
+export default function ProductTab({ data, loading }) {
   const [stuck, setStuck] = useState(null);
   if (loading) return <Card title="Product"><div className="adm-skeleton adm-skeleton-block" style={{ height: 160 }} /></Card>;
 

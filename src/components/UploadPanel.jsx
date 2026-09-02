@@ -1,6 +1,5 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 
-const SINGLE_ACCEPT = '.zip,.geojson,.json,.kml,.kmz,.csv';
 const MULTI_ACCEPT = '.zip,.shp,.dbf,.prj,.shx,.geojson,.json,.kml,.kmz,.csv';
 
 export default function UploadPanel({ onUploadFile, onUploadFiles, inputRef, status, layers }) {

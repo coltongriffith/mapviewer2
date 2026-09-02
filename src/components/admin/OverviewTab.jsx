@@ -54,7 +54,6 @@ export default function OverviewTab({ data, loading, range, onRange, onPickDay, 
   const k = data?.kpis || {};
   const spark = data?.spark || {};
   const since = data?.since || {};
-  const instrDate = data?.meta?.instrumentation_date;
 
   const activatedRate = formatRate(k.activated?.done, k.activated?.of);
   const actionKinds = (k.actions?.kinds || []).slice(0, 3)

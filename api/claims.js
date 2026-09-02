@@ -258,14 +258,14 @@ function cacheSet(key, value, ttl = META_TTL_MS) {
 }
 
 async function fetchJson(url) {
-  // Try the URL as given, then (only if it fails outright) with the opposite
-  // protocol. Some provincial gov ArcGIS hosts answer on https even when http is
-  // the documented endpoint — notably maps.gov.mb.ca — and a few WAFs block one
-  // scheme but not the other, so this recovers Manitoba without affecting hosts
-  // that already work on the first try.
+  // Try the URL as given, then (only if it fails outright) upgraded to https.
+  // Some provincial gov ArcGIS hosts answer on https even when http is the
+  // documented endpoint — notably maps.gov.mb.ca. The reverse downgrade is
+  // deliberately NOT attempted: falling back to plaintext when https fails
+  // would let anyone able to break a TLS connection substitute the registry's
+  // answer, and every configured service speaks https today.
   const variants = [url];
   if (/^http:\/\//i.test(url)) variants.push(url.replace(/^http:/i, 'https:'));
-  else if (/^https:\/\//i.test(url)) variants.push(url.replace(/^https:/i, 'http:'));
 
   let lastErr;
   for (const u of variants) {
@@ -380,7 +380,6 @@ async function arcgisQueryAll(layerUrl, baseParams, maxTotal = undefined) {
     const idResp = await fetchJson(idsUrl);
     const ids = Array.isArray(idResp?.objectIds) ? idResp.objectIds : null;
     if (!ids) throw new Error('no objectIds');
-    const oidField = idResp.objectIdFieldName || idField;
     // Honour the caller's ceiling here too. Without this a widened near-miss
     // rung would fetch thousands of ids from a layer that cannot paginate, only
     // for the caller to keep fifty.
@@ -1320,7 +1319,10 @@ async function searchArcgis(cfg, term, type, res) {
 // env vars. Returns null when not configured.
 function qcSupabaseCreds() {
   const base = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-  const key = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
+  // Anon key only. This endpoint is unauthenticated, so it must never hold a
+  // key that bypasses RLS — a missing anon key means "not configured", never
+  // "use the service role instead".
+  const key = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
   if (!base || !key) return null;
   return { base, key };
 }
@@ -1602,7 +1604,8 @@ export function numericPrefixRanges(digits, maxDigits = 9) {
 export async function runLadder(steps, run) {
   let last = { features: [], meta: {} };
   for (let i = 0; i < steps.length; i += 1) {
-    // eslint-disable-next-line no-await-in-loop -- deliberately sequential
+    // Deliberately sequential: each rung only runs because the one before it
+    // found nothing.
     const r = await run(steps[i]);
     if (r.features.length) return { ...r, step: steps[i], stepIndex: i };
     last = r;
@@ -1816,8 +1819,8 @@ async function searchQc(term, type, res) {
     const filter = set
       .map((t) => `owner_name_norm=ilike.${encodeURIComponent(`*${t}*`)}`)
       .join('&');
-    // eslint-disable-next-line no-await-in-loop -- deliberately sequential: each
-    // attempt only runs because the previous one found nothing.
+    // Deliberately sequential: each attempt only runs because the previous one
+    // found nothing.
     const r = await runQuery(filter);
     if (r.features.length) { result = r; usedTokens = set; break; }
     result = r;

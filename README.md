@@ -102,7 +102,6 @@ never touches MTO on a user's behalf.
   Supabase access token; writes with the service role; rate-limits per IP.
   Without `SUPABASE_SERVICE_ROLE_KEY` it accepts-and-drops so analytics can
   never break the app.
-- `api/geo.js` — echoes Vercel edge geolocation headers.
 - `api/stripe-checkout.js` / `api/stripe-portal.js` / `api/stripe-webhook.js`
   — Pro-subscription billing (Stripe Checkout + customer portal + the
   signature-verified webhook that syncs `public.user_plans`). Grandfathered
@@ -178,6 +177,12 @@ Apply order matters — two migrations are deploy-coupled:
 Each migration header includes rollback instructions. After applying, verify
 RLS as an anonymous client, a normal authenticated user, and the admin —
 verification queries are embedded in `...000005`.
+
+`20260901000001_shared_rate_limit.sql` is additive and can be applied any
+time, but until it is, the cross-instance rate limiter in `api/_lib/guard.js`
+has nothing to call and fails open (only the per-instance limiter applies).
+The `send-welcome` edge function must also be redeployed
+(`supabase functions deploy send-welcome`) to pick up its lead-row check.
 
 ## Deployment & rollback
 

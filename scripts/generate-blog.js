@@ -371,19 +371,6 @@ function faqBlock(faqs) {
 // Renders a product-led call-to-action band. `text` is the headline (approved
 // copy like "Search a claimholder and create a map."), `sub` an optional line,
 // `href` the destination (defaults to the editor). `label` is the button text.
-// Location slugs the app has a live claims registry for (RegistrySearch:
-// BC, ON, QC, SK, MB, NL, YT). Only these get a region-scoped registry deep
-// link; every other region opens the upload path instead of silently
-// defaulting the registry search to BC.
-const REGISTRY_REGION_SLUGS = new Set([
-  'british-columbia', 'ontario', 'quebec', 'saskatchewan',
-  'manitoba', 'newfoundland-labrador', 'yukon',
-  // U.S. federal (BLM MLRS) states — deep links open the US registry search.
-  // Keep in sync with REGION_TO_PROVINCE (App.jsx) + US_JURISDICTIONS (api).
-  'nevada', 'arizona', 'utah', 'idaho', 'montana', 'wyoming',
-  'colorado', 'new-mexico', 'california', 'oregon', 'washington',
-]);
-
 // Deep link into the app with intent/region so SEO visitors land in a
 // purposeful editor (registry pre-selected, upload prompt, or demo) instead of
 // a blank one. Consumed by the ?intent/?region/?demo effect in src/App.jsx.
@@ -690,15 +677,6 @@ function buildCategoryPage({ slug: pageSlug, title, description, label, body: co
 </div>`;
   return { slug: pageSlug, html: pageShell({ title, description, canonical: url, schema, body }) };
 }
-
-// A secondary in-workflow screenshot per map type (real product UI/output).
-const INLINE_BY_MAPTYPE = {
-  'mining-claims-map': { src: '/blog-img/map-claims.png', alt: 'Mineral claims styled on a map in Exploration Maps' },
-  'drill-results-map': { src: '/blog-img/badge-editor.png', alt: 'Labelling a drillhole with its best intercept in Exploration Maps' },
-  'location-map': { src: '/blog-img/title-block.png', alt: 'Branded title block on an exported map' },
-  'target-generation-map': { src: '/blog-img/title-block.png', alt: 'Styled target areas with a branded title block' },
-  'infrastructure-map': { src: '/blog-img/title-block.png', alt: 'Infrastructure map with a branded title block' },
-};
 
 // Hero figure for a how-to / comparison post that carries no image section of
 // its own — uses the post's map-type export when known, else a polished

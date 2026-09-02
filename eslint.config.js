@@ -1,5 +1,6 @@
 import js from '@eslint/js';
 import globals from 'globals';
+import react from 'eslint-plugin-react';
 import reactHooks from 'eslint-plugin-react-hooks';
 import jsxA11y from 'eslint-plugin-jsx-a11y';
 
@@ -34,11 +35,18 @@ export default [
       },
     },
     plugins: {
+      react,
       'react-hooks': reactHooks,
       'jsx-a11y': jsxA11y,
     },
+    settings: { react: { version: 'detect' } },
     rules: {
       // ── Correctness: these fail the build ──
+      // Marks a component referenced as <Foo /> as used. Without this rule
+      // no-unused-vars cannot see JSX at all, and every imported component
+      // in the tree was reported as unused — which is where most of the
+      // "~200 pre-existing unused bindings" in the earlier comment came from.
+      'react/jsx-uses-vars': 'error',
       'no-undef': 'error',
       'no-const-assign': 'error',
       'no-dupe-keys': 'error',
@@ -48,15 +56,18 @@ export default [
       // work (analytics, clipboard, localStorage in private mode).
       'no-empty': ['error', { allowEmptyCatch: true }],
 
-      // ── Known backlog: reported, not yet blocking ──
-      // ~200 pre-existing unused bindings across the tree. Real cleanup work,
-      // but erroring on them today would block every unrelated change, so CI
-      // gates on errors only and this stays visible as a warning count.
-      'no-unused-vars': ['warn', {
+      // Unused bindings. The tree was cleaned to zero in the 2026-09 review
+      // (most of the old "~200 backlog" was JSX usage the linter could not
+      // see, see jsx-uses-vars above), so a new one is a defect — a leftover
+      // import or a value computed and dropped — and fails the build.
+      'no-unused-vars': ['error', {
         argsIgnorePattern: '^_',
         varsIgnorePattern: '^(React|_)',
+        caughtErrorsIgnorePattern: '^_',
         ignoreRestSiblings: true,
       }],
+
+      // ── Known backlog: reported, not yet blocking ──
       'react-hooks/exhaustive-deps': 'warn',
       'jsx-a11y/label-has-associated-control': 'warn',
       'jsx-a11y/click-events-have-key-events': 'warn',

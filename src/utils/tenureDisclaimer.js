@@ -42,9 +42,6 @@ export const BC_DATA_ATTRIBUTION =
 /** The official MTO entry point. Public, no account needed to reach it. */
 export const MTO_URL = 'https://www.mtonline.gov.bc.ca/mtov/home.do';
 
-/** Province's Mineral Titles branch — background, rules, contact. */
-export const MTO_INFO_URL = 'https://www2.gov.bc.ca/gov/content/industry/mineral-exploration-mining/mineral-titles';
-
 /**
  * Where to send a user to verify one specific tenure.
  *

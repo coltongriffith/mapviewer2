@@ -193,22 +193,7 @@ export function resolveNI43101Zones(template, layout, mapSize, legendItems) {
       ? Math.round(insetWidth / layout.insetAspectRatio)
       : Math.round(190 * insetScale * insetScaleBase);
 
-  const insetCorner = layout?.insetCorner || 'tr';
-  const northArrowCorner = layout?.northArrowCorner || 'br';
-  const scaleBarCorner = layout?.scaleBarCorner || 'bl';
-  const legendCorner = layout?.legendCorner || 'bl';
-  const logoCorner = layout?.logoCorner || 'tl';
-
   const vOffset = { tl: 0, tr: 0, bl: 0, br: 0 };
-
-  function anchorAt(corner) {
-    switch (corner) {
-      case 'tr': return { top: safe.top + vOffset.tr, right: safe.right };
-      case 'bl': return { bottom: safe.bottom + vOffset.bl, left: safe.left };
-      case 'br': return { bottom: safe.bottom + vOffset.br, right: safe.right };
-      case 'tl': default: return { top: safe.top + vOffset.tl, left: safe.left };
-    }
-  }
 
   const logoW = layout?.logoWidthPx ? Math.max(40, Math.min(400, layout.logoWidthPx)) : 168;
   const logoH = layout?.logoHeightPx ? Math.max(20, Math.min(300, layout.logoHeightPx)) : 74;
@@ -288,7 +273,7 @@ function distinctShapesForLayer(layer) {
   return [...seen];
 }
 
-export function buildLegendItemsNI43101(template, layers, layout = {}) {
+export function buildLegendItemsNI43101(template, layers, _layout = {}) {
   // A layer whose every shape has been removed contributes nothing to the map,
   // so it must not contribute a legend entry either — an entry for an absent
   // layer tells the reader that data is on the page when it is not, and the
