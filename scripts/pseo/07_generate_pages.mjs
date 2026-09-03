@@ -90,6 +90,10 @@ ${noindex ? '<meta name="robots" content="noindex,follow">' : ''}
 <meta name="twitter:card" content="summary_large_image">
 ${schema ? `<script type="application/ld+json">${JSON.stringify(schema)}</script>` : ''}
 <style>${CSS}</style>
+<!-- Google tag (gtag.js) — the config lives in /gtag-init.js rather than inline
+     because our CSP is script-src 'self' with no 'unsafe-inline'. -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=AW-18358773663"></script>
+<script defer src="/gtag-init.js"></script>
 </head>
 <body>
 <nav class="nav">
