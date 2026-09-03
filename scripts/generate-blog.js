@@ -282,6 +282,10 @@ ${schema ? `<script type="application/ld+json">${JSON.stringify(schema, null, 0)
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Source+Sans+3:wght@300;400;600;700&display=swap" rel="stylesheet">
 <style>${CSS}</style>
+<!-- Google tag (gtag.js) — the config lives in /gtag-init.js rather than inline
+     because our CSP is script-src 'self' with no 'unsafe-inline'. -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=AW-18358773663"></script>
+<script defer src="/gtag-init.js"></script>
 </head>
 <body>
 <nav class="nav">
