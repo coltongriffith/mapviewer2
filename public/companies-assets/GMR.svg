@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 640" font-family="Arial, Helvetica, sans-serif">
+  <rect width="1000" height="640" fill="#f3efe6" />
+  <line x1="200" y1="0" x2="200" y2="640" stroke="#d9d2c0" stroke-width="0.7" />
+  <line x1="0" y1="128" x2="1000" y2="128" stroke="#d9d2c0" stroke-width="0.7" />
+  <line x1="400" y1="0" x2="400" y2="640" stroke="#d9d2c0" stroke-width="0.7" />
+  <line x1="0" y1="256" x2="1000" y2="256" stroke="#d9d2c0" stroke-width="0.7" />
+  <line x1="600" y1="0" x2="600" y2="640" stroke="#d9d2c0" stroke-width="0.7" />
+  <line x1="0" y1="384" x2="1000" y2="384" stroke="#d9d2c0" stroke-width="0.7" />
+  <line x1="800" y1="0" x2="800" y2="640" stroke="#d9d2c0" stroke-width="0.7" />
+  <line x1="0" y1="512" x2="1000" y2="512" stroke="#d9d2c0" stroke-width="0.7" />
+  <path d="M447.1 297.7 L447.1 320.1 L447.1 342.5 L447.1 364.9 L447.1 387.3 L447.1 409.7 L447.1 432.1 L468.3 432.1 L468.3 454.5 L489.4 454.5 L489.4 476.9 L510.6 476.9 L510.6 499.3 L489.4 499.3 L468.3 499.3 L447.1 499.3 L447.1 521.7 L468.3 521.7 L489.4 521.7 L510.6 521.6 L531.7 521.6 L531.7 499.3 L531.7 476.9 L531.7 454.5 L531.7 432.1 L531.7 409.7 L531.7 387.3 L531.7 364.9 L531.7 342.5 L531.7 320.1 L531.7 297.7 L531.7 275.3 L531.7 252.9 L531.7 230.5 L531.7 208.1 L531.7 185.7 L510.6 185.7 L489.4 185.7 L489.4 208.1 L489.4 230.5 L489.4 252.9 L489.4 275.3 L468.3 275.3 L447.1 275.3 L447.1 297.7 Z" fill="#2f8f83" fill-opacity="0.34" stroke="#0e5b52" stroke-width="1.6" />
+  <path d="M510.6 163.3 L489.4 163.3 L489.4 185.7 L510.6 185.7 L531.7 185.7 L531.7 208.1 L531.7 230.5 L531.7 252.9 L531.7 275.3 L531.7 297.7 L531.7 320.1 L531.7 342.5 L531.7 364.9 L531.7 387.3 L531.7 409.7 L531.7 432.1 L531.7 454.5 L531.7 476.9 L531.7 499.3 L531.7 521.6 L552.9 521.6 L552.9 499.3 L552.9 476.9 L552.9 454.5 L552.9 432.1 L552.9 409.7 L552.9 387.3 L552.9 364.9 L552.9 342.5 L552.9 320.1 L552.9 297.7 L552.9 275.3 L552.9 252.9 L552.9 230.5 L552.9 208.1 L552.9 185.7 L552.9 163.3 L552.9 140.8 L552.9 118.4 L531.7 118.4 L531.7 140.9 L510.6 140.9 L510.6 163.3 Z" fill="#2f8f83" fill-opacity="0.34" stroke="#0e5b52" stroke-width="1.6" />
+  <!-- title strip -->
+  <rect x="0" y="0" width="1000" height="54" fill="#173042" />
+  <text x="20" y="34" font-size="21" font-weight="bold" fill="#ffffff">Gelum Resources Ltd. — Mineral Claims</text>
+  <text x="980" y="34" font-size="15" fill="#cfe3df" text-anchor="end">GMR</text>
+  <!-- scale bar -->
+  <g transform="translate(863.414912678046, 596)">
+    <rect x="0" y="0" width="48.29254366097699" height="8" fill="#173042" />
+    <rect x="48.29254366097699" y="0" width="48.29254366097699" height="8" fill="#ffffff" stroke="#173042" stroke-width="1" />
+    <text x="48.29254366097699" y="-6" font-size="12" fill="#173042" text-anchor="middle">2 km</text>
+  </g>
+  <!-- north arrow -->
+  <g transform="translate(956, 92)">
+    <circle r="17" fill="#ffffff" stroke="#b9b09a" />
+    <path d="M0 -10 L5 7 L0 3 L-5 7 Z" fill="#173042" />
+    <text y="14" font-size="9" font-weight="bold" fill="#173042" text-anchor="middle">N</text>
+  </g>
+  <!-- watermark -->
+  <text x="20" y="620" font-size="13" fill="#7d8b8a">Map by Exploration Maps — explorationmaps.com</text>
+</svg>
