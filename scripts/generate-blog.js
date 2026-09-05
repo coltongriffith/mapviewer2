@@ -286,6 +286,7 @@ ${schema ? `<script type="application/ld+json">${JSON.stringify(schema, null, 0)
      because our CSP is script-src 'self' with no 'unsafe-inline'. -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=AW-18358773663"></script>
 <script defer src="/gtag-init.js"></script>
+<script defer src="/acquisition.js"></script>
 </head>
 <body>
 <nav class="nav">
@@ -293,7 +294,7 @@ ${schema ? `<script type="application/ld+json">${JSON.stringify(schema, null, 0)
     <svg width="20" height="20" viewBox="0 0 480 520" fill="none" aria-hidden="true"><path fill="#142126" d="M60 40H180V85H410V250H445V480H30V385H60Z"/><path fill="none" stroke="#ffffff" stroke-width="22" d="M18 180H132L205 250H240V325L320 400V490"/><path fill="none" stroke="#ffffff" stroke-width="22" d="M205 250L260 195"/><rect x="250" y="145" width="90" height="90" fill="#ffffff"/><rect x="273" y="168" width="44" height="44" fill="#c65322"/></svg>
     ${esc(SITE_NAME)}
   </a>
-  <a class="nav-cta" href="/">Open editor →</a>
+  <a class="nav-cta" href="${canonical.includes('/mineral-tenure-monitoring/') ? '/tenure-monitor' : '/?intent=claims'}">${canonical.includes('/mineral-tenure-monitoring/') ? 'Open monitor →' : 'Open editor →'}</a>
 </nav>
 ${body}
 <footer class="site-footer">
@@ -821,9 +822,9 @@ function buildSeoLandingPage(page, allLandingPages) {
     ${renderSections(page.sections || [])}
     ${disclaimerHtml}
     <div class="lp-cta">
-      <h2>Start a map</h2>
-      <p>Import your data, style it, and export a clean map. No GIS experience needed.</p>
-      <a href="/">Open Exploration Maps →</a>
+      <h2>${page.slug === 'mineral-tenure-monitoring' ? 'Start monitoring your claims' : 'Make your first map'}</h2>
+      <p>${page.slug === 'mineral-tenure-monitoring' ? 'Monitor up to 10 BC claims free and set reminders for their published good-to-dates.' : 'Find or upload your claims, choose an investor layout, and download your map.'}</p>
+      <a href="${esc(page.slug === 'mineral-tenure-monitoring' ? '/tenure-monitor?utm_source=blog&utm_medium=cta&utm_campaign=mineral-tenure-monitoring' : appLink({ intent: page.slug === 'shapefile-to-map' ? 'claims-upload' : page.slug === 'drill-results-map' ? 'drill-results' : 'claims', region: page.slug === 'bc-mineral-claims-map' ? 'british-columbia' : null, campaign: page.slug }))}">${page.slug === 'mineral-tenure-monitoring' ? 'Monitor my claims →' : 'Create my map →'}</a>
     </div>
     ${faqBlock(page.faqs)}
     ${relatedHtml}

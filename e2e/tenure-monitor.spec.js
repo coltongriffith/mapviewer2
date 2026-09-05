@@ -39,9 +39,8 @@ test.describe('/tenure-monitor', () => {
 
   test('tells a signed-out visitor what an account is for', async ({ page }) => {
     await page.goto('/tenure-monitor');
-    const body = await page.locator('body').innerText();
-    expect(body).toMatch(/sign in/i);
-    expect(body).toMatch(/reminders|good-to-date/i);
+    await expect(page.locator('body')).toContainText(/sign in/i);
+    await expect(page.locator('body')).toContainText(/reminders|good-to-date/i);
   });
 
   test('offers a sign-in the visitor can actually act on', async ({ page }) => {
@@ -62,13 +61,13 @@ test.describe('/tenure-monitor', () => {
     // "How current is this?" must never be gated behind an account — somebody
     // looking at a deadline needs to know when we last heard from the province.
     await page.goto('/tenure-monitor');
-    const body = await page.locator('body').innerText();
-    expect(body).toMatch(/synchroniz|not been synchronized/i);
+    await expect(page.locator('body')).toContainText(/synchroniz|not been synchronized/i);
   });
 
   test('never promises to maintain, renew or register a claim', async ({ page }) => {
     // The product boundary, asserted rather than assumed.
     await page.goto('/tenure-monitor');
+    await expect(page.getByRole('heading', { name: 'Tenure Monitor' })).toBeVisible();
     const body = await page.locator('body').innerText();
     expect(body).not.toMatch(/we (will )?(renew|maintain|file|register|pay)/i);
     expect(body).not.toMatch(/guarantee/i);

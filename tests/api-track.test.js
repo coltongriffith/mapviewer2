@@ -150,7 +150,7 @@ describe('api/track identity', () => {
     getUserMock.mockResolvedValue({ data: { user: { id: 'user-123' } }, error: null });
     const res = mockRes();
     await handler(req(
-      { kind: 'event', session_id: SID, event: 'signup_completed', user_id: 'attacker-forged' },
+      { kind: 'event', session_id: SID, event: 'editor_opened', user_id: 'attacker-forged' },
       { ip: uniqueIp(), authorization: 'Bearer sometoken' },
     ), res);
     expect(inserts[0].row.user_id).toBe('user-123');
@@ -160,7 +160,7 @@ describe('api/track identity', () => {
     getUserMock.mockResolvedValue({ data: null, error: { message: 'bad token' } });
     const res = mockRes();
     await handler(req(
-      { kind: 'event', session_id: SID, event: 'signup_completed' },
+      { kind: 'event', session_id: SID, event: 'editor_opened' },
       { ip: uniqueIp(), authorization: 'Bearer garbage' },
     ), res);
     expect(res.statusCode).toBe(204);

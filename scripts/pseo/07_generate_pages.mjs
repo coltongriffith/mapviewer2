@@ -94,6 +94,7 @@ ${schema ? `<script type="application/ld+json">${JSON.stringify(schema)}</script
      because our CSP is script-src 'self' with no 'unsafe-inline'. -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=AW-18358773663"></script>
 <script defer src="/gtag-init.js"></script>
+<script defer src="/acquisition.js"></script>
 </head>
 <body>
 <nav class="nav">
@@ -191,8 +192,8 @@ function companyPage({ iss, claims, neighbours, updated }) {
   </div>
 
   <div class="claim-cta">
-    <div><b>Is this your company?</b><span>Claim this page to get an editable, branded version of this map — free account, no password.</span></div>
-    <a class="btn btn-primary" href="/?claims=${encodeURIComponent(iss.ticker)}&amp;company=${encodeURIComponent(iss.company)}&amp;claim=1&amp;utm_source=companies&amp;utm_medium=claim_cta&amp;utm_campaign=${encodeURIComponent(iss.ticker)}">Claim this page</a>
+    <div><b>Is this your company?</b><span>Save an editable copy to your free account. Customize the map and download a PNG with credit; Pro removes the credit.</span></div>
+    <a class="btn btn-primary" href="/?claims=${encodeURIComponent(iss.ticker)}&amp;company=${encodeURIComponent(iss.company)}&amp;claim=1&amp;utm_source=companies&amp;utm_medium=claim_cta&amp;utm_campaign=${encodeURIComponent(iss.ticker)}">Save an editable copy</a>
   </div>
 
   <h2>Claim list</h2>

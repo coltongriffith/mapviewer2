@@ -54,7 +54,7 @@ export default async function handler(req, res) {
     const session = await stripeRequest(`/checkout/sessions/${sessionId}`, null, { method: 'GET' });
     // The session must belong to THIS user — otherwise a leaked/guessed id
     // could confirm someone else's purchase.
-    if (session.client_reference_id && session.client_reference_id !== user.id) {
+    if (session.client_reference_id !== user.id) {
       return res.status(403).json({ error: 'This checkout session belongs to another account.' });
     }
 
@@ -70,6 +70,15 @@ export default async function handler(req, res) {
     return res.status(200).json({
       status: paid ? (plan === 'pro' ? 'paid' : 'processing') : 'unpaid',
       plan,
+      ...(paid && plan === 'pro' && Number.isInteger(session.amount_total)
+        && ['usd', 'cad'].includes(session.currency) ? {
+          purchase: {
+            transaction_id: session.id,
+            value: session.amount_total / 100,
+            currency: session.currency.toUpperCase(),
+            livemode: session.livemode === true,
+          },
+        } : {}),
     });
   } catch (e) {
     console.error(JSON.stringify({

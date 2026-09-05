@@ -9,27 +9,30 @@
 // regression, not to force an immediate rewrite. Lower them as work lands.
 
 import { readdir, stat, readFile } from 'node:fs/promises';
-import { join, extname } from 'node:path';
+import { join, extname, resolve } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 
-const DIST = fileURLToPath(new URL('../dist', import.meta.url));
+const DIST = process.argv[2] ? resolve(process.argv[2]) : fileURLToPath(new URL('../dist', import.meta.url));
 const PUBLIC = fileURLToPath(new URL('../public', import.meta.url));
 
 const KB = 1024;
 
 const BUDGETS = {
-  // Largest single JS chunk, gzipped — in practice the entry chunk, which is
-  // what every visitor downloads before anything renders. This is the number
-  // that tracks what a user on a field connection actually waits for, so it is
-  // kept tight: measured at 185 kB after moving DashboardPage behind
-  // React.lazy, with 3 kB of slack for build-to-build variation.
+  // Largest single JS chunk, including lazy editor/export code.
   //
   // Raised 188 → 191 in the 2026-09 review. The basemap-tiles change
   // (be0f5b9) had already pushed the entry chunk to 190 kB and left main red
   // on this check; the review's dead-code removal took 1 kB back (189 kB
   // measured), and the same 3 kB of slack sits on top of that.
   maxJsChunkGzipKb: 191,
+  // Marketing entry plus its static imports. The September growth release
+  // separates the editor: measured ~69 kB; guard the actual first load too.
+  initialJsGzipKb: 75,
+  // Configured deployments also load Supabase Auth. CI checks this build with
+  // placeholder public settings: measured 124.1 kB initial / 796.6 kB total.
+  initialAuthJsGzipKb: 135,
+  totalAuthJsGzipKb: 798,
   // All JS shipped, gzipped, across every chunk — including the lazy ones a
   // given visit never loads.
   //
@@ -43,9 +46,10 @@ const BUDGETS = {
   // line on, and this one exists to catch a dependency quietly arriving. The
   // only way to lower it is to remove code or a package; splitting cannot.
   //
-  // Raised 732 → 737 with the chunk budget above: measured 734 kB after the
-  // 2026-09 cleanup (735 kB before it), plus the same 3 kB of slack.
-  totalJsGzipKb: 737,
+  // September growth release: 737 → 738, measured 737.3 kB with exact
+  // byte accounting. The new shared preload chunk keeps the PDF engine off
+  // the homepage; the separate 75 kB entry graph budget guards first load.
+  totalJsGzipKb: 738,
   // Stylesheet, gzipped. Today ~29 kB.
   maxCssGzipKb: 40,
   // Any single image shipped from public/. The hero is currently 2.76 MB,
@@ -69,7 +73,8 @@ async function walk(dir) {
   return out;
 }
 
-const gzipKb = async (file) => Math.round(gzipSync(await readFile(file)).length / KB);
+// Sum exact sizes before rounding; per-chunk rounding penalises code splitting.
+const gzipKb = async (file) => gzipSync(await readFile(file)).length / KB;
 const rawKb = async (file) => Math.round((await stat(file)).size / KB);
 
 const failures = [];
@@ -90,12 +95,30 @@ for (const f of jsFiles) {
   totalJs += kb;
   if (kb > biggestJs.kb) biggestJs = { file: f.replace(DIST, ''), kb };
 }
-report.push(`js: ${jsFiles.length} chunks, ${totalJs} kB gzip total, largest ${biggestJs.kb} kB (${biggestJs.file})`);
+report.push(`js: ${jsFiles.length} chunks, ${totalJs.toFixed(1)} kB gzip total, largest ${biggestJs.kb.toFixed(1)} kB (${biggestJs.file})`);
 if (biggestJs.kb > BUDGETS.maxJsChunkGzipKb) {
   failures.push(`largest JS chunk ${biggestJs.kb} kB gzip exceeds ${BUDGETS.maxJsChunkGzipKb} kB (${biggestJs.file})`);
 }
-if (totalJs > BUDGETS.totalJsGzipKb) {
-  failures.push(`total JS ${totalJs} kB gzip exceeds ${BUDGETS.totalJsGzipKb} kB`);
+
+const manifest = JSON.parse(await readFile(join(DIST, '.vite/manifest.json'), 'utf8'));
+const initialFiles = new Set();
+function collectInitial(key) {
+  const chunk = manifest[key];
+  if (!chunk || initialFiles.has(chunk.file)) return;
+  initialFiles.add(chunk.file);
+  for (const imported of chunk.imports || []) collectInitial(imported);
+}
+if (!manifest['index.html']) throw new Error('Missing homepage entry in build manifest');
+collectInitial('index.html');
+const authConfigured = [...initialFiles].some((file) => file.includes('vendor-supabase-'));
+const totalBudget = authConfigured ? BUDGETS.totalAuthJsGzipKb : BUDGETS.totalJsGzipKb;
+const initialBudget = authConfigured ? BUDGETS.initialAuthJsGzipKb : BUDGETS.initialJsGzipKb;
+if (totalJs > totalBudget) failures.push(`total JS ${totalJs.toFixed(1)} kB gzip exceeds ${totalBudget} kB`);
+let initialJs = 0;
+for (const file of initialFiles) initialJs += await gzipKb(join(DIST, file));
+report.push(`homepage JS: ${initialJs.toFixed(1)} kB gzip across ${initialFiles.size} initial chunks`);
+if (initialJs > initialBudget) {
+  failures.push(`homepage JS ${initialJs.toFixed(1)} kB gzip exceeds ${initialBudget} kB`);
 }
 
 // ── CSS ──
@@ -105,7 +128,7 @@ for (const f of cssFiles) {
   const kb = await gzipKb(f);
   if (kb > biggestCss.kb) biggestCss = { file: f.replace(DIST, ''), kb };
 }
-report.push(`css: largest ${biggestCss.kb} kB gzip (${biggestCss.file})`);
+report.push(`css: largest ${biggestCss.kb.toFixed(1)} kB gzip (${biggestCss.file})`);
 if (biggestCss.kb > BUDGETS.maxCssGzipKb) {
   failures.push(`largest CSS ${biggestCss.kb} kB gzip exceeds ${BUDGETS.maxCssGzipKb} kB (${biggestCss.file})`);
 }

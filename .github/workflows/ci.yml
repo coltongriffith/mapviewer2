@@ -47,6 +47,17 @@ jobs:
       - name: Performance budgets
         run: npm run budgets
 
+      # Auth is tree-shaken from the anonymous test build. Check the configured
+      # import graph too; these placeholders are not credentials and build
+      # commands never make an auth request.
+      - name: Configured auth bundle budgets
+        env:
+          VITE_SUPABASE_URL: https://example.supabase.co
+          VITE_SUPABASE_ANON_KEY: build-check-placeholder
+        run: |
+          npx vite build --outDir dist-auth-check
+          node scripts/check-budgets.mjs dist-auth-check
+
   e2e:
     runs-on: ubuntu-latest
     steps:

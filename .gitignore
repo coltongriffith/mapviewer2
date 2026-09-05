@@ -3,6 +3,7 @@ node_modules/
 
 # Build output
 dist/
+dist-auth-check/
 build/
 
 # Lockfiles ARE tracked. package-lock.json is committed so `npm ci` installs

@@ -13,6 +13,9 @@
 html, body, #root { margin: 0; width: 100%; height: 100%; }
 body { background: var(--ui-bg); overflow-x: hidden; }
 button, input, select, textarea { font: inherit; }
+.signup-link-status { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 20000; display: flex; align-items: center; gap: 14px; width: min(640px, calc(100% - 32px)); padding: 16px 20px; border: 1px solid var(--ui-border); border-radius: 12px; background: var(--ui-bg); color: var(--ui-text); box-shadow: 0 6px 28px #0002; font-size: 14px; }
+.signup-link-status span { flex: 1; }
+.signup-link-status button { cursor: pointer; padding: 6px 10px; border: 1px solid var(--ui-border); border-radius: 6px; background: white; color: var(--ui-text); }
 .drag-ghost { position: fixed; left: var(--ghost-x, -9999px); top: var(--ghost-y, -9999px); pointer-events: none; background: rgba(198, 83, 34, 0.15); border: 2px dashed var(--ui-action); border-radius: var(--r-md); z-index: 9999; transform: translate(-50%, -50%); }
 /* ── Standard template: corner drop zone clusters ── */
 .drop-zone-cluster { position: absolute; z-index: 9000; display: flex; flex-direction: column; gap: 4px; pointer-events: none; width: 180px; }

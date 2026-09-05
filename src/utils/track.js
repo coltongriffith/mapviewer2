@@ -33,8 +33,10 @@ async function post(payload) {
     if (import.meta.env.DEV && !res.ok && res.status !== 204) {
       console.warn(`[track] ${payload.kind} rejected: ${res.status}`);
     }
+    return res.ok;
   } catch (e) {
     if (import.meta.env.DEV) console.warn('[track] failed:', e?.message);
+    return false;
   }
 }
 
@@ -51,7 +53,7 @@ async function post(payload) {
  */
 export function trackEvent(event, props = {}, _userId = null) {
   if (!event) return;
-  post({ kind: 'event', event, props: props && Object.keys(props).length ? props : undefined });
+  return post({ kind: 'event', event, props: props && Object.keys(props).length ? props : undefined });
 }
 
 // Per-tab-session dedupe: this module-scoped Set lives as long as the tab, so
@@ -96,7 +98,7 @@ export function trackSearch({ kind, province, mode, query, resultCount, outcome 
 
 /** Once-per-session page view. Geo is attached server-side from edge headers. */
 export function trackPageView({ path, referrer, utmSource, utmMedium, utmCampaign, device }) {
-  post({
+  return post({
     kind: 'pageview',
     path,
     referrer: referrer || undefined,

@@ -7,7 +7,7 @@ import { test, expect } from '@playwright/test';
 
 test.describe('editor disclosure sections', () => {
   test('can be expanded and collapsed with the keyboard alone', async ({ page }) => {
-    await page.goto('/?intent=drill-results');
+    await page.goto('/?intent=resume');
     await expect(page.locator('.leaflet-container')).toBeVisible({ timeout: 30_000 });
 
     const toggle = page.locator('button.section-toggle-btn').first();
@@ -24,7 +24,7 @@ test.describe('editor disclosure sections', () => {
   });
 
   test('announces state and points at a real panel', async ({ page }) => {
-    await page.goto('/?intent=drill-results');
+    await page.goto('/?intent=resume');
     await expect(page.locator('.leaflet-container')).toBeVisible({ timeout: 30_000 });
 
     const toggles = page.locator('button.section-toggle-btn');
@@ -40,7 +40,7 @@ test.describe('editor disclosure sections', () => {
   });
 
   test('every toggle sits inside a heading, so page structure survives', async ({ page }) => {
-    await page.goto('/?intent=drill-results');
+    await page.goto('/?intent=resume');
     await expect(page.locator('.leaflet-container')).toBeVisible({ timeout: 30_000 });
     const inHeading = await page.locator('h2 > button.section-toggle-btn').count();
     const total = await page.locator('button.section-toggle-btn').count();
