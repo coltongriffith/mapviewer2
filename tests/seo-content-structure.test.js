@@ -223,6 +223,59 @@ describe('the blog index tells the truth about itself', () => {
 });
 
 describe('structured data', () => {
+  it('does not invent article revisions or sitemap dates on a later build', () => {
+    const sitemapBefore = readFileSync(join(ROOT, 'public/sitemap.xml'), 'utf8');
+    const articlePath = join(ROOT, 'public/blog/exploration-maps-vs-qgis/index.html');
+    const dates = html => [...html.matchAll(/"date(?:Published|Modified)":"[^"]+"/g)].map(m => m[0]);
+    const before = dates(readFileSync(articlePath, 'utf8'));
+    try {
+      execFileSync(process.execPath, ['--input-type=module', '-e', `
+        const RealDate = Date;
+        globalThis.Date = class extends RealDate {
+          constructor(...args) { super(...(args.length ? args : ['2040-10-12T12:00:00Z'])); }
+          static now() { return new RealDate('2040-10-12T12:00:00Z').getTime(); }
+        };
+        await import('./scripts/generate-blog.js');
+      `], { cwd: ROOT, stdio: 'pipe' });
+      expect(readFileSync(join(ROOT, 'public/sitemap.xml'), 'utf8')).toBe(sitemapBefore);
+      expect(dates(readFileSync(articlePath, 'utf8'))).toEqual(before);
+    } finally {
+      execFileSync(process.execPath, ['scripts/generate-blog.js'], { cwd: ROOT, stdio: 'pipe' });
+    }
+  });
+
+  it('only publishes known revision dates, matching the visible article date', () => {
+    const posts = ['how-to-posts', 'comparison-posts'].flatMap(f => JSON.parse(readFileSync(join(ROOT, `scripts/blog-data/${f}.json`), 'utf8')));
+    for (const post of posts) {
+      const html = pages.get(`/blog/${post.slug}/`);
+      const graph = JSON.parse(/<script type="application\/ld\+json">(.*?)<\/script>/s.exec(html)[1])['@graph'];
+      const article = graph.find(x => x['@type'] === 'Article');
+      expect(article.datePublished).toBe(post.publishedDate);
+      expect(article.dateModified).toBe(post.updatedDate);
+      if (post.updatedDate) expect(html).toContain(`Updated <time datetime="${post.updatedDate}">`);
+    }
+  });
+
+  it('delivers existing gallery images responsively and reserves screenshot dimensions', () => {
+    for (const [path, html] of pages) {
+      if (!path.startsWith('/blog/')) continue;
+      for (const [, tag] of html.matchAll(/(<img[^>]+src="\/(?:gallery|blog-img)\/[^>]+>)/g)) {
+        expect(tag, path).toMatch(/width="\d+"/);
+        expect(tag, path).toMatch(/height="\d+"/);
+        if (tag.includes('/gallery/')) {
+          expect(tag, path).toContain('.webp');
+          expect(tag, path).toContain('srcset=');
+        }
+      }
+    }
+  });
+
+  it('does not promise credit-free exports for an email or vector PDF output', () => {
+    for (const [path, html] of pages) {
+      expect(html, path).not.toMatch(/email to unlock watermark-free|Watermark-free exports unlock with your email|PDFs are vector-quality/i);
+    }
+  });
+
   it('emits no FAQPage markup', () => {
     // Removed deliberately: Google restricted FAQ rich results to authoritative
     // government and health sites in August 2023, so on a commercial site the

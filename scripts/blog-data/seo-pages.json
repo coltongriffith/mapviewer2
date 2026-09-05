@@ -91,7 +91,8 @@
       "mining-claim-search-by-company-name",
       "drill-results-map",
       "shapefile-to-map"
-    ]
+    ],
+    "updatedDate": "2026-09-05"
   },
   {
     "slug": "bc-mineral-claims-map",
@@ -146,7 +147,8 @@
       "mineral-tenure-monitoring",
       "mining-claim-search-by-company-name",
       "mining-map-software"
-    ]
+    ],
+    "updatedDate": "2026-09-05"
   },
   {
     "slug": "mining-claim-search-by-company-name",
@@ -258,7 +260,8 @@
       "bc-mineral-claims-map",
       "mining-map-software",
       "mineral-tenure-monitoring"
-    ]
+    ],
+    "updatedDate": "2026-09-05"
   },
   {
     "slug": "shapefile-to-map",
@@ -313,7 +316,8 @@
       "mining-map-software",
       "drill-results-map",
       "bc-mineral-claims-map"
-    ]
+    ],
+    "updatedDate": "2026-09-05"
   },
   {
     "slug": "drill-results-map",
@@ -368,7 +372,8 @@
       "mining-map-software",
       "shapefile-to-map",
       "bc-mineral-claims-map"
-    ]
+    ],
+    "updatedDate": "2026-09-05"
   },
   {
     "slug": "mineral-tenure-monitoring",
@@ -476,6 +481,7 @@
       "bc-mineral-claims-map",
       "mining-claim-search-by-company-name",
       "mining-map-software"
-    ]
+    ],
+    "updatedDate": "2026-09-05"
   }
 ]

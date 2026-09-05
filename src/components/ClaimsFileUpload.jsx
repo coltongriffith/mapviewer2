@@ -3,7 +3,7 @@ import { useFileParser, SUPPORTED_CRS } from '../hooks/useFileParser';
 
 const ACCEPTED = '.geojson,.json,.kml,.kmz,.zip';
 
-export default function ClaimsFileUpload({ onImport, onBack }) {
+export default function ClaimsFileUpload({ onImport, onBack, onCSVFile }) {
   const { parseFile, parsing, error: parseError, setError, needsCRS, setNeedsCRS } = useFileParser();
   const [preview, setPreview] = useState(null); // { geojson, name, count, crs }
   const [dragOver, setDragOver] = useState(false);
@@ -12,6 +12,10 @@ export default function ClaimsFileUpload({ onImport, onBack }) {
   const inputRef = useRef(null);
 
   async function handleFile(file, opts) {
+    if (onCSVFile && file.name.toLowerCase().endsWith('.csv')) {
+      onCSVFile(file);
+      return;
+    }
     setPreview(null);
     setError(null);
     const geojson = await parseFile(file, opts);
@@ -53,7 +57,7 @@ export default function ClaimsFileUpload({ onImport, onBack }) {
   return (
     <>
       <h3 className="export-hd-title">Upload File</h3>
-      <p className="export-hd-desc">Load claim boundaries from a local file.</p>
+      <p className="export-hd-desc">Add project boundaries or drill collars from a local file.</p>
 
       <div
         className={`claims-dropzone${dragOver ? ' drag-over' : ''}`}
@@ -63,7 +67,7 @@ export default function ClaimsFileUpload({ onImport, onBack }) {
         onDrop={handleDrop}
         role="button"
         tabIndex={0}
-        aria-label="Upload claim boundaries file (GeoJSON, KML, or zipped shapefile)"
+        aria-label="Upload project data file"
         onKeyDown={e => {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
@@ -74,7 +78,7 @@ export default function ClaimsFileUpload({ onImport, onBack }) {
         <input
           ref={inputRef}
           type="file"
-          accept={ACCEPTED}
+          accept={onCSVFile ? `${ACCEPTED},.csv` : ACCEPTED}
           style={{ display: 'none' }}
           onChange={handleInputChange}
         />
@@ -89,7 +93,7 @@ export default function ClaimsFileUpload({ onImport, onBack }) {
             Drop file here or <strong>click to browse</strong>
           </>
         )}
-        <span className="claims-dropzone-hint">GeoJSON · KML · KMZ · Shapefile (.zip)</span>
+        <span className="claims-dropzone-hint">GeoJSON · KML · KMZ · Shapefile (.zip){onCSVFile ? ' · CSV' : ''}</span>
       </div>
 
       {parseError && <p className="claims-error">⚠ {parseError}</p>}
