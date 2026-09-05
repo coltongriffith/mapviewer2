@@ -19,41 +19,26 @@ const PUBLIC = fileURLToPath(new URL('../public', import.meta.url));
 const KB = 1024;
 
 const BUDGETS = {
-  // Largest single JS chunk, including lazy editor/export code.
-  //
-  // Raised 188 → 191 in the 2026-09 review. The basemap-tiles change
-  // (be0f5b9) had already pushed the entry chunk to 190 kB and left main red
-  // on this check; the review's dead-code removal took 1 kB back (189 kB
-  // measured), and the same 3 kB of slack sits on top of that.
-  maxJsChunkGzipKb: 191,
-  // Marketing entry plus its static imports. The September growth release
-  // separates the editor: measured ~69 kB; guard the actual first load too.
+  // Largest chunk is now the editor (~124 KiB); tighten the old 191.
+  maxJsChunkGzipKb: 135,
   initialJsGzipKb: 75,
-  // Configured deployments also load Supabase Auth. CI checks this build with
-  // placeholder public settings: measured 124.1 kB initial / 796.6 kB total.
   initialAuthJsGzipKb: 135,
-  totalAuthJsGzipKb: 798,
-  // All JS shipped, gzipped, across every chunk — including the lazy ones a
-  // given visit never loads.
-  //
-  // Raised from 725, deliberately, and worth recording why. Splitting a screen
-  // out of the entry chunk moves bytes rather than removing them, and adds a
-  // little per-chunk overhead — so lazy-loading the dashboard took 6 kB off
-  // first paint and put 1 kB ON this total. This metric penalises the change
-  // that made the product faster.
-  //
-  // So the two are not interchangeable: maxJsChunkGzipKb is the one to hold the
-  // line on, and this one exists to catch a dependency quietly arriving. The
-  // only way to lower it is to remove code or a package; splitting cannot.
-  //
-  // September growth release: 737 → 738, measured 737.3 kB with exact
-  // byte accounting. The new shared preload chunk keeps the PDF engine off
-  // the homepage; the separate 75 kB entry graph budget guards first load.
-  totalJsGzipKb: 738,
+  // The former configured check omitted VITE_ADMIN_EMAIL, which pruned the
+  // live dashboard: real baseline total was 824.8, not 796.8 KiB. Server-side
+  // role checks now include all admin code in both builds. Growth reports and
+  // split modules add ~12 KiB overall; first-load graphs below shrink sharply.
+  totalAuthJsGzipKb: 840,
+  totalJsGzipKb: 775,
+  adminAuthJsGzipKb: 150,
+  adminJsGzipKb: 85,
+  editorAuthJsGzipKb: 310,
+  editorJsGzipKb: 245,
+  claimsAuthJsGzipKb: 330,
+  claimsJsGzipKb: 265,
   // Stylesheet, gzipped. Today ~29 kB.
   maxCssGzipKb: 40,
-  // Any single image shipped from public/. The hero is currently 2.76 MB,
-  // which is the single biggest LCP cost on the landing page.
+  // Any single image shipped from public/, including legacy PNG downloads.
+  // The homepage serves responsive WebP; browser tests guard its LCP image.
   maxImageKb: 2900,
 };
 
@@ -102,11 +87,11 @@ if (biggestJs.kb > BUDGETS.maxJsChunkGzipKb) {
 
 const manifest = JSON.parse(await readFile(join(DIST, '.vite/manifest.json'), 'utf8'));
 const initialFiles = new Set();
-function collectInitial(key) {
+function collectInitial(key, files = initialFiles) {
   const chunk = manifest[key];
-  if (!chunk || initialFiles.has(chunk.file)) return;
-  initialFiles.add(chunk.file);
-  for (const imported of chunk.imports || []) collectInitial(imported);
+  if (!chunk || files.has(chunk.file)) return;
+  files.add(chunk.file);
+  for (const imported of chunk.imports || []) collectInitial(imported, files);
 }
 if (!manifest['index.html']) throw new Error('Missing homepage entry in build manifest');
 collectInitial('index.html');
@@ -119,6 +104,30 @@ for (const file of initialFiles) initialJs += await gzipKb(join(DIST, file));
 report.push(`homepage JS: ${initialJs.toFixed(1)} kB gzip across ${initialFiles.size} initial chunks`);
 if (initialJs > initialBudget) {
   failures.push(`homepage JS ${initialJs.toFixed(1)} kB gzip exceeds ${initialBudget} kB`);
+}
+
+// Route budgets include the common entry and every static dependency needed
+// for the first usable screen. Total bytes alone hide accidental eager loads.
+const appKey = Object.keys(manifest).find(key => manifest[key].name === 'App');
+if (!appKey) throw new Error('Missing editor chunk in build manifest');
+for (const [name, entries, limit, forbidden] of [
+  ['admin', ['index.html', 'src/components/AdminPage.jsx', 'src/components/admin/GrowthTab.jsx'],
+    authConfigured ? BUDGETS.adminAuthJsGzipKb : BUDGETS.adminJsGzipKb, /\/(App-|MapCanvas-|vendor-leaflet-|vendor-export-|regionsNA-)/],
+  ['editor', ['index.html', appKey, 'src/components/MapCanvas.jsx'],
+    authConfigured ? BUDGETS.editorAuthJsGzipKb : BUDGETS.editorJsGzipKb, /\/vendor-export-/],
+  ['claims', ['index.html', appKey, 'src/components/MapCanvas.jsx', 'src/components/AddClaimsModal.jsx'],
+    authConfigured ? BUDGETS.claimsAuthJsGzipKb : BUDGETS.claimsJsGzipKb, /\/(vendor-export-|vendor-geo-|vendor-zip-)/],
+]) {
+  const files = new Set();
+  for (const entry of entries) {
+    if (!manifest[entry]) throw new Error(`Missing ${name} entry: ${entry}`);
+    collectInitial(entry, files);
+  }
+  let size = 0;
+  for (const file of files) size += await gzipKb(join(DIST, file));
+  report.push(`${name} initial JS: ${size.toFixed(1)} kB gzip across ${files.size} chunks`);
+  if (size > limit) failures.push(`${name} initial JS ${size.toFixed(1)} kB exceeds ${limit} kB`);
+  if ([...files].some(file => forbidden.test(file))) failures.push(`${name} eagerly loads an unrelated engine`);
 }
 
 // ── CSS ──

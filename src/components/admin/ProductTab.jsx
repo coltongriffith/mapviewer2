@@ -1,16 +1,7 @@
 import React, { useState } from 'react';
-import { FunnelV2, HBarsV2, EmptyHint, InfoTip } from './primitives';
+import { Card, FunnelV2, HBarsV2, EmptyHint } from './primitives';
 import { fmtNum, fmtDate, relTime } from './metrics';
 
-const Card = ({ title, tip, eyebrow, children, full }) => (
-  <section className={`adm-card${full ? ' adm-card-full' : ''}`}>
-    <div className="adm-card-head">
-      <div>{eyebrow && <div className="admx-eyebrow">{eyebrow}</div>}
-        <h3 className="adm-card-title">{title}{tip && <InfoTip text={tip} label={title} />}</h3></div>
-    </div>
-    {children}
-  </section>
-);
 
 export default function ProductTab({ data, loading }) {
   const [stuck, setStuck] = useState(null);
@@ -27,7 +18,7 @@ export default function ProductTab({ data, loading }) {
   return (
     <>
       <div className="admx-grid-2-1">
-        <Card title="New-user activation" tip="New signups (last 28 days) reaching each stage within 7 days of signup. Click a stage to see who's stuck." eyebrow="Users">
+        <Card title="New-account feature reach" tip="Accounts created in the last 28 days with these events within seven days. Includes accounts still in their first week. Stages are independent; use Growth for ordered conversion and mature cohorts." eyebrow="Users">
           <FunnelV2 steps={newUserSteps} unit="users" onPickStage={(s) => setStuck(s)} />
           {stuck && (
             <div className="admx-stuck">
@@ -36,7 +27,7 @@ export default function ProductTab({ data, loading }) {
             </div>
           )}
         </Card>
-        <Card title="Session → value" eyebrow="Sessions this window">
+        <Card title="Session feature reach" eyebrow="Independent event reach · this window">
           <FunnelV2 steps={sessionSteps} unit="sessions" />
         </Card>
       </div>
@@ -46,7 +37,7 @@ export default function ProductTab({ data, loading }) {
           <HBarsV2 rows={(data?.features || []).map((r) => ({ label: r.feature, value: r.events, sub: `by ${r.users} user${r.users === 1 ? '' : 's'}` }))}
             empty={<EmptyHint>Feature events will appear as people work. Tracking began at the migration date.</EmptyHint>} />
         </Card>
-        <Card title="Export gate" eyebrow="Sessions this window">
+        <Card title="Export gate" eyebrow="Independent event reach · this window">
           <FunnelV2 steps={gateSteps} unit="sessions" />
         </Card>
       </div>

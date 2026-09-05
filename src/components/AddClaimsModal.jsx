@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import RegistrySearch from './RegistrySearch';
-import ClaimsFileUpload from './ClaimsFileUpload';
 import { US_CLAIMS_ENABLED } from '../utils/jurisdictions';
+
+const ClaimsFileUpload = React.lazy(() => import('./ClaimsFileUpload'));
 
 export default function AddClaimsModal({ onClose, onImport, defaultPath = null, initialProvince = null, initialQuery = '', autoSearch = false }) {
   const [path, setPath] = useState(defaultPath); // null | 'registry' | 'upload'
@@ -56,10 +57,12 @@ export default function AddClaimsModal({ onClose, onImport, defaultPath = null, 
         )}
 
         {path === 'upload' && (
-          <ClaimsFileUpload
-            onImport={(geojson, name) => { onImport(geojson, name); onClose(); }}
-            onBack={() => setPath(null)}
-          />
+          <React.Suspense fallback={<p role="status">Opening file upload…</p>}>
+            <ClaimsFileUpload
+              onImport={(geojson, name) => { onImport(geojson, name); onClose(); }}
+              onBack={() => setPath(null)}
+            />
+          </React.Suspense>
         )}
       </div>
     </div>

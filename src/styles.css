@@ -3486,3 +3486,48 @@ button.claim-notices-chip[aria-expanded="true"] { border-color: var(--ui-border-
 .admx-health-stat span{font-size:12px;color:var(--ui-text-muted)}
 .admx-health-bad strong{color:var(--ui-danger)}
 .admx-since-note{font-size:11px;color:var(--ui-text-muted);margin-top:4px}
+
+/* Growth reports: counts and denominators remain readable on small screens. */
+.growth-heading { margin: 24px 0; }
+.growth-heading h1 { font-size: clamp(22px, 3vw, 30px); letter-spacing: -.035em; margin-bottom: 8px; }
+.growth-heading p, .growth-funnel small { color: #5f6e72; }
+.growth-tiles, .growth-cohort { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 20px; }
+.growth-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.growth-grid > *, .growth-tiles > * { min-width: 0; }
+.growth-funnel { list-style: none; padding: 0; display: grid; gap: 18px; }
+.growth-funnel li > div:first-child { display: flex; justify-content: space-between; gap: 10px; }
+.growth-track { background: #edf1f0; height: 8px; border-radius: 4px; overflow: hidden; margin: 7px 0 4px; }
+.growth-track span { display: block; background: #287454; height: 100%; }
+.growth-actions { padding-left: 20px; display: grid; gap: 16px; line-height: 1.6; }
+.growth-actions code { font-size: 12px; overflow-wrap: anywhere; }
+.growth-signals { display: flex; gap: 24px; flex-wrap: wrap; border-top: 1px solid #e4e9e7; padding-top: 16px; }
+.growth-cohort strong, .growth-cohort span { display: block; }
+.growth-cohort strong { font-size: 26px; margin: 12px 0 6px; }
+.growth-cohort span { color: #5f6e72; font-size: 13px; }
+.adm-report-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin: 18px 0; }
+.adm-report-toolbar label { display: flex; align-items: center; gap: 8px; }
+.adm-report-status { display: flex; align-items: center; gap: 10px; font-size: 12px; color: #5f6e72; }
+.adm-table-scroll { overflow-x: auto; }
+.adm-table th[scope="row"] { overflow-wrap: anywhere; }
+@media (max-width: 950px) { .growth-tiles, .growth-cohort { grid-template-columns: repeat(2, minmax(0, 1fr)); } .growth-grid { grid-template-columns: 1fr; } }
+@media (max-width: 480px) { .growth-tiles, .growth-cohort { grid-template-columns: 1fr; } .adm-report-status { flex-wrap: wrap; } }
+
+.adm-modal-dialog { border: 0; padding: 0; background: transparent; width: min(560px, calc(100vw - 32px)); max-width: none; }
+.adm-modal-dialog::backdrop { background: rgba(20, 33, 38, .45); }
+.adm-modal-dialog .adm-modal { box-sizing: border-box; }
+button.admx-ladder-seg { border: 0; font: inherit; padding: 0; }
+
+/* Wrapping navigation keeps every report reachable on narrow viewports. */
+.adm-tabs { flex-wrap: wrap; }
+.adm-tab { flex: 0 0 auto; white-space: nowrap; }
+.adm-header { flex-wrap: wrap; row-gap: 8px; }
+.adm-header-left { min-width: 0; }
+.adm-table th { color: #435459; }
+@media (max-width: 600px) {
+  .adm-header-email { display: none; }
+  .adm-header { padding: 12px 16px; }
+  .adm-header-title { font-size: 14px; }
+  .adm-header-right { margin-left: auto; }
+  .adm-body { padding: 16px; }
+  .adm-tab { padding: 10px 12px; }
+}

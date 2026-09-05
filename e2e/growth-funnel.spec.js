@@ -9,6 +9,20 @@ test('fresh homepage keeps map and export engines off the network', async ({ pag
   await page.getByRole('banner').getByRole('button', { name: 'Start a map', exact: true }).click();
   await expect(page.getByRole('dialog')).toBeVisible();
   await expect(page.locator('.leaflet-container')).toBeVisible();
+  expect(requests.filter((url) => /\/assets\/(vendor-export-|vendor-geo-|vendor-zip-)/.test(url))).toEqual([]);
+});
+
+test('sample maps remain demo activity rather than real customer imports', async ({ page }) => {
+  const layers = [];
+  await page.route('**/api/track', (route) => {
+    const payload = route.request().postDataJSON();
+    if (payload?.event === 'layer_added') layers.push(payload.props);
+    return route.fulfill({ status: 204 });
+  });
+  await page.goto('/?demo=sample');
+  await expect(page.locator('.leaflet-container')).toBeVisible();
+  await expect.poll(() => layers.length).toBeGreaterThanOrEqual(2);
+  expect(layers.every(layer => layer.source === 'demo')).toBe(true);
 });
 
 test('company claims reach investor export and a failed email can be retried', async ({ page }, testInfo) => {

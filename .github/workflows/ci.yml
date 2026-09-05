@@ -74,6 +74,13 @@ jobs:
       # so routing, 404s and security headers are covered too (P1-14).
       - name: Browser smoke tests
         run: npm run test:e2e
+      - name: Build configured admin client
+        env:
+          VITE_SUPABASE_URL: https://example.supabase.co
+          VITE_SUPABASE_ANON_KEY: build-check-placeholder
+        run: npx vite build --outDir dist-auth-check
+      - name: Admin browser flows (isolated auth and data fixtures)
+        run: npm run test:e2e:admin
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

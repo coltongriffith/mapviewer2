@@ -105,9 +105,11 @@ describe('the timeline modal', () => {
     // `.then(({ data }) => setSessionTimeline(data || []))` turned an RPC error
     // into "No tracked events for this session" — the same thing an idle
     // session shows, which is how a broken timeline stays unreported.
-    expect(page).toMatch(/setSessionTimelineError/);
-    const openFn = page.slice(page.indexOf('function openSession'), page.indexOf('function openSession') + 900);
-    expect(openFn).toMatch(/if \(error\)/);
-    expect(openFn).toMatch(/\.catch\(/);
+    expect(page).toContain("useRpc('admin_get_session_timeline'");
+    expect(page).toContain('error={timeline.error}');
+    expect(page).toContain('Could not load this timeline');
+    // Generic RPC cancellation/error behavior is exercised by dashboard-data;
+    // the actual modal failure/empty states are covered in the browser suite.
+
   });
 });

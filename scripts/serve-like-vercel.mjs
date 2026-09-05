@@ -13,7 +13,7 @@ import { join, extname, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
-const DIST = join(ROOT, 'dist');
+const DIST = join(ROOT, process.env.E2E_DIST || 'dist');
 const config = JSON.parse(await readFile(join(ROOT, 'vercel.json'), 'utf8'));
 const PORT = Number(process.env.PORT || 4173);
 

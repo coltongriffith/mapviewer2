@@ -1,7 +1,6 @@
 // Point-in-polygon detection for Canadian provinces and US states.
 // Used to auto-identify the region where uploaded claims are located.
 
-import regionsData from '../assets/regionsNA.json';
 
 function pointInRing(pt, ring) {
   let inside = false;
@@ -24,7 +23,7 @@ export async function detectRegion(bounds) {
   const cx = (bounds.minLng + bounds.maxLng) / 2;
   const cy = (bounds.minLat + bounds.maxLat) / 2;
 
-  const regions = regionsData;
+  const { default: regions } = await import('../assets/regionsNA.json');
   if (!regions.length) return null;
 
   // Bbox pre-filter

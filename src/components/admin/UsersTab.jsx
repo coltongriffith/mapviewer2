@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { RetentionLadder, StatTile, StatusBadge, ActivityDots, EmptyHint, InfoTip } from './primitives';
+import { Card, RetentionLadder, StatTile, StatusBadge, ActivityDots, EmptyHint } from './primitives';
 import { METRIC_DEFS, formatRate, fmtNum, fmtDate, relTime } from './metrics';
 
 const PLAN_SOURCE_LABEL = { stripe: 'Paid', grandfathered: 'Grandfathered', admin: 'Admin-granted' };
@@ -14,28 +14,19 @@ function PlanChip({ plan, source, status }) {
   );
 }
 
-const Card = ({ title, tip, eyebrow, action, children, full }) => (
-  <section className={`adm-card${full ? ' adm-card-full' : ''}`}>
-    <div className="adm-card-head">
-      <div>{eyebrow && <div className="admx-eyebrow">{eyebrow}</div>}
-        <h3 className="adm-card-title">{title}{tip && <InfoTip text={tip} label={title} />}</h3></div>
-      {action}
-    </div>
-    {children}
-  </section>
-);
 
+const EMPTY_USERS = [];
 const FILTERS = [
   ['all', 'All'], ['new', 'New (7d)'], ['never_activated', 'Never activated'],
   ['dormant', 'Dormant'], ['power', 'Power'],
 ];
 
-export default function UsersTab({ data, loading, detail, onLoadDetail, onOpenSession }) {
+export default function UsersTab({ data, loading, detail, onLoadDetail, onOpenSession, initialUserId = null }) {
   const [filter, setFilter] = useState('all');
   const [q, setQ] = useState('');
-  const [openUser, setOpenUser] = useState(null);
+  const [openUser, setOpenUser] = useState(initialUserId);
 
-  const users = data?.users || [];
+  const users = data?.users || EMPTY_USERS;
   const filtered = useMemo(() => users.filter((u) => {
     if (filter === 'new' && u.status !== 'new') return false;
     if (filter === 'never_activated' && u.status !== 'never_activated') return false;
@@ -138,7 +129,7 @@ export default function UsersTab({ data, loading, detail, onLoadDetail, onOpenSe
                   </tr>
                   {openUser === u.user_id && (
                     <tr className="admx-drawer-row"><td colSpan={9}>
-                      <UserDrawer d={detail.byId[u.user_id]} loading={detail.loadingId === u.user_id} onOpenSession={onOpenSession} />
+                      <UserDrawer error={detail?.error} onRetry={() => onLoadDetail(openUser)} d={detail.byId[u.user_id]} loading={detail.loadingId === u.user_id} onOpenSession={onOpenSession} />
                     </td></tr>
                   )}
                 </React.Fragment>
@@ -151,7 +142,8 @@ export default function UsersTab({ data, loading, detail, onLoadDetail, onOpenSe
   );
 }
 
-function UserDrawer({ d, loading, onOpenSession }) {
+function UserDrawer({ d, loading, error, onRetry, onOpenSession }) {
+  if (error) return <p role="alert">Could not load this account: {error} <button className="adm-btn adm-btn-ghost" onClick={onRetry}>Retry</button></p>;
   if (loading || !d) return <div className="adm-skeleton adm-skeleton-block" style={{ height: 80 }} />;
   const id = d.identity || {};
   const ck = d.checklist || {};

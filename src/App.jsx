@@ -29,10 +29,6 @@ const ColumnMapperModal = React.lazy(() => import('./components/ColumnMapperModa
 const AddClaimsModal = React.lazy(() => import('./components/AddClaimsModal'));
 const UpgradeModal = React.lazy(() => import('./components/UpgradeModal'));
 import { loadGeoJSON, loadCSV, loadShapefileSet } from './utils/importers';
-import sampleClaims from './assets/sampleClaims.json';
-import sampleDrillholes from './assets/sampleDrillholes.json';
-import { auroraClaims, auroraDrillholes, auroraTargets, auroraCallouts } from './assets/auroraDemo';
-import { GALLERY_DEMOS } from './assets/galleryDemos';
 import {
   CALLOUT_TYPES,
   createInitialProjectState,
@@ -57,7 +53,7 @@ import { claimSummary, claimTooltipHtml, claimPopupRowsHtml, esc } from './utils
 import L from 'leaflet';
 import { detectRegion } from './utils/detectRegion';
 import { cleanLayerName } from './utils/cleanLayerName';
-import regionsNA from './assets/regionsNA.json';
+import regionsNA from './assets/regionsIndex.json';
 import { fitProjectToTemplate } from './utils/frameMapForTemplate';
 import { getThemeTokens } from './utils/themeTokens';
 import { saveLead, getLastLeadEmail } from './utils/leadCapture';
@@ -81,7 +77,6 @@ import {
   clearActiveProjectContext,
   deleteProjectRecord,
   duplicateProjectRecord,
-  estimateStorageUsedBytes,
   listProjects,
   loadDraft,
   renameProjectRecord,
@@ -114,6 +109,7 @@ import {
   loadSharedMap,
 } from './utils/cloudStorage';
 import { useAuth } from './hooks/useAuth';
+import { useStorageUsage } from './hooks/useStorageUsage';
 import { supabase } from './lib/supabase';
 import { renderBrandKitSwatch } from './utils/brandKitSwatch';
 import { captureProjectThumbnail } from './utils/thumbnailCapture';
@@ -1365,7 +1361,8 @@ export default function App({ initialAction = null }) {
   }, []);
 
   // Show storage warning banner for anonymous users when local storage is getting full
-  const showStorageWarning = !user && !storageWarningDismissed && estimateStorageUsedBytes() > 3_500_000;
+  const storageUsedBytes = useStorageUsage(!user && !storageWarningDismissed);
+  const showStorageWarning = !user && !storageWarningDismissed && storageUsedBytes > 3_500_000;
 
   // Claim-set qualifications carried on layers by the registry import: degraded
   // US state scoping, and jurisdictions the app auto-adopted instead of the user
@@ -2774,7 +2771,6 @@ export default function App({ initialAction = null }) {
   };
 
   const loadSampleData = async (styleId) => {
-    const makeFile = (json, name) => new File([JSON.stringify(json)], name, { type: 'application/json' });
     saveCoordRef.current.switchWorkspace();
     resetHistory();
     setProject(createInitialProjectState());
@@ -2784,13 +2780,17 @@ export default function App({ initialAction = null }) {
         await loadAuroraDemo();
         return;
       }
+      const { GALLERY_DEMOS } = await import('./assets/galleryDemos');
       // Each gallery card loads its own real, style-matched demo project.
       if (typeof styleId === 'string' && GALLERY_DEMOS[styleId]) {
         await loadGalleryDemo(GALLERY_DEMOS[styleId]);
         return;
       }
-      await addGeoJSONLayer(makeFile(sampleClaims, 'Sample Claims.geojson'));
-      await addGeoJSONLayer(makeFile(sampleDrillholes, 'Sample Drillholes.geojson'));
+      const [{ default: sampleClaims }, { default: sampleDrillholes }] = await Promise.all([
+        import('./assets/sampleClaims.json'), import('./assets/sampleDrillholes.json'),
+      ]);
+      await addGeoJSONAsLayer(sampleClaims, 'Sample Claims.geojson', 'demo');
+      await addGeoJSONAsLayer(sampleDrillholes, 'Sample Drillholes.geojson', 'demo');
       const accent = preset.accent || SAMPLE_ACCENT;
       const { accent: _a, _aurora, ...styleOverride } = preset;
       updateLayout({
@@ -2855,6 +2855,7 @@ export default function App({ initialAction = null }) {
   // landing page investor map: dissolved teal claims on satellite, drill
   // collars, gold dashed target areas, and intercept callouts.
   const loadAuroraDemo = async () => {
+    const { auroraClaims, auroraDrillholes, auroraTargets, auroraCallouts } = await import('./assets/auroraDemo');
     await addGeoJSONAsLayer(auroraClaims, 'Claims.geojson', 'demo');
     await addGeoJSONAsLayer(auroraDrillholes, 'Drill Collars.geojson', 'demo');
     await addGeoJSONAsLayer(auroraTargets, 'Target Areas.geojson', 'demo');

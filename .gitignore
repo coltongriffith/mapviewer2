@@ -47,3 +47,6 @@ public/.pseo-fixture-demo/
 /playwright-report/
 /blob-report/
 /playwright/.cache/
+
+# Supabase CLI local metadata
+supabase/.temp/

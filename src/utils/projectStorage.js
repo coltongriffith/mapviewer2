@@ -126,6 +126,7 @@ export function discardRecoveryRecord(key) {
 export function safeSetItem(key, value) {
   try {
     localStorage.setItem(key, value);
+    try { window.dispatchEvent(new Event('project-storage-updated')); } catch { /* non-browser caller */ }
     return { ok: true };
   } catch (e) {
     if (e?.name === 'QuotaExceededError' || e?.code === 22) {

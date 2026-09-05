@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  StatTile, DeltaChip, Sparkline, ColumnChart, ActivityDots, EmptyHint, InfoTip,
+  Card, StatTile, DeltaChip, Sparkline, ColumnChart, ActivityDots, EmptyHint,
 } from './primitives';
 import { METRIC_DEFS, formatRate, fmtNum, fmtDate, relTime } from './metrics';
 
@@ -12,18 +12,6 @@ const RangeToggle = ({ value, onChange }) => (
   </div>
 );
 
-const Card = ({ title, tip, eyebrow, action, children, full, className = '' }) => (
-  <section className={`adm-card${full ? ' adm-card-full' : ''} ${className}`}>
-    <div className="adm-card-head">
-      <div>
-        {eyebrow && <div className="admx-eyebrow">{eyebrow}</div>}
-        <h3 className="adm-card-title">{title}{tip && <InfoTip text={tip} label={title} />}</h3>
-      </div>
-      {action}
-    </div>
-    {children}
-  </section>
-);
 
 // Feed row copy from a server event descriptor.
 function feedText(f) {
@@ -34,7 +22,7 @@ function feedText(f) {
     case 'signup': return <><strong>{who}</strong> signed up</>;
     case 'project_created': return <><strong>{who}</strong> created project {name}</>;
     case 'project_saved': return <><strong>{who}</strong> worked on {name}</>;
-    case 'export_completed': return <><strong>{who}</strong> exported {String(m.format || '').toUpperCase()} {name}{m.clean ? <em className="admx-tag-clean"> clean</em> : ''}</>;
+    case 'export_completed': return <><strong>{who}</strong> exported {String(m.format || '').toUpperCase()} {name}</>;
     case 'export_failed': return <span className="admx-feed-warn"><strong>{who}</strong> — export failed ({String(m.format || '').toUpperCase()})</span>;
     case 'share_created': return <><strong>{who}</strong> shared a map</>;
     case 'share_forked': return <><strong>A visitor</strong> forked {name || 'a shared map'}</>;
@@ -122,7 +110,7 @@ export default function OverviewTab({ data, loading, range, onRange, onPickDay, 
             )}
         </Card>
         <Card title="Needs attention" eyebrow="Outreach candidates">
-          <NeedsList title="Never activated" empty="Nobody needs outreach — every recent signup has activated."
+          <NeedsList title="Never activated" empty="No accounts flagged by these activity rules. This does not establish customer satisfaction or purchase intent."
             rows={(data?.needs_attention?.never_activated || []).map((u) => ({ id: u.user_id, email: u.email, note: `signed up ${relTime(u.created_at)}` }))}
             onOpenUser={onOpenUser} />
           <NeedsList title="Went quiet" empty={null}
@@ -155,8 +143,8 @@ export default function OverviewTab({ data, loading, range, onRange, onPickDay, 
             : (
               <ul className="admx-active-list">
                 {data.most_active.map((u) => (
-                  <li key={u.user_id} onClick={() => onOpenUser?.(u.user_id)}>
-                    <span className="adm-truncate" title={u.email}>{u.email}</span>
+                  <li key={u.user_id}>
+                    <button className="admx-feed-link adm-truncate" onClick={() => onOpenUser?.(u.user_id)} title={u.email}>{u.email}</button>
                     <ActivityDots dots={u.dots || []} />
                     <span className="admx-active-count">{u.value_actions} actions</span>
                   </li>

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { trackEvent } from '../utils/track';
 import { getAttribution, recordSignupOnce } from '../utils/attribution';
@@ -11,6 +11,8 @@ const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
+  const currentUserRef = useRef(null);
+  const planRequestRef = useRef(0);
   const [loading, setLoading] = useState(true);
   // Billing plan. FAILS CLOSED: while the plan is unknown (loading, or the
   // lookup errored) the user falls back to FREE entitlements — unless this
@@ -23,7 +25,10 @@ export function AuthProvider({ children }) {
   const [recovering, setRecovering] = useState(false);
 
   const refreshPlan = useCallback(async (u) => {
-    const target = u || user;
+    const target = u || currentUserRef.current;
+    if (target?.id !== currentUserRef.current?.id) return;
+    const request = ++planRequestRef.current;
+    const current = () => request === planRequestRef.current && target?.id === currentUserRef.current?.id;
     if (!supabase || !target) {
       setPlanState({ plan: null, source: null, ready: Boolean(target) === false });
       return;
@@ -41,6 +46,7 @@ export function AuthProvider({ children }) {
         .select('plan, status, source')
         .eq('user_id', target.id)
         .maybeSingle();
+      if (!current()) return;
       if (error) {
         // Lookup failed → unresolved. Entitlements fall back to free unless a
         // prior confirmed-Pro grace record covers this user.
@@ -58,9 +64,9 @@ export function AuthProvider({ children }) {
       else clearProGrace();
       setPlanState({ plan: data.plan, source: data.source, ready: true });
     } catch {
-      setPlanState({ plan: null, source: null, ready: false });
+      if (current()) setPlanState({ plan: null, source: null, ready: false });
     }
-  }, [user]);
+  }, []);
 
   useEffect(() => {
     if (!supabase) {
@@ -69,36 +75,51 @@ export function AuthProvider({ children }) {
       return;
     }
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
+    let closed = false;
+    let authEventSeen = false;
+    const invalidatePlan = () => { ++planRequestRef.current; };
+    const acceptSession = (session, event) => {
+      if (closed) return;
+      const next = session?.user ?? null;
+      const previousId = currentUserRef.current?.id;
+      if (previousId !== next?.id) {
+        // A late request for another account must never change entitlements.
+        invalidatePlan();
+        setPlanState({ plan: null, source: null, ready: !next });
+        if (previousId) clearProGrace();
+      }
+      currentUserRef.current = next;
+      setUser(next);
       setLoading(false);
-      if (session?.user) {
-        refreshPlan(session.user);
-        recordSignupOnce(session.user, trackEvent);
-      }
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-      // Recovery link followed → the app must show a set-a-new-password form.
-      // Without this the reset email led nowhere.
-      if (_event === 'PASSWORD_RECOVERY') setRecovering(true);
-      if (_event === 'SIGNED_IN' && session?.user) {
-        // Run after Supabase releases the auth callback lock.
-        setTimeout(() => recordSignupOnce(session.user, trackEvent), 0);
-      }
-      if (session?.user) refreshPlan(session.user);
-      else {
-        // Signed out — drop the offline Pro grace so the next account on this
-        // browser cannot inherit it.
+      if (event === 'PASSWORD_RECOVERY') setRecovering(true);
+      if (next) {
+        refreshPlan(next);
+        if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+          // Supabase releases the auth callback lock before telemetry runs.
+          setTimeout(() => {
+            if (!closed && currentUserRef.current?.id === next.id) recordSignupOnce(next, trackEvent);
+          }, 0);
+        }
+      } else {
+        invalidatePlan();
         clearProGrace();
         setPlanState({ plan: null, source: null, ready: false });
       }
-    });
+    };
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!authEventSeen) acceptSession(session, 'INITIAL_SESSION');
+    }).catch(() => { if (!authEventSeen) acceptSession(null, 'INITIAL_SESSION'); });
 
-    return () => subscription.unsubscribe();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      authEventSeen = true;
+      acceptSession(session, event);
+    });
+    return () => {
+      closed = true;
+      invalidatePlan();
+      subscription.unsubscribe();
+    };
+  }, [refreshPlan]);
 
   async function signIn(email, password) {
     if (!supabase) throw new Error('Auth not configured');

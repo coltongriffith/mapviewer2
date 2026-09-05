@@ -140,7 +140,7 @@ describe('trimming a dissolved layer', () => {
     // the individual cells they are being asked to pick.
     const src = readFileSync('src/components/MapCanvas.jsx', 'utf8');
     expect(src).toMatch(/const trimming = trimLayerId === layer\.id;/);
-    expect(src).toMatch(/if \(style\.dissolve && !trimming/);
+    expect(src).toMatch(/dissolve: !!style\.dissolve && !trimming/);
   });
 
   it('rebuilds rather than taking the style-only path when trim mode changes', () => {

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import LandingPage from './components/LandingPage';
 import { useAuth } from './hooks/useAuth.jsx';
 
+const AdminPage = React.lazy(() => import('./components/AdminPage'));
 const EditorApp = React.lazy(() => import('./App'));
 const HowToUseModal = React.lazy(() => import('./components/HowToUseModal'));
 
@@ -14,6 +15,8 @@ export function needsWorkspace(location = window.location) {
 // Keep the workspace mounted once opened, so a trip home cannot lose edits.
 export default function AppRouter() {
   const { user, loading } = useAuth();
+  // A direct admin visit must not initialize the map editor, drafts or demos.
+  const [adminEntry, setAdminEntry] = useState(() => /^\/admin\/?$/.test(window.location.pathname));
   const [workspace, setWorkspace] = useState(() => needsWorkspace());
   const [help, setHelp] = useState(false);
   const [initialAction, setInitialAction] = useState(null);
@@ -33,7 +36,10 @@ export default function AppRouter() {
   }, []);
   useEffect(() => { if (!loading && user) setWorkspace(true); }, [loading, user]);
   useEffect(() => {
-    const pop = () => { if (needsWorkspace()) setWorkspace(true); };
+    const pop = () => {
+      if (!/^\/admin\/?$/.test(window.location.pathname)) setAdminEntry(false);
+      if (needsWorkspace()) setWorkspace(true);
+    };
     window.addEventListener('popstate', pop);
     return () => window.removeEventListener('popstate', pop);
   }, []);
@@ -42,6 +48,9 @@ export default function AppRouter() {
     window.history.pushState({}, '', path + (query ? `?${query}` : ''));
     setWorkspace(true);
   };
+  if (adminEntry) return <React.Suspense fallback={<div className="shared-map-loading" role="status">Opening analytics…</div>}>
+    <AdminPage onExit={() => { window.history.pushState({}, '', '/'); setAdminEntry(false); }} />
+  </React.Suspense>;
   if (workspace) return <React.Suspense fallback={<div className="shared-map-loading" role="status">Opening your workspace…</div>}><EditorApp initialAction={initialAction} /></React.Suspense>;
   return <>
     <LandingPage
