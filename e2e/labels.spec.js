@@ -4,7 +4,7 @@ import { test, expect } from '@playwright/test';
 // label did nothing and screen readers announced unlabelled fields.
 
 test('every htmlFor points at a control that actually exists', async ({ page }) => {
-  await page.goto('/?intent=drill-results');
+  await page.goto('/?intent=resume');
   await expect(page.locator('.leaflet-container')).toBeVisible({ timeout: 30_000 });
 
   const orphans = await page.evaluate(() => {
@@ -19,7 +19,7 @@ test('every htmlFor points at a control that actually exists', async ({ page }) 
 });
 
 test('ids are unique — a duplicate silently breaks association', async ({ page }) => {
-  await page.goto('/?intent=drill-results');
+  await page.goto('/?intent=resume');
   await expect(page.locator('.leaflet-container')).toBeVisible({ timeout: 30_000 });
 
   const dupes = await page.evaluate(() => {
@@ -33,7 +33,7 @@ test('ids are unique — a duplicate silently breaks association', async ({ page
 });
 
 test('clicking a label focuses its control', async ({ page }) => {
-  await page.goto('/?intent=drill-results');
+  await page.goto('/?intent=resume');
   await expect(page.locator('.leaflet-container')).toBeVisible({ timeout: 30_000 });
 
   // Layout is where the labelled text fields live (title, subtitle, metadata).

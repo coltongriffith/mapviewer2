@@ -25,6 +25,9 @@ const EVENT_ALLOWLIST = new Set([
   'export_completed',
   'export_gate_shown',
   'export_gate_signup_started',
+  'signup_link_sent',
+  'signup_link_failed',
+  'investor_layout_selected',
   'share_created',
   'share_viewed',
   'share_forked',
@@ -121,18 +124,20 @@ function geoFromHeaders(h) {
   };
 }
 
-async function resolveUserId(req, sb) {
+async function resolveUser(req, sb) {
   const auth = req.headers?.authorization || '';
   const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
   if (!token || token.length > 4096) return null;
   try {
     const { data, error } = await sb.auth.getUser(token);
     if (error) return null;
-    return data?.user?.id || null;
+    return data?.user || null;
   } catch {
     return null;
   }
 }
+
+async function resolveUserId(req, sb) { return (await resolveUser(req, sb))?.id || null; }
 
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
@@ -165,7 +170,10 @@ export default async function handler(req, res) {
   if (!sessionId || !SESSION_ID_RE.test(sessionId)) return res.status(400).json({ error: 'invalid session_id' });
 
   // Without the service key we accept and drop — analytics never breaks the UI.
-  if (!SUPABASE_URL || !SERVICE_KEY) return res.status(204).end();
+  if (!SUPABASE_URL || !SERVICE_KEY) {
+    if (body.event === 'signup_completed') return res.status(503).json({ error: 'tracking unavailable' });
+    return res.status(204).end();
+  }
   const sb = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
 
   try {
@@ -188,6 +196,39 @@ export default async function handler(req, res) {
         if (s.length > MAX_PROPS_BYTES) return res.status(413).json({ error: 'props too large' });
         if (jsonDepth(body.props) > MAX_PROPS_DEPTH) return res.status(400).json({ error: 'props too deep' });
         props = Object.keys(body.props).length ? body.props : null;
+      }
+      if (event === 'signup_completed') {
+        const user = await resolveUser(req, sb);
+        const confirmedAt = user?.email_confirmed_at || user?.confirmed_at;
+        if (!user?.id || !confirmedAt || !Number.isFinite(Date.parse(confirmedAt))) {
+          return res.status(401).json({ error: 'confirmed account required' });
+        }
+        // Preserve pre-existing random-id signup rows. New signup rows use the
+        // account UUID as their event UUID, making concurrent tabs idempotent
+        // through the existing primary key without deleting historical data.
+        const existing = await sb.from('product_events').select('id')
+          .eq('event', event).eq('user_id', user.id).limit(1);
+        if (existing.error) throw existing.error;
+        if (existing.data?.length) return res.status(204).end();
+        const acquisition = user.user_metadata?.em_acquisition;
+        const allowed = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'gclid', 'gbraid', 'wbraid', 'claim', 'referrer', 'landing_path', 'acquisition_session'];
+        const firstTouch = {};
+        // Metadata is untrusted analytics context, never an authorization claim.
+        // For old accounts without signup-time metadata, don't attribute a new
+        // sign-in campaign to their historical registration.
+        if (acquisition && typeof acquisition === 'object') {
+          for (const key of allowed) {
+            const value = str(acquisition[key], 160);
+            if (value) firstTouch[key] = value;
+          }
+        }
+        const { error } = await sb.from('product_events').insert({
+          id: user.id, user_id: user.id, session_id: sessionId, event,
+          created_at: confirmedAt,
+          props: { ...firstTouch, account_created_at: user.created_at },
+        });
+        if (error && error.code !== '23505') throw error;
+        return res.status(204).end();
       }
       const userId = await resolveUserId(req, sb);
       const { error } = await sb.from('product_events').insert({ session_id: sessionId, user_id: userId, event, props });

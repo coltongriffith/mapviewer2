@@ -94,7 +94,7 @@ test.describe('editor', () => {
     if (await cta.count()) {
       await cta.click();
     } else {
-      await page.goto('/?intent=drill-results');
+      await page.goto('/?intent=resume');
     }
 
     // Leaflet mounts a .leaflet-container once the map is alive.
@@ -103,7 +103,7 @@ test.describe('editor', () => {
   });
 
   test('the export path is reachable from the editor', async ({ page }) => {
-    await page.goto('/?intent=drill-results');
+    await page.goto('/?intent=resume');
     await expect(page.locator('.leaflet-container')).toBeVisible({ timeout: 30_000 });
 
     // Export settings live in the inspector's Export tab, behind a collapsible

@@ -7,6 +7,7 @@ import LegendEditor from './components/LegendEditor';
 import { MarkerSvgIcon } from './utils/markerIcons.jsx';
 import CalloutsOverlay from './components/CalloutsOverlay';
 import LandingPage from './components/LandingPage';
+import SigninLinkStatus from './components/SigninLinkStatus';
 
 import SharedMapViewer from './components/SharedMapViewer';
 import UploadPanel from './components/UploadPanel';
@@ -60,11 +61,12 @@ import regionsNA from './assets/regionsNA.json';
 import { fitProjectToTemplate } from './utils/frameMapForTemplate';
 import { getThemeTokens } from './utils/themeTokens';
 import { saveLead, getLastLeadEmail } from './utils/leadCapture';
-import { trackSearch, trackEvent, trackEventOnce, trackPageView, trackPing } from './utils/track';
+import { trackSearch, trackEvent, trackEventOnce } from './utils/track';
 import { createSaveCoordinator, runGuardedSave } from './utils/saveCoordinator';
 import { US_CLAIMS_ENABLED, US_STATES, US_GROUP_LABEL, US_GEOMETRY_DISCLAIMER, isUsJurisdiction } from './utils/jurisdictions';
 import { clampExportSize, canExportFormat, maxPixelRatioFor, PRO_MAX_EXPORT_PIXELS } from './utils/entitlements';
 import { verifyCheckoutSession } from './utils/billing';
+import { trackVerifiedPurchase } from './utils/purchaseTracking';
 import { runCloudMigration } from './utils/cloudMigration';
 import { scopingWarning } from './utils/scopingNotice';
 import { CLAIM_NAME_CAVEAT } from './utils/claimProvenance';
@@ -762,7 +764,7 @@ const REGION_TO_PROVINCE = {
   ...(US_CLAIMS_ENABLED ? US_REGION_SLUGS : {}),
 };
 
-export default function App() {
+export default function App({ initialAction = null }) {
   const mapContainerRef = useRef(null);
   const mapViewportRef = useRef(null);
   const leafletMapRef = useRef(null);
@@ -784,6 +786,8 @@ export default function App() {
   const [claimPrompt, setClaimPrompt] = useState(null); // { company }
   // One-time, per-session nudge shown to anonymous users right after they export.
   const [showPostExportSignup, setShowPostExportSignup] = useState(false);
+  const [exportLinkStatus, setExportLinkStatus] = useState(null);
+  const [investorFrameRequest, setInvestorFrameRequest] = useState(0);
   const [cloudTemplates, setCloudTemplates] = useState([]);
   const [accountSettings, setAccountSettings] = useState({});
 
@@ -1053,11 +1057,11 @@ export default function App() {
 
   // Onboarding checklist progress (Add data → Style → Export). Derived from
   // project state so steps tick off automatically; the card persists past the
-  // first layer until all three are done or the user dismisses it.
+  // first layer until the map is exported and the user is signed in or the user dismisses it.
   const onbStep1 = project.layers.length > 0 || (project.areaClaims?.features?.length > 0);
-  const onbStep2 = onbStep1 && (project.layers.some((l) => l.userStyled) || Boolean(project.layout?.logo));
+  const onbStep2 = onbStep1 && (project.layout?.onboardingLayoutSelected || project.layers.some((l) => l.userStyled) || Boolean(project.layout?.logo));
   const onbStep3 = hasExported;
-  const showOnboarding = !onboardingDismissed && !(onbStep1 && onbStep2 && onbStep3);
+  const showOnboarding = !onboardingDismissed && !(onbStep1 && onbStep2 && onbStep3 && user);
 
   useEffect(() => {
     if (!bootstrappedRef.current) {
@@ -1308,45 +1312,6 @@ export default function App() {
       type: 'error',
       message: 'A locally saved project record was corrupted and could not be opened. The original data was preserved — contact support, or use __exportRecovery() / __discardRecovery() in the browser console to export or remove it.',
     });
-  }, []);
-
-  // Track unique visitor sessions (once per browser session, fire-and-forget).
-  // Geo + user identity are resolved server-side by /api/track — no client
-  // geo round-trip and no direct table insert.
-  useEffect(() => {
-    if (sessionStorage.getItem('em_visited')) return;
-    sessionStorage.setItem('em_visited', '1');
-    const params = new URLSearchParams(window.location.search);
-    const ref = document.referrer || null;
-    const refDomain = ref ? (() => { try { return new URL(ref).hostname; } catch { return ref; } })() : null;
-    trackPageView({
-      path: window.location.pathname,
-      referrer: refDomain,
-      utmSource: params.get('utm_source'),
-      utmMedium: params.get('utm_medium'),
-      utmCampaign: params.get('utm_campaign'),
-      device: /Mobi|Android/i.test(navigator.userAgent) ? 'mobile' : 'desktop',
-    });
-  }, []);
-
-  // Live-presence heartbeat: ping /api/track every ~25s while the page is
-  // visible, so the admin "live visitors" map reflects who's actually on the
-  // site right now. The server derives location from edge headers and writes
-  // live_pings with the service role — the table is no longer readable or
-  // writable from the browser.
-  useEffect(() => {
-    const ping = () => {
-      if (document.visibilityState !== 'visible') return;
-      trackPing();
-    };
-    ping();
-    const timer = setInterval(ping, 25000);
-    const onVisible = () => { if (document.visibilityState === 'visible') ping(); };
-    document.addEventListener('visibilitychange', onVisible);
-    return () => {
-      clearInterval(timer);
-      document.removeEventListener('visibilitychange', onVisible);
-    };
   }, []);
 
   // When user logs in, apply their default brand kit to the current (unsaved) project
@@ -2680,6 +2645,7 @@ export default function App() {
       id,
       name: baseName,
       sourceName: fileName,
+      dataSource: source,
       displayName,
       type: kind,
       visible: true,
@@ -3181,13 +3147,7 @@ export default function App() {
             // result, not the raw ?billing=success query param, since that
             // param is user-typeable/reloadable and would inflate/corrupt
             // the Ads account's conversion data.
-            if (typeof window.gtag === 'function') {
-              window.gtag('event', 'conversion', {
-                send_to: 'AW-18358773663/2_5ZCOf43dgcEJ_PkrJE',
-                value: 1.0,
-                currency: 'CAD',
-              });
-            }
+            trackVerifiedPurchase(result);
             setUploadStatus({ type: 'success', message: 'Welcome to Pro! Clean exports, HD formats, and unlimited projects are unlocked.' });
             // Resume the export that triggered the paywall, once entitlements
             // actually reflect Pro (see the effect below) — not immediately,
@@ -3248,11 +3208,15 @@ export default function App() {
         setAddClaimsProvince(province);
         setAddClaimsModalPath('registry');
       }
+      const query = params.get('query')?.trim();
+      if (query) { setAddClaimsQuery(query); setAddClaimsAutoSearch(true); }
       setShowAddClaimsModal(true);
     } else if (intent === 'claims-upload') {
       setAddClaimsModalPath('upload');
       setShowAddClaimsModal(true);
     } else if (intent === 'drill-results' || intent === 'csv') {
+      setAddClaimsModalPath('upload');
+      setShowAddClaimsModal(true);
       setUploadStatus({ type: 'info', message: 'Start with your drill hole or sample CSV.' });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -3579,6 +3543,22 @@ export default function App() {
       return applyModeToProject(withTemplate, getTemplate(t.templateId), t.mode);
     });
   };
+
+  useEffect(() => {
+    if (!investorFrameRequest || !mapReady) return undefined;
+    // Fit after the 16:9 surface has resized; fitting the previous dimensions
+    // clips claims at the bottom of the new export frame.
+    const timer = setTimeout(() => {
+      const map = leafletMapRef.current;
+      if (!map) return;
+      map.invalidateSize({ animate: false });
+      fitProjectToTemplate(project, map, { ...template, zones: resolvedZonesRef.current },
+        project.layout.compositionPreset || 'balanced', { focusRoles: true });
+    }, 120);
+    return () => clearTimeout(timer);
+    // Snapshot the chosen layout once, without refitting later manual edits.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [investorFrameRequest, mapReady]);
 
 
   const setDisplayLabel = (itemId, value) => {
@@ -4140,6 +4120,7 @@ export default function App() {
         entitlement_plan: tier,
         resolution_clamped: resolutionClamped,
         noWatermark: Boolean(extraOptions.noWatermark),
+        real_data: project.layers.some((layer) => ['upload', 'csv', 'registry', 'deeplink', 'tenure_monitor'].includes(layer.dataSource)),
       }, user?.id);
       setHasExported(true);
       // Anonymous exporter just got value — nudge them to save it to an account.
@@ -4200,6 +4181,16 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingProGateExport, entitlements]);
 
+  const sendExportLink = async (email) => {
+    setExportLinkStatus({ email, state: 'sending' });
+    try {
+      await signInWithMagicLink(email, { resumeEditor: true });
+      setExportLinkStatus({ email, state: 'sent' });
+    } catch {
+      setExportLinkStatus({ email, state: 'failed' });
+    }
+  };
+
   const handleExportModalConfirm = async (email, extraOpts = {}) => {
     setShowExportModal(false);
     saveLead({ email, projectTitle: project.layout?.title || '' });
@@ -4209,7 +4200,7 @@ export default function App() {
     // the email round-trip.
     if (!user && email) {
       trackEvent('export_gate_signup_started', { format: pendingExportFormat }, null);
-      signInWithMagicLink(email).catch(() => { /* email send is best-effort */ });
+      sendExportLink(email);
       // They just got a sign-in link — don't also fire the post-export nudge.
       try { sessionStorage.setItem('em_post_export_nudge', '1'); } catch { /* noop */ }
     }
@@ -4527,6 +4518,18 @@ export default function App() {
     setUploadStatus({ type: 'success', message: 'Started a new blank project workspace.' });
   };
 
+  const initialActionHandled = useRef(false);
+  useEffect(() => {
+    if (!initialAction || initialActionHandled.current) return;
+    initialActionHandled.current = true;
+    if (initialAction.type === 'project') {
+      openProjectFromRecent(initialAction.entry);
+      setScreen('editor');
+    }
+  // This is a one-time handoff from the lightweight marketing entry.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialAction]);
+
   const referenceOverlays = project.layout.referenceOverlays || {};
 
   if (screen === 'admin') {
@@ -4659,7 +4662,7 @@ export default function App() {
     return (
       <>
         <LandingPage
-          onOpenEditor={() => setScreen('editor')}
+          onOpenEditor={() => { setScreen('editor'); setAddClaimsModalPath('registry'); setShowAddClaimsModal(true); }}
           onLoadSample={loadSampleData}
           onLoadSampleStyle={(styleId) => loadSampleData(styleId)}
           recentProjects={recentProjects}
@@ -4687,6 +4690,8 @@ export default function App() {
 
   return (
     <div className="app-shell" data-preview={previewMode ? 'true' : 'false'}>
+      {!user && <SigninLinkStatus status={exportLinkStatus}
+        onRetry={() => sendExportLink(exportLinkStatus.email)} onClose={() => setExportLinkStatus(null)} />}
       {showMobileBanner && (
         <div className="mobile-editor-banner" role="status">
           <span>The editor works best on a desktop. Touch mostly works, but for the full experience grab a bigger screen.</span>
@@ -4781,8 +4786,6 @@ export default function App() {
         onClose={() => setInspectorOpen(false)}
         footer={<UserMenu onOpenTemplates={() => setShowBrandKitManager(true)} onOpenAccount={() => setScreen('dashboard')} onOpenTenureMonitor={() => { setTenureInitialFilter(null); setScreen('tenure'); }} />}
       >
-        {inspectorTab === 'data' && (
-          <>
           {showOnboarding ? (
             <div className="onboarding-card">
               <div className="onboarding-card-head">
@@ -4806,10 +4809,18 @@ export default function App() {
                 <li className={onbStep2 ? 'done' : (onbStep1 ? '' : 'onb-locked')}>
                   <span className="onb-tick">{onbStep2 ? '✓' : '2'}</span>
                   <div className="onb-body">
-                    <strong>Style it</strong>
+                    <strong>Choose your layout</strong>
                     {onbStep1 && !onbStep2 && (
                       <div className="onb-actions">
-                        <button type="button" onClick={() => { layersSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); trackEvent('onboarding_step', { step: 'style' }); }}>Open layer styling</button>
+                        <button type="button" onClick={() => {
+                          applyMapType('investor');
+                          handleRatioChange('landscape');
+                          updateLayout({ onboardingLayoutSelected: true,
+                            ...(project.layout.subtitle === 'Technical Results' ? { subtitle: 'Investor Map' } : {}) });
+                          setInvestorFrameRequest((value) => value + 1);
+                          trackEvent('investor_layout_selected', { format: '16:9' });
+                        }}>Use investor layout · 16:9</button>
+                        <button type="button" className="onb-link" onClick={() => { setInspectorTab('layout'); trackEvent('onboarding_step', { step: 'style' }); }}>Customize design</button>
                       </div>
                     )}
                   </div>
@@ -4817,7 +4828,7 @@ export default function App() {
                 <li className={onbStep3 ? 'done' : (onbStep1 ? '' : 'onb-locked')}>
                   <span className="onb-tick">{onbStep3 ? '✓' : '3'}</span>
                   <div className="onb-body">
-                    <strong>Export &amp; share</strong>
+                    <strong>Download your map</strong>
                     {onbStep1 && !onbStep3 && (
                       <div className="onb-actions">
                         <button type="button" onClick={() => { handleExportClick('png'); trackEvent('onboarding_step', { step: 'export' }); }}>Export PNG</button>
@@ -4825,9 +4836,19 @@ export default function App() {
                     )}
                   </div>
                 </li>
+                <li className={user ? 'done' : (onbStep3 ? '' : 'onb-locked')}>
+                  <span className="onb-tick">{user ? '✓' : '4'}</span>
+                  <div className="onb-body"><strong>Save for your next update</strong>
+                    {onbStep3 && !user && <div className="onb-actions">
+                      <button type="button" onClick={() => setShowAuthFromGate(true)}>Save to a free account</button>
+                    </div>}
+                  </div>
+                </li>
               </ol>
             </div>
           ) : null}
+        {inspectorTab === 'data' && (
+          <>
           <UploadPanel onUploadFile={handleUploadFile} onUploadFiles={handleUploadFiles} inputRef={uploadInputRef} status={uploadStatus} layers={project.layers} />
           <div className="add-claims-sidebar-btn-wrap">
             <button
@@ -7038,8 +7059,8 @@ export default function App() {
         <AuthModal
           onClose={() => setClaimPrompt(null)}
           context={claimPrompt.loaded
-            ? `Claim the ${claimPrompt.company} page — create a free account (no password) to save this map, brand it, and export it without a watermark.`
-            : `Claim the ${claimPrompt.company} page — create a free account (no password) to build and save your company's map, brand it, and export without a watermark.`}
+            ? `Save a copy of the ${claimPrompt.company} map to a free account. Customize it and download a PNG with credit. Pro removes the credit.`
+            : `Create a free account to build and save your ${claimPrompt.company} map. Free PNG exports include credit; Pro removes it.`}
         />
       )}
       {showPostExportSignup && !user && (

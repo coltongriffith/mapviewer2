@@ -19,10 +19,14 @@ export default defineConfig({
     }),
   ],
   build: {
+    manifest: true,
     sourcemap: false,
     rollupOptions: {
       output: {
         manualChunks(id) {
+          // Vite's shared preload helper must not pull a lazy PDF/export
+          // engine into the marketing page just to perform dynamic imports.
+          if (id.includes('vite/preload-helper')) return 'vendor-preload';
           if (id.includes('node_modules/leaflet')) return 'vendor-leaflet';
           if (id.includes('node_modules/jspdf') || id.includes('node_modules/fflate')) return 'vendor-export';
           if (id.includes('node_modules/jszip')) return 'vendor-export';

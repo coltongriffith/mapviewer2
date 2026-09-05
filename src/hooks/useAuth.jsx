@@ -1,29 +1,13 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { trackEvent } from '../utils/track';
-import { getAttribution } from '../utils/attribution';
+import { getAttribution, recordSignupOnce } from '../utils/attribution';
 import { isGrandfathered } from '../utils/pricing';
 import {
   resolveTier, entitlementsFor, rememberProGrace, clearProGrace, TIERS,
 } from '../utils/entitlements';
 
 const AuthContext = createContext(null);
-
-// Fire signup_completed exactly once per new account, on the first SIGNED_IN
-// after the account was created (covers password+confirm and magic-link paths).
-function trackSignupOnce(user) {
-  if (!user?.id || !user.created_at) return;
-  const ageMs = Date.now() - new Date(user.created_at).getTime();
-  if (ageMs > 10 * 60 * 1000) return; // existing account signing back in
-  const flag = `em_signup_tracked_${user.id}`;
-  try {
-    if (localStorage.getItem(flag)) return;
-    localStorage.setItem(flag, '1');
-  } catch { /* still fire; worst case a duplicate row */ }
-  // Attach first-touch attribution (utm_source / utm_campaign / claimed ticker)
-  // so the admin funnel can tell which channel produced each account.
-  trackEvent('signup_completed', getAttribution(), user.id);
-}
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
@@ -88,7 +72,10 @@ export function AuthProvider({ children }) {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
       setLoading(false);
-      if (session?.user) refreshPlan(session.user);
+      if (session?.user) {
+        refreshPlan(session.user);
+        recordSignupOnce(session.user, trackEvent);
+      }
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -96,7 +83,10 @@ export function AuthProvider({ children }) {
       // Recovery link followed → the app must show a set-a-new-password form.
       // Without this the reset email led nowhere.
       if (_event === 'PASSWORD_RECOVERY') setRecovering(true);
-      if (_event === 'SIGNED_IN' && session?.user) trackSignupOnce(session.user);
+      if (_event === 'SIGNED_IN' && session?.user) {
+        // Run after Supabase releases the auth callback lock.
+        setTimeout(() => recordSignupOnce(session.user, trackEvent), 0);
+      }
       if (session?.user) refreshPlan(session.user);
       else {
         // Signed out — drop the offline Pro grace so the next account on this
@@ -121,18 +111,22 @@ export function AuthProvider({ children }) {
     // Return the user to the page they signed up from (e.g. a /map/:id share
     // link) after they confirm their email, so a pending "edit a copy" resumes.
     const emailRedirectTo = typeof window !== 'undefined' ? window.location.href : undefined;
-    const { error } = await supabase.auth.signUp({ email, password, options: { emailRedirectTo } });
+    const { error } = await supabase.auth.signUp({ email, password, options: { emailRedirectTo, data: { em_acquisition: getAttribution() } } });
     if (error) throw error;
   }
 
-  async function signInWithMagicLink(email) {
+  async function signInWithMagicLink(email, { resumeEditor = false } = {}) {
     if (!supabase) throw new Error('Auth not configured');
-    // One email, no password, no confirm round-trip — the link both creates
-    // the account (if new) and signs in, returning to the page it was sent
-    // from (so a pending shared-map fork or unsaved draft is still there).
-    const emailRedirectTo = typeof window !== 'undefined' ? window.location.href : undefined;
-    const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo } });
-    if (error) throw error;
+    const emailRedirectTo = resumeEditor
+      ? new URL('/?intent=resume', window.location.origin).href : window.location.href;
+    const { error } = await supabase.auth.signInWithOtp({ email, options: {
+      emailRedirectTo, data: { em_acquisition: getAttribution() },
+    } });
+    if (error) {
+      trackEvent('signup_link_failed', { context: resumeEditor ? 'export' : 'auth', code: error.code || 'send_failed' });
+      throw error;
+    }
+    trackEvent('signup_link_sent', { context: resumeEditor ? 'export' : 'auth' });
   }
 
   async function signOut() {

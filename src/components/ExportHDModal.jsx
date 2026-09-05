@@ -112,8 +112,7 @@ export default function ExportHDModal({
               Enter your email to remove the large watermark. A small <em>explorationmaps.com</em>
               credit stays in the corner on the free plan, and free exports are capped at{' '}
               {FREE_MAX_EXPORT_PIXELS.toLocaleString()} px — Pro removes the credit and raises the
-              resolution. We'll also email you a one-click sign-in link (no password) so this map is
-              saved to your free account and ready to reuse.
+              resolution. We'll also email you a one-click sign-in link (no password) so you can save this map to your free account and reuse it on this device.
             </p>
 
             {ratioBadge}
@@ -133,12 +132,12 @@ export default function ExportHDModal({
                 autoFocus
               />
               {error && <div className="export-hd-error" role="alert">{error}</div>}
-              <p className="export-hd-small">No spam. Your map and account stay free during early access.</p>
+              <p className="export-hd-small">Free account. No card required.</p>
             </div>
 
             <div className="export-hd-actions">
               <button className="btn primary export-hd-btn-primary" type="button" onClick={handleSubmit}>
-                Email my link &amp; download clean {formatLabel}
+                Email sign-in link &amp; download {formatLabel}
               </button>
               {!isPdf && (
                 <button className="export-hd-skip" type="button" onClick={onWithWatermark}>
