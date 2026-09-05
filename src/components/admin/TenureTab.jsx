@@ -1,20 +1,8 @@
 import React, { useState } from 'react';
 import { supabase } from '../../lib/supabase';
-import { StatTile, InfoTip, EmptyHint } from './primitives';
+import { Card, StatTile, EmptyHint } from './primitives';
 import { fmtNum, relTime } from './metrics';
 
-const Card = ({ title, tip, eyebrow, count, children, full }) => (
-  <section className={`adm-card${full ? ' adm-card-full' : ''}`}>
-    <div className="adm-card-head">
-      <div>
-        {eyebrow && <div className="admx-eyebrow">{eyebrow}</div>}
-        <h3 className="adm-card-title">{title}{tip && <InfoTip text={tip} label={title} />}</h3>
-      </div>
-      {count != null && <span className="adm-pill">{count}</span>}
-    </div>
-    {children}
-  </section>
-);
 
 // Tenure Monitor operations.
 //

@@ -4,10 +4,9 @@ import 'leaflet/dist/leaflet.css';
 import { makeMarkerIcon } from '../utils/leaflet';
 import { claimTooltipHtml, claimPopupRowsHtml } from '../utils/claimInfo';
 import { POINT_ROLES } from '../projectState';
-import regionsNA from '../assets/regionsNA.json';
-import dissolveGeo from '@turf/dissolve';
+import { createLayerGeometryCache } from '../utils/layerGeometry';
 import { reportError } from '../utils/errorReporter';
-import { featureKey, visibleGeojson } from '../utils/featureIdentity.js';
+import { featureKey } from '../utils/featureIdentity.js';
 import { REFERENCE_OVERLAY_CONFIG, overlayAttribution } from '../utils/referenceOverlayConfig.js';
 import { basemapConfig } from '../utils/basemapConfig.js';
 
@@ -30,6 +29,8 @@ function detectGeomType(geojson) {
 
 export default function MapCanvas({ onReady, project, template, onFeatureClick, onMapClick, annotationToolRef, trimLayerId = null, onOverlayError }) {
   const mapRef = useRef(null);
+  const geometryCache = useRef(null);
+  if (!geometryCache.current) geometryCache.current = createLayerGeometryCache();
   const onMapClickRef = useRef(onMapClick);
   const onFeatureClickRef = useRef(onFeatureClick);
   const prevTrimLayerIdRef = useRef(null);
@@ -197,14 +198,19 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
     if (!group) return;
     group.clearLayers();
     const highlights = project?.layout?.regionHighlights || [];
-    highlights.forEach(({ regionId, color, opacity }) => {
-      const region = regionsNA.find((r) => r.id === regionId);
-      if (!region) return;
-      L.geoJSON(
-        { type: 'Feature', geometry: { type: 'Polygon', coordinates: region.coordinates } },
-        { pane: 'regionHighlightPane', style: () => ({ fillColor: color || '#ef4444', fillOpacity: opacity ?? 0.45, stroke: false, weight: 0 }) }
-      ).addTo(group);
-    });
+    if (!highlights.length) return;
+    let cancelled = false;
+    import('../assets/regionsNA.json').then(({ default: regions }) => {
+      if (cancelled) return;
+      highlights.forEach(({ regionId, color, opacity }) => {
+        const region = regions.find(r => r.id === regionId);
+        if (!region) return;
+        L.geoJSON({ type: 'Feature', geometry: { type: 'Polygon', coordinates: region.coordinates } }, {
+          pane: 'regionHighlightPane', style: () => ({ fillColor: color || '#ef4444', fillOpacity: opacity ?? 0.45, stroke: false, weight: 0 }),
+        }).addTo(group);
+      });
+    }).catch(() => { if (!cancelled) reportError('Region highlight geometry could not load', { kind: 'asset_load' }); });
+    return () => { cancelled = true; };
   }, [project?.layout?.regionHighlights]);
 
   useEffect(() => {
@@ -288,32 +294,13 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
       const drillholeRenderer = isDrillholes ? L.svg({ padding: 0 }) : undefined;
       if (drillholeRenderer) svgRendererRefs.current.push(drillholeRenderer);
 
-      // Dissolve adjacent polygons to remove internal shared borders
-      // Features the user removed come out BEFORE dissolve — dissolve merges
-      // adjacent polygons into one outline, so filtering after it would leave a
-      // removed claim absorbed into the block's outer boundary.
-      let geojsonData = visibleGeojson(layer);
-
-      // Dissolve is suspended for the layer being trimmed, and this is a
-      // correctness fix rather than a nicety. dissolveGeo emits ONE feature with
-      // EMPTY properties, so the shape handed to a click handler carries no
-      // registry identity: featureKey falls through to the merged outline's
-      // coordinates, the override is written under a key no original feature
-      // has, and the click silently does nothing at all.
-      //
-      // Un-dissolving while trimming also happens to be what the user needs —
-      // you cannot pick individual cells out of a block whose internal borders
-      // have been erased.
+      // Hiding a feature invalidates the geometry cache. Styling a marker or
+      // another layer does not repeat an expensive polygon dissolve.
+      // Trim mode always exposes individual claim identities for hit testing.
       const trimming = trimLayerId === layer.id;
-      if (style.dissolve && !trimming && geomType !== 'line' && !isDrillholes) {
-        try {
-          const fc = geojsonData.type === 'FeatureCollection'
-            ? geojsonData
-            : { type: 'FeatureCollection', features: geojsonData.type === 'Feature' ? [geojsonData] : [{ type: 'Feature', geometry: geojsonData, properties: {} }] };
-          const dissolved = dissolveGeo(fc);
-          if (dissolved?.features?.length) geojsonData = dissolved;
-        } catch (_) { /* dissolve failed — use original */ }
-      }
+      const geojsonData = geometryCache.current(layer, {
+        dissolve: !!style.dissolve && !trimming && geomType !== 'line' && !isDrillholes,
+      });
 
       const geoLayer = L.geoJSON(geojsonData, {
         renderer: svgRenderer,
@@ -444,7 +431,7 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
       }
     });
     prevLayersRef.current = newLayers;
-  }, [project?.layers, template, trimLayerId]);
+  }, [project?.layers, template, trimLayerId, annotationToolRef]);
 
   return <div ref={mapElRef} className="leaflet-map-canvas" />;
 }

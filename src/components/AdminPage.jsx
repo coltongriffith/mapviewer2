@@ -1,23 +1,16 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { geoOrthographic, geoPath, geoGraticule10 } from 'd3-geo';
-import { feature } from 'topojson-client';
-import landTopo from 'world-atlas/land-110m.json';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
-import OverviewTab from './admin/OverviewTab';
-import HealthTab from './admin/HealthTab';
-import UsersTab from './admin/UsersTab';
-import ProductTab from './admin/ProductTab';
-import RevenueTab from './admin/RevenueTab';
-import TenureTab from './admin/TenureTab';
+const OverviewTab = React.lazy(() => import('./admin/OverviewTab'));
+const HealthTab = React.lazy(() => import('./admin/HealthTab'));
+const UsersTab = React.lazy(() => import('./admin/UsersTab'));
+const ProductTab = React.lazy(() => import('./admin/ProductTab'));
+const RevenueTab = React.lazy(() => import('./admin/RevenueTab'));
+const TenureTab = React.lazy(() => import('./admin/TenureTab'));
 import {
-  useDashboardWindow, useOverview, useEngagement, useUsersOverview, useUserDetail, useErrorSummary, useRevenue, useTenureOps,
+  useRpc, useGrowth, useDashboardWindow, useOverview, useEngagement, useUsersOverview, useUserDetail, useErrorSummary, useRevenue, useTenureOps,
 } from './admin/useDashboardData';
-
-// Real coastline geometry (110m resolution — plenty of detail for a 240px
-// globe widget) instead of the old hand-tuned continent-ellipse dot cloud.
-const LAND_FEATURE = feature(landTopo, landTopo.objects.land);
-const GRATICULE = geoGraticule10();
+import { pacificDate, addCalendarDays, dayWindow } from './admin/dateWindow';
 
 /**
  * Dashboard series colours.
@@ -40,7 +33,8 @@ const SERIES = {
   accent:  '#c65322',  // Claim Copper
 };
 
-const ADMIN_EMAIL = import.meta.env.VITE_ADMIN_EMAIL;
+const WorldMap = React.lazy(() => import('./admin/WorldMap'));
+const GrowthTab = React.lazy(() => import('./admin/GrowthTab'));
 
 // ── Formatting helpers ─────────────────────────────────────────────────────────
 function fmt(iso) {
@@ -153,193 +147,6 @@ function HBars({ rows, color = SERIES.slate, emptyMsg }) {
   );
 }
 
-// Orthographic (3D sphere) projection of a lon/lat point. Returns null when the
-// point is on the far side of the globe (not visible from the current rotation).
-const GLOBE_TILT = 16; // degrees — slight downward tilt for a nicer view of land
-function projectOrtho(lon, lat, rotationDeg, R) {
-  const lambda = (lon * Math.PI) / 180;
-  const phi = (lat * Math.PI) / 180;
-  const lambda0 = (rotationDeg * Math.PI) / 180;
-  const phi0 = (GLOBE_TILT * Math.PI) / 180;
-  const cosc = Math.sin(phi0) * Math.sin(phi) + Math.cos(phi0) * Math.cos(phi) * Math.cos(lambda - lambda0);
-  if (cosc < -0.03) return null; // back of the sphere
-  const x = R * Math.cos(phi) * Math.sin(lambda - lambda0);
-  const y = R * (Math.cos(phi0) * Math.sin(phi) - Math.sin(phi0) * Math.cos(phi) * Math.cos(lambda - lambda0));
-  return { x, y, depth: Math.max(0, cosc) };
-}
-
-function WorldMap({ locations }) {
-  const R = 100;
-  const [rotation, setRotation] = useState(-20);
-  const [hoverIdx, setHoverIdx] = useState(null);
-  const pausedRef = useRef(false);
-  const draggingRef = useRef(false);
-  const lastXRef = useRef(0);
-  const resumeTimerRef = useRef(null);
-
-  useEffect(() => {
-    let raf;
-    const tick = () => {
-      if (!pausedRef.current) setRotation((r) => r + 0.1);
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, []);
-
-  const pings = useMemo(
-    () => (locations || []).filter((l) => l.lat != null && l.lng != null),
-    [locations]
-  );
-
-  // Cluster pings that round to the same ~10km grid cell (multiple tabs/visitors
-  // in the same city) into a single marker with a count, instead of stacking
-  // identical dots on top of each other.
-  const clusters = useMemo(() => {
-    const byKey = new Map();
-    for (const l of pings) {
-      const key = `${l.lat.toFixed(1)},${l.lng.toFixed(1)}`;
-      const existing = byKey.get(key);
-      if (existing) {
-        existing.count += 1;
-        if (!existing.city && l.city) existing.city = l.city;
-        if (!existing.region && l.region) existing.region = l.region;
-      } else {
-        byKey.set(key, { lat: l.lat, lng: l.lng, city: l.city, region: l.region, country: l.country, count: 1 });
-      }
-    }
-    return [...byKey.values()];
-  }, [pings]);
-
-  // Real orthographic projection (d3-geo handles antimeridian wrap and
-  // back-of-sphere clipping correctly, which the old manual dot-cloud couldn't).
-  const pathGen = useMemo(() => {
-    const projection = geoOrthographic()
-      .rotate([-rotation, -GLOBE_TILT])
-      .clipAngle(90)
-      .scale(R)
-      .translate([0, 0]);
-    return geoPath(projection);
-  }, [rotation]);
-
-  const landPath = useMemo(() => pathGen(LAND_FEATURE), [pathGen]);
-  const graticulePath = useMemo(() => pathGen(GRATICULE), [pathGen]);
-
-  const pingPoints = useMemo(() => {
-    const out = [];
-    clusters.forEach((l, i) => {
-      const p = projectOrtho(l.lng, l.lat, rotation, R);
-      if (p) out.push({ ...p, city: l.city, region: l.region, country: l.country, count: l.count, key: i });
-    });
-    return out;
-  }, [clusters, rotation]);
-
-  function pauseThenResume() {
-    if (resumeTimerRef.current) clearTimeout(resumeTimerRef.current);
-    resumeTimerRef.current = setTimeout(() => { pausedRef.current = false; }, 1800);
-  }
-  function onPointerDown(e) {
-    draggingRef.current = true;
-    pausedRef.current = true;
-    lastXRef.current = e.clientX;
-    e.currentTarget.setPointerCapture?.(e.pointerId);
-  }
-  function onPointerMove(e) {
-    if (!draggingRef.current) return;
-    const dx = e.clientX - lastXRef.current;
-    lastXRef.current = e.clientX;
-    setRotation((r) => r + dx * 0.5);
-  }
-  function onPointerUp() {
-    draggingRef.current = false;
-    pauseThenResume();
-  }
-
-  const hovered = hoverIdx != null ? pingPoints.find((p) => p.key === hoverIdx) : null;
-
-  return (
-    <div>
-      <div className="adm-globe-header">
-        <span className="adm-globe-live-dot" />
-        {pings.length} visitor{pings.length === 1 ? '' : 's'} live now
-      </div>
-      <div
-        className="adm-globe-wrap"
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerLeave={onPointerUp}
-      >
-        <svg viewBox={`${-R - 12} ${-R - 12} ${2 * R + 24} ${2 * R + 24}`} className="adm-globe-svg">
-          <defs>
-            <radialGradient id="admGlobeShade" cx="35%" cy="30%" r="75%">
-              <stop offset="0%" stopColor="#3c5157" />
-              <stop offset="60%" stopColor="#1d2c31" />
-              <stop offset="100%" stopColor="#0b1417" />
-            </radialGradient>
-            <radialGradient id="admGlobeAtmo" cx="50%" cy="50%" r="50%">
-              <stop offset="78%" stopColor="#8fa3a8" stopOpacity="0" />
-              <stop offset="92%" stopColor="#8fa3a8" stopOpacity="0.18" />
-              <stop offset="100%" stopColor="#8fa3a8" stopOpacity="0" />
-            </radialGradient>
-          </defs>
-          <circle cx="0" cy="0" r={R + 8} fill="url(#admGlobeAtmo)" />
-          <circle cx="0" cy="0" r={R} fill="url(#admGlobeShade)" className="adm-globe-sphere" />
-          {graticulePath && <path d={graticulePath} className="adm-globe-grid" />}
-          {landPath && <path d={landPath} className="adm-globe-land" />}
-          {pingPoints.map((p) => {
-            const r = Math.min(4.5, 1.8 + Math.log2(p.count + 1));
-            return (
-              <g
-                key={p.key}
-                style={{ opacity: Math.max(0.4, p.depth), cursor: 'pointer' }}
-                onPointerEnter={() => setHoverIdx(p.key)}
-                onPointerLeave={() => setHoverIdx((cur) => (cur === p.key ? null : cur))}
-              >
-                <circle cx={p.x} cy={p.y} r={r + 1.6} className="adm-globe-ping-halo" />
-                <circle cx={p.x} cy={p.y} r={r} className="adm-globe-ping" />
-                {p.count > 1 && (
-                  <text x={p.x} y={p.y + 2.6} textAnchor="middle" className="adm-globe-ping-count">{p.count}</text>
-                )}
-              </g>
-            );
-          })}
-          <circle cx="0" cy="0" r={R} fill="none" className="adm-globe-rim" />
-        </svg>
-        {hovered && (
-          <div
-            className="adm-globe-tooltip"
-            style={{
-              left: `calc(50% + ${(hovered.x / R) * 50}%)`,
-              top: `calc(50% + ${(hovered.y / R) * 50}%)`,
-            }}
-          >
-            <strong>{[hovered.city, hovered.region].filter(Boolean).join(', ') || 'Unknown location'}</strong>
-            <span>{hovered.country || ''}</span>
-            <span className="adm-globe-tooltip-count">{hovered.count} active {hovered.count === 1 ? 'tab' : 'tabs'}</span>
-          </div>
-        )}
-        {pings.length === 0 && <div className="adm-globe-empty">No live visitors right now</div>}
-      </div>
-      {clusters.length > 0 && (
-        <div className="adm-worldmap-legend">
-          {clusters
-            .slice()
-            .sort((a, b) => b.count - a.count)
-            .slice(0, 10)
-            .map((l, i) => (
-              <span key={i} className="adm-worldmap-loc">
-                <span className="adm-donut-dot" />
-                {[l.city, l.region, l.country].filter(Boolean).join(', ') || 'Unknown'}
-                {l.count > 1 && <span className="adm-worldmap-loc-count">×{l.count}</span>}
-              </span>
-            ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 const EVENT_KIND_META = {
   page_view: { icon: '◦', label: 'Page view' },
   search: { icon: '🔍', label: 'Search' },
@@ -361,41 +168,39 @@ function fmtDuration(seconds) {
   return s ? `${m}m ${s}s` : `${m}m`;
 }
 
-// Heuristic only — there's no ground truth for "is this a real visitor", but a
-// session with more than one page view, or any search/export/lead, is very
-// unlikely to be a bot or an instant bounce.
-function sessionLooksReal(s) {
+// Engagement is an observed action pattern, not a bot or human classifier.
+function sessionEngaged(s) {
   return Number(s.page_view_count) > 1 || Number(s.search_count) > 0 || Number(s.export_count) > 0 || !!s.lead_email;
 }
 
-function DayDetail({ day, summary, sessions, loading, onOpenSession }) {
+function DayDetail({ day, summary, sessions, loading, error, onClose, onOpenSession }) {
   const dayLabel = new Date(`${day}T00:00:00.000Z`).toLocaleDateString('en-CA', {
-    weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
+    timeZone: 'UTC', weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
   });
-  const real = sessions.filter(sessionLooksReal).length;
+  const real = sessions.filter(sessionEngaged).length;
   return (
-    <Card title={`Day detail — ${dayLabel}`} eyebrow="Single-day drill-down" full>
-      {loading ? (
+    <Card title={`Day detail — ${dayLabel}`} eyebrow="Pacific calendar day · known admins excluded" action={<button className="adm-btn adm-btn-ghost adm-btn-sm" onClick={onClose}>Close day</button>} full>
+      {error ? <p role="alert" className="adm-error-bar">Could not load this day: {error}</p> : loading ? (
         <div className="adm-skeleton-block" />
       ) : (
         <>
           <div className="adm-day-summary-row">
             <KPI label="Page views" value={fmtNum(summary?.page_views ?? 0)} accent={SERIES.primary} />
-            <KPI label="Sessions" value={fmtNum(summary?.sessions ?? 0)} detail={`${real} look real`} accent={SERIES.slate} />
+            <KPI label="Sessions" value={fmtNum(summary?.sessions ?? 0)} detail={`${real} engaged in the listed sessions`} accent={SERIES.slate} />
             <KPI label="Signups" value={fmtNum(summary?.signups ?? 0)} accent={SERIES.info} />
             <KPI label="Searches" value={fmtNum(summary?.searches ?? 0)} accent={SERIES.mid} />
             <KPI label="Exports" value={fmtNum(summary?.exports ?? 0)} accent={SERIES.success} />
-            <KPI label="Watermark-suppressed exports" value={fmtNum(summary?.premium_exports ?? 0)} accent={SERIES.faint} />
             <KPI label="Leads" value={fmtNum(summary?.leads ?? 0)} accent={SERIES.warning} />
           </div>
+          <p className="admx-since-note">Most recent 250 sessions. Activity span is the time between recorded events, not time spent on the page. Engagement does not establish whether a session is human.</p>
           {sessions.length === 0 ? (
             <Empty message="No visitor sessions recorded for this day." />
           ) : (
-            <table className="adm-table">
+            <div className="adm-table-scroll"><table className="adm-table">
               <thead>
                 <tr>
                   <th>First seen</th>
-                  <th>Duration</th>
+                  <th>Activity span</th>
                   <th>Location</th>
                   <th>Source</th>
                   <th>Device</th>
@@ -423,8 +228,8 @@ function DayDetail({ day, summary, sessions, loading, onOpenSession }) {
                       <td>{s.export_count ?? 0}</td>
                       <td>{s.lead_email || '—'}</td>
                       <td>
-                        <span className={`adm-real-badge ${sessionLooksReal(s) ? 'real' : 'maybe'}`}>
-                          {sessionLooksReal(s) ? 'Real' : 'Bounce?'}
+                        <span className={`adm-real-badge ${sessionEngaged(s) ? 'real' : 'maybe'}`}>
+                          {sessionEngaged(s) ? 'Engaged' : 'Limited activity'}
                         </span>
                         <button className="adm-btn adm-btn-ghost adm-btn-sm" onClick={() => onOpenSession(s.session_id)}>
                           Timeline
@@ -434,7 +239,7 @@ function DayDetail({ day, summary, sessions, loading, onOpenSession }) {
                   );
                 })}
               </tbody>
-            </table>
+            </table></div>
           )}
         </>
       )}
@@ -443,12 +248,18 @@ function DayDetail({ day, summary, sessions, loading, onOpenSession }) {
 }
 
 function SessionTimelineModal({ sessionId, events, error, onClose }) {
+  const dialog = useRef(null);
+  useEffect(() => {
+    const node = dialog.current;
+    node.showModal();
+    return () => node.close();
+  }, []);
   return (
-    <div className="adm-modal-overlay" onClick={onClose}>
-      <div className="adm-modal" onClick={(e) => e.stopPropagation()}>
+    <dialog ref={dialog} className="adm-modal-dialog" onCancel={onClose} aria-labelledby="session-timeline-heading">
+      <div className="adm-modal">
         <div className="adm-modal-head">
-          <h3>Session timeline</h3>
-          <button className="adm-btn adm-btn-ghost adm-btn-sm" onClick={onClose}>✕</button>
+          <h3 id="session-timeline-heading">Session timeline</h3>
+          <button className="adm-btn adm-btn-ghost adm-btn-sm" onClick={onClose} aria-label="Close session timeline">✕</button>
         </div>
         <p className="adm-muted adm-modal-sid">{sessionId}</p>
         {error ? (
@@ -472,43 +283,17 @@ function SessionTimelineModal({ sessionId, events, error, onClose }) {
           </ul>
         )}
       </div>
-    </div>
+    </dialog>
   );
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
-// Third element marks RPCs that accept an optional { p_start, p_end } range —
-// used to narrow a breakdown to a single picked day instead of the default window.
-const RPC_CALLS = [
-  ['users', 'admin_get_users'],
-  ['exportStats', 'admin_get_export_stats'],
-  ['leads', 'admin_get_leads', true],
-  ['dailyVisitors', 'admin_get_daily_visitors'],
-  ['referrerStats', 'admin_get_referrer_stats', true],
-  ['deviceStats', 'admin_get_device_stats', true],
-  ['kpiTrends', 'admin_get_kpi_trends'],
-  ['productFunnel', 'admin_get_product_funnel'],
-  ['campaignStats', 'admin_get_campaign_stats', true],
-  ['searchStats', 'admin_get_search_stats', true],
-  ['searchDropoff', 'admin_get_search_dropoff', true],
-  ['topSharedMaps', 'admin_get_top_shared_maps'],
-  ['landingClicks', 'admin_get_landing_clicks', true],
-];
-
 const TABS = [
-  ['overview', 'Overview'],
-  ['users', 'Users'],
-  ['product', 'Product'],
-  ['growth', 'Acquisition'],
-  ['revenue', 'Revenue'],
-  ['tenure', 'Tenure'],
-  ['health', 'Health'],
+  ['overview', 'Growth'], ['users', 'Users'], ['activity', 'Activity'],
+  ['product', 'Product'], ['growth', 'Acquisition'], ['revenue', 'Revenue'],
+  ['tenure', 'Tenure'], ['health', 'Health'],
 ];
-// 'revenue' used to run the same legacy 15-RPC batch as 'growth', framed
-// around "no-watermark export = paid intent" because there was no real
-// subscriber to look at yet. Now that Stripe is live, it's a real,
-// self-contained RPC (admin_get_revenue) like the other v2 tabs.
-const LEGACY_TABS = new Set(['growth']);
+const RANGE_TABS = new Set(['overview', 'activity', 'product', 'growth']);
 
 export default function AdminPage({ onExit }) {
   const { user, loading: authLoading, signIn, signOut } = useAuth();
@@ -518,124 +303,58 @@ export default function AdminPage({ onExit }) {
   const [loginError, setLoginError] = useState('');
   const [loggingIn, setLoggingIn] = useState(false);
 
-  const [d, setD] = useState({});
-  const [liveVisitors, setLiveVisitors] = useState(null);
-  const [liveLocations, setLiveLocations] = useState([]);
-  const [dataLoading, setDataLoading] = useState(false);
-  const [dataError, setDataError] = useState('');
   const [tab, setTab] = useState('overview');
   const [range, setRange] = useState(30);
-  const [selectedDay, setSelectedDay] = useState(''); // '' = no day filter, else 'YYYY-MM-DD'
-  const [daySummary, setDaySummary] = useState(null);
-  const [daySessions, setDaySessions] = useState([]);
-  const [dayLoading, setDayLoading] = useState(false);
+  const [selectedDay, setSelectedDay] = useState('');
   const [openSessionId, setOpenSessionId] = useState(null);
-  const [sessionTimeline, setSessionTimeline] = useState(null);
-  const [sessionTimelineError, setSessionTimelineError] = useState(null);
-
-  const isAdmin = !!ADMIN_EMAIL && user?.email === ADMIN_EMAIL;
-
-  // When a specific day is picked, narrow every range-aware RPC to that
-  // calendar day (UTC); otherwise fall back to the 7/30/90-day toggle.
-  const queryWindow = useMemo(() => {
-    if (selectedDay) {
-      const start = new Date(`${selectedDay}T00:00:00.000Z`);
-      const end = new Date(start.getTime() + 86400000);
-      return { p_start: start.toISOString(), p_end: end.toISOString() };
-    }
-    const end = new Date();
-    const start = new Date(end.getTime() - range * 86400000);
-    return { p_start: start.toISOString(), p_end: end.toISOString() };
-  }, [selectedDay, range]);
-
-  // Dashboard v2 data: complete-Pacific-day window; each RPC loads lazily only
-  // when its tab is active, so Overview's first paint is a single RPC.
+  const [focusedUser, setFocusedUser] = useState(null);
+  const [visible, setVisible] = useState(() => !document.hidden);
+  const access = useRpc('admin_get_access', {}, !!user);
+  const isAdmin = access.data === true;
   const dashWindow = useDashboardWindow(range);
-  const overview = useOverview(dashWindow, isAdmin && tab === 'overview');
+  const pickedWindow = selectedDay ? dayWindow(selectedDay) : dashWindow;
+  const queryWindow = useMemo(() => ({ p_start: pickedWindow.p_start, p_end: pickedWindow.p_end }), [pickedWindow.p_start, pickedWindow.p_end]);
+  const growth = useGrowth(dashWindow, isAdmin && tab === 'overview');
+  const overview = useOverview(dashWindow, isAdmin && tab === 'activity');
   const engagement = useEngagement(dashWindow, isAdmin && tab === 'product');
   const usersOverview = useUsersOverview(isAdmin && tab === 'users');
   const errorSummary = useErrorSummary(isAdmin && tab === 'health');
   const revenue = useRevenue(isAdmin && tab === 'revenue');
   const tenureOps = useTenureOps(isAdmin && tab === 'tenure');
   const userDetail = useUserDetail();
-
+  const acquisitionEnabled = isAdmin && tab === 'growth';
+  // Only the five reports actually displayed on Acquisition are requested.
+  const leads = useRpc('admin_get_leads', queryWindow, acquisitionEnabled);
+  const campaigns = useRpc('admin_get_campaign_stats', queryWindow, acquisitionEnabled);
+  const referrers = useRpc('admin_get_referrer_stats', queryWindow, acquisitionEnabled);
+  const searchDropoff = useRpc('admin_get_search_dropoff', queryWindow, acquisitionEnabled);
+  const landingClicks = useRpc('admin_get_landing_clicks', queryWindow, acquisitionEnabled);
+  const acquisition = [leads, campaigns, referrers, searchDropoff, landingClicks];
+  const d = { leads: leads.data, campaignStats: campaigns.data, referrerStats: referrers.data,
+    searchDropoff: searchDropoff.data, landingClicks: landingClicks.data };
+  const active = tab === 'growth' ? {
+    loading: acquisition.some(r => r.loading),
+    error: acquisition.find(r => r.error)?.error,
+    updatedAt: acquisition.every(r => r.updatedAt) ? Math.min(...acquisition.map(r => r.updatedAt)) : null,
+    reload: () => acquisition.forEach(r => r.reload()),
+  } : { overview: growth, activity: overview, users: usersOverview, product: engagement,
+    revenue, tenure: tenureOps, health: errorSummary }[tab];
+  const displayedWindow = tab === 'growth' ? queryWindow : dashWindow;
+  const dayReport = useRpc('admin_get_day_activity', queryWindow, isAdmin && !!selectedDay);
+  const timeline = useRpc('admin_get_session_timeline', { p_session_id: openSessionId }, isAdmin && !!openSessionId);
+  const openSession = id => setOpenSessionId(id);
+  const openUser = id => { userDetail.load(id); setFocusedUser(id); setTab('users'); setSelectedDay(''); };
+  const live = useRpc('admin_get_live_locations', {}, acquisitionEnabled && visible);
   useEffect(() => {
-    if (!isAdmin || !supabase) return;
-    // The legacy Acquisition/Monetization tabs (and their KPI row) are the only
-    // consumers of this 15-call batch now; the v2 tabs use their own single
-    // RPCs. Gating it here keeps the Overview first paint to one RPC.
-    if (!LEGACY_TABS.has(tab)) return;
-    setDataLoading(true);
-    setDataError('');
-    Promise.allSettled(
-      RPC_CALLS.map(([, fn, acceptsRange]) => supabase.rpc(fn, acceptsRange ? queryWindow : undefined))
-    ).then((results) => {
-      const next = {};
-      let firstError = '';
-      results.forEach((res, i) => {
-        const [key] = RPC_CALLS[i];
-        if (res.status === 'fulfilled' && !res.value.error) {
-          next[key] = res.value.data || [];
-        } else {
-          next[key] = [];
-          const msg = res.status === 'fulfilled' ? res.value.error?.message : res.reason?.message;
-          // Surface only the critical (users) failure — newer RPCs may not be installed yet
-          if (key === 'users' && msg && !firstError) firstError = msg;
-        }
-      });
-      setD(next);
-      setDataError(firstError);
-      setDataLoading(false);
-    });
-  }, [isAdmin, queryWindow, tab]);
-
-  // Per-day drill-down: headline counts + the list of sessions active that day.
+    const update = () => setVisible(!document.hidden);
+    document.addEventListener('visibilitychange', update);
+    return () => document.removeEventListener('visibilitychange', update);
+  }, []);
   useEffect(() => {
-    if (!isAdmin || !supabase || !selectedDay) { setDaySummary(null); setDaySessions([]); return; }
-    setDayLoading(true);
-    Promise.all([
-      supabase.rpc('admin_get_day_summary', { p_day: selectedDay }),
-      supabase.rpc('admin_get_sessions_for_day', { p_day: selectedDay }),
-    ]).then(([summaryRes, sessionsRes]) => {
-      setDaySummary(summaryRes.data?.[0] || null);
-      setDaySessions(sessionsRes.data || []);
-    }).catch(() => { setDaySummary(null); setDaySessions([]); })
-      .finally(() => setDayLoading(false));
-  }, [isAdmin, selectedDay]);
-
-  function openSession(sessionId) {
-    setOpenSessionId(sessionId);
-    setSessionTimeline(null);
-    setSessionTimelineError(null);
-    if (!supabase) return;
-    // An RPC error used to land here as `data == null` and render as "No
-    // tracked events for this session" — a failed call and a session that did
-    // nothing looked identical, which is how a missing branch in the function
-    // stays invisible. Say which one it is.
-    supabase.rpc('admin_get_session_timeline', { p_session_id: sessionId })
-      .then(({ data, error }) => {
-        if (error) { setSessionTimelineError(error.message || 'Timeline unavailable.'); return; }
-        setSessionTimeline(data || []);
-      })
-      .catch((e) => setSessionTimelineError(e?.message || 'Timeline unavailable.'));
-  }
-
-  useEffect(() => {
-    if (!isAdmin || !supabase) return;
-    const fetchLive = async () => {
-      try {
-        const { data } = await supabase.rpc('admin_get_live_visitors');
-        setLiveVisitors(data?.[0]?.count ?? 0);
-      } catch { setLiveVisitors(0); }
-      try {
-        const { data } = await supabase.rpc('admin_get_live_locations');
-        setLiveLocations(data || []);
-      } catch { setLiveLocations([]); }
-    };
-    fetchLive();
-    const interval = setInterval(fetchLive, 30000);
-    return () => clearInterval(interval);
-  }, [isAdmin]);
+    if (!acquisitionEnabled || !visible) return;
+    const timer = setInterval(live.reload, 30000);
+    return () => clearInterval(timer);
+  }, [acquisitionEnabled, visible, live.reload]);
 
   async function handleLogin(e) {
     e.preventDefault();
@@ -651,13 +370,6 @@ export default function AdminPage({ onExit }) {
   const campaignPag = usePagination(d.campaignStats, 10);
   const searchPag = usePagination(d.searchDropoff, 12);
 
-  // Derived values (hooks before early returns)
-  const trendMap = useMemo(() => {
-    const m = {};
-    (d.kpiTrends || []).forEach((r) => { m[r.metric] = { cur: Number(r.current_30d), prior: Number(r.prior_30d) }; });
-    return m;
-  }, [d.kpiTrends]);
-
   // ── Pre-auth screens ──────────────────────────────────────────────────────
   if (!supabase) return (
     <div className="adm-shell">
@@ -669,7 +381,7 @@ export default function AdminPage({ onExit }) {
       </div>
     </div>
   );
-  if (authLoading) return (
+  if (authLoading || (user && access.loading)) return (
     <div className="adm-shell"><div className="adm-login-card"><div className="adm-spinner" /></div></div>
   );
   if (!user) return (
@@ -691,7 +403,9 @@ export default function AdminPage({ onExit }) {
   if (!isAdmin) return (
     <div className="adm-shell">
       <div className="adm-login-card">
-        <h2>Access denied</h2>
+        <h2>{access.error === 'forbidden' ? 'Access denied' : 'Could not verify admin access'}</h2>
+        {access.error && <p className="adm-error" role="alert">{access.error}</p>}
+        <button className="adm-btn adm-btn-ghost" onClick={access.reload}>Retry access check</button>
         <p className="adm-muted">Signed in as <strong>{user.email}</strong></p>
         <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
           <button className="adm-btn adm-btn-ghost" onClick={() => signOut()}>Sign Out</button>
@@ -700,12 +414,6 @@ export default function AdminPage({ onExit }) {
       </div>
     </div>
   );
-
-  // ── Derived headline numbers ───────────────────────────────────────────────
-  const cur = (m) => trendMap[m]?.cur;
-  const visitors30d = cur('visitors') ?? (d.dailyVisitors || []).reduce((s, r) => s + Number(r.sessions || 0), 0);
-  const exports30d = cur('exports') ?? (d.exportStats || []).reduce((s, r) => s + Number(r.last_30_days || 0), 0);
-  const exportBreakdown = (d.exportStats || []).map((r) => `${r.format?.toUpperCase()} ${r.last_30_days}`).join(' · ');
 
   const landingBars = (d.landingClicks || []).map((r) => ({ label: r.element || '(no label)', value: Number(r.count) }));
 
@@ -726,53 +434,36 @@ export default function AdminPage({ onExit }) {
       </header>
 
       <main className="adm-body">
-        {dataError && <div className="adm-error-bar">⚠ {dataError}</div>}
-
-        {/* Legacy KPI row — flow metrics with 30d-over-30d trend. Shown only on
-            the legacy Acquisition/Monetization tabs; the new Overview tab has
-            its own product-analytics StatTiles. */}
-        {LEGACY_TABS.has(tab) && (
-        <div className="adm-kpi-row">
-          <KPI label="Live now" value={liveVisitors != null ? String(liveVisitors) : null} detail="active · last 5 min" accent={SERIES.accent} />
-          <KPI label="Visitors" value={dataLoading ? null : fmtNum(visitors30d)} trend={trendMap.visitors} detail="last 30 days" accent={SERIES.primary} />
-          <KPI label="Signups" value={dataLoading ? null : fmtNum(cur('signups') ?? 0)} trend={trendMap.signups} detail="last 30 days" accent={SERIES.info} />
-          <KPI label="Searches" value={dataLoading ? null : fmtNum(cur('searches') ?? 0)} trend={trendMap.searches} detail="registry + nearby" accent={SERIES.mid} />
-          <KPI label="Exports" value={dataLoading ? null : fmtNum(exports30d)} trend={trendMap.exports} detail={exportBreakdown || 'last 30 days'} accent={SERIES.slate} />
-          <KPI label="Watermark-suppressed exports" value={dataLoading ? null : fmtNum(cur('premium_exports') ?? 0)} trend={trendMap.premium_exports} detail="mostly FREE exports — still carry the small credit; not a paid signal" accent={SERIES.success} />
-          <KPI label="Email leads" value={dataLoading ? null : fmtNum(cur('leads') ?? (d.leads || []).length)} trend={trendMap.leads} detail="last 30 days" accent={SERIES.warning} />
-        </div>
-        )}
-
         {/* Tab nav */}
         <div className="adm-tabs">
           {TABS.map(([key, label]) => (
-            <button key={key} className={`adm-tab${tab === key ? ' active' : ''}`} onClick={() => setTab(key)}>{label}</button>
+            <button key={key} className={`adm-tab${tab === key ? ' active' : ''}`} aria-current={tab === key ? 'page' : undefined} onClick={() => { setTab(key); setSelectedDay(''); }}>{label}</button>
           ))}
-          <div className="adm-day-filter">
-            <input
-              type="date"
-              value={selectedDay}
-              max={new Date().toISOString().slice(0, 10)}
-              onChange={(e) => setSelectedDay(e.target.value)}
-            />
-            {selectedDay && (
-              <button className="adm-btn adm-btn-ghost adm-btn-sm" onClick={() => setSelectedDay('')}>Clear</button>
-            )}
+        </div>
+        <div className="adm-report-toolbar">
+          <div>
+            {RANGE_TABS.has(tab) ? <>
+              <div className="admx-range" aria-label="Complete days in report">
+                {[7, 30, 90].map(r => <button key={r} className={`admx-range-btn${range === r ? ' active' : ''}`} aria-pressed={range === r} onClick={() => { setRange(r); setSelectedDay(''); }}>{r}d</button>)}
+              </div>
+              <span className="adm-muted">{pacificDate(new Date(displayedWindow.p_start))} – {addCalendarDays(pacificDate(new Date(displayedWindow.p_end)), -1)} · {tab === 'growth' && selectedDay === pacificDate() ? 'Pacific day in progress' : 'complete Pacific days'}</span>
+            </> : <span className="adm-muted">{tab === 'health' ? 'Last 24 hours' : 'Current snapshot · each report labels its own lookback'}</span>}
+          </div>
+          {tab === 'growth' && <label>Inspect a day <input type="date" value={selectedDay} max={pacificDate()} onChange={e => setSelectedDay(e.target.value)} /></label>}
+          <div className="adm-report-status" aria-live="polite">
+            {active.loading ? 'Loading report…' : active.updatedAt ? `Updated ${new Date(active.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Report unavailable'}
+            <button className="adm-btn adm-btn-ghost adm-btn-sm" onClick={active.reload} disabled={active.loading}>Refresh</button>
           </div>
         </div>
-
-        {selectedDay && (
-          <DayDetail
-            day={selectedDay}
-            summary={daySummary}
-            sessions={daySessions}
-            loading={dayLoading}
-            onOpenSession={openSession}
-          />
-        )}
+        {selectedDay && <DayDetail day={selectedDay} summary={dayReport.data?.summary} sessions={dayReport.data?.sessions || []}
+          loading={dayReport.loading} error={dayReport.error} onClose={() => setSelectedDay('')} onOpenSession={openSession} />}
+        {active.error ? <div className="adm-error-bar" role="alert">Could not load this report: {active.error}. Use Refresh to retry.</div>
+          : active.loading ? <div className="adm-skeleton adm-skeleton-block" role="status" aria-label="Loading report" />
+          : <React.Suspense fallback={<div className="adm-skeleton adm-skeleton-block" role="status" aria-label="Opening report" />}>
+        {tab === 'overview' && growth.data && <GrowthTab data={growth.data} onOpenUser={openUser} />}
 
         {/* ───────── OVERVIEW (v2) ───────── */}
-        {tab === 'overview' && (
+        {tab === 'activity' && (
           <OverviewTab
             data={overview.data}
             loading={overview.loading}
@@ -780,7 +471,7 @@ export default function AdminPage({ onExit }) {
             onRange={setRange}
             onPickDay={setSelectedDay}
             onOpenSession={openSession}
-            onOpenUser={(id) => { userDetail.load(id); setTab('users'); }}
+            onOpenUser={openUser}
           />
         )}
 
@@ -790,6 +481,7 @@ export default function AdminPage({ onExit }) {
             data={usersOverview.data}
             loading={usersOverview.loading}
             detail={userDetail}
+            initialUserId={focusedUser}
             onLoadDetail={userDetail.load}
             onOpenSession={openSession}
           />
@@ -808,14 +500,13 @@ export default function AdminPage({ onExit }) {
         {tab === 'growth' && (
           <>
             <Card
-              title="Live visitors"
-              eyebrow="Active in the last 30 minutes"
-              action={<span className="adm-delta up">● {liveVisitors ?? 0} now</span>}
+              title="Recent active tabs"
+              eyebrow="Located sessions · last 30 minutes · drag the globe to explore"
               full
             >
-              <WorldMap locations={liveLocations} />
+              {live.error ? <p role="status">Live locations unavailable: {live.error}</p> : <WorldMap locations={live.data || []} />}
             </Card>
-            <Card title="Campaigns" eyebrow="UTM-tagged traffic · last 90 days" count={d.campaignStats?.length} full>
+            <Card title="Campaigns" eyebrow="UTM-tagged traffic · selected window" count={d.campaignStats?.length} full>
               {d.campaignStats && d.campaignStats.length > 0 ? (
                 <>
                   <table className="adm-table">
@@ -922,7 +613,7 @@ export default function AdminPage({ onExit }) {
                 </p>
               </Card>
 
-              <Card title="All referrers" eyebrow="Last 90 days">
+              <Card title="All referrers" eyebrow="Selected window">
                 <HBars rows={(d.referrerStats || []).slice(0, 12).map((r) => ({ label: r.referrer, value: Number(r.sessions) }))} emptyMsg="No referrer data yet." />
               </Card>
               <Card title="Landing-page clicks" eyebrow="What visitors click" count={landingBars.reduce((s, r) => s + r.value, 0) || null}>
@@ -958,13 +649,14 @@ export default function AdminPage({ onExit }) {
         {tab === 'revenue' && (
           <RevenueTab data={revenue.data} loading={revenue.loading} />
         )}
+        </React.Suspense>}
       </main>
       {openSessionId && (
         <SessionTimelineModal
           sessionId={openSessionId}
-          events={sessionTimeline}
-          error={sessionTimelineError}
-          onClose={() => { setOpenSessionId(null); setSessionTimeline(null); setSessionTimelineError(null); }}
+          events={timeline.loading ? null : timeline.data}
+          error={timeline.error}
+          onClose={() => setOpenSessionId(null)}
         />
       )}
     </div>

@@ -32,7 +32,7 @@ describe('OverviewTab rendering', () => {
     expect(screen.getByText(/No signups in the last 14 days/i)).toBeInTheDocument();
     expect(screen.getByText(/Product actions will stream here/i)).toBeInTheDocument();
     // celebratory needs-attention empty state
-    expect(screen.getByText(/Nobody needs outreach/i)).toBeInTheDocument();
+    expect(screen.getByText(/No accounts flagged by these activity rules/i)).toBeInTheDocument();
   });
 
   it('renders the activated tile as "0 of 3", never "0%"', () => {

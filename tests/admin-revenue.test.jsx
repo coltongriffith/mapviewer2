@@ -28,7 +28,7 @@ describe('RevenueTab rendering', () => {
     render(<RevenueTab data={base()} loading={false} />);
     expect(screen.getByText(/No Pro accounts yet/i)).toBeInTheDocument();
     expect(screen.getByText(/No custom invoices yet/i)).toBeInTheDocument();
-    expect(screen.getByText(/No free-plan users exporting clean yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/No qualifying real-data exports from free accounts yet/i)).toBeInTheDocument();
   });
 
   it('formats MRR/ARR as currency, not raw cents', () => {
@@ -57,7 +57,7 @@ describe('RevenueTab rendering', () => {
 
   it('renders the upsell list as free-plan users, never subscribers', () => {
     const data = base({
-      upsell_candidates: [{ user_id: '9', email: 'lead@x.com', clean_exports: 4, last_export: '2026-07-20T00:00:00Z' }],
+      upsell_candidates: [{ user_id: '9', email: 'lead@x.com', exports: 4, last_export: '2026-07-20T00:00:00Z' }],
     });
     render(<RevenueTab data={data} loading={false} />);
     expect(screen.getByText('lead@x.com')).toBeInTheDocument();

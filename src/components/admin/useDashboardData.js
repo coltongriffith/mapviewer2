@@ -1,91 +1,85 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../hooks/useAuth';
+import { dashboardWindow, pacificDate } from './dateWindow';
 
-// Complete-Pacific-day window for the selected range. The window ENDS at
-// 00:00 today Pacific (so it covers only finished days) and starts range*days
-// before that. Prior-period comparison is handled server-side from these
-// bounds. We approximate "Pacific midnight" without a tz lib by formatting
-// now() in America/Vancouver and reconstructing the day boundary as UTC-ish;
-// the RPC re-buckets in tz anyway, so the exact instant only needs to be
-// "start of today, Pacific" to a few hours — good enough for day windows.
 export function useDashboardWindow(range) {
-  // Midnight Pacific today, expressed as an instant: take the Pacific date
-  // string, treat it as that date at 07:00Z (~midnight PDT/PST) — the RPC's
-  // AT TIME ZONE bucketing corrects any residual offset.
-  const todayPacific = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Vancouver', year: 'numeric', month: '2-digit', day: '2-digit',
-  }).format(new Date());
-  const end = new Date(`${todayPacific}T08:00:00Z`); // ~00:00 Pacific
-  const start = new Date(end.getTime() - range * 86400000);
-  return { p_start: start.toISOString(), p_end: end.toISOString() };
+  const [today, setToday] = useState(pacificDate);
+  useEffect(() => {
+    const update = () => setToday(pacificDate());
+    const timer = setInterval(update, 60000);
+    document.addEventListener('visibilitychange', update);
+    return () => { clearInterval(timer); document.removeEventListener('visibilitychange', update); };
+  }, []);
+  return dashboardWindow(range, new Date(`${today}T12:00:00Z`));
 }
 
-// Generic single-RPC hook returning { data, loading, error, reload }.
-function useRpc(fn, params, enabled) {
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const paramKey = JSON.stringify(params || null);
-
-  const reload = useCallback(() => {
-    if (!enabled || !supabase) return;
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    supabase.rpc(fn, params || undefined).then(({ data: d, error: e }) => {
-      if (cancelled) return;
-      if (e) { setError(e.message); setData(null); }
-      else setData(d);
-      setLoading(false);
-    }, (e) => { if (!cancelled) { setError(String(e?.message || e)); setLoading(false); } });
-    return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fn, paramKey, enabled]);
+// One bounded cache per hook, scoped to the account and exact query window.
+// Abort on tab/range/account changes; sequence checks also cover refresh races.
+export function useRpc(fn, params, enabled = true) {
+  const { user } = useAuth();
+  const key = JSON.stringify([user?.id, fn, params || null]);
+  const [state, setState] = useState({ key: null, data: null, error: null, updatedAt: null });
+  const [pending, setPending] = useState(null);
+  const [revision, setRevision] = useState(0);
+  const cache = useRef(null);
+  const sequence = useRef(0);
+  const reload = useCallback(() => { cache.current = null; setRevision(n => n + 1); }, []);
 
   useEffect(() => {
-    const cleanup = reload();
-    return cleanup;
-  }, [reload]);
+    const id = ++sequence.current;
+    let cancelled = false;
+    if (!enabled || !supabase) return;
+    if (cache.current?.key === key && Date.now() - cache.current.updatedAt < 60000) {
+      setState(cache.current);
+      setPending(null);
+      return;
+    }
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 20000);
+    setPending(key);
+    const [, rpc, args] = JSON.parse(key);
+    Promise.resolve(supabase.rpc(rpc, args || undefined).abortSignal(controller.signal))
+      .then(({ data, error }) => {
+        if (cancelled || sequence.current !== id) return;
+        if (error) throw error;
+        if (data == null) throw new Error('Report returned no data. Please retry.');
+        const next = { key, data, error: null, updatedAt: Date.now() };
+        cache.current = next;
+        setState(next);
+      })
+      .catch(error => {
+        if (!cancelled && sequence.current === id) setState({ key, data: null, error: error?.message || 'Report unavailable. Please retry.', updatedAt: null });
+      })
+      .finally(() => { clearTimeout(timeout); if (!cancelled && sequence.current === id) setPending(null); });
+    return () => { cancelled = true; clearTimeout(timeout); controller.abort(); };
+  }, [key, enabled, revision]);
 
-  return { data, loading, error, reload };
+  const current = state.key === key;
+  return {
+    data: current ? state.data : null,
+    error: current ? state.error : null,
+    updatedAt: current ? state.updatedAt : null,
+    loading: !!enabled && !!supabase && (pending === key || !current),
+    reload,
+  };
 }
 
-export function useOverview(window, enabled) {
-  return useRpc('admin_get_overview', window, enabled);
-}
-export function useEngagement(window, enabled) {
-  return useRpc('admin_get_engagement', window, enabled);
-}
-export function useUsersOverview(enabled) {
-  return useRpc('admin_get_users_overview', {}, enabled);
-}
+export const useGrowth = (window, enabled) => useRpc('admin_get_growth', window, enabled);
+const reportingParams = window => ({ ...window, p_tz: window.p_start >= '2026-03-09' ? 'Etc/GMT+7' : 'America/Vancouver' });
+export const useOverview = (window, enabled) => useRpc('admin_get_overview', reportingParams(window), enabled);
+export const useEngagement = (window, enabled) => useRpc('admin_get_engagement', reportingParams(window), enabled);
+export const useUsersOverview = enabled => useRpc('admin_get_users_overview', { p_tz: pacificDate() >= '2026-03-09' ? 'Etc/GMT+7' : 'America/Vancouver' }, enabled);
+export const useRevenue = enabled => useRpc('admin_get_billing_metrics', {}, enabled);
+export const useTenureOps = enabled => useRpc('admin_get_tenure_ops', {}, enabled);
+export const useErrorSummary = (enabled, hours = 24) => useRpc('admin_get_error_summary', { p_hours: hours }, enabled);
 
-// Real Stripe-backed billing analytics (subscribers, MRR, invoices).
-export function useRevenue(enabled) {
-  return useRpc('admin_get_revenue', {}, enabled);
-}
-
-// Tenure Monitor operations: import-run history, alert queue, portfolios.
-export function useTenureOps(enabled) {
-  return useRpc('admin_get_tenure_ops', {}, enabled);
-}
-
-// Recent client/API failures, grouped by fingerprint (audit P1-12).
-export function useErrorSummary(enabled, hours = 24) {
-  return useRpc('admin_get_error_summary', { p_hours: hours }, enabled);
-}
-
-// On-demand single-user detail (drawer). Not a hook-per-render; call load(id).
 export function useUserDetail() {
-  const [byId, setById] = useState({});
-  const [loadingId, setLoadingId] = useState(null);
-  const load = useCallback((userId) => {
-    if (!supabase || !userId || byId[userId]) return;
-    setLoadingId(userId);
-    supabase.rpc('admin_get_user_detail', { p_user_id: userId }).then(({ data, error }) => {
-      if (!error && data) setById((m) => ({ ...m, [userId]: data }));
-      setLoadingId(null);
-    }, () => setLoadingId(null));
-  }, [byId]);
-  return { byId, loadingId, load };
+  const [userId, load] = useState(null);
+  const result = useRpc('admin_get_user_detail', { p_user_id: userId }, !!userId);
+  return {
+    byId: result.data && !result.loading ? { [userId]: result.data } : {},
+    loadingId: result.loading ? userId : null, error: result.error,
+    load: id => { if (id === userId) result.reload(); else load(id); },
+  };
 }

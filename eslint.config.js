@@ -16,7 +16,7 @@ import jsxA11y from 'eslint-plugin-jsx-a11y';
 // below DO fail the build.
 export default [
   {
-    ignores: ['dist/**', 'node_modules/**', 'public/**', 'data/**', 'coverage/**'],
+    ignores: ['dist/**', 'dist-auth-check/**', 'node_modules/**', 'public/**', 'data/**', 'coverage/**'],
   },
   js.configs.recommended,
   {

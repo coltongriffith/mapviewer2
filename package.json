@@ -13,7 +13,8 @@
     "test:e2e": "playwright test",
     "budgets": "node scripts/check-budgets.mjs",
     "stripe:check": "node scripts/stripe-golive.mjs",
-    "stripe:fix": "node scripts/stripe-golive.mjs --fix"
+    "stripe:fix": "node scripts/stripe-golive.mjs --fix",
+    "test:e2e:admin": "E2E_ADMIN=1 playwright test --config playwright.admin.config.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.104.1",
@@ -35,6 +36,7 @@
     "world-atlas": "^2.0.2"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
     "@eslint/js": "^9.39.5",
     "@playwright/test": "^1.62.0",
     "@testing-library/jest-dom": "^6.9.1",

@@ -137,13 +137,13 @@ export function ColumnChart({ series = [], onPick }) {
       {hover != null && (
         <div className="admx-col-tip">
           <strong>{new Date(`${String(series[hover].d).slice(0, 10)}T12:00:00`).toLocaleDateString('en-CA', { weekday: 'short', month: 'short', day: 'numeric' })}</strong>
-          {' · '}{fmtNum(series[hover].active_users)} active{' · '}{fmtNum(series[hover].sessions)} sessions
+          {' · '}{fmtNum(series[hover].active_users)} active{' · '}{fmtNum(series[hover].sessions)} page views
           {Number(series[hover].signups) > 0 ? ` · ${series[hover].signups} signup` : ''}
         </div>
       )}
       <div className="admx-col-legend">
         <span><i className="admx-lg-bar" /> active users</span>
-        <span><i className="admx-lg-line" /> sessions</span>
+        <span><i className="admx-lg-line" /> page views</span>
         {hasSignups && <span><i className="admx-lg-dot" /> signups</span>}
       </div>
     </div>
@@ -169,13 +169,13 @@ export function RetentionLadder({ buckets = [], onPick }) {
   if (!total) return <EmptyHint>No registered users yet. Signups will bucket here by how recently they did meaningful work.</EmptyHint>;
   return (
     <div className="admx-ladder-wrap">
-      <div className="admx-ladder" role="img" aria-label="Users by recency">
+      <div className="admx-ladder" role="group" aria-label="Users by recency">
         {buckets.map((b, i) => {
           const c = Number(b.count) || 0;
           if (!c) return null;
           const pct = (c / total) * 100;
           return (
-            <div key={b.bucket} className="admx-ladder-seg" title={`${b.bucket}: ${c}`}
+            <button type="button" aria-label={`${b.bucket}: ${c} accounts`} key={b.bucket} className="admx-ladder-seg" title={`${b.bucket}: ${c}`}
               style={{
                 width: `${pct}%`,
                 background: (LADDER_STEPS[i] || LADDER_FALLBACK).fill,
@@ -184,7 +184,7 @@ export function RetentionLadder({ buckets = [], onPick }) {
               }}
               onClick={() => onPick?.(b.bucket)}>
               {pct > 9 ? c : ''}
-            </div>
+            </button>
           );
         })}
       </div>
@@ -200,8 +200,8 @@ export function RetentionLadder({ buckets = [], onPick }) {
 }
 
 // ── Funnel: X-of-N stage rows with % suppressed below SMALL_N ────────────────
-export function FunnelV2({ steps = [], unit = 'users', onPickStage }) {
-  const top = Math.max(...steps.map((s) => Number(s.count) || 0), 1);
+export function FunnelV2({ steps = [], unit = 'users', onPickStage, sequential = false }) {
+  const top = Math.max(...steps.map((s) => Number(s.count) || 0), 0);
   if (!steps.length || top === 0) return <EmptyHint>Not enough activity to draw this funnel yet.</EmptyHint>;
   return (
     <div className="admx-funnel">
@@ -212,12 +212,14 @@ export function FunnelV2({ steps = [], unit = 'users', onPickStage }) {
         const conv = prev && prev > 0 ? Math.round((c / prev) * 100) : null;
         return (
           <div key={i} className={`admx-funnel-row${s.stuck?.length ? ' admx-funnel-clickable' : ''}`}
+            role="button" tabIndex={s.stuck?.length ? 0 : -1} aria-disabled={!s.stuck?.length}
+            onKeyDown={e => { if (s.stuck?.length && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onPickStage?.(s); } }}
             onClick={() => s.stuck?.length && onPickStage?.(s)}>
             <div className="admx-funnel-label">{s.stage}</div>
             <div className="admx-funnel-track"><div className="admx-funnel-fill" style={{ width: `${Math.max(w, 2)}%` }} /></div>
             <div className="admx-funnel-val">
               {fmtNum(c)} <span className="admx-funnel-unit">{unit}</span>
-              {conv != null && prev >= 8 && <span className="admx-funnel-conv">{conv}%</span>}
+              {sequential && conv != null && prev >= 8 && <span className="admx-funnel-conv">{conv}%</span>}
             </div>
           </div>
         );
@@ -241,4 +243,15 @@ export function HBarsV2({ rows = [], color = '#142126', empty }) {
       ))}
     </div>
   );
+}
+
+// Shared report shell keeps spacing, headings and help consistent across tabs.
+export function Card({ title, tip, eyebrow, action, count, children, full, className = '' }) {
+  return <section className={`adm-card${full ? ' adm-card-full' : ''} ${className}`}>
+    <div className="adm-card-head"><div>
+      {eyebrow && <div className="admx-eyebrow">{eyebrow}</div>}
+      <h3 className="adm-card-title">{title}{tip && <InfoTip text={tip} label={title} />}</h3>
+    </div>{action}{count != null && <span className="adm-pill">{count}</span>}</div>
+    {children}
+  </section>;
 }

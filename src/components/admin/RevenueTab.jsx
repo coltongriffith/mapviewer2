@@ -1,17 +1,7 @@
 import React from 'react';
-import { StatTile, InfoTip, EmptyHint } from './primitives';
+import { Card, StatTile, EmptyHint } from './primitives';
 import { fmtNum, fmtDate, relTime } from './metrics';
 
-const Card = ({ title, tip, eyebrow, count, children, full }) => (
-  <section className={`adm-card${full ? ' adm-card-full' : ''}`}>
-    <div className="adm-card-head">
-      <div>{eyebrow && <div className="admx-eyebrow">{eyebrow}</div>}
-        <h3 className="adm-card-title">{title}{tip && <InfoTip text={tip} label={title} />}</h3></div>
-      {count != null && <span className="adm-pill">{count}</span>}
-    </div>
-    {children}
-  </section>
-);
 
 function fmtMoney(cents, currency = 'USD') {
   if (cents == null) return '—';
@@ -31,15 +21,8 @@ function PlanBadge({ plan, source, status }) {
   );
 }
 
-/**
- * Real billing analytics. Replaces the pre-launch "Monetization" tab, whose
- * only signal was "exported without a watermark" — a proxy for paid intent
- * invented before there was anyone to actually pay. Stripe is live now,
- * so this reads user_plans/custom_invoices directly: real subscribers, real
- * MRR, real invoices. The one thing worth keeping from the old tab — clean
- * exporters as upsell targets — is kept, but now correctly excludes anyone
- * who has already subscribed.
- */
+// Current subscription state and standalone invoices. Catalog MRR is an
+// estimate; trials and complimentary plans are displayed separately.
 export default function RevenueTab({ data, loading }) {
   if (loading) return <Card title="Revenue"><div className="adm-skeleton adm-skeleton-block" style={{ height: 160 }} /></Card>;
 
@@ -53,17 +36,21 @@ export default function RevenueTab({ data, loading }) {
   return (
     <>
       <div className="admx-tile-row">
-        <StatTile label="MRR" accent="#287454"
+        <StatTile label="Estimated MRR · USD" accent="#287454"
           value={fmtMoney(data?.mrr_cents)}
-          detail={unknownInterval > 0 ? `${unknownInterval} subscriber${unknownInterval === 1 ? '' : 's'} missing billing interval — undercounted` : 'paying subscribers only'} />
-        <StatTile label="ARR" accent="#287454" value={fmtMoney((data?.mrr_cents || 0) * 12)} detail="MRR × 12" />
-        <StatTile label="Paying subscribers" accent="#142126" value={fmtNum(data?.paying_subscribers ?? 0)} detail="active + trialing, Stripe-sourced only" />
-        <StatTile label="New (30d)" accent="#176b87" value={fmtNum(data?.new_subscribers_30d ?? 0)} />
-        <StatTile label="Canceled (30d)" accent="#aa3e3e" value={fmtNum(data?.canceled_30d ?? 0)} />
-        <StatTile label="Refunded" accent="#9a6715" value={fmtMoney(data?.refunded_cents_total)} detail="lifetime, custom invoices" />
+          detail={unknownInterval > 0 ? `${unknownInterval} subscriber${unknownInterval === 1 ? '' : 's'} missing billing interval — undercounted` : 'Catalog prices · excludes trials and free Pro'} />
+        <StatTile label="Estimated ARR · USD" accent="#287454" value={fmtMoney((data?.mrr_cents || 0) * 12)} detail="MRR × 12" />
+        <StatTile label="Active subscriptions" accent="#142126" value={fmtNum(data?.paying_subscribers ?? 0)} detail="Stripe status active · excludes trials" />
+        <StatTile label="Active, started in 30d" accent="#176b87" value={fmtNum(data?.new_subscribers_30d ?? 0)} />
+        <StatTile label="Canceled, updated in 30d" accent="#aa3e3e" value={fmtNum(data?.canceled_30d ?? 0)} />
+        <StatTile label="Trials / past due" accent="#9a6715" value={`${data?.trial_subscribers || 0} / ${data?.past_due_subscribers || 0}`} detail="Excluded from estimated MRR" />
       </div>
 
-      <Card title="Plan breakdown" eyebrow="All registered accounts">
+      <p className="admx-since-note">MRR uses the current USD catalog ($29 monthly or $290 yearly ÷ 12). Discounts, tax, actual collections and refunds are not included. Canceled counts reflect the last record update, not a historical churn ledger. Known administrators are excluded.</p>
+      <Card title="Custom invoice refunds" eyebrow="Lifetime · currencies kept separate">
+        {data?.refunds_by_currency?.length ? data.refunds_by_currency.map(r => <p key={r.currency}>{r.currency}: {fmtMoney(r.cents, r.currency)}</p>) : <EmptyHint>No recorded custom invoice refunds.</EmptyHint>}
+      </Card>
+      <Card title="Plan breakdown" eyebrow="Non-admin accounts">
         <div className="admx-health">
           <div className="admx-health-stat"><strong>{fmtNum(pc.free ?? 0)}</strong><span>Free</span></div>
           <div className="admx-health-stat"><strong>{fmtNum(proTotal)}</strong><span>Pro (total)</span></div>
@@ -79,7 +66,7 @@ export default function RevenueTab({ data, loading }) {
           <table className="adm-table">
             <thead><tr><th>User</th><th>Plan</th><th>Interval</th><th>Pro since</th><th>Current period ends</th><th>Stripe customer</th></tr></thead>
             <tbody>
-              {subscribers.slice(0, 50).map((s) => (
+              {subscribers.map((s) => (
                 <tr key={s.user_id}>
                   <td className="adm-mono adm-truncate">{s.email}</td>
                   <td><PlanBadge plan="pro" source={s.source} status={s.status} /></td>
@@ -97,16 +84,16 @@ export default function RevenueTab({ data, loading }) {
       <Card title="Custom invoices" tip="One-off Stripe Invoicing — bespoke work outside the self-serve subscription. See docs/billing.md." eyebrow="Most recent 100" count={invoices.length} full>
         {invoices.length === 0 ? <EmptyHint>No custom invoices yet.</EmptyHint> : (
           <table className="adm-table">
-            <thead><tr><th>User</th><th>Number</th><th>Status</th><th>Amount</th><th>Refunded</th><th>Created</th></tr></thead>
+            <thead><tr><th>User</th><th>Number</th><th>Status</th><th>Amount due</th><th>Paid</th><th>Refunded</th><th>Created</th></tr></thead>
             <tbody>
-              {invoices.slice(0, 50).map((inv) => (
+              {invoices.map((inv) => (
                 <tr key={inv.stripe_invoice_id}>
                   <td className="adm-mono adm-truncate">{inv.email || <span className="adm-muted">—</span>}</td>
                   <td>{inv.hosted_invoice_url
                     ? <a href={inv.hosted_invoice_url} target="_blank" rel="noopener noreferrer">{inv.number || inv.stripe_invoice_id}</a>
                     : (inv.number || inv.stripe_invoice_id)}</td>
                   <td><span className={inv.status === 'paid' ? 'admx-tag-clean' : 'adm-muted'}>{inv.status}</span></td>
-                  <td>{fmtMoney(inv.amount_due, inv.currency)}</td>
+                  <td>{fmtMoney(inv.amount_due, inv.currency)}</td><td>{fmtMoney(inv.amount_paid, inv.currency)}</td>
                   <td className="adm-muted">{inv.amount_refunded > 0 ? fmtMoney(inv.amount_refunded, inv.currency) : '—'}</td>
                   <td className="adm-muted">{fmtDate(inv.created_at)}</td>
                 </tr>
@@ -116,15 +103,15 @@ export default function RevenueTab({ data, loading }) {
         )}
       </Card>
 
-      <Card title="Upsell candidates" tip="Free-plan users who already export clean (no watermark) — the clearest signal that they'd get more value from Pro. Excludes anyone already subscribed." eyebrow="Free plan · exports clean" count={upsell.length} full>
-        {upsell.length === 0 ? <EmptyHint>No free-plan users exporting clean yet.</EmptyHint> : (
+      <Card title="Free customers getting value" tip="Free accounts with an explicitly recorded real-data export. Removing the large watermark alone is not a paid-intent signal." eyebrow="Last 30 days · real-data tracking began September 5" count={upsell.length} full>
+        {upsell.length === 0 ? <EmptyHint>No qualifying real-data exports from free accounts yet.</EmptyHint> : (
           <table className="adm-table">
-            <thead><tr><th>User</th><th>Clean exports</th><th>Last export</th></tr></thead>
+            <thead><tr><th>User</th><th>Real-data exports</th><th>Last export</th></tr></thead>
             <tbody>
               {upsell.map((u) => (
                 <tr key={u.user_id}>
                   <td className="adm-mono adm-truncate">{u.email}</td>
-                  <td><strong>{fmtNum(u.clean_exports)}</strong></td>
+                  <td><strong>{fmtNum(u.exports)}</strong></td>
                   <td className="adm-muted">{relTime(u.last_export)}</td>
                 </tr>
               ))}
