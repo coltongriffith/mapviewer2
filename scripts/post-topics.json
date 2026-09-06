@@ -30,9 +30,9 @@
   {
     "id": "ni_43101",
     "theme": "tip",
-    "hook": "A QP should never have to rebuild your map layout",
-    "detail": "Every figure in an NI 43-101 needs: title block, north arrow, scale bar, legend, and a locator inset. Exploration Maps generates all of them automatically. Export at 3× resolution as PNG, SVG, or PDF. Hand the QP a file, not a QGIS project.",
-    "cta": "Free at explorationmaps.com — no account required"
+    "hook": "Give the report author a clear map figure to review",
+    "detail": "Exploration Maps lets you configure a title block, north arrow, scale bar, legend, and locator inset for a technical-report figure. The report author or qualified person must review the figure and determine what the report requires; the tool does not certify NI 43-101 compliance. Free PNG exports include a small credit. Pro adds higher-resolution PNG, SVG, Illustrator (AI), and PDF exports without the credit. PDF output contains a rendered map image; check readability at the intended page size.",
+    "cta": "Build a map at explorationmaps.com — Free PNG with a small credit; Pro US$29/month or US$290/year"
   },
   {
     "id": "open_ground",
@@ -51,9 +51,9 @@
   {
     "id": "export_formats",
     "theme": "feature",
-    "hook": "The same map. Three formats. One export panel.",
-    "detail": "PNG at 1×, 2×, or 3× for slide decks and social. Vector SVG for the graphic designer who needs to tweak the legend. Print PDF for the technical report. Exploration Maps exports all three — watermark-free with just an email address.",
-    "cta": "Export free at explorationmaps.com"
+    "hook": "Choose the export format that fits your next presentation or report",
+    "detail": "Free PNG exports include a small explorationmaps.com credit. Pro removes the credit and adds higher-resolution PNG, SVG, Illustrator (AI), and PDF export for US$29/month or US$290/year. Use SVG for editable vector elements; PDF contains a rendered map image, so check readability at the intended page size. Providing an email address alone does not unlock Pro exports.",
+    "cta": "Try Free PNG export at explorationmaps.com or choose Pro for additional formats"
   },
   {
     "id": "claims_canada",
