@@ -134,6 +134,7 @@ article strong{color:#142126}
 .lp-wrap{max-width:820px;margin:0 auto;padding:0 24px}
 .lp article h2{font-size:1.45rem}
 .lp-intro{font-size:1.15rem;color:#5f6e72;line-height:1.7;margin:0 0 8px}
+.lp .lp-plan-note{font-size:0.9rem;margin-bottom:24px}
 .lp-cta{background:#142126;border-radius:14px;padding:32px 28px;color:#fff;text-align:center;margin:40px 0}
 .lp-cta h2{color:#fff !important;border:none !important;margin:0 0 8px !important;padding:0 !important;font-size:1.3rem}
 .lp-cta p{color:#dde3e3;margin:0 0 18px;font-size:0.98rem}
@@ -192,16 +193,16 @@ article strong{color:#142126}
     <svg width="20" height="20" viewBox="0 0 480 520" fill="none" aria-hidden="true"><path fill="#142126" d="M60 40H180V85H410V250H445V480H30V385H60Z"/><path fill="none" stroke="#ffffff" stroke-width="22" d="M18 180H132L205 250H240V325L320 400V490"/><path fill="none" stroke="#ffffff" stroke-width="22" d="M205 250L260 195"/><rect x="250" y="145" width="90" height="90" fill="#ffffff"/><rect x="273" y="168" width="44" height="44" fill="#c65322"/></svg>
     Exploration Maps
   </a>
-  <a class="nav-cta" href="/?intent=claims">Open editor →</a>
+  <a class="nav-cta" href="/?intent=claims&amp;utm_source=blog&amp;utm_medium=cta&amp;utm_campaign=exploration-maps-vs-qgis">Create my map →</a>
 </nav>
 
 <div class="page-wrap">
   <div class="blog-layout">
     <article>
-      <p class="breadcrumb"><a href="/">Home</a><span>›</span><a href="/blog/">Blog</a><span>›</span><a href="/blog/comparisons/">Comparisons</a><span>›</span>Exploration Maps vs QGIS for Exploration Mapping <span class="post-date">· <time datetime="2026-01-19">January 19, 2026</time></span></p>
+      <p class="breadcrumb"><a href="/">Home</a><span>›</span><a href="/blog/">Blog</a><span>›</span><a href="/blog/comparisons/">Comparisons</a><span>›</span>Exploration Maps vs QGIS for Exploration Mapping <span class="post-date">· Published <time datetime="2026-01-19">January 19, 2026</time></span> <span class="post-date">· Updated <time datetime="2026-09-05">September 5, 2026</time></span></p>
       <h1>Exploration Maps vs QGIS for Exploration Mapping</h1>
       <p class="direct-answer">QGIS is a full open-source GIS and it is the better tool for spatial analysis, coordinate system management, raster and geophysical processing, and advanced cartography. Exploration Maps is narrower on purpose: it produces presentation-ready exploration figures — claim maps, drill collar plans, investor and news-release figures — without a desktop install or a layout composer. Most exploration teams end up using both, with QGIS for preparation and analysis and Exploration Maps for the figure that goes out.</p>
-      <figure class="blog-figure"><img src="/gallery/ba-after.png" alt="Example mining map created in Exploration Maps" loading="eager" fetchpriority="high"><figcaption>A finished map exported from Exploration Maps — the kind of output this guide walks you to.</figcaption></figure>
+      <figure class="blog-figure"><img src="/gallery/ba-after.webp" alt="Example mining map created in Exploration Maps" width="870" height="653" srcset="/gallery/ba-after.webp 870w, /gallery/ba-after@2x.webp 1448w" sizes="(max-width: 768px) calc(100vw - 48px), 724px" decoding="async" loading="eager" fetchpriority="high"><figcaption>A finished map exported from Exploration Maps — the kind of output this guide walks you to.</figcaption></figure>
       <h2>What QGIS is genuinely better at</h2><p>QGIS handles coordinate system transformation and CRS management properly, does real spatial analysis, processes rasters and geophysical grids, and its print layout composer will produce any cartographic output you can specify. It is free and open source, actively developed, and it is the correct answer for most serious GIS work in an exploration company. If your problem is analytical, use QGIS.</p>
 <h2>Exploration Maps: Fast Output, No Configuration</h2><p>Exploration Maps is deliberately narrow. Design themes fix the title block, legend, panel colours and fonts, so producing a figure is a matter of adding data and framing it rather than composing a layout. That is a real constraint as well as a convenience — if you need a bespoke cartographic layout, a layout composer is the right tool and QGIS has one.</p>
 <h2>Using both</h2><p>Most experienced exploration teams use a hybrid workflow: QGIS for data preparation, coordinate system management, and any spatial analysis (clipping, buffering, processing geophysical grids), then export the results as GeoJSON for import into Exploration Maps for final presentation-quality output. This leverages the strengths of both tools.</p>
@@ -222,7 +223,7 @@ article strong{color:#142126}
   </div>
 <div class="faq-item">
     <div class="faq-q">Does QGIS produce better-quality maps than Exploration Maps?</div>
-    <div class="faq-a">QGIS's Print Layout can produce very high-quality maps given enough time and expertise. For standard investor presentation maps, NI 43-101 figures, and news release maps, Exploration Maps produces output that is equivalent or superior in presentation quality — in a fraction of the time.</div>
+    <div class="faq-a">QGIS Print Layout can produce high-quality maps. Exploration Maps focuses on browser-based templates for investor maps and news-release figures. Compare both using your own project data, required formats and revision workflow before choosing.</div>
   </div>
 </section>
     </article>

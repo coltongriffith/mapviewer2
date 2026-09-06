@@ -57,7 +57,7 @@
       },
       {
         "h2": "Step 5: Export a clean BC claims map",
-        "body": "Pick an export ratio — Landscape 16:9 for slides and news releases, Letter Portrait for reports — frame the claims within the bounds, then export PNG for presentations or PDF for print. Enter your email to unlock watermark-free exports.",
+        "body": "Pick an export ratio — Landscape 16:9 for slides and news releases, Letter Portrait for reports — frame the claims within the bounds, then export PNG for presentations or PDF for print. Free PNG exports retain a small Exploration Maps credit. Pro removes that credit for US$29/month or US$290/year.",
         "image": {
           "alt": "Export panel with Landscape 16:9 ratio selected over a framed BC claims map",
           "caption": "Framing and exporting the finished BC claims map",
@@ -132,7 +132,8 @@
     ],
     "publishedDate": "2025-11-20",
     "category": "mineral-claims",
-    "fullTitle": "How to Search & Map BC Mineral Claims | Exploration Maps"
+    "fullTitle": "How to Search & Map BC Mineral Claims | Exploration Maps",
+    "updatedDate": "2026-09-05"
   },
   {
     "slug": "how-to-track-bc-mineral-claim-good-to-dates",
@@ -398,7 +399,7 @@
       },
       {
         "h2": "Step 6: Export your map",
-        "body": "Activate an export ratio — Landscape 16:9 for slides and news releases, Letter Portrait for technical reports — frame your claims within the bounds, then export PNG for presentations or PDF for print. Enter your email to unlock watermark-free exports."
+        "body": "Activate an export ratio — Landscape 16:9 for slides and news releases, Letter Portrait for technical reports — frame your claims within the bounds, then export PNG for presentations or PDF for print. Free PNG exports retain a small Exploration Maps credit. Pro removes that credit for US$29/month or US$290/year."
       },
       {
         "h2": "Example: a two-block property overview",
@@ -477,7 +478,7 @@
       },
       {
         "q": "Can I export a mining claims map as a PDF?",
-        "a": "Yes. Choose the PDF export and select your page size (Letter Landscape, A4 Landscape, or News Release Figure). PDFs are vector-quality and suitable for print in regulatory filings and technical reports. See the export to PDF guide for details."
+        "a": "Yes. Choose the PDF export and select your page size (Letter Landscape, A4 Landscape, or News Release Figure). PDF export places a rendered map image on the selected page size. Choose a suitable resolution and check labels at the final print size. Use SVG export when you need editable vector elements."
       },
       {
         "q": "How do I show multiple claim blocks with different colours?",
@@ -495,7 +496,8 @@
       "how-to-import-geojson-mining-map"
     ],
     "publishedDate": "2025-10-20",
-    "category": "mineral-claims"
+    "category": "mineral-claims",
+    "updatedDate": "2026-09-05"
   },
   {
     "slug": "how-to-make-a-drill-results-map",
@@ -781,7 +783,7 @@
         "box": {
           "kind": "note",
           "title": "Exports &amp; commercial use",
-          "html": "Exploration Maps is built for commercial exploration work — investor decks, project overviews, and news-release figures. Watermark-free exports unlock with your email, and paid export/subscription options may be offered. See the <a href=\"/blog/how-to-make-a-professional-exploration-map/\">professional map guide</a> for formats and resolutions."
+          "html": "Exploration Maps is built for commercial exploration work — investor decks, project overviews, and news-release figures. Free PNG exports retain a small Exploration Maps credit. Pro removes that credit for US$29/month or US$290/year. See the <a href=\"/blog/how-to-make-a-professional-exploration-map/\">professional map guide</a> for formats and resolutions."
         }
       },
       {
@@ -826,7 +828,8 @@
     ],
     "publishedDate": "2025-10-27",
     "category": "exploration-mapping",
-    "fullTitle": "Exploration Maps for an Investor Presentation | Exploration Maps"
+    "fullTitle": "Exploration Maps for an Investor Presentation | Exploration Maps",
+    "updatedDate": "2026-09-05"
   },
   {
     "slug": "how-to-import-geojson-mining-map",
@@ -1473,7 +1476,7 @@
       },
       {
         "h2": "Step 4: Style, add context, and export",
-        "body": "Adjust colour, opacity, and border weight in the layer card, enable roads and reference labels for context, choose a basemap, add your title block and logo, then export PNG for slides or PDF for reports. Enter your email to unlock watermark-free exports."
+        "body": "Adjust colour, opacity, and border weight in the layer card, enable roads and reference labels for context, choose a basemap, add your title block and logo, then export PNG for slides or PDF for reports. Free PNG exports retain a small Exploration Maps credit. Pro removes that credit for US$29/month or US$290/year."
       },
       {
         "h2": "Example: mapping an operator's Abitibi ground",
@@ -1536,7 +1539,8 @@
       "how-to-map-bc-mineral-claims-live-registry"
     ],
     "category": "mineral-claims",
-    "fullTitle": "Ontario Mining Claims Search (MLAS) | Exploration Maps"
+    "fullTitle": "Ontario Mining Claims Search (MLAS) | Exploration Maps",
+    "updatedDate": "2026-09-05"
   },
   {
     "slug": "how-to-search-saskatchewan-mineral-claims",
@@ -1849,7 +1853,7 @@
       },
       {
         "h2": "Step 4: Add context and export",
-        "body": "Choose a basemap (Terrain suits Abitibi-belt ground), enable Context and Reference Labels, add your title block and logo, and export PNG for slides or PDF for reports. A 2–3× PDF export meets typical figure standards. Enter your email to unlock watermark-free exports."
+        "body": "Choose a basemap (Terrain suits Abitibi-belt ground), enable Context and Reference Labels, add your title block and logo, and export PNG for slides or PDF for reports. A 2–3× PDF export meets typical figure standards. Free PNG exports retain a small Exploration Maps credit. Pro removes that credit for US$29/month or US$290/year."
       },
       {
         "h2": "Example: a James Bay lithium land position",
@@ -1904,7 +1908,8 @@
       "how-to-search-ontario-mining-claims"
     ],
     "category": "mineral-claims",
-    "fullTitle": "Quebec Mining Claims Search (GESTIM) | Exploration Maps"
+    "fullTitle": "Quebec Mining Claims Search (GESTIM) | Exploration Maps",
+    "updatedDate": "2026-09-05"
   },
   {
     "slug": "how-to-search-yukon-quartz-claims",

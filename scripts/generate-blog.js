@@ -15,7 +15,6 @@ const OUT = join(ROOT, 'public', 'blog');
 const SITE = 'https://www.explorationmaps.com';
 const SITE_NAME = 'Exploration Maps';
 const OG_IMAGE = `${SITE}/og-image.png`;
-const TODAY = new Date().toISOString().split('T')[0];
 
 // ─── Load data ────────────────────────────────────────────────────────────────
 
@@ -24,6 +23,7 @@ const compPosts     = JSON.parse(readFileSync(join(__dirname, 'blog-data', 'comp
 const mapTypes      = JSON.parse(readFileSync(join(__dirname, 'blog-data', 'map-types.json'), 'utf8'));
 const seoPages      = JSON.parse(readFileSync(join(__dirname, 'blog-data', 'seo-pages.json'), 'utf8'));
 const redirectMap   = JSON.parse(readFileSync(join(__dirname, 'blog-data', 'redirects.json'), 'utf8'));
+const imageVariants = JSON.parse(readFileSync(join(__dirname, 'blog-data', 'image-variants.json'), 'utf8'));
 
 // The five clusters the site is organised around. Ordered by how close the
 // topic sits to what Exploration Maps actually does — mineral claim search and
@@ -204,6 +204,7 @@ article strong{color:#142126}
 .lp-wrap{max-width:820px;margin:0 auto;padding:0 24px}
 .lp article h2{font-size:1.45rem}
 .lp-intro{font-size:1.15rem;color:#5f6e72;line-height:1.7;margin:0 0 8px}
+.lp .lp-plan-note{font-size:0.9rem;margin-bottom:24px}
 .lp-cta{background:#142126;border-radius:14px;padding:32px 28px;color:#fff;text-align:center;margin:40px 0}
 .lp-cta h2{color:#fff !important;border:none !important;margin:0 0 8px !important;padding:0 !important;font-size:1.3rem}
 .lp-cta p{color:#dde3e3;margin:0 0 18px;font-size:0.98rem}
@@ -253,7 +254,7 @@ article strong{color:#142126}
 
 // ─── Page shell ───────────────────────────────────────────────────────────────
 
-function pageShell({ title, description, canonical, schema, body, noindex = false, fullTitle = null, ogType = 'article', ogImage = OG_IMAGE }) {
+function pageShell({ title, description, canonical, schema, body, noindex = false, fullTitle = null, ogType = 'article', ogImage = OG_IMAGE, action = contentAction({ slug: canonical.split('/').filter(Boolean).at(-1) }) }) {
   // fullTitle overrides the default "<title> | SITE_NAME" pattern, used by
   // landing pages whose exact title tag is specified verbatim.
   const titleTag = fullTitle || `${title} | ${SITE_NAME}`;
@@ -294,7 +295,7 @@ ${schema ? `<script type="application/ld+json">${JSON.stringify(schema, null, 0)
     <svg width="20" height="20" viewBox="0 0 480 520" fill="none" aria-hidden="true"><path fill="#142126" d="M60 40H180V85H410V250H445V480H30V385H60Z"/><path fill="none" stroke="#ffffff" stroke-width="22" d="M18 180H132L205 250H240V325L320 400V490"/><path fill="none" stroke="#ffffff" stroke-width="22" d="M205 250L260 195"/><rect x="250" y="145" width="90" height="90" fill="#ffffff"/><rect x="273" y="168" width="44" height="44" fill="#c65322"/></svg>
     ${esc(SITE_NAME)}
   </a>
-  <a class="nav-cta" href="${canonical.includes('/mineral-tenure-monitoring/') ? '/tenure-monitor' : '/?intent=claims'}">${canonical.includes('/mineral-tenure-monitoring/') ? 'Open monitor →' : 'Open editor →'}</a>
+  <a class="nav-cta" href="${esc(action.href)}">${esc(action.label)}</a>
 </nav>
 ${body}
 <footer class="site-footer">
@@ -328,16 +329,16 @@ ${body}
 
 // ─── Sidebar ──────────────────────────────────────────────────────────────────
 
-function sidebar({ relatedHtml = '', compareHtml = '', howToHtml = '', locationHtml = '', appHref = '/' } = {}) {
+function sidebar({ relatedHtml = '', compareHtml = '', howToHtml = '', locationHtml = '', appHref = '/', monitor = false } = {}) {
   const comparisons = compareHtml ? `<div class="sidebar-card"><h3>Compare Tools</h3><ul>${compareHtml}</ul></div>` : '';
   const howToGuide = howToHtml ? `<div class="sidebar-card"><h3>Step-by-Step Guide</h3><ul>${howToHtml}</ul></div>` : '';
   const relatedCard = relatedHtml ? `<div class="sidebar-card"><h3>Related Guides</h3><ul>${relatedHtml}</ul></div>` : '';
   const locationCard = locationHtml ? `<div class="sidebar-card"><h3>By Region</h3><ul>${locationHtml}</ul></div>` : '';
   return `<aside>
   <div class="cta-card">
-    <h3>Create Your Map Now</h3>
-    <p>No GIS experience needed. Import your data, choose a theme, and export in minutes.</p>
-    <a class="cta-btn" href="${esc(appHref)}">Open Exploration Maps →</a>
+    <h3>${monitor ? 'Track your BC claims' : 'Create Your Map Now'}</h3>
+    <p>${monitor ? 'Save a watch list and receive reminders for published good-to-dates. Free for up to 10 claims.' : 'No GIS experience needed. Import your data, choose a theme, and export in minutes.'}</p>
+    <a class="cta-btn" href="${esc(appHref)}">${monitor ? 'Open monitor →' : 'Open Exploration Maps →'}</a>
   </div>
   ${howToGuide}
   ${relatedCard}
@@ -390,6 +391,17 @@ function appLink({ intent = null, region = null, demo = null, campaign = '' } = 
   return `/?${p.toString()}`;
 }
 
+// Keep navigation, article and landing-page actions aligned with search intent.
+function contentAction({ slug = '', mapTypeId } = {}) {
+  const monitor = ['mineral-tenure-monitoring', 'how-to-track-bc-mineral-claim-good-to-dates'].includes(slug);
+  if (monitor) return { monitor, href: `/tenure-monitor?utm_source=blog&utm_medium=cta&utm_campaign=${encodeURIComponent(slug)}`, label: 'Monitor my claims →' };
+  const region = (slug.match(/search-([a-z-]+?)-(?:mining|mineral|quartz)-claims/) || [])[1]
+    || (/\bbc\b/.test(slug) ? 'british-columbia' : null);
+  const files = ['shapefile-to-map', 'how-to-import-geojson-mining-map', 'exploration-mapping-file-types-shapefile-kml-geojson-csv'].includes(slug);
+  const drill = mapTypeId === 'drill-results-map' || ['drill-results-map', 'how-to-make-a-drill-results-map', 'how-to-import-csv-data-mining-map'].includes(slug);
+  return { monitor: false, href: appLink({ intent: files ? 'claims-upload' : drill ? 'drill-results' : 'claims', region, campaign: slug }), label: files || drill ? 'Upload my data →' : 'Create my map →' };
+}
+
 function inlineCta({ text, sub = '', href = '/', label = 'Open Exploration Maps →' } = {}) {
   if (!text) return '';
   return `<div class="inline-cta">
@@ -412,8 +424,21 @@ function inlineCta({ text, sub = '', href = '/', label = 'Open Exploration Maps 
 function figureBlock({ alt = '', caption = '', src = '', eager = false } = {}) {
   const label = caption || alt || 'App screenshot';
   const loadAttrs = eager ? 'loading="eager" fetchpriority="high"' : 'loading="lazy"';
+  const variants = imageVariants[src];
+  let dimensions = '';
+  let responsive = '';
+  if (variants) {
+    dimensions = `width="${variants[0].width}" height="${variants[0].height}"`;
+    responsive = `srcset="${variants.map(v => `${esc(v.src)} ${v.width}w`).join(', ')}" sizes="(max-width: 768px) calc(100vw - 48px), 724px"`;
+    src = variants[0].src;
+  } else if (src.endsWith('.png') && src.startsWith('/')) {
+    const png = readFileSync(join(ROOT, 'public', src));
+    if (png.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) {
+      dimensions = `width="${png.readUInt32BE(16)}" height="${png.readUInt32BE(20)}"`;
+    }
+  }
   const inner = src
-    ? `<img src="${esc(src)}" alt="${esc(alt || caption)}" ${loadAttrs}>`
+    ? `<img src="${esc(src)}" alt="${esc(alt || caption)}" ${dimensions} ${responsive} decoding="async" ${loadAttrs}>`
     : `<div class="screenshot-frame"><span class="screenshot-frame-icon">▦</span><span>${esc(label)}</span></div>`;
   return `<figure class="blog-figure">${inner}${caption ? `<figcaption>${esc(caption)}</figcaption>` : ''}</figure>`;
 }
@@ -474,17 +499,29 @@ function renderSections(sections) {
 
 // ─── Article schema builder ───────────────────────────────────────────────────
 
-function articleSchema(title, description, url, publishedDate) {
+function contentDate(value) {
+  if (!value) return undefined;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) !== value) throw new Error(`Invalid content date: ${value}`);
+  return value;
+}
+
+function articleSchema(title, description, url, publishedDate, updatedDate) {
   return {
     '@type': 'Article',
     headline: title,
     description,
     url,
-    datePublished: publishedDate || TODAY,
-    dateModified: TODAY,
+    datePublished: contentDate(publishedDate),
+    dateModified: contentDate(updatedDate),
     author: { '@type': 'Organization', name: SITE_NAME, url: SITE },
     publisher: { '@type': 'Organization', name: SITE_NAME, url: SITE },
   };
+}
+
+function postDates(post) {
+  return [['Published', contentDate(post.publishedDate)], ['Updated', contentDate(post.updatedDate)]]
+    .filter(([, date]) => date)
+    .map(([label, date]) => `<span class="post-date">· ${label} <time datetime="${date}">${formatDate(date)}</time></span>`).join(' ');
 }
 
 function formatDate(isoDate) {
@@ -524,7 +561,7 @@ function buildHowToPage(post, allPosts) {
   const schema = {
     '@context': 'https://schema.org',
     '@graph': [
-      articleSchema(post.title, post.metaDescription, url, post.publishedDate),
+      articleSchema(post.title, post.metaDescription, url, post.publishedDate, post.updatedDate),
       {
         '@type': 'HowTo',
         name: post.title,
@@ -545,7 +582,7 @@ function buildHowToPage(post, allPosts) {
     ],
   };
 
-  const pubDate = post.publishedDate ? `<span class="post-date">· <time datetime="${esc(post.publishedDate)}">${formatDate(post.publishedDate)}</time></span>` : '';
+  const pubDate = postDates(post);
 
   // Product-led CTAs at the top (right after the direct answer) and bottom
   // (before the FAQs). Posts may override the copy via post.ctaTop/post.ctaBottom;
@@ -553,15 +590,10 @@ function buildHowToPage(post, allPosts) {
   // blocks, so every priority page gets top / middle / bottom prompts.
   // Deep-link CTAs: registry guides open the right province's search; drill/CSV
   // guides open the upload prompt; claims guides open registry search.
-  const searchRegion = (post.slug.match(/search-([a-z-]+?)-(?:mining|mineral)-claims/) || [])[1] || null;
-  const postApp = appLink({
-    intent: post.mapTypeId === 'drill-results-map' ? 'drill-results'
-      : (post.mapTypeId === 'mining-claims-map' || searchRegion) ? 'claims' : null,
-    region: searchRegion,
-    campaign: post.slug,
-  });
-  const topCta = inlineCta({ href: postApp, ...(post.ctaTop || { text: 'Turn public claim data into a clean map.', sub: 'No GIS experience needed — import, style, and export in minutes.' }) });
-  const bottomCta = inlineCta({ href: postApp, ...(post.ctaBottom || { text: 'Import your file and export an investor-ready map.', sub: 'Open the editor and have a shareable map in minutes.' }) });
+  const action = contentAction(post);
+  const postApp = action.href;
+  const topCta = inlineCta({ ...(post.ctaTop || { text: 'Turn public claim data into a clean map.', sub: 'No GIS experience needed — import, style, and export in minutes.' }), href: postApp, label: action.label });
+  const bottomCta = inlineCta({ ...(post.ctaBottom || { text: 'Import your file and export an investor-ready map.', sub: 'Open the editor and have a shareable map in minutes.' }), href: postApp, label: action.label });
 
   const body = `
 <div class="page-wrap">
@@ -576,13 +608,13 @@ function buildHowToPage(post, allPosts) {
       ${bottomCta}
       ${faqBlock(post.faqs)}
     </article>
-    ${sidebar({ relatedHtml: related, compareHtml: COMP_LINKS, locationHtml, appHref: postApp })}
+    ${sidebar({ relatedHtml: related, compareHtml: COMP_LINKS, locationHtml, appHref: postApp, monitor: action.monitor })}
   </div>
 </div>`;
 
   return pageShell({
     title: post.title, fullTitle: post.fullTitle, description: post.metaDescription,
-    canonical: url, schema, body,
+    canonical: url, schema, body, action,
   });
 }
 
@@ -605,7 +637,7 @@ function buildCompPage(post, allPosts) {
   const schema = {
     '@context': 'https://schema.org',
     '@graph': [
-      articleSchema(post.title, post.metaDescription, url, post.publishedDate),
+      articleSchema(post.title, post.metaDescription, url, post.publishedDate, post.updatedDate),
       breadcrumbSchema(post.title, url),
     ],
   };
@@ -619,7 +651,7 @@ function buildCompPage(post, allPosts) {
 </table>
 </div>` : '';
 
-  const compPubDate = post.publishedDate ? `<span class="post-date">· <time datetime="${esc(post.publishedDate)}">${formatDate(post.publishedDate)}</time></span>` : '';
+  const compPubDate = postDates(post);
 
   const body = `
 <div class="page-wrap">
@@ -783,6 +815,15 @@ function softwareAppSchema(name, description, url) {
 
 function buildSeoLandingPage(page, allLandingPages) {
   const url = `${SITE}/${page.slug}/`;
+  const action = contentAction(page);
+  const start = inlineCta({
+    href: action.href, label: action.label,
+    text: action.monitor ? 'Start tracking your BC claims.' : action.label.startsWith('Upload') ? 'Start with your project file.' : 'Start with a company name or claim number.',
+    sub: action.monitor ? 'Save up to 10 claims and set reminders for their published good-to-dates.' : 'Open the matching workflow, add your data, and make a map for your next update.',
+  });
+  const planNote = action.monitor
+    ? 'Free: up to 10 BC claims. Pro: up to 50, with additional reminder options. Pro is US$29/month or US$290/year.'
+    : 'Start free. Free PNG exports keep a small Exploration Maps credit. Pro removes that credit for US$29/month or US$290/year.';
 
   const graph = [];
   if (page.softwareApp) {
@@ -819,12 +860,14 @@ function buildSeoLandingPage(page, allLandingPages) {
   </div>
   <article>
     <p class="lp-intro">${esc(page.intro)}</p>
+    ${start}
+    <p class="lp-plan-note">${esc(planNote)}</p>
     ${renderSections(page.sections || [])}
     ${disclaimerHtml}
     <div class="lp-cta">
       <h2>${page.slug === 'mineral-tenure-monitoring' ? 'Start monitoring your claims' : 'Make your first map'}</h2>
       <p>${page.slug === 'mineral-tenure-monitoring' ? 'Monitor up to 10 BC claims free and set reminders for their published good-to-dates.' : 'Find or upload your claims, choose an investor layout, and download your map.'}</p>
-      <a href="${esc(page.slug === 'mineral-tenure-monitoring' ? '/tenure-monitor?utm_source=blog&utm_medium=cta&utm_campaign=mineral-tenure-monitoring' : appLink({ intent: page.slug === 'shapefile-to-map' ? 'claims-upload' : page.slug === 'drill-results-map' ? 'drill-results' : 'claims', region: page.slug === 'bc-mineral-claims-map' ? 'british-columbia' : null, campaign: page.slug }))}">${page.slug === 'mineral-tenure-monitoring' ? 'Monitor my claims →' : 'Create my map →'}</a>
+      <a href="${esc(action.href)}">${esc(action.label)}</a>
     </div>
     ${faqBlock(page.faqs)}
     ${relatedHtml}
@@ -840,28 +883,29 @@ function buildSeoLandingPage(page, allLandingPages) {
     body,
     ogType: 'website',
     ogImage: `${SITE}/og/${page.slug}.png`,
+    action,
   });
 }
 
 // ─── Sitemap ──────────────────────────────────────────────────────────────────
 
 function buildSitemap(allUrls, landingUrls = []) {
-  const today = new Date().toISOString().split('T')[0];
-  const homepage = `  <url><loc>${SITE}/</loc><lastmod>${today}</lastmod><changefreq>weekly</changefreq><priority>1.0</priority></url>`;
+  // lastmod is optional. Use reviewed content revisions, never the build date
+  // or an old publication date when the actual last modification is unknown.
+  const revisions = new Map([
+    ...[...howToPosts, ...compPosts].map(p => [`${SITE}/blog/${p.slug}/`, contentDate(p.updatedDate)]),
+    ...seoPages.map(p => [`${SITE}/${p.slug}/`, contentDate(p.updatedDate)]),
+  ]);
+  const entry = url => `  <url><loc>${esc(url)}</loc>${revisions.get(url) ? `<lastmod>${revisions.get(url)}</lastmod>` : ''}</url>`;
+  const homepage = entry(`${SITE}/`);
   // Top-level SEO landing pages — high priority money pages.
   const landingEntries = landingUrls
-    .map(u => `  <url><loc>${esc(u)}</loc><lastmod>${today}</lastmod><changefreq>monthly</changefreq><priority>0.9</priority></url>`)
+    .map(entry)
     .join('\n');
-  const blogEntries = allUrls.map(u => {
-    const isBlogIndex = u === `${SITE}/blog/`;
-    const isHub = /\/blog\/(how-to|comparisons)\/$/.test(u);
-    const priority = isBlogIndex ? '0.9' : isHub ? '0.8' : '0.7';
-    const freq = isBlogIndex || isHub ? 'weekly' : 'monthly';
-    return `  <url><loc>${esc(u)}</loc><lastmod>${today}</lastmod><changefreq>${freq}</changefreq><priority>${priority}</priority></url>`;
-  }).join('\n');
+  const blogEntries = allUrls.map(entry).join('\n');
   const staticEntries = [
-    `  <url><loc>${SITE}/about/</loc><lastmod>${today}</lastmod><changefreq>monthly</changefreq><priority>0.6</priority></url>`,
-    `  <url><loc>${SITE}/contact/</loc><lastmod>${today}</lastmod><changefreq>yearly</changefreq><priority>0.5</priority></url>`,
+    entry(`${SITE}/about/`),
+    entry(`${SITE}/contact/`),
   ].join('\n');
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${homepage}\n${landingEntries}\n${blogEntries}\n${staticEntries}\n</urlset>`;
 }

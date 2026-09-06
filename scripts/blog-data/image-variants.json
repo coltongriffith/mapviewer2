@@ -1,0 +1,98 @@
+{
+  "/gallery/ba-after.png": [
+    {
+      "src": "/gallery/ba-after.webp",
+      "width": 870,
+      "height": 653
+    },
+    {
+      "src": "/gallery/ba-after@2x.webp",
+      "width": 1448,
+      "height": 1086
+    }
+  ],
+  "/gallery/ba-before.png": [
+    {
+      "src": "/gallery/ba-before.webp",
+      "width": 870,
+      "height": 870
+    },
+    {
+      "src": "/gallery/ba-before@2x.webp",
+      "width": 1254,
+      "height": 1254
+    }
+  ],
+  "/gallery/claims.png": [
+    {
+      "src": "/gallery/claims.webp",
+      "width": 640,
+      "height": 400
+    },
+    {
+      "src": "/gallery/claims@2x.webp",
+      "width": 1000,
+      "height": 625
+    }
+  ],
+  "/gallery/dark.png": [
+    {
+      "src": "/gallery/dark.webp",
+      "width": 640,
+      "height": 400
+    },
+    {
+      "src": "/gallery/dark@2x.webp",
+      "width": 1000,
+      "height": 625
+    }
+  ],
+  "/gallery/drill-results.png": [
+    {
+      "src": "/gallery/drill-results.webp",
+      "width": 640,
+      "height": 400
+    },
+    {
+      "src": "/gallery/drill-results@2x.webp",
+      "width": 1000,
+      "height": 625
+    }
+  ],
+  "/gallery/infrastructure.png": [
+    {
+      "src": "/gallery/infrastructure.webp",
+      "width": 640,
+      "height": 400
+    },
+    {
+      "src": "/gallery/infrastructure@2x.webp",
+      "width": 1000,
+      "height": 625
+    }
+  ],
+  "/gallery/regional.png": [
+    {
+      "src": "/gallery/regional.webp",
+      "width": 640,
+      "height": 400
+    },
+    {
+      "src": "/gallery/regional@2x.webp",
+      "width": 1000,
+      "height": 625
+    }
+  ],
+  "/gallery/target.png": [
+    {
+      "src": "/gallery/target.webp",
+      "width": 640,
+      "height": 400
+    },
+    {
+      "src": "/gallery/target@2x.webp",
+      "width": 1000,
+      "height": 625
+    }
+  ]
+}

@@ -7019,8 +7019,13 @@ export default function App({ initialAction = null }) {
             initialQuery={addClaimsQuery}
             autoSearch={addClaimsAutoSearch}
             onClose={() => { setShowAddClaimsModal(false); setAddClaimsModalPath(null); setAddClaimsProvince(null); setAddClaimsQuery(''); setAddClaimsAutoSearch(false); }}
-            onImport={(geojson, name, provenance) => {
-              addGeoJSONAsLayer(geojson, `${name}.geojson`, 'registry', provenance);
+            onCSVFile={(file) => {
+              setShowAddClaimsModal(false);
+              setAddClaimsModalPath(null);
+              handleUploadFile(file);
+            }}
+            onImport={(geojson, name, provenance, source = 'registry') => {
+              addGeoJSONAsLayer(geojson, `${name}.geojson`, source, provenance);
               setShowAddClaimsModal(false);
               setAddClaimsModalPath(null);
               if (screen !== 'editor') setScreen('editor');
