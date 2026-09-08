@@ -12,8 +12,8 @@ These need no external account and are working now:
 | Client error capture | `src/utils/errorReporter.js` | Catches uncaught errors, unhandled promise rejections and React render crashes. Redacts tokens/JWTs/API keys/emails before sending. Caps at 25 reports per session and dedupes the same fault to once a minute. |
 | React boundary reporting | `src/components/ErrorBoundary.jsx` | A render crash — the worst client failure — now reaches the sink, not just the console. |
 | Ingest endpoint | `api/client-error.js` | Verifies identity from the bearer token (never the request body), fingerprints the fault, and collapses repeats inside a 10-minute window so a render loop is one row, not thousands. |
-| Storage | `public.error_events` | Service-role writes only; RLS on; no client grants. |
-| Admin view | Admin → **Health** tab | Errors in the last 24h, grouped by fingerprint, with count, affected users, release, and a sample stack. |
+| Storage | `public.error_events` (`supabase/migrations/20260729000003_error_events.sql`) | Service-role writes only; RLS on; no client grants. |
+| Admin view | Admin → **Health** tab, via `admin_get_error_summary` (same migration) | Errors in the last 24h, grouped by fingerprint, with count, affected users, release, and a sample stack. |
 | API error logs | `api/stripe-*.js`, `api/client-error.js` | Structured single-line JSON to stdout, visible in Vercel runtime logs. Billing failures log unconditionally (they used to log only outside production, which is why the checkout failure was invisible). |
 | Release tagging | `vite.config.js` `__APP_VERSION__` | Every report carries the package version, so "did my last deploy break this" is answerable. |
 | Tenure sync + reminder failures | `.github/workflows/tenure-sync.yml`, `.github/workflows/tenure-alerts.yml` | An aborted or failed B.C. tenure import emails the administrator via Resend and exits non-zero, so the Actions run goes red as well. Every run — success or not — is durably recorded in `tenure_import_runs` and shown in Admin → **Tenure**, so a Resend outage cannot lose the signal. Per-alert delivery outcomes are recorded in `tenure_alert_instances`. |
