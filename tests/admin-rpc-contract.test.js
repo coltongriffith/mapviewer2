@@ -130,6 +130,84 @@ describe('admin_get_overview feed fix', () => {
   });
 });
 
+describe('every RPC the app calls', () => {
+  // The Health tab called admin_get_error_summary for six weeks while no
+  // migration in this repository defined it — or the error_events table it
+  // reads. Production had both (applied by hand and never committed), so the
+  // deployed dashboard worked and nothing here noticed; a fresh environment or
+  // the restore drill in docs/monitoring.md came up with a broken Health tab
+  // and an ingest endpoint whose inserts failed silently.
+  //
+  // The root supabase-*.sql setup files count as definitions: the older
+  // acquisition RPCs (admin_get_leads, admin_get_campaign_stats, …) live there
+  // and were never moved into migrations.
+  const SQL_FILES = [
+    ...migrationFiles().map((f) => path.join(MIGRATIONS, f)),
+    ...readdirSync('.').filter((f) => /^supabase-.*\.sql$/.test(f)),
+  ];
+  const defined = new Set();
+  for (const file of SQL_FILES) {
+    const sql = readFileSync(file, 'utf8');
+    for (const m of sql.matchAll(/create (?:or replace )?function\s+(?:public\.)?([a-z0-9_]+)\s*\(/gi)) defined.add(m[1]);
+  }
+
+  function walk(dir, out = []) {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(p, out);
+      else if (/\.(js|jsx)$/.test(entry.name)) out.push(p);
+    }
+    return out;
+  }
+  const called = new Map();
+  for (const file of [...walk('src'), ...walk('api')]) {
+    const js = readFileSync(file, 'utf8');
+    for (const m of js.matchAll(/\b(?:rpc|useRpc)\(\s*['"]([a-z0-9_]+)['"]/g)) {
+      if (!called.has(m[1])) called.set(m[1], file);
+    }
+  }
+
+  it('finds RPC calls to check', () => {
+    expect(called.size).toBeGreaterThan(10);
+    expect(called.has('admin_get_error_summary')).toBe(true);
+  });
+
+  it.each([...called])('%s is defined by SQL in this repository (called from %s)', (fn) => {
+    expect(defined.has(fn), `${fn} is called from ${called.get(fn)} but no migration or setup file defines it`).toBe(true);
+  });
+});
+
+describe('admin_get_error_summary', () => {
+  const def = currentDefinition('admin_get_error_summary');
+
+  it('is defined, gated, and does not resolve names through pg_temp', () => {
+    expect(def, 'no migration defines admin_get_error_summary').toBeTruthy();
+    const body = bodyOf(def.sql, 'admin_get_error_summary');
+    expect(body).toMatch(/security\s+definer/i);
+    expect(body).toMatch(/is_admin\(\)/);
+    expect(body).toMatch(/set\s+search_path/i);
+    expect(body, 'pg_temp in a definer search_path').not.toMatch(/search_path\s*=\s*[^\n]*pg_temp/i);
+  });
+
+  it('keeps the argument the Health tab sends and is never granted to anon', () => {
+    const body = bodyOf(def.sql, 'admin_get_error_summary');
+    expect(body).toMatch(/p_hours\s+integer/);
+    expect(readFileSync('src/components/admin/useDashboardData.js', 'utf8')).toContain('p_hours');
+    expect(def.sql).toMatch(/revoke\s+all\s+on\s+function\s+public\.admin_get_error_summary/i);
+    expect(def.sql).not.toMatch(/grant\s+execute[^;]*admin_get_error_summary[^;]*\b(anon|public)\b/i);
+  });
+
+  it('creates the table the ingest endpoint writes to, with no client access', () => {
+    expect(def.sql).toMatch(/create table if not exists public\.error_events/i);
+    expect(def.sql).toMatch(/alter table public\.error_events enable row level security/i);
+    expect(def.sql).toMatch(/revoke\s+all\s+on\s+table\s+public\.error_events\s+from[^;]*\banon\b/i);
+    // Every column api/client-error.js inserts.
+    for (const col of ['source', 'kind', 'message', 'stack', 'path', 'release', 'session_id', 'user_id', 'user_agent', 'context', 'fingerprint', 'seen_count', 'occurred_at']) {
+      expect(def.sql, `error_events is missing column ${col}`).toMatch(new RegExp(`^\\s*${col}\\s`, 'm'));
+    }
+  });
+});
+
 describe('every admin_ RPC', () => {
   // The rule this class of bug breaks, applied to all of them rather than only
   // the one that was caught.
