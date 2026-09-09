@@ -1,8 +1,8 @@
 import React from 'react';
 import { MarkerSvgIcon } from '../utils/markerIcons.jsx';
 import {
-  LEGEND_SYMBOLS, DEFAULT_LEGEND_SYMBOL, DEFAULT_LEGEND_COLOR,
-  customLegendItem, nextCustomLegendId,
+  LEGEND_SYMBOLS, DEFAULT_LEGEND_SYMBOL, DEFAULT_LEGEND_COLOR, DEFAULT_LEGEND_GROUP,
+  customLegendItem, nextCustomLegendId, applyLegendCustomization, moveLegendItem,
 } from '../utils/legendCustomization.js';
 
 // Editing the legend without letting it drift from the map.
@@ -35,13 +35,40 @@ export default function LegendEditor({ derivedItems, layout, updateLayout }) {
   const overrides = layout?.legendOverrides || {};
   const customItems = layout?.legendCustomItems || [];
 
+  const grouped = !!layout?.legendGrouped;
+
   const setOverride = (id, patch) => {
     const next = { ...overrides, [id]: { ...overrides[id], ...patch } };
     // Drop an override that no longer says anything, so the stored project does
     // not accumulate empty records for every entry the user touched.
-    if (!next[id].hidden && !next[id].label) delete next[id];
+    if (!next[id].hidden && !next[id].label && !next[id].group) delete next[id];
     updateLayout({ legendOverrides: next });
   };
+
+  // The ids as the legend currently shows them, so the first up/down click on
+  // a legend that has never been reordered moves one row and nothing else.
+  const shownIds = applyLegendCustomization(derivedItems, layout).map((item) => item.id);
+  const move = (id, direction) => updateLayout({ legendOrder: moveLegendItem(shownIds, id, direction) });
+  const orderButtons = (id, label) => {
+    const i = shownIds.indexOf(id);
+    if (i < 0) return null;
+    return (
+      <span className="legend-editor-order">
+        <button type="button" className="legend-editor-btn" aria-label={`Move ${label} up`} title="Move up" disabled={i === 0} onClick={() => move(id, 'up')}>↑</button>
+        <button type="button" className="legend-editor-btn" aria-label={`Move ${label} down`} title="Move down" disabled={i === shownIds.length - 1} onClick={() => move(id, 'down')}>↓</button>
+      </span>
+    );
+  };
+  const groupInput = (id, current, label) => (grouped ? (
+    <input
+      className="legend-editor-group"
+      value={overrides[id]?.group ?? ''}
+      placeholder={current || DEFAULT_LEGEND_GROUP}
+      aria-label={`Legend heading for ${label}`}
+      title="Heading this entry sits under"
+      onChange={(e) => setOverride(id, { group: e.target.value })}
+    />
+  ) : null);
 
   const setCustom = (id, patch) => {
     updateLayout({
@@ -75,6 +102,13 @@ export default function LegendEditor({ derivedItems, layout, updateLayout }) {
         <p className="small-note">Legend entries appear here as you add layers to the map.</p>
       )}
 
+      {(derivedItems.length > 0 || customItems.length > 0) && (
+        <label className="toggle-row" style={{ marginBottom: 6 }}>
+          <input type="checkbox" checked={grouped} onChange={(e) => updateLayout({ legendGrouped: e.target.checked })} />
+          <span>Group entries under headings</span>
+        </label>
+      )}
+
       {derivedItems.map((item) => {
         const hidden = !!overrides[item.id]?.hidden;
         return (
@@ -87,6 +121,8 @@ export default function LegendEditor({ derivedItems, layout, updateLayout }) {
               disabled={hidden}
               onChange={(e) => setOverride(item.id, { label: e.target.value })}
             />
+            {!hidden && groupInput(item.id, item.group, item.label)}
+            {!hidden && orderButtons(item.id, item.label)}
             <button
               type="button"
               className="legend-editor-btn"
@@ -134,6 +170,8 @@ export default function LegendEditor({ derivedItems, layout, updateLayout }) {
             aria-label="Colour"
             onChange={(e) => setCustom(entry.id, { color: e.target.value })}
           />
+          {groupInput(entry.id, entry.group, entry.label || 'custom legend item')}
+          {orderButtons(entry.id, entry.label || 'custom legend item')}
           <button
             type="button"
             className="legend-editor-btn"
@@ -151,6 +189,7 @@ export default function LegendEditor({ derivedItems, layout, updateLayout }) {
       </button>
       <p className="small-note">
         Added items are labels only — they describe something already on the map, and do not draw anything.
+        {grouped ? ' Entries with the same heading are listed together, in the order shown here.' : ''}
       </p>
     </div>
   );

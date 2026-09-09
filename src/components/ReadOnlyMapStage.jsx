@@ -10,7 +10,7 @@ import { buildLegendItems, resolveTemplateZones } from '../templates/technicalRe
 import { resolveNI43101Zones } from '../templates/technicalReportTemplate';
 import { resolveSidePanelZones } from '../templates/sidePanelTemplate';
 import { getThemeTokens } from '../utils/themeTokens';
-import { applyLegendCustomization } from '../utils/legendCustomization.js';
+import { applyLegendCustomization, groupLegendItems } from '../utils/legendCustomization.js';
 import { MarkerSvgIcon } from '../utils/markerIcons.jsx';
 import { fitProjectToTemplate } from '../utils/frameMapForTemplate';
 
@@ -32,10 +32,6 @@ function legendFillRgba(hex, alpha) {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-function renderLegendGroups(items) {
-  return [{ heading: null, items }];
-}
-
 // The shared marker renderer, as in the editable stage.
 //
 // This was a fifth copy of the shape table and the last one still missing
@@ -43,6 +39,13 @@ function renderLegendGroups(items) {
 // a reader actually receives. An author could pick hexagon in the editor, see
 // it in the editor and in the export, and have the public page show a circle.
 function LegendPointSwatch({ style }) {
+  if (style?.customMarkerDataUri) {
+    return (
+      <span className="legend-symbol-marker" style={{ display: 'flex', flexShrink: 0 }}>
+        <img src={style.customMarkerDataUri} alt="" width={14} height={14} style={{ objectFit: 'contain' }} draggable={false} />
+      </span>
+    );
+  }
   return (
     <span className="legend-symbol-marker" style={{ display: 'flex', flexShrink: 0 }}>
       <MarkerSvgIcon
@@ -182,7 +185,7 @@ export default function ReadOnlyMapStage({ project }) {
     () => applyLegendCustomization(buildLegendItems(template, project.layers, project.layout), project.layout),
     [template, project.layers, project.layout]
   );
-  const legendGroups = useMemo(() => renderLegendGroups(legendItems, project.layout), [legendItems, project.layout]);
+  const legendGroups = useMemo(() => groupLegendItems(legendItems, project.layout), [legendItems, project.layout]);
   const resolvedZones = useMemo(() => {
     if (project.layout?.templateId === 'ni_43101_technical') return resolveNI43101Zones(template, project.layout, mapSize, legendItems);
     if (project.layout?.templateId === 'side_panel') return resolveSidePanelZones(template, project.layout, mapSize, legendItems);

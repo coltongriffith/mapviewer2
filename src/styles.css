@@ -278,6 +278,7 @@ button, input, select, textarea { font: inherit; }
 .legend-header { display: flex; align-items: center; justify-content: space-between; }
 .legend-list { display: grid; gap: 10px; }
 .legend-group { display: grid; gap: 8px; }
+.legend-group + .legend-group { margin-top: 4px; }
 .legend-group-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted-text, var(--ui-text-muted)); font-weight: 700; }
 .legend-item { display: flex; align-items: center; gap: 12px; color: var(--body-text, var(--ui-text)); }
 .legend-swatch { width: 18px; height: 12px; border-radius: var(--r-sm); border: 1px solid var(--ui-action); flex: 0 0 auto; }
@@ -3218,6 +3219,10 @@ button.claim-notices-chip[aria-expanded="true"] { border-color: var(--ui-border-
 .legend-editor-row.is-hidden .legend-editor-label { opacity: 0.5; text-decoration: line-through; }
 .legend-editor-label { flex: 1; min-width: 0; font-size: 12px; padding: 4px 6px; }
 .legend-editor-symbol { font-size: 11px; padding: 3px 4px; max-width: 108px; }
+.legend-editor-group { flex: 0 1 96px; min-width: 0; font-size: 11px; padding: 4px 6px; }
+.legend-editor-order { display: inline-flex; gap: 2px; }
+.legend-editor-order .legend-editor-btn { padding: 2px 5px; }
+.legend-editor-order .legend-editor-btn:disabled { opacity: 0.35; cursor: default; }
 .legend-editor-color { width: 28px; height: 24px; padding: 0; border: 1px solid var(--ui-border-strong); border-radius: var(--r-md); background: none; }
 .legend-editor-btn {
   font-size: 11px; padding: 3px 7px; border: 1px solid var(--ui-border-strong); border-radius: var(--r-md);

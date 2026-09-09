@@ -148,3 +148,39 @@ describe('baselineFromTop', () => {
     expect(baselineFromTop(100, 20)).toBeCloseTo(116, 5);
   });
 });
+
+describe('legend headings and swatches in the SVG', () => {
+  const items = [
+    { id: 'a', type: 'polygon', label: 'Property', group: 'Mineral Tenure', style: { dashArray: '8 5' } },
+    { id: 'b', type: 'points', label: 'Discovery Zone', group: 'Project Areas', style: { customMarkerDataUri: 'data:image/png;base64,AAAA' } },
+  ];
+
+  it('draws no heading unless headings are on', () => {
+    expect(renderLegendSvg(scene({ legendItems: items }), 1, [])).not.toContain('em-legend-heading');
+  });
+
+  it('draws one heading per group, and pushes rows down to make room', () => {
+    const svg = renderLegendSvg(scene({ legendItems: items, legendGrouped: true }), 1, []);
+    expect(svg.match(/em-legend-heading/g).length).toBe(2);
+    expect(svg).toContain('MINERAL TENURE');
+    expect(svg).toContain('PROJECT AREAS');
+    const flat = renderLegendSvg(scene({ legendItems: items }), 1, []);
+    // Offset of the first swatch from the top of the legend card: the card is
+    // bottom-anchored in this template, so it grows upward as rows are added.
+    const panelY = (s) => Number(/<rect[^>]* y="([\d.]+)"/.exec(s)[1]);
+    const firstRowY = (s) => Number(/class="em-legend-item"><rect x="[\d.]+" y="([\d.]+)"/.exec(s)[1]);
+    expect(firstRowY(svg) - panelY(svg)).toBeGreaterThan(firstRowY(flat) - panelY(flat));
+  });
+
+  it('dashes a dashed layer’s polygon swatch, as the editor does', () => {
+    const svg = legendSwatchSvg(items[0], 100, 200, 2);
+    expect(svg).toContain('stroke-dasharray=');
+    expect(legendSwatchSvg({ type: 'polygon', style: {} }, 100, 200, 2)).not.toContain('stroke-dasharray=');
+  });
+
+  it('shows an uploaded icon instead of a shape', () => {
+    const svg = legendSwatchSvg(items[1], 100, 200, 2);
+    expect(svg).toContain('<image');
+    expect(svg).toContain('data:image/png;base64,AAAA');
+  });
+});

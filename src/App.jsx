@@ -68,7 +68,7 @@ import { scopingWarning } from './utils/scopingNotice';
 import { CLAIM_NAME_CAVEAT } from './utils/claimProvenance';
 import { OVERLAY_DESCRIPTIONS } from './utils/referenceOverlayCredits.js';
 import { BASEMAPS, BASEMAP_KEYS, basemapThumb } from './utils/basemapConfig.js';
-import { applyLegendCustomization } from './utils/legendCustomization.js';
+import { applyLegendCustomization, groupLegendItems } from './utils/legendCustomization.js';
 import { featureKey, layerFeatures, isFeatureHidden, hiddenCount, featuresInBounds, visibleGeojson, featureLabel } from './utils/featureIdentity.js';
 import { stripFeatureStyle, styledFeatureCount } from './utils/featureStyle.js';
 import { layerAnchorGroups, defaultAnchorForLayer, reanchorCalloutsForLayer } from './utils/featureClusters.js';
@@ -411,6 +411,15 @@ function LegendLabelEditable({ label, onSave }) {
 // hexagon in the client's PDF. Sharing MarkerSvgIcon means a shape added once
 // is available everywhere, and cannot be half-added again.
 function LegendPointSwatch({ style }) {
+  // A layer drawn with an uploaded icon is represented by that icon, not by
+  // the geometric shape it would otherwise have had.
+  if (style?.customMarkerDataUri) {
+    return (
+      <span className="legend-symbol-marker" style={{ display: 'flex', flexShrink: 0 }}>
+        <img src={style.customMarkerDataUri} alt="" width={14} height={14} style={{ objectFit: 'contain' }} draggable={false} />
+      </span>
+    );
+  }
   return (
     <span className="legend-symbol-marker" style={{ display: 'flex', flexShrink: 0 }}>
       <MarkerSvgIcon
@@ -490,10 +499,6 @@ function RecentProjectsModal({ entries, currentProjectId, onOpen, onRename, onDe
       </div>
     </div>
   );
-}
-
-function renderLegendGroups(items) {
-  return [{ heading: null, items }];
 }
 
 // Human names for the reference overlays, used when one fails to load. The
@@ -983,7 +988,7 @@ export default function App({ initialAction = null }) {
     () => applyLegendCustomization(derivedLegendItems, project.layout),
     [derivedLegendItems, project.layout],
   );
-  const legendGroups = useMemo(() => renderLegendGroups(allLegendItems, project.layout), [allLegendItems, project.layout]);
+  const legendGroups = useMemo(() => groupLegendItems(allLegendItems, project.layout), [allLegendItems, project.layout]);
   const resolvedZones = useMemo(() => {
     if (project.layout?.templateId === 'ni_43101_technical') {
       return resolveNI43101Zones(template, project.layout, mapSize, allLegendItems);
