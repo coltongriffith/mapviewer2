@@ -118,10 +118,44 @@ describe('classLegendItems', () => {
     const layer = { ...soils, classification: buildGraduated(soils, 'Cu_ppm', 4) };
     const rows = classLegendItems(layer, { markerColor: '#000' }, 'Soil Cu', 'Soil Geochemistry', true);
     expect(rows.length).toBe(layer.classification.classes.length);
-    expect(rows[0].id).toBe('soil::class:0');
+    expect(rows[0].id).toBe('soil::class:graduated:Cu_ppm:0');
     expect(rows[0].group).toBe('Soil Geochemistry');
     expect(rows.every((r) => r.type === 'points')).toBe(true);
     expect(rows[rows.length - 1].swatchSize).toBeGreaterThan(rows[0].swatchSize);
     expect(rows[0].style.markerColor).toBe(layer.classification.classes[0].color);
+  });
+});
+
+
+describe('Codex follow-ups', () => {
+  it('colours the open-ended top class row like the map does', () => {
+    const layer = { id: 'l', type: 'points', role: 'soil_samples', classification: { field: 'Cu_ppm', mode: 'graduated', classes: [{ max: 100, color: '#aaa', size: 6 }, { max: null, color: '#bbb', size: 14 }] } };
+    const rows = classLegendItems(layer, { markerColor: '#000' }, 'Soil', 'G', true);
+    expect(rows[1].style.markerColor).toBe('#bbb');
+    expect(rows[1].style.markerSize).toBe(14);
+  });
+
+  it('gives a line layer its class colour as stroke', () => {
+    const c = { field: 'Unit', mode: 'categorical', classes: [{ value: 'a', color: '#123456' }] };
+    expect(classStyle(c, { properties: { Unit: 'a' } }, 'line')).toEqual({ stroke: '#123456' });
+    const rows = classLegendItems({ id: 'x', type: 'line', classification: c }, { stroke: '#000' }, 'Faults', 'G', false);
+    expect(rows[0].type).toBe('line');
+    expect(rows[0].style.stroke).toBe('#123456');
+  });
+
+  it('scopes legend ids to the field and mode', () => {
+    const base = { id: 'x', type: 'points' };
+    const a = classLegendItems({ ...base, classification: buildGraduated(soils, 'Cu_ppm', 3) }, {}, 'S', 'G', true)[0].id;
+    const b = classLegendItems({ ...base, classification: buildCategorical(soils, 'Unit') }, {}, 'S', 'G', true)[0].id;
+    expect(a).not.toBe(b);
+    expect(b).toContain('categorical');
+  });
+
+  it('does not count a drill trace as an observation', () => {
+    const withTrace = { ...soils, geojson: { type: 'FeatureCollection', features: [pt(10), pt(1000), { ...pt(1000), properties: { Cu_ppm: 1000, _trace: true } }] } };
+    expect(attributeFields(withTrace).length).toBeGreaterThan(0);
+    const c = buildCategorical(withTrace, 'Cu_ppm');
+    // Two real observations, one each: the trace must not make 1000 win.
+    expect(c.classes.map((k) => k.value).sort()).toEqual(['10', '1000']);
   });
 });

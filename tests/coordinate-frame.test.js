@@ -152,3 +152,19 @@ describe('projection label and scale bar height', () => {
     expect(scaleBarHeight({ showProjectionLabel: true, scaleBarHeightPx: 40 })).toBe(40);
   });
 });
+
+
+describe('across the equator', () => {
+  it('still labels northings on both edges', () => {
+    const map = fakeMap({ lat: 0.02, lng: 30, mPerPx: 40 });
+    const frame = getMapFrame({ templateId: 'technical_results_v2', showCoordinateFrame: true }, { width: 1000, height: 600 });
+    const t = computeGridTicks(map, frame, 1);
+    expect(t.y.length).toBeGreaterThanOrEqual(2);
+    const above = t.y.filter((k) => k.northing >= 0);
+    const below = t.y.filter((k) => k.northing < 0);
+    expect(above.length).toBeGreaterThan(0);
+    expect(below.length).toBeGreaterThan(0);
+    // A southern tick reads with its false northing restored.
+    expect(below[0].label).toMatch(/^9 9\d\d \d{3}N$/);
+  });
+});

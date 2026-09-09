@@ -29,7 +29,7 @@ const ColumnMapperModal = React.lazy(() => import('./components/ColumnMapperModa
 const RasterPlacementModal = React.lazy(() => import('./components/RasterPlacementModal'));
 const AddClaimsModal = React.lazy(() => import('./components/AddClaimsModal'));
 const UpgradeModal = React.lazy(() => import('./components/UpgradeModal'));
-import { loadGeoJSON, loadCSV, loadShapefileSet } from './utils/importers';
+import { loadGeoJSON, loadCSV, loadShapefileSet, MAX_FEATURES } from './utils/importers';
 import {
   CALLOUT_TYPES,
   createInitialProjectState,
@@ -73,7 +73,7 @@ import { applyLegendCustomization, groupLegendItems } from './utils/legendCustom
 import { getMapFrame, projectionLabel, scaleBarHeight } from './utils/coordinateFrame.js';
 import { pickScaleBar } from './utils/scaleBar.js';
 import CoordinateFrameOverlay from './components/CoordinateFrameOverlay.jsx';
-import { featureKey, layerFeatures, isFeatureHidden, hiddenCount, featuresInBounds, visibleGeojson, featureLabel } from './utils/featureIdentity.js';
+import { featureKey, layerFeatures, isFeatureHidden, featuresInBounds, visibleGeojson, featureLabel } from './utils/featureIdentity.js';
 import { stripFeatureStyle, styledFeatureCount } from './utils/featureStyle.js';
 import { attributeFields, buildGraduated, buildCategorical, classLabel, MAX_CATEGORIES } from './utils/classification.js';
 import { addDrillTraces, isTrace } from './utils/drillTraces.js';
@@ -2519,7 +2519,7 @@ export default function App({ initialAction = null }) {
     const role = inferRoleFromLayer({ name: baseName, type: kind });
     // Collars that carry azimuth, dip and length get a surface trace each,
     // whatever file they arrived in.
-    if (role === 'drillholes' && geojson?.features) geojson = addDrillTraces(geojson);
+    if (role === 'drillholes' && geojson?.features) geojson = addDrillTraces(geojson, { maxFeatures: MAX_FEATURES });
     const displayName = cleanLayerName(baseName, role);
     trackEvent('layer_added', { source, role, kind, feature_count: geojson?.features?.length ?? 0 });
 
@@ -5153,7 +5153,8 @@ export default function App({ initialAction = null }) {
                     {(() => {
                       const trimming = trimLayerId === selectedLayer.id;
                       const listing = trimListLayerId === selectedLayer.id;
-                      const removed = hiddenCount(selectedLayer);
+                      // Collars, not geometry: a trace goes with its collar and is not a row.
+                      const removed = layerFeatures(selectedLayer).filter((f) => !isTrace(f) && isFeatureHidden(selectedLayer, f)).length;
                       const total = layerFeatures(selectedLayer).filter((f) => !isTrace(f)).length;
                       return (
                         <div className="trim-panel">
@@ -5165,7 +5166,7 @@ export default function App({ initialAction = null }) {
                               type="button"
                               className={`secondary-btn trim-toggle${trimming ? ' active' : ''}`}
                               aria-pressed={trimming}
-                              onClick={() => setTrimLayerId(trimming ? null : selectedLayer.id)}
+                              onClick={() => { setTrimLayerId(trimming ? null : selectedLayer.id); if (!trimming) { setFeatureStyleLayerId(null); setStyledFeatureKey(null); } }}
                             >
                               {trimming ? 'Done removing' : 'Select on map'}
                             </button>
@@ -6711,7 +6712,7 @@ export default function App({ initialAction = null }) {
             style={mapStageStyle}
           >
         <React.Suspense fallback={null}>
-          <MapCanvas onReady={onMapReady} project={project} template={template} onFeatureClick={handleFeatureClick} onMapClick={handleMapClick} annotationToolRef={annotationToolRef} trimLayerId={trimLayerId} onOverlayError={handleOverlayError} />
+          <MapCanvas onReady={onMapReady} project={project} template={template} onFeatureClick={handleFeatureClick} onMapClick={handleMapClick} annotationToolRef={annotationToolRef} trimLayerId={trimLayerId} featureStyleLayerId={featureStyleLayerId} onOverlayError={handleOverlayError} />
         </React.Suspense>
         {mapReady && (
           <>

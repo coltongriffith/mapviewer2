@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { addDrillTraces, traceEnd, destination, readOrientation, isTrace, hasDrillTraces } from '../src/utils/drillTraces.js';
 import { csvToGeoJSON, loadCSV } from '../src/utils/importers.js';
+import { featureKey } from '../src/utils/featureIdentity.js';
 
 // A collar file already carries azimuth, dip and length beside the
 // coordinates. The column mapper offered them and then dropped them; nothing
@@ -59,10 +60,10 @@ describe('addDrillTraces', () => {
     expect(t.geometry.type).toBe('LineString');
     expect(t.geometry.coordinates[0]).toEqual([-133.0, 61.5]);
     // The trace carries its collar's properties so a callout can name it,
-    // and no id of its own so it shares the collar's identity.
+    // and the collar's own key as its id so the two are one thing to hide.
     expect(t.properties.HoleID).toBe('TL-11-001');
     expect(t.properties._azimuth).toBe(160);
-    expect(t.id).toBeUndefined();
+    expect(featureKey(t)).toBe(featureKey(fc.features[0]));
     // The collar comes first so the layer still reads as a point layer.
     expect(fc.features[0].geometry.type).toBe('Point');
     expect(fc.features[1].geometry.type).toBe('LineString');
@@ -100,5 +101,35 @@ describe('CSV import carries orientation through', () => {
     expect(result.needsMapping).toBeUndefined();
     expect(result.features.filter(isTrace).length).toBe(1);
     expect(result.features[0].properties._length).toBe(200);
+  });
+});
+
+
+describe('Codex follow-ups', () => {
+  it('treats N/A and other placeholders as missing, never as zero', () => {
+    expect(Number.isNaN(readOrientation({ Azimuth: 'N/A' }, 'azimuth'))).toBe(true);
+    expect(Number.isNaN(readOrientation({ Dip: '-' }, 'dip'))).toBe(true);
+    expect(Number.isNaN(readOrientation({ Length: '?' }, 'length'))).toBe(true);
+    const fc = addDrillTraces({ type: 'FeatureCollection', features: [collar({ Az: 'N/A', Dip: -60, Length: 200 })] });
+    expect(fc.features.filter(isTrace).length).toBe(0);
+  });
+
+  it('keys a mapped-CSV trace to its collar even when only _holeid names the hole', () => {
+    const fc = csvToGeoJSON([{ E: '-122.7', N: '49.5', Hole: 'DH-01', Az: '90', Dip: '-60', TD: '100' }], { x: 'E', y: 'N', id: 'Hole', azimuth: 'Az', dip: 'Dip', length: 'TD' });
+    const [c, t] = fc.features;
+    expect(isTrace(t)).toBe(true);
+    expect(featureKey(t)).toBe(featureKey(c));
+    // Hiding the collar hides the trace, and only visible traces earn a legend row.
+    const layer = { geojson: fc, featureOverrides: { [featureKey(c)]: { hidden: true } } };
+    expect(hasDrillTraces(layer)).toBe(false);
+    expect(hasDrillTraces({ geojson: fc })).toBe(true);
+  });
+
+  it('will not carry a collection past the import ceiling', () => {
+    const feats = Array.from({ length: 3 }, (_, i) => collar({ HoleID: `h${i}`, Az: 10, Dip: -50, Length: 100 }));
+    const capped = addDrillTraces({ type: 'FeatureCollection', features: feats }, { maxFeatures: 5 });
+    expect(capped.features.length).toBe(3);
+    expect(capped.meta.tracesSkipped).toBe(3);
+    expect(addDrillTraces({ type: 'FeatureCollection', features: feats }, { maxFeatures: 6 }).features.length).toBe(6);
   });
 });

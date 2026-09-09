@@ -168,14 +168,19 @@ export function computeGridTicks(map, frame, scale = 1) {
   }
 
   const y = [];
-  const topN = latlngToUTM(topLL.lat, topLL.lng).northing;
-  const botN = latlngToUTM(botLL.lat, botLL.lng).northing;
+  // Northings are stepped on one continuous axis: the southern hemisphere's
+  // 10 000 000 m false northing is removed for the arithmetic and put back
+  // for the label, so a map across the equator still gets its ticks.
+  const continuous = (u) => (u.hemisphere === 'S' ? u.northing - 10000000 : u.northing);
+  const topN = continuous(latlngToUTM(topLL.lat, topLL.lng));
+  const botN = continuous(latlngToUTM(botLL.lat, botLL.lng));
+  const centreN = continuous(centre);
   for (let n = Math.floor(topN / yInterval) * yInterval; n >= botN - yInterval * 0.1; n -= yInterval) {
-    const lat = centerLL.lat + (n - centre.northing) / 111132;
+    const lat = centerLL.lat + (n - centreN) / 111132;
     const pt = map.latLngToContainerPoint([lat, centerLL.lng]);
     const py = pt.y * scale;
     if (py < f.top - tol || py > f.bottom + tol) continue;
-    y.push({ py, northing: n, label: fmtUTMNorthing(n) });
+    y.push({ py, northing: n, label: fmtUTMNorthing(n >= 0 ? n : n + 10000000) });
   }
 
   return { zone: centre.zone, hemisphere: centre.hemisphere, xInterval, yInterval, x, y, frame: f };

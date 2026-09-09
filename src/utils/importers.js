@@ -445,7 +445,7 @@ export function csvToGeoJSON(rows, mapping) {
   }
   if (!features.length) throw new Error("No valid coordinate rows found in CSV.");
   const skippedRows = rows.length - features.length;
-  return addDrillTraces({ type: 'FeatureCollection', features, ...(skippedRows > 0 ? { meta: { skippedRows } } : {}) });
+  return addDrillTraces({ type: 'FeatureCollection', features, ...(skippedRows > 0 ? { meta: { skippedRows } } : {}) }, { maxFeatures: MAX_FEATURES });
 }
 
 export async function loadCSV(file) {
