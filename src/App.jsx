@@ -6858,7 +6858,7 @@ export default function App({ initialAction = null }) {
           <div className="template-zone" style={{ ...zoneStyle(resolvedZones.legend), opacity: dragging?.id === 'legend' ? 0.3 : 1, cursor: 'grab' }} onMouseDown={makeDragHandler('legend', project.layout.legendWidthPx ?? 300, project.layout.legendHeightPx ?? resolvedZones.legend?.height ?? 168)}>
             <button className="panel-delete-btn" title="Hide legend" onClick={() => updateLayout({ showLegend: false })}>×</button>
             <div className={`template-card legend-card${project.layout.legendTransparent ? ' panel--transparent' : ''}`}>
-              <div className="legend-header"><h3 style={{ fontSize: Math.round(15 * (project.layout.legendFontScale ?? 1)) + 'px' }}>Legend</h3></div>
+              <div className="legend-header"><h3 style={{ fontSize: Math.round(15 * (project.layout.legendFontScale ?? 1)) + 'px' }}>{project.layout.legendTitle || 'Legend'}</h3></div>
               <div className="legend-list" style={{ fontSize: Math.round(13 * (project.layout.legendFontScale ?? 1)) + 'px' }}>
                 {legendGroups.map((group) => (
                   <div key={group.heading || 'all'} className="legend-group">

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../hooks/useAuth.jsx';
-import { PRICING, PRO_FEATURES, yearlyMonthlyEquivalent } from '../utils/pricing';
+import { PRICING, PRO_FEATURES, FREE_PROJECT_LIMIT, yearlyMonthlyEquivalent } from '../utils/pricing';
+import { FREE_MAX_EXPORT_PIXELS, PRO_MAX_EXPORT_PIXELS } from '../utils/entitlements';
 import { startCheckout } from '../utils/billing';
 import { trackEvent } from '../utils/track';
 
@@ -9,7 +10,9 @@ import { trackEvent } from '../utils/track';
 // account, so anonymous visitors are pointed at sign-in first.
 const REASON_COPY = {
   export: 'High-resolution SVG, Illustrator and PDF export are part of Pro.',
-  projects: 'The free plan saves up to 3 cloud projects — Pro is unlimited.',
+  projects: `The free plan saves up to ${FREE_PROJECT_LIMIT} cloud projects — Pro is unlimited.`,
+  export_resolution: `Free PNG exports stop at ${FREE_MAX_EXPORT_PIXELS.toLocaleString()} px — Pro goes up to ${PRO_MAX_EXPORT_PIXELS.toLocaleString()} px.`,
+  brand_kit: 'Saving a reusable brand kit is part of Pro.',
   watermark: 'Pro exports are fully clean — no watermark or corner credit.',
   // Tenure Monitor gates. Each names the specific limit the user just hit,
   // rather than a generic upsell — somebody who selected 30 claims wants to

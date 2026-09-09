@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
-import { PRICING, yearlyMonthlyEquivalent } from '../utils/pricing';
+import { PRICING, FREE_PROJECT_LIMIT, yearlyMonthlyEquivalent } from '../utils/pricing';
 import { startCheckout, openBillingPortal } from '../utils/billing';
 import {
   listCloudProjects,
@@ -293,7 +293,7 @@ function BillingSection({ onError }) {
       ) : (
         <>
           <p className="acct-section-hint">
-            <strong>Free plan.</strong> PNG export with a small credit, up to 3 cloud projects.
+            <strong>Free plan.</strong> PNG export with a small credit, up to {FREE_PROJECT_LIMIT} cloud projects.
           </p>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
             <button className="btn primary" type="button" disabled={Boolean(busy) || !planReady} onClick={act('year', () => startCheckout('year'))}>
