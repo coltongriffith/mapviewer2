@@ -257,6 +257,9 @@ function svgMarkerShape(shape, cx, cy, r, fill, stroke, sw, opacity) {
 }
 function drawCanvasGeometry(ctx, map, feature, style, scale) {
   const type = getLayerGeometryType(feature); const coords = feature?.geometry?.coordinates; if (!coords) return;
+  // Each point of a MultiPoint applies the feature opacity itself; applying
+  // it here as well would square it.
+  if (type === 'MultiPoint') { coords.forEach((coord) => drawCanvasGeometry(ctx, map, { geometry: { type: 'Point', coordinates: coord } }, style, scale)); return; }
   const baseOpacity = Math.max(0, Math.min(1, style.opacity ?? 1));
   // Multiplied into whatever alpha the caller set (the layer's own opacity),
   // not written over it: a point layer at 30% used to print fully opaque.
@@ -268,7 +271,6 @@ function drawCanvasGeometry(ctx, map, feature, style, scale) {
   if (type === 'LineString') { ctx.beginPath(); drawCanvasPath(ctx, projectLine(map, coords, scale), false); setCanvasStroke(ctx, style, scale); ctx.stroke(); ctx.restore(); return; }
   if (type === 'MultiLineString') { ctx.beginPath(); coords.forEach((line) => drawCanvasPath(ctx, projectLine(map, line, scale), false)); setCanvasStroke(ctx, style, scale); ctx.stroke(); ctx.restore(); return; }
   if (type === 'Point') { const pt = projectCoordinate(map, coords, scale); const radius = (style.markerSize ?? 8) * scale * 0.5; if (style._customIconImg) { const s = radius * 2; ctx.drawImage(style._customIconImg, pt.x - s / 2, pt.y - s / 2, s, s); ctx.restore(); return; } const shape = style.markerShape || 'circle'; drawCanvasMarkerShape(ctx, shape, pt.x, pt.y, radius); ctx.fillStyle = style.markerFill || style.markerColor || '#ffffff'; ctx.fill(); ctx.lineWidth = (style.strokeWidth ?? 1.5) * scale; ctx.strokeStyle = style.markerColor || style.stroke || '#111111'; ctx.stroke(); ctx.restore(); return; }
-  if (type === 'MultiPoint') { coords.forEach((coord) => drawCanvasGeometry(ctx, map, { geometry: { type: 'Point', coordinates: coord } }, style, scale)); ctx.restore(); return; }
   ctx.restore();
 }
 function buildSvgPatternDef(style, patternId, scale) {

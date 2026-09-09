@@ -3890,16 +3890,43 @@ export default function App({ initialAction = null }) {
     }
   };
 
+  // Where the inline collar editor opens: beside the hole, kept on the stage.
+  // The person can then drag it by its header; the drag is an offset from
+  // that anchor so the box follows the hole when the map pans, and it is
+  // forgotten when another hole is picked.
+  const [featureEditorOffset, setFeatureEditorOffset] = useState({ x: 0, y: 0 });
+  const featureEditorDragRef = useRef(null);
+  useEffect(() => { setFeatureEditorOffset({ x: 0, y: 0 }); }, [selectedFeature?.featureId]);
   const featureEditorPoint = useMemo(() => {
     if (!leafletMapRef.current || !selectedFeature?.latlng) return null;
     const pt = leafletMapRef.current.latLngToContainerPoint([selectedFeature.latlng.lat, selectedFeature.latlng.lng]);
     const maxLeft = Math.max(12, mapSize.width - 292);
     const maxTop = Math.max(12, mapSize.height - 340);
     return {
-      left: Math.min(maxLeft, Math.max(12, pt.x + 14)),
-      top: Math.min(maxTop, Math.max(70, pt.y - 24)),
+      left: Math.min(maxLeft, Math.max(12, pt.x + 14 + featureEditorOffset.x)),
+      top: Math.min(maxTop, Math.max(12, pt.y - 24 + featureEditorOffset.y)),
     };
-  }, [selectedFeature, mapSize, featureEditorTick]);
+  }, [selectedFeature, mapSize, featureEditorTick, featureEditorOffset]);
+  const startFeatureEditorDrag = (event) => {
+    // The header carries the drag; its close button still closes.
+    if (event.target.closest('button, input, select, textarea')) return;
+    event.preventDefault();
+    const start = { x: event.clientX, y: event.clientY, base: featureEditorOffset, pointerId: event.pointerId };
+    featureEditorDragRef.current = start;
+    const move = (ev) => {
+      if (ev.pointerId !== start.pointerId) return;
+      setFeatureEditorOffset({ x: start.base.x + ev.clientX - start.x, y: start.base.y + ev.clientY - start.y });
+    };
+    const end = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', end);
+      window.removeEventListener('pointercancel', end);
+      featureEditorDragRef.current = null;
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', end);
+    window.addEventListener('pointercancel', end);
+  };
 
   const updateMarker = (markerId, patch) => {
     setProject((prev) => ({
@@ -6968,7 +6995,7 @@ export default function App({ initialAction = null }) {
         ) : null}
         {selectedFeature && featureEditorPoint ? (
           <div className="drillhole-inline-editor" style={{ left: featureEditorPoint.left, top: featureEditorPoint.top }}>
-            <div className="drillhole-inline-header">
+            <div className="drillhole-inline-header" onPointerDown={startFeatureEditorDrag} title="Drag to move">
               <div className="drillhole-inline-title">{selectedFeature.layerName}</div>
               <button className="drillhole-inline-close" type="button" onClick={() => setSelectedFeature(null)}>×</button>
             </div>
