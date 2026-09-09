@@ -2,6 +2,7 @@ import { ROLE_LABELS, POINT_ROLES } from '../projectState';
 import { legendRowCount } from '../utils/legendCustomization.js';
 import { TICK_MARGIN } from '../utils/coordinateFrame.js';
 import { hasVisibleFeatures } from '../utils/featureIdentity.js';
+import { isClassified, classLegendItems } from '../utils/classification.js';
 import { getCornerLayout } from '../utils/cornerLayout';
 
 const BASE_ZONES = {
@@ -308,6 +309,10 @@ export function buildLegendItems(template, layers, layout = {}) {
       };
       const baseLabel = layer.displayName || layer.legend?.label || layer.name || ROLE_LABELS[layer.role] || 'Layer';
       const isPoint = POINT_ROLES.has(layer.role) || layer.type === 'points';
+      const group = template.roleGroups?.[layer.role] || 'Map Data';
+
+      // Coloured by attribute: a row per class, not a row for the layer.
+      if (isClassified(layer)) return classLegendItems(layer, baseStyle, baseLabel, group, isPoint);
 
       if (isPoint) {
         const shapes = distinctShapesForLayer(layer);

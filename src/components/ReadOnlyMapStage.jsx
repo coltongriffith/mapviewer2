@@ -40,19 +40,19 @@ function legendFillRgba(hex, alpha) {
 // hexagon and pin — on the worst possible surface, since a share link is what
 // a reader actually receives. An author could pick hexagon in the editor, see
 // it in the editor and in the export, and have the public page show a circle.
-function LegendPointSwatch({ style }) {
+function LegendPointSwatch({ style, size = 14 }) {
   if (style?.customMarkerDataUri) {
     return (
       <span className="legend-symbol-marker" style={{ display: 'flex', flexShrink: 0 }}>
-        <img src={style.customMarkerDataUri} alt="" width={14} height={14} style={{ objectFit: 'contain' }} draggable={false} />
+        <img src={style.customMarkerDataUri} alt="" width={size} height={size} style={{ objectFit: 'contain' }} draggable={false} />
       </span>
     );
   }
   return (
-    <span className="legend-symbol-marker" style={{ display: 'flex', flexShrink: 0 }}>
+    <span className="legend-symbol-marker" style={{ display: 'flex', flexShrink: 0, width: 18, justifyContent: 'center' }}>
       <MarkerSvgIcon
         type={style?.markerShape || 'circle'}
-        size={14}
+        size={size}
         color={style?.markerColor || '#111111'}
         fillColor={style?.markerFill || style?.markerColor || '#ffffff'}
       />
@@ -313,7 +313,7 @@ export default function ReadOnlyMapStage({ project }) {
                   {group.items.map((item) => (
                     <div key={item.id} className="legend-item">
                       {item.type === 'points' ? (
-                        <LegendPointSwatch style={item.style} />
+                        <LegendPointSwatch style={item.style} size={item.swatchSize || 14} />
                       ) : item.type === 'line' ? (
                         <svg className="legend-line-svg" width="22" height="12" aria-hidden="true" style={{ flexShrink: 0 }}>
                           <line x1="0" y1="6" x2="22" y2="6" stroke={item.style.stroke || '#333'} strokeWidth={Math.min(item.style.strokeWidth ?? 2, 3)} strokeDasharray={item.style.dashArray || ''} />

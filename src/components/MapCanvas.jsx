@@ -259,6 +259,7 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
                // edit forced a rebuild. setFeatureOverride replaces the object,
                // so reference equality is the right test.
                nl.featureOverrides === ol.featureOverrides &&
+               nl.classification === ol.classification &&
                nl.style?.markerShape === ol.style?.markerShape &&
                nl.style?.markerSize === ol.style?.markerSize &&
                nl.style?.customMarkerDataUri === ol.style?.customMarkerDataUri &&
@@ -316,10 +317,13 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
         style: (feature) => pathStyle(template, layer, feature, geomType),
         pointToLayer: (feature, latlng) => {
           const fKey = featureKey(feature);
-          const featureOverride = layer.featureOverrides?.[fKey] || {};
-          const markerShape = featureOverride.markerShape ?? style.markerShape;
-          const markerColor = featureOverride.markerColor ?? style.markerColor ?? style.stroke ?? '#111111';
-          const markerSize = style.markerSize ?? 10;
+          // Template role, layer style, attribute class, then this feature's
+          // own override — the exporters resolve the same way.
+          const fs = getFeatureStyle(template, layer, feature, fKey);
+          const featureOverride = { markerFill: fs.markerFill };
+          const markerShape = fs.markerShape;
+          const markerColor = fs.markerColor ?? fs.stroke ?? '#111111';
+          const markerSize = fs.markerSize ?? 10;
 
           let marker;
           const customUri = style.customMarkerDataUri;
@@ -336,7 +340,7 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
               renderer: drillholeRenderer,
               radius: Math.max(4, markerSize / 2),
               color: markerColor,
-              fillColor: style.markerFill || style.fill || markerColor || '#ffffff',
+              fillColor: fs.markerFill || fs.fill || markerColor || '#ffffff',
               fillOpacity: lo,
               weight: style.strokeWidth ?? 1.5,
               opacity: lo,

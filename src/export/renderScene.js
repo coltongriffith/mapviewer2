@@ -531,7 +531,7 @@ export function legendSwatchSvg(item, x, rowY, scale) {
   const style = item.style || {};
   if (item.type === 'points') {
     const shape = item.markerShape || style.markerShape || 'circle';
-    const cx = x + 8 * scale; const cy = rowY + LEGEND_ROW.markerCentreY * scale; const r = 5 * scale;
+    const cx = x + 8 * scale; const cy = rowY + LEGEND_ROW.markerCentreY * scale; const r = (item.swatchSize ? item.swatchSize / 2 : 5) * scale;
     if (style.customMarkerDataUri) {
       const s = r * 2 * 1.4;
       return `<image href="${escapeXml(style.customMarkerDataUri)}" x="${(cx - s / 2).toFixed(2)}" y="${(cy - s / 2).toFixed(2)}" width="${s.toFixed(2)}" height="${s.toFixed(2)}" preserveAspectRatio="xMidYMid meet" />`;
@@ -606,7 +606,7 @@ async function drawLegendCanvas(ctx, scene, scale) {
     {
       if (item.type === 'points') {
         const shape = item.markerShape || item.style?.markerShape || 'circle';
-        const cx = x + lp + 8 * scale; const cy = rowY + LEGEND_ROW.markerCentreY * scale; const r = 5 * scale;
+        const cx = x + lp + 8 * scale; const cy = rowY + LEGEND_ROW.markerCentreY * scale; const r = (item.swatchSize ? item.swatchSize / 2 : 5) * scale;
         const icon = icons.get(item.style?.customMarkerDataUri);
         ctx.save();
         if (icon) {
