@@ -1,6 +1,6 @@
 # Gap analysis: reproducing Core Silver's Touleary figures in Exploration Maps
 
-Date: 2026-09-09
+Date: 2026-09-09 · Status update below, same day
 
 Reference set: five news-release figures for the Touleary Property (Yukon) —
 (1) property geology map, (2) Target-8, (3) Target-4, (4) Discovery Zone /
@@ -121,3 +121,35 @@ Legend: **Yes** = works as needed · **Partial** = reachable with a workaround �
 
 Items 2, 4, 5, 9, and 10 are each a day or less and would lift figure 1 to
 parity. Items 1, 3, 6, and 7 are what make figures 2 to 5 reproducible.
+
+
+## Status (2026-09-09, end of day)
+
+Everything in the priority list except two deferred sub-items landed on
+`main` the same day, one pull request per item:
+
+| # | Item | PR |
+|---|------|----|
+| 2 | Hillshade basemap | #206 |
+| 4 | Outline width, dashed toggle, point opacity, per-shape styling, editor/export parity | #207 |
+| 5 | Legend headings, reorder, dashed and icon swatches | #208 |
+| 6 | Coordinate frame and projection text on every template; one UTM tick computation | #209 |
+| 3 | Colour by attribute: numeric ranges and unique values, one legend row per class | #210 |
+| 7 | Drill traces from azimuth, dip and length; orientation columns kept end to end | #211 |
+| 8, 9, 10 | Multi-line callouts, banner preset, arrowheads, bracket lines, two-step scale bar, SVG rail background | #212 |
+| 1 | Georeferenced images (world file or typed edges, lat/long or UTM) and custom tile/WMS layers | #213 |
+
+Still open:
+
+- **GeoTIFF decoding.** A `.tif` must be exported to PNG/JPG with a world
+  file first (QGIS: Export → Save As, with "Create world file"). geotiff.js
+  would add roughly 90 kB gzip to the total bundle budget.
+- **Basemap tiles at export resolution.** The exporter still upscales the
+  on-screen tiles. Vectors, rasters, legends and frames are crisp at any
+  size; the basemap softens above 2× on services capped at zoom 16.
+- **Contour lines** as a separate layer. Import them as vectors (generated
+  from a DEM in QGIS) or use the Terrain basemap.
+
+With these in, figure 1 (geology map) is reproducible as published, and
+figures 2 to 5 are reproducible once the magnetics grid is exported from
+the geophysics package as an image with a world file.
