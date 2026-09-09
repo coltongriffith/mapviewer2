@@ -141,10 +141,14 @@ per-project status + retry (`src/utils/cloudMigration.js`).
 
 ### Import formats
 
-CSV (RFC 4180 via Papa Parse; auto-detected lat/long columns), GeoJSON
-(validated), zipped shapefiles, loose `.shp/.dbf/.prj/.shx` sets (the `.prj`
-is honored — projected files are reprojected to WGS84 via proj4), KML, and
-KMZ (bounded: entry count, uncompressed size, path traversal).
+CSV (RFC 4180 via Papa Parse; auto-detected lat/long columns, plus azimuth,
+dip and length for drill traces), GeoJSON (validated), zipped shapefiles,
+loose `.shp/.dbf/.prj/.shx` sets (the `.prj` is honored — projected files are
+reprojected to WGS84 via proj4), KML, KMZ (bounded: entry count, uncompressed
+size, path traversal), and georeferenced images (`.png/.jpg/.gif/.webp` with
+a world file or typed-in edges, lat/long or UTM; resampled to 2048 px and
+stored in the project). Published tile (`{z}/{x}/{y}`) and WMS services can
+be added as layers under Reference Overlays.
 
 ### Claim registries
 

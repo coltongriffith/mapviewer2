@@ -200,6 +200,8 @@ button, input, select, textarea { font: inherit; }
   border: 1.5px solid var(--ui-border-strong); border-radius: 1px;
 }
 .layer-swatch--point { width: 11px; height: 11px; border-radius: 999px; }
+.layer-swatch--raster { object-fit: cover; border-color: var(--ui-border-strong); background: #fff; }
+.layer-swatch--tiles { background: repeating-linear-gradient(45deg, #94a3b8 0 2px, #e2e8f0 2px 5px); border-color: var(--ui-border-strong); }
 .layer-visibility {
   flex: 0 0 auto; display: flex; align-items: center; justify-content: center;
   width: 22px; height: 22px; padding: 0;

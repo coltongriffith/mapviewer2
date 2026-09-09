@@ -41,7 +41,9 @@ describe('every reference overlay is still wired up', () => {
   it('allows the geology host in the Content-Security-Policy', () => {
     // Without this the tiles are blocked by the browser before the service is
     // ever reached, which looks identical to the service being down.
-    expect(vercel).toMatch(/mrdata\.usgs\.gov/);
+    // Either the host by name, or the bare `https:` scheme source that admits
+    // every https host (there so custom tile services need no allowlist).
+    expect(vercel).toMatch(/mrdata\.usgs\.gov|img-src [^;]*\bhttps:/);
   });
 
   it('names every overlay for the failure notice', () => {

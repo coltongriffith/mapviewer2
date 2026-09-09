@@ -54,6 +54,7 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
   const mapElRef = useRef(null);
   const baseLayerRef = useRef(null);
   const overlayGroupRef = useRef(null);
+  const rasterRefs = useRef({});
   const regionHighlightGroupRef = useRef(null);
   const referenceRefs = useRef({});
   const reportedTileErrors = useRef(new Set());
@@ -89,6 +90,10 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
 
     const regionHighlightPane = map.createPane('regionHighlightPane');
     regionHighlightPane.style.zIndex = 355;
+    // Georeferenced images: above the basemap, below the reference overlays
+    // and every vector layer.
+    const rasterPane = map.createPane('rasterPane');
+    rasterPane.style.zIndex = 320;
 
     overlayGroupRef.current = L.layerGroup().addTo(map);
     regionHighlightGroupRef.current = L.layerGroup().addTo(map);
@@ -101,6 +106,7 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
       mapRef.current.remove();
       mapRef.current = null;
       overlayGroupRef.current = null;
+      rasterRefs.current = {};
       regionHighlightGroupRef.current = null;
       baseLayerRef.current = null;
       referenceRefs.current = {};
@@ -209,6 +215,49 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
       }
     });
   }, [project?.layout?.referenceOverlays, project?.layout?.referenceOpacity]);
+
+  // Raster images and custom tile services, keyed by layer id. Rebuilt only
+  // for the layer that changed: an image overlay holds a data URL that is
+  // expensive to re-decode on every unrelated edit.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const wanted = new Map();
+    (project?.layers || []).forEach((layer, index) => {
+      if (layer?.type === 'raster' || layer?.type === 'tiles') wanted.set(layer.id, { layer, index });
+    });
+    for (const [id, existing] of Object.entries(rasterRefs.current)) {
+      const w = wanted.get(id);
+      if (!w || w.layer.visible === false || w.layer !== existing.layer) {
+        map.removeLayer(existing.leaflet);
+        delete rasterRefs.current[id];
+      }
+    }
+    wanted.forEach(({ layer, index }, id) => {
+      if (layer.visible === false || rasterRefs.current[id]) return;
+      let leaflet;
+      if (layer.type === 'raster') {
+        const r = layer.raster || {};
+        if (!r.dataUri || !r.bounds) return;
+        leaflet = L.imageOverlay(r.dataUri, [[r.bounds.south, r.bounds.west], [r.bounds.north, r.bounds.east]], {
+          opacity: r.opacity ?? 0.85, pane: 'rasterPane', zIndex: index, interactive: false,
+        });
+      } else {
+        const t = layer.tiles || {};
+        const opts = { opacity: t.opacity ?? 0.8, crossOrigin: true, updateWhenIdle: true, keepBuffer: 3, zIndex: 330 + index, maxZoom: 21, attribution: t.attribution || '' };
+        leaflet = t.kind === 'wms'
+          ? L.tileLayer.wms(t.url, { ...opts, ...(t.wms || {}) })
+          : L.tileLayer(t.url, opts);
+        leaflet.on('tileerror', () => {
+          if (reportedTileErrors.current.has(id)) return;
+          reportedTileErrors.current.add(id);
+          onOverlayErrorRef.current?.(id);
+        });
+      }
+      leaflet.addTo(map);
+      rasterRefs.current[id] = { layer, leaflet };
+    });
+  }, [project?.layers]);
 
   useEffect(() => {
     const group = regionHighlightGroupRef.current;

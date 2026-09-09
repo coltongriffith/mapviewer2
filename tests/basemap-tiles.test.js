@@ -77,6 +77,10 @@ describe('the tiles the app asks for are tiles it is allowed to have', () => {
       .find((h) => h.key === 'Content-Security-Policy').value;
     const imgSrc = csp.split(';').map((d) => d.trim()).find((d) => d.startsWith('img-src')).split(/\s+/).slice(1);
     const allowed = imgSrc.filter((e) => e.startsWith('https://')).map((e) => e.replace('https://', ''));
+    // A bare `https:` scheme source admits every https host. It is there on
+    // purpose: custom tile and WMS services are the user's own choice, so
+    // their hosts cannot be an allowlist kept here.
+    const anyHttps = imgSrc.includes('https:');
 
     const hosts = new Set([
       ...configuredUrls.map(hostOf),
@@ -85,7 +89,7 @@ describe('the tiles the app asks for are tiles it is allowed to have', () => {
     ]);
 
     for (const host of hosts) {
-      const ok = allowed.some((entry) => (
+      const ok = anyHttps || allowed.some((entry) => (
         entry === host || (entry.startsWith('*.') && host.endsWith(entry.slice(1)))
       ));
       expect(ok, `img-src does not allow ${host} — its tiles are blocked before the service is reached`).toBe(true);
