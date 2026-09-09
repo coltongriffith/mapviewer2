@@ -119,6 +119,7 @@ describe('classLegendItems', () => {
     const rows = classLegendItems(layer, { markerColor: '#000' }, 'Soil Cu', 'Soil Geochemistry', true);
     expect(rows.length).toBe(layer.classification.classes.length);
     expect(rows[0].id).toBe('soil::class:graduated:Cu_ppm:0');
+    expect(rows[0].legacyIds).toContain('soil::class:0');
     expect(rows[0].group).toBe('Soil Geochemistry');
     expect(rows.every((r) => r.type === 'points')).toBe(true);
     expect(rows[rows.length - 1].swatchSize).toBeGreaterThan(rows[0].swatchSize);
@@ -157,5 +158,35 @@ describe('Codex follow-ups', () => {
     const c = buildCategorical(withTrace, 'Cu_ppm');
     // Two real observations, one each: the trace must not make 1000 win.
     expect(c.classes.map((k) => k.value).sort()).toEqual(['10', '1000']);
+  });
+});
+
+
+describe('class ids over time', () => {
+  it('keeps two categories that slug alike as two rows', () => {
+    const c = { field: 'Unit', mode: 'categorical', classes: [{ value: 'A B', color: '#1' }, { value: 'A/B', color: '#2' }] };
+    const rows = classLegendItems({ id: 'g', type: 'polygon', classification: c }, {}, 'Geo', 'G', false);
+    expect(new Set(rows.map((r) => r.id)).size).toBe(2);
+  });
+
+  it('still honours a rename or hide saved under the old id format', async () => {
+    const { applyLegendCustomization, orderLegendItems } = await import('../src/utils/legendCustomization.js');
+    const layer = { id: 'soil', type: 'points', classification: { field: 'Cu_ppm', mode: 'graduated', classes: [{ max: 50, color: '#a' }, { max: null, color: '#b' }] } };
+    const rows = classLegendItems(layer, {}, 'Soil', 'G', true);
+    const out = applyLegendCustomization(rows, { legendOverrides: { 'soil::class:0': { label: 'Background' }, 'soil::class:1': { hidden: true } } });
+    expect(out.map((r) => r.label)).toEqual(['Background']);
+    expect(orderLegendItems(rows, ['soil::class:1']).map((r) => r.legacyIds[1])).toEqual(['soil::class:1', 'soil::class:0']);
+  });
+});
+
+
+describe('the slugged id format of the previous release', () => {
+  it('still resolves a saved override', async () => {
+    const { overrideFor } = await import('../src/utils/legendCustomization.js');
+    const c = { field: 'Unit Name', mode: 'categorical', classes: [{ value: 'A/B', color: '#1' }] };
+    const [row] = classLegendItems({ id: 'g', type: 'polygon', classification: c }, {}, 'Geo', 'G', false);
+    expect(row.legacyIds).toContain('g::class:categorical:Unit_Name:A_B');
+    expect(overrideFor({ 'g::class:categorical:Unit_Name:A_B': { label: 'Old name' } }, row).label).toBe('Old name');
+    expect(overrideFor({ [row.id]: { label: 'New' }, 'g::class:categorical:Unit_Name:A_B': { label: 'Old' } }, row).label).toBe('New');
   });
 });

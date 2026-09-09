@@ -818,7 +818,8 @@ button, input, select, textarea { font: inherit; }
   display: grid;
   gap: 8px;
 }
-.drillhole-inline-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2px; }
+.drillhole-inline-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2px; cursor: grab; user-select: none; touch-action: none; }
+.drillhole-inline-header:active { cursor: grabbing; }
 .drillhole-inline-title { font-size: 12px; font-weight: 800; color: var(--ui-text); }
 .drillhole-inline-close { background: none; border: none; font-size: 18px; line-height: 1; color: var(--ui-text-muted); cursor: pointer; padding: 0 2px; }
 .drillhole-inline-close:hover { color: var(--ui-text); }

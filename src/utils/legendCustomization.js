@@ -97,16 +97,34 @@ export const DEFAULT_LEGEND_GROUP = 'Map Data';
 //   layout.legendOverrides[id].group   the heading an entry sits under
 //   layout.legendOrder                 entry ids in display order
 //   layout.legendGrouped               whether headings are drawn at all
+/** Every id an entry answers to: its own first, then the ones it used to have. */
+export function legendEntryIds(item) {
+  if (!item) return [];
+  return [item.id, ...(Array.isArray(item.legacyIds) ? item.legacyIds : [])].filter((id) => id != null);
+}
+
+// An entry's override, by its id or by an id it used to have. Class rows
+// changed id format twice (a lossy slug, then field and mode encoded); a
+// project saved before either still keeps the label, hidden state and
+// heading it was given. The editor reads through this too.
+export function overrideFor(overrides, item) {
+  if (!overrides) return undefined;
+  for (const id of legendEntryIds(item)) {
+    if (overrides[id]) return overrides[id];
+  }
+  return undefined;
+}
+
 export function applyLegendCustomization(items, layout = {}) {
   const overrides = layout?.legendOverrides || {};
   const regroup = (item) => {
-    const group = overrides[item?.id]?.group;
+    const group = overrideFor(overrides, item)?.group;
     return group && group.trim() ? { ...item, group: group.trim() } : item;
   };
   const kept = (items || [])
-    .filter((item) => !overrides[item?.id]?.hidden)
+    .filter((item) => !overrideFor(overrides, item)?.hidden)
     .map((item) => {
-      const label = overrides[item?.id]?.label;
+      const label = overrideFor(overrides, item)?.label;
       // An empty or blank override is not a rename to nothing — it means the
       // user cleared the box, and the derived name is the sensible fallback.
       return regroup(label && label.trim() ? { ...item, label: label.trim() } : item);
@@ -127,8 +145,9 @@ export function applyLegendCustomization(items, layout = {}) {
 export function orderLegendItems(items, order) {
   if (!Array.isArray(order) || !order.length) return items;
   const rank = new Map(order.map((id, i) => [id, i]));
+  const rankOf = (item) => { for (const id of legendEntryIds(item)) { if (rank.has(id)) return rank.get(id); } return undefined; };
   return items
-    .map((item, i) => ({ item, i, r: rank.has(item?.id) ? rank.get(item.id) : order.length + i }))
+    .map((item, i) => ({ item, i, r: rankOf(item) ?? order.length + i }))
     .sort((a, b) => a.r - b.r)
     .map(({ item }) => item);
 }

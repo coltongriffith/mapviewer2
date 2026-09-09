@@ -2,7 +2,7 @@ import React from 'react';
 import { MarkerSvgIcon } from '../utils/markerIcons.jsx';
 import {
   LEGEND_SYMBOLS, DEFAULT_LEGEND_SYMBOL, DEFAULT_LEGEND_COLOR, DEFAULT_LEGEND_GROUP,
-  customLegendItem, nextCustomLegendId, applyLegendCustomization, moveLegendItem, orderLegendItems,
+  customLegendItem, nextCustomLegendId, applyLegendCustomization, moveLegendItem, orderLegendItems, overrideFor,
 } from '../utils/legendCustomization.js';
 
 // Editing the legend without letting it drift from the map.
@@ -37,8 +37,13 @@ export default function LegendEditor({ derivedItems, layout, updateLayout }) {
 
   const grouped = !!layout?.legendGrouped;
 
-  const setOverride = (id, patch) => {
-    const next = { ...overrides, [id]: { ...overrides[id], ...patch } };
+  // An entry's saved override, whichever of its past ids it was saved under.
+  const ov = (item) => overrideFor(overrides, item) || {};
+  const setOverride = (id, patch, item = null) => {
+    // Written under the current id; an alias record is folded in and dropped,
+    // so a legacy override does not linger and win again on the next read.
+    const next = { ...overrides, [id]: { ...ov(item || { id }), ...patch } };
+    for (const old of (item?.legacyIds || [])) if (old !== id) delete next[old];
     // Drop an override that no longer says anything, so the stored project does
     // not accumulate empty records for every entry the user touched.
     if (!next[id].hidden && !next[id].label && !next[id].group) delete next[id];
@@ -59,16 +64,20 @@ export default function LegendEditor({ derivedItems, layout, updateLayout }) {
       </span>
     );
   };
-  const groupInput = (id, current, label) => (grouped ? (
-    <input
-      className="legend-editor-group"
-      value={overrides[id]?.group ?? ''}
-      placeholder={current || DEFAULT_LEGEND_GROUP}
-      aria-label={`Legend heading for ${label}`}
-      title="Heading this entry sits under"
-      onChange={(e) => setOverride(id, { group: e.target.value })}
-    />
-  ) : null);
+  const groupInput = (target, current, label) => {
+    if (!grouped) return null;
+    const item = typeof target === 'string' ? { id: target } : target;
+    return (
+      <input
+        className="legend-editor-group"
+        value={ov(item).group ?? ''}
+        placeholder={current || DEFAULT_LEGEND_GROUP}
+        aria-label={`Legend heading for ${label}`}
+        title="Heading this entry sits under"
+        onChange={(e) => setOverride(item.id, { group: e.target.value }, item)}
+      />
+    );
+  };
 
   const setCustom = (id, patch) => {
     updateLayout({
@@ -101,32 +110,32 @@ export default function LegendEditor({ derivedItems, layout, updateLayout }) {
   // interleaved as the stored order says — so an up/down click moves the row
   // the person is looking at. Hidden entries keep their derived place.
   const rows = orderLegendItems([
-    ...derivedItems.map((item) => ({ id: item.id, kind: 'derived', item })),
+    ...derivedItems.map((item) => ({ id: item.id, legacyIds: item.legacyIds, kind: 'derived', item })),
     ...customItems.map((entry) => ({ id: entry.id, kind: 'custom', entry })),
   ], layout?.legendOrder);
 
-  const hiddenCount = derivedItems.filter((item) => overrides[item.id]?.hidden).length;
+  const hiddenCount = derivedItems.filter((item) => ov(item).hidden).length;
 
   const derivedRow = (item) => {
-        const hidden = !!overrides[item.id]?.hidden;
+        const hidden = !!ov(item).hidden;
         return (
           <div className={`legend-editor-row${hidden ? ' is-hidden' : ''}`} key={item.id}>
             <input
               className="legend-editor-label"
-              value={overrides[item.id]?.label ?? ''}
+              value={ov(item).label ?? ''}
               placeholder={item.label}
               aria-label={`Legend label for ${item.label}`}
               disabled={hidden}
-              onChange={(e) => setOverride(item.id, { label: e.target.value })}
+              onChange={(e) => setOverride(item.id, { label: e.target.value }, item)}
             />
-            {!hidden && groupInput(item.id, item.group, item.label)}
+            {!hidden && groupInput(item, item.group, item.label)}
             {!hidden && orderButtons(item.id, item.label)}
             <button
               type="button"
               className="legend-editor-btn"
               aria-label={hidden ? `Show ${item.label} in the legend` : `Remove ${item.label} from the legend`}
               title={hidden ? 'Show in legend' : 'Remove from legend'}
-              onClick={() => setOverride(item.id, { hidden: !hidden })}
+              onClick={() => setOverride(item.id, { hidden: !hidden }, item)}
             >
               {hidden ? 'Show' : 'Remove'}
             </button>

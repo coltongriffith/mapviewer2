@@ -51,6 +51,7 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
   const onMapClickRef = useRef(onMapClick);
   const onFeatureClickRef = useRef(onFeatureClick);
   const prevTrimLayerIdRef = useRef(null);
+  const prevFeatureStyleLayerIdRef = useRef(null);
   const mapElRef = useRef(null);
   const baseLayerRef = useRef(null);
   const overlayGroupRef = useRef(null);
@@ -293,9 +294,12 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
     // is a geometry change, not a style one. Rebuild.
     const trimChanged = prevTrimLayerIdRef.current !== trimLayerId;
     prevTrimLayerIdRef.current = trimLayerId;
+    // Same for per-shape styling: it lifts the dissolve for its layer.
+    const stylingChanged = prevFeatureStyleLayerIdRef.current !== featureStyleLayerId;
+    prevFeatureStyleLayerIdRef.current = featureStyleLayerId;
 
     const isStyleOnly =
-      !trimChanged &&
+      !trimChanged && !stylingChanged &&
       newLayers.length === oldLayers.length &&
       leafletLayerRefsMap.current.size > 0 &&
       newLayers.every((nl, i) => {

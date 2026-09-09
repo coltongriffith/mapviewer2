@@ -193,7 +193,11 @@ export function classLegendItems(layer, baseStyle, baseLabel, group, isPoint) {
   const kind = isPoint ? 'points' : (layer.type === 'line' ? 'line' : 'polygon');
   // Ids carry the field and mode (and the value, for categories) so a rename
   // or hide made in the legend does not attach itself to an unrelated class
-  // after the classification is rebuilt on another column.
+  // after the classification is rebuilt on another column. Encoded, not
+  // slugged: "A B" and "A/B" are two categories and must stay two ids.
+  const enc = (v) => encodeURIComponent(String(v));
+  // The two formats these rows had before: index-only, then a lossy slug
+  // (one release). Legend overrides and order saved under either still apply.
   const slug = (v) => String(v).replace(/[^A-Za-z0-9_.-]+/g, '_').slice(0, 40);
   return c.classes.map((cls, i) => {
     // Straight from the class, not by classifying a synthetic value: the
@@ -201,7 +205,11 @@ export function classLegendItems(layer, baseStyle, baseLabel, group, isPoint) {
     // back to the layer colour in every legend while the map used its own.
     const style = { ...baseStyle, ...styleForClass(cls, kind) };
     return {
-      id: `${layer.id}::class:${c.mode}:${slug(c.field)}:${c.mode === 'categorical' ? slug(cls.value) : i}`,
+      id: `${layer.id}::class:${c.mode}:${enc(c.field)}:${c.mode === 'categorical' ? enc(cls.value) : i}`,
+      legacyIds: [
+        `${layer.id}::class:${c.mode}:${slug(c.field)}:${c.mode === 'categorical' ? slug(cls.value) : i}`,
+        `${layer.id}::class:${i}`,
+      ],
       role: layer.role,
       group,
       label: classLabel(c, i),

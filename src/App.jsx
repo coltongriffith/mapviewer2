@@ -27,6 +27,7 @@ const ExportHDModal = React.lazy(() => import('./components/ExportHDModal'));
 const HowToUseModal = React.lazy(() => import('./components/HowToUseModal'));
 const ColumnMapperModal = React.lazy(() => import('./components/ColumnMapperModal'));
 const RasterPlacementModal = React.lazy(() => import('./components/RasterPlacementModal'));
+const ClassificationPanel = React.lazy(() => import('./components/ClassificationPanel'));
 const AddClaimsModal = React.lazy(() => import('./components/AddClaimsModal'));
 const UpgradeModal = React.lazy(() => import('./components/UpgradeModal'));
 import { loadGeoJSON, loadCSV, loadShapefileSet, MAX_FEATURES } from './utils/importers';
@@ -75,7 +76,6 @@ import { pickScaleBar } from './utils/scaleBar.js';
 import CoordinateFrameOverlay from './components/CoordinateFrameOverlay.jsx';
 import { featureKey, layerFeatures, isFeatureHidden, featuresInBounds, visibleGeojson, featureLabel } from './utils/featureIdentity.js';
 import { stripFeatureStyle, styledFeatureCount } from './utils/featureStyle.js';
-import { attributeFields, buildGraduated, buildCategorical, classLabel, MAX_CATEGORIES } from './utils/classification.js';
 import { addDrillTraces, isTrace } from './utils/drillTraces.js';
 import {
   isRasterName, isWorldFileName, worldFileFor, parseWorldFile, boundsFromWorldFile, looksLikeLatLng,
@@ -3890,16 +3890,51 @@ export default function App({ initialAction = null }) {
     }
   };
 
+  // Where the inline collar editor opens: beside the hole, kept on the stage.
+  // The person can then drag it by its header; the drag is an offset from
+  // that anchor so the box follows the hole when the map pans, and it is
+  // forgotten when another hole is picked.
+  const [featureEditorOffset, setFeatureEditorOffset] = useState({ x: 0, y: 0 });
+  const featureEditorDragRef = useRef(null);
+  useEffect(() => { setFeatureEditorOffset({ x: 0, y: 0 }); }, [selectedFeature?.layerId, selectedFeature?.featureId]);
   const featureEditorPoint = useMemo(() => {
     if (!leafletMapRef.current || !selectedFeature?.latlng) return null;
     const pt = leafletMapRef.current.latLngToContainerPoint([selectedFeature.latlng.lat, selectedFeature.latlng.lng]);
     const maxLeft = Math.max(12, mapSize.width - 292);
     const maxTop = Math.max(12, mapSize.height - 340);
+    const rawLeft = pt.x + 14, rawTop = pt.y - 24;
     return {
-      left: Math.min(maxLeft, Math.max(12, pt.x + 14)),
-      top: Math.min(maxTop, Math.max(70, pt.y - 24)),
+      left: Math.min(maxLeft, Math.max(12, rawLeft + featureEditorOffset.x)),
+      top: Math.min(maxTop, Math.max(12, rawTop + featureEditorOffset.y)),
+      rawLeft, rawTop,
     };
-  }, [selectedFeature, mapSize, featureEditorTick]);
+  }, [selectedFeature, mapSize, featureEditorTick, featureEditorOffset]);
+  const startFeatureEditorDrag = (event) => {
+    // The header carries the drag; its close button still closes.
+    if (event.target.closest('button, input, select, textarea')) return;
+    event.preventDefault();
+    // Start from where the box is DRAWN, not from its stored offset: near a
+    // stage edge the box is clamped on screen, and a drag that began from the
+    // unclamped position would not move it until the pointer had made up the
+    // hidden difference.
+    const shown = featureEditorPoint || { left: 0, top: 0, rawLeft: 0, rawTop: 0 };
+    const base = { x: shown.left - shown.rawLeft, y: shown.top - shown.rawTop };
+    const start = { x: event.clientX, y: event.clientY, base, pointerId: event.pointerId };
+    featureEditorDragRef.current = start;
+    const move = (ev) => {
+      if (ev.pointerId !== start.pointerId) return;
+      setFeatureEditorOffset({ x: start.base.x + ev.clientX - start.x, y: start.base.y + ev.clientY - start.y });
+    };
+    const end = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', end);
+      window.removeEventListener('pointercancel', end);
+      featureEditorDragRef.current = null;
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', end);
+    window.addEventListener('pointercancel', end);
+  };
 
   const updateMarker = (markerId, patch) => {
     setProject((prev) => ({
@@ -5311,82 +5346,9 @@ export default function App({ initialAction = null }) {
                     </div>
                   </>
                 )}
-                {(() => {
-                  // Colour by attribute: ranges of a numeric column or one
-                  // colour per unique value, each class its own legend row.
-                  const fields = attributeFields(selectedLayer);
-                  if (!fields.length) return null;
-                  const isPt = isPointStyledLayer(selectedLayer);
-                  const cls = selectedLayer.classification || null;
-                  const setCls = (next) => updateLayer(selectedLayer.id, { classification: next });
-                  const build = (field, mode, n) => (mode === 'graduated'
-                    ? buildGraduated(selectedLayer, field, n || 4)
-                    : buildCategorical(selectedLayer, field));
-                  return (
-                    <details className="sub-details" open={!!cls} style={{ marginTop: 8 }}>
-                      <summary>Colour by attribute</summary>
-                      <div className="sub-details-body">
-                        <div className="control-row">
-                          <label htmlFor="f-class-field">Attribute</label>
-                          <select
-                            id="f-class-field"
-                            value={cls?.field || ''}
-                            onChange={(e) => {
-                              const f = e.target.value;
-                              if (!f) { setCls(null); return; }
-                              const numeric = fields.find((x) => x.key === f)?.numeric;
-                              setCls(build(f, numeric ? 'graduated' : 'categorical', cls?.classes?.length));
-                            }}
-                          >
-                            <option value="">None (one style for the layer)</option>
-                            {fields.map((f) => <option key={f.key} value={f.key}>{f.key}{f.numeric ? ' (numeric)' : ''}</option>)}
-                          </select>
-                        </div>
-                        {cls && (
-                          <>
-                            <div className="control-row inline-2">
-                              <div>
-                                <label htmlFor="f-class-mode">Method</label>
-                                <select id="f-class-mode" value={cls.mode} onChange={(e) => setCls(build(cls.field, e.target.value, cls.classes.length))}>
-                                  <option value="graduated">Ranges</option>
-                                  <option value="categorical">Unique values</option>
-                                </select>
-                              </div>
-                              {cls.mode === 'graduated' && (
-                                <div>
-                                  <label htmlFor="f-class-count">Classes</label>
-                                  <select id="f-class-count" value={cls.classes.length} onChange={(e) => setCls(build(cls.field, 'graduated', Number(e.target.value)))}>
-                                    {[2, 3, 4, 5, 6].map((n) => <option key={n} value={n}>{n}</option>)}
-                                  </select>
-                                </div>
-                              )}
-                            </div>
-                            <div className="class-list">
-                              {cls.classes.map((c, i) => {
-                                const patch = (pch) => setCls({ ...cls, classes: cls.classes.map((k, j) => (j === i ? { ...k, ...pch } : k)) });
-                                const last = i === cls.classes.length - 1;
-                                return (
-                                  <div className="class-row" key={i}>
-                                    <ColorField value={c.color} onChange={(e) => patch({ color: e.target.value })} brandColors={brandColors} />
-                                    {cls.mode === 'graduated'
-                                      ? (last
-                                        ? <span className="class-max small-note">and above</span>
-                                        : <input className="class-max" type="number" value={c.max ?? ''} aria-label="Class upper limit" title="Upper limit (inclusive)" onChange={(e) => patch({ max: e.target.value === '' ? null : Number(e.target.value) })} />)
-                                      : <span className="class-max small-note" title={String(c.value)}>{String(c.value)}</span>}
-                                    {isPt && <input className="class-size" type="number" min="4" max="30" value={c.size ?? 10} aria-label="Point size" title="Point size (px)" onChange={(e) => patch({ size: Number(e.target.value) })} />}
-                                    <input className="class-label" value={c.label || ''} placeholder={classLabel(cls, i)} aria-label="Legend label" onChange={(e) => patch({ label: e.target.value })} />
-                                  </div>
-                                );
-                              })}
-                            </div>
-                            {cls.truncated && <p className="small-note">Only the {MAX_CATEGORIES} most common values are classed; the rest keep the layer's style.</p>}
-                            <p className="small-note">Features with no value keep the layer's own style. Each class is its own legend row.</p>
-                          </>
-                        )}
-                      </div>
-                    </details>
-                  );
-                })()}
+                <React.Suspense fallback={null}>
+                  <ClassificationPanel layer={selectedLayer} isPoint={isPointStyledLayer(selectedLayer)} updateLayer={updateLayer} brandColors={brandColors} />
+                </React.Suspense>
               </div>
             ) : <p className="small-note">Select a layer to edit its display label, role, order, and colors.</p>}
           </section>
@@ -6968,7 +6930,7 @@ export default function App({ initialAction = null }) {
         ) : null}
         {selectedFeature && featureEditorPoint ? (
           <div className="drillhole-inline-editor" style={{ left: featureEditorPoint.left, top: featureEditorPoint.top }}>
-            <div className="drillhole-inline-header">
+            <div className="drillhole-inline-header" onPointerDown={startFeatureEditorDrag} title="Drag to move">
               <div className="drillhole-inline-title">{selectedFeature.layerName}</div>
               <button className="drillhole-inline-close" type="button" onClick={() => setSelectedFeature(null)}>×</button>
             </div>
