@@ -60,6 +60,18 @@ export const BASEMAPS = {
     // Deliberately uncapped: imagery is published past 19 in many places, and
     // capping it would trade real detail for the blank tiles it avoids.
   },
+  hillshade: {
+    label: 'Hillshade',
+    // Esri World Hillshade: greyscale shaded relief with no labels, roads or
+    // contours. The neutral ground a geology polygon or a geophysics raster
+    // is read against in a technical figure — the topo basemap already
+    // argues with coloured units, and the light canvas has no relief at all.
+    url: `${ESRI}/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}`,
+    attribution: '&copy; Esri, USGS, NASA, NGA, CGIAR, GEBCO',
+    // Published to level 16 (higher only in a few regions); Leaflet upscales
+    // past it, which relief tolerates far better than text would.
+    maxNativeZoom: 16,
+  },
   natgeo: {
     label: 'NatGeo',
     url: `${ESRI}/NatGeo_World_Map/MapServer/tile/{z}/{y}/{x}`,

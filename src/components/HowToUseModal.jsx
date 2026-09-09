@@ -186,7 +186,8 @@ export default function HowToUseModal({ onClose }) {
             <ul>
               <li><strong>Light</strong> — neutral light style. Best for technical and investor maps where your data layers should be the primary visual focus.</li>
               <li><strong>Dark</strong> — dark background. Best for modern digital presentations, dashboards, and social media.</li>
-              <li><strong>Terrain</strong> — contour lines and terrain shading. Best for geological, environmental, and fieldwork maps.</li>
+              <li><strong>Terrain</strong> — topographic map with contour lines and terrain shading. Best for environmental and fieldwork maps.</li>
+              <li><strong>Hillshade</strong> — greyscale shaded relief with no labels. Best under bedrock geology, geophysics, and target maps.</li>
               <li><strong>Satellite</strong> — aerial imagery. Best for showing terrain, vegetation, access, and physical infrastructure context.</li>
               <li><strong>NatGeo</strong> — classic National Geographic cartography. Distinctive look for regional and overview maps.</li>
               <li><strong>Blank</strong> — no basemap, with a custom background color. Best for clean figures in technical reports.</li>
