@@ -7,6 +7,9 @@
 // read it for points, so a polygon given its own outline looked unchanged on
 // screen and changed in the PNG. Both now call these.
 
+import { POINT_ROLES } from '../projectState.js';
+import { isClassified, classStyle } from './classification.js';
+
 export function getTemplateStyle(template, layer) {
   const base = template?.roleStyles?.[layer?.role] || template?.roleStyles?.other || {};
   return { ...base, ...(layer?.style || {}) };
@@ -17,7 +20,13 @@ export function getFeatureOverride(layer, key) {
 }
 
 export function getFeatureStyle(template, layer, feature, key) {
-  return { ...getTemplateStyle(template, layer), ...getFeatureOverride(layer, key) };
+  const base = getTemplateStyle(template, layer);
+  // A classification (colour by attribute) sits between the layer's style and
+  // the one-off override a user gave a single feature.
+  const cls = isClassified(layer)
+    ? classStyle(layer.classification, feature, layer.type === 'points' || POINT_ROLES.has(layer.role))
+    : null;
+  return { ...base, ...(cls || {}), ...getFeatureOverride(layer, key) };
 }
 
 // The keys the per-shape styling panel writes. `hidden` and `markerShape`

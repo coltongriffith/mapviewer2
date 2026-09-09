@@ -27,14 +27,19 @@ const BUDGETS = {
   // live dashboard: real baseline total was 824.8, not 796.8 KiB. Server-side
   // role checks now include all admin code in both builds. Growth reports and
   // split modules add ~12 KiB overall; first-load graphs below shrink sharply.
-  totalAuthJsGzipKb: 840,
-  totalJsGzipKb: 775,
+  // Figure-parity work (Sept 2026): attribute classification, the coordinate
+  // frame on every template, legend headings and ordering, per-shape styling,
+  // drill traces and raster overlays. All of it lives in the editor chunk and
+  // the shared export renderer, so the totals and the editor route carry it;
+  // the homepage and admin budgets are unchanged.
+  totalAuthJsGzipKb: 870,
+  totalJsGzipKb: 805,
   adminAuthJsGzipKb: 150,
   adminJsGzipKb: 85,
-  editorAuthJsGzipKb: 310,
-  editorJsGzipKb: 245,
-  claimsAuthJsGzipKb: 330,
-  claimsJsGzipKb: 265,
+  editorAuthJsGzipKb: 335,
+  editorJsGzipKb: 270,
+  claimsAuthJsGzipKb: 355,
+  claimsJsGzipKb: 290,
   // Stylesheet, gzipped. Today ~29 kB.
   maxCssGzipKb: 40,
   // Any single image shipped from public/, including legacy PNG downloads.
