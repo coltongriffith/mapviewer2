@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { resolveCalloutBoxes, leaderEndpoint } from '../utils/calloutLayout';
+import { resolveCalloutBoxes, leaderEndpoint, arrowheadPoints } from '../utils/calloutLayout';
 import { computeSnap } from '../utils/layout';
 
 export default function CalloutsOverlay({ map, callouts, selectedCalloutId, onSelect, onMove, onUpdate, fontFamily }) {
@@ -70,16 +70,20 @@ export default function CalloutsOverlay({ map, callouts, selectedCalloutId, onSe
             <React.Fragment key={`${callout.id}-leader`}>
               {(callout.type === 'leader' || callout.type === 'boxed') ? (() => {
                 const ep = leaderEndpoint(callout.anchorPx, callout);
+                const head = style.arrowhead ? arrowheadPoints(ep, callout.anchorPx, 9) : null;
                 return (
-                  <line
-                    x1={callout.anchorPx.x}
-                    y1={callout.anchorPx.y}
-                    x2={ep.x}
-                    y2={ep.y}
-                    stroke={style.border || '#102640'}
-                    strokeWidth="1.4"
-                    strokeDasharray={callout.type === 'leader' ? '5 3' : ''}
-                  />
+                  <>
+                    <line
+                      x1={callout.anchorPx.x}
+                      y1={callout.anchorPx.y}
+                      x2={ep.x}
+                      y2={ep.y}
+                      stroke={style.border || '#102640'}
+                      strokeWidth="1.4"
+                      strokeDasharray={callout.type === 'leader' ? '5 3' : ''}
+                    />
+                    {head && <polygon points={head.map((pt) => `${pt.x},${pt.y}`).join(' ')} fill={style.border || '#102640'} />}
+                  </>
                 );
               })() : null}
             </React.Fragment>
@@ -169,13 +173,15 @@ export default function CalloutsOverlay({ map, callouts, selectedCalloutId, onSe
                 )}
                 {callout.subtext ? (
                   editingField?.id === callout.id && editingField?.field === 'subtext' ? (
-                    <input
+                    <textarea
                       autoFocus
                       defaultValue={callout.subtext}
                       className="map-callout-subtext-input"
+                      rows={Math.max(1, Math.min(6, (callout.subtext || '').split('\n').length))}
                       style={{ color: style.subtextColor || '#475569' }}
                       onBlur={(e) => { onUpdate?.(callout.id, { subtext: e.target.value }); setEditingField(null); }}
-                      onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); if (e.key === 'Escape') setEditingField(null); }}
+                      // Enter commits; Shift+Enter starts a new line, one result per line.
+                      onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); e.target.blur(); } if (e.key === 'Escape') setEditingField(null); }}
                       onClick={(e) => e.stopPropagation()}
                       onPointerDown={(e) => e.stopPropagation()}
                     />

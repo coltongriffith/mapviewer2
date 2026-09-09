@@ -9,14 +9,16 @@ import { northArrowShapes, NORTH_ARROW_FONT } from '../utils/northArrowGeometry'
 import { markerIconSvgFragment, drawMarkerIconCanvas } from '../utils/markerIcons.jsx';
 import { safeColor } from '../utils/colorUtils.js';
 import regionsNA from '../assets/regionsNA.json';
-import { estimateBox, intersects as intersectsCallout, leaderEndpoint } from '../utils/calloutLayout';
+import { estimateBox, intersects as intersectsCallout, leaderEndpoint, arrowheadPoints } from '../utils/calloutLayout';
 import dissolveGeo from '@turf/dissolve';
 import { exportCreditLines } from '../utils/claimProvenance';
 import { referenceOverlayCredits } from '../utils/referenceOverlayCredits.js';
 import { featureKey, visibleGeojson } from '../utils/featureIdentity.js';
 import { getFeatureStyle as resolveFeatureStyle } from '../utils/featureStyle.js';
 import { groupLegendItems } from '../utils/legendCustomization.js';
-import { getMapFrame, scaleFrame, computeGridTicks, projectionLabel, haversineMeters, FRAME_FONT, FRAME_FONT_PX } from '../utils/coordinateFrame.js';
+import { isBracket, distanceLineLabel, bracketTicks, bracketLabelAnchor } from '../utils/distanceLine.js';
+import { pickScaleBar } from '../utils/scaleBar.js';
+import { getMapFrame, scaleFrame, computeGridTicks, projectionLabel, FRAME_FONT, FRAME_FONT_PX } from '../utils/coordinateFrame.js';
 
 let _exportWarnings = [];
 export function getExportWarnings() { return _exportWarnings; }
@@ -403,20 +405,23 @@ function toSvgFill(color, def = '#ffffff') {
 /** Word-wrap text to fit within maxWidth px, returns array of line strings */
 function wrapText(ctx, text, maxWidth) {
   if (!text) return [];
-  const words = text.split(' ');
-  const lines = [];
-  let line = '';
-  for (const word of words) {
-    const test = line ? line + ' ' + word : word;
-    if (ctx.measureText(test).width > maxWidth && line) {
-      lines.push(line);
-      line = word;
-    } else {
-      line = test;
+  // A hard line break is honoured first; each paragraph then wraps to width.
+  return String(text).split('\n').flatMap((para) => {
+    const words = para.split(' ');
+    const lines = [];
+    let line = '';
+    for (const word of words) {
+      const test = line ? line + ' ' + word : word;
+      if (ctx.measureText(test).width > maxWidth && line) {
+        lines.push(line);
+        line = word;
+      } else {
+        line = test;
+      }
     }
-  }
-  if (line) lines.push(line);
-  return lines;
+    if (line || !lines.length) lines.push(line);
+    return lines;
+  });
 }
 
 function drawTitleBlockCanvas(ctx, scene, scale) {
@@ -494,15 +499,17 @@ function pushRoundedClip(svgDefs, x, y, w, h, r) {
 function estimateWrapLines(text, maxWidth, fontSize, charFactor = 0.56) {
   if (!text) return [];
   const charsPerLine = Math.max(4, Math.floor(maxWidth / Math.max(4, fontSize * charFactor)));
-  const words = String(text).split(' ');
-  const lines = [];
-  let line = '';
-  for (const word of words) {
-    const test = line ? `${line} ${word}` : word;
-    if (test.length > charsPerLine && line) { lines.push(line); line = word; } else { line = test; }
-  }
-  if (line) lines.push(line);
-  return lines;
+  return String(text).split('\n').flatMap((para) => {
+    const words = para.split(' ');
+    const lines = [];
+    let line = '';
+    for (const word of words) {
+      const test = line ? `${line} ${word}` : word;
+      if (test.length > charsPerLine && line) { lines.push(line); line = word; } else { line = test; }
+    }
+    if (line || !lines.length) lines.push(line);
+    return lines;
+  });
 }
 
 // Canvas has textBaseline 'top'; SVG's equivalent (dominant-baseline
@@ -704,17 +711,7 @@ function drawNorthArrowCanvas(ctx, scene, scale) {
   ctx.restore();
 }
 function pickScaleLabel(map) {
-  const size = map.getSize();
-  const cy = size.y / 2;
-  const latlng1 = map.containerPointToLatLng([0, cy]);
-  const latlng2 = map.containerPointToLatLng([200, cy]);
-  const metersPerPx = latlng1.distanceTo(latlng2) / 200;
-  const steps = [10, 20, 50, 100, 200, 250, 500, 1000, 2000, 2500, 5000, 10000, 20000, 25000, 50000, 100000, 200000, 500000, 1000000];
-  const TARGET = 120;
-  const nice = steps.reduce((best, n) =>
-    Math.abs(n / metersPerPx - TARGET) < Math.abs(best / metersPerPx - TARGET) ? n : best,
-  steps[0]);
-  return { label: nice >= 1000 ? `${nice / 1000} km` : `${nice} m`, widthPx: Math.max(40, Math.min(220, Math.round(nice / metersPerPx))) };
+  return pickScaleBar(map);
 }
 function drawScaleBarCanvas(ctx, scene, scale) {
   if (scene.project.layout?.showScaleBar === false) return;
@@ -740,13 +737,17 @@ function drawScaleBarCanvas(ctx, scene, scale) {
   ctx.fillStyle = '#ffffff'; ctx.fillRect(barX + barWidth / 2, startY, barWidth / 2, barH);
   ctx.strokeStyle = theme.scaleStroke; ctx.lineWidth = Math.max(1, scale); ctx.strokeRect(barX, startY, barWidth, barH);
   const footerFont = `${scene.project.layout?.fonts?.footer || 'Inter'}, Arial, sans-serif`;
-  ctx.font = `${12 * scale}px ${footerFont}`; ctx.textBaseline = 'top'; ctx.textAlign = 'center';
+  // Three labels under the bar — 0, the midpoint, the end with its unit —
+  // as the editor draws them.
+  ctx.font = `${11 * scale}px ${footerFont}`; ctx.textBaseline = 'top';
+  const labelY = startY + barH + gap;
+  const labels = [['0', barX, 'left'], [scaleState.half, barX + barWidth / 2, 'center'], [scaleState.label, barX + barWidth, 'right']];
   if (scaleTransparent) {
     ctx.strokeStyle = theme.scaleFill; ctx.lineWidth = 3 * scale; ctx.lineJoin = 'round';
-    ctx.strokeText(scaleState.label, x + w / 2, startY + barH + gap);
+    labels.forEach(([t, lx, al]) => { ctx.textAlign = al; ctx.strokeText(t, lx, labelY); });
   }
   ctx.fillStyle = theme.bodyText;
-  ctx.fillText(scaleState.label, x + w / 2, startY + barH + gap);
+  labels.forEach(([t, lx, al]) => { ctx.textAlign = al; ctx.fillText(t, lx, labelY); });
   if (caption) {
     ctx.font = `${9.5 * scale}px ${footerFont}`;
     if (scaleTransparent) ctx.strokeText(caption, x + w / 2, startY + barH + gap + textH + 2 * scale);
@@ -1131,6 +1132,12 @@ function drawCalloutsCanvas(ctx, scene, scale) {
       const ep = leaderEndpoint(c.anchorPx, c);
       ctx.beginPath(); ctx.moveTo(c.anchorPx.x, c.anchorPx.y); ctx.lineTo(ep.x, ep.y);
       ctx.strokeStyle = c.style?.border || '#102640'; ctx.lineWidth = 1.4 * scale; ctx.setLineDash(c.type === 'leader' ? [5 * scale, 3 * scale] : []); ctx.stroke();
+      if (c.style?.arrowhead) {
+        const head = arrowheadPoints(ep, c.anchorPx, 9 * scale);
+        ctx.setLineDash([]);
+        ctx.beginPath(); ctx.moveTo(head[0].x, head[0].y); ctx.lineTo(head[1].x, head[1].y); ctx.lineTo(head[2].x, head[2].y); ctx.closePath();
+        ctx.fillStyle = c.style?.border || '#102640'; ctx.fill();
+      }
     }
     const fontSize = (c.style?.fontSize || 12) * scale;
     const subtextSize = Math.max(9, (c.style?.fontSize || 12) - 2) * scale;
@@ -1688,19 +1695,25 @@ function drawDistanceLinesCanvas(ctx, scene, scale) {
     const p2 = map.latLngToContainerPoint([line.p2.lat, line.p2.lng]);
     const x1 = p1.x * scale, y1 = p1.y * scale;
     const x2 = p2.x * scale, y2 = p2.y * scale;
+    const bracket = isBracket(line);
     ctx.save();
     ctx.strokeStyle = line.color || '#e11d48';
-    ctx.lineWidth = 2 * scale;
-    ctx.setLineDash([8 * scale, 4 * scale]);
-    ctx.lineCap = 'round';
+    ctx.lineWidth = (bracket ? 2.2 : 2) * scale;
+    ctx.setLineDash(bracket ? [] : [8 * scale, 4 * scale]);
+    ctx.lineCap = bracket ? 'butt' : 'round';
     ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
     ctx.setLineDash([]);
     ctx.fillStyle = line.color || '#e11d48';
-    ctx.beginPath(); ctx.arc(x1, y1, 4 * scale, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(x2, y2, 4 * scale, 0, Math.PI * 2); ctx.fill();
-    const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
-    const km = haversineMeters(line.p1.lat, line.p1.lng, line.p2.lat, line.p2.lng) / 1000;
-    const label = line.units === 'mi' ? `${(km * 0.621371).toFixed(1)} mi` : km >= 1 ? `${km.toFixed(1)} km` : `${Math.round(km * 1000)} m`;
+    if (bracket) {
+      bracketTicks(x1, y1, x2, y2, 12 * scale).forEach((t) => { ctx.beginPath(); ctx.moveTo(t.x1, t.y1); ctx.lineTo(t.x2, t.y2); ctx.stroke(); });
+    } else {
+      ctx.beginPath(); ctx.arc(x1, y1, 4 * scale, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(x2, y2, 4 * scale, 0, Math.PI * 2); ctx.fill();
+    }
+    const label = distanceLineLabel(line);
+    if (!label) { ctx.restore(); return; }
+    const anchor = bracket ? bracketLabelAnchor(x1, y1, x2, y2, 14 * scale) : { x: (x1 + x2) / 2, y: (y1 + y2) / 2 };
+    const mx = anchor.x, my = anchor.y;
     const font = `700 ${11 * scale}px ${scene.project.layout?.fonts?.callout || 'Inter'}, Arial, sans-serif`;
     ctx.font = font;
     const tw = ctx.measureText(label).width;
@@ -2044,21 +2057,26 @@ function renderDistanceLinesSvg(scene, scale) {
     const p2 = map.latLngToContainerPoint([line.p2.lat, line.p2.lng]);
     const x1 = p1.x * scale, y1 = p1.y * scale;
     const x2 = p2.x * scale, y2 = p2.y * scale;
-    const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
-    const km = haversineMeters(line.p1.lat, line.p1.lng, line.p2.lat, line.p2.lng) / 1000;
-    const label = line.units === 'mi' ? `${(km * 0.621371).toFixed(1)} mi` : km >= 1 ? `${km.toFixed(1)} km` : `${Math.round(km * 1000)} m`;
+    const bracket = isBracket(line);
+    const label = distanceLineLabel(line);
+    const anchor = bracket ? bracketLabelAnchor(x1, y1, x2, y2, 14 * scale) : { x: (x1 + x2) / 2, y: (y1 + y2) / 2 };
+    const mx = anchor.x, my = anchor.y;
     const color = safeColor(line.color, '#e11d48');
     const fs = 11 * scale;
     const tw = label.length * fs * 0.6;
     const pad = 5 * scale, lh = 17 * scale;
     const rx = mx - tw / 2 - pad, ry = my - lh / 2;
-    return `<g>` +
-      `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${color}" stroke-width="${2 * scale}" stroke-dasharray="${8 * scale} ${4 * scale}" stroke-linecap="round" />` +
-      `<circle cx="${x1}" cy="${y1}" r="${4 * scale}" fill="${color}" />` +
-      `<circle cx="${x2}" cy="${y2}" r="${4 * scale}" fill="${color}" />` +
-      `<rect x="${rx}" y="${ry}" width="${tw + pad * 2}" height="${lh}" rx="${3 * scale}" fill="rgba(255,255,255,0.93)" />` +
-      `<text x="${mx}" y="${my}" text-anchor="middle" dominant-baseline="middle" font-size="${fs}" font-weight="700" fill="${color}" font-family="${calloutFont}, Arial, sans-serif">${escapeXml(label)}</text>` +
-      `</g>`;
+    const stroke = bracket
+      ? `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${color}" stroke-width="${2.2 * scale}" />` +
+        bracketTicks(x1, y1, x2, y2, 12 * scale).map((t) => `<line x1="${t.x1.toFixed(1)}" y1="${t.y1.toFixed(1)}" x2="${t.x2.toFixed(1)}" y2="${t.y2.toFixed(1)}" stroke="${color}" stroke-width="${2.2 * scale}" />`).join('')
+      : `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${color}" stroke-width="${2 * scale}" stroke-dasharray="${8 * scale} ${4 * scale}" stroke-linecap="round" />` +
+        `<circle cx="${x1}" cy="${y1}" r="${4 * scale}" fill="${color}" />` +
+        `<circle cx="${x2}" cy="${y2}" r="${4 * scale}" fill="${color}" />`;
+    const caption = label
+      ? `<rect x="${rx}" y="${ry}" width="${tw + pad * 2}" height="${lh}" rx="${3 * scale}" fill="rgba(255,255,255,0.93)" />` +
+        `<text x="${mx}" y="${my}" text-anchor="middle" dominant-baseline="middle" font-size="${fs}" font-weight="700" fill="${color}" font-family="${calloutFont}, Arial, sans-serif">${escapeXml(label)}</text>`
+      : '';
+    return `<g>${stroke}${caption}</g>`;
   }).join('\n');
 }
 
@@ -2225,7 +2243,7 @@ function renderScaleBarSvg(scene, scale) {
   // startY + barH + gap. Arial and a hand-picked 0.85 * textH put the SVG in a
   // different typeface at a slightly different height.
   const footerFont = `${scene.project.layout?.fonts?.footer || 'Inter'}, Arial, sans-serif`;
-  const labelSize = 12 * scale;
+  const labelSize = 11 * scale;
   const scaleTransparent = scene.project.layout?.scaleBarTransparent;
   const scalePanel = scaleTransparent
     ? ''
@@ -2233,7 +2251,7 @@ function renderScaleBarSvg(scene, scale) {
   const labelHalo = scaleTransparent
     ? ` stroke="${theme.scaleFill}" stroke-width="${3 * scale}" stroke-linejoin="round" paint-order="stroke"`
     : '';
-  return `<g id="em-scale-bar" class="em-panel">${scalePanel}<rect x="${barX}" y="${startY}" width="${barWidth / 2}" height="${barH}" fill="${theme.scaleStroke}" /><rect x="${barX + barWidth / 2}" y="${startY}" width="${barWidth / 2}" height="${barH}" fill="#ffffff" stroke="${theme.scaleStroke}" stroke-width="${Math.max(1, scale)}" /><rect x="${barX}" y="${startY}" width="${barWidth}" height="${barH}" fill="none" stroke="${theme.scaleStroke}" stroke-width="${Math.max(1, scale)}" /><text x="${x + w / 2}" y="${baselineFromTop(startY + barH + gap, labelSize)}" text-anchor="middle" fill="${theme.bodyText}" font-family="${footerFont}" font-size="${labelSize}"${labelHalo}>${escapeXml(scaleState.label)}</text>${caption ? `<text x="${x + w / 2}" y="${baselineFromTop(startY + barH + gap + textH + 2 * scale, 9.5 * scale)}" text-anchor="middle" fill="${theme.mutedText || theme.bodyText}" font-family="${footerFont}" font-size="${9.5 * scale}"${labelHalo}>${escapeXml(caption)}</text>` : ''}</g>`;
+  return `<g id="em-scale-bar" class="em-panel">${scalePanel}<rect x="${barX}" y="${startY}" width="${barWidth / 2}" height="${barH}" fill="${theme.scaleStroke}" /><rect x="${barX + barWidth / 2}" y="${startY}" width="${barWidth / 2}" height="${barH}" fill="#ffffff" stroke="${theme.scaleStroke}" stroke-width="${Math.max(1, scale)}" /><rect x="${barX}" y="${startY}" width="${barWidth}" height="${barH}" fill="none" stroke="${theme.scaleStroke}" stroke-width="${Math.max(1, scale)}" />${[['0', barX, 'start'], [scaleState.half, barX + barWidth / 2, 'middle'], [scaleState.label, barX + barWidth, 'end']].map(([t, lx, anchor]) => `<text x="${lx}" y="${baselineFromTop(startY + barH + gap, labelSize)}" text-anchor="${anchor}" fill="${theme.bodyText}" font-family="${footerFont}" font-size="${labelSize}"${labelHalo}>${escapeXml(t)}</text>`).join('')}${caption ? `<text x="${x + w / 2}" y="${baselineFromTop(startY + barH + gap + textH + 2 * scale, 9.5 * scale)}" text-anchor="middle" fill="${theme.mutedText || theme.bodyText}" font-family="${footerFont}" font-size="${9.5 * scale}"${labelHalo}>${escapeXml(caption)}</text>` : ''}</g>`;
 }
 function renderFooterSvg(scene, scale) {
   const theme = getTheme(scene); const text = scene.project.layout?.footerText;
@@ -2360,7 +2378,11 @@ function renderCalloutsSvg(scene, scale, svgDefs) {
     }
 
     const svgEp = leaderEndpoint(c.anchorPx, c);
-    const line = c.type === 'leader' || c.type === 'boxed' ? `<line x1="${c.anchorPx.x}" y1="${c.anchorPx.y}" x2="${svgEp.x}" y2="${svgEp.y}" stroke="${leaderColor}" stroke-width="${1.4 * scale}" ${c.type === 'leader' ? `stroke-dasharray="${5 * scale} ${3 * scale}"` : ''} />` : '';
+    const hasLeader = c.type === 'leader' || c.type === 'boxed';
+    const head = hasLeader && c.style?.arrowhead
+      ? `<polygon points="${arrowheadPoints(svgEp, c.anchorPx, 9 * scale).map((pt) => `${pt.x.toFixed(1)},${pt.y.toFixed(1)}`).join(' ')}" fill="${leaderColor}" />`
+      : '';
+    const line = hasLeader ? `<line x1="${c.anchorPx.x}" y1="${c.anchorPx.y}" x2="${svgEp.x}" y2="${svgEp.y}" stroke="${leaderColor}" stroke-width="${1.4 * scale}" ${c.type === 'leader' ? `stroke-dasharray="${5 * scale} ${3 * scale}"` : ''} />${head}` : '';
     const rawBoxFill = c.style?.background || 'rgba(255,255,255,0.97)';
     const boxStroke = c.style?.border || '#17304f';
     const box = c.type !== 'plain' ? `<rect x="${c.left}" y="${c.top}" width="${c.width}" height="${c.height}" rx="${6 * scale}" ${toSvgFill(rawBoxFill)} stroke="${boxStroke}" />` : '';
@@ -2386,7 +2408,7 @@ function renderCalloutsSvg(scene, scale, svgDefs) {
     ).join('');
     const clipId = c.type !== 'plain' ? pushRoundedClip(svgDefs, c.left, c.top, c.width, c.height, 6 * scale) : null;
     const textGroup = clipId ? `<g clip-path="url(#${clipId})">${mainText}${subtextEl}</g>` : `${mainText}${subtextEl}`;
-    return `<g id="em-callout-${safeId}" class="em-callout">${line}${dot}${box}${textGroup}</g>`;
+    return `<g id="em-callout-${safeId}" class="em-callout">${line}${head ? '' : dot}${box}${textGroup}</g>`;
   }).join('\n');
 }
 

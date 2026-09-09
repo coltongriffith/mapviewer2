@@ -15,12 +15,32 @@ export function estimateBox(callout) {
     : Math.max(120, Math.min(Math.max(title.length, subtext.length) * (fontSize * 0.58) + (style.paddingX || 10) * 2 + 8, 280));
   const paddingX = style.paddingX ?? Math.max(4, Math.min(10, width * 0.06));
   const charsPerLine = Math.max(12, Math.floor((width - paddingX * 2) / Math.max(6, fontSize * 0.55)));
-  const titleLines = Math.max(1, Math.ceil(title.length / charsPerLine));
-  const subtextLines = subtext ? Math.max(1, Math.ceil(subtext.length / charsPerLine)) : 0;
+  // A hard line break is a line, whatever its length: intercept lists are
+  // written one result per line and must be sized as such.
+  const countLines = (text) => text.split('\n').reduce((n, seg) => n + Math.max(1, Math.ceil(seg.length / charsPerLine)), 0);
+  const titleLines = Math.max(1, countLines(title));
+  const subtextLines = subtext ? countLines(subtext) : 0;
   const titleHeight = titleLines * (fontSize + 3);
   const subtextHeight = subtextLines ? subtextLines * Math.max(11, fontSize - 1) + 6 : 0;
   const height = paddingY * 2 + titleHeight + subtextHeight;
   return { width, height };
+}
+
+/**
+ * The triangle at the anchor end of a leader, pointing at the anchor. Three
+ * screen points; every renderer fills the same shape.
+ */
+export function arrowheadPoints(from, to, size = 8) {
+  const dx = to.x - from.x, dy = to.y - from.y;
+  const d = Math.hypot(dx, dy) || 1;
+  const ux = dx / d, uy = dy / d;
+  const bx = to.x - ux * size, by = to.y - uy * size;
+  const w = size * 0.5;
+  return [
+    { x: to.x, y: to.y },
+    { x: bx - uy * w, y: by + ux * w },
+    { x: bx + uy * w, y: by - ux * w },
+  ];
 }
 
 export function intersects(a, b, padding = 10) {
