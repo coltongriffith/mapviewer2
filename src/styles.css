@@ -294,6 +294,10 @@ button, input, select, textarea { font: inherit; }
 .scale-bar-fill { background: var(--scale-stroke, var(--ui-text)); width: 50%; }
 .scale-bar-fill.light { background: #fff; }
 .scale-bar-label { color: var(--body-text, var(--ui-text)); font-size: 10.5px; line-height: 1; text-align: center; letter-spacing: 0.01em; }
+.scale-bar-labels { display: flex; justify-content: space-between; margin-top: 3px; }
+.scale-bar-labels span:first-child { transform: translateX(-30%); }
+.scale-bar-labels span:last-child { transform: translateX(30%); white-space: nowrap; }
+.callout-subtext-area { font: inherit; font-size: 12px; line-height: 1.35; resize: vertical; min-height: 44px; }
 .scale-bar-caption { color: var(--muted-text, var(--ui-text-muted)); font-size: 9.5px; line-height: 1; text-align: center; letter-spacing: 0.02em; margin-top: 3px; }
 .logo-card { display: flex; align-items: center; justify-content: center; padding: 10px; background: var(--logo-bg, var(--panel-bg, rgba(255,255,255,0.95))); border-color: var(--logo-border, var(--panel-border, rgba(20,33,38,0.18))); }
 .logo-card img { max-width: 100%; max-height: 100%; object-fit: contain; }

@@ -70,6 +70,7 @@ import { OVERLAY_DESCRIPTIONS } from './utils/referenceOverlayCredits.js';
 import { BASEMAPS, BASEMAP_KEYS, basemapThumb } from './utils/basemapConfig.js';
 import { applyLegendCustomization, groupLegendItems } from './utils/legendCustomization.js';
 import { getMapFrame, projectionLabel, scaleBarHeight } from './utils/coordinateFrame.js';
+import { pickScaleBar } from './utils/scaleBar.js';
 import CoordinateFrameOverlay from './components/CoordinateFrameOverlay.jsx';
 import { featureKey, layerFeatures, isFeatureHidden, hiddenCount, featuresInBounds, visibleGeojson, featureLabel } from './utils/featureIdentity.js';
 import { stripFeatureStyle, styledFeatureCount } from './utils/featureStyle.js';
@@ -322,16 +323,11 @@ function ScaleBar({ map, projection = false, projectionName = '' }) {
     if (!map) return;
     const update = () => {
       try {
-        const size = map.getSize();
-        const cy = size.y / 2;
-        const latlng1 = map.containerPointToLatLng([0, cy]);
-        const latlng2 = map.containerPointToLatLng([200, cy]);
-        const metersPerPx = latlng1.distanceTo(latlng2) / 200;
-        const steps = [10, 20, 50, 100, 200, 250, 500, 1000, 2000, 2500, 5000, 10000, 20000, 25000, 50000, 100000, 200000, 500000, 1000000];
-        const nice = steps.reduce((best, n) => (Math.abs(n / metersPerPx - 120) < Math.abs(best / metersPerPx - 120) ? n : best), steps[0]);
+        const bar = pickScaleBar(map);
         setState({
-          label: nice >= 1000 ? `${nice / 1000} km` : `${nice} m`,
-          width: Math.max(40, Math.min(220, Math.round(nice / metersPerPx))),
+          label: bar.label,
+          half: bar.half,
+          width: bar.widthPx,
           // The zone can change as the map pans, so the datum line is refreshed
           // with the bar rather than once at mount.
           caption: projectionLabel({ projectionName }, map),
@@ -351,7 +347,9 @@ function ScaleBar({ map, projection = false, projectionName = '' }) {
         <div className="scale-bar-fill" />
         <div className="scale-bar-fill light" />
       </div>
-      <div className="scale-bar-label">{state.label}</div>
+      <div className="scale-bar-label scale-bar-labels" style={{ width: state.width }}>
+        <span>0</span><span>{state.half}</span><span>{state.label}</span>
+      </div>
       {projection && <div className="scale-bar-caption">{state.caption || projectionLabel({ projectionName }, map)}</div>}
     </div>
   );
@@ -5314,7 +5312,7 @@ export default function App({ initialAction = null }) {
                 </div>
                 <div className="control-row">
                   <label htmlFor="f-subtext-4581">Subtext</label>
-                  <input id="f-subtext-4581" value={selectedFeature.suggestedSubtext || ''} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, suggestedSubtext: e.target.value }))} />
+                  <textarea id="f-subtext-4581" className="callout-subtext-area" rows={3} value={selectedFeature.suggestedSubtext || ''} placeholder={'One result per line, e.g.\n2.25m @ 7.18% Cu, 3.55g/t Au'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, suggestedSubtext: e.target.value }))} />
                 </div>
                 <div className="control-row inline-2">
                   <div>
@@ -5389,7 +5387,7 @@ export default function App({ initialAction = null }) {
                     {isOpen && (
                       <div className="control-grid">
                         <div className="control-row"><label htmlFor="f-text-4657">Text</label><input id="f-text-4657" autoFocus value={callout.text} onChange={(e) => updateCallout(callout.id, { text: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter') setSelectedCalloutId(null); }} /></div>
-                        <div className="control-row"><label htmlFor="f-subtext-4658">Subtext</label><input id="f-subtext-4658" value={callout.subtext || ''} placeholder="Details / result…" onChange={(e) => updateCallout(callout.id, { subtext: e.target.value })} /></div>
+                        <div className="control-row"><label htmlFor="f-subtext-4658">Subtext</label><textarea id="f-subtext-4658" className="callout-subtext-area" rows={3} value={callout.subtext || ''} placeholder={'Details / results, one per line'} onChange={(e) => updateCallout(callout.id, { subtext: e.target.value })} /></div>
                         {(() => {
                           // Which block this label points at. Only shown when the
                           // layer actually splits into more than one — a single
@@ -5498,6 +5496,19 @@ export default function App({ initialAction = null }) {
                                 </select>
                               </div>
                             </div>
+                            <div className="control-row">
+                              <label>Style preset</label>
+                              <div className="button-row two">
+                                <button type="button" className="secondary-btn" onClick={() => updateCallout(callout.id, { style: { ...(callout.style || {}), background: '#ffffff', border: '#102640', textColor: '#0f172a', subtextColor: '#475569', textAlign: 'left' } })}>Card</button>
+                                <button type="button" className="secondary-btn" onClick={() => updateCallout(callout.id, { style: { ...(callout.style || {}), background: '#111827', border: '#111827', textColor: '#ffffff', subtextColor: '#e5e7eb', textAlign: 'center', fontSize: Math.max(callout.style?.fontSize || 12, 13) } })}>Banner</button>
+                              </div>
+                            </div>
+                            {(callout.type === 'leader' || callout.type === 'boxed') && (
+                              <label className="toggle-row">
+                                <input type="checkbox" checked={!!callout.style?.arrowhead} onChange={(e) => updateCallout(callout.id, { style: { ...(callout.style || {}), arrowhead: e.target.checked } })} />
+                                <span>Arrowhead on the leader line</span>
+                              </label>
+                            )}
                           </>
                         )}
                         <div className="control-label">Nudge</div>
@@ -5789,6 +5800,16 @@ export default function App({ initialAction = null }) {
                       onChange={(e) => updateDistanceLine(dl.id, { color: e.target.value })} brandColors={brandColors} />
                   </div>
                   <div className="control-row">
+                    <label>Style</label>
+                    <div className="unit-toggle-row">
+                      {[['measure', 'Measure'], ['bracket', 'Bracket']].map(([v, l]) => (
+                        <button key={v} className={`unit-toggle-btn${(dl.style || 'measure') === v ? ' active' : ''}`}
+                          title={v === 'bracket' ? 'Solid line with end ticks: a strike length' : 'Dashed line with the distance in the middle'}
+                          onClick={() => updateDistanceLine(dl.id, { style: v })}>{l}</button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="control-row">
                     <label>Units</label>
                     <div className="unit-toggle-row">
                       {['km', 'mi'].map(u => (
@@ -5797,6 +5818,16 @@ export default function App({ initialAction = null }) {
                       ))}
                     </div>
                   </div>
+                  <label className="toggle-row">
+                    <input type="checkbox" checked={dl.showLabel !== false} onChange={(e) => updateDistanceLine(dl.id, { showLabel: e.target.checked })} />
+                    <span>Show caption</span>
+                  </label>
+                  {dl.showLabel !== false && (
+                    <div className="control-row">
+                      <label htmlFor="f-distance-label">Caption</label>
+                      <input id="f-distance-label" value={dl.label || ''} placeholder="Measured length (leave blank)" onChange={(e) => updateDistanceLine(dl.id, { label: e.target.value })} />
+                    </div>
+                  )}
                   <div className="control-row">
                     <button className="secondary-btn" style={{ color: '#ef4444' }}
                       onClick={() => removeDistanceLine(dl.id)}>Delete Distance Line</button>
@@ -6809,7 +6840,7 @@ export default function App({ initialAction = null }) {
             </div>
             <div className="control-row">
               <label htmlFor="f-subtext-5811">Subtext</label>
-              <input id="f-subtext-5811" value={selectedFeature.suggestedSubtext || ''} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, suggestedSubtext: e.target.value }))} placeholder="Subtext" />
+              <textarea id="f-subtext-5811" className="callout-subtext-area" rows={2} value={selectedFeature.suggestedSubtext || ''} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, suggestedSubtext: e.target.value }))} placeholder="Results, one per line" />
             </div>
             <div className="drillhole-inline-row2">
               <div className="control-row">

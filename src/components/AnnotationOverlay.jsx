@@ -1,3 +1,4 @@
+import { isBracket, distanceLineLabel, bracketTicks, bracketLabelAnchor } from '../utils/distanceLine.js';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { MarkerSvgIcon } from '../utils/markerIcons.jsx';
 
@@ -28,13 +29,6 @@ function getPointAtFraction(pts, fraction) {
   return { x: pts[0].x, y: pts[0].y, angle: 0 };
 }
 
-function haversineKm(lat1, lng1, lat2, lng2) {
-  const R = 6371;
-  const toR = d => d * Math.PI / 180;
-  const dLat = toR(lat2 - lat1), dLng = toR(lng2 - lng1);
-  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toR(lat1)) * Math.cos(toR(lat2)) * Math.sin(dLng / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
 
 function ellipseLabelPlacement(ellipse) {
   const anchorX = ellipse.x + ellipse.width * 0.34;
@@ -326,12 +320,12 @@ export default function AnnotationOverlay({
 
         {/* Distance measurement lines */}
         {placedDistanceLines.map((dl) => {
-          const mx = (dl.x1 + dl.x2) / 2;
-          const my = (dl.y1 + dl.y2) / 2;
-          const km = haversineKm(dl.p1.lat, dl.p1.lng, dl.p2.lat, dl.p2.lng);
-          const label = dl.units === 'mi'
-            ? `${(km * 0.621371).toFixed(1)} mi`
-            : km >= 1 ? `${km.toFixed(1)} km` : `${Math.round(km * 1000)} m`;
+          const bracket = isBracket(dl);
+          const label = distanceLineLabel(dl);
+          const anchor = bracket ? bracketLabelAnchor(dl.x1, dl.y1, dl.x2, dl.y2) : { x: (dl.x1 + dl.x2) / 2, y: (dl.y1 + dl.y2) / 2 };
+          const mx = anchor.x;
+          const my = anchor.y;
+          const labelW = Math.max(56, label.length * 6.6 + 12);
           const color = dl.color || '#e11d48';
           const isSelected = selectedDistanceLineId === dl.id;
           return (
@@ -348,39 +342,46 @@ export default function AnnotationOverlay({
                 <line x1={dl.x1} y1={dl.y1} x2={dl.x2} y2={dl.y2}
                   stroke="rgba(59,130,246,0.5)" strokeWidth={5} style={{ pointerEvents: 'none' }} />
               )}
-              {/* Visible dashed line */}
+              {/* The line: dashed measurement, or a solid bracket with end ticks */}
               <line
                 x1={dl.x1} y1={dl.y1} x2={dl.x2} y2={dl.y2}
-                stroke={color} strokeWidth={2} strokeDasharray="8 4" strokeLinecap="round"
+                stroke={color} strokeWidth={bracket ? 2.2 : 2} strokeDasharray={bracket ? '' : '8 4'} strokeLinecap={bracket ? 'butt' : 'round'}
                 style={{ pointerEvents: 'none' }}
               />
-              {/* Endpoint dots */}
-              <circle cx={dl.x1} cy={dl.y1} r={4} fill={color} style={{ pointerEvents: 'none' }} />
-              <circle cx={dl.x2} cy={dl.y2} r={4} fill={color} style={{ pointerEvents: 'none' }} />
-              {/* Midpoint label background */}
-              <rect
-                x={mx - 28} y={my - 9} width={56} height={18} rx={3}
-                fill="rgba(255,255,255,0.93)"
-                style={{ pointerEvents: 'none' }}
-              />
-              {/* Midpoint label text */}
-              <text
-                x={mx} y={my}
-                textAnchor="middle" dominantBaseline="middle"
-                fontSize={11} fontWeight="700" fill={color}
-                fontFamily="Inter, Arial, sans-serif"
-                style={{ pointerEvents: 'none', userSelect: 'none' }}
-              >
-                {label}
-              </text>
+              {bracket ? bracketTicks(dl.x1, dl.y1, dl.x2, dl.y2, 12).map((t, i) => (
+                <line key={i} x1={t.x1} y1={t.y1} x2={t.x2} y2={t.y2} stroke={color} strokeWidth={2.2} style={{ pointerEvents: 'none' }} />
+              )) : (
+                <>
+                  <circle cx={dl.x1} cy={dl.y1} r={4} fill={color} style={{ pointerEvents: 'none' }} />
+                  <circle cx={dl.x2} cy={dl.y2} r={4} fill={color} style={{ pointerEvents: 'none' }} />
+                </>
+              )}
+              {label && (
+                <>
+                  <rect
+                    x={mx - labelW / 2} y={my - 9} width={labelW} height={18} rx={3}
+                    fill="rgba(255,255,255,0.93)"
+                    style={{ pointerEvents: 'none' }}
+                  />
+                  <text
+                    x={mx} y={my}
+                    textAnchor="middle" dominantBaseline="middle"
+                    fontSize={11} fontWeight="700" fill={color}
+                    fontFamily="Inter, Arial, sans-serif"
+                    style={{ pointerEvents: 'none', userSelect: 'none' }}
+                  >
+                    {label}
+                  </text>
+                </>
+              )}
               {/* Delete button when selected */}
               {isSelected && (
                 <g
                   style={{ cursor: 'pointer', pointerEvents: 'auto' }}
                   onClick={(e) => { e.stopPropagation(); onRemoveDistanceLine?.(dl.id); }}
                 >
-                  <circle cx={mx + 32} cy={my - 9} r={8} fill="#ef4444" />
-                  <text x={mx + 32} y={my - 9} textAnchor="middle" dominantBaseline="middle"
+                  <circle cx={mx + labelW / 2 + 6} cy={my - 9} r={8} fill="#ef4444" />
+                  <text x={mx + labelW / 2 + 6} y={my - 9} textAnchor="middle" dominantBaseline="middle"
                     fontSize={11} fontWeight="700" fill="#ffffff"
                     style={{ userSelect: 'none', pointerEvents: 'none' }}>×</text>
                 </g>
