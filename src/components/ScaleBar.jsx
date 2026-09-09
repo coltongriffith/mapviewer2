@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { projectionLabel } from "../utils/coordinateFrame.js";
 
 function clamp(v, min, max) {
   return Math.max(min, Math.min(max, v));
@@ -7,7 +8,7 @@ function clamp(v, min, max) {
 const STEPS = [10, 20, 50, 100, 200, 250, 500, 1000, 2000, 2500, 5000, 10000, 20000, 25000, 50000, 100000, 200000, 500000, 1000000];
 const TARGET = 120;
 
-export default function ScaleBar({ map, height }) {
+export default function ScaleBar({ map, height, projection = false, projectionName = '' }) {
   const [state, setState] = useState({ label: "1 km", width: 100 });
 
   useEffect(() => {
@@ -26,18 +27,20 @@ export default function ScaleBar({ map, height }) {
       setState({
         label: nice >= 1000 ? `${nice / 1000} km` : `${nice} m`,
         width: clamp(Math.round(nice / metersPerPx), 40, 220),
+        caption: projectionLabel({ projectionName }, map),
       });
     };
 
     update();
     map.on("moveend zoomend", update);
     return () => map.off("moveend zoomend", update);
-  }, [map]);
+  }, [map, projectionName]);
 
   return (
     <div className="scale-bar" style={height ? { minHeight: `${height}px` } : undefined}>
       <div className="scale-bar-track" style={{ width: state.width }} />
       <div className="scale-bar-label">{state.label}</div>
+      {projection && <div className="scale-bar-caption">{state.caption || projectionLabel({ projectionName }, map)}</div>}
     </div>
   );
 }

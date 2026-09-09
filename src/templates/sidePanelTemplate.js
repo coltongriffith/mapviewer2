@@ -1,5 +1,6 @@
 import { hasVisibleFeatures } from '../utils/featureIdentity.js';
 import { legendRowCount } from '../utils/legendCustomization.js';
+import { TICK_MARGIN, scaleBarHeight } from '../utils/coordinateFrame.js';
 
 const SIDEBAR_FRAC = 0.28;
 
@@ -94,7 +95,7 @@ export function resolveSidePanelZones(template, layout, mapSize, legendItems) {
   const naW = Math.round(naH * 0.9);
   const footerH = layout?.footerHeightPx ? Math.max(22, Math.min(200, layout.footerHeightPx)) : 28;
   const scaleBarW = layout?.scaleBarWidthPx || 160;
-  const scaleBarActualH = layout?.scaleBarHeightPx ?? 48;
+  const scaleBarActualH = scaleBarHeight(layout);
 
   // Inset: full inner width, height = 22% of canvas or user-set
   const insetEnabled = layout?.insetEnabled !== false;
@@ -217,12 +218,14 @@ export function resolveSidePanelZones(template, layout, mapSize, legendItems) {
 
   // --- North arrow and scale bar in MAP area (when not in grid) ---
   const mapW = sbLeft;
+  // The coordinate frame's tick margin is white space nothing may sit in.
+  const mapMargin = margin + (layout?.showCoordinateFrame ? TICK_MARGIN : 0);
 
   if (!northArrowInGrid) {
     const sp = layout?.sidePanelPositions || {};
     northArrowZone = {
-      top: H - margin - naH,
-      left: mapW - margin - naW,
+      top: H - mapMargin - naH,
+      left: mapW - mapMargin - naW,
       width: naW,
       height: naH,
     };
@@ -233,8 +236,8 @@ export function resolveSidePanelZones(template, layout, mapSize, legendItems) {
   if (!scaleBarInGrid) {
     const sp = layout?.sidePanelPositions || {};
     scaleBarZone = {
-      top: H - margin - scaleBarActualH,
-      left: margin,
+      top: H - mapMargin - scaleBarActualH,
+      left: mapMargin,
       width: scaleBarW,
       height: scaleBarActualH,
     };
