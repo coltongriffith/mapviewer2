@@ -14,6 +14,7 @@ import dissolveGeo from '@turf/dissolve';
 import { exportCreditLines } from '../utils/claimProvenance';
 import { referenceOverlayCredits } from '../utils/referenceOverlayCredits.js';
 import { featureKey, visibleGeojson } from '../utils/featureIdentity.js';
+import { getFeatureStyle as resolveFeatureStyle } from '../utils/featureStyle.js';
 
 let _exportWarnings = [];
 export function getExportWarnings() { return _exportWarnings; }
@@ -81,15 +82,8 @@ function featureCollectionFeatures(geojson) {
   return [];
 }
 function getLayerGeometryType(feature) { return feature?.geometry?.type || ''; }
-function getTemplateStyle(template, layer) {
-  const base = template?.roleStyles?.[layer?.role] || template?.roleStyles?.other || {};
-  return { ...base, ...(layer?.style || {}) };
-}
 function getFeatureStyle(template, layer, feature) {
-  const base = getTemplateStyle(template, layer);
-  const key = featureKey(feature);
-  const override = key ? (layer.featureOverrides?.[key] || {}) : {};
-  return { ...base, ...override };
+  return resolveFeatureStyle(template, layer, feature, featureKey(feature));
 }
 function projectCoordinate(map, coord, scale) { return clonePoint(map.latLngToContainerPoint(toLatLng(coord)), scale); }
 function projectRing(map, ring, scale) { return ring.map((coord) => projectCoordinate(map, coord, scale)).filter(isFinitePoint); }

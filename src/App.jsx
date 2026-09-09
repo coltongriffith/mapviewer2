@@ -69,7 +69,8 @@ import { CLAIM_NAME_CAVEAT } from './utils/claimProvenance';
 import { OVERLAY_DESCRIPTIONS } from './utils/referenceOverlayCredits.js';
 import { BASEMAPS, BASEMAP_KEYS, basemapThumb } from './utils/basemapConfig.js';
 import { applyLegendCustomization } from './utils/legendCustomization.js';
-import { featureKey, layerFeatures, isFeatureHidden, hiddenCount, featuresInBounds, visibleGeojson } from './utils/featureIdentity.js';
+import { featureKey, layerFeatures, isFeatureHidden, hiddenCount, featuresInBounds, visibleGeojson, featureLabel } from './utils/featureIdentity.js';
+import { stripFeatureStyle, styledFeatureCount } from './utils/featureStyle.js';
 import { layerAnchorGroups, defaultAnchorForLayer, reanchorCalloutsForLayer } from './utils/featureClusters.js';
 import FeatureTrimList from './components/FeatureTrimList.jsx';
 import dissolveGeo from '@turf/dissolve';
@@ -852,6 +853,10 @@ export default function App({ initialAction = null }) {
   // trimLayerId: the list is usable without arming the map, and arming the map
   // does not force a 200-row list open.
   const [trimListLayerId, setTrimListLayerId] = useState(null);
+  // Per-shape styling: which layer is armed for "click a shape to style it",
+  // and which shape (by stable feature key) the panel is editing.
+  const [featureStyleLayerId, setFeatureStyleLayerId] = useState(null);
+  const [styledFeatureKey, setStyledFeatureKey] = useState(null);
   // Reference overlays whose tiles failed this session. These are third-party
   // services, and when one stops answering the toggle simply does nothing —
   // which reads as "the app is broken" rather than "the source is down". Saying
@@ -2516,6 +2521,15 @@ export default function App({ initialAction = null }) {
   }, [trimLayerId, selectedLayerId, project.layers]);
 
   useEffect(() => {
+    if (!featureStyleLayerId) return;
+    const stillThere = project.layers.some((l) => l.id === featureStyleLayerId);
+    if (!stillThere || selectedLayerId !== featureStyleLayerId) {
+      setFeatureStyleLayerId(null);
+      setStyledFeatureKey(null);
+    }
+  }, [featureStyleLayerId, selectedLayerId, project.layers]);
+
+  useEffect(() => {
     if (!trimListLayerId) return;
     const stillThere = project.layers.some((l) => l.id === trimListLayerId);
     if (!stillThere || selectedLayerId !== trimListLayerId) setTrimListLayerId(null);
@@ -3430,6 +3444,31 @@ export default function App({ initialAction = null }) {
     }));
   };
 
+  const resetFeatureStyle = (layerId, key) => {
+    setProject((prev) => ({
+      ...prev,
+      layers: prev.layers.map((layer) => {
+        if (layer.id !== layerId || !layer.featureOverrides?.[key]) return layer;
+        return {
+          ...layer,
+          featureOverrides: { ...layer.featureOverrides, [key]: stripFeatureStyle(layer.featureOverrides[key]) },
+        };
+      }),
+    }));
+  };
+
+  const resetAllFeatureStyles = (layerId) => {
+    setProject((prev) => ({
+      ...prev,
+      layers: prev.layers.map((layer) => {
+        if (layer.id !== layerId || !layer.featureOverrides) return layer;
+        const next = {};
+        for (const [k, v] of Object.entries(layer.featureOverrides)) next[k] = stripFeatureStyle(v);
+        return { ...layer, featureOverrides: next };
+      }),
+    }));
+  };
+
   // ── Removing individual features from a layer ────────────────────────────
   //
   // A company's ground is rarely one tidy block. A search returns everything
@@ -3726,6 +3765,15 @@ export default function App({ initialAction = null }) {
       if (layerId !== trimLayerId || !feature) return;
       setFeaturesHidden(layerId, [feature], true);
       trackEvent('features_removed', { count: 1, method: 'click', role: layer.role });
+      return;
+    }
+
+    // Per-shape styling owns the click the same way, and only for a shape
+    // with a stable identity: a dissolved blob has none to hang a style on.
+    if (featureStyleLayerId) {
+      if (layerId !== featureStyleLayerId || !feature) return;
+      const key = featureKey(feature);
+      if (key) setStyledFeatureKey(key);
       return;
     }
 
@@ -5049,6 +5097,13 @@ export default function App({ initialAction = null }) {
                     <ColorField value={selectedLayer.style?.fill || selectedLayer.style?.markerFill || '#93c5fd'} onChange={(e) => { const id = selectedLayer.id, val = e.target.value; clearTimeout(layerStyleDebounceRef.current); layerStyleDebounceRef.current = setTimeout(() => updateLayer(id, { style: { fill: val, markerFill: val } }), 50); }} brandColors={brandColors} />
                   </div>
                 </div>
+                <div className="control-row inline-2">
+                  <div>
+                    <label htmlFor="f-layer-opacity-4378">Layer Opacity</label>
+                    <input id="f-layer-opacity-4378" type="range" min="0" max="1" step="0.05" value={selectedLayer.style?.layerOpacity ?? 1} onChange={(e) => { const id = selectedLayer.id, val = Number(e.target.value); clearTimeout(layerStyleDebounceRef.current); layerStyleDebounceRef.current = setTimeout(() => updateLayer(id, { style: { layerOpacity: val } }), 50); }} />
+                  </div>
+                  <div className="range-value">{Math.round((selectedLayer.style?.layerOpacity ?? 1) * 100)}%</div>
+                </div>
                 {isPointStyledLayer(selectedLayer) ? (
                   <>
                     <div className="control-row inline-2">
@@ -5115,11 +5170,16 @@ export default function App({ initialAction = null }) {
                     </div>
                     <div className="control-row inline-2">
                       <div>
-                        <label htmlFor="f-layer-opacity-4378">Layer Opacity</label>
-                        <input id="f-layer-opacity-4378" type="range" min="0" max="1" step="0.05" value={selectedLayer.style?.layerOpacity ?? 1} onChange={(e) => { const id = selectedLayer.id, val = Number(e.target.value); clearTimeout(layerStyleDebounceRef.current); layerStyleDebounceRef.current = setTimeout(() => updateLayer(id, { style: { layerOpacity: val } }), 50); }} />
+                        <label htmlFor="f-outline-width-4379">Outline Width</label>
+                        <input id="f-outline-width-4379" type="range" min="0.5" max="6" step="0.5" value={selectedLayer.style?.strokeWidth ?? 2} onChange={(e) => { const id = selectedLayer.id, val = Number(e.target.value); clearTimeout(layerStyleDebounceRef.current); layerStyleDebounceRef.current = setTimeout(() => updateLayer(id, { style: { strokeWidth: val } }), 50); }} />
                       </div>
-                      <div className="range-value">{Math.round((selectedLayer.style?.layerOpacity ?? 1) * 100)}%</div>
+                      <div className="range-value">{selectedLayer.style?.strokeWidth ?? 2}px</div>
                     </div>
+                    <label className="toggle-row" style={{ marginTop: 4 }}>
+                      <input type="checkbox" checked={!!selectedLayer.style?.dashArray}
+                        onChange={(e) => updateLayer(selectedLayer.id, { style: { dashArray: e.target.checked ? '8 5' : '' } })} />
+                      <span>Dashed outline</span>
+                    </label>
                     <label className="toggle-row" style={{ marginTop: 4 }}>
                       <input type="checkbox" checked={!!selectedLayer.style?.dissolve}
                         onChange={(e) => updateLayer(selectedLayer.id, { style: { dissolve: e.target.checked } })} />
@@ -5185,6 +5245,81 @@ export default function App({ initialAction = null }) {
                                 }
                               }}
                             />
+                          )}
+                        </div>
+                      );
+                    })()}
+                    {(() => {
+                      const styling = featureStyleLayerId === selectedLayer.id;
+                      const styledCount = styledFeatureCount(selectedLayer);
+                      const feature = styling && styledFeatureKey
+                        ? layerFeatures(selectedLayer).find((f) => featureKey(f) === styledFeatureKey)
+                        : null;
+                      const override = feature ? (selectedLayer.featureOverrides?.[styledFeatureKey] || {}) : {};
+                      const base = selectedLayer.style || {};
+                      const set = (patch) => setFeatureOverride(selectedLayer.id, styledFeatureKey, patch);
+                      return (
+                        <div className="trim-panel">
+                          <div className="control-row">
+                            <label>Style individual shapes</label>
+                          </div>
+                          <div className="trim-actions">
+                            <button
+                              type="button"
+                              className={`secondary-btn trim-toggle${styling ? ' active' : ''}`}
+                              aria-pressed={styling}
+                              onClick={() => { setFeatureStyleLayerId(styling ? null : selectedLayer.id); setStyledFeatureKey(null); if (!styling) setTrimLayerId(null); }}
+                            >
+                              {styling ? 'Done styling' : 'Select on map'}
+                            </button>
+                            {styledCount > 0 && (
+                              <button type="button" className="link-btn" onClick={() => resetAllFeatureStyles(selectedLayer.id)}>
+                                Reset {styledCount} styled
+                              </button>
+                            )}
+                          </div>
+                          {styling && !feature && (
+                            <p className="trim-hint">
+                              Click a shape on the map to give it its own outline and fill —
+                              a bold priority target beside thinner ones, for example.
+                            </p>
+                          )}
+                          {feature && (
+                            <div className="control-grid" style={{ marginTop: 6 }}>
+                              <div className="small-note">{featureLabel(feature).title}</div>
+                              <div className="control-row inline-2">
+                                <div>
+                                  <label>Outline</label>
+                                  <ColorField value={override.stroke ?? base.stroke ?? '#2563eb'} onChange={(e) => set({ stroke: e.target.value })} brandColors={brandColors} />
+                                </div>
+                                <div>
+                                  <label>Fill</label>
+                                  <ColorField value={override.fill ?? base.fill ?? '#93c5fd'} onChange={(e) => set({ fill: e.target.value })} brandColors={brandColors} />
+                                </div>
+                              </div>
+                              <div className="control-row inline-2">
+                                <div>
+                                  <label htmlFor="f-shape-width">Outline Width</label>
+                                  <input id="f-shape-width" type="range" min="0.5" max="6" step="0.5" value={override.strokeWidth ?? base.strokeWidth ?? 2} onChange={(e) => set({ strokeWidth: Number(e.target.value) })} />
+                                </div>
+                                <div className="range-value">{override.strokeWidth ?? base.strokeWidth ?? 2}px</div>
+                              </div>
+                              <div className="control-row inline-2">
+                                <div>
+                                  <label htmlFor="f-shape-fill-opacity">Fill Opacity</label>
+                                  <input id="f-shape-fill-opacity" type="range" min="0" max="1" step="0.05" value={override.fillOpacity ?? base.fillOpacity ?? 0.22} onChange={(e) => set({ fillOpacity: Number(e.target.value) })} />
+                                </div>
+                                <div className="range-value">{Math.round((override.fillOpacity ?? base.fillOpacity ?? 0.22) * 100)}%</div>
+                              </div>
+                              <label className="toggle-row">
+                                <input type="checkbox" checked={!!(override.dashArray ?? base.dashArray)}
+                                  onChange={(e) => set({ dashArray: e.target.checked ? '8 5' : '' })} />
+                                <span>Dashed outline</span>
+                              </label>
+                              <button type="button" className="link-btn" style={{ textAlign: 'left' }} onClick={() => resetFeatureStyle(selectedLayer.id, styledFeatureKey)}>
+                                Reset this shape
+                              </button>
+                            </div>
                           )}
                         </div>
                       );

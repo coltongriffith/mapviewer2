@@ -9,6 +9,23 @@ import { reportError } from '../utils/errorReporter';
 import { featureKey } from '../utils/featureIdentity.js';
 import { REFERENCE_OVERLAY_CONFIG, overlayAttribution } from '../utils/referenceOverlayConfig.js';
 import { basemapConfig } from '../utils/basemapConfig.js';
+import { getTemplateStyle, getFeatureStyle } from '../utils/featureStyle.js';
+
+// Leaflet path options for one feature: template role defaults, then the
+// layer's style, then that feature's own override — the same resolution the
+// exporters use, so what a shape looks like on screen is what it exports as.
+function pathStyle(template, layer, feature, geomType) {
+  const style = getFeatureStyle(template, layer, feature, featureKey(feature));
+  const lo = style.layerOpacity ?? 1;
+  return {
+    color: style.stroke || '#54a6ff',
+    weight: style.strokeWidth ?? 2,
+    fillColor: style.fill || '#54a6ff',
+    fillOpacity: geomType === 'line' ? 0 : (style.fillOpacity ?? 0.22) * lo,
+    dashArray: style.dashArray || '',
+    opacity: (style.opacity ?? 1) * lo,
+  };
+}
 
 // Definitions live in utils/referenceOverlayConfig.js, shared with the
 // exporter's credit block. Keeping a second copy here is what let the two
@@ -254,17 +271,10 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
         if (layer.visible === false || !layer.geojson) return;
         const geoLayer = leafletLayerRefsMap.current.get(layer.id);
         if (!geoLayer) return;
-        const baseStyle = template?.roleStyles?.[layer.role] || template?.roleStyles?.other || {};
-        const style = { ...baseStyle, ...(layer.style || {}) };
-        const lo = style.layerOpacity ?? 1;
-        geoLayer.setStyle({
-          color: style.stroke || '#54a6ff',
-          weight: style.strokeWidth ?? 2,
-          fillColor: style.fill || '#54a6ff',
-          fillOpacity: (style.fillOpacity ?? 0.22) * lo,
-          dashArray: style.dashArray || '',
-          opacity: (style.opacity ?? 1) * lo,
-        });
+        const geomType = detectGeomType(layer.geojson);
+        // A function, not an object: an object would restyle every shape
+        // alike and wipe the outline a user gave one polygon.
+        geoLayer.setStyle((feature) => pathStyle(template, layer, feature, geomType));
       });
       prevLayersRef.current = newLayers;
       return;
@@ -279,8 +289,7 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
     newLayers.forEach((layer) => {
       if (layer.visible === false || !layer.geojson) return;
 
-      const baseStyle = template?.roleStyles?.[layer.role] || template?.roleStyles?.other || {};
-      const style = { ...baseStyle, ...(layer.style || {}) };
+      const style = getTemplateStyle(template, layer);
       const geomType = detectGeomType(layer.geojson);
       const isDrillholes = POINT_ROLES.has(layer.role) || layer.type === 'points';
 
@@ -304,14 +313,7 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
 
       const geoLayer = L.geoJSON(geojsonData, {
         renderer: svgRenderer,
-        style: () => ({
-          color: style.stroke || '#54a6ff',
-          weight: style.strokeWidth ?? 2,
-          fillColor: style.fill || '#54a6ff',
-          fillOpacity: geomType === 'line' ? 0 : (style.fillOpacity ?? 0.22) * lo,
-          dashArray: style.dashArray || '',
-          opacity: (style.opacity ?? 1) * lo,
-        }),
+        style: (feature) => pathStyle(template, layer, feature, geomType),
         pointToLayer: (feature, latlng) => {
           const fKey = featureKey(feature);
           const featureOverride = layer.featureOverrides?.[fKey] || {};
@@ -324,11 +326,11 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
           if (customUri) {
             const s = Math.max(8, markerSize);
             const icon = L.icon({ iconUrl: customUri, iconSize: [s, s], iconAnchor: [s / 2, s / 2], popupAnchor: [0, -s / 2 - 2] });
-            marker = L.marker(latlng, { icon });
+            marker = L.marker(latlng, { icon, opacity: lo });
           } else if (markerShape && markerShape !== 'circle') {
             const markerFill = featureOverride.markerFill ?? style.markerFill ?? style.fill ?? '#ffffff';
             const icon = makeMarkerIcon(markerShape, markerColor, Math.max(8, markerSize), markerFill);
-            marker = L.marker(latlng, { icon });
+            marker = L.marker(latlng, { icon, opacity: lo });
           } else {
             marker = L.circleMarker(latlng, {
               renderer: drillholeRenderer,
