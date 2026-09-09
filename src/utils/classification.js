@@ -196,6 +196,9 @@ export function classLegendItems(layer, baseStyle, baseLabel, group, isPoint) {
   // after the classification is rebuilt on another column. Encoded, not
   // slugged: "A B" and "A/B" are two categories and must stay two ids.
   const enc = (v) => encodeURIComponent(String(v));
+  // The two formats these rows had before: index-only, then a lossy slug
+  // (one release). Legend overrides and order saved under either still apply.
+  const slug = (v) => String(v).replace(/[^A-Za-z0-9_.-]+/g, '_').slice(0, 40);
   return c.classes.map((cls, i) => {
     // Straight from the class, not by classifying a synthetic value: the
     // open-ended top class has no finite value to classify, and used to fall
@@ -203,9 +206,10 @@ export function classLegendItems(layer, baseStyle, baseLabel, group, isPoint) {
     const style = { ...baseStyle, ...styleForClass(cls, kind) };
     return {
       id: `${layer.id}::class:${c.mode}:${enc(c.field)}:${c.mode === 'categorical' ? enc(cls.value) : i}`,
-      // The id these rows had before field and mode were part of it. Legend
-      // overrides and order saved under it still apply (legendCustomization).
-      legacyId: `${layer.id}::class:${i}`,
+      legacyIds: [
+        `${layer.id}::class:${c.mode}:${slug(c.field)}:${c.mode === 'categorical' ? slug(cls.value) : i}`,
+        `${layer.id}::class:${i}`,
+      ],
       role: layer.role,
       group,
       label: classLabel(c, i),

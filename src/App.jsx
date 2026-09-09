@@ -3896,22 +3896,30 @@ export default function App({ initialAction = null }) {
   // forgotten when another hole is picked.
   const [featureEditorOffset, setFeatureEditorOffset] = useState({ x: 0, y: 0 });
   const featureEditorDragRef = useRef(null);
-  useEffect(() => { setFeatureEditorOffset({ x: 0, y: 0 }); }, [selectedFeature?.featureId]);
+  useEffect(() => { setFeatureEditorOffset({ x: 0, y: 0 }); }, [selectedFeature?.layerId, selectedFeature?.featureId]);
   const featureEditorPoint = useMemo(() => {
     if (!leafletMapRef.current || !selectedFeature?.latlng) return null;
     const pt = leafletMapRef.current.latLngToContainerPoint([selectedFeature.latlng.lat, selectedFeature.latlng.lng]);
     const maxLeft = Math.max(12, mapSize.width - 292);
     const maxTop = Math.max(12, mapSize.height - 340);
+    const rawLeft = pt.x + 14, rawTop = pt.y - 24;
     return {
-      left: Math.min(maxLeft, Math.max(12, pt.x + 14 + featureEditorOffset.x)),
-      top: Math.min(maxTop, Math.max(12, pt.y - 24 + featureEditorOffset.y)),
+      left: Math.min(maxLeft, Math.max(12, rawLeft + featureEditorOffset.x)),
+      top: Math.min(maxTop, Math.max(12, rawTop + featureEditorOffset.y)),
+      rawLeft, rawTop,
     };
   }, [selectedFeature, mapSize, featureEditorTick, featureEditorOffset]);
   const startFeatureEditorDrag = (event) => {
     // The header carries the drag; its close button still closes.
     if (event.target.closest('button, input, select, textarea')) return;
     event.preventDefault();
-    const start = { x: event.clientX, y: event.clientY, base: featureEditorOffset, pointerId: event.pointerId };
+    // Start from where the box is DRAWN, not from its stored offset: near a
+    // stage edge the box is clamped on screen, and a drag that began from the
+    // unclamped position would not move it until the pointer had made up the
+    // hidden difference.
+    const shown = featureEditorPoint || { left: 0, top: 0, rawLeft: 0, rawTop: 0 };
+    const base = { x: shown.left - shown.rawLeft, y: shown.top - shown.rawTop };
+    const start = { x: event.clientX, y: event.clientY, base, pointerId: event.pointerId };
     featureEditorDragRef.current = start;
     const move = (ev) => {
       if (ev.pointerId !== start.pointerId) return;

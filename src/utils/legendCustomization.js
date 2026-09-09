@@ -97,12 +97,22 @@ export const DEFAULT_LEGEND_GROUP = 'Map Data';
 //   layout.legendOverrides[id].group   the heading an entry sits under
 //   layout.legendOrder                 entry ids in display order
 //   layout.legendGrouped               whether headings are drawn at all
+/** Every id an entry answers to: its own first, then the ones it used to have. */
+export function legendEntryIds(item) {
+  if (!item) return [];
+  return [item.id, ...(Array.isArray(item.legacyIds) ? item.legacyIds : [])].filter((id) => id != null);
+}
+
 // An entry's override, by its id or by an id it used to have. Class rows
-// changed id format once (field and mode were added); a project saved
-// before that still keeps the label, hidden state and heading it was given.
-function overrideFor(overrides, item) {
-  if (!item) return undefined;
-  return overrides[item.id] ?? (item.legacyId ? overrides[item.legacyId] : undefined);
+// changed id format twice (a lossy slug, then field and mode encoded); a
+// project saved before either still keeps the label, hidden state and
+// heading it was given. The editor reads through this too.
+export function overrideFor(overrides, item) {
+  if (!overrides) return undefined;
+  for (const id of legendEntryIds(item)) {
+    if (overrides[id]) return overrides[id];
+  }
+  return undefined;
 }
 
 export function applyLegendCustomization(items, layout = {}) {
@@ -135,7 +145,7 @@ export function applyLegendCustomization(items, layout = {}) {
 export function orderLegendItems(items, order) {
   if (!Array.isArray(order) || !order.length) return items;
   const rank = new Map(order.map((id, i) => [id, i]));
-  const rankOf = (item) => (rank.has(item?.id) ? rank.get(item.id) : (item?.legacyId != null && rank.has(item.legacyId) ? rank.get(item.legacyId) : undefined));
+  const rankOf = (item) => { for (const id of legendEntryIds(item)) { if (rank.has(id)) return rank.get(id); } return undefined; };
   return items
     .map((item, i) => ({ item, i, r: rankOf(item) ?? order.length + i }))
     .sort((a, b) => a.r - b.r)
