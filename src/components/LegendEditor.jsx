@@ -54,8 +54,8 @@ export default function LegendEditor({ derivedItems, layout, updateLayout }) {
     if (i < 0) return null;
     return (
       <span className="legend-editor-order">
-        <button type="button" className="legend-editor-btn" aria-label={`Move ${label} up`} title="Move up" disabled={i === 0} onClick={() => move(id, 'up')}>↑</button>
-        <button type="button" className="legend-editor-btn" aria-label={`Move ${label} down`} title="Move down" disabled={i === shownIds.length - 1} onClick={() => move(id, 'down')}>↓</button>
+        <button type="button" className="legend-editor-order-btn" aria-label={`Move ${label} up`} title="Move up" disabled={i === 0} onClick={() => move(id, 'up')}>↑</button>
+        <button type="button" className="legend-editor-order-btn" aria-label={`Move ${label} down`} title="Move down" disabled={i === shownIds.length - 1} onClick={() => move(id, 'down')}>↓</button>
       </span>
     );
   };
