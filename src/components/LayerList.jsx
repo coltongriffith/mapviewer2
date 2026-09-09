@@ -3,6 +3,12 @@ import { ROLE_LABELS } from '../projectState';
 
 /** The colour the layer actually draws with, so the row identifies itself. */
 function LayerSwatch({ layer }) {
+  if (layer.type === 'raster' && layer.raster?.dataUri) {
+    return <img className="layer-swatch layer-swatch--raster" src={layer.raster.dataUri} alt="" aria-hidden="true" />;
+  }
+  if (layer.type === 'tiles') {
+    return <span className="layer-swatch layer-swatch--tiles" aria-hidden="true" />;
+  }
   const style = layer.style || {};
   const stroke = style.stroke || style.markerColor || '#5f6e72';
   const isPoint = layer.type === 'points' || !!style.markerColor;

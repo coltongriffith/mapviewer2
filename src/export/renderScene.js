@@ -18,6 +18,7 @@ import { getFeatureStyle as resolveFeatureStyle } from '../utils/featureStyle.js
 import { groupLegendItems } from '../utils/legendCustomization.js';
 import { isBracket, distanceLineLabel, bracketTicks, bracketLabelAnchor } from '../utils/distanceLine.js';
 import { pickScaleBar } from '../utils/scaleBar.js';
+import { tileLayerCredits } from '../utils/rasterOverlay.js';
 import { getMapFrame, scaleFrame, computeGridTicks, projectionLabel, FRAME_FONT, FRAME_FONT_PX } from '../utils/coordinateFrame.js';
 
 let _exportWarnings = [];
@@ -1735,7 +1736,7 @@ export async function renderSceneToCanvas(scene, options = {}) {
   ctx.fillStyle = mapBg; ctx.fillRect(0, 0, canvas.width, canvas.height);
   const isNI = scene.template?.id === 'ni_43101_technical';
   const isSP = scene.template?.id === 'side_panel';
-  await drawTilesCanvas(ctx, scene, scale); drawRegionHighlightsCanvas(ctx, scene, scale); await drawVectorsCanvas(ctx, scene, scale); drawEllipsesCanvas(ctx, scene, scale); drawPolygonsCanvas(ctx, scene, scale); await drawMarkersCanvas(ctx, scene, scale); drawCalloutsCanvas(ctx, scene, scale); drawDistanceLinesCanvas(ctx, scene, scale);
+  await drawTilesCanvas(ctx, scene, scale); await drawRastersCanvas(ctx, scene, scale); drawRegionHighlightsCanvas(ctx, scene, scale); await drawVectorsCanvas(ctx, scene, scale); drawEllipsesCanvas(ctx, scene, scale); drawPolygonsCanvas(ctx, scene, scale); await drawMarkersCanvas(ctx, scene, scale); drawCalloutsCanvas(ctx, scene, scale); drawDistanceLinesCanvas(ctx, scene, scale);
   if (isSP) { drawSidebarPanelCanvas(ctx, scene, scale); }
   if (!isNI) { drawTitleBlockCanvas(ctx, scene, scale); drawFooterCanvas(ctx, scene, scale); }
   drawScaleBarCanvas(ctx, scene, scale);
@@ -1777,6 +1778,7 @@ function creditLinesFor(scene) {
   return [
     ...exportCreditLines(scene.project?.layers || []),
     ...referenceOverlayCredits(scene.project?.layout?.referenceOverlays),
+    ...tileLayerCredits(scene.project?.layers || []),
   ];
 }
 
@@ -1830,6 +1832,40 @@ async function drawTilesCanvas(ctx, scene, scale) {
     ctx.save(); ctx.globalAlpha = tile.opacity; ctx.drawImage(img, tile.x * scale, tile.y * scale, tile.width * scale, tile.height * scale); ctx.restore();
   }
   if (f) ctx.restore();
+}
+// Where a georeferenced image sits in export pixels, from the same bounds
+// the editor map places it by.
+function rasterPlacement(scene, layer, scale) {
+  const r = layer?.raster;
+  if (!r?.dataUri || !r?.bounds || !scene.map) return null;
+  const sw = scene.map.latLngToContainerPoint([r.bounds.south, r.bounds.west]);
+  const ne = scene.map.latLngToContainerPoint([r.bounds.north, r.bounds.east]);
+  return { x: sw.x * scale, y: ne.y * scale, w: (ne.x - sw.x) * scale, h: (sw.y - ne.y) * scale, opacity: r.opacity ?? 0.85, href: r.dataUri };
+}
+function visibleRasterLayers(scene) {
+  return (scene.project.layers || []).filter((l) => l?.type === 'raster' && l.visible !== false);
+}
+async function drawRastersCanvas(ctx, scene, scale) {
+  const layers = visibleRasterLayers(scene);
+  if (!layers.length) return;
+  const f = exportFrame(scene, scale);
+  ctx.save();
+  if (f) { ctx.beginPath(); ctx.rect(f.mapLeft, f.mapTop, f.mapRight - f.mapLeft, f.mapBottom - f.mapTop); ctx.clip(); }
+  for (const layer of layers) {
+    const pl = rasterPlacement(scene, layer, scale);
+    if (!pl) continue;
+    const img = await loadImage(pl.href).catch(() => null);
+    if (!img) continue;
+    ctx.save(); ctx.globalAlpha = pl.opacity; ctx.drawImage(img, pl.x, pl.y, pl.w, pl.h); ctx.restore();
+  }
+  ctx.restore();
+}
+function renderRastersSvg(scene, scale) {
+  return visibleRasterLayers(scene).map((layer) => {
+    const pl = rasterPlacement(scene, layer, scale);
+    if (!pl) return '';
+    return `<image href="${escapeXml(pl.href)}" x="${pl.x.toFixed(1)}" y="${pl.y.toFixed(1)}" width="${pl.w.toFixed(1)}" height="${pl.h.toFixed(1)}" opacity="${pl.opacity}" preserveAspectRatio="none" />`;
+  }).join('');
 }
 function drawRegionHighlightsCanvas(ctx, scene, scale) {
   const highlights = scene.project.layout?.regionHighlights || [];
@@ -2423,7 +2459,7 @@ export async function renderSceneToSvg(scene, options = {}) {
 
   const svgDefs = [];
   const frame = exportFrame(scene, scale);
-  const mapLayers = `${basemapImage}${renderRegionHighlightsSvg(scene, scale)}${renderVectorsSvg(scene, scale)}${renderEllipsesSvg(scene, scale, svgDefs)}${renderPolygonsSvg(scene, scale)}${renderMarkersSvg(scene, scale)}${renderCalloutsSvg(scene, scale, svgDefs)}${renderDistanceLinesSvg(scene, scale)}`;
+  const mapLayers = `${basemapImage}${renderRastersSvg(scene, scale)}${renderRegionHighlightsSvg(scene, scale)}${renderVectorsSvg(scene, scale)}${renderEllipsesSvg(scene, scale, svgDefs)}${renderPolygonsSvg(scene, scale)}${renderMarkersSvg(scene, scale)}${renderCalloutsSvg(scene, scale, svgDefs)}${renderDistanceLinesSvg(scene, scale)}`;
   let mapContentGroup;
   if (frame) {
     const clipId = 'em-mapframe-clip';

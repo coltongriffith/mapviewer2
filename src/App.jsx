@@ -26,6 +26,7 @@ const TenureMonitorPage = React.lazy(() => import('./components/tenure/TenureMon
 const ExportHDModal = React.lazy(() => import('./components/ExportHDModal'));
 const HowToUseModal = React.lazy(() => import('./components/HowToUseModal'));
 const ColumnMapperModal = React.lazy(() => import('./components/ColumnMapperModal'));
+const RasterPlacementModal = React.lazy(() => import('./components/RasterPlacementModal'));
 const AddClaimsModal = React.lazy(() => import('./components/AddClaimsModal'));
 const UpgradeModal = React.lazy(() => import('./components/UpgradeModal'));
 import { loadGeoJSON, loadCSV, loadShapefileSet } from './utils/importers';
@@ -76,6 +77,10 @@ import { featureKey, layerFeatures, isFeatureHidden, hiddenCount, featuresInBoun
 import { stripFeatureStyle, styledFeatureCount } from './utils/featureStyle.js';
 import { attributeFields, buildGraduated, buildCategorical, classLabel, MAX_CATEGORIES } from './utils/classification.js';
 import { addDrillTraces, isTrace } from './utils/drillTraces.js';
+import {
+  isRasterName, isWorldFileName, worldFileFor, parseWorldFile, boundsFromWorldFile, looksLikeLatLng,
+  loadRasterImage, rasterLayer, tileLayer, validateTileSource,
+} from './utils/rasterOverlay.js';
 import { layerAnchorGroups, defaultAnchorForLayer, reanchorCalloutsForLayer } from './utils/featureClusters.js';
 import FeatureTrimList from './components/FeatureTrimList.jsx';
 import dissolveGeo from '@turf/dissolve';
@@ -727,7 +732,7 @@ export default function App({ initialAction = null }) {
   const [pendingDistanceP1, setPendingDistanceP1] = useState(null);
   const [selectedDistanceLineId, setSelectedDistanceLineId] = useState(null);
   const [annotationTool, setAnnotationTool] = useState(null);
-  const [uploadStatus, setUploadStatus] = useState({ type: 'info', message: 'Drop a shapefile, GeoJSON, KML or CSV here to put your data on the map.' });
+  const [uploadStatus, setUploadStatus] = useState({ type: 'info', message: 'Drop a shapefile, GeoJSON, KML, CSV or a georeferenced image here to put your data on the map.' });
   const [exporting, setExporting] = useState(false);
   const [dragging, setDragging] = useState(null); // { id, hoverZone, ghostX, ghostY, ghostW, ghostH }
   const [resizeGuides, setResizeGuides] = useState([]);
@@ -799,6 +804,9 @@ export default function App({ initialAction = null }) {
   const annotationToolRef = useRef(null);
   const [editingTitleField, setEditingTitleField] = useState(null);
   const [csvMappingData, setCsvMappingData] = useState(null); // { headers, rows, filename } for ColumnMapperModal
+  // { image, initialBounds, initialCrs, layerId? } for RasterPlacementModal
+  const [rasterPlacement, setRasterPlacement] = useState(null);
+  const [customTile, setCustomTile] = useState({ kind: 'xyz', url: '', layers: '', name: '', attribution: '', error: '' });
   const layersSectionRef = useRef(null);
   const markersSectionRef = useRef(null);
   const calloutsSectionRef = useRef(null);
@@ -2607,9 +2615,57 @@ export default function App({ initialAction = null }) {
     await addGeoJSONAsLayer(geojson, file.name);
   };
 
+  // A picture goes through the placement dialog: it needs edges before it
+  // can be a layer. A world file beside it fills the edges in.
+  const beginRasterPlacement = async (imageFile, worldFile = null) => {
+    const image = await loadRasterImage(imageFile);
+    let initialBounds = null;
+    let initialCrs = null;
+    if (worldFile) {
+      const wf = parseWorldFile(await worldFile.text());
+      const raw = boundsFromWorldFile(wf, image.sourceWidth, image.sourceHeight);
+      if (raw) {
+        initialBounds = raw;
+        initialCrs = looksLikeLatLng(raw) ? 'latlng' : 'utm';
+      } else {
+        setUploadStatus({ type: 'info', message: `Could not read ${worldFile.name}; enter the image edges by hand.` });
+      }
+    }
+    setRasterPlacement({ image, initialBounds, initialCrs });
+    if (screen !== 'editor') setScreen('editor');
+  };
+
+  const addRasterLayer = (image, bounds, opacity) => {
+    const id = crypto.randomUUID();
+    const layer = rasterLayer({ id, name: image.name, dataUri: image.dataUri, width: image.width, height: image.height, bounds, opacity });
+    trackEvent('layer_added', { source: 'raster', role: layer.role, kind: 'raster', feature_count: 0 });
+    setProject((prev) => ({ ...prev, layers: [...prev.layers, layer] }));
+    setSelectedLayerId(id);
+    setUploadStatus({ type: 'info', message: `${layer.displayName} placed. Adjust its edges or opacity under Layers.` });
+  };
+
+  const addCustomTileLayer = () => {
+    const error = validateTileSource(customTile);
+    if (error) { setCustomTile((c) => ({ ...c, error })); return; }
+    const id = crypto.randomUUID();
+    const layer = tileLayer({ id, ...customTile });
+    trackEvent('layer_added', { source: 'tiles', role: layer.role, kind: layer.tiles.kind, feature_count: 0 });
+    setProject((prev) => ({ ...prev, layers: [...prev.layers, layer] }));
+    setCustomTile({ kind: 'xyz', url: '', layers: '', name: '', attribution: '', error: '' });
+    setSelectedLayerId(id);
+  };
+
   const handleUploadFile = async (file) => {
     try {
       const name = file.name.toLowerCase();
+      if (isRasterName(name)) {
+        await beginRasterPlacement(file);
+        return;
+      }
+      if (isWorldFileName(name)) {
+        setUploadStatus({ type: 'error', message: 'Drop the world file together with its image (select both files at once).' });
+        return;
+      }
       if (name.endsWith('.csv')) {
         const result = await loadCSV(file);
         if (result.needsMapping) {
@@ -2632,6 +2688,11 @@ export default function App({ initialAction = null }) {
 
   const handleUploadFiles = async (files) => {
     try {
+      const imageFile = files.find((f) => isRasterName(f.name));
+      if (imageFile) {
+        await beginRasterPlacement(imageFile, worldFileFor(imageFile.name, files));
+        return;
+      }
       const shpName = files.find((f) => f.name.toLowerCase().endsWith('.shp'))?.name || 'shapefile';
       const geojson = await loadShapefileSet(files);
       await addGeoJSONAsLayer(geojson, shpName);
@@ -4931,7 +4992,48 @@ export default function App({ initialAction = null }) {
           <section className="control-section cs-collapsible" ref={layersSectionRef}>
             <h2>Layers</h2>
             <LayerList layers={project.layers} selectedLayerId={selectedLayerId} onSelect={setSelectedLayerId} onToggleVisible={toggleLayerVisible} onRemove={removeLayer} />
-            {selectedLayer ? (
+            {selectedLayer && (selectedLayer.type === 'raster' || selectedLayer.type === 'tiles') ? (
+              <div className="control-grid" style={{ marginTop: 10 }}>
+                <div className="control-row">
+                  <label htmlFor="f-display-label-raster">Display Label</label>
+                  <input id="f-display-label-raster" value={selectedLayer.displayName || ''} onChange={(e) => updateLayer(selectedLayer.id, { displayName: e.target.value })} />
+                </div>
+                <div className="control-row inline-2">
+                  <div>
+                    <label htmlFor="f-raster-layer-opacity">Opacity</label>
+                    <input id="f-raster-layer-opacity" type="range" min="0.1" max="1" step="0.05"
+                      value={(selectedLayer.type === 'raster' ? selectedLayer.raster?.opacity : selectedLayer.tiles?.opacity) ?? 0.85}
+                      onChange={(e) => {
+                        const v = Number(e.target.value);
+                        updateLayer(selectedLayer.id, selectedLayer.type === 'raster'
+                          ? { raster: { ...selectedLayer.raster, opacity: v } }
+                          : { tiles: { ...selectedLayer.tiles, opacity: v } });
+                      }} />
+                  </div>
+                  <div className="range-value">{Math.round((((selectedLayer.type === 'raster' ? selectedLayer.raster?.opacity : selectedLayer.tiles?.opacity) ?? 0.85)) * 100)}%</div>
+                </div>
+                <div className="button-row two">
+                  <button className="secondary-btn" type="button" onClick={() => moveLayer(selectedLayer.id, 'down')}>Move Down</button>
+                  <button className="secondary-btn" type="button" onClick={() => moveLayer(selectedLayer.id, 'up')}>Move Up</button>
+                </div>
+                {selectedLayer.type === 'raster' ? (
+                  <>
+                    <div className="small-note">
+                      Edges: {selectedLayer.raster?.bounds?.north?.toFixed(5)}N · {selectedLayer.raster?.bounds?.south?.toFixed(5)}S · {selectedLayer.raster?.bounds?.west?.toFixed(5)}W · {selectedLayer.raster?.bounds?.east?.toFixed(5)}E
+                    </div>
+                    <button className="secondary-btn" type="button" onClick={() => setRasterPlacement({
+                      image: { name: selectedLayer.sourceName || selectedLayer.name, dataUri: selectedLayer.raster?.dataUri, width: selectedLayer.raster?.width, height: selectedLayer.raster?.height, sourceWidth: selectedLayer.raster?.width, sourceHeight: selectedLayer.raster?.height },
+                      initialBounds: selectedLayer.raster?.bounds || null,
+                      initialCrs: 'latlng',
+                      layerId: selectedLayer.id,
+                    })}>Re-place image…</button>
+                    <p className="small-note">Drawn above the basemap and below every data layer. Exports include it at the same place and opacity.</p>
+                  </>
+                ) : (
+                  <p className="small-note" style={{ wordBreak: 'break-all' }}>{selectedLayer.tiles?.kind === 'wms' ? 'WMS' : 'Tiles'}: {selectedLayer.tiles?.url}{selectedLayer.tiles?.wms?.layers ? ` (${selectedLayer.tiles.wms.layers})` : ''}</p>
+                )}
+              </div>
+            ) : selectedLayer ? (
               <div className="control-grid" style={{ marginTop: 10 }}>
                 <div className="control-row">
                   <label htmlFor="f-display-label-4286">Display Label</label>
@@ -6424,6 +6526,41 @@ export default function App({ initialAction = null }) {
               {referenceOverlays.geology && (
                 <p className="overlay-help-note">{OVERLAY_DESCRIPTIONS.geology}</p>
               )}
+              <details className="sub-details" style={{ marginTop: 8 }}>
+                <summary>Add a tile or WMS service</summary>
+                <div className="sub-details-body">
+                  <div className="small-note" style={{ marginBottom: 6 }}>A published map service — a survey's magnetics or bedrock geology, say. It becomes a layer under Layers, above the basemap and below your data.</div>
+                  <div className="control-row inline-2">
+                    <div>
+                      <label htmlFor="f-tile-kind">Type</label>
+                      <select id="f-tile-kind" value={customTile.kind} onChange={(e) => setCustomTile((c) => ({ ...c, kind: e.target.value, error: '' }))}>
+                        <option value="xyz">Tile URL ({'{z}/{x}/{y}'})</option>
+                        <option value="wms">WMS</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label htmlFor="f-tile-name">Name</label>
+                      <input id="f-tile-name" value={customTile.name} placeholder="e.g. YGS magnetics" onChange={(e) => setCustomTile((c) => ({ ...c, name: e.target.value }))} />
+                    </div>
+                  </div>
+                  <div className="control-row">
+                    <label htmlFor="f-tile-url">{customTile.kind === 'wms' ? 'WMS endpoint' : 'Tile URL template'}</label>
+                    <input id="f-tile-url" value={customTile.url} placeholder={customTile.kind === 'wms' ? 'https://…/geoserver/wms' : 'tiles/{z}/{x}/{y}.png (https)'} onChange={(e) => setCustomTile((c) => ({ ...c, url: e.target.value, error: '' }))} />
+                  </div>
+                  {customTile.kind === 'wms' && (
+                    <div className="control-row">
+                      <label htmlFor="f-tile-layers">WMS layers</label>
+                      <input id="f-tile-layers" value={customTile.layers} placeholder="layer name(s), comma separated" onChange={(e) => setCustomTile((c) => ({ ...c, layers: e.target.value }))} />
+                    </div>
+                  )}
+                  <div className="control-row">
+                    <label htmlFor="f-tile-credit">Credit (printed on the export)</label>
+                    <input id="f-tile-credit" value={customTile.attribution} placeholder="e.g. Yukon Geological Survey" onChange={(e) => setCustomTile((c) => ({ ...c, attribution: e.target.value }))} />
+                  </div>
+                  {customTile.error && <p className="overlay-error-note">{customTile.error}</p>}
+                  <button className="secondary-btn" type="button" style={{ width: '100%' }} onClick={addCustomTileLayer}>Add as layer</button>
+                </div>
+              </details>
               {Object.keys(overlayErrors).filter((k) => referenceOverlays[k]).length > 0 && (
                 <p className="overlay-error-note">
                   {Object.keys(overlayErrors).filter((k) => referenceOverlays[k]).map((k) => OVERLAY_LABELS[k] || k).join(', ')}
@@ -7311,6 +7448,24 @@ export default function App({ initialAction = null }) {
         </div>
       )}
       <React.Suspense fallback={null}>
+        {rasterPlacement ? (
+          <RasterPlacementModal
+            image={rasterPlacement.image}
+            initialBounds={rasterPlacement.initialBounds}
+            initialCrs={rasterPlacement.initialCrs}
+            mapCenter={(() => { try { const c = leafletMapRef.current?.getCenter(); return c ? { lat: c.lat, lng: c.lng } : null; } catch { return null; } })()}
+            onImport={(bounds, opacity) => {
+              const { image, layerId } = rasterPlacement;
+              setRasterPlacement(null);
+              if (layerId) {
+                updateLayer(layerId, { raster: { ...(project.layers.find((l) => l.id === layerId)?.raster || {}), bounds, opacity } });
+              } else {
+                addRasterLayer(image, bounds, opacity);
+              }
+            }}
+            onClose={() => setRasterPlacement(null)}
+          />
+        ) : null}
         {csvMappingData ? (
           <ColumnMapperModal
             headers={csvMappingData.headers}
