@@ -3,6 +3,7 @@ import { legendRowCount } from '../utils/legendCustomization.js';
 import { TICK_MARGIN } from '../utils/coordinateFrame.js';
 import { hasVisibleFeatures } from '../utils/featureIdentity.js';
 import { isClassified, classLegendItems } from '../utils/classification.js';
+import { hasDrillTraces } from '../utils/drillTraces.js';
 import { getCornerLayout } from '../utils/cornerLayout';
 
 const BASE_ZONES = {
@@ -311,12 +312,22 @@ export function buildLegendItems(template, layers, layout = {}) {
       const isPoint = POINT_ROLES.has(layer.role) || layer.type === 'points';
       const group = template.roleGroups?.[layer.role] || 'Map Data';
 
+      // Holes with a plan-view trace get a line row beside the collar row.
+      const traceRows = isPoint && hasDrillTraces(layer) ? [{
+        id: `${layer.id}::trace`,
+        role: layer.role,
+        group,
+        label: layer.legend?.traceLabel || 'Drill trace',
+        type: 'line',
+        style: { ...baseStyle, stroke: baseStyle.stroke || baseStyle.markerColor || '#1f2937', dashArray: '' },
+      }] : [];
+
       // Coloured by attribute: a row per class, not a row for the layer.
-      if (isClassified(layer)) return classLegendItems(layer, baseStyle, baseLabel, group, isPoint);
+      if (isClassified(layer)) return [...classLegendItems(layer, baseStyle, baseLabel, group, isPoint), ...traceRows];
 
       if (isPoint) {
         const shapes = distinctShapesForLayer(layer);
-        return shapes.map((shape) => ({
+        return [...shapes.map((shape) => ({
           id: shapes.length === 1 ? layer.id : `${layer.id}::${shape}`,
           role: layer.role,
           group: template.roleGroups?.[layer.role] || 'Map Data',
@@ -325,7 +336,7 @@ export function buildLegendItems(template, layers, layout = {}) {
           type: 'points',
           markerShape: shape,
           style: { ...baseStyle, markerShape: shape },
-        }));
+        })), ...traceRows];
       }
 
       return [{

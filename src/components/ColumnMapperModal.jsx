@@ -6,8 +6,9 @@ const ROLES = [
   { value: 'y',       label: 'Latitude — north/south position *' },
   { value: 'id',      label: 'Point name (hole ID, sample #…)' },
   { value: 'elev',    label: 'Elevation' },
-  { value: 'azimuth', label: 'Azimuth' },
-  { value: 'dip',     label: 'Dip' },
+  { value: 'azimuth', label: 'Azimuth (for drill traces)' },
+  { value: 'dip',     label: 'Dip (for drill traces)' },
+  { value: 'length',  label: 'Hole length / depth (for drill traces)' },
   { value: 'skip',    label: '— Skip —' },
 ];
 
@@ -42,14 +43,14 @@ export default function ColumnMapperModal({ headers, rows, filename, onImport, o
     if (!xCol) { setError('Which column has the east/west position (longitude)? Pick it above.'); return; }
     if (!yCol) { setError('Which column has the north/south position (latitude)? Pick it above.'); return; }
 
-    const idCol = Object.keys(mapping).find((h) => mapping[h] === 'id');
-    const elevCol = Object.keys(mapping).find((h) => mapping[h] === 'elev');
-    const m = {
-      x: xCol,
-      y: yCol,
-      ...(idCol ? { id: idCol } : {}),
-      ...(elevCol ? { elev: elevCol } : {}),
-    };
+    const colFor = (role) => Object.keys(mapping).find((h) => mapping[h] === role);
+    const m = { x: xCol, y: yCol };
+    // Every optional role the user picked travels with the mapping; the
+    // orientation picks used to be offered here and dropped on this line.
+    for (const role of ['id', 'elev', 'azimuth', 'dip', 'length']) {
+      const col = colFor(role);
+      if (col) m[role] = col;
+    }
 
     try {
       const geojson = csvToGeoJSON(rows, m);
@@ -68,6 +69,7 @@ export default function ColumnMapperModal({ headers, rows, filename, onImport, o
         <h3 className="export-hd-title" style={{ marginBottom: 4 }}>Map CSV columns</h3>
         <p className="export-hd-desc" style={{ marginBottom: 12 }}>
           <strong>{filename}</strong> — tell us which columns hold the coordinates. We've pre-selected our best guess.
+          Map azimuth, dip and length too and each hole gets a surface trace.
         </p>
         {hint && (
           <p className="export-hd-desc" style={{ marginBottom: 12, background: 'var(--ui-surface-subtle)', border: '1px solid var(--ui-border)', borderLeft: '3px solid var(--ui-warning)', borderRadius: 'var(--r-md)', padding: '8px 12px', color: 'var(--ui-text)' }}>

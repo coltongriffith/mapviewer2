@@ -28,7 +28,9 @@ const RENDER_CAP = 300;
 export default function FeatureTrimList({ layer, onSetHidden }) {
   const [query, setQuery] = useState('');
 
-  const rows = useMemo(() => layerFeatures(layer).map((feature) => ({
+  // A drill trace shares its collar's identity and goes with it; listing it
+  // separately would show every hole twice.
+  const rows = useMemo(() => layerFeatures(layer).filter((f) => !f?.properties?._trace).map((feature) => ({
     feature,
     key: featureKey(feature),
     label: featureLabel(feature),
