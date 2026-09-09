@@ -14,7 +14,7 @@ import dissolveGeo from '@turf/dissolve';
 import { exportCreditLines } from '../utils/claimProvenance';
 import { referenceOverlayCredits } from '../utils/referenceOverlayCredits.js';
 import { featureKey, visibleGeojson } from '../utils/featureIdentity.js';
-import { getFeatureStyle as resolveFeatureStyle } from '../utils/featureStyle.js';
+import { getFeatureStyle as resolveFeatureStyle, canDissolve } from '../utils/featureStyle.js';
 import { groupLegendItems } from '../utils/legendCustomization.js';
 import { isBracket, distanceLineLabel, bracketTicks, bracketLabelAnchor } from '../utils/distanceLine.js';
 import { pickScaleBar } from '../utils/scaleBar.js';
@@ -258,8 +258,11 @@ function svgMarkerShape(shape, cx, cy, r, fill, stroke, sw, opacity) {
 function drawCanvasGeometry(ctx, map, feature, style, scale) {
   const type = getLayerGeometryType(feature); const coords = feature?.geometry?.coordinates; if (!coords) return;
   const baseOpacity = Math.max(0, Math.min(1, style.opacity ?? 1));
+  // Multiplied into whatever alpha the caller set (the layer's own opacity),
+  // not written over it: a point layer at 30% used to print fully opaque.
+  const outerAlpha = ctx.globalAlpha;
   ctx.save();
-  ctx.globalAlpha = baseOpacity;
+  ctx.globalAlpha = outerAlpha * baseOpacity;
   if (type === 'Polygon') { ctx.beginPath(); coords.forEach((ring) => drawCanvasPath(ctx, projectRing(map, ring, scale), true)); setCanvasFill(ctx, style); ctx.fill('evenodd'); setCanvasStroke(ctx, style, scale); ctx.stroke(); ctx.restore(); return; }
   if (type === 'MultiPolygon') { ctx.beginPath(); coords.forEach((polygon) => polygon.forEach((ring) => drawCanvasPath(ctx, projectRing(map, ring, scale), true))); setCanvasFill(ctx, style); ctx.fill('evenodd'); setCanvasStroke(ctx, style, scale); ctx.stroke(); ctx.restore(); return; }
   if (type === 'LineString') { ctx.beginPath(); drawCanvasPath(ctx, projectLine(map, coords, scale), false); setCanvasStroke(ctx, style, scale); ctx.stroke(); ctx.restore(); return; }
@@ -1997,7 +2000,9 @@ export function getLayerGeojson(layer) {
   // claim the user removed would already have been absorbed into the union and
   // would print as part of the block's outer boundary.
   const source = visibleGeojson(layer);
-  if (!layer.style?.dissolve || layer.type === 'line' || layer.role === 'drillholes') return source;
+  // Dissolve is also lifted for a layer coloured by attribute or with
+  // individually styled shapes: the union has no properties to colour by.
+  if (!canDissolve(layer) || layer.type === 'line' || layer.role === 'drillholes') return source;
   try {
     const fc = source.type === 'FeatureCollection' ? source : { type: 'FeatureCollection', features: [source] };
     const dissolved = dissolveGeo(fc);

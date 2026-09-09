@@ -5,6 +5,11 @@ import { computeGridTicks, FRAME_FONT, FRAME_FONT_PX, FRAME_TICK_PX } from '../u
 // margins over the map's edges, the frame rule, and a UTM tick with its label
 // on every edge. Redraws on every pan and zoom. The exporters draw the same
 // ticks from the same computation (utils/coordinateFrame.js).
+//
+// Stacked above the callout and annotation overlays (510, 520): the margin is
+// outside the map, and the exporters clip map content to the frame, so an
+// annotation dragged into the margin must not paint over the ticks here
+// either.
 export default function CoordinateFrameOverlay({ map, frame, stage }) {
   const [, setV] = useState(0);
   useEffect(() => {
@@ -28,7 +33,7 @@ export default function CoordinateFrameOverlay({ map, frame, stage }) {
       className="coordinate-frame"
       width={W}
       height={H}
-      style={{ position: 'absolute', top: 0, left: 0, width: W, height: H, pointerEvents: 'none', zIndex: 391 }}
+      style={{ position: 'absolute', top: 0, left: 0, width: W, height: H, pointerEvents: 'none', zIndex: 530 }}
       aria-hidden="true"
     >
       <rect x={area.left} y={area.top} width={area.right - area.left} height={top - area.top} fill="#fff" />

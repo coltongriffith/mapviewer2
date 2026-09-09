@@ -2,7 +2,7 @@ import React from 'react';
 import { MarkerSvgIcon } from '../utils/markerIcons.jsx';
 import {
   LEGEND_SYMBOLS, DEFAULT_LEGEND_SYMBOL, DEFAULT_LEGEND_COLOR, DEFAULT_LEGEND_GROUP,
-  customLegendItem, nextCustomLegendId, applyLegendCustomization, moveLegendItem,
+  customLegendItem, nextCustomLegendId, applyLegendCustomization, moveLegendItem, orderLegendItems,
 } from '../utils/legendCustomization.js';
 
 // Editing the legend without letting it drift from the map.
@@ -91,25 +91,23 @@ export default function LegendEditor({ derivedItems, layout, updateLayout }) {
     updateLayout({
       legendCustomItems: customItems.filter((entry) => entry.id !== id),
       legendOverrides: nextOverrides,
+      // Its slot in the order goes with it, or the next item to reuse the id
+      // would inherit a position it was never given.
+      ...(Array.isArray(layout?.legendOrder) ? { legendOrder: layout.legendOrder.filter((x) => x !== id) } : {}),
     });
   };
 
+  // Rows in the order the legend shows them — derived and added entries
+  // interleaved as the stored order says — so an up/down click moves the row
+  // the person is looking at. Hidden entries keep their derived place.
+  const rows = orderLegendItems([
+    ...derivedItems.map((item) => ({ id: item.id, kind: 'derived', item })),
+    ...customItems.map((entry) => ({ id: entry.id, kind: 'custom', entry })),
+  ], layout?.legendOrder);
+
   const hiddenCount = derivedItems.filter((item) => overrides[item.id]?.hidden).length;
 
-  return (
-    <div className="legend-editor">
-      {derivedItems.length === 0 && customItems.length === 0 && (
-        <p className="small-note">Legend entries appear here as you add layers to the map.</p>
-      )}
-
-      {(derivedItems.length > 0 || customItems.length > 0) && (
-        <label className="toggle-row" style={{ marginBottom: 6 }}>
-          <input type="checkbox" checked={grouped} onChange={(e) => updateLayout({ legendGrouped: e.target.checked })} />
-          <span>Group entries under headings</span>
-        </label>
-      )}
-
-      {derivedItems.map((item) => {
+  const derivedRow = (item) => {
         const hidden = !!overrides[item.id]?.hidden;
         return (
           <div className={`legend-editor-row${hidden ? ' is-hidden' : ''}`} key={item.id}>
@@ -134,18 +132,9 @@ export default function LegendEditor({ derivedItems, layout, updateLayout }) {
             </button>
           </div>
         );
-      })}
+      };
 
-      {hiddenCount > 0 && (
-        // The layer is still drawn — only its legend row is gone. Saying so
-        // prevents "I removed it and it's still on the map" being read as a bug.
-        <p className="small-note">
-          {hiddenCount} {hiddenCount === 1 ? 'entry is' : 'entries are'} hidden from the legend.
-          The layer itself is still drawn — hide the layer to remove it from the map.
-        </p>
-      )}
-
-      {customItems.map((entry) => (
+  const customRow = (entry) => (
         <div className="legend-editor-row is-custom" key={entry.id}>
           <SymbolPreview symbol={entry.symbol} color={entry.color} />
           <input
@@ -182,7 +171,32 @@ export default function LegendEditor({ derivedItems, layout, updateLayout }) {
             Delete
           </button>
         </div>
-      ))}
+      );
+
+
+  return (
+    <div className="legend-editor">
+      {derivedItems.length === 0 && customItems.length === 0 && (
+        <p className="small-note">Legend entries appear here as you add layers to the map.</p>
+      )}
+
+      {(derivedItems.length > 0 || customItems.length > 0) && (
+        <label className="toggle-row" style={{ marginBottom: 6 }}>
+          <input type="checkbox" checked={grouped} onChange={(e) => updateLayout({ legendGrouped: e.target.checked })} />
+          <span>Group entries under headings</span>
+        </label>
+      )}
+
+      {rows.map((row) => (row.kind === 'derived' ? derivedRow(row.item) : customRow(row.entry)))}
+
+      {hiddenCount > 0 && (
+        // The layer is still drawn — only its legend row is gone. Saying so
+        // prevents "I removed it and it's still on the map" being read as a bug.
+        <p className="small-note">
+          {hiddenCount} {hiddenCount === 1 ? 'entry is' : 'entries are'} hidden from the legend.
+          The layer itself is still drawn — hide the layer to remove it from the map.
+        </p>
+      )}
 
       <button type="button" className="btn-secondary legend-editor-add" onClick={addCustom}>
         + Add legend item

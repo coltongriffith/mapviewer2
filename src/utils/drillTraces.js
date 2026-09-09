@@ -9,6 +9,8 @@
 // No React and no Leaflet imports: the CSV importer, the GeoJSON importer
 // and the demo data all pass through here.
 
+import { featureKey, isFeatureHidden } from './featureIdentity.js';
+
 const ORIENTATION_SYNONYMS = {
   azimuth: ['_azimuth', 'azimuth', 'azi', 'az', 'bearing', 'azim'],
   dip: ['_dip', 'dip', 'inclination', 'incl', 'plunge'],
@@ -19,7 +21,12 @@ const EARTH_R = 6371008.8;
 
 function num(v) {
   if (v == null || v === '') return NaN;
-  const n = typeof v === 'number' ? v : Number(String(v).replace(/[^\d.eE+-]/g, ''));
+  if (typeof v === 'number') return Number.isFinite(v) ? v : NaN;
+  // "N/A", "-", "?" and friends strip to nothing, and Number('') is 0 — a
+  // fabricated north-pointing hole. Nothing numeric left means no value.
+  const cleaned = String(v).replace(/[^\d.eE+-]/g, '');
+  if (!/\d/.test(cleaned)) return NaN;
+  const n = Number(cleaned);
   return Number.isFinite(n) ? n : NaN;
 }
 
@@ -69,15 +76,13 @@ export function isTrace(feature) {
  * orientation and a length. Idempotent: collars already accompanied by a
  * trace are left alone, so re-running on a saved layer adds nothing.
  */
-export function addDrillTraces(fc) {
+export function addDrillTraces(fc, { maxFeatures = Infinity } = {}) {
   const feats = fc?.features || [];
   if (!feats.length) return fc;
   const hasTraces = feats.some(isTrace);
   if (hasTraces) return fc;
-  const out = [];
-  let added = 0;
+  const traces = [];
   for (const f of feats) {
-    out.push(f);
     if (f?.geometry?.type !== 'Point') continue;
     const props = f.properties || {};
     const azimuth = readOrientation(props, 'azimuth');
@@ -86,18 +91,33 @@ export function addDrillTraces(fc) {
     if (![azimuth, dip, length].every(Number.isFinite)) continue;
     const end = traceEnd(f.geometry.coordinates, azimuth, dip, length);
     if (!end) continue;
-    out.push({
+    traces.push([f, {
       type: 'Feature',
+      // The collar's own key, so the two are one thing to hide or style —
+      // whatever the file called its hole id, and whether or not it had one.
+      id: featureKey(f),
       geometry: { type: 'LineString', coordinates: [f.geometry.coordinates, end] },
       properties: { ...props, _trace: true, _azimuth: azimuth, _dip: dip, _length: length },
-    });
-    added += 1;
+    }]);
   }
-  if (!added) return fc;
-  return { ...fc, features: out, meta: { ...(fc.meta || {}), traces: added } };
+  if (!traces.length) return fc;
+  // The import ceiling was checked before this ran; a trace per collar must
+  // not carry the collection past it.
+  if (feats.length + traces.length > maxFeatures) {
+    return { ...fc, meta: { ...(fc.meta || {}), tracesSkipped: traces.length } };
+  }
+  const byCollar = new Map(traces);
+  const out = [];
+  for (const f of feats) {
+    out.push(f);
+    const t = byCollar.get(f);
+    if (t) out.push(t);
+  }
+  return { ...fc, features: out, meta: { ...(fc.meta || {}), traces: traces.length } };
 }
 
+/** Does the layer put a trace on the map — one that is not hidden? */
 export function hasDrillTraces(layer) {
   const feats = layer?.geojson?.features || [];
-  return feats.some(isTrace);
+  return feats.some((f) => isTrace(f) && !isFeatureHidden(layer, f));
 }

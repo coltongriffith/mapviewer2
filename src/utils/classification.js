@@ -13,6 +13,10 @@
 
 import { layerFeatures } from './featureIdentity.js';
 
+// A drill trace copies its collar's properties; counting it would weigh every
+// oriented hole twice in the breaks and the category ranking.
+const observations = (layer) => layerFeatures(layer).filter((f) => !f?.properties?._trace);
+
 // Yellow → orange → red → magenta, low to high: the reading a geochemist
 // expects, and the one the soil maps this was built against use.
 export const GRADUATED_PALETTE = ['#fde047', '#f59e0b', '#ef4444', '#d946ef', '#7e22ce', '#1e1b4b'];
@@ -35,7 +39,7 @@ function toNumber(v) {
 
 /** Property keys of a layer's features, with whether each reads as numeric. */
 export function attributeFields(layer) {
-  const feats = layerFeatures(layer).slice(0, SAMPLE);
+  const feats = observations(layer).slice(0, SAMPLE);
   const seen = new Map();
   for (const f of feats) {
     for (const [k, v] of Object.entries(f?.properties || {})) {
@@ -54,7 +58,7 @@ export function attributeFields(layer) {
 }
 
 export function fieldValues(layer, field) {
-  return layerFeatures(layer).map((f) => f?.properties?.[field]).filter((v) => v != null && v !== '');
+  return observations(layer).map((f) => f?.properties?.[field]).filter((v) => v != null && v !== '');
 }
 
 function niceNumber(x) {
@@ -130,21 +134,38 @@ export function classIndexFor(classification, feature) {
   return idx;
 }
 
+/** What one class paints, by geometry: points take colour and size, lines
+ * their stroke, areas their fill. An area's outline is left to the layer so
+ * a classified geology sheet keeps one contact line weight. */
+export function styleForClass(cls, kind) {
+  const k = kind === true ? 'points' : (kind || 'polygon');
+  const out = k === 'points'
+    ? { markerColor: cls.color, markerFill: cls.color }
+    : k === 'line' ? { stroke: cls.color } : { fill: cls.color };
+  if (k === 'points' && Number.isFinite(cls.size)) out.markerSize = cls.size;
+  if (cls.shape) out.markerShape = cls.shape;
+  return out;
+}
+
+/** Geometry kind for a feature, falling back to the layer's declared type. */
+export function geometryKind(feature, layer) {
+  const g = String(feature?.geometry?.type || '');
+  if (g.includes('Point')) return 'points';
+  if (g.includes('Line')) return 'line';
+  if (g) return 'polygon';
+  if (layer?.type === 'points') return 'points';
+  if (layer?.type === 'line') return 'line';
+  return 'polygon';
+}
+
 /**
- * The style a class contributes: for a point, colour and size; for an area,
- * fill. Stroke is left to the layer so a classified geology sheet keeps one
- * contact line weight.
+ * The style a class contributes to one feature, or null when the feature has
+ * no usable value. `kind` is 'points' | 'line' | 'polygon' (true = points).
  */
-export function classStyle(classification, feature, isPoint) {
+export function classStyle(classification, feature, kind) {
   const i = classIndexFor(classification, feature);
   if (i < 0) return null;
-  const c = classification.classes[i];
-  const out = isPoint
-    ? { markerColor: c.color, markerFill: c.color }
-    : { fill: c.color };
-  if (isPoint && Number.isFinite(c.size)) out.markerSize = c.size;
-  if (c.shape) out.markerShape = c.shape;
-  return out;
+  return styleForClass(classification.classes[i], kind);
 }
 
 function fmt(n) {
@@ -169,11 +190,18 @@ export function classLabel(classification, i) {
  */
 export function classLegendItems(layer, baseStyle, baseLabel, group, isPoint) {
   const c = layer.classification;
+  const kind = isPoint ? 'points' : (layer.type === 'line' ? 'line' : 'polygon');
+  // Ids carry the field and mode (and the value, for categories) so a rename
+  // or hide made in the legend does not attach itself to an unrelated class
+  // after the classification is rebuilt on another column.
+  const slug = (v) => String(v).replace(/[^A-Za-z0-9_.-]+/g, '_').slice(0, 40);
   return c.classes.map((cls, i) => {
-    const style = { ...baseStyle, ...classStyle(c, { properties: { [c.field]: c.mode === 'categorical' ? cls.value : (cls.max ?? Infinity) } }, isPoint) };
-    if (isPoint && Number.isFinite(cls.size)) style.markerSize = cls.size;
+    // Straight from the class, not by classifying a synthetic value: the
+    // open-ended top class has no finite value to classify, and used to fall
+    // back to the layer colour in every legend while the map used its own.
+    const style = { ...baseStyle, ...styleForClass(cls, kind) };
     return {
-      id: `${layer.id}::class:${i}`,
+      id: `${layer.id}::class:${c.mode}:${slug(c.field)}:${c.mode === 'categorical' ? slug(cls.value) : i}`,
       role: layer.role,
       group,
       label: classLabel(c, i),
