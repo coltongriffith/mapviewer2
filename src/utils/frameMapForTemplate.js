@@ -58,6 +58,10 @@ export function fitProjectToTemplate(project, map, template, mode = 'balanced', 
     bounds = buildBounds(visibleLayers);
   }
   if (!bounds) return;
+  // A regional map wants the property small inside its district: pad the
+  // focus extent by this fraction of its size on every side before fitting.
+  const pad = Number(project?.layout?.zoomPadFrac);
+  if (Number.isFinite(pad) && pad > 0) bounds = bounds.pad(pad);
 
   const zones = template?.zones || {};
   const leftSafe = Math.max((zones.legend?.width || 0) + 54, (zones.title?.width || 0) * 0.48, 180);

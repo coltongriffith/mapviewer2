@@ -1,7 +1,7 @@
 import { ROLE_LABELS, POINT_ROLES } from '../projectState';
 import { legendRowCount } from '../utils/legendCustomization.js';
 import { TICK_MARGIN } from '../utils/coordinateFrame.js';
-import { hasVisibleFeatures } from '../utils/featureIdentity.js';
+import { hasVisibleFeatures, layerGeometryKind } from '../utils/featureIdentity.js';
 import { isClassified, classLegendItems } from '../utils/classification.js';
 import { hasDrillTraces } from '../utils/drillTraces.js';
 import { getCornerLayout } from '../utils/cornerLayout';
@@ -310,7 +310,8 @@ export function buildLegendItems(template, layers, layout = {}) {
       };
       const baseLabel = layer.displayName || layer.legend?.label || layer.name || ROLE_LABELS[layer.role] || 'Layer';
       const isPoint = POINT_ROLES.has(layer.role) || layer.type === 'points';
-      const group = template.roleGroups?.[layer.role] || 'Map Data';
+      // A layer may name its own heading; the template's role heading is the default.
+      const group = layer.legend?.group || template.roleGroups?.[layer.role] || 'Map Data';
 
       // Holes with a plan-view trace get a line row beside the collar row.
       const traceRows = isPoint && hasDrillTraces(layer) ? [{
@@ -330,7 +331,7 @@ export function buildLegendItems(template, layers, layout = {}) {
         return [...shapes.map((shape) => ({
           id: shapes.length === 1 ? layer.id : `${layer.id}::${shape}`,
           role: layer.role,
-          group: template.roleGroups?.[layer.role] || 'Map Data',
+          group,
           label: layer.legend?.shapeLabels?.[shape]
             || (shapes.length === 1 ? baseLabel : `${baseLabel} (${SHAPE_DISPLAY[shape] || shape})`),
           type: 'points',
@@ -342,9 +343,9 @@ export function buildLegendItems(template, layers, layout = {}) {
       return [{
         id: layer.id,
         role: layer.role,
-        group: template.roleGroups?.[layer.role] || 'Map Data',
+        group,
         label: baseLabel,
-        type: layer.type,
+        type: layerGeometryKind(layer) === 'line' ? 'line' : layer.type,
         style: baseStyle,
       }];
     });

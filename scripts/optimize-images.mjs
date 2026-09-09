@@ -22,6 +22,7 @@ const TARGETS = [
   { src: 'public/gallery/ba-before.png', widths: [870, 1740], quality: 0.82 },
   { src: 'public/gallery/regional.png', widths: [640, 1280], quality: 0.82 },
   { src: 'public/gallery/target.png', widths: [640, 1280], quality: 0.82 },
+  { src: 'public/gallery/geology.png', widths: [640, 1280], quality: 0.82 },
   { src: 'public/gallery/infrastructure.png', widths: [640, 1280], quality: 0.82 },
   { src: 'public/gallery/claims.png', widths: [640, 1280], quality: 0.82 },
   { src: 'public/gallery/drill-results.png', widths: [640, 1280], quality: 0.82 },

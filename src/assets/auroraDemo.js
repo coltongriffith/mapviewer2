@@ -163,3 +163,98 @@ export const auroraCallouts = [
     style: { background: '#ffffff', border: '#0b3533', textColor: '#0b3533', subtextColor: '#13554f', fontSize: 13, paddingX: 12, paddingY: 9 },
   },
 ];
+
+// ── Hole orientation for the drill traces: a northwest-dipping fan across the
+// targets, so each collar draws its plan-view trace.
+const ORIENTATION = { CR: { Az: 335, Dip: -55 } };
+auroraDrillholes.features.forEach((f, i) => {
+  const lengths = [212, 185, 160, 240, 305, 268, 150, 132, 176, 198, 144, 260, 231, 172, 190];
+  f.properties.Az = ORIENTATION.CR.Az + ((i % 3) - 1) * 12;
+  f.properties.Dip = ORIENTATION.CR.Dip - (i % 4) * 4;
+  f.properties.Length_m = lengths[i % lengths.length];
+});
+
+// ── Soil geochemistry: a 200 m × 100 m grid over the claim block, copper in
+// ppm with anomalies over the three targets — the way a soil program reads
+// once it is classed into ranges.
+function hash(a, b) {
+  const x = Math.sin(a * 127.1 + b * 311.7) * 43758.5453;
+  return x - Math.floor(x);
+}
+const soilPoints = [];
+const anomalies = [
+  { x: -1.85, y: 1.25, rx: 1.1, ry: 0.55, rot: -25, peak: 260 },
+  { x: 2.0, y: 1.1, rx: 0.75, ry: 0.95, rot: 8, peak: 210 },
+  { x: -1.05, y: -1.75, rx: 1.3, ry: 0.6, rot: -28, peak: 320 },
+];
+for (let iy = -26; iy <= 26; iy += 1) {
+  for (let ix = -15; ix <= 15; ix += 1) {
+    const x = ix * 0.25;
+    const y = iy * 0.125;
+    const d = Math.pow(Math.abs(x) / 3.7, 1.7) + Math.pow(Math.abs(y) / 3.4, 1.7);
+    if (d > 0.98) continue;
+    let cu = 18 + 40 * hash(ix, iy) * hash(iy, ix);
+    for (const a of anomalies) {
+      const rot = (a.rot * Math.PI) / 180;
+      const dx = x - a.x, dy = y - a.y;
+      const u = (dx * Math.cos(rot) + dy * Math.sin(rot)) / a.rx;
+      const v = (-dx * Math.sin(rot) + dy * Math.cos(rot)) / a.ry;
+      const r2 = u * u + v * v;
+      cu += a.peak * Math.exp(-r2 * 1.6) * (0.7 + 0.6 * hash(ix + 7, iy + 3));
+    }
+    soilPoints.push({
+      type: 'Feature',
+      properties: { SampleID: `S${(iy + 30) * 37 + (ix + 18) + 1000}`, Cu_ppm: Math.round(cu), Au_ppb: Math.round(cu * 0.09 * (0.5 + hash(ix + 1, iy + 2))) },
+      geometry: { type: 'Point', coordinates: toLngLat(x, y) },
+    });
+  }
+}
+export const auroraSoils = { type: 'FeatureCollection', features: soilPoints };
+
+// ── Bedrock geology: four units in northeast-trending bands across the
+// district, and a small intrusive stock under Target B.
+function bandPolygon(yBase, yTop, k, name, age) {
+  const xs = [];
+  for (let i = 0; i <= 28; i += 1) xs.push(-7 + (14 * i) / 28);
+  const curve = (x, y0, kk) => y0 + 0.45 * Math.sin(x / 1.4 + kk) + 0.32 * x;
+  const top = xs.map((x) => toLngLat(x, curve(x, yTop, k + 1)));
+  const bottom = xs.slice().reverse().map((x) => toLngLat(x, curve(x, yBase, k)));
+  return {
+    type: 'Feature',
+    properties: { Unit: name, Age: age },
+    geometry: { type: 'Polygon', coordinates: [[...top, ...bottom, top[0]]] },
+  };
+}
+export const auroraGeology = {
+  type: 'FeatureCollection',
+  features: [
+    bandPolygon(-9, -2.2, 0, 'Bowser Lake Group sediments', 'Jurassic–Cretaceous'),
+    bandPolygon(-2.2, 0.4, 1, 'Hazelton Group volcanics', 'Jurassic'),
+    bandPolygon(0.4, 2.6, 2, 'Stuhini Group volcaniclastics', 'Triassic'),
+    bandPolygon(2.6, 9, 3, 'Stikine assemblage', 'Paleozoic'),
+    { ...ellipsePolygon(2.1, 0.9, 1.05, 0.8, 20, 'Intrusive stock'), properties: { Unit: 'Granodiorite intrusion', Age: 'Jurassic' } },
+  ],
+};
+
+// ── Neighbouring ground for the regional map: two other operators' blocks
+// and the district town, so the property reads in context.
+const block = (x0, y0, x1, y1, props) => ({
+  type: 'Feature', properties: props,
+  geometry: { type: 'Polygon', coordinates: [[toLngLat(x0, y0), toLngLat(x1, y0), toLngLat(x1, y1), toLngLat(x0, y1), toLngLat(x0, y0)]] },
+});
+export const auroraNeighbours = {
+  type: 'FeatureCollection',
+  features: [
+    block(5.5, 1.5, 11.5, 6.5, { Name: 'Kispiox Gold Property', Owner: 'Kispiox Gold Corp.' }),
+    block(-12.5, -7.5, -6.0, -2.0, { Name: 'Skeena West Claims', Owner: 'Skeena West Resources' }),
+    block(2.0, -12.0, 8.5, -7.0, { Name: 'Bulkley Silver Property', Owner: 'Bulkley Silver Ltd.' }),
+  ],
+};
+export const auroraTown = {
+  type: 'FeatureCollection',
+  features: [{ type: 'Feature', properties: { Name: 'Hazelton', Type: 'Town' }, geometry: { type: 'Point', coordinates: toLngLat(9.5, -10.5) } }],
+};
+export const auroraHighway = {
+  type: 'FeatureCollection',
+  features: [lineFeature([[-14, -13.5], [-6, -12.6], [1, -12.2], [7.5, -11.0], [9.5, -10.5], [14, -8.5]], { Name: 'Highway 16', Type: 'Highway' })],
+};

@@ -2712,6 +2712,22 @@ export default function App({ initialAction = null }) {
     saveCoordRef.current.switchWorkspace();
     resetHistory();
     setProject(createInitialProjectState());
+    // A demo is its own, unowned workspace. It used to keep the id and name of
+    // whatever project was open, so the autosave that followed wrote the demo
+    // over that project's draft — and Save wrote it over the cloud copy —
+    // which is why "my project" kept opening as Cedar Ridge.
+    setProjectId(null);
+    setProjectName('Untitled map');
+    projectRevisionRef.current = null;
+    setSelectedLayerId(null);
+    setSelectedCalloutId(null);
+    setSelectedFeature(null);
+    setSelectedMarkerId(null);
+    setSelectedEllipseId(null);
+    setAnnotationTool(null);
+    setShowRecentProjects(false);
+    clearActiveProjectContext();
+    lastSavedSnapshotRef.current = null;
     try {
       const preset = styleId ? (SAMPLE_STYLE_PRESETS[styleId] || {}) : {};
       if (preset._aurora) {
@@ -2731,6 +2747,7 @@ export default function App({ initialAction = null }) {
       await addGeoJSONAsLayer(sampleDrillholes, 'Sample Drillholes.geojson', 'demo');
       const accent = preset.accent || SAMPLE_ACCENT;
       const { accent: _a, _aurora, ...styleOverride } = preset;
+      setProjectName('Buckhorn Creek Property');
       updateLayout({
         logo: SAMPLE_LOGO_URL,
         accentColor: accent,
@@ -2760,14 +2777,18 @@ export default function App({ initialAction = null }) {
     setProject((prev) => ({
       ...prev,
       layers: prev.layers.map((layer) => {
-        const r = recipe.layers.find((x) => x.role === layer.role);
+        // By file name: a recipe can carry two point files (collars and a
+        // soil grid) that the importer would give the same role.
+        const r = recipe.layers.find((x) => x.name === layer.sourceName) || recipe.layers.find((x) => x.role === layer.role);
         if (!r) return layer;
         return {
           ...layer,
+          role: r.role ?? layer.role,
           displayName: r.displayName ?? layer.displayName,
           visible: r.visible ?? layer.visible,
           style: { ...layer.style, ...(r.style || {}) },
           legend: r.legend ?? layer.legend,
+          ...(r.classification ? { classification: r.classification } : {}),
           userStyled: true,
         };
       }),
@@ -2777,7 +2798,9 @@ export default function App({ initialAction = null }) {
         featureId: null,
         layerId: null,
       })),
+      distanceLines: (recipe.distanceLines || []).map((line) => ({ ...line, id: crypto.randomUUID() })),
     }));
+    setProjectName(recipe.title);
     updateLayout({
       logo: AURORA_LOGO_URL,
       title: recipe.title,
@@ -2833,6 +2856,7 @@ export default function App({ initialAction = null }) {
         layerId: null,
       })),
     }));
+    setProjectName('Cedar Ridge Project');
     updateLayout({
       logo: AURORA_LOGO_URL,
       accentColor: AURORA_ACCENT,

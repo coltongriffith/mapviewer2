@@ -185,3 +185,17 @@ export function visibleGeojson(layer) {
   if (visible.length === features.length) return layer.geojson;
   return { ...layer.geojson, type: 'FeatureCollection', features: visible };
 }
+
+/**
+ * What a layer draws as, for a legend swatch: 'points', 'line' or
+ * 'polygon'. The importer only tells points from everything else, so a road
+ * file used to earn a polygon swatch.
+ */
+export function layerGeometryKind(layer) {
+  if (layer?.type === 'points') return 'points';
+  const first = layerFeatures(layer).find((f) => f?.geometry?.type && !f?.properties?._trace);
+  const t = String(first?.geometry?.type || '');
+  if (t.includes('Point')) return 'points';
+  if (t.includes('Line')) return 'line';
+  return layer?.type === 'line' ? 'line' : 'polygon';
+}
