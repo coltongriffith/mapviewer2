@@ -42,7 +42,7 @@ Legend: **Yes** = works as needed Â· **Partial** = reachable with a workaround Â
 | Hand-pit classes as squares (4 to 6 classes) | No | Same gap; square marker shape exists per layer |
 | Crossed-hammers "Discovery Zone" symbol | Partial | Custom icon upload per point layer works on the map (`src/App.jsx:5080-5105`), but the legend swatch ignores it and shows a circle |
 | Drill collars | Yes | Point layer with `drillhole` marker shape |
-| Drill traces (surface projection from azimuth/dip/length) | No | Azimuth and dip are mapped on CSV import but never read; only `Point` geometry is emitted (`src/utils/importers.js:418-437`) |
+| Drill traces (surface projection from azimuth/dip/length) | No | The column mapper offers azimuth and dip but discards them when it builds the mapping (`src/components/ColumnMapperModal.jsx:47-52`); `loadCSV` guesses only x/y/id/elev; there is no length role; only `Point` geometry is emitted (`src/utils/importers.js:418-437`) |
 | Intercept callouts (bold hole ID + 1 to 3 result lines, white rounded box, leader) | Partial | Boxed callout has title + one subtext line, leader without arrowhead (`src/components/CalloutsOverlay.jsx`) |
 | Black banner callouts ("Untested Strike-Length >1.5km") | Yes | Boxed callout with custom `background` and `textColor` |
 | Strike-length bracket line | Partial | Distance line has endpoint dots and a forced length label; no plain bracket |
@@ -53,7 +53,8 @@ Legend: **Yes** = works as needed Â· **Partial** = reachable with a workaround Â
 | Right-hand panel with logo, title, legend, scale bar | Yes | `side_panel` template |
 | Projection/datum text (`NAD83 - Z07N`) in the panel | No | `layout.projectionName` is displayed only by the NI 43-101 title strip (`src/templates/technicalReportTemplate.js:357`); footer text is the workaround |
 | UTM coordinate frame with edge ticks and labels | Partial | Exists, but gated to `ni_43101_technical` in the editor and both exporters (`src/App.jsx:6490`, `src/export/renderScene.js:1828,2494`) and cannot be combined with the side panel |
-| North arrow, scale bar with two labelled steps | Yes | `ScaleBar.jsx` shows one nice-number label; the figures show a two-step bar (2.5 / 5 km) |
+| North arrow | Yes | `NorthArrow.jsx` |
+| Scale bar with two labelled steps (2.5 / 5 km) | Partial | `ScaleBar.jsx` draws a single bar with one nice-number label |
 | Crisp export of the raster base | Partial | Exporter upscales on-screen 256px tiles rather than fetching at export zoom (`src/export/renderScene.js:99-146,1905-1920`) |
 | SVG export of the side panel | Partial | Panel elements export but the rail background does not (`renderScene.js:2494-2527`) |
 
@@ -105,10 +106,12 @@ Legend: **Yes** = works as needed Â· **Partial** = reachable with a workaround Â
    projection/datum text element to the side panel, and replace the three
    duplicated hand-rolled Transverse Mercator implementations with proj4 so
    NAD83 zones label correctly and cross-zone maps do not drift.
-7. **Drill traces** (medium). Build a `LineString` surface projection from
-   collar, azimuth, dip, and length at import (columns are already mapped),
-   render collar plus trace as one layer, and allow multi-line intercept
-   subtext in callouts.
+7. **Drill traces** (medium). Add azimuth, dip, and length roles end to end:
+   `loadCSV` detection, the column mapper (which currently drops its
+   azimuth/dip picks), and normalised `_azimuth`/`_dip`/`_length` properties
+   from `csvToGeoJSON`. Then build a `LineString` surface projection from
+   collar, azimuth, dip, and length, render collar plus trace as one layer,
+   and allow multi-line intercept subtext in callouts.
 8. **Annotation polish** (small). Multi-line callout body, a "banner" callout
    preset (black box, white bold text), a bracket line with end ticks and no
    label, and optional arrowheads on leaders.
