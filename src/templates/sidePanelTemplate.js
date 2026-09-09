@@ -1,4 +1,5 @@
 import { hasVisibleFeatures } from '../utils/featureIdentity.js';
+import { legendRowCount } from '../utils/legendCustomization.js';
 
 const SIDEBAR_FRAC = 0.28;
 
@@ -13,19 +14,17 @@ const SIDEBAR_FRAC = 0.28;
  */
 export const DEFAULT_SIDE_PANEL_GRID = ['logo', 'title', 'legend', 'inset', 'footer'];
 
-function legendHeightFor(layout, itemCount) {
+function legendHeightFor(layout, rowCount) {
   const lfs = layout?.legendFontScale ?? 1;
   // Row pitch and chrome measured against what the legend card actually
   // renders (title + 12px rule + 10px gaps + 14px padding top and bottom).
   // The old numbers were a few pixels short per row, so a four-entry legend
   // clipped its last line in the rail and in the export alike.
   const rowH = Math.round(30 * lfs);
-  // No group allowance: nothing renders legend group headings — not the stage
-  // (renderLegendGroups returns a single unheaded group) and not either
-  // exporter. Reserving a row per group padded every legend panel with dead
-  // space in the preview and in the export alike. If headings come back, the
-  // allowance comes back with them.
-  return Math.max(60, Math.min(400, 58 + itemCount * rowH));
+  // rowCount already includes one row per group heading when headings are
+  // on (legendRowCount), and nothing extra when they are off — a reserved
+  // row per group used to pad every legend with dead space.
+  return Math.max(60, Math.min(400, 58 + rowCount * rowH));
 }
 
 export const sidePanelTemplate = {
@@ -84,10 +83,9 @@ export function resolveSidePanelZones(template, layout, mapSize, legendItems) {
 
   // --- Element heights ---
   const resolvedItems = legendItems || layout?.legendItems || [];
-  const itemCount = resolvedItems.length;
   const legendHeight = layout?.legendHeightPx != null
     ? Math.max(60, Math.min(H - 320, layout.legendHeightPx))
-    : legendHeightFor(layout, itemCount);
+    : legendHeightFor(layout, legendRowCount(resolvedItems, layout));
 
   const titleHeight = Math.max(72, Math.min(180, layout?.titleHeightPx ?? 108));
   const logoScale = Math.max(0.7, Math.min(1.2, Number(layout?.logoScale || 1)));

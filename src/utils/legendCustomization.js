@@ -87,26 +87,87 @@ export function customLegendItem(custom) {
   };
 }
 
+export const DEFAULT_LEGEND_GROUP = 'Map Data';
+
 // Applied to the FINAL assembled list, after layer entries, overlay entries and
 // nearby-claim entries have all been gathered — so every row the reader sees can
-// be renamed or removed, not just the ones that came from a file.
+// be renamed, regrouped, reordered or removed, not just the ones that came from
+// a file.
+//
+//   layout.legendOverrides[id].group   the heading an entry sits under
+//   layout.legendOrder                 entry ids in display order
+//   layout.legendGrouped               whether headings are drawn at all
 export function applyLegendCustomization(items, layout = {}) {
   const overrides = layout?.legendOverrides || {};
+  const regroup = (item) => {
+    const group = overrides[item?.id]?.group;
+    return group && group.trim() ? { ...item, group: group.trim() } : item;
+  };
   const kept = (items || [])
     .filter((item) => !overrides[item?.id]?.hidden)
     .map((item) => {
       const label = overrides[item?.id]?.label;
       // An empty or blank override is not a rename to nothing — it means the
       // user cleared the box, and the derived name is the sensible fallback.
-      return label && label.trim() ? { ...item, label: label.trim() } : item;
+      return regroup(label && label.trim() ? { ...item, label: label.trim() } : item);
     });
   const custom = (layout?.legendCustomItems || [])
     .filter((entry) => entry && entry.id && !overrides[entry.id]?.hidden)
-    .map((entry) => customLegendItem({
+    .map((entry) => regroup(customLegendItem({
       ...entry,
       label: overrides[entry.id]?.label?.trim() || entry.label,
-    }));
-  return [...kept, ...custom];
+    })));
+  return orderLegendItems([...kept, ...custom], layout?.legendOrder);
+}
+
+// A stored order is a list of ids. Entries it names come first, in that
+// order; anything it does not know about (a layer added since) keeps its
+// derived position after them, so a new layer never vanishes into a stale
+// order and an order never has to be rebuilt by hand.
+export function orderLegendItems(items, order) {
+  if (!Array.isArray(order) || !order.length) return items;
+  const rank = new Map(order.map((id, i) => [id, i]));
+  return items
+    .map((item, i) => ({ item, i, r: rank.has(item?.id) ? rank.get(item.id) : order.length + i }))
+    .sort((a, b) => a.r - b.r)
+    .map(({ item }) => item);
+}
+
+// The full display order with one entry moved a step: what the editor stores
+// as legendOrder after an up/down click. Works from the ids as currently
+// shown, so the first move on an unordered legend keeps everything else put.
+export function moveLegendItem(orderedIds, id, direction) {
+  const ids = [...orderedIds];
+  const i = ids.indexOf(id);
+  const j = direction === 'up' ? i - 1 : i + 1;
+  if (i < 0 || j < 0 || j >= ids.length) return ids;
+  [ids[i], ids[j]] = [ids[j], ids[i]];
+  return ids;
+}
+
+// Rows under headings, in first-appearance order — or one unheaded group when
+// headings are off, which is the default: every map saved before this existed
+// keeps its exact legend. Every renderer (editor, shared page, PNG, SVG) walks
+// this, so a heading cannot show on screen and be missing from the file.
+export function groupLegendItems(items, layout = {}) {
+  const list = items || [];
+  if (!layout?.legendGrouped) return [{ heading: null, items: list }];
+  const groups = new Map();
+  for (const item of list) {
+    const heading = (item?.group && String(item.group).trim()) || DEFAULT_LEGEND_GROUP;
+    if (!groups.has(heading)) groups.set(heading, []);
+    groups.get(heading).push(item);
+  }
+  return [...groups.entries()].map(([heading, rows]) => ({ heading, items: rows }));
+}
+
+// How many rows the legend panel needs: one per entry, plus one per heading
+// when headings are on. The templates size the panel from this, so a grouped
+// legend does not clip its last entry.
+export function legendRowCount(items, layout = {}) {
+  const groups = groupLegendItems(items, layout);
+  const headings = groups.filter((g) => g.heading).length;
+  return (items || []).length + headings;
 }
 
 export function nextCustomLegendId(existing = []) {

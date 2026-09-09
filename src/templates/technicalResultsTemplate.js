@@ -1,4 +1,5 @@
 import { ROLE_LABELS, POINT_ROLES } from '../projectState';
+import { legendRowCount } from '../utils/legendCustomization.js';
 import { hasVisibleFeatures } from '../utils/featureIdentity.js';
 import { getCornerLayout } from '../utils/cornerLayout';
 
@@ -96,11 +97,8 @@ function legendHeightFor(layout, itemCount) {
   const mode = layout?.legendMode || 'auto';
   const compact = mode === 'compact' || (mode === 'auto' && itemCount <= 2);
   if (!itemCount) return 0;
-  // No group allowance: nothing renders legend group headings — not the stage
-  // (renderLegendGroups returns a single unheaded group) and not either
-  // exporter. Reserving a row per group padded every legend panel with dead
-  // space in the preview and in the export alike. If headings come back, the
-  // allowance comes back with them.
+  // itemCount includes one row per group heading when headings are on
+  // (legendRowCount), and nothing extra when they are off.
   // Chrome (card padding + legend title + rule) plus the real row pitch the
   // legend list renders at — a few pixels short per row clipped the last entry.
   if (compact) return Math.max(84, Math.min(360, 48 + itemCount * 26));
@@ -132,10 +130,9 @@ export function resolveTemplateZones(template, layout, mapSize, legendItems) {
   const titleHeight = Math.max(60, Math.min(180, layout?.titleHeightPx ?? 92));
 
   const resolvedLegendItems = legendItems || layout?.legendItems || [];
-  const legendCount = resolvedLegendItems.length;
   const legendHeight = layout?.legendHeightPx != null
     ? Math.max(60, Math.min(500, layout.legendHeightPx))
-    : legendHeightFor(layout, legendCount);
+    : legendHeightFor(layout, legendRowCount(resolvedLegendItems, layout));
   const legendWidth = Math.max(180, Math.min(480, layout?.legendWidthPx ?? 300));
   const logoScale = Math.max(0.7, Math.min(1.2, Number(layout?.logoScale || 1)));
   const insetScale = Math.max(0.8, Math.min(1.2, Number(layout?.insetScale || 1)));

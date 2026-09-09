@@ -275,3 +275,72 @@ describe('nextCustomLegendId', () => {
     expect(nextCustomLegendId([])).toBe('custom-1');
   });
 });
+
+// ── Headings and order ───────────────────────────────────────────────────────
+//
+// Entries carried a `group` from the day the legend was built, and every
+// renderer threw it away. A technical figure reads "Mineral Tenure / Bedrock
+// Geology / Soil Geochemistry" as three sections, so the headings are back —
+// off by default, so a saved map keeps its exact legend until someone asks.
+
+import {
+  groupLegendItems, orderLegendItems, moveLegendItem, legendRowCount, DEFAULT_LEGEND_GROUP,
+} from '../src/utils/legendCustomization.js';
+
+const grouped = [
+  { id: 'a', label: 'Property', group: 'Mineral Tenure', type: 'polygon', style: {} },
+  { id: 'b', label: 'Finlayson', group: 'Bedrock Geology', type: 'polygon', style: {} },
+  { id: 'c', label: 'Discovery Zone', group: 'Project Areas', type: 'points', style: {} },
+  { id: 'd', label: 'Snowcap', group: 'Bedrock Geology', type: 'polygon', style: {} },
+  { id: 'e', label: 'No group', type: 'line', style: {} },
+];
+
+describe('groupLegendItems', () => {
+  it('is one unheaded group unless headings are switched on', () => {
+    expect(groupLegendItems(grouped, {})).toEqual([{ heading: null, items: grouped }]);
+    expect(groupLegendItems(grouped, { legendGrouped: false })).toEqual([{ heading: null, items: grouped }]);
+  });
+
+  it('gathers entries under their heading in first-appearance order', () => {
+    const out = groupLegendItems(grouped, { legendGrouped: true });
+    expect(out.map((g) => g.heading)).toEqual(['Mineral Tenure', 'Bedrock Geology', 'Project Areas', DEFAULT_LEGEND_GROUP]);
+    expect(out[1].items.map((i) => i.id)).toEqual(['b', 'd']);
+  });
+
+  it('counts a row per heading only when headings are on', () => {
+    expect(legendRowCount(grouped, {})).toBe(5);
+    expect(legendRowCount(grouped, { legendGrouped: true })).toBe(9);
+  });
+});
+
+describe('regrouping and reordering', () => {
+  it('renames the heading an entry sits under', () => {
+    const out = applyLegendCustomization(grouped, { legendOverrides: { e: { group: 'Reference' } } });
+    expect(out.find((i) => i.id === 'e').group).toBe('Reference');
+    // A cleared box is not a rename to nothing.
+    const cleared = applyLegendCustomization(grouped, { legendOverrides: { a: { group: '  ' } } });
+    expect(cleared.find((i) => i.id === 'a').group).toBe('Mineral Tenure');
+  });
+
+  it('puts named ids first and leaves the rest in derived order', () => {
+    expect(orderLegendItems(grouped, ['c', 'a']).map((i) => i.id)).toEqual(['c', 'a', 'b', 'd', 'e']);
+    expect(orderLegendItems(grouped, []).map((i) => i.id)).toEqual(['a', 'b', 'c', 'd', 'e']);
+    // An id for a layer that has since been deleted is inert.
+    expect(orderLegendItems(grouped, ['gone', 'e']).map((i) => i.id)).toEqual(['e', 'a', 'b', 'c', 'd']);
+  });
+
+  it('orders custom entries alongside derived ones', () => {
+    const out = applyLegendCustomization(grouped, {
+      legendCustomItems: [{ id: 'custom-1', label: 'Mill site', symbol: 'square', color: '#000000' }],
+      legendOrder: ['custom-1', 'a'],
+    });
+    expect(out.map((i) => i.id).slice(0, 2)).toEqual(['custom-1', 'a']);
+  });
+
+  it('moves one entry a single step and clamps at the ends', () => {
+    expect(moveLegendItem(['a', 'b', 'c'], 'c', 'up')).toEqual(['a', 'c', 'b']);
+    expect(moveLegendItem(['a', 'b', 'c'], 'a', 'up')).toEqual(['a', 'b', 'c']);
+    expect(moveLegendItem(['a', 'b', 'c'], 'c', 'down')).toEqual(['a', 'b', 'c']);
+    expect(moveLegendItem(['a', 'b', 'c'], 'zz', 'down')).toEqual(['a', 'b', 'c']);
+  });
+});

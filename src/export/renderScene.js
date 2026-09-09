@@ -15,6 +15,7 @@ import { exportCreditLines } from '../utils/claimProvenance';
 import { referenceOverlayCredits } from '../utils/referenceOverlayCredits.js';
 import { featureKey, visibleGeojson } from '../utils/featureIdentity.js';
 import { getFeatureStyle as resolveFeatureStyle } from '../utils/featureStyle.js';
+import { groupLegendItems } from '../utils/legendCustomization.js';
 
 let _exportWarnings = [];
 export function getExportWarnings() { return _exportWarnings; }
@@ -472,10 +473,6 @@ function drawTitleBlockCanvas(ctx, scene, scale) {
   ctx.restore();
 }
 
-function groupLegendItems(items) {
-  return [{ heading: null, items }];
-}
-
 function pushRoundedClip(svgDefs, x, y, w, h, r) {
   const id = `em-clip-${svgDefs.length}`;
   svgDefs.push(`<clipPath id="${id}"><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${r}" /></clipPath>`);
@@ -512,13 +509,23 @@ export function baselineFromTop(topY, fontSize) { return topY + fontSize * TEXT_
 // in one renderer and not the other.
 const LEGEND_ROW = {
   markerCentreY: 9, lineY: 8, swatchY: 2, swatchW: 18, swatchH: 12, labelCentreY: 9, labelX: 30,
+  // Pitch of an entry row and of a group heading row, in composition px.
+  pitch: 24, headingPitch: 20, headingFont: 11,
 };
+function legendDash(style, scale) {
+  return String(style?.dashArray || '').split(/[ ,]+/).filter(Boolean)
+    .map((d) => Number(d) * scale).filter((d) => Number.isFinite(d) && d > 0);
+}
 
 export function legendSwatchSvg(item, x, rowY, scale) {
   const style = item.style || {};
   if (item.type === 'points') {
     const shape = item.markerShape || style.markerShape || 'circle';
     const cx = x + 8 * scale; const cy = rowY + LEGEND_ROW.markerCentreY * scale; const r = 5 * scale;
+    if (style.customMarkerDataUri) {
+      const s = r * 2 * 1.4;
+      return `<image href="${escapeXml(style.customMarkerDataUri)}" x="${(cx - s / 2).toFixed(2)}" y="${(cy - s / 2).toFixed(2)}" width="${s.toFixed(2)}" height="${s.toFixed(2)}" preserveAspectRatio="xMidYMid meet" />`;
+    }
     const fill = safeColor(style.markerFill || style.markerColor, '#ffffff');
     const stroke = safeColor(style.markerColor, '#111111');
     const sw = Math.max(1, scale).toFixed(2);
@@ -533,9 +540,30 @@ export function legendSwatchSvg(item, x, rowY, scale) {
       .map((d) => Number(d) * scale).filter((d) => Number.isFinite(d));
     return `<line x1="${x.toFixed(2)}" y1="${lineY}" x2="${(x + LEGEND_ROW.swatchW * scale).toFixed(2)}" y2="${lineY}" stroke="${safeColor(style.stroke, '#3b82f6')}" stroke-width="${Math.max(scale, (style.strokeWidth ?? 2) * 0.6 * scale).toFixed(2)}" stroke-dasharray="${dash.join(' ')}" />`;
   }
-  return `<rect x="${x.toFixed(2)}" y="${(rowY + LEGEND_ROW.swatchY * scale).toFixed(2)}" width="${(LEGEND_ROW.swatchW * scale).toFixed(2)}" height="${(LEGEND_ROW.swatchH * scale).toFixed(2)}" fill="${safeColor(style.fill, '#93c5fd')}" fill-opacity="${style.fillOpacity ?? 0.22}" stroke="${safeColor(style.stroke, '#3b82f6')}" stroke-width="${Math.max(1, scale).toFixed(2)}" />`;
+  // A dashed layer gets a dashed swatch border here as it does in the editor;
+  // the exporters used to draw it solid, so the file disagreed with the preview.
+  const rectDash = legendDash(style, scale * 0.5);
+  const dashAttr = rectDash.length ? ` stroke-dasharray="${rectDash.join(' ')}"` : '';
+  return `<rect x="${x.toFixed(2)}" y="${(rowY + LEGEND_ROW.swatchY * scale).toFixed(2)}" width="${(LEGEND_ROW.swatchW * scale).toFixed(2)}" height="${(LEGEND_ROW.swatchH * scale).toFixed(2)}" fill="${safeColor(style.fill, '#93c5fd')}" fill-opacity="${style.fillOpacity ?? 0.22}" stroke="${safeColor(style.stroke, '#3b82f6')}" stroke-width="${Math.max(1, scale).toFixed(2)}"${dashAttr} />`;
 }
-function drawLegendCanvas(ctx, scene, scale) {
+// Where each legend row and heading sits, walked identically by the canvas
+// and the SVG so the two cannot disagree about a heading's height.
+function legendRowLayout(items, layout, y, scale) {
+  const rows = [];
+  let rowY = y + 40 * scale;
+  groupLegendItems(items, layout).forEach((group) => {
+    if (group.heading) {
+      rows.push({ heading: group.heading, y: rowY });
+      rowY += LEGEND_ROW.headingPitch * scale;
+    }
+    group.items.forEach((item) => {
+      rows.push({ item, y: rowY });
+      rowY += LEGEND_ROW.pitch * scale;
+    });
+  });
+  return rows;
+}
+async function drawLegendCanvas(ctx, scene, scale) {
   if (scene.project.layout?.showLegend === false) return;
   const theme = getTheme(scene);
   const legendFont = `${scene.project.layout?.fonts?.legend || 'Inter'}, Arial, sans-serif`;
@@ -550,13 +578,32 @@ function drawLegendCanvas(ctx, scene, scale) {
   ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
   ctx.fillStyle = theme.panelTitle; ctx.font = `700 ${15 * scale * lfs}px ${legendFont}`; ctx.textBaseline = 'top'; ctx.fillText(scene.project.layout?.legendTitle || 'Legend', x + leftPad * scale, y + 14 * scale);
   const lp = (theme.panelAccentLeft ? 20 : 16) * scale;
-  let rowY = y + 40 * scale;
-  groupLegendItems(items).forEach((group) => {
-    group.items.forEach((item) => {
+  // Uploaded icons are images and have to be loaded before they can be drawn;
+  // the vector pass keeps its own cache, but the legend runs after it.
+  const icons = new Map();
+  for (const item of items) {
+    const uri = item?.style?.customMarkerDataUri;
+    if (uri && !icons.has(uri)) icons.set(uri, await loadImage(uri).catch(() => null));
+  }
+  legendRowLayout(items, scene.project.layout, y, scale).forEach(({ heading, item, y: rowY }) => {
+    if (heading) {
+      ctx.fillStyle = theme.mutedText || theme.bodyText;
+      ctx.font = `700 ${LEGEND_ROW.headingFont * scale * lfs}px ${legendFont}`;
+      ctx.textBaseline = 'middle';
+      ctx.fillText(String(heading).toUpperCase(), x + lp, rowY + (LEGEND_ROW.headingPitch / 2) * scale);
+      return;
+    }
+    {
       if (item.type === 'points') {
         const shape = item.markerShape || item.style?.markerShape || 'circle';
         const cx = x + lp + 8 * scale; const cy = rowY + LEGEND_ROW.markerCentreY * scale; const r = 5 * scale;
+        const icon = icons.get(item.style?.customMarkerDataUri);
         ctx.save();
+        if (icon) {
+          const s = r * 2 * 1.4;
+          ctx.drawImage(icon, cx - s / 2, cy - s / 2, s, s);
+          ctx.restore();
+        } else {
         drawCanvasMarkerShape(ctx, shape, cx, cy, r);
         ctx.fillStyle = item.style.markerFill || item.style.markerColor || '#ffffff';
         ctx.fill();
@@ -564,6 +611,7 @@ function drawLegendCanvas(ctx, scene, scale) {
         ctx.lineWidth = Math.max(1, scale);
         ctx.stroke();
         ctx.restore();
+        }
       } else if (item.type === 'line') {
         ctx.save();
         ctx.strokeStyle = item.style.stroke || '#3b82f6';
@@ -577,10 +625,14 @@ function drawLegendCanvas(ctx, scene, scale) {
         ctx.restore();
       } else {
         const sy = rowY + LEGEND_ROW.swatchY * scale, sw = LEGEND_ROW.swatchW * scale, sh = LEGEND_ROW.swatchH * scale;
-        ctx.fillStyle = rgba(item.style.fill || '#93c5fd', item.style.fillOpacity ?? 0.22); ctx.fillRect(x + lp, sy, sw, sh); ctx.strokeStyle = item.style.stroke || '#3b82f6'; ctx.lineWidth = Math.max(1, scale); ctx.strokeRect(x + lp, sy, sw, sh);
+        ctx.save();
+        ctx.fillStyle = rgba(item.style.fill || '#93c5fd', item.style.fillOpacity ?? 0.22); ctx.fillRect(x + lp, sy, sw, sh); ctx.strokeStyle = item.style.stroke || '#3b82f6'; ctx.lineWidth = Math.max(1, scale);
+        ctx.setLineDash(legendDash(item.style, scale * 0.5));
+        ctx.strokeRect(x + lp, sy, sw, sh);
+        ctx.restore();
       }
-      ctx.fillStyle = theme.bodyText; ctx.font = `${13 * scale * lfs}px ${legendFont}`; ctx.textBaseline = 'middle'; ctx.fillText(item.label || 'Layer', x + lp + LEGEND_ROW.labelX * scale, rowY + LEGEND_ROW.labelCentreY * scale); rowY += 24 * scale;
-    });
+      ctx.fillStyle = theme.bodyText; ctx.font = `${13 * scale * lfs}px ${legendFont}`; ctx.textBaseline = 'middle'; ctx.fillText(item.label || 'Layer', x + lp + LEGEND_ROW.labelX * scale, rowY + LEGEND_ROW.labelCentreY * scale);
+    }
   });
   ctx.restore();
 }
@@ -1819,7 +1871,7 @@ export async function renderSceneToCanvas(scene, options = {}) {
   if (isSP) { drawSidebarPanelCanvas(ctx, scene, scale); }
   if (!isNI) { drawTitleBlockCanvas(ctx, scene, scale); drawFooterCanvas(ctx, scene, scale); }
   drawScaleBarCanvas(ctx, scene, scale);
-  drawLegendCanvas(ctx, scene, scale); drawNorthArrowCanvas(ctx, scene, scale); await drawInsetCanvas(ctx, scene, scale); await drawLogoCanvas(ctx, scene, scale);
+  await drawLegendCanvas(ctx, scene, scale); drawNorthArrowCanvas(ctx, scene, scale); await drawInsetCanvas(ctx, scene, scale); await drawLogoCanvas(ctx, scene, scale);
   if (isNI) { drawDistanceTicksCanvas(ctx, scene, scale); drawTitleStripCanvas(ctx, scene, scale); }
   const niFrame = isNI ? getNI43101MapFrame(scene, scale) : null;
   const wmX = niFrame ? niFrame.mapRight - 8 * scale : canvas.width - 8 * scale;
@@ -2248,8 +2300,10 @@ export function renderLegendSvg(scene, scale, svgDefs) {
   const legendFont = `${scene.project.layout?.fonts?.legend || 'Inter'}, Arial, sans-serif`;
   const lfs = scene.project.layout?.legendFontScale ?? 1;
   const lp = (theme.panelAccentLeft ? 20 : 16) * scale;
-  const rows = groupLegendItems(items).flatMap((group) => group.items).map((item, index) => {
-    const rowY = y + (40 + index * 24) * scale;
+  const rows = legendRowLayout(items, scene.project.layout, y, scale).map(({ heading, item, y: rowY }, index) => {
+    if (heading) {
+      return `<text class="em-legend-heading" x="${x + lp}" y="${rowY + (LEGEND_ROW.headingPitch / 2) * scale}" dominant-baseline="middle" fill="${theme.mutedText || theme.bodyText}" font-family="${legendFont}" font-size="${LEGEND_ROW.headingFont * scale * lfs}" font-weight="700">${escapeXml(String(heading).toUpperCase())}</text>`;
+    }
     // Canvas centres the label on the row; matching that with the same y and an
     // explicit middle baseline keeps the two in step at any legendFontScale.
     return `<g id="em-legend-item-${index}" class="em-legend-item">${legendSwatchSvg(item, x + lp, rowY, scale)}<text x="${x + lp + LEGEND_ROW.labelX * scale}" y="${rowY + LEGEND_ROW.labelCentreY * scale}" dominant-baseline="middle" fill="${theme.bodyText}" font-family="${legendFont}" font-size="${13 * scale * lfs}">${escapeXml(item.label || 'Layer')}</text></g>`;
