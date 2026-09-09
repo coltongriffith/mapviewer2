@@ -11,6 +11,8 @@ import { resolveNI43101Zones } from '../templates/technicalReportTemplate';
 import { resolveSidePanelZones } from '../templates/sidePanelTemplate';
 import { getThemeTokens } from '../utils/themeTokens';
 import { applyLegendCustomization, groupLegendItems } from '../utils/legendCustomization.js';
+import { getMapFrame, scaleBarHeight } from '../utils/coordinateFrame.js';
+import CoordinateFrameOverlay from './CoordinateFrameOverlay.jsx';
 import { MarkerSvgIcon } from '../utils/markerIcons.jsx';
 import { fitProjectToTemplate } from '../utils/frameMapForTemplate';
 
@@ -57,105 +59,6 @@ function LegendPointSwatch({ style }) {
     </span>
   );
 }
-
-// ── NI 43-101 UTM grid overlay helpers ───────────────────────────────────────
-
-function _haversineM(lat1, lng1, lat2, lng2) {
-  const R = 6371000;
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLng = (lng2 - lng1) * Math.PI / 180;
-  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-function _latlngToUTM(lat, lng) {
-  const zone = Math.floor((lng + 180) / 6) + 1;
-  const cm = (zone - 1) * 6 - 180 + 3;
-  const a = 6378137, f = 1 / 298.257223563;
-  const e2 = 2 * f - f * f;
-  const k0 = 0.9996;
-  const latR = lat * Math.PI / 180;
-  const dLng = (lng - cm) * Math.PI / 180;
-  const N = a / Math.sqrt(1 - e2 * Math.sin(latR) ** 2);
-  const T = Math.tan(latR) ** 2;
-  const C = e2 / (1 - e2) * Math.cos(latR) ** 2;
-  const A = dLng * Math.cos(latR);
-  const e1sq = e2 / (1 - e2);
-  const M = a * ((1 - e2/4 - 3*e2**2/64 - 5*e2**3/256) * latR - (3*e2/8 + 3*e2**2/32 + 45*e2**3/1024) * Math.sin(2*latR) + (15*e2**2/256 + 45*e2**3/1024) * Math.sin(4*latR) - (35*e2**3/3072) * Math.sin(6*latR));
-  const easting = k0 * N * (A + (1-T+C)*A**3/6 + (5-18*T+T**2+72*C-58*e1sq)*A**5/120) + 500000;
-  const northing = k0 * (M + N*Math.tan(latR)*(A**2/2 + (5-T+9*C+4*C**2)*A**4/24 + (61-58*T+T**2+600*C-330*e1sq)*A**6/720)) + (lat < 0 ? 10000000 : 0);
-  return { easting, northing, zone };
-}
-function _pickUTMInterval(totalM, count) {
-  const steps = [500, 1000, 2000, 5000, 10000, 25000, 50000, 100000];
-  const target = totalM / count;
-  return steps.find((s) => s >= target) || steps[steps.length - 1];
-}
-function _fmtUTMEasting(e) { const s = Math.round(e).toString().padStart(6, '0'); return s.slice(0, -3) + ' ' + s.slice(-3) + 'E'; }
-function _fmtUTMNorthing(n) { const s = Math.round(n).toString(); if (s.length <= 6) return s.slice(0, -3) + ' ' + s.slice(-3) + 'N'; return s.slice(0, -6) + ' ' + s.slice(-6, -3) + ' ' + s.slice(-3) + 'N'; }
-
-function NIMapOverlay({ map, mapSize, layout }) {
-  const [, setV] = useState(0);
-  useEffect(() => {
-    if (!map) return;
-    const bump = () => setV((v) => v + 1);
-    map.on('moveend zoomend', bump);
-    return () => map.off('moveend zoomend', bump);
-  }, [map]);
-
-  if (!map || !mapSize) return null;
-  const STRIP_H = 72, TICK_M = 28;
-  const stageW = mapSize.width || 1000, stageH = mapSize.height || 600;
-  const stripPos = layout.titleStripPosition || 'bottom';
-  const mapTop = TICK_M + (stripPos === 'top' ? STRIP_H : 0);
-  const mapBottom = stageH - TICK_M - (stripPos === 'bottom' ? STRIP_H : 0);
-  const mapLeft = TICK_M, mapRight = stageW - TICK_M;
-  const mapW = mapRight - mapLeft, mapH = mapBottom - mapTop;
-  const size = map.getSize();
-  if (!size || size.x === 0 || size.y === 0) return null;
-  const cy = size.y / 2, cx = size.x / 2;
-  const centerLL = map.getCenter();
-  const leftLL = map.containerPointToLatLng([0, cy]);
-  const rightLL = map.containerPointToLatLng([size.x, cy]);
-  const topLL = map.containerPointToLatLng([cx, 0]);
-  const botLL = map.containerPointToLatLng([cx, size.y]);
-  const totalW = _haversineM(leftLL.lat, leftLL.lng, rightLL.lat, rightLL.lng);
-  const totalH = _haversineM(topLL.lat, topLL.lng, botLL.lat, botLL.lng);
-  const xInt = _pickUTMInterval(totalW, 6), yInt = _pickUTMInterval(totalH, 5);
-  const centerUTM = _latlngToUTM(centerLL.lat, centerLL.lng);
-  const { zone } = centerUTM;
-  const cm = (zone - 1) * 6 - 180 + 3;
-  const a = 6378137, f = 1 / 298.257223563, e2 = 2 * f - f * f, k0 = 0.9996;
-  const refLatR = centerLL.lat * Math.PI / 180;
-  const N_ref = a / Math.sqrt(1 - e2 * Math.sin(refLatR) ** 2);
-  const topUTM = _latlngToUTM(topLL.lat, topLL.lng), botUTM = _latlngToUTM(botLL.lat, botLL.lng);
-  const monoFont = "'Courier New', Courier, monospace", fontSize = 9;
-  const xTicks = [];
-  const leftE_cz = 500000 + k0 * N_ref * Math.cos(refLatR) * (leftLL.lng - cm) * (Math.PI / 180);
-  const rightE_cz = 500000 + k0 * N_ref * Math.cos(refLatR) * (rightLL.lng - cm) * (Math.PI / 180);
-  const startE = Math.ceil(leftE_cz / xInt) * xInt;
-  for (let e = startE; e <= rightE_cz + xInt * 0.1; e += xInt) {
-    const dE = e - 500000;
-    const lng = cm + (dE / (k0 * N_ref * Math.cos(refLatR))) * (180 / Math.PI);
-    const pt = map.latLngToContainerPoint([centerLL.lat, lng]);
-    const px = Math.round(pt.x * (mapW / size.x)) + mapLeft;
-    if (px < mapLeft - 1 || px > mapRight + 1) continue;
-    const lbl = _fmtUTMEasting(e);
-    xTicks.push(<g key={e}><line x1={px} y1={mapTop} x2={px} y2={mapTop - 8} stroke="#000" strokeWidth="1" /><line x1={px} y1={mapBottom} x2={px} y2={mapBottom + 8} stroke="#000" strokeWidth="1" /><text x={px} y={mapTop - 10} textAnchor="middle" dominantBaseline="auto" fontFamily={monoFont} fontSize={fontSize} fill="#000">{lbl}</text><text x={px} y={mapBottom + 10} textAnchor="middle" dominantBaseline="hanging" fontFamily={monoFont} fontSize={fontSize} fill="#000">{lbl}</text></g>);
-  }
-  const yTicks = [];
-  const startN = Math.floor(topUTM.northing / yInt) * yInt;
-  for (let n = startN; n >= botUTM.northing - yInt * 0.1; n -= yInt) {
-    const lat = centerLL.lat + (n - centerUTM.northing) / 111132;
-    const pt = map.latLngToContainerPoint([lat, centerLL.lng]);
-    const py = Math.round(pt.y * (mapH / size.y)) + mapTop;
-    if (py < mapTop - 1 || py > mapBottom + 1) continue;
-    const lbl = _fmtUTMNorthing(n);
-    yTicks.push(<g key={n}><line x1={mapLeft} y1={py} x2={mapLeft - 8} y2={py} stroke="#000" strokeWidth="1" /><line x1={mapRight} y1={py} x2={mapRight + 8} y2={py} stroke="#000" strokeWidth="1" /><text textAnchor="middle" dominantBaseline="auto" fontFamily={monoFont} fontSize={fontSize} fill="#000" transform={`translate(${mapLeft - 10},${py}) rotate(-90)`}>{lbl}</text><text textAnchor="middle" dominantBaseline="auto" fontFamily={monoFont} fontSize={fontSize} fill="#000" transform={`translate(${mapRight + 10},${py}) rotate(90)`}>{lbl}</text></g>);
-  }
-  return <svg style={{ position: 'absolute', top: 0, left: 0, width: stageW, height: stageH, pointerEvents: 'none', zIndex: 391 }}>{xTicks}{yTicks}</svg>;
-}
-
-// ── Main component ────────────────────────────────────────────────────────────
 
 export default function ReadOnlyMapStage({ project }) {
   const containerRef = useRef(null);
@@ -269,8 +172,6 @@ export default function ReadOnlyMapStage({ project }) {
   const niStageH = mapSize?.height || 600;
   const niStageW = mapSize?.width || 1000;
   const niStripY = niStripPos === 'bottom' ? niStageH - STRIP_H : 0;
-  const niMapTop = 28 + (niStripPos === 'top' ? STRIP_H : 0);
-  const niMapBottom = niStageH - 28 - (niStripPos === 'bottom' ? STRIP_H : 0);
   const niFs = Math.max(0.7, Math.min(1.4, Number(layout.stripFontScale || 1)));
   const monoFont = "'Courier New', Courier, monospace";
 
@@ -335,6 +236,8 @@ export default function ReadOnlyMapStage({ project }) {
 
       <ShadeOverlay map={map} ellipses={project.ellipses || []} polygons={project.polygons || []} />
 
+      <CoordinateFrameOverlay map={map} frame={getMapFrame(layout, mapSize, { sidebarFrac: template?.sidebarFrac })} stage={mapSize} />
+
       {/* NI 43-101 template */}
       {layout.templateId === 'ni_43101_technical' && (() => {
         const scaleDisplay = layout.manualScaleDenom
@@ -345,11 +248,6 @@ export default function ReadOnlyMapStage({ project }) {
         })();
         return (
           <>
-            <div style={{ position: 'absolute', top: niMapTop, left: 0, width: 28, height: niMapBottom - niMapTop, background: '#fff', borderRight: '1.5px solid #000', zIndex: 390, pointerEvents: 'none' }} />
-            <div style={{ position: 'absolute', top: niMapTop, left: niStageW - 28, width: 28, height: niMapBottom - niMapTop, background: '#fff', borderLeft: '1.5px solid #000', zIndex: 390, pointerEvents: 'none' }} />
-            <div style={{ position: 'absolute', top: 0, left: 0, width: niStageW, height: niMapTop, background: '#fff', borderBottom: '1.5px solid #000', zIndex: 390, pointerEvents: 'none' }} />
-            <div style={{ position: 'absolute', top: niMapBottom, left: 0, width: niStageW, height: niStageH - niMapBottom - STRIP_H, background: '#fff', borderTop: '1.5px solid #000', zIndex: 390, pointerEvents: 'none' }} />
-            <NIMapOverlay map={map} mapSize={mapSize} layout={layout} />
             <div style={{ position: 'absolute', left: 0, top: niStripY, width: niStageW, height: STRIP_H, background: '#fff', border: '1.5px solid #000', boxSizing: 'border-box', zIndex: 410, display: 'flex', fontFamily: monoFont }}>
               <div style={{ flex: '0 0 45%', borderRight: '1px solid #000', padding: '6px 8px', overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
                 <div style={{ fontSize: 8 * niFs, fontWeight: 700, color: '#000', marginBottom: 2 }}>TITLE</div>
@@ -463,7 +361,7 @@ export default function ReadOnlyMapStage({ project }) {
       {/* Scale bar */}
       {layout.showScaleBar !== false && (
         <div className={`template-zone${layout.scaleBarTransparent ? ' panel--transparent' : ''}`} style={{ ...zoneStyle(resolvedZones.scaleBar), width: layout.scaleBarWidthPx || resolvedZones.scaleBar?.width }}>
-          <ScaleBar map={map} height={layout.scaleBarHeightPx ?? 48} />
+          <ScaleBar map={map} height={scaleBarHeight(layout)} projection={!!layout.showProjectionLabel} projectionName={layout.projectionName} />
         </div>
       )}
 

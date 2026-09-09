@@ -202,7 +202,7 @@ export function resolveNI43101Zones(template, layout, mapSize, legendItems) {
       case 'logo':       return [logoW, logoH];
       case 'inset':      return layout?.insetEnabled === false ? [0, 0] : [insetWidth, insetHeight];
       case 'northArrow': return [naW, naH];
-      case 'scaleBar':   return layout?.showScaleBar === false ? [0, 0] : [180, 60];
+      case 'scaleBar':   return layout?.showScaleBar === false ? [0, 0] : [180, 60 + (layout?.showProjectionLabel ? 16 : 0)];
       case 'legend':     return [legendWidth, legendHeight];
       default:           return [0, 0];
     }

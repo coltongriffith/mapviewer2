@@ -1,5 +1,6 @@
 import { ROLE_LABELS, POINT_ROLES } from '../projectState';
 import { legendRowCount } from '../utils/legendCustomization.js';
+import { TICK_MARGIN } from '../utils/coordinateFrame.js';
 import { hasVisibleFeatures } from '../utils/featureIdentity.js';
 import { getCornerLayout } from '../utils/cornerLayout';
 
@@ -124,6 +125,11 @@ export function resolveTemplateZones(template, layout, mapSize, legendItems) {
   const width = mapSize?.width || 1600;
   const height = mapSize?.height || 1000;
   const safe = { top: 22, right: 22, bottom: 22, left: 22, ...(layout?.safeMargins || {}) };
+  // With the coordinate frame on, the outer margin is white tick space:
+  // nothing may sit in it, so every card moves inward by that much.
+  if (layout?.showCoordinateFrame) {
+    safe.top += TICK_MARGIN; safe.bottom += TICK_MARGIN; safe.left += TICK_MARGIN; safe.right += TICK_MARGIN;
+  }
   const titleWidth = layout?.titleWidthPx
     ? Math.max(300, Math.min(800, layout.titleWidthPx))
     : Math.max(420, Math.min(Math.round(width * 0.42), layout?.titleWidth === 'wide' ? 620 : 560));
@@ -162,7 +168,7 @@ export function resolveTemplateZones(template, layout, mapSize, legendItems) {
       case 'logo':       return [logoW, logoH];
       case 'inset':      return layout?.insetEnabled === false ? [0, 0] : [insetWidth, insetHeight];
       case 'northArrow': return [naW, naH];
-      case 'scaleBar':   return [BASE_ZONES.scaleBar.width, BASE_ZONES.scaleBar.height];
+      case 'scaleBar':   return [BASE_ZONES.scaleBar.width, BASE_ZONES.scaleBar.height + (layout?.showProjectionLabel ? 16 : 0)];
       case 'legend':     return [legendWidth, legendHeight];
       default:           return [0, 0];
     }

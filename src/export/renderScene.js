@@ -16,6 +16,7 @@ import { referenceOverlayCredits } from '../utils/referenceOverlayCredits.js';
 import { featureKey, visibleGeojson } from '../utils/featureIdentity.js';
 import { getFeatureStyle as resolveFeatureStyle } from '../utils/featureStyle.js';
 import { groupLegendItems } from '../utils/legendCustomization.js';
+import { getMapFrame, scaleFrame, computeGridTicks, projectionLabel, haversineMeters, FRAME_FONT, FRAME_FONT_PX } from '../utils/coordinateFrame.js';
 
 let _exportWarnings = [];
 export function getExportWarnings() { return _exportWarnings; }
@@ -316,6 +317,15 @@ function getOverlayMetrics(scene) {
   return resolveTemplateZones(scene.template, scene.project.layout || {}, { width: scene.width, height: scene.height });
 }
 
+// The technical rail's white background, which the SVG never drew: its
+// elements exported in the right places, sitting on the basemap.
+function renderSidebarPanelSvg(scene, scale) {
+  if ((scene.template?.id || scene.project.layout?.templateId) !== 'side_panel') return '';
+  const sb = getOverlayMetrics(scene).sidebar;
+  if (!sb?.width) return '';
+  const theme = getTheme(scene);
+  return `<g id="em-sidebar"><rect x="${sb.left * scale}" y="${sb.top * scale}" width="${sb.width * scale}" height="${sb.height * scale}" fill="${theme.panelFill || '#ffffff'}" /><line x1="${sb.left * scale}" y1="0" x2="${sb.left * scale}" y2="${sb.height * scale}" stroke="${theme.panelBorder || '#d4deea'}" stroke-width="${1.5 * scale}" /></g>`;
+}
 function drawSidebarPanelCanvas(ctx, scene, scale) {
   if ((scene.template?.id || scene.project.layout?.templateId) !== 'side_panel') return;
   const zones = getOverlayMetrics(scene);
@@ -721,8 +731,10 @@ function drawScaleBarCanvas(ctx, scene, scale) {
   }
   // Center bar + label inside the panel (mirrors the editor's flex layout)
   const barH = 6 * scale, gap = 4 * scale, textH = 11 * scale;
+  const caption = scene.project.layout?.showProjectionLabel ? projectionLabel(scene.project.layout, scene.map) : '';
+  const capH = caption ? 13 * scale : 0;
   const barWidth = Math.min(scaleState.widthPx * scale, w - 24 * scale);
-  const startY = y + (h - (barH + gap + textH)) / 2;
+  const startY = y + (h - (barH + gap + textH + capH)) / 2;
   const barX = x + (w - barWidth) / 2;
   ctx.fillStyle = theme.scaleStroke; ctx.fillRect(barX, startY, barWidth / 2, barH);
   ctx.fillStyle = '#ffffff'; ctx.fillRect(barX + barWidth / 2, startY, barWidth / 2, barH);
@@ -735,6 +747,12 @@ function drawScaleBarCanvas(ctx, scene, scale) {
   }
   ctx.fillStyle = theme.bodyText;
   ctx.fillText(scaleState.label, x + w / 2, startY + barH + gap);
+  if (caption) {
+    ctx.font = `${9.5 * scale}px ${footerFont}`;
+    if (scaleTransparent) ctx.strokeText(caption, x + w / 2, startY + barH + gap + textH + 2 * scale);
+    ctx.fillStyle = theme.mutedText || theme.bodyText;
+    ctx.fillText(caption, x + w / 2, startY + barH + gap + textH + 2 * scale);
+  }
   ctx.textAlign = 'left';
 }
 
@@ -1404,70 +1422,16 @@ function drawPolygonsCanvas(ctx, scene, scale) {
 
 // ─── NI 43-101 Template helpers ────────────────────────────────────────────
 
-function haversineMeters(lat1, lng1, lat2, lng2) {
-  const R = 6371000;
-  const toRad = (d) => d * Math.PI / 180;
-  const dLat = toRad(lat2 - lat1);
-  const dLng = toRad(lng2 - lng1);
-  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+// The coordinate frame in export pixels, or null when this layout has none.
+// NI 43-101 always has one; any other template has one when the layout asks.
+function exportFrame(scene, scale) {
+  const f = scaleFrame(getMapFrame(scene.project.layout || {}, { width: scene.width, height: scene.height }, { sidebarFrac: scene.template?.sidebarFrac }), scale);
+  if (!f) return null;
+  return { mapLeft: f.left, mapTop: f.top, mapRight: f.right, mapBottom: f.bottom, area: f.area, frame: f };
 }
 
-function getNI43101MapFrame(scene, scale) {
-  const TICK_MARGIN = 28, STRIP_H = 72;
-  const stripPos = scene.project.layout?.titleStripPosition || 'bottom';
-  return {
-    mapLeft: TICK_MARGIN * scale,
-    mapTop: (TICK_MARGIN + (stripPos === 'top' ? STRIP_H : 0)) * scale,
-    mapRight: (scene.width - TICK_MARGIN) * scale,
-    mapBottom: (scene.height - TICK_MARGIN - (stripPos === 'bottom' ? STRIP_H : 0)) * scale,
-  };
-}
-
-// Shared with the editing stage so the SCALE cell reads the same in the
-// preview and in every export (src/utils/geo.js).
 function calcMapScaleDenom(scene) {
   return scaleDenomFromMap(scene.map);
-}
-
-function pickUTMInterval(totalMeters, targetTicks = 6) {
-  const steps = [500, 1000, 2000, 5000, 10000, 25000, 50000, 100000];
-  const target = totalMeters / targetTicks;
-  return steps.find((s) => s >= target) || steps[steps.length - 1];
-}
-
-function latlngToUTM(lat, lng) {
-  const zone = Math.floor((lng + 180) / 6) + 1;
-  const cm = (zone - 1) * 6 - 180 + 3;
-  const a = 6378137, f = 1 / 298.257223563;
-  const e2 = 2 * f - f * f;
-  const k0 = 0.9996;
-  const latR = lat * Math.PI / 180;
-  const dLng = (lng - cm) * Math.PI / 180;
-  const N = a / Math.sqrt(1 - e2 * Math.sin(latR) ** 2);
-  const T = Math.tan(latR) ** 2;
-  const C = e2 / (1 - e2) * Math.cos(latR) ** 2;
-  const A = dLng * Math.cos(latR);
-  const e1sq = e2 / (1 - e2);
-  const M = a * (
-    (1 - e2/4 - 3*e2**2/64 - 5*e2**3/256) * latR
-    - (3*e2/8 + 3*e2**2/32 + 45*e2**3/1024) * Math.sin(2*latR)
-    + (15*e2**2/256 + 45*e2**3/1024) * Math.sin(4*latR)
-    - (35*e2**3/3072) * Math.sin(6*latR));
-  const easting = k0 * N * (A + (1-T+C)*A**3/6 + (5-18*T+T**2+72*C-58*e1sq)*A**5/120) + 500000;
-  const northing = k0 * (M + N*Math.tan(latR)*(A**2/2 + (5-T+9*C+4*C**2)*A**4/24 + (61-58*T+T**2+600*C-330*e1sq)*A**6/720)) + (lat < 0 ? 10000000 : 0);
-  return { easting, northing, zone, hemisphere: lat >= 0 ? 'N' : 'S' };
-}
-
-function fmtUTMEasting(e) {
-  const s = Math.round(e).toString().padStart(6, '0');
-  return s.slice(0, -3) + ' ' + s.slice(-3) + 'E';
-}
-
-function fmtUTMNorthing(n) {
-  const s = Math.round(n).toString();
-  if (s.length <= 6) return s.slice(0, -3) + ' ' + s.slice(-3) + 'N';
-  return s.slice(0, -6) + ' ' + s.slice(-6, -3) + ' ' + s.slice(-3) + 'N';
 }
 
 function drawTitleStripCanvas(ctx, scene, scale) {
@@ -1627,72 +1591,29 @@ ${f.companyName ? `<text x="${cell2 + pad}" y="${valueY + 32 * scale}" font-fami
 }
 
 function drawDistanceTicksCanvas(ctx, scene, scale) {
-  const map = scene.map;
-  if (!map) return;
-  const frame = getNI43101MapFrame(scene, scale);
-  const { mapLeft, mapTop, mapRight, mapBottom } = frame;
-  const mapW = mapRight - mapLeft;
-  const mapH = mapBottom - mapTop;
+  const frame = exportFrame(scene, scale);
+  if (!scene.map || !frame) return;
+  const { mapLeft, mapTop, mapRight, mapBottom, area } = frame;
+  const ticks = computeGridTicks(scene.map, getMapFrame(scene.project.layout || {}, { width: scene.width, height: scene.height }, { sidebarFrac: scene.template?.sidebarFrac }), scale);
+  if (!ticks) return;
 
-  // Fill margin areas with white
-  const cw = Math.round(scene.width * scale);
-  const ch = Math.round(scene.height * scale);
+  // White tick margins inside the map area (never over a panel beside it).
   ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, mapLeft, ch);
-  ctx.fillRect(mapRight, 0, cw - mapRight, ch);
-  ctx.fillRect(mapLeft, 0, mapW, mapTop);
-  ctx.fillRect(mapLeft, mapBottom, mapW, ch - mapBottom);
-
-  // Map frame border
+  ctx.fillRect(area.left, area.top, area.right - area.left, mapTop - area.top);
+  ctx.fillRect(area.left, mapBottom, area.right - area.left, area.bottom - mapBottom);
+  ctx.fillRect(area.left, mapTop, mapLeft - area.left, mapBottom - mapTop);
+  ctx.fillRect(mapRight, mapTop, area.right - mapRight, mapBottom - mapTop);
   ctx.strokeStyle = '#000000';
   ctx.lineWidth = 1.5 * scale;
-  ctx.strokeRect(mapLeft, mapTop, mapW, mapH);
-
-  const size = map.getSize();
-  const centerY = size.y / 2;
-  const centerX = size.x / 2;
-
-  const centerLL = map.containerPointToLatLng([centerX, centerY]);
-  const leftLL = map.containerPointToLatLng([0, centerY]);
-  const rightLL = map.containerPointToLatLng([size.x, centerY]);
-  const topLL = map.containerPointToLatLng([centerX, 0]);
-  const botLL = map.containerPointToLatLng([centerX, size.y]);
-  const totalWidthM = haversineMeters(leftLL.lat, leftLL.lng, rightLL.lat, rightLL.lng);
-  const totalHeightM = haversineMeters(topLL.lat, topLL.lng, botLL.lat, botLL.lng);
-  const xInterval = pickUTMInterval(totalWidthM, 6);
-  const yInterval = pickUTMInterval(totalHeightM, 5);
-
-  // UTM parameters based on center zone
-  const centerUTM = latlngToUTM(centerLL.lat, centerLL.lng);
-  const { zone } = centerUTM;
-  const cm = (zone - 1) * 6 - 180 + 3;
-  const a = 6378137, f = 1 / 298.257223563;
-  const e2 = 2 * f - f * f;
-  const k0 = 0.9996;
-  const refLatR = centerLL.lat * Math.PI / 180;
-  const N_ref = a / Math.sqrt(1 - e2 * Math.sin(refLatR) ** 2);
-  const topUTM = latlngToUTM(topLL.lat, topLL.lng);
-  const botUTM = latlngToUTM(botLL.lat, botLL.lng);
+  ctx.strokeRect(mapLeft, mapTop, mapRight - mapLeft, mapBottom - mapTop);
 
   const tickLen = 10 * scale;
-  const monoFont = `'Courier New', Courier, monospace`;
   ctx.fillStyle = '#000000';
-  ctx.font = `${9 * scale}px ${monoFont}`;
+  ctx.font = `${FRAME_FONT_PX * scale}px ${FRAME_FONT}`;
   ctx.lineWidth = scale;
   ctx.strokeStyle = '#000000';
 
-  // X ticks: constant UTM easting lines (top and bottom)
-  const leftE_cz  = 500000 + k0 * N_ref * Math.cos(refLatR) * (leftLL.lng  - cm) * (Math.PI / 180);
-  const rightE_cz = 500000 + k0 * N_ref * Math.cos(refLatR) * (rightLL.lng - cm) * (Math.PI / 180);
-  const startE = Math.ceil(leftE_cz / xInterval) * xInterval;
-  for (let e = startE; e <= rightE_cz + xInterval * 0.1; e += xInterval) {
-    const dE = e - 500000;
-    const lng = cm + (dE / (k0 * N_ref * Math.cos(refLatR))) * (180 / Math.PI);
-    const pt = map.latLngToContainerPoint([centerLL.lat, lng]);
-    const px = pt.x * scale + mapLeft;
-    if (px < mapLeft - 1 || px > mapRight + 1) continue;
-    const label = fmtUTMEasting(e);
-
+  for (const { px, label } of ticks.x) {
     ctx.beginPath(); ctx.moveTo(px, mapTop); ctx.lineTo(px, mapTop - tickLen); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(px, mapBottom); ctx.lineTo(px, mapBottom + tickLen); ctx.stroke();
     ctx.textAlign = 'center';
@@ -1701,19 +1622,9 @@ function drawDistanceTicksCanvas(ctx, scene, scale) {
     ctx.textBaseline = 'top';
     ctx.fillText(label, px, mapBottom + tickLen + 2 * scale);
   }
-
-  // Y ticks: constant UTM northing lines (left and right, labels rotated 90°)
-  const startN = Math.floor(topUTM.northing / yInterval) * yInterval;
-  for (let n = startN; n >= botUTM.northing - yInterval * 0.1; n -= yInterval) {
-    const lat = centerLL.lat + (n - centerUTM.northing) / 111132;
-    const pt = map.latLngToContainerPoint([lat, centerLL.lng]);
-    const py = pt.y * scale + mapTop;
-    if (py < mapTop - 1 || py > mapBottom + 1) continue;
-    const label = fmtUTMNorthing(n);
-
+  for (const { py, label } of ticks.y) {
     ctx.beginPath(); ctx.moveTo(mapLeft, py); ctx.lineTo(mapLeft - tickLen, py); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(mapRight, py); ctx.lineTo(mapRight + tickLen, py); ctx.stroke();
-
     ctx.save();
     ctx.translate(mapLeft - tickLen - 2 * scale, py);
     ctx.rotate(-Math.PI / 2);
@@ -1721,7 +1632,6 @@ function drawDistanceTicksCanvas(ctx, scene, scale) {
     ctx.textBaseline = 'bottom';
     ctx.fillText(label, 0, 0);
     ctx.restore();
-
     ctx.save();
     ctx.translate(mapRight + tickLen + 2 * scale, py);
     ctx.rotate(Math.PI / 2);
@@ -1730,98 +1640,43 @@ function drawDistanceTicksCanvas(ctx, scene, scale) {
     ctx.fillText(label, 0, 0);
     ctx.restore();
   }
-
   ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
 }
 
 function renderDistanceTicksSvg(scene, scale) {
-  const map = scene.map;
-  if (!map) return '';
-  const frame = getNI43101MapFrame(scene, scale);
-  const { mapLeft, mapTop, mapRight, mapBottom } = frame;
-  const mapW = mapRight - mapLeft;
-  const mapH = mapBottom - mapTop;
-  const cw = Math.round(scene.width * scale);
-  const ch = Math.round(scene.height * scale);
-
-  const size = map.getSize();
-  const centerY = size.y / 2;
-  const centerX = size.x / 2;
-
-  const centerLL = map.containerPointToLatLng([centerX, centerY]);
-  const leftLL = map.containerPointToLatLng([0, centerY]);
-  const rightLL = map.containerPointToLatLng([size.x, centerY]);
-  const topLL = map.containerPointToLatLng([centerX, 0]);
-  const botLL = map.containerPointToLatLng([centerX, size.y]);
-  const totalWidthM = haversineMeters(leftLL.lat, leftLL.lng, rightLL.lat, rightLL.lng);
-  const totalHeightM = haversineMeters(topLL.lat, topLL.lng, botLL.lat, botLL.lng);
-  const xInterval = pickUTMInterval(totalWidthM, 6);
-  const yInterval = pickUTMInterval(totalHeightM, 5);
-
-  // UTM parameters based on center zone
-  const centerUTM = latlngToUTM(centerLL.lat, centerLL.lng);
-  const { zone } = centerUTM;
-  const cm = (zone - 1) * 6 - 180 + 3;
-  const a = 6378137, f = 1 / 298.257223563;
-  const e2 = 2 * f - f * f;
-  const k0 = 0.9996;
-  const refLatR = centerLL.lat * Math.PI / 180;
-  const N_ref = a / Math.sqrt(1 - e2 * Math.sin(refLatR) ** 2);
-  const topUTM = latlngToUTM(topLL.lat, topLL.lng);
-  const botUTM = latlngToUTM(botLL.lat, botLL.lng);
-
+  const frame = exportFrame(scene, scale);
+  if (!scene.map || !frame) return '';
+  const { mapLeft, mapTop, mapRight, mapBottom, area } = frame;
+  const ticks = computeGridTicks(scene.map, getMapFrame(scene.project.layout || {}, { width: scene.width, height: scene.height }, { sidebarFrac: scene.template?.sidebarFrac }), scale);
+  if (!ticks) return '';
   const tickLen = 10 * scale;
-  const monoFont = `'Courier New', Courier, monospace`;
-  const fontSize = 9 * scale;
-  const parts = [];
-
-  // White margin fills + map frame border
-  parts.push(
-    `<rect x="0" y="0" width="${mapLeft}" height="${ch}" fill="#ffffff" />`,
-    `<rect x="${mapRight}" y="0" width="${cw - mapRight}" height="${ch}" fill="#ffffff" />`,
-    `<rect x="${mapLeft}" y="0" width="${mapW}" height="${mapTop}" fill="#ffffff" />`,
-    `<rect x="${mapLeft}" y="${mapBottom}" width="${mapW}" height="${ch - mapBottom}" fill="#ffffff" />`,
-    `<rect x="${mapLeft}" y="${mapTop}" width="${mapW}" height="${mapH}" fill="none" stroke="#000000" stroke-width="${1.5 * scale}" />`,
-  );
-
-  // X ticks: constant UTM easting lines
-  const leftE_cz  = 500000 + k0 * N_ref * Math.cos(refLatR) * (leftLL.lng  - cm) * (Math.PI / 180);
-  const rightE_cz = 500000 + k0 * N_ref * Math.cos(refLatR) * (rightLL.lng - cm) * (Math.PI / 180);
-  const startE = Math.ceil(leftE_cz / xInterval) * xInterval;
-  for (let e = startE; e <= rightE_cz + xInterval * 0.1; e += xInterval) {
-    const dE = e - 500000;
-    const lng = cm + (dE / (k0 * N_ref * Math.cos(refLatR))) * (180 / Math.PI);
-    const pt = map.latLngToContainerPoint([centerLL.lat, lng]);
-    const px = pt.x * scale + mapLeft;
-    if (px < mapLeft - 1 || px > mapRight + 1) continue;
-    const label = escapeXml(fmtUTMEasting(e));
+  const fontSize = FRAME_FONT_PX * scale;
+  const t = (x, y, extra, label) => `<text x="${x}" y="${y}" text-anchor="middle" font-family="${FRAME_FONT}" font-size="${fontSize}" fill="#000"${extra}>${escapeXml(label)}</text>`;
+  const parts = [
+    `<rect x="${area.left}" y="${area.top}" width="${area.right - area.left}" height="${mapTop - area.top}" fill="#ffffff" />`,
+    `<rect x="${area.left}" y="${mapBottom}" width="${area.right - area.left}" height="${area.bottom - mapBottom}" fill="#ffffff" />`,
+    `<rect x="${area.left}" y="${mapTop}" width="${mapLeft - area.left}" height="${mapBottom - mapTop}" fill="#ffffff" />`,
+    `<rect x="${mapRight}" y="${mapTop}" width="${area.right - mapRight}" height="${mapBottom - mapTop}" fill="#ffffff" />`,
+    `<rect x="${mapLeft}" y="${mapTop}" width="${mapRight - mapLeft}" height="${mapBottom - mapTop}" fill="none" stroke="#000000" stroke-width="${1.5 * scale}" />`,
+  ];
+  for (const { px, label } of ticks.x) {
     parts.push(
       `<line x1="${px}" y1="${mapTop}" x2="${px}" y2="${mapTop - tickLen}" stroke="#000" stroke-width="${scale}" />`,
       `<line x1="${px}" y1="${mapBottom}" x2="${px}" y2="${mapBottom + tickLen}" stroke="#000" stroke-width="${scale}" />`,
-      `<text x="${px}" y="${mapTop - tickLen - 2 * scale}" text-anchor="middle" dominant-baseline="auto" font-family="${monoFont}" font-size="${fontSize}" fill="#000">${label}</text>`,
-      `<text x="${px}" y="${mapBottom + tickLen + 2 * scale}" text-anchor="middle" dominant-baseline="hanging" font-family="${monoFont}" font-size="${fontSize}" fill="#000">${label}</text>`,
+      t(px, mapTop - tickLen - 2 * scale, ' dominant-baseline="auto"', label),
+      t(px, mapBottom + tickLen + 2 * scale, ' dominant-baseline="hanging"', label),
     );
   }
-
-  // Y ticks: constant UTM northing lines (labels rotated 90° to fit margin)
-  const startN = Math.floor(topUTM.northing / yInterval) * yInterval;
-  for (let n = startN; n >= botUTM.northing - yInterval * 0.1; n -= yInterval) {
-    const lat = centerLL.lat + (n - centerUTM.northing) / 111132;
-    const pt = map.latLngToContainerPoint([lat, centerLL.lng]);
-    const py = pt.y * scale + mapTop;
-    if (py < mapTop - 1 || py > mapBottom + 1) continue;
-    const label = escapeXml(fmtUTMNorthing(n));
-    const lx = mapLeft - tickLen - 2 * scale;
-    const rx = mapRight + tickLen + 2 * scale;
+  for (const { py, label } of ticks.y) {
     parts.push(
       `<line x1="${mapLeft}" y1="${py}" x2="${mapLeft - tickLen}" y2="${py}" stroke="#000" stroke-width="${scale}" />`,
       `<line x1="${mapRight}" y1="${py}" x2="${mapRight + tickLen}" y2="${py}" stroke="#000" stroke-width="${scale}" />`,
-      `<text text-anchor="middle" dominant-baseline="auto" font-family="${monoFont}" font-size="${fontSize}" fill="#000" transform="translate(${lx},${py}) rotate(-90)">${label}</text>`,
-      `<text text-anchor="middle" dominant-baseline="auto" font-family="${monoFont}" font-size="${fontSize}" fill="#000" transform="translate(${rx},${py}) rotate(90)">${label}</text>`,
+      `<text text-anchor="middle" font-family="${FRAME_FONT}" font-size="${fontSize}" fill="#000" transform="translate(${mapLeft - tickLen - 2 * scale},${py}) rotate(-90)">${escapeXml(label)}</text>`,
+      `<text text-anchor="middle" font-family="${FRAME_FONT}" font-size="${fontSize}" fill="#000" transform="translate(${mapRight + tickLen + 2 * scale},${py}) rotate(90)">${escapeXml(label)}</text>`,
     );
   }
-
-  return `<g>${parts.join('')}</g>`;
+  return `<g id="em-coordinate-frame">${parts.join('')}</g>`;
 }
 
 function drawDistanceLinesCanvas(ctx, scene, scale) {
@@ -1872,8 +1727,9 @@ export async function renderSceneToCanvas(scene, options = {}) {
   if (!isNI) { drawTitleBlockCanvas(ctx, scene, scale); drawFooterCanvas(ctx, scene, scale); }
   drawScaleBarCanvas(ctx, scene, scale);
   await drawLegendCanvas(ctx, scene, scale); drawNorthArrowCanvas(ctx, scene, scale); await drawInsetCanvas(ctx, scene, scale); await drawLogoCanvas(ctx, scene, scale);
-  if (isNI) { drawDistanceTicksCanvas(ctx, scene, scale); drawTitleStripCanvas(ctx, scene, scale); }
-  const niFrame = isNI ? getNI43101MapFrame(scene, scale) : null;
+  drawDistanceTicksCanvas(ctx, scene, scale);
+  if (isNI) drawTitleStripCanvas(ctx, scene, scale);
+  const niFrame = exportFrame(scene, scale);
   const wmX = niFrame ? niFrame.mapRight - 8 * scale : canvas.width - 8 * scale;
   const wmY = niFrame ? niFrame.mapBottom - 5 * scale : canvas.height - 5 * scale;
   drawSourceCreditCanvas(ctx, scene, scale);
@@ -1914,8 +1770,7 @@ function creditLinesFor(scene) {
 function drawSourceCreditCanvas(ctx, scene, scale) {
   const lines = creditLinesFor(scene);
   if (!lines.length) return;
-  const isNI = scene.template?.id === 'ni_43101_technical';
-  const frame = isNI ? getNI43101MapFrame(scene, scale) : null;
+  const frame = exportFrame(scene, scale);
   const left = (frame ? frame.mapLeft + 8 * scale : 8 * scale);
   // Sit above the watermark line so the two never collide.
   const bottom = (frame ? frame.mapBottom : scene.height * scale) - 14 * scale;
@@ -1938,8 +1793,7 @@ function drawSourceCreditCanvas(ctx, scene, scale) {
 function renderSourceCreditSvg(scene, scale) {
   const lines = creditLinesFor(scene);
   if (!lines.length) return '';
-  const isNI = scene.template?.id === 'ni_43101_technical';
-  const frame = isNI ? getNI43101MapFrame(scene, scale) : null;
+  const frame = exportFrame(scene, scale);
   const left = (frame ? frame.mapLeft + 8 * scale : 8 * scale);
   const bottom = (frame ? frame.mapBottom : scene.height * scale) - 14 * scale;
   return lines.map((line, i) => {
@@ -1949,9 +1803,8 @@ function renderSourceCreditSvg(scene, scale) {
 }
 
 async function drawTilesCanvas(ctx, scene, scale) {
-  const isNI = scene.template?.id === 'ni_43101_technical';
-  if (isNI) {
-    const f = getNI43101MapFrame(scene, scale);
+  const f = exportFrame(scene, scale);
+  if (f) {
     ctx.save();
     ctx.beginPath();
     ctx.rect(f.mapLeft, f.mapTop, f.mapRight - f.mapLeft, f.mapBottom - f.mapTop);
@@ -1963,7 +1816,7 @@ async function drawTilesCanvas(ctx, scene, scale) {
     if (!img) continue;
     ctx.save(); ctx.globalAlpha = tile.opacity; ctx.drawImage(img, tile.x * scale, tile.y * scale, tile.width * scale, tile.height * scale); ctx.restore();
   }
-  if (isNI) ctx.restore();
+  if (f) ctx.restore();
 }
 function drawRegionHighlightsCanvas(ctx, scene, scale) {
   const highlights = scene.project.layout?.regionHighlights || [];
@@ -2363,8 +2216,10 @@ function renderScaleBarSvg(scene, scale) {
   const theme = getTheme(scene); const { scaleBar } = getOverlayMetrics(scene); const x = scaleBar.left * scale, y = scaleBar.top * scale, w = scaleBar.width * scale, h = scaleBar.height * scale, scaleState = pickScaleLabel(scene.map);
   // Center bar + label inside the panel (mirrors the editor's flex layout)
   const barH = 6 * scale, gap = 4 * scale, textH = 11 * scale;
+  const caption = scene.project.layout?.showProjectionLabel ? projectionLabel(scene.project.layout, scene.map) : '';
+  const capH = caption ? 13 * scale : 0;
   const barWidth = Math.min(scaleState.widthPx * scale, w - 24 * scale);
-  const startY = y + (h - (barH + gap + textH)) / 2;
+  const startY = y + (h - (barH + gap + textH + capH)) / 2;
   const barX = x + (w - barWidth) / 2;
   // The canvas sets this label in the project's footer font and tops it at
   // startY + barH + gap. Arial and a hand-picked 0.85 * textH put the SVG in a
@@ -2378,7 +2233,7 @@ function renderScaleBarSvg(scene, scale) {
   const labelHalo = scaleTransparent
     ? ` stroke="${theme.scaleFill}" stroke-width="${3 * scale}" stroke-linejoin="round" paint-order="stroke"`
     : '';
-  return `<g id="em-scale-bar" class="em-panel">${scalePanel}<rect x="${barX}" y="${startY}" width="${barWidth / 2}" height="${barH}" fill="${theme.scaleStroke}" /><rect x="${barX + barWidth / 2}" y="${startY}" width="${barWidth / 2}" height="${barH}" fill="#ffffff" stroke="${theme.scaleStroke}" stroke-width="${Math.max(1, scale)}" /><rect x="${barX}" y="${startY}" width="${barWidth}" height="${barH}" fill="none" stroke="${theme.scaleStroke}" stroke-width="${Math.max(1, scale)}" /><text x="${x + w / 2}" y="${baselineFromTop(startY + barH + gap, labelSize)}" text-anchor="middle" fill="${theme.bodyText}" font-family="${footerFont}" font-size="${labelSize}"${labelHalo}>${escapeXml(scaleState.label)}</text></g>`;
+  return `<g id="em-scale-bar" class="em-panel">${scalePanel}<rect x="${barX}" y="${startY}" width="${barWidth / 2}" height="${barH}" fill="${theme.scaleStroke}" /><rect x="${barX + barWidth / 2}" y="${startY}" width="${barWidth / 2}" height="${barH}" fill="#ffffff" stroke="${theme.scaleStroke}" stroke-width="${Math.max(1, scale)}" /><rect x="${barX}" y="${startY}" width="${barWidth}" height="${barH}" fill="none" stroke="${theme.scaleStroke}" stroke-width="${Math.max(1, scale)}" /><text x="${x + w / 2}" y="${baselineFromTop(startY + barH + gap, labelSize)}" text-anchor="middle" fill="${theme.bodyText}" font-family="${footerFont}" font-size="${labelSize}"${labelHalo}>${escapeXml(scaleState.label)}</text>${caption ? `<text x="${x + w / 2}" y="${baselineFromTop(startY + barH + gap + textH + 2 * scale, 9.5 * scale)}" text-anchor="middle" fill="${theme.mutedText || theme.bodyText}" font-family="${footerFont}" font-size="${9.5 * scale}"${labelHalo}>${escapeXml(caption)}</text>` : ''}</g>`;
 }
 function renderFooterSvg(scene, scale) {
   const theme = getTheme(scene); const text = scene.project.layout?.footerText;
@@ -2545,31 +2400,30 @@ export async function renderSceneToSvg(scene, options = {}) {
   const satelliteInset = await renderSatelliteInsetImageSvg(scene, scale);
 
   const svgDefs = [];
-  let mapContent;
-  if (isNI) {
-    const f = getNI43101MapFrame(scene, scale);
-    const clipId = 'ni-mapframe-clip';
-    svgDefs.push(`<clipPath id="${clipId}"><rect x="${f.mapLeft}" y="${f.mapTop}" width="${f.mapRight - f.mapLeft}" height="${f.mapBottom - f.mapTop}" /></clipPath>`);
-    const clipped = `<g id="em-map-content" clip-path="url(#${clipId})">${basemapImage}${renderRegionHighlightsSvg(scene, scale)}${renderVectorsSvg(scene, scale)}${renderEllipsesSvg(scene, scale, svgDefs)}${renderPolygonsSvg(scene, scale)}${renderMarkersSvg(scene, scale)}${renderCalloutsSvg(scene, scale, svgDefs)}${renderDistanceLinesSvg(scene, scale)}</g>`;
-    const niFrame = getNI43101MapFrame(scene, scale);
-    const wmX = niFrame.mapRight - 8 * scale;
-    const wmY = niFrame.mapBottom - 5 * scale;
-    // Attribution: pre-email shows the removable watermark; after email
-    // (noWatermark) a smaller persistent mark stays on all free exports; a
-    // future paid tier (options.paidTier) is the only thing that removes it.
-    const watermark = options.noWatermark
-      ? (options.paidTier ? '' : `<text x="${wmX}" y="${wmY}" font-family="Arial,sans-serif" font-size="${6.5 * scale}" font-weight="600" fill="#94a3b8" fill-opacity="0.6" text-anchor="end" dominant-baseline="auto" paint-order="stroke" stroke="#ffffff" stroke-opacity="0.5" stroke-width="${2 * scale}" stroke-linejoin="round">explorationmaps.com</text>`)
-      : `<text x="${wmX}" y="${wmY}" font-family="Arial,sans-serif" font-size="${9 * scale}" font-weight="bold" fill="#64748b" fill-opacity="0.72" text-anchor="end" dominant-baseline="auto" paint-order="stroke" stroke="#ffffff" stroke-opacity="0.55" stroke-width="2.5" stroke-linejoin="round">explorationmaps.com</text>`;
-    const panels = `<g id="em-overlay-panels">${renderLegendSvg(scene, scale, svgDefs)}${renderNorthArrowSvg(scene, scale, svgDefs)}${renderInsetSvg(scene, scale, svgDefs, satelliteInset)}${renderLogoSvg(scene, scale)}${renderScaleBarSvg(scene, scale)}${renderDistanceTicksSvg(scene, scale)}${renderTitleStripSvg(scene, scale)}</g>`;
-    mapContent = `${clipped}${panels}${renderSourceCreditSvg(scene, scale)}${watermark}`;
+  const frame = exportFrame(scene, scale);
+  const mapLayers = `${basemapImage}${renderRegionHighlightsSvg(scene, scale)}${renderVectorsSvg(scene, scale)}${renderEllipsesSvg(scene, scale, svgDefs)}${renderPolygonsSvg(scene, scale)}${renderMarkersSvg(scene, scale)}${renderCalloutsSvg(scene, scale, svgDefs)}${renderDistanceLinesSvg(scene, scale)}`;
+  let mapContentGroup;
+  if (frame) {
+    const clipId = 'em-mapframe-clip';
+    svgDefs.push(`<clipPath id="${clipId}"><rect x="${frame.mapLeft}" y="${frame.mapTop}" width="${frame.mapRight - frame.mapLeft}" height="${frame.mapBottom - frame.mapTop}" /></clipPath>`);
+    mapContentGroup = `<g id="em-map-content" clip-path="url(#${clipId})">${mapLayers}</g>`;
   } else {
-    const watermark = options.noWatermark
-      ? (options.paidTier ? '' : `<text x="${width - 8}" y="${height - 5}" font-family="Arial,sans-serif" font-size="6.5" font-weight="600" fill="#94a3b8" fill-opacity="0.6" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-opacity="0.5" stroke-width="2" stroke-linejoin="round">explorationmaps.com</text>`)
-      : `<text x="${width - 8}" y="${height - 5}" font-family="Arial,sans-serif" font-size="9" font-weight="bold" fill="#64748b" fill-opacity="0.72" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-opacity="0.55" stroke-width="2.5" stroke-linejoin="round">explorationmaps.com</text>`;
-    const mapLayers = `<g id="em-map-content">${basemapImage}${renderRegionHighlightsSvg(scene, scale)}${renderVectorsSvg(scene, scale)}${renderEllipsesSvg(scene, scale, svgDefs)}${renderPolygonsSvg(scene, scale)}${renderMarkersSvg(scene, scale)}${renderCalloutsSvg(scene, scale, svgDefs)}${renderDistanceLinesSvg(scene, scale)}</g>`;
-    const panels = `<g id="em-overlay-panels">${renderTitleSvg(scene, scale, svgDefs)}${renderLegendSvg(scene, scale, svgDefs)}${renderNorthArrowSvg(scene, scale, svgDefs)}${renderInsetSvg(scene, scale, svgDefs, satelliteInset)}${renderScaleBarSvg(scene, scale)}${renderFooterSvg(scene, scale)}${renderLogoSvg(scene, scale)}</g>`;
-    mapContent = `${mapLayers}${panels}${renderSourceCreditSvg(scene, scale)}${watermark}`;
+    mapContentGroup = `<g id="em-map-content">${mapLayers}</g>`;
   }
+  // The watermark sits inside the frame when there is one, else at the corner.
+  const wmX = frame ? frame.mapRight - 8 * scale : width - 8;
+  const wmY = frame ? frame.mapBottom - 5 * scale : height - 5;
+  const wmScale = isNI ? scale : 1;
+  // Attribution: pre-email shows the removable watermark; after email
+  // (noWatermark) a smaller persistent mark stays on all free exports; a
+  // future paid tier (options.paidTier) is the only thing that removes it.
+  const watermark = options.noWatermark
+    ? (options.paidTier ? '' : `<text x="${wmX}" y="${wmY}" font-family="Arial,sans-serif" font-size="${6.5 * wmScale}" font-weight="600" fill="#94a3b8" fill-opacity="0.6" text-anchor="end" dominant-baseline="auto" paint-order="stroke" stroke="#ffffff" stroke-opacity="0.5" stroke-width="${2 * wmScale}" stroke-linejoin="round">explorationmaps.com</text>`)
+    : `<text x="${wmX}" y="${wmY}" font-family="Arial,sans-serif" font-size="${9 * wmScale}" font-weight="bold" fill="#64748b" fill-opacity="0.72" text-anchor="end" dominant-baseline="auto" paint-order="stroke" stroke="#ffffff" stroke-opacity="0.55" stroke-width="2.5" stroke-linejoin="round">explorationmaps.com</text>`;
+  const panels = isNI
+    ? `<g id="em-overlay-panels">${renderLegendSvg(scene, scale, svgDefs)}${renderNorthArrowSvg(scene, scale, svgDefs)}${renderInsetSvg(scene, scale, svgDefs, satelliteInset)}${renderLogoSvg(scene, scale)}${renderScaleBarSvg(scene, scale)}${renderDistanceTicksSvg(scene, scale)}${renderTitleStripSvg(scene, scale)}</g>`
+    : `<g id="em-overlay-panels">${renderSidebarPanelSvg(scene, scale)}${renderTitleSvg(scene, scale, svgDefs)}${renderLegendSvg(scene, scale, svgDefs)}${renderNorthArrowSvg(scene, scale, svgDefs)}${renderInsetSvg(scene, scale, svgDefs, satelliteInset)}${renderScaleBarSvg(scene, scale)}${renderFooterSvg(scene, scale)}${renderLogoSvg(scene, scale)}${renderDistanceTicksSvg(scene, scale)}</g>`;
+  const mapContent = `${mapContentGroup}${panels}${renderSourceCreditSvg(scene, scale)}${watermark}`;
 
   const defsBlock = svgDefs.length ? `<defs>${svgDefs.join('')}</defs>` : '';
   return `<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${defsBlock}<rect width="100%" height="100%" fill="${scene.project.layout?.basemap === 'blank' ? (scene.project.layout?.blankBg || '#ffffff') : '#ffffff'}" />${mapContent}</svg>`;

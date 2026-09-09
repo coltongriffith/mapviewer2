@@ -69,6 +69,8 @@ import { CLAIM_NAME_CAVEAT } from './utils/claimProvenance';
 import { OVERLAY_DESCRIPTIONS } from './utils/referenceOverlayCredits.js';
 import { BASEMAPS, BASEMAP_KEYS, basemapThumb } from './utils/basemapConfig.js';
 import { applyLegendCustomization, groupLegendItems } from './utils/legendCustomization.js';
+import { getMapFrame, projectionLabel, scaleBarHeight } from './utils/coordinateFrame.js';
+import CoordinateFrameOverlay from './components/CoordinateFrameOverlay.jsx';
 import { featureKey, layerFeatures, isFeatureHidden, hiddenCount, featuresInBounds, visibleGeojson, featureLabel } from './utils/featureIdentity.js';
 import { stripFeatureStyle, styledFeatureCount } from './utils/featureStyle.js';
 import { layerAnchorGroups, defaultAnchorForLayer, reanchorCalloutsForLayer } from './utils/featureClusters.js';
@@ -311,7 +313,7 @@ function zoneStyle(zone) {
   };
 }
 
-function ScaleBar({ map }) {
+function ScaleBar({ map, projection = false, projectionName = '' }) {
   const [state, setState] = useState({ label: '1 km', width: 130 });
 
   useEffect(() => {
@@ -328,6 +330,9 @@ function ScaleBar({ map }) {
         setState({
           label: nice >= 1000 ? `${nice / 1000} km` : `${nice} m`,
           width: Math.max(40, Math.min(220, Math.round(nice / metersPerPx))),
+          // The zone can change as the map pans, so the datum line is refreshed
+          // with the bar rather than once at mount.
+          caption: projectionLabel({ projectionName }, map),
         });
       } catch {
         // noop
@@ -336,7 +341,7 @@ function ScaleBar({ map }) {
     update();
     map.on('moveend zoomend resize', update);
     return () => map.off('moveend zoomend resize', update);
-  }, [map]);
+  }, [map, projectionName]);
 
   return (
     <div className="template-card scale-card">
@@ -345,6 +350,7 @@ function ScaleBar({ map }) {
         <div className="scale-bar-fill light" />
       </div>
       <div className="scale-bar-label">{state.label}</div>
+      {projection && <div className="scale-bar-caption">{state.caption || projectionLabel({ projectionName }, map)}</div>}
     </div>
   );
 }
@@ -569,161 +575,6 @@ function initialWorkspaceState() {
 }
 
 // ─── NI 43-101 live tick overlay ────────────────────────────────────────────
-
-function _haversineM(lat1, lng1, lat2, lng2) {
-  const R = 6371000;
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLng = (lng2 - lng1) * Math.PI / 180;
-  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-function _displaceLng(lat, lng, meters) {
-  return lng + (meters / (Math.cos(lat * Math.PI / 180) * 111319.9));
-}
-function _displaceLat(lat, meters) {
-  return lat + meters / 111132;
-}
-function _latlngToUTM(lat, lng) {
-  const zone = Math.floor((lng + 180) / 6) + 1;
-  const cm = (zone - 1) * 6 - 180 + 3;
-  const a = 6378137, f = 1 / 298.257223563;
-  const e2 = 2 * f - f * f;
-  const k0 = 0.9996;
-  const latR = lat * Math.PI / 180;
-  const dLng = (lng - cm) * Math.PI / 180;
-  const N = a / Math.sqrt(1 - e2 * Math.sin(latR) ** 2);
-  const T = Math.tan(latR) ** 2;
-  const C = e2 / (1 - e2) * Math.cos(latR) ** 2;
-  const A = dLng * Math.cos(latR);
-  const e1sq = e2 / (1 - e2);
-  const M = a * (
-    (1 - e2/4 - 3*e2**2/64 - 5*e2**3/256) * latR
-    - (3*e2/8 + 3*e2**2/32 + 45*e2**3/1024) * Math.sin(2*latR)
-    + (15*e2**2/256 + 45*e2**3/1024) * Math.sin(4*latR)
-    - (35*e2**3/3072) * Math.sin(6*latR));
-  const easting = k0 * N * (A + (1-T+C)*A**3/6 + (5-18*T+T**2+72*C-58*e1sq)*A**5/120) + 500000;
-  const northing = k0 * (M + N*Math.tan(latR)*(A**2/2 + (5-T+9*C+4*C**2)*A**4/24 + (61-58*T+T**2+600*C-330*e1sq)*A**6/720)) + (lat < 0 ? 10000000 : 0);
-  return { easting, northing, zone, hemisphere: lat >= 0 ? 'N' : 'S' };
-}
-function _pickUTMInterval(totalM, count) {
-  const steps = [500, 1000, 2000, 5000, 10000, 25000, 50000, 100000];
-  const target = totalM / count;
-  return steps.find((s) => s >= target) || steps[steps.length - 1];
-}
-function _fmtUTMEasting(e) {
-  const s = Math.round(e).toString().padStart(6, '0');
-  return s.slice(0, -3) + ' ' + s.slice(-3) + 'E';
-}
-function _fmtUTMNorthing(n) {
-  const s = Math.round(n).toString();
-  if (s.length <= 6) return s.slice(0, -3) + ' ' + s.slice(-3) + 'N';
-  return s.slice(0, -6) + ' ' + s.slice(-6, -3) + ' ' + s.slice(-3) + 'N';
-}
-
-function NIMapOverlay({ map, mapSize, layout }) {
-  const [, setV] = React.useState(0);
-  React.useEffect(() => {
-    if (!map) return;
-    const bump = () => setV((v) => v + 1);
-    map.on('moveend zoomend', bump);
-    return () => map.off('moveend zoomend', bump);
-  }, [map]);
-
-  if (!map || !mapSize) return null;
-
-  const STRIP_H = 72;
-  const TICK_M = 28;
-  const stageW = mapSize.width || 1000;
-  const stageH = mapSize.height || 600;
-  const stripPos = layout.titleStripPosition || 'bottom';
-  const mapTop = TICK_M + (stripPos === 'top' ? STRIP_H : 0);
-  const mapBottom = stageH - TICK_M - (stripPos === 'bottom' ? STRIP_H : 0);
-  const mapLeft = TICK_M;
-  const mapRight = stageW - TICK_M;
-  const mapW = mapRight - mapLeft;
-  const mapH = mapBottom - mapTop;
-
-  const size = map.getSize();
-  if (!size || size.x === 0 || size.y === 0) return null;
-
-  const cy = size.y / 2;
-  const cx = size.x / 2;
-  const centerLL = map.getCenter();
-  const leftLL = map.containerPointToLatLng([0, cy]);
-  const rightLL = map.containerPointToLatLng([size.x, cy]);
-  const topLL = map.containerPointToLatLng([cx, 0]);
-  const botLL = map.containerPointToLatLng([cx, size.y]);
-  const totalW = _haversineM(leftLL.lat, leftLL.lng, rightLL.lat, rightLL.lng);
-  const totalH = _haversineM(topLL.lat, topLL.lng, botLL.lat, botLL.lng);
-  const xInt = _pickUTMInterval(totalW, 6);
-  const yInt = _pickUTMInterval(totalH, 5);
-
-  // UTM parameters based on map center zone
-  const centerUTM = _latlngToUTM(centerLL.lat, centerLL.lng);
-  const { zone } = centerUTM;
-  const cm = (zone - 1) * 6 - 180 + 3;
-  const a = 6378137, f = 1 / 298.257223563;
-  const e2 = 2 * f - f * f;
-  const k0 = 0.9996;
-  const refLatR = centerLL.lat * Math.PI / 180;
-  const N_ref = a / Math.sqrt(1 - e2 * Math.sin(refLatR) ** 2);
-
-  const topUTM = _latlngToUTM(topLL.lat, topLL.lng);
-  const botUTM = _latlngToUTM(botLL.lat, botLL.lng);
-
-  const tickLen = 8;
-  const monoFont = "'Courier New', Courier, monospace";
-  const fontSize = 9;
-
-  // X ticks: vertical lines at constant UTM easting
-  const xTicks = [];
-  // Compute edge eastings in the center zone to avoid cross-zone mismatch near 6° boundaries
-  const leftE_cz  = 500000 + k0 * N_ref * Math.cos(refLatR) * (leftLL.lng  - cm) * (Math.PI / 180);
-  const rightE_cz = 500000 + k0 * N_ref * Math.cos(refLatR) * (rightLL.lng - cm) * (Math.PI / 180);
-  const startE = Math.ceil(leftE_cz / xInt) * xInt;
-  for (let e = startE; e <= rightE_cz + xInt * 0.1; e += xInt) {
-    const dE = e - 500000;
-    const lng = cm + (dE / (k0 * N_ref * Math.cos(refLatR))) * (180 / Math.PI);
-    const pt = map.latLngToContainerPoint([centerLL.lat, lng]);
-    const px = Math.round(pt.x * (mapW / size.x)) + mapLeft;
-    if (px < mapLeft - 1 || px > mapRight + 1) continue;
-    const lbl = _fmtUTMEasting(e);
-    xTicks.push(
-      <g key={e}>
-        <line x1={px} y1={mapTop} x2={px} y2={mapTop - tickLen} stroke="#000" strokeWidth="1" />
-        <line x1={px} y1={mapBottom} x2={px} y2={mapBottom + tickLen} stroke="#000" strokeWidth="1" />
-        <text x={px} y={mapTop - tickLen - 2} textAnchor="middle" dominantBaseline="auto" fontFamily={monoFont} fontSize={fontSize} fill="#000">{lbl}</text>
-        <text x={px} y={mapBottom + tickLen + 2} textAnchor="middle" dominantBaseline="hanging" fontFamily={monoFont} fontSize={fontSize} fill="#000">{lbl}</text>
-      </g>
-    );
-  }
-
-  // Y ticks: horizontal lines at constant UTM northing (labels rotated 90° to fit margin)
-  const yTicks = [];
-  const startN = Math.floor(topUTM.northing / yInt) * yInt;
-  for (let n = startN; n >= botUTM.northing - yInt * 0.1; n -= yInt) {
-    const lat = centerLL.lat + (n - centerUTM.northing) / 111132;
-    const pt = map.latLngToContainerPoint([lat, centerLL.lng]);
-    const py = Math.round(pt.y * (mapH / size.y)) + mapTop;
-    if (py < mapTop - 1 || py > mapBottom + 1) continue;
-    const lbl = _fmtUTMNorthing(n);
-    yTicks.push(
-      <g key={n}>
-        <line x1={mapLeft} y1={py} x2={mapLeft - tickLen} y2={py} stroke="#000" strokeWidth="1" />
-        <line x1={mapRight} y1={py} x2={mapRight + tickLen} y2={py} stroke="#000" strokeWidth="1" />
-        <text textAnchor="middle" dominantBaseline="auto" fontFamily={monoFont} fontSize={fontSize} fill="#000" transform={`translate(${mapLeft - tickLen - 2},${py}) rotate(-90)`}>{lbl}</text>
-        <text textAnchor="middle" dominantBaseline="auto" fontFamily={monoFont} fontSize={fontSize} fill="#000" transform={`translate(${mapRight + tickLen + 2},${py}) rotate(90)`}>{lbl}</text>
-      </g>
-    );
-  }
-
-  return (
-    <svg style={{ position: 'absolute', top: 0, left: 0, width: stageW, height: stageH, pointerEvents: 'none', zIndex: 391 }}>
-      {xTicks}
-      {yTicks}
-    </svg>
-  );
-}
 
 // Merge all polygons belonging to one owner into a single outline, removing
 // the internal borders between adjacent claims. Returns a FeatureCollection.
@@ -998,6 +849,10 @@ export default function App({ initialAction = null }) {
     }
     return resolveTemplateZones(template, project.layout, mapSize, allLegendItems);
   }, [template, project.layout, mapSize, allLegendItems]);
+  const mapFrame = useMemo(
+    () => getMapFrame(project.layout, mapSize, { sidebarFrac: template?.sidebarFrac }),
+    [project.layout, mapSize, template],
+  );
   // Keep a ref so the framing effect can read the current zones without them being a reactive trigger
   const resolvedZonesRef = useRef(resolvedZones);
   useEffect(() => { resolvedZonesRef.current = resolvedZones; }, [resolvedZones]);
@@ -6221,6 +6076,39 @@ export default function App({ initialAction = null }) {
                 </details>
               )}
 
+              {/* Coordinate frame and datum: the UTM tick frame any template
+                  can wear (NI 43-101 always does), and the projection line
+                  under the scale bar that says what the ticks are in. */}
+              <details className="sub-details">
+                <summary>Coordinate Frame &amp; Datum</summary>
+                <div className="sub-details-body">
+                  <label className="toggle-row">
+                    <input
+                      type="checkbox"
+                      checked={project.layout.templateId === 'ni_43101_technical' || !!project.layout.showCoordinateFrame}
+                      disabled={project.layout.templateId === 'ni_43101_technical'}
+                      onChange={(e) => updateLayout({ showCoordinateFrame: e.target.checked })}
+                    />
+                    <span>UTM coordinate frame (ticks and labels on every edge)</span>
+                  </label>
+                  <label className="toggle-row">
+                    <input type="checkbox" checked={!!project.layout.showProjectionLabel} onChange={(e) => updateLayout({ showProjectionLabel: e.target.checked })} />
+                    <span>Projection under the scale bar</span>
+                  </label>
+                  <div className="control-row" style={{ marginTop: 6 }}>
+                    <label htmlFor="f-projection-frame">Projection / Datum</label>
+                    <input
+                      id="f-projection-frame"
+                      type="text"
+                      value={project.layout.projectionName || ''}
+                      placeholder={projectionLabel({}, leafletMapRef.current)}
+                      onChange={(e) => updateLayout({ projectionName: e.target.value })}
+                    />
+                  </div>
+                  <div className="small-note">Leave blank to derive the UTM zone from the map centre. Write the datum you work in, e.g. NAD83 / UTM Zone 7N.</div>
+                </div>
+              </details>
+
               {/* Panel box visibility */}
               <details className="sub-details">
                 <summary>Panel Boxes</summary>
@@ -6627,16 +6515,14 @@ export default function App({ initialAction = null }) {
           polygons={project.polygons || []}
         />
 
+        <CoordinateFrameOverlay map={leafletMapRef.current} frame={mapFrame} stage={mapSize} />
+
         {project.layout.templateId === 'ni_43101_technical' && (() => {
-          const STRIP_H = 72, TICK_M = 28;
+          const STRIP_H = 72;
           const stripPos = project.layout.titleStripPosition || 'bottom';
           const stageH = mapSize?.height || 600;
           const stageW = mapSize?.width || 1000;
           const stripY = stripPos === 'bottom' ? stageH - STRIP_H : 0;
-          const mapTop = TICK_M + (stripPos === 'top' ? STRIP_H : 0);
-          const mapBottom = stageH - TICK_M - (stripPos === 'bottom' ? STRIP_H : 0);
-          const mapLeft = TICK_M;
-          const mapRight = stageW - TICK_M;
           const monoFont = "'Courier New', Courier, monospace";
           const fs = Math.max(0.7, Math.min(1.4, Number(project.layout.stripFontScale || 1)));
           // Exactly what the PNG and SVG exporters print, from the same resolver.
@@ -6647,13 +6533,6 @@ export default function App({ initialAction = null }) {
           const missingStyle = { fontStyle: 'italic' };
           return (
             <>
-              {/* Tick margin overlays */}
-              <div style={{ position: 'absolute', top: mapTop, left: 0, width: mapLeft, height: mapBottom - mapTop, background: '#fff', borderRight: '1.5px solid #000', zIndex: 390, pointerEvents: 'none' }} />
-              <div style={{ position: 'absolute', top: mapTop, left: mapRight, width: stageW - mapRight, height: mapBottom - mapTop, background: '#fff', borderLeft: '1.5px solid #000', zIndex: 390, pointerEvents: 'none' }} />
-              <div style={{ position: 'absolute', top: 0, left: 0, width: stageW, height: mapTop, background: '#fff', borderBottom: '1.5px solid #000', zIndex: 390, pointerEvents: 'none' }} />
-              <div style={{ position: 'absolute', top: mapBottom, left: 0, width: stageW, height: stageH - mapBottom - STRIP_H, background: '#fff', borderTop: '1.5px solid #000', zIndex: 390, pointerEvents: 'none' }} />
-              {/* Live tick marks */}
-              <NIMapOverlay map={leafletMapRef.current} mapSize={mapSize} layout={project.layout} />
               {/* Title strip */}
               <div style={{ position: 'absolute', left: 0, top: stripY, width: stageW, height: STRIP_H, background: '#fff', border: '1.5px solid #000', boxSizing: 'border-box', zIndex: 410, display: 'flex', fontFamily: monoFont }}>
                 {/* Cell 0: Title */}
@@ -6805,11 +6684,11 @@ export default function App({ initialAction = null }) {
           </div>
         ) : null}
         {project.layout.showScaleBar !== false && (
-          <div className={`template-zone${project.layout.scaleBarTransparent ? ' panel--transparent' : ''}`} style={{ ...zoneStyle(resolvedZones.scaleBar), width: project.layout.scaleBarWidthPx || resolvedZones.scaleBar?.width, opacity: dragging?.id === 'scaleBar' ? 0.3 : 1, cursor: 'grab' }} onMouseDown={makeDragHandler('scaleBar', project.layout.scaleBarWidthPx || resolvedZones.scaleBar?.width || 160, project.layout.scaleBarHeightPx ?? 48)}>
-            <ScaleBar map={leafletMapRef.current} height={project.layout.scaleBarHeightPx ?? 48} />
+          <div className={`template-zone${project.layout.scaleBarTransparent ? ' panel--transparent' : ''}`} style={{ ...zoneStyle(resolvedZones.scaleBar), width: project.layout.scaleBarWidthPx || resolvedZones.scaleBar?.width, opacity: dragging?.id === 'scaleBar' ? 0.3 : 1, cursor: 'grab' }} onMouseDown={makeDragHandler('scaleBar', project.layout.scaleBarWidthPx || resolvedZones.scaleBar?.width || 160, scaleBarHeight(project.layout))}>
+            <ScaleBar map={leafletMapRef.current} projection={!!project.layout.showProjectionLabel} projectionName={project.layout.projectionName} />
             <button className="panel-delete-btn" title="Hide scale bar" onClick={() => updateLayout({ showScaleBar: false })}>×</button>
             {makeResizeHandles(project.layout.scaleBarCorner || 'bl', {
-              elemId: 'scaleBar', startW: project.layout.scaleBarWidthPx || resolvedZones.scaleBar?.width || 160, startH: project.layout.scaleBarHeightPx ?? 48,
+              elemId: 'scaleBar', startW: project.layout.scaleBarWidthPx || resolvedZones.scaleBar?.width || 160, startH: scaleBarHeight(project.layout),
               minW: 80, maxW: 400, minH: 30, maxH: 100,
               applyW: (w) => updateLayout({ scaleBarWidthPx: w }), applyH: (h) => updateLayout({ scaleBarHeightPx: h }),
             })}
