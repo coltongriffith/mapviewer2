@@ -3233,8 +3233,12 @@ button.claim-notices-chip[aria-expanded="true"] { border-color: var(--ui-border-
 .class-row .class-label { flex: 1; min-width: 0; font-size: 11px; padding: 4px 6px; }
 .legend-editor-group { flex: 0 1 96px; min-width: 0; font-size: 11px; padding: 4px 6px; }
 .legend-editor-order { display: inline-flex; gap: 2px; }
-.legend-editor-order .legend-editor-btn { padding: 2px 5px; }
-.legend-editor-order .legend-editor-btn:disabled { opacity: 0.35; cursor: default; }
+/* Its own class, not .legend-editor-btn: that class is the row's one
+   action button (Remove / Show / Delete), and anything that finds a row's
+   button by it must keep finding exactly that. */
+.legend-editor-order-btn { font-size: 11px; line-height: 1; padding: 2px 5px; border: 1px solid var(--ui-border); background: var(--ui-surface); color: var(--ui-text-muted); border-radius: var(--r-sm); cursor: pointer; }
+.legend-editor-order-btn:hover { background: var(--ui-border); color: var(--ui-text); }
+.legend-editor-order-btn:disabled { opacity: 0.35; cursor: default; }
 .legend-editor-color { width: 28px; height: 24px; padding: 0; border: 1px solid var(--ui-border-strong); border-radius: var(--r-md); background: none; }
 .legend-editor-btn {
   font-size: 11px; padding: 3px 7px; border: 1px solid var(--ui-border-strong); border-radius: var(--r-md);
