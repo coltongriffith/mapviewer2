@@ -74,6 +74,7 @@ import CoordinateFrameOverlay from './components/CoordinateFrameOverlay.jsx';
 import { featureKey, layerFeatures, isFeatureHidden, hiddenCount, featuresInBounds, visibleGeojson, featureLabel } from './utils/featureIdentity.js';
 import { stripFeatureStyle, styledFeatureCount } from './utils/featureStyle.js';
 import { attributeFields, buildGraduated, buildCategorical, classLabel, MAX_CATEGORIES } from './utils/classification.js';
+import { addDrillTraces, isTrace } from './utils/drillTraces.js';
 import { layerAnchorGroups, defaultAnchorForLayer, reanchorCalloutsForLayer } from './utils/featureClusters.js';
 import FeatureTrimList from './components/FeatureTrimList.jsx';
 import dissolveGeo from '@turf/dissolve';
@@ -2510,6 +2511,9 @@ export default function App({ initialAction = null }) {
     const baseName = fileName.replace(/\.(zip|geojson|json|kml|kmz|csv)$/i, '') || 'Layer';
     const kind = detectLayerKind(geojson);
     const role = inferRoleFromLayer({ name: baseName, type: kind });
+    // Collars that carry azimuth, dip and length get a surface trace each,
+    // whatever file they arrived in.
+    if (role === 'drillholes' && geojson?.features) geojson = addDrillTraces(geojson);
     const displayName = cleanLayerName(baseName, role);
     trackEvent('layer_added', { source, role, kind, feature_count: geojson?.features?.length ?? 0 });
 
@@ -5050,7 +5054,7 @@ export default function App({ initialAction = null }) {
                       const trimming = trimLayerId === selectedLayer.id;
                       const listing = trimListLayerId === selectedLayer.id;
                       const removed = hiddenCount(selectedLayer);
-                      const total = layerFeatures(selectedLayer).length;
+                      const total = layerFeatures(selectedLayer).filter((f) => !isTrace(f)).length;
                       return (
                         <div className="trim-panel">
                           <div className="control-row">

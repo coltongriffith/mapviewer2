@@ -1,4 +1,5 @@
 import * as toGeoJSON from "@tmcw/togeojson";
+import { addDrillTraces } from './drillTraces.js';
 
 const MAX_UPLOAD_SIZE = 50 * 1024 * 1024; // 50 MB
 
@@ -53,9 +54,12 @@ const COL_SYNONYMS = {
   x:  ['easting', 'x', 'lon', 'longitude', 'long', 'east', 'utm_e', 'utm_easting'],
   y:  ['northing', 'y', 'lat', 'latitude', 'north', 'utm_n', 'utm_northing'],
   id: ['holeid', 'hole_id', 'hole', 'drillhole', 'dhid', 'bhid', 'id', 'name', 'collar'],
-  elev: ['elevation', 'elev', 'z', 'rl', 'depth', 'total_depth', 'alt', 'altitude'],
+  elev: ['elevation', 'elev', 'z', 'rl', 'alt', 'altitude'],
   azimuth: ['azimuth', 'azi', 'az', 'bearing'],
   dip: ['dip', 'inclination', 'incl'],
+  // A hole's length is what makes a trace. "depth" here is total depth, the
+  // usual collar-file column; it was listed as an elevation synonym before.
+  length: ['length', 'length_m', 'depth', 'total_depth', 'totaldepth', 'eoh', 'td', 'hole_length', 'final_depth', 'depth_m'],
 };
 
 /**
@@ -416,14 +420,22 @@ async function parseCsvText(text) {
 }
 
 export function csvToGeoJSON(rows, mapping) {
-  // mapping: { x: headerName, y: headerName, id?: headerName, elev?: headerName, ... }
+  // mapping: { x, y, id?, elev?, azimuth?, dip?, length? } — header names.
+  // Orientation columns are normalised onto the collar as _azimuth/_dip/
+  // _length so a trace can be built whatever the file called them.
   const features = [];
+  const numberOrNaN = (v) => { const n = parseFloat(v); return Number.isFinite(n) ? n : NaN; };
   for (const row of rows) {
     const xVal = parseFloat(row[mapping.x]);
     const yVal = parseFloat(row[mapping.y]);
     if (isNaN(xVal) || isNaN(yVal)) continue;
     const props = { ...row };
     if (mapping.id) props._holeid = row[mapping.id] || '';
+    for (const role of ['azimuth', 'dip', 'length']) {
+      if (!mapping[role]) continue;
+      const n = numberOrNaN(row[mapping[role]]);
+      if (Number.isFinite(n)) props[`_${role}`] = n;
+    }
     const label = mapping.id ? (row[mapping.id] || '') : '';
     features.push({
       type: 'Feature',
@@ -433,7 +445,7 @@ export function csvToGeoJSON(rows, mapping) {
   }
   if (!features.length) throw new Error("No valid coordinate rows found in CSV.");
   const skippedRows = rows.length - features.length;
-  return { type: 'FeatureCollection', features, ...(skippedRows > 0 ? { meta: { skippedRows } } : {}) };
+  return addDrillTraces({ type: 'FeatureCollection', features, ...(skippedRows > 0 ? { meta: { skippedRows } } : {}) });
 }
 
 export async function loadCSV(file) {
@@ -450,11 +462,17 @@ export async function loadCSV(file) {
   const yIdx = detectColumn(headers, 'y');
   const idIdx = detectColumn(headers, 'id');
   const elevIdx = detectColumn(headers, 'elev');
+  const azIdx = detectColumn(headers, 'azimuth');
+  const dipIdx = detectColumn(headers, 'dip');
+  const lenIdx = detectColumn(headers, 'length');
   const guesses = {
     ...(xIdx >= 0 ? { x: headers[xIdx] } : {}),
     ...(yIdx >= 0 ? { y: headers[yIdx] } : {}),
     ...(idIdx >= 0 ? { id: headers[idIdx] } : {}),
     ...(elevIdx >= 0 ? { elev: headers[elevIdx] } : {}),
+    ...(azIdx >= 0 ? { azimuth: headers[azIdx] } : {}),
+    ...(dipIdx >= 0 ? { dip: headers[dipIdx] } : {}),
+    ...(lenIdx >= 0 ? { length: headers[lenIdx] } : {}),
   };
 
   // Both coordinate columns found AND the values are in lon/lat range →
