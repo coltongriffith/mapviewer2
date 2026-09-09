@@ -1,4 +1,4 @@
-import { hasVisibleFeatures } from '../utils/featureIdentity.js';
+import { hasVisibleFeatures, layerGeometryKind } from '../utils/featureIdentity.js';
 import { legendRowCount } from '../utils/legendCustomization.js';
 import { TICK_MARGIN, scaleBarHeight } from '../utils/coordinateFrame.js';
 
@@ -302,7 +302,7 @@ export function buildSidePanelLegendItems(layers, _layout) {
     const label = layer.legend?.label || layer.displayName || layer.name;
     const baseStyle = sidePanelTemplate.roleStyles?.[layer.role] || sidePanelTemplate.roleStyles?.other || {};
     const style = { ...baseStyle, ...(layer.style || {}) };
-    items.push({ id: layer.id, label, type: layer.type, role: layer.role, style });
+    items.push({ id: layer.id, label, type: layerGeometryKind(layer) === 'line' ? 'line' : layer.type, role: layer.role, style });
   }
   return items;
 }

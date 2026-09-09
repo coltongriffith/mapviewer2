@@ -17,6 +17,20 @@ import { getTemplateStyle, getFeatureStyle, canDissolve } from '../utils/feature
 function pathStyle(template, layer, feature, geomType) {
   const style = getFeatureStyle(template, layer, feature, featureKey(feature));
   const lo = style.layerOpacity ?? 1;
+  // Leaflet restyles a circle marker with this too (GeoJSON.resetStyle runs
+  // it on every path, points included), so a point must read its marker
+  // colours here or the fill pointToLayer chose is overwritten with the
+  // polygon fill — which is how a classed soil grid drew every dot white.
+  if (String(feature?.geometry?.type || '').includes('Point')) {
+    return {
+      color: style.markerColor ?? style.stroke ?? '#111111',
+      weight: style.strokeWidth ?? 1.5,
+      fillColor: style.markerFill || style.fill || style.markerColor || '#ffffff',
+      fillOpacity: lo,
+      opacity: lo,
+      radius: Math.max(4, (style.markerSize ?? 10) / 2),
+    };
+  }
   return {
     color: style.stroke || '#54a6ff',
     weight: style.strokeWidth ?? 2,

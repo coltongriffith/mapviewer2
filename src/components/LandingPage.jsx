@@ -8,31 +8,31 @@ import BrandMark from './BrandMark';
 
 const SHOWCASE = [
   {
-    id: 'regional',
-    label: 'Regional project location map',
-    desc: 'Property location in district context — neighbouring operators, district roads, and the town down the valley.',
-    img: '/gallery/regional.png',
-    webp: '/gallery/regional.webp',
-    webp2x: '/gallery/regional@2x.webp',
-    tags: ['Project boundary', 'Nearby operators', 'District roads'],
-  },
-  {
     id: 'target',
-    label: 'Claims & drill target map',
-    desc: 'The claim block with priority target areas and collar locations, labelled with headline intercepts.',
+    label: 'Target map with soil geochemistry',
+    desc: 'Classed soil copper on hillshade with drill traces, intercept callouts, a UTM grid and a grouped legend.',
     img: '/gallery/target.png',
     webp: '/gallery/target.webp',
     webp2x: '/gallery/target@2x.webp',
-    tags: ['Claims', 'Target areas', 'Drill collars'],
+    tags: ['Soil Cu ppm', 'Drill traces', 'UTM frame'],
   },
   {
-    id: 'infrastructure',
-    label: 'Infrastructure & access map',
-    desc: 'Access roads and the powerline corridor around the claims — the access story at a glance.',
-    img: '/gallery/infrastructure.png',
-    webp: '/gallery/infrastructure.webp',
-    webp2x: '/gallery/infrastructure@2x.webp',
-    tags: ['Access roads', 'Powerline corridor', 'Drill collars'],
+    id: 'geology',
+    label: 'Bedrock geology map',
+    desc: 'One geology file coloured by unit, with the claim boundary, target areas and collars over it.',
+    img: '/gallery/geology.png',
+    webp: '/gallery/geology.webp',
+    webp2x: '/gallery/geology@2x.webp',
+    tags: ['Geology units', 'Target areas', 'Drill collars'],
+  },
+  {
+    id: 'regional',
+    label: 'Regional project location map',
+    desc: 'Property location in district context — district roads, the claim block and a province inset.',
+    img: '/gallery/regional.png',
+    webp: '/gallery/regional.webp',
+    webp2x: '/gallery/regional@2x.webp',
+    tags: ['Project boundary', 'District roads', 'Location inset'],
   },
 ];
 
@@ -255,7 +255,7 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
               <picture>
                 <source
                   type="image/webp"
-                  srcSet="/gallery/ba-after.webp 870w, /gallery/ba-after@2x.webp 1448w"
+                  srcSet="/gallery/ba-after.webp 870w, /gallery/ba-after@2x.webp 1576w"
                   sizes="(max-width: 900px) 100vw, 870px"
                 />
                 <img
@@ -417,7 +417,7 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
                     <picture>
                       <source
                         type="image/webp"
-                        srcSet={`${ex.webp} 640w, ${ex.webp2x} 1000w`}
+                        srcSet={`${ex.webp} 640w, ${ex.webp2x} 1280w`}
                         sizes="(max-width: 900px) 100vw, 640px"
                       />
                       {/* The <h3> below names the map; repeating it here makes
