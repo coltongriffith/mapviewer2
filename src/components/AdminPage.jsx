@@ -9,7 +9,7 @@ const ProductTab = React.lazy(() => import('./admin/ProductTab'));
 const RevenueTab = React.lazy(() => import('./admin/RevenueTab'));
 const TenureTab = React.lazy(() => import('./admin/TenureTab'));
 import {
-  useRpc, useGrowth, useDashboardWindow, useOverview, useEngagement, useUsersOverview, useUserDetail, useErrorSummary, useFeedback, useRevenue, useTenureOps,
+  useRpc, useGrowth, useDashboardWindow, useOverview, useEngagement, useUsersOverview, useUserDetail, useErrorSummary, useFeedback, useRevenue, useTenureOps, useDailyActivity,
 } from './admin/useDashboardData';
 import { pacificDate, addCalendarDays, dayWindow } from './admin/dateWindow';
 
@@ -316,6 +316,7 @@ export default function AdminPage({ onExit }) {
   const pickedWindow = selectedDay ? dayWindow(selectedDay) : dashWindow;
   const queryWindow = useMemo(() => ({ p_start: pickedWindow.p_start, p_end: pickedWindow.p_end }), [pickedWindow.p_start, pickedWindow.p_end]);
   const growth = useGrowth(dashWindow, isAdmin && tab === 'overview');
+  const dailyActivity = useDailyActivity(dashWindow, isAdmin && tab === 'overview');
   const overview = useOverview(dashWindow, isAdmin && tab === 'activity');
   const engagement = useEngagement(dashWindow, isAdmin && tab === 'product');
   const usersOverview = useUsersOverview(isAdmin && tab === 'users');
@@ -463,7 +464,7 @@ export default function AdminPage({ onExit }) {
         {active.error ? <div className="adm-error-bar" role="alert">Could not load this report: {active.error}. Use Refresh to retry.</div>
           : active.loading ? <div className="adm-skeleton adm-skeleton-block" role="status" aria-label="Loading report" />
           : <React.Suspense fallback={<div className="adm-skeleton adm-skeleton-block" role="status" aria-label="Opening report" />}>
-        {tab === 'overview' && growth.data && <GrowthTab data={growth.data} onOpenUser={openUser} />}
+        {tab === 'overview' && growth.data && <GrowthTab data={growth.data} onOpenUser={openUser} daily={dailyActivity} onPickDay={setSelectedDay} />}
 
         {/* ───────── OVERVIEW (v2) ───────── */}
         {tab === 'activity' && (

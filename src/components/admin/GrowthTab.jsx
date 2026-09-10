@@ -1,5 +1,5 @@
 import React from 'react';
-import { StatTile, EmptyHint, Card } from './primitives';
+import { StatTile, EmptyHint, Card, ColumnChart } from './primitives';
 import { fmtNum } from './metrics';
 
 export function cohortRate(n, total) {
@@ -7,7 +7,7 @@ export function cohortRate(n, total) {
 }
 const money = cents => (Number(cents) / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 
-export default function GrowthTab({ data, onOpenUser }) {
+export default function GrowthTab({ data, onOpenUser, daily, onPickDay }) {
   const f = data.funnel;
   const c = data.cohort;
   const b = data.billing;
@@ -35,6 +35,16 @@ export default function GrowthTab({ data, onOpenUser }) {
     {(b.past_due > 0 || b.stale_periods > 0) && <p className="adm-error-bar" role="status">
       Billing needs a check: {b.past_due} past due; {b.stale_periods} active records with an ended billing period. Review Revenue and Stripe.
     </p>}
+    {daily && (
+      <Card title="Daily activity" eyebrow="Visitor tabs per Pacific day · click a bar to inspect that day" full>
+        {daily.error ? <p className="adm-error-bar" role="alert">Could not load daily activity: {daily.error}</p>
+          : daily.loading || !daily.data ? <div className="adm-skeleton adm-skeleton-block" style={{ height: 200 }} role="status" aria-label="Loading daily activity" />
+          : <ColumnChart series={daily.data} onPick={onPickDay}
+              barKey="sessions" barLabel="visitor tabs" lineKey="active_users" lineLabel="signed-in users"
+              ariaLabel="Daily visitor tabs" empty="No tracked visits in this window." />}
+        <p className="admx-since-note">A visitor tab is one browser tab with at least one recorded page view; known admin activity is excluded. Signed-in users are accounts that did something in the editor that day. Signup dots mark confirmed accounts.</p>
+      </Card>
+    )}
     <div className="growth-grid">
       <Card title="First-map journey" eyebrow="Same tab session · steps in order">
         {f.sessions === 0 ? <EmptyHint>No sessions in this window. Use tagged links in your next working sessions.</EmptyHint> : <ol className="growth-funnel">

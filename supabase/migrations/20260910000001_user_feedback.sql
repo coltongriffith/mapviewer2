@@ -42,7 +42,7 @@ grant all on table public.feedback to service_role;
 
 -- ── Owner notification ──────────────────────────────────────────────────────
 -- Same mechanism as the signup email (20260729000001 / 20260812000001): the
--- Resend key and the recipient live in Vault, and the trigger swallows every
+-- Resend key and the recipient (feedback_notification_to) live in Vault, and the trigger swallows every
 -- failure so a Resend outage can never lose a report — the row is the record,
 -- the email is the nudge. pg_net is already installed by 20260729000001.
 create or replace function public.send_feedback_notification(
@@ -69,8 +69,16 @@ begin
     return;
   end if;
 
+  -- Dedicated recipient first (set with
+  --   select vault.create_secret('you@yourdomain.com', 'feedback_notification_to');
+  -- ), then the signup-notification recipient, then the published support
+  -- address. Never a personal address in this file.
   select decrypted_secret into v_to
-  from vault.decrypted_secrets where name = 'signup_notification_to' limit 1;
+  from vault.decrypted_secrets where name = 'feedback_notification_to' limit 1;
+  if nullif(trim(v_to), '') is null then
+    select decrypted_secret into v_to
+    from vault.decrypted_secrets where name = 'signup_notification_to' limit 1;
+  end if;
   v_to := coalesce(nullif(trim(v_to), ''), 'support@explorationmaps.com');
 
   if p_user_id is not null then

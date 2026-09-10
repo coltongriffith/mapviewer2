@@ -69,6 +69,7 @@ export const useGrowth = (window, enabled) => useRpc('admin_get_growth', window,
 const reportingParams = window => ({ ...window, p_tz: window.p_start >= '2026-03-09' ? 'Etc/GMT+7' : 'America/Vancouver' });
 export const useOverview = (window, enabled) => useRpc('admin_get_overview', reportingParams(window), enabled);
 export const useEngagement = (window, enabled) => useRpc('admin_get_engagement', reportingParams(window), enabled);
+export const useDailyActivity = (window, enabled) => useRpc('admin_get_daily_activity', reportingParams(window), enabled);
 export const useUsersOverview = enabled => useRpc('admin_get_users_overview', { p_tz: pacificDate() >= '2026-03-09' ? 'Etc/GMT+7' : 'America/Vancouver' }, enabled);
 export const useRevenue = enabled => useRpc('admin_get_billing_metrics', {}, enabled);
 export const useTenureOps = enabled => useRpc('admin_get_tenure_ops', {}, enabled);
