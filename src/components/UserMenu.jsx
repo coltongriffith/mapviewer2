@@ -1,10 +1,27 @@
 import React, { useState } from 'react';
 import { useAuth } from '../hooks/useAuth.jsx';
 import AuthModal from './AuthModal';
+import FeedbackModal from './FeedbackModal';
 
 export default function UserMenu({ onOpenTemplates, onOpenAccount, onOpenTenureMonitor }) {
   const { user, signOut } = useAuth();
   const [showAuth, setShowAuth] = useState(false);
+  const [showFeedback, setShowFeedback] = useState(false);
+
+  // One entry point for "this broke" / "I wish it did X", signed in or not.
+  const feedbackButton = (
+    <button
+      className="sidebar-feedback-btn"
+      type="button"
+      onClick={() => setShowFeedback(true)}
+      title="Report a problem or send feedback"
+    >
+      Report a problem / send feedback
+    </button>
+  );
+  const feedbackModal = showFeedback && (
+    <FeedbackModal onClose={() => setShowFeedback(false)} userEmail={user?.email || null} />
+  );
 
   if (!user) {
     return (
@@ -14,8 +31,10 @@ export default function UserMenu({ onOpenTemplates, onOpenAccount, onOpenTenureM
           <button className="sidebar-account-signin-btn" onClick={() => setShowAuth(true)}>
             Sign in / Create account
           </button>
+          {feedbackButton}
         </div>
         {showAuth && <AuthModal onClose={() => setShowAuth(false)} />}
+        {feedbackModal}
       </>
     );
   }
@@ -48,6 +67,8 @@ export default function UserMenu({ onOpenTemplates, onOpenAccount, onOpenTenureM
           Sign out
         </button>
       </div>
+      {feedbackButton}
+      {feedbackModal}
     </div>
   );
 }

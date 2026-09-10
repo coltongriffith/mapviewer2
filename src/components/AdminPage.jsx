@@ -3,12 +3,13 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 const OverviewTab = React.lazy(() => import('./admin/OverviewTab'));
 const HealthTab = React.lazy(() => import('./admin/HealthTab'));
+const FeedbackTab = React.lazy(() => import('./admin/FeedbackTab'));
 const UsersTab = React.lazy(() => import('./admin/UsersTab'));
 const ProductTab = React.lazy(() => import('./admin/ProductTab'));
 const RevenueTab = React.lazy(() => import('./admin/RevenueTab'));
 const TenureTab = React.lazy(() => import('./admin/TenureTab'));
 import {
-  useRpc, useGrowth, useDashboardWindow, useOverview, useEngagement, useUsersOverview, useUserDetail, useErrorSummary, useRevenue, useTenureOps,
+  useRpc, useGrowth, useDashboardWindow, useOverview, useEngagement, useUsersOverview, useUserDetail, useErrorSummary, useFeedback, useRevenue, useTenureOps,
 } from './admin/useDashboardData';
 import { pacificDate, addCalendarDays, dayWindow } from './admin/dateWindow';
 
@@ -291,7 +292,7 @@ function SessionTimelineModal({ sessionId, events, error, onClose }) {
 const TABS = [
   ['overview', 'Growth'], ['users', 'Users'], ['activity', 'Activity'],
   ['product', 'Product'], ['growth', 'Acquisition'], ['revenue', 'Revenue'],
-  ['tenure', 'Tenure'], ['health', 'Health'],
+  ['tenure', 'Tenure'], ['health', 'Health'], ['feedback', 'Feedback'],
 ];
 const RANGE_TABS = new Set(['overview', 'activity', 'product', 'growth']);
 
@@ -319,6 +320,8 @@ export default function AdminPage({ onExit }) {
   const engagement = useEngagement(dashWindow, isAdmin && tab === 'product');
   const usersOverview = useUsersOverview(isAdmin && tab === 'users');
   const errorSummary = useErrorSummary(isAdmin && tab === 'health');
+  const [feedbackFilter, setFeedbackFilter] = useState('new');
+  const feedback = useFeedback(isAdmin && tab === 'feedback', feedbackFilter);
   const revenue = useRevenue(isAdmin && tab === 'revenue');
   const tenureOps = useTenureOps(isAdmin && tab === 'tenure');
   const userDetail = useUserDetail();
@@ -338,7 +341,7 @@ export default function AdminPage({ onExit }) {
     updatedAt: acquisition.every(r => r.updatedAt) ? Math.min(...acquisition.map(r => r.updatedAt)) : null,
     reload: () => acquisition.forEach(r => r.reload()),
   } : { overview: growth, activity: overview, users: usersOverview, product: engagement,
-    revenue, tenure: tenureOps, health: errorSummary }[tab];
+    revenue, tenure: tenureOps, health: errorSummary, feedback }[tab];
   const displayedWindow = tab === 'growth' ? queryWindow : dashWindow;
   const dayReport = useRpc('admin_get_day_activity', queryWindow, isAdmin && !!selectedDay);
   const timeline = useRpc('admin_get_session_timeline', { p_session_id: openSessionId }, isAdmin && !!openSessionId);
@@ -447,7 +450,7 @@ export default function AdminPage({ onExit }) {
                 {[7, 30, 90].map(r => <button key={r} className={`admx-range-btn${range === r ? ' active' : ''}`} aria-pressed={range === r} onClick={() => { setRange(r); setSelectedDay(''); }}>{r}d</button>)}
               </div>
               <span className="adm-muted">{pacificDate(new Date(displayedWindow.p_start))} – {addCalendarDays(pacificDate(new Date(displayedWindow.p_end)), -1)} · {tab === 'growth' && selectedDay === pacificDate() ? 'Pacific day in progress' : 'complete Pacific days'}</span>
-            </> : <span className="adm-muted">{tab === 'health' ? 'Last 24 hours' : 'Current snapshot · each report labels its own lookback'}</span>}
+            </> : <span className="adm-muted">{tab === 'health' ? 'Last 24 hours' : tab === 'feedback' ? 'User reports · newest first' : 'Current snapshot · each report labels its own lookback'}</span>}
           </div>
           {tab === 'growth' && <label>Inspect a day <input type="date" value={selectedDay} max={pacificDate()} onChange={e => setSelectedDay(e.target.value)} /></label>}
           <div className="adm-report-status" aria-live="polite">
@@ -494,6 +497,10 @@ export default function AdminPage({ onExit }) {
 
         {tab === 'health' && (
           <HealthTab data={errorSummary.data} loading={errorSummary.loading} error={errorSummary.error} />
+        )}
+        {tab === 'feedback' && (
+          <FeedbackTab data={feedback.data} loading={feedback.loading} error={feedback.error}
+            filter={feedbackFilter} onFilter={setFeedbackFilter} onReload={feedback.reload} />
         )}
 
         {/* ───────── ACQUISITION ───────── */}

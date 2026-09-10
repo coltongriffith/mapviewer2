@@ -73,6 +73,7 @@ export const useUsersOverview = enabled => useRpc('admin_get_users_overview', { 
 export const useRevenue = enabled => useRpc('admin_get_billing_metrics', {}, enabled);
 export const useTenureOps = enabled => useRpc('admin_get_tenure_ops', {}, enabled);
 export const useErrorSummary = (enabled, hours = 24) => useRpc('admin_get_error_summary', { p_hours: hours }, enabled);
+export const useFeedback = (enabled, status = null) => useRpc('admin_get_feedback', { p_status: status, p_limit: 100 }, enabled);
 
 export function useUserDetail() {
   const [userId, load] = useState(null);

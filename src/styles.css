@@ -3553,3 +3553,33 @@ button.admx-ladder-seg { border: 0; font: inherit; padding: 0; }
   .adm-body { padding: 16px; }
   .adm-tab { padding: 10px 12px; }
 }
+
+/* ── Feedback (sidebar entry + modal) ─────────────────────────────────────── */
+.sidebar-feedback-btn {
+  display: block; width: 100%; margin-top: 8px; padding: 6px 0;
+  background: none; border: none; font: inherit; font-size: var(--fs-label);
+  color: var(--ui-text-muted); cursor: pointer; text-align: left; text-decoration: underline;
+  text-underline-offset: 2px; text-decoration-color: var(--ui-border-strong);
+}
+.sidebar-feedback-btn:hover { color: var(--ui-text); text-decoration-color: currentColor; }
+.feedback-modal { max-width: 440px; }
+.feedback-kind-row { display: flex; gap: 6px; }
+.feedback-kind-btn {
+  flex: 1; padding: 8px 6px; font: inherit; font-size: 13px; font-weight: 600;
+  background: var(--ui-surface-subtle); color: var(--ui-text-muted);
+  border: 1px solid var(--ui-border); border-radius: var(--r-md); cursor: pointer;
+}
+.feedback-kind-btn:hover { color: var(--ui-text); }
+.feedback-kind-btn.active { background: var(--ui-action); color: #fff; border-color: var(--ui-action); }
+.feedback-textarea { resize: vertical; min-height: 110px; font-family: inherit; line-height: 1.45; }
+.feedback-optional { font-weight: 500; text-transform: none; letter-spacing: 0; }
+.feedback-fineprint { margin: 0; font-size: 12px; line-height: 1.5; color: var(--ui-text-muted); }
+.feedback-sent { display: grid; gap: 8px; }
+
+/* Admin → Feedback */
+.adm-feedback-msg { white-space: pre-wrap; overflow-wrap: anywhere; max-width: 520px; font-size: 13px; line-height: 1.5; }
+.adm-feedback-actions { display: flex; gap: 4px; flex-wrap: wrap; }
+.adm-feedback-filter { display: flex; gap: 4px; }
+.adm-tag-amber { background: #f4ead5; color: var(--ui-warning); }
+.adm-tag-red { background: #f9eeee; color: var(--ui-danger); }
+.adm-tag-muted { background: var(--ui-surface-subtle); color: var(--ui-text-muted); }
