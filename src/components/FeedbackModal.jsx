@@ -124,3 +124,19 @@ export default function FeedbackModal({
     </Dialog>
   );
 }
+
+/**
+ * Button + modal in one, so callers in the main editor chunk carry a single
+ * element reference rather than the state and markup (bundle budget).
+ */
+export function FeedbackLauncher({ userEmail = null, className = 'sidebar-feedback-btn', label = 'Report a problem / send feedback' }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button className={className} type="button" onClick={() => setOpen(true)} title="Report a problem or send feedback">
+        {label}
+      </button>
+      {open && <FeedbackModal onClose={() => setOpen(false)} userEmail={userEmail} />}
+    </>
+  );
+}
