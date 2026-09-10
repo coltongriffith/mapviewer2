@@ -11,6 +11,7 @@
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'node:crypto';
 import { applyCors, handleMethods, rateLimited } from './_lib/guard.js';
+import { redact } from './_lib/redact.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -32,18 +33,6 @@ function boundedContext(value) {
   } catch {
     return null;
   }
-}
-
-// Strip anything that looks like a secret or personal identifier before the
-// report is stored. Stack traces and messages routinely contain URLs with
-// tokens in the query string.
-function redact(text) {
-  if (!text) return null;
-  return String(text)
-    .replace(/(access_token|refresh_token|api[-_]?key|apikey|password|secret|authorization|bearer)=[^&\s"']+/gi, '$1=[redacted]')
-    .replace(/eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/g, '[jwt]')
-    .replace(/\b(sk|pk|rk|whsec)_[A-Za-z0-9]{10,}/g, '[key]')
-    .replace(/[\w.+-]+@[\w-]+\.[\w.]+/g, '[email]');
 }
 
 // Group identical faults: same kind + normalized message + top stack frame.

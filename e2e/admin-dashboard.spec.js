@@ -21,6 +21,10 @@ async function setup(page, { forbidden = false, failGrowth = false } = {}) {
       if (failGrowth && growthAttempts++ === 0) return reply({ code: '503', message: 'Temporary report outage' },503);
       return reply(growthReport);
     }
+    if (fn === 'admin_get_daily_activity') return reply([
+      { d: '2026-09-03T00:00:00+00:00', sessions: 22, page_views: 22, active_users: 0, signups: 0 },
+      { d: '2026-09-04T00:00:00+00:00', sessions: 14, page_views: 17, active_users: 1, signups: 1 },
+    ]);
     if (fn === 'admin_get_billing_metrics') return reply({ mrr_cents: 5800, paying_subscribers: 2, subscribers: [], invoices: [], upsell_candidates: [], refunds_by_currency: [] });
     if (fn === 'admin_get_day_activity') return reply({ summary: { sessions: 1, page_views: 2, signups: 0, searches: 1, exports: 0, leads: 0 }, sessions: [{ session_id: 'test-tab', first_seen: '2026-09-04T07:00Z', last_seen: '2026-09-04T07:01Z', page_view_count: 2, search_count: 1, export_count: 0 }] });
     if (fn === 'admin_get_session_timeline') return reply({ code: '503', message: 'Timeline temporarily unavailable' },503);
@@ -43,7 +47,8 @@ test('opens growth without loading the editor; shows mobile-safe cohorts and laz
   await page.goto('/admin');
   await expect(page.getByRole('heading', { name: 'Useful maps. Paying customers. Repeat use.' })).toBeVisible();
   expect(scripts.some(url => /\/assets\/(App-|MapCanvas-|vendor-leaflet-|vendor-export-|regionsNA-)/.test(url))).toBe(false);
-  expect(calls.filter(c => c.fn.startsWith('admin_')).map(c => c.fn)).toEqual(['admin_get_access','admin_get_growth']);
+  expect(calls.filter(c => c.fn.startsWith('admin_')).map(c => c.fn).sort()).toEqual(['admin_get_access','admin_get_daily_activity','admin_get_growth']);
+  await expect(page.getByRole('img', { name: 'Daily visitor tabs' })).toBeVisible();
   await expect(page.getByText('3 of 8 at the previous step')).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.screenshot({ path: info.outputPath('growth.png'), fullPage: true });

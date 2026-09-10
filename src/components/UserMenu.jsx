@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../hooks/useAuth.jsx';
 import AuthModal from './AuthModal';
+import { FeedbackLauncher } from './FeedbackModal';
 
 export default function UserMenu({ onOpenTemplates, onOpenAccount, onOpenTenureMonitor }) {
   const { user, signOut } = useAuth();
@@ -14,6 +15,8 @@ export default function UserMenu({ onOpenTemplates, onOpenAccount, onOpenTenureM
           <button className="sidebar-account-signin-btn" onClick={() => setShowAuth(true)}>
             Sign in / Create account
           </button>
+          {/* One entry point for "this broke" / "I wish it did X", signed in or not. */}
+          <FeedbackLauncher />
         </div>
         {showAuth && <AuthModal onClose={() => setShowAuth(false)} />}
       </>
@@ -48,6 +51,7 @@ export default function UserMenu({ onOpenTemplates, onOpenAccount, onOpenTenureM
           Sign out
         </button>
       </div>
+      <FeedbackLauncher userEmail={user.email} />
     </div>
   );
 }

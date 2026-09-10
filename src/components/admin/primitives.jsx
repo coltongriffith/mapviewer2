@@ -93,12 +93,22 @@ export function EmptyHint({ children, since }) {
 // ── Skeleton rows for tables/cards ───────────────────────────────────────────
 // ── ColumnChart: integer y-axis columns + optional context/overlay lines ─────
 // series: [{ d, active_users, sessions, signups }]. Click a column → onPick(d).
-export function ColumnChart({ series = [], onPick }) {
+// Bars and line are configurable so the same chart serves the Activity tab
+// (bars = signed-in active users, line = page views) and the Growth landing
+// tab (bars = visitor tabs, line = signed-in users), where a signed-in-only
+// chart on a young product is flat zero and reads as missing data.
+export function ColumnChart({
+  series = [], onPick,
+  barKey = 'active_users', barLabel = 'active users',
+  lineKey = 'sessions', lineLabel = 'page views',
+  ariaLabel = 'Daily active users',
+  empty = 'No signed-in activity in this window yet. Anonymous traffic is on the Acquisition tab.',
+}) {
   const [hover, setHover] = useState(null);
-  if (!series.length) return <EmptyHint>No signed-in activity in this window yet. Anonymous traffic is on the Acquisition tab.</EmptyHint>;
+  if (!series.length) return <EmptyHint>{empty}</EmptyHint>;
   const W = 720, H = 200, padL = 28, padR = 8, padT = 12, padB = 22;
   const iw = W - padL - padR, ih = H - padT - padB;
-  const maxA = Math.max(...series.map((s) => Number(s.active_users) || 0), 2);
+  const maxA = Math.max(...series.map((s) => Number(s[barKey]) || 0), 2);
   // integer y ticks: 0..maxA stepped to ~4 lines
   const step = Math.max(1, Math.ceil(maxA / 4));
   const top = Math.ceil(maxA / step) * step;
@@ -107,13 +117,13 @@ export function ColumnChart({ series = [], onPick }) {
   const bw = Math.min(24, (iw / n) * 0.62);
   const x = (i) => padL + (iw / n) * (i + 0.5);
   const y = (v) => padT + ih - (v / top) * ih;
-  const maxSess = Math.max(...series.map((s) => Number(s.sessions) || 0), 1);
+  const maxSess = Math.max(...series.map((s) => Number(s[lineKey]) || 0), 1);
   const ys = (v) => padT + ih - (v / maxSess) * ih;
   const hasSignups = series.some((s) => Number(s.signups) > 0);
-  const sessPath = series.map((s, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)} ${ys(Number(s.sessions) || 0).toFixed(1)}`).join(' ');
+  const sessPath = series.map((s, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)} ${ys(Number(s[lineKey]) || 0).toFixed(1)}`).join(' ');
   return (
     <div className="admx-col-wrap">
-      <svg viewBox={`0 0 ${W} ${H}`} className="admx-col" role="img" aria-label="Daily active users">
+      <svg viewBox={`0 0 ${W} ${H}`} className="admx-col" role="img" aria-label={ariaLabel}>
         {ticks.map((t) => (
           <g key={t}>
             <line x1={padL} x2={W - padR} y1={y(t)} y2={y(t)} stroke="var(--em-slate-100, #edf1f0)" />
@@ -121,7 +131,7 @@ export function ColumnChart({ series = [], onPick }) {
           </g>
         ))}
         {series.map((s, i) => {
-          const v = Number(s.active_users) || 0;
+          const v = Number(s[barKey]) || 0;
           const bh = top ? (v / top) * ih : 0;
           return (
             <rect key={i} x={x(i) - bw / 2} y={padT + ih - bh} width={bw} height={bh}
@@ -132,18 +142,18 @@ export function ColumnChart({ series = [], onPick }) {
         })}
         <path d={sessPath} fill="none" stroke="var(--em-slate-300, #c6cecf)" strokeWidth="1.5" />
         {hasSignups && series.map((s, i) => (Number(s.signups) > 0
-          ? <circle key={i} cx={x(i)} cy={y(Number(s.active_users) || 0)} r="2" fill="#176b87" /> : null))}
+          ? <circle key={i} cx={x(i)} cy={y(Number(s[barKey]) || 0)} r="2" fill="#176b87" /> : null))}
       </svg>
       {hover != null && (
         <div className="admx-col-tip">
           <strong>{new Date(`${String(series[hover].d).slice(0, 10)}T12:00:00`).toLocaleDateString('en-CA', { weekday: 'short', month: 'short', day: 'numeric' })}</strong>
-          {' · '}{fmtNum(series[hover].active_users)} active{' · '}{fmtNum(series[hover].sessions)} page views
+          {' · '}{fmtNum(series[hover][barKey])} {barLabel}{' · '}{fmtNum(series[hover][lineKey])} {lineLabel}
           {Number(series[hover].signups) > 0 ? ` · ${series[hover].signups} signup` : ''}
         </div>
       )}
       <div className="admx-col-legend">
-        <span><i className="admx-lg-bar" /> active users</span>
-        <span><i className="admx-lg-line" /> page views</span>
+        <span><i className="admx-lg-bar" /> {barLabel}</span>
+        <span><i className="admx-lg-line" /> {lineLabel}</span>
         {hasSignups && <span><i className="admx-lg-dot" /> signups</span>}
       </div>
     </div>

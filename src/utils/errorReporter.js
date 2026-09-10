@@ -21,6 +21,17 @@ const MAX_REPORTS_PER_SESSION = 25;
 let sent = 0;
 const recentlySent = new Map(); // message -> timestamp
 
+// Ring buffer of the last few faults this tab saw, attached to user feedback
+// (src/utils/feedback.js) so a report of "the export broke" arrives with the
+// exception that broke it, without the user having to open the console.
+const MAX_RECENT = 8;
+const recent = [];
+
+/** @returns {{at: string, kind: string, message: string}[]} newest last */
+export function getRecentErrors() {
+  return recent.slice();
+}
+
 function shouldSend(key) {
   if (sent >= MAX_REPORTS_PER_SESSION) return false;
   const now = Date.now();
@@ -41,6 +52,8 @@ export function reportError(error, { kind = 'error', context } = {}) {
   try {
     const message = String(error?.message || error || '').slice(0, 500);
     if (!message) return;
+    recent.push({ at: new Date().toISOString(), kind, message: message.slice(0, 200) });
+    if (recent.length > MAX_RECENT) recent.shift();
     if (!shouldSend(`${kind}:${message}`)) return;
     sent += 1;
 
