@@ -51,7 +51,10 @@ describe('error summary SQL', () => {
     expect(d.groups.map(g => g.fingerprint)).toEqual(['fp-a', 'fp-b']); // newest first
     const a = d.groups[0];
     expect(a).toMatchObject({ count: 6, users: 2, kind: 'error', source: 'client', release: '1.0.0', sample_stack: 'newest stack' });
-    expect(a.last_seen.startsWith('2026-09-08T11:00:00')).toBe(true);
+    // PostgreSQL may serialize the same instant with the runtime's local UTC
+    // offset (PGlite currently uses +02:00 in CI), so compare instants rather
+    // than a presentation-specific timestamp prefix.
+    expect(Date.parse(a.last_seen)).toBe(Date.parse('2026-09-08T11:00:00Z'));
     expect(d.groups[1]).toMatchObject({ count: 1, users: 0, kind: 'api', message: 'stripe failed' });
   });
 
