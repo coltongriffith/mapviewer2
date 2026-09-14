@@ -32,6 +32,7 @@ beforeAll(async () => {
     alter default privileges in schema public grant execute on functions to anon, authenticated;
   `);
   await db.exec(readFileSync('supabase/migrations/20260905053221_growth_dashboard_performance.sql', 'utf8'));
+  await db.exec(readFileSync('supabase/migrations/20260914000001_growth_engaged_sessions.sql', 'utf8'));
 }, 30000);
 afterAll(async () => { await db?.close(); });
 beforeEach(async () => {
@@ -47,7 +48,7 @@ const event = (sid, event, at, props = {}, n = null) => db.query('insert into pu
 describe('growth report SQL', () => {
   it('runs with no activity and preserves empty cohorts', async () => {
     const d = await report();
-    expect(d.funnel).toEqual({ sessions: 0, opened: 0, imported: 0, exported: 0, real_exported: 0 });
+    expect(d.funnel).toEqual({ sessions: 0, engaged: 0, opened: 0, imported: 0, exported: 0, real_exported: 0 });
     expect(d.sources).toEqual([]);
     expect(d.cohort.activation_eligible).toBe(0);
   });
@@ -63,8 +64,16 @@ describe('growth report SQL', () => {
     await event('after', 'editor_opened', end);
     await event('unknown', 'export_completed', '2026-09-07T12:00Z');
     const d = await report();
-    expect(d.funnel).toEqual({ sessions: 3, opened: 2, imported: 2, exported: 1, real_exported: 1 });
+    expect(d.funnel).toEqual({ sessions: 3, engaged: 3, opened: 2, imported: 2, exported: 1, real_exported: 1 });
     expect(d.exports).toEqual({ total: 3, real: 2, unclassified: 1, other: 0 });
+  });
+  it('separates landing-only tabs from observed engagement without calling either human', async () => {
+    await db.exec("insert into public.page_views (session_id,created_at) values ('landing','2026-09-06T12:00Z'),('browse','2026-09-06T12:00Z'),('browse','2026-09-06T12:01Z'),('action','2026-09-06T12:00Z')");
+    await event('action', 'editor_opened', '2026-09-06T12:02Z');
+    const d = await report();
+    expect(d.funnel).toMatchObject({ sessions: 3, engaged: 2, opened: 1 });
+    expect(d.sources).toEqual([{ source: 'Unattributed', sessions: 3, engaged: 2, opened: 1, imported: 0, exported: 0, real_exported: 0 }]);
+    expect(d.meta.engagement_definition).toBe('two_page_views_or_product_event');
   });
   it('excludes young cohorts and activity after the reporting cutoff', async () => {
     await user(1); // mature, real-data export + week-two return

@@ -13,7 +13,7 @@ export default function GrowthTab({ data, onOpenUser, daily, onPickDay }) {
   const b = data.billing;
   const friction = data.friction;
   const steps = [
-    ['Tracked sessions', f.sessions], ['Opened editor', f.opened],
+    ['Tracked tab sessions', f.sessions], ['Observed engagement', f.engaged ?? f.opened], ['Opened editor', f.opened],
     ['Imported real data', f.imported], ['Exported after import', f.exported],
   ];
   return <>
@@ -55,7 +55,7 @@ export default function GrowthTab({ data, onOpenUser, daily, onPickDay }) {
           </li>)}
         </ol>}
         <p className="admx-since-note">{fmtNum(f.real_exported)} of those sessions explicitly confirmed real data in the exported map. Importing and exporting in one tab alone does not prove it was the same map.</p>
-        <p className="admx-since-note">Sessions are browser tabs, not people. Known admin activity is excluded; unidentified tests, bots and blocked tracking remain limitations.</p>
+        <p className="admx-since-note">Engagement means more than one recorded page view or any product action. It is an observed action pattern, not proof that a session was human. Sessions are browser tabs, not people. Known admin activity is excluded; unidentified tests, bots and blocked tracking remain limitations.</p>
       </Card>
       <Card title="Next customer actions" eyebrow="Decisions from this window">
         <ul className="growth-actions">
@@ -81,8 +81,8 @@ export default function GrowthTab({ data, onOpenUser, daily, onPickDay }) {
     <div className="growth-grid">
       <Card title="Sources that produce maps" eyebrow="Top 30 · first recorded page in each tab within this window">
         {!data.sources.length ? <EmptyHint>No source data in this window.</EmptyHint> : <div className="adm-table-scroll"><table className="adm-table">
-          <thead><tr><th>Source / medium</th><th>Sessions</th><th>Editor</th><th>Import</th><th>Export</th></tr></thead>
-          <tbody>{data.sources.map(s => <tr key={s.source}><th scope="row">{s.source}</th><td>{fmtNum(s.sessions)}</td><td>{fmtNum(s.opened)}</td><td>{fmtNum(s.imported)}</td><td>{fmtNum(s.exported)}</td></tr>)}</tbody>
+          <thead><tr><th>Source / medium</th><th>Sessions</th><th>Engaged</th><th>Editor</th><th>Import</th><th>Export</th></tr></thead>
+          <tbody>{data.sources.map(s => <tr key={s.source}><th scope="row">{s.source}</th><td>{fmtNum(s.sessions)}</td><td>{fmtNum(s.engaged ?? s.opened)}</td><td>{fmtNum(s.opened)}</td><td>{fmtNum(s.imported)}</td><td>{fmtNum(s.exported)}</td></tr>)}</tbody>
         </table></div>}
         <p className="admx-since-note">Steps follow the same sequence as the first-map journey. Unattributed includes direct, missing and blocked attribution; it is not proof of direct traffic.</p>
       </Card>

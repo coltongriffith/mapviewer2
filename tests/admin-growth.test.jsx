@@ -9,6 +9,8 @@ describe('growth dashboard', () => {
     render(<GrowthTab data={growthReport} onOpenUser={() => {}} />);
     expect(screen.getByText('Estimated MRR · USD')).toBeInTheDocument();
     expect(screen.getByText('$58.00')).toBeInTheDocument();
+    expect(screen.getByText('Observed engagement')).toBeInTheDocument();
+    expect(screen.getByText(/Engagement means more than one recorded page view/)).toBeInTheDocument();
     expect(screen.getByText('3 of 8 at the previous step')).toBeInTheDocument();
     expect(screen.getByText(/1 unclassified/)).toBeInTheDocument();
     expect(screen.getByText('1 of 3')).toBeInTheDocument();
