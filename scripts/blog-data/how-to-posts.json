@@ -515,7 +515,7 @@
     "mapTypeId": "drill-results-map",
     "title": "How to Make a Drill Results Map",
     "metaDescription": "Turn a drill collar CSV into a drill hole map for a news release or technical report: required columns, coordinate fixes, how to present assay intercepts, callout discipline, claims and target context, and export settings.",
-    "directAnswer": "To make a drill results map, import your drill collar CSV, map the latitude/longitude (or easting/northing) columns, assign the Drillholes role, add callout labels showing hole ID and best intercept, add the property boundary, then export as a Landscape 16:9 PNG or a news-release figure PDF.",
+    "directAnswer": "Import a collar CSV with hole IDs and WGS84 longitude/latitude, assign the Drillholes role, add a boundary for context and label selected results. Start with the downloadable 14-hole example below, then replace the fictional data with your reviewed project data.",
     "ctaTop": {
       "text": "Turn a collar CSV into a drill map.",
       "sub": "Map the columns, badge the intercepts that matter, export the figure."
@@ -536,6 +536,22 @@
         ]
       },
       {
+        "h2": "A downloadable example you can reproduce",
+        "html": "<a href=\"/examples/cedar-ridge-collars.csv\" download>Download the 14-collar CSV</a> · <a href=\"/examples/cedar-ridge-claims.geojson\" download>Download its claim boundary</a> · <a href=\"/examples/README.txt\">Sample notes and reuse</a>",
+        "body": "The CSV contains 14 fictional Cedar Ridge collars, from CR-24-01 to CR-24-14. Longitude and Latitude are decimal degrees. Result contains illustrative label text. The boundary file uses the same coordinate system. Neither file represents a real exploration program.",
+        "image": {
+          "src": "/gallery/drill-results.png",
+          "alt": "Fourteen Cedar Ridge demonstration drill collars inside a claim boundary with three result callouts",
+          "caption": "Finished Drill Results gallery example. The downloadable CSV contains these 14 collar locations; all company names, claims and assay labels are fictional."
+        },
+        "cta": {
+          "text": "Explore the finished 14-hole example.",
+          "sub": "Compare the map layout with the CSV and boundary files.",
+          "href": "/?demo=drill_plan&utm_source=blog&utm_medium=example&utm_campaign=how-to-make-a-drill-results-map",
+          "label": "Open the drill example →"
+        }
+      },
+      {
         "h2": "Required and recommended CSV columns",
         "body": "At minimum you need a hole ID and a coordinate pair. Everything else is preserved as feature properties you can show in callouts.",
         "table": {
@@ -553,16 +569,16 @@
               "Used as the callout title"
             ],
             [
-              "Latitude / Northing",
+              "Latitude",
               "Required",
-              "50.12345",
-              "Decimal degrees or UTM northing"
+              "55.464373",
+              "WGS84 decimal degrees"
             ],
             [
-              "Longitude / Easting",
+              "Longitude",
               "Required",
-              "-122.54321",
-              "Decimal degrees or UTM easting"
+              "-127.241130",
+              "WGS84 decimal degrees"
             ],
             [
               "Total depth (m)",
@@ -587,7 +603,7 @@
       },
       {
         "h2": "Step 1: Import the drill collar CSV",
-        "body": "Click the import button in the Layers section and select your collar CSV. The Column Mapper opens automatically — assign latitude and longitude. Columns named Lat, Long, Latitude, Longitude, Easting, or Northing are detected for you. Every other column (hole ID, depth, grade) is preserved and accessible when you click a hole.",
+        "body": "Open the upload workflow and select the CSV. Recognised latitude/longitude columns can import automatically. If the Column Mapper appears, select the coordinate columns and confirm them. The sample uses Longitude and Latitude; HoleID, Result and Status remain feature properties.",
         "image": {
           "alt": "Column Mapper showing latitude and longitude columns being assigned from a collar CSV",
           "caption": "Mapping coordinate columns when importing a collar CSV",
@@ -598,10 +614,10 @@
         "h2": "Common coordinate issues (and fixes)",
         "body": "Most drill maps that come out wrong are a coordinate problem, not a styling problem.",
         "checklist": [
-          "Lat/long swapped: if holes land in the wrong hemisphere, you've mapped longitude to latitude — re-map the columns",
-          "UTM vs decimal degrees: easting/northing in the hundreds of thousands won't plot — convert to decimal degrees (WGS84) first, then import",
-          "Sign dropped: western/southern coordinates must be negative (e.g. -122.5, not 122.5)",
-          "Datum mismatch: NAD83 vs WGS84 is usually sub-metre, but a wrong datum or zone can shift holes by hundreds of metres — verify against a known landmark"
+          "Use decimal-degree WGS84 coordinates for the CSV. Convert UTM eastings/northings using the correct source zone and datum before importing.",
+          "Check that longitude is assigned to longitude, and latitude to latitude.",
+          "Keep negative signs for western longitudes and southern latitudes.",
+          "Check against a known control point; do not infer positional accuracy from a plausible-looking basemap."
         ]
       },
       {
@@ -649,7 +665,7 @@
       },
       {
         "h2": "Step 5: Frame and export for a news release",
-        "body": "Activate Landscape 16:9 — the standard for news-release figures — and frame so all holes and key callouts fit. The Investor — Navy & White theme with a Light or Satellite basemap is the convention. Export PNG at 2× for email and web, or the News Release Figure PDF (6\" × 4.5\") for print-ready delivery."
+        "body": "Choose a landscape layout for a slide or a page layout for a report figure. Fit all intended collars and labels inside the export frame. Include the project, program date, source and an explanation of the interval widths. Export at the size your publication needs, then inspect label legibility and compare every result with the reviewed source table."
       },
       {
         "h2": "Drill maps for a news release",
@@ -668,14 +684,6 @@
         }
       },
       {
-        "h2": "Example: a discovery-hole release",
-        "body": "The release leads with one discovery hole and two strong step-outs. Plot all collars so the program reads as a program; badge only those three with width and grade; outline the target and the claim so the holes sit in context; switch to satellite so the setting is obvious; add a title block with the date; export Landscape 16:9 for the wire and the deck. Twelve holes, three labels, one point."
-      },
-      {
-        "h2": "Example: a 12-hole discovery program",
-        "body": "You've finished a 12-hole program with three standout intercepts. Import the collar CSV, map the coordinates, assign Drillholes, badge-label the three best holes with their grades, add plain callouts on the rest, drop in the claims boundary and your logo, switch to Satellite to show the ridge the holes follow, and export Landscape 16:9. That figure is ready to attach to the news release and reuse in the deck."
-      },
-      {
         "h2": "About the data and what to disclose",
         "box": {
           "kind": "capability",
@@ -685,13 +693,17 @@
       },
       {
         "h2": "Related guides",
-        "html": "See the <a href=\"/blog/how-to-make-a-drill-results-map/\">news-release figure section</a>, the broad <a href=\"/blog/how-to-make-a-mining-claims-map/\">mining claims map guide</a>, how to <a href=\"/blog/how-to-import-csv-data-mining-map/\">import CSV data</a>, and how to <a href=\"/blog/how-to-make-a-professional-exploration-map/\">lay out and export the figure</a>."
+        "html": "Continue with the <a href=\"/drill-results-map/\">drill-results map tool</a>, the <a href=\"/blog/how-to-import-csv-data-mining-map/\">CSV import guide</a>, and <a href=\"/blog/how-to-make-a-professional-exploration-map/\">map layout and export guide</a>."
+      },
+      {
+        "h2": "How this guide was checked",
+        "html": "Prepared by <a href=\"/about/\">Exploration Maps</a>. Workflow reviewed on September 15, 2026 against the current importer and editor. Demo files use fictional data; registry examples are dated observations. See our <a href=\"/data-coverage/\">data coverage and methodology</a> for sources, freshness and limitations."
       }
     ],
     "faqs": [
       {
         "q": "What columns does a drill collar CSV need?",
-        "a": "At minimum a hole ID and a coordinate pair — latitude and longitude in decimal degrees is the least error-prone form. Easting/northing works if you also know the UTM zone and datum. Azimuth, dip, total depth and any assay summary columns are preserved as feature properties and can be used for labels."
+        "a": "Use a hole ID and WGS84 latitude/longitude in decimal degrees. Convert projected coordinates with the correct source zone and datum first. Other fields such as depth and results can be used for labels."
       },
       {
         "q": "How should I label drill intercepts on a map?",
@@ -721,7 +733,8 @@
     ],
     "publishedDate": "2025-10-22",
     "category": "drill-results",
-    "cardSummary": "Collar CSV to finished drill hole map: columns, coordinate fixes, intercept callouts, target and claims context, and news-release export."
+    "cardSummary": "Collar CSV to finished drill hole map: columns, coordinate fixes, intercept callouts, target and claims context, and news-release export.",
+    "updatedDate": "2026-09-15"
   },
   {
     "slug": "how-to-create-exploration-map-investor-presentation",
@@ -845,80 +858,114 @@
   {
     "slug": "how-to-import-geojson-mining-map",
     "title": "How to Import GeoJSON Data into a Mining Map",
-    "metaDescription": "Import GeoJSON into a mining map in one click. Convert Shapefiles free at mapshaper.org, assign layer roles for automatic styling, and fix common coordinate-system issues.",
-    "directAnswer": "To import GeoJSON into Exploration Maps, click the import button in the Layers section, select your .geojson or .json file, and the layer is added automatically with the map zoomed to your data. Assign a layer Role (Claims, Drillholes, Targets) to get standard exploration styling in one click.",
+    "metaDescription": "Import GeoJSON, zipped Shapefiles or KML into a mining map. Try a downloadable boundary, style claims, and fix missing projection or coordinate problems.",
+    "directAnswer": "Upload a GeoJSON or JSON file with WGS84 longitude/latitude coordinates, then assign the Claims role and style the boundary. Zipped Shapefiles and KML/KMZ can also be imported directly; conversion to GeoJSON is optional.",
     "sections": [
       {
-        "h2": "What you need",
-        "checklist": [
-          "A .geojson or .json file (polygons, lines, or points)",
-          "Coordinates in WGS84 latitude/longitude (EPSG:4326) — the standard for web maps",
-          "If your data is a Shapefile or KML: two minutes to convert it (below)"
-        ]
+        "h2": "Choose the file you already have",
+        "body": "You do not need to convert a Shapefile or KML just to open it in Exploration Maps. Keep a copy of your original data and use the corresponding import path below.",
+        "table": {
+          "headers": [
+            "File",
+            "What to supply",
+            "Coordinate handling"
+          ],
+          "rows": [
+            [
+              "GeoJSON / JSON",
+              "A FeatureCollection with geometry and properties",
+              "Use WGS84 longitude, latitude (EPSG:4326)."
+            ],
+            [
+              "Zipped Shapefile",
+              "Matching .shp, .shx, .dbf and .prj files in one .zip",
+              "The .prj supplies the source projection for conversion."
+            ],
+            [
+              "KML / KMZ",
+              "Upload the .kml or compressed .kmz directly",
+              "KML uses geographic longitude/latitude."
+            ],
+            [
+              "CSV",
+              "A header row and a coordinate pair for each point",
+              "Use WGS84 decimal degrees; convert projected eastings/northings first."
+            ]
+          ]
+        }
       },
       {
-        "h2": "Why GeoJSON is the easiest format to work with",
-        "body": "GeoJSON is a single text file that encodes polygons, lines, and points as JSON. Unlike a Shapefile — which is really four or more files that must travel together — a GeoJSON never arrives missing its .prj or .dbf. Most government open-data portals and modern GIS tools export it directly, and it imports into Exploration Maps with zero configuration."
-      },
-      {
-        "h2": "Converting a Shapefile to GeoJSON (free, 2 minutes)",
-        "body": "If your data came as a Shapefile (.shp + .dbf + .shx + .prj) or KML, convert it first:",
-        "items": [
-          "Go to mapshaper.org (free, runs in your browser — your data never uploads to a server)",
-          "Drag the whole Shapefile set in (or the .zip) — include the .prj so the projection is read correctly",
-          "Click Export → GeoJSON",
-          "Import the downloaded file into Exploration Maps"
-        ]
-      },
-      {
-        "h2": "Importing the file",
-        "body": "In Exploration Maps, click the import button in the Layers section of the sidebar and select your file. The layer is added, the map zooms to its bounds, and polygon, line, and point geometry are detected automatically. Attribute properties come along too — they drive labels and callouts later."
-      },
-      {
-        "h2": "Assign a Role to get instant styling",
-        "body": "Expand the new layer card and set its Role. Roles apply the styling conventions readers of exploration maps expect — Claims get the classic boundary treatment, Drillholes render as collar points, Target Areas get dashed outlines. You can override any colour afterwards, but the role gets you to a presentable map immediately.",
+        "h2": "Try a boundary with a known result",
+        "html": "<a href=\"/examples/cedar-ridge-claims.geojson\" download>Download the Cedar Ridge GeoJSON boundary</a> · <a href=\"/examples/README.txt\">Read the sample notes</a>",
+        "body": "This sample contains 161 fictional claim cells near 55.45° N, 127.20° W. It is the boundary used in the Claims gallery example below. It is not an actual title record.",
         "image": {
-          "src": "/blog-img/layer-claims-role.png",
-          "alt": "Assigning the Claims role to an imported GeoJSON layer",
-          "caption": "Assigning a Role after import applies standard exploration styling in one click."
+          "src": "/gallery/claims.png",
+          "alt": "Cedar Ridge demonstration claim boundary with a legend, scale bar and location inset",
+          "caption": "Finished Claims gallery example using the downloadable Cedar Ridge boundary. Fictional demonstration data; styling is configured separately from the file."
         }
       },
       {
-        "h2": "If your data lands in the wrong place",
-        "body": "Exploration Maps expects geographic coordinates (WGS84 / EPSG:4326). If your imported layer appears in the ocean or at (0,0), the file is almost certainly in a projected system like UTM.",
-        "box": {
-          "kind": "tip",
-          "title": "Fix a UTM or projected file",
-          "html": "Open the original file in mapshaper.org, run the console command <code>-proj wgs84</code> (or export from your GIS with CRS set to EPSG:4326), then re-import. Zone mismatches are the #1 cause of misplaced exploration data."
+        "h2": "Import and check the location",
+        "body": "Open the upload workflow, select the file, and review the feature preview. Click Add to map, then wait for the map to fit its bounds. The sample should form a compact block in northwestern British Columbia. For your own file, compare the position with a known coordinate or landmark before styling it. Attributes remain available as feature properties."
+      },
+      {
+        "h2": "Style the boundary and export",
+        "body": "Assign the Claims role, choose a fill colour and border, and turn on Dissolve inner borders if you want the claim cells to read as one outline. Give the legend a meaningful name. Add a project title, source/date text, scale bar and north arrow, then check your PNG at the size it will be used.",
+        "html": "<a href=\"/?demo=claims&amp;utm_source=blog&amp;utm_medium=example&amp;utm_campaign=how-to-import-geojson-mining-map\">Open the finished Claims example</a> to compare its styling with your import. A GeoJSON file supplies geometry and attributes; it does not carry this editor layout."
+      },
+      {
+        "h2": "Fix a missing projection or misplaced file",
+        "table": {
+          "headers": [
+            "Symptom",
+            "What to check"
+          ],
+          "rows": [
+            [
+              "Projected Shapefile without a .prj",
+              "Include the matching .prj in the ZIP. Do not rename an unrelated projection file to make it fit."
+            ],
+            [
+              "GeoJSON has six- or seven-digit coordinates",
+              "These may be projected metres. Re-export from the known source CRS to WGS84 before importing."
+            ],
+            [
+              "Map is in the wrong hemisphere",
+              "Check longitude/latitude order and negative signs. Western longitudes are negative."
+            ],
+            [
+              "A few features are far from the main block",
+              "Inspect those coordinates and remove invalid records in a copy of the source."
+            ]
+          ]
         }
       },
       {
+        "h2": "When conversion is useful",
+        "body": "Convert when a source format is unsupported, a geometry needs repair, or you want one portable GeoJSON file. In your GIS, select the correct source coordinate system and export to EPSG:4326. A projection cannot be recovered reliably from an unknown UTM zone or a guessed datum.",
+        "html": "For a Shapefile, keep the companion files together. See the <a href=\"/shapefile-to-map/\">Shapefile upload workflow</a> and <a href=\"/data-coverage/\">supported inputs and data sources</a>.",
         "cta": {
-          "text": "Import your GeoJSON and export an investor-ready map.",
-          "sub": "Drag the file in, pick a role, export in minutes."
+          "text": "Import your boundary.",
+          "sub": "Check its location, style the claims, and export your map."
         }
+      },
+      {
+        "h2": "How this guide was checked",
+        "html": "Prepared by <a href=\"/about/\">Exploration Maps</a>. Workflow reviewed on September 15, 2026 against the current importer and editor. Demo files use fictional data; registry examples are dated observations. See our <a href=\"/data-coverage/\">data coverage and methodology</a> for sources, freshness and limitations."
       }
     ],
     "faqs": [
       {
-        "q": "What GeoJSON geometry types can I import?",
-        "a": "Polygons and MultiPolygons (claims, licences, target outlines), LineStrings (roads, powerlines, trenches), and Points (drill collars, samples, showings). A single FeatureCollection can mix types, though separate layers per type style more cleanly."
+        "q": "Do I have to convert a Shapefile or KML to GeoJSON?",
+        "a": "No. Upload a zipped Shapefile with its companion files, or upload KML/KMZ directly. Conversion is an optional preparation step."
       },
       {
-        "q": "Is there a file size limit for GeoJSON imports?",
-        "a": "Very large files (tens of megabytes) can slow the browser. If your file is heavy, simplify the geometry at mapshaper.org (Simplify → 10–30%) — claim boundaries rarely need survey-grade vertex density for a presentation map."
+        "q": "Why does my Shapefile need a .prj?",
+        "a": "It identifies the source coordinate system. Projected coordinates cannot be placed reliably without it. Include the original .prj or re-export in WGS84 from a known source CRS."
       },
       {
-        "q": "Do my GeoJSON attributes/properties import too?",
-        "a": "Yes. Feature properties are preserved and available for labels and callouts — for example a claim number or hole ID column can be shown directly on the map."
-      },
-      {
-        "q": "My coordinates are in UTM. Can I import them?",
-        "a": "Convert to WGS84 first. In mapshaper, load the file with its .prj and export as GeoJSON with the wgs84 setting, or reproject in QGIS with 'Save As' → CRS EPSG:4326. If the file has no .prj, you'll need to know the UTM zone to reproject correctly."
-      },
-      {
-        "q": "Can I import multiple GeoJSON files into one map?",
-        "a": "Yes — each import becomes its own layer with independent styling, visibility, and legend entry. A typical project map stacks a claims layer, a drillhole layer, and a target-areas layer."
+        "q": "Does GeoJSON preserve my map styling?",
+        "a": "Feature geometry and attributes are imported. Set colours, layer roles, labels, legend and layout in the editor; the sample layout is available separately."
       }
     ],
     "relatedSlugs": [
@@ -927,7 +974,12 @@
       "how-to-make-a-professional-exploration-map"
     ],
     "publishedDate": "2025-11-03",
-    "category": "gis-data"
+    "category": "gis-data",
+    "ctaTop": {
+      "text": "Start with your boundary file.",
+      "sub": "Upload GeoJSON, a zipped Shapefile, KML or KMZ directly."
+    },
+    "updatedDate": "2026-09-15"
   },
   {
     "slug": "how-to-create-target-generation-map",
@@ -2515,6 +2567,42 @@
         }
       },
       {
+        "h2": "Worked example: Goliath in British Columbia",
+        "body": "On September 15, 2026, a search for Goliath in the BC registered-owner field returned 94 features under GOLIATH RESOURCES LTD, with no truncation reported. This is a dated search observation, not a permanent claim count or verification of the company’s complete land position.",
+        "table": {
+          "headers": [
+            "Step",
+            "What to inspect"
+          ],
+          "rows": [
+            [
+              "Search Goliath in British Columbia",
+              "Read the registered-owner spelling rather than relying on the ticker GOT."
+            ],
+            [
+              "Review GOLIATH RESOURCES LTD",
+              "Compare title identifiers and geography with your source records and Mineral Titles Online."
+            ],
+            [
+              "Choose the relevant titles",
+              "Use Select All only if every returned title belongs in the map you are making."
+            ],
+            [
+              "Add the selected claims",
+              "Review the map extent and the layer source/date; set its legend name and export layout."
+            ]
+          ]
+        },
+        "image": {
+          "src": "/companies-assets/GOT.svg",
+          "alt": "Goliath Resources company-page snapshot of published mineral claim geometry",
+          "width": 1000,
+          "height": 640,
+          "caption": "Company-page map snapshot for Goliath Resources. This separately generated snapshot is an example of the output; it is not the 94-record search observation below or a current ownership certification."
+        },
+        "html": "<a href=\"/companies/got/\">View the Goliath company-page snapshot</a> or verify individual tenures in <a href=\"https://www.mtonline.gov.bc.ca/\">Mineral Titles Online</a>. Search results can change as the published record changes."
+      },
+      {
         "h2": "Read the candidates properly",
         "body": "Results come back grouped: exact name match, possible match, and weak match. That grouping is deliberate and it is worth respecting.",
         "html": "Company names reach a title registry in clipped legal form, with inconsistent punctuation, under previous corporate names, through numbered subsidiaries, and in the name of one joint-venture partner rather than the operator everyone talks about. A name match ranks a candidate; it does not establish who holds the ground. Nothing enters your map until you tick it.",
@@ -2526,7 +2614,7 @@
       },
       {
         "h2": "Select the whole position at once",
-        "body": "Each candidate group has a select-all control, and the footer totals what you have selected — claim count and hectares together. Those two numbers are the land position, and they are the numbers you will end up quoting, so it is worth reading them before you add rather than counting rows afterwards.",
+        "body": "Each candidate group has a select-all control. Read the selected claim count and reported hectares before adding it. These describe the selected published records, which may not represent the company’s entire land position.",
         "html": "Hectares in particular tends to surprise people: forty small cell claims and four large leases can describe very different companies."
       },
       {
@@ -2550,12 +2638,20 @@
       {
         "h2": "Where this workflow stops",
         "items": [
-          "It reflects published data as of the last successful synchronization, not the live registry",
+          "It reflects published spatial data returned by the search source, which may lag the authoritative title record.",
           "It matches a registered-owner field, so beneficial ownership and option agreements are invisible to it",
           "It cannot tell you about applications in progress beyond what the province publishes",
           "It is not a substitute for a title search when money is changing hands"
         ],
         "body": "For a transaction, use it to build the picture and then verify every tenure in MTO."
+      },
+      {
+        "h2": "Next steps and sources",
+        "html": "Use the <a href=\"/mining-claim-search-by-company-name/\">company-name search tool</a> to repeat the lookup. Read <a href=\"/data-coverage/\">coverage and methodology</a> before comparing results across jurisdictions."
+      },
+      {
+        "h2": "How this guide was checked",
+        "html": "Prepared by <a href=\"/about/\">Exploration Maps</a>. The Goliath search was checked against the BC public-data search endpoint on September 15, 2026. The map image comes from the separately dated company-page snapshot. We have not certified legal or beneficial ownership."
       }
     ],
     "faqs": [
@@ -2586,7 +2682,8 @@
       "how-to-map-bc-mineral-claims-live-registry"
     ],
     "publishedDate": "2026-08-06",
-    "fullTitle": "Find BC Mineral Claims Owned by a Company | Exploration Maps"
+    "fullTitle": "Find BC Mineral Claims Owned by a Company | Exploration Maps",
+    "updatedDate": "2026-09-15"
   },
   {
     "slug": "canadian-mineral-claim-registries",

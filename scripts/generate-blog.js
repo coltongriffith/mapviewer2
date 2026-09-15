@@ -426,11 +426,11 @@ function inlineCta({ text, sub = '', href = '/', label = 'Open Exploration Maps 
 // `eager: true` for above-the-fold hero images (the LCP candidate) — loads
 // immediately at high fetch priority instead of the default lazy, which would
 // defer the main visual's fetch. Inline screenshots keep the lazy default.
-function figureBlock({ alt = '', caption = '', src = '', eager = false } = {}) {
+function figureBlock({ alt = '', caption = '', src = '', eager = false, width, height } = {}) {
   const label = caption || alt || 'App screenshot';
   const loadAttrs = eager ? 'loading="eager" fetchpriority="high"' : 'loading="lazy"';
   const variants = imageVariants[src];
-  let dimensions = '';
+  let dimensions = width && height ? `width="${Number(width)}" height="${Number(height)}"` : '';
   let responsive = '';
   if (variants) {
     dimensions = `width="${variants[0].width}" height="${variants[0].height}"`;
@@ -865,15 +865,15 @@ function buildSeoLandingPage(page, allLandingPages) {
   </div>
   <article>
     <p class="lp-intro">${esc(page.intro)}</p>
-    ${start}
-    <p class="lp-plan-note">${esc(planNote)}</p>
+    ${page.reference ? '' : start}
+    ${page.reference ? '' : `<p class="lp-plan-note">${esc(planNote)}</p>`}
     ${renderSections(page.sections || [], action)}
     ${disclaimerHtml}
-    <div class="lp-cta">
+    ${page.reference ? '' : `<div class="lp-cta">
       <h2>${page.slug === 'mineral-tenure-monitoring' ? 'Start monitoring your claims' : 'Make your first map'}</h2>
-      <p>${page.slug === 'mineral-tenure-monitoring' ? 'Monitor up to 10 BC claims free and set reminders for their published good-to-dates.' : 'Find or upload your claims, choose an investor layout, and download your map.'}</p>
+      <p>${esc(page.ctaSummary || (page.slug === 'mineral-tenure-monitoring' ? 'Monitor up to 10 BC claims free and set reminders for their published good-to-dates.' : 'Find or upload your claims, choose an investor layout, and download your map.'))}</p>
       <a href="${esc(action.href)}">${esc(action.label)}</a>
-    </div>
+    </div>`}
     ${faqBlock(page.faqs)}
     ${relatedHtml}
   </article>
@@ -887,7 +887,7 @@ function buildSeoLandingPage(page, allLandingPages) {
     schema,
     body,
     ogType: 'website',
-    ogImage: `${SITE}/og/${page.slug}.png`,
+    ogImage: page.ogImage ? `${SITE}${page.ogImage}` : page.reference ? OG_IMAGE : `${SITE}/og/${page.slug}.png`,
     action,
   });
 }
