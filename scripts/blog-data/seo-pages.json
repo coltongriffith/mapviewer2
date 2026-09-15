@@ -156,85 +156,86 @@
     "h1": "Mining Claim Search by Company Name",
     "label": "Claim Search",
     "metaDescription": "Search mineral claims by company or claimholder name in six Canadian jurisdictions — BC, Ontario, Quebec, Saskatchewan, Newfoundland & Labrador and Yukon — then map the results. Confirm ownership with the responsible provincial registry.",
-    "intro": "Exploration Maps lets you search public mineral claim data and turn the results into clean maps — useful for reviewing a company's land position, competitor research, deal review, and due diligence.",
+    "intro": "Search published mineral claim records by registered holder, review the candidate titles, and map the ones relevant to your project. Company names, subsidiaries and tickers do not always match the registry’s recorded owner name.",
     "softwareApp": false,
     "sections": [
       {
-        "h2": "Why search claims by company name",
-        "body": "Searching mineral claims by company name answers a direct question: what ground does this company actually control. Instead of looking up individual tenures one at a time, you can review a company's land position as a whole and then map it. This is one of the most practical starting points for research on a junior explorer or a prospective deal, where supported by the underlying public data."
-      },
-      {
-        "h2": "Reviewing land positions",
-        "body": "A company-name search gives you the shape and extent of a land package — how concentrated it is, whether it covers a known trend, and how it sits relative to neighbours. Mapping it makes the land position legible in a way a list of tenure numbers never will."
-      },
-      {
-        "h2": "Competitor research",
-        "body": "Mapping a competitor's claims shows where they are expanding, what districts they favour, and whether their ground borders yours. This context is helpful for staking decisions, partnership discussions, and understanding a peer group."
-      },
-      {
-        "h2": "Deal review",
-        "body": "When evaluating an acquisition, option, or earn-in, a claims map built from a company-name search lets you see the asset clearly before going deep into documents. It is a fast first-pass filter for corporate development and capital markets teams."
-      },
-      {
-        "h2": "Project due diligence",
-        "body": "During due diligence, an independent map of the target's claims helps cross-check what is being represented. It is a visual reference to review alongside the official tenure records, not a replacement for them."
-      },
-      {
-        "h2": "Turning claim search results into usable maps",
-        "body": "Once you have the claims, style them, add context such as roads and regional geography, and frame the view. The output is a clean map rather than a raw data view, ready to drop into the document you are working on."
-      },
-      {
-        "h2": "Using the output in decks, reports, websites, and internal memos",
-        "html": "Export the map as a PNG for slides, websites, and internal memos, or a PDF for formal reports. For a province-specific workflow, see the <a href=\"/bc-mineral-claims-map/\">BC mineral claims map tool</a>, and for the full feature set see <a href=\"/mining-map-software/\">mining map software</a>."
-      },
-      {
-        "h2": "Where company search works",
-        "body": "Company or claimholder-name search runs against the holder field each province publishes, so it is available wherever that field exists.",
+        "h2": "Worked example: Goliath in British Columbia",
+        "body": "On September 15, 2026, a search for Goliath in the BC registered-owner field returned 94 features under GOLIATH RESOURCES LTD, with no truncation reported. This is a dated search observation, not a permanent claim count or verification of the company’s complete land position.",
         "table": {
           "headers": [
-            "Jurisdiction",
-            "Search by company",
-            "Search by claim number"
+            "Step",
+            "What to inspect"
           ],
           "rows": [
             [
-              "British Columbia",
-              "Yes",
-              "Yes"
+              "Search Goliath in British Columbia",
+              "Read the registered-owner spelling rather than relying on the ticker GOT."
             ],
             [
-              "Ontario",
-              "Yes",
-              "Yes"
+              "Review GOLIATH RESOURCES LTD",
+              "Compare title identifiers and geography with your source records and Mineral Titles Online."
             ],
             [
-              "Quebec",
-              "Yes",
-              "Yes"
+              "Choose the relevant titles",
+              "Use Select All only if every returned title belongs in the map you are making."
             ],
             [
-              "Saskatchewan",
-              "Yes",
-              "Yes"
-            ],
-            [
-              "Newfoundland & Labrador",
-              "Yes",
-              "Yes"
-            ],
-            [
-              "Yukon",
-              "Yes",
-              "Yes"
-            ],
-            [
-              "Manitoba",
-              "No — no holder name published",
-              "Yes"
+              "Add the selected claims",
+              "Review the map extent and the layer source/date; set its legend name and export layout."
             ]
           ]
         },
-        "html": "<strong>Manitoba</strong> is the exception. Its public mineral disposition layer carries no holder name, so there is nothing to match a company against and only claim-number lookup is offered. That is a limit of the published data rather than of the search — see the <a href=\"/blog/how-to-search-manitoba-mining-claims/\">Manitoba guide</a> and the <a href=\"/blog/canadian-mineral-claim-registries/\">Canadian registry guide</a>."
+        "image": {
+          "src": "/companies-assets/GOT.svg",
+          "alt": "Goliath Resources company-page snapshot of published mineral claim geometry",
+          "width": 1000,
+          "height": 640,
+          "caption": "Company-page map snapshot for Goliath Resources. This separately generated snapshot is an example of the output; it is not the 94-record search observation below or a current ownership certification."
+        },
+        "html": "<a href=\"/companies/got/\">View the Goliath company-page snapshot</a> or verify individual tenures in <a href=\"https://www.mtonline.gov.bc.ca/\">Mineral Titles Online</a>. Search results can change as the published record changes."
+      },
+      {
+        "h2": "Choose the right jurisdiction and search field",
+        "table": {
+          "headers": [
+            "Coverage",
+            "Name-search scope"
+          ],
+          "rows": [
+            [
+              "BC, Ontario, Quebec, Saskatchewan, Newfoundland & Labrador",
+              "Registered-owner or holder fields in the configured public dataset."
+            ],
+            [
+              "Yukon",
+              "Quartz claim owner/name lookup; this workflow does not include placer claims."
+            ],
+            [
+              "Manitoba",
+              "Claim or tag number only; no holder-name field in the configured layer."
+            ],
+            [
+              "United States federal claims",
+              "Project/claim-name lookup is not a claimant ownership search."
+            ]
+          ]
+        }
+      },
+      {
+        "h2": "When a company name returns nothing",
+        "items": [
+          "Try the distinctive part of the registered legal name.",
+          "Check known subsidiaries, previous names or joint-venture titleholders against source documents.",
+          "Use a known title number to inspect how the holder is recorded.",
+          "Check the jurisdiction and claim type before interpreting an empty response."
+        ],
+        "html": "The <a href=\"/blog/find-mineral-claims-owned-by-company-bc/\">BC company-search guide</a> explains candidate groups and selection. An empty search does not prove a company has no claims."
+      },
+      {
+        "h2": "Build a map from the records you have checked",
+        "body": "Add selected records as a layer, give it a meaningful legend name and include the source and retrieval date. Use separate layers for separate holders or projects. A public-data match is a research starting point; confirm title details in the official registry before relying on the map.",
+        "html": "Read <a href=\"/data-coverage/\">coverage, sources and update timing</a>, or use <a href=\"/shapefile-to-map/\">file upload</a> if you already have a reviewed boundary."
       }
     ],
     "disclaimer": "Claim search results and any maps built from them are for research and visualization only. Exploration Maps is not an official government registry. Always verify current claim ownership, status, boundaries, and tenure details through the applicable government mineral titles registry before relying on them for transactions, staking, or filings. Search-by-company-name is available where the underlying public claim data supports it.",
@@ -261,7 +262,8 @@
       "mining-map-software",
       "mineral-tenure-monitoring"
     ],
-    "updatedDate": "2026-09-05"
+    "updatedDate": "2026-09-15",
+    "ogImage": null
   },
   {
     "slug": "shapefile-to-map",
@@ -269,47 +271,83 @@
     "h1": "Shapefile to Map Tool for Mining Projects",
     "label": "Shapefile to Map",
     "metaDescription": "Upload Shapefile, GeoJSON, KML, or CSV data and create clean mineral exploration maps for presentations, reports, and investor materials.",
-    "intro": "Exploration Maps turns Shapefile, GeoJSON, KML, and CSV data into clean mineral exploration maps — a fast way to get a presentation-ready output when you already have the files but do not want to work in full GIS software.",
+    "intro": "Upload a zipped Shapefile, GeoJSON, KML/KMZ or a coordinate CSV and turn it into an exploration map. Check the location, style your layers, add labels and export a figure. Shapefiles and KML do not need to be converted to GeoJSON first.",
     "softwareApp": false,
     "sections": [
       {
-        "h2": "Uploading Shapefile, GeoJSON, KML, and CSV data",
-        "body": "If you already have exploration data as files, you can import it directly. Exploration Maps reads Shapefile, GeoJSON, KML, and CSV. CSV files with coordinate columns are handled with a column mapper so latitude and longitude are assigned correctly. Most exploration datasets import without manual conversion."
+        "h2": "See the finished boundary map",
+        "image": {
+          "src": "/gallery/claims.png",
+          "alt": "Cedar Ridge demonstration claim boundary with a legend, scale bar and location inset",
+          "caption": "Finished Claims gallery example using the downloadable Cedar Ridge boundary. Fictional demonstration data; styling is configured separately from the file."
+        },
+        "html": "<a href=\"/examples/cedar-ridge-claims.geojson\" download>Download the Cedar Ridge GeoJSON boundary</a> · <a href=\"/examples/README.txt\">Read the sample notes</a>"
       },
       {
-        "h2": "Converting raw files into clean visual maps",
-        "body": "Imported files usually look raw — default colours, no labels, no layout. Tag each layer by role (claims, drillholes, targets) to apply sensible styling, then the map is fit to your data automatically. The point of this tool is the step that desktop GIS makes slow: getting from a valid file to a clean visual quickly."
+        "h2": "Supported uploads",
+        "table": {
+          "headers": [
+            "File",
+            "What to supply",
+            "Coordinate handling"
+          ],
+          "rows": [
+            [
+              "GeoJSON / JSON",
+              "A FeatureCollection with geometry and properties",
+              "Use WGS84 longitude, latitude (EPSG:4326)."
+            ],
+            [
+              "Zipped Shapefile",
+              "Matching .shp, .shx, .dbf and .prj files in one .zip",
+              "The .prj supplies the source projection for conversion."
+            ],
+            [
+              "KML / KMZ",
+              "Upload the .kml or compressed .kmz directly",
+              "KML uses geographic longitude/latitude."
+            ],
+            [
+              "CSV",
+              "A header row and a coordinate pair for each point",
+              "Use WGS84 decimal degrees; convert projected eastings/northings first."
+            ]
+          ]
+        }
       },
       {
-        "h2": "Styling layers",
-        "body": "Adjust stroke and fill colours, opacity, and labels per layer. Use separate layers for separate claim blocks or sample types so each appears distinctly in the legend. Reduce the opacity on context layers like roads and water so your main data stays dominant."
+        "h2": "From file to finished map",
+        "items": [
+          "Keep matching Shapefile components together in one ZIP, including the .prj.",
+          "Upload the file, review the preview and click Add to map. Verify its location before styling.",
+          "Assign Claims, Drillholes or another appropriate layer role.",
+          "Add a legend, title, source/date and labels; inspect the exported figure."
+        ],
+        "html": "Follow the <a href=\"/blog/how-to-import-geojson-mining-map/\">file import guide</a> for the downloadable example and projection troubleshooting."
       },
       {
-        "h2": "Adding labels and project context",
-        "body": "Add claim and feature labels, a title block with the project name and date, a north arrow, and a scale bar. Optional context overlays place the data in its regional and infrastructure setting so the map reads on its own."
+        "h2": "Why a projected Shapefile may fail",
+        "body": "A .shp with metre-based coordinates needs its matching .prj so the importer can identify and convert the source projection. Include that file in the archive. If the source projection is unknown, ask the data supplier; changing a filename or guessing a UTM zone will not fix the coordinates."
       },
       {
-        "h2": "Exporting maps for presentations and reports",
-        "body": "Export a PNG for slides and websites or a PDF for print-ready report figures, using a 16:9 landscape ratio for decks or a letter or A4 page for technical reports."
-      },
-      {
-        "h2": "For users who do not want to work in full GIS software",
-        "html": "Desktop GIS is the right tool for heavy analysis, but it is overkill when you simply need a clean figure from data you already have. This tool focuses on presentation output. For the broader workflow, see <a href=\"/mining-map-software/\">mining map software</a>."
+        "h2": "Keep your source data and map separate",
+        "body": "The imported file supplies geometry and attributes. Colours, labels, layout and callouts belong to your map project. Save the project if you want to return to the same presentation; retain the original source files as well.",
+        "html": "See <a href=\"/data-coverage/\">data coverage and methodology</a> for the difference between uploaded files, registry searches and example maps."
       }
     ],
     "disclaimer": null,
     "faqs": [
       {
-        "q": "Can I turn a Shapefile into a map without GIS software?",
-        "a": "Yes. Upload your Shapefile (along with its companion files) and Exploration Maps renders it in the browser. You can style it, add labels and a title block, and export a presentation-ready PNG or PDF without a desktop GIS."
+        "q": "Do I need to convert my Shapefile first?",
+        "a": "No. Upload a ZIP containing its matching .shp, .shx, .dbf and .prj files. GeoJSON and KML/KMZ can also be imported directly."
       },
       {
-        "q": "What file types are supported?",
-        "a": "Shapefile, GeoJSON, KML, and CSV. CSV files with coordinate columns use a column mapper to assign latitude and longitude."
+        "q": "Can I try it without my own data?",
+        "a": "Yes. Download the fictional Cedar Ridge boundary above, upload it, and compare your map with the finished Claims example."
       },
       {
-        "q": "What coordinate system should my data use?",
-        "a": "Data in WGS84 (EPSG:4326) imports most reliably. If your source is in another projection, convert it to WGS84 before importing."
+        "q": "What should I do when the data appears in the wrong place?",
+        "a": "Check the coordinate system, the .prj file for a Shapefile, and longitude/latitude order. Use WGS84 decimal degrees for CSV and GeoJSON."
       }
     ],
     "related": [
@@ -317,7 +355,8 @@
       "drill-results-map",
       "bc-mineral-claims-map"
     ],
-    "updatedDate": "2026-09-05"
+    "updatedDate": "2026-09-15",
+    "ogImage": "/gallery/claims@2x.webp"
   },
   {
     "slug": "drill-results-map",
@@ -325,32 +364,59 @@
     "h1": "Drill Results Map Tool for Exploration Updates",
     "label": "Drill Results",
     "metaDescription": "Create clear drillhole and assay maps for mining presentations, reports, news releases, and investor updates.",
-    "intro": "Exploration Maps helps you build clear drillhole and assay maps — collars, intercepts, targets, and claim context — for news releases, presentations, technical summaries, and investor updates.",
+    "intro": "Turn a drill collar CSV into a map with hole locations, selected result labels and a property boundary. Use the downloadable 14-hole example to try the workflow, then import your own reviewed collar and assay data.",
     "softwareApp": false,
     "sections": [
       {
-        "h2": "Why drill results need clear maps",
-        "body": "Drill results are hard to interpret as a table of numbers alone. A map shows where the holes are, how they relate to each other and to the target, and which intercepts matter. For investors reading a news release, a clear drill map is often the difference between a result that lands and one that gets skimmed past."
+        "h2": "Start with a complete example",
+        "image": {
+          "src": "/gallery/drill-results.png",
+          "alt": "Fourteen Cedar Ridge demonstration drill collars inside a claim boundary with three result callouts",
+          "caption": "Finished Drill Results gallery example. The downloadable CSV contains these 14 collar locations; all company names, claims and assay labels are fictional."
+        },
+        "html": "<a href=\"/examples/cedar-ridge-collars.csv\" download>Download the 14-collar CSV</a> · <a href=\"/examples/cedar-ridge-claims.geojson\" download>Download its claim boundary</a> · <a href=\"/examples/README.txt\">Sample notes and reuse</a>"
       },
       {
-        "h2": "Showing drill collars",
-        "body": "Import drill collars from CSV or GeoJSON — typically hole ID, latitude, and longitude — and plot them on the claim block. Label holes clearly and keep the symbols consistent so the pattern of the program is easy to follow."
+        "h2": "What your collar file needs",
+        "table": {
+          "headers": [
+            "Field",
+            "Purpose"
+          ],
+          "rows": [
+            [
+              "HoleID",
+              "Identifies the collar and its label."
+            ],
+            [
+              "Longitude / Latitude",
+              "WGS84 decimal-degree location."
+            ],
+            [
+              "Result or other attributes",
+              "Optional text you can use in callouts; the app does not validate assay results."
+            ]
+          ]
+        }
       },
       {
-        "h2": "Highlighting assays and intercepts",
-        "body": "Add callouts for the best intervals — grade and width — next to the relevant holes. Highlighting the intercepts that drive the story keeps attention on the results that matter instead of burying them among every hole drilled."
+        "h2": "Build the map in four steps",
+        "items": [
+          "Upload the CSV and confirm any coordinate mapping prompt.",
+          "Assign Drillholes and check the collar positions.",
+          "Import the boundary; label the results that need explanation.",
+          "Choose a layout, save the project and check the exported figure at publication size."
+        ],
+        "html": "The <a href=\"/blog/how-to-make-a-drill-results-map/\">drill-results guide</a> walks through coordinates, labels and export checks. <a href=\"/?demo=drill_plan&amp;utm_source=blog&amp;utm_medium=example&amp;utm_campaign=drill-results-map\">Open the finished demonstration map</a> to inspect the example layout."
       },
       {
-        "h2": "Showing targets and claim boundaries",
-        "body": "Place the drilling in context by including target outlines and claim boundaries. This shows whether holes are testing the intended target and confirms the results sit within the company's ground."
+        "h2": "Use the map to explain the program",
+        "body": "Keep the collar pattern visible, use a small number of readable labels, and include the program date and source. An imported boundary provides spatial context; it does not certify title ownership. The issuer and its reviewers remain responsible for the information published."
       },
       {
-        "h2": "Using maps in news releases, decks, technical summaries, and investor updates",
-        "body": "The same drill map can serve a news release figure, a slide in a corporate deck, a technical summary, and an investor email update. Building it once and exporting per channel keeps the results presented consistently everywhere they appear."
-      },
-      {
-        "h2": "Export-ready visuals",
-        "html": "Export PNG for slides, websites, and news releases, or PDF for print-ready report figures, with a legend, scale bar, north arrow, and title block included. For the broader exploration map workflow, see <a href=\"/mining-map-software/\">mining map software</a>."
+        "h2": "Return for the next update",
+        "body": "Save to an account if you want to reopen the project later. When new collars arrive, add the reviewed data, check labels and dates, and export the revised map.",
+        "html": "See <a href=\"/data-coverage/\">data coverage and methodology</a> for how uploaded and demonstration data are handled."
       }
     ],
     "disclaimer": null,
@@ -365,7 +431,7 @@
       },
       {
         "q": "Can I update the map when new holes come in?",
-        "a": "Yes. Because the project is saved, you can add new collars and intercepts and re-export the same layout as the program progresses."
+        "a": "Yes. Save the project first, then add new collar data and update the labels and source date when you reopen it. Check the exported map against the latest reviewed data."
       }
     ],
     "related": [
@@ -373,7 +439,9 @@
       "shapefile-to-map",
       "bc-mineral-claims-map"
     ],
-    "updatedDate": "2026-09-05"
+    "updatedDate": "2026-09-15",
+    "ogImage": "/gallery/drill-results@2x.webp",
+    "ctaSummary": "Upload your collar CSV, check the locations, add result labels, and export your drill map."
   },
   {
     "slug": "mineral-tenure-monitoring",
@@ -483,5 +551,154 @@
       "mining-map-software"
     ],
     "updatedDate": "2026-09-05"
+  },
+  {
+    "slug": "data-coverage",
+    "fullTitle": "Data Coverage & Methodology | Exploration Maps",
+    "h1": "Data Coverage & Methodology",
+    "label": "Data reference",
+    "metaDescription": "See supported claim searches, registry sources, file formats, update timing and the limits of company-name matching in Exploration Maps.",
+    "intro": "Use this reference to understand where a map’s data comes from, what the search supports, and what you still need to verify. Coverage reviewed September 15, 2026; a review date is not a guarantee that every source is current or available.",
+    "updatedDate": "2026-09-15",
+    "reference": true,
+    "sections": [
+      {
+        "h2": "Claim-search coverage",
+        "table": {
+          "headers": [
+            "Jurisdiction",
+            "Source used by the app",
+            "Search scope"
+          ],
+          "rows": [
+            [
+              "British Columbia",
+              "BC public acquired-tenure WFS",
+              "Registered owner, tenure/tag number; no map-sheet lookup."
+            ],
+            [
+              "Ontario",
+              "MLAS public mapping service",
+              "Holder or tenure number."
+            ],
+            [
+              "Quebec",
+              "Imported public mining-title dataset",
+              "Holder or title number; a stored snapshot, not a live GESTIM query."
+            ],
+            [
+              "Saskatchewan",
+              "Public mineral-tenure mapping service",
+              "Owner or disposition number."
+            ],
+            [
+              "Manitoba",
+              "iMaQs public mining-claim layer",
+              "Tenure or staking tag number; holder search unavailable."
+            ],
+            [
+              "Newfoundland & Labrador",
+              "GeoAtlas mineral-lands mapping service",
+              "Licensee/holder or licence/claim number, as published."
+            ],
+            [
+              "Yukon",
+              "GeoYukon quartz-claims layer",
+              "Owner/name or grant number; placer claims excluded."
+            ],
+            [
+              "United States",
+              "BLM MLRS federal mining-claims spatial data",
+              "Selected states; project/claim name or serial number. State/private tenure is outside this dataset."
+            ]
+          ]
+        }
+      },
+      {
+        "h2": "Official sources and detailed guides",
+        "html": "BC: <a href=\"https://www.mtonline.gov.bc.ca/\">Mineral Titles Online</a> · Ontario: <a href=\"https://ws.lioservices.lrc.gov.on.ca/arcgis2/rest/services/MLAS/mlas_op/MapServer\">MLAS mapping service</a> · Saskatchewan: <a href=\"https://gis.saskatchewan.ca/arcgis/rest/services/Economy/P_Mineral_Tenure_Crown_Dispositions/MapServer\">mineral-tenure service</a> · Manitoba: <a href=\"https://rdmaps.gov.mb.ca/arcgis/rest/services/iMaQs/imaqsMining/MapServer\">iMaQs mapping service</a> · Newfoundland &amp; Labrador: <a href=\"https://dnrmaps.gov.nl.ca/arcgis/rest/services/GeoAtlas/Mineral_Lands/MapServer\">GeoAtlas mineral lands</a> · Yukon: <a href=\"https://mapservices.gov.yk.ca/arcgis/rest/services/GeoYukon/GY_Mining/MapServer\">GeoYukon mining service</a>. See the <a href=\"/blog/canadian-mineral-claim-registries/\">Canadian registry guide</a> for official registry links including Quebec, and <a href=\"https://reports.blm.gov/report/MLRS/103/Mining-Claims-Customer-Info-Report\">BLM’s claimant report</a> for claimant records."
+      },
+      {
+        "h2": "Search results, company snapshots and saved maps have different dates",
+        "table": {
+          "headers": [
+            "Data path",
+            "What freshness means"
+          ],
+          "rows": [
+            [
+              "Public-service searches",
+              "The app requests the published service; its publication timing may lag the official registry. Availability and completeness depend on the source."
+            ],
+            [
+              "Quebec searches",
+              "The app queries an imported dataset. Freshness depends on the latest successful import; it is not the time you run the search."
+            ],
+            [
+              "Company pages",
+              "Prebuilt map snapshots have their own displayed source/update information. They are not regenerated by opening the page."
+            ],
+            [
+              "Imported or saved projects",
+              "Geometry reflects the source you imported or saved. Reopening a map does not automatically refresh every layer."
+            ]
+          ]
+        },
+        "body": "Read the source and date shown with the result or layer. A retrieval date says when data was obtained, not when the government last changed a title. If a date is absent, treat freshness as unverified."
+      },
+      {
+        "h2": "How company matching works",
+        "body": "Searches compare your query with available published name fields. Exact, possible and weaker candidates help you find spelling variants, but do not prove beneficial ownership, option terms or control. Select titles after checking their identifiers and location. For US results identified as claim-name matches, a familiar company word in a claim name is not an ownership record.",
+        "html": "See the <a href=\"/blog/find-mineral-claims-owned-by-company-bc/\">worked BC owner-search example</a>."
+      },
+      {
+        "h2": "Empty, partial or unavailable results",
+        "body": "An empty response can mean no matching spelling, the wrong jurisdiction, an unsupported claim type or missing source records. A source outage is a different condition. Read any truncation or scope notice before treating a result as complete. Try a known identifier or consult the official registry; do not infer that ground is available from a missing polygon."
+      },
+      {
+        "h2": "Uploaded files and sample maps",
+        "table": {
+          "headers": [
+            "File",
+            "What to supply",
+            "Coordinate handling"
+          ],
+          "rows": [
+            [
+              "GeoJSON / JSON",
+              "A FeatureCollection with geometry and properties",
+              "Use WGS84 longitude, latitude (EPSG:4326)."
+            ],
+            [
+              "Zipped Shapefile",
+              "Matching .shp, .shx, .dbf and .prj files in one .zip",
+              "The .prj supplies the source projection for conversion."
+            ],
+            [
+              "KML / KMZ",
+              "Upload the .kml or compressed .kmz directly",
+              "KML uses geographic longitude/latitude."
+            ],
+            [
+              "CSV",
+              "A header row and a coordinate pair for each point",
+              "Use WGS84 decimal degrees; convert projected eastings/northings first."
+            ]
+          ]
+        },
+        "html": "Try the <a href=\"/blog/how-to-import-geojson-mining-map/\">boundary import example</a> or the <a href=\"/blog/how-to-make-a-drill-results-map/\">14-collar drill example</a>. Cedar Ridge and Aurora Ridge Minerals are fictional demonstrations. Sample assay labels are not exploration results. File imports preserve supplied geometry and attributes; the app does not certify coordinates or assays."
+      },
+      {
+        "h2": "How we check guides and correct errors",
+        "body": "Exploration Maps prepares these product guides. We compare changed instructions with the current app and use reproducible samples or dated public-data searches for worked examples. Automated checks cover generated pages, links and core editor flows. These checks do not amount to a survey, a title opinion or an independent technical review.",
+        "html": "Read <a href=\"/about/\">about Exploration Maps</a>. Report an incorrect instruction or source to <a href=\"mailto:support@explorationmaps.com\">support@explorationmaps.com</a>, including the page, jurisdiction and the step that failed. Please avoid sending confidential project files unless needed and agreed."
+      }
+    ],
+    "faqs": [],
+    "related": [
+      "mining-claim-search-by-company-name",
+      "shapefile-to-map",
+      "drill-results-map"
+    ]
   }
 ]

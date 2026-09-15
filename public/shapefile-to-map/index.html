@@ -12,11 +12,11 @@
 <meta property="og:url" content="https://www.explorationmaps.com/shapefile-to-map/">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Exploration Maps">
-<meta property="og:image" content="https://www.explorationmaps.com/og/shapefile-to-map.png">
+<meta property="og:image" content="https://www.explorationmaps.com/gallery/claims@2x.webp">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Shapefile to Map Tool for Mining Projects | Exploration Maps">
 <meta name="twitter:description" content="Upload Shapefile, GeoJSON, KML, or CSV data and create clean mineral exploration maps for presentations, reports, and investor materials.">
-<meta name="twitter:image" content="https://www.explorationmaps.com/og/shapefile-to-map.png">
+<meta name="twitter:image" content="https://www.explorationmaps.com/gallery/claims@2x.webp">
 <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://www.explorationmaps.com"},{"@type":"ListItem","position":2,"name":"Shapefile to Map Tool for Mining Projects","item":"https://www.explorationmaps.com/shapefile-to-map/"}]}]}</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -202,7 +202,7 @@ article strong{color:#142126}
     <h1>Shapefile to Map Tool for Mining Projects</h1>
   </div>
   <article>
-    <p class="lp-intro">Exploration Maps turns Shapefile, GeoJSON, KML, and CSV data into clean mineral exploration maps — a fast way to get a presentation-ready output when you already have the files but do not want to work in full GIS software.</p>
+    <p class="lp-intro">Upload a zipped Shapefile, GeoJSON, KML/KMZ or a coordinate CSV and turn it into an exploration map. Check the location, style your layers, add labels and export a figure. Shapefiles and KML do not need to be converted to GeoJSON first.</p>
     <div class="inline-cta">
   <div class="inline-cta-copy">
     <strong>Start with your project file.</strong>
@@ -211,12 +211,11 @@ article strong{color:#142126}
   <a class="inline-cta-btn" href="/?intent=claims-upload&amp;utm_source=blog&amp;utm_medium=cta&amp;utm_campaign=shapefile-to-map">Upload my data →</a>
 </div>
     <p class="lp-plan-note">Start free. Free PNG exports keep a small Exploration Maps credit. Pro removes that credit for US$29/month or US$290/year.</p>
-    <h2>Uploading Shapefile, GeoJSON, KML, and CSV data</h2><p>If you already have exploration data as files, you can import it directly. Exploration Maps reads Shapefile, GeoJSON, KML, and CSV. CSV files with coordinate columns are handled with a column mapper so latitude and longitude are assigned correctly. Most exploration datasets import without manual conversion.</p>
-<h2>Converting raw files into clean visual maps</h2><p>Imported files usually look raw — default colours, no labels, no layout. Tag each layer by role (claims, drillholes, targets) to apply sensible styling, then the map is fit to your data automatically. The point of this tool is the step that desktop GIS makes slow: getting from a valid file to a clean visual quickly.</p>
-<h2>Styling layers</h2><p>Adjust stroke and fill colours, opacity, and labels per layer. Use separate layers for separate claim blocks or sample types so each appears distinctly in the legend. Reduce the opacity on context layers like roads and water so your main data stays dominant.</p>
-<h2>Adding labels and project context</h2><p>Add claim and feature labels, a title block with the project name and date, a north arrow, and a scale bar. Optional context overlays place the data in its regional and infrastructure setting so the map reads on its own.</p>
-<h2>Exporting maps for presentations and reports</h2><p>Export a PNG for slides and websites or a PDF for print-ready report figures, using a 16:9 landscape ratio for decks or a letter or A4 page for technical reports.</p>
-<h2>For users who do not want to work in full GIS software</h2><p>Desktop GIS is the right tool for heavy analysis, but it is overkill when you simply need a clean figure from data you already have. This tool focuses on presentation output. For the broader workflow, see <a href="/mining-map-software/">mining map software</a>.</p>
+    <h2>See the finished boundary map</h2><p><a href="/examples/cedar-ridge-claims.geojson" download>Download the Cedar Ridge GeoJSON boundary</a> · <a href="/examples/README.txt">Read the sample notes</a></p><figure class="blog-figure"><img src="/gallery/claims.webp" alt="Cedar Ridge demonstration claim boundary with a legend, scale bar and location inset" width="640" height="400" srcset="/gallery/claims.webp 640w, /gallery/claims@2x.webp 1000w" sizes="(max-width: 768px) calc(100vw - 48px), 724px" decoding="async" loading="lazy"><figcaption>Finished Claims gallery example using the downloadable Cedar Ridge boundary. Fictional demonstration data; styling is configured separately from the file.</figcaption></figure>
+<h2>Supported uploads</h2><div class="table-scroll"><table class="data-table"><thead><tr><th>File</th><th>What to supply</th><th>Coordinate handling</th></tr></thead><tbody><tr><td>GeoJSON / JSON</td><td>A FeatureCollection with geometry and properties</td><td>Use WGS84 longitude, latitude (EPSG:4326).</td></tr><tr><td>Zipped Shapefile</td><td>Matching .shp, .shx, .dbf and .prj files in one .zip</td><td>The .prj supplies the source projection for conversion.</td></tr><tr><td>KML / KMZ</td><td>Upload the .kml or compressed .kmz directly</td><td>KML uses geographic longitude/latitude.</td></tr><tr><td>CSV</td><td>A header row and a coordinate pair for each point</td><td>Use WGS84 decimal degrees; convert projected eastings/northings first.</td></tr></tbody></table></div>
+<h2>From file to finished map</h2><p>Follow the <a href="/blog/how-to-import-geojson-mining-map/">file import guide</a> for the downloadable example and projection troubleshooting.</p><ul><li>Keep matching Shapefile components together in one ZIP, including the .prj.</li><li>Upload the file, review the preview and click Add to map. Verify its location before styling.</li><li>Assign Claims, Drillholes or another appropriate layer role.</li><li>Add a legend, title, source/date and labels; inspect the exported figure.</li></ul>
+<h2>Why a projected Shapefile may fail</h2><p>A .shp with metre-based coordinates needs its matching .prj so the importer can identify and convert the source projection. Include that file in the archive. If the source projection is unknown, ask the data supplier; changing a filename or guessing a UTM zone will not fix the coordinates.</p>
+<h2>Keep your source data and map separate</h2><p>The imported file supplies geometry and attributes. Colours, labels, layout and callouts belong to your map project. Save the project if you want to return to the same presentation; retain the original source files as well.</p><p>See <a href="/data-coverage/">data coverage and methodology</a> for the difference between uploaded files, registry searches and example maps.</p>
     
     <div class="lp-cta">
       <h2>Make your first map</h2>
@@ -226,16 +225,16 @@ article strong{color:#142126}
     <section class="faq-section" aria-label="Frequently Asked Questions">
   <h2>Frequently Asked Questions</h2>
   <div class="faq-item">
-    <div class="faq-q">Can I turn a Shapefile into a map without GIS software?</div>
-    <div class="faq-a">Yes. Upload your Shapefile (along with its companion files) and Exploration Maps renders it in the browser. You can style it, add labels and a title block, and export a presentation-ready PNG or PDF without a desktop GIS.</div>
+    <div class="faq-q">Do I need to convert my Shapefile first?</div>
+    <div class="faq-a">No. Upload a ZIP containing its matching .shp, .shx, .dbf and .prj files. GeoJSON and KML/KMZ can also be imported directly.</div>
   </div>
 <div class="faq-item">
-    <div class="faq-q">What file types are supported?</div>
-    <div class="faq-a">Shapefile, GeoJSON, KML, and CSV. CSV files with coordinate columns use a column mapper to assign latitude and longitude.</div>
+    <div class="faq-q">Can I try it without my own data?</div>
+    <div class="faq-a">Yes. Download the fictional Cedar Ridge boundary above, upload it, and compare your map with the finished Claims example.</div>
   </div>
 <div class="faq-item">
-    <div class="faq-q">What coordinate system should my data use?</div>
-    <div class="faq-a">Data in WGS84 (EPSG:4326) imports most reliably. If your source is in another projection, convert it to WGS84 before importing.</div>
+    <div class="faq-q">What should I do when the data appears in the wrong place?</div>
+    <div class="faq-a">Check the coordinate system, the .prj file for a Shapefile, and longitude/latitude order. Use WGS84 decimal degrees for CSV and GeoJSON.</div>
   </div>
 </section>
     <section class="lp-related"><h2>Related tools and guides</h2><div class="lp-related-grid"><a class="lp-related-card" href="/mining-map-software/"><strong>Mining Map Software for Exploration Teams</strong><span>Browser-based mining and mineral exploration map software. Build claim maps, drill collar plans, target and infrastructure maps from your own GIS files or public registry data, and export figures for decks, reports and news releases.</span></a>

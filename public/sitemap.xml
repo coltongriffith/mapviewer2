@@ -3,17 +3,18 @@
   <url><loc>https://www.explorationmaps.com/</loc></url>
   <url><loc>https://www.explorationmaps.com/mining-map-software/</loc><lastmod>2026-09-05</lastmod></url>
   <url><loc>https://www.explorationmaps.com/bc-mineral-claims-map/</loc><lastmod>2026-09-05</lastmod></url>
-  <url><loc>https://www.explorationmaps.com/mining-claim-search-by-company-name/</loc><lastmod>2026-09-05</lastmod></url>
-  <url><loc>https://www.explorationmaps.com/shapefile-to-map/</loc><lastmod>2026-09-05</lastmod></url>
-  <url><loc>https://www.explorationmaps.com/drill-results-map/</loc><lastmod>2026-09-05</lastmod></url>
+  <url><loc>https://www.explorationmaps.com/mining-claim-search-by-company-name/</loc><lastmod>2026-09-15</lastmod></url>
+  <url><loc>https://www.explorationmaps.com/shapefile-to-map/</loc><lastmod>2026-09-15</lastmod></url>
+  <url><loc>https://www.explorationmaps.com/drill-results-map/</loc><lastmod>2026-09-15</lastmod></url>
   <url><loc>https://www.explorationmaps.com/mineral-tenure-monitoring/</loc><lastmod>2026-09-05</lastmod></url>
+  <url><loc>https://www.explorationmaps.com/data-coverage/</loc><lastmod>2026-09-15</lastmod></url>
   <url><loc>https://www.explorationmaps.com/blog/</loc></url>
   <url><loc>https://www.explorationmaps.com/blog/how-to-map-bc-mineral-claims-live-registry/</loc><lastmod>2026-09-15</lastmod></url>
   <url><loc>https://www.explorationmaps.com/blog/how-to-track-bc-mineral-claim-good-to-dates/</loc></url>
   <url><loc>https://www.explorationmaps.com/blog/how-to-make-a-mining-claims-map/</loc><lastmod>2026-09-05</lastmod></url>
-  <url><loc>https://www.explorationmaps.com/blog/how-to-make-a-drill-results-map/</loc></url>
+  <url><loc>https://www.explorationmaps.com/blog/how-to-make-a-drill-results-map/</loc><lastmod>2026-09-15</lastmod></url>
   <url><loc>https://www.explorationmaps.com/blog/how-to-create-exploration-map-investor-presentation/</loc><lastmod>2026-09-05</lastmod></url>
-  <url><loc>https://www.explorationmaps.com/blog/how-to-import-geojson-mining-map/</loc></url>
+  <url><loc>https://www.explorationmaps.com/blog/how-to-import-geojson-mining-map/</loc><lastmod>2026-09-15</lastmod></url>
   <url><loc>https://www.explorationmaps.com/blog/how-to-create-target-generation-map/</loc></url>
   <url><loc>https://www.explorationmaps.com/blog/how-to-create-infrastructure-map/</loc></url>
   <url><loc>https://www.explorationmaps.com/blog/how-to-import-csv-data-mining-map/</loc></url>
@@ -27,7 +28,7 @@
   <url><loc>https://www.explorationmaps.com/blog/exploration-mapping-file-types-shapefile-kml-geojson-csv/</loc></url>
   <url><loc>https://www.explorationmaps.com/blog/how-to-make-a-professional-exploration-map/</loc></url>
   <url><loc>https://www.explorationmaps.com/blog/bc-mineral-titles-online-guide/</loc><lastmod>2026-09-15</lastmod></url>
-  <url><loc>https://www.explorationmaps.com/blog/find-mineral-claims-owned-by-company-bc/</loc></url>
+  <url><loc>https://www.explorationmaps.com/blog/find-mineral-claims-owned-by-company-bc/</loc><lastmod>2026-09-15</lastmod></url>
   <url><loc>https://www.explorationmaps.com/blog/canadian-mineral-claim-registries/</loc><lastmod>2026-09-15</lastmod></url>
   <url><loc>https://www.explorationmaps.com/blog/exploration-maps-vs-arcgis/</loc></url>
   <url><loc>https://www.explorationmaps.com/blog/exploration-maps-vs-qgis/</loc><lastmod>2026-09-05</lastmod></url>
