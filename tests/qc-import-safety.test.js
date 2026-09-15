@@ -30,6 +30,9 @@ describe('Quebec import safeguards',()=>{
         create function truncate_qc_claims() returns void language sql as $$truncate qc_claims$$;
         insert into qc_claims(tag_number,status,geometry) values('old','Active','{}');`);
       await db.exec(readFileSync('supabase/migrations/20260915160235_repair_qc_atomic_import.sql','utf8'));
+      await db.exec(readFileSync('supabase/migrations/20260915160808_qc_import_continue_identity.sql','utf8'));
+      // Match production: the importer can use the table/sequence but owns neither.
+      await db.exec('grant all on qc_claims to service_role; grant usage,select on sequence qc_claims_id_seq to service_role; set role service_role;');
       await expect(db.query('select publish_qc_import(null)')).rejects.toThrow(/Stale/);
       const {rows:[{id}]}=await db.query('select begin_qc_import(100000) as id');
       await expect(db.query('select publish_qc_import($1)',[id])).rejects.toThrow(/Incomplete/);
