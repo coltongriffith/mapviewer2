@@ -25,7 +25,7 @@ let redirects;    // vercel.json redirect list
 
 function pagePaths() {
   return globSync('public/**/index.html', { cwd: ROOT })
-    .map(f => '/' + f.slice('public/'.length, -'index.html'.length));
+    .map(f => '/' + f.replaceAll('\\', '/').slice('public/'.length, -'index.html'.length));
 }
 
 beforeAll(() => {
@@ -38,6 +38,30 @@ beforeAll(() => {
 }, 120_000);
 
 const blogPages = () => [...pages.keys()].filter(p => p.startsWith('/blog/') && p !== '/blog/');
+
+describe('registry article journeys', () => {
+  it('keeps Ontario search context on section CTAs and offers an explicit upload path', () => {
+    const html=pages.get('/blog/how-to-search-ontario-mining-claims/');
+    const actions=[...html.matchAll(/class="inline-cta-btn" href="([^"]+)"/g)].map(m=>new URL(m[1].replaceAll('&amp;','&'),'https://www.explorationmaps.com'));
+    expect(actions.length).toBeGreaterThanOrEqual(4);
+    expect(actions.every(u=>u.searchParams.get('region')==='ontario')).toBe(true);
+    expect(actions.every(u=>u.searchParams.get('utm_campaign')==='how-to-search-ontario-mining-claims')).toBe(true);
+    expect(actions.some(u=>u.searchParams.get('intent')==='claims-upload')).toBe(true);
+    expect(actions.some(u=>u.searchParams.get('intent')==='claims' && u.searchParams.get('utm_content').startsWith('section-'))).toBe(true);
+  });
+  it('opens all seven jurisdictions directly from the registry hub', () => {
+    const html=pages.get('/blog/canadian-mineral-claim-registries/');
+    for(const region of ['british-columbia','ontario','quebec','saskatchewan','manitoba','newfoundland-labrador','yukon']) expect(html).toContain(`intent=claims&amp;region=${region}&amp;`);
+    expect(html).not.toContain('owner, tenure number and map-sheet search');
+  });
+  it('removes the BC map-sheet promise while keeping the monitoring action distinct', () => {
+    const html=pages.get('/blog/bc-mineral-titles-online-guide/');
+    expect(html).not.toContain('Three search modes');
+    expect(html).not.toContain('<td>Map sheet</td>');
+    expect(html).toContain('Map-sheet lookup is not available');
+    expect(html).toContain('href="/tenure-monitor?utm_source=blog');
+  });
+});
 
 describe('the mass-generated region families are gone', () => {
   it('generates no [map type] — [region] pages', () => {

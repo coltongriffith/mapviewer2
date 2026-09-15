@@ -402,8 +402,13 @@ function contentAction({ slug = '', mapTypeId } = {}) {
   return { monitor: false, href: appLink({ intent: files ? 'claims-upload' : drill ? 'drill-results' : 'claims', region, campaign: slug }), label: files || drill ? 'Upload my data →' : 'Create my map →' };
 }
 
-function inlineCta({ text, sub = '', href = '/', label = 'Open Exploration Maps →' } = {}) {
+function inlineCta({ text, sub = '', href = '/', label = 'Open Exploration Maps →', position } = {}) {
   if (!text) return '';
+  if (position && href.startsWith('/') && !href.startsWith('//')) {
+    const target = new URL(href, SITE);
+    target.searchParams.set('utm_content', position);
+    href = `${target.pathname}${target.search}${target.hash}`;
+  }
   return `<div class="inline-cta">
   <div class="inline-cta-copy">
     <strong>${esc(text)}</strong>
@@ -476,8 +481,8 @@ function boxBlock({ kind = 'note', title = '', html = '' } = {}) {
 // Each section may combine any of: h2, h3, body/html, items, checklist, table,
 // image, cta, box. h2 is optional so a section can be a standalone CTA/figure/box
 // with no heading. Existing posts (h2 + body/html + items) render unchanged.
-function renderSections(sections) {
-  return sections.map(s => {
+function renderSections(sections, action) {
+  return sections.map((s, index) => {
     const h2 = s.h2 ? `<h2>${esc(s.h2)}</h2>` : '';
     const h3 = s.h3 ? `<h3>${esc(s.h3)}</h3>` : '';
     // s.body is plain text and gets escaped; s.html is raw (trusted,
@@ -492,7 +497,7 @@ function renderSections(sections) {
     const table = s.table ? tableBlock(s.table) : '';
     const image = s.image ? figureBlock(s.image) : '';
     const box = s.box ? boxBlock(s.box) : '';
-    const cta = s.cta ? inlineCta(s.cta) : '';
+    const cta = s.cta ? inlineCta({ ...action, ...s.cta, position: `section-${index + 1}` }) : '';
     return `${h2}${h3}${body}${items}${checklist}${table}${image}${box}${cta}`;
   }).join('\n');
 }
@@ -592,8 +597,8 @@ function buildHowToPage(post, allPosts) {
   // guides open the upload prompt; claims guides open registry search.
   const action = contentAction(post);
   const postApp = action.href;
-  const topCta = inlineCta({ ...(post.ctaTop || { text: 'Turn public claim data into a clean map.', sub: 'No GIS experience needed — import, style, and export in minutes.' }), href: postApp, label: action.label });
-  const bottomCta = inlineCta({ ...(post.ctaBottom || { text: 'Import your file and export an investor-ready map.', sub: 'Open the editor and have a shareable map in minutes.' }), href: postApp, label: action.label });
+  const topCta = inlineCta({ ...action, ...(post.ctaTop || { text: 'Turn public claim data into a clean map.', sub: 'No GIS experience needed — import, style, and export in minutes.' }), position: 'top' });
+  const bottomCta = inlineCta({ ...action, ...(post.ctaBottom || { text: 'Import your file and export an investor-ready map.', sub: 'Open the editor and have a shareable map in minutes.' }), position: 'bottom' });
 
   const body = `
 <div class="page-wrap">
@@ -604,7 +609,7 @@ function buildHowToPage(post, allPosts) {
       <p class="direct-answer">${esc(post.directAnswer)}</p>
       ${heroFigureForPost(post)}
       ${topCta}
-      ${renderSections(post.sections || [])}
+      ${renderSections(post.sections || [], action)}
       ${bottomCta}
       ${faqBlock(post.faqs)}
     </article>
@@ -661,7 +666,7 @@ function buildCompPage(post, allPosts) {
       <h1>${esc(post.title)}</h1>
       <p class="direct-answer">${esc(post.directAnswer)}</p>
       ${heroFigureForPost(post)}
-      ${renderSections(post.sections || [])}
+      ${renderSections(post.sections || [], contentAction(post))}
       ${tableHtml}
       ${faqBlock(post.faqs)}
     </article>
@@ -862,7 +867,7 @@ function buildSeoLandingPage(page, allLandingPages) {
     <p class="lp-intro">${esc(page.intro)}</p>
     ${start}
     <p class="lp-plan-note">${esc(planNote)}</p>
-    ${renderSections(page.sections || [])}
+    ${renderSections(page.sections || [], action)}
     ${disclaimerHtml}
     <div class="lp-cta">
       <h2>${page.slug === 'mineral-tenure-monitoring' ? 'Start monitoring your claims' : 'Make your first map'}</h2>

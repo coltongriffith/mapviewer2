@@ -44,11 +44,28 @@ function resolveWith(view, RegistrySearch, state) {
 
 describe('empty-state guidance follows the submitted search', () => {
   beforeEach(() => {
+    localStorage.clear();
     Object.assign(useClaimsState, {
       results: null, loading: false, error: null,
       crossProvinceHits: null, crossProvinceLoading: false,
     });
     vi.clearAllMocks();
+  });
+
+  it('explains Yukon scope before searching and lets an empty owner search recover with a grant number', async () => {
+    const {view, RegistrySearch}=await renderRegistry();
+    fireEvent.change(view.container.querySelector('select'),{target:{value:'yt'}});
+    expect(screen.getByText('Quartz claims only.')).toBeInTheDocument();
+    fireEvent.change(screen.getByRole('textbox'),{target:{value:'Example holder'}});
+    fireEvent.submit(screen.getByRole('textbox').closest('form'));
+    resolveWith(view,RegistrySearch,{results:EMPTY_RESULTS});
+    expect(screen.getByText(/No quartz claims matched/)).toBeInTheDocument();
+    expect(screen.getByRole('link',{name:/Yukon mining resources/})).toHaveAttribute('href','https://yukon.ca/en/mining');
+    fireEvent.click(screen.getByRole('button',{name:'Try a grant number'}));
+    expect(screen.getByRole('textbox',{name:'Grant number'})).toHaveValue('');
+    fireEvent.change(screen.getByRole('textbox'),{target:{value:'YA12345'}});
+    fireEvent.submit(screen.getByRole('textbox').closest('form'));
+    expect(useClaimsState.search).toHaveBeenLastCalledWith('YA12345','number','yt');
   });
 
   it('keeps company guidance when the user switches to Claim # mid-request', async () => {
@@ -125,7 +142,7 @@ describe('the submitted search is captured at dispatch, not at resolution', () =
   // Dispatch-time capture is safe because useClaims.search() calls
   // setResults(null) synchronously before fetching, so nothing is on screen for
   // these values to misdescribe while a request is in flight.
-  const src = readFileSync('src/components/RegistrySearch.jsx', 'utf8');
+  const src = readFileSync('src/components/RegistrySearch.jsx', 'utf8').replaceAll('\r\n', '\n');
 
   it('sets it beside every pendingSearchRef assignment', () => {
     const dispatches = [...src.matchAll(/pendingSearchRef\.current = \{[^;]*;\n([^\n]*)/g)];

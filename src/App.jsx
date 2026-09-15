@@ -7,7 +7,6 @@ import LegendEditor from './components/LegendEditor';
 import { MarkerSvgIcon } from './utils/markerIcons.jsx';
 import CalloutsOverlay from './components/CalloutsOverlay';
 import LandingPage from './components/LandingPage';
-import SigninLinkStatus from './components/SigninLinkStatus';
 
 import SharedMapViewer from './components/SharedMapViewer';
 import UploadPanel from './components/UploadPanel';
@@ -19,6 +18,9 @@ import Menu, { MenuItem, MenuSeparator, MenuLabel } from './components/Menu';
 import BrandMarkInline from './components/BrandMark';
 
 const MapCanvas = React.lazy(() => import('./components/MapCanvas'));
+const SigninLinkStatus = React.lazy(() => import('./components/SigninLinkStatus'));
+const FirstMapChecklist = React.lazy(() => import('./components/FirstMapChecklist'));
+const MobileEditorBanner = React.lazy(() => import('./components/MobileEditorBanner'));
 const DashboardPage = React.lazy(() => import('./components/DashboardPage'));
 const AdminPage = React.lazy(() => import('./components/AdminPage'));
 const AccountPage = React.lazy(() => import('./components/AccountPage'));
@@ -931,6 +933,11 @@ export default function App({ initialAction = null }) {
   const onbStep2 = onbStep1 && (project.layout?.onboardingLayoutSelected || project.layers.some((l) => l.userStyled) || Boolean(project.layout?.logo));
   const onbStep3 = hasExported;
   const showOnboarding = !onboardingDismissed && !(onbStep1 && onbStep2 && onbStep3 && user);
+  useEffect(() => {
+    if (screen === 'editor' && showOnboarding) {
+      trackEventOnce('first_map_checklist_shown', onbStep1 ? 'with_data' : 'empty', { has_data: onbStep1 });
+    }
+  }, [screen, showOnboarding, onbStep1]);
 
   useEffect(() => {
     if (!bootstrappedRef.current) {
@@ -4722,13 +4729,17 @@ export default function App({ initialAction = null }) {
 
   return (
     <div className="app-shell" data-preview={previewMode ? 'true' : 'false'}>
-      {!user && <SigninLinkStatus status={exportLinkStatus}
-        onRetry={() => sendExportLink(exportLinkStatus.email)} onClose={() => setExportLinkStatus(null)} />}
-      {showMobileBanner && (
-        <div className="mobile-editor-banner" role="status">
-          <span>The editor works best on a desktop. Touch mostly works, but for the full experience grab a bigger screen.</span>
-          <button type="button" onClick={() => { setShowMobileBanner(false); try { sessionStorage.setItem('em_mobile_banner_dismissed', '1'); } catch { /* noop */ } }} aria-label="Dismiss">✕</button>
-        </div>
+      {!user && exportLinkStatus && <React.Suspense fallback={null}>
+        <SigninLinkStatus status={exportLinkStatus}
+          onRetry={() => sendExportLink(exportLinkStatus.email)} onClose={() => setExportLinkStatus(null)} />
+      </React.Suspense>}
+      {showMobileBanner && !showAuthFromGate && (
+        <React.Suspense fallback={null}>
+          <MobileEditorBanner preview={previewMode} hasData={onbStep1} signedIn={Boolean(user)}
+            onPreview={() => setPreviewMode(!previewMode)}
+            onSave={() => { if (user) saveCurrentProject(); else setShowAuthFromGate(true); }}
+            onDismiss={() => setShowMobileBanner(false)} />
+        </React.Suspense>
       )}
       <header className="ed-toolbar">
         <div className="ed-toolbar-left">
@@ -4819,65 +4830,24 @@ export default function App({ initialAction = null }) {
         footer={<UserMenu onOpenTemplates={() => setShowBrandKitManager(true)} onOpenAccount={() => setScreen('dashboard')} onOpenTenureMonitor={() => { setTenureInitialFilter(null); setScreen('tenure'); }} />}
       >
           {showOnboarding ? (
-            <div className="onboarding-card">
-              <div className="onboarding-card-head">
-                <div className="onboarding-title">Make your first map</div>
-                <button className="onboarding-dismiss" type="button" aria-label="Dismiss" onClick={() => { setOnboardingDismissed(true); trackEvent('onboarding_dismissed', { step1: onbStep1, step2: onbStep2, step3: onbStep3 }); }}>✕</button>
-              </div>
-              <ol className="onboarding-checklist">
-                <li className={onbStep1 ? 'done' : ''}>
-                  <span className="onb-tick">{onbStep1 ? '✓' : '1'}</span>
-                  <div className="onb-body">
-                    <strong>Add your data</strong>
-                    {!onbStep1 && (
-                      <div className="onb-actions">
-                        <button type="button" onClick={() => { setAddClaimsModalPath(null); setShowAddClaimsModal(true); trackEvent('onboarding_step', { step: 'add_data', via: 'claims' }); }}>Search public claims</button>
-                        <button type="button" onClick={() => { uploadInputRef.current?.click(); trackEvent('onboarding_step', { step: 'add_data', via: 'upload' }); }}>Upload a file</button>
-                        <button type="button" className="onb-link" onClick={() => { loadSampleData(); trackEvent('onboarding_step', { step: 'add_data', via: 'sample' }); }}>Load sample data</button>
-                      </div>
-                    )}
-                  </div>
-                </li>
-                <li className={onbStep2 ? 'done' : (onbStep1 ? '' : 'onb-locked')}>
-                  <span className="onb-tick">{onbStep2 ? '✓' : '2'}</span>
-                  <div className="onb-body">
-                    <strong>Choose your layout</strong>
-                    {onbStep1 && !onbStep2 && (
-                      <div className="onb-actions">
-                        <button type="button" onClick={() => {
+            <React.Suspense fallback={null}>
+              <FirstMapChecklist onbStep1={onbStep1} onbStep2={onbStep2} onbStep3={onbStep3} user={Boolean(user)}
+                onDismiss={() => { setOnboardingDismissed(true); trackEvent('onboarding_dismissed', { step1: onbStep1, step2: onbStep2, step3: onbStep3 }); }}
+                onSearch={() => { setAddClaimsModalPath(null); setShowAddClaimsModal(true); trackEvent('onboarding_step', { step: 'add_data', via: 'claims' }); }}
+                onUpload={() => { uploadInputRef.current?.click(); trackEvent('onboarding_step', { step: 'add_data', via: 'upload' }); }}
+                onSample={() => { loadSampleData(); trackEvent('onboarding_step', { step: 'add_data', via: 'sample' }); }}
+                onInvestorLayout={() => {
                           applyMapType('investor');
                           handleRatioChange('landscape');
                           updateLayout({ onboardingLayoutSelected: true,
                             ...(project.layout.subtitle === 'Technical Results' ? { subtitle: 'Investor Map' } : {}) });
                           setInvestorFrameRequest((value) => value + 1);
                           trackEvent('investor_layout_selected', { format: '16:9' });
-                        }}>Use investor layout · 16:9</button>
-                        <button type="button" className="onb-link" onClick={() => { setInspectorTab('layout'); trackEvent('onboarding_step', { step: 'style' }); }}>Customize design</button>
-                      </div>
-                    )}
-                  </div>
-                </li>
-                <li className={onbStep3 ? 'done' : (onbStep1 ? '' : 'onb-locked')}>
-                  <span className="onb-tick">{onbStep3 ? '✓' : '3'}</span>
-                  <div className="onb-body">
-                    <strong>Download your map</strong>
-                    {onbStep1 && !onbStep3 && (
-                      <div className="onb-actions">
-                        <button type="button" onClick={() => { handleExportClick('png'); trackEvent('onboarding_step', { step: 'export' }); }}>Export PNG</button>
-                      </div>
-                    )}
-                  </div>
-                </li>
-                <li className={user ? 'done' : (onbStep3 ? '' : 'onb-locked')}>
-                  <span className="onb-tick">{user ? '✓' : '4'}</span>
-                  <div className="onb-body"><strong>Save for your next update</strong>
-                    {onbStep3 && !user && <div className="onb-actions">
-                      <button type="button" onClick={() => setShowAuthFromGate(true)}>Save to a free account</button>
-                    </div>}
-                  </div>
-                </li>
-              </ol>
-            </div>
+                        }}
+                onCustomize={() => { setInspectorTab('layout'); trackEvent('onboarding_step', { step: 'style' }); }}
+                onExport={() => { handleExportClick('png'); trackEvent('onboarding_step', { step: 'export' }); }}
+                onSave={() => { setShowAuthFromGate(true); trackEvent('onboarding_step', { step: 'save', before_export: !onbStep3 }); }} />
+            </React.Suspense>
           ) : null}
         {inspectorTab === 'data' && (
           <>
@@ -7335,7 +7305,7 @@ export default function App({ initialAction = null }) {
           </div>
         </div>
       )}
-      {showAuthFromGate && <AuthModal onClose={() => setShowAuthFromGate(false)} />}
+      {showAuthFromGate && <AuthModal onClose={() => setShowAuthFromGate(false)} context="Sign in on this device to save your map to your account. Once it is saved, you can open it from your dashboard on desktop." />}
       {showShareModal && (
         <div className="modal-backdrop" onClick={() => setShowShareModal(false)}>
           <div className="share-modal" onClick={e => e.stopPropagation()}>

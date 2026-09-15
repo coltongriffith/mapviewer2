@@ -56,6 +56,22 @@
   };
   // Static documents do not execute React. Use the same tab id as the editor.
   if (!document.getElementById('root')) {
+    // Record the actual CTA click without replacing the visitor's first touch.
+    // Only fixed navigation context is sent, never raw queries or the full URL.
+    document.addEventListener('click', function (event) {
+      var anchor = event.target.closest && event.target.closest('a[href]');
+      if (!anchor) return;
+      try {
+        var target = new URL(anchor.href, window.location.origin);
+        if (target.origin !== window.location.origin || !target.searchParams.has('utm_campaign')) return;
+        if (!['blog', 'companies'].includes(target.searchParams.get('utm_source'))) return;
+        var props = { path: window.location.pathname, campaign: target.searchParams.get('utm_campaign'),
+          position: target.searchParams.get('utm_content') || 'unspecified', intent: target.searchParams.get('intent') || (target.searchParams.has('claims') ? 'company_map' : 'navigation') };
+        fetch('/api/track', { method: 'POST', keepalive: true, headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ kind: 'event', session_id: session(), event: 'content_cta_clicked', props: props })
+        }).catch(function () { /* optional */ });
+      } catch (_) { /* never block navigation */ }
+    });
     var sid = session();
     var visitKey = 'em_pageview:' + window.location.pathname;
     try { if (sessionStorage.getItem(visitKey)) return; } catch (_) { /* optional */ }

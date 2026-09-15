@@ -7,11 +7,13 @@
     "directAnswer": "To map BC mineral claims, open Exploration Maps, search a company or claimholder to pull their British Columbia tenures from public registry data, add the claims to the map, assign the Claims layer role for standard styling, add context and a title block, then export a PNG or PDF. Always confirm current ownership, status, and boundaries in BC Mineral Titles Online (MTO) before relying on the map.",
     "ctaTop": {
       "text": "Search a claimholder and create a map.",
-      "sub": "Pull a company's BC tenures and have a styled map in minutes."
+      "sub": "Pull a company's BC tenures and have a styled map in minutes.",
+      "label": "Search BC claims →"
     },
     "ctaBottom": {
-      "text": "Import your file and export an investor-ready map.",
-      "sub": "Open the editor, drop in your claims, and export a clean PNG or PDF."
+      "text": "Keep your map for the next update.",
+      "sub": "Choose the investor layout, download a PNG, and save to a free account when you want to return.",
+      "label": "Search BC claims →"
     },
     "sections": [
       {
@@ -33,6 +35,15 @@
           "caption": "Searching BC tenures by claimholder name in the Add Claims panel",
           "src": "/blog-img/registry-bc.png"
         }
+      },
+      {
+        "h2": "If your search returns no claims",
+        "body": "An empty result does not establish that a company holds no ground. The public record may use a subsidiary or a different legal name.",
+        "items": [
+          "Try one distinctive word from the registered owner name.",
+          "Search a tenure number from your source document instead.",
+          "Check the jurisdiction and current record in the official registry. Map-sheet lookup is not available in Exploration Maps; browse the map and nearby claims for an area instead."
+        ]
       },
       {
         "h2": "Step 2: Add the claims to your map",
@@ -133,7 +144,7 @@
     "publishedDate": "2025-11-20",
     "category": "mineral-claims",
     "fullTitle": "How to Search & Map BC Mineral Claims | Exploration Maps",
-    "updatedDate": "2026-09-05"
+    "updatedDate": "2026-09-15"
   },
   {
     "slug": "how-to-track-bc-mineral-claim-good-to-dates",
@@ -1442,16 +1453,50 @@
     "publishedDate": "2026-06-14",
     "ctaTop": {
       "text": "Search a claimholder and create a map.",
-      "sub": "Pull an Ontario company's claims and style them in minutes."
+      "sub": "Pull an Ontario company's claims and style them in minutes.",
+      "label": "Search Ontario claims →"
     },
     "ctaBottom": {
-      "text": "Turn public claim data into a clean map.",
-      "sub": "Open the editor, add Ontario claims, and export a PNG or PDF."
+      "text": "Turn your Ontario claims into a finished map.",
+      "sub": "Choose the investor layout, download a PNG, and save your map for the next update.",
+      "label": "Search Ontario claims →"
     },
     "sections": [
       {
         "h2": "What is the Ontario MLAS?",
         "body": "The Ontario Mineral Lands Administration System (MLAS) is the provincial registry for mining claims, leases, and other mineral dispositions, administered by the Ontario Ministry of Mines. It covers the whole province, with active exploration concentrated in the Abitibi Greenstone Belt, Timmins–Kirkland Lake, and the Sudbury area. Exploration Maps uses public MLAS claim data so you can map tenure without downloading shapefiles."
+      },
+      {
+        "h2": "Already have your claim boundaries?",
+        "body": "Upload your GeoJSON, KML/KMZ or zipped shapefile instead of searching the registry again. Add separate files for your project and neighbouring ground, then give each layer a clear name.",
+        "checklist": [
+          "Upload your claim file and choose the Claims role.",
+          "In the first-map checklist, choose Use investor layout · 16:9.",
+          "Set the title and date, check the legend, then Export PNG. Free PNGs retain an Exploration Maps credit.",
+          "Save to a free account to keep working on the map later."
+        ],
+        "cta": {
+          "text": "Start with the boundaries you already have.",
+          "sub": "Your files stay together in one editable map.",
+          "href": "/?intent=claims-upload&region=ontario&utm_source=blog&utm_medium=cta&utm_campaign=how-to-search-ontario-mining-claims",
+          "label": "Upload my claim file →"
+        }
+      },
+      {
+        "h2": "From a claim file to a presentation layout",
+        "body": "These screenshots show an illustrative boundary imported into the actual editor, followed by the investor layout. The example geometry is for the walkthrough and is not an official claim record.",
+        "image": {
+          "src": "/blog-img/ontario-upload-before.png",
+          "alt": "An illustrative Ontario boundary after file upload, with the first-map checklist ready for layout selection",
+          "caption": "Before: an uploaded boundary with the Claims role assigned."
+        }
+      },
+      {
+        "image": {
+          "src": "/blog-img/ontario-upload-after.png",
+          "alt": "The same illustrative Ontario boundary with the investor layout, locator, legend and scale bar",
+          "caption": "After: choose Use investor layout, review the title and legend, then export PNG or save to an account."
+        }
       },
       {
         "h2": "Step 1: Open the claims registry search for Ontario",
@@ -1467,7 +1512,8 @@
         "body": "Type a company or individual holder name — e.g. 'Alamos Gold' or 'Agnico Eagle' — in the Company tab and press Enter, or switch to the Claim # tab for a specific Ontario claim number. Results are grouped by geographic cluster (Kirkland Lake, Timmins, Thunder Bay) so you can pick the right tenure package quickly.",
         "cta": {
           "text": "Search a claimholder and create a map.",
-          "sub": "Find an operator's Ontario ground and add it in one click."
+          "sub": "Find an operator's Ontario ground and add it in one click.",
+          "label": "Search Ontario claims →"
         }
       },
       {
@@ -1481,6 +1527,10 @@
       {
         "h2": "Example: mapping an operator's Abitibi ground",
         "body": "To brief your team on a competitor's position in the Abitibi, search the company name, select Ontario, add the Timmins and Kirkland Lake groups, assign the Claims role, switch to Satellite to show the greenstone terrain, add a title block and date, and export Landscape 16:9 — a clean competitive-position map in a few minutes."
+      },
+      {
+        "h2": "If an Ontario owner search is empty",
+        "body": "Try one distinctive word from the holder name, or the subsidiary listed on the claim. If you have a claim number, use Claim # instead. Verify the record in MLAS; an empty name match is not evidence that the ground is unheld."
       },
       {
         "h2": "Verify in Ontario MLAS",
@@ -1540,7 +1590,7 @@
     ],
     "category": "mineral-claims",
     "fullTitle": "Ontario Mining Claims Search (MLAS) | Exploration Maps",
-    "updatedDate": "2026-09-05"
+    "updatedDate": "2026-09-15"
   },
   {
     "slug": "how-to-search-saskatchewan-mineral-claims",
@@ -1953,7 +2003,8 @@
           "Try the subsidiary that holds the project, if you know it",
           "Try a grant number from a technical report or news release",
           "Check whether the ground is placer rather than quartz — placer claims are not in this dataset"
-        ]
+        ],
+        "html": "<a href=\"https://yukon.ca/en/mining\" target=\"_blank\" rel=\"noopener noreferrer\">Check the official Yukon mining resources</a> or <a href=\"/contact/\">ask for help finding your claim</a>. For placer ground, use the separate placer records; a quartz search cannot establish whether that ground is held."
       },
       {
         "h2": "Verify before you rely on it",
@@ -1990,7 +2041,18 @@
       "canadian-mineral-claim-registries",
       "how-to-make-a-mining-claims-map",
       "how-to-search-ontario-mining-claims"
-    ]
+    ],
+    "ctaTop": {
+      "text": "Search Yukon quartz claims.",
+      "sub": "Search an owner or grant number. Placer claims are not included.",
+      "label": "Search Yukon quartz claims →"
+    },
+    "ctaBottom": {
+      "text": "Make a map from your Yukon quartz claims.",
+      "sub": "Add the matching claims, choose a layout, download a PNG, and save your work.",
+      "label": "Search Yukon quartz claims →"
+    },
+    "updatedDate": "2026-09-15"
   },
   {
     "slug": "exploration-mapping-file-types-shapefile-kml-geojson-csv",
@@ -2251,7 +2313,8 @@
     "directAnswer": "Mineral Titles Online (MTO) is the Province of British Columbia's official system for acquiring and administering mineral, placer and coal titles. It is where claims are staked, maintained, transferred and paid for, and it is the authoritative record of who holds a title and when it expires. Exploration Maps does not replace MTO — it reads the province's public tenure dataset so you can search claims by tenure number or registered owner, map them, and track good-to-dates, then sends you back to MTO for anything that governs a transaction or a deadline.",
     "ctaTop": {
       "text": "Search BC claims by tenure number or owner.",
-      "sub": "Map them in a couple of minutes, then verify in MTO."
+      "sub": "Map them in a couple of minutes, then verify in MTO.",
+      "label": "Search BC claims →"
     },
     "ctaBottom": {
       "text": "Monitor up to 10 BC claims free.",
@@ -2291,7 +2354,7 @@
       },
       {
         "h2": "Searching BC claims outside MTO",
-        "body": "In Exploration Maps, open Add Claims → Search Claims Registry and select British Columbia. Three search modes are available for BC:",
+        "body": "In Exploration Maps, open Add Claims → Search Claims Registry and select British Columbia. Two search modes are available for BC:",
         "table": {
           "headers": [
             "Search by",
@@ -2308,15 +2371,19 @@
               "Tenure number",
               "You have a specific claim in hand",
               "1012345"
-            ],
-            [
-              "Map sheet",
-              "You are working a NTS map area",
-              "082F056"
             ]
           ]
         },
         "html": "Owner search returns <em>candidates</em> grouped by match confidence rather than a finished answer, because company names reach the registry in clipped legal form, under previous names, and through subsidiaries and joint-venture partners. You confirm what enters your map. The <a href=\"/blog/find-mineral-claims-owned-by-company-bc/\">company claim-search guide</a> covers that workflow in detail."
+      },
+      {
+        "h2": "If your search returns no claims",
+        "body": "An empty result does not establish that a company holds no ground. The public record may use a subsidiary or a different legal name.",
+        "items": [
+          "Try one distinctive word from the registered owner name.",
+          "Search a tenure number from your source document instead.",
+          "Check the jurisdiction and current record in the official registry. Map-sheet lookup is not available in Exploration Maps; browse the map and nearby claims for an area instead."
+        ]
       },
       {
         "h2": "Mapping the results",
@@ -2329,7 +2396,9 @@
         "html": "Tenure Monitor saves a group of claims, reads their published good-to-dates, and emails reminders at 90, 30 and 1 day beforehand. It also flags changes it detects in the government record — a good-to-date that moved, an owner added or removed, a title that stopped appearing in the dataset. See the <a href=\"/blog/how-to-track-bc-mineral-claim-good-to-dates/\">BC claim expiry guide</a>.",
         "cta": {
           "text": "Monitor up to 10 BC claims free.",
-          "sub": "Reminders before each good-to-date. No credit card."
+          "sub": "Reminders before each good-to-date. No credit card.",
+          "href": "/tenure-monitor?utm_source=blog&utm_medium=cta&utm_campaign=bc-mineral-titles-online-guide",
+          "label": "Monitor my BC claims →"
         }
       },
       {
@@ -2385,7 +2454,8 @@
       "how-to-map-bc-mineral-claims-live-registry"
     ],
     "publishedDate": "2026-08-06",
-    "fullTitle": "BC Mineral Titles Online (MTO) Guide"
+    "fullTitle": "BC Mineral Titles Online (MTO) Guide",
+    "updatedDate": "2026-09-15"
   },
   {
     "slug": "find-mineral-claims-owned-by-company-bc",
@@ -2608,9 +2678,19 @@
         "html": "<strong>Manitoba:</strong> the public disposition layer does not publish a holder name, so only claim-number lookup is offered. That is a limit of the published data rather than a decision on our side, and it is the reason the Manitoba guide leads with the claim number."
       },
       {
+        "h2": "Open the right registry search",
+        "body": "Choose your jurisdiction to open its search directly. Manitoba supports claim numbers only. Yukon covers quartz claims; placer tenure is a separate dataset.",
+        "html": "<ul><li><a href=\"/?intent=claims&amp;region=british-columbia&amp;utm_source=blog&amp;utm_medium=cta&amp;utm_campaign=canadian-mineral-claim-registries&amp;utm_content=jurisdiction-british-columbia\">Search British Columbia →</a></li><li><a href=\"/?intent=claims&amp;region=ontario&amp;utm_source=blog&amp;utm_medium=cta&amp;utm_campaign=canadian-mineral-claim-registries&amp;utm_content=jurisdiction-ontario\">Search Ontario →</a></li><li><a href=\"/?intent=claims&amp;region=quebec&amp;utm_source=blog&amp;utm_medium=cta&amp;utm_campaign=canadian-mineral-claim-registries&amp;utm_content=jurisdiction-quebec\">Search Quebec →</a></li><li><a href=\"/?intent=claims&amp;region=saskatchewan&amp;utm_source=blog&amp;utm_medium=cta&amp;utm_campaign=canadian-mineral-claim-registries&amp;utm_content=jurisdiction-saskatchewan\">Search Saskatchewan →</a></li><li><a href=\"/?intent=claims&amp;region=manitoba&amp;utm_source=blog&amp;utm_medium=cta&amp;utm_campaign=canadian-mineral-claim-registries&amp;utm_content=jurisdiction-manitoba\">Search Manitoba →</a></li><li><a href=\"/?intent=claims&amp;region=newfoundland-labrador&amp;utm_source=blog&amp;utm_medium=cta&amp;utm_campaign=canadian-mineral-claim-registries&amp;utm_content=jurisdiction-newfoundland-labrador\">Search Newfoundland &amp; Labrador →</a></li><li><a href=\"/?intent=claims&amp;region=yukon&amp;utm_source=blog&amp;utm_medium=cta&amp;utm_campaign=canadian-mineral-claim-registries&amp;utm_content=jurisdiction-yukon\">Search Yukon quartz claims →</a></li></ul>"
+      },
+      {
         "h2": "The jurisdiction guides",
         "body": "Where a province has enough of its own quirks to be worth its own walkthrough, it has one:",
-        "html": "<ul><li><a href=\"/blog/how-to-map-bc-mineral-claims-live-registry/\">British Columbia</a> — owner, tenure number and map-sheet search, plus the strongest tenure tooling on the site</li><li><a href=\"/blog/how-to-search-ontario-mining-claims/\">Ontario</a> — MLAS cell claims and how holder names are recorded</li><li><a href=\"/blog/how-to-search-quebec-mining-claims/\">Quebec</a> — GESTIM claims (<em>claims désignés sur carte</em>) and titleholder search</li><li><a href=\"/blog/how-to-search-saskatchewan-mineral-claims/\">Saskatchewan</a> — MARS dispositions</li><li><a href=\"/blog/how-to-search-manitoba-mining-claims/\">Manitoba</a> — claim-number lookup, and why owner search is unavailable</li><li><a href=\"/blog/how-to-search-newfoundland-mineral-claims/\">Newfoundland &amp; Labrador</a> — licences rather than claims, and what that changes</li></ul><a href=\"/blog/how-to-search-yukon-quartz-claims/\">Yukon</a> — quartz claims only; placer is a separate register"
+        "html": "<ul><li><a href=\"/blog/how-to-map-bc-mineral-claims-live-registry/\">British Columbia</a> — owner and tenure-number search, plus the strongest tenure tooling on the site</li><li><a href=\"/blog/how-to-search-ontario-mining-claims/\">Ontario</a> — MLAS cell claims and how holder names are recorded</li><li><a href=\"/blog/how-to-search-quebec-mining-claims/\">Quebec</a> — GESTIM claims (<em>claims désignés sur carte</em>) and titleholder search</li><li><a href=\"/blog/how-to-search-saskatchewan-mineral-claims/\">Saskatchewan</a> — MARS dispositions</li><li><a href=\"/blog/how-to-search-manitoba-mining-claims/\">Manitoba</a> — claim-number lookup, and why owner search is unavailable</li><li><a href=\"/blog/how-to-search-newfoundland-mineral-claims/\">Newfoundland &amp; Labrador</a> — licences rather than claims, and what that changes</li></ul><a href=\"/blog/how-to-search-yukon-quartz-claims/\">Yukon</a> — quartz claims only; placer is a separate register"
+      },
+      {
+        "h2": "A search came back empty — what next?",
+        "body": "First check the jurisdiction and search mode. Try a distinctive part of the registered owner name or a claim number. Yukon placer claims are outside the quartz dataset, and Manitoba has no owner-name search. If the registry service is unavailable, retry later; a service error and an empty match are different outcomes.",
+        "html": "<a href=\"/contact/\">Need help finding a claim?</a> Tell us the jurisdiction and the source you are working from."
       },
       {
         "h2": "Why the registries differ so much",
@@ -2668,6 +2748,7 @@
       "how-to-search-yukon-quartz-claims"
     ],
     "publishedDate": "2026-08-06",
-    "fullTitle": "Canadian Mineral Claim & Tenure Registries | Exploration Maps"
+    "fullTitle": "Canadian Mineral Claim & Tenure Registries | Exploration Maps",
+    "updatedDate": "2026-09-15"
   }
 ]

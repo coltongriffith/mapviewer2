@@ -94,6 +94,19 @@ export default function GrowthTab({ data, onOpenUser, daily, onPickDay }) {
         <p className="admx-since-note">Signup attribution is stored browser context, not a verified ad-platform report. Its account cohort differs from the session cohort on the left.</p>
       </Card>
     </div>
+    <Card title="Landing pages that produce map work" eyebrow="Top 50 · ranked by real-data exports, then uploads and registry imports" full>
+      {!data.landing_pages ? <EmptyHint>Landing-page outcomes are not available yet. Check that the latest reporting migration is installed.</EmptyHint>
+        : !data.landing_pages.length ? <EmptyHint>No landing-page activity in this window.</EmptyHint>
+          : <div className="adm-table-scroll"><table className="adm-table">
+            <thead><tr><th>First recorded page</th><th>Tabs</th><th>Editor</th><th>Upload / registry</th><th>Company preview</th><th>Demo</th><th>Real-data export</th><th>Saved</th><th>Lead</th></tr></thead>
+            <tbody>{data.landing_pages.map(p => <tr key={p.path}>
+              <th scope="row">{p.path}</th><td>{fmtNum(p.sessions)}</td><td>{fmtNum(p.opened)}</td>
+              <td>{fmtNum(p.deliberate_data)}</td><td>{fmtNum(p.company_previews)}</td><td>{fmtNum(p.demos)}</td>
+              <td>{fmtNum(p.real_exports)}</td><td>{fmtNum(p.saved_sessions)}</td><td>{fmtNum(p.lead_sessions)}</td>
+            </tr>)}</tbody>
+          </table></div>}
+      <p className="admx-since-note">Each count is a distinct tab in the selected window. The landing page is its first recorded page within that window. Upload / registry excludes automatic company previews and demos; a tab can appear in more than one action column. Real-data exports follow an import. Saved means a recorded project save, not necessarily a new account. Known admin sessions are excluded; small counts and unidentified testing limit conclusions.</p>
+    </Card>
     <Card title="Free customers getting value" eyebrow="Confirmed real-data exports in this window · up to 10 accounts" full>
       {!data.follow_up.length ? <EmptyHint>No qualifying accounts recorded yet. Use working sessions to establish the first useful-map → paid-customer examples.</EmptyHint> : <div className="adm-table-scroll"><table className="adm-table">
         <thead><tr><th>Account</th><th>Real-data exports</th><th>Next step</th></tr></thead>
