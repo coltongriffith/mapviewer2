@@ -11,6 +11,7 @@ import { relaxationNotice } from '../utils/relaxationNotice';
 import { claimNamePrefix, sourceCredit, CLAIM_NAME_CAVEAT } from '../utils/claimProvenance';
 import { claimNotices } from '../utils/claimNotices';
 import ClaimNoticeStrip from './ClaimNoticeStrip';
+const ClaimSearchHelp = React.lazy(() => import('./FeedbackModal'));
 import { clusterFeatures, clusterLabels } from '../utils/featureClusters.js';
 
 // ── Spatial clustering helpers ─────────────────────────────────────────────
@@ -189,6 +190,7 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
   const [manualMode, setManualMode] = useState(false);
   const [selectedOwner, setSelectedOwner] = useState(null);
   const [selectedGroups, setSelectedGroups] = useState(new Set());
+  const [showSearchHelp, setShowSearchHelp] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState(new Set());
   const [selectedFlat, setSelectedFlat] = useState(new Set());
   const {
@@ -693,6 +695,10 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
               BLM's Customer Info Report
             </a>{' '}and search a serial here.
           </>
+        ) : province === 'yt' ? (
+          <><strong>Quartz claims only.</strong> Yukon placer claims are a separate dataset and are not searched here. Search a registered owner or grant number.</>
+        ) : province === 'mb' ? (
+          'Search by claim number. Manitoba’s public dataset does not publish owner names.'
         ) : (
           "Not sure which province? Search any company name — we'll check the others automatically if nothing turns up here."
         )}
@@ -716,6 +722,7 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
         <div className="claims-search-row">
           <input
             className="export-hd-input claims-search-input"
+            aria-label={mode === 'number' ? (province === 'yt' ? 'Grant number' : 'Claim number') : 'Claim search'}
             placeholder={provinceCfg.placeholders[mode] || provinceCfg.placeholders.company}
             value={query}
             onChange={e => handleQueryChange(e.target.value)}
@@ -808,6 +815,21 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
             {emptyMessage.detail ? <><br /><span className="claims-empty-detail">{emptyMessage.detail}</span></> : null}
             {emptyMessage.hint ? <><br /><span className="claims-empty-hint">{emptyMessage.hint}</span></> : null}
           </p>
+          <div className="claims-recovery-actions">
+            {provinceCfg.modes.filter(m => m !== mode).map(m => (
+              <button type="button" className="ui-btn" key={m} onClick={() => {
+                handleModeChange(m);
+                setQuery('');
+                trackEvent('search_recovery_clicked', { province, mode, action: m });
+              }}>{m === 'number' ? (province === 'yt' ? 'Try a grant number' : 'Try a claim number') : 'Try an owner name'}</button>
+            ))}
+            {province === 'yt' && <a href="https://yukon.ca/en/mining" target="_blank" rel="noopener noreferrer"
+              onClick={() => trackEvent('search_recovery_clicked', { province, mode, action: 'official_registry' })}>Yukon mining resources ↗</a>}
+            <button type="button" className="ui-btn" onClick={() => {
+              setShowSearchHelp(true);
+              trackEvent('search_recovery_clicked', { province, mode, action: 'help' });
+            }}>Need help finding this claim?</button>
+          </div>
           {crossProvinceLoading && (
             <p className="claims-cross-province-checking">Checking other provinces…</p>
           )}
@@ -840,6 +862,12 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
           )}
         </>
       )}
+
+      {showSearchHelp && <React.Suspense fallback={<p role="status">Opening help…</p>}>
+        <ClaimSearchHelp onClose={() => setShowSearchHelp(false)}
+          initialMessage={`I need help finding a claim in ${provinceCfg.label}. `}
+          context={{ province, mode, outcome: 'empty' }} />
+      </React.Suspense>}
 
       {allFeatures.length >= 500 && (
         <p className="claims-limit-warning">⚠ Showing first 500 results — try a more specific search if your target is missing.</p>

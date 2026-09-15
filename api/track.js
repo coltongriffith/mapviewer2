@@ -35,6 +35,10 @@ const EVENT_ALLOWLIST = new Set([
   'claim_intent',
   'mobile_editor_banner_shown',
   'onboarding_step',
+  'search_recovery_clicked',
+  'content_cta_clicked',
+  'first_map_checklist_shown',
+  'mobile_continue_clicked',
   'onboarding_dismissed',
   // Dashboard v2 product events (see supabase migration 20260713000001 +
   // src/components/admin/metrics.js for the taxonomy these feed).

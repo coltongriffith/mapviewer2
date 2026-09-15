@@ -12,6 +12,21 @@ beforeEach(() => {
 afterEach(() => { vi.restoreAllMocks(); });
 
 describe('acquisition across the static site, app, and email', () => {
+  it('records a static CTA click without sending its raw query or replacing the original source', async () => {
+    const send=vi.fn().mockResolvedValue({ok:true});
+    vi.stubGlobal('fetch',send);
+    window.history.replaceState({},'', '/blog/ontario/?utm_source=bing');
+    document.body.innerHTML='<a href="/?intent=claims&amp;region=ontario&amp;query=private-example&amp;utm_source=blog&amp;utm_campaign=ontario&amp;utm_content=section-3">Search</a>';
+    boot();
+    const click=new MouseEvent('click',{bubbles:true,cancelable:true});
+    click.preventDefault(); // Avoid jsdom navigation; the delegated handler still runs.
+    document.querySelector('a').dispatchEvent(click);
+    const events=send.mock.calls.map(([,options])=>JSON.parse(options.body));
+    expect(events.find(e=>e.event==='content_cta_clicked').props).toEqual({path:'/blog/ontario/',campaign:'ontario',position:'section-3',intent:'claims'});
+    expect(JSON.stringify(events)).not.toContain('private-example');
+    expect(window.emAcquisition.get().utm_source).toBe('bing');
+    vi.unstubAllGlobals();
+  });
   it('keeps the first external source through an internal CTA and a new tab', () => {
     window.history.replaceState({}, '', '/blog/example/?utm_source=google&utm_medium=cpc&gclid=click-123');
     boot();

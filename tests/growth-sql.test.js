@@ -16,7 +16,7 @@ beforeAll(async () => {
     create table auth.users (id uuid primary key, email text, email_confirmed_at timestamptz, raw_user_meta_data jsonb);
     create table public.admin_users (user_id uuid);
     create table public.product_events (id uuid default gen_random_uuid(), session_id text, user_id uuid, event text, props jsonb, created_at timestamptz);
-    create table public.page_views (session_id text, user_id uuid, created_at timestamptz, utm_source text, utm_medium text, referrer text, device text, city text, country text);
+    create table public.page_views (session_id text, user_id uuid, created_at timestamptz, utm_source text, utm_medium text, referrer text, device text, city text, country text, path text);
     create table public.export_events (session_id text, user_id uuid, created_at timestamptz);
     create table public.search_events (session_id text, user_id uuid, created_at timestamptz);
     create table public.leads (session_id text, email text, captured_at timestamptz);
@@ -33,6 +33,7 @@ beforeAll(async () => {
   `);
   await db.exec(readFileSync('supabase/migrations/20260905053221_growth_dashboard_performance.sql', 'utf8'));
   await db.exec(readFileSync('supabase/migrations/20260914000001_growth_engaged_sessions.sql', 'utf8'));
+  await db.exec(readFileSync('supabase/migrations/20260915144240_growth_landing_outcomes.sql', 'utf8'));
 }, 30000);
 afterAll(async () => { await db?.close(); });
 beforeEach(async () => {
@@ -46,6 +47,21 @@ const user = async (n, joined = '2026-09-06T12:00Z', plan = 'free', source = 'si
 const event = (sid, event, at, props = {}, n = null) => db.query('insert into public.product_events (session_id,event,created_at,props,user_id) values ($1,$2,$3,$4,$5)', [sid,event,at,props,n == null ? null : uid(n)]);
 
 describe('growth report SQL', () => {
+  it('ranks original landing pages by deliberate work and separates previews, demos, saves and leads', async () => {
+    await user(99);
+    await db.query('insert into public.admin_users values ($1)', [uid(99)]);
+    for (const sid of ['upload', 'preview', 'demo', 'admin']) {
+      await db.query('insert into public.page_views (session_id,created_at,path) values ($1,$2,$3)', [sid,'2026-09-06T12:00Z','/blog/ontario/?utm_source=example']);
+      await db.query('insert into public.page_views (session_id,created_at,path,utm_source) values ($1,$2,$3,$4)', [sid,'2026-09-06T12:01Z','/','blog']);
+      await event(sid,'editor_opened','2026-09-06T12:02Z',{},sid==='admin'?99:null);
+      await event(sid,'layer_added','2026-09-06T12:03Z',{source: sid==='preview'?'deeplink':sid==='demo'?'demo':'upload'});
+    }
+    await event('upload','export_completed','2026-09-06T12:04Z',{real_data:true});
+    await event('upload','project_saved','2026-09-06T12:05Z');
+    await db.exec("insert into public.leads values ('upload','test@example.test','2026-09-06T12:06Z'),('upload','test@example.test','2026-09-06T12:07Z')");
+    const d=await report();
+    expect(d.landing_pages).toEqual([{path:'/blog/ontario/',sessions:3,opened:3,deliberate_data:1,company_previews:1,demos:1,real_exports:1,saved_sessions:1,lead_sessions:1}]);
+  });
   it('runs with no activity and preserves empty cohorts', async () => {
     const d = await report();
     expect(d.funnel).toEqual({ sessions: 0, engaged: 0, opened: 0, imported: 0, exported: 0, real_exported: 0 });

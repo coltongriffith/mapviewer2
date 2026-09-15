@@ -97,6 +97,17 @@ export function emptyResultMessage({ resolution, query, jurisdictionLabel, isUs,
   // displaced the spelling hint that did apply to them.
   const isCompanySearch = mode === undefined || mode === 'company';
 
+  if (province === 'yt') {
+    return {
+      kind: 'empty',
+      headline: `No quartz claims matched "${query}" in Yukon.`,
+      detail: 'This search covers quartz claims only. Placer claims are in a separate dataset; an empty match does not establish that the ground is unheld.',
+      hint: isCompanySearch
+        ? 'Try one distinctive word from the registered owner or subsidiary name, or search a grant number.'
+        : 'Check the grant number in your source document, including its letter prefix, or try the registered owner name.',
+    };
+  }
+
   if (looksLikeMapSheet(query)) {
     return {
       kind: 'empty',

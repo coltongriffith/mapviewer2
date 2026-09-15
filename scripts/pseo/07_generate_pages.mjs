@@ -180,9 +180,11 @@ function companyPage({ iss, claims, neighbours, updated }) {
 
   <div class="map-card"><img src="${mapSvg}" alt="Map of ${esc(iss.company)} mineral claims" loading="eager"></div>
   <div class="map-actions">
-    <a class="btn btn-primary" href="/?claims=${encodeURIComponent(iss.ticker)}&amp;company=${encodeURIComponent(iss.company)}&amp;region=${encodeURIComponent((provs[0] || '').toLowerCase())}&amp;utm_source=companies&amp;utm_campaign=${encodeURIComponent(iss.ticker)}">Open interactive version →</a>
+    <a class="btn btn-primary" href="/?claims=${encodeURIComponent(iss.ticker)}&amp;company=${encodeURIComponent(iss.company)}&amp;region=${encodeURIComponent((provs[0] || '').toLowerCase())}&amp;utm_source=companies&amp;utm_campaign=${encodeURIComponent(iss.ticker)}">Open this company's claims map →</a>
     <a class="btn btn-ghost" href="/?claims=${encodeURIComponent(iss.ticker)}&amp;company=${encodeURIComponent(iss.company)}&amp;region=${encodeURIComponent((provs[0] || '').toLowerCase())}&amp;utm_source=companies&amp;utm_campaign=${encodeURIComponent(iss.ticker)}-export">${esc(exportCopy)}</a>
   </div>
+
+  <p class="updated">Choose the investor layout, export a PNG, or save an editable copy to your account. On mobile, preview the map first and save on this device before continuing on desktop. <a href="/about/">About Exploration Maps</a> · <a href="/privacy/">Privacy</a></p>
 
   <div class="stats">
     <div class="stat"><b>${claims.length}</b><span>Mineral claims</span></div>

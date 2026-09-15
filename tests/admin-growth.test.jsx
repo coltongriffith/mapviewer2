@@ -5,6 +5,13 @@ import GrowthTab, { cohortRate } from '../src/components/admin/GrowthTab';
 import { growthReport } from './fixtures/growth-report';
 
 describe('growth dashboard', () => {
+  it('shows deliberate work separately from automatically loaded maps by landing page', () => {
+    render(<GrowthTab data={{...growthReport,landing_pages:[{path:'/blog/ontario/',sessions:8,opened:4,deliberate_data:2,company_previews:1,demos:1,real_exports:1,saved_sessions:1,lead_sessions:0}]}} onOpenUser={() => {}} />);
+    expect(screen.getByText('/blog/ontario/')).toBeInTheDocument();
+    expect(screen.getByRole('columnheader',{name:'Upload / registry'})).toBeInTheDocument();
+    expect(screen.getByRole('columnheader',{name:'Company preview'})).toBeInTheDocument();
+    expect(screen.getByText(/a tab can appear in more than one action column/)).toBeInTheDocument();
+  });
   it('shows explicit cohort denominators and distinguishes estimated revenue', () => {
     render(<GrowthTab data={growthReport} onOpenUser={() => {}} />);
     expect(screen.getByText('Estimated MRR · USD')).toBeInTheDocument();
