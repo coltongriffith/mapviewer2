@@ -7,7 +7,6 @@ import LegendEditor from './components/LegendEditor';
 import { MarkerSvgIcon } from './utils/markerIcons.jsx';
 import CalloutsOverlay from './components/CalloutsOverlay';
 import LandingPage from './components/LandingPage';
-import SigninLinkStatus from './components/SigninLinkStatus';
 
 import SharedMapViewer from './components/SharedMapViewer';
 import UploadPanel from './components/UploadPanel';
@@ -19,6 +18,7 @@ import Menu, { MenuItem, MenuSeparator, MenuLabel } from './components/Menu';
 import BrandMarkInline from './components/BrandMark';
 
 const MapCanvas = React.lazy(() => import('./components/MapCanvas'));
+const SigninLinkStatus = React.lazy(() => import('./components/SigninLinkStatus'));
 const FirstMapChecklist = React.lazy(() => import('./components/FirstMapChecklist'));
 const MobileEditorBanner = React.lazy(() => import('./components/MobileEditorBanner'));
 const DashboardPage = React.lazy(() => import('./components/DashboardPage'));
@@ -4729,8 +4729,10 @@ export default function App({ initialAction = null }) {
 
   return (
     <div className="app-shell" data-preview={previewMode ? 'true' : 'false'}>
-      {!user && <SigninLinkStatus status={exportLinkStatus}
-        onRetry={() => sendExportLink(exportLinkStatus.email)} onClose={() => setExportLinkStatus(null)} />}
+      {!user && exportLinkStatus && <React.Suspense fallback={null}>
+        <SigninLinkStatus status={exportLinkStatus}
+          onRetry={() => sendExportLink(exportLinkStatus.email)} onClose={() => setExportLinkStatus(null)} />
+      </React.Suspense>}
       {showMobileBanner && !showAuthFromGate && (
         <React.Suspense fallback={null}>
           <MobileEditorBanner preview={previewMode} hasData={onbStep1} signedIn={Boolean(user)}
