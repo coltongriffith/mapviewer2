@@ -2,6 +2,7 @@ import { deflateSync, inflateSync, strToU8, strFromU8 } from 'fflate';
 
 const PROJECTS_KEY = 'mapviewer.projects.v1';
 const DRAFT_KEY = 'mapviewer.draft.v1';
+const ACCOUNT_SAVE_KEY = 'mapviewer.pendingAccountSave.v1';
 const LAST_OPENED_PROJECT_KEY = 'mapviewer.lastProjectId.v1';
 const ACCOUNT_SETTINGS_KEY = 'mapviewer.accountSettings.v1';
 const GZ_PREFIX = 'gz1:';
@@ -280,6 +281,26 @@ export function loadDraft() {
     }
   }
   return draft;
+}
+
+// A separate snapshot survives an email round-trip even if another tab replaces
+// the working draft. Use the same compressed, quota-aware storage as projects.
+export function queueAccountSave({ payload, projectName, projectId }) {
+  const request = { payload, projectName, projectId, nonce: crypto.randomUUID(), requestedAt: Date.now() };
+  const result = safeSetItem(ACCOUNT_SAVE_KEY, compress(JSON.stringify(request)));
+  return { ...result, request };
+}
+
+export function loadAccountSave() {
+  try {
+    const request = safeParse(localStorage.getItem(ACCOUNT_SAVE_KEY), null, ACCOUNT_SAVE_KEY);
+    return request?.nonce && request?.payload ? request : null;
+  } catch { return null; }
+}
+
+export function clearAccountSave(nonce) {
+  if (loadAccountSave()?.nonce !== nonce) return;
+  try { localStorage.removeItem(ACCOUNT_SAVE_KEY); } catch { /* keep the snapshot on storage failure */ }
 }
 
 export function resolveInitialWorkspace(fallbackProject) {

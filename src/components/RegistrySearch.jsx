@@ -428,6 +428,8 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
       province: asked.province,
     });
   }, [results, submitted, query, mode, province, provinceCfg]);
+  const recoverySearch = submitted || { mode, query, province };
+  const recoveryCfg = ALL_JURISDICTIONS.find(p => p.value === recoverySearch.province) || provinceCfg;
 
   // ── Company mode: owner picker + clustering ──
   // Holder label for a feature. US federal records carry no claimant, so their
@@ -816,18 +818,19 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
             {emptyMessage.hint ? <><br /><span className="claims-empty-hint">{emptyMessage.hint}</span></> : null}
           </p>
           <div className="claims-recovery-actions">
-            {provinceCfg.modes.filter(m => m !== mode).map(m => (
+            {recoveryCfg.modes.filter(m => m !== recoverySearch.mode).map(m => (
               <button type="button" className="ui-btn" key={m} onClick={() => {
+                setProvince(recoverySearch.province);
                 handleModeChange(m);
                 setQuery('');
-                trackEvent('search_recovery_clicked', { province, mode, action: m });
-              }}>{m === 'number' ? (province === 'yt' ? 'Try a grant number' : 'Try a claim number') : 'Try an owner name'}</button>
+                trackEvent('search_recovery_clicked', { province: recoverySearch.province, mode: recoverySearch.mode, action: m });
+              }}>{m === 'number' ? (recoverySearch.province === 'yt' ? 'Try a grant number' : 'Try a claim number') : m === 'name' ? 'Try a claim name' : 'Try an owner name'}</button>
             ))}
-            {province === 'yt' && <a href="https://yukon.ca/en/mining" target="_blank" rel="noopener noreferrer"
-              onClick={() => trackEvent('search_recovery_clicked', { province, mode, action: 'official_registry' })}>Yukon mining resources ↗</a>}
+            {recoverySearch.province === 'yt' && <a href="https://yukon.ca/en/mining" target="_blank" rel="noopener noreferrer"
+              onClick={() => trackEvent('search_recovery_clicked', { province: recoverySearch.province, mode: recoverySearch.mode, action: 'official_registry' })}>Yukon mining resources ↗</a>}
             <button type="button" className="ui-btn" onClick={() => {
               setShowSearchHelp(true);
-              trackEvent('search_recovery_clicked', { province, mode, action: 'help' });
+              trackEvent('search_recovery_clicked', { province: recoverySearch.province, mode: recoverySearch.mode, action: 'help' });
             }}>Need help finding this claim?</button>
           </div>
           {crossProvinceLoading && (
@@ -865,8 +868,8 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
 
       {showSearchHelp && <React.Suspense fallback={<p role="status">Opening help…</p>}>
         <ClaimSearchHelp onClose={() => setShowSearchHelp(false)}
-          initialMessage={`I need help finding a claim in ${provinceCfg.label}. `}
-          context={{ province, mode, outcome: 'empty' }} />
+          initialMessage={`I need help finding a claim in ${recoveryCfg.label}. `}
+          context={{ province: recoverySearch.province, mode: recoverySearch.mode, outcome: 'empty' }} />
       </React.Suspense>}
 
       {allFeatures.length >= 500 && (

@@ -93,6 +93,26 @@ describe('empty-state guidance follows the submitted search', () => {
     expect(panel.textContent).not.toMatch(/check the number/i);
   });
 
+  it('keeps Yukon grant-number recovery tied to the failed owner search after switching modes', async () => {
+    const { view, RegistrySearch } = await renderRegistry();
+    fireEvent.change(view.container.querySelector('select'), { target: { value: 'yt' } });
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Example owner' } });
+    resolveWith(view, RegistrySearch, { loading: true });
+    fireEvent.submit(screen.getByRole('textbox').closest('form'));
+    fireEvent.click(screen.getByRole('button', { name: /claim ?#|number/i }));
+    resolveWith(view, RegistrySearch, { loading: false, results: EMPTY_RESULTS });
+    expect(screen.getByText(/No quartz claims matched "Example owner"/)).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Try an owner name' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Try a grant number' }));
+    const input = screen.getByRole('textbox', { name: 'Grant number' });
+    expect(input).toHaveValue('');
+    fireEvent.change(input, { target: { value: 'YA12345' } });
+    fireEvent.submit(input.closest('form'));
+    expect(useClaimsState.search).toHaveBeenLastCalledWith('YA12345', 'number', 'yt');
+    const { trackEvent } = await import('../src/utils/track');
+    expect(trackEvent).toHaveBeenCalledWith('search_recovery_clicked', { province: 'yt', mode: 'company', action: 'number' });
+  });
+
   it('quotes the submitted query, not whatever is now in the box', async () => {
     const { view, RegistrySearch } = await renderRegistry();
 

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import Dialog from './Dialog';
 
-export default function AuthModal({ onClose, context = '' }) {
+export default function AuthModal({ onClose, context = '', resumeEditor = false }) {
   const { signIn, signUp, signInWithMagicLink, resetPassword } = useAuth();
   // 'magic' is the default: one email, no password, no confirm round-trip.
   const [mode, setMode] = useState('magic'); // 'magic' | 'signin' | 'signup' | 'reset'
@@ -25,7 +25,7 @@ export default function AuthModal({ onClose, context = '' }) {
     setLoading(true);
     try {
       if (mode === 'magic') {
-        await signInWithMagicLink(email);
+        await signInWithMagicLink(email, { resumeEditor });
         setLinkSent(true);
         setInfo(`We emailed a sign-in link to ${email}. Open it on this device — your map will still be here.`);
       } else if (mode === 'signin') {
