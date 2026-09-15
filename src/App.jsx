@@ -67,7 +67,7 @@ import { US_CLAIMS_ENABLED, US_STATES, US_GROUP_LABEL, US_GEOMETRY_DISCLAIMER, i
 import { clampExportSize, canExportFormat, maxPixelRatioFor, PRO_MAX_EXPORT_PIXELS } from './utils/entitlements';
 import { verifyCheckoutSession } from './utils/billing';
 import { trackVerifiedPurchase } from './utils/purchaseTracking';
-import { runCloudMigration } from './utils/cloudMigration';
+import { queueAccountSave, loadAccountSave, clearAccountSave } from './utils/projectStorage';
 import { scopingWarning } from './utils/scopingNotice';
 import { CLAIM_NAME_CAVEAT } from './utils/claimProvenance';
 import { OVERLAY_DESCRIPTIONS } from './utils/referenceOverlayCredits.js';
@@ -640,6 +640,7 @@ export default function App({ initialAction = null }) {
   const [storageWarningDismissed, setStorageWarningDismissed] = useState(false);
   const [showBrandKitManager, setShowBrandKitManager] = useState(false);
   const [showAuthFromGate, setShowAuthFromGate] = useState(false);
+  const accountSaveTicketRef = useRef(null);
   // Set when a visitor arrives from a company page's "Claim this page" CTA
   // (/?claims=TICKER&claim=1). After their claims load we prompt account
   // creation — claiming a company map is the natural moment to ask for an account.
@@ -1136,10 +1137,13 @@ export default function App({ initialAction = null }) {
   useEffect(() => {
     if (!user || !supabase) return;
     (async () => {
+      const pending = loadAccountSave();
+      const { runCloudMigration } = await import('./utils/cloudMigration');
       const result = await runCloudMigration({
         userId: user.id,
-        localProjects: listProjects().slice(0, 10), // cap: pathological hoards stay local
-        draft: loadDraft(),
+        localProjects: listProjects().filter(p => p.id !== pending?.projectId).slice(0, 10),
+        // The explicit account-save handoff owns this draft, including retries.
+        draft: pending ? null : loadDraft(),
         uploadProject: ({ name, payload }) => saveCloudProject({ id: null, name, payload, silent: true }),
       });
       if (result.migrated > 0) {
@@ -4269,15 +4273,15 @@ export default function App({ initialAction = null }) {
     }).catch(() => {});
   };
 
-  const saveCurrentProject = async (nextName = null) => {
-    const nameToSave = (nextName || projectName || project.layout?.title || 'Untitled map').trim();
+  const saveCurrentProject = async (nextName = null, accountSave = null) => {
+    const nameToSave = (nextName || accountSave?.projectName || projectName || project.layout?.title || 'Untitled map').trim();
     if (user) {
       // Snapshot + ticket BEFORE the await: edits made while the save is in
       // flight must not be masked (dirty stays set), and a workspace switch
       // mid-save must detach this completion entirely.
-      const snapshot = JSON.stringify(project);
-      const payloadToSave = project;
-      const ticket = saveCoordRef.current.begin();
+      const payloadToSave = accountSave?.payload || project;
+      const snapshot = JSON.stringify(payloadToSave);
+      const ticket = accountSave?.ticket || saveCoordRef.current.begin();
       // Pass projectId as-is: when it's null (a new or deep-linked map),
       // saveCloudProject INSERTS a fresh row and returns its id. Fabricating
       // a random id here would send it down the UPDATE path, which matches no
@@ -4285,7 +4289,7 @@ export default function App({ initialAction = null }) {
       const outcome = await runGuardedSave({
         ticket,
         snapshot,
-        doSave: () => saveCloudProject({ id: projectId, name: nameToSave, payload: payloadToSave, expectedRevision: projectRevisionRef.current }),
+        doSave: () => saveCloudProject({ id: accountSave ? null : projectId, name: nameToSave, payload: payloadToSave, expectedRevision: projectRevisionRef.current }),
         getCurrentSerialized: () => lastSerializedRef.current,
         onSaved: () => { lastSavedSnapshotRef.current = snapshot; setIsDirty(false); },
         onMismatch: () => { lastSavedSnapshotRef.current = snapshot; },
@@ -4303,11 +4307,16 @@ export default function App({ initialAction = null }) {
         projectRevisionRef.current = outcome.result.revision ?? 1;
         setProjectId(cloudId);
         setProjectName(nameToSave);
+        const pending = loadAccountSave();
+        const requested = accountSaveTicketRef.current;
+        if (pending && (JSON.stringify(pending.payload) === snapshot
+          || (requested?.nonce === pending.nonce && requested.ticket.stillCurrent()))) clearAccountSave(pending.nonce);
         saveDraft({ payload: payloadToSave, projectId: cloudId, projectName: nameToSave });
         listCloudProjects().then(setRecentProjects).catch(() => {});
         setUploadStatus({ type: 'success', message: `Saved to cloud: ${nameToSave}` });
         captureAndStoreThumbnail(cloudId, true);
       }
+      return outcome;
     } else {
       // Local store needs an explicit id; reuse the current one or mint a new
       // record. (saveProjectRecord updates in place when the id already exists.)
@@ -4328,6 +4337,39 @@ export default function App({ initialAction = null }) {
       captureAndStoreThumbnail(saved.id, false);
     }
   };
+
+  const requestAccountSave = () => {
+    if (user) return saveCurrentProject();
+    const result = queueAccountSave({ payload: project, projectId, projectName });
+    if (!result.ok) {
+      setUploadStatus({ type: 'error', message: 'Could not preserve your map for sign-in. Free up browser storage or export a project file, then try again.' });
+      return;
+    }
+    accountSaveTicketRef.current = { nonce: result.request.nonce, ticket: saveCoordRef.current.begin() };
+    saveDraft({ payload: project, projectId, projectName });
+    setShowAuthFromGate(true);
+  };
+
+  useEffect(() => {
+    if (!user || !supabase || !loadAccountSave()) return;
+    import('./utils/resumeAccountSave').then(({ resumeAccountSave }) => resumeAccountSave(request => {
+      const original = accountSaveTicketRef.current;
+      const sameWorkspace = original?.nonce === request.nonce
+        ? original.ticket.stillCurrent() : JSON.stringify(project) === JSON.stringify(request.payload);
+      setShowAuthFromGate(false);
+      if (sameWorkspace) {
+        accountSaveTicketRef.current = { nonce: request.nonce, ticket: saveCoordRef.current.begin() };
+        setScreen('editor');
+      }
+      return saveCurrentProject(null, {
+        ...request,
+        ...(sameWorkspace ? { payload: project, projectName } : {}),
+        ticket: sameWorkspace ? saveCoordRef.current.begin() : { stillCurrent: () => false },
+      });
+    })).catch(err => setUploadStatus({ type: 'error', message: `Could not complete the account save: ${err.message}. Your map is still in this browser.` }));
+  // Resume once per sign-in, not after every edit or auth-token refresh.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   const nextFreeName = (base, existing) => {
     if (!existing.includes(base)) return base;
@@ -4737,7 +4779,7 @@ export default function App({ initialAction = null }) {
         <React.Suspense fallback={null}>
           <MobileEditorBanner preview={previewMode} hasData={onbStep1} signedIn={Boolean(user)}
             onPreview={() => setPreviewMode(!previewMode)}
-            onSave={() => { if (user) saveCurrentProject(); else setShowAuthFromGate(true); }}
+            onSave={requestAccountSave}
             onDismiss={() => setShowMobileBanner(false)} />
         </React.Suspense>
       )}
@@ -4846,7 +4888,7 @@ export default function App({ initialAction = null }) {
                         }}
                 onCustomize={() => { setInspectorTab('layout'); trackEvent('onboarding_step', { step: 'style' }); }}
                 onExport={() => { handleExportClick('png'); trackEvent('onboarding_step', { step: 'export' }); }}
-                onSave={() => { setShowAuthFromGate(true); trackEvent('onboarding_step', { step: 'save', before_export: !onbStep3 }); }} />
+                onSave={() => { requestAccountSave(); trackEvent('onboarding_step', { step: 'save', before_export: !onbStep3 }); }} />
             </React.Suspense>
           ) : null}
         {inspectorTab === 'data' && (
@@ -7300,12 +7342,12 @@ export default function App({ initialAction = null }) {
             <strong>Map exported.</strong> Create a free account to save it and reuse your branding next time — no password.
           </div>
           <div className="post-export-toast-actions">
-            <button className="btn compact primary" type="button" onClick={() => { setShowPostExportSignup(false); setShowAuthFromGate(true); }}>Save to account</button>
+            <button className="btn compact primary" type="button" onClick={() => { setShowPostExportSignup(false); requestAccountSave(); }}>Save to account</button>
             <button className="post-export-toast-dismiss" type="button" onClick={() => setShowPostExportSignup(false)} aria-label="Dismiss">✕</button>
           </div>
         </div>
       )}
-      {showAuthFromGate && <AuthModal onClose={() => setShowAuthFromGate(false)} context="Sign in on this device to save your map to your account. Once it is saved, you can open it from your dashboard on desktop." />}
+      {showAuthFromGate && <AuthModal resumeEditor onClose={() => setShowAuthFromGate(false)} context="Sign in on this device to save your map to your account. Once it is saved, you can open it from your dashboard on desktop." />}
       {showShareModal && (
         <div className="modal-backdrop" onClick={() => setShowShareModal(false)}>
           <div className="share-modal" onClick={e => e.stopPropagation()}>
