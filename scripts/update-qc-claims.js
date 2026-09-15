@@ -1,6 +1,8 @@
 // Active titles only. --dry-run validates offline; --output FILE saves validated rows.
 import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import shp from 'shpjs';
 import JSZip from 'jszip';
 export const SOURCE_URL = 'https://diffusion.mern.gouv.qc.ca/Public/GESTIM/telechargements/Province_shape/TITRES_ACTIFS_ACTIVE_TITLES.zip';
@@ -43,10 +45,9 @@ export async function downloadActive(url = SOURCE_URL) {
   let lastError;
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
-      const r = await fetch(url, { signal: AbortSignal.timeout(120000) });
-      if (!r.ok) throw new Error(`Active archive HTTP ${r.status}`);
-      assertActiveSource(r.url);
-      const buf = Buffer.from(await r.arrayBuffer());
+      // IPv4 avoids unreliable government-host connections on dual-stack runners.
+      // No redirects: a download can never switch to a different dataset or host.
+      const { stdout: buf } = await promisify(execFile)('curl', ['--ipv4', '--fail', '--silent', '--show-error', '--connect-timeout', '30', '--max-time', '120', url], { encoding: 'buffer', maxBuffer: 64 * 1024 * 1024 });
       if (buf.length < 4 || buf[0] !== 0x50 || buf[1] !== 0x4b) throw new Error('Active archive is not a ZIP');
       console.log(`Downloaded ${(buf.length / 1e6).toFixed(1)} MB from the active archive.`);
       return buf;
