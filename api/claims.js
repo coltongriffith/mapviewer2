@@ -1448,7 +1448,18 @@ export function isInformativeTokenSet(tokens) {
 // fetched.
 export function relaxedTokenSets(tokens) {
   const sets = [tokens];
-  const distinctive = tokens.filter((t) => !GENERIC_OWNER_WORDS.has(t));
+  const withoutGeneric = tokens.filter((t) => !GENERIC_OWNER_WORDS.has(t));
+  // Joiners come off with the industry words, not after them. Filtering only
+  // the industry words produced rungs like ["barrick", "of"] out of "Barrick
+  // Gold Corporation of North America" — a rung requiring `%of%`, which no
+  // registry rendering of that name carries, so it could only ever return
+  // nothing. Against the live B.C. layer it scored 0 where ["barrick"] alone
+  // scored 79: a whole round trip spent proving a joiner is not part of the
+  // company's name.
+  //
+  // The exact term is unaffected. Rung one is still every token as typed; only
+  // the already-relaxed rungs stop carrying words that cannot narrow anything.
+  const distinctive = withoutGeneric.filter(isInformativeToken);
 
   // Drop the industry words — but only if it actually removed anything, and
   // only if what remains can still narrow the table. "A Gold Corporation"
@@ -1464,7 +1475,11 @@ export function relaxedTokenSets(tokens) {
   // Chosen from the informative tokens only. Taking the longest overall would
   // pick "the" out of ["the", "of"] and issue the same table scan by a longer
   // route. If nothing in the pool is informative there is no fallback to make.
-  const pool = distinctive.length ? distinctive : tokens;
+  // Deliberately the generic-word filter ONLY, not `distinctive`. Narrowing it
+  // further would flip an all-joiner remainder back to the full token list and
+  // hand "A Gold Corporation" a ["gold"] rung — every gold company in the
+  // province, which is the noise this last resort is supposed to avoid.
+  const pool = withoutGeneric.length ? withoutGeneric : tokens;
   const informative = pool.filter(isInformativeToken);
   if (pool.length > 1 && informative.length) {
     const longest = informative.reduce((a, b) => (b.length > a.length ? b : a));

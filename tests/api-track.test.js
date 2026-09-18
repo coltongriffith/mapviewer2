@@ -201,6 +201,64 @@ describe('api/track dashboard-v2 events', () => {
     expect(inserts.at(-1).row.province).toBe('bc');
   });
 
+  // query_text: the term itself, recorded so a zero-result search can be
+  // reproduced. A rate says how often search fails; only the term says whether
+  // it should have.
+  it('stores the search term as typed', async () => {
+    const res = mockRes();
+    await handler(req(
+      { kind: 'search', session_id: SID, search_kind: 'registry', province: 'bc', mode: 'company',
+        query_len: 22, query_text: 'Teck Resources Limited', result_count: 0, outcome: 'empty' },
+      { ip: uniqueIp() },
+    ), res);
+    expect(res.statusCode).toBe(204);
+    expect(inserts.at(-1).row.query_text).toBe('Teck Resources Limited');
+  });
+
+  it('collapses whitespace so one term does not split into two report rows', async () => {
+    const res = mockRes();
+    await handler(req(
+      { kind: 'search', session_id: SID, search_kind: 'registry', query_text: '  Acme   Gold  Corp ' },
+      { ip: uniqueIp() },
+    ), res);
+    expect(inserts.at(-1).row.query_text).toBe('Acme Gold Corp');
+  });
+
+  it('redacts a credential pasted into the search box', async () => {
+    const res = mockRes();
+    await handler(req(
+      { kind: 'search', session_id: SID, search_kind: 'registry', query_text: 'mine api_key=abcdef123456 owner@example.com' },
+      { ip: uniqueIp() },
+    ), res);
+    const stored = inserts.at(-1).row.query_text;
+    expect(stored).not.toContain('abcdef123456');
+    expect(stored).not.toContain('owner@example.com');
+    expect(stored).toContain('[redacted]');
+    expect(stored).toContain('[email]');
+  });
+
+  it('truncates an over-long term instead of dropping the event', async () => {
+    const res = mockRes();
+    await handler(req(
+      { kind: 'search', session_id: SID, search_kind: 'registry', query_text: 'x'.repeat(400) },
+      { ip: uniqueIp() },
+    ), res);
+    expect(res.statusCode).toBe(204);
+    expect(inserts.at(-1).table).toBe('search_events');
+    expect(inserts.at(-1).row.query_text.length).toBe(120);
+  });
+
+  it('records null rather than an empty string when there is no term', async () => {
+    // A radius search has no term. Null keeps it out of the terms report
+    // instead of showing a blank row that reads as an empty search.
+    const res = mockRes();
+    await handler(req(
+      { kind: 'search', session_id: SID, search_kind: 'nearby', province: 'bc', mode: 'radius' },
+      { ip: uniqueIp() },
+    ), res);
+    expect(inserts.at(-1).row.query_text).toBeNull();
+  });
+
   it('anonymous searches insert user_id null', async () => {
     const res = mockRes();
     await handler(req(

@@ -15,6 +15,7 @@
 //    enough to blunt casual spam; not a hard global guarantee.
 
 import { createClient } from '@supabase/supabase-js';
+import { redact } from './_lib/redact.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -115,6 +116,20 @@ function jsonDepth(value, depth = 0) {
 }
 
 const str = (v, max) => (typeof v === 'string' && v.length ? v.slice(0, max) : null);
+
+// A registry search term, kept so a zero-result search can be explained rather
+// than only counted (see migration 20260918120000). Trimmed, capped at the
+// length api/_lib/guard.js accepts, and run through the same redact() the error
+// sink uses — a term is typed into a search box, and search boxes collect
+// pasted junk. Whitespace is collapsed so "acme  corp" and "acme corp" group as
+// one term in the report instead of two.
+const MAX_QUERY_TEXT = 120;
+const searchTerm = (v) => {
+  const cleaned = str(v, MAX_QUERY_TEXT * 2);
+  if (cleaned === null) return null;
+  const collapsed = cleaned.replace(/\s+/g, ' ').trim();
+  return collapsed ? redact(collapsed).slice(0, MAX_QUERY_TEXT) : null;
+};
 const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
 
 function geoFromHeaders(h) {
@@ -252,6 +267,10 @@ export default async function handler(req, res) {
         province: str(body.province, 32),
         mode: str(body.mode, 32),
         query_len: num(body.query_len),
+        // The term itself. query_len alone cannot say whether a miss was the
+        // matcher's fault or the registry's — see the migration for the B.C.
+        // searches that prompted this.
+        query_text: searchTerm(body.query_text),
         result_count: num(body.result_count),
         // Allowlisted, like every other enum this endpoint accepts — the column
         // has a CHECK constraint and an unexpected value would fail the insert

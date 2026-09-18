@@ -88,6 +88,11 @@ export function trackSearch({ kind, province, mode, query, resultCount, outcome 
     province: province || undefined,
     mode: mode || undefined,
     query_len: query ? query.trim().length : undefined,
+    // The term as typed. Sent so a zero-result search can be reproduced and
+    // judged — a miss on a company that really does hold claims here is a bug,
+    // a miss on one that doesn't is the registry answering correctly, and
+    // query_len cannot tell them apart. Truncated and redacted server-side.
+    query_text: query ? query.trim() : undefined,
     result_count: resultCount == null ? undefined : Number(resultCount),
     // 'ok' | 'empty' | 'error'. A failed request and a genuine miss both carry
     // result_count 0, so without this they are the same row and a broken

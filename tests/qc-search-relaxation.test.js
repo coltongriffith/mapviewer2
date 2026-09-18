@@ -63,6 +63,31 @@ describe('relaxedTokenSets', () => {
     expect(last[0]).toBe('graphite');
   });
 
+  it('drops joiner words from the relaxed sets, not just industry words', () => {
+    // "Barrick Gold Corporation of North America": removing only the industry
+    // vocabulary left ["barrick", "of"], a rung requiring `%of%` that no
+    // registry rendering of the name carries. Against the live B.C. layer that
+    // rung returned 0 while ["barrick"] alone returned 79 — a whole round trip
+    // spent proving a joiner is not part of the company's name.
+    const attempts = sets('Barrick Gold Corporation of North America');
+    expect(attempts).not.toContainEqual(['barrick', 'of']);
+    expect(attempts).toContainEqual(['barrick']);
+  });
+
+  it('still tries the exact tokens even when they include a joiner', () => {
+    // Only the RELAXED rungs drop joiners. Rung one is always what was typed,
+    // so a registry that really does store "of" is still matched first.
+    expect(sets('Barrick Gold Corporation of North America')[0])
+      .toEqual(['barrick', 'gold', 'of', 'north', 'america']);
+  });
+
+  it('does not hand an all-generic name a generic fallback', () => {
+    // "A Gold Corporation" reduces to ["a"], which is not a search — and
+    // ["gold"] would be every gold company in the province. Neither is an
+    // answer, so the exact tokens are all that is tried.
+    expect(sets('A Gold Corporation')).toEqual([['a', 'gold']]);
+  });
+
   it('never produces an empty token set', () => {
     // An empty filter does not fail — it drops the WHERE clause and pages the
     // whole table back. Every attempt must constrain something.
