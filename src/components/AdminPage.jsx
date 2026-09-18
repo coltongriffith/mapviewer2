@@ -332,10 +332,15 @@ export default function AdminPage({ onExit }) {
   const campaigns = useRpc('admin_get_campaign_stats', queryWindow, acquisitionEnabled);
   const referrers = useRpc('admin_get_referrer_stats', queryWindow, acquisitionEnabled);
   const searchDropoff = useRpc('admin_get_search_dropoff', queryWindow, acquisitionEnabled);
+  // The terms behind the zero-result rate. The rate says how often search
+  // fails; only the term says whether it should have — a company that holds
+  // claims here and was missed is a bug, one that holds none is the registry
+  // answering correctly, and the two look identical in every other column.
+  const failedSearches = useRpc('admin_get_failed_searches', queryWindow, acquisitionEnabled);
   const landingClicks = useRpc('admin_get_landing_clicks', queryWindow, acquisitionEnabled);
-  const acquisition = [leads, campaigns, referrers, searchDropoff, landingClicks];
+  const acquisition = [leads, campaigns, referrers, searchDropoff, failedSearches, landingClicks];
   const d = { leads: leads.data, campaignStats: campaigns.data, referrerStats: referrers.data,
-    searchDropoff: searchDropoff.data, landingClicks: landingClicks.data };
+    searchDropoff: searchDropoff.data, failedSearches: failedSearches.data, landingClicks: landingClicks.data };
   const active = tab === 'growth' ? {
     loading: acquisition.some(r => r.loading),
     error: acquisition.find(r => r.error)?.error,
@@ -373,6 +378,7 @@ export default function AdminPage({ onExit }) {
   const leadsPag = usePagination(d.leads, 10);
   const campaignPag = usePagination(d.campaignStats, 10);
   const searchPag = usePagination(d.searchDropoff, 12);
+  const failedPag = usePagination(d.failedSearches, 12);
 
   // ── Pre-auth screens ──────────────────────────────────────────────────────
   if (!supabase) return (
@@ -618,6 +624,70 @@ export default function AdminPage({ onExit }) {
                   <strong>Left after</strong> counts sessions whose last recorded action was a
                   search that found nothing. A high rate with people leaving is usually a broken
                   search rather than empty ground — open the session timeline to see the sequence.
+                </p>
+              </Card>
+
+              {/* The terms themselves. Recorded from 2026-09-18 (migration
+                  20260918120000); rows before that kept only a length, and say
+                  so rather than showing a blank that reads as an empty search. */}
+              <Card
+                title="What they searched for"
+                eyebrow="Terms that found nothing · newest first"
+                count={(d.failedSearches || []).length || null}
+                full
+              >
+                {(d.failedSearches || []).length === 0 ? (
+                  <Empty message="No failed searches in this window." />
+                ) : (
+                  <div className="adm-table-wrap">
+                    <table className="adm-table">
+                      <thead>
+                        <tr>
+                          <th scope="col">Term</th>
+                          <th scope="col">Province</th>
+                          <th scope="col">Mode</th>
+                          <th scope="col" className="adm-num">Tries</th>
+                          <th scope="col" className="adm-num">Sessions</th>
+                          <th scope="col" className="adm-num">Errors</th>
+                          <th scope="col">Last</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {failedPag.slice.map((r, i) => (
+                          <tr key={`${r.province}-${r.mode}-${r.query_text || 'n'}-${i}`}>
+                            <th scope="row" className="adm-mono">
+                              {r.query_text || (
+                                <span className="adm-muted">
+                                  not recorded{r.chars ? ` (${r.chars} chars)` : ''}
+                                </span>
+                              )}
+                            </th>
+                            <td>{r.province}</td>
+                            <td>{r.mode}</td>
+                            <td className="adm-num">
+                              {/* Repeated tries at ONE term is the tell: somebody
+                                  rephrasing the same company is a miss worth
+                                  reproducing, not a browse. */}
+                              {Number(r.attempts) > 2
+                                ? <strong className="adm-rate-bad">{r.attempts}</strong>
+                                : r.attempts}
+                            </td>
+                            <td className="adm-num">{r.sessions}</td>
+                            <td className="adm-num">{Number(r.errors) > 0
+                              ? <strong className="adm-rate-bad">{r.errors}</strong>
+                              : <span className="adm-muted">—</span>}</td>
+                            <td className="adm-muted">{fmt(r.last_search)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    <Pagination {...failedPag} />
+                  </div>
+                )}
+                <p className="adm-muted" style={{ marginTop: 10, fontSize: 12 }}>
+                  Paste a term into the live search to reproduce it. If the company really does
+                  hold claims in that province, the matcher missed it; if it holds none, the
+                  registry answered correctly and the rate is not a bug.
                 </p>
               </Card>
 

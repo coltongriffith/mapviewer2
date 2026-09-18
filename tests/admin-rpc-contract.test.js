@@ -100,6 +100,65 @@ describe('admin_get_search_dropoff', () => {
   });
 });
 
+describe('admin_get_failed_searches', () => {
+  // The terms report. Same three failure modes as the dropoff RPC it sits
+  // beside — a renamed argument empties it silently, a dropped gate exposes
+  // what people typed to every signed-in user, and a pg_temp search_path lets
+  // a caller's objects run as the owner.
+  const def = currentDefinition('admin_get_failed_searches');
+
+  it('is defined by some migration', () => {
+    expect(def, 'no migration defines admin_get_failed_searches').toBeTruthy();
+  });
+
+  it('keeps the argument names the dashboard sends', () => {
+    const body = bodyOf(def.sql, 'admin_get_failed_searches');
+    expect(body).toMatch(/p_start\s+timestamptz/);
+    expect(body).toMatch(/p_end\s+timestamptz/);
+    // p_limit is defaulted, so AdminPage's two-argument call still binds.
+    expect(body, 'p_limit must have a default or the dashboard call fails')
+      .toMatch(/p_limit\s+integer\s+default/i);
+  });
+
+  it('gates on is_admin(), because it is security definer and granted to authenticated', () => {
+    const body = bodyOf(def.sql, 'admin_get_failed_searches');
+    expect(body).toMatch(/security\s+definer/i);
+    expect(body, `${def.file} drops the admin check on a definer function`).toMatch(/is_admin\(\)/);
+  });
+
+  it('is never granted to anon or public', () => {
+    expect(def.sql).toMatch(/revoke\s+all\s+on\s+function\s+public\.admin_get_failed_searches/i);
+    expect(def.sql).not.toMatch(/grant\s+execute[^;]*admin_get_failed_searches[^;]*\b(anon|public)\b/i);
+  });
+
+  it('scopes the window half-open, like every other range RPC', () => {
+    const body = bodyOf(def.sql, 'admin_get_failed_searches');
+    expect(body).toMatch(/created_at\s*>=\s*coalesce\(p_start/);
+    expect(body).toMatch(/created_at\s*<\s*coalesce\(p_end/);
+    expect(body).not.toMatch(/created_at\s*<=\s*coalesce\(p_end/);
+  });
+
+  it('does not resolve names through a caller-writable temp schema', () => {
+    const body = bodyOf(def.sql, 'admin_get_failed_searches');
+    expect(body).toMatch(/set\s+search_path/i);
+    expect(body, 'pg_temp in a definer search_path').not.toMatch(/search_path\s*=\s*[^\n]*pg_temp/i);
+  });
+
+  it('bounds the row count it will return', () => {
+    // An unbounded report over a wide window is a page-sized payload of raw
+    // search terms; the cap is what keeps it a report.
+    const body = bodyOf(def.sql, 'admin_get_failed_searches');
+    expect(body).toMatch(/limit\s+least\(/i);
+  });
+
+  it('adds the column it reads', () => {
+    // The RPC and the column ship together: the report selects query_text, and
+    // api/track.js starts writing it in the same change. A migration that
+    // created only the function would fail on first call.
+    expect(def.sql).toMatch(/alter table public\.search_events\s+add column if not exists query_text/i);
+  });
+});
+
 describe('admin_get_overview feed fix', () => {
   // This one is applied by rewriting the DEPLOYED definition rather than
   // restating ~200 lines of plpgsql, so what needs pinning is not the SQL but
