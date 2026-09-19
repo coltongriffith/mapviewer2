@@ -21,6 +21,25 @@ describe('agent map schema', () => {
     expect(result.errors.join(' ')).toMatch(/search\.query|bbox/);
   });
 
+  it('accepts direct GeoJSON for drill maps without a registry search', () => {
+    const result = validateCreateMapInput({
+      map_type: 'drill',
+      title: 'Drill Results',
+      jurisdiction: 'bc',
+      data: {
+        role: 'drillholes',
+        source_name: 'Company drill collars',
+        geojson: {
+          type: 'FeatureCollection',
+          features: [{ type: 'Feature', properties: { hole: 'DDH-01' }, geometry: { type: 'Point', coordinates: [-120, 50] } }],
+        },
+      },
+    });
+    expect(result.ok).toBe(true);
+    expect(result.value.data.role).toBe('drillholes');
+    expect(result.value.data.geojson.features).toHaveLength(1);
+  });
+
   it('rejects unsupported jurisdiction and style', () => {
     const result = validateCreateMapInput({
       jurisdiction: 'mars',
