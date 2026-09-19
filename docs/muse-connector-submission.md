@@ -99,3 +99,25 @@ ExplorationMaps is a strong example of what an agent-native vertical service can
 
 ## Support
 Website: https://www.explorationmaps.com
+
+
+## Review / listing assets
+- Square/touch icon: https://www.explorationmaps.com/apple-touch-icon.png
+- Brand logo PNG: https://www.explorationmaps.com/brand/exploration-maps-logo.png
+- Brand logo SVG: https://www.explorationmaps.com/brand/exploration-maps-logo.svg
+- Brand mark SVG: https://www.explorationmaps.com/brand/exploration-maps-mark.svg
+- Social / preview image: https://www.explorationmaps.com/og-image.png
+- Privacy policy: https://www.explorationmaps.com/privacy/
+- Terms of Service: https://www.explorationmaps.com/terms/
+- Billing / refunds: https://www.explorationmaps.com/refunds/
+- Support: support@explorationmaps.com
+- Privacy contact: privacy@explorationmaps.com
+
+## Short form answer: “What does your connector do?”
+ExplorationMaps lets Muse create professional mineral exploration maps from natural-language requests. Muse can search supported official mineral-claim registries and produce claim/tenure, investor, infrastructure and project-location maps immediately; connected ExplorationMaps accounts can also save/edit maps and map supplied drill or GeoJSON data.
+
+## Short form answer: “How will users use it?”
+A user asks Muse for a mining or exploration map in normal language—for example, “Map Example Mining’s claims in British Columbia and show roads, towns and rail.” Muse calls ExplorationMaps, which handles the registry search, mining-specific map structure and styling, and returns a shareable finished map. Connected users can open the same project in ExplorationMaps for further editing.
+
+## Short form answer: “Why should Muse feature it?”
+ExplorationMaps turns a specialist desktop-GIS workflow into a direct agent task. The user asks for the business outcome rather than operating mapping software, while the connector supplies mining-specific registry access, provenance, map templates and a finished visual artifact.
