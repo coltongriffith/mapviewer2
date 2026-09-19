@@ -32,6 +32,7 @@ export const AGENT_OVERLAYS = Object.freeze({
 });
 
 export const AGENT_SEARCH_TYPES = Object.freeze(['company', 'number', 'name']);
+export const AGENT_DATA_ROLES = Object.freeze(['claims', 'drillholes', 'target_areas', 'anomalies', 'faults_structures', 'roads_access', 'rivers_water', 'labels']);
 export const AGENT_MAP_TYPES = Object.freeze(Object.keys(MAP_TYPES));
 export const AGENT_STYLES = Object.freeze(['investor_clean', 'technical_sharp', 'modern_dark', 'warm_terrain', 'ni_43101']);
 
@@ -87,8 +88,36 @@ export function validateCreateMapInput(body) {
     }
   }
 
-  if (!query && !normalizedBbox) {
-    errors.push('Provide search.query or location.bbox.');
+  const rawData = body.data && typeof body.data === 'object' ? body.data : null;
+  let data = null;
+  if (rawData?.geojson != null) {
+    const geojson = rawData.geojson;
+    const features = geojson?.type === 'FeatureCollection' && Array.isArray(geojson.features)
+      ? geojson.features
+      : null;
+    if (!features) {
+      errors.push('data.geojson must be a GeoJSON FeatureCollection.');
+    } else if (features.length < 1) {
+      errors.push('data.geojson must contain at least one feature.');
+    } else if (features.length > 5000) {
+      errors.push('data.geojson may contain at most 5000 features.');
+    } else if (features.some((feature) => !feature || feature.type !== 'Feature' || !feature.geometry?.type)) {
+      errors.push('Every data.geojson feature must contain a geometry.');
+    } else {
+      const requestedRole = cleanString(rawData.role, 40);
+      if (requestedRole && !AGENT_DATA_ROLES.includes(requestedRole)) {
+        errors.push(`Unsupported data.role '${requestedRole}'.`);
+      }
+      data = {
+        geojson,
+        role: requestedRole || null,
+        source_name: cleanString(rawData.source_name, 160),
+      };
+    }
+  }
+
+  if (!query && !normalizedBbox && !data) {
+    errors.push('Provide search.query, location.bbox, or data.geojson.');
   }
 
   const include = normalizeInclude(body.include);
@@ -109,6 +138,7 @@ export function validateCreateMapInput(body) {
       include,
       style,
       company: { name: companyName },
+      data,
     },
   };
 }
@@ -122,6 +152,7 @@ export function capabilities() {
     jurisdictions: Object.entries(AGENT_JURISDICTIONS).map(([id, value]) => ({ id, ...value })),
     overlays: Object.keys(AGENT_OVERLAYS),
     search_types: AGENT_SEARCH_TYPES,
+    data_roles: AGENT_DATA_ROLES,
     styles: AGENT_STYLES,
   };
 }
