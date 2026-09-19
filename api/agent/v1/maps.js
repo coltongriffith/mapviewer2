@@ -161,25 +161,38 @@ export default async function handler(req, res) {
 
   const started = Date.now();
   try {
-    const claims = await runClaimsSearch({
-      jurisdiction: input.jurisdiction,
-      query: input.search.query,
-      type: input.search.type,
-      bbox: input.location.bbox,
-      clientIp: clientIp(req),
-    });
+    const jurisdiction = AGENT_JURISDICTIONS[input.jurisdiction];
+    let featureCollection;
+    let sourceName;
+    let sourceMeta = null;
+    let usedRegistry = false;
 
-    if (!claims?.features?.length) {
-      const error = new Error('No matching mineral claims were found.');
-      error.code = 'CLAIMS_NOT_FOUND';
-      throw error;
+    if (input.data?.geojson) {
+      featureCollection = input.data.geojson;
+      sourceName = input.data.source_name || 'Agent supplied GeoJSON';
+    } else {
+      usedRegistry = true;
+      const claims = await runClaimsSearch({
+        jurisdiction: input.jurisdiction,
+        query: input.search.query,
+        type: input.search.type,
+        bbox: input.location.bbox,
+        clientIp: clientIp(req),
+      });
+      if (!claims?.features?.length) {
+        const error = new Error('No matching mineral claims were found.');
+        error.code = 'CLAIMS_NOT_FOUND';
+        throw error;
+      }
+      featureCollection = claims;
+      sourceName = jurisdiction?.registry;
+      sourceMeta = claims.meta || null;
     }
 
-    const jurisdiction = AGENT_JURISDICTIONS[input.jurisdiction];
     const project = createAgentMapProject(input, {
-      featureCollection: claims,
-      source: jurisdiction?.registry,
-      sourceMeta: claims.meta || null,
+      featureCollection,
+      source: sourceName,
+      sourceMeta,
     });
 
     const { data: created, error: createError } = await sb.rpc('create_agent_project_and_share', {
@@ -199,10 +212,17 @@ export default async function handler(req, res) {
       share_url: `${siteUrl}/map/${created.share_id}`,
       project: {
         jurisdiction: input.jurisdiction,
-        claims_found: claims.features.length,
+        feature_count: featureCollection.features.length,
+        ...(usedRegistry ? { claims_found: featureCollection.features.length } : {}),
       },
-      sources: [{ name: jurisdiction?.registry || 'Official mineral registry', jurisdiction: jurisdiction?.label || input.jurisdiction }],
-      warnings: warningList(input, claims),
+      sources: [{
+        name: sourceName || jurisdiction?.registry || 'Exploration data',
+        jurisdiction: jurisdiction?.label || input.jurisdiction,
+      }],
+      warnings: [
+        ...warningList(input, usedRegistry ? featureCollection : null),
+        ...(!usedRegistry ? ['Agent-supplied geometry has not been independently verified by ExplorationMaps.'] : []),
+      ],
       request_id: rid,
     };
 
