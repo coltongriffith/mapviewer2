@@ -1,11 +1,13 @@
 import capabilitiesHandler from './_lib/agent/capabilities.js';
 import keysHandler from './_lib/agent/keys.js';
 import mapsHandler from './_lib/agent/maps.js';
+import previewHandler from './_lib/agent/preview.js';
 
 const HANDLERS = {
   capabilities: capabilitiesHandler,
   keys: keysHandler,
   maps: mapsHandler,
+  preview: previewHandler,
 };
 
 export default async function handler(req, res) {
