@@ -28,7 +28,7 @@ export function handleMethods(req, res, allowed = ['GET']) {
   if (req.method === 'OPTIONS') {
     res.setHeader('Allow', allowHeader);
     res.setHeader('Access-Control-Allow-Methods', allowHeader);
-    res.setHeader('Access-Control-Allow-Headers', 'content-type');
+    res.setHeader('Access-Control-Allow-Headers', 'content-type, authorization, idempotency-key, x-agent-platform, x-request-id');
     res.status(204).end();
     return true;
   }
