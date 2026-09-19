@@ -1,0 +1,8 @@
+{
+  "name": "ExplorationMaps",
+  "description": "Create professional mineral exploration, mining claim, tenure, drill-results, infrastructure, investor-presentation and technical maps.",
+  "homepage": "https://explorationmaps.com",
+  "openapi": "https://explorationmaps.com/api/agent/openapi.json",
+  "capabilities": "https://explorationmaps.com/api/agent/v1/capabilities",
+  "support": "https://explorationmaps.com"
+}
