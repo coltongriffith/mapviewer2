@@ -43,7 +43,7 @@
         ],
         "operationId": "createExplorationMap",
         "summary": "Create a professional mineral exploration map",
-        "description": "Create a professional mineral exploration map, mining claim map, mineral tenure map, property location map, infrastructure map, investor-presentation figure, drill-results map or NI 43-101-style figure. ExplorationMaps searches supported mineral registries, builds a mining-specific map project, saves it to the user's account, and returns a shareable map URL.",
+        "description": "Create a professional mineral exploration map, mining claim map, mineral tenure map, property location map, infrastructure map, investor-presentation figure, drill-results map or NI 43-101-style figure. ExplorationMaps can search supported mineral registries or map supplied GeoJSON, then builds a mining-specific project, saves it to the user's account, and returns a shareable map URL.",
         "security": [
           {
             "bearerAgent": []
@@ -294,6 +294,61 @@
                 "maxLength": 160
               }
             }
+          },
+          "data": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "Optional direct GeoJSON. Use this for drill collars/results or other exploration data that is not being fetched from a mineral-claim registry.",
+            "additionalProperties": false,
+            "properties": {
+              "role": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "claims",
+                  "drillholes",
+                  "target_areas",
+                  "anomalies",
+                  "faults_structures",
+                  "roads_access",
+                  "rivers_water",
+                  "labels",
+                  null
+                ]
+              },
+              "source_name": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 160
+              },
+              "geojson": {
+                "type": "object",
+                "required": [
+                  "type",
+                  "features"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "FeatureCollection"
+                  },
+                  "features": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 5000,
+                    "items": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
           }
         },
         "anyOf": [
@@ -307,7 +362,8 @@
               "location"
             ]
           }
-        ]
+        ],
+        "description": "Provide either search/query or location/bbox to map mineral registry claims, or data.geojson to map supplied exploration data such as drill collars."
       },
       "CreateMapResult": {
         "type": "object",
@@ -347,6 +403,10 @@
                 "type": "string"
               },
               "claims_found": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "feature_count": {
                 "type": "integer",
                 "minimum": 1
               }
