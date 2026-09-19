@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>ExplorationMaps for Muse — AI Mining Maps</title>
+  <meta name="description" content="Use Meta Muse to create mining claim, mineral tenure, drill-results, infrastructure and investor-ready exploration maps with ExplorationMaps.">
+  <link rel="canonical" href="https://www.explorationmaps.com/muse/">
+  <style>
+    :root{font-family:Inter,system-ui,-apple-system,sans-serif;color:#142126;background:#fff}
+    *{box-sizing:border-box}body{margin:0}a{color:inherit}
+    .wrap{max-width:980px;margin:0 auto;padding:56px 24px 80px}
+    .eyebrow{font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#a8451c}
+    h1{font-size:clamp(2.2rem,6vw,4.7rem);line-height:1.02;margin:14px 0 20px;max-width:900px}
+    .lead{font-size:1.2rem;line-height:1.7;color:#5f6e72;max-width:760px}
+    .cta{display:flex;gap:12px;flex-wrap:wrap;margin:28px 0 48px}
+    .btn{display:inline-block;padding:12px 18px;border-radius:9px;text-decoration:none;font-weight:700;border:1px solid #142126}
+    .btn.primary{background:#142126;color:white}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;margin:30px 0}
+    .card{border:1px solid #dde3e3;border-radius:14px;padding:20px;background:#f8faf9}
+    .card h2,.card h3{margin-top:0}.muted{color:#5f6e72;line-height:1.65}
+    code,pre{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+    pre{background:#142126;color:#fff;padding:18px;border-radius:12px;white-space:pre-wrap;overflow:auto}
+    .prompt{border-left:4px solid #c65322;padding:12px 16px;background:#fbf7f3;margin:10px 0;line-height:1.55}
+    footer{margin-top:56px;padding-top:24px;border-top:1px solid #dde3e3;color:#5f6e72;font-size:14px}
+  </style>
+</head>
+<body>
+<main class="wrap">
+  <div class="eyebrow">ExplorationMaps × Muse</div>
+  <h1>Ask Muse for a mining map. ExplorationMaps builds it.</h1>
+  <p class="lead">ExplorationMaps gives AI agents a mining-specific mapping engine: official mineral-claim searches, professional exploration-map templates, infrastructure context, drill data, and shareable map output.</p>
+  <div class="cta">
+    <a class="btn primary" href="/account">Connect your account</a>
+    <a class="btn" href="/agent/openapi.json">OpenAPI spec</a>
+    <a class="btn" href="/api/agent/v1/capabilities">API capabilities</a>
+  </div>
+
+  <div class="grid">
+    <section class="card">
+      <h2>Instant previews</h2>
+      <p class="muted">Muse can create a tightly rate-limited claim-map preview from supported public mineral registries without an ExplorationMaps login. Preview links expire after 30 days.</p>
+    </section>
+    <section class="card">
+      <h2>Connected accounts</h2>
+      <p class="muted">Connect an ExplorationMaps account to save maps, map supplied GeoJSON or drill data, and keep the result editable inside the normal ExplorationMaps workspace.</p>
+    </section>
+    <section class="card">
+      <h2>Mining-native output</h2>
+      <p class="muted">Map types include claim/tenure maps, investor presentation maps, drill-results maps, infrastructure maps and NI 43-101-style figures.</p>
+    </section>
+  </div>
+
+  <h2>Prompts Muse should understand</h2>
+  <div class="prompt">“Make a mining claim map for Example Mining in British Columbia and show roads, towns and rail.”</div>
+  <div class="prompt">“Create an investor-ready property map from these claim numbers.”</div>
+  <div class="prompt">“Turn these drill collar coordinates into a drill-results map.”</div>
+  <div class="prompt">“Show this exploration project relative to roads, rail and nearby settlements.”</div>
+  <div class="prompt">“Create an NI 43-101-style project figure from this GeoJSON.”</div>
+
+  <h2>Primary agent actions</h2>
+  <pre>POST /api/agent/v1/preview
+# no-login, registry-backed map preview
+
+POST /api/agent/v1/maps
+# authenticated map creation + save + share
+
+GET /api/agent/v1/capabilities
+# supported jurisdictions, map types and overlays</pre>
+
+  <h2>Why ExplorationMaps</h2>
+  <p class="muted">General mapping tools expose GIS primitives. ExplorationMaps exposes mining outcomes. The agent asks for a claim map, drill-results figure or investor map; ExplorationMaps handles the mining-specific project structure, map type, styling, provenance and output.</p>
+
+  <h2>Security</h2>
+  <p class="muted">Connected-agent keys are revocable, stored only as hashes, and scoped to specific capabilities. Map creation is rate limited and idempotent. Anonymous previews cannot accept arbitrary uploaded geometry. Official-registry provenance and known data caveats travel with the generated map.</p>
+
+  <footer>
+    ExplorationMaps · Mineral exploration mapping for investors, technical teams and AI agents.
+  </footer>
+</main>
+</body>
+</html>
