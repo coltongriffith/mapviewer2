@@ -15,6 +15,10 @@
   },
   "rewrites": [
     {
+      "source": "/api/agent/v1/preview",
+      "destination": "/api/agent?action=preview"
+    },
+    {
       "source": "/api/agent/v1/capabilities",
       "destination": "/api/agent?action=capabilities"
     },
