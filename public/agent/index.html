@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>ExplorationMaps Agent API</title>
+  <meta name="description" content="Connect AI agents to ExplorationMaps to create professional mineral exploration maps.">\n  <link rel="canonical" href="https://www.explorationmaps.com/agent/">
+  <style>
+    body{font-family:Inter,system-ui,sans-serif;max-width:860px;margin:48px auto;padding:0 20px;line-height:1.55;color:#172033}
+    h1,h2{line-height:1.15} code,pre{font-family:ui-monospace,SFMono-Regular,monospace}
+    pre{background:#f5f7fa;padding:16px;border-radius:10px;overflow:auto}
+    .muted{color:#5e6778}.card{border:1px solid #dbe0e8;border-radius:12px;padding:18px;margin:16px 0}
+    a{color:#2156a5}
+  </style>
+</head>
+<body>
+  <h1>ExplorationMaps Agent API</h1>
+  <p>Create professional mineral exploration maps from an AI agent. The API is platform-neutral and is designed for connectors such as Meta Muse, ChatGPT, Claude and Gemini.</p>
+  <div class="card">
+    <strong>Primary action:</strong> <code>POST /api/agent/v1/maps</code>
+    <p class="muted">Search a supported mineral registry, create an ExplorationMaps project, save it to the user's account and return a shareable map URL.</p>
+  </div>
+  <h2>Example</h2>
+  <pre>{
+  "map_type": "claims",
+  "title": "Copper Creek Project",
+  "jurisdiction": "bc",
+  "search": {
+    "type": "company",
+    "query": "Example Mining Corp"
+  },
+  "include": ["claims", "roads", "settlements", "rail"]
+}</pre>
+  <h2>Authentication</h2>
+  <p>Signed-in users create an Agent Connection under ExplorationMaps account settings. The generated API key is supplied as a Bearer token and can be revoked at any time.</p>
+  <h2>Machine-readable specification</h2>
+  <p><a href="/api/agent/openapi.json">OpenAPI 3.1 specification</a> · <a href="/api/agent/v1/capabilities">Capabilities</a></p>
+</body>
+</html>
