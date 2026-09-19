@@ -15,6 +15,7 @@ import {
   restoreCloudProject,
 } from '../utils/cloudStorage';
 import { renderBrandKitSwatch } from '../utils/brandKitSwatch';
+import AgentConnectionsSection from './AgentConnectionsSection';
 
 function fmtRelative(iso) {
   if (!iso) return '';
@@ -378,6 +379,8 @@ export default function AccountPage({ onExit, onOpenDashboard, onApplyBrandKit, 
           </div>
         )}
         <BillingSection onError={surfaceActionError('Billing')} />
+
+        <AgentConnectionsSection onError={surfaceActionError('Agent connections')} />
 
         <section className="acct-section">
           <div className="acct-section-header">
