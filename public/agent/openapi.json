@@ -3,7 +3,7 @@
   "info": {
     "title": "ExplorationMaps Agent API",
     "version": "1.0.0",
-    "description": "Create professional mineral exploration maps using official mineral-claim registry data and ExplorationMaps mining-specific map templates. Designed for AI agents including Muse, ChatGPT, Claude and Gemini."
+    "description": "Create professional mineral exploration maps using official mineral-claim registry data and ExplorationMaps mining-specific templates. Built for AI agents including Meta Muse, ChatGPT, Claude and Gemini. Anonymous agents can create tightly rate-limited registry previews; connected accounts can save maps and submit drill/custom GeoJSON."
   },
   "servers": [
     {
@@ -138,6 +138,79 @@
           },
           "5XX": {
             "description": "Temporary service or registry error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agent/v1/preview": {
+      "post": {
+        "tags": [
+          "Maps"
+        ],
+        "operationId": "previewExplorationMap",
+        "summary": "Create a free mining claim map preview without an account",
+        "description": "Fastest path for an AI agent to create a mineral claim, mineral tenure, project location, investor or infrastructure map from a supported official registry. No ExplorationMaps account is required. Anonymous preview links expire after 30 days and are rate limited. Supplied GeoJSON and drill data require the authenticated createExplorationMap operation.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateMapRequest"
+              },
+              "examples": {
+                "bcCompany": {
+                  "summary": "British Columbia company claim map",
+                  "value": {
+                    "map_type": "claims",
+                    "title": "Example Mining Claims",
+                    "jurisdiction": "bc",
+                    "search": {
+                      "type": "company",
+                      "query": "Example Mining Corp"
+                    },
+                    "include": [
+                      "claims",
+                      "roads",
+                      "settlements",
+                      "rail"
+                    ],
+                    "style": "investor_clean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Preview map created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreviewMapResult"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Invalid, rate-limited or no-results request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Temporary registry/service error",
             "content": {
               "application/json": {
                 "schema": {
@@ -459,6 +532,83 @@
               },
               "details": {}
             }
+          }
+        }
+      },
+      "PreviewMapResult": {
+        "type": "object",
+        "required": [
+          "status",
+          "preview",
+          "title",
+          "map_type",
+          "share_url",
+          "expires_in_days",
+          "project",
+          "sources",
+          "warnings"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "ready"
+          },
+          "preview": {
+            "type": "boolean",
+            "const": true
+          },
+          "title": {
+            "type": "string"
+          },
+          "map_type": {
+            "type": "string"
+          },
+          "share_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "expires_in_days": {
+            "type": "integer",
+            "const": 30
+          },
+          "project": {
+            "type": "object",
+            "properties": {
+              "jurisdiction": {
+                "type": "string"
+              },
+              "claims_found": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "feature_count": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "jurisdiction": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "request_id": {
+            "type": "string"
           }
         }
       }
