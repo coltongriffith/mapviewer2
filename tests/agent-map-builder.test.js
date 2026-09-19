@@ -45,6 +45,28 @@ describe('agent map builder', () => {
     expect(project.layout.primaryLayerId).toBe(project.layers[0].id);
   });
 
+  it('styles drill input as a drillhole layer', () => {
+    const drill = {
+      type: 'FeatureCollection',
+      features: [{ type: 'Feature', properties: { hole: 'DDH-01' }, geometry: { type: 'Point', coordinates: [-120, 50] } }],
+    };
+    const project = createAgentMapProject({
+      map_type: 'drill',
+      title: 'Drill Results',
+      jurisdiction: 'bc',
+      search: { type: 'company', query: null },
+      location: { bbox: null },
+      include: ['roads'],
+      style: 'technical_sharp',
+      company: { name: null },
+      data: { role: 'drillholes', source_name: 'Company drill collars', geojson: drill },
+    }, { featureCollection: drill, source: 'Company drill collars' });
+
+    expect(project.layout.mode).toBe('drill_plan');
+    expect(project.layers[0].role).toBe('drillholes');
+    expect(project.layers[0].type).toBe('points');
+  });
+
   it('applies the existing infrastructure template/mode', () => {
     const project = createAgentMapProject({
       map_type: 'infrastructure',
