@@ -9,14 +9,23 @@
     "api/tenure-search.js": {
       "maxDuration": 30
     },
-    "api/agent/v1/maps.js": {
+    "api/agent.js": {
       "maxDuration": 60
-    },
-    "api/agent/v1/keys.js": {
-      "maxDuration": 20
     }
   },
   "rewrites": [
+    {
+      "source": "/api/agent/v1/capabilities",
+      "destination": "/api/agent?action=capabilities"
+    },
+    {
+      "source": "/api/agent/v1/keys",
+      "destination": "/api/agent?action=keys"
+    },
+    {
+      "source": "/api/agent/v1/maps",
+      "destination": "/api/agent?action=maps"
+    },
     {
       "source": "/api/agent/openapi.json",
       "destination": "/agent/openapi.json"
