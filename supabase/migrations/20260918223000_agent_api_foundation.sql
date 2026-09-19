@@ -222,3 +222,111 @@ grant execute on function public.create_agent_share(uuid, jsonb, uuid) to servic
 -- 2. anon/authenticated cannot execute create_agent_project/create_agent_share.
 -- 3. service_role can create a project/share only when the supplied key belongs
 --    to the supplied user and is active.
+
+
+-- Atomic convenience path used by POST /api/agent/v1/maps. Project and share
+-- either both exist or neither exists; connector retries therefore never leave
+-- an unshared orphan project when share creation fails.
+create or replace function public.create_agent_project_and_share(
+  p_user_id uuid,
+  p_name text,
+  p_payload jsonb,
+  p_api_key_id uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_plan text;
+  v_source text;
+  v_limit integer;
+  v_count integer;
+  v_project_id uuid;
+  v_share_id text;
+  v_features integer;
+  v_recent integer;
+begin
+  if p_user_id is null or p_api_key_id is null then
+    raise exception 'AGENT_INVALID_IDENTITY' using errcode = '22023';
+  end if;
+
+  if not exists (
+    select 1 from public.agent_api_keys k
+    where k.id = p_api_key_id
+      and k.user_id = p_user_id
+      and k.revoked_at is null
+      and (k.expires_at is null or k.expires_at > now())
+  ) then
+    raise exception 'AGENT_KEY_INVALID' using errcode = '42501';
+  end if;
+
+  if p_name is null or char_length(btrim(p_name)) = 0 or char_length(p_name) > 200 then
+    raise exception 'invalid project name' using errcode = '22023';
+  end if;
+
+  if p_payload is null
+     or jsonb_typeof(p_payload) <> 'object'
+     or not (p_payload ? 'layout' and p_payload ? 'layers')
+     or pg_column_size(p_payload) > 2 * 1024 * 1024 then
+    raise exception 'MAP_TOO_COMPLEX: invalid or oversized agent map payload' using errcode = 'P0001';
+  end if;
+
+  select coalesce(sum(jsonb_array_length(coalesce(l->'geojson'->'features', '[]'::jsonb))), 0)
+  into v_features
+  from jsonb_array_elements(coalesce(p_payload->'layers', '[]'::jsonb)) l
+  where jsonb_typeof(coalesce(l->'geojson'->'features', '[]'::jsonb)) = 'array';
+
+  if v_features > 50000 then
+    raise exception 'MAP_TOO_COMPLEX: feature limit exceeded' using errcode = 'P0001';
+  end if;
+
+  perform pg_advisory_xact_lock(hashtextextended(p_user_id::text, 0));
+
+  select plan, source into v_plan, v_source
+  from public.user_plans
+  where user_id = p_user_id;
+
+  if coalesce(v_plan, 'free') = 'pro'
+     or coalesce(v_source, '') in ('grandfathered', 'admin') then
+    v_limit := null;
+  else
+    v_limit := 2;
+  end if;
+
+  if v_limit is not null then
+    select count(*) into v_count from public.projects where user_id = p_user_id;
+    if v_count >= v_limit then
+      raise exception 'PROJECT_LIMIT: free plan allows % cloud projects', v_limit
+        using errcode = 'P0001';
+    end if;
+  end if;
+
+  select count(*) into v_recent
+  from public.shared_maps
+  where user_id = p_user_id
+    and created_at > now() - interval '1 hour';
+
+  if v_recent >= 60 then
+    raise exception 'SHARE_RATE_LIMIT: too many agent shares created recently' using errcode = 'P0001';
+  end if;
+
+  insert into public.projects (user_id, name, payload, updated_at)
+  values (p_user_id, btrim(p_name), p_payload, now())
+  returning id into v_project_id;
+
+  v_share_id := replace(gen_random_uuid()::text, '-', '');
+  insert into public.shared_maps (id, state, user_id, creator_key, expires_at)
+  values (v_share_id, p_payload, p_user_id, null, null);
+
+  return jsonb_build_object(
+    'project_id', v_project_id,
+    'share_id', v_share_id
+  );
+end;
+$$;
+
+revoke all on function public.create_agent_project_and_share(uuid, text, jsonb, uuid) from public;
+revoke execute on function public.create_agent_project_and_share(uuid, text, jsonb, uuid) from anon, authenticated;
+grant execute on function public.create_agent_project_and_share(uuid, text, jsonb, uuid) to service_role;
