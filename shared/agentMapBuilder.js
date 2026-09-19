@@ -42,8 +42,10 @@ export function createAgentMapProject(input, {
   const project = createInitialProjectState();
   const layerId = id();
   const jurisdiction = AGENT_JURISDICTIONS[input.jurisdiction] || null;
-  const layerName = input.company?.name || input.search?.query || jurisdiction?.label || 'Mineral Claims';
+  const layerName = input.company?.name || input.search?.query || jurisdiction?.label || 'Exploration Data';
   const kind = detectKind(featureCollection);
+  const defaultRole = input.map_type === 'drill' ? 'drillholes' : 'claims';
+  const role = input.data?.role || defaultRole;
 
   const baseLayer = {
     id: layerId,
@@ -53,7 +55,7 @@ export function createAgentMapProject(input, {
     displayName: layerName,
     type: kind,
     visible: true,
-    role: 'claims',
+    role,
     geojson: featureCollection,
     userStyled: false,
     legend: { enabled: true, label: layerName },
@@ -66,11 +68,11 @@ export function createAgentMapProject(input, {
     },
   };
 
-  const claimLayer = applyRoleToLayer(baseLayer, 'claims', 0);
+  const mappedLayer = applyRoleToLayer(baseLayer, role, 0);
 
   return {
     ...project,
-    layers: [claimLayer],
+    layers: [mappedLayer],
     layout: {
       ...project.layout,
       title: input.title,
