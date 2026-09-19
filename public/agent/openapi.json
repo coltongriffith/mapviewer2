@@ -1,0 +1,407 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "ExplorationMaps Agent API",
+    "version": "1.0.0",
+    "description": "Create professional mineral exploration maps using official mineral-claim registry data and ExplorationMaps mining-specific map templates. Designed for AI agents including Muse, ChatGPT, Claude and Gemini."
+  },
+  "servers": [
+    {
+      "url": "https://explorationmaps.com"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Maps",
+      "description": "Create investor-ready mineral exploration maps."
+    },
+    {
+      "name": "Discovery",
+      "description": "Discover supported map types and jurisdictions."
+    }
+  ],
+  "paths": {
+    "/api/agent/v1/capabilities": {
+      "get": {
+        "tags": [
+          "Discovery"
+        ],
+        "operationId": "getExplorationMapCapabilities",
+        "summary": "Get supported mineral mapping capabilities",
+        "description": "Discover supported jurisdictions, mining map types, styles, overlays and search modes before creating a map.",
+        "responses": {
+          "200": {
+            "description": "Capabilities"
+          }
+        }
+      }
+    },
+    "/api/agent/v1/maps": {
+      "post": {
+        "tags": [
+          "Maps"
+        ],
+        "operationId": "createExplorationMap",
+        "summary": "Create a professional mineral exploration map",
+        "description": "Create a professional mineral exploration map, mining claim map, mineral tenure map, property location map, infrastructure map, investor-presentation figure, drill-results map or NI 43-101-style figure. ExplorationMaps searches supported mineral registries, builds a mining-specific map project, saves it to the user's account, and returns a shareable map URL.",
+        "security": [
+          {
+            "bearerAgent": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "description": "Stable unique key for this intended map creation. Reuse it when retrying the same request.",
+            "schema": {
+              "type": "string",
+              "minLength": 8,
+              "maxLength": 160
+            }
+          },
+          {
+            "name": "X-Agent-Platform",
+            "in": "header",
+            "required": false,
+            "description": "Calling agent platform, for example muse.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateMapRequest"
+              },
+              "examples": {
+                "britishColumbiaClaims": {
+                  "summary": "Investor-ready B.C. claim map",
+                  "value": {
+                    "map_type": "claims",
+                    "title": "Copper Creek Project",
+                    "jurisdiction": "bc",
+                    "search": {
+                      "type": "company",
+                      "query": "Example Mining Corp"
+                    },
+                    "include": [
+                      "claims",
+                      "roads",
+                      "settlements",
+                      "rail"
+                    ],
+                    "style": "investor_clean",
+                    "company": {
+                      "name": "Example Mining Corp"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Idempotent replay of a previously completed map request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateMapResult"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Map created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateMapResult"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Request, authentication, quota or registry result error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Temporary service or registry error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAgent": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "ExplorationMaps agent API key",
+        "description": "Create an Agent Connection in ExplorationMaps account settings and use the one-time API key as the bearer token."
+      }
+    },
+    "schemas": {
+      "CreateMapRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "map_type": {
+            "type": "string",
+            "enum": [
+              "investor",
+              "claims",
+              "drill",
+              "infrastructure",
+              "ni_43101"
+            ],
+            "default": "claims"
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 160
+          },
+          "subtitle": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 160
+          },
+          "jurisdiction": {
+            "type": "string",
+            "description": "Mineral registry jurisdiction.",
+            "enum": [
+              "bc",
+              "on",
+              "qc",
+              "sk",
+              "mb",
+              "nl",
+              "yt",
+              "us-nv",
+              "us-az",
+              "us-ut",
+              "us-id",
+              "us-mt",
+              "us-wy",
+              "us-co",
+              "us-nm",
+              "us-ca",
+              "us-or",
+              "us-wa"
+            ],
+            "default": "bc"
+          },
+          "search": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "company",
+                  "number",
+                  "name"
+                ],
+                "default": "company"
+              },
+              "query": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 120
+              }
+            }
+          },
+          "location": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "bbox": {
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "description": "[minLng,minLat,maxLng,maxLat]",
+                "minItems": 4,
+                "maxItems": 4,
+                "items": {
+                  "type": "number"
+                }
+              }
+            }
+          },
+          "include": {
+            "type": "array",
+            "uniqueItems": true,
+            "maxItems": 8,
+            "items": {
+              "type": "string",
+              "enum": [
+                "claims",
+                "roads",
+                "settlements",
+                "labels",
+                "rail",
+                "geology"
+              ]
+            },
+            "default": [
+              "claims",
+              "roads",
+              "settlements"
+            ]
+          },
+          "style": {
+            "type": "string",
+            "enum": [
+              "investor_clean",
+              "technical_sharp",
+              "modern_dark",
+              "warm_terrain",
+              "ni_43101"
+            ]
+          },
+          "company": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 160
+              }
+            }
+          }
+        },
+        "anyOf": [
+          {
+            "required": [
+              "search"
+            ]
+          },
+          {
+            "required": [
+              "location"
+            ]
+          }
+        ]
+      },
+      "CreateMapResult": {
+        "type": "object",
+        "required": [
+          "id",
+          "status",
+          "title",
+          "map_type",
+          "share_url",
+          "project",
+          "sources",
+          "warnings"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "const": "ready"
+          },
+          "title": {
+            "type": "string"
+          },
+          "map_type": {
+            "type": "string"
+          },
+          "share_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "project": {
+            "type": "object",
+            "properties": {
+              "jurisdiction": {
+                "type": "string"
+              },
+              "claims_found": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "jurisdiction": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "request_id": {
+            "type": "string"
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": [
+              "code",
+              "message",
+              "retryable"
+            ],
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              },
+              "details": {}
+            }
+          }
+        }
+      }
+    }
+  }
+}
