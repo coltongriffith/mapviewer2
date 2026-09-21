@@ -16,6 +16,9 @@ const ALLOWED_ORIGINS = new Set([
   'https://explorationmaps.com',
   'https://www.explorationmaps.com',
   'https://chatgpt.com',
+  'https://openai.com',
+  'https://platform.openai.com',
+  'https://developers.openai.com',
   'https://claude.ai',
   'https://gemini.google.com',
   'https://aistudio.google.com',
@@ -50,6 +53,7 @@ const PREVIEW_INPUT_SCHEMA = {
     search: {
       type: 'object',
       additionalProperties: false,
+      required: ['query'],
       properties: {
         type: {
           type: 'string',
@@ -68,6 +72,7 @@ const PREVIEW_INPUT_SCHEMA = {
     location: {
       type: 'object',
       additionalProperties: false,
+      required: ['bbox'],
       properties: {
         bbox: {
           type: 'array',
@@ -596,6 +601,9 @@ export default async function handler(req, res) {
         const result = await callTool(req, name, body.params?.arguments || {});
         return res.status(200).json(jsonRpcResult(body.id, callToolResponse(result), modern));
       } catch (error) {
+        if (error?.code === 'UNKNOWN_TOOL') {
+          return res.status(400).json(jsonRpcError(body.id, -32602, String(error.message || 'Unknown tool.')));
+        }
         return res.status(200).json(jsonRpcResult(body.id, callToolError(error), modern));
       }
     }
