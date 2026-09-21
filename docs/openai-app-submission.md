@@ -6,7 +6,7 @@ Updated: 2026-09-20
 With MCP / remote MCP server
 
 ## Remote MCP server
-https://www.explorationmaps.com/mcp
+https://www.explorationmaps.com/mcp/server
 
 ## Name
 ExplorationMaps
