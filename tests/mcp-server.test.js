@@ -164,6 +164,32 @@ describe('ExplorationMaps MCP endpoint', () => {
     expect(res.body.result.structuredContent.map_types.length).toBeGreaterThan(0);
   });
 
+  it('returns a protocol error for an unknown tool', async () => {
+    const req = mockReq({
+      headers: {
+        'mcp-protocol-version': '2026-07-28',
+        'mcp-method': 'tools/call',
+        'mcp-name': 'not_a_real_tool',
+      },
+      body: {
+        jsonrpc: '2.0',
+        id: 41,
+        method: 'tools/call',
+        params: {
+          name: 'not_a_real_tool',
+          arguments: {},
+          _meta: {
+            'io.modelcontextprotocol/protocolVersion': '2026-07-28',
+          },
+        },
+      },
+    });
+    const res = mockRes();
+    await handler(req, res);
+    expect(res.statusCode).toBe(400);
+    expect(res.body.error.code).toBe(-32602);
+  });
+
   it('rejects routing-header/body mismatches', async () => {
     const req = mockReq({
       headers: {
