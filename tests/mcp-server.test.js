@@ -68,6 +68,7 @@ describe('ExplorationMaps MCP endpoint', () => {
     await handler(req, res);
 
     expect(res.statusCode).toBe(200);
+    expect(res.body.result.resultType).toBe('complete');
     expect(res.body.result.supportedVersions).toContain('2026-07-28');
     expect(res.body.result.capabilities.tools).toBeTruthy();
     expect(res.body.result._meta['io.modelcontextprotocol/serverInfo'].name).toBe('ExplorationMaps');
@@ -95,6 +96,7 @@ describe('ExplorationMaps MCP endpoint', () => {
     await handler(req, res);
 
     expect(res.statusCode).toBe(200);
+    expect(res.body.result.resultType).toBe('complete');
     const names = res.body.result.tools.map((tool) => tool.name);
     expect(names).toEqual([
       'preview_exploration_map',
