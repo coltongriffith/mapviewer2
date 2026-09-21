@@ -229,6 +229,7 @@ function jsonRpcResult(id, result, modern = false) {
   const response = { jsonrpc: '2.0', id, result };
   if (modern) {
     response.result = {
+      resultType: 'complete',
       ...result,
       _meta: {
         ...(result?._meta || {}),
