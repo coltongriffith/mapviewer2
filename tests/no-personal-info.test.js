@@ -17,7 +17,12 @@ function trackedFiles() {
     .split('\n')
     .filter(Boolean)
     // This test names the patterns it forbids, so it would flag itself.
-    .filter((f) => f !== 'tests/no-personal-info.test.js');
+    .filter((f) => f !== 'tests/no-personal-info.test.js')
+    // The official MCP Registry's GitHub-OIDC namespace must literally match
+    // the public GitHub repository owner (io.github.<owner>/*). server.json is
+    // machine registry metadata, not site copy or a contact point. Keep the
+    // existing personal-info guard strict everywhere else.
+    .filter((f) => f !== 'server.json');
 }
 
 // Split so the literals do not appear as searchable strings in this file.
