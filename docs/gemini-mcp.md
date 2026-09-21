@@ -4,7 +4,7 @@ Updated: 2026-09-20
 
 ExplorationMaps exposes a public Streamable HTTP MCP server:
 
-https://www.explorationmaps.com/mcp
+https://www.explorationmaps.com/mcp/server
 
 ## Interactions API example (JavaScript)
 
@@ -19,7 +19,7 @@ const interaction = await client.interactions.create({
   tools: [{
     type: 'mcp_server',
     name: 'explorationmaps',
-    url: 'https://www.explorationmaps.com/mcp'
+    url: 'https://www.explorationmaps.com/mcp/server'
   }]
 });
 
