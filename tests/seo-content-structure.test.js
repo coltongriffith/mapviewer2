@@ -164,6 +164,23 @@ describe('nothing links to a page that no longer exists', () => {
 });
 
 describe('sitemap and canonicals agree with what exists', () => {
+  it('contains only sitemap elements and whitespace at the document root', () => {
+    const sitemap = readFileSync(join(ROOT, 'public', 'sitemap.xml'), 'utf8');
+    const betweenEntries = sitemap
+      .replace(/^<\?xml[^>]*>\s*/, '')
+      .replace(/^<urlset[^>]*>\s*/, '')
+      .replace(/\s*<\/urlset>\s*$/, '')
+      .replace(/<url>.*?<\/url>/gs, '');
+    expect(betweenEntries.trim()).toBe('');
+  });
+
+  it('preserves reviewed revision dates for hand-authored agent pages', () => {
+    const sitemap = readFileSync(join(ROOT, 'public', 'sitemap.xml'), 'utf8');
+    expect(sitemap).toContain(`<loc>${SITE}/agent/</loc><lastmod>2026-09-19</lastmod>`);
+    expect(sitemap).toContain(`<loc>${SITE}/muse/</loc><lastmod>2026-09-19</lastmod>`);
+    expect(sitemap).toContain(`<loc>${SITE}/mcp/</loc><lastmod>2026-09-20</lastmod>`);
+  });
+
   it('lists every generated page and nothing else', () => {
     // Only content pages. The SPA routes are rewrites, not files, and the
     // companies family has its own sitemap.
