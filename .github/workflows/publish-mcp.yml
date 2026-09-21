@@ -24,6 +24,24 @@ jobs:
         run: |
           curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
 
+      - name: Validate registry metadata
+        run: ./mcp-publisher validate ./server.json
+
+      - name: Wait for production MCP endpoint
+        run: |
+          BODY='{"jsonrpc":"2.0","id":1,"method":"server/discover","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}'
+          for attempt in $(seq 1 30); do
+            STATUS=$(curl -sS -o /tmp/mcp-response.json -w "%{http_code}"               -X POST "https://www.explorationmaps.com/mcp/server"               -H "Content-Type: application/json"               -H "Accept: application/json"               -H "MCP-Protocol-Version: 2026-07-28"               -H "Mcp-Method: server/discover"               --data "$BODY" || true)
+            if [ "$STATUS" = "200" ] && grep -q '"supportedVersions"' /tmp/mcp-response.json; then
+              cat /tmp/mcp-response.json
+              exit 0
+            fi
+            echo "MCP endpoint not ready yet (HTTP $STATUS); retrying..."
+            sleep 10
+          done
+          cat /tmp/mcp-response.json || true
+          exit 1
+
       - name: Authenticate with GitHub OIDC
         run: ./mcp-publisher login github-oidc
 
