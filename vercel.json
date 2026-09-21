@@ -18,7 +18,7 @@
   },
   "rewrites": [
     {
-      "source": "/mcp",
+      "source": "/mcp/server",
       "destination": "/api/mcp"
     },
     {
