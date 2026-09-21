@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>ExplorationMaps MCP — Mining Maps for AI Agents</title>
+  <meta name="description" content="Connect ChatGPT, Claude, Gemini and other MCP clients to ExplorationMaps for mineral claim search and professional mining map generation.">
+  <link rel="canonical" href="https://www.explorationmaps.com/mcp/">
+  <meta property="og:title" content="ExplorationMaps MCP — Mining Maps for AI Agents">
+  <meta property="og:description" content="One remote MCP server for mineral claim search and professional mining map generation.">
+  <meta property="og:url" content="https://www.explorationmaps.com/mcp/">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Exploration Maps">
+  <meta property="og:image" content="https://www.explorationmaps.com/og-image.png">
+  <style>
+    *{box-sizing:border-box}body{margin:0;font-family:Inter,system-ui,-apple-system,sans-serif;color:#142126;background:#fff;line-height:1.6}
+    .wrap{max-width:980px;margin:0 auto;padding:52px 24px 84px}.eyebrow{font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#c65322}
+    h1{font-size:clamp(2.3rem,6vw,4.8rem);line-height:1.02;margin:14px 0 20px;max-width:900px}h2{margin-top:42px}
+    .lead{font-size:1.15rem;color:#5f6e72;max-width:760px}.endpoint{background:#142126;color:#fff;padding:16px 18px;border-radius:12px;font:600 1rem ui-monospace,SFMono-Regular,monospace;overflow:auto}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:16px;margin:28px 0}.card{border:1px solid #dde3e3;border-radius:14px;padding:20px;background:#f8faf9}
+    .card h3{margin-top:0}.muted{color:#5f6e72}.prompt{border-left:4px solid #c65322;padding:10px 15px;background:#fbf7f3;margin:10px 0}
+    a{color:#142126}.cta{display:flex;gap:12px;flex-wrap:wrap;margin:26px 0}.btn{padding:10px 15px;border-radius:8px;border:1px solid #142126;text-decoration:none;font-weight:700}.btn.primary{background:#142126;color:#fff}
+    footer{border-top:1px solid #dde3e3;margin-top:54px;padding-top:22px;color:#5f6e72;font-size:14px}
+  </style>
+</head>
+<body><main class="wrap">
+  <div class="eyebrow">Universal agent connection</div>
+  <h1>One mining MCP server for ChatGPT, Claude, Gemini and other agents.</h1>
+  <p class="lead">ExplorationMaps exposes mining-specific outcomes instead of generic GIS primitives: search mineral claims, create claim and tenure maps, generate investor-ready property maps, and return shareable ExplorationMaps results.</p>
+  <div class="endpoint">https://www.explorationmaps.com/mcp</div>
+  <div class="cta">
+    <a class="btn primary" href="/muse/">Muse integration</a>
+    <a class="btn" href="/agent/openapi.json">Raw API OpenAPI</a>
+    <a class="btn" href="/privacy/">Privacy</a>
+  </div>
+
+  <div class="grid">
+    <section class="card"><h3>preview_exploration_map</h3><p class="muted">Creates a registry-backed claims, investor, or infrastructure map and returns a shareable URL.</p></section>
+    <section class="card"><h3>search_mineral_claims</h3><p class="muted">Searches supported official mineral registries by company/holder, claim number, claim name, or bounding box.</p></section>
+    <section class="card"><h3>get_mapping_capabilities</h3><p class="muted">Returns supported jurisdictions, map types, overlays, search modes and styles.</p></section>
+  </div>
+
+  <h2>Example requests</h2>
+  <div class="prompt">“Make a mining claim map for this company in British Columbia and show roads, towns and rail.”</div>
+  <div class="prompt">“Find the mineral claims associated with this tenure number.”</div>
+  <div class="prompt">“Create an investor-ready property map for this exploration company.”</div>
+  <div class="prompt">“What jurisdictions can ExplorationMaps search and map?”</div>
+
+  <h2>Client setup</h2>
+  <p class="muted"><strong>ChatGPT / Codex:</strong> use the remote MCP URL above when creating a custom app or when submitting ExplorationMaps to the public app directory.</p>
+  <p class="muted"><strong>Claude:</strong> add the URL above as a custom web connector. The same endpoint is suitable for Connectors Directory review.</p>
+  <p class="muted"><strong>Gemini:</strong> register the endpoint as a remote <code>mcp_server</code> using Streamable HTTP in the Gemini Interactions API or supported agent surfaces.</p>
+
+  <h2>Safety and data</h2>
+  <p class="muted">Public map previews use supported public mineral registries, are rate limited, and produce expiring unlisted share links. Registry results are informational and are not legal title opinions or legal surveys. ExplorationMaps publishes a privacy policy and terms covering agent/API usage.</p>
+
+  <footer>ExplorationMaps · Remote MCP endpoint: <strong>/mcp</strong> · Streamable HTTP · version 1.0.0</footer>
+</main></body></html>

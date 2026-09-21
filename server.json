@@ -1,0 +1,28 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.coltongriffith/explorationmaps",
+  "title": "ExplorationMaps",
+  "description": "Create professional mineral exploration, mining claim, mineral tenure, investor, infrastructure, and project-location maps from supported public mineral registries.",
+  "version": "1.0.0",
+  "websiteUrl": "https://www.explorationmaps.com/muse/",
+  "repository": {
+    "url": "https://github.com/coltongriffith/mapviewer2",
+    "source": "github",
+    "id": "1193810126"
+  },
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://www.explorationmaps.com/mcp"
+    }
+  ],
+  "icons": [
+    {
+      "src": "https://www.explorationmaps.com/apple-touch-icon.png",
+      "mimeType": "image/png",
+      "sizes": [
+        "180x180"
+      ]
+    }
+  ]
+}
