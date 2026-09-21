@@ -983,7 +983,7 @@ function writeRedirectsToVercelConfig() {
 async function main() {
   // Static product/API docs live outside the generated blog tree but belong in
   // the primary sitemap alongside the generated content pages.
-  const allUrls = [`${SITE}/agent/`, `${SITE}/muse/`, `${SITE}/blog/`];
+  const allUrls = [`${SITE}/agent/`, `${SITE}/muse/`, `${SITE}/mcp/`, `${SITE}/blog/`];
   const allPosts = [...howToPosts, ...compPosts];
 
   console.log('🗺  Generating blog...');
