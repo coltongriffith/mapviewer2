@@ -900,6 +900,12 @@ function buildSitemap(allUrls, landingUrls = []) {
   const revisions = new Map([
     ...[...howToPosts, ...compPosts].map(p => [`${SITE}/blog/${p.slug}/`, contentDate(p.updatedDate)]),
     ...seoPages.map(p => [`${SITE}/${p.slug}/`, contentDate(p.updatedDate)]),
+    // These hand-authored product/API pages are not part of the content data
+    // above. Keep their dates here so a normal production build does not
+    // silently discard a known, significant revision from the sitemap.
+    [`${SITE}/agent/`, '2026-09-19'],
+    [`${SITE}/muse/`, '2026-09-19'],
+    [`${SITE}/mcp/`, '2026-09-20'],
   ]);
   const entry = url => `  <url><loc>${esc(url)}</loc>${revisions.get(url) ? `<lastmod>${revisions.get(url)}</lastmod>` : ''}</url>`;
   const homepage = entry(`${SITE}/`);
