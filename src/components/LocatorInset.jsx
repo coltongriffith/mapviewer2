@@ -103,7 +103,7 @@ function buildAutoSvg(region, visibleBounds) {
   return { paths, markerEl, svgW, svgH };
 }
 
-export default function LocatorInset({ layers, insetMode, mode, insetImage, autoInsetRegion, insetTitle, insetLabel, zone, regionFill, regionStroke, bgFill, markerColor }) {
+export default function LocatorInset({ layers, insetMode, insetBasemap, mode, insetImage, autoInsetRegion, insetTitle, insetLabel, zone, regionFill, regionStroke, bgFill, markerColor }) {
   const { visibleBounds, referenceBounds } = useMemo(() => {
     const visible = (layers || []).filter((layer) => layer.visible !== false);
     // Removed shapes are not part of the map's extent, so the locator must not
@@ -118,7 +118,7 @@ export default function LocatorInset({ layers, insetMode, mode, insetImage, auto
   const backdrop = buildBackdrop(mode);
   const wantsCustom = insetMode === 'custom_image';
   const showCustom = wantsCustom && insetImage;
-  const showSatellite = !showCustom && insetMode === 'satellite_locator';
+  const showSatellite = !showCustom && (Boolean(insetBasemap) || insetMode === 'satellite_locator');
   const showAuto = !showCustom && !showSatellite && !!autoInsetRegion;
 
   const autoSvg = useMemo(() => {
@@ -138,7 +138,7 @@ export default function LocatorInset({ layers, insetMode, mode, insetImage, auto
       ) : showSatellite ? (
         <div className="inset-satellite-wrap">
           <React.Suspense fallback={null}>
-            <SatelliteInset layers={layers} region={autoInsetRegion} markerColor={markerColor} />
+            <SatelliteInset layers={layers} region={autoInsetRegion} markerColor={markerColor} basemap={insetBasemap || 'satellite'} />
           </React.Suspense>
         </div>
       ) : showAuto ? (

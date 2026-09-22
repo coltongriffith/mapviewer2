@@ -1,6 +1,6 @@
 import { MAP_TYPES } from './projectState.js';
 
-export const AGENT_API_VERSION = '1.0.0';
+export const AGENT_API_VERSION = '1.1.0';
 
 export const AGENT_JURISDICTIONS = Object.freeze({
   bc: { label: 'British Columbia', country: 'CA', registry: 'BC Mineral Titles' },
@@ -35,6 +35,7 @@ export const AGENT_SEARCH_TYPES = Object.freeze(['company', 'number', 'name']);
 export const AGENT_DATA_ROLES = Object.freeze(['claims', 'drillholes', 'target_areas', 'anomalies', 'faults_structures', 'roads_access', 'rivers_water', 'labels']);
 export const AGENT_MAP_TYPES = Object.freeze(Object.keys(MAP_TYPES));
 export const AGENT_STYLES = Object.freeze(['investor_clean', 'technical_sharp', 'modern_dark', 'warm_terrain', 'ni_43101']);
+export const AGENT_BASEMAPS = Object.freeze(['white', 'light_grey', 'dark', 'terrain', 'topo', 'satellite', 'satellite_hybrid', 'hillshade', 'geology']);
 
 const MAX_TITLE = 160;
 const MAX_QUERY = 120;
@@ -49,6 +50,7 @@ function cleanString(value, max) {
 }
 
 function normalizeInclude(value) {
+  if (value === 'all') return ['claims', ...Object.keys(AGENT_OVERLAYS)];
   if (!Array.isArray(value)) return ['claims', 'roads', 'settlements'];
   const allowed = new Set(['claims', ...Object.keys(AGENT_OVERLAYS)]);
   return [...new Set(value.filter((v) => typeof v === 'string' && allowed.has(v)))].slice(0, MAX_INCLUDE);
@@ -116,11 +118,41 @@ export function validateCreateMapInput(body) {
     }
   }
 
-  if (!query && !normalizedBbox && !data) {
-    errors.push('Provide search.query, location.bbox, or data.geojson.');
+  const claimNumbers = Array.isArray(body.claim_numbers)
+    ? [...new Set(body.claim_numbers.filter((value) => typeof value === 'string' && /^[A-Za-z0-9.-]{1,40}$/.test(value.trim())).map((value) => value.trim()))].slice(0, 40)
+    : [];
+  if (body.claim_numbers != null && (!Array.isArray(body.claim_numbers) || claimNumbers.length !== body.claim_numbers.length || claimNumbers.length === 0)) {
+    errors.push('claim_numbers must contain 1–40 unique claim identifiers.');
+  }
+  if (!query && !normalizedBbox && !data && !claimNumbers.length) {
+    errors.push('Provide search.query, location.bbox, claim_numbers, or data.geojson.');
   }
 
   const include = normalizeInclude(body.include);
+  const defaultBasemap = mapType === 'investor' ? 'satellite' : mapType === 'infrastructure' ? 'terrain' : 'white';
+  const basemap = cleanString(body.basemap, 40) || defaultBasemap;
+  if (!AGENT_BASEMAPS.includes(basemap)) errors.push(`Unsupported basemap '${basemap}'.`);
+  if (basemap.startsWith('satellite') && (body.include == null || body.include === 'all')) {
+    const geologyIndex = include.indexOf('geology');
+    if (geologyIndex >= 0) include.splice(geologyIndex, 1);
+  }
+  const insetBasemap = cleanString(body.inset?.basemap, 40) || basemap;
+  if (!AGENT_BASEMAPS.includes(insetBasemap)) errors.push(`Unsupported inset.basemap '${insetBasemap}'.`);
+  const opacity = body.basemap_opacity == null ? 1 : Number(body.basemap_opacity);
+  if (!Number.isFinite(opacity) || opacity < 0 || opacity > 1) errors.push('basemap_opacity must be between 0 and 1.');
+  const validHex = (value) => typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value);
+  const rawBranding = body.branding || {};
+  for (const key of ['primary_color', 'accent_color']) {
+    if (rawBranding[key] != null && !validHex(rawBranding[key])) errors.push(`branding.${key} must be a six-digit hex colour.`);
+  }
+  for (const key of ['website', 'logo_url', 'logo_url_dark']) {
+    if (rawBranding[key] != null && (typeof rawBranding[key] !== 'string' || !/^https:\/\//i.test(rawBranding[key]))) errors.push(`branding.${key} must be an HTTPS URL.`);
+  }
+  const annotations = Array.isArray(body.annotations) ? body.annotations.slice(0, 30) : [];
+  if (body.annotations != null && (!Array.isArray(body.annotations) || body.annotations.length > 30 || annotations.some((item) =>
+    !item || typeof item.label !== 'string' || !Number.isFinite(Number(item.lat)) || !Number.isFinite(Number(item.lng)) || Math.abs(Number(item.lat)) > 90 || Math.abs(Number(item.lng)) > 180))) {
+    errors.push('annotations must contain at most 30 labelled latitude/longitude points.');
+  }
   const title = cleanString(body.title, MAX_TITLE) || (query ? `${query} Project Map` : 'Exploration Project Map');
   const subtitle = cleanString(body.subtitle, MAX_TITLE);
   const companyName = cleanString(body.company?.name, MAX_TITLE);
@@ -135,8 +167,24 @@ export function validateCreateMapInput(body) {
       jurisdiction,
       search: { type: searchType, query },
       location: { bbox: normalizedBbox },
+      claim_numbers: claimNumbers,
       include,
       style,
+      basemap,
+      basemap_opacity: opacity,
+      inset: { show: body.inset?.show !== false, basemap: insetBasemap },
+      neighbours: { show: body.neighbours?.show !== false, label_holders: body.neighbours?.label_holders !== false, max_holders: Math.max(0, Math.min(8, Number(body.neighbours?.max_holders ?? 8))) },
+      branding: {
+        website: cleanString(rawBranding.website, 500),
+        logo_url: cleanString(rawBranding.logo_url, 500),
+        logo_url_dark: cleanString(rawBranding.logo_url_dark, 500),
+        primary_color: validHex(rawBranding.primary_color) ? rawBranding.primary_color : null,
+        accent_color: validHex(rawBranding.accent_color) ? rawBranding.accent_color : null,
+        font: cleanString(rawBranding.font, 80),
+      },
+      facts_panel: body.facts_panel && typeof body.facts_panel === 'object' ? body.facts_panel : null,
+      claims_callout: body.claims_callout && typeof body.claims_callout === 'object' ? body.claims_callout : { show: true },
+      annotations: annotations.map((item) => ({ type: cleanString(item.type, 40) || 'target', label: cleanString(item.label, 100), lat: Number(item.lat), lng: Number(item.lng) })),
       company: { name: companyName },
       data,
     },
@@ -154,5 +202,7 @@ export function capabilities() {
     search_types: AGENT_SEARCH_TYPES,
     data_roles: AGENT_DATA_ROLES,
     styles: AGENT_STYLES,
+    basemaps: AGENT_BASEMAPS,
+    anonymous_mcp_preview: { map_types: ['claims', 'investor', 'infrastructure'], styles: ['investor_clean', 'technical_sharp', 'modern_dark', 'warm_terrain'], note: 'Drill and NI 43-101 templates require user-supplied data and review in the editor.' },
   };
 }

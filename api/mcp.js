@@ -1,12 +1,16 @@
 import { createHash } from 'node:crypto';
-import { capabilities, AGENT_JURISDICTIONS } from '../shared/agentSchema.js';
+import { capabilities, AGENT_JURISDICTIONS, AGENT_BASEMAPS } from '../shared/agentSchema.js';
 import { createAgentMapProject } from '../shared/agentMapBuilder.js';
 import { runClaimsSearch } from './_lib/claims-internal.js';
+import { resolveMapClaims } from './_lib/map-claims.js';
+import { resolveBranding } from './_lib/branding.js';
+import { claimSummary } from '../shared/claimData.js';
 import { serverSupabase } from './_lib/supabase-server.js';
 import { clientIp, rateLimited, rateLimitedShared } from './_lib/guard.js';
 
 const SERVER_NAME = 'ExplorationMaps';
-const SERVER_VERSION = '1.0.0';
+const SERVER_VERSION = '1.1.0';
+const SERVER_INSTRUCTIONS = `ExplorationMaps creates mineral exploration maps from public registry records. For a request naming a company or project, identify the specific project before mapping. Search its claims, group records geographically, and pass verified claim_numbers to preview_exploration_map so unrelated projects stay out. If the project cannot be identified reliably, ask the user. When available, pass the company's HTTPS website in branding and verified project facts in facts_panel and claims_callout; do not invent ownership, grades, targets or coordinates. Choose a map type and basemap that match the request. The preview defaults to supported context overlays, nearby claims, a locator inset and a claim callout. After the call, report claims_found_primary separately from claims_found_neighbours, describe only layers_applied, and give the share_url. Public registry data is informational and is not a legal title opinion or survey. A rendered PNG and export pack are not currently returned by this MCP tool.`;
 const MODERN_VERSION = '2026-07-28';
 const LEGACY_VERSIONS = ['2025-11-25', '2025-06-18', '2025-03-26'];
 const SUPPORTED_VERSIONS = [MODERN_VERSION, ...LEGACY_VERSIONS];
@@ -31,7 +35,7 @@ const PREVIEW_INPUT_SCHEMA = {
     map_type: {
       type: 'string',
       enum: ['claims', 'investor', 'infrastructure'],
-      default: 'claims',
+      default: 'investor',
       description: 'The mining-specific map format to create.',
     },
     title: {
@@ -83,16 +87,14 @@ const PREVIEW_INPUT_SCHEMA = {
         },
       },
     },
+    claim_numbers: { type: 'array', minItems: 1, maxItems: 40, uniqueItems: true, items: { type: 'string', pattern: '^[A-Za-z0-9.-]{1,40}$' }, description: 'Exact claim identifiers to map. Overrides search selection; all requested claims must be found.' },
     include: {
-      type: 'array',
-      uniqueItems: true,
-      maxItems: 8,
-      items: {
-        type: 'string',
-        enum: ['claims', 'roads', 'settlements', 'labels', 'rail', 'geology'],
-      },
-      default: ['claims', 'roads', 'settlements'],
-      description: 'Context layers to turn on in the finished map.',
+      oneOf: [
+        { type: 'string', enum: ['all'] },
+        { type: 'array', uniqueItems: true, maxItems: 8, items: { type: 'string', enum: ['claims', 'roads', 'settlements', 'labels', 'rail', 'geology'] } },
+      ],
+      default: 'all',
+      description: 'Available reference overlays; all enables the supported roads, settlements, labels, rail and geology overlays.',
     },
     style: {
       type: 'string',
@@ -107,10 +109,24 @@ const PREVIEW_INPUT_SCHEMA = {
         name: { type: 'string', maxLength: 160 },
       },
     },
+    basemap: { type: 'string', enum: AGENT_BASEMAPS, description: 'Main map basemap. Defaults by map type; geology uses the published bedrock overlay.' },
+    basemap_opacity: { type: 'number', minimum: 0, maximum: 1, default: 1 },
+    inset: { type: 'object', additionalProperties: false, properties: { show: { type: 'boolean', default: true }, basemap: { type: 'string', enum: AGENT_BASEMAPS } } },
+    neighbours: { type: 'object', additionalProperties: false, properties: { show: { type: 'boolean', default: true }, label_holders: { type: 'boolean', default: true }, max_holders: { type: 'integer', minimum: 0, maximum: 8 } } },
+    branding: { type: 'object', additionalProperties: false, properties: {
+      website: { type: 'string', format: 'uri' }, logo_url: { type: 'string', format: 'uri' }, logo_url_dark: { type: 'string', format: 'uri' },
+      primary_color: { type: 'string', pattern: '^#[0-9a-fA-F]{6}$' }, accent_color: { type: 'string', pattern: '^#[0-9a-fA-F]{6}$' }, font: { type: 'string', maxLength: 80 },
+    } },
+    facts_panel: { type: 'object', additionalProperties: false, properties: {
+      project: { type: 'string' }, claims: { type: 'integer' }, hectares: { type: 'number' }, commodity: { type: 'string' }, ownership: { type: 'string' }, access: { type: 'string' }, tickers: { type: 'array', items: { type: 'string' } },
+    } },
+    claims_callout: { type: 'object', additionalProperties: false, properties: { show: { type: 'boolean', default: true }, anchor: { type: 'string', enum: ['auto'] }, fields: { type: 'object', additionalProperties: { type: 'string' } }, source_note: { type: 'string' }, style: { type: 'string', enum: ['brand', 'technical', 'minimal'] } } },
+    annotations: { type: 'array', maxItems: 30, items: { type: 'object', additionalProperties: false, required: ['type', 'label', 'lat', 'lng'], properties: { type: { type: 'string', enum: ['target', 'airstrip', 'camp', 'mine', 'deposit', 'other'] }, label: { type: 'string' }, lat: { type: 'number' }, lng: { type: 'number' } } } },
   },
   anyOf: [
     { required: ['search'] },
     { required: ['location'] },
+    { required: ['claim_numbers'] },
   ],
 };
 
@@ -161,7 +177,7 @@ const TOOLS = [
   {
     name: 'preview_exploration_map',
     title: 'Create a mineral exploration map preview',
-    description: 'Create a professional mining claim, mineral tenure, investor-presentation, project-location, or infrastructure map from a supported public mineral registry. Use this when the user asks to make, draw, visualize, map, or present a mineral exploration property or claims. It returns a shareable ExplorationMaps URL. This tool does not accept uploaded drill or GeoJSON data; those require a connected ExplorationMaps account.',
+    description: 'Create a branded mineral exploration map from public registry claims and return a shareable URL. For a specific project, search its claims first and pass exact claim_numbers. Supply published facts and branding when known; never invent ownership, targets, grades or coordinates. Supports separate neighbouring claims, a project callout, locator inset, and map basemap selection. Drill and NI 43-101 layouts require user-supplied data or qualified review; this tool does not generate drill results.',
     inputSchema: PREVIEW_INPUT_SCHEMA,
     outputSchema: {
       type: 'object',
@@ -171,6 +187,13 @@ const TOOLS = [
         title: { type: 'string' },
         map_type: { type: 'string' },
         claims_found: { type: 'integer' },
+        claims_found_primary: { type: 'integer' },
+        claims_found_neighbours: { type: 'integer' },
+        branding_applied: { type: 'object' },
+        layers_applied: { type: 'array', items: { type: 'string' } },
+        layers_empty: { type: 'array', items: { type: 'string' } },
+        caption: { type: 'string' },
+        alt_text: { type: 'string' },
         source: { type: 'string' },
         expires_in_days: { type: 'integer' },
         warnings: { type: 'array', items: { type: 'string' } },
@@ -187,7 +210,7 @@ const TOOLS = [
   {
     name: 'search_mineral_claims',
     title: 'Search mineral claims and tenure',
-    description: 'Search supported official mineral-claim registries by holder/company, claim number, claim name, or geographic bounding box. Use this to answer factual questions about claim records or to identify the ground that should be mapped. Results are registry records, not a legal title opinion or survey.',
+    description: 'Search public mineral-claim registries by holder, exact claim number, claim name, or geographic bounding box. Returns claim number as a string, name, holder, status, expiry, area and centroid when the registry supplies them. Cluster results geographically before selecting a specific project. Results are informational, not a legal title opinion or survey.',
     inputSchema: SEARCH_INPUT_SCHEMA,
     outputSchema: {
       type: 'object',
@@ -306,26 +329,6 @@ function sourceWarnings(jurisdiction, featureCollection) {
   return warnings;
 }
 
-function simplifyClaim(feature) {
-  const p = feature?.properties || {};
-  const pick = (...keys) => {
-    for (const key of keys) {
-      if (p[key] !== undefined && p[key] !== null && String(p[key]).trim() !== '') return p[key];
-      const found = Object.keys(p).find((k) => k.toLowerCase() === String(key).toLowerCase());
-      if (found && p[found] !== undefined && p[found] !== null && String(p[found]).trim() !== '') return p[found];
-    }
-    return null;
-  };
-  return {
-    claim_number: pick('TAG_NUMBER', 'TENURE_NUMBER_ID', 'CLAIM_NUMBER', 'SERIAL_NR', 'SERIAL_NO', 'claim_number', 'tag_number'),
-    claim_name: pick('CLAIM_NAME', 'CSE_NAME', 'name', 'claim_name'),
-    holder: pick('OWNER_NAME', 'HOLDER_NAME', 'CLAIMANT_NAME', 'owner_name', 'holder'),
-    status: pick('STATUS', 'TENURE_STATUS', 'status'),
-    good_to_date: pick('GOOD_TO_DATE', 'good_to_date', 'EXPIRY_DATE', 'expiration_date'),
-    area_hectares: pick('AREA_HECTARES', 'AREA_HA', 'area_hectares'),
-  };
-}
-
 function callerSubject(req, toolName) {
   const ip = clientIp(req);
   const clientName = req.body?.params?._meta?.['io.modelcontextprotocol/clientInfo']?.name || 'unknown';
@@ -334,19 +337,29 @@ function callerSubject(req, toolName) {
 
 async function createPreview(req, args) {
   if (args?.map_type && !['claims', 'investor', 'infrastructure'].includes(args.map_type)) {
-    throw new Error('Anonymous MCP previews support claims, investor, and infrastructure map types.');
+    const error = new Error('Anonymous MCP previews support claims, investor, and infrastructure map types.');
+    error.code = 'INVALID_REQUEST';
+    throw error;
   }
-
   const normalizedBody = {
-    map_type: args?.map_type || 'claims',
+    map_type: args?.map_type || 'investor',
     title: args?.title,
     subtitle: args?.subtitle,
     jurisdiction: args?.jurisdiction || 'bc',
     search: args?.search,
     location: args?.location,
-    include: args?.include,
+    include: args?.include ?? 'all',
     style: args?.style || 'investor_clean',
     company: args?.company,
+    claim_numbers: args?.claim_numbers,
+    branding: args?.branding,
+    facts_panel: args?.facts_panel,
+    claims_callout: args?.claims_callout,
+    annotations: args?.annotations,
+    neighbours: args?.neighbours,
+    inset: args?.inset,
+    basemap: args?.basemap,
+    basemap_opacity: args?.basemap_opacity,
   };
 
   // Mirror the high-level validation contract without accepting direct GeoJSON.
@@ -373,22 +386,23 @@ async function createPreview(req, args) {
     throw error;
   }
 
-  const claims = await runClaimsSearch({
-    jurisdiction: input.jurisdiction,
-    query: input.search.query,
-    type: input.search.type,
-    bbox: input.location.bbox,
-    clientIp: clientIp(req),
-  });
+  const { primary: claims, neighbours, neighboursWarning } = await resolveMapClaims(input, runClaimsSearch, clientIp(req));
 
   if (!claims?.features?.length) {
     const error = new Error('No matching mineral claims were found.');
     error.code = 'CLAIMS_NOT_FOUND';
     throw error;
   }
+  if (Number.isInteger(input.facts_panel?.claims) && input.facts_panel.claims !== claims.features.length) {
+    const error = new Error(`Published claim count (${input.facts_panel.claims}) does not match selected registry records (${claims.features.length}). Verify claim_numbers before creating the map.`);
+    error.code = 'CLAIM_COUNT_MISMATCH';
+    throw error;
+  }
 
+  input.branding = await resolveBranding({ ...input.branding, logo_url: input.style === 'modern_dark' ? input.branding.logo_url_dark || input.branding.logo_url : input.branding.logo_url });
   const project = createAgentMapProject(input, {
     featureCollection: claims,
+    neighbours,
     source: jurisdiction?.registry,
     sourceMeta: claims.meta || null,
   });
@@ -402,9 +416,21 @@ async function createPreview(req, args) {
   const siteUrl = String(process.env.SITE_URL || 'https://explorationmaps.com').replace(/\/$/, '');
   const warnings = [
     ...sourceWarnings(input.jurisdiction, claims),
+    ...(neighboursWarning ? [neighboursWarning] : []),
     'This map is generated from public registry data and is not a legal title opinion or legal survey.',
     'Anonymous preview links expire after 30 days.',
+    'Reference overlays are configured on the map; third-party tile availability is checked when the share page renders.',
   ];
+  const layersApplied = ['claims', input.basemap, ...input.include.filter((layer) => layer !== 'claims')];
+  const layersEmpty = [];
+  if (neighbours.features.length) layersApplied.push('neighbours'); else layersEmpty.push('neighbours');
+  if (input.branding.logo_data_uri) layersApplied.push('company_logo'); else if (input.branding.website || input.branding.logo_url) layersEmpty.push('company_logo');
+  if (input.annotations.length) layersApplied.push('annotations');
+  if (input.claims_callout.show !== false) layersApplied.push('claims_callout');
+  if (input.inset.show) layersApplied.push('locator_inset');
+  if (input.facts_panel) layersApplied.push('facts_panel');
+  const caption = `Figure 1. ${input.title}: ${claims.features.length} mineral claims in ${jurisdiction?.label || input.jurisdiction}, from ${jurisdiction?.registry || 'public registry'} records accessed ${new Date().toISOString().slice(0, 10)}. Verify current title with the registry.`;
+  const altText = `Map of ${input.title} showing ${claims.features.length} selected mineral claims${neighbours.features.length ? ` and ${neighbours.features.length} neighbouring claims` : ''} in ${jurisdiction?.label || input.jurisdiction}.`;
 
   return {
     status: 'ready',
@@ -412,6 +438,13 @@ async function createPreview(req, args) {
     title: input.title,
     map_type: input.map_type,
     claims_found: claims.features.length,
+    claims_found_primary: claims.features.length,
+    claims_found_neighbours: neighbours.features.length,
+    branding_applied: { logo: Boolean(input.branding.logo_data_uri), primary_color: input.branding.primary_color || '#2563eb', source: input.branding.source || null },
+    layers_applied: layersApplied,
+    layers_empty: layersEmpty,
+    caption,
+    alt_text: altText,
     source: jurisdiction?.registry || 'Official mineral registry',
     expires_in_days: 30,
     warnings,
@@ -449,15 +482,15 @@ async function searchClaims(req, args) {
     throw error;
   }
 
-  const claims = await runClaimsSearch({
+  const { primary: claims } = await resolveMapClaims({
     jurisdiction,
-    query,
-    type,
-    bbox,
-    clientIp: clientIp(req),
-  });
+    search: { query, type },
+    location: { bbox },
+    claim_numbers: [],
+    neighbours: { show: false },
+  }, runClaimsSearch, clientIp(req));
 
-  const summaries = (claims?.features || []).slice(0, limit).map(simplifyClaim);
+  const summaries = (claims?.features || []).slice(0, limit).map(claimSummary);
   return {
     jurisdiction: cfg.label,
     source: cfg.registry,
@@ -564,7 +597,7 @@ export default async function handler(req, res) {
       return res.status(200).json(jsonRpcResult(body.id, {
         supportedVersions: [MODERN_VERSION],
         capabilities: { tools: { listChanged: false } },
-        instructions: 'ExplorationMaps is a mining-specific mapping server. Use preview_exploration_map when a user asks to create or visualize a mining claim, mineral tenure, investor, project-location, or infrastructure map. Use search_mineral_claims for factual claim-registry lookups. Public registry data must not be represented as a legal title opinion or legal survey.',
+        instructions: SERVER_INSTRUCTIONS,
         ttlMs: 60_000,
         cacheScope: 'public',
       }, true));
@@ -577,7 +610,7 @@ export default async function handler(req, res) {
         protocolVersion: negotiated,
         capabilities: { tools: { listChanged: false } },
         serverInfo: { name: SERVER_NAME, version: SERVER_VERSION },
-        instructions: 'ExplorationMaps creates and searches professional mineral exploration maps using supported public mineral registries.',
+        instructions: SERVER_INSTRUCTIONS,
       }, false));
     }
 

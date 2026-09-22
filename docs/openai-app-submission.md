@@ -1,6 +1,6 @@
 # OpenAI App Directory Submission — ExplorationMaps
 
-Updated: 2026-09-20
+Updated: 2026-09-22 (MCP 1.1.0 core update)
 
 ## Submission type
 With MCP / remote MCP server
@@ -30,24 +30,24 @@ https://www.explorationmaps.com/terms/
 https://www.explorationmaps.com/apple-touch-icon.png
 
 ## Short description
-Create professional mineral exploration maps and search public mineral-claim registries directly from ChatGPT and Codex.
+Create branded mineral exploration maps and search public mineral-claim registries from ChatGPT and Codex.
 
 ## Long description
-ExplorationMaps is a mining-specific mapping service for mineral exploration companies, investors and technical teams. The app lets ChatGPT and Codex search supported official mineral-claim registries and turn natural-language requests into professional claim/tenure, investor-presentation, project-location and infrastructure maps. Generated previews return a shareable ExplorationMaps URL.
+ExplorationMaps is a mining-specific mapping service for mineral exploration companies, investors and technical teams. ChatGPT and Codex can search public mineral-claim registries, select exact claim numbers for a project, and create claim, investor and infrastructure maps with a chosen basemap, a locator inset, neighbouring tenure, company branding and a project facts callout. Generated previews return an expiring shareable ExplorationMaps URL and report selected claims separately from nearby claims.
 
 The server exposes narrowly scoped mining tools rather than generic GIS primitives. Registry data is clearly identified as informational and not a substitute for official title records, legal surveys or professional technical review.
 
 ## Tools
 ### preview_exploration_map
-Creates a professional registry-backed exploration map and returns a share URL.
+Creates a registry-backed map from exact claim numbers or a holder search, with supported branding, basemap and context controls; returns a share URL. It does not return a rendered PNG or export pack.
 Annotations: readOnlyHint=false, destructiveHint=false, idempotentHint=false, openWorldHint=true.
 
 ### search_mineral_claims
-Searches supported official mineral-claim registries.
+Searches supported public mineral-claim registries and returns claim identifiers, holder, area and centroid where available.
 Annotations: readOnlyHint=true, destructiveHint=false, idempotentHint=true, openWorldHint=true.
 
 ### get_mapping_capabilities
-Returns supported map types, jurisdictions, overlays, search modes and styles.
+Returns product capabilities plus the narrower anonymous MCP preview scope.
 Annotations: readOnlyHint=true, destructiveHint=false, idempotentHint=true, openWorldHint=false.
 
 ## Suggested starter prompts
@@ -56,6 +56,7 @@ Annotations: readOnlyHint=true, destructiveHint=false, idempotentHint=true, open
 - Create an investor-ready property map for an exploration project.
 - Find this mineral tenure number and map it.
 - What jurisdictions can ExplorationMaps search?
+- Make a branded investor map of this specific project using these claim numbers and show nearby holders.
 
 ## Positive review cases
 
@@ -78,6 +79,14 @@ Expected: get_mapping_capabilities identifies Ontario as supported and describes
 ### 5 — No-results behavior
 Prompt: Search for a deliberately nonexistent claim identifier.
 Expected: tool returns an actionable tool error stating no matching mineral claims were found; it does not fabricate claims.
+
+### 6 — Exact project selection and nearby tenure
+Prompt: Create an investor map for a project from a verified list of BC tenure numbers and show nearby holders.
+Expected: preview_exploration_map receives claim_numbers and optional location.bbox; claims_found_primary is the number of selected tenure records, claims_found_neighbours is separate, and nearby holders render as a muted layer.
+
+### 7 — Published count mismatch
+Prompt: Create a map with facts_panel.claims higher than the number of selected claim_numbers.
+Expected: tool returns a claim-count mismatch error and does not publish a misleading map.
 
 ## Negative review cases
 
@@ -108,3 +117,5 @@ ChatGPT sends the user's structured map/search request to the ExplorationMaps MC
 - Preview share links expire automatically.
 - Privacy and Terms explicitly cover AI agents / API access.
 - The endpoint supports modern MCP 2026-07-28 and legacy initialize-era clients.
+- The MCP tool supports anonymous claims, investor and infrastructure previews. Drill and NI 43-101 layouts in the editor need supplied data and professional review.
+- The 1.1.0 core release does not include inline PNG, PDF/SVG/KMZ export packs, a geology unit legend or a 3D hero render; directory copy must not promise them.

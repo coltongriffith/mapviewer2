@@ -4,6 +4,8 @@ import { visibleGeojson } from '../utils/featureIdentity.js';
 import { geojsonBounds, unionBounds } from '../utils/geometry';
 import { detectRegion } from '../utils/detectRegion';
 import { reportError } from '../utils/errorReporter';
+import { basemapConfig } from '../utils/basemapConfig';
+import { REFERENCE_OVERLAY_CONFIG } from '../utils/referenceOverlayConfig';
 
 // A satellite locator: imagery, the province or state outlined on top of it, and
 // a marker on the project.
@@ -22,7 +24,6 @@ import { reportError } from '../utils/errorReporter';
 // having it, so the two share one mechanism rather than two that can drift.
 export const SATELLITE_INSET_CLASS = 'satellite-inset-map';
 
-const IMAGERY_URL = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
 
 // Room around the jurisdiction, in PIXELS rather than as a fraction of the
 // bounds.
@@ -41,12 +42,13 @@ const REGION_PAD_PX = 6;
 // than nothing.
 const CLAIM_PAD = 4;
 
-export default function SatelliteInset({ layers, markerColor, region }) {
+export default function SatelliteInset({ layers, markerColor, region, basemap = 'satellite' }) {
   const elRef = useRef(null);
   const mapRef = useRef(null);
   const regionRef = useRef(null);
   const markerRef = useRef(null);
   const reportedRef = useRef(false);
+  const tileRefs = useRef([]);
   const [detected, setDetected] = React.useState(null);
 
   // What is actually on the map — visibleGeojson, so a trimmed block does not
@@ -90,28 +92,40 @@ export default function SatelliteInset({ layers, markerColor, region }) {
       zoomAnimation: false,
     });
 
-    const tiles = L.tileLayer(IMAGERY_URL, {
-      // Required for the export canvas to read the pixels without tainting it.
-      // Esri sends the header, and the main map already relies on it.
-      crossOrigin: true,
-      maxZoom: 19,
-      updateWhenIdle: true,
-    });
-    tiles.on('tileerror', () => {
-      if (reportedRef.current) return;
-      reportedRef.current = true;
-      reportError('Satellite inset failed to load tiles', {
-        kind: 'tile_error', context: { overlay: 'satellite_inset' },
-      });
-    });
-    tiles.addTo(mapRef.current);
-
     return () => {
       if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; }
       regionRef.current = null;
       markerRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    tileRefs.current.forEach((layer) => layer.remove());
+    tileRefs.current = [];
+    const cfg = basemapConfig(basemap);
+    map.getContainer().style.backgroundColor = cfg.url ? '' : '#ffffff';
+    const add = (layer) => {
+      layer.on('tileerror', () => {
+        if (reportedRef.current) return;
+        reportedRef.current = true;
+        reportError('Locator inset failed to load tiles', { kind: 'tile_error', context: { overlay: 'locator_inset', basemap } });
+      });
+      layer.addTo(map);
+      tileRefs.current.push(layer);
+    };
+    if (cfg.url) add(L.tileLayer(cfg.url, { crossOrigin: true, maxZoom: 19, maxNativeZoom: cfg.maxNativeZoom, updateWhenIdle: true }));
+    if (cfg.reliefUrl) add(L.tileLayer(cfg.reliefUrl, { crossOrigin: true, maxZoom: 19, maxNativeZoom: 16, opacity: cfg.reliefOpacity }));
+    const overlayKey = basemap === 'geology' ? 'geology' : basemap === 'satellite_hybrid' ? 'labels' : null;
+    if (overlayKey) {
+      const overlay = REFERENCE_OVERLAY_CONFIG[overlayKey];
+      add(overlay.wms
+        ? L.tileLayer.wms(overlay.url, { ...overlay.wms, crossOrigin: true, opacity: 0.55 })
+        : L.tileLayer(overlay.url, { crossOrigin: true, maxZoom: 19 }));
+    }
+    return () => { tileRefs.current.forEach((layer) => layer.remove()); tileRefs.current = []; };
+  }, [basemap]);
 
   // The view, reapplied whenever anything it depends on changes — including the
   // container's size, since Leaflet derives zoom from pixels and nothing else

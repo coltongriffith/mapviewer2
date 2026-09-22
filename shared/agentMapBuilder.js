@@ -1,6 +1,7 @@
-import { createInitialProjectState, MAP_TYPES } from './projectState.js';
+import { createInitialProjectState, MAP_TYPES, FONT_OPTIONS } from './projectState.js';
 import { applyRoleToLayer } from './mapPresets.js';
 import { AGENT_OVERLAYS, AGENT_JURISDICTIONS } from './agentSchema.js';
+import { claimCentroid, claimHolder } from './claimData.js';
 
 function id() {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
@@ -32,6 +33,7 @@ function referenceOverlays(include = []) {
 
 export function createAgentMapProject(input, {
   featureCollection,
+  neighbours = null,
   source = null,
   sourceMeta = null,
 } = {}) {
@@ -69,10 +71,57 @@ export function createAgentMapProject(input, {
   };
 
   const mappedLayer = applyRoleToLayer(baseLayer, role, 0);
+  const brand = input.branding || {};
+  const primaryColor = brand.primary_color || '#2563eb';
+  mappedLayer.style = { ...mappedLayer.style, stroke: primaryColor, fill: primaryColor, fillOpacity: input.basemap?.startsWith('satellite') ? 0.25 : 0.22, strokeWidth: 2.5 };
+  const neighbourLayer = neighbours?.features?.length ? applyRoleToLayer({
+    ...baseLayer,
+    id: id(),
+    name: 'Neighbouring claims',
+    displayName: 'Neighbouring claims',
+    geojson: neighbours,
+    legend: { enabled: true, label: 'Neighbouring claims' },
+    style: { stroke: input.basemap?.startsWith('satellite') ? '#ffffff' : '#8b95a3', fill: '#a9b0bb', fillOpacity: input.basemap?.startsWith('satellite') ? 0 : 0.06, strokeWidth: 1, dashArray: '4 4' },
+  }, 'claims', 1) : null;
+  const anchor = claimCentroid(featureCollection.features[0]);
+  const sourceLabel = source || input.data?.source_name || jurisdiction?.registry || 'Map data';
+  const facts = input.facts_panel || {};
+  const callout = input.claims_callout || { show: true };
+  const fieldText = Object.values(callout.fields || {}).filter(Boolean).slice(0, 6).map(String);
+  if (!fieldText.length) fieldText.push(`${featureCollection.features.length} claims`, sourceLabel);
+  const overlay = referenceOverlays(input.include);
+  if (input.basemap === 'geology') overlay.geology = true;
+  if (input.basemap === 'satellite_hybrid') overlay.labels = true;
+  if (input.basemap?.startsWith('satellite') && !input.include.includes('geology')) overlay.geology = false;
+  const holderGroups = new Map();
+  if (input.neighbours?.label_holders) {
+    for (const feature of neighbours?.features || []) {
+      const holder = claimHolder(feature);
+      if (!holder) continue;
+      if (!holderGroups.has(holder)) holderGroups.set(holder, []);
+      holderGroups.get(holder).push(feature);
+    }
+  }
+  const neighbourLabels = [...holderGroups.entries()]
+    .sort((a, b) => b[1].length - a[1].length)
+    .slice(0, input.neighbours?.max_holders ?? 8)
+    .map(([holder, features]) => ({
+      id: id(), type: 'plain', priority: 3, text: holder,
+      anchor: claimCentroid(features[0]), offset: { x: 8, y: -8 }, boxWidth: 160,
+      style: { textColor: input.basemap?.startsWith('satellite') ? '#ffffff' : '#4b5563', fontSize: 10 },
+    })).filter((label) => label.anchor);
 
   return {
     ...project,
-    layers: [mappedLayer],
+    layers: [...(neighbourLayer ? [neighbourLayer] : []), mappedLayer],
+    callouts: [...(role === 'claims' && anchor && callout.show !== false ? [{
+      id: id(), type: 'boxed', priority: 1,
+      text: String(callout.fields?.project || facts.project || input.title),
+      subtext: [...fieldText, callout.source_note].filter(Boolean).join('\n'),
+      anchor, offset: { x: 28, y: -100 }, boxWidth: 250,
+      style: { background: '#ffffff', border: callout.style === 'technical' ? '#111827' : primaryColor, textColor: '#17212f', fontSize: callout.style === 'minimal' ? 11 : 12 },
+    }] : []), ...neighbourLabels],
+    markers: (input.annotations || []).map((annotation) => ({ id: id(), lat: annotation.lat, lng: annotation.lng, type: 'pin', label: annotation.label, color: primaryColor, size: 18 })),
     layout: {
       ...project.layout,
       title: input.title,
@@ -80,9 +129,22 @@ export function createAgentMapProject(input, {
       templateId: type.templateId,
       mode: type.mode,
       themeId: input.style || type.themeId,
+      basemap: input.basemap === 'white' ? 'white' : input.basemap,
+      basemapOpacity: input.basemap_opacity,
+      insetEnabled: input.inset?.show !== false,
+      insetBasemap: input.inset?.basemap || input.basemap,
+      insetMode: input.inset?.basemap?.startsWith('satellite') ? 'satellite_locator' : 'province_state',
+      factsPanel: facts,
+      logo: brand.logo_data_uri || null,
+      accentColor: brand.accent_color || primaryColor,
+      fonts: brand.font && FONT_OPTIONS[brand.font]
+        ? { ...project.layout.fonts, title: brand.font, legend: brand.font, callout: brand.font, label: brand.font, footer: brand.font }
+        : project.layout.fonts,
+      mapDate: new Date().toISOString().slice(0, 10),
+      footerText: `Data: ${sourceLabel} · ${new Date().toISOString().slice(0, 10)}${role === 'claims' ? ' · Informational map; verify title with the official registry.' : ''}`,
       primaryLayerId: layerId,
       frameVersion: 1,
-      referenceOverlays: referenceOverlays(input.include),
+      referenceOverlays: overlay,
       exportSettings: {
         ...project.layout.exportSettings,
         filename: safeFilename(input.title),

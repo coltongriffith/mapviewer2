@@ -90,7 +90,11 @@ export default async function handler(req, res) {
 
   let cqlFilter;
   if (type === 'number') {
-    cqlFilter = `TAG_NUMBER = '${safeTerm}'`;
+    cqlFilter = /^\d+$/.test(checkedTerm.term)
+      ? `(TENURE_NUMBER_ID = ${checkedTerm.term} OR TAG_NUMBER = '${safeTerm}')`
+      : `TAG_NUMBER = '${safeTerm}'`;
+  } else if (type === 'name') {
+    cqlFilter = `CLAIM_NAME ILIKE '%${safeTerm}%'`;
   } else if (type === 'map') {
     // The layer has no map sheet column — see api/claims.js. Refused rather
     // than filtered on a field that does not exist.

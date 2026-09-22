@@ -28,6 +28,7 @@ const ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services';
 const ESRI_COMMUNITY = '&copy; Esri, HERE, Garmin &copy; OpenStreetMap contributors';
 
 export const BASEMAPS = {
+  white: { label: 'White', url: '', attribution: '' },
   light: {
     label: 'Light',
     // Light Gray Canvas: muted land, restrained roads, and no place labels —
@@ -41,6 +42,12 @@ export const BASEMAPS = {
     // instead — soft, but the ground is still there under the claims.
     maxNativeZoom: 16,
   },
+  light_grey: {
+    label: 'Light Grey',
+    url: `${ESRI}/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}`,
+    attribution: ESRI_COMMUNITY,
+    maxNativeZoom: 16,
+  },
   dark: {
     label: 'Dark',
     url: `${ESRI}/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}`,
@@ -49,6 +56,14 @@ export const BASEMAPS = {
   },
   terrain: {
     label: 'Terrain',
+    url: `${ESRI}/World_Terrain_Base/MapServer/tile/{z}/{y}/{x}`,
+    attribution: '&copy; Esri',
+    maxNativeZoom: 13,
+    reliefUrl: `${ESRI}/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}`,
+    reliefOpacity: 0.35,
+  },
+  topo: {
+    label: 'Topographic',
     url: `${ESRI}/World_Topo_Map/MapServer/tile/{z}/{y}/{x}`,
     attribution: '&copy; Esri',
     maxNativeZoom: 19,
@@ -59,6 +74,17 @@ export const BASEMAPS = {
     attribution: '&copy; Esri',
     // Deliberately uncapped: imagery is published past 19 in many places, and
     // capping it would trade real detail for the blank tiles it avoids.
+  },
+  satellite_hybrid: {
+    label: 'Satellite Hybrid',
+    url: `${ESRI}/World_Imagery/MapServer/tile/{z}/{y}/{x}`,
+    attribution: '&copy; Esri',
+  },
+  geology: {
+    label: 'Geology',
+    url: `${ESRI}/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}`,
+    attribution: ESRI_COMMUNITY,
+    maxNativeZoom: 16,
   },
   hillshade: {
     label: 'Hillshade',
