@@ -326,6 +326,14 @@ export default function ReadOnlyMapStage({ project }) {
                   ))}
                 </div>
               ))}
+              {layout.factsPanel && Object.keys(layout.factsPanel).length > 0 && (
+                <div className="map-facts-panel" style={{ borderTop: '1px solid #d7dee8', marginTop: 10, paddingTop: 8, fontSize: 11, lineHeight: 1.4 }}>
+                  <strong>Project facts</strong>
+                  {Object.entries(layout.factsPanel).filter(([, value]) => value != null && value !== '').map(([key, value]) => (
+                    <div key={key}><strong>{key.replace(/_/g, ' ')}:</strong> {Array.isArray(value) ? value.join(', ') : String(value)}</div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -344,6 +352,7 @@ export default function ReadOnlyMapStage({ project }) {
           <LocatorInset
             layers={project.layers}
             insetMode={layout.insetMode}
+            insetBasemap={layout.insetBasemap}
             insetImage={layout.insetImage}
             autoInsetRegion={layout.autoInsetRegion}
             insetTitle={layout.insetTitle}

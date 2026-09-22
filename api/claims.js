@@ -1904,7 +1904,7 @@ async function searchQcBbox(minLng, minLat, maxLng, maxLat, res) {
  * nobody had staked rather than a query that could never match.
  *
  * @param {string} term  raw user input
- * @param {'number'|'map'|'company'} type
+ * @param {'number'|'name'|'company'} type
  * @returns {string} a CQL_FILTER expression
  */
 export function bcCqlFilter(term, type, opts = {}) {
@@ -1952,6 +1952,7 @@ export function bcCqlFilter(term, type, opts = {}) {
       ? `(TENURE_NUMBER_ID = ${term} OR TAG_NUMBER = '${safeTerm}')`
       : `TAG_NUMBER = '${safeTerm}'`;
   }
+  if (type === 'name') return `CLAIM_NAME ILIKE '%${safeTerm}%'`;
   // Owner search requires every meaningful word, in any order, rather than one
   // contiguous string — see ownerSearchTokens for why (every full-legal-name
   // search on the live site returned nothing).

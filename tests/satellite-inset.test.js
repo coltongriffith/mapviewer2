@@ -53,10 +53,9 @@ describe('the satellite locator is reachable', () => {
   });
 
   it('does not offer a basemap picker', () => {
-    // Satellite is the only imagery that answers "what does this ground look
-    // like". Topographic and street duplicate the Standard locator.
+    // The editor still offers the simple Standard/Satellite choice. Remote
+    // MCP previews can set an inset basemap without adding a new editor control.
     expect(app).not.toMatch(/f-inset-basemap/);
-    expect(component).not.toMatch(/basemap/);
   });
 });
 

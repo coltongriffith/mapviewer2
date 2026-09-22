@@ -145,8 +145,10 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
 
     if (!cfg.url) return; // blank basemap — no tile layer
 
-    baseLayerRef.current = L.tileLayer(cfg.url, {
+    const opacity = Math.max(0, Math.min(1, Number(project?.layout?.basemapOpacity ?? 1)));
+    const base = L.tileLayer(cfg.url, {
       attribution: cfg.attribution,
+      opacity,
       maxZoom: 21,
       // Every tile service stops publishing somewhere. Past that level Leaflet
       // upscales the deepest tile it can actually get instead of requesting
@@ -157,8 +159,11 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
       updateWhenIdle: true,
       keepBuffer: 4,
       zIndex: 200,
-    }).addTo(map);
-  }, [project?.layout?.basemap, project?.layout?.blankBg]);
+    });
+    const layers = [base];
+    if (cfg.reliefUrl) layers.push(L.tileLayer(cfg.reliefUrl, { attribution: cfg.attribution, crossOrigin: true, maxZoom: 21, maxNativeZoom: 16, opacity: opacity * cfg.reliefOpacity, zIndex: 201 }));
+    baseLayerRef.current = L.layerGroup(layers).addTo(map);
+  }, [project?.layout?.basemap, project?.layout?.blankBg, project?.layout?.basemapOpacity]);
 
   useEffect(() => {
     const map = mapRef.current;
