@@ -246,7 +246,7 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
             <button
               type="button"
               className="lm-map-preview"
-              onClick={() => (onLoadSampleStyle ? onLoadSampleStyle('aurora_demo') : onOpenEditor())}
+              onClick={() => (onLoadSampleStyle ? onLoadSampleStyle('hero') : onOpenEditor())}
               data-track="Hero mockup: open live demo"
               aria-label="Open this map as a live demo"
             >
@@ -262,10 +262,10 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
               <picture className="lm-map-preview-image">
                 <source
                   type="image/webp"
-                  srcSet="/gallery/ba-after.webp 870w, /gallery/ba-after@2x.webp 1576w"
+                  srcSet="/gallery/hero-exploration.webp 640w, /gallery/hero-exploration@2x.webp 1336w"
                   sizes="(max-width: 600px) calc(100vw - 40px), (max-width: 1000px) 560px, 520px"
                 />
-                <img className="lm-mock-img" src="/gallery/ba-after.png" width="870" height="653" fetchpriority="high" decoding="async" alt="Cedar Ridge exploration map with mineral claims, drill targets, a legend and location inset" />
+                <img className="lm-mock-img" src="/gallery/hero-exploration.webp" width="870" height="653" fetchpriority="high" decoding="async" alt="Aurora Ridge’s Cedar Ridge map: shaded terrain, bedrock geology, classified copper soil samples, drill results, target areas and a BC location inset" />
               </picture>
               <span className="lm-map-preview-footer" aria-hidden="true">
                 <span><span className="lm-map-status" />Made in Exploration Maps</span>

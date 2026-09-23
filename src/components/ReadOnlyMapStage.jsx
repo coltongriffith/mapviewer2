@@ -304,7 +304,7 @@ export default function ReadOnlyMapStage({ project }) {
       {/* Legend card */}
       {legendItems.length > 0 && layout.showLegend !== false && (
         <div className="template-zone" style={zoneStyle(resolvedZones.legend)}>
-          <div className={`template-card legend-card${layout.legendTransparent ? ' panel--transparent' : ''}`}>
+          <div className={`template-card legend-card${layout.legendTransparent ? ' panel--transparent' : ''}`} data-compact={layout.legendCompact || undefined}>
             <div className="legend-header"><h3 style={{ fontSize: Math.round(15 * (layout.legendFontScale ?? 1)) + 'px' }}>{layout.legendTitle || 'Legend'}</h3></div>
             <div className="legend-list" style={{ fontSize: Math.round(13 * (layout.legendFontScale ?? 1)) + 'px' }}>
               {legendGroups.map((group) => (

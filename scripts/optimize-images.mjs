@@ -18,6 +18,7 @@ const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 
 // width = the widest the image is ever DRAWN, x2 for high-density screens.
 const TARGETS = [
+  { src: 'public/gallery/hero-exploration.png', widths: [640, 1336], quality: 0.9 },
   { src: 'public/gallery/ba-after.png', widths: [870, 1740], quality: 0.82 },
   { src: 'public/gallery/ba-before.png', widths: [870, 1740], quality: 0.82 },
   { src: 'public/gallery/regional.png', widths: [640, 1280], quality: 0.82 },
@@ -36,7 +37,8 @@ const browser = await chromium.launch({
 const page = await browser.newPage();
 
 let saved = 0;
-for (const target of TARGETS) {
+const only = process.argv.slice(2);
+for (const target of TARGETS.filter((target) => !only.length || only.includes(path.basename(target.src, '.png')))) {
   const abs = path.join(ROOT, target.src);
   if (!existsSync(abs)) { console.log(`skip (missing) ${target.src}`); continue; }
   const before = readFileSync(abs).length;

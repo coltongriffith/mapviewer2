@@ -573,15 +573,18 @@ export function legendSwatchSvg(item, x, rowY, scale) {
 // and the SVG so the two cannot disagree about a heading's height.
 function legendRowLayout(items, layout, y, scale) {
   const rows = [];
+  // Opt-in dense legend for detailed demo compositions. Keep the editor,
+  // shared view, PNG and vector export on the same row spacing.
+  const density = layout?.legendCompact ? 0.75 : 1;
   let rowY = y + 40 * scale;
   groupLegendItems(items, layout).forEach((group) => {
     if (group.heading) {
       rows.push({ heading: group.heading, y: rowY });
-      rowY += LEGEND_ROW.headingPitch * scale;
+      rowY += LEGEND_ROW.headingPitch * scale * density;
     }
     group.items.forEach((item) => {
       rows.push({ item, y: rowY });
-      rowY += LEGEND_ROW.pitch * scale;
+      rowY += LEGEND_ROW.pitch * scale * density;
     });
   });
   return rows;

@@ -281,6 +281,9 @@ button, input, select, textarea { font: inherit; }
 .legend-list { display: grid; gap: 10px; }
 .legend-group { display: grid; gap: 8px; }
 .legend-group + .legend-group { margin-top: 4px; }
+.legend-card[data-compact="true"] .legend-group { gap: 2px; }
+.legend-card[data-compact="true"] .legend-list { gap: 4px; }
+.legend-card[data-compact="true"] .legend-group + .legend-group { margin-top: 0; }
 .legend-group-title { font-size: 0.85em; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted-text, var(--ui-text-muted)); font-weight: 700; }
 .legend-item { display: flex; align-items: center; gap: 12px; color: var(--body-text, var(--ui-text)); }
 .legend-swatch { width: 18px; height: 12px; border-radius: var(--r-sm); border: 1px solid var(--ui-action); flex: 0 0 auto; }

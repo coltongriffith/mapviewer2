@@ -104,7 +104,87 @@ const strikeBracket = {
   style: 'bracket', color: TEAL_DARK, units: 'km', label: 'Untested strike >1.5 km',
 };
 
+// The hero is a real, editable synthesis of the gallery examples. Keep the
+// full-resolution source datasets intact for the individual gallery demos;
+// this presentation uses every second soil row so anomalies remain readable
+// at thumbnail size. Intercept labels come from the exact collar they point to.
+const heroSoils = {
+  ...auroraSoils,
+  features: auroraSoils.features.filter((feature) =>
+    Math.round((feature.geometry.coordinates[1] - 55.45) * 111.32 / 0.125) % 2 === 0),
+};
+const heroIntercept = (target, holeId, offset, boxWidth = 215) => {
+  const hole = auroraDrillholes.features.find((feature) => feature.properties.HoleID === holeId);
+  const [lng, lat] = hole.geometry.coordinates;
+  return boxed(target, `${holeId}\n${hole.properties.result}`, { lat, lng }, offset, boxWidth);
+};
+
 export const GALLERY_DEMOS = {
+  // Homepage hero — technical depth with the same Aurora Ridge identity.
+  hero: {
+    title: TITLE, subtitle: 'Geology, Soil Geochemistry & Drill Targets',
+    layout: brand({
+      basemap: 'hillshade', mode: 'target_anomaly', compositionPreset: 'tight',
+      showCoordinateFrame: true, showProjectionLabel: true, projectionName: 'WGS 84 / UTM Zone 9N',
+      legendGrouped: true, legendCompact: true, legendWidthPx: 245, legendHeightPx: 355, legendFontScale: 0.8,
+      titleWidthPx: 360, titleHeightPx: 72, logoWidthPx: 190, logoHeightPx: 70,
+      scaleBarCorner: 'br',
+      cornerLayout: { tl: [['logo', 'title']], tr: [['inset']], bl: [['legend']], br: [['scaleBar'], ['northArrow']] },
+      insetWidthPx: 205, insetHeightPx: 165, footerEnabled: false,
+      exportSettings: { filename: 'cedar-ridge-exploration-map', pixelRatio: 2 },
+    }),
+    layers: [
+      {
+        ...geologyLayer(),
+        style: { stroke: '#627b79', fillOpacity: 0.28, strokeWidth: 1 },
+        classification: {
+          field: 'Unit', mode: 'categorical',
+          classes: [
+            { value: 'Bowser Lake Group sediments', color: '#a2b9c7', label: 'Bowser Lake sediments' },
+            { value: 'Hazelton Group volcanics', color: '#7cbaac', label: 'Hazelton volcanics' },
+            { value: 'Stuhini Group volcaniclastics', color: '#d7c686', label: 'Stuhini volcaniclastics' },
+            { value: 'Stikine assemblage', color: '#b5aec4', label: 'Stikine assemblage' },
+            { value: 'Granodiorite intrusion', color: '#caa1a5', label: 'Granodiorite intrusion' },
+          ],
+        },
+      },
+      {
+        ...claimsLayer({ stroke: TEAL_DARK, fill: TEAL, fillOpacity: 0.05, strokeWidth: 2.8 }, 'Claim Boundary'),
+        legend: { enabled: true, label: 'Claim boundary', group: 'Exploration' },
+      },
+      {
+        data: auroraRoads, name: 'Access Roads.geojson', role: 'roads_access', displayName: 'Access / power corridor',
+        style: { stroke: '#657370', strokeWidth: 1.8, dashArray: '5 3' },
+        legend: { enabled: true, label: 'Access / power corridor', group: 'Exploration' },
+      },
+      {
+        ...soilsLayer(), data: heroSoils,
+        style: { markerColor: '#ffffff', markerSize: 8, strokeWidth: 0.6 },
+        legend: { enabled: true, label: 'Soil copper', group: 'Soil Cu (ppm)' },
+        classification: {
+          field: 'Cu_ppm', mode: 'graduated',
+          classes: [
+            { max: 50, color: '#b3c6af', size: 8, label: '≤ 50' },
+            { max: 100, color: '#dfb83d', size: 9, label: '50–100' },
+            { max: 200, color: '#db6546', size: 11, label: '100–200' },
+            { max: null, color: '#873653', size: 14, label: '> 200' },
+          ],
+        },
+      },
+      {
+        ...targetsLayer(),
+        style: { stroke: TEAL_DARK, fill: TEAL, fillOpacity: 0, strokeWidth: 2.4, dashArray: '9 5' },
+        legend: { enabled: true, label: 'Target areas', group: 'Exploration' },
+      },
+      { ...collarsLayer(12), legend: { enabled: true, label: 'Drill collars', group: 'Exploration' } },
+    ],
+    callouts: [
+      heroIntercept('Target A · Gold', 'CR-24-01', { x: -225, y: -70 }),
+      heroIntercept('Target B · Gold', 'CR-24-05', { x: 100, y: 0 }, 180),
+      heroIntercept('Target C · Copper', 'CR-24-12', { x: 65, y: 60 }),
+    ],
+  },
+
   // Drill Results — collars & intercepts on satellite imagery
   drill_plan: {
     title: TITLE, subtitle: 'Drill Results — 2024 Program',

@@ -31,6 +31,7 @@ const CARDS = {
   // The hero is drawn at 870px, 1740 at 2x; satellite imagery compresses
   // badly as PNG, so it is rendered narrower to stay under the image budget.
   'ba-after': { demo: 'aurora_demo', ratio: 870 / 653, width: 1600 },
+  'hero-exploration': { demo: 'hero', ratio: 870 / 653, width: 1360 },
 };
 const only = process.argv.slice(2);
 const names = only.length ? only : Object.keys(CARDS);
