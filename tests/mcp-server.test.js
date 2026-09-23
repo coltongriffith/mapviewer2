@@ -236,6 +236,13 @@ describe('ExplorationMaps MCP endpoint', () => {
     }
   });
 
+  it('issues a session id on initialize so hosted clients are not rate limited as one caller', async () => {
+    const res = mockRes();
+    await handler(mockReq({ body: { jsonrpc: '2.0', id: 9, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'claude-ai', version: '1' } } } }), res);
+    expect(res.headers['mcp-session-id']).toMatch(/^[\x21-\x7e]{16,128}$/);
+    expect(res.headers['access-control-expose-headers']).toMatch(/Mcp-Session-Id/);
+  });
+
   it('accepts any notification with 202 and no body', async () => {
     const res = mockRes();
     await handler(mockReq({ body: { jsonrpc: '2.0', method: 'notifications/cancelled', params: { requestId: 3 } } }), res);

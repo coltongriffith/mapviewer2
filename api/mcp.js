@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { capabilities, AGENT_JURISDICTIONS, AGENT_BASEMAPS } from '../shared/agentSchema.js';
 import { createAgentMapProject } from '../shared/agentMapBuilder.js';
 import { runClaimsSearch } from './_lib/claims-internal.js';
@@ -117,7 +117,7 @@ const PREVIEW_INPUT_SCHEMA = {
       website: { type: 'string', format: 'uri' }, logo_url: { type: 'string', format: 'uri' }, logo_url_dark: { type: 'string', format: 'uri' },
       primary_color: { type: 'string', pattern: '^#[0-9a-fA-F]{6}$' }, accent_color: { type: 'string', pattern: '^#[0-9a-fA-F]{6}$' }, font: { type: 'string', maxLength: 80 },
     } },
-    facts_panel: { type: 'object', additionalProperties: false, properties: {
+    facts_panel: { type: 'object', additionalProperties: false, description: 'Verified, published project facts, drawn in the project callout. claims must equal the number of mapped claims.', properties: {
       project: { type: 'string' }, claims: { type: 'integer' }, hectares: { type: 'number' }, commodity: { type: 'string' }, ownership: { type: 'string' }, access: { type: 'string' }, tickers: { type: 'array', items: { type: 'string' } },
     } },
     claims_callout: { type: 'object', additionalProperties: false, properties: { show: { type: 'boolean', default: true }, anchor: { type: 'string', enum: ['auto'] }, fields: { type: 'object', additionalProperties: { type: 'string' } }, source_note: { type: 'string' }, style: { type: 'string', enum: ['brand', 'technical', 'minimal'] } } },
@@ -328,16 +328,25 @@ function hashSubject(value) {
   return createHash('sha256').update(value).digest('hex').slice(0, 48);
 }
 
-// Per-caller key. ChatGPT sends an anonymised per-user `openai/subject`; other
-// clients only identify themselves by clientInfo. Both are caller-supplied, so
-// they only partition the budget — ipSubject() is the ceiling they cannot
-// rotate their way past.
+// Session ids this server issues on initialize: visible ASCII, per the spec.
+const SESSION_ID = /^[\x21-\x7e]{16,128}$/;
+
+// Per-caller key. Hosted assistants call from shared egress IPs, so an IP-only
+// key would give every user of one platform a single budget. ChatGPT sends an
+// anonymised per-user `openai/subject`; legacy Streamable HTTP clients (Claude
+// among them) echo the Mcp-Session-Id issued on initialize, i.e. one budget per
+// conversation; anything else falls back to IP + clientInfo. All of these are
+// caller-supplied, so they only partition the budget — ipSubject() is the
+// ceiling they cannot rotate their way past.
 function callerSubject(req, toolName) {
   const ip = clientIp(req);
   const meta = req.body?.params?._meta || {};
   const user = typeof meta['openai/subject'] === 'string' ? meta['openai/subject'].slice(0, 200) : '';
+  if (user) return hashSubject(`mcp:${toolName}:openai:${user}`);
+  const session = String(req.headers?.['mcp-session-id'] || '');
+  if (SESSION_ID.test(session)) return hashSubject(`mcp:${toolName}:session:${session}`);
   const clientName = String(meta['io.modelcontextprotocol/clientInfo']?.name || 'unknown').slice(0, 100);
-  return hashSubject(user ? `mcp:${toolName}:openai:${user}` : `mcp:${toolName}:${ip}:${clientName}`);
+  return hashSubject(`mcp:${toolName}:${ip}:${clientName}`);
 }
 
 function ipSubject(req, toolName) {
@@ -452,7 +461,12 @@ async function createPreview(req, args) {
   if (input.annotations.length) layersApplied.push('annotations');
   if (input.claims_callout.show !== false) layersApplied.push('claims_callout');
   if (input.inset.show) layersApplied.push('locator_inset');
-  if (input.facts_panel) layersApplied.push('facts_panel');
+  // Facts are drawn inside the project callout (see createAgentMapProject).
+  if (input.facts_panel && input.claims_callout.show !== false) layersApplied.push('facts_panel');
+  else if (input.facts_panel) {
+    layersEmpty.push('facts_panel');
+    warnings.push('facts_panel is drawn in the project callout, which claims_callout.show=false turned off.');
+  }
   const caption = `Figure 1. ${input.title}: ${claims.features.length} mineral claims in ${jurisdiction?.label || input.jurisdiction}, from ${jurisdiction?.registry || 'public registry'} records accessed ${new Date().toISOString().slice(0, 10)}. Verify current title with the registry.`;
   const altText = `Map of ${input.title} showing ${claims.features.length} selected mineral claims${neighbours.features.length ? ` and ${neighbours.features.length} neighbouring claims` : ''} in ${jurisdiction?.label || input.jurisdiction}.`;
 
@@ -566,8 +580,8 @@ function setCors(req, res) {
     res.setHeader('Vary', 'Origin');
   }
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'content-type, accept, authorization, mcp-protocol-version, mcp-method, mcp-name, mcp-param-*');
-  res.setHeader('Access-Control-Expose-Headers', 'MCP-Protocol-Version, X-Request-Id');
+  res.setHeader('Access-Control-Allow-Headers', 'content-type, accept, authorization, mcp-protocol-version, mcp-method, mcp-name, mcp-session-id, mcp-param-*');
+  res.setHeader('Access-Control-Expose-Headers', 'MCP-Protocol-Version, Mcp-Session-Id, X-Request-Id');
 }
 
 export default async function handler(req, res) {
@@ -624,6 +638,9 @@ export default async function handler(req, res) {
     if (body.method === 'initialize') {
       const requested = String(body.params?.protocolVersion || '2025-11-25');
       const negotiated = LEGACY_VERSIONS.includes(requested) ? requested : '2025-11-25';
+      // Stateless: the id is never stored or required, only echoed back by the
+      // client so previews can be rate limited per conversation (callerSubject).
+      res.setHeader('Mcp-Session-Id', randomUUID());
       return res.status(200).json(jsonRpcResult(body.id, {
         protocolVersion: negotiated,
         capabilities: { tools: { listChanged: false } },

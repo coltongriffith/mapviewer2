@@ -80,6 +80,18 @@ describe('MCP map selection', () => {
     expect(include({ basemap: 'satellite', include: ['claims', 'roads'] })).toEqual(['claims', 'roads']);
   });
 
+  it('draws published facts in the project callout, which the editor and export also render', () => {
+    const checked = validateCreateMapInput({
+      jurisdiction: 'bc', claim_numbers: ['71071'],
+      facts_panel: { project: 'Star', commodity: 'Copper', claims: 1, hectares: 1234.4, tickers: ['TSXV: STR'] },
+      claims_callout: { source_note: 'Company release, 2026' },
+    });
+    const project = createAgentMapProject(checked.value, { featureCollection: { type: 'FeatureCollection', features: [primary] } });
+    expect(project.layout.factsPanel).toBeUndefined();
+    expect(project.callouts[0].text).toBe('Star');
+    expect(project.callouts[0].subtext).toBe('Commodity: Copper\nClaims: 1 (1,234 ha)\nTSXV: STR\nCompany release, 2026');
+  });
+
   it('reports the B.C. tenure number, not the staking tag, as the claim number', () => {
     const tagged = { ...primary, properties: { ...primary.properties, TAG_NUMBER: '716678M' } };
     expect(claimSummary(tagged).claim_number).toBe('71071');

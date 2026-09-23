@@ -92,6 +92,8 @@ import {
   duplicateProjectRecord,
   listProjects,
   loadDraft,
+  rememberCloudRevision,
+  rememberedCloudRevision,
   renameProjectRecord,
   resolveInitialWorkspace,
   saveDraft,
@@ -180,7 +182,6 @@ const BASEMAP_OPTIONS = BASEMAP_KEYS.map((key) => ({
   key,
   label: BASEMAPS[key].label,
   thumb: basemapThumb(key),
-  agentOnly: Boolean(BASEMAPS[key].agentOnly),
 }));
 
 const MARKER_TYPES = {
@@ -776,8 +777,10 @@ export default function App({ initialAction = null }) {
   const lastSavedSnapshotRef = useRef(JSON.stringify(project));
   // Revision of the cloud row this tab last read/wrote. Sent with every
   // update so the server can refuse a save that would clobber another
-  // tab's work (P1-01). null = no expectation (deliberate overwrite).
-  const projectRevisionRef = useRef(null);
+  // tab's work (P1-01). null = no expectation (deliberate overwrite). Seeded
+  // from the revision this browser last saved/opened the restored project at.
+  const initialRevision = useMemo(() => rememberedCloudRevision(initialWorkspace.projectId), [initialWorkspace]);
+  const projectRevisionRef = useRef(initialRevision);
   // Set when a save is refused because the row changed elsewhere.
   const [saveConflict, setSaveConflict] = useState(null);
   // Always-fresh serialization of the current project, updated by the local
@@ -804,7 +807,8 @@ export default function App({ initialAction = null }) {
   const mapScaleNoteDebounceRef = useRef(null);
   const layerStyleDebounceRef = useRef(null);
   // Tracks which metadata fields have unsaved user input (debounce pending)
-  const metaDirtyRef = useRef({ legendTitle: false, footerText: false, mapDate: false, projectNumber: false, mapScaleNote: false });
+  // Field name → true while that field's debounced write is pending.
+  const metaDirtyRef = useRef({});
   const annotationToolRef = useRef(null);
   const [editingTitleField, setEditingTitleField] = useState(null);
   const [csvMappingData, setCsvMappingData] = useState(null); // { headers, rows, filename } for ColumnMapperModal
@@ -1085,6 +1089,14 @@ export default function App({ initialAction = null }) {
   useEffect(() => {
     const h = historyRef.current;
     if (h.restoring) { h.restoring = false; h.pending = null; return undefined; }
+    // A pan or zoom only rewrites mapView: fold it into the current step rather
+    // than adding one, so Ctrl+Z undoes edits instead of camera moves and a
+    // session of panning cannot push real edits out of the 30-step buffer.
+    const top = h.stack[h.index];
+    if (!h.pending && top && Object.keys({ ...top, ...project }).every((k) => k === 'mapView' || top[k] === project[k])) {
+      h.stack[h.index] = project;
+      return undefined;
+    }
     h.pending = project;
     const t = setTimeout(() => {
       h.pending = null;
@@ -1124,7 +1136,9 @@ export default function App({ initialAction = null }) {
         h.index -= 1;
       }
       h.restoring = true;
-      skipAutoFitRef.current = true;
+      // Tied to this state, not a bare flag: when the undo does not change what
+      // the map frames, the next fit (say, an import) must still frame.
+      skipAutoFitRef.current = h.stack[h.index];
       setProject(h.stack[h.index]);
     };
     window.addEventListener('keydown', handler);
@@ -1137,6 +1151,7 @@ export default function App({ initialAction = null }) {
   // duplicating already-migrated projects. Local copies are never deleted.
   useEffect(() => {
     if (!user || !supabase) return;
+    const ticket = saveCoordRef.current.begin();
     (async () => {
       const pending = loadAccountSave();
       const { runCloudMigration } = await import('./utils/cloudMigration');
@@ -1147,6 +1162,14 @@ export default function App({ initialAction = null }) {
         draft: pending ? null : loadDraft(),
         uploadProject: ({ name, payload }) => saveCloudProject({ id: null, name, payload, silent: true }),
       });
+      // If the open map was just uploaded, point the workspace at its cloud copy.
+      // Left on the local id, Save failed ("not found") and autosave's fallback
+      // created a second cloud copy of the same map.
+      const moved = result.uploaded?.[projectId || 'draft'];
+      if (moved?.id && ticket.stillCurrent()) {
+        setProjectId(moved.id);
+        projectRevisionRef.current = moved.revision;
+      }
       if (result.migrated > 0) {
         listCloudProjects().then(setRecentProjects).catch(() => {});
         setUploadStatus({ type: 'success', message: `${result.migrated} map${result.migrated === 1 ? '' : 's'} from this browser ${result.migrated === 1 ? 'is' : 'are'} now saved to your account.` });
@@ -1369,12 +1392,14 @@ export default function App({ initialAction = null }) {
   // Sync local fields when project changes from an external action (open, duplicate, new).
   // Cancel pending debounce timers first to prevent cross-project writes.
   useEffect(() => {
+    clearTimeout(titleDebounceRef.current);
+    clearTimeout(subtitleDebounceRef.current);
     clearTimeout(legendTitleDebounceRef.current);
     clearTimeout(footerTextDebounceRef.current);
     clearTimeout(mapDateDebounceRef.current);
     clearTimeout(projectNumberDebounceRef.current);
     clearTimeout(mapScaleNoteDebounceRef.current);
-    metaDirtyRef.current = { legendTitle: false, footerText: false, mapDate: false, projectNumber: false, mapScaleNote: false };
+    metaDirtyRef.current = {};
     setLocalTitle(project.layout.title || '');
     setLocalSubtitle(project.layout.subtitle || '');
     setLocalLegendTitle(project.layout.legendTitle ?? 'Legend');
@@ -1385,7 +1410,11 @@ export default function App({ initialAction = null }) {
   }, [projectId]);
 
   // Resync individual metadata fields when layout changes externally (e.g. template applied),
-  // but not while the user is actively editing that field.
+  // but not while the user is actively editing that field. Title and subtitle
+  // included: undo, New, a demo or a deep link can change them with projectId
+  // unchanged, which left the fields showing the previous map's title.
+  useEffect(() => { if (!metaDirtyRef.current.title) setLocalTitle(project.layout.title || ''); }, [project.layout.title]);
+  useEffect(() => { if (!metaDirtyRef.current.subtitle) setLocalSubtitle(project.layout.subtitle || ''); }, [project.layout.subtitle]);
   useEffect(() => { if (!metaDirtyRef.current.legendTitle) setLocalLegendTitle(project.layout.legendTitle ?? 'Legend'); }, [project.layout.legendTitle]);
   useEffect(() => { if (!metaDirtyRef.current.footerText) setLocalFooterText(project.layout.footerText || ''); }, [project.layout.footerText]);
   useEffect(() => { if (!metaDirtyRef.current.mapDate) setLocalMapDate(project.layout.mapDate || ''); }, [project.layout.mapDate]);
@@ -1639,8 +1668,11 @@ export default function App({ initialAction = null }) {
     const noLayers = project.layers.length === 0;
     // Use the ref so cosmetic layout changes (title, logo size, opacity…) don't
     // trigger a map reframe. Only the explicit deps below cause refitting.
-    if (skipAutoFitRef.current) {
-      skipAutoFitRef.current = false;
+    // true = keep the saved view on the next fit; a project = only while that
+    // project (an undo target) is the one on screen.
+    const skip = skipAutoFitRef.current;
+    skipAutoFitRef.current = false;
+    if (skip === true || skip === project) {
       const saved = project.mapView;
       const screenMatch = saved?.screenW
         ? Math.abs(saved.screenW - mapSizeRef.current.width) / saved.screenW < 0.15
@@ -4459,6 +4491,7 @@ export default function App({ initialAction = null }) {
     resetHistory();
     skipAutoFitRef.current = true;
     projectRevisionRef.current = revision;
+    rememberCloudRevision(entry.id, revision);
     setProject(payload);
     setProjectId(entry.id);
     setProjectName(entry.name);
@@ -5973,14 +6006,16 @@ export default function App({ initialAction = null }) {
               <div className="control-row"><label htmlFor="f-title-4176">Title</label><input id="f-title-4176" value={localTitle} onChange={(e) => {
                 const val = e.target.value;
                 setLocalTitle(val);
+                metaDirtyRef.current.title = true;
                 clearTimeout(titleDebounceRef.current);
-                titleDebounceRef.current = setTimeout(() => updateLayout({ title: val }), 300);
+                titleDebounceRef.current = setTimeout(() => { updateLayout({ title: val }); metaDirtyRef.current.title = false; }, 300);
               }} /></div>
               <div className="control-row"><label htmlFor="f-subtitle-4182">Subtitle</label><input id="f-subtitle-4182" value={localSubtitle} onChange={(e) => {
                 const val = e.target.value;
                 setLocalSubtitle(val);
+                metaDirtyRef.current.subtitle = true;
                 clearTimeout(subtitleDebounceRef.current);
-                subtitleDebounceRef.current = setTimeout(() => updateLayout({ subtitle: val }), 300);
+                subtitleDebounceRef.current = setTimeout(() => { updateLayout({ subtitle: val }); metaDirtyRef.current.subtitle = false; }, 300);
               }} /></div>
               <div className="control-row slider">
                 <label htmlFor="f-title-size-4189">Title Size</label>
@@ -5990,7 +6025,7 @@ export default function App({ initialAction = null }) {
               <div className="control-row-stack">
                 <label>Basemap</label>
                 <div className="basemap-picker">
-                  {BASEMAP_OPTIONS.filter(({ key, agentOnly }) => !agentOnly || key === project.layout.basemap).map(({ key, label, thumb }) => (
+                  {BASEMAP_OPTIONS.map(({ key, label, thumb }) => (
                     <button
                       key={key}
                       type="button"
@@ -7186,6 +7221,7 @@ export default function App({ initialAction = null }) {
                     resetHistory();
                     setProject(full.payload);
                     projectRevisionRef.current = full.revision ?? null;
+                    rememberCloudRevision(projectId, full.revision);
                     lastSavedSnapshotRef.current = JSON.stringify(full.payload);
                     setIsDirty(false);
                     setUploadStatus({ type: 'success', message: 'Reloaded the newer version from the cloud.' });

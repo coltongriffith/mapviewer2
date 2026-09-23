@@ -86,4 +86,14 @@ describe('local → cloud migration reliability', () => {
     expect(second.skipped).toBe(0); // done → whole run short-circuits as complete
     expect(second.complete).toBe(true);
   });
+
+  it("reports where each map landed, so the open one can be re-pointed instead of duplicated", async () => {
+    // saveCloudProject resolves {id, revision}; recording that object as the
+    // cloudId is what the editor used to get back.
+    const upload = vi.fn(async ({ name }) => ({ id: `cloud-${name}`, revision: 1 }));
+    const draft = { payload: { layers: [{}], layout: { title: 'WIP' } }, projectId: null };
+    const result = await runCloudMigration({ userId: USER, localProjects: [proj('p1')], draft, uploadProject: upload });
+    expect(result.uploaded).toEqual({ p1: { id: 'cloud-Project p1', revision: 1 }, draft: { id: 'cloud-WIP', revision: 1 } });
+    expect(readMigrationState(USER).projects.p1.cloudId).toBe('cloud-Project p1');
+  });
 });

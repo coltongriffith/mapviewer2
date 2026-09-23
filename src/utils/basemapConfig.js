@@ -27,12 +27,7 @@ const ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services';
 // licence requires the credit travel with the map.
 const ESRI_COMMUNITY = '&copy; Esri, HERE, Garmin &copy; OpenStreetMap contributors';
 
-// `agentOnly` entries are names the Agent API / MCP may request. The editor's
-// picker lists them only on a map that already uses one: 'geology' and
-// 'satellite_hybrid' depend on overlays the agent builder switches on, and the
-// rest duplicate a picker entry.
 export const BASEMAPS = {
-  white: { label: 'White', url: '', attribution: '', agentOnly: true },
   light: {
     label: 'Light',
     // Light Gray Canvas: muted land, restrained roads, and no place labels —
@@ -45,13 +40,6 @@ export const BASEMAPS = {
     // the zoom a claim block is read at; with it, Leaflet upscales level 16
     // instead — soft, but the ground is still there under the claims.
     maxNativeZoom: 16,
-  },
-  light_grey: {
-    label: 'Light Grey',
-    url: `${ESRI}/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}`,
-    attribution: ESRI_COMMUNITY,
-    maxNativeZoom: 16,
-    agentOnly: true,
   },
   dark: {
     label: 'Dark',
@@ -68,32 +56,12 @@ export const BASEMAPS = {
     attribution: '&copy; Esri',
     maxNativeZoom: 19,
   },
-  topo: {
-    label: 'Topographic',
-    url: `${ESRI}/World_Topo_Map/MapServer/tile/{z}/{y}/{x}`,
-    attribution: '&copy; Esri',
-    maxNativeZoom: 19,
-    agentOnly: true,
-  },
   satellite: {
     label: 'Satellite',
     url: `${ESRI}/World_Imagery/MapServer/tile/{z}/{y}/{x}`,
     attribution: '&copy; Esri',
     // Deliberately uncapped: imagery is published past 19 in many places, and
     // capping it would trade real detail for the blank tiles it avoids.
-  },
-  satellite_hybrid: {
-    label: 'Satellite Hybrid',
-    url: `${ESRI}/World_Imagery/MapServer/tile/{z}/{y}/{x}`,
-    attribution: '&copy; Esri',
-    agentOnly: true,
-  },
-  geology: {
-    label: 'Geology',
-    url: `${ESRI}/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}`,
-    attribution: ESRI_COMMUNITY,
-    maxNativeZoom: 16,
-    agentOnly: true,
   },
   hillshade: {
     label: 'Hillshade',
@@ -123,8 +91,15 @@ export const BASEMAPS = {
 
 export const BASEMAP_KEYS = Object.keys(BASEMAPS);
 
+// Names the Agent API / MCP may request (shared/agentSchema.js AGENT_BASEMAPS)
+// that draw the same tiles as a picker entry. They stay out of BASEMAPS so the
+// picker does not offer duplicates: 'geology' and 'satellite_hybrid' get their
+// overlay from the agent builder's referenceOverlays, and 'white' is the blank
+// map on white.
+const ALIASES = { white: 'blank', light_grey: 'light', topo: 'terrain', satellite_hybrid: 'satellite', geology: 'light' };
+
 export function basemapConfig(key) {
-  return BASEMAPS[key] || BASEMAPS.light;
+  return BASEMAPS[key] || BASEMAPS[ALIASES[key]] || BASEMAPS.light;
 }
 
 /**

@@ -90,8 +90,19 @@ export function createAgentMapProject(input, {
   const sourceLabel = source || input.data?.source_name || jurisdiction?.registry || 'Map data';
   const facts = input.facts_panel || {};
   const callout = input.claims_callout || { show: true };
+  // Published facts ride in the project callout: callouts are drawn by the
+  // editor, the share page and export alike, and stay editable. (A separate
+  // layout.factsPanel existed only on the share page, clipped inside the legend.)
+  const hectares = Number.isFinite(facts.hectares) ? `${Math.round(facts.hectares).toLocaleString('en-US')} ha` : null;
+  const factLines = [
+    facts.commodity && `Commodity: ${facts.commodity}`,
+    Number.isInteger(facts.claims) ? `Claims: ${facts.claims}${hectares ? ` (${hectares})` : ''}` : hectares && `Area: ${hectares}`,
+    facts.ownership && `Ownership: ${facts.ownership}`,
+    facts.access && `Access: ${facts.access}`,
+    facts.tickers?.length && facts.tickers.join(' · '),
+  ].filter(Boolean);
   const fieldText = Object.values(callout.fields || {}).filter(Boolean).slice(0, 6).map(String);
-  if (!fieldText.length) fieldText.push(`${featureCollection.features.length} claims`, sourceLabel);
+  if (!fieldText.length && !factLines.length) fieldText.push(`${featureCollection.features.length} claims`, sourceLabel);
   const overlay = referenceOverlays(input.include);
   if (input.basemap === 'geology') overlay.geology = true;
   if (input.basemap === 'satellite_hybrid') overlay.labels = true;
@@ -120,7 +131,7 @@ export function createAgentMapProject(input, {
     callouts: [...(role === 'claims' && anchor && callout.show !== false ? [{
       id: id(), type: 'boxed', priority: 1,
       text: String(callout.fields?.project || facts.project || input.title),
-      subtext: [...fieldText, callout.source_note].filter(Boolean).join('\n'),
+      subtext: [...factLines, ...fieldText, callout.source_note].filter(Boolean).join('\n'),
       anchor, offset: { x: 28, y: -100 }, boxWidth: 250,
       style: { background: '#ffffff', border: callout.style === 'technical' ? '#111827' : primaryColor, textColor: '#17212f', fontSize: callout.style === 'minimal' ? 11 : 12 },
     }] : []), ...neighbourLabels],
@@ -140,7 +151,6 @@ export function createAgentMapProject(input, {
       // plain province/state locator. insetMode is what the editor, the share
       // page and export all key on.
       insetMode: (input.inset?.basemap || input.basemap) === 'white' ? 'province_state' : 'satellite_locator',
-      factsPanel: facts,
       logo: brand.logo_data_uri || null,
       accentColor: brand.accent_color || primaryColor,
       fonts: brand.font && FONT_OPTIONS[brand.font]

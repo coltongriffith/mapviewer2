@@ -20,7 +20,11 @@ const KB = 1024;
 
 const BUDGETS = {
   // Largest chunk is now the editor (~124 KiB); tighten the old 191.
-  maxJsChunkGzipKb: 135,
+  // 135 → 136 (Sept 2026 review): the configured editor chunk was 20 bytes
+  // under 135 and the data-loss fixes that landed in it — save-conflict
+  // revisions surviving a reload, re-pointing the open map after sign-in
+  // migration, pans kept out of undo, title/subtitle resync — add ~0.3 KiB.
+  maxJsChunkGzipKb: 136,
   initialJsGzipKb: 75,
   initialAuthJsGzipKb: 135,
   // The former configured check omitted VITE_ADMIN_EMAIL, which pruned the
