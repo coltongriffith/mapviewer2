@@ -141,3 +141,34 @@ describe('import roles', () => {
     expect(l.claimsIndex).toBeUndefined();
   });
 });
+
+describe('placed logo / image markers', () => {
+  it('size is the width at 1x, centred on its map point, and scales with export resolution', async () => {
+    const { imageMarkerBox } = await import('../src/export/renderScene.js');
+    expect(imageMarkerBox({ size: 100, aspect: 0.5 }, { x: 300, y: 200 }, 1)).toEqual({ x: 250, y: 175, w: 100, h: 50, pad: 0 });
+    expect(imageMarkerBox({ size: 100, aspect: 0.5, plate: true }, { x: 900, y: 600 }, 3)).toEqual({ x: 750, y: 525, w: 300, h: 150, pad: 18 });
+  });
+});
+
+describe('source credit and legend width', () => {
+  it('the source credit never prints under the legend', async () => {
+    const { sourceCreditPlacement } = await import('../src/export/renderScene.js');
+    const { resolveTemplateZones } = await import('../src/templates/technicalResultsTemplate.js');
+    const legendItems = [{ label: 'Apex Holdings' }, { label: 'Railway Network' }];
+    const scene = { width: 930, height: 930, template: technicalResultsTemplate, project: { layout: { legendItems } } };
+    const lines = ['Railways: OpenRailwayMap / OpenStreetMap contributors'];
+    const place = sourceCreditPlacement(scene, lines);
+    const legend = resolveTemplateZones(technicalResultsTemplate, scene.project.layout, { width: 930, height: 930 }).legend;
+    const box = { left: place.left, top: place.bottom - 9.5, width: lines[0].length * 7.5 * 0.52, height: 9.5 };
+    const overlaps = !(box.left > legend.left + legend.width || box.left + box.width < legend.left || box.top > legend.top + legend.height || box.top + box.height < legend.top);
+    expect(overlaps).toBe(false);
+  });
+
+  it('the legend widens for a long label unless the user sized it', async () => {
+    const { legendWidthFor } = await import('../src/utils/legendCustomization.js');
+    const items = [{ label: 'Elk Creek Carbonatite complex (approx.)' }];
+    expect(legendWidthFor({ legendWidthPx: 300 }, items)).toBeGreaterThan(300); // 300 is the stored default
+    expect(legendWidthFor({ legendWidthPx: 260 }, items)).toBe(260);
+    expect(legendWidthFor({}, [{ label: 'Short' }])).toBe(300);
+  });
+});

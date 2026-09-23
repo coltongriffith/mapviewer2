@@ -647,6 +647,8 @@ export default function App({ initialAction = null }) {
   const mapSizeRef = useRef({ width: 1600, height: 1000 });
   const draggingActiveRef = useRef(false); // true while a template-zone drag is in progress; freezes ResizeObserver updates
   const logoInputRef = useRef(null);
+  const imageMarkerInputRef = useRef(null);
+  const imageMarkerReplaceIdRef = useRef(null);
   const insetInputRef = useRef(null);
   const uploadInputRef = useRef(null);
 
@@ -3400,6 +3402,54 @@ export default function App({ initialAction = null }) {
     }
   };
 
+  // A logo or image pinned to a map location — e.g. neighbouring companies'
+  // logos over their ground. Stored as a marker (type 'image') so it moves
+  // with the map, drags like any marker and exports with the others. Raster
+  // images are downscaled so a project does not carry a print-size file.
+  const handleImageMarkerChange = async (e) => {
+    const file = e.target.files?.[0];
+    const replaceId = imageMarkerReplaceIdRef.current;
+    imageMarkerReplaceIdRef.current = null;
+    if (!file) return;
+    try {
+      if (file.size > 3 * 1024 * 1024) throw new Error('Image must be under 3 MB.');
+      let dataUrl = await readFileAsDataURL(file);
+      if (isSvgFile(file)) {
+        dataUrl = sanitizeSvgDataUrl(dataUrl);
+        if (!dataUrl) throw new Error('That SVG could not be used safely — try a PNG.');
+      }
+      const img = new Image();
+      await new Promise((resolve, reject) => { img.onload = resolve; img.onerror = () => reject(new Error('That image could not be read.')); img.src = dataUrl; });
+      const w = img.naturalWidth || 1, h = img.naturalHeight || 1;
+      if (!isSvgFile(file) && w > 600) {
+        const canvas = document.createElement('canvas');
+        canvas.width = 600; canvas.height = Math.round((600 * h) / w);
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        dataUrl = canvas.toDataURL('image/png');
+      }
+      const aspect = Math.max(0.05, Math.min(20, h / w));
+      if (replaceId) {
+        updateMarker(replaceId, { image: dataUrl, aspect });
+      } else {
+        const center = leafletMapRef.current?.getCenter() || { lat: 0, lng: 0 };
+        const id = crypto.randomUUID();
+        trackEventOnce('element_added', 'image', { type: 'image' });
+        setProject((prev) => ({
+          ...prev,
+          markers: [...(prev.markers || []), { id, lat: center.lat, lng: center.lng, type: 'image', image: dataUrl, aspect, size: 90, opacity: 1, plate: false, label: '' }],
+        }));
+        setSelectedMarkerId(id);
+        setSelectedEllipseId(null);
+        setSelectedCalloutId(null);
+      }
+      setUploadStatus({ type: 'success', message: `Placed ${file.name} on the map — drag it over the ground it identifies.` });
+    } catch (err) {
+      setUploadStatus({ type: 'error', message: err.message });
+    } finally {
+      e.target.value = '';
+    }
+  };
+
   const handleInsetImageChange = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -5833,6 +5883,8 @@ export default function App({ initialAction = null }) {
               <button className={`secondary-btn ${annotationTool === 'ellipse' ? 'active-toggle' : ''}`} type="button" onClick={() => { const next = annotationTool === 'ellipse' ? null : 'ellipse'; setAnnotationTool(next); annotationToolRef.current = next; setSelectedFeature(null); }}>Draw Dashed Area</button>
               <button className={`secondary-btn ${annotationTool === 'ring' ? 'active-toggle' : ''}`} type="button" onClick={() => { const next = annotationTool === 'ring' ? null : 'ring'; setAnnotationTool(next); annotationToolRef.current = next; setSelectedFeature(null); }}>Draw Distance Ring</button>
               <button className={`secondary-btn ${annotationTool === 'maplabel' ? 'active-toggle' : ''}`} type="button" onClick={() => { const next = annotationTool === 'maplabel' ? null : 'maplabel'; setAnnotationTool(next); annotationToolRef.current = next; setSelectedFeature(null); }}>Place Map Label</button>
+              <button className="secondary-btn" type="button" onClick={() => { imageMarkerReplaceIdRef.current = null; imageMarkerInputRef.current?.click(); }}>Add Logo / Image</button>
+              <input ref={imageMarkerInputRef} type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={handleImageMarkerChange} hidden />
               <button className={`secondary-btn ${annotationTool === 'polygon' ? 'active-toggle' : ''}`} type="button" onClick={() => { const next = annotationTool === 'polygon' ? null : 'polygon'; setAnnotationTool(next); annotationToolRef.current = next; setPendingPolygonPoints([]); setSelectedFeature(null); }}>Draw Boundary</button>
               <button className={`secondary-btn ${annotationTool === 'distanceLine' ? 'active-toggle' : ''}`} type="button"
                 onClick={() => { const next = annotationTool === 'distanceLine' ? null : 'distanceLine'; setAnnotationTool(next); annotationToolRef.current = next; setPendingDistanceP1(null); setSelectedFeature(null); }}>
@@ -5850,7 +5902,35 @@ export default function App({ initialAction = null }) {
             )}
             <div className="small-note" style={{ marginTop: 8 }}>{annotationTool === 'polygon' ? '' : annotationTool ? 'Click anywhere on the map to place the selected annotation.' : 'Add highlight markers or dashed ellipses anywhere on the map.'}</div>
 
-            {selectedMarker?.type === 'maplabel' ? (
+            {selectedMarker?.type === 'image' ? (
+              <div className="control-grid" style={{ marginTop: 10 }}>
+                <div className="selected-note">Logo / image</div>
+                <div className="control-row"><label htmlFor="f-image-label">Caption (optional)</label><input id="f-image-label" value={selectedMarker.label || ''} onChange={(e) => updateMarker(selectedMarker.id, { label: e.target.value })} placeholder="Neighbour name" /></div>
+                <div className="control-row inline-2">
+                  <div>
+                    <label htmlFor="f-image-width">Width</label>
+                    <input id="f-image-width" type="range" min="20" max="300" step="1" value={selectedMarker.size || 90} onChange={(e) => updateMarker(selectedMarker.id, { size: Number(e.target.value) })} />
+                  </div>
+                  <input className="size-number" type="number" min="20" max="600" step="1" aria-label="Width in pixels" value={selectedMarker.size || 90} onChange={(e) => { const v = Number(e.target.value); if (Number.isFinite(v) && v > 0) updateMarker(selectedMarker.id, { size: Math.min(600, Math.max(20, v)) }); }} />
+                </div>
+                <div className="control-row inline-2">
+                  <div>
+                    <label htmlFor="f-image-opacity">Opacity</label>
+                    <input id="f-image-opacity" type="range" min="0.1" max="1" step="0.05" value={selectedMarker.opacity ?? 1} onChange={(e) => updateMarker(selectedMarker.id, { opacity: Number(e.target.value) })} />
+                  </div>
+                  <div className="range-value">{Math.round((selectedMarker.opacity ?? 1) * 100)}%</div>
+                </div>
+                <label className="toggle-row">
+                  <input type="checkbox" checked={!!selectedMarker.plate} onChange={(e) => updateMarker(selectedMarker.id, { plate: e.target.checked })} />
+                  <span>White backing</span>
+                </label>
+                <div className="small-note">Drag the image on the map to place it. It stays pinned to that ground when you pan or zoom.</div>
+                <div className="button-row">
+                  <button className="secondary-btn" type="button" onClick={() => { imageMarkerReplaceIdRef.current = selectedMarker.id; imageMarkerInputRef.current?.click(); }}>Replace Image</button>
+                  <button className="secondary-btn" type="button" onClick={() => removeMarker(selectedMarker.id)}>Remove</button>
+                </div>
+              </div>
+            ) : selectedMarker?.type === 'maplabel' ? (
               <div className="control-grid" style={{ marginTop: 10 }}>
                 <div className="selected-note">Map Label</div>
                 <div className="control-row"><label htmlFor="f-text-4771">Text</label><input id="f-text-4771" value={selectedMarker.label || ''} onChange={(e) => updateMarker(selectedMarker.id, { label: e.target.value })} placeholder="BRITISH COLUMBIA" /></div>
@@ -6286,6 +6366,15 @@ export default function App({ initialAction = null }) {
               </>
             )}
           </div>
+          {project.layout.logo ? (
+            <div className="control-row inline-2">
+              <div>
+                <label htmlFor="f-logo-opacity">Logo Opacity</label>
+                <input id="f-logo-opacity" type="range" min="0.1" max="1" step="0.05" value={project.layout.logoOpacity ?? 1} onChange={(e) => updateLayout({ logoOpacity: Number(e.target.value) })} />
+              </div>
+              <div className="range-value">{Math.round((project.layout.logoOpacity ?? 1) * 100)}%</div>
+            </div>
+          ) : null}
           <input ref={logoInputRef} type="file" accept="image/*" onChange={handleLogoChange} hidden />
           <section className="control-section cs-collapsible">
             <h2 className="control-section-heading">
@@ -7069,7 +7158,7 @@ export default function App({ initialAction = null }) {
         </div>}
 
         {allLegendItems.length && project.layout.showLegend !== false ? (
-          <div className="template-zone" style={{ ...zoneStyle(resolvedZones.legend), opacity: dragging?.id === 'legend' ? 0.3 : 1, cursor: 'grab' }} onMouseDown={makeDragHandler('legend', project.layout.legendWidthPx ?? 300, project.layout.legendHeightPx ?? resolvedZones.legend?.height ?? 168)}>
+          <div className="template-zone" style={{ ...zoneStyle(resolvedZones.legend), opacity: dragging?.id === 'legend' ? 0.3 : 1, cursor: 'grab' }} onMouseDown={makeDragHandler('legend', resolvedZones.legend?.width ?? project.layout.legendWidthPx ?? 300, project.layout.legendHeightPx ?? resolvedZones.legend?.height ?? 168)}>
             <button className="panel-delete-btn" title="Hide legend" onClick={() => updateLayout({ showLegend: false })}>×</button>
             <div className={`template-card legend-card${project.layout.legendTransparent ? ' panel--transparent' : ''}`} data-compact={project.layout.legendCompact || undefined}>
               <div className="legend-header"><h3 style={{ fontSize: Math.round(15 * (project.layout.legendFontScale ?? 1)) + 'px' }}>{project.layout.legendTitle || 'Legend'}</h3></div>
@@ -7104,7 +7193,7 @@ export default function App({ initialAction = null }) {
               </div>
             </div>
             {makeResizeHandles(project.layout.legendCorner || 'bl', {
-              elemId: 'legend', startW: project.layout.legendWidthPx ?? 300, startH: project.layout.legendHeightPx ?? resolvedZones.legend?.height ?? 168,
+              elemId: 'legend', startW: resolvedZones.legend?.width ?? project.layout.legendWidthPx ?? 300, startH: project.layout.legendHeightPx ?? resolvedZones.legend?.height ?? 168,
               minW: 180, maxW: 480, minH: 60, maxH: 500,
               applyW: (w) => updateLayout({ legendWidthPx: w }), applyH: (h) => updateLayout({ legendHeightPx: h }),
             })}
@@ -7157,7 +7246,7 @@ export default function App({ initialAction = null }) {
         ) : null}
         {project.layout.logo ? (
           <div className="template-zone" style={{ ...zoneStyle(resolvedZones.logo), opacity: dragging?.id === 'logo' ? 0.3 : 1, cursor: 'grab' }} onMouseDown={makeDragHandler('logo', project.layout.logoWidthPx ?? 168, project.layout.logoHeightPx ?? 74)}>
-            <div className={`template-card logo-card${project.layout.logoTransparent ? ' panel--transparent' : ''}`}><img src={project.layout.logo} alt="Logo" /></div>
+            <div className={`template-card logo-card${project.layout.logoTransparent ? ' panel--transparent' : ''}`}><img src={project.layout.logo} alt="Logo" style={{ opacity: project.layout.logoOpacity ?? 1 }} /></div>
             <button className="panel-delete-btn" title="Remove logo" onClick={() => updateLayout({ logo: null })}>×</button>
             {makeResizeHandles(project.layout.logoCorner || 'tl', {
               elemId: 'logo', startW: project.layout.logoWidthPx ?? 168, startH: project.layout.logoHeightPx ?? 74,

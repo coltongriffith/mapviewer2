@@ -9,7 +9,7 @@ import { northArrowShapes, NORTH_ARROW_FONT } from '../utils/northArrowGeometry'
 import { markerIconSvgFragment, drawMarkerIconCanvas } from '../utils/markerIcons.jsx';
 import { safeColor } from '../utils/colorUtils.js';
 import regionsNA from '../assets/regionsNA.json';
-import { resolveCalloutBoxes, panelObstacles, leaderEndpoint, arrowheadPoints } from '../utils/calloutLayout';
+import { resolveCalloutBoxes, panelObstacles, intersects, leaderEndpoint, arrowheadPoints } from '../utils/calloutLayout';
 import dissolveGeo from '@turf/dissolve';
 import { exportCreditLines } from '../utils/claimProvenance';
 import { referenceOverlayCredits } from '../utils/referenceOverlayCredits.js';
@@ -522,6 +522,19 @@ function pushRoundedClip(svgDefs, x, y, w, h, r) {
 
 // Rough word-wrap estimate for SVG text (no DOM measurement available) —
 // mirrors the charsPerLine heuristic used by estimateBox() in calloutLayout.js.
+// Wrap SVG text exactly as the canvas renderer does (same measuring and
+// wrapText), so both formats break lines in the same places. Falls back to a
+// character estimate where no canvas exists (tests, workers).
+let _measureCtx = null;
+function measuredWrapLines(text, maxWidth, font, fontSize) {
+  if (!text) return [];
+  try {
+    if (!_measureCtx && typeof document !== 'undefined') _measureCtx = document.createElement('canvas').getContext('2d');
+  } catch { _measureCtx = null; }
+  if (!_measureCtx || typeof _measureCtx.measureText !== 'function') return estimateWrapLines(text, maxWidth, fontSize);
+  _measureCtx.font = font;
+  return wrapText(_measureCtx, text, maxWidth);
+}
 function estimateWrapLines(text, maxWidth, fontSize, charFactor = 0.56) {
   if (!text) return [];
   const charsPerLine = Math.max(4, Math.floor(maxWidth / Math.max(4, fontSize * charFactor)));
@@ -686,7 +699,7 @@ async function drawLegendCanvas(ctx, scene, scale) {
         ctx.strokeRect(x + lp, sy, sw, sh);
         ctx.restore();
       }
-      ctx.fillStyle = theme.bodyText; ctx.font = `${13 * scale * lfs}px ${legendFont}`; ctx.textBaseline = 'middle'; ctx.fillText(item.label || 'Layer', x + lp + LEGEND_ROW.labelX * scale, rowY + LEGEND_ROW.labelCentreY * scale);
+      ctx.fillStyle = theme.bodyText; ctx.font = `${13 * scale * lfs}px ${legendFont}`; ctx.textBaseline = 'middle'; ctx.fillText(fitText(ctx, item.label || 'Layer', w - lp - (LEGEND_ROW.labelX + 10) * scale), x + lp + LEGEND_ROW.labelX * scale, rowY + LEGEND_ROW.labelCentreY * scale);
     }
   });
   ctx.restore();
@@ -1253,6 +1266,34 @@ function drawMarkerLabelCanvas(ctx, scene, marker, point, scale) {
   ctx.restore();
 }
 
+// A placed logo/image marker: `size` is its width in CSS px at 1x, centred on
+// its map point; the optional white backing adds 6 px padding all round, the
+// same box the editor draws (.free-marker-image.plated).
+export function imageMarkerBox(marker, point, scale) {
+  const w = (marker.size || 90) * scale;
+  const h = w * (marker.aspect || 1);
+  const pad = marker.plate ? 6 * scale : 0;
+  return { x: point.x - w / 2, y: point.y - h / 2, w, h, pad };
+}
+async function drawImageMarkerCanvas(ctx, marker, point, scale) {
+  if (!marker.image) return;
+  const img = await new Promise((resolve) => { const el = new Image(); el.onload = () => resolve(el); el.onerror = () => resolve(null); el.src = marker.image; });
+  if (!img) { _exportWarnings.push('a placed logo could not be embedded'); return; }
+  const b = imageMarkerBox(marker, point, scale);
+  ctx.save();
+  ctx.globalAlpha = marker.opacity ?? 1;
+  if (b.pad) {
+    drawRoundedRect(ctx, b.x - b.pad, b.y - b.pad, b.w + b.pad * 2, b.h + b.pad * 2, 6 * scale);
+    ctx.fillStyle = '#ffffff';
+    ctx.fill();
+  }
+  // object-fit: contain, as in the editor
+  const r = Math.min(b.w / (img.naturalWidth || img.width || 1), b.h / (img.naturalHeight || img.height || 1));
+  const dw = (img.naturalWidth || img.width) * r, dh = (img.naturalHeight || img.height) * r;
+  ctx.drawImage(img, b.x + (b.w - dw) / 2, b.y + (b.h - dh) / 2, dw, dh);
+  ctx.restore();
+}
+
 async function drawMarkersCanvas(ctx, scene, scale) {
   for (const marker of (scene.project.markers || [])) {
     const point = clonePoint(scene.map.latLngToContainerPoint([marker.lat, marker.lng]), scale);
@@ -1275,6 +1316,12 @@ async function drawMarkersCanvas(ctx, scene, scale) {
         ctx.fillText((marker.label || '').toUpperCase(), point.x, point.y);
       }
       ctx.restore();
+      continue;
+    }
+
+    if (marker.type === 'image') {
+      await drawImageMarkerCanvas(ctx, marker, point, scale);
+      drawMarkerLabelCanvas(ctx, scene, marker, point, scale);
       continue;
     }
 
@@ -1443,41 +1490,59 @@ function drawPolygonsCanvas(ctx, scene, scale) {
     ctx.restore();
 
     if (poly.label) {
-      const fontSize = (poly.labelFontSize || 12) * scale;
-      const fontWeight = poly.labelBold !== false ? '700' : '400';
-      const color = poly.labelColor || poly.color || '#000000';
-      if (poly.arcLabel) {
-        const gap = ((poly.labelFontSize || 12) * 0.7 + 10) * scale;
-        const pcx = pts.reduce((s, p) => s + p.x, 0) / pts.length;
-        const pcy = pts.reduce((s, p) => s + p.y, 0) / pts.length;
-        const expandedPts = pts.map((p) => {
-          const dx = p.x - pcx, dy = p.y - pcy;
-          const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-          return { x: pcx + dx * (dist + gap) / dist, y: pcy + dy * (dist + gap) / dist };
-        });
-        const pos = getPointAtFraction(expandedPts, (poly.labelAngle || 0) / 360);
-        ctx.save();
-        ctx.translate(pos.x, pos.y);
-        ctx.rotate(pos.angle * Math.PI / 180);
-        ctx.font = `${fontWeight} ${fontSize}px Inter, Arial, sans-serif`;
-        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = 3 * scale;
+      const g = polygonLabelGeometry(scene, poly, pts, scale);
+      ctx.save();
+      ctx.font = `${g.fontWeight} ${g.fontSize}px ${g.fontFamily}`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      if (g.arc) {
+        ctx.translate(g.x, g.y);
+        ctx.rotate(g.angle * Math.PI / 180);
+        ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = 3 * scale; ctx.lineJoin = 'round';
         ctx.strokeText(poly.label, 0, 0);
-        ctx.fillStyle = color; ctx.fillText(poly.label, 0, 0);
-        ctx.restore();
+        ctx.fillStyle = g.color; ctx.fillText(poly.label, 0, 0);
       } else {
-        const minY = Math.min(...pts.map((p) => p.y));
-        const midX = (Math.min(...pts.map((p) => p.x)) + Math.max(...pts.map((p) => p.x))) / 2;
-        const lx = midX + (poly.labelOffsetX || 0) * scale;
-        const ly = minY - 18 * scale + (poly.labelOffsetY || 0) * scale;
-        ctx.save();
-        ctx.font = `${fontWeight} ${fontSize}px Inter, Arial, sans-serif`;
-        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillStyle = color; ctx.fillText(poly.label, lx, ly);
-        ctx.restore();
+        const pw = ctx.measureText(poly.label).width + g.padX * 2;
+        drawRoundedRect(ctx, g.x - pw / 2, g.y - g.pillH / 2, pw, g.pillH, g.pillH / 2);
+        ctx.fillStyle = 'rgba(255,255,255,0.95)'; ctx.fill();
+        ctx.strokeStyle = 'rgba(20,33,38,0.12)'; ctx.lineWidth = scale; ctx.stroke();
+        ctx.fillStyle = g.color; ctx.fillText(poly.label, g.x, g.y);
       }
+      ctx.restore();
     }
   });
+}
+
+// Where a drawn boundary's label goes, matching the editor (AnnotationOverlay):
+// an arc label follows the outline, 13 px, with a white halo; a plain label is
+// a white pill centred above the outline's top, 12 px. Both use the map's label
+// font. The exporters used to hard-code Inter, 12 px, draw the plain label as
+// bare text 10 px higher than the editor's pill, and the SVG ignored the arc
+// setting entirely.
+function polygonLabelGeometry(scene, poly, pts, scale) {
+  const fontFamily = `${scene.project.layout?.fonts?.label || 'Inter'}, Arial, Helvetica, sans-serif`;
+  const fontWeight = poly.labelBold !== false ? '700' : '400';
+  const color = poly.labelColor || poly.color || '#000000';
+  if (poly.arcLabel && pts.length >= 2) {
+    const fs = poly.labelFontSize || 13;
+    const gap = (fs * 0.7 + 10) * scale;
+    const pcx = pts.reduce((a, p) => a + p.x, 0) / pts.length;
+    const pcy = pts.reduce((a, p) => a + p.y, 0) / pts.length;
+    const expanded = pts.map((p) => {
+      const dx = p.x - pcx, dy = p.y - pcy;
+      const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+      return { x: pcx + dx * (dist + gap) / dist, y: pcy + dy * (dist + gap) / dist };
+    });
+    const pos = getPointAtFraction(expanded, (poly.labelAngle || 0) / 360);
+    return { arc: true, x: pos.x, y: pos.y, angle: pos.angle, fontSize: fs * scale, fontFamily, fontWeight, color };
+  }
+  const fs = poly.labelFontSize || 12;
+  const minY = Math.min(...pts.map((p) => p.y));
+  const midX = (Math.min(...pts.map((p) => p.x)) + Math.max(...pts.map((p) => p.x))) / 2;
+  // The editor pill: top edge at (top - 18 + offset), 3 px padding + 1 px
+  // border round a normal (1.2) line box.
+  const pillH = (fs * 1.2 + 8) * scale;
+  const top = minY + (-18 + (poly.labelOffsetY || 0)) * scale;
+  return { arc: false, x: midX + (poly.labelOffsetX || 0) * scale, y: top + pillH / 2, pillH, padX: 9 * scale, fontSize: fs * scale, fontFamily, fontWeight, color };
 }
 
 // ─── NI 43-101 Template helpers ────────────────────────────────────────────
@@ -1793,6 +1858,56 @@ export async function ensureExportFonts(scene, timeoutMs = 3000) {
   await Promise.race([Promise.all(loads).then(() => fonts.ready), new Promise((r) => setTimeout(r, timeoutMs))]);
 }
 
+// An SVG names its fonts but carries none, so any viewer without Montserrat,
+// Inter… installed (a browser, a phone, a client's laptop) silently swaps in a
+// system font — different widths, wraps and weights from the PNG. Embed the
+// Latin subset of each Google font the map uses as @font-face data URLs. If a
+// font cannot be fetched, the SVG still exports and says so.
+const GOOGLE_FONTS = new Set(['Inter', 'Montserrat', 'Lato', 'Open Sans', 'Roboto', 'Source Sans 3', 'IBM Plex Mono']);
+async function embeddedFontCss(scene) {
+  if (typeof globalThis.fetch !== 'function') return '';
+  const families = [...new Set(['Inter', ...Object.values(scene?.project?.layout?.fonts || {})])].filter((f) => GOOGLE_FONTS.has(f));
+  // Bounded: a slow or blocked font host must not stall the export.
+  const ctrl = typeof AbortController === 'function' ? new AbortController() : null;
+  const timer = setTimeout(() => ctrl?.abort(), 5000);
+  const fetch = (url) => globalThis.fetch(url, ctrl ? { signal: ctrl.signal } : undefined);
+  // Variable fonts serve every weight from one file: fetch each file once.
+  const cache = new Map();
+  const toDataUrl = (url) => {
+    if (!cache.has(url)) cache.set(url, fetchDataUrl(url));
+    return cache.get(url);
+  };
+  const fetchDataUrl = async (url) => {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(String(res.status));
+    const buf = new Uint8Array(await res.arrayBuffer());
+    let bin = '';
+    for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode(...buf.subarray(i, i + 0x8000));
+    return `data:font/woff2;base64,${btoa(bin)}`;
+  };
+  const blocks = await Promise.all(families.map(async (family) => {
+    try {
+      const q = encodeURIComponent(family).replace(/%20/g, '+');
+      let res = await fetch(`https://fonts.googleapis.com/css2?family=${q}:wght@400;500;600;700&display=swap`);
+      if (!res.ok) res = await fetch(`https://fonts.googleapis.com/css2?family=${q}:wght@400;700&display=swap`);
+      if (!res.ok) throw new Error(String(res.status));
+      const css = await res.text();
+      // Latin subset only: the others are for scripts a map label rarely uses.
+      const faces = css.split('/* ').filter((b) => b.startsWith('latin */')).map((b) => b.slice('latin */'.length));
+      const out = await Promise.all(faces.map(async (face) => {
+        const url = face.match(/url\((https:[^)]+)\)/)?.[1];
+        return url ? face.replace(url, await toDataUrl(url)) : '';
+      }));
+      return out.join('');
+    } catch {
+      _exportWarnings.push(`font ${family} could not be embedded in the SVG — viewers without it installed will substitute another font`);
+      return '';
+    }
+  }));
+  clearTimeout(timer);
+  return blocks.join('').trim();
+}
+
 export async function renderSceneToCanvas(scene, options = {}) {
   _exportWarnings = [];
   await ensureExportFonts(scene);
@@ -1848,13 +1963,42 @@ function creditLinesFor(scene) {
   ];
 }
 
+// Where the credit lines go, in 1x px. Bottom-left of the map by default, but
+// never under a panel: the legend and scale bar usually sit there, and a credit
+// printed through the legend reads as a rendering fault. It steps right past
+// any panel it would overlap, and if the bottom edge has no room it sits just
+// above the lowest panel at the left.
+export function sourceCreditPlacement(scene, lines) {
+  const frame = exportFrame(scene, 1);
+  const W = frame ? frame.mapRight : scene.width;
+  const left0 = (frame ? frame.mapLeft : 0) + 8;
+  // Sit above the watermark line so the two never collide.
+  const bottom0 = (frame ? frame.mapBottom : scene.height) - 14;
+  const width = Math.max(...lines.map((l) => l.length)) * CREDIT_FONT_PX * 0.52 + 4;
+  const height = lines.length * CREDIT_LINE_PX;
+  const layout = scene.project?.layout || {};
+  const obstacles = panelObstacles(getOverlayMetrics(scene), layout);
+  const footer = exportFooterBox(scene);
+  if (footer) obstacles.push({ key: 'footer', ...footer });
+  const hit = (b) => obstacles.filter((o) => intersects(b, o, 2));
+  let left = left0;
+  for (let i = 0; i < 8; i += 1) {
+    const hits = hit({ left, top: bottom0 - height, width, height });
+    if (!hits.length) return { left, bottom: bottom0 };
+    left = Math.max(...hits.map((o) => o.left + o.width)) + 8;
+    if (left + width > W - 8) break;
+  }
+  const below = obstacles.filter((o) => o.left < left0 + width && o.left + o.width > left0 && o.top + o.height > bottom0 - height);
+  const top = below.length ? Math.min(...below.map((o) => o.top)) : bottom0;
+  return { left: left0, bottom: top - 4 };
+}
+
 function drawSourceCreditCanvas(ctx, scene, scale) {
   const lines = creditLinesFor(scene);
   if (!lines.length) return;
-  const frame = exportFrame(scene, scale);
-  const left = (frame ? frame.mapLeft + 8 * scale : 8 * scale);
-  // Sit above the watermark line so the two never collide.
-  const bottom = (frame ? frame.mapBottom : scene.height * scale) - 14 * scale;
+  const place = sourceCreditPlacement(scene, lines);
+  const left = place.left * scale;
+  const bottom = place.bottom * scale;
   ctx.save();
   ctx.font = `${CREDIT_FONT_PX * scale}px Arial, sans-serif`;
   ctx.fillStyle = 'rgba(71,85,105,0.82)';
@@ -1874,9 +2018,9 @@ function drawSourceCreditCanvas(ctx, scene, scale) {
 function renderSourceCreditSvg(scene, scale) {
   const lines = creditLinesFor(scene);
   if (!lines.length) return '';
-  const frame = exportFrame(scene, scale);
-  const left = (frame ? frame.mapLeft + 8 * scale : 8 * scale);
-  const bottom = (frame ? frame.mapBottom : scene.height * scale) - 14 * scale;
+  const place = sourceCreditPlacement(scene, lines);
+  const left = place.left * scale;
+  const bottom = place.bottom * scale;
   return lines.map((line, i) => {
     const y = bottom - (lines.length - 1 - i) * CREDIT_LINE_PX * scale;
     return `<text x="${left.toFixed(1)}" y="${y.toFixed(1)}" font-family="Arial,sans-serif" font-size="${CREDIT_FONT_PX * scale}" fill="#475569" fill-opacity="0.82" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-opacity="0.7" stroke-width="${2 * scale}" stroke-linejoin="round">${escapeXml(line)}</text>`;
@@ -1998,7 +2142,10 @@ async function drawLogoCanvas(ctx, scene, scale) {
     const dh = img.naturalHeight * ratio;
     const dx = x + pad + (inRail ? 0 : (availW - dw) / 2);
     const dy = y + pad + (availH - dh) / 2;
+    ctx.save();
+    ctx.globalAlpha = scene.project.layout?.logoOpacity ?? 1;
     ctx.drawImage(img, dx, dy, dw, dh);
+    ctx.restore();
   }
 }
 
@@ -2101,6 +2248,13 @@ function renderMarkersSvg(scene, scale) {
       return `<text x="${point.x}" y="${point.y}" text-anchor="middle" dominant-baseline="middle" fill="${safeColor(marker.color, '#1e293b')}" fill-opacity="${marker.opacity ?? 0.35}" font-size="${(marker.size || 28) * scale}" font-weight="${marker.bold !== false ? '700' : '400'}" font-family="${labelFont}, Arial, sans-serif" letter-spacing="${(marker.tracking ?? 0.12)}em"${rotate}>${escapeXml((marker.label || '').toUpperCase())}</text>`;
     }
 
+    if (marker.type === 'image') {
+      if (!marker.image || !/^data:image\//.test(marker.image)) return '';
+      const b = imageMarkerBox(marker, point, scale);
+      const plate = b.pad ? `<rect x="${b.x - b.pad}" y="${b.y - b.pad}" width="${b.w + b.pad * 2}" height="${b.h + b.pad * 2}" rx="${6 * scale}" fill="#ffffff" />` : '';
+      return `<g opacity="${Number(marker.opacity ?? 1)}">${plate}<image x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" preserveAspectRatio="xMidYMid meet" href="${escapeXml(marker.image)}" /></g>${renderMarkerLabelSvg(scene, marker, point, scale)}`;
+    }
+
     // markerIconSvgFragment handles all types — path icons and geometric shapes
     const symbol = markerIconSvgFragment(marker.type, point.x, point.y, size, color);
     return `<g>${symbol}${renderMarkerLabelSvg(scene, marker, point, scale)}</g>`;
@@ -2138,14 +2292,15 @@ function renderPolygonsSvg(scene, scale) {
     }
     let labelSvg = '';
     if (poly.label) {
-      const minY = Math.min(...pts.map((p) => p.y));
-      const midX = (Math.min(...pts.map((p) => p.x)) + Math.max(...pts.map((p) => p.x))) / 2;
-      const lx = midX + (poly.labelOffsetX || 0) * scale;
-      const ly = minY - 18 * scale + (poly.labelOffsetY || 0) * scale;
-      const fontSize = (poly.labelFontSize || 12) * scale;
-      const fw = poly.labelBold !== false ? '700' : '400';
-      const lc = escapeXml(poly.labelColor || poly.color || '#000000');
-      labelSvg = `<text x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" text-anchor="middle" dominant-baseline="middle" fill="${lc}" font-family="Inter, Arial, sans-serif" font-size="${fontSize}" font-weight="${fw}">${escapeXml(poly.label)}</text>`;
+      const g = polygonLabelGeometry(scene, poly, pts, scale);
+      const lc = escapeXml(g.color);
+      const font = `fill="${lc}" font-family="${escapeXml(g.fontFamily)}" font-size="${g.fontSize}" font-weight="${g.fontWeight}"`;
+      if (g.arc) {
+        labelSvg = `<text x="${g.x.toFixed(1)}" y="${g.y.toFixed(1)}" text-anchor="middle" dominant-baseline="middle" ${font} stroke="#ffffff" stroke-opacity="0.85" stroke-width="${3 * scale}" stroke-linejoin="round" paint-order="stroke" transform="rotate(${g.angle.toFixed(2)} ${g.x.toFixed(1)} ${g.y.toFixed(1)})">${escapeXml(poly.label)}</text>`;
+      } else {
+        const pw = poly.label.length * g.fontSize * 0.6 + g.padX * 2;
+        labelSvg = `<rect x="${(g.x - pw / 2).toFixed(1)}" y="${(g.y - g.pillH / 2).toFixed(1)}" width="${pw.toFixed(1)}" height="${g.pillH.toFixed(1)}" rx="${(g.pillH / 2).toFixed(1)}" fill="#ffffff" fill-opacity="0.95" stroke="#142126" stroke-opacity="0.12" stroke-width="${scale}" /><text x="${g.x.toFixed(1)}" y="${g.y.toFixed(1)}" text-anchor="middle" dominant-baseline="middle" ${font}>${escapeXml(poly.label)}</text>`;
+      }
     }
     return `<g>${shadeSvg}<path d="${polyPath}" fill="none" stroke="${color}" stroke-width="${(poly.strokeWidth ?? 2) * scale}"${dash} />${labelSvg}</g>`;
   }).join('\n');
@@ -2240,26 +2395,35 @@ function renderTitleSvg(scene, scale, svgDefs) {
       ? `<rect x="${x}" y="${y}" width="${6 * scale}" height="${h}" fill="${theme.titleAccent}" />`
       : `<rect x="${x}" y="${y}" width="${w}" height="${5 * scale}" fill="${theme.titleAccent}" />`
     : '';
+  // Same sizes and spacing as drawTitleBlockCanvas (and the editor's 22/12 px
+  // title card). The SVG used 26/14 px with its own offsets, so the same map
+  // exported as SVG had a visibly bigger title with the subtitle lower down.
   const textX = x + (leftBar ? 22 : 18) * scale;
   const padRight = 12 * scale;
   const availW = w - (textX - x) - padRight;
-  const topOff = (theme.titleAccent && !leftBar) ? 46 : 42;
+  const topOff = (theme.titleAccent && !leftBar) ? 20 : 16;
   const tfs = layout.titleFontScale ?? 1;
-  const titleSize = 26 * scale * tfs;
-  const titleLines = estimateWrapLines(layout.title || 'Project Map', availW, titleSize);
-  const titleSvg = titleLines.map((line, i) =>
-    `<text x="${textX}" y="${(y + topOff * scale) + i * titleSize * 1.18}" fill="${theme.titleText}" font-family="${titleFont}" font-size="${titleSize}" font-weight="700">${escapeXml(line)}</text>`
-  ).join('');
-  const subtitleSize = 14 * scale * tfs;
-  const subtitleY = y + topOff * scale + titleLines.length * titleSize * 1.18 + subtitleSize * 0.3;
-  const subtitleLines = layout.subtitle ? estimateWrapLines(layout.subtitle, availW, subtitleSize) : [];
-  const subtitleSvg = subtitleLines.map((line, i) =>
-    `<text x="${textX}" y="${subtitleY + i * subtitleSize * 1.3}" fill="${theme.subtitleText}" font-family="${titleFont}" font-size="${subtitleSize}">${escapeXml(line)}</text>`
-  ).join('');
+  const titleSize = 22 * scale * tfs;
+  const titleLineH = titleSize * 1.25;
+  const subtitleSize = 12 * scale * tfs;
+  const metaSize = 10 * scale * tfs;
+  let curY = y + topOff * scale;
+  const titleLines = measuredWrapLines(layout.title || 'Project Map', availW, `700 ${titleSize}px ${titleFont}`, titleSize);
+  const titleSvg = titleLines.map((line) => {
+    const t = `<text x="${textX}" y="${baselineFromTop(curY, titleSize)}" fill="${theme.titleText}" font-family="${titleFont}" font-size="${titleSize}" font-weight="700">${escapeXml(line)}</text>`;
+    curY += titleLineH;
+    return t;
+  }).join('');
+  const subtitleLines = layout.subtitle ? measuredWrapLines(layout.subtitle, availW, `${subtitleSize}px ${titleFont}`, subtitleSize) : [];
+  const subtitleSvg = subtitleLines.map((line) => {
+    const t = `<text x="${textX}" y="${baselineFromTop(curY, subtitleSize)}" fill="${theme.subtitleText}" font-family="${titleFont}" font-size="${subtitleSize}">${escapeXml(line)}</text>`;
+    curY += subtitleSize * 1.4;
+    return t;
+  }).join('');
   const metaItems = [layout.mapDate, layout.projectNumber, layout.mapScaleNote].filter(Boolean);
-  const metaSvg = metaItems.map((item, i) =>
-    `<text x="${x + w - 12 * scale}" y="${y + (topOff - 22 + i * 14 * tfs) * scale}" text-anchor="end" fill="${theme.subtitleText}" font-family="${titleFont}" font-size="${10 * scale * tfs}">${escapeXml(item)}</text>`
-  ).join('');
+  const metaSvg = metaItems.length
+    ? `<text x="${textX}" y="${baselineFromTop(curY + (layout.subtitle ? 2 : 4) * scale, metaSize)}" fill="${theme.subtitleText}" fill-opacity="0.75" font-family="${titleFont}" font-size="${metaSize}">${escapeXml(metaItems.join('  ·  '))}</text>`
+    : '';
   const clipId = pushRoundedClip(svgDefs, x, y, w, h, radius);
   return `<g id="em-title" class="em-panel" clip-path="url(#${clipId})">${svgRect(x, y, w, h, radius, theme.titleFill, theme.titleBorder, scale)}${accent}${titleSvg}${subtitleSvg}${metaSvg}</g>`;
 }
@@ -2457,7 +2621,7 @@ function renderLogoSvg(scene, scale) {
   const padding = logoPlain ? 0 : 10 * scale;
   const panel = logoPlain ? '' : svgRect(x, y, w, h, (theme.panelRadius ?? 10) * scale, theme.logoFill, theme.logoBorder, scale);
   const align = inRail ? 'xMinYMid' : 'xMidYMid';
-  return `<g id="em-logo" class="em-panel">${panel}<image href="${escapeXml(logo)}" x="${x + padding}" y="${y + padding}" width="${w - padding * 2}" height="${h - padding * 2}" preserveAspectRatio="${align} meet" /></g>`;
+  return `<g id="em-logo" class="em-panel">${panel}<image href="${escapeXml(logo)}" x="${x + padding}" y="${y + padding}" width="${w - padding * 2}" height="${h - padding * 2}" preserveAspectRatio="${align} meet" opacity="${Number(scene.project.layout?.logoOpacity ?? 1)}" /></g>`;
 }
 function renderCalloutsSvg(scene, scale, svgDefs) {
   const calloutFont = `${scene.project.layout?.fonts?.callout || 'Inter'}, Arial, sans-serif`;
@@ -2488,9 +2652,13 @@ function renderCalloutsSvg(scene, scale, svgDefs) {
       ? `<polygon points="${arrowheadPoints(svgEp, c.anchorPx, 9 * scale).map((pt) => `${pt.x.toFixed(1)},${pt.y.toFixed(1)}`).join(' ')}" fill="${leaderColor}" />`
       : '';
     if (hasLeader) leaders.push(`<line x1="${c.anchorPx.x}" y1="${c.anchorPx.y}" x2="${svgEp.x}" y2="${svgEp.y}" stroke="${leaderColor}" stroke-width="${1.4 * scale}" ${c.type === 'leader' ? `stroke-dasharray="${5 * scale} ${3 * scale}"` : ''} />${head}`);
-    const rawBoxFill = c.style?.background || 'rgba(255,255,255,0.97)';
-    const boxStroke = c.style?.border || '#17304f';
-    const textFill = c.style?.textColor || '#102640';
+    // Mirrors drawCalloutsCanvas line for line — same theme colours, corner
+    // radius, measured wrapping and text tops — so PNG and SVG cards match.
+    const theme = getTheme(scene);
+    const radius = Math.max(0, (theme.panelRadius ?? 10) - 4) * scale;
+    const rawBoxFill = c.style?.background || theme.calloutFill || 'rgba(255,255,255,0.97)';
+    const boxStroke = c.style?.border || theme.calloutBorder || '#17304f';
+    const textFill = c.style?.textColor || theme.calloutText || '#102640';
     const svgPadX = (c.style?.paddingX ?? Math.max(4, Math.min(10, (c.width || 160) * 0.06))) * scale;
     const svgAlign = c.style?.textAlign === 'center' ? 'center' : 'left';
     const textX = svgAlign === 'center' ? c.left + c.width / 2 : c.left + (c.type === 'plain' ? 0 : svgPadX);
@@ -2500,21 +2668,23 @@ function renderCalloutsSvg(scene, scale, svgDefs) {
     // c.width is already in export px; scaling it again made the SVG wrap at
     // three times the box width at 3x, so it disagreed with the PNG.
     const wrapWidth = (c.width || 160 * scale) - (c.type === 'plain' ? 0 : svgPadX * 2);
-    const titleLines = estimateWrapLines(c.text || '', wrapWidth, svgFontSz);
-    const subtextLines = c.subtext ? estimateWrapLines(c.subtext, wrapWidth, svgSubFontSz) : [];
-    const titleBlockH = titleLines.length * svgFontSz * 1.2;
-    const subBlockH = subtextLines.length ? subtextLines.length * svgSubFontSz * 1.3 + 4 * scale : 0;
+    const titleLines = measuredWrapLines(c.text || '', wrapWidth, `700 ${svgFontSz}px ${calloutFont}`, svgFontSz);
+    const subtextLines = c.subtext ? measuredWrapLines(c.subtext, wrapWidth, `${svgSubFontSz}px ${calloutFont}`, svgSubFontSz) : [];
+    const titleLineH = svgFontSz * 1.2;
+    const subLineH = svgSubFontSz * 1.3;
+    const titleBlockH = titleLines.length * titleLineH;
+    const subBlockH = subtextLines.length ? subtextLines.length * subLineH + 4 * scale : 0;
     if (c.type !== 'plain') c.height = Math.max(c.height, (c.style?.paddingY || 8) * scale * 2 + titleBlockH + subBlockH);
-    const box = c.type !== 'plain' ? `<rect x="${c.left}" y="${c.top}" width="${c.width}" height="${c.height}" rx="${6 * scale}" ${toSvgFill(rawBoxFill)} stroke="${boxStroke}" />` : '';
-    const startY = c.top + (c.type === 'plain' ? svgFontSz : c.height / 2 - (titleBlockH + subBlockH) / 2 + svgFontSz * 0.85);
+    const box = c.type !== 'plain' ? `<rect x="${c.left}" y="${c.top}" width="${c.width}" height="${c.height}" rx="${radius}" ${toSvgFill(rawBoxFill)} stroke="${boxStroke}" stroke-width="${scale}" />` : '';
+    const blockTop = c.top + (c.type === 'plain' ? 0 : c.height / 2 - (titleBlockH + subBlockH) / 2);
     const mainText = titleLines.map((tl, i) =>
-      `<text x="${textX}" y="${startY + i * svgFontSz * 1.2}" text-anchor="${textAnchor}" fill="${textFill}" font-family="${calloutFont}" font-size="${svgFontSz}" font-weight="700">${escapeXml(tl)}</text>`
+      `<text x="${textX}" y="${baselineFromTop(blockTop + i * titleLineH, svgFontSz)}" text-anchor="${textAnchor}" fill="${textFill}" font-family="${calloutFont}" font-size="${svgFontSz}" font-weight="700">${escapeXml(tl)}</text>`
     ).join('');
-    const subtextStartY = startY + titleBlockH + svgSubFontSz * 0.9;
+    const subTop = blockTop + titleBlockH + 4 * scale;
     const subtextEl = subtextLines.map((sl, i) =>
-      `<text x="${textX}" y="${subtextStartY + i * svgSubFontSz * 1.3}" text-anchor="${textAnchor}" fill="${c.style?.subtextColor || '#475569'}" font-family="${calloutFont}" font-size="${svgSubFontSz}">${escapeXml(sl)}</text>`
+      `<text x="${textX}" y="${baselineFromTop(subTop + i * subLineH, svgSubFontSz)}" text-anchor="${textAnchor}" fill="${c.style?.subtextColor || '#475569'}" font-family="${calloutFont}" font-size="${svgSubFontSz}">${escapeXml(sl)}</text>`
     ).join('');
-    const clipId = c.type !== 'plain' ? pushRoundedClip(svgDefs, c.left, c.top, c.width, c.height, 6 * scale) : null;
+    const clipId = c.type !== 'plain' ? pushRoundedClip(svgDefs, c.left, c.top, c.width, c.height, radius) : null;
     const textGroup = clipId ? `<g clip-path="url(#${clipId})">${mainText}${subtextEl}</g>` : `${mainText}${subtextEl}`;
     return `<g id="em-callout-${safeId}" class="em-callout">${box}${textGroup}</g>`;
   });
@@ -2534,6 +2704,8 @@ export async function renderSceneToSvg(scene, options = {}) {
   const satelliteInset = await renderSatelliteInsetImageSvg(scene, scale);
 
   const svgDefs = [];
+  const fontCss = options.embedFonts === false ? '' : await embeddedFontCss(scene);
+  if (fontCss) svgDefs.push(`<style type="text/css"><![CDATA[${fontCss}]]></style>`);
   const frame = exportFrame(scene, scale);
   const mapLayers = `${basemapImage}${renderRastersSvg(scene, scale)}${renderRegionHighlightsSvg(scene, scale)}${renderVectorsSvg(scene, scale)}${renderEllipsesSvg(scene, scale, svgDefs)}${renderPolygonsSvg(scene, scale)}${renderMarkersSvg(scene, scale)}${renderCalloutsSvg(scene, scale, svgDefs)}${renderDistanceLinesSvg(scene, scale)}`;
   let mapContentGroup;

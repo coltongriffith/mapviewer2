@@ -615,10 +615,13 @@ export default function AnnotationOverlay({
       })}
 
       {placedMarkers.filter((m) => m.type !== 'maplabel').map((marker) => {
-        const size = marker.size || 22;
+        const isImage = marker.type === 'image';
+        const size = marker.size || (isImage ? 90 : 22);
         const color = marker.color || '#d97706';
-        const labelOffsetX = marker.labelOffsetX ?? (size / 2 + 6);
-        const labelOffsetY = marker.labelOffsetY ?? -(size / 2);
+        // An image's caption sits beside it, vertically centred — where the
+        // exporters draw it (drawMarkerLabelCanvas).
+        const labelOffsetX = marker.labelOffsetX ?? (isImage ? size + 8 : size / 2 + 6);
+        const labelOffsetY = marker.labelOffsetY ?? (isImage ? (size * (marker.aspect || 1)) / 2 - 11 : -(size / 2));
 
         return (
           <div
@@ -636,7 +639,15 @@ export default function AnnotationOverlay({
               dragRef.current = { id: marker.id, kind: 'marker', startX: e.clientX, startY: e.clientY, startPoint: { x: marker.x, y: marker.y }, pointerId: e.pointerId };
             }}
           >
-            <MarkerSvgIcon type={marker.type} size={size} color={color} />
+            {marker.type === 'image' ? (
+              <img
+                className={`free-marker-image${marker.plate ? ' plated' : ''}`}
+                src={marker.image}
+                alt={marker.label || 'Logo'}
+                draggable={false}
+                style={{ width: size, height: size * (marker.aspect || 1), opacity: marker.opacity ?? 1 }}
+              />
+            ) : <MarkerSvgIcon type={marker.type} size={size} color={color} />}
 
             {marker.label ? (
               <div

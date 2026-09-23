@@ -419,6 +419,9 @@ button, input, select, textarea { font: inherit; }
 }
 /* Icon variant uses inline SVG — no fixed font-size, width/height come from marker.size */
 .free-marker-symbol.icon { line-height: 1; border: none; background: transparent; display: flex; align-items: center; justify-content: center; }
+.free-marker-image { display: block; object-fit: contain; pointer-events: none; user-select: none; }
+.free-marker-image.plated { background: #ffffff; padding: 6px; border-radius: 6px; box-shadow: 0 1px 3px rgba(15,23,42,0.18); box-sizing: content-box; }
+.free-marker.selected .free-marker-image { outline: 2px solid rgba(198,83,34,0.9); outline-offset: 2px; }
 .free-marker-label {
   padding: 4px 8px; border-radius: 999px; background: rgba(255,255,255,0.96); border: 1px solid rgba(20,33,38,0.12); color: var(--ui-text); font-size: 12px; font-weight: 700;
   /* When independently draggable the label is absolutely positioned from the marker center */

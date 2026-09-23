@@ -1,5 +1,5 @@
 import { ROLE_LABELS, POINT_ROLES } from '../projectState';
-import { legendRowCount } from '../utils/legendCustomization.js';
+import { legendRowCount, legendWidthFor } from '../utils/legendCustomization.js';
 import { TICK_MARGIN } from '../utils/coordinateFrame.js';
 import { hasVisibleFeatures, layerGeometryKind } from '../utils/featureIdentity.js';
 import { isClassified, classLegendItems } from '../utils/classification.js';
@@ -144,7 +144,7 @@ export function resolveTemplateZones(template, layout, mapSize, legendItems) {
   const legendHeight = layout?.legendHeightPx != null
     ? Math.max(60, Math.min(500, layout.legendHeightPx))
     : legendHeightFor(layout, legendRowCount(resolvedLegendItems, layout));
-  const legendWidth = Math.max(180, Math.min(480, layout?.legendWidthPx ?? 300));
+  const legendWidth = legendWidthFor(layout, resolvedLegendItems);
   const logoScale = Math.max(0.7, Math.min(1.2, Number(layout?.logoScale || 1)));
   const insetScale = Math.max(0.8, Math.min(1.2, Number(layout?.insetScale || 1)));
   const insetSize = layout?.insetSize || 'medium';
