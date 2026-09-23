@@ -315,6 +315,28 @@ function isSvgFile(file) {
   return file?.type === 'image/svg+xml' || (file?.name || '').toLowerCase().endsWith('.svg');
 }
 
+// An uploaded image for the map (a placed logo, a callout logo): size-checked,
+// SVG sanitised, raster downscaled to 600 px wide so a project doesn't carry a
+// print-size file. → { dataUrl, aspect } (height / width).
+async function readImageForMap(file) {
+  if (file.size > 3 * 1024 * 1024) throw new Error('Image must be under 3 MB.');
+  let dataUrl = await readFileAsDataURL(file);
+  if (isSvgFile(file)) {
+    dataUrl = sanitizeSvgDataUrl(dataUrl);
+    if (!dataUrl) throw new Error('That SVG could not be used safely — try a PNG.');
+  }
+  const img = new Image();
+  await new Promise((resolve, reject) => { img.onload = resolve; img.onerror = () => reject(new Error('That image could not be read.')); img.src = dataUrl; });
+  const w = img.naturalWidth || 1, h = img.naturalHeight || 1;
+  if (!isSvgFile(file) && w > 600) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 600; canvas.height = Math.round((600 * h) / w);
+    canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+    dataUrl = canvas.toDataURL('image/png');
+  }
+  return { dataUrl, aspect: Math.max(0.05, Math.min(20, h / w)) };
+}
+
 function zoneStyle(zone) {
   if (!zone || !zone.width || !zone.height) return { display: 'none' };
   return {
@@ -649,6 +671,8 @@ export default function App({ initialAction = null }) {
   const logoInputRef = useRef(null);
   const imageMarkerInputRef = useRef(null);
   const imageMarkerReplaceIdRef = useRef(null);
+  const calloutLogoInputRef = useRef(null);
+  const calloutLogoTargetRef = useRef(null);
   const insetInputRef = useRef(null);
   const uploadInputRef = useRef(null);
 
@@ -3412,22 +3436,7 @@ export default function App({ initialAction = null }) {
     imageMarkerReplaceIdRef.current = null;
     if (!file) return;
     try {
-      if (file.size > 3 * 1024 * 1024) throw new Error('Image must be under 3 MB.');
-      let dataUrl = await readFileAsDataURL(file);
-      if (isSvgFile(file)) {
-        dataUrl = sanitizeSvgDataUrl(dataUrl);
-        if (!dataUrl) throw new Error('That SVG could not be used safely — try a PNG.');
-      }
-      const img = new Image();
-      await new Promise((resolve, reject) => { img.onload = resolve; img.onerror = () => reject(new Error('That image could not be read.')); img.src = dataUrl; });
-      const w = img.naturalWidth || 1, h = img.naturalHeight || 1;
-      if (!isSvgFile(file) && w > 600) {
-        const canvas = document.createElement('canvas');
-        canvas.width = 600; canvas.height = Math.round((600 * h) / w);
-        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-        dataUrl = canvas.toDataURL('image/png');
-      }
-      const aspect = Math.max(0.05, Math.min(20, h / w));
+      const { dataUrl, aspect } = await readImageForMap(file);
       if (replaceId) {
         updateMarker(replaceId, { image: dataUrl, aspect });
       } else {
@@ -3443,6 +3452,26 @@ export default function App({ initialAction = null }) {
         setSelectedCalloutId(null);
       }
       setUploadStatus({ type: 'success', message: `Placed ${file.name} on the map — drag it over the ground it identifies.` });
+    } catch (err) {
+      setUploadStatus({ type: 'error', message: err.message });
+    } finally {
+      e.target.value = '';
+    }
+  };
+
+  // Optional logo at the top of one callout card (e.g. the neighbour's logo on
+  // their project's callout). Never added unless the user picks one.
+  const handleCalloutLogoChange = async (e) => {
+    const file = e.target.files?.[0];
+    const id = calloutLogoTargetRef.current;
+    calloutLogoTargetRef.current = null;
+    if (!file || !id) return;
+    try {
+      const { dataUrl, aspect } = await readImageForMap(file);
+      setProject((prev) => ({
+        ...prev,
+        callouts: (prev.callouts || []).map((c) => (c.id === id ? { ...c, logo: { width: c.logo?.width || 70, ...(c.logo || {}), image: dataUrl, aspect } } : c)),
+      }));
     } catch (err) {
       setUploadStatus({ type: 'error', message: err.message });
     } finally {
@@ -5728,6 +5757,22 @@ export default function App({ initialAction = null }) {
                       <div className="control-grid">
                         <div className="control-row"><label htmlFor="f-text-4657">Text</label><input id="f-text-4657" autoFocus value={callout.text} onChange={(e) => updateCallout(callout.id, { text: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter') setSelectedCalloutId(null); }} /></div>
                         <div className="control-row"><label htmlFor="f-subtext-4658">Subtext</label><textarea id="f-subtext-4658" className="callout-subtext-area" rows={3} value={callout.subtext || ''} placeholder={'Details / results, one per line'} onChange={(e) => updateCallout(callout.id, { subtext: e.target.value })} /></div>
+                        {callout.type !== 'badge' ? (
+                          callout.logo?.image ? (
+                            <div className="control-row inline-2">
+                              <div>
+                                <label htmlFor={`f-callout-logo-${callout.id}`}>Logo width</label>
+                                <input id={`f-callout-logo-${callout.id}`} type="range" min="20" max="240" step="1" value={callout.logo.width || 70} onChange={(e) => updateCallout(callout.id, { logo: { ...callout.logo, width: Number(e.target.value) } })} />
+                              </div>
+                              <div className="button-row">
+                                <button type="button" className="link-btn" onClick={() => { calloutLogoTargetRef.current = callout.id; calloutLogoInputRef.current?.click(); }}>Replace logo</button>
+                                <button type="button" className="link-btn" onClick={() => updateCallout(callout.id, { logo: null })}>Remove logo</button>
+                              </div>
+                            </div>
+                          ) : (
+                            <button type="button" className="link-btn" style={{ justifySelf: 'start' }} onClick={() => { calloutLogoTargetRef.current = callout.id; calloutLogoInputRef.current?.click(); }}>+ Add logo to this callout</button>
+                          )
+                        ) : null}
                         {(() => {
                           // A label on a sample point: restyle the point itself here.
                           const pt = calloutPoint(callout);
@@ -5885,6 +5930,7 @@ export default function App({ initialAction = null }) {
               <button className={`secondary-btn ${annotationTool === 'maplabel' ? 'active-toggle' : ''}`} type="button" onClick={() => { const next = annotationTool === 'maplabel' ? null : 'maplabel'; setAnnotationTool(next); annotationToolRef.current = next; setSelectedFeature(null); }}>Place Map Label</button>
               <button className="secondary-btn" type="button" onClick={() => { imageMarkerReplaceIdRef.current = null; imageMarkerInputRef.current?.click(); }}>Add Logo / Image</button>
               <input ref={imageMarkerInputRef} type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={handleImageMarkerChange} hidden />
+              <input ref={calloutLogoInputRef} type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={handleCalloutLogoChange} hidden />
               <button className={`secondary-btn ${annotationTool === 'polygon' ? 'active-toggle' : ''}`} type="button" onClick={() => { const next = annotationTool === 'polygon' ? null : 'polygon'; setAnnotationTool(next); annotationToolRef.current = next; setPendingPolygonPoints([]); setSelectedFeature(null); }}>Draw Boundary</button>
               <button className={`secondary-btn ${annotationTool === 'distanceLine' ? 'active-toggle' : ''}`} type="button"
                 onClick={() => { const next = annotationTool === 'distanceLine' ? null : 'distanceLine'; setAnnotationTool(next); annotationToolRef.current = next; setPendingDistanceP1(null); setSelectedFeature(null); }}>

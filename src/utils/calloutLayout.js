@@ -22,8 +22,22 @@ export function estimateBox(callout) {
   const subtextLines = subtext ? countLines(subtext) : 0;
   const titleHeight = titleLines * (fontSize + 3);
   const subtextHeight = subtextLines ? subtextLines * Math.max(11, fontSize - 1) + 6 : 0;
-  const height = paddingY * 2 + titleHeight + subtextHeight;
+  const logo = calloutLogoSize(callout, width - paddingX * 2);
+  const height = paddingY * 2 + (logo ? logo.h + logo.gap : 0) + titleHeight + subtextHeight;
   return { width, height };
+}
+
+/**
+ * An optional logo at the top of a callout card (callout.logo, set per callout;
+ * none by default). `logo.width` is its width in CSS px at 1x, never wider than
+ * the card's text area; height follows the image's aspect. Shared by the
+ * editor card, the box estimate and every exporter.
+ */
+export function calloutLogoSize(callout, innerWidth) {
+  const logo = callout?.logo;
+  if (!logo?.image || callout.type === 'badge') return null;
+  const w = Math.max(10, Math.min(Number(logo.width) || 70, innerWidth));
+  return { w, h: w * (Number(logo.aspect) || 1), gap: 6 };
 }
 
 /**

@@ -172,3 +172,16 @@ describe('source credit and legend width', () => {
     expect(legendWidthFor({}, [{ label: 'Short' }])).toBe(300);
   });
 });
+
+describe('callout logo (optional)', () => {
+  it('adds nothing unless the callout has one', async () => {
+    const { calloutLogoSize, estimateBox } = await import('../src/utils/calloutLayout.js');
+    const base = { text: 'NIOCORP', subtext: 'Elk Creek', boxWidth: 200 };
+    expect(calloutLogoSize(base, 180)).toBeNull();
+    const withLogo = { ...base, logo: { image: 'data:image/png;base64,AA', aspect: 0.5, width: 80 } };
+    expect(calloutLogoSize(withLogo, 180)).toEqual({ w: 80, h: 40, gap: 6 });
+    expect(calloutLogoSize({ ...withLogo, logo: { ...withLogo.logo, width: 500 } }, 180).w).toBe(180);
+    expect(estimateBox(withLogo).height - estimateBox(base).height).toBe(46);
+    expect(calloutLogoSize({ ...withLogo, type: 'badge' }, 180)).toBeNull();
+  });
+});

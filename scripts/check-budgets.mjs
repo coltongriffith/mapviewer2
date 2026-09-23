@@ -45,7 +45,8 @@ const BUDGETS = {
   // 870 → 875: the same, plus SVG font embedding and shared export label
   // geometry in the export renderer.
   totalAuthJsGzipKb: 875,
-  totalJsGzipKb: 805,
+  // 805 → 808: placed and callout logos, SVG font embedding (Sept 2026).
+  totalJsGzipKb: 808,
   adminAuthJsGzipKb: 150,
   adminJsGzipKb: 85,
   editorAuthJsGzipKb: 335,

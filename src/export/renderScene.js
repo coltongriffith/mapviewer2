@@ -9,7 +9,7 @@ import { northArrowShapes, NORTH_ARROW_FONT } from '../utils/northArrowGeometry'
 import { markerIconSvgFragment, drawMarkerIconCanvas } from '../utils/markerIcons.jsx';
 import { safeColor } from '../utils/colorUtils.js';
 import regionsNA from '../assets/regionsNA.json';
-import { resolveCalloutBoxes, panelObstacles, intersects, leaderEndpoint, arrowheadPoints } from '../utils/calloutLayout';
+import { resolveCalloutBoxes, panelObstacles, intersects, leaderEndpoint, arrowheadPoints, calloutLogoSize } from '../utils/calloutLayout';
 import dissolveGeo from '@turf/dissolve';
 import { exportCreditLines } from '../utils/claimProvenance';
 import { referenceOverlayCredits } from '../utils/referenceOverlayCredits.js';
@@ -1161,12 +1161,19 @@ function drawCalloutLeaderCanvas(ctx, c, scale) {
   ctx.setLineDash([]);
 }
 
-function drawCalloutsCanvas(ctx, scene, scale) {
+async function drawCalloutsCanvas(ctx, scene, scale) {
   const calloutFont = `${scene.project.layout?.fonts?.callout || 'Inter'}, Arial, sans-serif`;
   const placed = placeCallouts(scene, scale);
   // Every leader first, then every card — as the editor layers them — so a
   // leader never runs across another callout's box or text.
   placed.forEach((c) => drawCalloutLeaderCanvas(ctx, c, scale));
+  // Callout logos (optional, per callout) are loaded up front so the cards
+  // can then be drawn in order.
+  const logoImgs = new Map();
+  await Promise.all(placed.filter((c) => c.logo?.image && c.type !== 'badge').map(async (c) => {
+    const img = await new Promise((resolve) => { const el = new Image(); el.onload = () => resolve(el); el.onerror = () => resolve(null); el.src = c.logo.image; });
+    if (img) logoImgs.set(c.id, img); else _exportWarnings.push('a callout logo could not be embedded');
+  }));
   placed.forEach((c) => {
     const theme = getTheme(scene);
     const radius = Math.max(0, (theme.panelRadius ?? 10) - 4) * scale;
@@ -1217,16 +1224,27 @@ function drawCalloutsCanvas(ctx, scene, scale) {
     const subtextLineH = subtextSize * 1.3;
     const titleBlockH = titleLines.length * titleLineH;
     const subBlockH = subtextLines.length ? subtextLines.length * subtextLineH + 4 * scale : 0;
+    const logo = logoImgs.has(c.id) ? calloutLogoSize(c, maxTextW / scale) : null;
+    const logoBlockH = logo ? (logo.h + logo.gap) * scale : 0;
     // The editor's card grows to fit its text (min-height = the estimate); the
     // export clipped overflowing text to the estimated box instead.
     if (c.type !== 'plain') {
-      const needed = (c.style?.paddingY || 8) * scale * 2 + titleBlockH + subBlockH;
+      const needed = (c.style?.paddingY || 8) * scale * 2 + logoBlockH + titleBlockH + subBlockH;
       if (needed > c.height) c.height = needed;
       ctx.restore(); ctx.save();
       drawRoundedRect(ctx, c.left, c.top, c.width, c.height, radius); ctx.fillStyle = c.style?.background || theme.calloutFill; ctx.fill(); ctx.strokeStyle = c.style?.border || theme.calloutBorder; ctx.lineWidth = 1 * scale; ctx.stroke();
       drawRoundedRect(ctx, c.left, c.top, c.width, c.height, radius); ctx.clip();
     }
-    const blockTop = c.top + (c.type === 'plain' ? 0 : c.height / 2 - (titleBlockH + subBlockH) / 2);
+    const contentTop = c.top + (c.type === 'plain' ? 0 : c.height / 2 - (logoBlockH + titleBlockH + subBlockH) / 2);
+    if (logo) {
+      const lw = logo.w * scale, lh = logo.h * scale;
+      const lx = align === 'center' ? c.left + (c.width - lw) / 2 : textX;
+      const img = logoImgs.get(c.id);
+      const r = Math.min(lw / (img.naturalWidth || img.width || 1), lh / (img.naturalHeight || img.height || 1));
+      const dw = (img.naturalWidth || img.width) * r, dh = (img.naturalHeight || img.height) * r;
+      ctx.drawImage(img, lx + (lw - dw) / 2, contentTop + (lh - dh) / 2, dw, dh);
+    }
+    const blockTop = contentTop + logoBlockH;
 
     ctx.fillStyle = c.style?.textColor || theme.calloutText; ctx.font = `700 ${fontSize}px ${calloutFont}`; ctx.textBaseline = 'top'; ctx.textAlign = align;
     titleLines.forEach((line, i) => { ctx.fillText(line, textX, blockTop + i * titleLineH); });
@@ -1917,7 +1935,7 @@ export async function renderSceneToCanvas(scene, options = {}) {
   ctx.fillStyle = mapBg; ctx.fillRect(0, 0, canvas.width, canvas.height);
   const isNI = scene.template?.id === 'ni_43101_technical';
   const isSP = scene.template?.id === 'side_panel';
-  await drawTilesCanvas(ctx, scene, scale); await drawRastersCanvas(ctx, scene, scale); drawRegionHighlightsCanvas(ctx, scene, scale); await drawVectorsCanvas(ctx, scene, scale); drawEllipsesCanvas(ctx, scene, scale); drawPolygonsCanvas(ctx, scene, scale); await drawMarkersCanvas(ctx, scene, scale); drawCalloutsCanvas(ctx, scene, scale); drawDistanceLinesCanvas(ctx, scene, scale);
+  await drawTilesCanvas(ctx, scene, scale); await drawRastersCanvas(ctx, scene, scale); drawRegionHighlightsCanvas(ctx, scene, scale); await drawVectorsCanvas(ctx, scene, scale); drawEllipsesCanvas(ctx, scene, scale); drawPolygonsCanvas(ctx, scene, scale); await drawMarkersCanvas(ctx, scene, scale); await drawCalloutsCanvas(ctx, scene, scale); drawDistanceLinesCanvas(ctx, scene, scale);
   if (isSP) { drawSidebarPanelCanvas(ctx, scene, scale); }
   if (!isNI) { drawTitleBlockCanvas(ctx, scene, scale); drawFooterCanvas(ctx, scene, scale); }
   drawScaleBarCanvas(ctx, scene, scale);
@@ -2674,9 +2692,15 @@ function renderCalloutsSvg(scene, scale, svgDefs) {
     const subLineH = svgSubFontSz * 1.3;
     const titleBlockH = titleLines.length * titleLineH;
     const subBlockH = subtextLines.length ? subtextLines.length * subLineH + 4 * scale : 0;
-    if (c.type !== 'plain') c.height = Math.max(c.height, (c.style?.paddingY || 8) * scale * 2 + titleBlockH + subBlockH);
+    const logo = c.logo?.image && /^data:image\//.test(c.logo.image) ? calloutLogoSize(c, wrapWidth / scale) : null;
+    const logoBlockH = logo ? (logo.h + logo.gap) * scale : 0;
+    if (c.type !== 'plain') c.height = Math.max(c.height, (c.style?.paddingY || 8) * scale * 2 + logoBlockH + titleBlockH + subBlockH);
     const box = c.type !== 'plain' ? `<rect x="${c.left}" y="${c.top}" width="${c.width}" height="${c.height}" rx="${radius}" ${toSvgFill(rawBoxFill)} stroke="${boxStroke}" stroke-width="${scale}" />` : '';
-    const blockTop = c.top + (c.type === 'plain' ? 0 : c.height / 2 - (titleBlockH + subBlockH) / 2);
+    const contentTop = c.top + (c.type === 'plain' ? 0 : c.height / 2 - (logoBlockH + titleBlockH + subBlockH) / 2);
+    const logoEl = logo
+      ? `<image x="${svgAlign === 'center' ? c.left + (c.width - logo.w * scale) / 2 : textX}" y="${contentTop}" width="${logo.w * scale}" height="${logo.h * scale}" preserveAspectRatio="xMidYMid meet" href="${escapeXml(c.logo.image)}" />`
+      : '';
+    const blockTop = contentTop + logoBlockH;
     const mainText = titleLines.map((tl, i) =>
       `<text x="${textX}" y="${baselineFromTop(blockTop + i * titleLineH, svgFontSz)}" text-anchor="${textAnchor}" fill="${textFill}" font-family="${calloutFont}" font-size="${svgFontSz}" font-weight="700">${escapeXml(tl)}</text>`
     ).join('');
@@ -2685,7 +2709,7 @@ function renderCalloutsSvg(scene, scale, svgDefs) {
       `<text x="${textX}" y="${baselineFromTop(subTop + i * subLineH, svgSubFontSz)}" text-anchor="${textAnchor}" fill="${c.style?.subtextColor || '#475569'}" font-family="${calloutFont}" font-size="${svgSubFontSz}">${escapeXml(sl)}</text>`
     ).join('');
     const clipId = c.type !== 'plain' ? pushRoundedClip(svgDefs, c.left, c.top, c.width, c.height, radius) : null;
-    const textGroup = clipId ? `<g clip-path="url(#${clipId})">${mainText}${subtextEl}</g>` : `${mainText}${subtextEl}`;
+    const textGroup = clipId ? `<g clip-path="url(#${clipId})">${logoEl}${mainText}${subtextEl}</g>` : `${logoEl}${mainText}${subtextEl}`;
     return `<g id="em-callout-${safeId}" class="em-callout">${box}${textGroup}</g>`;
   });
   // All leaders under all cards, as the editor draws them. No anchor dot on a

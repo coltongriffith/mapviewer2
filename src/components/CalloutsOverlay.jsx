@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { resolveCalloutBoxes, panelObstacles, leaderEndpoint, arrowheadPoints } from '../utils/calloutLayout';
+import { resolveCalloutBoxes, panelObstacles, leaderEndpoint, arrowheadPoints, calloutLogoSize } from '../utils/calloutLayout';
 import { computeSnap } from '../utils/layout';
 
 export default function CalloutsOverlay({ map, callouts, selectedCalloutId, onSelect, onMove, onUpdate, fontFamily, zones, layout }) {
@@ -156,6 +156,19 @@ export default function CalloutsOverlay({ map, callouts, selectedCalloutId, onSe
               </div>
             ) : (
               <>
+                {(() => {
+                  const padX = style.paddingX ?? Math.max(4, Math.min(10, (callout.width || 160) * 0.06));
+                  const logo = calloutLogoSize(callout, (callout.width || 160) - (callout.type === 'plain' ? 0 : padX * 2));
+                  return logo ? (
+                    <img
+                      className="map-callout-logo"
+                      src={callout.logo.image}
+                      alt=""
+                      draggable={false}
+                      style={{ width: logo.w, height: logo.h, marginBottom: logo.gap, marginLeft: style.textAlign === 'center' ? 'auto' : 0, marginRight: style.textAlign === 'center' ? 'auto' : 0 }}
+                    />
+                  ) : null;
+                })()}
                 {editingField?.id === callout.id && editingField?.field === 'text' ? (
                   <input
                     autoFocus

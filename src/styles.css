@@ -384,6 +384,7 @@ button, input, select, textarea { font: inherit; }
 .map-callout.leader { min-width: 132px; }
 .map-callout.boxed { min-width: 170px; }
 .map-callout.badge { border: none; box-shadow: var(--shadow-overlay); border-radius: var(--r-md); overflow: hidden; }
+.map-callout-logo { display: block; object-fit: contain; pointer-events: none; user-select: none; }
 .map-callout.selected { outline: 2px solid rgba(198,83,34,0.9); outline-offset: 1px; }
 .map-callout.collides:not(.selected) { outline: 2px dashed rgba(220,38,38,0.85); outline-offset: 1px; }
 .badge-callout { display: flex; height: 32px; border-radius: inherit; overflow: hidden; }
