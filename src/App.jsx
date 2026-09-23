@@ -3729,6 +3729,18 @@ export default function App({ initialAction = null }) {
     }));
   };
 
+  // "Apply to all": copy one style value from the selected callout to every
+  // callout, so recolouring a dozen leader lines is one click, not twelve.
+  const applyCalloutStyleToAll = (key, value) => {
+    setProject((prev) => ({
+      ...prev,
+      callouts: prev.callouts.map((callout) => ({ ...callout, style: { ...(callout.style || {}), [key]: value } })),
+    }));
+  };
+  const applyAllLink = (key, value) => (project.callouts.length > 1 ? (
+    <button type="button" className="link-btn apply-all-link" title="Use this value on every callout" onClick={() => applyCalloutStyleToAll(key, value)}>Apply to all</button>
+  ) : null);
+
   const nudgeCallout = (calloutId, dx, dy) => {
     setProject((prev) => ({
       ...prev,
@@ -5606,20 +5618,24 @@ export default function App({ initialAction = null }) {
                               <div>
                                 <label htmlFor="f-background-4691">Background</label>
                                 <ColorField id="f-background-4691" value={callout.style?.background || '#ffffff'} onChange={(e) => updateCallout(callout.id, { style: { ...(callout.style || {}), background: e.target.value } })} brandColors={brandColors} />
+                                {applyAllLink('background', callout.style?.background || '#ffffff')}
                               </div>
                               <div>
                                 <label htmlFor="f-border-line-4695">Border / Line</label>
                                 <ColorField id="f-border-line-4695" value={callout.style?.border || '#102640'} onChange={(e) => updateCallout(callout.id, { style: { ...(callout.style || {}), border: e.target.value } })} brandColors={brandColors} />
+                                {applyAllLink('border', callout.style?.border || '#102640')}
                               </div>
                             </div>
                             <div className="control-row inline-2">
                               <div>
                                 <label htmlFor="f-text-color-4701">Text Color</label>
                                 <ColorField id="f-text-color-4701" value={callout.style?.textColor || '#0f172a'} onChange={(e) => updateCallout(callout.id, { style: { ...(callout.style || {}), textColor: e.target.value } })} brandColors={brandColors} />
+                                {applyAllLink('textColor', callout.style?.textColor || '#0f172a')}
                               </div>
                               <div>
                                 <label htmlFor="f-subtext-color-4705">Subtext Color</label>
                                 <ColorField id="f-subtext-color-4705" value={callout.style?.subtextColor || '#475569'} onChange={(e) => updateCallout(callout.id, { style: { ...(callout.style || {}), subtextColor: e.target.value } })} brandColors={brandColors} />
+                                {applyAllLink('subtextColor', callout.style?.subtextColor || '#475569')}
                               </div>
                             </div>
                             <div className="control-row inline-2">

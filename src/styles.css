@@ -1275,6 +1275,9 @@ body.is-dragging .template-zone .panel-delete-btn { opacity: 0 !important; }
 .auth-link-sep { color: var(--ui-border-strong); font-size: 13px; }
 .link-btn { background: none; border: none; color: var(--ui-action); font-size: 13px; cursor: pointer; padding: 0; text-decoration: underline; }
 .link-btn:hover { color: var(--ui-action); }
+/* Callout colour "Apply to all": present but quiet until hovered. */
+.apply-all-link { display: block; margin-top: 3px; font-size: 11px; color: var(--ui-text-muted); text-decoration: none; }
+.apply-all-link:hover { text-decoration: underline; }
 .auth-info-msg { background: #eef4f0; border: 1px solid #c7ddce; color: var(--ui-success); border-radius: var(--r-md); padding: 10px 14px; font-size: 13px; margin-bottom: 10px; }
 .auth-error-msg { background: #f9eeee; border: 1px solid #eccfcf; color: var(--ui-danger); border-radius: var(--r-md); padding: 10px 14px; font-size: 13px; margin-bottom: 10px; }
 
