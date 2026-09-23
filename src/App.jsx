@@ -3741,6 +3741,74 @@ export default function App({ initialAction = null }) {
     <button type="button" className="link-btn apply-all-link" title="Use this value on every callout" onClick={() => applyCalloutStyleToAll(key, value)}>Apply to all</button>
   ) : null);
 
+  // The point a label is attached to, so a sample that is already labelled can
+  // be restyled from its label instead of deleting and re-creating it.
+  const calloutPoint = (callout) => {
+    const layer = project.layers.find((l) => l.id === callout?.layerId);
+    const a = callout?.anchor;
+    if (!layer || !a) return null;
+    const feature = layerFeatures(layer).find((f) => {
+      const c = f?.geometry?.type === 'Point' && f.geometry.coordinates;
+      return c && Math.abs(c[0] - a.lng) < 2e-6 && Math.abs(c[1] - a.lat) < 2e-6;
+    });
+    return feature ? { layerId: layer.id, key: featureKey(feature) } : null;
+  };
+
+  // One point's own marker — size, shape, border and fill — stored as that
+  // feature's override, which the map and every exporter already honour.
+  const POINT_STYLE_KEYS = ['markerSize', 'markerShape', 'markerColor', 'markerFill'];
+  const pointStyleControls = (layerId, key, where = 'pt') => {
+    const layer = project.layers.find((l) => l.id === layerId);
+    if (!layer || !key) return null;
+    const own = layer.featureOverrides?.[key] || {};
+    const base = layer.style || {};
+    const set = (patch) => setFeatureOverride(layerId, key, patch);
+    const size = own.markerSize ?? base.markerSize ?? 12;
+    const shape = own.markerShape ?? base.markerShape ?? 'circle';
+    const customised = POINT_STYLE_KEYS.some((k) => own[k] !== undefined);
+    const idp = `f-${where}-${String(key).replace(/[^A-Za-z0-9_-]/g, '_')}`;
+    return (
+      <div className="point-style-controls">
+        <div className="control-row inline-2">
+          <div>
+            <label htmlFor={`${idp}-size`}>This Point&apos;s Size</label>
+            <input id={`${idp}-size`} type="range" min="6" max="48" step="1" value={size} onChange={(e) => set({ markerSize: Number(e.target.value) })} />
+          </div>
+          <div className="range-value">{size}px</div>
+        </div>
+        <div className="control-row">
+          <div className="control-label">Marker Shape</div>
+          <div className="marker-shape-picker">
+            {[['circle', 'Circle'], ['triangle_down', 'Tri ▼'], ['triangle', 'Tri ▲'], ['square', 'Square'], ['diamond', 'Diamond'], ['cross', 'Cross'], ['drillhole', 'DH Pin'], ['star', 'Star']].map(([val, label]) => (
+              <button key={val} type="button" className={`shape-btn${shape === val ? ' active' : ''}`} onClick={() => set({ markerShape: val })} title={label}>{label}</button>
+            ))}
+          </div>
+        </div>
+        <div className="control-row inline-2">
+          <div>
+            <label htmlFor={`${idp}-border`}>Point Border</label>
+            <ColorField id={`${idp}-border`} value={own.markerColor ?? base.markerColor ?? base.stroke ?? '#111111'} onChange={(e) => set({ markerColor: e.target.value })} brandColors={brandColors} />
+          </div>
+          <div>
+            <label htmlFor={`${idp}-fill`}>Point Fill</label>
+            <ColorField id={`${idp}-fill`} value={own.markerFill ?? base.markerFill ?? base.fill ?? '#ffffff'} onChange={(e) => set({ markerFill: e.target.value })} brandColors={brandColors} />
+          </div>
+        </div>
+        {customised && (
+          <button type="button" className="link-btn apply-all-link" onClick={() => setProject((prev) => ({
+            ...prev,
+            layers: prev.layers.map((l) => {
+              if (l.id !== layerId) return l;
+              const rest = { ...(l.featureOverrides?.[key] || {}) };
+              for (const k of POINT_STYLE_KEYS) delete rest[k];
+              return { ...l, featureOverrides: { ...(l.featureOverrides || {}), [key]: rest } };
+            }),
+          }))}>Match layer style</button>
+        )}
+      </div>
+    );
+  };
+
   const nudgeCallout = (calloutId, dx, dy) => {
     setProject((prev) => ({
       ...prev,
@@ -5543,6 +5611,11 @@ export default function App({ initialAction = null }) {
                         <div className="control-row"><label htmlFor="f-text-4657">Text</label><input id="f-text-4657" autoFocus value={callout.text} onChange={(e) => updateCallout(callout.id, { text: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter') setSelectedCalloutId(null); }} /></div>
                         <div className="control-row"><label htmlFor="f-subtext-4658">Subtext</label><textarea id="f-subtext-4658" className="callout-subtext-area" rows={3} value={callout.subtext || ''} placeholder={'Details / results, one per line'} onChange={(e) => updateCallout(callout.id, { subtext: e.target.value })} /></div>
                         {(() => {
+                          // A label on a sample point: restyle the point itself here.
+                          const pt = calloutPoint(callout);
+                          return pt ? (<><div className="control-label">Labelled point</div>{pointStyleControls(pt.layerId, pt.key, 'lbl')}</>) : null;
+                        })()}
+                        {(() => {
                           // Which block this label points at. Only shown when the
                           // layer actually splits into more than one — a single
                           // compact block has nothing to choose between, and an
@@ -7071,62 +7144,7 @@ export default function App({ initialAction = null }) {
                 <ColorField id="f-text-5844" value={selectedFeature.style?.textColor || '#0f172a'} onChange={(e) => setSelectedFeature((prev) => ({ ...prev, style: { ...(prev.style || {}), textColor: e.target.value } }))} brandColors={brandColors} />
               </div>
             </div>
-            <div className="control-row" style={{ marginTop: 6 }}>
-              <label>Marker Shape</label>
-              <div className="marker-shape-picker">
-                {(() => {
-                  const fKey = featureKey(selectedFeature.feature);
-                  const featureLayer = project.layers.find((l) => l.id === selectedFeature.layerId);
-                  const currentShape = featureLayer?.featureOverrides?.[fKey]?.markerShape ?? featureLayer?.style?.markerShape ?? 'circle';
-                  return [
-                    ['circle', 'Circle'],
-                    ['triangle_down', 'Tri ▼'],
-                    ['triangle', 'Tri ▲'],
-                    ['square', 'Square'],
-                    ['diamond', 'Diamond'],
-                    ['cross', 'Cross'],
-                    ['drillhole', 'DH Pin'],
-                    ['star', 'Star'],
-                  ].map(([val, label]) => (
-                    <button
-                      key={val}
-                      type="button"
-                      className={`shape-btn${currentShape === val ? ' active' : ''}`}
-                      onClick={() => setFeatureOverride(selectedFeature.layerId, fKey, { markerShape: val })}
-                      title={label}
-                    >
-                      {label}
-                    </button>
-                  ));
-                })()}
-              </div>
-            </div>
-            {/Point$/.test(selectedFeature.feature?.geometry?.type || '') && (() => {
-              // Per-point size: enlarge one sample to highlight it without
-              // splitting it into its own layer. Map and export both read the
-              // override through getFeatureStyle.
-              const fKey = featureKey(selectedFeature.feature);
-              const featureLayer = project.layers.find((l) => l.id === selectedFeature.layerId);
-              const own = featureLayer?.featureOverrides?.[fKey]?.markerSize;
-              const size = own ?? featureLayer?.style?.markerSize ?? 12;
-              return (
-                <div className="control-row inline-2" style={{ marginTop: 6 }}>
-                  <div>
-                    <label htmlFor="f-this-point-size">This Point&apos;s Size</label>
-                    <input id="f-this-point-size" type="range" min="6" max="48" step="1" value={size} onChange={(e) => setFeatureOverride(selectedFeature.layerId, fKey, { markerSize: Number(e.target.value) })} />
-                    {own != null && <button type="button" className="link-btn apply-all-link" onClick={() => setProject((prev) => ({
-                      ...prev,
-                      layers: prev.layers.map((l) => {
-                        if (l.id !== selectedFeature.layerId) return l;
-                        const { markerSize: _drop, ...rest } = l.featureOverrides?.[fKey] || {};
-                        return { ...l, featureOverrides: { ...(l.featureOverrides || {}), [fKey]: rest } };
-                      }),
-                    }))}>Match layer</button>}
-                  </div>
-                  <div className="range-value">{size}px</div>
-                </div>
-              );
-            })()}
+            {/Point$/.test(selectedFeature.feature?.geometry?.type || '') && pointStyleControls(selectedFeature.layerId, featureKey(selectedFeature.feature))}
             <button className="btn primary" style={{ width: '100%', marginTop: 8 }} type="button" onClick={addCalloutFromSelectedFeature}>Add Callout</button>
           </div>
         ) : null}

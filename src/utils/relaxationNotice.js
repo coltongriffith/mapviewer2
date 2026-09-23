@@ -23,6 +23,19 @@ const NUMBER_MATCH_PHRASE = {
  * @returns {{headline: string, detail: string|null}|null} null when the exact search answered
  */
 export function relaxationNotice(meta, { query, jurisdictionLabel, province, count } = {}) {
+  // An Ontario claim number from before the April 2018 conversion to grid
+  // cells: the server answers with the current claims on that ground, which
+  // carry new numbers — never let them read as the claim that was typed.
+  if (meta?.legacyClaim) {
+    const n = meta.legacyClaim.currentClaims;
+    return {
+      headline: `${meta.legacyClaim.number} is a legacy Ontario claim number, from before claims were converted to grid cells in 2018. `
+        + (n ? `Showing the ${n === 1 ? 'current claim' : `${n} current claims`} on its ground.` : 'No current claim covers its ground.'),
+      detail: n
+        ? 'These are today\'s claims and carry new numbers; check the holder on each before adding them to a map.'
+        : 'The ground may have lapsed, or been taken to lease or patent. Check MLAS for its current status.',
+    };
+  }
   if (!meta?.relaxedTo) return null;
   const asked = meta.relaxedFrom || query || '';
   const ran = meta.relaxedTo;
