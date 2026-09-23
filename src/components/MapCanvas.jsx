@@ -140,12 +140,15 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
       baseLayerRef.current = null;
     }
 
-    // Apply background color to the map container (only meaningful for blank basemap)
-    map.getContainer().style.backgroundColor = cfg.url ? '' : (project?.layout?.blankBg || '#ffffff');
+    const opacity = Math.max(0, Math.min(1, Number(project?.layout?.basemapOpacity ?? 1)));
+    // Container background: the blank basemap's chosen colour, or white under
+    // 'white' and under a faded basemap — which is what export paints there.
+    map.getContainer().style.backgroundColor = key === 'blank'
+      ? (project?.layout?.blankBg || '#ffffff')
+      : (!cfg.url || opacity < 1 ? '#ffffff' : '');
 
     if (!cfg.url) return; // blank basemap — no tile layer
 
-    const opacity = Math.max(0, Math.min(1, Number(project?.layout?.basemapOpacity ?? 1)));
     const base = L.tileLayer(cfg.url, {
       attribution: cfg.attribution,
       opacity,

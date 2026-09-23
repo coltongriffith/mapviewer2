@@ -180,6 +180,7 @@ const BASEMAP_OPTIONS = BASEMAP_KEYS.map((key) => ({
   key,
   label: BASEMAPS[key].label,
   thumb: basemapThumb(key),
+  agentOnly: Boolean(BASEMAPS[key].agentOnly),
 }));
 
 const MARKER_TYPES = {
@@ -1194,12 +1195,16 @@ export default function App({ initialAction = null }) {
     });
   }, []);
 
-  // When user logs in, apply their default brand kit to the current (unsaved) project
+  // When user logs in, apply their default brand kit to a fresh, empty workspace.
+  // This also runs on every signed-in page load, so a restored saved project or
+  // in-progress draft is left alone — re-applying would reset its template,
+  // legend title, footer and overlays and then autosave that over their work.
   useEffect(() => {
     if (!user) return;
+    if (projectId) return;
     getDefaultBrandKit().then((tmpl) => {
       if (tmpl?.config) {
-        setProject((prev) => ({ ...prev, layout: applyBrandKitConfig(tmpl.config, prev.layout) }));
+        setProject((prev) => (prev.layers.length ? prev : { ...prev, layout: applyBrandKitConfig(tmpl.config, prev.layout) }));
       }
     }).catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -4433,11 +4438,16 @@ export default function App({ initialAction = null }) {
     saveCoordRef.current.switchWorkspace();
     const openTicket = saveCoordRef.current.begin();
     let payload = entry.payload;
+    // entry.revision comes from listCloudProjects and goes stale as the list
+    // does, so it only describes a payload that came with the entry; a freshly
+    // loaded payload carries its own. A locally-cached entry has none, in which
+    // case we save without an expectation.
+    let revision = entry.revision ?? null;
     if (!payload && user) {
       try {
         const full = await loadCloudProject(entry.id);
         payload = full.payload;
-        projectRevisionRef.current = full.revision ?? null;
+        revision = full.revision ?? null;
       } catch (err) {
         if (openTicket.stillCurrent()) {
           setUploadStatus({ type: 'error', message: `Failed to open project: ${err.message}` });
@@ -4448,9 +4458,7 @@ export default function App({ initialAction = null }) {
     if (!payload || !openTicket.stillCurrent()) return;
     resetHistory();
     skipAutoFitRef.current = true;
-    // entry.revision comes from listCloudProjects; a locally-cached entry has
-    // none, in which case we save without an expectation.
-    if (entry.revision != null) projectRevisionRef.current = entry.revision;
+    projectRevisionRef.current = revision;
     setProject(payload);
     setProjectId(entry.id);
     setProjectName(entry.name);
@@ -4475,11 +4483,11 @@ export default function App({ initialAction = null }) {
   const cloneSharedMapAndOpen = async (state) => {
     const name = state?.layout?.title || 'Shared map';
     trackEvent('share_forked', { mapId: sharedMapId, mode: 'cloud' }, user?.id);
-    const newId = await cloneSharedMapToCloud(state, name);
+    const { id: newId, revision } = await cloneSharedMapToCloud(state, name);
     // Drop the /map/:id URL so a later refresh lands on the editor, not the viewer.
     try { window.history.replaceState({}, '', '/'); } catch { /* noop */ }
     setSharedMapId(null);
-    openProjectFromRecent({ id: newId, name, payload: state });
+    openProjectFromRecent({ id: newId, name, payload: state, revision });
     setScreen('editor');
   };
 
@@ -5982,7 +5990,7 @@ export default function App({ initialAction = null }) {
               <div className="control-row-stack">
                 <label>Basemap</label>
                 <div className="basemap-picker">
-                  {BASEMAP_OPTIONS.map(({ key, label, thumb }) => (
+                  {BASEMAP_OPTIONS.filter(({ key, agentOnly }) => !agentOnly || key === project.layout.basemap).map(({ key, label, thumb }) => (
                     <button
                       key={key}
                       type="button"
@@ -6923,7 +6931,7 @@ export default function App({ initialAction = null }) {
         {project.layout.insetEnabled !== false && resolvedZones.inset?.width ? (
           <div className="template-zone" style={{ ...zoneStyle(resolvedZones.inset), opacity: dragging?.id === 'inset' ? 0.3 : 1, cursor: 'grab' }} onMouseDown={makeDragHandler('inset', project.layout.insetWidthPx ?? 244, project.layout.insetHeightPx ?? 190)}>
             <button className="panel-delete-btn" title="Hide inset map" onClick={() => updateLayout({ insetEnabled: false })}>×</button>
-            <LocatorInset layers={project.layers} insetMode={project.layout.insetMode} insetImage={project.layout.insetImage} autoInsetRegion={project.layout.autoInsetRegion} insetTitle={project.layout.insetTitle} insetLabel={project.layout.insetLabel} mode={project.layout.mode} zone={{ width: '100%', height: '100%' }} regionFill={project.layout.insetRegionFill} regionStroke={project.layout.insetRegionStroke} bgFill={project.layout.insetBgFill} markerColor={project.layout.insetMarkerColor} />
+            <LocatorInset layers={project.layers} insetMode={project.layout.insetMode} insetBasemap={project.layout.insetBasemap} insetImage={project.layout.insetImage} autoInsetRegion={project.layout.autoInsetRegion} insetTitle={project.layout.insetTitle} insetLabel={project.layout.insetLabel} mode={project.layout.mode} zone={{ width: '100%', height: '100%' }} regionFill={project.layout.insetRegionFill} regionStroke={project.layout.insetRegionStroke} bgFill={project.layout.insetBgFill} markerColor={project.layout.insetMarkerColor} />
             {makeResizeHandles(project.layout.insetCorner || 'tr', {
               elemId: 'inset', startW: project.layout.insetWidthPx ?? 244, startH: project.layout.insetHeightPx ?? 190,
               minW: 100, maxW: 600, minH: 80, maxH: 500,

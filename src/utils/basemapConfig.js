@@ -27,8 +27,12 @@ const ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services';
 // licence requires the credit travel with the map.
 const ESRI_COMMUNITY = '&copy; Esri, HERE, Garmin &copy; OpenStreetMap contributors';
 
+// `agentOnly` entries are names the Agent API / MCP may request. The editor's
+// picker lists them only on a map that already uses one: 'geology' and
+// 'satellite_hybrid' depend on overlays the agent builder switches on, and the
+// rest duplicate a picker entry.
 export const BASEMAPS = {
-  white: { label: 'White', url: '', attribution: '' },
+  white: { label: 'White', url: '', attribution: '', agentOnly: true },
   light: {
     label: 'Light',
     // Light Gray Canvas: muted land, restrained roads, and no place labels —
@@ -47,6 +51,7 @@ export const BASEMAPS = {
     url: `${ESRI}/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}`,
     attribution: ESRI_COMMUNITY,
     maxNativeZoom: 16,
+    agentOnly: true,
   },
   dark: {
     label: 'Dark',
@@ -56,17 +61,19 @@ export const BASEMAPS = {
   },
   terrain: {
     label: 'Terrain',
-    url: `${ESRI}/World_Terrain_Base/MapServer/tile/{z}/{y}/{x}`,
+    // World Topo Map, as it has always been: saved projects and the access /
+    // side-panel / report templates rely on its roads and labels. World
+    // Terrain Base has neither and its cache stops at 13 — blurry at claim scale.
+    url: `${ESRI}/World_Topo_Map/MapServer/tile/{z}/{y}/{x}`,
     attribution: '&copy; Esri',
-    maxNativeZoom: 13,
-    reliefUrl: `${ESRI}/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}`,
-    reliefOpacity: 0.35,
+    maxNativeZoom: 19,
   },
   topo: {
     label: 'Topographic',
     url: `${ESRI}/World_Topo_Map/MapServer/tile/{z}/{y}/{x}`,
     attribution: '&copy; Esri',
     maxNativeZoom: 19,
+    agentOnly: true,
   },
   satellite: {
     label: 'Satellite',
@@ -79,12 +86,14 @@ export const BASEMAPS = {
     label: 'Satellite Hybrid',
     url: `${ESRI}/World_Imagery/MapServer/tile/{z}/{y}/{x}`,
     attribution: '&copy; Esri',
+    agentOnly: true,
   },
   geology: {
     label: 'Geology',
     url: `${ESRI}/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}`,
     attribution: ESRI_COMMUNITY,
     maxNativeZoom: 16,
+    agentOnly: true,
   },
   hillshade: {
     label: 'Hillshade',

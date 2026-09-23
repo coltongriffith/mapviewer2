@@ -57,4 +57,42 @@ describe('MCP map selection', () => {
     expect(project.layout.referenceOverlays.geology).toBe(false);
     expect(project.callouts[0].text).toBe('Star Project');
   });
+
+  it('keeps neighbours out of the frame, and the inset mode in step with the inset basemap', () => {
+    const build = (body) => {
+      const checked = validateCreateMapInput({ jurisdiction: 'bc', claim_numbers: ['71071'], ...body });
+      return createAgentMapProject(checked.value, { featureCollection: { type: 'FeatureCollection', features: [primary] }, neighbours: { type: 'FeatureCollection', features: [neighbour] } });
+    };
+    const investor = build({ map_type: 'investor' });
+    expect(investor.layers[0].focus).toBe(false);
+    expect(investor.layers[1].focus).toBeUndefined();
+    expect(investor.layout.insetMode).toBe('satellite_locator');
+    expect(build({ map_type: 'claims' }).layout.insetMode).toBe('province_state');
+    expect(build({ map_type: 'investor', inset: { basemap: 'white' } }).layout.insetMode).toBe('province_state');
+  });
+
+  it("fits 'all' overlays to the basemap and honours an explicit list", () => {
+    const include = (body) => validateCreateMapInput({ jurisdiction: 'bc', claim_numbers: ['71071'], include: 'all', ...body }).value.include;
+    // The roads/settlements overlay is an opaque street map: never over imagery, relief or topo by default.
+    expect(include({ basemap: 'satellite' })).toEqual(['claims', 'labels', 'rail']);
+    expect(include({ basemap: 'terrain' })).toEqual(['claims', 'labels', 'rail', 'geology']);
+    expect(include({ basemap: 'white' })).toEqual(['claims', 'roads', 'settlements', 'labels', 'rail', 'geology']);
+    expect(include({ basemap: 'satellite', include: ['claims', 'roads'] })).toEqual(['claims', 'roads']);
+  });
+
+  it('reports the B.C. tenure number, not the staking tag, as the claim number', () => {
+    const tagged = { ...primary, properties: { ...primary.properties, TAG_NUMBER: '716678M' } };
+    expect(claimSummary(tagged).claim_number).toBe('71071');
+  });
+
+  it('keeps only documented, clipped facts and callout fields', () => {
+    const checked = validateCreateMapInput({
+      jurisdiction: 'bc', claim_numbers: ['71071'],
+      facts_panel: { project: { nested: true }, commodity: 'Copper', claims: 3, hectares: 'lots', tickers: ['ABC', 7, ''], injected: 'x' },
+      claims_callout: { fields: { status: 'Active', bad: { a: 1 } }, style: 'weird', source_note: 42 },
+    });
+    expect(checked.ok).toBe(true);
+    expect(checked.value.facts_panel).toEqual({ commodity: 'Copper', claims: 3, tickers: ['ABC'] });
+    expect(checked.value.claims_callout).toEqual({ show: true, fields: { status: 'Active' }, source_note: null, style: 'brand' });
+  });
 });

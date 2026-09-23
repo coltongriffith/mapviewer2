@@ -3,6 +3,7 @@ import { validateCreateMapInput, AGENT_JURISDICTIONS } from '../../../shared/age
 import { createAgentMapProject } from '../../../shared/agentMapBuilder.js';
 import { applyCors, clientIp, handleMethods, rateLimited, rateLimitedShared } from '../guard.js';
 import { runClaimsSearch } from '../claims-internal.js';
+import { resolveMapClaims } from '../map-claims.js';
 import { agentError, requestId } from '../agent-response.js';
 import { serverSupabase } from '../supabase-server.js';
 
@@ -65,13 +66,19 @@ export default async function handler(req, res) {
 
   try {
     const jurisdiction = AGENT_JURISDICTIONS[input.jurisdiction];
-    const claims = await runClaimsSearch({
-      jurisdiction: input.jurisdiction,
-      query: input.search.query,
-      type: input.search.type,
-      bbox: input.location.bbox,
-      clientIp: clientIp(req),
-    });
+    // Same selection as the MCP preview (exact claim_numbers; query ∩ bbox);
+    // neighbours stay off on the REST API.
+    let claims;
+    try {
+      ({ primary: claims } = await resolveMapClaims(
+        { ...input, neighbours: { ...input.neighbours, show: false } },
+        runClaimsSearch,
+        clientIp(req),
+      ));
+    } catch (error) {
+      if (error?.code === 'CLAIMS_NOT_FOUND') return agentError(res, 404, 'CLAIMS_NOT_FOUND', String(error.message), false);
+      throw error;
+    }
 
     if (!claims?.features?.length) {
       return agentError(res, 404, 'CLAIMS_NOT_FOUND', 'No matching mineral claims were found.', false);

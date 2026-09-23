@@ -3,6 +3,7 @@ import { createAgentMapProject } from '../../../shared/agentMapBuilder.js';
 import { applyCors, clientIp, handleMethods, rateLimited, rateLimitedShared } from '../guard.js';
 import { authenticateAgent } from '../agent-auth.js';
 import { runClaimsSearch } from '../claims-internal.js';
+import { resolveMapClaims } from '../map-claims.js';
 import { agentError, platformName, requestId } from '../agent-response.js';
 import { serverSupabase } from '../supabase-server.js';
 
@@ -172,13 +173,14 @@ export default async function handler(req, res) {
       sourceName = input.data.source_name || 'Agent supplied GeoJSON';
     } else {
       usedRegistry = true;
-      const claims = await runClaimsSearch({
-        jurisdiction: input.jurisdiction,
-        query: input.search.query,
-        type: input.search.type,
-        bbox: input.location.bbox,
-        clientIp: clientIp(req),
-      });
+      // Same selection as the MCP preview: exact claim_numbers, and a query
+      // plus bbox intersected rather than the bbox alone. Neighbours stay off
+      // on the REST API.
+      const { primary: claims } = await resolveMapClaims(
+        { ...input, neighbours: { ...input.neighbours, show: false } },
+        runClaimsSearch,
+        clientIp(req),
+      );
       if (!claims?.features?.length) {
         const error = new Error('No matching mineral claims were found.');
         error.code = 'CLAIMS_NOT_FOUND';
@@ -245,7 +247,9 @@ export default async function handler(req, res) {
       ? ['CLAIMS_NOT_FOUND', 404, false]
       : mapErrorCode(error);
 
-    void sb
+    // A Supabase builder only sends when awaited; without this the run stayed
+    // 'started' and a retry with the same key got REQUEST_IN_PROGRESS.
+    await sb
       .from('agent_runs')
       .update({
         status: 'failed',
@@ -253,13 +257,14 @@ export default async function handler(req, res) {
         duration_ms: Date.now() - started,
         completed_at: new Date().toISOString(),
       })
-      .eq('id', begun.run.id);
+      .eq('id', begun.run.id)
+      .then(() => {}, () => {});
 
     return agentError(
       res,
       status,
       code,
-      isNotFound ? 'No matching mineral claims were found.' : (status < 500 ? String(error?.message || 'Map creation failed.') : 'Map creation failed.'),
+      isNotFound ? String(error?.message || 'No matching mineral claims were found.') : (status < 500 ? String(error?.message || 'Map creation failed.') : 'Map creation failed.'),
       retryable,
     );
   }

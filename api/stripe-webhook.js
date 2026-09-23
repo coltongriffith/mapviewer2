@@ -401,6 +401,14 @@ export default async function handler(req, res) {
       supabase_code: e?.supabaseCode || null,
       message: String(e?.message || e).slice(0, 300),
     }));
+    // Release the ledger claim, or Stripe's retry would hit the unique key,
+    // be acked as a duplicate, and the event (e.g. a paid checkout that never
+    // granted Pro) would be lost for good.
+    if (event?.id) {
+      try {
+        await sb.from('stripe_events').delete().eq('event_id', event.id);
+      } catch { /* the 500 still asks Stripe to retry */ }
+    }
     // 500 → Stripe retries with backoff, which is what we want on a DB blip.
     return res.status(500).json({ error: 'processing failed' });
   }

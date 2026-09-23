@@ -224,4 +224,29 @@ describe('ExplorationMaps MCP endpoint', () => {
     await handler(getReq, getRes);
     expect(getRes.statusCode).toBe(405);
   });
+
+  it('keeps tool input schemas free of top-level combinators', async () => {
+    // Several MCP clients reject tool schemas with a top-level anyOf/oneOf/allOf,
+    // which would take every tool on the connector down with it.
+    const res = mockRes();
+    await handler(mockReq({ body: { jsonrpc: '2.0', id: 7, method: 'tools/list', params: {} } }), res);
+    for (const tool of res.body.result.tools) {
+      expect(tool.inputSchema.type).toBe('object');
+      for (const key of ['anyOf', 'oneOf', 'allOf']) expect(tool.inputSchema[key]).toBeUndefined();
+    }
+  });
+
+  it('accepts any notification with 202 and no body', async () => {
+    const res = mockRes();
+    await handler(mockReq({ body: { jsonrpc: '2.0', method: 'notifications/cancelled', params: { requestId: 3 } } }), res);
+    expect(res.statusCode).toBe(202);
+    expect(res.body).toBeUndefined();
+  });
+
+  it('still requires a query or bbox for claim search', async () => {
+    const res = mockRes();
+    await handler(mockReq({ body: { jsonrpc: '2.0', id: 8, method: 'tools/call', params: { name: 'search_mineral_claims', arguments: { jurisdiction: 'bc' } } } }), res);
+    expect(res.body.result.isError).toBe(true);
+    expect(res.body.result.structuredContent.error.message).toMatch(/query or bbox/);
+  });
 });

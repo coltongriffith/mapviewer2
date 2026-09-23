@@ -9,7 +9,7 @@ import { serverSupabase } from './_lib/supabase-server.js';
 import { clientIp, rateLimited, rateLimitedShared } from './_lib/guard.js';
 
 const SERVER_NAME = 'ExplorationMaps';
-const SERVER_VERSION = '1.1.0';
+const SERVER_VERSION = '1.1.1'; // keep in step with server.json
 const SERVER_INSTRUCTIONS = `ExplorationMaps creates mineral exploration maps from public registry records. For a request naming a company or project, identify the specific project before mapping. Search its claims, group records geographically, and pass verified claim_numbers to preview_exploration_map so unrelated projects stay out. If the project cannot be identified reliably, ask the user. When available, pass the company's HTTPS website in branding and verified project facts in facts_panel and claims_callout; do not invent ownership, grades, targets or coordinates. Choose a map type and basemap that match the request. The preview defaults to supported context overlays, nearby claims, a locator inset and a claim callout. After the call, report claims_found_primary separately from claims_found_neighbours, describe only layers_applied, and give the share_url. Public registry data is informational and is not a legal title opinion or survey. A rendered PNG and export pack are not currently returned by this MCP tool.`;
 const MODERN_VERSION = '2026-07-28';
 const LEGACY_VERSIONS = ['2025-11-25', '2025-06-18', '2025-03-26'];
@@ -94,7 +94,7 @@ const PREVIEW_INPUT_SCHEMA = {
         { type: 'array', uniqueItems: true, maxItems: 8, items: { type: 'string', enum: ['claims', 'roads', 'settlements', 'labels', 'rail', 'geology'] } },
       ],
       default: 'all',
-      description: 'Available reference overlays; all enables the supported roads, settlements, labels, rail and geology overlays.',
+      description: 'Reference overlays. "all" enables those that suit the basemap: labels and rail always, roads/settlements only on white or light_grey, geology except on satellite. Pass a list to choose exactly.',
     },
     style: {
       type: 'string',
@@ -123,11 +123,9 @@ const PREVIEW_INPUT_SCHEMA = {
     claims_callout: { type: 'object', additionalProperties: false, properties: { show: { type: 'boolean', default: true }, anchor: { type: 'string', enum: ['auto'] }, fields: { type: 'object', additionalProperties: { type: 'string' } }, source_note: { type: 'string' }, style: { type: 'string', enum: ['brand', 'technical', 'minimal'] } } },
     annotations: { type: 'array', maxItems: 30, items: { type: 'object', additionalProperties: false, required: ['type', 'label', 'lat', 'lng'], properties: { type: { type: 'string', enum: ['target', 'airstrip', 'camp', 'mine', 'deposit', 'other'] }, label: { type: 'string' }, lat: { type: 'number' }, lng: { type: 'number' } } } },
   },
-  anyOf: [
-    { required: ['search'] },
-    { required: ['location'] },
-    { required: ['claim_numbers'] },
-  ],
+  // "One of search, location or claim_numbers" is enforced by
+  // validateCreateMapInput, not a top-level anyOf: several MCP clients reject
+  // tool input schemas with top-level anyOf/oneOf/allOf.
 };
 
 const SEARCH_INPUT_SCHEMA = {
@@ -167,17 +165,14 @@ const SEARCH_INPUT_SCHEMA = {
       description: 'Maximum claim summaries returned to the model.',
     },
   },
-  anyOf: [
-    { required: ['query'] },
-    { required: ['bbox'] },
-  ],
+  // "query or bbox" is enforced in searchClaims — see PREVIEW_INPUT_SCHEMA.
 };
 
 const TOOLS = [
   {
     name: 'preview_exploration_map',
     title: 'Create a mineral exploration map preview',
-    description: 'Create a branded mineral exploration map from public registry claims and return a shareable URL. For a specific project, search its claims first and pass exact claim_numbers. Supply published facts and branding when known; never invent ownership, targets, grades or coordinates. Supports separate neighbouring claims, a project callout, locator inset, and map basemap selection. Drill and NI 43-101 layouts require user-supplied data or qualified review; this tool does not generate drill results.',
+    description: 'Create a branded mineral exploration map from public registry claims and return a shareable URL. Provide at least one of search, location or claim_numbers. For a specific project, search its claims first and pass exact claim_numbers. Supply published facts and branding when known; never invent ownership, targets, grades or coordinates. Supports separate neighbouring claims, a project callout, locator inset, and map basemap selection. Drill and NI 43-101 layouts require user-supplied data or qualified review; this tool does not generate drill results.',
     inputSchema: PREVIEW_INPUT_SCHEMA,
     outputSchema: {
       type: 'object',
@@ -210,7 +205,7 @@ const TOOLS = [
   {
     name: 'search_mineral_claims',
     title: 'Search mineral claims and tenure',
-    description: 'Search public mineral-claim registries by holder, exact claim number, claim name, or geographic bounding box. Returns claim number as a string, name, holder, status, expiry, area and centroid when the registry supplies them. Cluster results geographically before selecting a specific project. Results are informational, not a legal title opinion or survey.',
+    description: 'Search public mineral-claim registries by holder, exact claim number, claim name, or geographic bounding box; provide query, bbox, or both. Claim-name search is available for British Columbia and US BLM jurisdictions. Returns claim number as a string, name, holder, status, expiry, area and centroid when the registry supplies them. Cluster results geographically before selecting a specific project. Results are informational, not a legal title opinion or survey.',
     inputSchema: SEARCH_INPUT_SCHEMA,
     outputSchema: {
       type: 'object',
@@ -329,10 +324,29 @@ function sourceWarnings(jurisdiction, featureCollection) {
   return warnings;
 }
 
+function hashSubject(value) {
+  return createHash('sha256').update(value).digest('hex').slice(0, 48);
+}
+
+// Per-caller key. ChatGPT sends an anonymised per-user `openai/subject`; other
+// clients only identify themselves by clientInfo. Both are caller-supplied, so
+// they only partition the budget — ipSubject() is the ceiling they cannot
+// rotate their way past.
 function callerSubject(req, toolName) {
   const ip = clientIp(req);
-  const clientName = req.body?.params?._meta?.['io.modelcontextprotocol/clientInfo']?.name || 'unknown';
-  return createHash('sha256').update(`mcp:${toolName}:${ip}:${clientName}`).digest('hex').slice(0, 48);
+  const meta = req.body?.params?._meta || {};
+  const user = typeof meta['openai/subject'] === 'string' ? meta['openai/subject'].slice(0, 200) : '';
+  const clientName = String(meta['io.modelcontextprotocol/clientInfo']?.name || 'unknown').slice(0, 100);
+  return hashSubject(user ? `mcp:${toolName}:openai:${user}` : `mcp:${toolName}:${ip}:${clientName}`);
+}
+
+function ipSubject(req, toolName) {
+  return hashSubject(`mcp:${toolName}:ip:${clientIp(req)}`);
+}
+
+async function overToolLimit(sb, req, toolName, { perCaller, perIp, bucket }) {
+  if (await rateLimitedShared(sb, req, { max: perCaller, windowSeconds: 60 * 60, bucket, subject: callerSubject(req, toolName) })) return true;
+  return rateLimitedShared(sb, req, { max: perIp, windowSeconds: 60 * 60, bucket: `${bucket}-ip`, subject: ipSubject(req, toolName) });
 }
 
 async function createPreview(req, args) {
@@ -375,12 +389,10 @@ async function createPreview(req, args) {
 
   const sb = serverSupabase();
   const subject = callerSubject(req, 'preview_exploration_map');
-  if (await rateLimitedShared(sb, req, {
-    max: 5,
-    windowSeconds: 60 * 60,
-    bucket: 'mcp-preview',
-    subject,
-  })) {
+  // perCaller matches create_shared_map's anonymous limit (3 per creator key
+  // per hour); a higher number only let calls 4-5 do the registry and branding
+  // work and then fail at the share insert.
+  if (await overToolLimit(sb, req, 'preview_exploration_map', { perCaller: 3, perIp: 60, bucket: 'mcp-preview' })) {
     const error = new Error('Free MCP preview limit reached. Try again later or connect an ExplorationMaps account.');
     error.code = 'RATE_LIMITED';
     throw error;
@@ -411,7 +423,19 @@ async function createPreview(req, args) {
     p_state: project,
     p_creator_key: subject,
   });
-  if (shareError) throw shareError;
+  if (shareError) {
+    const message = String(shareError.message || '');
+    const error = new Error('The map preview could not be saved.');
+    error.code = 'SHARE_FAILED';
+    if (/SHARE_RATE_LIMIT/.test(message)) {
+      error.message = 'Free MCP preview limit reached. Try again later or connect an ExplorationMaps account.';
+      error.code = 'RATE_LIMITED';
+    } else if (/SHARE_TOO_(LARGE|COMPLEX)/.test(message)) {
+      error.message = 'This claim set is too large for a preview. Pass claim_numbers for one project, or set neighbours.show to false.';
+      error.code = 'MAP_TOO_COMPLEX';
+    }
+    throw error;
+  }
 
   const siteUrl = String(process.env.SITE_URL || 'https://explorationmaps.com').replace(/\/$/, '');
   const warnings = [
@@ -470,13 +494,7 @@ async function searchClaims(req, args) {
   const limit = Math.max(1, Math.min(100, Number(args?.limit) || 25));
 
   const sb = serverSupabase();
-  const subject = callerSubject(req, 'search_mineral_claims');
-  if (await rateLimitedShared(sb, req, {
-    max: 30,
-    windowSeconds: 60 * 60,
-    bucket: 'mcp-search',
-    subject,
-  })) {
+  if (await overToolLimit(sb, req, 'search_mineral_claims', { perCaller: 30, perIp: 300, bucket: 'mcp-search' })) {
     const error = new Error('Mineral-registry search rate limit reached.');
     error.code = 'RATE_LIMITED';
     throw error;
@@ -589,7 +607,7 @@ export default async function handler(req, res) {
   if (modern) res.setHeader('MCP-Protocol-Version', MODERN_VERSION);
 
   try {
-    if (body.method === 'notifications/initialized') {
+    if (body.method.startsWith('notifications/') && body.id === undefined) {
       return res.status(202).end();
     }
 

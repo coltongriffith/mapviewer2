@@ -120,6 +120,21 @@ describe('api/claims request hardening', () => {
     }
   });
 
+  it('runs B.C. claim-name search against CLAIM_NAME instead of refusing it', async () => {
+    // B.C. is WFS, not ArcGIS, so the ArcGIS nameFields gate refused every B.C.
+    // name search before bcCqlFilter's CLAIM_NAME branch could run.
+    const fetchMock = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ type: 'FeatureCollection', features: [] }), text: async () => '' }));
+    vi.stubGlobal('fetch', fetchMock);
+    const res = mockRes();
+    await handler({ ...req({ q: 'GOLD 5', province: 'bc', type: 'name' }), headers: { 'x-forwarded-for': '9.9.9.10' } }, res);
+    expect(res.statusCode).toBe(200);
+    expect(decodeURIComponent(String(fetchMock.mock.calls[0][0]))).toContain("CLAIM_NAME ILIKE '%GOLD 5%'");
+
+    const on = mockRes();
+    await handler({ ...req({ q: 'GOLD 5', province: 'on', type: 'name' }), headers: { 'x-forwarded-for': '9.9.9.10' } }, on);
+    expect(on.statusCode).toBe(400);
+  });
+
   it('rate limits repeated requests from one IP', async () => {
     const codes = [];
     for (let i = 0; i < 70; i++) {

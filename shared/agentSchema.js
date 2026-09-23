@@ -49,6 +49,42 @@ function cleanString(value, max) {
   return cleaned.slice(0, max);
 }
 
+// Facts and callout text come straight from the model and are stored in the
+// shared map, then rendered verbatim — keep only the documented keys, as
+// clipped strings or finite numbers.
+function cleanFactsPanel(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const facts = {};
+  for (const key of ['project', 'commodity', 'ownership', 'access']) {
+    const text = cleanString(value[key], 200);
+    if (text) facts[key] = text;
+  }
+  if (Number.isInteger(value.claims) && value.claims >= 0) facts.claims = value.claims;
+  if (Number.isFinite(value.hectares) && value.hectares >= 0) facts.hectares = value.hectares;
+  if (Array.isArray(value.tickers)) {
+    const tickers = value.tickers.map((ticker) => cleanString(ticker, 40)).filter(Boolean).slice(0, 6);
+    if (tickers.length) facts.tickers = tickers;
+  }
+  return Object.keys(facts).length ? facts : null;
+}
+
+function cleanClaimsCallout(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return { show: true };
+  const fields = {};
+  if (value.fields && typeof value.fields === 'object' && !Array.isArray(value.fields)) {
+    for (const [key, text] of Object.entries(value.fields).slice(0, 12)) {
+      const cleaned = cleanString(typeof text === 'number' ? String(text) : text, 200);
+      if (cleaned) fields[String(key).slice(0, 40)] = cleaned;
+    }
+  }
+  return {
+    show: value.show !== false,
+    fields,
+    source_note: cleanString(value.source_note, 200),
+    style: ['brand', 'technical', 'minimal'].includes(value.style) ? value.style : 'brand',
+  };
+}
+
 function normalizeInclude(value) {
   if (value === 'all') return ['claims', ...Object.keys(AGENT_OVERLAYS)];
   if (!Array.isArray(value)) return ['claims', 'roads', 'settlements'];
@@ -132,9 +168,14 @@ export function validateCreateMapInput(body) {
   const defaultBasemap = mapType === 'investor' ? 'satellite' : mapType === 'infrastructure' ? 'terrain' : 'white';
   const basemap = cleanString(body.basemap, 40) || defaultBasemap;
   if (!AGENT_BASEMAPS.includes(basemap)) errors.push(`Unsupported basemap '${basemap}'.`);
-  if (basemap.startsWith('satellite') && (body.include == null || body.include === 'all')) {
-    const geologyIndex = include.indexOf('geology');
-    if (geologyIndex >= 0) include.splice(geologyIndex, 1);
+  // The default and 'all' fit the overlays to the basemap. Roads/settlements is
+  // an opaque street map drawn over the basemap, so it would wash out imagery,
+  // relief, topo or a dark canvas; geology would hide satellite imagery. An
+  // explicit list is honoured as given.
+  if (body.include == null || body.include === 'all') {
+    const drop = new Set(basemap.startsWith('satellite') ? ['geology'] : []);
+    if (!['white', 'light_grey'].includes(basemap)) { drop.add('roads'); drop.add('settlements'); }
+    for (let i = include.length - 1; i >= 0; i--) if (drop.has(include[i])) include.splice(i, 1);
   }
   const insetBasemap = cleanString(body.inset?.basemap, 40) || basemap;
   if (!AGENT_BASEMAPS.includes(insetBasemap)) errors.push(`Unsupported inset.basemap '${insetBasemap}'.`);
@@ -173,7 +214,7 @@ export function validateCreateMapInput(body) {
       basemap,
       basemap_opacity: opacity,
       inset: { show: body.inset?.show !== false, basemap: insetBasemap },
-      neighbours: { show: body.neighbours?.show !== false, label_holders: body.neighbours?.label_holders !== false, max_holders: Math.max(0, Math.min(8, Number(body.neighbours?.max_holders ?? 8))) },
+      neighbours: { show: body.neighbours?.show !== false, label_holders: body.neighbours?.label_holders !== false, max_holders: Number.isFinite(Number(body.neighbours?.max_holders)) ? Math.max(0, Math.min(8, Math.trunc(Number(body.neighbours.max_holders)))) : 8 },
       branding: {
         website: cleanString(rawBranding.website, 500),
         logo_url: cleanString(rawBranding.logo_url, 500),
@@ -182,8 +223,8 @@ export function validateCreateMapInput(body) {
         accent_color: validHex(rawBranding.accent_color) ? rawBranding.accent_color : null,
         font: cleanString(rawBranding.font, 80),
       },
-      facts_panel: body.facts_panel && typeof body.facts_panel === 'object' ? body.facts_panel : null,
-      claims_callout: body.claims_callout && typeof body.claims_callout === 'object' ? body.claims_callout : { show: true },
+      facts_panel: cleanFactsPanel(body.facts_panel),
+      claims_callout: cleanClaimsCallout(body.claims_callout),
       annotations: annotations.map((item) => ({ type: cleanString(item.type, 40) || 'target', label: cleanString(item.label, 100), lat: Number(item.lat), lng: Number(item.lng) })),
       company: { name: companyName },
       data,
