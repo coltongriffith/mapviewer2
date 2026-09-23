@@ -196,3 +196,20 @@ export function nextCustomLegendId(existing = []) {
   while (used.has(id)) { n += 1; id = `custom-${n}`; }
   return id;
 }
+
+// Default legend panel width: wide enough for the longest entry label so it is
+// not cut off at the panel edge (it used to be a fixed 300 px), capped at 480.
+// A width the user dragged (legendWidthPx) wins — except 300, which every new
+// project stores as its default and so says nothing about intent. Label start (46 px) and
+// the 13 px label font match the exporters' legend row (renderScene LEGEND_ROW).
+export function legendAutoWidth(items = [], layout = {}) {
+  const lfs = Number(layout?.legendFontScale) || 1;
+  const longest = items.reduce((m, it) => Math.max(m, String(it?.label || '').length), 0);
+  return Math.max(300, Math.min(480, Math.round(46 + longest * 13 * lfs * 0.56 + 20)));
+}
+
+export function legendWidthFor(layout = {}, items = []) {
+  const w = Number(layout?.legendWidthPx);
+  if (Number.isFinite(w) && w !== 300) return Math.max(180, Math.min(480, w));
+  return legendAutoWidth(items, layout);
+}

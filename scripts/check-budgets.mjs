@@ -28,7 +28,9 @@ const BUDGETS = {
   // precedence controls (base size, class/point override notes, scale-all),
   // Zoom to layer, and callout obstacle handling add ~2.1 KiB to the editor
   // chunk; the shared symbol geometry replaced the old icon builder.
-  maxJsChunkGzipKb: 139,
+  // 139 → 141: placed logo/image markers (upload, width, opacity, backing,
+  // replace) and the main logo's opacity control live in the editor chunk.
+  maxJsChunkGzipKb: 141,
   initialJsGzipKb: 75,
   initialAuthJsGzipKb: 135,
   // The former configured check omitted VITE_ADMIN_EMAIL, which pruned the
@@ -40,7 +42,9 @@ const BUDGETS = {
   // drill traces and raster overlays. All of it lives in the editor chunk and
   // the shared export renderer, so the totals and the editor route carry it;
   // the homepage and admin budgets are unchanged.
-  totalAuthJsGzipKb: 870,
+  // 870 → 875: the same, plus SVG font embedding and shared export label
+  // geometry in the export renderer.
+  totalAuthJsGzipKb: 875,
   totalJsGzipKb: 805,
   adminAuthJsGzipKb: 150,
   adminJsGzipKb: 85,

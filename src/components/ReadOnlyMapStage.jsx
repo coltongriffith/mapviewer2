@@ -385,7 +385,7 @@ export default function ReadOnlyMapStage({ project }) {
       {layout.logo && (
         <div className="template-zone" style={zoneStyle(resolvedZones.logo)}>
           <div className={`template-card logo-card${layout.logoTransparent ? ' panel--transparent' : ''}`}>
-            <img src={layout.logo} alt="Logo" />
+            <img src={layout.logo} alt="Logo" style={{ opacity: layout.logoOpacity ?? 1 }} />
           </div>
         </div>
       )}
