@@ -45,7 +45,7 @@ import {
   TEMPLATE_THEMES,
 } from './projectState';
 import { EXPORT_RATIOS } from './constants';
-import { applyRoleToLayer, inferRoleFromLayer } from './mapPresets';
+import { applyRoleToLayer, inferRoleFromLayer, NEUTRAL_ROLES } from './mapPresets';
 import { getTemplate } from './templates';
 import { buildLegendItems, resolveTemplateZones } from './templates/technicalResultsTemplate';
 import { resolveNI43101Zones, resolveTitleStripFields } from './templates/technicalReportTemplate';
@@ -77,7 +77,9 @@ import { getMapFrame, projectionLabel, scaleBarHeight } from './utils/coordinate
 import { pickScaleBar } from './utils/scaleBar.js';
 import CoordinateFrameOverlay from './components/CoordinateFrameOverlay.jsx';
 import { featureKey, layerFeatures, isFeatureHidden, featuresInBounds, visibleGeojson, featureLabel } from './utils/featureIdentity.js';
-import { stripFeatureStyle, styledFeatureCount } from './utils/featureStyle.js';
+import { stripFeatureStyle, styledFeatureCount, sizedFeatureCount, scalePointSizes, withoutFeatureSizes } from './utils/featureStyle.js';
+import { DEFAULT_POINT_SIZE, clampPointSize } from './utils/pointSymbol.js';
+import { hasClassSizes, withoutClassSizes, classStyle } from './utils/classification.js';
 import { addDrillTraces, isTrace } from './utils/drillTraces.js';
 import {
   isRasterName, isWorldFileName, worldFileFor, parseWorldFile, boundsFromWorldFile, looksLikeLatLng,
@@ -371,7 +373,7 @@ function applyModeToProject(project, template, mode) {
     ...project,
     layers: project.layers.map((layer) => ({
       ...layer,
-      visible: layer.userStyled ? layer.visible : (preset.visibleRoles ? (preset.visibleRoles.includes(layer.role) || POINT_ROLES.has(layer.role)) : layer.visible),
+      visible: (layer.userStyled || NEUTRAL_ROLES.has(layer.role)) ? layer.visible : (preset.visibleRoles ? (preset.visibleRoles.includes(layer.role) || POINT_ROLES.has(layer.role)) : layer.visible),
     })),
     layout: {
       ...project.layout,
@@ -570,6 +572,13 @@ function fitMapToAreaClaims(map, areaClaims) {
   return false;
 }
 
+// Frame the map to one layer — the explicit "Zoom to layer" action. Importing
+// a layer no longer reframes a map that already has content.
+function fitMapToLayer(map, layer) {
+  if (!map || !layer?.geojson?.features?.length) return false;
+  return fitMapToAreaClaims(map, layer.geojson);
+}
+
 function initialWorkspaceState() {
   const base = createInitialProjectState();
   const fallback = {
@@ -631,6 +640,9 @@ export default function App({ initialAction = null }) {
   const mapViewportRef = useRef(null);
   const leafletMapRef = useRef(null);
   const skipAutoFitRef = useRef(false);
+  // Set by an import into a map that already has layers: the next auto-fit is
+  // skipped so the user's viewport and framing layer stay where they were.
+  const preserveViewRef = useRef(false);
   const dragHoverRef = useRef({});        // tracks last hover state so setDragging only fires on zone changes
   const mapSizeRef = useRef({ width: 1600, height: 1000 });
   const draggingActiveRef = useRef(false); // true while a template-zone drag is in progress; freezes ResizeObserver updates
@@ -1665,6 +1677,7 @@ export default function App({ initialAction = null }) {
   useEffect(() => {
     const map = leafletMapRef.current;
     if (!map) return;
+    if (preserveViewRef.current) { preserveViewRef.current = false; return; }
     const noLayers = project.layers.length === 0;
     // Use the ref so cosmetic layout changes (title, logo size, opacity…) don't
     // trigger a map reframe. Only the explicit deps below cause refitting.
@@ -2560,11 +2573,19 @@ export default function App({ initialAction = null }) {
   // degraded state scoping, or a jurisdiction the app auto-adopted rather than
   // the user choosing it. Stored on the layer so it persists into project state
   // and is rendered over the map, not just in the search panel it came from.
-  const addGeoJSONAsLayer = async (geojson, fileName, source = 'upload', provenance = null) => {
+  // roleHint: the caller knows what the layer is (claims from a registry
+  // search or the Add Claims dialog); otherwise the role is inferred from the
+  // file name and falls back to a neutral "Other" rather than "Claims".
+  const addGeoJSONAsLayer = async (geojson, fileName, source = 'upload', provenance = null, roleHint = null) => {
     const id = crypto.randomUUID();
     const baseName = fileName.replace(/\.(zip|geojson|json|kml|kmz|csv)$/i, '') || 'Layer';
     const kind = detectLayerKind(geojson);
-    const role = inferRoleFromLayer({ name: baseName, type: kind });
+    const role = roleHint || inferRoleFromLayer({ name: baseName, type: kind });
+    // Curated loads (demo, template, deep link) frame the map as before; a
+    // user's own import into a map that already shows data keeps the view.
+    const preserveView = !['demo', 'template', 'deeplink'].includes(source)
+      && !!leafletMapRef.current
+      && project.layers.some((l) => l.geojson?.features?.length);
     // Collars that carry azimuth, dip and length get a surface trace each,
     // whatever file they arrived in.
     if (role === 'drillholes' && geojson?.features) geojson = addDrillTraces(geojson, { maxFeatures: MAX_FEATURES });
@@ -2586,11 +2607,16 @@ export default function App({ initialAction = null }) {
       ...(provenance ? { provenance } : {}),
     };
 
+    if (preserveView) preserveViewRef.current = true;
     setProject((prev) => {
       // Count inside the callback so rapid sequential imports each see up-to-date count
       const existingClaimsCount = prev.layers.filter((l) => l.role === 'claims').length;
       const nextLayer = applyRoleToLayer(baseLayer, role, existingClaimsCount);
       const allLayers = [...prev.layers, nextLayer];
+      // Adding to an existing map: leave the other layers' visibility, the
+      // framing layer and the view alone, and show the new layer even if the
+      // current mode preset would hide its role — the user just imported it.
+      if (preserveView) return { ...prev, layers: allLayers };
       const next = {
         ...prev,
         layers: allLayers,
@@ -2616,7 +2642,11 @@ export default function App({ initialAction = null }) {
     }).catch(() => {});
 
     setSelectedLayerId(id);
-    setUploadStatus({ type: 'success', message: `Imported ${fileName}. ${kind === 'points' ? 'Point layer detected.' : 'Layer added successfully.'}` });
+    setUploadStatus({
+      type: 'success',
+      message: `Imported ${fileName} as ${ROLE_LABELS[role] || 'a layer'}${role === 'other' ? ' — set its role in the layer panel' : ''}.${preserveView ? ' The view was kept.' : ''}`,
+      ...(preserveView ? { action: { label: 'Zoom to imported layer', onClick: () => fitMapToLayer(leafletMapRef.current, { geojson }) } } : {}),
+    });
   };
 
   // Hand a monitored portfolio (or one claim) to the map editor.
@@ -2643,7 +2673,7 @@ export default function App({ initialAction = null }) {
       syncedAt: info.syncedAt || null,
       tenureNumbers: info.tenureNumbers || [],
       attribution: 'Contains information licensed under the Open Government Licence – British Columbia.',
-    });
+    }, 'claims');
     // Only title the map when it is a fresh workspace — overwriting the title
     // of a project the user has been working on would be rude and surprising.
     if (!projectId && !project.layers.length) {
@@ -2984,7 +3014,7 @@ export default function App({ initialAction = null }) {
       clearActiveProjectContext();
 
       if (geojson) {
-        await addGeoJSONAsLayer(geojson, `${label} Claims.geojson`, 'deeplink');
+        await addGeoJSONAsLayer(geojson, `${label} Claims.geojson`, 'deeplink', null, 'claims');
         updateLayout({
           title: `${label} — Mineral Claims`,
           exportSettings: { filename: `${ticker.toLowerCase()}-claims`, pixelRatio: 2 },
@@ -3763,7 +3793,9 @@ export default function App({ initialAction = null }) {
     const own = layer.featureOverrides?.[key] || {};
     const base = layer.style || {};
     const set = (patch) => setFeatureOverride(layerId, key, patch);
-    const size = own.markerSize ?? base.markerSize ?? 12;
+    const feature = layerFeatures(layer).find((f) => featureKey(f) === key);
+    const inherited = (layer.classification && classStyle(layer.classification, feature, 'points')?.markerSize) || Number(base.markerSize) || DEFAULT_POINT_SIZE;
+    const size = own.markerSize ?? inherited;
     const shape = own.markerShape ?? base.markerShape ?? 'circle';
     const customised = POINT_STYLE_KEYS.some((k) => own[k] !== undefined);
     const idp = `f-${where}-${String(key).replace(/[^A-Za-z0-9_-]/g, '_')}`;
@@ -3771,10 +3803,10 @@ export default function App({ initialAction = null }) {
       <div className="point-style-controls">
         <div className="control-row inline-2">
           <div>
-            <label htmlFor={`${idp}-size`}>This Point&apos;s Size</label>
-            <input id={`${idp}-size`} type="range" min="6" max="48" step="1" value={size} onChange={(e) => set({ markerSize: Number(e.target.value) })} />
+            <label htmlFor={`${idp}-size`}>This Point&apos;s Size{own.markerSize != null ? ' (own size)' : ''}</label>
+            <input id={`${idp}-size`} type="range" min="1" max="48" step="0.5" value={Math.min(48, size)} onChange={(e) => set({ markerSize: clampPointSize(e.target.value) })} />
           </div>
-          <div className="range-value">{size}px</div>
+          <input className="size-number" type="number" min="1" max="64" step="0.5" value={size} aria-label="This point's size in px" onChange={(e) => { const n = clampPointSize(e.target.value); if (n != null) set({ markerSize: n }); }} />
         </div>
         <div className="control-row">
           <div className="control-label">Marker Shape</div>
@@ -5244,6 +5276,9 @@ export default function App({ initialAction = null }) {
                   </button>
                   <button className="secondary-btn" type="button" onClick={() => moveLayer(selectedLayer.id, 'up')}>Move Up</button>
                 </div>
+                {selectedLayer.geojson?.features?.length ? (
+                  <button className="link-btn" type="button" style={{ justifySelf: 'start' }} onClick={() => fitMapToLayer(leafletMapRef.current, selectedLayer)}>Zoom to layer</button>
+                ) : null}
                 <div className="control-row inline-2">
                   <div>
                     <label>{isPointStyledLayer(selectedLayer) ? 'Point Border' : 'Outline Color'}</label>
@@ -5263,13 +5298,46 @@ export default function App({ initialAction = null }) {
                 </div>
                 {isPointStyledLayer(selectedLayer) ? (
                   <>
-                    <div className="control-row inline-2">
-                      <div>
-                        <label htmlFor="f-point-size-4316">Point Size</label>
-                        <input id="f-point-size-4316" type="range" min="6" max="24" step="1" value={selectedLayer.style?.markerSize ?? 12} onChange={(e) => updateLayer(selectedLayer.id, { style: { markerSize: Number(e.target.value) } })} />
-                      </div>
-                      <div className="range-value">{selectedLayer.style?.markerSize ?? 12}px</div>
-                    </div>
+                    {(() => {
+                      // Size = symbol diameter in px at 1x (utils/pointSymbol.js).
+                      // Precedence: a point's own size > its class size > this.
+                      const base = Number(selectedLayer.style?.markerSize) || DEFAULT_POINT_SIZE;
+                      const setBase = (v) => { const n = clampPointSize(v); if (n != null) updateLayer(selectedLayer.id, { style: { markerSize: n } }); };
+                      const cls = selectedLayer.classification;
+                      const classSized = hasClassSizes(cls) ? cls.classes.filter((c) => Number.isFinite(c.size)).length : 0;
+                      const pointSized = sizedFeatureCount(selectedLayer);
+                      return (
+                        <>
+                          <div className="control-row inline-2">
+                            <div>
+                              <label htmlFor="f-point-size-4316">{classSized || pointSized ? 'Base Point Size' : 'Point Size'}</label>
+                              <input id="f-point-size-4316" type="range" min="1" max="40" step="0.5" value={Math.min(40, base)} onChange={(e) => setBase(e.target.value)} />
+                            </div>
+                            <input className="size-number" type="number" min="1" max="64" step="0.5" value={base} aria-label="Point size in px" onChange={(e) => setBase(e.target.value)} />
+                          </div>
+                          {(classSized > 0 || pointSized > 0) && (
+                            <p className="small-note size-override-note" role="note">
+                              {classSized > 0 && `${classSized} of ${cls.classes.length} classes set their own size`}
+                              {classSized > 0 && pointSized > 0 && ' and '}
+                              {pointSized > 0 && `${pointSized} point${pointSized === 1 ? '' : 's'} ${pointSized === 1 ? 'has its' : 'have their'} own size`}
+                              {' — this base size applies only to points without one. '}
+                              {classSized > 0 && <button type="button" className="link-btn" onClick={() => updateLayer(selectedLayer.id, { classification: withoutClassSizes(cls) })}>Reset classes to layer size</button>}
+                              {classSized > 0 && pointSized > 0 && ' · '}
+                              {pointSized > 0 && <button type="button" className="link-btn" onClick={() => updateLayer(selectedLayer.id, { featureOverrides: withoutFeatureSizes(selectedLayer.featureOverrides) })}>Reset points to layer size</button>}
+                            </p>
+                          )}
+                          <div className="control-row inline-2 scale-all-row">
+                            <span className="control-label">Scale all points</span>
+                            <div className="button-row">
+                              {[[0.8, '−20%'], [1.25, '+25%']].map(([k, label]) => (
+                                <button key={label} type="button" className="secondary-btn" title="Scale the layer, class and individual point sizes together, keeping their differences"
+                                  onClick={() => updateLayer(selectedLayer.id, scalePointSizes(selectedLayer, k, { base: DEFAULT_POINT_SIZE }))}>{label}</button>
+                              ))}
+                            </div>
+                          </div>
+                        </>
+                      );
+                    })()}
                     <div className="control-row">
                       <label>Marker Shape</label>
                       <div className="marker-shape-picker-visual">
@@ -6885,6 +6953,8 @@ export default function App({ initialAction = null }) {
               onMove={(id, offset) => updateCallout(id, { offset: { x: offset.x, y: offset.y }, isManualPosition: true })}
               onUpdate={updateCallout}
               fontFamily={project.layout.fonts?.callout}
+              zones={resolvedZones}
+              layout={project.layout}
             />
           </>
         )}
@@ -7396,7 +7466,7 @@ export default function App({ initialAction = null }) {
               handleUploadFile(file);
             }}
             onImport={(geojson, name, provenance, source = 'registry') => {
-              addGeoJSONAsLayer(geojson, `${name}.geojson`, source, provenance);
+              addGeoJSONAsLayer(geojson, `${name}.geojson`, source, provenance, 'claims');
               setShowAddClaimsModal(false);
               setAddClaimsModalPath(null);
               if (screen !== 'editor') setScreen('editor');

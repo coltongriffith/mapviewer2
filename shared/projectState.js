@@ -9,6 +9,8 @@ export const ROLE_LABELS = {
   roads_access: 'Roads / Access',
   rivers_water: 'Rivers / Water',
   labels: 'Labels',
+  sampling_extent: 'Sampling Extent',
+  other: 'Other / Unassigned',
 };
 
 export const POINT_ROLES = new Set([

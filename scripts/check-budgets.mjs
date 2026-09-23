@@ -24,7 +24,11 @@ const BUDGETS = {
   // under 135 and the data-loss fixes that landed in it — save-conflict
   // revisions surviving a reload, re-pointing the open map after sign-in
   // migration, pans kept out of undo, title/subtitle resync — add ~0.3 KiB.
-  maxJsChunkGzipKb: 136,
+  // 136 → 139 (Sept 2026 point-size / export-agreement work): the size
+  // precedence controls (base size, class/point override notes, scale-all),
+  // Zoom to layer, and callout obstacle handling add ~2.1 KiB to the editor
+  // chunk; the shared symbol geometry replaced the old icon builder.
+  maxJsChunkGzipKb: 139,
   initialJsGzipKb: 75,
   initialAuthJsGzipKb: 135,
   // The former configured check omitted VITE_ADMIN_EMAIL, which pruned the

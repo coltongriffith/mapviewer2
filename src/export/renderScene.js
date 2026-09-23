@@ -9,7 +9,7 @@ import { northArrowShapes, NORTH_ARROW_FONT } from '../utils/northArrowGeometry'
 import { markerIconSvgFragment, drawMarkerIconCanvas } from '../utils/markerIcons.jsx';
 import { safeColor } from '../utils/colorUtils.js';
 import regionsNA from '../assets/regionsNA.json';
-import { estimateBox, intersects as intersectsCallout, leaderEndpoint, arrowheadPoints } from '../utils/calloutLayout';
+import { resolveCalloutBoxes, panelObstacles, leaderEndpoint, arrowheadPoints } from '../utils/calloutLayout';
 import dissolveGeo from '@turf/dissolve';
 import { exportCreditLines } from '../utils/claimProvenance';
 import { referenceOverlayCredits } from '../utils/referenceOverlayCredits.js';
@@ -18,6 +18,7 @@ import { getFeatureStyle as resolveFeatureStyle, canDissolve } from '../utils/fe
 import { groupLegendItems } from '../utils/legendCustomization.js';
 import { isBracket, distanceLineLabel, bracketTicks, bracketLabelAnchor } from '../utils/distanceLine.js';
 import { pickScaleBar } from '../utils/scaleBar.js';
+import { resolvePointSymbol, symbolPath } from '../utils/pointSymbol.js';
 import { tileLayerCredits } from '../utils/rasterOverlay.js';
 import { getMapFrame, scaleFrame, computeGridTicks, projectionLabel, FRAME_FONT, FRAME_FONT_PX } from '../utils/coordinateFrame.js';
 
@@ -175,10 +176,15 @@ function rgba(hex, alpha = 1) {
   const int = Number.parseInt(normalized, 16);
   return `rgba(${(int >> 16) & 255}, ${(int >> 8) & 255}, ${int & 255}, ${alpha})`;
 }
+// Stroke width and dash lengths are CSS px at 1x, so both scale with the
+// export: a 3x PNG must look like the editor at three times the resolution.
+// The canvas used to hold outlines at 1x width (and dashes at 1x length) above
+// scale 1, so a 3x export drew boundaries a third as heavy as the editor and
+// the SVG export — the "editor strokes look heavier than the PNG" report.
 function setCanvasStroke(ctx, style, scale) {
   ctx.strokeStyle = style.stroke || style.markerColor || '#111111';
-  ctx.lineWidth = (style.strokeWidth ?? 2) * (scale >= 1 ? 1 : scale);
-  ctx.setLineDash(style.dashArray ? style.dashArray.split(/[ ,]+/).map(Number).filter((n) => Number.isFinite(n) && n > 0) : []);
+  ctx.lineWidth = (style.strokeWidth ?? 2) * scale;
+  ctx.setLineDash(style.dashArray ? style.dashArray.split(/[ ,]+/).map(Number).filter((n) => Number.isFinite(n) && n > 0).map((n) => n * scale) : []);
 }
 function buildPatternCanvas(style, scale) {
   const spacing = (style.fillPatternSpacing || 6) * scale;
@@ -270,7 +276,14 @@ function drawCanvasGeometry(ctx, map, feature, style, scale) {
   if (type === 'MultiPolygon') { ctx.beginPath(); coords.forEach((polygon) => polygon.forEach((ring) => drawCanvasPath(ctx, projectRing(map, ring, scale), true))); setCanvasFill(ctx, style); ctx.fill('evenodd'); setCanvasStroke(ctx, style, scale); ctx.stroke(); ctx.restore(); return; }
   if (type === 'LineString') { ctx.beginPath(); drawCanvasPath(ctx, projectLine(map, coords, scale), false); setCanvasStroke(ctx, style, scale); ctx.stroke(); ctx.restore(); return; }
   if (type === 'MultiLineString') { ctx.beginPath(); coords.forEach((line) => drawCanvasPath(ctx, projectLine(map, line, scale), false)); setCanvasStroke(ctx, style, scale); ctx.stroke(); ctx.restore(); return; }
-  if (type === 'Point') { const pt = projectCoordinate(map, coords, scale); const radius = (style.markerSize ?? 8) * scale * 0.5; if (style._customIconImg) { const s = radius * 2; ctx.drawImage(style._customIconImg, pt.x - s / 2, pt.y - s / 2, s, s); ctx.restore(); return; } const shape = style.markerShape || 'circle'; drawCanvasMarkerShape(ctx, shape, pt.x, pt.y, radius); ctx.fillStyle = style.markerFill || style.markerColor || '#ffffff'; ctx.fill(); ctx.lineWidth = (style.strokeWidth ?? 1.5) * scale; ctx.strokeStyle = style.markerColor || style.stroke || '#111111'; ctx.stroke(); ctx.restore(); return; }
+  if (type === 'Point') {
+    // utils/pointSymbol.js: the same size convention and geometry as the editor.
+    const sym = resolvePointSymbol(style);
+    const pt = projectCoordinate(map, coords, scale); const radius = sym.size * scale * 0.5;
+    if (style._customIconImg) { const s = radius * 2; ctx.drawImage(style._customIconImg, pt.x - s / 2, pt.y - s / 2, s, s); ctx.restore(); return; }
+    if (typeof Path2D !== 'undefined') { const path = new Path2D(symbolPath(sym.shape, pt.x, pt.y, radius)); ctx.fillStyle = sym.fill; ctx.fill(path); ctx.lineWidth = sym.strokeWidth * scale; ctx.lineJoin = 'round'; ctx.strokeStyle = sym.stroke; ctx.stroke(path); ctx.restore(); return; }
+    drawCanvasMarkerShape(ctx, sym.shape, pt.x, pt.y, radius); ctx.fillStyle = sym.fill; ctx.fill(); ctx.lineWidth = sym.strokeWidth * scale; ctx.strokeStyle = sym.stroke; ctx.stroke(); ctx.restore(); return;
+  }
   ctx.restore();
 }
 function buildSvgPatternDef(style, patternId, scale) {
@@ -296,7 +309,8 @@ function geometryToSvg(map, feature, style, scale) {
   const fillOpacity = (style.fillOpacity ?? 0.2) * (style.opacity ?? 1);
   const strokeWidth = (style.strokeWidth ?? 2) * scale;
   const opacity = Math.max(0, Math.min(1, style.opacity ?? 1));
-  const dash = style.dashArray ? ` stroke-dasharray="${escapeXml(style.dashArray)}"` : '';
+  const dashList = String(style.dashArray || '').split(/[ ,]+/).map(Number).filter((n) => Number.isFinite(n) && n > 0).map((n) => +(n * scale).toFixed(2));
+  const dash = dashList.length ? ` stroke-dasharray="${dashList.join(' ')}"` : '';
 
   let fillAttr = `fill="${fill}" fill-opacity="${fillOpacity}"`;
   let patternDef = '';
@@ -310,7 +324,13 @@ function geometryToSvg(map, feature, style, scale) {
   if (type === 'MultiPolygon') return `${patternDef}<path d="${coords.flatMap((polygon) => polygon.map((ring) => pathFromPoints(projectRing(map, ring, scale), true))).filter(Boolean).join(' ')}" ${fillAttr} stroke="${stroke}" stroke-width="${strokeWidth}"${dash} fill-rule="evenodd" stroke-opacity="${opacity}" />`;
   if (type === 'LineString') return `<path d="${pathFromPoints(projectLine(map, coords, scale), false)}" fill="none" stroke="${stroke}" stroke-width="${strokeWidth}"${dash} stroke-linecap="round" stroke-linejoin="round" stroke-opacity="${opacity}" />`;
   if (type === 'MultiLineString') return `<path d="${coords.map((line) => pathFromPoints(projectLine(map, line, scale), false)).filter(Boolean).join(' ')}" fill="none" stroke="${stroke}" stroke-width="${strokeWidth}"${dash} stroke-linecap="round" stroke-linejoin="round" stroke-opacity="${opacity}" />`;
-  if (type === 'Point') { const pt = projectCoordinate(map, coords, scale); const radius = (style.markerSize ?? 8) * scale * 0.5; if (style.customMarkerDataUri) { const s = radius * 2; return `<image href="${escapeXml(style.customMarkerDataUri)}" x="${(pt.x - s / 2).toFixed(2)}" y="${(pt.y - s / 2).toFixed(2)}" width="${s.toFixed(2)}" height="${s.toFixed(2)}" opacity="${opacity}" />`; } const shape = style.markerShape || 'circle'; return svgMarkerShape(shape, pt.x, pt.y, radius, safeColor(style.markerFill || fill), safeColor(style.markerColor || stroke), Math.max(scale, strokeWidth * 0.4).toFixed(2), opacity); }
+  if (type === 'Point') {
+    const sym = resolvePointSymbol(style);
+    const pt = projectCoordinate(map, coords, scale); const radius = sym.size * scale * 0.5;
+    if (style.customMarkerDataUri) { const s = radius * 2; return `<image href="${escapeXml(style.customMarkerDataUri)}" x="${(pt.x - s / 2).toFixed(2)}" y="${(pt.y - s / 2).toFixed(2)}" width="${s.toFixed(2)}" height="${s.toFixed(2)}" opacity="${opacity}" />`; }
+    // Stroke = the symbol's stroke × scale, as in the PNG (was max(scale, 0.4 × width)).
+    return `<path d="${symbolPath(sym.shape, pt.x, pt.y, radius)}" fill="${safeColor(sym.fill)}" stroke="${safeColor(sym.stroke)}" stroke-width="${(sym.strokeWidth * scale).toFixed(2)}" stroke-linejoin="round" opacity="${opacity}" />`;
+  }
   if (type === 'MultiPoint') return coords.map((coord) => geometryToSvg(map, { geometry: { type: 'Point', coordinates: coord } }, style, scale)).join('');
   return '';
 }
@@ -611,7 +631,12 @@ async function drawLegendCanvas(ctx, scene, scale) {
     const uri = item?.style?.customMarkerDataUri;
     if (uri && !icons.has(uri)) icons.set(uri, await loadImage(uri).catch(() => null));
   }
-  legendRowLayout(items, scene.project.layout, y, scale).forEach(({ heading, item, y: rowY }) => {
+  const rowsLaidOut = legendRowLayout(items, scene.project.layout, y, scale);
+  // Never clip rows silently: the panel is clipped like the editor's, but a
+  // row that falls outside it is reported with the export.
+  const hiddenRows = rowsLaidOut.filter((r) => r.item && r.y + LEGEND_ROW.pitch * scale * 0.75 > y + h).length;
+  if (hiddenRows) _exportWarnings.push(`${hiddenRows} legend row${hiddenRows === 1 ? '' : 's'} did not fit the legend panel — enlarge it or switch the legend to compact`);
+  rowsLaidOut.forEach(({ heading, item, y: rowY }) => {
     if (heading) {
       ctx.fillStyle = theme.mutedText || theme.bodyText;
       ctx.font = `700 ${LEGEND_ROW.headingFont * scale * lfs}px ${legendFont}`;
@@ -630,10 +655,14 @@ async function drawLegendCanvas(ctx, scene, scale) {
           ctx.drawImage(icon, cx - s / 2, cy - s / 2, s, s);
           ctx.restore();
         } else {
+        // Legend policy: a point row shows the layer's real shape, fill and
+        // border; its SIZE is normalised for readability (a fixed 10 px swatch,
+        // or 8–18 px for classes sized by class) rather than the map size.
+        const sym = resolvePointSymbol(item.style);
         drawCanvasMarkerShape(ctx, shape, cx, cy, r);
-        ctx.fillStyle = item.style.markerFill || item.style.markerColor || '#ffffff';
+        ctx.fillStyle = sym.fill;
         ctx.fill();
-        ctx.strokeStyle = item.style.markerColor || '#111111';
+        ctx.strokeStyle = sym.stroke;
         ctx.lineWidth = Math.max(1, scale);
         ctx.stroke();
         ctx.restore();
@@ -1060,42 +1089,43 @@ async function drawInsetCanvas(ctx, scene, scale) {
   if (marker) { const mx = Math.max(innerX + 8 * scale, innerX + (marker.x / 100) * innerW), my = Math.max(innerY + 8 * scale, innerY + (marker.y / 100) * innerH), mw = Math.max(8 * scale, Math.max(10 * scale, (marker.w / 100) * innerW)), mh = Math.max(8 * scale, Math.max(10 * scale, (marker.h / 100) * innerH)); ctx.fillStyle = 'rgba(96,165,250,0.16)'; drawRoundedRect(ctx, mx, my, mw, mh, 2 * scale); ctx.fill(); ctx.strokeStyle = '#2563eb'; ctx.lineWidth = 1.5 * scale; ctx.stroke(); ctx.beginPath(); ctx.arc(Math.min(innerX + innerW - 8 * scale, Math.max(innerX + 8 * scale, mx + mw / 2)), Math.min(innerY + innerH - 8 * scale, Math.max(innerY + 8 * scale, my + mh / 2)), 3.2 * scale, 0, Math.PI * 2); ctx.fillStyle = '#0f2c56'; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.2 * scale; ctx.fill(); ctx.stroke(); }
   ctx.fillStyle = theme.insetMuted; ctx.font = `${11 * scale}px Arial`; ctx.textBaseline = 'alphabetic'; ctx.fillText(insetLabel || ref.label, x + 12 * scale, y + h - 10 * scale);
 }
+// The footer exactly as the editor shows it: hidden when switched off or on the
+// NI 43-101 template (whose title block carries the source), and at the height
+// the user dragged it to. Export used to check only that footer TEXT existed,
+// so a hidden footer's stale note ("Oval is indicative only") still printed.
+export function exportFooterBox(scene) {
+  const layout = scene.project.layout || {};
+  const templateId = scene.template?.id || layout.templateId;
+  if (!layout.footerText || layout.footerEnabled === false || templateId === 'ni_43101_technical') return null;
+  const zone = getOverlayMetrics(scene).footer;
+  if (!zone || !zone.width || !zone.height) return null;
+  return { left: zone.left, top: zone.top, width: zone.width, height: layout.footerHeightPx || zone.height, text: layout.footerText };
+}
 function drawFooterCanvas(ctx, scene, scale) {
   const theme = getTheme(scene);
-  const text = scene.project.layout?.footerText; const zone = getOverlayMetrics(scene).footer; if (!text || !zone || !zone.width || !zone.height) return; const x = zone.left * scale, y = zone.top * scale, w = zone.width * scale, h = zone.height * scale;
+  const box = exportFooterBox(scene); if (!box) return; const text = box.text; const x = box.left * scale, y = box.top * scale, w = box.width * scale, h = box.height * scale;
   drawPanelRect(ctx, x, y, w, h, (theme.panelRadius ?? 10) * scale, theme.footerFill, theme.panelBorder, scale);
   ctx.fillStyle = theme.footerText; ctx.font = `${12 * scale}px ${scene.project.layout?.fonts?.footer || 'Inter'}, Arial, sans-serif`; ctx.textBaseline = 'middle'; ctx.fillText(text, x + 12 * scale, y + h / 2);
 }
 
-const CALLOUT_DIRECTIONS = [
-  { dx: 0, dy: 1 }, { dx: 0, dy: -1 }, { dx: 1, dy: 0 }, { dx: -1, dy: 0 },
-];
+// The same placement the editor draws (utils/calloutLayout.js
+// resolveCalloutBoxes), scaled. Export used to run its own copy of the stacking
+// loop without the editor's edge clamping, so boxes the editor kept apart near
+// the frame edge could overlap in the PNG.
+// Panels (legend, inset, logo, title…) are obstacles for automatic cards, the
+// same zones the editor passes, and any card still overlapping one is reported.
 function placeCallouts(scene, scale) {
-  const callouts = (scene.project.callouts || []).slice().sort((a, b) => (a.priority || 2) - (b.priority || 2));
-  const placed = [];
-  callouts.forEach((callout) => {
-    if (!callout.anchor) return;
-    const pt = scene.map.latLngToContainerPoint([callout.anchor.lat, callout.anchor.lng]);
-    const { width, height } = estimateBox(callout);
-    let left = pt.x + (callout.offset?.x || 0);
-    let top = pt.y + (callout.offset?.y || 0);
-    let candidate = { ...callout, left, top, width, height, anchorPx: { x: pt.x, y: pt.y } };
-    if (callout.isManualPosition) {
-      placed.push({ ...candidate, left: left * scale, top: top * scale, width: width * scale, height: height * scale, anchorPx: { x: pt.x * scale, y: pt.y * scale } });
-      return;
-    }
-    let attempts = 0;
-    while (placed.some((other) => intersectsCallout(candidate, other, 10)) && attempts < 40) {
-      const dir = CALLOUT_DIRECTIONS[Math.floor(attempts / 10) % 4];
-      const step = height * 0.7;
-      top += dir.dy * step;
-      left += dir.dx * step;
-      candidate = { ...candidate, left, top };
-      attempts++;
-    }
-    placed.push({ ...candidate, left: left * scale, top: top * scale, width: width * scale, height: height * scale, anchorPx: { x: pt.x * scale, y: pt.y * scale } });
-  });
-  return placed;
+  const obstacles = panelObstacles(getOverlayMetrics(scene), scene.project.layout || {});
+  const placed = resolveCalloutBoxes(scene.project.callouts || [], scene.map, { obstacles });
+  const colliding = placed.filter((c) => c.collidesWith?.length);
+  if (colliding.length) {
+    const what = [...new Set(colliding.flatMap((c) => c.collidesWith))].slice(0, 3).join(', ');
+    _exportWarnings.push(`${colliding.length} callout${colliding.length === 1 ? '' : 's'} overlap${colliding.length === 1 ? 's' : ''} ${what} — drag ${colliding.length === 1 ? 'it' : 'them'} clear or move the panel`);
+  }
+  return placed.map((c) => ({
+    ...c, left: c.left * scale, top: c.top * scale, width: c.width * scale, height: c.height * scale,
+    anchorPx: { x: c.anchorPx.x * scale, y: c.anchorPx.y * scale },
+  }));
 }
 function fitText(ctx, text, maxWidth) {
   if (!text || ctx.measureText(text).width <= maxWidth) return text;
@@ -1104,9 +1134,27 @@ function fitText(ctx, text, maxWidth) {
   return t + '…';
 }
 
+function drawCalloutLeaderCanvas(ctx, c, scale) {
+  if (c.type !== 'leader' && c.type !== 'boxed') return;
+  const ep = leaderEndpoint(c.anchorPx, c);
+  ctx.beginPath(); ctx.moveTo(c.anchorPx.x, c.anchorPx.y); ctx.lineTo(ep.x, ep.y);
+  ctx.strokeStyle = c.style?.border || '#102640'; ctx.lineWidth = 1.4 * scale; ctx.setLineDash(c.type === 'leader' ? [5 * scale, 3 * scale] : []); ctx.stroke();
+  if (c.style?.arrowhead) {
+    const head = arrowheadPoints(ep, c.anchorPx, 9 * scale);
+    ctx.setLineDash([]);
+    ctx.beginPath(); ctx.moveTo(head[0].x, head[0].y); ctx.lineTo(head[1].x, head[1].y); ctx.lineTo(head[2].x, head[2].y); ctx.closePath();
+    ctx.fillStyle = c.style?.border || '#102640'; ctx.fill();
+  }
+  ctx.setLineDash([]);
+}
+
 function drawCalloutsCanvas(ctx, scene, scale) {
   const calloutFont = `${scene.project.layout?.fonts?.callout || 'Inter'}, Arial, sans-serif`;
-  placeCallouts(scene, scale).forEach((c) => {
+  const placed = placeCallouts(scene, scale);
+  // Every leader first, then every card — as the editor layers them — so a
+  // leader never runs across another callout's box or text.
+  placed.forEach((c) => drawCalloutLeaderCanvas(ctx, c, scale));
+  placed.forEach((c) => {
     const theme = getTheme(scene);
     const radius = Math.max(0, (theme.panelRadius ?? 10) - 4) * scale;
 
@@ -1137,21 +1185,9 @@ function drawCalloutsCanvas(ctx, scene, scale) {
       return;
     }
 
-    if (c.type === 'leader' || c.type === 'boxed') {
-      const ep = leaderEndpoint(c.anchorPx, c);
-      ctx.beginPath(); ctx.moveTo(c.anchorPx.x, c.anchorPx.y); ctx.lineTo(ep.x, ep.y);
-      ctx.strokeStyle = c.style?.border || '#102640'; ctx.lineWidth = 1.4 * scale; ctx.setLineDash(c.type === 'leader' ? [5 * scale, 3 * scale] : []); ctx.stroke();
-      if (c.style?.arrowhead) {
-        const head = arrowheadPoints(ep, c.anchorPx, 9 * scale);
-        ctx.setLineDash([]);
-        ctx.beginPath(); ctx.moveTo(head[0].x, head[0].y); ctx.lineTo(head[1].x, head[1].y); ctx.lineTo(head[2].x, head[2].y); ctx.closePath();
-        ctx.fillStyle = c.style?.border || '#102640'; ctx.fill();
-      }
-    }
     const fontSize = (c.style?.fontSize || 12) * scale;
     const subtextSize = Math.max(9, (c.style?.fontSize || 12) - 2) * scale;
     ctx.setLineDash([]);
-    if (c.type !== 'plain') { drawRoundedRect(ctx, c.left, c.top, c.width, c.height, radius); ctx.fillStyle = c.style?.background || theme.calloutFill; ctx.fill(); ctx.strokeStyle = c.style?.border || theme.calloutBorder; ctx.lineWidth = 1 * scale; ctx.stroke(); }
     const paddingX = (c.style?.paddingX ?? Math.max(4, Math.min(10, (c.width || 160) * 0.06))) * scale;
     const align = c.style?.textAlign === 'center' ? 'center' : 'left';
     const textX = align === 'center'
@@ -1160,7 +1196,6 @@ function drawCalloutsCanvas(ctx, scene, scale) {
     const maxTextW = c.width - (c.type === 'plain' ? 0 : paddingX * 2);
 
     ctx.save();
-    if (c.type !== 'plain') { drawRoundedRect(ctx, c.left, c.top, c.width, c.height, radius); ctx.clip(); }
     ctx.font = `700 ${fontSize}px ${calloutFont}`;
     const titleLines = wrapText(ctx, c.text || '', maxTextW);
     const titleLineH = fontSize * 1.2;
@@ -1169,6 +1204,15 @@ function drawCalloutsCanvas(ctx, scene, scale) {
     const subtextLineH = subtextSize * 1.3;
     const titleBlockH = titleLines.length * titleLineH;
     const subBlockH = subtextLines.length ? subtextLines.length * subtextLineH + 4 * scale : 0;
+    // The editor's card grows to fit its text (min-height = the estimate); the
+    // export clipped overflowing text to the estimated box instead.
+    if (c.type !== 'plain') {
+      const needed = (c.style?.paddingY || 8) * scale * 2 + titleBlockH + subBlockH;
+      if (needed > c.height) c.height = needed;
+      ctx.restore(); ctx.save();
+      drawRoundedRect(ctx, c.left, c.top, c.width, c.height, radius); ctx.fillStyle = c.style?.background || theme.calloutFill; ctx.fill(); ctx.strokeStyle = c.style?.border || theme.calloutBorder; ctx.lineWidth = 1 * scale; ctx.stroke();
+      drawRoundedRect(ctx, c.left, c.top, c.width, c.height, radius); ctx.clip();
+    }
     const blockTop = c.top + (c.type === 'plain' ? 0 : c.height / 2 - (titleBlockH + subBlockH) / 2);
 
     ctx.fillStyle = c.style?.textColor || theme.calloutText; ctx.font = `700 ${fontSize}px ${calloutFont}`; ctx.textBaseline = 'top'; ctx.textAlign = align;
@@ -1736,8 +1780,22 @@ function drawDistanceLinesCanvas(ctx, scene, scale) {
   });
 }
 
+// Every font the layout names must be loaded before text is measured or drawn.
+// A canvas draws with whatever is ready at that instant, so an export fired
+// while Inter was still downloading set its text in Arial — narrower glyphs,
+// different wraps, callout boxes sized for the wrong font. Bounded, so a font
+// that never arrives cannot hang the export.
+export async function ensureExportFonts(scene, timeoutMs = 3000) {
+  const fonts = typeof document !== 'undefined' ? document.fonts : null;
+  if (!fonts?.load) return;
+  const families = new Set(['Inter', ...Object.values(scene?.project?.layout?.fonts || {})].filter((f) => typeof f === 'string' && f));
+  const loads = [...families].flatMap((family) => ['400', '700'].map((w) => fonts.load(`${w} 12px "${family}"`).catch(() => null)));
+  await Promise.race([Promise.all(loads).then(() => fonts.ready), new Promise((r) => setTimeout(r, timeoutMs))]);
+}
+
 export async function renderSceneToCanvas(scene, options = {}) {
   _exportWarnings = [];
+  await ensureExportFonts(scene);
   const scale = resolveExportScale(scene, options);
   const canvas = document.createElement('canvas'); canvas.width = Math.round(scene.width * scale); canvas.height = Math.round(scene.height * scale); const ctx = canvas.getContext('2d');
   const mapBg = scene.project.layout?.basemap === 'blank' ? (scene.project.layout?.blankBg || '#ffffff') : '#ffffff';
@@ -2300,9 +2358,9 @@ function renderScaleBarSvg(scene, scale) {
   return `<g id="em-scale-bar" class="em-panel">${scalePanel}<rect x="${barX}" y="${startY}" width="${barWidth / 2}" height="${barH}" fill="${theme.scaleStroke}" /><rect x="${barX + barWidth / 2}" y="${startY}" width="${barWidth / 2}" height="${barH}" fill="#ffffff" stroke="${theme.scaleStroke}" stroke-width="${Math.max(1, scale)}" /><rect x="${barX}" y="${startY}" width="${barWidth}" height="${barH}" fill="none" stroke="${theme.scaleStroke}" stroke-width="${Math.max(1, scale)}" />${[['0', barX, 'start'], [scaleState.half, barX + barWidth / 2, 'middle'], [scaleState.label, barX + barWidth, 'end']].map(([t, lx, anchor]) => `<text x="${lx}" y="${baselineFromTop(startY + barH + gap, labelSize)}" text-anchor="${anchor}" fill="${theme.bodyText}" font-family="${footerFont}" font-size="${labelSize}"${labelHalo}>${escapeXml(t)}</text>`).join('')}${caption ? `<text x="${x + w / 2}" y="${baselineFromTop(startY + barH + gap + textH + 2 * scale, 9.5 * scale)}" text-anchor="middle" fill="${theme.mutedText || theme.bodyText}" font-family="${footerFont}" font-size="${9.5 * scale}"${labelHalo}>${escapeXml(caption)}</text>` : ''}</g>`;
 }
 function renderFooterSvg(scene, scale) {
-  const theme = getTheme(scene); const text = scene.project.layout?.footerText;
-  const zone = getOverlayMetrics(scene).footer; if (!text || !zone || !zone.width || !zone.height) return '';
-  const x = zone.left * scale, y = zone.top * scale, w = zone.width * scale, h = zone.height * scale;
+  const theme = getTheme(scene);
+  const box = exportFooterBox(scene); if (!box) return ''; const text = box.text;
+  const x = box.left * scale, y = box.top * scale, w = box.width * scale, h = box.height * scale;
   // Centred in the panel and in the footer font, as the canvas does. A fixed
   // y + 25 only agreed with it at one panel height, and Arial disagreed always.
   const footerFont = `${scene.project.layout?.fonts?.footer || 'Inter'}, Arial, sans-serif`;
@@ -2403,7 +2461,8 @@ function renderLogoSvg(scene, scale) {
 }
 function renderCalloutsSvg(scene, scale, svgDefs) {
   const calloutFont = `${scene.project.layout?.fonts?.callout || 'Inter'}, Arial, sans-serif`;
-  return placeCallouts(scene, scale).map((c) => {
+  const leaders = [];
+  const cards = placeCallouts(scene, scale).map((c) => {
     const safeId = String(c.id || '').replace(/[^a-zA-Z0-9]/g, '');
     const leaderColor = c.style?.border || '#102640';
     const dot = `<circle cx="${c.anchorPx.x}" cy="${c.anchorPx.y}" r="${4 * scale}" fill="${leaderColor}" />`;
@@ -2428,10 +2487,9 @@ function renderCalloutsSvg(scene, scale, svgDefs) {
     const head = hasLeader && c.style?.arrowhead
       ? `<polygon points="${arrowheadPoints(svgEp, c.anchorPx, 9 * scale).map((pt) => `${pt.x.toFixed(1)},${pt.y.toFixed(1)}`).join(' ')}" fill="${leaderColor}" />`
       : '';
-    const line = hasLeader ? `<line x1="${c.anchorPx.x}" y1="${c.anchorPx.y}" x2="${svgEp.x}" y2="${svgEp.y}" stroke="${leaderColor}" stroke-width="${1.4 * scale}" ${c.type === 'leader' ? `stroke-dasharray="${5 * scale} ${3 * scale}"` : ''} />${head}` : '';
+    if (hasLeader) leaders.push(`<line x1="${c.anchorPx.x}" y1="${c.anchorPx.y}" x2="${svgEp.x}" y2="${svgEp.y}" stroke="${leaderColor}" stroke-width="${1.4 * scale}" ${c.type === 'leader' ? `stroke-dasharray="${5 * scale} ${3 * scale}"` : ''} />${head}`);
     const rawBoxFill = c.style?.background || 'rgba(255,255,255,0.97)';
     const boxStroke = c.style?.border || '#17304f';
-    const box = c.type !== 'plain' ? `<rect x="${c.left}" y="${c.top}" width="${c.width}" height="${c.height}" rx="${6 * scale}" ${toSvgFill(rawBoxFill)} stroke="${boxStroke}" />` : '';
     const textFill = c.style?.textColor || '#102640';
     const svgPadX = (c.style?.paddingX ?? Math.max(4, Math.min(10, (c.width || 160) * 0.06))) * scale;
     const svgAlign = c.style?.textAlign === 'center' ? 'center' : 'left';
@@ -2439,11 +2497,15 @@ function renderCalloutsSvg(scene, scale, svgDefs) {
     const textAnchor = svgAlign === 'center' ? 'middle' : 'start';
     const svgFontSz = (c.style?.fontSize || 12) * scale;
     const svgSubFontSz = Math.max(9, (c.style?.fontSize || 12) - 2) * scale;
-    const wrapWidth = (c.width || 160) * scale - (c.type === 'plain' ? 0 : svgPadX * 2);
+    // c.width is already in export px; scaling it again made the SVG wrap at
+    // three times the box width at 3x, so it disagreed with the PNG.
+    const wrapWidth = (c.width || 160 * scale) - (c.type === 'plain' ? 0 : svgPadX * 2);
     const titleLines = estimateWrapLines(c.text || '', wrapWidth, svgFontSz);
     const subtextLines = c.subtext ? estimateWrapLines(c.subtext, wrapWidth, svgSubFontSz) : [];
     const titleBlockH = titleLines.length * svgFontSz * 1.2;
     const subBlockH = subtextLines.length ? subtextLines.length * svgSubFontSz * 1.3 + 4 * scale : 0;
+    if (c.type !== 'plain') c.height = Math.max(c.height, (c.style?.paddingY || 8) * scale * 2 + titleBlockH + subBlockH);
+    const box = c.type !== 'plain' ? `<rect x="${c.left}" y="${c.top}" width="${c.width}" height="${c.height}" rx="${6 * scale}" ${toSvgFill(rawBoxFill)} stroke="${boxStroke}" />` : '';
     const startY = c.top + (c.type === 'plain' ? svgFontSz : c.height / 2 - (titleBlockH + subBlockH) / 2 + svgFontSz * 0.85);
     const mainText = titleLines.map((tl, i) =>
       `<text x="${textX}" y="${startY + i * svgFontSz * 1.2}" text-anchor="${textAnchor}" fill="${textFill}" font-family="${calloutFont}" font-size="${svgFontSz}" font-weight="700">${escapeXml(tl)}</text>`
@@ -2454,11 +2516,15 @@ function renderCalloutsSvg(scene, scale, svgDefs) {
     ).join('');
     const clipId = c.type !== 'plain' ? pushRoundedClip(svgDefs, c.left, c.top, c.width, c.height, 6 * scale) : null;
     const textGroup = clipId ? `<g clip-path="url(#${clipId})">${mainText}${subtextEl}</g>` : `${mainText}${subtextEl}`;
-    return `<g id="em-callout-${safeId}" class="em-callout">${line}${head ? '' : dot}${box}${textGroup}</g>`;
-  }).join('\n');
+    return `<g id="em-callout-${safeId}" class="em-callout">${box}${textGroup}</g>`;
+  });
+  // All leaders under all cards, as the editor draws them. No anchor dot on a
+  // leader: neither the editor nor the PNG draws one.
+  return `${leaders.length ? `<g id="em-callout-leaders">${leaders.join('')}</g>` : ''}\n${cards.join('\n')}`;
 }
 
 export async function renderSceneToSvg(scene, options = {}) {
+  await ensureExportFonts(scene);
   _exportWarnings = [];
   const scale = resolveExportScale(scene, options); const width = Math.round(scene.width * scale), height = Math.round(scene.height * scale);
   const isNI = scene.template?.id === 'ni_43101_technical';

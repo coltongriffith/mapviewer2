@@ -58,3 +58,42 @@ export function canDissolve(layer) {
 export function styledFeatureCount(layer) {
   return Object.values(layer?.featureOverrides || {}).filter(hasFeatureStyle).length;
 }
+
+/** Features in a layer carrying their own point size. */
+export function sizedFeatureCount(layer) {
+  return Object.values(layer?.featureOverrides || {}).filter((o) => Number.isFinite(o?.markerSize)).length;
+}
+
+/**
+ * "Scale all points": multiply the layer size, every explicit class size and
+ * every per-feature size by `factor`, so relative differences survive. Nothing
+ * is dropped — overrides stay overrides, just scaled. Sizes are the symbol
+ * diameter in CSS px (utils/pointSymbol.js).
+ * → { style, classification, featureOverrides } patch for updateLayer.
+ */
+export function scalePointSizes(layer, factor, { base = 8, min = 1, max = 64 } = {}) {
+  const k = Number(factor);
+  if (!layer || !Number.isFinite(k) || k <= 0) return {};
+  const scale = (v) => Math.max(min, Math.min(max, Math.round(v * k * 10) / 10));
+  const patch = { style: { markerSize: scale(Number(layer.style?.markerSize) || base) } };
+  if (layer.classification?.classes?.some((c) => Number.isFinite(c?.size))) {
+    patch.classification = {
+      ...layer.classification,
+      classes: layer.classification.classes.map((c) => (Number.isFinite(c?.size) ? { ...c, size: scale(c.size) } : c)),
+    };
+  }
+  if (sizedFeatureCount(layer)) {
+    patch.featureOverrides = Object.fromEntries(Object.entries(layer.featureOverrides).map(([key, o]) => [
+      key, Number.isFinite(o?.markerSize) ? { ...o, markerSize: scale(o.markerSize) } : o,
+    ]));
+  }
+  return patch;
+}
+
+/** Every per-feature point size removed; other per-feature styling kept. */
+export function withoutFeatureSizes(featureOverrides) {
+  return Object.fromEntries(Object.entries(featureOverrides || {}).map(([key, o]) => {
+    const { markerSize: _size, ...rest } = o || {};
+    return [key, rest];
+  }));
+}

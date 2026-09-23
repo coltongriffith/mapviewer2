@@ -52,6 +52,7 @@ export const sidePanelTemplate = {
     roads_access: { stroke: '#7c5e43', fill: '#7c5e43', fillOpacity: 0, strokeWidth: 1.8 },
     rivers_water: { stroke: '#0ea5e9', fill: '#7dd3fc', fillOpacity: 0.16, strokeWidth: 1.8 },
     labels: { stroke: '#0f172a', fill: '#0f172a', fillOpacity: 0, strokeWidth: 1 },
+    sampling_extent: { stroke: '#475569', fill: '#94a3b8', fillOpacity: 0, strokeWidth: 1.4, dashArray: '4 3' },
     other: { stroke: '#2563eb', fill: '#93c5fd', fillOpacity: 0.2, strokeWidth: 1.8 },
   },
   modePresets: {
