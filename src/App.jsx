@@ -7101,6 +7101,32 @@ export default function App({ initialAction = null }) {
                 })()}
               </div>
             </div>
+            {/Point$/.test(selectedFeature.feature?.geometry?.type || '') && (() => {
+              // Per-point size: enlarge one sample to highlight it without
+              // splitting it into its own layer. Map and export both read the
+              // override through getFeatureStyle.
+              const fKey = featureKey(selectedFeature.feature);
+              const featureLayer = project.layers.find((l) => l.id === selectedFeature.layerId);
+              const own = featureLayer?.featureOverrides?.[fKey]?.markerSize;
+              const size = own ?? featureLayer?.style?.markerSize ?? 12;
+              return (
+                <div className="control-row inline-2" style={{ marginTop: 6 }}>
+                  <div>
+                    <label htmlFor="f-this-point-size">This Point&apos;s Size</label>
+                    <input id="f-this-point-size" type="range" min="6" max="48" step="1" value={size} onChange={(e) => setFeatureOverride(selectedFeature.layerId, fKey, { markerSize: Number(e.target.value) })} />
+                    {own != null && <button type="button" className="link-btn apply-all-link" onClick={() => setProject((prev) => ({
+                      ...prev,
+                      layers: prev.layers.map((l) => {
+                        if (l.id !== selectedFeature.layerId) return l;
+                        const { markerSize: _drop, ...rest } = l.featureOverrides?.[fKey] || {};
+                        return { ...l, featureOverrides: { ...(l.featureOverrides || {}), [fKey]: rest } };
+                      }),
+                    }))}>Match layer</button>}
+                  </div>
+                  <div className="range-value">{size}px</div>
+                </div>
+              );
+            })()}
             <button className="btn primary" style={{ width: '100%', marginTop: 8 }} type="button" onClick={addCalloutFromSelectedFeature}>Add Callout</button>
           </div>
         ) : null}
