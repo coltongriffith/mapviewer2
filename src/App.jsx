@@ -2611,7 +2611,9 @@ export default function App({ initialAction = null }) {
     // user's own import into a map that already shows data keeps the view.
     const preserveView = !['demo', 'template', 'deeplink'].includes(source)
       && !!leafletMapRef.current
-      && project.layers.some((l) => l.geojson?.features?.length);
+      // Any existing content counts — a placed raster or tile layer included,
+      // which has no geojson.
+      && project.layers.some((l) => l.geojson?.features?.length || l.type === 'raster' || l.type === 'tiles');
     // Collars that carry azimuth, dip and length get a surface trace each,
     // whatever file they arrived in.
     if (role === 'drillholes' && geojson?.features) geojson = addDrillTraces(geojson, { maxFeatures: MAX_FEATURES });

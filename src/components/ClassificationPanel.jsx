@@ -16,9 +16,27 @@ export default function ClassificationPanel({ layer, isPoint, updateLayer, brand
   const setCls = (next) => updateLayer(selectedLayer.id, { classification: next });
   const baseSize = Number(selectedLayer.style?.markerSize) || DEFAULT_POINT_SIZE;
   const sizedByClass = isPt && hasClassSizes(cls);
-  const build = (field, mode, n) => (mode === 'graduated'
-    ? buildGraduated(selectedLayer, field, n || 4)
-    : buildCategorical(selectedLayer, field));
+  // Rebuilding classes (new field, method or count) keeps "Size by class" on
+  // when it was on, and keeps each edited size where the class still exists:
+  // matched by value for categories, by position when the break count holds.
+  const build = (field, mode, n) => {
+    const next = mode === 'graduated'
+      ? buildGraduated(selectedLayer, field, n || 4)
+      : buildCategorical(selectedLayer, field);
+    if (!sizedByClass) return next;
+    const sized = withClassSizes(next, baseSize);
+    const prev = cls?.classes || [];
+    const sameCount = cls?.mode === 'graduated' && mode === 'graduated' && prev.length === sized.classes.length;
+    return {
+      ...sized,
+      classes: sized.classes.map((c, i) => {
+        const old = mode === 'categorical'
+          ? prev.find((p) => p.value !== undefined && String(p.value) === String(c.value))
+          : (sameCount ? prev[i] : null);
+        return old && Number.isFinite(old.size) ? { ...c, size: old.size } : c;
+      }),
+    };
+  };
   return (
     <details className="sub-details" open={!!cls} style={{ marginTop: 8 }}>
       <summary>Colour by attribute</summary>

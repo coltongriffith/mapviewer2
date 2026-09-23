@@ -158,7 +158,9 @@ export default function CalloutsOverlay({ map, callouts, selectedCalloutId, onSe
               <>
                 {(() => {
                   const padX = style.paddingX ?? Math.max(4, Math.min(10, (callout.width || 160) * 0.06));
-                  const logo = calloutLogoSize(callout, (callout.width || 160) - (callout.type === 'plain' ? 0 : padX * 2));
+                  // Plain callouts are padded like the others (the card style above), so
+                  // the logo gets the same inner width estimateBox and the exporters use.
+                  const logo = calloutLogoSize(callout, (callout.width || 160) - padX * 2);
                   return logo ? (
                     <img
                       className="map-callout-logo"
