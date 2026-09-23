@@ -173,6 +173,15 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
       <main>
         {/* ── Hero ───────────────────────────────────────────────── */}
         <section className="lm-hero" data-section="hero">
+          <picture className="lm-hero-landscape" aria-hidden="true">
+            <source
+              type="image/webp"
+              srcSet="/landing/hero-valley.webp 1280w, /landing/hero-valley@2x.webp 1920w"
+              sizes="(max-width: 1000px) 100vw, 80vw"
+            />
+            <img src="/landing/hero-valley.jpg" width="1920" height="800" alt="" decoding="async" />
+          </picture>
+          <div className="lm-hero-inner">
           <div className="lm-hero-copy">
             <p className="lm-eyebrow"><span className="lm-eyebrow-tick" aria-hidden="true" />Mapping for mineral exploration</p>
             <h1 className="lm-h1">
@@ -185,7 +194,7 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
 
             <div className="lm-hero-ctas">
               <button className="lm-btn lm-btn-primary" type="button" onClick={onOpenEditor} data-track="Hero: Start Mapping">
-                Start a map
+                Start a map <span aria-hidden="true">↗</span>
               </button>
               <button className="lm-btn lm-btn-ghost" type="button" onClick={() => scrollTo('examples')} data-track="Hero: View an example">
                 View an example
@@ -233,61 +242,41 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
 
           </div>
 
-          {/* ── The product in the field, with the live demo one click away ── */}
-          <figure className="lm-mock-wrap" data-section="hero-mockup">
+          <figure className="lm-hero-showcase" data-section="hero-mockup">
             <button
               type="button"
-              className="lm-mock-body lm-hero-scene"
+              className="lm-map-preview"
               onClick={() => (onLoadSampleStyle ? onLoadSampleStyle('aurora_demo') : onOpenEditor())}
               data-track="Hero mockup: open live demo"
               aria-label="Open this map as a live demo"
             >
-              {/* The terrain is the LCP image. The real map export remains a
-                  separate DOM layer over it so the product stays crisp and
-                  the whole computer remains the live-demo trigger. */}
-              <picture className="lm-scene-bg">
+              <span className="lm-map-preview-bar" aria-hidden="true">
+                <span className="lm-map-preview-title">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <path d="m12 3 9 5-9 5-9-5 9-5Z" /><path d="m3 12 9 5 9-5M3 16l9 5 9-5" />
+                  </svg>
+                  Cedar Ridge Project
+                </span>
+                <span className="lm-map-preview-badge">Example map</span>
+              </span>
+              <picture className="lm-map-preview-image">
                 <source
                   type="image/webp"
-                  srcSet="/landing/hero-property-terrain.webp 870w, /landing/hero-property-terrain@2x.webp 1456w"
-                  sizes="(max-width: 900px) 100vw, 870px"
+                  srcSet="/gallery/ba-after.webp 870w, /gallery/ba-after@2x.webp 1576w"
+                  sizes="(max-width: 600px) calc(100vw - 40px), (max-width: 1000px) 560px, 520px"
                 />
-                <img
-                  className="lm-mock-img"
-                  src="/landing/hero-property-terrain.jpg"
-                  width="870"
-                  height="653"
-                  fetchpriority="high"
-                  decoding="async"
-                  alt=""
-                />
+                <img className="lm-mock-img" src="/gallery/ba-after.png" width="870" height="653" fetchpriority="high" decoding="async" alt="Cedar Ridge exploration map with mineral claims, drill targets, a legend and location inset" />
               </picture>
-
-              <span className="lm-scene-device" aria-hidden="true">
-                <span className="lm-scene-screen">
-                  <picture>
-                    <source
-                      type="image/webp"
-                      srcSet="/gallery/ba-after.webp 870w, /gallery/ba-after@2x.webp 1576w"
-                      sizes="(max-width: 900px) 78vw, 520px"
-                    />
-                    <img
-                      className="lm-scene-map"
-                      src="/gallery/ba-after.png"
-                      width="870"
-                      height="653"
-                      decoding="async"
-                      alt=""
-                    />
-                  </picture>
-                </span>
-                <span className="lm-scene-base" />
+              <span className="lm-map-preview-footer" aria-hidden="true">
+                <span><span className="lm-map-status" />Made in Exploration Maps</span>
+                <span className="lm-map-open">Explore this map <span className="lm-map-arrow">↗</span></span>
               </span>
             </button>
-            <figcaption className="lm-mock-caption">
-              <span>Cedar Ridge Project · investor map created in Exploration Maps</span>
-              <span className="lm-mock-live">Open live example →</span>
+            <figcaption className="lm-hero-caption">
+              Open the example. Edit the layers. Make it yours.
             </figcaption>
           </figure>
+          </div>
         </section>
 
         {/* ── Workflow, as a strip under the hero ────────────────── */}
@@ -587,4 +576,3 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
     </div>
   );
 }
-
