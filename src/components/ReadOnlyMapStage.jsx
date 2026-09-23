@@ -230,6 +230,8 @@ export default function ReadOnlyMapStage({ project }) {
             onMove={null}
             onUpdate={null}
             fontFamily={layout.fonts?.callout}
+            zones={resolvedZones}
+            layout={layout}
           />
         </>
       )}

@@ -122,7 +122,7 @@ export function inferRoleFromLayer(layer) {
   if (has(/road|access/)) return "roads_access";
   if (has(/river|water|creek/)) return "rivers_water";
   if (has(/fault|structure/)) return "faults_structures";
-  if (has(/anomal|mag(netic)?(?![a-z])/)) return "anomalies";
+  if (has(/anomal|mag(netics?)?(?![a-z])/)) return "anomalies";
   if (has(/target/)) return "target_areas";
   if (has(/label|town/)) return "labels";
   if (has(/claim|tenure|landholding|licen[cs]e|property|permit|concession|cells?(?![a-z])|mineral title/)) return "claims";

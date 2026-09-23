@@ -185,3 +185,18 @@ describe('callout logo (optional)', () => {
     expect(calloutLogoSize({ ...withLogo, type: 'badge' }, 180)).toBeNull();
   });
 });
+
+describe('review follow-ups', () => {
+  it('recognises plural magnetics without matching unrelated words', () => {
+    expect(inferRoleFromLayer({ name: 'airborne magnetics', type: 'polygons' })).toBe('anomalies');
+    expect(inferRoleFromLayer({ name: 'mag_high', type: 'polygons' })).toBe('anomalies');
+    expect(inferRoleFromLayer({ name: 'imagery tiles', type: 'polygons' })).toBe('other');
+  });
+
+  it('a plain callout logo gets the padded inner width, as estimateBox sizes it', async () => {
+    const { calloutLogoSize, estimateBox } = await import('../src/utils/calloutLayout.js');
+    const c = { type: 'plain', text: 'X', boxWidth: 160, style: { paddingX: 8 }, logo: { image: 'data:image/png;base64,AA', aspect: 0.5, width: 240 } };
+    const box = estimateBox(c);
+    expect(calloutLogoSize(c, box.width - 16).w).toBe(144);
+  });
+});

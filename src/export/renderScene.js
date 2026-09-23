@@ -1212,8 +1212,10 @@ async function drawCalloutsCanvas(ctx, scene, scale) {
     const align = c.style?.textAlign === 'center' ? 'center' : 'left';
     const textX = align === 'center'
       ? c.left + c.width / 2
-      : c.left + (c.type === 'plain' ? 0 : paddingX);
-    const maxTextW = c.width - (c.type === 'plain' ? 0 : paddingX * 2);
+      : c.left + paddingX;
+    // A plain callout is transparent but padded like any card, as in the
+    // editor (CalloutsOverlay) and estimateBox.
+    const maxTextW = c.width - paddingX * 2;
 
     ctx.save();
     ctx.font = `700 ${fontSize}px ${calloutFont}`;
@@ -1235,7 +1237,7 @@ async function drawCalloutsCanvas(ctx, scene, scale) {
       drawRoundedRect(ctx, c.left, c.top, c.width, c.height, radius); ctx.fillStyle = c.style?.background || theme.calloutFill; ctx.fill(); ctx.strokeStyle = c.style?.border || theme.calloutBorder; ctx.lineWidth = 1 * scale; ctx.stroke();
       drawRoundedRect(ctx, c.left, c.top, c.width, c.height, radius); ctx.clip();
     }
-    const contentTop = c.top + (c.type === 'plain' ? 0 : c.height / 2 - (logoBlockH + titleBlockH + subBlockH) / 2);
+    const contentTop = c.top + (c.type === 'plain' ? (c.style?.paddingY || 8) * scale : c.height / 2 - (logoBlockH + titleBlockH + subBlockH) / 2);
     if (logo) {
       const lw = logo.w * scale, lh = logo.h * scale;
       const lx = align === 'center' ? c.left + (c.width - lw) / 2 : textX;
@@ -2679,13 +2681,13 @@ function renderCalloutsSvg(scene, scale, svgDefs) {
     const textFill = c.style?.textColor || theme.calloutText || '#102640';
     const svgPadX = (c.style?.paddingX ?? Math.max(4, Math.min(10, (c.width || 160) * 0.06))) * scale;
     const svgAlign = c.style?.textAlign === 'center' ? 'center' : 'left';
-    const textX = svgAlign === 'center' ? c.left + c.width / 2 : c.left + (c.type === 'plain' ? 0 : svgPadX);
+    const textX = svgAlign === 'center' ? c.left + c.width / 2 : c.left + svgPadX;
     const textAnchor = svgAlign === 'center' ? 'middle' : 'start';
     const svgFontSz = (c.style?.fontSize || 12) * scale;
     const svgSubFontSz = Math.max(9, (c.style?.fontSize || 12) - 2) * scale;
     // c.width is already in export px; scaling it again made the SVG wrap at
     // three times the box width at 3x, so it disagreed with the PNG.
-    const wrapWidth = (c.width || 160 * scale) - (c.type === 'plain' ? 0 : svgPadX * 2);
+    const wrapWidth = (c.width || 160 * scale) - svgPadX * 2;
     const titleLines = measuredWrapLines(c.text || '', wrapWidth, `700 ${svgFontSz}px ${calloutFont}`, svgFontSz);
     const subtextLines = c.subtext ? measuredWrapLines(c.subtext, wrapWidth, `${svgSubFontSz}px ${calloutFont}`, svgSubFontSz) : [];
     const titleLineH = svgFontSz * 1.2;
@@ -2696,7 +2698,7 @@ function renderCalloutsSvg(scene, scale, svgDefs) {
     const logoBlockH = logo ? (logo.h + logo.gap) * scale : 0;
     if (c.type !== 'plain') c.height = Math.max(c.height, (c.style?.paddingY || 8) * scale * 2 + logoBlockH + titleBlockH + subBlockH);
     const box = c.type !== 'plain' ? `<rect x="${c.left}" y="${c.top}" width="${c.width}" height="${c.height}" rx="${radius}" ${toSvgFill(rawBoxFill)} stroke="${boxStroke}" stroke-width="${scale}" />` : '';
-    const contentTop = c.top + (c.type === 'plain' ? 0 : c.height / 2 - (logoBlockH + titleBlockH + subBlockH) / 2);
+    const contentTop = c.top + (c.type === 'plain' ? (c.style?.paddingY || 8) * scale : c.height / 2 - (logoBlockH + titleBlockH + subBlockH) / 2);
     const logoEl = logo
       ? `<image x="${svgAlign === 'center' ? c.left + (c.width - logo.w * scale) / 2 : textX}" y="${contentTop}" width="${logo.w * scale}" height="${logo.h * scale}" preserveAspectRatio="xMidYMid meet" href="${escapeXml(c.logo.image)}" />`
       : '';
