@@ -38,6 +38,12 @@ const ARCGIS_PROVINCES = {
     // Verified post-deploy: layer 1, fields HOLDER + TENURE_NUMBER_ID
     ownerFields: ['HOLDER', 'CLAIM_HOLDER', 'RECORDED_HOLDER', 'HOLDER_NAME', 'OWNER_NAME', 'OWNER', 'CLIENT_NAME'],
     numberFields: ['TENURE_NUMBER_ID', 'CLAIM_NUMBER', 'CLAIMNUM', 'CLAIM_NUM', 'TENURE_NUMBER', 'CLAIM_ID', 'CELL_CLAIM_NUMBER'],
+    // Ontario converted every staked claim to grid cells in April 2018. People
+    // still arrive with the old number (assessment reports, company filings),
+    // and the current Mining Claim layer has never heard of it. MLAS keeps the
+    // old outlines on this layer; see legacyClaimResult. Verified Sept 2026:
+    // layer 8 "Legacy Claim", string CLAIM_NUM.
+    legacyClaims: { layerId: 8, numberField: 'CLAIM_NUM' },
   },
   sk: {
     service: 'https://gis.saskatchewan.ca/arcgis/rest/services/Economy/P_Mineral_Tenure_Crown_Dispositions/MapServer',
@@ -1279,6 +1285,20 @@ async function searchArcgis(cfg, term, type, res) {
   });
   if (cfg.provider) meta.provider = cfg.provider;
 
+  // The exact number is not a current claim: before offering near misses, see
+  // whether it is a pre-conversion legacy claim and answer with the current
+  // claims on its ground.
+  if (type === 'number' && cfg.legacyClaims && step !== steps[0]) {
+    const legacy = await legacyClaimResult(cfg, layerUrl, effectiveTerm).catch(() => null);
+    if (legacy) {
+      return res.status(200).json({
+        type: 'FeatureCollection',
+        features: legacy.features.map((f) => ({ ...f, properties: normalizeProps(f.properties || {}, cfg) })),
+        meta: { ...legacy.meta, provider: cfg.provider || 'arcgis', legacyClaim: { number: effectiveTerm, currentClaims: legacy.features.length } },
+      });
+    }
+  }
+
   // Widened only if the rung that answered was not the first one. The first
   // rung is what the user asked for; anything past it has to say so.
   const widened = step && step !== steps[0];
@@ -1306,6 +1326,63 @@ async function searchArcgis(cfg, term, type, res) {
       }) : {}),
     },
   });
+}
+
+function pointInRing(pt, ring) {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i];
+    const [xj, yj] = ring[j];
+    if ((yi > pt[1]) !== (yj > pt[1]) && pt[0] < ((xj - xi) * (pt[1] - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+function featureCentre(feature) {
+  const pts = [];
+  const walk = (v) => { if (typeof v?.[0] === 'number') pts.push(v); else if (Array.isArray(v)) v.forEach(walk); };
+  walk(feature?.geometry?.coordinates);
+  if (!pts.length) return null;
+  const xs = pts.map((p) => p[0]);
+  const ys = pts.map((p) => p[1]);
+  return [(Math.min(...xs) + Math.max(...xs)) / 2, (Math.min(...ys) + Math.max(...ys)) / 2];
+}
+
+/**
+ * A pre-2018 Ontario claim number → the CURRENT claims on that ground.
+ *
+ * The legacy outline itself is not returned: it is not current tenure, and a
+ * map of it would read as a live claim. Cells are kept when their centre lies
+ * inside the legacy outline, so neighbours that merely touch its edge stay out.
+ * Returns null when the number is not a legacy claim either.
+ */
+async function legacyClaimResult(cfg, currentLayerUrl, term) {
+  if (!/^[A-Za-z0-9-]{3,20}$/.test(term)) return null;
+  const { layerId, numberField } = cfg.legacyClaims;
+  const legacyUrl = `${cfg.service}/${layerId}`;
+  const found = await arcgisQueryAll(legacyUrl, {
+    where: `${numberField} = '${escapeSql(term)}'`,
+    outFields: numberField,
+    returnGeometry: 'true',
+    outSR: '4326',
+  }, 5);
+  const outline = found.features.find((f) => f.geometry);
+  if (!outline) return null;
+  const rings = outline.geometry.type === 'MultiPolygon' ? outline.geometry.coordinates.flat() : outline.geometry.coordinates;
+  const current = await arcgisQueryAll(currentLayerUrl, {
+    geometry: JSON.stringify({ rings, spatialReference: { wkid: 4326 } }),
+    geometryType: 'esriGeometryPolygon',
+    spatialRel: 'esriSpatialRelIntersects',
+    inSR: '4326',
+    outFields: '*',
+    returnGeometry: 'true',
+    outSR: '4326',
+  }, 500);
+  const features = current.features.filter((f) => {
+    const c = featureCentre(f);
+    return c && rings.some((ring) => pointInRing(c, ring));
+  });
+  return { features, meta: { ...current.meta, returned: features.length } };
 }
 
 // Quebec has no live queryable registry, so its claims are loaded weekly into a
@@ -2061,7 +2138,8 @@ export default async function handler(req, res) {
     return res.status(429).json({ error: 'rate limited — slow down and try again' });
   }
 
-  const { q, type, schema, bbox } = req.query;
+  const { q, schema, bbox } = req.query;
+  let { type } = req.query;
   const province = (req.query.province || 'bc').toLowerCase();
 
   // BBOX spatial query: return all claims within an envelope (nearby claims overlay)
@@ -2230,6 +2308,10 @@ export default async function handler(req, res) {
   const checkedTerm = validateTerm(q);
   if (!checkedTerm.ok) return res.status(400).json({ error: checkedTerm.error });
   const term = checkedTerm.term;
+  // No holder is named with digits alone; a bare number typed into company
+  // search is a claim number (the one failed Ontario session of 2026-09-22
+  // tried exactly that first).
+  if ((type || 'company') === 'company' && /^\d{5,}$/.test(term)) type = 'number';
 
   try {
     if (province === 'bc') return await searchBc(term, type, res);

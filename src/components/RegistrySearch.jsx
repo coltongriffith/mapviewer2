@@ -419,6 +419,9 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
     // `results`.
     const asked = submitted || { mode, query, province };
     const askedCfg = ALL_JURISDICTIONS.find((p) => p.value === asked.province) || provinceCfg;
+    // A legacy Ontario number whose ground no current claim covers: say that,
+    // not the generic "nothing found" — the number was real.
+    if (results?.meta?.legacyClaim) return relaxationNotice(results.meta);
     return emptyResultMessage({
       resolution: results?.resolution,
       query: asked.query,
