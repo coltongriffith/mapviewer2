@@ -10,8 +10,10 @@ import { test, expect } from '@playwright/test';
 // ours and is exactly what regresses when someone drops in a new screenshot.
 
 test('the hero image is a right-sized WebP, not a multi-megabyte PNG', async ({ page }) => {
-  const gallery = [];
-  page.on('response', (r) => { if (/\/gallery\//.test(r.url())) gallery.push(r.url().split('/').pop()); });
+  const heroAssets = [];
+  page.on('response', (r) => {
+    if (/\/landing\/hero-property-terrain/.test(r.url())) heroAssets.push(r.url().split('/').pop());
+  });
 
   await page.goto('/', { waitUntil: 'load', timeout: 60_000 });
   await page.waitForTimeout(1500);
@@ -33,7 +35,7 @@ test('the hero image is a right-sized WebP, not a multi-megabyte PNG', async ({ 
 
   expect(hero, 'the hero image is gone').toBeTruthy();
   expect(hero.src, 'the browser did not choose the WebP').toMatch(/\.webp$/);
-  expect(gallery.some((f) => f === 'ba-after.png'), 'the PNG fallback was downloaded as well').toBe(false);
+  expect(heroAssets.some((f) => f === 'hero-property-terrain.jpg'), 'the JPEG fallback was downloaded as well').toBe(false);
 
   // Shipping twice the pixels it draws was 1,722 KiB of the waste. A little
   // headroom for 2x, but not 2x itself at 1x density.
@@ -74,3 +76,4 @@ test('analytics config does not block the first paint', async ({ page }) => {
     .map((s) => s.getAttribute('src')));
   expect(blocking, `render-blocking scripts in <head>: ${blocking.join(', ')}`).toEqual([]);
 });
+

@@ -25,6 +25,7 @@
 .lm-reveal.lm-vis { opacity: 1; transform: none; }
 @media (prefers-reduced-motion: reduce) {
   .lm-reveal { opacity: 1; transform: none; transition: none; }
+  .lm-scene-device { transition: none; }
 }
 
 /* ── Buttons ─────────────────────────────────────────────────────────────── */
@@ -196,6 +197,83 @@
   overflow: hidden;
 }
 .lm-mock-img { display: block; width: 100%; height: auto; }
+.lm-hero-scene {
+  aspect-ratio: 870 / 653;
+  isolation: isolate;
+}
+.lm-scene-bg {
+  position: absolute;
+  inset: 0;
+  display: block;
+}
+.lm-hero-scene .lm-mock-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.lm-scene-device {
+  position: absolute;
+  z-index: 1;
+  inset: 8% 4% 6% 8%;
+  transform: perspective(1200px) rotateY(-2deg) rotateX(1deg);
+  transform-origin: 50% 100%;
+  filter: drop-shadow(0 20px 22px rgba(9, 17, 20, 0.34));
+  transition: transform 180ms ease, filter 180ms ease;
+}
+.lm-scene-screen {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  left: 6%;
+  right: 6%;
+  aspect-ratio: 4 / 3;
+  padding: 1.8%;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 11px 11px 4px 4px;
+  background: #0b1215;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.72);
+}
+.lm-scene-screen picture,
+.lm-scene-map {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.lm-scene-map {
+  object-fit: cover;
+  border-radius: 2px;
+}
+.lm-scene-base {
+  position: absolute;
+  z-index: 1;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 18%;
+  border-radius: 0 0 16px 16px;
+  background: linear-gradient(180deg, #6e757b 0%, #42494f 34%, #252b30 74%, #161b1f 100%);
+  clip-path: polygon(7% 0, 93% 0, 100% 72%, 58% 88%, 42% 88%, 0 72%);
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.34);
+}
+.lm-scene-base::before {
+  content: '';
+  position: absolute;
+  top: 17%;
+  left: 43%;
+  right: 43%;
+  height: 2px;
+  border-radius: 999px;
+  background: rgba(12, 20, 24, 0.52);
+}
+.lm-hero-scene:hover .lm-scene-device {
+  transform: perspective(1200px) rotateY(-2deg) rotateX(1deg) translateY(-2px);
+  filter: drop-shadow(0 23px 25px rgba(9, 17, 20, 0.38));
+}
+.lm-hero-scene:focus-visible {
+  outline: 3px solid var(--ui-focus);
+  outline-offset: 3px;
+}
 .lm-mock-caption {
   display: flex;
   flex-wrap: wrap;
@@ -391,3 +469,4 @@
   .lm-hero-ctas .lm-btn { min-height: 44px; }
   .lm-footer-inner { grid-template-columns: minmax(0, 1fr); }
 }
+

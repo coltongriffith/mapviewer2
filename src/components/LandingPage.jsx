@@ -233,41 +233,55 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
 
           </div>
 
-          {/* ── A real export from the product, shown as a figure ── */}
+          {/* ── The product in the field, with the live demo one click away ── */}
           <figure className="lm-mock-wrap" data-section="hero-mockup">
             <button
               type="button"
-              className="lm-mock-body"
+              className="lm-mock-body lm-hero-scene"
               onClick={() => (onLoadSampleStyle ? onLoadSampleStyle('aurora_demo') : onOpenEditor())}
               data-track="Hero mockup: open live demo"
               aria-label="Open this map as a live demo"
             >
-              {/* The LCP element, and it was 2.7 MB of PNG — 78% of the whole
-                  page — shipped at 1448px into an 870px box. WebP at the size
-                  it is actually drawn is 136 kB.
-
-                  width/height are the intrinsic 1x dimensions: they give the
-                  browser the aspect ratio up front so the hero does not
-                  reflow when the image lands. fetchPriority raises it above
-                  the other subresources, since this is the thing the page is
-                  judged on. No loading="lazy" — lazy-loading your own LCP
-                  element delays the only paint that matters. */}
-              <picture>
+              {/* The terrain is the LCP image. The real map export remains a
+                  separate DOM layer over it so the product stays crisp and
+                  the whole computer remains the live-demo trigger. */}
+              <picture className="lm-scene-bg">
                 <source
                   type="image/webp"
-                  srcSet="/gallery/ba-after.webp 870w, /gallery/ba-after@2x.webp 1576w"
+                  srcSet="/landing/hero-property-terrain.webp 870w, /landing/hero-property-terrain@2x.webp 1456w"
                   sizes="(max-width: 900px) 100vw, 870px"
                 />
                 <img
                   className="lm-mock-img"
-                  src="/gallery/ba-after.png"
+                  src="/landing/hero-property-terrain.jpg"
                   width="870"
                   height="653"
-                  fetchPriority="high"
+                  fetchpriority="high"
                   decoding="async"
-                  alt="Cedar Ridge Project investor map — claims boundary, drill collars, target areas with assay callouts, legend, location inset, north arrow, and scale bar"
+                  alt=""
                 />
               </picture>
+
+              <span className="lm-scene-device" aria-hidden="true">
+                <span className="lm-scene-screen">
+                  <picture>
+                    <source
+                      type="image/webp"
+                      srcSet="/gallery/ba-after.webp 870w, /gallery/ba-after@2x.webp 1576w"
+                      sizes="(max-width: 900px) 78vw, 520px"
+                    />
+                    <img
+                      className="lm-scene-map"
+                      src="/gallery/ba-after.png"
+                      width="870"
+                      height="653"
+                      decoding="async"
+                      alt=""
+                    />
+                  </picture>
+                </span>
+                <span className="lm-scene-base" />
+              </span>
             </button>
             <figcaption className="lm-mock-caption">
               <span>Cedar Ridge Project · investor map created in Exploration Maps</span>
@@ -573,3 +587,4 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
     </div>
   );
 }
+
