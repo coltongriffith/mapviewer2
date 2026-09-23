@@ -297,26 +297,44 @@
 
 /* ── Company proof strip ─────────────────────────────────────────────────── */
 .lm-proof-strip { padding: var(--sp-5) 0; border-top: 1px solid var(--ui-border); background: var(--ui-surface-subtle); }
-.lm-proof-lead { margin: 0 0 var(--sp-3); font-size: var(--fs-body); color: var(--ui-text-muted); max-width: 70ch; line-height: 1.6; }
-.lm-ticker-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0 var(--sp-5); }
+.lm-company-heading { display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+.lm-proof-lead { margin: 0; font-size: var(--fs-body); color: var(--ui-text-muted); max-width: 64ch; line-height: 1.6; }
+.lm-company-all { color: var(--ui-text-muted); font-size: var(--fs-body); font-weight: 600; white-space: nowrap; text-decoration: none; }
+.lm-company-all span { margin-left: 8px; }
+.lm-company-all:hover { color: var(--ui-text); text-decoration: underline; text-underline-offset: 4px; }
+.lm-ticker-list { list-style: none; margin: 18px 0 0; padding: 0; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 20px; }
 .lm-ticker-list a {
   display: flex;
-  align-items: baseline;
-  gap: 7px;
-  padding: 7px 0;
-  color: var(--ui-text);
+  align-items: center;
+  justify-content: center;
+  min-height: 64px;
+  padding: 4px 0;
+  border-radius: 4px;
   text-decoration: none;
 }
-.lm-ticker-list a:hover .lm-ticker-name { text-decoration: underline; text-underline-offset: 3px; }
-.lm-ticker {
-  font-family: var(--ui-font-mono);
-  font-size: var(--fs-sm);
-  font-weight: 600;
-  color: var(--ui-text);
-  letter-spacing: 0.02em;
+.lm-company-logo {
+  display: block;
+  width: 100%;
+  max-width: 142px;
+  height: 38px;
+  object-fit: contain;
+  filter: grayscale(1) brightness(0.45);
+  opacity: 0.62;
+  mix-blend-mode: multiply;
+  transition: opacity 150ms ease;
 }
-.lm-ticker-name { font-size: var(--fs-body); color: var(--ui-text-muted); }
-.lm-ticker-all a { color: var(--ui-text); font-size: var(--fs-body); font-weight: 600; text-decoration: underline; text-decoration-color: var(--ui-border-strong); text-underline-offset: 4px; }
+.lm-company-logo-dv { max-width: 164px; filter: grayscale(1); }
+.lm-company-logo-bbb { max-width: 120px; height: 40px; }
+.lm-company-logo-scot { max-width: 132px; height: 42px; }
+.lm-company-logo-tud { max-width: 150px; }
+.lm-ticker-list a:hover .lm-company-logo, .lm-ticker-list a:focus-visible .lm-company-logo { opacity: 0.9; }
+.lm-ticker-list a:focus-visible, .lm-company-all:focus-visible { outline: 2px solid var(--ui-focus); outline-offset: 4px; }
+@media (prefers-reduced-motion: reduce) { .lm-company-logo { transition: none; } }
+@media (max-width: 1000px) { .lm-ticker-list { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 24px; } }
+@media (max-width: 600px) {
+  .lm-company-heading { align-items: flex-start; flex-direction: column; gap: 10px; }
+  .lm-ticker-list { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 24px; margin-top: 16px; }
+}
 
 /* Legacy social-proof block (still gated off) */
 .lm-proof { padding: var(--sp-4) 0; border-top: 1px solid var(--ui-border); }

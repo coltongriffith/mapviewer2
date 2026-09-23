@@ -48,12 +48,12 @@ const SOCIAL_PROOF_COMPANIES = ['Star Copper', 'Discovery Energy Metals'];
 // push — a visitor who recognizes their own ticker converts far better than one
 // imagining a blank map. Full directory lives at /companies/.
 const COMPANY_PAGES = [
-  { ticker: 'DV', name: 'Dolly Varden Silver' },
-  { ticker: 'GOT', name: 'Goliath Resources' },
-  { ticker: 'ESK', name: 'Eskay Mining' },
-  { ticker: 'BBB', name: 'Brixton Metals' },
-  { ticker: 'SCOT', name: 'Scottie Resources' },
-  { ticker: 'TUD', name: 'Tudor Gold' },
+  { ticker: 'DV', name: 'Dolly Varden Silver', logo: 'dolly-varden.webp' },
+  { ticker: 'GOT', name: 'Goliath Resources', logo: 'goliath.webp' },
+  { ticker: 'ESK', name: 'Eskay Mining', logo: 'eskay.webp' },
+  { ticker: 'BBB', name: 'Brixton Metals', logo: 'brixton.webp' },
+  { ticker: 'SCOT', name: 'Scottie Resources', logo: 'scottie.svg' },
+  { ticker: 'TUD', name: 'Tudor Gold', logo: 'tudor.webp' },
 ];
 
 // What actually goes on these maps. Stated as capabilities with the nouns a
@@ -310,22 +310,21 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
         {/* ── Company proof, immediately under the hero ─────────── */}
         <section className="lm-proof-strip lm-reveal" id="companies" data-section="companies">
           <div className="lm-section-inner">
-            <p className="lm-proof-lead">
-              Company claim maps are available for selected TSXV and CSE issuers.
-              Open a map, then request the editable version.
-            </p>
+            <div className="lm-company-heading">
+              <p className="lm-proof-lead">
+                Company claim maps from public registry data.
+                Open a map, then request the editable version.
+              </p>
+              <a className="lm-company-all" href="/companies/" data-track="Company: See all">All mapped companies <span aria-hidden="true">→</span></a>
+            </div>
             <ul className="lm-ticker-list">
               {COMPANY_PAGES.map((c) => (
                 <li key={c.ticker}>
-                  <a href={`/companies/${c.ticker.toLowerCase()}/`} data-track={`Company: ${c.ticker}`}>
-                    <span className="lm-ticker">{c.ticker}</span>
-                    <span className="lm-ticker-name">{c.name}</span>
+                  <a href={`/companies/${c.ticker.toLowerCase()}/`} data-track={`Company: ${c.ticker}`} aria-label={`Open ${c.name} claim map`} title={`${c.name} · View claim map`}>
+                    <img className={`lm-company-logo lm-company-logo-${c.ticker.toLowerCase()}`} src={`/company-logos/${c.logo}`} alt={c.name} width="160" height="44" loading="lazy" decoding="async" />
                   </a>
                 </li>
               ))}
-              <li className="lm-ticker-all">
-                <a href="/companies/" data-track="Company: See all">All mapped companies →</a>
-              </li>
             </ul>
           </div>
         </section>
