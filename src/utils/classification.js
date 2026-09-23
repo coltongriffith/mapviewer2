@@ -1,5 +1,12 @@
-// Symbology by attribute: colour (and, for points, size) a layer by one of
-// its columns, either in numeric ranges or by unique value.
+// Symbology by attribute: colour a layer by one of its columns, either in
+// numeric ranges or by unique value — and, only when the user turns it on,
+// size its points by class too.
+//
+// SIZE PRECEDENCE for a point: feature override > class size > layer size.
+// A class size is explicit: classes are built WITHOUT one, because colouring
+// by attribute used to write a size into every class, which silently overrode
+// the layer's Point Size control (moving it did nothing). Projects saved with
+// class sizes keep them exactly — they are not reinterpreted.
 //
 // This is how a soil grid reads as "0–50 / 50–100 / 100–200 / >200 ppm Cu"
 // in four colours and four sizes from ONE layer, and how a geology sheet
@@ -21,6 +28,8 @@ const observations = (layer) => layerFeatures(layer).filter((f) => !f?.propertie
 // expects, and the one the soil maps this was built against use.
 export const GRADUATED_PALETTE = ['#fde047', '#f59e0b', '#ef4444', '#d946ef', '#7e22ce', '#1e1b4b'];
 export const GRADUATED_SIZES = [6, 9, 12, 15, 18, 21];
+// Multipliers of the layer size for "size by class" on ranges, small → large.
+const GRADUATED_SIZE_STEPS = [0.6, 0.8, 1, 1.3, 1.6, 2];
 export const CATEGORICAL_PALETTE = [
   '#a7f3d0', '#fbcfe8', '#c7d2fe', '#fde68a', '#bfdbfe', '#d9f99d',
   '#fecaca', '#ddd6fe', '#99f6e4', '#fed7aa', '#e9d5ff', '#bbf7d0',
@@ -95,7 +104,6 @@ export function buildGraduated(layer, field, n = 4) {
     classes.push({
       max: i < breaks.length ? breaks[i] : null,
       color: GRADUATED_PALETTE[Math.min(i, GRADUATED_PALETTE.length - 1)],
-      size: GRADUATED_SIZES[Math.min(i, GRADUATED_SIZES.length - 1)],
       label: '',
     });
   }
@@ -110,9 +118,33 @@ export function buildCategorical(layer, field) {
   }
   const values = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, MAX_CATEGORIES).map(([k]) => k);
   const classes = values.map((value, i) => ({
-    value, color: CATEGORICAL_PALETTE[i % CATEGORICAL_PALETTE.length], size: 10, label: '',
+    value, color: CATEGORICAL_PALETTE[i % CATEGORICAL_PALETTE.length], label: '',
   }));
   return { field, mode: 'categorical', classes, truncated: counts.size > MAX_CATEGORIES };
+}
+
+/** Whether any class carries its own point size. */
+export function hasClassSizes(classification) {
+  return !!classification?.classes?.some((c) => Number.isFinite(c?.size));
+}
+
+/**
+ * Explicit per-class sizes derived from the layer size: graded small → large
+ * for ranges, all equal to the layer size for unique values (edit each after).
+ */
+export function withClassSizes(classification, baseSize) {
+  const n = classification.classes.length;
+  const classes = classification.classes.map((c, i) => {
+    if (classification.mode !== 'graduated') return { ...c, size: baseSize };
+    const step = GRADUATED_SIZE_STEPS[Math.round((i / Math.max(1, n - 1)) * (GRADUATED_SIZE_STEPS.length - 1))];
+    return { ...c, size: Math.round(baseSize * step * 10) / 10 };
+  });
+  return { ...classification, classes };
+}
+
+/** The classification with every class size removed (points inherit again). */
+export function withoutClassSizes(classification) {
+  return { ...classification, classes: classification.classes.map(({ size: _size, ...c }) => c) };
 }
 
 export function isClassified(layer) {

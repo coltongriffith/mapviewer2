@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  hasClassSizes, withClassSizes, withoutClassSizes,
   attributeFields, suggestBreaks, buildGraduated, buildCategorical, classIndexFor,
   classStyle, classLabel, classLegendItems, isClassified, MAX_CATEGORIES,
 } from '../src/utils/classification.js';
@@ -44,12 +45,23 @@ describe('suggestBreaks', () => {
 describe('graduated classes', () => {
   const c = buildGraduated(soils, 'Cu_ppm', 4);
 
-  it('builds an open-ended top class with a colour and size per class', () => {
+  it('builds an open-ended top class with a colour per class and no implicit size', () => {
     expect(c.mode).toBe('graduated');
     expect(c.classes[c.classes.length - 1].max).toBeNull();
     expect(new Set(c.classes.map((k) => k.color)).size).toBe(c.classes.length);
-    expect(c.classes[1].size).toBeGreaterThan(c.classes[0].size);
+    // Colouring must not silently size: a class size overrides the layer's
+    // Point Size, which is how moving that control became a no-op.
+    expect(hasClassSizes(c)).toBe(false);
     expect(isClassified({ classification: c })).toBe(true);
+  });
+
+  it('sizes by class only when asked, graded from the layer size, and can undo it', () => {
+    const sized = withClassSizes(c, 10);
+    expect(sized.classes[0].size).toBe(6);
+    expect(sized.classes[1].size).toBeGreaterThan(sized.classes[0].size);
+    expect(sized.classes.at(-1).size).toBe(20);
+    expect(hasClassSizes(withoutClassSizes(sized))).toBe(false);
+    expect(withoutClassSizes(sized).classes.map((k) => k.color)).toEqual(c.classes.map((k) => k.color));
   });
 
   it('assigns a feature to the first class whose ceiling holds it', () => {
@@ -115,7 +127,7 @@ describe('style resolution with a class', () => {
 
 describe('classLegendItems', () => {
   it('emits one row per class with stable ids and growing swatches', () => {
-    const layer = { ...soils, classification: buildGraduated(soils, 'Cu_ppm', 4) };
+    const layer = { ...soils, classification: withClassSizes(buildGraduated(soils, 'Cu_ppm', 4), 10) };
     const rows = classLegendItems(layer, { markerColor: '#000' }, 'Soil Cu', 'Soil Geochemistry', true);
     expect(rows.length).toBe(layer.classification.classes.length);
     expect(rows[0].id).toBe('soil::class:graduated:Cu_ppm:0');

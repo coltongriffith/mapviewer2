@@ -1,7 +1,34 @@
 import React, { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { makeMarkerIcon } from '../utils/leaflet';
+import { resolvePointSymbol, symbolSvg } from '../utils/pointSymbol.js';
+
+// Leaflet rounds a circle marker's radius to a whole pixel, so a size-13 point
+// (radius 6.5) drew 14 px across on screen and 13 px in every export. Draw the
+// exact radius, as the exporters do (see utils/pointSymbol.js).
+L.SVG.include({
+  _updateCircle(layer) {
+    const p = layer._point;
+    const r = Math.max(layer._radius, 0.5);
+    const r2 = layer._radiusY ? Math.max(layer._radiusY, 0.5) : r;
+    const arc = `a${r},${r2} 0 1,0 `;
+    this._setPath(layer, layer._empty() ? 'M0 0' : `M${p.x - r},${p.y}${arc}${r * 2},0 ${arc}${-r * 2},0 `);
+  },
+});
+L.Canvas.include({
+  _updateCircle(layer) {
+    if (!this._drawing || layer._empty()) return;
+    const p = layer._point;
+    const ctx = this._ctx;
+    const r = Math.max(layer._radius, 0.5);
+    const s = (layer._radiusY ? Math.max(layer._radiusY, 0.5) : r) / r;
+    if (s !== 1) { ctx.save(); ctx.scale(1, s); }
+    ctx.beginPath();
+    ctx.arc(p.x, p.y / s, r, 0, Math.PI * 2, false);
+    if (s !== 1) ctx.restore();
+    this._fillStroke(ctx, layer);
+  },
+});
 import { claimTooltipHtml, claimPopupRowsHtml } from '../utils/claimInfo';
 import { POINT_ROLES } from '../projectState';
 import { createLayerGeometryCache } from '../utils/layerGeometry';
@@ -22,13 +49,14 @@ function pathStyle(template, layer, feature, geomType) {
   // colours here or the fill pointToLayer chose is overwritten with the
   // polygon fill — which is how a classed soil grid drew every dot white.
   if (String(feature?.geometry?.type || '').includes('Point')) {
+    const sym = resolvePointSymbol(style);
     return {
-      color: style.markerColor ?? style.stroke ?? '#111111',
-      weight: style.strokeWidth ?? 1.5,
-      fillColor: style.markerFill || style.fill || style.markerColor || '#ffffff',
+      color: sym.stroke,
+      weight: sym.strokeWidth,
+      fillColor: sym.fill,
       fillOpacity: lo,
       opacity: lo,
-      radius: Math.max(4, (style.markerSize ?? 10) / 2),
+      radius: sym.size / 2,
     };
   }
   return {
@@ -398,29 +426,28 @@ export default function MapCanvas({ onReady, project, template, onFeatureClick, 
           // Template role, layer style, attribute class, then this feature's
           // own override — the exporters resolve the same way.
           const fs = getFeatureStyle(template, layer, feature, fKey);
-          const featureOverride = { markerFill: fs.markerFill };
-          const markerShape = fs.markerShape;
-          const markerColor = fs.markerColor ?? fs.stroke ?? '#111111';
-          const markerSize = fs.markerSize ?? 10;
+          // The same symbol the exporters draw: size is the diameter in CSS
+          // px, stroke centred, no hidden minimums (utils/pointSymbol.js).
+          const sym = resolvePointSymbol(fs);
 
           let marker;
           const customUri = style.customMarkerDataUri;
           if (customUri) {
-            const s = Math.max(8, markerSize);
+            const s = sym.size;
             const icon = L.icon({ iconUrl: customUri, iconSize: [s, s], iconAnchor: [s / 2, s / 2], popupAnchor: [0, -s / 2 - 2] });
             marker = L.marker(latlng, { icon, opacity: lo });
-          } else if (markerShape && markerShape !== 'circle') {
-            const markerFill = featureOverride.markerFill ?? style.markerFill ?? style.fill ?? '#ffffff';
-            const icon = makeMarkerIcon(markerShape, markerColor, Math.max(8, markerSize), markerFill);
+          } else if (sym.shape !== 'circle') {
+            const { svg, box } = symbolSvg(sym);
+            const icon = L.icon({ iconUrl: `data:image/svg+xml;base64,${btoa(svg)}`, iconSize: [box, box], iconAnchor: [box / 2, box / 2], popupAnchor: [0, -box / 2 - 2] });
             marker = L.marker(latlng, { icon, opacity: lo });
           } else {
             marker = L.circleMarker(latlng, {
               renderer: drillholeRenderer,
-              radius: Math.max(4, markerSize / 2),
-              color: markerColor,
-              fillColor: fs.markerFill || fs.fill || markerColor || '#ffffff',
+              radius: sym.size / 2,
+              color: sym.stroke,
+              fillColor: sym.fill,
               fillOpacity: lo,
-              weight: style.strokeWidth ?? 1.5,
+              weight: sym.strokeWidth,
               opacity: lo,
             });
           }

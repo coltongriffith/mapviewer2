@@ -74,11 +74,39 @@ const DIRECTIONS = [
   { dx: -1, dy: 0 },
 ];
 
-export function resolveCalloutBoxes(callouts, map) {
+// The map panels a callout card must not sit on, from the resolved template
+// zones. Shared by the editor overlay and the exporters so both place cards
+// against the same obstacles.
+export function panelObstacles(zones, layout = {}) {
+  if (!zones) return [];
+  const out = [];
+  const add = (z, key) => {
+    if (z && z.width > 0 && z.height > 0 && Number.isFinite(z.left) && Number.isFinite(z.top)) {
+      out.push({ key, left: z.left, top: z.top, width: z.width, height: z.height });
+    }
+  };
+  if (layout.showTitle !== false) add(zones.title, 'title');
+  if (layout.showLegend !== false && (layout.legendItems || []).length) add(zones.legend, 'legend');
+  if (layout.showNorthArrow !== false) add(zones.northArrow, 'north arrow');
+  if (layout.showScaleBar !== false) add(zones.scaleBar, 'scale bar');
+  add(zones.inset, 'inset');
+  if (layout.logo) add(zones.logo, 'logo');
+  return out;
+}
+
+/**
+ * Card positions for every callout, in map-container pixels. Automatic cards
+ * step away from earlier cards and from `obstacles` (panels); a card the user
+ * dragged (isManualPosition) never moves. Any card still overlapping another
+ * card or a panel carries `collidesWith` so the editor and the exporters can
+ * warn instead of silently printing a card over the legend.
+ */
+export function resolveCalloutBoxes(callouts, map, { obstacles = [] } = {}) {
   if (!map) return [];
   const size = map.getSize();
   const placed = [];
   const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
+  const hits = (c) => placed.some((other) => intersects(c, other)) || obstacles.some((o) => intersects(c, o, 4));
 
   callouts
     .slice()
@@ -92,24 +120,29 @@ export function resolveCalloutBoxes(callouts, map) {
       let top = clamp(pt.y + (callout.offset?.y || 0), 6, Math.max(6, size.y - box.height - 6));
       let candidate = { ...callout, width: box.width, height: box.height, left, top, anchorPx: pt };
 
-      if (callout.isManualPosition) {
-        placed.push(candidate);
-        return;
+      if (!callout.isManualPosition) {
+        const start = candidate;
+        let attempts = 0;
+        while (hits(candidate) && attempts < 40) {
+          const dir = DIRECTIONS[Math.floor(attempts / 10) % 4];
+          const step = box.height * 0.7;
+          top += dir.dy * step;
+          left += dir.dx * step;
+          left = clamp(left, 6, Math.max(6, size.x - box.width - 6));
+          top = clamp(top, 6, Math.max(6, size.y - box.height - 6));
+          candidate = { ...candidate, top, left };
+          attempts++;
+        }
+        // No free spot found: keep the original position rather than a
+        // random point 40 steps away from its anchor.
+        if (hits(candidate)) candidate = start;
       }
 
-      let attempts = 0;
-      while (placed.some((other) => intersects(candidate, other)) && attempts < 40) {
-        const dir = DIRECTIONS[Math.floor(attempts / 10) % 4];
-        const step = box.height * 0.7;
-        top += dir.dy * step;
-        left += dir.dx * step;
-        left = clamp(left, 6, Math.max(6, size.x - box.width - 6));
-        top = clamp(top, 6, Math.max(6, size.y - box.height - 6));
-        candidate = { ...candidate, top, left };
-        attempts++;
-      }
-
-      placed.push(candidate);
+      const collidesWith = [
+        ...placed.filter((other) => intersects(candidate, other, -1)).map((o) => `callout "${o.text || o.id}"`),
+        ...obstacles.filter((o) => intersects(candidate, o, -1)).map((o) => o.key),
+      ];
+      placed.push(collidesWith.length ? { ...candidate, collidesWith } : candidate);
     });
 
   return placed;

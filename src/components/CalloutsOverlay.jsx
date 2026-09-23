@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { resolveCalloutBoxes, leaderEndpoint, arrowheadPoints } from '../utils/calloutLayout';
+import { resolveCalloutBoxes, panelObstacles, leaderEndpoint, arrowheadPoints } from '../utils/calloutLayout';
 import { computeSnap } from '../utils/layout';
 
-export default function CalloutsOverlay({ map, callouts, selectedCalloutId, onSelect, onMove, onUpdate, fontFamily }) {
+export default function CalloutsOverlay({ map, callouts, selectedCalloutId, onSelect, onMove, onUpdate, fontFamily, zones, layout }) {
   const [tick, setTick] = useState(0);
   const [editingField, setEditingField] = useState(null);
   const [snapGuides, setSnapGuides] = useState([]);
@@ -56,7 +56,10 @@ export default function CalloutsOverlay({ map, callouts, selectedCalloutId, onSe
     };
   }, [onMove, onUpdate]);
 
-  const placed = useMemo(() => resolveCalloutBoxes(callouts, map), [callouts, map, tick]);
+  // Same obstacles the exporters use (renderScene placeCallouts), so a card
+  // the editor moved off the legend is off the legend in the PNG too.
+  const obstacles = useMemo(() => panelObstacles(zones, layout || {}), [zones, layout]);
+  const placed = useMemo(() => resolveCalloutBoxes(callouts, map, { obstacles }), [callouts, map, tick, obstacles]);
 
   return (
     <div className="callouts-overlay">
@@ -95,7 +98,8 @@ export default function CalloutsOverlay({ map, callouts, selectedCalloutId, onSe
         return (
           <div
             key={callout.id}
-            className={`map-callout ${callout.type} ${selectedCalloutId === callout.id ? 'selected' : ''}`}
+            className={`map-callout ${callout.type} ${selectedCalloutId === callout.id ? 'selected' : ''} ${callout.collidesWith ? 'collides' : ''}`}
+            title={callout.collidesWith ? `Overlaps ${callout.collidesWith.join(', ')} — drag it clear` : undefined}
             style={{
               position: 'absolute',
               left: callout.left,
@@ -127,7 +131,7 @@ export default function CalloutsOverlay({ map, callouts, selectedCalloutId, onSe
                 id: callout.id,
                 startX: event.clientX,
                 startY: event.clientY,
-                startOffset: callout.offset || { x: 0, y: 0 },
+                startOffset: { x: callout.left - callout.anchorPx.x, y: callout.top - callout.anchorPx.y },
                 startAbsX: callout.left,
                 startAbsY: callout.top,
                 boxW: callout.width || 160,

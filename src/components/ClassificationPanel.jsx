@@ -1,6 +1,7 @@
 import React from 'react';
 import ColorField from './ColorField.jsx';
-import { attributeFields, buildGraduated, buildCategorical, classLabel, MAX_CATEGORIES } from '../utils/classification.js';
+import { attributeFields, buildGraduated, buildCategorical, classLabel, MAX_CATEGORIES, hasClassSizes, withClassSizes, withoutClassSizes } from '../utils/classification.js';
+import { DEFAULT_POINT_SIZE, clampPointSize } from '../utils/pointSymbol.js';
 
 // Colour by attribute: ranges of a numeric column or one colour per unique
 // value, each class its own legend row. Loaded on demand — it is a large
@@ -13,6 +14,8 @@ export default function ClassificationPanel({ layer, isPoint, updateLayer, brand
   if (!fields.length) return null;
   const cls = selectedLayer.classification || null;
   const setCls = (next) => updateLayer(selectedLayer.id, { classification: next });
+  const baseSize = Number(selectedLayer.style?.markerSize) || DEFAULT_POINT_SIZE;
+  const sizedByClass = isPt && hasClassSizes(cls);
   const build = (field, mode, n) => (mode === 'graduated'
     ? buildGraduated(selectedLayer, field, n || 4)
     : buildCategorical(selectedLayer, field));
@@ -55,6 +58,13 @@ export default function ClassificationPanel({ layer, isPoint, updateLayer, brand
                 </div>
               )}
             </div>
+            {isPt && (
+              <label className="toggle-row" title="Off: every class uses the layer's Point Size. On: each class sets its own size.">
+                <input type="checkbox" checked={sizedByClass}
+                  onChange={(e) => setCls(e.target.checked ? withClassSizes(cls, baseSize) : withoutClassSizes(cls))} />
+                <span>Size by class{sizedByClass ? ' — overrides the layer Point Size' : ''}</span>
+              </label>
+            )}
             <div className="class-list">
               {cls.classes.map((c, i) => {
                 const patch = (pch) => setCls({ ...cls, classes: cls.classes.map((k, j) => (j === i ? { ...k, ...pch } : k)) });
@@ -67,7 +77,17 @@ export default function ClassificationPanel({ layer, isPoint, updateLayer, brand
                         ? <span className="class-max small-note">and above</span>
                         : <input className="class-max" type="number" value={c.max ?? ''} aria-label="Class upper limit" title="Upper limit (inclusive)" onChange={(e) => patch({ max: e.target.value === '' ? null : Number(e.target.value) })} />)
                       : <span className="class-max small-note" title={String(c.value)}>{String(c.value)}</span>}
-                    {isPt && <input className="class-size" type="number" min="4" max="30" value={c.size ?? 10} aria-label="Point size" title="Point size (px)" onChange={(e) => patch({ size: Number(e.target.value) })} />}
+                    {sizedByClass && (
+                      // Blank = inherit the layer size. The field used to show 10
+                      // for a class with no size while the map drew the layer size.
+                      <input className="class-size" type="number" min="1" max="64" step="0.5"
+                        value={Number.isFinite(c.size) ? c.size : ''} placeholder={String(baseSize)}
+                        aria-label="Point size (px, diameter)" title="Point diameter in px — blank uses the layer size"
+                        onChange={(e) => {
+                          const v = e.target.value === '' ? null : clampPointSize(e.target.value);
+                          patch({ size: v == null ? undefined : v });
+                        }} />
+                    )}
                     <input className="class-label" value={c.label || ''} placeholder={classLabel(cls, i)} aria-label="Legend label" onChange={(e) => patch({ label: e.target.value })} />
                   </div>
                 );

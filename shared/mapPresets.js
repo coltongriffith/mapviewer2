@@ -81,6 +81,31 @@ const roleStyleMap = {
   },
 };
 
+// Neutral roles: imports whose purpose the file name does not state, and
+// sampling footprints (soil grids, survey extents) that must not read as a
+// claim or anomaly. Mode presets leave their visibility alone.
+roleStyleMap.sampling_extent = {
+  stroke: "#475569",
+  fill: "#94a3b8",
+  fillOpacity: 0,
+  strokeWidth: 1.4,
+  markerColor: "#475569",
+  markerFill: "#ffffff",
+  markerSize: 8,
+  dashArray: "4 3",
+};
+roleStyleMap.other = {
+  stroke: "#2563eb",
+  fill: "#93c5fd",
+  fillOpacity: 0.2,
+  strokeWidth: 1.8,
+  markerColor: "#2563eb",
+  markerFill: "#ffffff",
+  markerSize: 8,
+  dashArray: "",
+};
+export const NEUTRAL_ROLES = new Set(["sampling_extent", "other"]);
+
 export function getRoleDefaultStyle(role) {
   return { ...(roleStyleMap[role] || roleStyleMap.claims) };
 }
@@ -88,15 +113,22 @@ export function getRoleDefaultStyle(role) {
 export function inferRoleFromLayer(layer) {
   const type = String(layer?.type || "").toLowerCase();
   const name = String(layer?.name || "").toLowerCase();
+  const has = (re) => re.test(name);
 
+  // Sampling footprints first: "soil grid extent" is neither a claim nor an
+  // anomaly, even though older inference called every unnamed polygon a claim.
+  if (type !== "points" && has(/sampl|soil|extent|footprint|survey|coverage/)) return "sampling_extent";
   if (type === "points") return "drillholes";
-  if (name.includes("road") || name.includes("access")) return "roads_access";
-  if (name.includes("river") || name.includes("water") || name.includes("creek")) return "rivers_water";
-  if (name.includes("fault") || name.includes("structure")) return "faults_structures";
-  if (name.includes("anomaly") || name.includes("mag")) return "anomalies";
-  if (name.includes("target")) return "target_areas";
-  if (name.includes("label") || name.includes("town")) return "labels";
-  return "claims";
+  if (has(/road|access/)) return "roads_access";
+  if (has(/river|water|creek/)) return "rivers_water";
+  if (has(/fault|structure/)) return "faults_structures";
+  if (has(/anomal|mag(netic)?(?![a-z])/)) return "anomalies";
+  if (has(/target/)) return "target_areas";
+  if (has(/label|town/)) return "labels";
+  if (has(/claim|tenure|landholding|licen[cs]e|property|permit|concession|cells?(?![a-z])|mineral title/)) return "claims";
+  // Nothing in the name says what this is: stay neutral rather than label it
+  // "Project Claims". The user picks a role from the layer panel.
+  return "other";
 }
 
 // Color palette for multiple claims layers — index 0 = primary, 1 = secondary, etc.

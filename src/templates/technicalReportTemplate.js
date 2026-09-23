@@ -94,6 +94,7 @@ export const technicalReportTemplate = {
       fillOpacity: 0,
       strokeWidth: 0.8,
     },
+    sampling_extent: { stroke: '#475569', fill: '#94a3b8', fillOpacity: 0, strokeWidth: 1.4, dashArray: '4 3' },
     other: {
       stroke: '#1a3a8f',
       fill: '#4a6fd4',

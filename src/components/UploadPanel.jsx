@@ -77,6 +77,9 @@ export default function UploadPanel({ onUploadFile, onUploadFiles, inputRef, sta
       {status?.message ? (
         <div className={`upload-status ${status.type || 'info'}`}>
           {status.message}
+          {status.action ? (
+            <> <button type="button" className="link-btn" onClick={status.action.onClick}>{status.action.label}</button></>
+          ) : null}
         </div>
       ) : null}
 
