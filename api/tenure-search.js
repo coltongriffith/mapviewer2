@@ -125,8 +125,10 @@ async function searchByNumber(sb, q, cap) {
   }
 
   // Prefix fallback, with the wildcards escaped so a user pasting '%' does not
-  // turn their search into a full-table scan.
-  const safe = term.replace(/[%_\\]/g, '\\$&');
+  // turn their search into a full-table scan. PostgREST also reads '*' as '%'
+  // in a like pattern and has no escape for it, so it is dropped.
+  const safe = term.replace(/\*/g, '').replace(/[%_\\]/g, '\\$&');
+  if (!safe) return { mode: 'number', match: 'prefix', results: [] };
   const prefix = await sb.from('tenures').select(SUMMARY_COLUMNS)
     .eq('jurisdiction', 'BC').like('tenure_number', `${safe}%`)
     .order('tenure_number').limit(cap);

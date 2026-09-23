@@ -1,6 +1,7 @@
 import { supabase } from '../lib/supabase';
 import { trackEvent, trackEventOnce } from './track';
 import { FREE_PROJECT_LIMIT } from './pricing';
+import { rememberCloudRevision } from './projectStorage';
 
 function requireSupabase() {
   if (!supabase) throw new Error('Supabase is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to your environment.');
@@ -112,6 +113,7 @@ export async function saveCloudProject({ id, name, payload, silent = false, expe
     // "Worked on this project" — deduped per project per tab-session so the
     // ~10s autosave cadence doesn't turn into keystroke-count noise.
     if (!silent) trackEventOnce('project_saved', id, { project_id: id, name: cleanName.slice(0, 80) });
+    rememberCloudRevision(id, data);
     return { id, revision: data };
   } else {
     // Transactional create + quota check. Direct INSERT on projects is
@@ -123,6 +125,7 @@ export async function saveCloudProject({ id, name, payload, silent = false, expe
       throw error;
     }
     if (!silent) trackEvent('project_created', { project_id: data, name: cleanName.slice(0, 80) });
+    rememberCloudRevision(data, 1);
     return { id: data, revision: 1 };
   }
 }

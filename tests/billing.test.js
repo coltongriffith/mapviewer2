@@ -18,6 +18,7 @@ function makeChain(table) {
     insert: (v) => { rec.ops.push(['insert', v]); return obj; },
     upsert: (v, o) => { rec.ops.push(['upsert', v, o]); return obj; },
     update: (v) => { rec.ops.push(['update', v]); return obj; },
+    delete: () => { rec.ops.push(['delete']); return obj; },
     select: (...a) => { rec.ops.push(['select', ...a]); return obj; },
     eq: (c, v) => { rec.ops.push(['eq', c, v]); return obj; },
     maybeSingle: () => { rec.ops.push(['maybeSingle']); return obj; },
@@ -451,6 +452,20 @@ describe('event ledger and idempotency (P1-08)', () => {
     expect(res.body.duplicate).toBe(true);
     // Crucially: no entitlement write happened on the replay.
     expect(dbCalls.some((c) => c.table === 'user_plans')).toBe(false);
+  });
+
+  it('releases the ledger claim when processing fails, so the retry is reprocessed', async () => {
+    const { default: handler } = await import('../api/stripe-webhook.js');
+    dbResults.user_plans = { error: { code: '08006', message: 'connection reset' } };
+    const body = JSON.stringify({
+      id: 'evt_3', created: 1780000000, type: 'checkout.session.completed',
+      data: { object: { mode: 'subscription', client_reference_id: 'u1', customer: 'cus_1' } },
+    });
+    const res = mockRes();
+    await handler({ method: 'POST', body, headers: signedHeaders(body) }, res);
+    expect(res.statusCode).toBe(500);
+    const release = dbCalls.find((c) => c.table === 'stripe_events' && c.ops.some((o) => o[0] === 'delete'));
+    expect(release.ops).toContainEqual(['eq', 'event_id', 'evt_3']);
   });
 
   it('returns 500 when the ledger itself is unavailable', async () => {

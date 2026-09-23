@@ -118,7 +118,9 @@ export default function LocatorInset({ layers, insetMode, insetBasemap, mode, in
   const backdrop = buildBackdrop(mode);
   const wantsCustom = insetMode === 'custom_image';
   const showCustom = wantsCustom && insetImage;
-  const showSatellite = !showCustom && (Boolean(insetBasemap) || insetMode === 'satellite_locator');
+  // insetMode alone decides, as it does in export (renderScene); insetBasemap
+  // only picks the tiles, so the share page, editor and PNG agree.
+  const showSatellite = !showCustom && insetMode === 'satellite_locator';
   const showAuto = !showCustom && !showSatellite && !!autoInsetRegion;
 
   const autoSvg = useMemo(() => {

@@ -39,8 +39,10 @@ export async function authenticateAgent(req, requiredScope = null) {
     return { ok: false, status: 403, code: 'FORBIDDEN', message: `API key lacks required scope: ${requiredScope}.` };
   }
 
-  // Usage timestamp is non-critical and must never fail a real request.
-  void sb.from('agent_api_keys').update({ last_used_at: new Date().toISOString() }).eq('id', data.id);
+  // Usage timestamp is non-critical and must never fail a real request. The
+  // builder only sends once it is awaited/then'd, so `void` alone wrote nothing.
+  await sb.from('agent_api_keys').update({ last_used_at: new Date().toISOString() }).eq('id', data.id)
+    .then(() => {}, () => {});
 
   return {
     ok: true,

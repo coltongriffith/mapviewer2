@@ -39,18 +39,19 @@ function legacyFlagSet(userId) {
  * @param {string} opts.userId
  * @param {Array<{id:string,name:string,payload:object}>} opts.localProjects
  * @param {{payload:object,projectId:?string}|null} opts.draft  unsaved draft (uploaded once, under the 'draft' id)
- * @param {(job:{name:string,payload:object}) => Promise<string>} opts.uploadProject  returns the new cloud id
- * @returns {{ attempted:number, migrated:number, failed:number, skipped:number, complete:boolean }}
+ * @param {(job:{name:string,payload:object}) => Promise<string|{id:string,revision?:number}>} opts.uploadProject  returns the new cloud id (or saveCloudProject's {id, revision})
+ * @returns {{ attempted:number, migrated:number, failed:number, skipped:number, complete:boolean,
+ *   uploaded: Object<string, {id:string, revision:?number}> }}  uploaded: this pass, by local id ('draft' for the draft)
  */
 export async function runCloudMigration({ userId, localProjects, draft, uploadProject }) {
   // Users migrated under the old single-flag scheme are treated as complete:
   // re-uploading everything they already migrated would create duplicates.
   if (legacyFlagSet(userId)) {
-    return { attempted: 0, migrated: 0, failed: 0, skipped: 0, complete: true };
+    return { attempted: 0, migrated: 0, failed: 0, skipped: 0, complete: true, uploaded: {} };
   }
 
   const state = readMigrationState(userId);
-  if (state.done) return { attempted: 0, migrated: 0, failed: 0, skipped: 0, complete: true };
+  if (state.done) return { attempted: 0, migrated: 0, failed: 0, skipped: 0, complete: true, uploaded: {} };
 
   const jobs = (localProjects || [])
     .filter((p) => p && p.id && p.payload)
@@ -62,13 +63,16 @@ export async function runCloudMigration({ userId, localProjects, draft, uploadPr
   let migrated = 0;
   let failed = 0;
   let skipped = 0;
+  const uploaded = {};
 
   for (const job of jobs) {
     const prior = state.projects[job.key];
     if (prior?.status === 'done' && prior.cloudId) { skipped += 1; continue; }
     try {
-      const cloudId = await uploadProject({ name: job.name, payload: job.payload });
+      const result = await uploadProject({ name: job.name, payload: job.payload });
+      const cloudId = typeof result === 'object' ? result?.id : result;
       state.projects[job.key] = { status: 'done', cloudId, at: new Date().toISOString() };
+      uploaded[job.key] = { id: cloudId, revision: typeof result === 'object' ? result?.revision ?? null : null };
       migrated += 1;
     } catch (e) {
       state.projects[job.key] = {
@@ -87,5 +91,5 @@ export async function runCloudMigration({ userId, localProjects, draft, uploadPr
     writeMigrationState(userId, state);
   }
 
-  return { attempted: jobs.length - skipped, migrated, failed, skipped, complete };
+  return { attempted: jobs.length - skipped, migrated, failed, skipped, complete, uploaded };
 }

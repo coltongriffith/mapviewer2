@@ -9,7 +9,7 @@ export function claimProperty(feature, ...names) {
 }
 
 export function claimNumber(feature) {
-  const value = claimProperty(feature, 'TAG_NUMBER', 'TENURE_NUMBER_ID', 'CLAIM_NUMBER', 'SERIAL_NR', 'SERIAL_NO', 'claim_number');
+  const value = claimProperty(feature, 'TENURE_NUMBER_ID', 'TAG_NUMBER', 'CLAIM_NUMBER', 'SERIAL_NR', 'SERIAL_NO', 'claim_number');
   return value == null ? null : String(value).trim();
 }
 

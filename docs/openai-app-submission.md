@@ -78,7 +78,7 @@ Expected: get_mapping_capabilities identifies Ontario as supported and describes
 
 ### 5 — No-results behavior
 Prompt: Search for a deliberately nonexistent claim identifier.
-Expected: tool returns an actionable tool error stating no matching mineral claims were found; it does not fabricate claims.
+Expected: search_mineral_claims returns count 0 with an empty claims list (preview_exploration_map returns a CLAIMS_NOT_FOUND tool error); it does not fabricate claims.
 
 ### 6 — Exact project selection and nearby tenure
 Prompt: Create an investor map for a project from a verified list of BC tenure numbers and show nearby holders.

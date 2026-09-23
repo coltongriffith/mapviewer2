@@ -6,11 +6,22 @@ const cache = new Map();
 const logoCache = new Map();
 const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
 const MAX_IMAGE_BYTES = 256 * 1024;
+const MAX_CACHE_ENTRIES = 100;
+
+// Warm instances live for hours; bound both caches so arbitrary caller URLs
+// cannot grow them without limit.
+function remember(map, key, value) {
+  map.delete(key);
+  map.set(key, value);
+  while (map.size > MAX_CACHE_ENTRIES) map.delete(map.keys().next().value);
+}
 
 function privateAddress(address) {
-  if (address.includes(':')) return /^(::|::1|fc|fd|fe80|::ffff:)/i.test(address);
-  const [a, b] = address.split('.').map(Number);
-  return a === 0 || a === 10 || a === 127 || a >= 224 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127);
+  if (address.includes(':')) return /^(::|fc|fd|fe[89ab]|64:ff9b:|2001:db8:|2002:)/i.test(address);
+  const [a, b, c] = address.split('.').map(Number);
+  return a === 0 || a === 10 || a === 127 || a >= 224 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31)
+    || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127) || (a === 198 && (b === 18 || b === 19))
+    || (a === 192 && b === 0 && (c === 0 || c === 2)) || (a === 198 && b === 51 && c === 100) || (a === 203 && b === 0 && c === 113);
 }
 
 async function publicUrl(value) {
@@ -100,25 +111,28 @@ function isNeutralColor(hex) {
 export async function resolveBranding(input) {
   const brand = input || {};
   const result = { ...brand, source: null, logo_data_uri: null };
-  let websiteHtml = null;
+  let site = null;
   if (brand.website) {
     let key;
     try { key = new URL(brand.website).hostname; } catch { key = null; }
     if (!key) return result;
     const hit = cache.get(key);
     if (hit && Date.now() - hit.time < THIRTY_DAYS) {
-      websiteHtml = hit.html;
+      site = hit.site;
     } else {
       try {
         const page = await fetchPublic(brand.website, 512 * 1024, ['text/html']);
-        websiteHtml = page.data.toString('utf8');
-        cache.set(key, { html: websiteHtml, time: Date.now() });
+        const html = page.data.toString('utf8');
+        let logoUrl = null;
+        try { logoUrl = firstLogo(html, brand.website); } catch { /* malformed src */ }
+        site = { logoUrl, font: googleFont(html), color: themeColor(html) };
+        remember(cache, key, { site, time: Date.now() });
       } catch { /* A brand website is optional; keep the map usable. */ }
     }
-    if (websiteHtml) {
+    if (site) {
       result.source = key;
-      result.logo_url ||= firstLogo(websiteHtml, brand.website);
-      result.font ||= googleFont(websiteHtml);
+      result.logo_url ||= site.logoUrl;
+      result.font ||= site.font;
     }
   }
   if (result.logo_url) {
@@ -134,10 +148,10 @@ export async function resolveBranding(input) {
           .map((match) => match[1]).find((color) => !isNeutralColor(color)) || null;
       }
       result.logo_data_uri = `data:${logo.type};base64,${logo.data.toString('base64')}`;
-      if (!cachedLogo || Date.now() - cachedLogo.time >= THIRTY_DAYS) logoCache.set(result.logo_url, { asset: logo, time: Date.now() });
+      if (!cachedLogo || Date.now() - cachedLogo.time >= THIRTY_DAYS) remember(logoCache, result.logo_url, { asset: logo, time: Date.now() });
       result.source ||= new URL(result.logo_url).hostname;
     } catch { /* An invalid external logo must not prevent map creation. */ }
   }
-  result.primary_color ||= websiteHtml ? themeColor(websiteHtml) : null;
+  result.primary_color ||= site?.color || null;
   return result;
 }

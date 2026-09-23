@@ -2223,7 +2223,8 @@ export default async function handler(req, res) {
       detail: 'The provincial registries do not publish a map sheet field. Search by claim number, claim name, or company.',
     });
   }
-  if (type === 'name' && !getArcgisJurisdiction(province)?.nameFields?.length) {
+  // B.C. is served by WFS, not ArcGIS; its layer publishes CLAIM_NAME (see bcCqlFilter).
+  if (type === 'name' && province !== 'bc' && !getArcgisJurisdiction(province)?.nameFields?.length) {
     return res.status(400).json({ error: 'Claim-name search is not available for this jurisdiction.' });
   }
   const checkedTerm = validateTerm(q);

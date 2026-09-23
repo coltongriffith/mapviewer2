@@ -73,6 +73,7 @@ export function createAgentMapProject(input, {
   const mappedLayer = applyRoleToLayer(baseLayer, role, 0);
   const brand = input.branding || {};
   const primaryColor = brand.primary_color || '#2563eb';
+  const onDark = Boolean(input.basemap?.startsWith('satellite') || input.basemap === 'dark');
   mappedLayer.style = { ...mappedLayer.style, stroke: primaryColor, fill: primaryColor, fillOpacity: input.basemap?.startsWith('satellite') ? 0.25 : 0.22, strokeWidth: 2.5 };
   const neighbourLayer = neighbours?.features?.length ? applyRoleToLayer({
     ...baseLayer,
@@ -80,15 +81,28 @@ export function createAgentMapProject(input, {
     name: 'Neighbouring claims',
     displayName: 'Neighbouring claims',
     geojson: neighbours,
+    // Context, not subject: framing fits the project claims, not the neighbourhood.
+    focus: false,
     legend: { enabled: true, label: 'Neighbouring claims' },
-    style: { stroke: input.basemap?.startsWith('satellite') ? '#ffffff' : '#8b95a3', fill: '#a9b0bb', fillOpacity: input.basemap?.startsWith('satellite') ? 0 : 0.06, strokeWidth: 1, dashArray: '4 4' },
+    style: { stroke: onDark ? '#ffffff' : '#8b95a3', fill: '#a9b0bb', fillOpacity: onDark ? 0 : 0.06, strokeWidth: 1, dashArray: '4 4' },
   }, 'claims', 1) : null;
   const anchor = claimCentroid(featureCollection.features[0]);
   const sourceLabel = source || input.data?.source_name || jurisdiction?.registry || 'Map data';
   const facts = input.facts_panel || {};
   const callout = input.claims_callout || { show: true };
+  // Published facts ride in the project callout: callouts are drawn by the
+  // editor, the share page and export alike, and stay editable. (A separate
+  // layout.factsPanel existed only on the share page, clipped inside the legend.)
+  const hectares = Number.isFinite(facts.hectares) ? `${Math.round(facts.hectares).toLocaleString('en-US')} ha` : null;
+  const factLines = [
+    facts.commodity && `Commodity: ${facts.commodity}`,
+    Number.isInteger(facts.claims) ? `Claims: ${facts.claims}${hectares ? ` (${hectares})` : ''}` : hectares && `Area: ${hectares}`,
+    facts.ownership && `Ownership: ${facts.ownership}`,
+    facts.access && `Access: ${facts.access}`,
+    facts.tickers?.length && facts.tickers.join(' · '),
+  ].filter(Boolean);
   const fieldText = Object.values(callout.fields || {}).filter(Boolean).slice(0, 6).map(String);
-  if (!fieldText.length) fieldText.push(`${featureCollection.features.length} claims`, sourceLabel);
+  if (!fieldText.length && !factLines.length) fieldText.push(`${featureCollection.features.length} claims`, sourceLabel);
   const overlay = referenceOverlays(input.include);
   if (input.basemap === 'geology') overlay.geology = true;
   if (input.basemap === 'satellite_hybrid') overlay.labels = true;
@@ -108,7 +122,7 @@ export function createAgentMapProject(input, {
     .map(([holder, features]) => ({
       id: id(), type: 'plain', priority: 3, text: holder,
       anchor: claimCentroid(features[0]), offset: { x: 8, y: -8 }, boxWidth: 160,
-      style: { textColor: input.basemap?.startsWith('satellite') ? '#ffffff' : '#4b5563', fontSize: 10 },
+      style: { textColor: onDark ? '#ffffff' : '#4b5563', fontSize: 10 },
     })).filter((label) => label.anchor);
 
   return {
@@ -117,7 +131,7 @@ export function createAgentMapProject(input, {
     callouts: [...(role === 'claims' && anchor && callout.show !== false ? [{
       id: id(), type: 'boxed', priority: 1,
       text: String(callout.fields?.project || facts.project || input.title),
-      subtext: [...fieldText, callout.source_note].filter(Boolean).join('\n'),
+      subtext: [...factLines, ...fieldText, callout.source_note].filter(Boolean).join('\n'),
       anchor, offset: { x: 28, y: -100 }, boxWidth: 250,
       style: { background: '#ffffff', border: callout.style === 'technical' ? '#111827' : primaryColor, textColor: '#17212f', fontSize: callout.style === 'minimal' ? 11 : 12 },
     }] : []), ...neighbourLabels],
@@ -133,8 +147,10 @@ export function createAgentMapProject(input, {
       basemapOpacity: input.basemap_opacity,
       insetEnabled: input.inset?.show !== false,
       insetBasemap: input.inset?.basemap || input.basemap,
-      insetMode: input.inset?.basemap?.startsWith('satellite') ? 'satellite_locator' : 'province_state',
-      factsPanel: facts,
+      // A tiled locator for any inset basemap except 'white', which is the
+      // plain province/state locator. insetMode is what the editor, the share
+      // page and export all key on.
+      insetMode: (input.inset?.basemap || input.basemap) === 'white' ? 'province_state' : 'satellite_locator',
       logo: brand.logo_data_uri || null,
       accentColor: brand.accent_color || primaryColor,
       fonts: brand.font && FONT_OPTIONS[brand.font]

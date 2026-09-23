@@ -303,6 +303,33 @@ export function clearAccountSave(nonce) {
   try { localStorage.removeItem(ACCOUNT_SAVE_KEY); } catch { /* keep the snapshot on storage failure */ }
 }
 
+// The cloud revision this browser last saved, or opened, each project at. A
+// reload restores the draft but not the in-memory revision, so without this the
+// restored project saved with no expectation and silently overwrote edits made
+// on another device in the meantime. Written on save and on open only — never
+// on a background read, which could vouch for a revision the draft isn't based on.
+const CLOUD_REVISION_KEY = 'em_cloud_revisions';
+const MAX_REMEMBERED_REVISIONS = 50;
+
+export function rememberCloudRevision(projectId, revision) {
+  if (!projectId || revision == null) return;
+  try {
+    const all = JSON.parse(localStorage.getItem(CLOUD_REVISION_KEY)) || {};
+    delete all[projectId];
+    all[projectId] = revision;
+    const ids = Object.keys(all);
+    for (const id of ids.slice(0, Math.max(0, ids.length - MAX_REMEMBERED_REVISIONS))) delete all[id];
+    localStorage.setItem(CLOUD_REVISION_KEY, JSON.stringify(all));
+  } catch { /* best-effort: a missing value only means "no expectation" */ }
+}
+
+export function rememberedCloudRevision(projectId) {
+  if (!projectId) return null;
+  try {
+    return JSON.parse(localStorage.getItem(CLOUD_REVISION_KEY))?.[projectId] ?? null;
+  } catch { return null; }
+}
+
 export function resolveInitialWorkspace(fallbackProject) {
   const draft = loadDraft();
   if (draft?.payload) {

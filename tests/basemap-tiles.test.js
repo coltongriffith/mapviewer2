@@ -142,6 +142,17 @@ describe('a basemap cannot be half-migrated', () => {
     expect(basemapConfig('a_basemap_that_was_removed')).toBe(BASEMAPS.light);
     expect(basemapConfig(undefined)).toBe(BASEMAPS.light);
   });
+
+  it('draws every basemap name the Agent API accepts, without adding picker duplicates', async () => {
+    const { AGENT_BASEMAPS } = await import('../shared/agentSchema.js');
+    for (const key of AGENT_BASEMAPS) {
+      expect(Object.values(BASEMAPS), `${key} does not resolve to a basemap`).toContain(basemapConfig(key));
+    }
+    expect(basemapConfig('white')).toBe(BASEMAPS.blank);
+    expect(basemapConfig('topo')).toBe(BASEMAPS.terrain);
+    expect(basemapConfig('satellite_hybrid')).toBe(BASEMAPS.satellite);
+    expect(BASEMAP_KEYS).not.toContain('satellite_hybrid');
+  });
 });
 
 describe('the map keeps drawing past the end of a tile cache', () => {

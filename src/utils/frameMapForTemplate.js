@@ -34,7 +34,9 @@ export function fitProjectToTemplate(project, map, template, mode = 'balanced', 
   let targetLayers;
   if (opts.focusRoles) {
     // Always prefer focus-role layers (claims, drillholes, targets) when they exist
-    const focus = visibleLayers.filter((l) => FOCUS_ROLES.has(l.role));
+    // focus:false marks context drawn in a focus role — the agent builder's
+    // neighbouring claims — which must not widen the frame past the project.
+    const focus = visibleLayers.filter((l) => FOCUS_ROLES.has(l.role) && l.focus !== false);
     if (focus.length) {
       targetLayers = focus;
     } else if (project?.layout?.primaryLayerId) {
