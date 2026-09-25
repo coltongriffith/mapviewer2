@@ -25,6 +25,11 @@ const ROLE_GROUPS = {
   roads_access: 'Infrastructure',
   rivers_water: 'Infrastructure',
   labels: 'Reference',
+  // New layers land under their role's heading rather than "Map Data".
+  rock_samples: 'Sampling',
+  soil_samples: 'Sampling',
+  sampling_extent: 'Sampling',
+  other: 'Other',
 };
 
 export const technicalResultsTemplate = {

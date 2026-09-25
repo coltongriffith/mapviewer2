@@ -73,7 +73,7 @@ import { scopingWarning } from './utils/scopingNotice';
 import { CLAIM_NAME_CAVEAT } from './utils/claimProvenance';
 import { OVERLAY_DESCRIPTIONS } from './utils/referenceOverlayCredits.js';
 import { BASEMAPS, BASEMAP_KEYS, basemapThumb } from './utils/basemapConfig.js';
-import { applyLegendCustomization, groupLegendItems } from './utils/legendCustomization.js';
+import { applyLegendCustomization, groupLegendItems, renameLegendHeading } from './utils/legendCustomization.js';
 import { getMapFrame, projectionLabel, scaleBarHeight } from './utils/coordinateFrame.js';
 import { pickScaleBar } from './utils/scaleBar.js';
 import CoordinateFrameOverlay from './components/CoordinateFrameOverlay.jsx';
@@ -630,6 +630,8 @@ export default function App({ initialAction = null }) {
   // Set by an import into a map that already has layers: the next auto-fit is
   // skipped so the user's viewport and framing layer stay where they were.
   const preserveViewRef = useRef(false);
+  // Whether this map instance has had its first fit (reset when the editor map unmounts).
+  const initialFitDoneRef = useRef(false);
   const dragHoverRef = useRef({});        // tracks last hover state so setDragging only fires on zone changes
   const mapSizeRef = useRef({ width: 1600, height: 1000 });
   const draggingActiveRef = useRef(false); // true while a template-zone drag is in progress; freezes ResizeObserver updates
@@ -1096,7 +1098,7 @@ export default function App({ initialAction = null }) {
     // than adding one, so Ctrl+Z undoes edits instead of camera moves and a
     // session of panning cannot push real edits out of the 30-step buffer.
     const top = h.stack[h.index];
-    if (!h.pending && top && Object.keys({ ...top, ...project }).every((k) => k === 'mapView' || top[k] === project[k])) {
+    if (!h.pending && top && Object.keys({ ...top, ...project }).every((k) => k === 'mapView' || k === 'ratioMapStates' || top[k] === project[k])) {
       h.stack[h.index] = project;
       return undefined;
     }
@@ -1644,9 +1646,20 @@ export default function App({ initialAction = null }) {
 
     activeRatioRef.current = newRatio;
     setActiveRatio(newRatio);
+    // Saved with the project, so a reload reopens in the same shape.
     // A preset ratio and a custom pixel size are mutually exclusive framing modes.
-    if (newRatio) updateLayout({ exportSettings: { customWidth: 0, customHeight: 0 } });
+    updateLayout(newRatio ? { exportRatio: newRatio, exportSettings: { customWidth: 0, customHeight: 0 } } : { exportRatio: null });
   }, []);
+
+  // A project opened, restored or undone carries its export shape; adopt it.
+  useEffect(() => {
+    const r = project.layout?.exportRatio;
+    const next = r && EXPORT_RATIOS[r] ? r : null;
+    if (next !== activeRatioRef.current) {
+      activeRatioRef.current = next;
+      setActiveRatio(next);
+    }
+  }, [project.layout?.exportRatio]);
 
   useEffect(() => {
     const map = leafletMapRef.current;
@@ -1669,6 +1682,7 @@ export default function App({ initialAction = null }) {
     if (screen !== 'editor') {
       setMapReady(false);
       leafletMapRef.current = null;
+      initialFitDoneRef.current = false;
     } else if (project.layers.length === 0 && project.areaClaims?.features?.length) {
       // Entering the editor on a claims-only project (e.g. a restored draft or a
       // reopened pin-based search): frame to the saved view / claims so they
@@ -1683,6 +1697,17 @@ export default function App({ initialAction = null }) {
     const map = leafletMapRef.current;
     if (!map) return;
     if (preserveViewRef.current) { preserveViewRef.current = false; return; }
+    // With an export shape set, the first fit on a (re)loaded map and any
+    // "keep the saved view" fit restore that shape's saved view.
+    const ratio = activeRatioRef.current;
+    const ratioView = ratio ? project.ratioMapStates?.[ratio] : null;
+    if (ratioView?.center && (!initialFitDoneRef.current || skipAutoFitRef.current === true || skipAutoFitRef.current === project)) {
+      initialFitDoneRef.current = true;
+      skipAutoFitRef.current = false;
+      map.setView([ratioView.center.lat, ratioView.center.lng], ratioView.zoom, { animate: false });
+      return;
+    }
+    initialFitDoneRef.current = true;
     const noLayers = project.layers.length === 0;
     // Use the ref so cosmetic layout changes (title, logo size, opacity…) don't
     // trigger a map reframe. Only the explicit deps below cause refitting.
@@ -1738,13 +1763,26 @@ export default function App({ initialAction = null }) {
     const map = leafletMapRef.current;
     if (!map) return undefined;
     let saveTimer;
+    // Every move is saved — the user's and programmatic ones (fits, restores)
+    // alike: with an export shape set, as that shape's view; otherwise as the
+    // free-form view. Ratio views used to be saved only when switching shape,
+    // so a reload lost the framing.
     const handleMoveEnd = () => {
-      if (activeRatioRef.current) return;
       clearTimeout(saveTimer);
       saveTimer = setTimeout(() => {
         const center = map.getCenter();
         const zoom = map.getZoom();
-        setProject((p) => ({ ...p, mapView: { center: { lat: center.lat, lng: center.lng }, zoom, screenW: mapSizeRef.current.width, screenH: mapSizeRef.current.height } }));
+        const view = { center: { lat: center.lat, lng: center.lng }, zoom };
+        const ratio = activeRatioRef.current;
+        if (ratio) {
+          setProject((p) => {
+            const prev = p.ratioMapStates?.[ratio];
+            if (prev && prev.zoom === zoom && prev.center?.lat === view.center.lat && prev.center?.lng === view.center.lng) return p;
+            return { ...p, ratioMapStates: { ...(p.ratioMapStates || {}), [ratio]: view } };
+          });
+        } else {
+          setProject((p) => ({ ...p, mapView: { ...view, screenW: mapSizeRef.current.width, screenH: mapSizeRef.current.height } }));
+        }
       }, 600);
     };
     map.on('moveend', handleMoveEnd);
@@ -6922,7 +6960,7 @@ export default function App({ initialAction = null }) {
                         const baseH = el?.clientHeight || viewportSize.height || 1000;
                         activeRatioRef.current = null;
                         setActiveRatio(null);
-                        updateLayout({ exportSettings: { customWidth: Math.round(baseW * 2), customHeight: Math.round(baseH * 2) } });
+                        updateLayout({ exportRatio: null, exportSettings: { customWidth: Math.round(baseW * 2), customHeight: Math.round(baseH * 2) } });
                       } else {
                         updateLayout({ exportSettings: { pixelRatio: Number(e.target.value), customWidth: 0, customHeight: 0 } });
                       }
@@ -7195,7 +7233,14 @@ export default function App({ initialAction = null }) {
               <div className="legend-list" style={{ fontSize: Math.round(13 * (project.layout.legendFontScale ?? 1)) + 'px' }}>
                 {legendGroups.map((group) => (
                   <div key={group.heading || 'all'} className="legend-group">
-                    {group.heading ? <div className="legend-group-title">{group.heading}</div> : null}
+                    {group.heading ? (
+                      <div className="legend-group-title">
+                        <LegendLabelEditable
+                          label={group.heading}
+                          onSave={(v) => { const next = renameLegendHeading(derivedLegendItems, project.layout, group.heading, v); if (next) updateLayout({ legendOverrides: next }); }}
+                        />
+                      </div>
+                    ) : null}
                     {group.items.map((item) => (
                       <div
                         key={item.id}

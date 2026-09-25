@@ -169,11 +169,14 @@ export function classIndexFor(classification, feature) {
 /** What one class paints, by geometry: points take colour and size, lines
  * their stroke, areas their fill. An area's outline is left to the layer so
  * a classified geology sheet keeps one contact line weight. */
-export function styleForClass(cls, kind) {
+export function styleForClass(cls, kind, { outlineFollowsClass = false } = {}) {
   const k = kind === true ? 'points' : (kind || 'polygon');
   const out = k === 'points'
     ? { markerColor: cls.color, markerFill: cls.color }
     : k === 'line' ? { stroke: cls.color } : { fill: cls.color };
+  // Opt-in (classification.outlineFollowsClass): an area's outline takes the
+  // class colour too, so a lightly filled class still reads by its edge.
+  if (k === 'polygon' && outlineFollowsClass) out.stroke = cls.color;
   if (k === 'points' && Number.isFinite(cls.size)) out.markerSize = cls.size;
   if (cls.shape) out.markerShape = cls.shape;
   return out;
@@ -197,7 +200,7 @@ export function geometryKind(feature, layer) {
 export function classStyle(classification, feature, kind) {
   const i = classIndexFor(classification, feature);
   if (i < 0) return null;
-  return styleForClass(classification.classes[i], kind);
+  return styleForClass(classification.classes[i], kind, { outlineFollowsClass: !!classification.outlineFollowsClass });
 }
 
 function fmt(n) {
@@ -235,7 +238,7 @@ export function classLegendItems(layer, baseStyle, baseLabel, group, isPoint) {
     // Straight from the class, not by classifying a synthetic value: the
     // open-ended top class has no finite value to classify, and used to fall
     // back to the layer colour in every legend while the map used its own.
-    const style = { ...baseStyle, ...styleForClass(cls, kind) };
+    const style = { ...baseStyle, ...styleForClass(cls, kind, { outlineFollowsClass: !!c.outlineFollowsClass }) };
     return {
       id: `${layer.id}::class:${c.mode}:${enc(c.field)}:${c.mode === 'categorical' ? enc(cls.value) : i}`,
       legacyIds: [

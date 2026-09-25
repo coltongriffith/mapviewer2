@@ -42,6 +42,7 @@ export const sidePanelTemplate = {
     claims: 'Property', target_areas: 'Targets', anomalies: 'Targets',
     drillholes: 'Drilling', faults_structures: 'Reference',
     roads_access: 'Infrastructure', rivers_water: 'Infrastructure', labels: 'Reference',
+    rock_samples: 'Sampling', soil_samples: 'Sampling', sampling_extent: 'Sampling', other: 'Other',
   },
   roleStyles: {
     claims: { stroke: '#60a5fa', fill: '#93c5fd', fillOpacity: 0.22, strokeWidth: 2 },

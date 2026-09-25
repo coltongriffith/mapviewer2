@@ -63,7 +63,8 @@ export function LegendAreaSwatch({ style = {} }) {
       style={{
         borderColor: safeColor(stroke, '#3b82f6'),
         borderStyle: style.dashArray ? 'dashed' : 'solid',
-        background: fillRgba(style.fill || '#93c5fd', style.fillOpacity ?? 1),
+        // Same default opacity as the exporters' swatch (renderScene legendSwatchSvg).
+        background: fillRgba(style.fill || '#93c5fd', style.fillOpacity ?? 0.22),
         ...(isNearWhite(stroke) ? { boxShadow: `0 0 0 1px ${LIGHT_SWATCH_EDGE}` } : {}),
       }}
     />

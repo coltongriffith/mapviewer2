@@ -3606,3 +3606,5 @@ button.admx-ladder-seg { border: 0; font: inherit; padding: 0; }
 
 .legend-editor-headings { display: grid; gap: 4px; margin: 4px 0 8px; }
 .legend-editor-heading-name { width: 100%; }
+.legend-editor-handle { cursor: grab; user-select: none; color: var(--ui-text-muted); padding: 0 2px; font-size: 12px; line-height: 1; }
+.legend-editor-handle:active { cursor: grabbing; }

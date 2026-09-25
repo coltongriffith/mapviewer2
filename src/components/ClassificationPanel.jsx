@@ -23,6 +23,8 @@ export default function ClassificationPanel({ layer, isPoint, updateLayer, brand
     const next = mode === 'graduated'
       ? buildGraduated(selectedLayer, field, n || 4)
       : buildCategorical(selectedLayer, field);
+    // Rebuilding keeps the classification's own options.
+    if (cls?.outlineFollowsClass) next.outlineFollowsClass = true;
     if (!sizedByClass) return next;
     const sized = withClassSizes(next, baseSize);
     const prev = cls?.classes || [];
@@ -76,6 +78,13 @@ export default function ClassificationPanel({ layer, isPoint, updateLayer, brand
                 </div>
               )}
             </div>
+            {!isPt && selectedLayer.type !== 'line' && (
+              <label className="toggle-row" title="On: each area's outline takes its class colour as well as its fill.">
+                <input type="checkbox" checked={!!cls.outlineFollowsClass}
+                  onChange={(e) => setCls({ ...cls, outlineFollowsClass: e.target.checked })} />
+                <span>Outline follows class colour</span>
+              </label>
+            )}
             {isPt && (
               <label className="toggle-row" title="Off: every class uses the layer's Point Size. On: each class sets its own size.">
                 <input type="checkbox" checked={sizedByClass}

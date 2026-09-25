@@ -233,3 +233,35 @@ describe('fixed-size stage and legend fixes', () => {
     expect(zones.legend.height).toBeGreaterThanOrEqual(58 + 20 * 30);
   });
 });
+
+describe('legend editor upgrades', () => {
+  it('renames a heading for every entry under it, derived and added', async () => {
+    const { renameLegendHeading } = await import('../src/utils/legendCustomization.js');
+    const derived = [
+      { id: 'a', label: 'Rocks', group: 'Map Data', style: {} },
+      { id: 'b', label: 'Soils', group: 'Map Data', style: {} },
+      { id: 'c', label: 'Claims', group: 'Property', style: {} },
+    ];
+    const layout = { legendGrouped: true, legendCustomItems: [{ id: 'custom-1', label: 'Mill', symbol: 'circle', color: '#111111' }] };
+    const next = renameLegendHeading(derived, layout, 'Map Data', 'Raven Rock Samples');
+    expect(next.a.group).toBe('Raven Rock Samples');
+    expect(next.b.group).toBe('Raven Rock Samples');
+    expect(next.c).toBeUndefined();
+    expect(next['custom-1'].group).toBe('Raven Rock Samples');
+    expect(renameLegendHeading(derived, layout, 'Map Data', '  ')).toBeNull();
+  });
+
+  it('polygon outlines follow the class colour only when asked', async () => {
+    const { classStyle } = await import('../src/utils/classification.js');
+    const cls = { mode: 'categorical', field: 'z', classes: [{ value: 'A', color: '#ff0000' }] };
+    const f = { properties: { z: 'A' } };
+    expect(classStyle(cls, f, 'polygon')).toEqual({ fill: '#ff0000' });
+    expect(classStyle({ ...cls, outlineFollowsClass: true }, f, 'polygon')).toEqual({ fill: '#ff0000', stroke: '#ff0000' });
+    expect(classStyle({ ...cls, outlineFollowsClass: true }, f, 'points').stroke).toBeUndefined();
+  });
+
+  it('new sample layers default to their role heading', () => {
+    expect(technicalResultsTemplate.roleGroups.rock_samples).toBe('Sampling');
+    expect(technicalResultsTemplate.roleGroups.soil_samples).toBe('Sampling');
+  });
+});

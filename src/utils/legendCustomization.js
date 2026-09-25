@@ -225,3 +225,29 @@ export function isNearWhite(color) {
   return 0.2126 * r + 0.7152 * g + 0.0722 * b > 225;
 }
 export const LIGHT_SWATCH_EDGE = 'rgba(15,23,42,0.55)';
+
+// Rename a legend heading for every entry under it (derived layers and added
+// items alike), as the legend currently shows them. Returns the new
+// legendOverrides, or null when nothing changes. Shared by the legend on the
+// map (click a heading) and the legend editor panel.
+export function renameLegendHeading(derivedItems, layout = {}, from, to) {
+  const name = String(to || '').trim();
+  if (!name || name === from) return null;
+  const overrides = layout?.legendOverrides || {};
+  const shown = applyLegendCustomization(derivedItems, layout);
+  const headingOf = (item) => (item?.group && String(item.group).trim()) || DEFAULT_LEGEND_GROUP;
+  const shownById = new Map(shown.map((it) => [it.id, it]));
+  const next = { ...overrides };
+  for (const d of derivedItems || []) {
+    const it = shownById.get(d.id);
+    if (it && headingOf(it) === from) {
+      next[d.id] = { ...(overrideFor(overrides, d) || {}), group: name };
+      for (const old of (d.legacyIds || [])) if (old !== d.id) delete next[old];
+    }
+  }
+  for (const entry of layout?.legendCustomItems || []) {
+    const it = shownById.get(entry.id);
+    if (it && headingOf(it) === from) next[entry.id] = { ...(overrides[entry.id] || {}), group: name };
+  }
+  return next;
+}
