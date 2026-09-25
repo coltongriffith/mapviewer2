@@ -251,3 +251,18 @@ export function renameLegendHeading(derivedItems, layout = {}, from, to) {
   }
   return next;
 }
+
+// The height the legend's entries actually occupy, walked the way the
+// exporters lay rows out (renderScene legendRowLayout: 40 px to the first row,
+// 24 px per entry and 20 px per heading, ×0.75 for the compact legend) plus a
+// 12 px bottom margin. A dragged legend height is never allowed below this,
+// so no entry is clipped in an export.
+export function legendContentHeight(items, layout = {}) {
+  const density = layout?.legendCompact ? 0.75 : 1;
+  let h = 0;
+  for (const group of groupLegendItems(items, layout)) {
+    if (group.heading) h += 20 * density;
+    h += group.items.length * 24 * density;
+  }
+  return items && items.length ? Math.ceil(40 + h + 12) : 0;
+}

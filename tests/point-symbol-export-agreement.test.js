@@ -230,7 +230,7 @@ describe('fixed-size stage and legend fixes', () => {
     const { resolveTemplateZones } = await import('../src/templates/technicalResultsTemplate.js');
     const items = Array.from({ length: 20 }, (_, i) => ({ label: `Item ${i}` }));
     const zones = resolveTemplateZones(technicalResultsTemplate, { legendItems: items, legendHeightPx: 200 }, { width: 1333, height: 2000 }, items);
-    expect(zones.legend.height).toBeGreaterThanOrEqual(58 + 20 * 30);
+    expect(zones.legend.height).toBeGreaterThanOrEqual(40 + 20 * 24 + 12);
   });
 });
 
