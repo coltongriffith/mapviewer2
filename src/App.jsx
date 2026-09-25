@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { LegendPointSwatch, LegendLineSwatch, LegendAreaSwatch } from './components/LegendSwatches.jsx';
 import RatioSwitcher from './components/RatioSwitcher';
 import Sidebar from './components/Sidebar';
 import LayerList from './components/LayerList';
 import LocatorInset from './components/LocatorInset';
 import LegendEditor from './components/LegendEditor';
-import { MarkerSvgIcon } from './utils/markerIcons.jsx';
 import CalloutsOverlay from './components/CalloutsOverlay';
 import LandingPage from './components/LandingPage';
 
@@ -46,6 +46,7 @@ import {
 } from './projectState';
 import { EXPORT_RATIOS } from './constants';
 import { applyRoleToLayer, inferRoleFromLayer, NEUTRAL_ROLES } from './mapPresets';
+import { logicalStageSize, screenScale } from './utils/stageScale.js';
 import { getTemplate } from './templates';
 import { buildLegendItems, resolveTemplateZones } from './templates/technicalResultsTemplate';
 import { resolveNI43101Zones, resolveTitleStripFields } from './templates/technicalReportTemplate';
@@ -168,14 +169,6 @@ const AURORA_LOGO_SVG = [
 const AURORA_LOGO_URL = `data:image/svg+xml,${encodeURIComponent(AURORA_LOGO_SVG)}`;
 const AURORA_ACCENT = '#c8a84b';
 
-// Legend swatch fill: keep the border visible even when the layer has no fill
-const legendFillRgba = (hex, alpha) => {
-  if (typeof hex !== 'string' || !/^#[0-9a-f]{6}$/i.test(hex)) return hex;
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-};
 
 // Built from the same definitions the map draws with, so a preview cannot show
 // one basemap while the canvas shows another — a thumbnail left pointing at a
@@ -442,34 +435,6 @@ function LegendLabelEditable({ label, onSave }) {
   );
 }
 
-// The legend's point swatch, drawn by the same component as the map markers.
-//
-// This was a fourth hand-written copy of the shape table, and it had fallen
-// behind: hexagon and pin fell through to a circle here while both exporters
-// drew them properly, so a hexagon layer read as a circle on screen and a
-// hexagon in the client's PDF. Sharing MarkerSvgIcon means a shape added once
-// is available everywhere, and cannot be half-added again.
-function LegendPointSwatch({ style, size = 14 }) {
-  // A layer drawn with an uploaded icon is represented by that icon, not by
-  // the geometric shape it would otherwise have had.
-  if (style?.customMarkerDataUri) {
-    return (
-      <span className="legend-symbol-marker" style={{ display: 'flex', flexShrink: 0 }}>
-        <img src={style.customMarkerDataUri} alt="" width={size} height={size} style={{ objectFit: 'contain' }} draggable={false} />
-      </span>
-    );
-  }
-  return (
-    <span className="legend-symbol-marker" style={{ display: 'flex', flexShrink: 0, width: 18, justifyContent: 'center' }}>
-      <MarkerSvgIcon
-        type={style?.markerShape || 'circle'}
-        size={size}
-        color={style?.markerColor || '#111111'}
-        fillColor={style?.markerFill || style?.markerColor || '#ffffff'}
-      />
-    </span>
-  );
-}
 
 function ProjectNameInput({ initialValue, onSave, onCancel }) {
   const [value, setValue] = useState(initialValue);
@@ -1589,33 +1554,46 @@ export default function App({ initialAction = null }) {
 
   const customExportW = project.layout.exportSettings?.customWidth || 0;
   const customExportH = project.layout.exportSettings?.customHeight || 0;
-  const constrainedStageSize = useMemo(() => {
-    // A custom pixel size (width×height) takes priority and constrains the
-    // on-screen stage to that exact aspect ratio, so the user edits at the size
-    // they'll export. Otherwise fall back to a preset export ratio.
+  // The stage renders at a FIXED logical size for the chosen shape and is
+  // CSS-scaled to fit the window. It used to take its pixel size from the
+  // window, so resizing the browser (or a side panel opening) changed the
+  // composition — panels are sized in fixed pixels — and the exported size.
+  const stageLogical = useMemo(() => {
     let targetRatio = null;
     if (customExportW > 0 && customExportH > 0) targetRatio = customExportW / customExportH;
     else if (activeRatio) targetRatio = EXPORT_RATIOS[activeRatio].ratio;
-    if (!targetRatio) return null;
+    return targetRatio ? logicalStageSize(targetRatio) : null;
+  }, [activeRatio, customExportW, customExportH]);
+  const constrainedStageSize = useMemo(() => {
+    if (!stageLogical) return null;
     const PAD = 32;
-    const availW = Math.max(100, viewportSize.width - PAD * 2);
-    const availH = Math.max(100, viewportSize.height - PAD * 2);
-    if (availW / availH > targetRatio) {
-      return { width: Math.round(availH * targetRatio), height: availH };
-    }
-    return { width: availW, height: Math.round(availW / targetRatio) };
-  }, [activeRatio, viewportSize, customExportW, customExportH]);
+    const availW = Math.max(40, viewportSize.width - PAD * 2);
+    const availH = Math.max(40, viewportSize.height - PAD * 2);
+    const scale = Math.min(availW / stageLogical.width, availH / stageLogical.height);
+    return { ...stageLogical, scale: Number.isFinite(scale) && scale > 0 ? scale : 1 };
+  }, [stageLogical, viewportSize]);
 
-  // Stable key for the auto-fit effect — changes only for fit-relevant layer events
-  // (add/remove, visibility toggle, role change, GeoJSON data arrives).
-  // Style-only changes (color, opacity) do NOT change this key, preventing unwanted re-fits.
+  // Stable key for the auto-fit effect — changes only when layers are added or
+  // removed or their GeoJSON arrives. Turning a layer on or off and changing
+  // its role used to be in the key too, so either zoomed the map out and lost
+  // the user's framing; Refit Map / Use for Framing reframe on request.
   const layerFitKey = useMemo(
-    () => project.layers.map(l => `${l.id}:${l.visible ? 1 : 0}:${l.role || ''}:${l.geojson ? 1 : 0}`).join('|'),
+    () => project.layers.map(l => `${l.id}:${l.geojson ? 1 : 0}`).join('|'),
     [project.layers]
   );
 
   const mapStageStyle = useMemo(() => ({
-    ...(constrainedStageSize || {}),
+    ...(constrainedStageSize ? (() => {
+      const { width, height, scale } = constrainedStageSize;
+      return {
+        width, height,
+        transform: `scale(${scale})`,
+        transformOrigin: 'center center',
+        // Negative margins make the layout box the scaled size, so the flex
+        // parent centres what is actually visible.
+        margin: `${(height * scale - height) / 2}px ${(width * scale - width) / 2}px`,
+      };
+    })() : {}),
     '--template-radius': project.layout.cornerRadius != null ? `${project.layout.cornerRadius}px` : `${themeTokens.panelRadius}px`,
     '--title-radius': project.layout.cornerRadius != null ? `${project.layout.cornerRadius}px` : `${themeTokens.titleRadius}px`,
     '--panel-bg': themeTokens.panelFill,
@@ -1683,8 +1661,9 @@ export default function App({ initialAction = null }) {
       }
     }, 60);
     return () => clearTimeout(timer);
+  // Logical size only: rescaling to fit the window leaves the map unchanged.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [constrainedStageSize]);
+  }, [stageLogical]);
 
   useEffect(() => {
     if (screen !== 'editor') {
@@ -1884,6 +1863,8 @@ export default function App({ initialAction = null }) {
 
     // Capture container rect ONCE at drag start — prevents forced reflow on every mousemove (shaking fix)
     const containerRect = mapContainerRef.current?.getBoundingClientRect() ?? { left: 0, top: 0, width: 0, height: 0 };
+    // Pointer positions are screen px; zones are logical stage px.
+    const sc = screenScale(mapContainerRef.current);
 
     dragHoverRef.current = {};
     draggingActiveRef.current = true; // freeze ResizeObserver so mapSize can't change during drag
@@ -1902,8 +1883,8 @@ export default function App({ initialAction = null }) {
       document.documentElement.style.setProperty('--ghost-y', me.clientY + 'px');
 
       if (isInSidebar || (isSidePanel && SP_SIDEBAR_ELEMENTS.includes(id))) {
-        const cursorX = me.clientX - containerRect.left - sbLeft - 16;
-        const cursorY = me.clientY - containerRect.top - 16;
+        const cursorX = ((me.clientX - containerRect.left) / sc) - sbLeft - 16;
+        const cursorY = ((me.clientY - containerRect.top) / sc) - 16;
         const row = Math.max(0, Math.min(4, Math.floor(cursorY / (rowH + 6))));
         // Three targets per row, not two: the outer thirds are the left and
         // right halves, and dropping across the middle spans the row. Without
@@ -1917,11 +1898,11 @@ export default function App({ initialAction = null }) {
 
         let newMapSlot = null;
         // northArrow/scaleBar can also drop to map area
-        if (['northArrow', 'scaleBar'].includes(id) && (me.clientX - containerRect.left) < sbLeft) {
+        if (['northArrow', 'scaleBar'].includes(id) && (((me.clientX - containerRect.left) / sc)) < sbLeft) {
           const zW = ghostW || 80, zH = ghostH || 48;
           const slots = getMapSlots();
-          const cx = me.clientX - containerRect.left;
-          const cy = me.clientY - containerRect.top;
+          const cx = ((me.clientX - containerRect.left) / sc);
+          const cy = ((me.clientY - containerRect.top) / sc);
           let bestKey = null, bestDist = Infinity;
           slots.forEach((s) => {
             const d = Math.hypot(cx - (s.left + zW / 2), cy - (s.top + zH / 2));
@@ -1944,8 +1925,8 @@ export default function App({ initialAction = null }) {
       }
 
       if (isMapInSidePanel) {
-        const cursorX = me.clientX - containerRect.left;
-        const cursorY = me.clientY - containerRect.top;
+        const cursorX = ((me.clientX - containerRect.left) / sc);
+        const cursorY = ((me.clientY - containerRect.top) / sc);
         const zW = ghostW || 80, zH = ghostH || 48;
         const slots = getMapSlots();
         let bestKey = null, bestDist = Infinity;
@@ -2125,13 +2106,14 @@ export default function App({ initialAction = null }) {
     const map = leafletMapRef.current;
     if (map) map.dragging.disable();
     const sx = e.clientX, sy = e.clientY;
+    const sc = screenScale(mapContainerRef.current);
     const initZone = resolvedZonesRef.current?.[elemId] || {};
     const zLeft = initZone.left != null ? initZone.left
       : initZone.right != null ? mapSize.width - initZone.right - startW : 0;
     const zTop = initZone.top != null ? initZone.top
       : initZone.bottom != null ? mapSize.height - initZone.bottom - startH : 0;
     const onMove = (me) => {
-      const dx = me.clientX - sx, dy = me.clientY - sy;
+      const dx = (me.clientX - sx) / sc, dy = (me.clientY - sy) / sc;
       let newW = null, newH = null;
       if (direction.includes('r')) newW = Math.max(minW, Math.min(maxW, Math.round(startW + dx)));
       if (direction.includes('l')) newW = Math.max(minW, Math.min(maxW, Math.round(startW - dx)));
@@ -4184,11 +4166,11 @@ export default function App({ initialAction = null }) {
     // hidden difference.
     const shown = featureEditorPoint || { left: 0, top: 0, rawLeft: 0, rawTop: 0 };
     const base = { x: shown.left - shown.rawLeft, y: shown.top - shown.rawTop };
-    const start = { x: event.clientX, y: event.clientY, base, pointerId: event.pointerId };
+    const start = { x: event.clientX, y: event.clientY, base, pointerId: event.pointerId, sc: screenScale(mapContainerRef.current) };
     featureEditorDragRef.current = start;
     const move = (ev) => {
       if (ev.pointerId !== start.pointerId) return;
-      setFeatureEditorOffset({ x: start.base.x + ev.clientX - start.x, y: start.base.y + ev.clientY - start.y });
+      setFeatureEditorOffset({ x: start.base.x + (ev.clientX - start.x) / start.sc, y: start.base.y + (ev.clientY - start.y) / start.sc });
     };
     const end = () => {
       window.removeEventListener('pointermove', move);
@@ -7223,15 +7205,9 @@ export default function App({ initialAction = null }) {
                         {item.type === 'points' ? (
                           <LegendPointSwatch style={item.style} size={item.swatchSize || 14} />
                         ) : item.type === 'line' ? (
-                          <svg className="legend-line-svg" width="22" height="12" aria-hidden="true" style={{ flexShrink: 0 }}>
-                            <line x1="0" y1="6" x2="22" y2="6"
-                              stroke={item.style.stroke || '#333'}
-                              strokeWidth={Math.min(item.style.strokeWidth ?? 2, 3)}
-                              strokeDasharray={item.style.dashArray || ''}
-                            />
-                          </svg>
+                          <LegendLineSwatch style={item.style} />
                         ) : (
-                          <span className="legend-swatch" style={{ borderColor: item.style.stroke || '#3b82f6', borderStyle: item.style.dashArray ? 'dashed' : 'solid', background: legendFillRgba(item.style.fill || '#93c5fd', item.style.fillOpacity ?? 1) }} />
+                          <LegendAreaSwatch style={item.style} />
                         )}
                         <LegendLabelEditable label={item.label} onSave={(val) => setDisplayLabel(item.id, val)} />
                       </div>
@@ -7242,7 +7218,7 @@ export default function App({ initialAction = null }) {
             </div>
             {makeResizeHandles(project.layout.legendCorner || 'bl', {
               elemId: 'legend', startW: resolvedZones.legend?.width ?? project.layout.legendWidthPx ?? 300, startH: project.layout.legendHeightPx ?? resolvedZones.legend?.height ?? 168,
-              minW: 180, maxW: 480, minH: 60, maxH: 500,
+              minW: 180, maxW: 480, minH: 60, maxH: 900,
               applyW: (w) => updateLayout({ legendWidthPx: w }), applyH: (h) => updateLayout({ legendHeightPx: h }),
             })}
           </div>
@@ -7461,8 +7437,9 @@ export default function App({ initialAction = null }) {
       </div>
       {dragging && (
         <div className="drag-ghost" style={{
-          width: dragging.ghostW,
-          height: dragging.ghostH,
+          // The ghost follows the pointer outside the (scaled) stage.
+          width: (dragging.ghostW || 0) * (constrainedStageSize?.scale || 1),
+          height: (dragging.ghostH || 0) * (constrainedStageSize?.scale || 1),
         }} />
       )}
       {/* Save conflict — another tab or device changed this project. The

@@ -213,3 +213,15 @@ export function legendWidthFor(layout = {}, items = []) {
   if (Number.isFinite(w) && w !== 300) return Math.max(180, Math.min(480, w));
   return legendAutoWidth(items, layout);
 }
+
+// A near-white outline vanishes on a white legend panel; the editor legend and
+// both exporters give such swatches a thin dark edge.
+export function isNearWhite(color) {
+  const v = String(color || '').trim();
+  const m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(v);
+  if (!m) return /^white$/i.test(v);
+  const h = m[1].length === 3 ? m[1].split('').map((c) => c + c).join('') : m[1];
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16));
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 225;
+}
+export const LIGHT_SWATCH_EDGE = 'rgba(15,23,42,0.55)';

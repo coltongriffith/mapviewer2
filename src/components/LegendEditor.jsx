@@ -64,12 +64,36 @@ export default function LegendEditor({ derivedItems, layout, updateLayout }) {
       </span>
     );
   };
+  // Headings as the legend shows them, so one can be renamed in one place and
+  // an entry moved under an existing heading by picking it from a list.
+  const shownItems = applyLegendCustomization(derivedItems, layout);
+  const headingOf = (item) => (item?.group && String(item.group).trim()) || DEFAULT_LEGEND_GROUP;
+  const headings = [...new Set(shownItems.map(headingOf))];
+  const renameHeading = (from, to) => {
+    const name = String(to || '').trim();
+    if (!name || name === from) return;
+    const next = { ...overrides };
+    const shownById = new Map(shownItems.map((it) => [it.id, it]));
+    for (const d of derivedItems) {
+      const shown = shownById.get(d.id);
+      if (shown && headingOf(shown) === from) {
+        next[d.id] = { ...ov(d), group: name };
+        for (const old of (d.legacyIds || [])) if (old !== d.id) delete next[old];
+      }
+    }
+    for (const entry of customItems) {
+      const shown = shownById.get(entry.id);
+      if (shown && headingOf(shown) === from) next[entry.id] = { ...(overrides[entry.id] || {}), group: name };
+    }
+    updateLayout({ legendOverrides: next });
+  };
   const groupInput = (target, current, label) => {
     if (!grouped) return null;
     const item = typeof target === 'string' ? { id: target } : target;
     return (
       <input
         className="legend-editor-group"
+        list="legend-editor-headings"
         value={ov(item).group ?? ''}
         placeholder={current || DEFAULT_LEGEND_GROUP}
         aria-label={`Legend heading for ${label}`}
@@ -194,6 +218,27 @@ export default function LegendEditor({ derivedItems, layout, updateLayout }) {
           <input type="checkbox" checked={grouped} onChange={(e) => updateLayout({ legendGrouped: e.target.checked })} />
           <span>Group entries under headings</span>
         </label>
+      )}
+
+      {grouped && headings.length > 0 && (
+        <div className="legend-editor-headings">
+          <div className="control-label">Headings</div>
+          {headings.map((h) => (
+            <input
+              key={h}
+              className="legend-editor-heading-name"
+              defaultValue={h}
+              aria-label={`Rename heading ${h}`}
+              title="Rename this heading for every entry under it"
+              onBlur={(e) => renameHeading(h, e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+            />
+          ))}
+          <datalist id="legend-editor-headings">
+            {headings.map((h) => <option key={h} value={h} />)}
+          </datalist>
+          <p className="small-note">To move an entry, pick a heading in the box beside it.</p>
+        </div>
       )}
 
       {rows.map((row) => (row.kind === 'derived' ? derivedRow(row.item) : customRow(row.entry)))}

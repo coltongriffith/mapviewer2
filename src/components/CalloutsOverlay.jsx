@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { resolveCalloutBoxes, panelObstacles, leaderEndpoint, arrowheadPoints, calloutLogoSize } from '../utils/calloutLayout';
 import { computeSnap } from '../utils/layout';
+import { screenScale } from '../utils/stageScale.js';
 
 export default function CalloutsOverlay({ map, callouts, selectedCalloutId, onSelect, onMove, onUpdate, fontFamily, zones, layout }) {
   const [tick, setTick] = useState(0);
@@ -22,7 +23,9 @@ export default function CalloutsOverlay({ map, callouts, selectedCalloutId, onSe
       if (!dragRef.current) return;
       const { startX, startY, startOffset, startWidth, startAbsX, startAbsY, boxW, boxH, snapEls, containerW, containerH, id, kind, pointerId } = dragRef.current;
       if (pointerId != null && event.pointerId !== pointerId) return;
-      const dx = event.clientX - startX;
+      // Pointer deltas are screen px; the stage may be scaled to fit.
+      const sc = screenScale(map?.getContainer?.());
+      const dx = (event.clientX - startX) / sc;
 
       if (kind === 'resize') {
         const newWidth = Math.max(100, Math.min(400, Math.round(startWidth + dx)));
@@ -30,7 +33,7 @@ export default function CalloutsOverlay({ map, callouts, selectedCalloutId, onSe
         return;
       }
 
-      const dy = event.clientY - startY;
+      const dy = (event.clientY - startY) / sc;
       const newAbsX = startAbsX + dx;
       const newAbsY = startAbsY + dy;
       const snap = computeSnap(newAbsX, newAbsY, boxW, boxH, snapEls, containerW, containerH, id);
@@ -54,7 +57,7 @@ export default function CalloutsOverlay({ map, callouts, selectedCalloutId, onSe
       window.removeEventListener('pointerup', handleUp);
       window.removeEventListener('pointercancel', handleUp);
     };
-  }, [onMove, onUpdate]);
+  }, [map, onMove, onUpdate]);
 
   // Same obstacles the exporters use (renderScene placeCallouts), so a card
   // the editor moved off the legend is off the legend in the PNG too.

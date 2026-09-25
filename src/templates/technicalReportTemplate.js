@@ -147,8 +147,8 @@ function legendHeightFor(layout, itemCount) {
   if (!itemCount) return 0;
   // itemCount includes one row per group heading when headings are on
   // (legendRowCount), and nothing extra when they are off.
-  if (compact) return Math.max(84, Math.min(360, 42 + itemCount * 24));
-  return Math.max(110, Math.min(360, 52 + itemCount * 28));
+  if (compact) return Math.max(84, Math.min(900, 42 + itemCount * 24));
+  return Math.max(110, Math.min(900, 52 + itemCount * 28));
 }
 
 function clampZone(zone, safe, width, height) {
@@ -176,9 +176,13 @@ export function resolveNI43101Zones(template, layout, mapSize, legendItems) {
   const safe = { top: mapFrameTop + 16, bottom: height - mapFrameBottom + 16, left: mapFrameLeft + 16, right: width - mapFrameRight + 16 };
 
   const resolvedLegendItems = legendItems || layout?.legendItems || [];
+  // A dragged height is honoured up to 900 px but never below what the entries
+  // need: it used to cap at 500 and let the rest scroll, so the export clipped
+  // the last rows of a long legend.
+  const legendNeeded = legendHeightFor(layout, legendRowCount(resolvedLegendItems, layout));
   const legendHeight = layout?.legendHeightPx != null
-    ? Math.max(60, Math.min(500, layout.legendHeightPx))
-    : legendHeightFor(layout, legendRowCount(resolvedLegendItems, layout));
+    ? Math.max(60, legendNeeded, Math.min(900, layout.legendHeightPx))
+    : legendNeeded;
   const legendWidth = legendWidthFor(layout, resolvedLegendItems);
 
   const insetScale = Math.max(0.8, Math.min(1.2, Number(layout?.insetScale || 1)));

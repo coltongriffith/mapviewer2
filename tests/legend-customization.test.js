@@ -233,6 +233,7 @@ describe('legend swatches all come from one renderer', () => {
     'src/App.jsx',
     'src/components/ReadOnlyMapStage.jsx',
     'src/components/LegendEditor.jsx',
+    'src/components/LegendSwatches.jsx',
   ];
 
   it.each(LEGEND_SURFACES)('%s does not re-implement the shape table', async (file) => {
@@ -252,7 +253,12 @@ describe('legend swatches all come from one renderer', () => {
     LEGEND_SURFACES.forEach((file) => {
       const src = readFileSync(file, 'utf8');
       if (!/LegendPointSwatch|legend-symbol-marker|SymbolPreview/.test(src)) return;
-      expect(src, `${file} draws legend symbols without MarkerSvgIcon`).toContain('MarkerSvgIcon');
+      // Either the shared marker icon, or the shared legend swatches, which
+      // draw with the map's own point-symbol geometry (utils/pointSymbol.js).
+      expect(
+        /MarkerSvgIcon|from '\.\.?\/(components\/)?LegendSwatches\.jsx'|symbolPath\(/.test(src),
+        `${file} draws legend symbols without a shared renderer`,
+      ).toBe(true);
     });
   });
 });

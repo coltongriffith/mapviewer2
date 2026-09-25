@@ -131,7 +131,13 @@ describe('import roles', () => {
     expect(inferRoleFromLayer({ name: 'tenures', type: 'polygons' })).toBe('claims');
     expect(inferRoleFromLayer({ name: 'mag_high', type: 'polygons' })).toBe('anomalies');
     expect(inferRoleFromLayer({ name: 'imagery footprint', type: 'polygons' })).toBe('sampling_extent');
-    expect(inferRoleFromLayer({ name: 'rocks', type: 'points' })).toBe('drillholes');
+    expect(inferRoleFromLayer({ name: 'rocks', type: 'points' })).toBe('rock_samples');
+    expect(inferRoleFromLayer({ name: '2026 rock samples', type: 'points' })).toBe('rock_samples');
+    expect(inferRoleFromLayer({ name: 'soil grid 2026', type: 'points' })).toBe('soil_samples');
+    expect(inferRoleFromLayer({ name: 'DDH collars', type: 'points' })).toBe('drillholes');
+    expect(inferRoleFromLayer({ name: 'planned holes', type: 'points' })).toBe('drillholes');
+    expect(inferRoleFromLayer({ name: 'whole_data', type: 'points' })).toBe('other');
+    expect(inferRoleFromLayer({ name: 'export_2024', type: 'points' })).toBe('other');
   });
   it('neutral roles get their own style, not the claims palette', () => {
     expect(NEUTRAL_ROLES.has('sampling_extent')).toBe(true);
@@ -198,5 +204,32 @@ describe('review follow-ups', () => {
     const c = { type: 'plain', text: 'X', boxWidth: 160, style: { paddingX: 8 }, logo: { image: 'data:image/png;base64,AA', aspect: 0.5, width: 240 } };
     const box = estimateBox(c);
     expect(calloutLogoSize(c, box.width - 16).w).toBe(144);
+  });
+});
+
+describe('fixed-size stage and legend fixes', () => {
+  it('the stage has one logical size per shape, whatever the window', async () => {
+    const { logicalStageSize, screenScale } = await import('../src/utils/stageScale.js');
+    expect(logicalStageSize(1)).toEqual({ width: 1000, height: 1000 });
+    expect(logicalStageSize(16 / 9)).toEqual({ width: 1333, height: 750 });
+    expect(logicalStageSize(3 / 4)).toEqual({ width: 866, height: 1155 });
+    expect(screenScale(null)).toBe(1);
+    expect(screenScale({ offsetWidth: 1000, getBoundingClientRect: () => ({ width: 500 }) })).toBe(0.5);
+  });
+
+  it('white outlines are detected for a visible legend edge', async () => {
+    const { isNearWhite } = await import('../src/utils/legendCustomization.js');
+    expect(isNearWhite('#ffffff')).toBe(true);
+    expect(isNearWhite('#fafafa')).toBe(true);
+    expect(isNearWhite('white')).toBe(true);
+    expect(isNearWhite('#60a5fa')).toBe(false);
+    expect(isNearWhite(undefined)).toBe(false);
+  });
+
+  it('a dragged legend height never hides entries', async () => {
+    const { resolveTemplateZones } = await import('../src/templates/technicalResultsTemplate.js');
+    const items = Array.from({ length: 20 }, (_, i) => ({ label: `Item ${i}` }));
+    const zones = resolveTemplateZones(technicalResultsTemplate, { legendItems: items, legendHeightPx: 200 }, { width: 1333, height: 2000 }, items);
+    expect(zones.legend.height).toBeGreaterThanOrEqual(58 + 20 * 30);
   });
 });

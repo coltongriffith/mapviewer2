@@ -1,4 +1,5 @@
 import { isBracket, distanceLineLabel, bracketTicks, bracketLabelAnchor } from '../utils/distanceLine.js';
+import { screenScale } from '../utils/stageScale.js';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { MarkerSvgIcon } from '../utils/markerIcons.jsx';
 
@@ -109,8 +110,10 @@ export default function AnnotationOverlay({
       if (!dragRef.current || !map) return;
       const { startX, startY, id, kind, startPoint, pointerId } = dragRef.current;
       if (pointerId != null && event.pointerId !== pointerId) return;
-      const dx = event.clientX - startX;
-      const dy = event.clientY - startY;
+      // Pointer deltas are screen px; the stage may be scaled to fit.
+      const sc = screenScale(map.getContainer());
+      const dx = (event.clientX - startX) / sc;
+      const dy = (event.clientY - startY) / sc;
 
       if (kind === 'label') {
         onMoveLabelOffset?.(id, { x: startPoint.x + dx, y: startPoint.y + dy });
@@ -122,8 +125,8 @@ export default function AnnotationOverlay({
       }
       if (kind === 'polygon-label-arc') {
         const mapRect = map.getContainer().getBoundingClientRect();
-        const mx = event.clientX - mapRect.left;
-        const my = event.clientY - mapRect.top;
+        const mx = (event.clientX - mapRect.left) / sc;
+        const my = (event.clientY - mapRect.top) / sc;
         const ax = mx - startPoint.x;
         const ay = my - startPoint.y;
         let angle = Math.atan2(ax, -ay) * 180 / Math.PI;
@@ -137,8 +140,8 @@ export default function AnnotationOverlay({
       }
       if (kind === 'ellipse-label-arc') {
         const mapRect = map.getContainer().getBoundingClientRect();
-        const mx = event.clientX - mapRect.left;
-        const my = event.clientY - mapRect.top;
+        const mx = (event.clientX - mapRect.left) / sc;
+        const my = (event.clientY - mapRect.top) / sc;
         const ax = mx - startPoint.x;
         const ay = my - startPoint.y;
         let angle = Math.atan2(ax, -ay) * 180 / Math.PI;
