@@ -1,5 +1,5 @@
 import { ROLE_LABELS, POINT_ROLES } from '../projectState';
-import { legendRowCount, legendWidthFor } from '../utils/legendCustomization.js';
+import { legendRowCount, legendWidthFor, legendContentHeight } from '../utils/legendCustomization.js';
 import { TICK_MARGIN } from '../utils/coordinateFrame.js';
 import { hasVisibleFeatures, layerGeometryKind } from '../utils/featureIdentity.js';
 import { isClassified, classLegendItems } from '../utils/classification.js';
@@ -25,6 +25,11 @@ const ROLE_GROUPS = {
   roads_access: 'Infrastructure',
   rivers_water: 'Infrastructure',
   labels: 'Reference',
+  // New layers land under their role's heading rather than "Map Data".
+  rock_samples: 'Sampling',
+  soil_samples: 'Sampling',
+  sampling_extent: 'Sampling',
+  other: 'Other',
 };
 
 export const technicalResultsTemplate = {
@@ -105,10 +110,10 @@ function legendHeightFor(layout, itemCount) {
   // (legendRowCount), and nothing extra when they are off.
   // Chrome (card padding + legend title + rule) plus the real row pitch the
   // legend list renders at — a few pixels short per row clipped the last entry.
-  // Capped at 600 (then by the frame, in clampZone) — the old 360 cap cut a
+  // Capped at 900 (then by the frame, in clampZone) — the old 360 cap cut a
   // long classified legend's last rows off with no sign they were missing.
-  if (compact) return Math.max(84, Math.min(600, 48 + itemCount * 26));
-  return Math.max(110, Math.min(600, 58 + itemCount * 30));
+  if (compact) return Math.max(84, Math.min(900, 48 + itemCount * 26));
+  return Math.max(110, Math.min(900, 58 + itemCount * 30));
 }
 
 function clampZone(zone, safe, width, height) {
@@ -141,8 +146,11 @@ export function resolveTemplateZones(template, layout, mapSize, legendItems) {
   const titleHeight = Math.max(60, Math.min(180, layout?.titleHeightPx ?? 92));
 
   const resolvedLegendItems = legendItems || layout?.legendItems || [];
+  // A dragged height is honoured up to 900 px but never below what the entries
+  // need: it used to cap at 500 and let the rest scroll, so the export clipped
+  // the last rows of a long legend.
   const legendHeight = layout?.legendHeightPx != null
-    ? Math.max(60, Math.min(500, layout.legendHeightPx))
+    ? Math.max(60, legendContentHeight(resolvedLegendItems, layout), Math.min(900, layout.legendHeightPx))
     : legendHeightFor(layout, legendRowCount(resolvedLegendItems, layout));
   const legendWidth = legendWidthFor(layout, resolvedLegendItems);
   const logoScale = Math.max(0.7, Math.min(1.2, Number(layout?.logoScale || 1)));

@@ -1,5 +1,5 @@
 import { ROLE_LABELS, POINT_ROLES } from '../projectState';
-import { legendRowCount, legendWidthFor } from '../utils/legendCustomization.js';
+import { legendRowCount, legendWidthFor, legendContentHeight } from '../utils/legendCustomization.js';
 import { hasVisibleFeatures, layerGeometryKind } from '../utils/featureIdentity.js';
 import { isClassified, classLegendItems } from '../utils/classification.js';
 import { hasDrillTraces } from '../utils/drillTraces.js';
@@ -17,6 +17,11 @@ const ROLE_GROUPS = {
   roads_access: 'Infrastructure',
   rivers_water: 'Infrastructure',
   labels: 'Reference',
+  // New layers land under their role's heading rather than "Map Data".
+  rock_samples: 'Sampling',
+  soil_samples: 'Sampling',
+  sampling_extent: 'Sampling',
+  other: 'Other',
 };
 
 export const technicalReportTemplate = {
@@ -147,8 +152,8 @@ function legendHeightFor(layout, itemCount) {
   if (!itemCount) return 0;
   // itemCount includes one row per group heading when headings are on
   // (legendRowCount), and nothing extra when they are off.
-  if (compact) return Math.max(84, Math.min(360, 42 + itemCount * 24));
-  return Math.max(110, Math.min(360, 52 + itemCount * 28));
+  if (compact) return Math.max(84, Math.min(900, 42 + itemCount * 24));
+  return Math.max(110, Math.min(900, 52 + itemCount * 28));
 }
 
 function clampZone(zone, safe, width, height) {
@@ -176,8 +181,11 @@ export function resolveNI43101Zones(template, layout, mapSize, legendItems) {
   const safe = { top: mapFrameTop + 16, bottom: height - mapFrameBottom + 16, left: mapFrameLeft + 16, right: width - mapFrameRight + 16 };
 
   const resolvedLegendItems = legendItems || layout?.legendItems || [];
+  // A dragged height is honoured up to 900 px but never below what the entries
+  // need: it used to cap at 500 and let the rest scroll, so the export clipped
+  // the last rows of a long legend.
   const legendHeight = layout?.legendHeightPx != null
-    ? Math.max(60, Math.min(500, layout.legendHeightPx))
+    ? Math.max(60, legendContentHeight(resolvedLegendItems, layout), Math.min(900, layout.legendHeightPx))
     : legendHeightFor(layout, legendRowCount(resolvedLegendItems, layout));
   const legendWidth = legendWidthFor(layout, resolvedLegendItems);
 

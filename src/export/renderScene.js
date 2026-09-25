@@ -15,10 +15,11 @@ import { exportCreditLines } from '../utils/claimProvenance';
 import { referenceOverlayCredits } from '../utils/referenceOverlayCredits.js';
 import { featureKey, visibleGeojson } from '../utils/featureIdentity.js';
 import { getFeatureStyle as resolveFeatureStyle, canDissolve } from '../utils/featureStyle.js';
-import { groupLegendItems } from '../utils/legendCustomization.js';
+import { groupLegendItems, isNearWhite, LIGHT_SWATCH_EDGE } from '../utils/legendCustomization.js';
 import { isBracket, distanceLineLabel, bracketTicks, bracketLabelAnchor } from '../utils/distanceLine.js';
 import { pickScaleBar } from '../utils/scaleBar.js';
 import { resolvePointSymbol, symbolPath } from '../utils/pointSymbol.js';
+import { screenScale } from '../utils/stageScale.js';
 import { tileLayerCredits } from '../utils/rasterOverlay.js';
 import { getMapFrame, scaleFrame, computeGridTicks, projectionLabel, FRAME_FONT, FRAME_FONT_PX } from '../utils/coordinateFrame.js';
 
@@ -98,6 +99,7 @@ function projectLine(map, coords, scale) { return coords.map((coord) => projectC
 // invisibly, and only a direct call can hold it.
 export function getTileImages(container) {
   const rootRect = container.getBoundingClientRect();
+  const ss = screenScale(container);
   const resolveEffectiveOpacity = (node) => {
     let opacity = 1;
     let current = node;
@@ -132,13 +134,15 @@ export function getTileImages(container) {
     })
     .map((img) => {
       const rect = img.getBoundingClientRect();
+      // Screen px → the container's own (logical) px: the editor stage is
+      // CSS-scaled to fit the window, and the export must not change with it.
       return {
         element: img,
         href: img.currentSrc || img.src,
-        x: rect.left - rootRect.left,
-        y: rect.top - rootRect.top,
-        width: rect.width,
-        height: rect.height,
+        x: (rect.left - rootRect.left) / ss,
+        y: (rect.top - rootRect.top) / ss,
+        width: rect.width / ss,
+        height: rect.height / ss,
         opacity: resolveEffectiveOpacity(img),
       };
     })
@@ -585,7 +589,8 @@ export function legendSwatchSvg(item, x, rowY, scale) {
     const fill = safeColor(style.markerFill || style.markerColor, '#ffffff');
     const stroke = safeColor(style.markerColor, '#111111');
     const sw = Math.max(1, scale).toFixed(2);
-    return svgMarkerShape(shape, cx, cy, r, fill, stroke, sw, 1);
+    const edge = isNearWhite(stroke) && isNearWhite(fill) ? svgMarkerShape(shape, cx, cy, r, 'none', LIGHT_SWATCH_EDGE, (Number(sw) + 1.5 * scale).toFixed(2), 1) : '';
+    return edge + svgMarkerShape(shape, cx, cy, r, fill, stroke, sw, 1);
   }
   if (item.type === 'line') {
     const lineY = (rowY + LEGEND_ROW.lineY * scale).toFixed(2);
@@ -594,13 +599,16 @@ export function legendSwatchSvg(item, x, rowY, scale) {
     // finer pattern than the map's at any export scale above 1.
     const dash = String(style.dashArray || '').split(/[ ,]+/).filter(Boolean)
       .map((d) => Number(d) * scale).filter((d) => Number.isFinite(d));
-    return `<line x1="${x.toFixed(2)}" y1="${lineY}" x2="${(x + LEGEND_ROW.swatchW * scale).toFixed(2)}" y2="${lineY}" stroke="${safeColor(style.stroke, '#3b82f6')}" stroke-width="${Math.max(scale, (style.strokeWidth ?? 2) * 0.6 * scale).toFixed(2)}" stroke-dasharray="${dash.join(' ')}" />`;
+    const lw = Math.max(scale, (style.strokeWidth ?? 2) * 0.6 * scale);
+    const lineEdge = isNearWhite(style.stroke) ? `<line x1="${x.toFixed(2)}" y1="${lineY}" x2="${(x + LEGEND_ROW.swatchW * scale).toFixed(2)}" y2="${lineY}" stroke="${LIGHT_SWATCH_EDGE}" stroke-width="${(lw + 2 * scale).toFixed(2)}" />` : '';
+    return `${lineEdge}<line x1="${x.toFixed(2)}" y1="${lineY}" x2="${(x + LEGEND_ROW.swatchW * scale).toFixed(2)}" y2="${lineY}" stroke="${safeColor(style.stroke, '#3b82f6')}" stroke-width="${Math.max(scale, (style.strokeWidth ?? 2) * 0.6 * scale).toFixed(2)}" stroke-dasharray="${dash.join(' ')}" />`;
   }
   // A dashed layer gets a dashed swatch border here as it does in the editor;
   // the exporters used to draw it solid, so the file disagreed with the preview.
   const rectDash = legendDash(style, scale * 0.5);
   const dashAttr = rectDash.length ? ` stroke-dasharray="${rectDash.join(' ')}"` : '';
-  return `<rect x="${x.toFixed(2)}" y="${(rowY + LEGEND_ROW.swatchY * scale).toFixed(2)}" width="${(LEGEND_ROW.swatchW * scale).toFixed(2)}" height="${(LEGEND_ROW.swatchH * scale).toFixed(2)}" fill="${safeColor(style.fill, '#93c5fd')}" fill-opacity="${style.fillOpacity ?? 0.22}" stroke="${safeColor(style.stroke, '#3b82f6')}" stroke-width="${Math.max(1, scale).toFixed(2)}"${dashAttr} />`;
+  const rectEdge = isNearWhite(style.stroke) ? `<rect x="${(x - scale).toFixed(2)}" y="${(rowY + LEGEND_ROW.swatchY * scale - scale).toFixed(2)}" width="${(LEGEND_ROW.swatchW * scale + 2 * scale).toFixed(2)}" height="${(LEGEND_ROW.swatchH * scale + 2 * scale).toFixed(2)}" fill="none" stroke="${LIGHT_SWATCH_EDGE}" stroke-width="${scale.toFixed(2)}" />` : '';
+  return `${rectEdge}<rect x="${x.toFixed(2)}" y="${(rowY + LEGEND_ROW.swatchY * scale).toFixed(2)}" width="${(LEGEND_ROW.swatchW * scale).toFixed(2)}" height="${(LEGEND_ROW.swatchH * scale).toFixed(2)}" fill="${safeColor(style.fill, '#93c5fd')}" fill-opacity="${style.fillOpacity ?? 0.22}" stroke="${safeColor(style.stroke, '#3b82f6')}" stroke-width="${Math.max(1, scale).toFixed(2)}"${dashAttr} />`;
 }
 // Where each legend row and heading sits, walked identically by the canvas
 // and the SVG so the two cannot disagree about a heading's height.
@@ -672,6 +680,10 @@ async function drawLegendCanvas(ctx, scene, scale) {
         // border; its SIZE is normalised for readability (a fixed 10 px swatch,
         // or 8–18 px for classes sized by class) rather than the map size.
         const sym = resolvePointSymbol(item.style);
+        if (isNearWhite(sym.stroke) && isNearWhite(sym.fill)) {
+          drawCanvasMarkerShape(ctx, shape, cx, cy, r);
+          ctx.strokeStyle = LIGHT_SWATCH_EDGE; ctx.lineWidth = Math.max(1, scale) + 1.5 * scale; ctx.stroke();
+        }
         drawCanvasMarkerShape(ctx, shape, cx, cy, r);
         ctx.fillStyle = sym.fill;
         ctx.fill();
@@ -682,6 +694,14 @@ async function drawLegendCanvas(ctx, scene, scale) {
         }
       } else if (item.type === 'line') {
         ctx.save();
+        if (isNearWhite(item.style.stroke)) {
+          ctx.strokeStyle = LIGHT_SWATCH_EDGE;
+          ctx.lineWidth = Math.max(scale, (item.style.strokeWidth ?? 2) * 0.6 * scale) + 2 * scale;
+          ctx.beginPath();
+          ctx.moveTo(x + lp, rowY + LEGEND_ROW.lineY * scale);
+          ctx.lineTo(x + lp + LEGEND_ROW.swatchW * scale, rowY + LEGEND_ROW.lineY * scale);
+          ctx.stroke();
+        }
         ctx.strokeStyle = item.style.stroke || '#3b82f6';
         ctx.lineWidth = Math.max(scale, (item.style.strokeWidth ?? 2) * 0.6 * scale);
         const dash = (item.style.dashArray || '').split(/[ ,]+/).filter(Boolean).map(Number);
@@ -697,6 +717,7 @@ async function drawLegendCanvas(ctx, scene, scale) {
         ctx.fillStyle = rgba(item.style.fill || '#93c5fd', item.style.fillOpacity ?? 0.22); ctx.fillRect(x + lp, sy, sw, sh); ctx.strokeStyle = item.style.stroke || '#3b82f6'; ctx.lineWidth = Math.max(1, scale);
         ctx.setLineDash(legendDash(item.style, scale * 0.5));
         ctx.strokeRect(x + lp, sy, sw, sh);
+        if (isNearWhite(item.style.stroke)) { ctx.setLineDash([]); ctx.strokeStyle = LIGHT_SWATCH_EDGE; ctx.lineWidth = scale; ctx.strokeRect(x + lp - scale, sy - scale, sw + 2 * scale, sh + 2 * scale); }
         ctx.restore();
       }
       ctx.fillStyle = theme.bodyText; ctx.font = `${13 * scale * lfs}px ${legendFont}`; ctx.textBaseline = 'middle'; ctx.fillText(fitText(ctx, item.label || 'Layer', w - lp - (LEGEND_ROW.labelX + 10) * scale), x + lp + LEGEND_ROW.labelX * scale, rowY + LEGEND_ROW.labelCentreY * scale);
@@ -1009,8 +1030,10 @@ async function drawSatelliteInsetCanvas(ctx, x, y, w, h, scale) {
   if (!tiles.length) return false;
 
   // Container pixels → export pixels. The inset panel keeps its aspect ratio on
-  // screen, so a single factor is right for both axes.
-  const k = w / rect.width;
+  // screen, so a single factor is right for both axes. Tiles come back in the
+  // container's logical px; ss converts the overlay's screen rects to match.
+  const ss = screenScale(container);
+  const k = w / (rect.width / ss);
 
   ctx.save();
   drawRoundedRect(ctx, x, y, w, h, 8 * scale);
@@ -1042,13 +1065,13 @@ async function drawSatelliteInsetCanvas(ctx, x, y, w, h, scale) {
   if (svg) {
     const sb = svg.getBoundingClientRect();
     if (sb.width > 0 && sb.height > 0) {
-      const uri = serializeOverlaySvg(svg, sb.width, sb.height);
+      const uri = serializeOverlaySvg(svg, sb.width / ss, sb.height / ss);
       const overlay = await loadImage(uri).catch(() => null);
       if (overlay) {
         ctx.drawImage(
           overlay,
-          x + (sb.left - rect.left) * k, y + (sb.top - rect.top) * k,
-          sb.width * k, sb.height * k,
+          x + ((sb.left - rect.left) / ss) * k, y + ((sb.top - rect.top) / ss) * k,
+          (sb.width / ss) * k, (sb.height / ss) * k,
         );
       } else {
         _exportWarnings.push('satellite inset outline could not be embedded');

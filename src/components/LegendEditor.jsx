@@ -1,8 +1,8 @@
-import React from 'react';
-import { MarkerSvgIcon } from '../utils/markerIcons.jsx';
+import React, { useRef } from 'react';
+import { LegendPointSwatch } from './LegendSwatches.jsx';
 import {
   LEGEND_SYMBOLS, DEFAULT_LEGEND_SYMBOL, DEFAULT_LEGEND_COLOR, DEFAULT_LEGEND_GROUP,
-  customLegendItem, nextCustomLegendId, applyLegendCustomization, moveLegendItem, orderLegendItems, overrideFor,
+  customLegendItem, nextCustomLegendId, applyLegendCustomization, moveLegendItem, orderLegendItems, overrideFor, renameLegendHeading,
 } from '../utils/legendCustomization.js';
 
 // Editing the legend without letting it drift from the map.
@@ -26,9 +26,9 @@ function SymbolPreview({ symbol, color }) {
   if (item.type === 'polygon') {
     return <svg width="22" height="14" aria-hidden="true"><rect x="1" y="2" width="20" height="10" fill={color} fillOpacity="0.22" stroke={color} /></svg>;
   }
-  // The same component the map markers and the legend itself use, so the
-  // preview cannot promise a shape the map does not draw.
-  return <MarkerSvgIcon type={item.markerShape} size={14} color={color} fillColor={color} />;
+  // The same swatch the legend itself draws, so the preview cannot promise a
+  // shape or fill the legend and exports do not show.
+  return <LegendPointSwatch style={item.style} size={14} />;
 }
 
 export default function LegendEditor({ derivedItems, layout, updateLayout }) {
@@ -64,20 +64,71 @@ export default function LegendEditor({ derivedItems, layout, updateLayout }) {
       </span>
     );
   };
+  // Headings as the legend shows them, so one can be renamed in one place and
+  // an entry moved under an existing heading by picking it from a list.
+  const shownItems = applyLegendCustomization(derivedItems, layout);
+  const headingOf = (item) => (item?.group && String(item.group).trim()) || DEFAULT_LEGEND_GROUP;
+  const headings = [...new Set(shownItems.map(headingOf))];
+  const renameHeading = (from, to) => {
+    const next = renameLegendHeading(derivedItems, layout, from, to);
+    if (next) updateLayout({ legendOverrides: next });
+  };
+  // "Move to group": any entry can go under any heading, or a new one.
   const groupInput = (target, current, label) => {
     if (!grouped) return null;
     const item = typeof target === 'string' ? { id: target } : target;
+    const shownItem = shownItems.find((it) => it.id === item.id);
+    const value = headingOf(shownItem || { group: current });
     return (
-      <input
+      <select
         className="legend-editor-group"
-        value={ov(item).group ?? ''}
-        placeholder={current || DEFAULT_LEGEND_GROUP}
-        aria-label={`Legend heading for ${label}`}
-        title="Heading this entry sits under"
-        onChange={(e) => setOverride(item.id, { group: e.target.value }, item)}
-      />
+        value={value}
+        aria-label={`Move ${label} to heading`}
+        title="Move to group"
+        onChange={(e) => {
+          let v = e.target.value;
+          if (v === '__new__') {
+            v = typeof window !== 'undefined' ? window.prompt('New heading name') : '';
+            if (!v || !v.trim()) return;
+          }
+          setOverride(item.id, { group: v.trim() }, item);
+        }}
+      >
+        {[...new Set([...headings, value])].map((h) => <option key={h} value={h}>{h}</option>)}
+        <option value="__new__">New heading…</option>
+      </select>
     );
   };
+
+  // Drag a row by its handle onto another row to put it there; the whole
+  // order is written to layout.legendOrder, as the arrow buttons do.
+  const dragIdRef = useRef(null);
+  const reorder = (fromId, toId) => {
+    if (!fromId || fromId === toId) return;
+    const ids = rows.map((r) => r.id);
+    const from = ids.indexOf(fromId);
+    if (from < 0 || !ids.includes(toId)) return;
+    ids.splice(from, 1);
+    ids.splice(ids.indexOf(toId), 0, fromId);
+    updateLayout({ legendOrder: ids });
+  };
+  const dropProps = (id) => ({
+    onDragOver: (e) => { if (dragIdRef.current) e.preventDefault(); },
+    onDrop: (e) => { e.preventDefault(); reorder(dragIdRef.current, id); dragIdRef.current = null; },
+  });
+  const dragHandle = (id, label) => (
+    <span
+      className="legend-editor-handle"
+      draggable
+      role="button"
+      tabIndex={-1}
+      aria-label={`Drag ${label} to reorder`}
+      title="Drag to reorder"
+      onDragStart={(e) => { dragIdRef.current = id; e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', id); } catch { /* some browsers */ } }}
+      onDragEnd={() => { dragIdRef.current = null; }}
+    >⋮⋮</span>
+  );
+
 
   const setCustom = (id, patch) => {
     updateLayout({
@@ -119,7 +170,8 @@ export default function LegendEditor({ derivedItems, layout, updateLayout }) {
   const derivedRow = (item) => {
         const hidden = !!ov(item).hidden;
         return (
-          <div className={`legend-editor-row${hidden ? ' is-hidden' : ''}`} key={item.id}>
+          <div className={`legend-editor-row${hidden ? ' is-hidden' : ''}`} key={item.id} {...dropProps(item.id)}>
+            {dragHandle(item.id, item.label)}
             <input
               className="legend-editor-label"
               value={ov(item).label ?? ''}
@@ -133,18 +185,20 @@ export default function LegendEditor({ derivedItems, layout, updateLayout }) {
             <button
               type="button"
               className="legend-editor-btn"
-              aria-label={hidden ? `Show ${item.label} in the legend` : `Remove ${item.label} from the legend`}
-              title={hidden ? 'Show in legend' : 'Remove from legend'}
+              aria-pressed={!hidden}
+              aria-label={hidden ? `Show ${item.label} in the legend` : `Hide ${item.label} from the legend`}
+              title={hidden ? 'Show in legend' : 'Hide from legend (the layer stays on the map)'}
               onClick={() => setOverride(item.id, { hidden: !hidden }, item)}
             >
-              {hidden ? 'Show' : 'Remove'}
+              {hidden ? 'Show' : 'Hide'}
             </button>
           </div>
         );
       };
 
   const customRow = (entry) => (
-        <div className="legend-editor-row is-custom" key={entry.id}>
+        <div className="legend-editor-row is-custom" key={entry.id} {...dropProps(entry.id)}>
+          {dragHandle(entry.id, entry.label || 'custom legend item')}
           <SymbolPreview symbol={entry.symbol} color={entry.color} />
           <input
             className="legend-editor-label"
@@ -194,6 +248,24 @@ export default function LegendEditor({ derivedItems, layout, updateLayout }) {
           <input type="checkbox" checked={grouped} onChange={(e) => updateLayout({ legendGrouped: e.target.checked })} />
           <span>Group entries under headings</span>
         </label>
+      )}
+
+      {grouped && headings.length > 0 && (
+        <div className="legend-editor-headings">
+          <div className="control-label">Headings</div>
+          {headings.map((h) => (
+            <input
+              key={h}
+              className="legend-editor-heading-name"
+              defaultValue={h}
+              aria-label={`Rename heading ${h}`}
+              title="Rename this heading for every entry under it"
+              onBlur={(e) => renameHeading(h, e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+            />
+          ))}
+          <p className="small-note">Click a heading on the map legend or here to rename it. Move an entry with the heading menu beside it; drag ⋮⋮ to reorder.</p>
+        </div>
       )}
 
       {rows.map((row) => (row.kind === 'derived' ? derivedRow(row.item) : customRow(row.entry)))}

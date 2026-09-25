@@ -84,6 +84,26 @@ const roleStyleMap = {
 // Neutral roles: imports whose purpose the file name does not state, and
 // sampling footprints (soil grids, survey extents) that must not read as a
 // claim or anomaly. Mode presets leave their visibility alone.
+roleStyleMap.rock_samples = {
+  stroke: "#7c2d12",
+  fill: "#f97316",
+  fillOpacity: 1,
+  strokeWidth: 1.2,
+  markerColor: "#7c2d12",
+  markerFill: "#f97316",
+  markerSize: 9,
+  dashArray: "",
+};
+roleStyleMap.soil_samples = {
+  stroke: "#14532d",
+  fill: "#22c55e",
+  fillOpacity: 1,
+  strokeWidth: 1,
+  markerColor: "#14532d",
+  markerFill: "#22c55e",
+  markerSize: 7,
+  dashArray: "",
+};
 roleStyleMap.sampling_extent = {
   stroke: "#475569",
   fill: "#94a3b8",
@@ -118,7 +138,14 @@ export function inferRoleFromLayer(layer) {
   // Sampling footprints first: "soil grid extent" is neither a claim nor an
   // anomaly, even though older inference called every unnamed polygon a claim.
   if (type !== "points" && has(/sampl|soil|extent|footprint|survey|coverage/)) return "sampling_extent";
-  if (type === "points") return "drillholes";
+  // Points: named for what they are, else neutral. Every point file used to
+  // become "Planned Drillholes", so rock and soil samples arrived mislabelled.
+  if (type === "points") {
+    if (has(/drill|ddh|collar|(^|[^a-z])holes?([^a-z]|$)|rc[ _-]?holes?/)) return "drillholes";
+    if (has(/rock|grab|chip|outcrop|float|boulder/)) return "rock_samples";
+    if (has(/soil|till|stream|sediment|silt|b[ _-]?horizon/)) return "soil_samples";
+    return "other";
+  }
   if (has(/road|access/)) return "roads_access";
   if (has(/river|water|creek/)) return "rivers_water";
   if (has(/fault|structure/)) return "faults_structures";

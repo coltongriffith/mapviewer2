@@ -94,6 +94,9 @@ test('the legend swatch shows the marker shape, not always a circle', async ({ p
   await customRow.locator('.legend-editor-symbol').selectOption('triangle');
   await page.waitForTimeout(500);
 
-  const shapes = await page.locator('.legend-symbol-marker svg polygon').count();
+  // Swatches draw the map's own symbol path (utils/pointSymbol.js): a circle
+  // is two arcs ("A"), a triangle is straight segments only.
+  const shapes = await page.locator('.legend-symbol-marker svg path').evaluateAll((paths) =>
+    paths.filter((p) => { const d = p.getAttribute('d') || ''; return d && !/A/.test(d) && (d.match(/L/g) || []).length === 2; }).length);
   expect(shapes, 'the legend swatch is not drawing the chosen shape').toBeGreaterThan(0);
 });

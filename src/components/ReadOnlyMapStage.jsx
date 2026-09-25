@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { LegendPointSwatch, LegendLineSwatch, LegendAreaSwatch } from './LegendSwatches.jsx';
 import AnnotationOverlay from './AnnotationOverlay';
 import CalloutsOverlay from './CalloutsOverlay';
 import ShadeOverlay from './ShadeOverlay';
@@ -13,7 +14,6 @@ import { getThemeTokens } from '../utils/themeTokens';
 import { applyLegendCustomization, groupLegendItems } from '../utils/legendCustomization.js';
 import { getMapFrame, scaleBarHeight } from '../utils/coordinateFrame.js';
 import CoordinateFrameOverlay from './CoordinateFrameOverlay.jsx';
-import { MarkerSvgIcon } from '../utils/markerIcons.jsx';
 import { fitProjectToTemplate } from '../utils/frameMapForTemplate';
 
 const MapCanvas = React.lazy(() => import('./MapCanvas'));
@@ -23,41 +23,6 @@ const MapCanvas = React.lazy(() => import('./MapCanvas'));
 function zoneStyle(zone) {
   if (!zone || !zone.width || !zone.height) return { display: 'none' };
   return { position: 'absolute', top: zone.top, left: zone.left, width: zone.width, height: zone.height, zIndex: 400 };
-}
-
-// Legend swatch fill: keep the border visible even when the layer has no fill
-function legendFillRgba(hex, alpha) {
-  if (typeof hex !== 'string' || !/^#[0-9a-f]{6}$/i.test(hex)) return hex;
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
-
-// The shared marker renderer, as in the editable stage.
-//
-// This was a fifth copy of the shape table and the last one still missing
-// hexagon and pin — on the worst possible surface, since a share link is what
-// a reader actually receives. An author could pick hexagon in the editor, see
-// it in the editor and in the export, and have the public page show a circle.
-function LegendPointSwatch({ style, size = 14 }) {
-  if (style?.customMarkerDataUri) {
-    return (
-      <span className="legend-symbol-marker" style={{ display: 'flex', flexShrink: 0 }}>
-        <img src={style.customMarkerDataUri} alt="" width={size} height={size} style={{ objectFit: 'contain' }} draggable={false} />
-      </span>
-    );
-  }
-  return (
-    <span className="legend-symbol-marker" style={{ display: 'flex', flexShrink: 0, width: 18, justifyContent: 'center' }}>
-      <MarkerSvgIcon
-        type={style?.markerShape || 'circle'}
-        size={size}
-        color={style?.markerColor || '#111111'}
-        fillColor={style?.markerFill || style?.markerColor || '#ffffff'}
-      />
-    </span>
-  );
 }
 
 export default function ReadOnlyMapStage({ project }) {
@@ -317,11 +282,9 @@ export default function ReadOnlyMapStage({ project }) {
                       {item.type === 'points' ? (
                         <LegendPointSwatch style={item.style} size={item.swatchSize || 14} />
                       ) : item.type === 'line' ? (
-                        <svg className="legend-line-svg" width="22" height="12" aria-hidden="true" style={{ flexShrink: 0 }}>
-                          <line x1="0" y1="6" x2="22" y2="6" stroke={item.style.stroke || '#333'} strokeWidth={Math.min(item.style.strokeWidth ?? 2, 3)} strokeDasharray={item.style.dashArray || ''} />
-                        </svg>
+                        <LegendLineSwatch style={item.style} />
                       ) : (
-                        <span className="legend-swatch" style={{ borderColor: item.style.stroke || '#3b82f6', borderStyle: item.style.dashArray ? 'dashed' : 'solid', background: legendFillRgba(item.style.fill || '#93c5fd', item.style.fillOpacity ?? 1) }} />
+                        <LegendAreaSwatch style={item.style} />
                       )}
                       <span>{item.label}</span>
                     </div>

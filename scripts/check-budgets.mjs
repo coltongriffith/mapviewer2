@@ -30,7 +30,9 @@ const BUDGETS = {
   // chunk; the shared symbol geometry replaced the old icon builder.
   // 139 → 141: placed logo/image markers (upload, width, opacity, backing,
   // replace) and the main logo's opacity control live in the editor chunk.
-  maxJsChunkGzipKb: 141,
+  // 141 → 143: fixed-size scaled stage, per-ratio view persistence, legend
+  // heading rename / move-to-group / drag reorder (Sept 2026).
+  maxJsChunkGzipKb: 143,
   initialJsGzipKb: 75,
   initialAuthJsGzipKb: 135,
   // The former configured check omitted VITE_ADMIN_EMAIL, which pruned the

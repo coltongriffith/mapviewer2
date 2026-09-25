@@ -213,3 +213,56 @@ export function legendWidthFor(layout = {}, items = []) {
   if (Number.isFinite(w) && w !== 300) return Math.max(180, Math.min(480, w));
   return legendAutoWidth(items, layout);
 }
+
+// A near-white outline vanishes on a white legend panel; the editor legend and
+// both exporters give such swatches a thin dark edge.
+export function isNearWhite(color) {
+  const v = String(color || '').trim();
+  const m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(v);
+  if (!m) return /^white$/i.test(v);
+  const h = m[1].length === 3 ? m[1].split('').map((c) => c + c).join('') : m[1];
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16));
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 225;
+}
+export const LIGHT_SWATCH_EDGE = 'rgba(15,23,42,0.55)';
+
+// Rename a legend heading for every entry under it (derived layers and added
+// items alike), as the legend currently shows them. Returns the new
+// legendOverrides, or null when nothing changes. Shared by the legend on the
+// map (click a heading) and the legend editor panel.
+export function renameLegendHeading(derivedItems, layout = {}, from, to) {
+  const name = String(to || '').trim();
+  if (!name || name === from) return null;
+  const overrides = layout?.legendOverrides || {};
+  const shown = applyLegendCustomization(derivedItems, layout);
+  const headingOf = (item) => (item?.group && String(item.group).trim()) || DEFAULT_LEGEND_GROUP;
+  const shownById = new Map(shown.map((it) => [it.id, it]));
+  const next = { ...overrides };
+  for (const d of derivedItems || []) {
+    const it = shownById.get(d.id);
+    if (it && headingOf(it) === from) {
+      next[d.id] = { ...(overrideFor(overrides, d) || {}), group: name };
+      for (const old of (d.legacyIds || [])) if (old !== d.id) delete next[old];
+    }
+  }
+  for (const entry of layout?.legendCustomItems || []) {
+    const it = shownById.get(entry.id);
+    if (it && headingOf(it) === from) next[entry.id] = { ...(overrides[entry.id] || {}), group: name };
+  }
+  return next;
+}
+
+// The height the legend's entries actually occupy, walked the way the
+// exporters lay rows out (renderScene legendRowLayout: 40 px to the first row,
+// 24 px per entry and 20 px per heading, ×0.75 for the compact legend) plus a
+// 12 px bottom margin. A dragged legend height is never allowed below this,
+// so no entry is clipped in an export.
+export function legendContentHeight(items, layout = {}) {
+  const density = layout?.legendCompact ? 0.75 : 1;
+  let h = 0;
+  for (const group of groupLegendItems(items, layout)) {
+    if (group.heading) h += 20 * density;
+    h += group.items.length * 24 * density;
+  }
+  return items && items.length ? Math.ceil(40 + h + 12) : 0;
+}

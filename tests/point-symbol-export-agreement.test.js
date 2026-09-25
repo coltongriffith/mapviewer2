@@ -131,7 +131,13 @@ describe('import roles', () => {
     expect(inferRoleFromLayer({ name: 'tenures', type: 'polygons' })).toBe('claims');
     expect(inferRoleFromLayer({ name: 'mag_high', type: 'polygons' })).toBe('anomalies');
     expect(inferRoleFromLayer({ name: 'imagery footprint', type: 'polygons' })).toBe('sampling_extent');
-    expect(inferRoleFromLayer({ name: 'rocks', type: 'points' })).toBe('drillholes');
+    expect(inferRoleFromLayer({ name: 'rocks', type: 'points' })).toBe('rock_samples');
+    expect(inferRoleFromLayer({ name: '2026 rock samples', type: 'points' })).toBe('rock_samples');
+    expect(inferRoleFromLayer({ name: 'soil grid 2026', type: 'points' })).toBe('soil_samples');
+    expect(inferRoleFromLayer({ name: 'DDH collars', type: 'points' })).toBe('drillholes');
+    expect(inferRoleFromLayer({ name: 'planned holes', type: 'points' })).toBe('drillholes');
+    expect(inferRoleFromLayer({ name: 'whole_data', type: 'points' })).toBe('other');
+    expect(inferRoleFromLayer({ name: 'export_2024', type: 'points' })).toBe('other');
   });
   it('neutral roles get their own style, not the claims palette', () => {
     expect(NEUTRAL_ROLES.has('sampling_extent')).toBe(true);
@@ -198,5 +204,64 @@ describe('review follow-ups', () => {
     const c = { type: 'plain', text: 'X', boxWidth: 160, style: { paddingX: 8 }, logo: { image: 'data:image/png;base64,AA', aspect: 0.5, width: 240 } };
     const box = estimateBox(c);
     expect(calloutLogoSize(c, box.width - 16).w).toBe(144);
+  });
+});
+
+describe('fixed-size stage and legend fixes', () => {
+  it('the stage has one logical size per shape, whatever the window', async () => {
+    const { logicalStageSize, screenScale } = await import('../src/utils/stageScale.js');
+    expect(logicalStageSize(1)).toEqual({ width: 1000, height: 1000 });
+    expect(logicalStageSize(16 / 9)).toEqual({ width: 1333, height: 750 });
+    expect(logicalStageSize(3 / 4)).toEqual({ width: 866, height: 1155 });
+    expect(screenScale(null)).toBe(1);
+    expect(screenScale({ offsetWidth: 1000, getBoundingClientRect: () => ({ width: 500 }) })).toBe(0.5);
+  });
+
+  it('white outlines are detected for a visible legend edge', async () => {
+    const { isNearWhite } = await import('../src/utils/legendCustomization.js');
+    expect(isNearWhite('#ffffff')).toBe(true);
+    expect(isNearWhite('#fafafa')).toBe(true);
+    expect(isNearWhite('white')).toBe(true);
+    expect(isNearWhite('#60a5fa')).toBe(false);
+    expect(isNearWhite(undefined)).toBe(false);
+  });
+
+  it('a dragged legend height never hides entries', async () => {
+    const { resolveTemplateZones } = await import('../src/templates/technicalResultsTemplate.js');
+    const items = Array.from({ length: 20 }, (_, i) => ({ label: `Item ${i}` }));
+    const zones = resolveTemplateZones(technicalResultsTemplate, { legendItems: items, legendHeightPx: 200 }, { width: 1333, height: 2000 }, items);
+    expect(zones.legend.height).toBeGreaterThanOrEqual(40 + 20 * 24 + 12);
+  });
+});
+
+describe('legend editor upgrades', () => {
+  it('renames a heading for every entry under it, derived and added', async () => {
+    const { renameLegendHeading } = await import('../src/utils/legendCustomization.js');
+    const derived = [
+      { id: 'a', label: 'Rocks', group: 'Map Data', style: {} },
+      { id: 'b', label: 'Soils', group: 'Map Data', style: {} },
+      { id: 'c', label: 'Claims', group: 'Property', style: {} },
+    ];
+    const layout = { legendGrouped: true, legendCustomItems: [{ id: 'custom-1', label: 'Mill', symbol: 'circle', color: '#111111' }] };
+    const next = renameLegendHeading(derived, layout, 'Map Data', 'Raven Rock Samples');
+    expect(next.a.group).toBe('Raven Rock Samples');
+    expect(next.b.group).toBe('Raven Rock Samples');
+    expect(next.c).toBeUndefined();
+    expect(next['custom-1'].group).toBe('Raven Rock Samples');
+    expect(renameLegendHeading(derived, layout, 'Map Data', '  ')).toBeNull();
+  });
+
+  it('polygon outlines follow the class colour only when asked', async () => {
+    const { classStyle } = await import('../src/utils/classification.js');
+    const cls = { mode: 'categorical', field: 'z', classes: [{ value: 'A', color: '#ff0000' }] };
+    const f = { properties: { z: 'A' } };
+    expect(classStyle(cls, f, 'polygon')).toEqual({ fill: '#ff0000' });
+    expect(classStyle({ ...cls, outlineFollowsClass: true }, f, 'polygon')).toEqual({ fill: '#ff0000', stroke: '#ff0000' });
+    expect(classStyle({ ...cls, outlineFollowsClass: true }, f, 'points').stroke).toBeUndefined();
+  });
+
+  it('new sample layers default to their role heading', () => {
+    expect(technicalResultsTemplate.roleGroups.rock_samples).toBe('Sampling');
+    expect(technicalResultsTemplate.roleGroups.soil_samples).toBe('Sampling');
   });
 });
