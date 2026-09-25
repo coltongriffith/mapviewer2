@@ -454,6 +454,31 @@ function wrapText(ctx, text, maxWidth) {
   });
 }
 
+// Title-block text laid out the way the editor's title card sets it (CSS in
+// styles.css .title-card): title 22 px bold, subtitle 12 px 8 px below it,
+// date/meta 10 px 6 px below that, each on a normal (~1.22) line box with the
+// glyphs centred in it. The exporters used to stack lines tighter and drop
+// both gaps, so the text rode high and left a band of empty panel below it.
+// Shared by the canvas and SVG renderers. → [{ kind, text, font, baseline, alpha }]
+const TITLE_LINE = 1.22;
+function titleBlockLines(layout, availW, scale, top, wrap, titleFont) {
+  const tfs = layout.titleFontScale ?? 1;
+  const out = [];
+  const baselineIn = (lineTop, fs) => lineTop + (fs * TITLE_LINE) / 2 + fs * 0.35;
+  let cur = top;
+  const add = (kind, text, fs, weight, alpha, gapBefore) => {
+    const font = `${weight} ${fs}px ${titleFont}`;
+    const lines = wrap(font, text, availW, fs);
+    if (!lines.length) return;
+    cur += gapBefore;
+    for (const t of lines) { out.push({ kind, text: t, font, size: fs, weight, baseline: baselineIn(cur, fs), alpha }); cur += fs * TITLE_LINE; }
+  };
+  add('title', layout.title || 'Project Map', 22 * scale * tfs, 700, 1, 0);
+  if (layout.subtitle) add('subtitle', layout.subtitle, 12 * scale * tfs, 400, 1, 8 * scale);
+  const meta = [layout.mapDate, layout.projectNumber, layout.mapScaleNote].filter(Boolean);
+  if (meta.length) add('meta', meta.join('  ·  '), 10 * scale * tfs, 400, 0.8, 6 * scale);
+  return out;
+}
 function drawTitleBlockCanvas(ctx, scene, scale) {
   if (scene.project.layout?.showTitle === false) return;
   const theme = getTheme(scene);
@@ -474,46 +499,24 @@ function drawTitleBlockCanvas(ctx, scene, scale) {
     ctx.restore();
   }
   const titleFont = `${layout.fonts?.title || 'Inter'}, Arial, sans-serif`;
-  const tfs = layout.titleFontScale ?? 1;
-  const padLeft = (leftBar ? 22 : 18) * scale;
+  const padLeft = (leftBar ? 24 : 18) * scale;
   const padRight = 12 * scale;
   const textX = x + padLeft;
   const availW = w - padLeft - padRight;
-  const topOff = (theme.titleAccent && !leftBar) ? 20 : 16;
-  const titleSize = 22 * scale * tfs;
-  const titleLineH = titleSize * 1.25;
-  const subtitleSize = 12 * scale * tfs;
-  const metaSize = 10 * scale * tfs;
-
+  // The editor card's top padding (styles.css .title-card): 20 px unless the
+  // accent is a left bar.
+  const topOff = leftBar ? 16 : 20;
   // Clip to zone so long text never bleeds past the panel edge
   ctx.save();
   ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
-  ctx.textBaseline = 'top';
-
-  // Title — word-wrapped to fit within available width
-  ctx.fillStyle = theme.titleText;
-  ctx.font = `700 ${titleSize}px ${titleFont}`;
-  const titleLines = wrapText(ctx, layout.title || 'Project Map', availW);
-  let curY = y + topOff * scale;
-  titleLines.forEach((line) => { ctx.fillText(line, textX, curY); curY += titleLineH; });
-
-  // Subtitle
-  if (layout.subtitle) {
-    ctx.fillStyle = theme.subtitleText;
-    ctx.font = `${subtitleSize}px ${titleFont}`;
-    const subLines = wrapText(ctx, layout.subtitle, availW);
-    subLines.forEach((line) => { ctx.fillText(line, textX, curY); curY += subtitleSize * 1.4; });
+  ctx.textBaseline = 'alphabetic';
+  for (const line of titleBlockLines(layout, availW, scale, y + topOff * scale, (font, text, maxW) => { ctx.font = font; return wrapText(ctx, text, maxW); }, titleFont)) {
+    ctx.fillStyle = line.kind === 'title' ? theme.titleText : theme.subtitleText;
+    ctx.font = line.font;
+    ctx.globalAlpha = line.alpha;
+    ctx.fillText(line.text, textX, line.baseline);
   }
-
-  // Metadata (date · project# · scale) — small, below subtitle
-  const metaItems = [layout.mapDate, layout.projectNumber, layout.mapScaleNote].filter(Boolean);
-  if (metaItems.length) {
-    ctx.fillStyle = theme.subtitleText;
-    ctx.font = `${metaSize}px ${titleFont}`;
-    ctx.globalAlpha = 0.75;
-    ctx.fillText(metaItems.join('  ·  '), textX, curY + (layout.subtitle ? 2 : 4) * scale);
-    ctx.globalAlpha = 1;
-  }
+  ctx.globalAlpha = 1;
 
   ctx.restore();
 }
@@ -2438,35 +2441,20 @@ function renderTitleSvg(scene, scale, svgDefs) {
       ? `<rect x="${x}" y="${y}" width="${6 * scale}" height="${h}" fill="${theme.titleAccent}" />`
       : `<rect x="${x}" y="${y}" width="${w}" height="${5 * scale}" fill="${theme.titleAccent}" />`
     : '';
-  // Same sizes and spacing as drawTitleBlockCanvas (and the editor's 22/12 px
-  // title card). The SVG used 26/14 px with its own offsets, so the same map
-  // exported as SVG had a visibly bigger title with the subtitle lower down.
-  const textX = x + (leftBar ? 22 : 18) * scale;
+  // Laid out by titleBlockLines, as drawTitleBlockCanvas is and as the
+  // editor's title card sets it.
+  const textX = x + (leftBar ? 24 : 18) * scale;
   const padRight = 12 * scale;
   const availW = w - (textX - x) - padRight;
-  const topOff = (theme.titleAccent && !leftBar) ? 20 : 16;
-  const tfs = layout.titleFontScale ?? 1;
-  const titleSize = 22 * scale * tfs;
-  const titleLineH = titleSize * 1.25;
-  const subtitleSize = 12 * scale * tfs;
-  const metaSize = 10 * scale * tfs;
-  let curY = y + topOff * scale;
-  const titleLines = measuredWrapLines(layout.title || 'Project Map', availW, `700 ${titleSize}px ${titleFont}`, titleSize);
-  const titleSvg = titleLines.map((line) => {
-    const t = `<text x="${textX}" y="${baselineFromTop(curY, titleSize)}" fill="${theme.titleText}" font-family="${titleFont}" font-size="${titleSize}" font-weight="700">${escapeXml(line)}</text>`;
-    curY += titleLineH;
-    return t;
-  }).join('');
-  const subtitleLines = layout.subtitle ? measuredWrapLines(layout.subtitle, availW, `${subtitleSize}px ${titleFont}`, subtitleSize) : [];
-  const subtitleSvg = subtitleLines.map((line) => {
-    const t = `<text x="${textX}" y="${baselineFromTop(curY, subtitleSize)}" fill="${theme.subtitleText}" font-family="${titleFont}" font-size="${subtitleSize}">${escapeXml(line)}</text>`;
-    curY += subtitleSize * 1.4;
-    return t;
-  }).join('');
-  const metaItems = [layout.mapDate, layout.projectNumber, layout.mapScaleNote].filter(Boolean);
-  const metaSvg = metaItems.length
-    ? `<text x="${textX}" y="${baselineFromTop(curY + (layout.subtitle ? 2 : 4) * scale, metaSize)}" fill="${theme.subtitleText}" fill-opacity="0.75" font-family="${titleFont}" font-size="${metaSize}">${escapeXml(metaItems.join('  ·  '))}</text>`
-    : '';
+  // The editor card's top padding (styles.css .title-card): 20 px unless the
+  // accent is a left bar.
+  const topOff = leftBar ? 16 : 20;
+  const lines = titleBlockLines(layout, availW, scale, y + topOff * scale, (font, text, maxW, fs) => measuredWrapLines(text, maxW, font, fs), titleFont);
+  const lineSvg = (kind) => lines.filter((l) => l.kind === kind).map((l) =>
+    `<text x="${textX}" y="${l.baseline.toFixed(2)}" fill="${kind === 'title' ? theme.titleText : theme.subtitleText}"${l.alpha < 1 ? ` fill-opacity="${l.alpha}"` : ''} font-family="${titleFont}" font-size="${l.size}"${l.weight === 700 ? ' font-weight="700"' : ''}>${escapeXml(l.text)}</text>`).join('');
+  const titleSvg = lineSvg('title');
+  const subtitleSvg = lineSvg('subtitle');
+  const metaSvg = lineSvg('meta');
   const clipId = pushRoundedClip(svgDefs, x, y, w, h, radius);
   return `<g id="em-title" class="em-panel" clip-path="url(#${clipId})">${svgRect(x, y, w, h, radius, theme.titleFill, theme.titleBorder, scale)}${accent}${titleSvg}${subtitleSvg}${metaSvg}</g>`;
 }
