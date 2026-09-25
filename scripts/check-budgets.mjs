@@ -48,7 +48,8 @@ const BUDGETS = {
   // geometry in the export renderer.
   totalAuthJsGzipKb: 875,
   // 805 → 808: placed and callout logos, SVG font embedding (Sept 2026).
-  totalJsGzipKb: 808,
+  // 808 → 809: shared-map viewer opens at the saved view on the fixed stage.
+  totalJsGzipKb: 809,
   adminAuthJsGzipKb: 150,
   adminJsGzipKb: 85,
   editorAuthJsGzipKb: 335,

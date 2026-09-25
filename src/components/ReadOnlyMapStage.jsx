@@ -15,6 +15,7 @@ import { applyLegendCustomization, groupLegendItems } from '../utils/legendCusto
 import { getMapFrame, scaleBarHeight } from '../utils/coordinateFrame.js';
 import CoordinateFrameOverlay from './CoordinateFrameOverlay.jsx';
 import { fitProjectToTemplate } from '../utils/frameMapForTemplate';
+import { projectStageSize, savedViewFor, zoomForSize } from '../utils/savedView';
 
 const MapCanvas = React.lazy(() => import('./MapCanvas'));
 
@@ -31,6 +32,23 @@ export default function ReadOnlyMapStage({ project }) {
   const [map, setMap] = useState(null);
   const [mapSize, setMapSize] = useState({ width: 800, height: 600 });
   const fittedRef = useRef(false);
+  // The author's fixed stage (export shape), shown whole and scaled to fit the
+  // viewer — the same composition and framing as in the editor.
+  const stage = useMemo(() => projectStageSize(project.layout), [project.layout]);
+  const fitRef = useRef(null);
+  const [fitScale, setFitScale] = useState(1);
+  useEffect(() => {
+    const el = fitRef.current;
+    if (!stage || !el) return undefined;
+    const update = () => {
+      const s = Math.min(el.clientWidth / stage.width, el.clientHeight / stage.height);
+      if (Number.isFinite(s) && s > 0) setFitScale(s);
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [stage]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -118,14 +136,28 @@ export default function ReadOnlyMapStage({ project }) {
     '--font-label': `${project.layout.fonts?.label || 'Inter'}, Arial, Helvetica, sans-serif`,
     '--font-callout': `${project.layout.fonts?.callout || 'Inter'}, Arial, Helvetica, sans-serif`,
     '--font-footer': `${project.layout.fonts?.footer || 'Inter'}, Arial, Helvetica, sans-serif`,
-    width: '100%',
-    height: '100%',
+    ...(stage ? {
+      width: stage.width,
+      height: stage.height,
+      flex: 'none',
+      transform: `scale(${fitScale})`,
+      transformOrigin: 'center center',
+      margin: `${(stage.height * fitScale - stage.height) / 2}px ${(stage.width * fitScale - stage.width) / 2}px`,
+    } : { width: '100%', height: '100%' }),
   };
 
-  // Fit to bounds once when map is first ready
+  // Open at the view the map was shared at; fit to the data only when none
+  // was saved.
   useEffect(() => {
     if (!map || fittedRef.current) return;
     fittedRef.current = true;
+    const view = savedViewFor(project);
+    if (view) {
+      const el = containerRef.current;
+      const zoom = zoomForSize(view, el?.offsetWidth, el?.offsetHeight);
+      map.setView([view.center.lat, view.center.lng], zoom, { animate: false });
+      return;
+    }
     fitProjectToTemplate(project, map, { ...template, zones: resolvedZones }, 'balanced', { focusRoles: true });
   }, [map, project, template, resolvedZones]);
 
@@ -140,7 +172,7 @@ export default function ReadOnlyMapStage({ project }) {
   const niFs = Math.max(0.7, Math.min(1.4, Number(layout.stripFontScale || 1)));
   const monoFont = "'Courier New', Courier, monospace";
 
-  return (
+  const stageEl = (
     <div
       ref={containerRef}
       className="map-stage"
@@ -356,4 +388,6 @@ export default function ReadOnlyMapStage({ project }) {
       )}
     </div>
   );
+  if (!stage) return stageEl;
+  return <div ref={fitRef} className="readonly-stage-fit">{stageEl}</div>;
 }

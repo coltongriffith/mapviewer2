@@ -46,6 +46,7 @@ import {
 } from './projectState';
 import { EXPORT_RATIOS } from './constants';
 import { applyRoleToLayer, inferRoleFromLayer, NEUTRAL_ROLES } from './mapPresets';
+import { zoomForSize } from './utils/savedView';
 import { logicalStageSize, screenScale } from './utils/stageScale.js';
 import { getTemplate } from './templates';
 import { buildLegendItems, resolveTemplateZones } from './templates/technicalResultsTemplate';
@@ -1707,6 +1708,7 @@ export default function App({ initialAction = null }) {
       map.setView([ratioView.center.lat, ratioView.center.lng], ratioView.zoom, { animate: false });
       return;
     }
+    const firstFit = !initialFitDoneRef.current;
     initialFitDoneRef.current = true;
     const noLayers = project.layers.length === 0;
     // Use the ref so cosmetic layout changes (title, logo size, opacity…) don't
@@ -1715,15 +1717,15 @@ export default function App({ initialAction = null }) {
     // project (an undo target) is the one on screen.
     const skip = skipAutoFitRef.current;
     skipAutoFitRef.current = false;
-    if (skip === true || skip === project) {
+    // A reloaded project reopens at its saved view too, not refitted.
+    if (skip === true || skip === project || (firstFit && project.mapView?.center)) {
       const saved = project.mapView;
-      const screenMatch = saved?.screenW
-        ? Math.abs(saved.screenW - mapSizeRef.current.width) / saved.screenW < 0.15
-        : false;
-      if (saved?.center && screenMatch) {
-        // Restore the exact saved view — works even for claims-only projects
-        // (no layers), which previously bailed out and left claims off-screen.
-        map.setView([saved.center.lat, saved.center.lng], saved.zoom, { animate: false });
+      if (saved?.center && Number.isFinite(saved.zoom)) {
+        // Restore the saved view — works even for claims-only projects (no
+        // layers). On a different-sized window the zoom is adjusted to keep
+        // the same extent in view rather than refitting to the layers.
+        const zoom = zoomForSize({ zoom: saved.zoom, width: saved.screenW, height: saved.screenH }, mapSizeRef.current.width, mapSizeRef.current.height);
+        map.setView([saved.center.lat, saved.center.lng], zoom, { animate: false });
       } else if (noLayers) {
         // No usable saved view and no layers — frame the nearby claims so a
         // claims-only project reopens showing its claims rather than blank.
