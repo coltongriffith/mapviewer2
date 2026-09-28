@@ -279,3 +279,39 @@ describe('api/track dashboard-v2 events', () => {
     expect(inserts.at(-1).row.props.format).toBe('pdf');
   });
 });
+
+describe('api/track automated traffic', () => {
+  it('drops crawlers that announce themselves, without writing', async () => {
+    const bots = [
+      'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+      'Mozilla/5.0 (Linux; Android 5.0) AppleWebKit/537.36 (KHTML, like Gecko) Mobile Safari/537.36 (compatible; Bytespider; spider-feedback@bytedance.com)',
+      'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/120.0.0.0 Safari/537.36',
+      'python-requests/2.31.0',
+    ];
+    for (const ua of bots) {
+      const res = mockRes();
+      await handler(req({ kind: 'pageview', session_id: SID, path: '/' }, { ip: uniqueIp(), 'user-agent': ua }), res);
+      expect(res.statusCode, ua).toBe(204);
+    }
+    expect(inserts).toHaveLength(0);
+  });
+
+  it('keeps real browsers, including CUBOT phones', async () => {
+    const browsers = [
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36',
+      'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 [LinkedInApp]/9.29.8',
+      'Mozilla/5.0 (Linux; Android 10; CUBOT X30) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+    ];
+    for (const ua of browsers) {
+      await handler(req({ kind: 'pageview', session_id: SID, path: '/' }, { ip: uniqueIp(), 'user-agent': ua }), mockRes());
+    }
+    expect(inserts.filter((i) => i.table === 'page_views')).toHaveLength(3);
+  });
+
+  it('records the internal-browser marker', async () => {
+    const res = mockRes();
+    await handler(req({ kind: 'event', session_id: SID, event: 'internal_session' }, { ip: uniqueIp() }), res);
+    expect(res.statusCode).toBe(204);
+    expect(inserts.at(-1).row).toMatchObject({ event: 'internal_session', props: null });
+  });
+});

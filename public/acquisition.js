@@ -49,9 +49,35 @@
     }
     try { localStorage.setItem(KEY, JSON.stringify({ data: saved, expires: Date.now() + TTL })); } catch (_) { /* optional */ }
   }
+  // Internal browser: one the site owner uses. The admin dashboard sets it once
+  // the server confirms admin access; ?em_internal=1 (or =0 to clear) sets it on
+  // any page, e.g. a private window. Such a tab still records analytics but also
+  // sends `internal_session` once, so admin_session_ids() leaves it out of
+  // customer reports whether or not anyone is signed in.
+  var INTERNAL_KEY = 'em_internal';
+  function markInternal() {
+    var sid = session();
+    try {
+      if (!sid || localStorage.getItem(INTERNAL_KEY) !== '1' || sessionStorage.getItem('em_internal_sent') === sid) return;
+      fetch('/api/track', {
+        method: 'POST', keepalive: true, headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kind: 'event', session_id: sid, event: 'internal_session' })
+      }).then(function (res) {
+        if (res.ok) try { sessionStorage.setItem('em_internal_sent', sid); } catch (_) { /* optional */ }
+      }).catch(function () { /* retried on the next page load */ });
+    } catch (_) { /* storage and fetch are optional */ }
+  }
+  function setInternal(on) {
+    try { if (on) localStorage.setItem(INTERNAL_KEY, '1'); else localStorage.removeItem(INTERNAL_KEY); } catch (_) { /* optional */ }
+    markInternal();
+  }
+  if (params.get('em_internal') === '1' || params.get('em_internal') === '0') setInternal(params.get('em_internal') === '1');
+  else markInternal();
+
   window.emAcquisition = {
     get: function () { return clean(saved); },
     clean: clean,
+    setInternal: setInternal,
     entry: { path: window.location.pathname, referrer: referrer, utm_source: params.get('utm_source'), utm_medium: params.get('utm_medium'), utm_campaign: params.get('utm_campaign') }
   };
   // Static documents do not execute React. Use the same tab id as the editor.

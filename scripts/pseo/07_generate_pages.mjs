@@ -180,8 +180,8 @@ function companyPage({ iss, claims, neighbours, updated }) {
 
   <div class="map-card"><img src="${mapSvg}" alt="Map of ${esc(iss.company)} mineral claims" loading="eager"></div>
   <div class="map-actions">
-    <a class="btn btn-primary" href="/?claims=${encodeURIComponent(iss.ticker)}&amp;company=${encodeURIComponent(iss.company)}&amp;region=${encodeURIComponent((provs[0] || '').toLowerCase())}&amp;utm_source=companies&amp;utm_campaign=${encodeURIComponent(iss.ticker)}">Open this company's claims map →</a>
-    <a class="btn btn-ghost" href="/?claims=${encodeURIComponent(iss.ticker)}&amp;company=${encodeURIComponent(iss.company)}&amp;region=${encodeURIComponent((provs[0] || '').toLowerCase())}&amp;utm_source=companies&amp;utm_campaign=${encodeURIComponent(iss.ticker)}-export">${esc(exportCopy)}</a>
+    <a class="btn btn-primary" href="/?claims=${encodeURIComponent(iss.ticker)}&amp;company=${encodeURIComponent(iss.company)}&amp;region=${encodeURIComponent((provs[0] || '').toLowerCase())}&amp;utm_source=companies&amp;utm_campaign=${encodeURIComponent(iss.ticker)}" rel="nofollow">Open this company's claims map →</a>
+    <a class="btn btn-ghost" href="/?claims=${encodeURIComponent(iss.ticker)}&amp;company=${encodeURIComponent(iss.company)}&amp;region=${encodeURIComponent((provs[0] || '').toLowerCase())}&amp;utm_source=companies&amp;utm_campaign=${encodeURIComponent(iss.ticker)}-export" rel="nofollow">${esc(exportCopy)}</a>
   </div>
 
   <p class="updated">Choose the investor layout, export a PNG, or save an editable copy to your account. On mobile, preview the map first and save on this device before continuing on desktop. <a href="/about/">About Exploration Maps</a> · <a href="/privacy/">Privacy</a></p>
@@ -195,7 +195,7 @@ function companyPage({ iss, claims, neighbours, updated }) {
 
   <div class="claim-cta">
     <div><b>Is this your company?</b><span>Save an editable copy to your free account. Customize the map and download a PNG with credit; Pro removes the credit.</span></div>
-    <a class="btn btn-primary" href="/?claims=${encodeURIComponent(iss.ticker)}&amp;company=${encodeURIComponent(iss.company)}&amp;claim=1&amp;utm_source=companies&amp;utm_medium=claim_cta&amp;utm_campaign=${encodeURIComponent(iss.ticker)}">Save an editable copy</a>
+    <a class="btn btn-primary" href="/?claims=${encodeURIComponent(iss.ticker)}&amp;company=${encodeURIComponent(iss.company)}&amp;claim=1&amp;utm_source=companies&amp;utm_medium=claim_cta&amp;utm_campaign=${encodeURIComponent(iss.ticker)}" rel="nofollow">Save an editable copy</a>
   </div>
 
   <h2>Claim list</h2>

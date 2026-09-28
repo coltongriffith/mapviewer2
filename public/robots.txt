@@ -1,4 +1,5 @@
 User-agent: *
 Allow: /
+Disallow: /*utm_source=
 Sitemap: https://www.explorationmaps.com/sitemap.xml
 Sitemap: https://www.explorationmaps.com/sitemap-companies.xml

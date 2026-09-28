@@ -69,7 +69,25 @@ const EVENT_ALLOWLIST = new Set([
   'upgrade_verified_paid',
   'features_removed',
   'features_restored',
+  // Sent once per tab by a browser the owner marked as internal (see
+  // public/acquisition.js); admin_session_ids() drops that tab from reports.
+  'internal_session',
 ]);
+
+// Crawlers that run JavaScript (Googlebot, Bingbot, Bytespider, headless
+// Chrome, SEO and uptime tools) execute the same tracking code as a visitor.
+// A user agent that says it is automated is accepted and dropped, so it never
+// becomes a session. Bots posing as a browser are excluded at report time by
+// admin_session_ids() instead.
+const BOT_UA_RE = new RegExp([
+  // Googlebot, bingbot, AhrefsBot, Bytespider, Baiduspider… but not CUBOT
+  // phones, whose model names end in "bot".
+  String.raw`\b[\w-]*(?<!cu)(?:bot|crawler|spider)\b`,
+  'headless', 'lighthouse', 'facebookexternalhit', 'slurp', 'googleother', 'inspectiontool',
+  'phantomjs', 'python-requests', 'python-urllib', 'aiohttp', 'scrapy', 'curl/', 'wget/',
+  'go-http-client', 'okhttp', 'axios/', 'node-fetch', 'undici', 'java/', 'libwww', 'httpclient',
+  'gtmetrix', 'pingdom', 'uptimerobot', 'statuscake', 'screaming frog', 'sitebulb',
+].join('|'), 'i');
 
 const MAX_BODY_BYTES = 8 * 1024;
 const MAX_PROPS_BYTES = 2 * 1024;
@@ -168,6 +186,7 @@ export default async function handler(req, res) {
     res.setHeader('Allow', 'POST, OPTIONS');
     return res.status(405).json({ error: 'method not allowed' });
   }
+  if (BOT_UA_RE.test(req.headers?.['user-agent'] || '')) return res.status(204).end();
 
   let body = req.body;
   if (typeof body === 'string') {

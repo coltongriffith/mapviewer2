@@ -55,3 +55,33 @@ describe('acquisition across the static site, app, and email', () => {
     expect(send).toHaveBeenLastCalledWith('signup_completed', { utm_source: 'partner' });
   });
 });
+
+describe('internal browser', () => {
+  const markers = (send) => send.mock.calls.map(([, o]) => JSON.parse(o.body)).filter((b) => b.event === 'internal_session');
+  it('?em_internal=1 marks the browser and sends one marker per tab', async () => {
+    const send = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal('fetch', send);
+    window.history.replaceState({}, '', '/?em_internal=1');
+    boot();
+    await Promise.resolve(); await Promise.resolve();
+    expect(localStorage.getItem('em_internal')).toBe('1');
+    delete window.emAcquisition; window.history.replaceState({}, '', '/blog/example/');
+    boot();
+    expect(markers(send)).toHaveLength(1);
+    expect(markers(send)[0].session_id).toBe(sessionStorage.getItem('em_live_sid'));
+    vi.unstubAllGlobals();
+  });
+  it('the dashboard can mark it, ?em_internal=0 clears it, and an unmarked browser sends nothing', () => {
+    const send = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal('fetch', send);
+    boot();
+    expect(markers(send)).toHaveLength(0);
+    window.emAcquisition.setInternal(true);
+    expect(localStorage.getItem('em_internal')).toBe('1');
+    expect(markers(send)).toHaveLength(1);
+    delete window.emAcquisition; window.history.replaceState({}, '', '/?em_internal=0');
+    boot();
+    expect(localStorage.getItem('em_internal')).toBeNull();
+    vi.unstubAllGlobals();
+  });
+});
