@@ -21,6 +21,8 @@ describe('growth dashboard', () => {
     expect(screen.getByText('3 of 8 at the previous step')).toBeInTheDocument();
     expect(screen.getByText(/1 unclassified/)).toBeInTheDocument();
     expect(screen.getByText('1 of 3')).toBeInTheDocument();
+    expect(document.querySelector('.growth-signals')).toHaveTextContent('4 sessions opened export setup');
+    expect(screen.getByText(/Export setup is an export-attempt signal/)).toBeInTheDocument();
     expect(screen.queryByText(/ROAS\s*[0-9]/)).not.toBeInTheDocument();
   });
   it('opens a value-producing account without sending outreach', () => {
