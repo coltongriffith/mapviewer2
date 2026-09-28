@@ -34,6 +34,7 @@ beforeAll(async () => {
   await db.exec(readFileSync('supabase/migrations/20260905053221_growth_dashboard_performance.sql', 'utf8'));
   await db.exec(readFileSync('supabase/migrations/20260914000001_growth_engaged_sessions.sql', 'utf8'));
   await db.exec(readFileSync('supabase/migrations/20260915144240_growth_landing_outcomes.sql', 'utf8'));
+  await db.exec(readFileSync('supabase/migrations/20260928113000_growth_export_gate_signal.sql', 'utf8'));
 }, 30000);
 afterAll(async () => { await db?.close(); });
 beforeEach(async () => {
@@ -90,6 +91,17 @@ describe('growth report SQL', () => {
     expect(d.funnel).toMatchObject({ sessions: 3, engaged: 2, opened: 1 });
     expect(d.sources).toEqual([{ source: 'Unattributed', sessions: 3, engaged: 2, opened: 1, imported: 0, exported: 0, real_exported: 0 }]);
     expect(d.meta.engagement_definition).toBe('two_page_views_or_product_event');
+  });
+  it('counts distinct export-gate sessions separately from Pro gates and checkout', async () => {
+    await user(99);
+    await db.query('insert into public.admin_users values ($1)', [uid(99)]);
+    await event('attempt', 'export_gate_shown', '2026-09-06T12:00Z');
+    await event('attempt', 'export_gate_shown', '2026-09-06T12:01Z');
+    await event('admin-attempt', 'export_gate_shown', '2026-09-06T12:02Z', {}, 99);
+    await event('pro', 'pro_gate_shown', '2026-09-06T12:03Z');
+    await event('checkout', 'upgrade_checkout_started', '2026-09-06T12:04Z');
+    const d = await report();
+    expect(d.friction).toEqual({ export_failures: 0, export_gate_sessions: 1, pro_gate_sessions: 1, checkout_sessions: 1 });
   });
   it('excludes young cohorts and activity after the reporting cutoff', async () => {
     await user(1); // mature, real-data export + week-two return
