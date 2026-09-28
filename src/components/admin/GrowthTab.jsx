@@ -64,8 +64,8 @@ export default function GrowthTab({ data, onOpenUser, daily, onPickDay }) {
           <li><strong>Start with recurring map makers.</strong> Use your mining network to reach consultants and IR/design teams. Build a map with their claims and ask for a paid subscription when the result is useful.</li>
           <li><strong>Track the source of each conversation.</strong> Use campaign links such as <code>?utm_source=founder&amp;utm_medium=outreach&amp;utm_campaign=first_customers</code>. Conversations and demos need a separate sales record.</li>
         </ul>
-        <div className="growth-signals"><span><b>{fmtNum(friction.pro_gate_sessions)}</b> sessions saw a Pro gate</span><span><b>{fmtNum(friction.checkout_sessions)}</b> started checkout</span></div>
-        <p className="admx-since-note">These are intent signals. Subscription status above comes from the billing database. Spend and cash receipts are not connected, so CAC and ROAS are not calculated.</p>
+        <div className="growth-signals"><span><b>{fmtNum(friction.export_gate_sessions ?? 0)}</b> sessions opened export setup</span><span><b>{fmtNum(friction.pro_gate_sessions)}</b> sessions saw a Pro gate</span><span><b>{fmtNum(friction.checkout_sessions)}</b> started checkout</span></div>
+        <p className="admx-since-note">Export setup is an export-attempt signal, not a completed export or signup. These are intent signals only. Subscription status above comes from the billing database. Spend and cash receipts are not connected, so CAC and ROAS are not calculated.</p>
       </Card>
     </div>
     <Card title="New-account cohort" eyebrow="Accounts whose email was confirmed in the selected window" full>
