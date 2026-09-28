@@ -217,6 +217,14 @@ describe('sitemap and canonicals agree with what exists', () => {
       expect(html.includes('noindex'), `${path} carries noindex`).toBe(false);
     }
   });
+
+  it('explicitly noindexes the live trailing-slash admin route', () => {
+    // Vercel serves /admin/ through the SPA rewrite, but its /admin/:path*
+    // header rule does not cover that exact trailing-slash URL in production.
+    const config = JSON.parse(readFileSync(join(ROOT, 'vercel.json'), 'utf8'));
+    const rule = config.headers.find(h => h.source === '/admin/');
+    expect(rule?.headers).toContainEqual({ key: 'X-Robots-Tag', value: 'noindex, follow' });
+  });
 });
 
 describe('titles and headings are distinct', () => {
