@@ -42,7 +42,7 @@ export default function GrowthTab({ data, onOpenUser, daily, onPickDay }) {
           : <ColumnChart series={daily.data} onPick={onPickDay}
               barKey="sessions" barLabel="visitor tabs" lineKey="active_users" lineLabel="signed-in users"
               ariaLabel="Daily visitor tabs" empty="No tracked visits in this window." />}
-        <p className="admx-since-note">A visitor tab is one browser tab with at least one recorded page view; known admin and internal activity, and crawlers that open CTA links, are excluded. Signed-in users are accounts that did something in the editor that day. Signup dots mark confirmed accounts.</p>
+        <p className="admx-since-note">A visitor tab is one browser tab with at least one recorded page view; known admin, internal and bot activity is excluded. Signed-in users are accounts that did something in the editor that day. Signup dots mark confirmed accounts.</p>
       </Card>
     )}
     <div className="growth-grid">
@@ -55,7 +55,7 @@ export default function GrowthTab({ data, onOpenUser, daily, onPickDay }) {
           </li>)}
         </ol>}
         <p className="admx-since-note">{fmtNum(f.real_exported)} of those sessions explicitly confirmed real data in the exported map. Importing and exporting in one tab alone does not prove it was the same map.</p>
-        <p className="admx-since-note">Engagement means more than one recorded page view or any product action. It is an observed action pattern, not proof that a session was human. Sessions are browser tabs, not people. Known admin and internal activity, self-identified crawlers and crawlers that open CTA links are excluded; other bots and blocked tracking remain limitations.</p>
+        <p className="admx-since-note">Engagement means more than one recorded page view or any product action. It is an observed action pattern, not proof that a session was human. Sessions are browser tabs, not people. Known admin, internal and bot activity is excluded; unidentified bots and blocked tracking remain limitations.</p>
       </Card>
       <Card title="Next customer actions" eyebrow="Decisions from this window">
         <ul className="growth-actions">
@@ -105,7 +105,7 @@ export default function GrowthTab({ data, onOpenUser, daily, onPickDay }) {
               <td>{fmtNum(p.real_exports)}</td><td>{fmtNum(p.saved_sessions)}</td><td>{fmtNum(p.lead_sessions)}</td>
             </tr>)}</tbody>
           </table></div>}
-      <p className="admx-since-note">Each count is a distinct tab in the selected window. The landing page is its first recorded page within that window. Upload / registry excludes automatic company previews and demos; a tab can appear in more than one action column. Real-data exports follow an import. Saved means a recorded project save, not necessarily a new account. Known admin and internal sessions and CTA-link crawlers are excluded; small counts and unidentified testing limit conclusions.</p>
+      <p className="admx-since-note">Each count is a distinct tab in the selected window. The landing page is its first recorded page within that window. Upload / registry excludes automatic company previews and demos; a tab can appear in more than one action column. Real-data exports follow an import. Saved means a recorded project save, not necessarily a new account. Known admin, internal and bot sessions are excluded; small counts and unidentified testing limit conclusions.</p>
     </Card>
     <Card title="Free customers getting value" eyebrow="Confirmed real-data exports in this window · up to 10 accounts" full>
       {!data.follow_up.length ? <EmptyHint>No qualifying accounts recorded yet. Use working sessions to establish the first useful-map → paid-customer examples.</EmptyHint> : <div className="adm-table-scroll"><table className="adm-table">

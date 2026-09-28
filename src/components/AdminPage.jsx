@@ -181,7 +181,7 @@ function DayDetail({ day, summary, sessions, loading, error, onClose, onOpenSess
   });
   const real = sessions.filter(sessionEngaged).length;
   return (
-    <Card title={`Day detail — ${dayLabel}`} eyebrow="Pacific calendar day · admin, internal and crawler tabs excluded" action={<button className="adm-btn adm-btn-ghost adm-btn-sm" onClick={onClose}>Close day</button>} full>
+    <Card title={`Day detail — ${dayLabel}`} eyebrow="Pacific calendar day · known admins and bots excluded" action={<button className="adm-btn adm-btn-ghost adm-btn-sm" onClick={onClose}>Close day</button>} full>
       {error ? <p role="alert" className="adm-error-bar">Could not load this day: {error}</p> : loading ? (
         <div className="adm-skeleton-block" />
       ) : (
