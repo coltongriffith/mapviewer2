@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback, use
 import { supabase } from '../lib/supabase';
 import { trackEvent } from '../utils/track';
 import { getAttribution, recordSignupOnce } from '../utils/attribution';
+import { authRedirectUrl } from '../utils/authRedirect';
 import { isGrandfathered } from '../utils/pricing';
 import {
   resolveTier, entitlementsFor, rememberProGrace, clearProGrace, TIERS,
@@ -131,15 +132,15 @@ export function AuthProvider({ children }) {
     if (!supabase) throw new Error('Auth not configured');
     // Return the user to the page they signed up from (e.g. a /map/:id share
     // link) after they confirm their email, so a pending "edit a copy" resumes.
-    const emailRedirectTo = typeof window !== 'undefined' ? window.location.href : undefined;
+    const emailRedirectTo = typeof window !== 'undefined' ? authRedirectUrl(window.location.href) : undefined;
     const { error } = await supabase.auth.signUp({ email, password, options: { emailRedirectTo, data: { em_acquisition: getAttribution() } } });
     if (error) throw error;
   }
 
   async function signInWithMagicLink(email, { resumeEditor = false } = {}) {
     if (!supabase) throw new Error('Auth not configured');
-    const emailRedirectTo = resumeEditor
-      ? new URL('/?intent=resume', window.location.origin).href : window.location.href;
+    const emailRedirectTo = authRedirectUrl(resumeEditor
+      ? new URL('/?intent=resume', window.location.origin).href : window.location.href);
     const { error } = await supabase.auth.signInWithOtp({ email, options: {
       emailRedirectTo, data: { em_acquisition: getAttribution() },
     } });
@@ -161,7 +162,7 @@ export function AuthProvider({ children }) {
     // Send the user back to this origin so the PASSWORD_RECOVERY listener and
     // the reset form can pick the session up. Without redirectTo, Supabase
     // falls back to the project's Site URL, which may not be this deployment.
-    const redirectTo = typeof window !== 'undefined' ? `${window.location.origin}/` : undefined;
+    const redirectTo = typeof window !== 'undefined' ? authRedirectUrl(`${window.location.origin}/`) : undefined;
     const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
     // Do NOT surface "user not found" — that discloses whether an address has
     // an account. Supabase already returns success for unknown addresses;
