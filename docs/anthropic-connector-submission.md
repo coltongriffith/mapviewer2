@@ -33,10 +33,10 @@ https://www.explorationmaps.com/terms/
 https://www.explorationmaps.com/apple-touch-icon.png
 
 ## Authentication
-None required for the public registry-backed tools in MCP version 1.1.0.
+None required at https://www.explorationmaps.com/mcp/server. The same tools are also served at https://www.explorationmaps.com/mcp/account behind OAuth 2.1 sign-in: Supabase Auth is the authorization server (dynamic client registration, PKCE), discovered from the protected resource metadata at /.well-known/oauth-protected-resource/mcp/account, with consent at https://explorationmaps.com/oauth/consent.
 
 ## Usage limits
-Free, anonymous use allows 10 map previews per hour (rolling) and 30 claim searches per hour. Each preview returns `allowance` with the number remaining; a capped call returns `RATE_LIMITED` with `resets_at`, `retry_after_seconds` and the editor URL. A shared ceiling of 300 previews per hour per network also applies.
+Free, anonymous use allows 10 map previews per hour (rolling) and 30 claim searches per hour. Each preview returns `allowance` with the number remaining; a capped call returns `RATE_LIMITED` with `resets_at`, `retry_after_seconds` and the editor URL. A shared ceiling of 300 previews per hour per network also applies. Signed in through /mcp/account: 30 previews and 90 searches per hour on the Free plan, 200 previews and 600 searches on Pro, with previews saved to the account.
 
 ## Core examples
 1. Make a mining claim map for a company in British Columbia and show roads, towns and rail.

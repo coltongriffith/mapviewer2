@@ -3609,3 +3609,12 @@ button.admx-ladder-seg { border: 0; font: inherit; padding: 0; }
 .legend-editor-heading-name { width: 100%; }
 .legend-editor-handle { cursor: grab; user-select: none; color: var(--ui-text-muted); padding: 0 2px; font-size: 12px; line-height: 1; }
 .legend-editor-handle:active { cursor: grabbing; }
+
+/* ── OAuth consent (/oauth/consent) ─────────────────────────────────────────── */
+.oauth-consent { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px 16px; background: var(--ui-surface-subtle, #f4f6f9); font-family: system-ui, sans-serif; }
+.oauth-consent-card { width: 100%; max-width: 440px; background: var(--ui-surface, #fff); border: 1px solid var(--ui-border); border-radius: 12px; padding: 24px; color: var(--ui-text); line-height: 1.5; }
+.oauth-consent-card h1 { margin: 0 0 12px; font-size: 20px; }
+.oauth-consent-card ul { margin: 8px 0 16px; padding-left: 20px; font-size: 14px; }
+.oauth-consent-actions { display: flex; gap: 8px; }
+.oauth-consent-actions .btn, .oauth-consent-actions .secondary-btn { flex: 1; padding: 10px 12px; }
+.oauth-consent-switch { margin: 14px 0 0; font-size: 13px; color: var(--ui-text-muted); }
