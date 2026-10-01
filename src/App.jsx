@@ -52,7 +52,7 @@ import { getTemplate } from './templates';
 import { buildLegendItems, resolveTemplateZones } from './templates/technicalResultsTemplate';
 import { resolveNI43101Zones, resolveTitleStripFields } from './templates/technicalReportTemplate';
 import { DEFAULT_SIDE_PANEL_GRID, resolveSidePanelZones, mapSlotPositions } from './templates/sidePanelTemplate';
-import { geojsonBounds, geojsonCenter } from './utils/geometry';
+import { geojsonBounds, geojsonCenter, unionBounds } from './utils/geometry';
 import { autoProjectionName, formatScaleDenom, scaleDenomFromMap } from './utils/geo';
 import { markerSvgUrl } from './utils/leaflet';
 import { claimSummary, claimTooltipHtml, claimPopupRowsHtml, esc } from './utils/claimInfo';
@@ -73,7 +73,8 @@ import { queueAccountSave, loadAccountSave, clearAccountSave } from './utils/pro
 import { scopingWarning } from './utils/scopingNotice';
 import { CLAIM_NAME_CAVEAT } from './utils/claimProvenance';
 import { OVERLAY_DESCRIPTIONS } from './utils/referenceOverlayCredits.js';
-import { BASEMAPS, BASEMAP_KEYS, basemapThumb } from './utils/basemapConfig.js';
+import { BASEMAPS, BASEMAP_KEYS, basemapThumb, basemapConfig } from './utils/basemapConfig.js';
+import { insetStyle, insetStylePatch } from './utils/insetStyle';
 import { applyLegendCustomization, groupLegendItems, renameLegendHeading } from './utils/legendCustomization.js';
 import { getMapFrame, projectionLabel, scaleBarHeight } from './utils/coordinateFrame.js';
 import { pickScaleBar } from './utils/scaleBar.js';
@@ -977,6 +978,28 @@ export default function App({ initialAction = null }) {
     }, 250);
     return () => window.clearTimeout(timer);
   }, [project, projectId, projectName]);
+
+  // Maps built outside the editor (the MCP connector, the agent API) arrive
+  // without the province/state a file import detects, so the Standard locator
+  // and its export drew the generic placeholder. Detect it once from what is on
+  // the map, as an import would.
+  const regionAttemptRef = useRef('');
+  useEffect(() => {
+    if (project.layout.autoInsetRegion) return;
+    const bounds = unionBounds(project.layers
+      .filter((layer) => layer.visible !== false && layer.geojson)
+      .map((layer) => geojsonBounds(visibleGeojson(layer)))
+      .filter(Boolean));
+    if (!bounds) return;
+    const key = `${projectId || ''}:${[bounds.minLng, bounds.minLat, bounds.maxLng, bounds.maxLat].map((v) => v.toFixed(3)).join(',')}`;
+    if (regionAttemptRef.current === key) return;
+    regionAttemptRef.current = key;
+    detectRegion(bounds).then((region) => {
+      // A newer project or extent has started its own attempt since.
+      if (!region || regionAttemptRef.current !== key) return;
+      setProject((prev) => (prev.layout.autoInsetRegion ? prev : { ...prev, layout: { ...prev.layout, autoInsetRegion: region } }));
+    }).catch(() => {});
+  }, [project.layers, project.layout.autoInsetRegion, projectId]);
 
   // Auto cloud-save for signed-in users editing a saved (cloud) project. The
   // local draft above already persists every 250ms; this mirrors it to the
@@ -6825,14 +6848,17 @@ export default function App({ initialAction = null }) {
                       different zoom factors — indistinguishable in the panel, so
                       the extra entries read as broken rather than as options.
                       Standard keeps whichever of those a saved project already
-                      has; only an explicit change collapses it. */}
+                      has; only an explicit change collapses it. A map tile
+                      locator (from the MCP connector) shows as its own entry so
+                      Satellite can still be chosen over it. */}
                   <select id="f-inset-mode"
-                    value={project.layout.insetMode === 'satellite_locator' ? 'satellite_locator' : 'standard'}
-                    onChange={(e) => updateLayout({
-                      insetMode: e.target.value === 'satellite_locator' ? 'satellite_locator' : 'province_state',
-                    })}>
+                    value={insetStyle(project.layout)}
+                    onChange={(e) => updateLayout(insetStylePatch(e.target.value))}>
                     <option value="standard">Standard</option>
-                    <option value="satellite_locator">Satellite</option>
+                    <option value="satellite">Satellite</option>
+                    {insetStyle(project.layout) === 'tiles' && (
+                      <option value="tiles">Map tiles ({basemapConfig(project.layout.insetBasemap).label})</option>
+                    )}
                   </select>
                 </div>
               )}

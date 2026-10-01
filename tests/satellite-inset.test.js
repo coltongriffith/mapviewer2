@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { INSET_MODES } from '../src/projectState.js';
+import { insetStylePatch } from '../src/utils/insetStyle.js';
 
 // The component and the exporter are coupled by one string — the container's
 // class name. If either side is renamed, the inset renders perfectly on screen
@@ -19,7 +20,8 @@ describe('the satellite locator is reachable', () => {
 
   it('has a control that can select it', () => {
     expect(app).toMatch(/f-inset-mode/);
-    expect(app).toMatch(/insetMode === 'satellite_locator'/);
+    expect(app).toMatch(/insetStylePatch\(e\.target\.value\)/);
+    expect(insetStylePatch('satellite').insetMode).toBe('satellite_locator');
   });
 
   it('renders inside the locator card rather than replacing it', () => {
@@ -46,10 +48,13 @@ describe('the satellite locator is reachable', () => {
     // The old list had province / country / regional / secondary zoom, which
     // all render the same generic backdrop at different zoom factors —
     // indistinguishable in the panel, so the extra entries read as broken
-    // rather than as choices.
+    // rather than as choices. An MCP map-tile locator is listed as a third,
+    // current-state-only entry so Satellite can be chosen over it; it cannot be
+    // picked from any other state.
     const block = app.slice(app.indexOf('f-inset-mode'), app.indexOf('</select>', app.indexOf('f-inset-mode')));
-    const options = [...block.matchAll(/<option value="([^"]+)">([^<]+)</g)].map((m) => m[2]);
+    const options = [...block.matchAll(/<option value="([^"]+)">([^<]+)</g)].filter((m) => m[1] !== 'tiles').map((m) => m[2]);
     expect(options).toEqual(['Standard', 'Satellite']);
+    expect(block).toMatch(/insetStyle\(project\.layout\) === 'tiles' && \(/);
   });
 
   it('does not offer a basemap picker', () => {

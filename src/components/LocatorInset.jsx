@@ -1,5 +1,6 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { geojsonBounds, unionBounds } from '../utils/geometry';
+import { detectRegion } from '../utils/detectRegion';
 import { visibleGeojson } from '../utils/featureIdentity.js';
 const SatelliteInset = React.lazy(() => import('./SatelliteInset'));
 
@@ -121,12 +122,29 @@ export default function LocatorInset({ layers, insetMode, insetBasemap, mode, in
   // insetMode alone decides, as it does in export (renderScene); insetBasemap
   // only picks the tiles, so the share page, editor and PNG agree.
   const showSatellite = !showCustom && insetMode === 'satellite_locator';
-  const showAuto = !showCustom && !showSatellite && !!autoInsetRegion;
+
+  // Maps made outside the editor (MCP connector, shared links) can arrive
+  // without a detected region; find it here, as SatelliteInset does, rather than
+  // drawing the generic placeholder for a place we can name. null = looking,
+  // false = no province or state found.
+  const [detected, setDetected] = useState(null);
+  const needsRegion = !autoInsetRegion && !showCustom && !showSatellite && !wantsCustom && !!visibleBounds;
+  useEffect(() => {
+    if (!needsRegion) { setDetected(null); return undefined; }
+    let cancelled = false;
+    detectRegion(visibleBounds)
+      .then((region) => { if (!cancelled) setDetected(region || false); })
+      .catch(() => { if (!cancelled) setDetected(false); });
+    return () => { cancelled = true; };
+  }, [needsRegion, visibleBounds?.minLng, visibleBounds?.minLat, visibleBounds?.maxLng, visibleBounds?.maxLat]); // eslint-disable-line react-hooks/exhaustive-deps
+  const region = autoInsetRegion || detected || null;
+  const detecting = needsRegion && detected === null;
+  const showAuto = !showCustom && !showSatellite && !!region;
 
   const autoSvg = useMemo(() => {
     if (!showAuto) return null;
-    return buildAutoSvg(autoInsetRegion, visibleBounds);
-  }, [showAuto, autoInsetRegion, visibleBounds]);
+    return buildAutoSvg(region, visibleBounds);
+  }, [showAuto, region, visibleBounds]);
 
   return (
     <div className="template-card inset-card polished" style={zone}>
@@ -174,6 +192,10 @@ export default function LocatorInset({ layers, insetMode, insetBasemap, mode, in
         </svg>
       ) : wantsCustom ? (
         <div className="inset-empty-state">No custom inset image loaded yet.</div>
+      ) : detecting ? (
+        <svg viewBox="0 0 100 100" className="inset-svg" preserveAspectRatio="none">
+          <rect x="0" y="0" width="100" height="100" rx="8" fill={bgFill || '#f0f4f8'} />
+        </svg>
       ) : (
         <svg viewBox="0 0 100 100" className="inset-svg" preserveAspectRatio="none">
           <defs>
@@ -218,7 +240,7 @@ export default function LocatorInset({ layers, insetMode, insetBasemap, mode, in
       {!showCustom ? (
         <div className="inset-mode-label">
           {insetLabel
-            || (showAuto ? autoInsetRegion.name : null)
+            || (showAuto ? region.name : null)
             || (showSatellite ? (autoInsetRegion?.name || 'Satellite locator') : null)
             || referenceBounds?.label || 'Project in State'}
         </div>
