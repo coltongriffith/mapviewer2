@@ -32,7 +32,8 @@ beforeAll(async () => {
     $$;
     alter default privileges in schema public grant execute on functions to anon, authenticated;
   `);
-  const sql = readFileSync('supabase/migrations/20261002120000_admin_summary.sql', 'utf8');
+  // The newest migration that defines the function is the one in effect.
+  const sql = readFileSync('supabase/migrations/20261002130000_admin_summary_real_visitors.sql', 'utf8');
   await db.exec(sql);
   await db.exec(sql); // idempotent
 }, 30000);
@@ -99,6 +100,29 @@ describe('admin summary SQL', () => {
     const d = await summary();
     expect(d.problems.failed_searches[0]).toMatchObject({ query: 'juggernaut exploration', province: 'BC' });
     expect(d.problems.errors[0]).toMatchObject({ message: 'Unable to preload CSS', people: 1 });
+  });
+
+  it('lists only errors and failed searches from real visitors', async () => {
+    const error = (sid, at, seen = 1) => db.query("insert into public.error_events (session_id, message, path, seen_count, occurred_at) values ($1,'Map failed to load','/app',$2,$3)", [sid, seen, at]);
+    const failedSearch = (sid, q) => db.query("insert into public.search_events (session_id, kind, province, result_count, outcome, query_text, created_at) values ($1,'company','BC',0,'empty',$2,'2026-09-02T16:01:00Z')", [sid, q]);
+    // Two real visitors saw the error (one of them twice).
+    await view('a', '2026-09-02T15:00:00Z', { referrer: 'https://www.google.com/' });
+    await view('b', '2026-09-02T15:10:00Z', { referrer: 'https://www.bing.com/' });
+    await error('a', '2026-09-02T15:01:00Z', 2);
+    await error('b', '2026-09-02T15:11:00Z');
+    // A data-centre bot and your own session hit errors and failed searches too.
+    await view('dc', '2026-09-02T16:00:00Z', { city: 'Ashburn' });
+    await error('dc', '2026-09-02T16:01:00Z', 40);
+    await failedSearch('dc', 'bot query');
+    await view('me', '2026-09-02T17:00:00Z');
+    await event('me', 'internal_session', '2026-09-02T17:00:00Z');
+    await db.query("insert into public.error_events (session_id, message, path, seen_count, occurred_at) values ('me','Only you saw this','/admin',1,'2026-09-02T17:01:00Z')");
+    await failedSearch('me', 'my test query');
+    await failedSearch('a', 'juggernaut exploration');
+
+    const d = await summary();
+    expect(d.problems.errors).toEqual([expect.objectContaining({ message: 'Map failed to load', people: 2, times: 3 })]);
+    expect(d.problems.failed_searches.map((f) => f.query)).toEqual(['juggernaut exploration']);
   });
 
   it('refuses non-admins and is never granted to anon', async () => {
