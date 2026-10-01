@@ -10,7 +10,9 @@ const autoDownload = () => {
   try { return new URLSearchParams(window.location.search).get('download') === 'png'; } catch { return false; }
 };
 
-export default function SharedMapViewer({ mapId, onExit, user, entitlements, onEditCopy }) {
+// entitlementsReady: sign-in and the plan have resolved, so `entitlements` is
+// the viewer's real plan rather than the signed-out default.
+export default function SharedMapViewer({ mapId, onExit, user, entitlements, entitlementsReady = true, onEditCopy }) {
   const [project, setProject] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -31,11 +33,22 @@ export default function SharedMapViewer({ mapId, onExit, user, entitlements, onE
     }
   }, [exporter, project, download, entitlements, mapId, user?.id]);
 
+  // The automatic download waits for the viewer's plan, so a Pro account is
+  // not handed the free credit and size cap. A plan that never resolves (the
+  // lookup failed) falls back to free after 10 s, as the editor does.
+  const [planWaitOver, setPlanWaitOver] = useState(false);
+  useEffect(() => {
+    if (!exporter || entitlementsReady || !autoDownload()) return undefined;
+    const timer = setTimeout(() => setPlanWaitOver(true), 10000);
+    return () => clearTimeout(timer);
+  }, [exporter, entitlementsReady]);
+
   useEffect(() => {
     if (!exporter || autoStarted.current || !autoDownload()) return;
+    if (!entitlementsReady && !planWaitOver) return;
     autoStarted.current = true;
     downloadPng();
-  }, [exporter, downloadPng]);
+  }, [exporter, downloadPng, entitlementsReady, planWaitOver]);
 
   const handleEdit = async () => {
     if (!project || editing) return;

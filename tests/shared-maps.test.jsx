@@ -134,4 +134,33 @@ describe('SharedMapViewer PNG download', () => {
     (await screen.findByRole('button', { name: 'Download PNG' })).click();
     expect(await screen.findByRole('alert')).toHaveTextContent('The PNG could not be made');
   });
+
+  it('waits for a signed-in viewer\'s plan before the automatic download', async () => {
+    window.history.replaceState({}, '', '/map/abc123def456?download=png');
+    rpcMock.mockResolvedValue({ data: state, error: null });
+    exportPng.mockResolvedValue({ clamped: false });
+    const props = { mapId: 'abc123def456', onExit: () => {}, user: { id: 'u1' } };
+    const { rerender } = render(<SharedMapViewer {...props} entitlements={{ clean_export: false, max_export_pixels: 3000 }} entitlementsReady={false} />);
+    await screen.findByRole('button', { name: 'Download PNG' });
+    expect(exportPng).not.toHaveBeenCalled();
+    rerender(<SharedMapViewer {...props} entitlements={{ clean_export: true, max_export_pixels: 12000 }} entitlementsReady />);
+    await waitFor(() => expect(exportPng).toHaveBeenCalledTimes(1));
+    expect(exportPng).toHaveBeenCalledWith({ clean_export: true, max_export_pixels: 12000 });
+  });
+
+  it('falls back to the free plan if the plan never resolves', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      window.history.replaceState({}, '', '/map/abc123def456?download=png');
+      rpcMock.mockResolvedValue({ data: state, error: null });
+      exportPng.mockResolvedValue({ clamped: false });
+      render(<SharedMapViewer mapId="abc123def456" onExit={() => {}} user={{ id: 'u1' }} entitlements={{ clean_export: false }} entitlementsReady={false} />);
+      await screen.findByRole('button', { name: 'Download PNG' });
+      expect(exportPng).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(10000);
+      await waitFor(() => expect(exportPng).toHaveBeenCalledWith({ clean_export: false }));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

@@ -645,7 +645,7 @@ export default function App({ initialAction = null }) {
   const insetInputRef = useRef(null);
   const uploadInputRef = useRef(null);
 
-  const { user, loading: authLoading, signInWithMagicLink, entitlements, tier, refreshPlan } = useAuth();
+  const { user, loading: authLoading, signInWithMagicLink, entitlements, tier, refreshPlan, planReady } = useAuth();
   const [storageWarningDismissed, setStorageWarningDismissed] = useState(false);
   const [showBrandKitManager, setShowBrandKitManager] = useState(false);
   const [showAuthFromGate, setShowAuthFromGate] = useState(false);
@@ -4976,6 +4976,7 @@ export default function App({ initialAction = null }) {
           mapId={sharedMapId}
           user={user}
           entitlements={entitlements}
+          entitlementsReady={!authLoading && (!user || planReady)}
           onEditCopy={handleEditSharedCopy}
           onExit={() => { window.location.href = '/'; }}
         />
