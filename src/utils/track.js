@@ -28,7 +28,8 @@ async function post(payload) {
         'Content-Type': 'application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
-      body: JSON.stringify({ session_id: getSessionId(), ...payload }),
+      // Automated browsers are flagged so /api/track can leave them out.
+      body: JSON.stringify({ session_id: getSessionId(), ...payload, ...(navigator.webdriver ? { automated: true } : {}) }),
     });
     if (import.meta.env.DEV && !res.ok && res.status !== 204) {
       console.warn(`[track] ${payload.kind} rejected: ${res.status}`);

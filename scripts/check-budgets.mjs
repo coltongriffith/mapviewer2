@@ -137,7 +137,7 @@ if (initialJs > initialBudget) {
 const appKey = Object.keys(manifest).find(key => manifest[key].name === 'App');
 if (!appKey) throw new Error('Missing editor chunk in build manifest');
 for (const [name, entries, limit, forbidden] of [
-  ['admin', ['index.html', 'src/components/AdminPage.jsx', 'src/components/admin/GrowthTab.jsx'],
+  ['admin', ['index.html', 'src/components/AdminPage.jsx', 'src/components/admin/SummaryTab.jsx'],
     authConfigured ? BUDGETS.adminAuthJsGzipKb : BUDGETS.adminJsGzipKb, /\/(App-|MapCanvas-|vendor-leaflet-|vendor-export-|regionsNA-)/],
   ['editor', ['index.html', appKey, 'src/components/MapCanvas.jsx'],
     authConfigured ? BUDGETS.editorAuthJsGzipKb : BUDGETS.editorJsGzipKb, /\/vendor-export-/],

@@ -228,11 +228,29 @@ describe('every RPC the app calls', () => {
 
   it('finds RPC calls to check', () => {
     expect(called.size).toBeGreaterThan(10);
-    expect(called.has('admin_get_error_summary')).toBe(true);
+    expect(called.has('admin_get_summary')).toBe(true);
   });
 
   it.each([...called])('%s is defined by SQL in this repository (called from %s)', (fn) => {
     expect(defined.has(fn), `${fn} is called from ${called.get(fn)} but no migration or setup file defines it`).toBe(true);
+  });
+});
+
+describe('admin_get_summary', () => {
+  const def = currentDefinition('admin_get_summary');
+
+  it('keeps the range arguments the Overview tab sends, gated and never granted to anon', () => {
+    expect(def, 'no migration defines admin_get_summary').toBeTruthy();
+    const body = bodyOf(def.sql, 'admin_get_summary');
+    expect(body).toMatch(/p_start\s+timestamptz/);
+    expect(body).toMatch(/p_end\s+timestamptz/);
+    expect(body).toMatch(/p_tz\s+text/);
+    expect(readFileSync('src/components/admin/useDashboardData.js', 'utf8')).toMatch(/useRpc\('admin_get_summary', reportingParams\(window\)/);
+    expect(body).toMatch(/security\s+definer/i);
+    expect(body).toMatch(/is_admin\(\)/);
+    expect(body).toMatch(/set\s+search_path\s*=\s*''/i);
+    expect(def.sql).toMatch(/revoke\s+all\s+on\s+function\s+public\.admin_get_summary/i);
+    expect(def.sql).not.toMatch(/grant\s+execute[^;]*admin_get_summary[^;]*\b(anon|public)\b/i);
   });
 });
 
@@ -248,10 +266,7 @@ describe('admin_get_error_summary', () => {
     expect(body, 'pg_temp in a definer search_path').not.toMatch(/search_path\s*=\s*[^\n]*pg_temp/i);
   });
 
-  it('keeps the argument the Health tab sends and is never granted to anon', () => {
-    const body = bodyOf(def.sql, 'admin_get_error_summary');
-    expect(body).toMatch(/p_hours\s+integer/);
-    expect(readFileSync('src/components/admin/useDashboardData.js', 'utf8')).toContain('p_hours');
+  it('is never granted to anon', () => {
     expect(def.sql).toMatch(/revoke\s+all\s+on\s+function\s+public\.admin_get_error_summary/i);
     expect(def.sql).not.toMatch(/grant\s+execute[^;]*admin_get_error_summary[^;]*\b(anon|public)\b/i);
   });

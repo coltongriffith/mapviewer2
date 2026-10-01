@@ -279,3 +279,41 @@ describe('api/track dashboard-v2 events', () => {
     expect(inserts.at(-1).row.props.format).toBe('pdf');
   });
 });
+
+describe('api/track automated traffic', () => {
+  const chrome = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36';
+
+  it.each([
+    ['a headless browser', 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/154.0.0.0 Safari/537.36'],
+    ['a search crawler', 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)'],
+    ['a script', 'python-requests/2.32.0'],
+  ])('accepts and drops a page view from %s', async (_, ua) => {
+    const res = mockRes();
+    await handler(req({ kind: 'event', session_id: SID, event: 'editor_opened' }, { ip: uniqueIp(), 'user-agent': ua }), res);
+    expect(res.statusCode).toBe(204);
+    expect(inserts).toHaveLength(0);
+  });
+
+  it('drops events a browser flags as automated (navigator.webdriver)', async () => {
+    const res = mockRes();
+    await handler(req({ kind: 'event', session_id: SID, event: 'editor_opened', automated: true }, { ip: uniqueIp(), 'user-agent': chrome }), res);
+    expect(res.statusCode).toBe(204);
+    expect(inserts).toHaveLength(0);
+  });
+
+  it('still records an ordinary browser', async () => {
+    const res = mockRes();
+    await handler(req({ kind: 'event', session_id: SID, event: 'editor_opened' }, { ip: uniqueIp(), 'user-agent': chrome }), res);
+    expect(res.statusCode).toBe(204);
+    expect(inserts.at(-1).row.event).toBe('editor_opened');
+  });
+
+  it('never drops a confirmed signup, whatever the browser says', async () => {
+    getUserMock.mockResolvedValue({ data: { user: { id: '11111111-1111-4111-8111-111111111111', email_confirmed_at: '2026-10-01T00:00:00Z' } }, error: null });
+    const res = mockRes();
+    await handler(req({ kind: 'event', session_id: SID, event: 'signup_completed', automated: true },
+      { ip: uniqueIp(), 'user-agent': 'HeadlessChrome', authorization: 'Bearer token' }), res);
+    // Reached account verification instead of being dropped as automated.
+    expect(getUserMock).toHaveBeenCalled();
+  });
+});

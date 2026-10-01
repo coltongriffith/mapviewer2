@@ -3356,8 +3356,9 @@ button.claim-notices-chip[aria-expanded="true"] { border-color: var(--ui-border-
 
 /* InfoTip */
 .admx-info{position:relative;display:inline-flex;margin-left:6px;color:var(--ui-text-muted);cursor:help;font-size:12px;vertical-align:middle}
-.admx-info-pop{position:absolute;left:50%;top:150%;transform:translateX(-50%);width:250px;background:var(--ui-text);color:var(--ui-border);font-size:12px;font-weight:400;line-height:1.5;text-transform:none;letter-spacing:normal;padding:9px 11px;border-radius:var(--r-md);box-shadow:var(--shadow-overlay);opacity:0;visibility:hidden;transition:opacity .12s;z-index:50;pointer-events:none}
-.admx-info:hover .admx-info-pop,.admx-info:focus .admx-info-pop{opacity:1;visibility:visible}
+/* display:none, not visibility, so a closed tip near the edge never widens a phone's layout viewport. */
+.admx-info-pop{display:none;position:absolute;left:50%;top:150%;transform:translateX(-50%);width:250px;max-width:calc(100vw - 32px);background:var(--ui-text);color:var(--ui-border);font-size:12px;font-weight:400;line-height:1.5;text-transform:none;letter-spacing:normal;padding:9px 11px;border-radius:var(--r-md);box-shadow:var(--shadow-overlay);z-index:50;pointer-events:none}
+.admx-info:hover .admx-info-pop,.admx-info:focus .admx-info-pop{display:block}
 
 /* Delta chips */
 .admx-delta{font-size:12px;font-weight:600;padding:1px 6px;border-radius:var(--r-md);white-space:nowrap}
@@ -3527,29 +3528,39 @@ button.claim-notices-chip[aria-expanded="true"] { border-color: var(--ui-border-
 .admx-since-note{font-size:11px;color:var(--ui-text-muted);margin-top:4px}
 
 /* Growth reports: counts and denominators remain readable on small screens. */
-.growth-heading { margin: 24px 0; }
-.growth-heading h1 { font-size: clamp(22px, 3vw, 30px); letter-spacing: -.035em; margin-bottom: 8px; }
-.growth-heading p, .growth-funnel small { color: #5f6e72; }
-.growth-tiles, .growth-cohort { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 20px; }
+.growth-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 8px; }
 .growth-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
 .growth-grid > *, .growth-tiles > * { min-width: 0; }
-.growth-funnel { list-style: none; padding: 0; display: grid; gap: 18px; }
-.growth-funnel li > div:first-child { display: flex; justify-content: space-between; gap: 10px; }
-.growth-track { background: #edf1f0; height: 8px; border-radius: 4px; overflow: hidden; margin: 7px 0 4px; }
-.growth-track span { display: block; background: #287454; height: 100%; }
-.growth-actions { padding-left: 20px; display: grid; gap: 16px; line-height: 1.6; }
-.growth-actions code { font-size: 12px; overflow-wrap: anywhere; }
-.growth-signals { display: flex; gap: 24px; flex-wrap: wrap; border-top: 1px solid #e4e9e7; padding-top: 16px; }
-.growth-cohort strong, .growth-cohort span { display: block; }
-.growth-cohort strong { font-size: 26px; margin: 12px 0 6px; }
-.growth-cohort span { color: #5f6e72; font-size: 13px; }
+/* Overview (SummaryTab) */
+.sum-excluded { margin: 0 0 18px; }
+.sum-sub { font-size: 11px; font-weight: 400; overflow-wrap: anywhere; }
+.sum-path { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sum-funnel { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+.sum-funnel li { display: grid; grid-template-columns: minmax(0, 11rem) 1fr 3rem; align-items: center; gap: 10px; font-size: 13px; }
+.sum-funnel strong { text-align: right; font-variant-numeric: tabular-nums; }
+.sum-funnel-track { background: #edf1f0; height: 8px; border-radius: 4px; overflow: hidden; }
+.sum-funnel-track span { display: block; height: 100%; background: #287454; }
+.sum-stuck, .sum-list { list-style: none; padding: 0; margin: 0 0 12px; display: grid; gap: 8px; font-size: 13px; }
+.sum-list li { display: grid; gap: 2px; min-width: 0; }
+.sum-list .adm-muted { font-size: 12px; }
+.sum-msg { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sum-subhead { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--ui-text-muted); margin: 16px 0 8px; display: flex; align-items: center; gap: 6px; }
+.sum-feedback { display: flex; align-items: center; gap: 8px; font-size: 13px; margin: 0 0 12px; }
+.sum-steps { display: flex; flex-wrap: wrap; gap: 4px; }
+.sum-step { font-size: 11px; padding: 2px 7px; border-radius: 999px; background: #edf1f0; color: #142126; white-space: nowrap; }
+.sum-step-bad { background: #f6e3dc; color: #8a3414; }
+.adm-link { background: none; border: 0; padding: 0; font: inherit; color: #176b87; cursor: pointer; text-align: left; overflow-wrap: anywhere; }
+.adm-link:hover { text-decoration: underline; }
+.sum-journey { font-size: 12px; margin-top: 2px; }
+/* The last tile's tip opens leftward so it stays on screen. */
+.growth-tiles > :last-child .admx-info-pop { left: auto; right: -8px; transform: none; }
 .adm-report-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin: 18px 0; }
 .adm-report-toolbar label { display: flex; align-items: center; gap: 8px; }
 .adm-report-status { display: flex; align-items: center; gap: 10px; font-size: 12px; color: #5f6e72; }
 .adm-table-scroll { overflow-x: auto; }
 .adm-table th[scope="row"] { overflow-wrap: anywhere; }
-@media (max-width: 950px) { .growth-tiles, .growth-cohort { grid-template-columns: repeat(2, minmax(0, 1fr)); } .growth-grid { grid-template-columns: 1fr; } }
-@media (max-width: 480px) { .growth-tiles, .growth-cohort { grid-template-columns: 1fr; } .adm-report-status { flex-wrap: wrap; } }
+@media (max-width: 950px) { .growth-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } .growth-grid { grid-template-columns: 1fr; } }
+@media (max-width: 480px) { .growth-tiles { grid-template-columns: 1fr; } .adm-report-status { flex-wrap: wrap; } .sum-funnel li { grid-template-columns: minmax(0, 1fr) 3rem; } .sum-funnel-track { grid-column: 1 / -1; grid-row: 2; } }
 
 .adm-modal-dialog { border: 0; padding: 0; background: transparent; width: min(560px, calc(100vw - 32px)); max-width: none; }
 .adm-modal-dialog::backdrop { background: rgba(20, 33, 38, .45); }
