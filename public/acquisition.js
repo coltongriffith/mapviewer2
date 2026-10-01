@@ -68,7 +68,7 @@
         var props = { path: window.location.pathname, campaign: target.searchParams.get('utm_campaign'),
           position: target.searchParams.get('utm_content') || 'unspecified', intent: target.searchParams.get('intent') || (target.searchParams.has('claims') ? 'company_map' : 'navigation') };
         fetch('/api/track', { method: 'POST', keepalive: true, headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ kind: 'event', session_id: session(), event: 'content_cta_clicked', props: props })
+          body: JSON.stringify({ kind: 'event', session_id: session(), event: 'content_cta_clicked', props: props, automated: navigator.webdriver === true || undefined })
         }).catch(function () { /* optional */ });
       } catch (_) { /* never block navigation */ }
     });
@@ -78,7 +78,7 @@
     if (!sid) return;
     fetch('/api/track', {
       method: 'POST', keepalive: true, headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(Object.assign({ kind: 'pageview', session_id: sid, device: /Mobi|Android/i.test(navigator.userAgent) ? 'mobile' : 'desktop' }, window.emAcquisition.entry))
+      body: JSON.stringify(Object.assign({ kind: 'pageview', session_id: sid, device: /Mobi|Android/i.test(navigator.userAgent) ? 'mobile' : 'desktop', automated: navigator.webdriver === true || undefined }, window.emAcquisition.entry))
     }).then(function (res) {
       if (res.ok) try { sessionStorage.setItem(visitKey, '1'); } catch (_) { /* optional */ }
     }).catch(function () { /* analytics never blocks navigation */ });

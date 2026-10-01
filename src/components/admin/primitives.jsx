@@ -101,14 +101,15 @@ export function ColumnChart({
   series = [], onPick,
   barKey = 'active_users', barLabel = 'active users',
   lineKey = 'sessions', lineLabel = 'page views',
-  ariaLabel = 'Daily active users',
+  ariaLabel = 'Daily active users', sharedScale = false,
   empty = 'No signed-in activity in this window yet. Anonymous traffic is on the Acquisition tab.',
 }) {
   const [hover, setHover] = useState(null);
   if (!series.length) return <EmptyHint>{empty}</EmptyHint>;
   const W = 720, H = 200, padL = 28, padR = 8, padT = 12, padB = 22;
   const iw = W - padL - padR, ih = H - padT - padB;
-  const maxA = Math.max(...series.map((s) => Number(s[barKey]) || 0), 2);
+  // sharedScale: bar and line count the same thing, so draw them on one axis.
+  const maxA = Math.max(...series.map((s) => Math.max(Number(s[barKey]) || 0, sharedScale ? Number(s[lineKey]) || 0 : 0)), 2);
   // integer y ticks: 0..maxA stepped to ~4 lines
   const step = Math.max(1, Math.ceil(maxA / 4));
   const top = Math.ceil(maxA / step) * step;
@@ -117,7 +118,7 @@ export function ColumnChart({
   const bw = Math.min(24, (iw / n) * 0.62);
   const x = (i) => padL + (iw / n) * (i + 0.5);
   const y = (v) => padT + ih - (v / top) * ih;
-  const maxSess = Math.max(...series.map((s) => Number(s[lineKey]) || 0), 1);
+  const maxSess = sharedScale ? top : Math.max(...series.map((s) => Number(s[lineKey]) || 0), 1);
   const ys = (v) => padT + ih - (v / maxSess) * ih;
   const hasSignups = series.some((s) => Number(s.signups) > 0);
   const sessPath = series.map((s, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)} ${ys(Number(s[lineKey]) || 0).toFixed(1)}`).join(' ');

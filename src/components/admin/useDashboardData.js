@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
-import { dashboardWindow, pacificDate } from './dateWindow';
+import { summaryWindow, pacificDate } from './dateWindow';
 
 export function useDashboardWindow(range) {
   const [today, setToday] = useState(pacificDate);
@@ -11,7 +11,7 @@ export function useDashboardWindow(range) {
     document.addEventListener('visibilitychange', update);
     return () => { clearInterval(timer); document.removeEventListener('visibilitychange', update); };
   }, []);
-  return dashboardWindow(range, new Date(`${today}T12:00:00Z`));
+  return summaryWindow(range, new Date(`${today}T12:00:00Z`));
 }
 
 // One bounded cache per hook, scoped to the account and exact query window.
@@ -65,15 +65,11 @@ export function useRpc(fn, params, enabled = true) {
   };
 }
 
-export const useGrowth = (window, enabled) => useRpc('admin_get_growth', window, enabled);
 const reportingParams = window => ({ ...window, p_tz: window.p_start >= '2026-03-09' ? 'Etc/GMT+7' : 'America/Vancouver' });
-export const useOverview = (window, enabled) => useRpc('admin_get_overview', reportingParams(window), enabled);
-export const useEngagement = (window, enabled) => useRpc('admin_get_engagement', reportingParams(window), enabled);
-export const useDailyActivity = (window, enabled) => useRpc('admin_get_daily_activity', reportingParams(window), enabled);
+export const useSummary = (window, enabled) => useRpc('admin_get_summary', reportingParams(window), enabled);
 export const useUsersOverview = enabled => useRpc('admin_get_users_overview', { p_tz: pacificDate() >= '2026-03-09' ? 'Etc/GMT+7' : 'America/Vancouver' }, enabled);
 export const useRevenue = enabled => useRpc('admin_get_billing_metrics', {}, enabled);
 export const useTenureOps = enabled => useRpc('admin_get_tenure_ops', {}, enabled);
-export const useErrorSummary = (enabled, hours = 24) => useRpc('admin_get_error_summary', { p_hours: hours }, enabled);
 export const useFeedback = (enabled, status = null) => useRpc('admin_get_feedback', { p_status: status, p_limit: 100 }, enabled);
 
 export function useUserDetail() {

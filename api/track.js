@@ -158,6 +158,16 @@ async function resolveUser(req, sb) {
 
 async function resolveUserId(req, sb) { return (await resolveUser(req, sb))?.id || null; }
 
+// Crawlers, uptime checks and automated browsers (headless runs, agents that
+// set navigator.webdriver) are not visitors. They are accepted and dropped so
+// they never reach the dashboard. A confirmed signup is always recorded.
+const AUTOMATED_UA = /bot\b|bot\/|crawl|spider|slurp|headless|lighthouse|pagespeed|gtmetrix|pingdom|uptime|python-|curl\/|wget|httpclient|okhttp|phantomjs|selenium|puppeteer|playwright|bingpreview|facebookexternalhit|embedly/i;
+
+export function isAutomated(req, body) {
+  if (body?.automated === true) return true;
+  return AUTOMATED_UA.test(String(req.headers?.['user-agent'] || ''));
+}
+
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
   if (req.method === 'OPTIONS') {
@@ -187,6 +197,8 @@ export default async function handler(req, res) {
 
   const sessionId = str(body.session_id, 64);
   if (!sessionId || !SESSION_ID_RE.test(sessionId)) return res.status(400).json({ error: 'invalid session_id' });
+
+  if (body.event !== 'signup_completed' && isAutomated(req, body)) return res.status(204).end();
 
   // Without the service key we accept and drop — analytics never breaks the UI.
   if (!SUPABASE_URL || !SERVICE_KEY) {

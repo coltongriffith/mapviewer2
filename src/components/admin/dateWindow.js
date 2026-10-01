@@ -36,6 +36,11 @@ export function dashboardWindow(range, now = new Date()) {
   const end = pacificDate(now);
   return { p_start: pacificMidnight(addCalendarDays(end, -range)), p_end: pacificMidnight(end) };
 }
+// The last `range` Pacific days, today included, so new visits show up at once.
+export function summaryWindow(range, now = new Date()) {
+  const today = pacificDate(now);
+  return { p_start: pacificMidnight(addCalendarDays(today, 1 - range)), p_end: pacificMidnight(addCalendarDays(today, 1)) };
+}
 export function dayWindow(day) {
   return { p_start: pacificMidnight(day), p_end: pacificMidnight(addCalendarDays(day, 1)) };
 }
