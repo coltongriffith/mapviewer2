@@ -131,6 +131,18 @@ describe('Refit Map still frames what is left on screen', () => {
     expect(map.calls.length, 'Refit Map did nothing at all').toBeGreaterThan(0);
   });
 
+  it('shrinks the panel padding to fit a phone-sized map', () => {
+    // 180px + 90px of side padding on a 390px map made Leaflet's zoom NaN.
+    const project = { layers: [{ id: 'claims', role: 'claims', visible: true, geojson: { type: 'FeatureCollection', features: [cell(-120, 55, 1)] } }], layout: {} };
+    const map = { ...fakeMap(), getSize: () => ({ x: 390, y: 600 }) };
+    map.calls = [];
+    map.fitBounds = (...a) => map.calls.push(a);
+    fitProjectToTemplate(project, map, { zones: {} }, 'balanced', { focusRoles: true });
+    const [, { paddingTopLeft, paddingBottomRight }] = map.calls[0];
+    expect(paddingTopLeft[0] + paddingBottomRight[0]).toBeLessThanOrEqual(390 * 0.6 + 0.001);
+    expect(paddingTopLeft[1] + paddingBottomRight[1]).toBe(180); // tall enough already
+  });
+
   it('still prefers the claims layer when it has features left', () => {
     const project = {
       layers: [

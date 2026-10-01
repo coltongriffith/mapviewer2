@@ -21,12 +21,22 @@ const MapCanvas = React.lazy(() => import('./MapCanvas'));
 
 // ── Helpers (mirrored from App.jsx) ──────────────────────────────────────────
 
+// Wait until the visible tiles have loaded (or give up after `timeoutMs`), so
+// a PNG is not drawn over a half-painted basemap.
+async function tilesSettled(container, timeoutMs = 15000) {
+  const end = Date.now() + timeoutMs;
+  while (Date.now() < end) {
+    if (!container?.querySelector('img.leaflet-tile:not(.leaflet-tile-loaded)')) return;
+    await new Promise((r) => setTimeout(r, 250));
+  }
+}
+
 function zoneStyle(zone) {
   if (!zone || !zone.width || !zone.height) return { display: 'none' };
   return { position: 'absolute', top: zone.top, left: zone.left, width: zone.width, height: zone.height, zIndex: 400 };
 }
 
-export default function ReadOnlyMapStage({ project }) {
+export default function ReadOnlyMapStage({ project, onExportReady }) {
   const containerRef = useRef(null);
   const leafletMapRef = useRef(null);
   const [map, setMap] = useState(null);
@@ -160,6 +170,31 @@ export default function ReadOnlyMapStage({ project }) {
     }
     fitProjectToTemplate(project, map, { ...template, zones: resolvedZones }, 'balanced', { focusRoles: true });
   }, [map, project, template, resolvedZones]);
+
+  // Hand the viewer a PNG download of exactly this stage, built the way the
+  // editor builds its export scene and under the same plan rules (the
+  // viewer's plan sets the credit and the largest size).
+  useEffect(() => {
+    if (!map || !onExportReady) return;
+    onExportReady({
+      downloadPng: async (entitlements) => {
+        const container = containerRef.current;
+        await tilesSettled(container);
+        const [{ buildScene }, { exportPNG }, { clampExportSize }] = await Promise.all([
+          import('../export/buildScene'), import('../export/exportPNG'), import('../utils/entitlements'),
+        ]);
+        const opts = { ...(project.layout?.exportSettings || {}), noWatermark: true, paidTier: Boolean(entitlements?.clean_export) };
+        const baseW = opts.customWidth > 0 ? opts.customWidth : (container?.offsetWidth || 1600);
+        const baseH = opts.customHeight > 0 ? opts.customHeight : (container?.offsetHeight || 1000);
+        const ratio = opts.customWidth > 0 ? 1 : (Number(opts.pixelRatio) || 1);
+        const fit = clampExportSize(entitlements, baseW * ratio, baseH * ratio);
+        if (fit.clamped) Object.assign(opts, { customWidth: fit.width, customHeight: fit.height, pixelRatio: 1 });
+        const scene = buildScene(container, { ...project, layout: { ...project.layout, legendItems } }, map);
+        await exportPNG(scene, opts);
+        return { clamped: fit.clamped };
+      },
+    });
+  }, [map, onExportReady, project, legendItems]);
 
   const layout = project.layout || {};
 

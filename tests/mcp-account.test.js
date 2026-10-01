@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const db = vi.hoisted(() => ({ shares: [], plans: {}, created: [], oauthEnabled: true }));
+const db = vi.hoisted(() => ({ shares: [], plans: {}, created: [], oauthEnabled: true, kits: [], projects: [] }));
 
 vi.mock('../api/_lib/supabase-server.js', () => ({
   serverSupabase: () => ({
@@ -18,6 +18,20 @@ vi.mock('../api/_lib/supabase-server.js', () => ({
   }),
   // Signed-in previews must be created as the user, never with a creator key.
   userSupabase: (token) => ({
+    // Rows the user can read, filtered by eq() like RLS plus the query would.
+    from: (table) => {
+      let rows = (table === 'templates' ? db.kits : db.projects).filter((r) => r.token === token);
+      const query = {
+        select: () => query,
+        eq: (col, value) => { rows = rows.filter((r) => col === 'user_id' || r[col] === value); return query; },
+        is: () => query,
+        order: () => query,
+        limit: (n) => Promise.resolve({ data: rows.slice(0, n), error: null }),
+        maybeSingle: () => Promise.resolve({ data: rows[0] || null, error: null }),
+        then: (resolve) => resolve({ data: rows, error: null }),
+      };
+      return query;
+    },
     rpc: (name, args) => {
       db.created.push({ token, name, args });
       return Promise.resolve({ data: 'acct-share', error: null });
@@ -98,7 +112,7 @@ describe('MCP account connector', () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(NOW);
     process.env.SUPABASE_URL = 'https://proj.supabase.co';
-    Object.assign(db, { shares: [], plans: {}, created: [], oauthEnabled: true });
+    Object.assign(db, { shares: [], plans: {}, created: [], oauthEnabled: true, kits: [], projects: [] });
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: db.oauthEnabled })));
   });
   afterEach(() => {
@@ -165,6 +179,7 @@ describe('MCP account connector', () => {
     const result = res.body.result.structuredContent;
     expect(result.allowance).toEqual({ tier: 'free', limit: 30, remaining: 25, window_seconds: 3600 });
     expect(result.expires_in_days).toBeNull();
+    expect(result.png_download_url).toBe(`${result.share_url}?download=png`);
     expect(result.warnings).toContain('This map is saved to your ExplorationMaps account and does not expire.');
     expect(result.warnings).toContain('Previews left this hour: 25 of 30 on the Free plan.');
     expect(db.created).toEqual([{ token: 'free-b', name: 'create_shared_map', args: { p_state: expect.any(Object) } }]);
@@ -189,5 +204,67 @@ describe('MCP account connector', () => {
     db.shares = shares(10, 40);
     const res = await call({ query: {}, body: previewBody });
     expect(res.body.result.structuredContent.error.message).toMatch(/Signed-in accounts get 30 per hour: add the ExplorationMaps account connector at https:\/\/www\.explorationmaps\.com\/mcp\/account and sign in\./);
+  });
+
+  it('applies the account\'s brand kit, and lists saved maps to copy a look from', async () => {
+    const logo = 'data:image/png;base64,AAAA';
+    db.kits = [{ token: 'pro-k', id: 'kit-1', name: 'Evolution', is_default: true, config: { logo, accentColor: '#c9a227', themeId: 'modern_dark', templateId: 'other', referenceOverlays: { roads: false } } }];
+    db.projects = [{ token: 'pro-k', id: 'map-1', name: 'Tenure figure', updated_at: '2026-09-30T00:00:00Z', layout: { accentColor: '#112233', logoCorner: 'top-left', fonts: { title: 'Lora' } } }];
+
+    let res = await call({ token: 'pro-k', body: previewBody });
+    let result = res.body.result.structuredContent;
+    expect(result.branding_applied).toMatchObject({ logo: true, primary_color: '#c9a227', source: 'brand kit: Evolution' });
+    expect(result.layers_applied).toContain('company_logo');
+    const layout = db.created.at(-1).args.p_state.layout;
+    expect(layout).toMatchObject({ logo, accentColor: '#c9a227', themeId: 'modern_dark' });
+    // The kit styles the map; it does not change its type or overlays.
+    expect(layout.templateId).not.toBe('other');
+    expect(layout.referenceOverlays).not.toEqual({ roads: false });
+
+    res = await call({ token: 'pro-k', body: { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'list_my_maps', arguments: {} } } });
+    expect(res.body.result.structuredContent).toMatchObject({
+      maps: [expect.objectContaining({ id: 'map-1', name: 'Tenure figure' })],
+      brand_kits: [expect.objectContaining({ id: 'kit-1', name: 'Evolution', is_default: true })],
+    });
+
+    res = await call({ token: 'pro-k', body: { ...previewBody, params: { ...previewBody.params, arguments: { ...previewBody.params.arguments, style_from_map: 'map-1', style: 'investor_clean' } } } });
+    expect(res.body.result.structuredContent.branding_applied.source).toBe('saved map: Tenure figure');
+    expect(db.created.at(-1).args.p_state.layout).toMatchObject({ accentColor: '#112233', logoCorner: 'top-left', themeId: 'investor_clean' });
+    expect(db.created.at(-1).args.p_state.layout.fonts.title).toBe('Lora');
+  });
+
+  it('keeps branding the caller passed, and can skip the kit', async () => {
+    db.kits = [{ token: 'free-k', id: 'kit-2', name: 'Kit', is_default: true, config: { accentColor: '#c9a227', themeId: 'modern_dark' } }];
+    let res = await call({ token: 'free-k', body: { ...previewBody, params: { ...previewBody.params, arguments: { ...previewBody.params.arguments, branding: { primary_color: '#00aa00' } } } } });
+    expect(db.created.at(-1).args.p_state.layout.accentColor).not.toBe('#c9a227');
+    expect(db.created.at(-1).args.p_state.layout.themeId).toBe('modern_dark');
+    res = await call({ token: 'free-k', body: { ...previewBody, params: { ...previewBody.params, arguments: { ...previewBody.params.arguments, use_brand_kit: false } } } });
+    expect(res.body.result.structuredContent.branding_applied.source).toBeNull();
+    expect(db.created.at(-1).args.p_state.layout.themeId).toBe('investor_clean');
+  });
+
+  it('rejects a map id that is not the user\'s', async () => {
+    db.projects = [{ token: 'someone-else', id: 'map-x', name: 'Not yours', layout: {} }];
+    const res = await call({ token: 'pro-z', body: { ...previewBody, params: { ...previewBody.params, arguments: { ...previewBody.params.arguments, style_from_map: 'map-x' } } } });
+    expect(res.body.result.structuredContent.error).toMatchObject({ code: 'NOT_FOUND' });
+    expect(db.created).toEqual([]);
+  });
+
+  it('offers list_my_maps and the look options only when signed in', async () => {
+    const signedIn = (await call({ token: 'free-a', body: { jsonrpc: '2.0', id: 1, method: 'tools/list' } })).body.result.tools;
+    expect(signedIn.map((t) => t.name)).toContain('list_my_maps');
+    expect(Object.keys(signedIn.find((t) => t.name === 'preview_exploration_map').inputSchema.properties)).toEqual(expect.arrayContaining(['brand_kit', 'style_from_map', 'use_brand_kit']));
+    const anonymous = (await call({ query: {}, body: { jsonrpc: '2.0', id: 1, method: 'tools/list' } })).body.result.tools;
+    expect(anonymous.map((t) => t.name)).not.toContain('list_my_maps');
+    expect(anonymous.find((t) => t.name === 'preview_exploration_map').inputSchema.properties.style_from_map).toBeUndefined();
+    const anonCall = await call({ query: {}, body: { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'list_my_maps', arguments: {} } } });
+    expect(anonCall.statusCode).toBe(400);
+  });
+
+  it('tells an anonymous caller how to use their account branding', async () => {
+    const init = await call({ query: {}, body: { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-11-25', capabilities: {} } } });
+    expect(init.body.result.instructions).toMatch(/cannot see the user's ExplorationMaps account, brand kit or saved maps.*\/mcp\/account/);
+    const res = await call({ query: {}, body: previewBody });
+    expect(res.body.result.structuredContent.warnings.join(' ')).toMatch(/no account branding.*\/mcp\/account/);
   });
 });

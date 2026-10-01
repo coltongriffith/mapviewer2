@@ -78,5 +78,12 @@ export function fitProjectToTemplate(project, map, template, mode = 'balanced', 
     access: { paddingTopLeft: [leftSafe + 68, topSafe + 24], paddingBottomRight: [rightSafe + 60, bottomSafe + 24] },
   };
 
-  map.fitBounds(bounds, { ...(padVariants[mode] || padVariants.balanced), animate: false });
+  // On a small map (a phone) the panel padding can exceed the map itself,
+  // which makes Leaflet's zoom NaN and throws. Shrink it to leave room.
+  const { paddingTopLeft, paddingBottomRight } = padVariants[mode] || padVariants.balanced;
+  const size = map.getSize?.();
+  const fit = (a, b, total) => (total > 0 && a + b > total * 0.6 ? [a, b].map((v) => (v * total * 0.6) / (a + b)) : [a, b]);
+  const [left, right] = fit(paddingTopLeft[0], paddingBottomRight[0], size?.x);
+  const [top, bottom] = fit(paddingTopLeft[1], paddingBottomRight[1], size?.y);
+  map.fitBounds(bounds, { paddingTopLeft: [left, top], paddingBottomRight: [right, bottom], animate: false });
 }

@@ -2245,7 +2245,9 @@ button.claim-notices-chip[aria-expanded="true"] { border-color: var(--ui-border-
   transition: background 0.15s;
 }
 .shared-map-cta-btn:hover { background: var(--ui-action-hover); }
-.shared-map-bar-actions { display: flex; align-items: center; gap: 10px; }
+.shared-map-bar-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+.shared-map-bar-note { color: #f0b4a0; font-size: 12px; }
+@media (max-width: 600px) { .shared-map-bar { flex-wrap: wrap; gap: 8px; padding: 10px 16px; } .shared-map-bar-actions { justify-content: flex-start; } }
 .shared-map-edit-btn {
   background: transparent; color: var(--ui-border); border: 1px solid var(--ui-text-muted);
   border-radius: var(--r-md); padding: 7px 16px; font-size: 13px; font-weight: 600;
