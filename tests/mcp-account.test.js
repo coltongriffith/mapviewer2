@@ -54,11 +54,18 @@ const NOW = Date.parse('2026-10-01T16:40:00Z');
 const minutesAgo = (n) => new Date(NOW - n * 60_000).toISOString();
 const shares = (n, oldest) => Array.from({ length: n }, (_, i) => minutesAgo(oldest - i));
 
-// A fresh module per test: the sign-in availability and account caches are
-// per-instance state.
-async function call({ method = 'POST', query = { auth: 'account' }, token, body } = {}) {
+async function freshHandler() {
   vi.resetModules();
-  const { default: handler } = await import('../api/mcp.js');
+  return (await import('../api/mcp.js')).default;
+}
+
+// A fresh module per call: the sign-in availability and account caches are
+// per-instance state.
+async function call(options) {
+  return send(await freshHandler(), options);
+}
+
+async function send(handler, { method = 'POST', query = { auth: 'account' }, token, body } = {}) {
   const res = {
     statusCode: 200,
     headers: {},
@@ -127,6 +134,23 @@ describe('MCP account connector', () => {
     const res = await call({ body: { jsonrpc: '2.0', id: 1, method: 'tools/list' } });
     expect(res.statusCode).toBe(503);
     expect(res.body.error.message).toMatch(/\/mcp\/server/);
+  });
+
+  it('rechecks a failed sign-in availability probe after 30 seconds', async () => {
+    const handler = await freshHandler();
+    const body = { jsonrpc: '2.0', id: 1, method: 'tools/list' };
+    db.oauthEnabled = false;
+    expect((await send(handler, { body })).statusCode).toBe(503);
+    db.oauthEnabled = true;
+    vi.setSystemTime(NOW + 20_000);
+    expect((await send(handler, { body })).statusCode).toBe(503);
+    vi.setSystemTime(NOW + 31_000);
+    expect((await send(handler, { body })).statusCode).toBe(401);
+    // A success is trusted for ten minutes without probing again.
+    db.oauthEnabled = false;
+    vi.setSystemTime(NOW + 9 * 60_000);
+    expect((await send(handler, { body })).statusCode).toBe(401);
+    expect(fetch).toHaveBeenCalledTimes(2);
   });
 
   it('states the signed-in allowance in the tool description', async () => {

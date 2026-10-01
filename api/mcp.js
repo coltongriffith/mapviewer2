@@ -447,10 +447,11 @@ function whenText(at) {
 }
 
 // Whether Supabase's OAuth server is switched on, so the account connector can
-// be offered. Checked at most every ten minutes per instance.
-let signInState = { at: 0, ok: false };
+// be offered. A yes is trusted for ten minutes per instance; a no is rechecked
+// after 30 seconds, so a timeout or 5xx does not turn sign-in away for long.
+let signInState = { until: 0, ok: false };
 async function accountSignInAvailable() {
-  if (Date.now() - signInState.at < 10 * 60_000) return signInState.ok;
+  if (Date.now() < signInState.until) return signInState.ok;
   let ok = false;
   try {
     const response = await fetch(`${supabaseUrl()}/.well-known/oauth-authorization-server/auth/v1`, { signal: AbortSignal.timeout(2000) });
@@ -458,7 +459,7 @@ async function accountSignInAvailable() {
   } catch {
     ok = false;
   }
-  signInState = { at: Date.now(), ok };
+  signInState = { until: Date.now() + (ok ? 10 * 60_000 : 30_000), ok };
   return ok;
 }
 
