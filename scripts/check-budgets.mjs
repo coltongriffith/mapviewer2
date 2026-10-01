@@ -49,10 +49,12 @@ const BUDGETS = {
   // 875 → 876: the locator inset detects its province/state when a map arrives
   // without one (MCP connector maps), and the Inset Style control reflects
   // map-tile locators (Oct 2026).
-  totalAuthJsGzipKb: 876,
+  // 876 → 877: the lazy /oauth/consent page for MCP account sign-in.
+  totalAuthJsGzipKb: 877,
   // 805 → 808: placed and callout logos, SVG font embedding (Sept 2026).
   // 808 → 809: shared-map viewer opens at the saved view on the fixed stage.
-  totalJsGzipKb: 809,
+  // 809 → 810: the lazy /oauth/consent page for MCP account sign-in.
+  totalJsGzipKb: 810,
   adminAuthJsGzipKb: 150,
   adminJsGzipKb: 85,
   editorAuthJsGzipKb: 335,
