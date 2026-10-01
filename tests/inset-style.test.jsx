@@ -21,9 +21,9 @@ const claims = [{
 
 describe('Inset Style control', () => {
   it('only reads Satellite when the inset tiles are imagery', () => {
-    expect(insetStyle({ insetMode: 'satellite_locator', insetBasemap: 'satellite' })).toBe('satellite');
-    expect(insetStyle({ insetMode: 'satellite_locator', insetBasemap: 'satellite_hybrid' })).toBe('satellite');
-    expect(insetStyle({ insetMode: 'satellite_locator' })).toBe('satellite');
+    expect(insetStyle({ insetMode: 'satellite_locator', insetBasemap: 'satellite' })).toBe('satellite_locator');
+    expect(insetStyle({ insetMode: 'satellite_locator', insetBasemap: 'satellite_hybrid' })).toBe('satellite_locator');
+    expect(insetStyle({ insetMode: 'satellite_locator' })).toBe('satellite_locator');
     // MCP maps carry the main map's tiles here; picking Satellite must change them.
     expect(insetStyle({ insetMode: 'satellite_locator', insetBasemap: 'light_grey' })).toBe('tiles');
     expect(insetStyle({ insetMode: 'province_state', insetBasemap: 'satellite' })).toBe('standard');
@@ -31,7 +31,7 @@ describe('Inset Style control', () => {
   });
 
   it('switches the tiles to imagery when Satellite is chosen', () => {
-    expect(insetStylePatch('satellite')).toEqual({ insetMode: 'satellite_locator', insetBasemap: 'satellite' });
+    expect(insetStylePatch('satellite_locator')).toEqual({ insetMode: 'satellite_locator', insetBasemap: 'satellite' });
     expect(insetStylePatch('standard')).toEqual({ insetMode: 'province_state' });
     expect(insetStylePatch('tiles')).toEqual({});
   });

@@ -6855,7 +6855,7 @@ export default function App({ initialAction = null }) {
                     value={insetStyle(project.layout)}
                     onChange={(e) => updateLayout(insetStylePatch(e.target.value))}>
                     <option value="standard">Standard</option>
-                    <option value="satellite">Satellite</option>
+                    <option value="satellite_locator">Satellite</option>
                     {insetStyle(project.layout) === 'tiles' && (
                       <option value="tiles">Map tiles ({basemapConfig(project.layout.insetBasemap).label})</option>
                     )}

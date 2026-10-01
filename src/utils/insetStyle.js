@@ -9,13 +9,13 @@ const SATELLITE_TILES = new Set(['satellite', 'satellite_hybrid']);
 
 export function insetStyle(layout) {
   if (layout?.insetMode !== 'satellite_locator') return 'standard';
-  return !layout.insetBasemap || SATELLITE_TILES.has(layout.insetBasemap) ? 'satellite' : 'tiles';
+  return !layout.insetBasemap || SATELLITE_TILES.has(layout.insetBasemap) ? 'satellite_locator' : 'tiles';
 }
 
 // Layout changes for a choice. Satellite always means imagery. Standard
 // collapses any older reference mode (country, regional...) only when chosen.
 export function insetStylePatch(style) {
-  if (style === 'satellite') return { insetMode: 'satellite_locator', insetBasemap: 'satellite' };
+  if (style === 'satellite_locator') return { insetMode: 'satellite_locator', insetBasemap: 'satellite' };
   if (style === 'standard') return { insetMode: 'province_state' };
   return {};
 }

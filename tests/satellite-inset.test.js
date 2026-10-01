@@ -21,7 +21,7 @@ describe('the satellite locator is reachable', () => {
   it('has a control that can select it', () => {
     expect(app).toMatch(/f-inset-mode/);
     expect(app).toMatch(/insetStylePatch\(e\.target\.value\)/);
-    expect(insetStylePatch('satellite').insetMode).toBe('satellite_locator');
+    expect(insetStylePatch('satellite_locator').insetMode).toBe('satellite_locator');
   });
 
   it('renders inside the locator card rather than replacing it', () => {
