@@ -46,7 +46,10 @@ const BUDGETS = {
   // the homepage and admin budgets are unchanged.
   // 870 → 875: the same, plus SVG font embedding and shared export label
   // geometry in the export renderer.
-  totalAuthJsGzipKb: 875,
+  // 875 → 876: the locator inset detects its province/state when a map arrives
+  // without one (MCP connector maps), and the Inset Style control reflects
+  // map-tile locators (Oct 2026).
+  totalAuthJsGzipKb: 876,
   // 805 → 808: placed and callout logos, SVG font embedding (Sept 2026).
   // 808 → 809: shared-map viewer opens at the saved view on the fixed stage.
   totalJsGzipKb: 809,
