@@ -10,7 +10,7 @@ import { clientIp, rateLimited, rateLimitedShared } from './_lib/guard.js';
 
 const SERVER_NAME = 'ExplorationMaps';
 const SERVER_VERSION = '1.1.1'; // keep in step with server.json
-const SERVER_INSTRUCTIONS = `ExplorationMaps creates mineral exploration maps from public registry records. For a request naming a company or project, identify the specific project before mapping. Search its claims, group records geographically, and pass verified claim_numbers to preview_exploration_map so unrelated projects stay out. If the project cannot be identified reliably, ask the user. When available, pass the company's HTTPS website in branding and verified project facts in facts_panel and claims_callout; do not invent ownership, grades, targets or coordinates. Choose a map type and basemap that match the request. The preview defaults to supported context overlays, nearby claims, a locator inset and a claim callout. After the call, report claims_found_primary separately from claims_found_neighbours, describe only layers_applied, and give the share_url. Public registry data is informational and is not a legal title opinion or survey. A rendered PNG and export pack are not currently returned by this MCP tool. Free use allows 3 map previews per hour: tell the user how many remain after each preview, and if the limit is reached, give them the reset time and editor link from the error.`;
+const SERVER_INSTRUCTIONS = `ExplorationMaps creates mineral exploration maps from public registry records. For a request naming a company or project, identify the specific project before mapping. Search its claims, group records geographically, and pass verified claim_numbers to preview_exploration_map so unrelated projects stay out. If the project cannot be identified reliably, ask the user. When available, pass the company's HTTPS website in branding and verified project facts in facts_panel and claims_callout; do not invent ownership, grades, targets or coordinates. Choose a map type and basemap that match the request. The preview defaults to supported context overlays, nearby claims, a locator inset and a claim callout. After the call, report claims_found_primary separately from claims_found_neighbours, describe only layers_applied, and give the share_url. Public registry data is informational and is not a legal title opinion or survey. A rendered PNG and export pack are not currently returned by this MCP tool. Free use allows 10 map previews per hour: tell the user how many remain after each preview, and if the limit is reached, give them the reset time and editor link from the error.`;
 const MODERN_VERSION = '2026-07-28';
 const LEGACY_VERSIONS = ['2025-11-25', '2025-06-18', '2025-03-26'];
 const SUPPORTED_VERSIONS = [MODERN_VERSION, ...LEGACY_VERSIONS];
@@ -172,7 +172,7 @@ const TOOLS = [
   {
     name: 'preview_exploration_map',
     title: 'Create a mineral exploration map preview',
-    description: 'Create a branded mineral exploration map from public registry claims and return a shareable URL. Provide at least one of search, location or claim_numbers. For a specific project, search its claims first and pass exact claim_numbers. Supply published facts and branding when known; never invent ownership, targets, grades or coordinates. Supports separate neighbouring claims, a project callout, locator inset, and map basemap selection. Drill and NI 43-101 layouts require user-supplied data or qualified review; this tool does not generate drill results. Free use allows 3 previews per hour; free_previews in the result reports how many remain.',
+    description: 'Create a branded mineral exploration map from public registry claims and return a shareable URL. Provide at least one of search, location or claim_numbers. For a specific project, search its claims first and pass exact claim_numbers. Supply published facts and branding when known; never invent ownership, targets, grades or coordinates. Supports separate neighbouring claims, a project callout, locator inset, and map basemap selection. Drill and NI 43-101 layouts require user-supplied data or qualified review; this tool does not generate drill results. Free use allows 10 previews per hour; allowance in the result reports how many remain.',
     inputSchema: PREVIEW_INPUT_SCHEMA,
     outputSchema: {
       type: 'object',
@@ -191,9 +191,10 @@ const TOOLS = [
         alt_text: { type: 'string' },
         source: { type: 'string' },
         expires_in_days: { type: 'integer' },
-        free_previews: {
+        allowance: {
           type: 'object',
           properties: {
+            tier: { type: 'string' },
             limit: { type: 'integer' },
             remaining: { type: 'integer' },
             window_seconds: { type: 'integer' },
@@ -364,10 +365,10 @@ function ipSubject(req, toolName) {
 
 // Anonymous preview allowance. create_shared_map enforces the same number per
 // creator key over a rolling hour, so this is the single figure users are told.
-const FREE_PREVIEWS_PER_HOUR = 3;
+const FREE_PREVIEWS_PER_HOUR = 10;
 // Abuse ceiling per egress IP. Hosted assistants share egress IPs, so hitting
 // it says nothing about the individual caller.
-const NETWORK_PREVIEWS_PER_HOUR = 60;
+const NETWORK_PREVIEWS_PER_HOUR = 300;
 const HOUR_MS = 60 * 60_000;
 
 function siteUrl() {
@@ -524,12 +525,13 @@ async function createPreview(req, args) {
 
   // This share now counts toward the caller's rolling hour.
   const after = times && [...times, Date.now()];
-  const freePreviews = after && {
+  const allowance = after && {
+    tier: 'anonymous',
     limit: FREE_PREVIEWS_PER_HOUR,
     remaining: Math.max(0, FREE_PREVIEWS_PER_HOUR - after.length),
     window_seconds: HOUR_MS / 1000,
   };
-  if (freePreviews && !freePreviews.remaining) freePreviews.next_available_at = nextPreviewAt(after).toISOString();
+  if (allowance && !allowance.remaining) allowance.next_available_at = nextPreviewAt(after).toISOString();
   const warnings = [
     ...sourceWarnings(input.jurisdiction, claims),
     ...(neighboursWarning ? [neighboursWarning] : []),
@@ -537,10 +539,10 @@ async function createPreview(req, args) {
     'Anonymous preview links expire after 30 days.',
     'Reference overlays are configured on the map; third-party tile availability is checked when the share page renders.',
   ];
-  if (freePreviews) {
-    warnings.push(freePreviews.remaining
-      ? `Free previews left this hour: ${freePreviews.remaining} of ${FREE_PREVIEWS_PER_HOUR}.`
-      : `That was the last of ${FREE_PREVIEWS_PER_HOUR} free previews this hour. The next is available at ${whenText(new Date(freePreviews.next_available_at))}.`);
+  if (allowance) {
+    warnings.push(allowance.remaining
+      ? `Free previews left this hour: ${allowance.remaining} of ${FREE_PREVIEWS_PER_HOUR}.`
+      : `That was the last of ${FREE_PREVIEWS_PER_HOUR} free previews this hour. The next is available at ${whenText(new Date(allowance.next_available_at))}.`);
   }
   const layersApplied = ['claims', input.basemap, ...input.include.filter((layer) => layer !== 'claims')];
   const layersEmpty = [];
@@ -573,7 +575,7 @@ async function createPreview(req, args) {
     alt_text: altText,
     source: jurisdiction?.registry || 'Official mineral registry',
     expires_in_days: 30,
-    ...(freePreviews ? { free_previews: freePreviews } : {}),
+    ...(allowance ? { allowance } : {}),
     warnings,
   };
 }
