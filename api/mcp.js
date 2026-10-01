@@ -4,6 +4,7 @@ import { createAgentMapProject } from '../shared/agentMapBuilder.js';
 import { runClaimsSearch } from './_lib/claims-internal.js';
 import { resolveMapClaims } from './_lib/map-claims.js';
 import { resolveBranding } from './_lib/branding.js';
+import { BRAND_KIT_SAVEABLE_KEYS, applyBrandKitConfig } from '../shared/brandKit.js';
 import { claimSummary } from '../shared/claimData.js';
 import { serverSupabase, userSupabase } from './_lib/supabase-server.js';
 import { authenticateUserBearer } from './_lib/user-auth.js';
@@ -31,8 +32,8 @@ const SERVER_NAME = 'ExplorationMaps';
 const SERVER_VERSION = '1.1.1'; // keep in step with server.json
 const SERVER_INSTRUCTIONS = `ExplorationMaps creates mineral exploration maps from public registry records. For a request naming a company or project, identify the specific project before mapping. Search its claims, group records geographically, and pass verified claim_numbers to preview_exploration_map so unrelated projects stay out. If the project cannot be identified reliably, ask the user. When available, pass the company's HTTPS website in branding and verified project facts in facts_panel and claims_callout; do not invent ownership, grades, targets or coordinates. Choose a map type and basemap that match the request. The preview defaults to supported context overlays, nearby claims, a locator inset and a claim callout. After the call, report claims_found_primary separately from claims_found_neighbours, describe only layers_applied, and give the share_url. Public registry data is informational and is not a legal title opinion or survey. A rendered PNG and export pack are not currently returned by this MCP tool.`;
 const LIMIT_INSTRUCTIONS = {
-  anonymous: ` Free use allows ${PREVIEWS_PER_HOUR.anonymous} map previews per hour: tell the user how many remain after each preview, and if the limit is reached, give them the reset time and links from the error.`,
-  account: ` The user is signed in to ExplorationMaps: ${PREVIEWS_PER_HOUR.free} map previews per hour on the Free plan, ${PREVIEWS_PER_HOUR.pro} on Pro. Tell the user how many remain after each preview, and if the limit is reached, give them the reset time and links from the error.`,
+  anonymous: ` Free use allows ${PREVIEWS_PER_HOUR.anonymous} map previews per hour: tell the user how many remain after each preview, and if the limit is reached, give them the reset time and links from the error. This connection is anonymous: it cannot see the user's ExplorationMaps account, brand kit or saved maps. If the user wants their account branding or saved maps, tell them to add ${CONNECTOR_ORIGIN}/mcp/account as a custom connector (Settings, Connectors, Add custom connector) and sign in there.`,
+  account: ` The user is signed in to ExplorationMaps: ${PREVIEWS_PER_HOUR.free} map previews per hour on the Free plan, ${PREVIEWS_PER_HOUR.pro} on Pro. Tell the user how many remain after each preview, and if the limit is reached, give them the reset time and links from the error. Previews use the user's default brand kit (logo, colours, fonts, layout) automatically; omit style so the kit's theme applies. To match one of the user's saved maps, call list_my_maps and pass its id as style_from_map; pass brand_kit to choose another kit. Previews are saved to the user's account; to export a PNG, they open share_url and choose Edit this map, then Export.`,
 };
 
 function instructionsFor(req) {
@@ -285,10 +286,41 @@ const TOOLS = [
   },
 ];
 
-// The account connector serves the same tools; only the stated limit differs.
-const ACCOUNT_TOOLS = TOOLS.map((tool) => (tool.name === 'preview_exploration_map'
-  ? { ...tool, description: tool.description.replace(LIMIT_TEXT.anonymous, LIMIT_TEXT.account) }
-  : tool));
+// Signed in, previews take the account's look and the user's saved maps can
+// be listed; everything else is the same as the anonymous connector.
+const ACCOUNT_PREVIEW_PROPERTIES = {
+  brand_kit: { type: 'string', format: 'uuid', description: 'Brand kit id from list_my_maps. Defaults to the account\'s default kit.' },
+  style_from_map: { type: 'string', format: 'uuid', description: 'Saved map id from list_my_maps: copy its logo, colours, fonts and layout. Overrides brand_kit.' },
+  use_brand_kit: { type: 'boolean', default: true, description: 'Set false for the plain ExplorationMaps look.' },
+};
+
+const LIST_MY_MAPS_TOOL = {
+  name: 'list_my_maps',
+  title: 'List my saved maps and brand kits',
+  description: 'List the signed-in user\'s saved ExplorationMaps maps and brand kits, newest first. Pass a map id as style_from_map, or a kit id as brand_kit, to preview_exploration_map to make a new map in the same style.',
+  inputSchema: { type: 'object', additionalProperties: false, properties: {} },
+  outputSchema: {
+    type: 'object',
+    properties: {
+      maps: { type: 'array', items: { type: 'object', properties: { id: { type: 'string' }, name: { type: 'string' }, updated_at: { type: 'string' } } } },
+      brand_kits: { type: 'array', items: { type: 'object', properties: { id: { type: 'string' }, name: { type: 'string' }, is_default: { type: 'boolean' } } } },
+      dashboard_url: { type: 'string', format: 'uri' },
+    },
+    required: ['maps', 'brand_kits'],
+  },
+  annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+};
+
+const ACCOUNT_TOOLS = [
+  ...TOOLS.map((tool) => (tool.name === 'preview_exploration_map'
+    ? {
+      ...tool,
+      description: tool.description.replace(LIMIT_TEXT.anonymous, LIMIT_TEXT.account),
+      inputSchema: { ...tool.inputSchema, properties: { ...tool.inputSchema.properties, ...ACCOUNT_PREVIEW_PROPERTIES } },
+    }
+    : tool)),
+  LIST_MY_MAPS_TOOL,
+];
 
 function jsonRpcResult(id, result, modern = false) {
   const response = { jsonrpc: '2.0', id, result };
@@ -573,6 +605,11 @@ async function createPreview(req, args) {
     throw error;
   }
 
+  const look = req.account ? await accountLook(req, args) : null;
+  // The kit's accent also colours the callout and markers the builder draws.
+  if (look && !input.branding?.primary_color && !input.branding?.accent_color && /^#[0-9a-f]{6}$/i.test(look.config.accentColor || '')) {
+    input.branding = { ...input.branding, primary_color: look.config.accentColor };
+  }
   input.branding = await resolveBranding({ ...input.branding, logo_url: input.style === 'modern_dark' ? input.branding.logo_url_dark || input.branding.logo_url : input.branding.logo_url });
   const project = createAgentMapProject(input, {
     featureCollection: claims,
@@ -580,6 +617,7 @@ async function createPreview(req, args) {
     source: jurisdiction?.registry,
     sourceMeta: claims.meta || null,
   });
+  if (look) project.layout = applyAccountLook(project.layout, look, args);
 
   // Signed-in previews are created as the user, so the map is owned by the
   // account and does not expire; anonymous ones carry the caller's key.
@@ -615,13 +653,14 @@ async function createPreview(req, args) {
     ...(neighboursWarning ? [neighboursWarning] : []),
     'This map is generated from public registry data and is not a legal title opinion or legal survey.',
     req.account ? 'This map is saved to your ExplorationMaps account and does not expire.' : 'Anonymous preview links expire after 30 days.',
+    ...(req.account ? [] : [`Anonymous preview: no account branding. To use your ExplorationMaps brand kit and saved maps, add ${CONNECTOR_ORIGIN}/mcp/account as a custom connector and sign in.`]),
     'Reference overlays are configured on the map; third-party tile availability is checked when the share page renders.',
   ];
   if (allowance) warnings.push(allowanceNotice(allowance));
   const layersApplied = ['claims', input.basemap, ...input.include.filter((layer) => layer !== 'claims')];
   const layersEmpty = [];
   if (neighbours.features.length) layersApplied.push('neighbours'); else layersEmpty.push('neighbours');
-  if (input.branding.logo_data_uri) layersApplied.push('company_logo'); else if (input.branding.website || input.branding.logo_url) layersEmpty.push('company_logo');
+  if (project.layout.logo) layersApplied.push('company_logo'); else if (input.branding.website || input.branding.logo_url) layersEmpty.push('company_logo');
   if (input.annotations.length) layersApplied.push('annotations');
   if (input.claims_callout.show !== false) layersApplied.push('claims_callout');
   if (input.inset.show) layersApplied.push('locator_inset');
@@ -642,7 +681,7 @@ async function createPreview(req, args) {
     claims_found: claims.features.length,
     claims_found_primary: claims.features.length,
     claims_found_neighbours: neighbours.features.length,
-    branding_applied: { logo: Boolean(input.branding.logo_data_uri), primary_color: input.branding.primary_color || '#2563eb', source: input.branding.source || null },
+    branding_applied: { logo: Boolean(project.layout.logo), primary_color: input.branding.primary_color || '#2563eb', source: look?.source || input.branding.source || null },
     layers_applied: layersApplied,
     layers_empty: layersEmpty,
     caption,
@@ -651,6 +690,75 @@ async function createPreview(req, args) {
     expires_in_days: req.account ? null : 30,
     ...(allowance ? { allowance } : {}),
     warnings,
+  };
+}
+
+// ── Account look and saved maps (signed in only) ────────────────────────────
+// Keys that describe this map's content or type rather than the account's look.
+const LOOK_CONTENT_KEYS = ['templateId', 'mode', 'compositionPreset', 'referenceOverlays', 'referenceOpacity', 'insetMode', 'footerText'];
+
+function notFound(message) {
+  const error = new Error(message);
+  error.code = 'NOT_FOUND';
+  return error;
+}
+
+// The look a signed-in preview takes: a saved map's (style_from_map), a chosen
+// kit (brand_kit), or the account's default kit. Read as the user, so RLS
+// limits it to their own rows.
+async function accountLook(req, args) {
+  if (args.use_brand_kit === false && !args.style_from_map) return null;
+  const db = userSupabase(req.account.token);
+  const userId = req.account.user.id;
+  if (args.style_from_map) {
+    const { data } = await db.from('projects').select('name, layout:payload->layout')
+      .eq('id', args.style_from_map).eq('user_id', userId).is('deleted_at', null).maybeSingle();
+    if (!data) throw notFound('style_from_map is not one of your saved maps. Call list_my_maps for ids.');
+    const layout = data.layout || {};
+    const config = Object.fromEntries(BRAND_KIT_SAVEABLE_KEYS.filter((k) => layout[k] !== undefined).map((k) => [k, layout[k]]));
+    if (layout.fonts) config.fonts = layout.fonts;
+    return { config, source: `saved map: ${data.name}` };
+  }
+  let query = db.from('templates').select('name, config').eq('user_id', userId);
+  query = args.brand_kit
+    ? query.eq('id', args.brand_kit)
+    : query.order('is_default', { ascending: false, nullsFirst: false }).order('updated_at', { ascending: false });
+  const { data, error } = await query.limit(1);
+  if (args.brand_kit && !data?.length) throw notFound('brand_kit is not one of your brand kits. Call list_my_maps for ids.');
+  if (error || !data?.length) return null;
+  return { config: data[0].config || {}, source: `brand kit: ${data[0].name}` };
+}
+
+// Branding the caller passed explicitly wins over the account's look.
+function applyAccountLook(layout, look, args) {
+  const config = { ...look.config };
+  for (const key of LOOK_CONTENT_KEYS) delete config[key];
+  const branding = args.branding || {};
+  if (branding.logo_url || branding.logo_url_dark || branding.website) delete config.logo;
+  if (branding.primary_color || branding.accent_color) delete config.accentColor;
+  if (branding.font) delete config.fonts;
+  if (args.style) delete config.themeId;
+  const next = applyBrandKitConfig(config, layout);
+  return { ...next, exportSettings: { ...next.exportSettings, filename: layout.exportSettings?.filename } };
+}
+
+async function listMyMaps(req) {
+  const db = userSupabase(req.account.token);
+  const userId = req.account.user.id;
+  const [maps, kits] = await Promise.all([
+    db.from('projects').select('id, name, updated_at').eq('user_id', userId).is('deleted_at', null)
+      .order('updated_at', { ascending: false }).limit(50),
+    db.from('templates').select('id, name, is_default').eq('user_id', userId).order('created_at', { ascending: true }),
+  ]);
+  if (maps.error || kits.error) {
+    const error = new Error('Your saved maps could not be loaded. Try again shortly.');
+    error.code = 'ACCOUNT_UNAVAILABLE';
+    throw error;
+  }
+  return {
+    maps: maps.data || [],
+    brand_kits: (kits.data || []).map((k) => ({ ...k, is_default: Boolean(k.is_default) })),
+    dashboard_url: `${siteUrl()}/dashboard`,
   };
 }
 
@@ -710,6 +818,7 @@ async function callTool(req, name, args) {
   if (name === 'preview_exploration_map') return createPreview(req, args || {});
   if (name === 'search_mineral_claims') return searchClaims(req, args || {});
   if (name === 'get_mapping_capabilities') return capabilities();
+  if (name === 'list_my_maps' && req.account) return listMyMaps(req);
   const error = new Error(`Unknown tool '${name}'.`);
   error.code = 'UNKNOWN_TOOL';
   throw error;

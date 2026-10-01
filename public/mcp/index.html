@@ -28,7 +28,7 @@
   <h1>One mining MCP server for ChatGPT, Claude, Gemini and other agents.</h1>
   <p class="lead">ExplorationMaps exposes mining-specific outcomes instead of generic GIS primitives: search mineral claims, create claim and tenure maps, generate investor-ready property maps, and return shareable ExplorationMaps results.</p>
   <div class="endpoint">https://www.explorationmaps.com/mcp/server</div>
-  <p class="muted">No sign-in needed: 10 free map previews per hour. For more, add the account connector instead and sign in with your ExplorationMaps account: 30 previews per hour on the Free plan, 200 on Pro, and maps are saved to your account.</p>
+  <p class="muted">No sign-in needed: 10 free map previews per hour. For more, add the account connector instead and sign in with your ExplorationMaps account: 30 previews per hour on the Free plan, 200 on Pro, maps are saved to your account, and they use your brand kit (logo, colours, fonts) or the look of one of your saved maps.</p>
   <div class="endpoint">https://www.explorationmaps.com/mcp/account</div>
   <div class="cta">
     <a class="btn primary" href="/muse/">Muse integration</a>
@@ -40,6 +40,7 @@
     <section class="card"><h3>preview_exploration_map</h3><p class="muted">Creates a registry-backed claims, investor, or infrastructure map and returns a shareable URL.</p></section>
     <section class="card"><h3>search_mineral_claims</h3><p class="muted">Searches supported official mineral registries by company/holder, claim number, claim name, or bounding box.</p></section>
     <section class="card"><h3>get_mapping_capabilities</h3><p class="muted">Returns supported jurisdictions, map types, overlays, search modes and styles.</p></section>
+    <section class="card"><h3>list_my_maps</h3><p class="muted">Account connector only. Lists your saved maps and brand kits so a new map can match one of them.</p></section>
   </div>
 
   <h2>Example requests</h2>
@@ -50,7 +51,7 @@
 
   <h2>Client setup</h2>
   <p class="muted"><strong>ChatGPT / Codex:</strong> use the remote MCP URL above when creating a custom app or when submitting ExplorationMaps to the public app directory.</p>
-  <p class="muted"><strong>Claude:</strong> add the URL above as a custom web connector. The same endpoint is suitable for Connectors Directory review.</p>
+  <p class="muted"><strong>Claude:</strong> Settings → Connectors → Add custom connector. Use <code>/mcp/server</code> for anonymous use, or <code>/mcp/account</code> to sign in and use your brand kit and saved maps. If you already added <code>/mcp/server</code>, add <code>/mcp/account</code> as a second connector: reconnecting the first one does not sign you in.</p>
   <p class="muted"><strong>Gemini:</strong> register the endpoint as a remote <code>mcp_server</code> using Streamable HTTP in the Gemini Interactions API or supported agent surfaces.</p>
 
   <h2>Safety and data</h2>
