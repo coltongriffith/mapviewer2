@@ -87,13 +87,17 @@ export default async function handler(req, res) {
 
     const fp = fingerprint({ kind, message, stack, path });
 
-    // Collapse repeats within a 10-minute window instead of writing a row per
-    // occurrence — a render loop can emit thousands per minute.
+    // Collapse a tab's repeats within a 10-minute window instead of writing a
+    // row per occurrence — a render loop can emit thousands per minute. Each
+    // tab keeps its own row, so the dashboard can count how many people saw
+    // an error rather than folding everyone into the first reporter.
     const since = new Date(Date.now() - 10 * 60 * 1000).toISOString();
-    const { data: existing } = await sb.from('error_events')
+    let repeat = sb.from('error_events')
       .select('id, seen_count')
       .eq('fingerprint', fp)
-      .gte('occurred_at', since)
+      .gte('occurred_at', since);
+    repeat = sessionId ? repeat.eq('session_id', sessionId) : repeat.is('session_id', null);
+    const { data: existing } = await repeat
       .order('occurred_at', { ascending: false })
       .limit(1)
       .maybeSingle();
