@@ -179,6 +179,7 @@ describe('MCP account connector', () => {
     const result = res.body.result.structuredContent;
     expect(result.allowance).toEqual({ tier: 'free', limit: 30, remaining: 25, window_seconds: 3600 });
     expect(result.expires_in_days).toBeNull();
+    expect(result.png_download_url).toBe(`${result.share_url}?download=png`);
     expect(result.warnings).toContain('This map is saved to your ExplorationMaps account and does not expire.');
     expect(result.warnings).toContain('Previews left this hour: 25 of 30 on the Free plan.');
     expect(db.created).toEqual([{ token: 'free-b', name: 'create_shared_map', args: { p_state: expect.any(Object) } }]);

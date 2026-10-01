@@ -30,10 +30,10 @@ const LIMIT_TEXT = {
 
 const SERVER_NAME = 'ExplorationMaps';
 const SERVER_VERSION = '1.1.1'; // keep in step with server.json
-const SERVER_INSTRUCTIONS = `ExplorationMaps creates mineral exploration maps from public registry records. For a request naming a company or project, identify the specific project before mapping. Search its claims, group records geographically, and pass verified claim_numbers to preview_exploration_map so unrelated projects stay out. If the project cannot be identified reliably, ask the user. When available, pass the company's HTTPS website in branding and verified project facts in facts_panel and claims_callout; do not invent ownership, grades, targets or coordinates. Choose a map type and basemap that match the request. The preview defaults to supported context overlays, nearby claims, a locator inset and a claim callout. After the call, report claims_found_primary separately from claims_found_neighbours, describe only layers_applied, and give the share_url. Public registry data is informational and is not a legal title opinion or survey. A rendered PNG and export pack are not currently returned by this MCP tool.`;
+const SERVER_INSTRUCTIONS = `ExplorationMaps creates mineral exploration maps from public registry records. For a request naming a company or project, identify the specific project before mapping. Search its claims, group records geographically, and pass verified claim_numbers to preview_exploration_map so unrelated projects stay out. If the project cannot be identified reliably, ask the user. When available, pass the company's HTTPS website in branding and verified project facts in facts_panel and claims_callout; do not invent ownership, grades, targets or coordinates. Choose a map type and basemap that match the request. The preview defaults to supported context overlays, nearby claims, a locator inset and a claim callout. After the call, report claims_found_primary separately from claims_found_neighbours, describe only layers_applied, and give the share_url. For an image file, give png_download_url: opening it downloads the map as a PNG in the user's browser. This tool does not return image data itself. Public registry data is informational and is not a legal title opinion or survey.`;
 const LIMIT_INSTRUCTIONS = {
   anonymous: ` Free use allows ${PREVIEWS_PER_HOUR.anonymous} map previews per hour: tell the user how many remain after each preview, and if the limit is reached, give them the reset time and links from the error. This connection is anonymous: it cannot see the user's ExplorationMaps account, brand kit or saved maps. If the user wants their account branding or saved maps, tell them to add ${CONNECTOR_ORIGIN}/mcp/account as a custom connector (Settings, Connectors, Add custom connector) and sign in there.`,
-  account: ` The user is signed in to ExplorationMaps: ${PREVIEWS_PER_HOUR.free} map previews per hour on the Free plan, ${PREVIEWS_PER_HOUR.pro} on Pro. Tell the user how many remain after each preview, and if the limit is reached, give them the reset time and links from the error. Previews use the user's default brand kit (logo, colours, fonts, layout) automatically; omit style so the kit's theme applies. To match one of the user's saved maps, call list_my_maps and pass its id as style_from_map; pass brand_kit to choose another kit. Previews are saved to the user's account; to export a PNG, they open share_url and choose Edit this map, then Export.`,
+  account: ` The user is signed in to ExplorationMaps: ${PREVIEWS_PER_HOUR.free} map previews per hour on the Free plan, ${PREVIEWS_PER_HOUR.pro} on Pro. Tell the user how many remain after each preview, and if the limit is reached, give them the reset time and links from the error. Previews use the user's default brand kit (logo, colours, fonts, layout) automatically; omit style so the kit's theme applies. To match one of the user's saved maps, call list_my_maps and pass its id as style_from_map; pass brand_kit to choose another kit. Previews are saved to the user's account.`,
 };
 
 function instructionsFor(req) {
@@ -207,6 +207,7 @@ const TOOLS = [
       properties: {
         status: { type: 'string' },
         share_url: { type: 'string', format: 'uri' },
+        png_download_url: { type: 'string', format: 'uri' },
         title: { type: 'string' },
         map_type: { type: 'string' },
         claims_found: { type: 'integer' },
@@ -676,6 +677,7 @@ async function createPreview(req, args) {
   return {
     status: 'ready',
     share_url: `${siteUrl()}/map/${shareId}`,
+    png_download_url: `${siteUrl()}/map/${shareId}?download=png`,
     title: input.title,
     map_type: input.map_type,
     claims_found: claims.features.length,

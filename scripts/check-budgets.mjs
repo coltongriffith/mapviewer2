@@ -50,11 +50,13 @@ const BUDGETS = {
   // without one (MCP connector maps), and the Inset Style control reflects
   // map-tile locators (Oct 2026).
   // 876 → 877: the lazy /oauth/consent page for MCP account sign-in.
-  totalAuthJsGzipKb: 877,
+  // 877 → 878: Download PNG on shared maps (the MCP png_download_url).
+  totalAuthJsGzipKb: 878,
   // 805 → 808: placed and callout logos, SVG font embedding (Sept 2026).
   // 808 → 809: shared-map viewer opens at the saved view on the fixed stage.
   // 809 → 810: the lazy /oauth/consent page for MCP account sign-in.
-  totalJsGzipKb: 810,
+  // 810 → 812: Download PNG on shared maps (the MCP png_download_url).
+  totalJsGzipKb: 812,
   adminAuthJsGzipKb: 150,
   adminJsGzipKb: 85,
   editorAuthJsGzipKb: 335,

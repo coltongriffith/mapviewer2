@@ -1,14 +1,41 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { loadSharedMap } from '../utils/cloudStorage';
 import { trackEvent } from '../utils/track';
 
 const ReadOnlyMapStage = React.lazy(() => import('./ReadOnlyMapStage'));
 
-export default function SharedMapViewer({ mapId, onExit, user, onEditCopy }) {
+// ?download=png opens the map and downloads it as a PNG: the link an AI
+// assistant hands back with each map preview.
+const autoDownload = () => {
+  try { return new URLSearchParams(window.location.search).get('download') === 'png'; } catch { return false; }
+};
+
+export default function SharedMapViewer({ mapId, onExit, user, entitlements, onEditCopy }) {
   const [project, setProject] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
+  const [exporter, setExporter] = useState(null);
+  const [download, setDownload] = useState(null); // null | 'working' | 'done' | 'failed'
+  const autoStarted = useRef(false);
+
+  const downloadPng = useCallback(async () => {
+    if (!exporter || !project || download === 'working') return;
+    setDownload('working');
+    try {
+      const { clamped } = await exporter.downloadPng(entitlements);
+      setDownload('done');
+      trackEvent('export_completed', { format: 'png', source: 'shared_link', mapId, resolution_clamped: clamped }, user?.id);
+    } catch {
+      setDownload('failed');
+    }
+  }, [exporter, project, download, entitlements, mapId, user?.id]);
+
+  useEffect(() => {
+    if (!exporter || autoStarted.current || !autoDownload()) return;
+    autoStarted.current = true;
+    downloadPng();
+  }, [exporter, downloadPng]);
 
   const handleEdit = async () => {
     if (!project || editing) return;
@@ -79,7 +106,7 @@ export default function SharedMapViewer({ mapId, onExit, user, onEditCopy }) {
     <div className="shared-map-viewer">
       <div className="shared-map-canvas-wrap">
         <React.Suspense fallback={<div className="shared-map-loading"><div className="shared-map-spinner" />Loading map…</div>}>
-          <ReadOnlyMapStage project={project} />
+          <ReadOnlyMapStage project={project} onExportReady={setExporter} />
         </React.Suspense>
       </div>
       <div className="shared-map-bar">
@@ -87,6 +114,10 @@ export default function SharedMapViewer({ mapId, onExit, user, onEditCopy }) {
           Made with <a href="/" rel="noopener">ExplorationMaps</a>
         </span>
         <div className="shared-map-bar-actions">
+          {download === 'failed' && <span className="shared-map-bar-note" role="alert">The PNG could not be made. Try again, or use Edit this map → Export.</span>}
+          <button className="shared-map-edit-btn" onClick={downloadPng} disabled={!exporter || download === 'working'}>
+            {download === 'working' ? 'Preparing PNG…' : download === 'done' ? 'Download PNG again' : 'Download PNG'}
+          </button>
           <button className="shared-map-edit-btn" onClick={handleEdit} disabled={editing}>
             {editing ? 'Opening…' : (user ? 'Edit this map' : 'Make your own copy — free, no signup')}
           </button>

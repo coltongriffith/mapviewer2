@@ -9,16 +9,24 @@ vi.mock('../src/lib/supabase', () => ({
   supabase: { rpc: (...args) => rpcMock(...args) },
 }));
 
+const exportPng = vi.fn();
 vi.mock('../src/components/ReadOnlyMapStage', () => ({
-  default: () => <div data-testid="stage">stage</div>,
+  default: function MockStage({ onExportReady }) {
+    React.useEffect(() => { onExportReady?.({ downloadPng: exportPng }); }, [onExportReady]);
+    return <div data-testid="stage">stage</div>;
+  },
 }));
-vi.mock('../src/utils/track', () => ({ trackEvent: vi.fn() }));
+const trackEvent = vi.hoisted(() => vi.fn());
+vi.mock('../src/utils/track', () => ({ trackEvent }));
 
 import { loadSharedMap } from '../src/utils/cloudStorage';
 import SharedMapViewer from '../src/components/SharedMapViewer';
 
 beforeEach(() => {
   rpcMock.mockReset();
+  exportPng.mockReset();
+  trackEvent.mockReset();
+  window.history.replaceState({}, '', '/');
 });
 
 describe('loadSharedMap', () => {
@@ -92,5 +100,38 @@ describe('SharedMapViewer', () => {
     await new Promise((r) => setTimeout(r, 20));
     expect(screen.queryByText('Map not found')).not.toBeInTheDocument();
     expect(screen.getByTestId('stage')).toBeInTheDocument();
+  });
+});
+
+describe('SharedMapViewer PNG download', () => {
+  const state = { layers: [], layout: { title: 'Shared', exportSettings: { pixelRatio: 3 } } };
+
+  it('downloads a PNG from the button with the viewer\'s plan', async () => {
+    rpcMock.mockResolvedValue({ data: state, error: null });
+    exportPng.mockResolvedValue({ clamped: true });
+    render(<SharedMapViewer mapId="abc123def456" onExit={() => {}} user={null} entitlements={{ clean_export: false, max_export_pixels: 3000 }} />);
+    const button = await screen.findByRole('button', { name: 'Download PNG' });
+    expect(exportPng).not.toHaveBeenCalled();
+    button.click();
+    await screen.findByRole('button', { name: 'Download PNG again' });
+    expect(exportPng).toHaveBeenCalledWith({ clean_export: false, max_export_pixels: 3000 });
+    expect(trackEvent).toHaveBeenCalledWith('export_completed', expect.objectContaining({ format: 'png', source: 'shared_link', resolution_clamped: true }), undefined);
+  });
+
+  it('downloads at once when the link ends in ?download=png', async () => {
+    window.history.replaceState({}, '', '/map/abc123def456?download=png');
+    rpcMock.mockResolvedValue({ data: state, error: null });
+    exportPng.mockResolvedValue({ clamped: false });
+    render(<SharedMapViewer mapId="abc123def456" onExit={() => {}} user={null} entitlements={{ clean_export: true, max_export_pixels: 12000 }} />);
+    await waitFor(() => expect(exportPng).toHaveBeenCalledTimes(1));
+    expect(exportPng).toHaveBeenCalledWith({ clean_export: true, max_export_pixels: 12000 });
+  });
+
+  it('says so when the PNG fails', async () => {
+    rpcMock.mockResolvedValue({ data: state, error: null });
+    exportPng.mockRejectedValue(new Error('tainted canvas'));
+    render(<SharedMapViewer mapId="abc123def456" onExit={() => {}} user={null} />);
+    (await screen.findByRole('button', { name: 'Download PNG' })).click();
+    expect(await screen.findByRole('alert')).toHaveTextContent('The PNG could not be made');
   });
 });

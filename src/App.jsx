@@ -4975,6 +4975,7 @@ export default function App({ initialAction = null }) {
         <SharedMapViewer
           mapId={sharedMapId}
           user={user}
+          entitlements={entitlements}
           onEditCopy={handleEditSharedCopy}
           onExit={() => { window.location.href = '/'; }}
         />

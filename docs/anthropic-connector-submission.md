@@ -54,7 +54,7 @@ The connector queries supported public mineral registries. Map previews create e
 - get_mapping_capabilities — read-only; closed-world/static capability data.
 
 ## Reviewer notes
-The connector is intentionally narrow. It does not execute payments, transfer financial assets, generate image/video/audio media, or perform destructive actions. Map generation uses a public registry query and existing ExplorationMaps map templates. Exact claim selection avoids pulling unrelated projects into one map. Nearby claims are counted separately. The MCP preview returns a share URL, not an inline image or export pack. All tools have titles and explicit readOnly/destructive/openWorld annotations.
+The connector is intentionally narrow. It does not execute payments, transfer financial assets, generate image/video/audio media, or perform destructive actions. Map generation uses a public registry query and existing ExplorationMaps map templates. Exact claim selection avoids pulling unrelated projects into one map. Nearby claims are counted separately. The MCP preview returns a share URL and a PNG download link (the PNG is rendered in the user's browser), not an inline image or export pack. All tools have titles and explicit readOnly/destructive/openWorld annotations.
 
 ## Directory submission path
 Claude.ai → Team/Enterprise organization → Admin settings → Directory → Submissions → New remote MCP server.

@@ -39,7 +39,7 @@ The server exposes narrowly scoped mining tools rather than generic GIS primitiv
 
 ## Tools
 ### preview_exploration_map
-Creates a registry-backed map from exact claim numbers or a holder search, with supported branding, basemap and context controls; returns a share URL. It does not return a rendered PNG or export pack.
+Creates a registry-backed map from exact claim numbers or a holder search, with supported branding, basemap and context controls; returns a share URL and a PNG download link (`png_download_url`, which renders and downloads the PNG in the browser). It does not return image data or an export pack.
 Annotations: readOnlyHint=false, destructiveHint=false, idempotentHint=false, openWorldHint=true.
 
 ### search_mineral_claims
