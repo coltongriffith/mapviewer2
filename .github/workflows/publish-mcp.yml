@@ -49,4 +49,16 @@ jobs:
         run: ./mcp-publisher login github-oidc
 
       - name: Publish remote server
-        run: ./mcp-publisher publish ./server.json
+        run: |
+          # Changes to api/mcp.js or this file re-run the workflow without a new
+          # server.json version. The registry rejects a duplicate version, and
+          # there is nothing new to publish, so that is not a failure.
+          if ! out=$(./mcp-publisher publish ./server.json 2>&1); then
+            echo "$out"
+            if grep -q "duplicate version" <<<"$out"; then
+              echo "::notice::server.json version $(jq -r .version server.json) is already published. Bump it to publish registry metadata changes."
+              exit 0
+            fi
+            exit 1
+          fi
+          echo "$out"
