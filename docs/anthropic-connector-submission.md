@@ -35,6 +35,9 @@ https://www.explorationmaps.com/apple-touch-icon.png
 ## Authentication
 None required for the public registry-backed tools in MCP version 1.1.0.
 
+## Usage limits
+Free, anonymous use allows 10 map previews per hour (rolling) and 30 claim searches per hour. Each preview returns `allowance` with the number remaining; a capped call returns `RATE_LIMITED` with `resets_at`, `retry_after_seconds` and the editor URL. A shared ceiling of 300 previews per hour per network also applies.
+
 ## Core examples
 1. Make a mining claim map for a company in British Columbia and show roads, towns and rail.
 2. Search for mineral claims associated with a company or tenure number.

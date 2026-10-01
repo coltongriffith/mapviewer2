@@ -10,7 +10,7 @@ import { clientIp, rateLimited, rateLimitedShared } from './_lib/guard.js';
 
 const SERVER_NAME = 'ExplorationMaps';
 const SERVER_VERSION = '1.1.1'; // keep in step with server.json
-const SERVER_INSTRUCTIONS = `ExplorationMaps creates mineral exploration maps from public registry records. For a request naming a company or project, identify the specific project before mapping. Search its claims, group records geographically, and pass verified claim_numbers to preview_exploration_map so unrelated projects stay out. If the project cannot be identified reliably, ask the user. When available, pass the company's HTTPS website in branding and verified project facts in facts_panel and claims_callout; do not invent ownership, grades, targets or coordinates. Choose a map type and basemap that match the request. The preview defaults to supported context overlays, nearby claims, a locator inset and a claim callout. After the call, report claims_found_primary separately from claims_found_neighbours, describe only layers_applied, and give the share_url. Public registry data is informational and is not a legal title opinion or survey. A rendered PNG and export pack are not currently returned by this MCP tool.`;
+const SERVER_INSTRUCTIONS = `ExplorationMaps creates mineral exploration maps from public registry records. For a request naming a company or project, identify the specific project before mapping. Search its claims, group records geographically, and pass verified claim_numbers to preview_exploration_map so unrelated projects stay out. If the project cannot be identified reliably, ask the user. When available, pass the company's HTTPS website in branding and verified project facts in facts_panel and claims_callout; do not invent ownership, grades, targets or coordinates. Choose a map type and basemap that match the request. The preview defaults to supported context overlays, nearby claims, a locator inset and a claim callout. After the call, report claims_found_primary separately from claims_found_neighbours, describe only layers_applied, and give the share_url. Public registry data is informational and is not a legal title opinion or survey. A rendered PNG and export pack are not currently returned by this MCP tool. Free use allows 10 map previews per hour: tell the user how many remain after each preview, and if the limit is reached, give them the reset time and editor link from the error.`;
 const MODERN_VERSION = '2026-07-28';
 const LEGACY_VERSIONS = ['2025-11-25', '2025-06-18', '2025-03-26'];
 const SUPPORTED_VERSIONS = [MODERN_VERSION, ...LEGACY_VERSIONS];
@@ -172,7 +172,7 @@ const TOOLS = [
   {
     name: 'preview_exploration_map',
     title: 'Create a mineral exploration map preview',
-    description: 'Create a branded mineral exploration map from public registry claims and return a shareable URL. Provide at least one of search, location or claim_numbers. For a specific project, search its claims first and pass exact claim_numbers. Supply published facts and branding when known; never invent ownership, targets, grades or coordinates. Supports separate neighbouring claims, a project callout, locator inset, and map basemap selection. Drill and NI 43-101 layouts require user-supplied data or qualified review; this tool does not generate drill results.',
+    description: 'Create a branded mineral exploration map from public registry claims and return a shareable URL. Provide at least one of search, location or claim_numbers. For a specific project, search its claims first and pass exact claim_numbers. Supply published facts and branding when known; never invent ownership, targets, grades or coordinates. Supports separate neighbouring claims, a project callout, locator inset, and map basemap selection. Drill and NI 43-101 layouts require user-supplied data or qualified review; this tool does not generate drill results. Free use allows 10 previews per hour; allowance in the result reports how many remain.',
     inputSchema: PREVIEW_INPUT_SCHEMA,
     outputSchema: {
       type: 'object',
@@ -191,6 +191,16 @@ const TOOLS = [
         alt_text: { type: 'string' },
         source: { type: 'string' },
         expires_in_days: { type: 'integer' },
+        allowance: {
+          type: 'object',
+          properties: {
+            tier: { type: 'string' },
+            limit: { type: 'integer' },
+            remaining: { type: 'integer' },
+            window_seconds: { type: 'integer' },
+            next_available_at: { type: 'string', format: 'date-time' },
+          },
+        },
         warnings: { type: 'array', items: { type: 'string' } },
       },
       required: ['status', 'share_url', 'title', 'map_type', 'claims_found', 'source', 'expires_in_days', 'warnings'],
@@ -353,6 +363,70 @@ function ipSubject(req, toolName) {
   return hashSubject(`mcp:${toolName}:ip:${clientIp(req)}`);
 }
 
+// Anonymous preview allowance. create_shared_map enforces the same number per
+// creator key over a rolling hour, so this is the single figure users are told.
+const FREE_PREVIEWS_PER_HOUR = 10;
+// Abuse ceiling per egress IP. Hosted assistants share egress IPs, so hitting
+// it says nothing about the individual caller.
+const NETWORK_PREVIEWS_PER_HOUR = 300;
+const HOUR_MS = 60 * 60_000;
+
+function siteUrl() {
+  return String(process.env.SITE_URL || 'https://explorationmaps.com').replace(/\/$/, '');
+}
+
+// Creation times (ms) of this caller's shares in the rolling hour, oldest
+// first. Fails open (null) like the other limiters; create_shared_map still
+// enforces the cap.
+async function previewTimes(sb, subject) {
+  try {
+    const { data, error } = await sb.from('shared_maps').select('created_at')
+      .eq('creator_key', subject)
+      .gt('created_at', new Date(Date.now() - HOUR_MS).toISOString())
+      .order('created_at', { ascending: true });
+    if (error || !Array.isArray(data)) return null;
+    return data.map((row) => Date.parse(row.created_at)).filter(Number.isFinite);
+  } catch {
+    return null;
+  }
+}
+
+// When the rolling-hour count next drops below the allowance.
+function nextPreviewAt(times) {
+  return new Date(times[times.length - FREE_PREVIEWS_PER_HOUR] + HOUR_MS);
+}
+
+// check_rate_limit counts in fixed clock-hour windows.
+function nextClockHour() {
+  return new Date((Math.floor(Date.now() / HOUR_MS) + 1) * HOUR_MS);
+}
+
+function secondsUntil(at) {
+  return Math.max(1, Math.ceil((at.getTime() - Date.now()) / 1000));
+}
+
+function whenText(at) {
+  const minutes = Math.ceil(secondsUntil(at) / 60);
+  return `${at.toISOString().slice(11, 16)} UTC (in ${minutes} minute${minutes === 1 ? '' : 's'})`;
+}
+
+function previewLimitError(scope, resetsAt) {
+  const editor = `${siteUrl()}/`;
+  const error = new Error(scope === 'caller'
+    ? `Free preview limit reached: ${FREE_PREVIEWS_PER_HOUR} map previews per hour. The next free preview is available at ${whenText(resetsAt)}. To keep mapping now, use the ExplorationMaps editor at ${editor}, which has no preview limit.`
+    : `ExplorationMaps has reached its hourly preview capacity for requests from this network. Try again at ${whenText(resetsAt)}, or use the ExplorationMaps editor at ${editor}.`);
+  error.code = 'RATE_LIMITED';
+  error.details = {
+    scope,
+    limit: scope === 'caller' ? FREE_PREVIEWS_PER_HOUR : NETWORK_PREVIEWS_PER_HOUR,
+    window_seconds: HOUR_MS / 1000,
+    resets_at: resetsAt.toISOString(),
+    retry_after_seconds: secondsUntil(resetsAt),
+    editor_url: editor,
+  };
+  return error;
+}
+
 async function overToolLimit(sb, req, toolName, { perCaller, perIp, bucket }) {
   if (await rateLimitedShared(sb, req, { max: perCaller, windowSeconds: 60 * 60, bucket, subject: callerSubject(req, toolName) })) return true;
   return rateLimitedShared(sb, req, { max: perIp, windowSeconds: 60 * 60, bucket: `${bucket}-ip`, subject: ipSubject(req, toolName) });
@@ -398,13 +472,15 @@ async function createPreview(req, args) {
 
   const sb = serverSupabase();
   const subject = callerSubject(req, 'preview_exploration_map');
-  // perCaller matches create_shared_map's anonymous limit (3 per creator key
-  // per hour); a higher number only let calls 4-5 do the registry and branding
-  // work and then fail at the share insert.
-  if (await overToolLimit(sb, req, 'preview_exploration_map', { perCaller: 3, perIp: 60, bucket: 'mcp-preview' })) {
-    const error = new Error('Free MCP preview limit reached. Try again later or connect an ExplorationMaps account.');
-    error.code = 'RATE_LIMITED';
-    throw error;
+  // Read the caller's allowance from the shares create_shared_map counts, so
+  // the stated number and reset time are exact and failed calls cost nothing.
+  // Checked before the registry and branding work so a capped call fails fast.
+  const times = await previewTimes(sb, subject);
+  if (times && times.length >= FREE_PREVIEWS_PER_HOUR) throw previewLimitError('caller', nextPreviewAt(times));
+  if (await rateLimitedShared(sb, req, {
+    max: NETWORK_PREVIEWS_PER_HOUR, windowSeconds: HOUR_MS / 1000, bucket: 'mcp-preview-ip', subject: ipSubject(req, 'preview_exploration_map'),
+  })) {
+    throw previewLimitError('network', nextClockHour());
   }
 
   const { primary: claims, neighbours, neighboursWarning } = await resolveMapClaims(input, runClaimsSearch, clientIp(req));
@@ -437,8 +513,9 @@ async function createPreview(req, args) {
     const error = new Error('The map preview could not be saved.');
     error.code = 'SHARE_FAILED';
     if (/SHARE_RATE_LIMIT/.test(message)) {
-      error.message = 'Free MCP preview limit reached. Try again later or connect an ExplorationMaps account.';
-      error.code = 'RATE_LIMITED';
+      // A concurrent call took the last slot after the check above.
+      const latest = await previewTimes(sb, subject);
+      throw previewLimitError('caller', latest?.length >= FREE_PREVIEWS_PER_HOUR ? nextPreviewAt(latest) : new Date(Date.now() + HOUR_MS));
     } else if (/SHARE_TOO_(LARGE|COMPLEX)/.test(message)) {
       error.message = 'This claim set is too large for a preview. Pass claim_numbers for one project, or set neighbours.show to false.';
       error.code = 'MAP_TOO_COMPLEX';
@@ -446,7 +523,15 @@ async function createPreview(req, args) {
     throw error;
   }
 
-  const siteUrl = String(process.env.SITE_URL || 'https://explorationmaps.com').replace(/\/$/, '');
+  // This share now counts toward the caller's rolling hour.
+  const after = times && [...times, Date.now()];
+  const allowance = after && {
+    tier: 'anonymous',
+    limit: FREE_PREVIEWS_PER_HOUR,
+    remaining: Math.max(0, FREE_PREVIEWS_PER_HOUR - after.length),
+    window_seconds: HOUR_MS / 1000,
+  };
+  if (allowance && !allowance.remaining) allowance.next_available_at = nextPreviewAt(after).toISOString();
   const warnings = [
     ...sourceWarnings(input.jurisdiction, claims),
     ...(neighboursWarning ? [neighboursWarning] : []),
@@ -454,6 +539,11 @@ async function createPreview(req, args) {
     'Anonymous preview links expire after 30 days.',
     'Reference overlays are configured on the map; third-party tile availability is checked when the share page renders.',
   ];
+  if (allowance) {
+    warnings.push(allowance.remaining
+      ? `Free previews left this hour: ${allowance.remaining} of ${FREE_PREVIEWS_PER_HOUR}.`
+      : `That was the last of ${FREE_PREVIEWS_PER_HOUR} free previews this hour. The next is available at ${whenText(new Date(allowance.next_available_at))}.`);
+  }
   const layersApplied = ['claims', input.basemap, ...input.include.filter((layer) => layer !== 'claims')];
   const layersEmpty = [];
   if (neighbours.features.length) layersApplied.push('neighbours'); else layersEmpty.push('neighbours');
@@ -472,7 +562,7 @@ async function createPreview(req, args) {
 
   return {
     status: 'ready',
-    share_url: `${siteUrl}/map/${shareId}`,
+    share_url: `${siteUrl()}/map/${shareId}`,
     title: input.title,
     map_type: input.map_type,
     claims_found: claims.features.length,
@@ -485,6 +575,7 @@ async function createPreview(req, args) {
     alt_text: altText,
     source: jurisdiction?.registry || 'Official mineral registry',
     expires_in_days: 30,
+    ...(allowance ? { allowance } : {}),
     warnings,
   };
 }
@@ -509,8 +600,10 @@ async function searchClaims(req, args) {
 
   const sb = serverSupabase();
   if (await overToolLimit(sb, req, 'search_mineral_claims', { perCaller: 30, perIp: 300, bucket: 'mcp-search' })) {
-    const error = new Error('Mineral-registry search rate limit reached.');
+    const resetsAt = nextClockHour();
+    const error = new Error(`Mineral-registry search limit reached. Try again at ${whenText(resetsAt)}.`);
     error.code = 'RATE_LIMITED';
+    error.details = { resets_at: resetsAt.toISOString(), retry_after_seconds: secondsUntil(resetsAt) };
     throw error;
   }
 
@@ -561,14 +654,15 @@ function callToolResponse(result) {
 function callToolError(error) {
   const code = error?.code || 'TOOL_ERROR';
   const message = String(error?.message || 'Tool call failed.');
+  const payload = { error: { code, message, ...(error?.details || {}) } };
   return {
     content: [
       {
         type: 'text',
-        text: JSON.stringify({ error: { code, message } }),
+        text: JSON.stringify(payload),
       },
     ],
-    structuredContent: { error: { code, message } },
+    structuredContent: payload,
     isError: true,
   };
 }

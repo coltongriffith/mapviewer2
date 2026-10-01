@@ -113,7 +113,7 @@ ChatGPT sends the user's structured map/search request to the ExplorationMaps MC
 - No local/test endpoint.
 - No interactive UI is returned from MCP, so no MCP component screenshot or component CSP is required.
 - Tool annotations match actual behavior.
-- Public registry queries are rate limited.
+- Public registry queries are rate limited: 10 free map previews per hour (each preview reports how many remain) and 30 claim searches per hour.
 - Preview share links expire automatically.
 - Privacy and Terms explicitly cover AI agents / API access.
 - The endpoint supports modern MCP 2026-07-28 and legacy initialize-era clients.
