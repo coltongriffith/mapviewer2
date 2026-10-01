@@ -193,7 +193,7 @@ article strong{color:#142126}
     <svg width="20" height="20" viewBox="0 0 480 520" fill="none" aria-hidden="true"><path fill="#142126" d="M60 40H180V85H410V250H445V480H30V385H60Z"/><path fill="none" stroke="#ffffff" stroke-width="22" d="M18 180H132L205 250H240V325L320 400V490"/><path fill="none" stroke="#ffffff" stroke-width="22" d="M205 250L260 195"/><rect x="250" y="145" width="90" height="90" fill="#ffffff"/><rect x="273" y="168" width="44" height="44" fill="#c65322"/></svg>
     Exploration Maps
   </a>
-  <a class="nav-cta" href="/?intent=drill-results&amp;utm_source=blog&amp;utm_medium=cta&amp;utm_campaign=how-to-make-a-drill-results-map">Upload my data →</a>
+  <a class="nav-cta" href="/?intent=drill-results&amp;utm_source=blog&amp;utm_medium=cta&amp;utm_campaign=how-to-make-a-drill-results-map" rel="nofollow">Upload my data →</a>
 </nav>
 
 <div class="page-wrap">
@@ -208,7 +208,7 @@ article strong{color:#142126}
     <strong>Turn a collar CSV into a drill map.</strong>
     <span>Map the columns, badge the intercepts that matter, export the figure.</span>
   </div>
-  <a class="inline-cta-btn" href="/?intent=drill-results&amp;utm_source=blog&amp;utm_medium=cta&amp;utm_campaign=how-to-make-a-drill-results-map&amp;utm_content=top">Upload my data →</a>
+  <a class="inline-cta-btn" href="/?intent=drill-results&amp;utm_source=blog&amp;utm_medium=cta&amp;utm_campaign=how-to-make-a-drill-results-map&amp;utm_content=top" rel="nofollow">Upload my data →</a>
 </div>
       <h2>What data you need</h2><p>A drill results map is built from a collar table plus your headline intercepts. Gather:</p><ul class="checklist"><li>A drill collar CSV (one row per hole) with hole ID and coordinates</li><li>Your best intercept per key hole (width × grade) for the labels</li><li>A property/claims boundary file for context (GeoJSON, Shapefile, or KML)</li><li>Your company logo and the program/map date</li></ul>
 <h2>A downloadable example you can reproduce</h2><p>The CSV contains 14 fictional Cedar Ridge collars, from CR-24-01 to CR-24-14. Longitude and Latitude are decimal degrees. Result contains illustrative label text. The boundary file uses the same coordinate system. Neither file represents a real exploration program.</p><p><a href="/examples/cedar-ridge-collars.csv" download>Download the 14-collar CSV</a> · <a href="/examples/cedar-ridge-claims.geojson" download>Download its claim boundary</a> · <a href="/examples/README.txt">Sample notes and reuse</a></p><figure class="blog-figure"><img src="/gallery/drill-results.webp" alt="Fourteen Cedar Ridge demonstration drill collars inside a claim boundary with three result callouts" width="640" height="400" srcset="/gallery/drill-results.webp 640w, /gallery/drill-results@2x.webp 1000w" sizes="(max-width: 768px) calc(100vw - 48px), 724px" decoding="async" loading="lazy"><figcaption>Finished Drill Results gallery example. The downloadable CSV contains these 14 collar locations; all company names, claims and assay labels are fictional.</figcaption></figure><div class="inline-cta">
@@ -216,7 +216,7 @@ article strong{color:#142126}
     <strong>Explore the finished 14-hole example.</strong>
     <span>Compare the map layout with the CSV and boundary files.</span>
   </div>
-  <a class="inline-cta-btn" href="/?demo=drill_plan&amp;utm_source=blog&amp;utm_medium=example&amp;utm_campaign=how-to-make-a-drill-results-map&amp;utm_content=section-2">Open the drill example →</a>
+  <a class="inline-cta-btn" href="/?demo=drill_plan&amp;utm_source=blog&amp;utm_medium=example&amp;utm_campaign=how-to-make-a-drill-results-map&amp;utm_content=section-2" rel="nofollow">Open the drill example →</a>
 </div>
 <h2>Required and recommended CSV columns</h2><p>At minimum you need a hole ID and a coordinate pair. Everything else is preserved as feature properties you can show in callouts.</p><div class="table-scroll"><table class="data-table"><thead><tr><th>Column</th><th>Required?</th><th>Example</th><th>Notes</th></tr></thead><tbody><tr><td>Hole ID</td><td>Required</td><td>DDH-24-012</td><td>Used as the callout title</td></tr><tr><td>Latitude</td><td>Required</td><td>55.464373</td><td>WGS84 decimal degrees</td></tr><tr><td>Longitude</td><td>Required</td><td>-127.241130</td><td>WGS84 decimal degrees</td></tr><tr><td>Total depth (m)</td><td>Recommended</td><td>248.5</td><td>Context in callouts/tables</td></tr><tr><td>Best intercept</td><td>Recommended</td><td>15.2m @ 4.8 g/t Au</td><td>The headline label</td></tr><tr><td>Azimuth / Dip</td><td>Optional</td><td>135 / -50</td><td>If you note hole orientation</td></tr></tbody></table></div>
 <h2>Step 1: Import the drill collar CSV</h2><p>Open the upload workflow and select the CSV. Recognised latitude/longitude columns can import automatically. If the Column Mapper appears, select the coordinate columns and confirm them. The sample uses Longitude and Latitude; HoleID, Result and Status remain feature properties.</p><figure class="blog-figure"><img src="/blog-img/column-mapper.png" alt="Column Mapper showing latitude and longitude columns being assigned from a collar CSV" width="1080" height="1032"  decoding="async" loading="lazy"><figcaption>Mapping coordinate columns when importing a collar CSV</figcaption></figure>
@@ -230,7 +230,7 @@ article strong{color:#142126}
     <strong>Turn public claim data into a clean map.</strong>
     <span>Add your claims boundary around the drill pattern in seconds.</span>
   </div>
-  <a class="inline-cta-btn" href="/?intent=drill-results&amp;utm_source=blog&amp;utm_medium=cta&amp;utm_campaign=how-to-make-a-drill-results-map&amp;utm_content=section-10">Upload my data →</a>
+  <a class="inline-cta-btn" href="/?intent=drill-results&amp;utm_source=blog&amp;utm_medium=cta&amp;utm_campaign=how-to-make-a-drill-results-map&amp;utm_content=section-10" rel="nofollow">Upload my data →</a>
 </div>
 <h2>Step 5: Frame and export for a news release</h2><p>Choose a landscape layout for a slide or a page layout for a report figure. Fit all intended collars and labels inside the export frame. Include the project, program date, source and an explanation of the interval widths. Export at the size your publication needs, then inspect label legibility and compare every result with the reviewed source table.</p>
 <h2>Drill maps for a news release</h2><p>In a junior mining news release the drill map is often the first thing a reader looks at, before the body text and frequently instead of it. That makes the figure the part carrying the result to anyone who skims, and it changes what the map has to do: it has to be legible to a non-technical audience at email and phone size.</p><p>Reuse the same figure in the investor deck and on the website so the story stays visually consistent across the release. A reader who saw the map on Tuesday should recognise it on Thursday. See <a href="/blog/how-to-make-a-professional-exploration-map/">making a professional exploration map</a> for the layout elements, and <a href="/blog/how-to-create-exploration-map-investor-presentation/">the investor presentation guide</a> for deck framing.</p><ul><li>Show the target outline and your claim boundaries so the holes are visibly testing the intended target, on your ground</li><li>Use a clear basemap — satellite for setting, light for a report-style figure</li><li>Title block with project, company and the release date</li><li>Scale bar and north arrow, always</li><li>Check legibility at the size it will appear, not at full screen</li></ul><div class="inline-cta">
@@ -238,7 +238,7 @@ article strong{color:#142126}
     <strong>Build the release figure.</strong>
     <span>Import collars, badge the headline holes, export 16:9.</span>
   </div>
-  <a class="inline-cta-btn" href="/?intent=drill-results&amp;utm_source=blog&amp;utm_medium=cta&amp;utm_campaign=how-to-make-a-drill-results-map&amp;utm_content=section-12">Upload my data →</a>
+  <a class="inline-cta-btn" href="/?intent=drill-results&amp;utm_source=blog&amp;utm_medium=cta&amp;utm_campaign=how-to-make-a-drill-results-map&amp;utm_content=section-12" rel="nofollow">Upload my data →</a>
 </div>
 <h2>About the data and what to disclose</h2><div class="capability-box"><strong class="box-title">Can and cannot verify</strong><div><strong>Can:</strong> plot the collars you provide, preserve your attributes, and label intercepts exactly as you enter them.<br><strong>Cannot:</strong> validate assays, QA/QC, or that an intercept is true width. The map reflects the data you import — make sure your disclosure follows your QP's guidance and applicable securities rules.</div></div>
 <h2>Related guides</h2><p>Continue with the <a href="/drill-results-map/">drill-results map tool</a>, the <a href="/blog/how-to-import-csv-data-mining-map/">CSV import guide</a>, and <a href="/blog/how-to-make-a-professional-exploration-map/">map layout and export guide</a>.</p>
@@ -248,7 +248,7 @@ article strong{color:#142126}
     <strong>Export a news-release figure.</strong>
     <span>Landscape 16:9 for the wire, portrait PDF if it is also a report figure.</span>
   </div>
-  <a class="inline-cta-btn" href="/?intent=drill-results&amp;utm_source=blog&amp;utm_medium=cta&amp;utm_campaign=how-to-make-a-drill-results-map&amp;utm_content=bottom">Upload my data →</a>
+  <a class="inline-cta-btn" href="/?intent=drill-results&amp;utm_source=blog&amp;utm_medium=cta&amp;utm_campaign=how-to-make-a-drill-results-map&amp;utm_content=bottom" rel="nofollow">Upload my data →</a>
 </div>
       <section class="faq-section" aria-label="Frequently Asked Questions">
   <h2>Frequently Asked Questions</h2>
@@ -282,7 +282,7 @@ article strong{color:#142126}
   <div class="cta-card">
     <h3>Create Your Map Now</h3>
     <p>No GIS experience needed. Import your data, choose a theme, and export in minutes.</p>
-    <a class="cta-btn" href="/?intent=drill-results&amp;utm_source=blog&amp;utm_medium=cta&amp;utm_campaign=how-to-make-a-drill-results-map">Open Exploration Maps →</a>
+    <a class="cta-btn" href="/?intent=drill-results&amp;utm_source=blog&amp;utm_medium=cta&amp;utm_campaign=how-to-make-a-drill-results-map" rel="nofollow">Open Exploration Maps →</a>
   </div>
   
   <div class="sidebar-card"><h3>Related Guides</h3><ul><li><a href="/blog/how-to-import-csv-data-mining-map/">How to Import CSV Data into a Mining Map</a></li>

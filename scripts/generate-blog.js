@@ -295,7 +295,7 @@ ${schema ? `<script type="application/ld+json">${JSON.stringify(schema, null, 0)
     <svg width="20" height="20" viewBox="0 0 480 520" fill="none" aria-hidden="true"><path fill="#142126" d="M60 40H180V85H410V250H445V480H30V385H60Z"/><path fill="none" stroke="#ffffff" stroke-width="22" d="M18 180H132L205 250H240V325L320 400V490"/><path fill="none" stroke="#ffffff" stroke-width="22" d="M205 250L260 195"/><rect x="250" y="145" width="90" height="90" fill="#ffffff"/><rect x="273" y="168" width="44" height="44" fill="#c65322"/></svg>
     ${esc(SITE_NAME)}
   </a>
-  <a class="nav-cta" href="${esc(action.href)}">${esc(action.label)}</a>
+  <a class="nav-cta" href="${esc(action.href)}"${ctaRel(action.href)}>${esc(action.label)}</a>
 </nav>
 ${body}
 <footer class="site-footer">
@@ -338,7 +338,7 @@ function sidebar({ relatedHtml = '', compareHtml = '', howToHtml = '', locationH
   <div class="cta-card">
     <h3>${monitor ? 'Track your BC claims' : 'Create Your Map Now'}</h3>
     <p>${monitor ? 'Save a watch list and receive reminders for published good-to-dates. Free for up to 10 claims.' : 'No GIS experience needed. Import your data, choose a theme, and export in minutes.'}</p>
-    <a class="cta-btn" href="${esc(appHref)}">${monitor ? 'Open monitor →' : 'Open Exploration Maps →'}</a>
+    <a class="cta-btn" href="${esc(appHref)}"${ctaRel(appHref)}>${monitor ? 'Open monitor →' : 'Open Exploration Maps →'}</a>
   </div>
   ${howToGuide}
   ${relatedCard}
@@ -391,6 +391,10 @@ function appLink({ intent = null, region = null, demo = null, campaign = '' } = 
   return `/?${p.toString()}`;
 }
 
+// Tracked links into the app are also disallowed in robots.txt: crawlers that
+// follow them open the editor and read as visitors.
+function ctaRel(href) { return /[?&]utm_source=/.test(href) ? ' rel="nofollow"' : ''; }
+
 // Keep navigation, article and landing-page actions aligned with search intent.
 function contentAction({ slug = '', mapTypeId } = {}) {
   const monitor = ['mineral-tenure-monitoring', 'how-to-track-bc-mineral-claim-good-to-dates'].includes(slug);
@@ -414,7 +418,7 @@ function inlineCta({ text, sub = '', href = '/', label = 'Open Exploration Maps 
     <strong>${esc(text)}</strong>
     ${sub ? `<span>${esc(sub)}</span>` : ''}
   </div>
-  <a class="inline-cta-btn" href="${esc(href)}">${esc(label)}</a>
+  <a class="inline-cta-btn" href="${esc(href)}"${ctaRel(href)}>${esc(label)}</a>
 </div>`;
 }
 
@@ -872,7 +876,7 @@ function buildSeoLandingPage(page, allLandingPages) {
     ${page.reference ? '' : `<div class="lp-cta">
       <h2>${page.slug === 'mineral-tenure-monitoring' ? 'Start monitoring your claims' : 'Make your first map'}</h2>
       <p>${esc(page.ctaSummary || (page.slug === 'mineral-tenure-monitoring' ? 'Monitor up to 10 BC claims free and set reminders for their published good-to-dates.' : 'Find or upload your claims, choose an investor layout, and download your map.'))}</p>
-      <a href="${esc(action.href)}">${esc(action.label)}</a>
+      <a href="${esc(action.href)}"${ctaRel(action.href)}>${esc(action.label)}</a>
     </div>`}
     ${faqBlock(page.faqs)}
     ${relatedHtml}
@@ -1073,9 +1077,12 @@ async function main() {
   // .txt never referenced — real per-issuer claim maps that no crawler was
   // being told about. They are not linked from the blog either; the only path
   // in is the landing page, so the sitemap is how they get found.
+  // Tracked CTA links into the editor are the homepage plus parameters.
+  // Crawlers that follow them open the editor and read as visitors.
   const robots = [
     'User-agent: *',
     'Allow: /',
+    'Disallow: /*utm_source=',
     `Sitemap: ${SITE}/sitemap.xml`,
     `Sitemap: ${SITE}/sitemap-companies.xml`,
     '',

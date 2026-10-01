@@ -12,6 +12,7 @@ import {
   useRpc, useGrowth, useDashboardWindow, useOverview, useEngagement, useUsersOverview, useUserDetail, useErrorSummary, useFeedback, useRevenue, useTenureOps, useDailyActivity,
 } from './admin/useDashboardData';
 import { pacificDate, addCalendarDays, dayWindow } from './admin/dateWindow';
+import { markInternalBrowser } from '../utils/attribution';
 
 /**
  * Dashboard series colours.
@@ -180,7 +181,7 @@ function DayDetail({ day, summary, sessions, loading, error, onClose, onOpenSess
   });
   const real = sessions.filter(sessionEngaged).length;
   return (
-    <Card title={`Day detail — ${dayLabel}`} eyebrow="Pacific calendar day · known admins excluded" action={<button className="adm-btn adm-btn-ghost adm-btn-sm" onClick={onClose}>Close day</button>} full>
+    <Card title={`Day detail — ${dayLabel}`} eyebrow="Pacific calendar day · known admins and bots excluded" action={<button className="adm-btn adm-btn-ghost adm-btn-sm" onClick={onClose}>Close day</button>} full>
       {error ? <p role="alert" className="adm-error-bar">Could not load this day: {error}</p> : loading ? (
         <div className="adm-skeleton-block" />
       ) : (
@@ -312,6 +313,8 @@ export default function AdminPage({ onExit }) {
   const [visible, setVisible] = useState(() => !document.hidden);
   const access = useRpc('admin_get_access', {}, !!user);
   const isAdmin = access.data === true;
+  // Mark this browser as internal so its signed-out tabs leave reports too.
+  useEffect(() => { if (isAdmin) markInternalBrowser(); }, [isAdmin]);
   const dashWindow = useDashboardWindow(range);
   const pickedWindow = selectedDay ? dayWindow(selectedDay) : dashWindow;
   const queryWindow = useMemo(() => ({ p_start: pickedWindow.p_start, p_end: pickedWindow.p_end }), [pickedWindow.p_start, pickedWindow.p_end]);

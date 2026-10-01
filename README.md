@@ -101,7 +101,11 @@ never touches MTO on a user's behalf.
   from edge headers (never the body); resolves user identity from a verified
   Supabase access token; writes with the service role; rate-limits per IP.
   Without `SUPABASE_SERVICE_ROLE_KEY` it accepts-and-drops so analytics can
-  never break the app.
+  never break the app. Crawlers that identify themselves are dropped before
+  any write. Admin reports also leave out, via `admin_session_ids()`, admin
+  accounts, browsers marked internal (opening the admin dashboard marks yours;
+  `?em_internal=1` marks any other, such as a private window, and `=0` clears
+  it) and crawlers that open blog/company CTA links and leave.
 - `api/stripe-checkout.js` / `api/stripe-portal.js` / `api/stripe-webhook.js`
   — Pro-subscription billing (Stripe Checkout + customer portal + the
   signature-verified webhook that syncs `public.user_plans`). Grandfathered
