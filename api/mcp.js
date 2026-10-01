@@ -5,12 +5,39 @@ import { runClaimsSearch } from './_lib/claims-internal.js';
 import { resolveMapClaims } from './_lib/map-claims.js';
 import { resolveBranding } from './_lib/branding.js';
 import { claimSummary } from '../shared/claimData.js';
-import { serverSupabase } from './_lib/supabase-server.js';
+import { serverSupabase, userSupabase } from './_lib/supabase-server.js';
+import { authenticateUserBearer } from './_lib/user-auth.js';
 import { clientIp, rateLimited, rateLimitedShared } from './_lib/guard.js';
+
+// Hourly preview allowance by tier. create_shared_map enforces the same
+// numbers over a rolling hour (per creator key when anonymous, per account when
+// signed in), so these are the figures users are told.
+const PREVIEWS_PER_HOUR = { anonymous: 10, free: 30, pro: 200 };
+// A map usually takes one to three claim searches.
+const SEARCHES_PER_HOUR = { anonymous: 30, free: 90, pro: 600 };
+// Abuse ceilings per egress IP, for anonymous calls only. Hosted assistants
+// share egress IPs, so hitting one says nothing about the individual caller.
+const NETWORK_PREVIEWS_PER_HOUR = 300;
+const NETWORK_SEARCHES_PER_HOUR = 300;
+const PLAN_LABEL = { free: 'the Free plan', pro: 'Pro' };
+// Public connector URLs, on the host the docs and server.json advertise.
+const CONNECTOR_ORIGIN = 'https://www.explorationmaps.com';
+const LIMIT_TEXT = {
+  anonymous: `Free use allows ${PREVIEWS_PER_HOUR.anonymous} previews per hour; allowance in the result reports how many remain.`,
+  account: `Signed-in use allows ${PREVIEWS_PER_HOUR.free} previews per hour on the Free plan and ${PREVIEWS_PER_HOUR.pro} on Pro; allowance in the result reports how many remain.`,
+};
 
 const SERVER_NAME = 'ExplorationMaps';
 const SERVER_VERSION = '1.1.1'; // keep in step with server.json
-const SERVER_INSTRUCTIONS = `ExplorationMaps creates mineral exploration maps from public registry records. For a request naming a company or project, identify the specific project before mapping. Search its claims, group records geographically, and pass verified claim_numbers to preview_exploration_map so unrelated projects stay out. If the project cannot be identified reliably, ask the user. When available, pass the company's HTTPS website in branding and verified project facts in facts_panel and claims_callout; do not invent ownership, grades, targets or coordinates. Choose a map type and basemap that match the request. The preview defaults to supported context overlays, nearby claims, a locator inset and a claim callout. After the call, report claims_found_primary separately from claims_found_neighbours, describe only layers_applied, and give the share_url. Public registry data is informational and is not a legal title opinion or survey. A rendered PNG and export pack are not currently returned by this MCP tool. Free use allows 10 map previews per hour: tell the user how many remain after each preview, and if the limit is reached, give them the reset time and editor link from the error.`;
+const SERVER_INSTRUCTIONS = `ExplorationMaps creates mineral exploration maps from public registry records. For a request naming a company or project, identify the specific project before mapping. Search its claims, group records geographically, and pass verified claim_numbers to preview_exploration_map so unrelated projects stay out. If the project cannot be identified reliably, ask the user. When available, pass the company's HTTPS website in branding and verified project facts in facts_panel and claims_callout; do not invent ownership, grades, targets or coordinates. Choose a map type and basemap that match the request. The preview defaults to supported context overlays, nearby claims, a locator inset and a claim callout. After the call, report claims_found_primary separately from claims_found_neighbours, describe only layers_applied, and give the share_url. Public registry data is informational and is not a legal title opinion or survey. A rendered PNG and export pack are not currently returned by this MCP tool.`;
+const LIMIT_INSTRUCTIONS = {
+  anonymous: ` Free use allows ${PREVIEWS_PER_HOUR.anonymous} map previews per hour: tell the user how many remain after each preview, and if the limit is reached, give them the reset time and links from the error.`,
+  account: ` The user is signed in to ExplorationMaps: ${PREVIEWS_PER_HOUR.free} map previews per hour on the Free plan, ${PREVIEWS_PER_HOUR.pro} on Pro. Tell the user how many remain after each preview, and if the limit is reached, give them the reset time and links from the error.`,
+};
+
+function instructionsFor(req) {
+  return SERVER_INSTRUCTIONS + LIMIT_INSTRUCTIONS[req.account ? 'account' : 'anonymous'];
+}
 const MODERN_VERSION = '2026-07-28';
 const LEGACY_VERSIONS = ['2025-11-25', '2025-06-18', '2025-03-26'];
 const SUPPORTED_VERSIONS = [MODERN_VERSION, ...LEGACY_VERSIONS];
@@ -172,7 +199,7 @@ const TOOLS = [
   {
     name: 'preview_exploration_map',
     title: 'Create a mineral exploration map preview',
-    description: 'Create a branded mineral exploration map from public registry claims and return a shareable URL. Provide at least one of search, location or claim_numbers. For a specific project, search its claims first and pass exact claim_numbers. Supply published facts and branding when known; never invent ownership, targets, grades or coordinates. Supports separate neighbouring claims, a project callout, locator inset, and map basemap selection. Drill and NI 43-101 layouts require user-supplied data or qualified review; this tool does not generate drill results. Free use allows 10 previews per hour; allowance in the result reports how many remain.',
+    description: `Create a branded mineral exploration map from public registry claims and return a shareable URL. Provide at least one of search, location or claim_numbers. For a specific project, search its claims first and pass exact claim_numbers. Supply published facts and branding when known; never invent ownership, targets, grades or coordinates. Supports separate neighbouring claims, a project callout, locator inset, and map basemap selection. Drill and NI 43-101 layouts require user-supplied data or qualified review; this tool does not generate drill results. ${LIMIT_TEXT.anonymous}`,
     inputSchema: PREVIEW_INPUT_SCHEMA,
     outputSchema: {
       type: 'object',
@@ -190,7 +217,7 @@ const TOOLS = [
         caption: { type: 'string' },
         alt_text: { type: 'string' },
         source: { type: 'string' },
-        expires_in_days: { type: 'integer' },
+        expires_in_days: { type: ['integer', 'null'] },
         allowance: {
           type: 'object',
           properties: {
@@ -257,6 +284,11 @@ const TOOLS = [
     },
   },
 ];
+
+// The account connector serves the same tools; only the stated limit differs.
+const ACCOUNT_TOOLS = TOOLS.map((tool) => (tool.name === 'preview_exploration_map'
+  ? { ...tool, description: tool.description.replace(LIMIT_TEXT.anonymous, LIMIT_TEXT.account) }
+  : tool));
 
 function jsonRpcResult(id, result, modern = false) {
   const response = { jsonrpc: '2.0', id, result };
@@ -349,6 +381,7 @@ const SESSION_ID = /^[\x21-\x7e]{16,128}$/;
 // caller-supplied, so they only partition the budget — ipSubject() is the
 // ceiling they cannot rotate their way past.
 function callerSubject(req, toolName) {
+  if (req.account) return hashSubject(`mcp:${toolName}:user:${req.account.user.id}`);
   const ip = clientIp(req);
   const meta = req.body?.params?._meta || {};
   const user = typeof meta['openai/subject'] === 'string' ? meta['openai/subject'].slice(0, 200) : '';
@@ -363,25 +396,28 @@ function ipSubject(req, toolName) {
   return hashSubject(`mcp:${toolName}:ip:${clientIp(req)}`);
 }
 
-// Anonymous preview allowance. create_shared_map enforces the same number per
-// creator key over a rolling hour, so this is the single figure users are told.
-const FREE_PREVIEWS_PER_HOUR = 10;
-// Abuse ceiling per egress IP. Hosted assistants share egress IPs, so hitting
-// it says nothing about the individual caller.
-const NETWORK_PREVIEWS_PER_HOUR = 300;
 const HOUR_MS = 60 * 60_000;
 
 function siteUrl() {
   return String(process.env.SITE_URL || 'https://explorationmaps.com').replace(/\/$/, '');
 }
 
-// Creation times (ms) of this caller's shares in the rolling hour, oldest
-// first. Fails open (null) like the other limiters; create_shared_map still
-// enforces the cap.
-async function previewTimes(sb, subject) {
+function supabaseUrl() {
+  return String(process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').replace(/\/$/, '');
+}
+
+function tierOf(req) {
+  return req.account?.tier || 'anonymous';
+}
+
+// Creation times (ms) of the caller's shares in the rolling hour, oldest first:
+// by account when signed in, else by creator key. Fails open (null) like the
+// other limiters; create_shared_map still enforces the cap.
+async function previewTimes(sb, req, subject) {
   try {
-    const { data, error } = await sb.from('shared_maps').select('created_at')
-      .eq('creator_key', subject)
+    const query = sb.from('shared_maps').select('created_at');
+    const scoped = req.account ? query.eq('user_id', req.account.user.id) : query.eq('creator_key', subject);
+    const { data, error } = await scoped
       .gt('created_at', new Date(Date.now() - HOUR_MS).toISOString())
       .order('created_at', { ascending: true });
     if (error || !Array.isArray(data)) return null;
@@ -392,8 +428,8 @@ async function previewTimes(sb, subject) {
 }
 
 // When the rolling-hour count next drops below the allowance.
-function nextPreviewAt(times) {
-  return new Date(times[times.length - FREE_PREVIEWS_PER_HOUR] + HOUR_MS);
+function nextPreviewAt(times, limit) {
+  return new Date(times[times.length - limit] + HOUR_MS);
 }
 
 // check_rate_limit counts in fixed clock-hour windows.
@@ -410,21 +446,60 @@ function whenText(at) {
   return `${at.toISOString().slice(11, 16)} UTC (in ${minutes} minute${minutes === 1 ? '' : 's'})`;
 }
 
-function previewLimitError(scope, resetsAt) {
+// Whether Supabase's OAuth server is switched on, so the account connector can
+// be offered. A yes is trusted for ten minutes per instance; a no is rechecked
+// after 30 seconds, so a timeout or 5xx does not turn sign-in away for long.
+let signInState = { until: 0, ok: false };
+async function accountSignInAvailable() {
+  if (Date.now() < signInState.until) return signInState.ok;
+  let ok = false;
+  try {
+    const response = await fetch(`${supabaseUrl()}/.well-known/oauth-authorization-server/auth/v1`, { signal: AbortSignal.timeout(2000) });
+    ok = response.ok;
+  } catch {
+    ok = false;
+  }
+  signInState = { until: Date.now() + (ok ? 10 * 60_000 : 30_000), ok };
+  return ok;
+}
+
+async function previewLimitError(req, scope, resetsAt) {
+  const tier = tierOf(req);
   const editor = `${siteUrl()}/`;
-  const error = new Error(scope === 'caller'
-    ? `Free preview limit reached: ${FREE_PREVIEWS_PER_HOUR} map previews per hour. The next free preview is available at ${whenText(resetsAt)}. To keep mapping now, use the ExplorationMaps editor at ${editor}, which has no preview limit.`
-    : `ExplorationMaps has reached its hourly preview capacity for requests from this network. Try again at ${whenText(resetsAt)}, or use the ExplorationMaps editor at ${editor}.`);
+  const upgradeUrl = `${siteUrl()}/account`;
+  const when = whenText(resetsAt);
+  let message;
+  if (scope === 'network') {
+    message = `ExplorationMaps has reached its hourly preview capacity for requests from this network. Try again at ${when}, or use the ExplorationMaps editor at ${editor}.`;
+  } else if (tier === 'anonymous') {
+    const signIn = await accountSignInAvailable()
+      ? ` Signed-in accounts get ${PREVIEWS_PER_HOUR.free} per hour: add the ExplorationMaps account connector at ${CONNECTOR_ORIGIN}/mcp/account and sign in.`
+      : '';
+    message = `Free preview limit reached: ${PREVIEWS_PER_HOUR.anonymous} map previews per hour. The next free preview is available at ${when}.${signIn} To keep mapping now, use the ExplorationMaps editor at ${editor}, which has no preview limit.`;
+  } else {
+    const upgrade = tier === 'free' ? ` Upgrade to Pro for ${PREVIEWS_PER_HOUR.pro} per hour at ${upgradeUrl}.` : '';
+    message = `Preview limit reached: ${PREVIEWS_PER_HOUR[tier]} map previews per hour on ${PLAN_LABEL[tier]}. The next preview is available at ${when}.${upgrade}`;
+  }
+  const error = new Error(message);
   error.code = 'RATE_LIMITED';
   error.details = {
     scope,
-    limit: scope === 'caller' ? FREE_PREVIEWS_PER_HOUR : NETWORK_PREVIEWS_PER_HOUR,
+    tier,
+    limit: scope === 'network' ? NETWORK_PREVIEWS_PER_HOUR : PREVIEWS_PER_HOUR[tier],
     window_seconds: HOUR_MS / 1000,
     resets_at: resetsAt.toISOString(),
     retry_after_seconds: secondsUntil(resetsAt),
     editor_url: editor,
+    ...(tier === 'free' ? { upgrade_url: upgradeUrl } : {}),
   };
   return error;
+}
+
+function allowanceNotice({ tier, limit, remaining, next_available_at: nextAt }) {
+  const plan = tier === 'anonymous' ? '' : ` on ${PLAN_LABEL[tier]}`;
+  if (remaining) return `${tier === 'anonymous' ? 'Free previews' : 'Previews'} left this hour: ${remaining} of ${limit}${plan}.`;
+  const upgrade = tier === 'free' ? ` Upgrade to Pro for ${PREVIEWS_PER_HOUR.pro} per hour at ${siteUrl()}/account.` : '';
+  return `That was the last of ${limit} ${tier === 'anonymous' ? 'free ' : ''}previews this hour${plan}. The next is available at ${whenText(new Date(nextAt))}.${upgrade}`;
 }
 
 async function overToolLimit(sb, req, toolName, { perCaller, perIp, bucket }) {
@@ -472,15 +547,17 @@ async function createPreview(req, args) {
 
   const sb = serverSupabase();
   const subject = callerSubject(req, 'preview_exploration_map');
+  const tier = tierOf(req);
+  const limit = PREVIEWS_PER_HOUR[tier];
   // Read the caller's allowance from the shares create_shared_map counts, so
   // the stated number and reset time are exact and failed calls cost nothing.
   // Checked before the registry and branding work so a capped call fails fast.
-  const times = await previewTimes(sb, subject);
-  if (times && times.length >= FREE_PREVIEWS_PER_HOUR) throw previewLimitError('caller', nextPreviewAt(times));
-  if (await rateLimitedShared(sb, req, {
+  const times = await previewTimes(sb, req, subject);
+  if (times && times.length >= limit) throw await previewLimitError(req, 'caller', nextPreviewAt(times, limit));
+  if (!req.account && await rateLimitedShared(sb, req, {
     max: NETWORK_PREVIEWS_PER_HOUR, windowSeconds: HOUR_MS / 1000, bucket: 'mcp-preview-ip', subject: ipSubject(req, 'preview_exploration_map'),
   })) {
-    throw previewLimitError('network', nextClockHour());
+    throw await previewLimitError(req, 'network', nextClockHour());
   }
 
   const { primary: claims, neighbours, neighboursWarning } = await resolveMapClaims(input, runClaimsSearch, clientIp(req));
@@ -504,18 +581,19 @@ async function createPreview(req, args) {
     sourceMeta: claims.meta || null,
   });
 
-  const { data: shareId, error: shareError } = await sb.rpc('create_shared_map', {
-    p_state: project,
-    p_creator_key: subject,
-  });
+  // Signed-in previews are created as the user, so the map is owned by the
+  // account and does not expire; anonymous ones carry the caller's key.
+  const { data: shareId, error: shareError } = req.account
+    ? await userSupabase(req.account.token).rpc('create_shared_map', { p_state: project })
+    : await sb.rpc('create_shared_map', { p_state: project, p_creator_key: subject });
   if (shareError) {
     const message = String(shareError.message || '');
     const error = new Error('The map preview could not be saved.');
     error.code = 'SHARE_FAILED';
     if (/SHARE_RATE_LIMIT/.test(message)) {
       // A concurrent call took the last slot after the check above.
-      const latest = await previewTimes(sb, subject);
-      throw previewLimitError('caller', latest?.length >= FREE_PREVIEWS_PER_HOUR ? nextPreviewAt(latest) : new Date(Date.now() + HOUR_MS));
+      const latest = await previewTimes(sb, req, subject);
+      throw await previewLimitError(req, 'caller', latest?.length >= limit ? nextPreviewAt(latest, limit) : new Date(Date.now() + HOUR_MS));
     } else if (/SHARE_TOO_(LARGE|COMPLEX)/.test(message)) {
       error.message = 'This claim set is too large for a preview. Pass claim_numbers for one project, or set neighbours.show to false.';
       error.code = 'MAP_TOO_COMPLEX';
@@ -526,24 +604,20 @@ async function createPreview(req, args) {
   // This share now counts toward the caller's rolling hour.
   const after = times && [...times, Date.now()];
   const allowance = after && {
-    tier: 'anonymous',
-    limit: FREE_PREVIEWS_PER_HOUR,
-    remaining: Math.max(0, FREE_PREVIEWS_PER_HOUR - after.length),
+    tier,
+    limit,
+    remaining: Math.max(0, limit - after.length),
     window_seconds: HOUR_MS / 1000,
   };
-  if (allowance && !allowance.remaining) allowance.next_available_at = nextPreviewAt(after).toISOString();
+  if (allowance && !allowance.remaining) allowance.next_available_at = nextPreviewAt(after, limit).toISOString();
   const warnings = [
     ...sourceWarnings(input.jurisdiction, claims),
     ...(neighboursWarning ? [neighboursWarning] : []),
     'This map is generated from public registry data and is not a legal title opinion or legal survey.',
-    'Anonymous preview links expire after 30 days.',
+    req.account ? 'This map is saved to your ExplorationMaps account and does not expire.' : 'Anonymous preview links expire after 30 days.',
     'Reference overlays are configured on the map; third-party tile availability is checked when the share page renders.',
   ];
-  if (allowance) {
-    warnings.push(allowance.remaining
-      ? `Free previews left this hour: ${allowance.remaining} of ${FREE_PREVIEWS_PER_HOUR}.`
-      : `That was the last of ${FREE_PREVIEWS_PER_HOUR} free previews this hour. The next is available at ${whenText(new Date(allowance.next_available_at))}.`);
-  }
+  if (allowance) warnings.push(allowanceNotice(allowance));
   const layersApplied = ['claims', input.basemap, ...input.include.filter((layer) => layer !== 'claims')];
   const layersEmpty = [];
   if (neighbours.features.length) layersApplied.push('neighbours'); else layersEmpty.push('neighbours');
@@ -574,7 +648,7 @@ async function createPreview(req, args) {
     caption,
     alt_text: altText,
     source: jurisdiction?.registry || 'Official mineral registry',
-    expires_in_days: 30,
+    expires_in_days: req.account ? null : 30,
     ...(allowance ? { allowance } : {}),
     warnings,
   };
@@ -599,7 +673,10 @@ async function searchClaims(req, args) {
   const limit = Math.max(1, Math.min(100, Number(args?.limit) || 25));
 
   const sb = serverSupabase();
-  if (await overToolLimit(sb, req, 'search_mineral_claims', { perCaller: 30, perIp: 300, bucket: 'mcp-search' })) {
+  const limited = req.account
+    ? await rateLimitedShared(sb, req, { max: SEARCHES_PER_HOUR[tierOf(req)], windowSeconds: HOUR_MS / 1000, bucket: 'mcp-search-account', subject: callerSubject(req, 'search_mineral_claims') })
+    : await overToolLimit(sb, req, 'search_mineral_claims', { perCaller: SEARCHES_PER_HOUR.anonymous, perIp: NETWORK_SEARCHES_PER_HOUR, bucket: 'mcp-search' });
+  if (limited) {
     const resetsAt = nextClockHour();
     const error = new Error(`Mineral-registry search limit reached. Try again at ${whenText(resetsAt)}.`);
     error.code = 'RATE_LIMITED';
@@ -667,15 +744,76 @@ function callToolError(error) {
   };
 }
 
+// ── Account connector (/mcp/account) ────────────────────────────────────────
+// The same tools behind sign-in. Supabase Auth is the OAuth 2.1 authorization
+// server (with dynamic client registration and our /oauth/consent page); this
+// endpoint is the protected resource and only checks the bearer it is sent.
+function isAccountEndpoint(req) {
+  return req.query?.auth === 'account';
+}
+
+const RESOURCE_HOST = /^(?:(?:www\.)?explorationmaps\.com|[a-z0-9-]+\.vercel\.app)$/;
+
+// The origin the client connected to, so the advertised resource matches the
+// URL it holds; anything unexpected falls back to the documented host.
+function requestOrigin(req) {
+  const host = String(req.headers?.['x-forwarded-host'] || req.headers?.host || '').split(',')[0].trim().toLowerCase();
+  return RESOURCE_HOST.test(host) ? `https://${host}` : CONNECTOR_ORIGIN;
+}
+
+// RFC 9728 protected resource metadata.
+function protectedResourceMetadata(req) {
+  const origin = requestOrigin(req);
+  return {
+    resource: `${origin}/mcp/account`,
+    authorization_servers: [`${supabaseUrl()}/auth/v1`],
+    bearer_methods_supported: ['header'],
+    resource_name: 'ExplorationMaps',
+    resource_documentation: `${origin}/mcp/`,
+  };
+}
+
+function signInChallenge(req, res, id, invalidToken) {
+  const metadata = `${requestOrigin(req)}/.well-known/oauth-protected-resource/mcp/account`;
+  res.setHeader('WWW-Authenticate', `Bearer resource_metadata="${metadata}"${invalidToken ? ', error="invalid_token"' : ''}`);
+  return res.status(401).json(jsonRpcError(id ?? null, -32001, 'Sign in to ExplorationMaps to use this connector.'));
+}
+
+// Validated accounts by token, briefly, so a conversation does not cost an
+// Auth round trip and a plan lookup on every call.
+const ACCOUNT_CACHE_MS = 60_000;
+const accountCache = new Map();
+
+async function accountFor(req) {
+  const token = String(req.headers?.authorization || '').match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
+  if (!token) return { status: 'missing' };
+  const key = hashSubject(`account:${token}`);
+  const hit = accountCache.get(key);
+  if (hit && hit.until > Date.now()) return hit.result;
+  const auth = await authenticateUserBearer(req);
+  if (!auth.ok) return { status: auth.status === 401 ? 'invalid' : 'unavailable' };
+  let tier = 'free';
+  try {
+    const { data } = await serverSupabase().from('user_plans').select('plan').eq('user_id', auth.user.id).maybeSingle();
+    if (data?.plan === 'pro') tier = 'pro';
+  } catch {
+    // Plan unknown: the free allowance, never Pro by accident.
+  }
+  const result = { status: 'ok', account: { user: auth.user, token, tier } };
+  accountCache.set(key, { result, until: Date.now() + ACCOUNT_CACHE_MS });
+  if (accountCache.size > 1000) accountCache.delete(accountCache.keys().next().value);
+  return result;
+}
+
 function setCors(req, res) {
   const origin = req.headers?.origin;
   if (origin && ALLOWED_ORIGINS.has(String(origin))) {
     res.setHeader('Access-Control-Allow-Origin', String(origin));
     res.setHeader('Vary', 'Origin');
   }
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'content-type, accept, authorization, mcp-protocol-version, mcp-method, mcp-name, mcp-session-id, mcp-param-*');
-  res.setHeader('Access-Control-Expose-Headers', 'MCP-Protocol-Version, Mcp-Session-Id, X-Request-Id');
+  res.setHeader('Access-Control-Expose-Headers', 'MCP-Protocol-Version, Mcp-Session-Id, X-Request-Id, WWW-Authenticate');
 }
 
 export default async function handler(req, res) {
@@ -683,6 +821,12 @@ export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
 
   if (req.method === 'OPTIONS') return res.status(204).end();
+  if (req.method === 'GET' && req.query?.wellknown === 'protected-resource') {
+    // Public discovery metadata, readable from any origin.
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Cache-Control', 'public, max-age=300');
+    return res.status(200).json(protectedResourceMetadata(req));
+  }
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST, OPTIONS');
     return res.status(405).json(jsonRpcError(null, -32600, 'Streamable HTTP MCP endpoint accepts POST requests.'));
@@ -711,6 +855,22 @@ export default async function handler(req, res) {
   const routingError = validateRoutingHeaders(req, body);
   if (routingError) return res.status(400).json(routingError);
 
+  if (isAccountEndpoint(req)) {
+    const auth = await accountFor(req);
+    if (auth.status === 'unavailable') {
+      return res.status(503).json(jsonRpcError(body.id, -32603, 'ExplorationMaps sign-in is temporarily unavailable. Try again shortly.'));
+    }
+    if (auth.status !== 'ok') {
+      // Until Supabase's OAuth server is switched on, a challenge would send
+      // clients into a discovery that fails; say so instead.
+      if (!(await accountSignInAvailable())) {
+        return res.status(503).json(jsonRpcError(body.id, -32603, `ExplorationMaps account sign-in is not available yet. Use ${CONNECTOR_ORIGIN}/mcp/server for now.`));
+      }
+      return signInChallenge(req, res, body.id, auth.status === 'invalid');
+    }
+    req.account = auth.account;
+  }
+
   const modern = modernRequest(req, body);
   if (modern) res.setHeader('MCP-Protocol-Version', MODERN_VERSION);
 
@@ -723,7 +883,7 @@ export default async function handler(req, res) {
       return res.status(200).json(jsonRpcResult(body.id, {
         supportedVersions: [MODERN_VERSION],
         capabilities: { tools: { listChanged: false } },
-        instructions: SERVER_INSTRUCTIONS,
+        instructions: instructionsFor(req),
         ttlMs: 60_000,
         cacheScope: 'public',
       }, true));
@@ -739,7 +899,7 @@ export default async function handler(req, res) {
         protocolVersion: negotiated,
         capabilities: { tools: { listChanged: false } },
         serverInfo: { name: SERVER_NAME, version: SERVER_VERSION },
-        instructions: SERVER_INSTRUCTIONS,
+        instructions: instructionsFor(req),
       }, false));
     }
 
@@ -749,7 +909,7 @@ export default async function handler(req, res) {
 
     if (body.method === 'tools/list') {
       return res.status(200).json(jsonRpcResult(body.id, {
-        tools: TOOLS,
+        tools: req.account ? ACCOUNT_TOOLS : TOOLS,
         ...(modern ? { ttlMs: 60_000, cacheScope: 'public' } : {}),
       }, modern));
     }

@@ -78,8 +78,13 @@ describe('MCP free preview allowance', () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(NOW);
     Object.assign(db, { reads: [], ipLimited: false, insertError: null, rpcCalls: [] });
+    // Supabase's OAuth server reads as off, so no sign-in offer is made here.
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false })));
   });
-  afterEach(() => vi.useRealTimers());
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
 
   it('tells the caller how many free previews remain', async () => {
     db.reads = [shares(8, 30)];

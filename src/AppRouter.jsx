@@ -5,6 +5,7 @@ import { useAuth } from './hooks/useAuth.jsx';
 const AdminPage = React.lazy(() => import('./components/AdminPage'));
 const EditorApp = React.lazy(() => import('./App'));
 const HowToUseModal = React.lazy(() => import('./components/HowToUseModal'));
+const OAuthConsentPage = React.lazy(() => import('./components/OAuthConsentPage'));
 
 export function needsWorkspace(location = window.location) {
   const params = new URLSearchParams(location.search);
@@ -48,6 +49,10 @@ export default function AppRouter() {
     window.history.pushState({}, '', path + (query ? `?${query}` : ''));
     setWorkspace(true);
   };
+  // Supabase's OAuth server sends an assistant's account-connection request here.
+  if (window.location.pathname === '/oauth/consent') {
+    return <React.Suspense fallback={<div className="shared-map-loading" role="status">Loading…</div>}><OAuthConsentPage /></React.Suspense>;
+  }
   if (adminEntry) return <React.Suspense fallback={<div className="shared-map-loading" role="status">Opening analytics…</div>}>
     <AdminPage onExit={() => { window.history.pushState({}, '', '/'); setAdminEntry(false); }} />
   </React.Suspense>;

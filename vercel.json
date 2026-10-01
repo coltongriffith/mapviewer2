@@ -22,6 +22,18 @@
       "destination": "/api/mcp"
     },
     {
+      "source": "/mcp/account",
+      "destination": "/api/mcp?auth=account"
+    },
+    {
+      "source": "/.well-known/oauth-protected-resource",
+      "destination": "/api/mcp?wellknown=protected-resource"
+    },
+    {
+      "source": "/.well-known/oauth-protected-resource/:path*",
+      "destination": "/api/mcp?wellknown=protected-resource"
+    },
+    {
       "source": "/api/agent/v1/preview",
       "destination": "/api/agent?action=preview"
     },
@@ -79,6 +91,10 @@
     },
     {
       "source": "/tenure-monitor/:path*",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/oauth/consent",
       "destination": "/index.html"
     }
   ],
