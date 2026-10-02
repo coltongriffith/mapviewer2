@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 640" font-family="Arial, Helvetica, sans-serif">
+  <rect width="1000" height="640" fill="#f3efe6" />
+  <line x1="200" y1="0" x2="200" y2="640" stroke="#d9d2c0" stroke-width="0.7" />
+  <line x1="0" y1="128" x2="1000" y2="128" stroke="#d9d2c0" stroke-width="0.7" />
+  <line x1="400" y1="0" x2="400" y2="640" stroke="#d9d2c0" stroke-width="0.7" />
+  <line x1="0" y1="256" x2="1000" y2="256" stroke="#d9d2c0" stroke-width="0.7" />
+  <line x1="600" y1="0" x2="600" y2="640" stroke="#d9d2c0" stroke-width="0.7" />
+  <line x1="0" y1="384" x2="1000" y2="384" stroke="#d9d2c0" stroke-width="0.7" />
+  <line x1="800" y1="0" x2="800" y2="640" stroke="#d9d2c0" stroke-width="0.7" />
+  <line x1="0" y1="512" x2="1000" y2="512" stroke="#d9d2c0" stroke-width="0.7" />
+  <path d="M500.0 428.6 L500.0 459.6 L500.0 490.6 L500.0 521.6 L526.6 521.6 L553.2 521.6 L579.9 521.6 L606.5 521.6 L633.1 521.6 L659.7 521.6 L686.3 521.6 L712.9 521.6 L712.9 490.7 L712.9 459.7 L712.9 428.6 L686.3 428.6 L659.7 428.6 L633.1 428.6 L606.5 428.6 L579.9 428.6 L553.2 428.6 L526.6 428.6 L526.6 397.6 L500.0 397.6 L500.0 428.6 Z" fill="#2f8f83" fill-opacity="0.34" stroke="#0e5b52" stroke-width="1.6" />
+  <path d="M553.2 149.5 L553.2 180.5 L553.2 211.5 L553.2 242.6 L553.2 273.6 L553.2 304.6 L579.9 304.6 L606.5 304.6 L633.1 304.6 L659.7 304.6 L659.7 273.6 L659.7 242.6 L659.7 211.5 L659.7 180.5 L659.7 149.5 L659.7 118.4 L633.1 118.4 L606.5 118.4 L579.9 118.4 L553.2 118.4 L553.2 149.5 Z" fill="#2f8f83" fill-opacity="0.34" stroke="#0e5b52" stroke-width="1.6" />
+  <path d="M500.0 304.6 L500.0 335.6 L500.0 366.6 L500.0 397.6 L526.6 397.6 L526.6 428.6 L553.2 428.6 L579.9 428.6 L606.5 428.6 L633.1 428.6 L659.7 428.6 L659.7 397.6 L659.7 366.6 L659.7 335.6 L659.7 304.6 L633.1 304.6 L606.5 304.6 L579.9 304.6 L553.2 304.6 L553.2 273.6 L526.6 273.6 L500.0 273.6 L500.0 304.6 Z" fill="#2f8f83" fill-opacity="0.34" stroke="#0e5b52" stroke-width="1.6" />
+  <path d="M366.9 304.6 L366.9 335.6 L366.9 366.6 L366.9 397.6 L393.5 397.6 L420.1 397.6 L446.8 397.6 L473.4 397.6 L500.0 397.6 L500.0 366.6 L500.0 335.6 L500.0 304.6 L500.0 273.6 L473.4 273.6 L446.8 273.6 L420.2 273.6 L393.5 273.6 L366.9 273.6 L366.9 304.6 Z" fill="#2f8f83" fill-opacity="0.34" stroke="#0e5b52" stroke-width="1.6" />
+  <path d="M366.9 428.6 L366.9 459.6 L366.9 490.6 L366.9 521.6 L393.5 521.6 L420.1 521.6 L446.8 521.6 L473.4 521.6 L500.0 521.6 L500.0 490.6 L500.0 459.6 L500.0 428.6 L500.0 397.6 L473.4 397.6 L446.8 397.6 L420.1 397.6 L393.5 397.6 L366.9 397.6 L366.9 428.6 Z" fill="#2f8f83" fill-opacity="0.34" stroke="#0e5b52" stroke-width="1.6" />
+  <path d="M287.1 428.6 L287.1 459.6 L287.1 490.6 L287.1 521.6 L313.7 521.6 L340.3 521.6 L366.9 521.6 L366.9 490.6 L366.9 459.6 L366.9 428.6 L366.9 397.6 L340.3 397.6 L313.7 397.6 L287.1 397.6 L287.1 428.6 Z" fill="#2f8f83" fill-opacity="0.34" stroke="#0e5b52" stroke-width="1.6" />
+  <path d="M287.1 242.5 L287.1 273.6 L287.1 304.6 L287.1 335.6 L287.1 366.6 L287.1 397.6 L313.7 397.6 L340.3 397.6 L366.9 397.6 L366.9 366.6 L366.9 335.6 L366.9 304.6 L366.9 273.6 L393.5 273.6 L420.2 273.6 L420.2 242.5 L420.2 211.5 L393.5 211.5 L366.9 211.5 L340.3 211.5 L313.7 211.5 L287.1 211.5 L287.1 242.5 Z" fill="#2f8f83" fill-opacity="0.34" stroke="#0e5b52" stroke-width="1.6" />
+  <!-- title strip -->
+  <rect x="0" y="0" width="1000" height="54" fill="#173042" />
+  <text x="20" y="34" font-size="21" font-weight="bold" fill="#ffffff">Fjordland Exploration Inc. — Mineral Claims</text>
+  <text x="980" y="34" font-size="15" fill="#cfe3df" text-anchor="end">FEX</text>
+  <!-- scale bar -->
+  <g transform="translate(826.256201209384, 596)">
+    <rect x="0" y="0" width="66.87189939530798" height="8" fill="#173042" />
+    <rect x="66.87189939530798" y="0" width="66.87189939530798" height="8" fill="#ffffff" stroke="#173042" stroke-width="1" />
+    <text x="66.87189939530798" y="-6" font-size="12" fill="#173042" text-anchor="middle">2 km</text>
+  </g>
+  <!-- north arrow -->
+  <g transform="translate(956, 92)">
+    <circle r="17" fill="#ffffff" stroke="#b9b09a" />
+    <path d="M0 -10 L5 7 L0 3 L-5 7 Z" fill="#173042" />
+    <text y="14" font-size="9" font-weight="bold" fill="#173042" text-anchor="middle">N</text>
+  </g>
+  <!-- watermark -->
+  <text x="20" y="620" font-size="13" fill="#7d8b8a">Map by Exploration Maps — explorationmaps.com</text>
+</svg>
