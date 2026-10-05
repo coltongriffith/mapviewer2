@@ -55,3 +55,38 @@ describe('acquisition across the static site, app, and email', () => {
     expect(send).toHaveBeenLastCalledWith('signup_completed', { utm_source: 'partner' });
   });
 });
+
+describe('internal browser', () => {
+  const markers = (send) => send.mock.calls
+    .map(([, options]) => JSON.parse(options.body))
+    .filter((body) => body.event === 'internal_session');
+
+  it('?em_internal=1 persists the marker and sends it once per tab', () => {
+    const send = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal('fetch', send);
+    window.history.replaceState({}, '', '/?em_internal=1');
+    boot();
+    expect(localStorage.getItem('em_internal')).toBe('1');
+    expect(markers(send)).toHaveLength(1);
+    delete window.emAcquisition;
+    window.history.replaceState({}, '', '/blog/example/');
+    boot();
+    expect(markers(send)).toHaveLength(1);
+    vi.unstubAllGlobals();
+  });
+
+  it('supports dashboard marking and an explicit clear control', () => {
+    const send = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal('fetch', send);
+    boot();
+    expect(markers(send)).toHaveLength(0);
+    window.emAcquisition.setInternal(true);
+    expect(localStorage.getItem('em_internal')).toBe('1');
+    expect(markers(send)).toHaveLength(1);
+    delete window.emAcquisition;
+    window.history.replaceState({}, '', '/?em_internal=0');
+    boot();
+    expect(localStorage.getItem('em_internal')).toBeNull();
+    vi.unstubAllGlobals();
+  });
+});
