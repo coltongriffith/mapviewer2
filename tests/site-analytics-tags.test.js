@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 
@@ -6,6 +6,8 @@ import path from 'node:path';
 // blocks it unless analytics.ahrefs.com is allowed. Every page the site
 // serves, and the two generators that write pages, must carry it once.
 const AHREFS_TAG = '<script src="https://analytics.ahrefs.com/analytics.js" data-key="Nj1JOEhHV5bRKYBBoUJVVg" async></script>';
+// The app page holds back the automatic first pageview (see below).
+const AHREFS_APP_TAG = '<script src="https://analytics.ahrefs.com/analytics.js" data-key="Nj1JOEhHV5bRKYBBoUJVVg" data-no-pageview-on-load async></script>';
 
 function htmlFiles(dir, out = []) {
   for (const name of readdirSync(dir)) {
@@ -24,9 +26,33 @@ describe('Ahrefs Web Analytics', () => {
     for (const file of pages) {
       const html = readFileSync(file, 'utf8');
       const head = html.slice(0, html.indexOf('</head>'));
-      expect(html.split(AHREFS_TAG).length - 1, `${file} carries the tag once`).toBe(1);
-      expect(head, `${file} has the tag in <head>`).toContain(AHREFS_TAG);
+      const tag = file === 'index.html' ? AHREFS_APP_TAG : AHREFS_TAG;
+      expect(html.split('analytics.ahrefs.com/analytics.js').length - 1, `${file} carries the tag once`).toBe(1);
+      expect(head, `${file} has the tag in <head>`).toContain(tag);
     }
+  });
+
+  it('sends the app\'s first pageview only for an address without one-time codes', async () => {
+    const html = readFileSync('index.html', 'utf8');
+    expect(html).toContain('<script defer src="/ahrefs-pageview.js"></script>');
+    const source = readFileSync('public/ahrefs-pageview.js', 'utf8');
+    const sent = (url) => {
+      window.history.replaceState({}, '', url);
+      const sendEvent = vi.fn();
+      window.AhrefsAnalytics = { sendEvent };
+      new Function(source)();
+      delete window.AhrefsAnalytics;
+      return sendEvent.mock.calls.length > 0;
+    };
+    expect(sent('/')).toBe(true);
+    expect(sent('/app?company=star%20copper&utm_source=linkedin')).toBe(true);
+    expect(sent('/map/abc123?download=png')).toBe(true);
+    // Stripe's checkout return, the connector consent page, sign-in links.
+    expect(sent('/?billing=success&session_id=cs_live_abc')).toBe(false);
+    expect(sent('/oauth/consent?authorization_id=diof6bw3skq5')).toBe(false);
+    expect(sent('/#access_token=eyJ.x.y&refresh_token=r&type=magiclink')).toBe(false);
+    expect(sent('/?code=pkce-code')).toBe(false);
+    window.history.replaceState({}, '', '/');
   });
 
   it('is written by the page generators, so regenerated pages keep it', () => {
