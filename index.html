@@ -37,6 +37,12 @@
      Without it the browser blocks rendering while it fetches and runs the file
      — PageSpeed measured 240 ms of blocked render, and a 72 ms long task. -->
 <script defer src="/gtag-init.js"></script>
+<!-- Ahrefs reports each page's full address, and some app addresses carry
+     one-time codes (Stripe's checkout return, the connector consent page,
+     sign-in links). So the app sends its first pageview from
+     /ahrefs-pageview.js, only for an address without them. -->
+<script src="https://analytics.ahrefs.com/analytics.js" data-key="Nj1JOEhHV5bRKYBBoUJVVg" data-no-pageview-on-load async></script>
+<script defer src="/ahrefs-pageview.js"></script>
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",

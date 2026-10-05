@@ -287,6 +287,7 @@ ${schema ? `<script type="application/ld+json">${JSON.stringify(schema, null, 0)
      because our CSP is script-src 'self' with no 'unsafe-inline'. -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=AW-18358773663"></script>
 <script defer src="/gtag-init.js"></script>
+<script src="https://analytics.ahrefs.com/analytics.js" data-key="Nj1JOEhHV5bRKYBBoUJVVg" async></script>
 <script defer src="/acquisition.js"></script>
 </head>
 <body>
