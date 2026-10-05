@@ -243,6 +243,46 @@ describe('MCP account connector', () => {
     expect(db.created.at(-1).args.p_state.layout.themeId).toBe('investor_clean');
   });
 
+  it('applies no kit when there are several and none is the default, and says so', async () => {
+    // An agency keeps a kit per client company: guessing would put another
+    // company's logo on the map.
+    db.kits = [
+      { token: 'pro-m', id: 'kit-a', name: 'Apex Critical Metals', is_default: false, config: { accentColor: '#111111' } },
+      { token: 'pro-m', id: 'kit-b', name: 'Evolution Uranium', is_default: false, config: { accentColor: '#c9a227' } },
+    ];
+    const withArgs = (extra) => ({ ...previewBody, params: { ...previewBody.params, arguments: { ...previewBody.params.arguments, ...extra } } });
+
+    let res = await call({ token: 'pro-m', body: previewBody });
+    let result = res.body.result.structuredContent;
+    expect(result.branding_applied.source).toBeNull();
+    expect(db.created.at(-1).args.p_state.layout.accentColor).not.toBe('#111111');
+    expect(result.warnings.join(' ')).toMatch(/No brand kit applied: the account has 2 brand kits and none is the default\. Pass brand_kit/);
+
+    res = await call({ token: 'pro-m', body: withArgs({ brand_kit: 'kit-b' }) });
+    result = res.body.result.structuredContent;
+    expect(result.branding_applied.source).toBe('brand kit: Evolution Uranium');
+    expect(db.created.at(-1).args.p_state.layout.accentColor).toBe('#c9a227');
+    expect(result.warnings.join(' ')).not.toMatch(/No brand kit applied/);
+  });
+
+  it('treats two kits marked default as no clear default', async () => {
+    db.kits = [
+      { token: 'pro-d', id: 'kit-a', name: 'Apex Critical Metals', is_default: true, config: { accentColor: '#111111' } },
+      { token: 'pro-d', id: 'kit-b', name: 'Evolution Uranium', is_default: true, config: { accentColor: '#c9a227' } },
+      { token: 'pro-d', id: 'kit-c', name: 'Star Copper', is_default: false, config: {} },
+    ];
+    const res = await call({ token: 'pro-d', body: previewBody });
+    const result = res.body.result.structuredContent;
+    expect(result.branding_applied.source).toBeNull();
+    expect(result.warnings.join(' ')).toMatch(/the account has 3 brand kits and 2 are marked default\. Pass brand_kit/);
+  });
+
+  it('applies the only kit even when it is not marked default', async () => {
+    db.kits = [{ token: 'free-o', id: 'kit-o', name: 'Only Kit', is_default: false, config: { accentColor: '#0a7a50' } }];
+    const res = await call({ token: 'free-o', body: previewBody });
+    expect(res.body.result.structuredContent.branding_applied.source).toBe('brand kit: Only Kit');
+  });
+
   it('rejects a map id that is not the user\'s', async () => {
     db.projects = [{ token: 'someone-else', id: 'map-x', name: 'Not yours', layout: {} }];
     const res = await call({ token: 'pro-z', body: { ...previewBody, params: { ...previewBody.params, arguments: { ...previewBody.params.arguments, style_from_map: 'map-x' } } } });

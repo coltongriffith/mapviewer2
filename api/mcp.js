@@ -33,7 +33,7 @@ const SERVER_VERSION = '1.1.1'; // keep in step with server.json
 const SERVER_INSTRUCTIONS = `ExplorationMaps creates mineral exploration maps from public registry records. For a request naming a company or project, identify the specific project before mapping. Search its claims, group records geographically, and pass verified claim_numbers to preview_exploration_map so unrelated projects stay out. If the project cannot be identified reliably, ask the user. When available, pass the company's HTTPS website in branding and verified project facts in facts_panel and claims_callout; do not invent ownership, grades, targets or coordinates. Choose a map type and basemap that match the request. The preview defaults to supported context overlays, nearby claims, a locator inset and a claim callout. After the call, report claims_found_primary separately from claims_found_neighbours, describe only layers_applied, and give the share_url. For an image file, give png_download_url: opening it downloads the map as a PNG in the user's browser. This tool does not return image data itself. Public registry data is informational and is not a legal title opinion or survey.`;
 const LIMIT_INSTRUCTIONS = {
   anonymous: ` Free use allows ${PREVIEWS_PER_HOUR.anonymous} map previews per hour: tell the user how many remain after each preview, and if the limit is reached, give them the reset time and links from the error. This connection is anonymous: it cannot see the user's ExplorationMaps account, brand kit or saved maps. If the user wants their account branding or saved maps, tell them to add ${CONNECTOR_ORIGIN}/mcp/account as a custom connector (Settings, Connectors, Add custom connector) and sign in there.`,
-  account: ` The user is signed in to ExplorationMaps: ${PREVIEWS_PER_HOUR.free} map previews per hour on the Free plan, ${PREVIEWS_PER_HOUR.pro} on Pro. Tell the user how many remain after each preview, and if the limit is reached, give them the reset time and links from the error. Previews use the user's default brand kit (logo, colours, fonts, layout) automatically; omit style so the kit's theme applies. To match one of the user's saved maps, call list_my_maps and pass its id as style_from_map; pass brand_kit to choose another kit. Previews are saved to the user's account.`,
+  account: ` The user is signed in to ExplorationMaps: ${PREVIEWS_PER_HOUR.free} map previews per hour on the Free plan, ${PREVIEWS_PER_HOUR.pro} on Pro. Tell the user how many remain after each preview, and if the limit is reached, give them the reset time and links from the error. Previews use the user's default brand kit (logo, colours, fonts, layout), or their only kit, automatically; omit style so the kit's theme applies. If the user has several kits and none is the default, none is applied: call list_my_maps, pick the kit for the company being mapped and pass its id as brand_kit, and ask the user if it is unclear. To match one of the user's saved maps, pass its id as style_from_map. Previews are saved to the user's account.`,
 };
 
 function instructionsFor(req) {
@@ -290,7 +290,7 @@ const TOOLS = [
 // Signed in, previews take the account's look and the user's saved maps can
 // be listed; everything else is the same as the anonymous connector.
 const ACCOUNT_PREVIEW_PROPERTIES = {
-  brand_kit: { type: 'string', format: 'uuid', description: 'Brand kit id from list_my_maps. Defaults to the account\'s default kit.' },
+  brand_kit: { type: 'string', format: 'uuid', description: 'Brand kit id from list_my_maps. Without it, the account\'s default kit (or its only kit) applies; with several kits and no default, none does.' },
   style_from_map: { type: 'string', format: 'uuid', description: 'Saved map id from list_my_maps: copy its logo, colours, fonts and layout. Overrides brand_kit.' },
   use_brand_kit: { type: 'boolean', default: true, description: 'Set false for the plain ExplorationMaps look.' },
 };
@@ -606,7 +606,8 @@ async function createPreview(req, args) {
     throw error;
   }
 
-  const look = req.account ? await accountLook(req, args) : null;
+  const accountChoice = req.account ? await accountLook(req, args) : null;
+  const look = accountChoice?.config ? accountChoice : null;
   // The kit's accent also colours the callout and markers the builder draws.
   if (look && !input.branding?.primary_color && !input.branding?.accent_color && /^#[0-9a-f]{6}$/i.test(look.config.accentColor || '')) {
     input.branding = { ...input.branding, primary_color: look.config.accentColor };
@@ -654,6 +655,7 @@ async function createPreview(req, args) {
     ...(neighboursWarning ? [neighboursWarning] : []),
     'This map is generated from public registry data and is not a legal title opinion or legal survey.',
     req.account ? 'This map is saved to your ExplorationMaps account and does not expire.' : 'Anonymous preview links expire after 30 days.',
+    ...(accountChoice?.unchosenKits ? [`No brand kit applied: the account has ${accountChoice.unchosenKits} brand kits and ${accountChoice.defaultKits > 1 ? `${accountChoice.defaultKits} are marked default` : 'none is the default'}. Pass brand_kit with the kit for this company (list_my_maps lists them), or set a default kit in ExplorationMaps.`] : []),
     ...(req.account ? [] : [`Anonymous preview: no account branding. To use your ExplorationMaps brand kit and saved maps, add ${CONNECTOR_ORIGIN}/mcp/account as a custom connector and sign in.`]),
     'Reference overlays are configured on the map; third-party tile availability is checked when the share page renders.',
   ];
@@ -721,14 +723,25 @@ async function accountLook(req, args) {
     if (layout.fonts) config.fonts = layout.fonts;
     return { config, source: `saved map: ${data.name}` };
   }
-  let query = db.from('templates').select('name, config').eq('user_id', userId);
-  query = args.brand_kit
-    ? query.eq('id', args.brand_kit)
-    : query.order('is_default', { ascending: false, nullsFirst: false }).order('updated_at', { ascending: false });
-  const { data, error } = await query.limit(1);
-  if (args.brand_kit && !data?.length) throw notFound('brand_kit is not one of your brand kits. Call list_my_maps for ids.');
-  if (error || !data?.length) return null;
-  return { config: data[0].config || {}, source: `brand kit: ${data[0].name}` };
+  if (args.brand_kit) {
+    const { data } = await db.from('templates').select('name, config')
+      .eq('id', args.brand_kit).eq('user_id', userId).maybeSingle();
+    if (!data) throw notFound('brand_kit is not one of your brand kits. Call list_my_maps for ids.');
+    return { config: data.config || {}, source: `brand kit: ${data.name}` };
+  }
+  // Unasked, only an unambiguous kit applies: the default, or the only one.
+  // Someone mapping for several companies keeps a kit per company, and the
+  // most recent one would put another company's logo on the map.
+  const { data: kits, error } = await db.from('templates').select('id, name, is_default').eq('user_id', userId);
+  if (error || !kits?.length) return null;
+  // Two defaults can exist (defaults change in separate updates); that is as
+  // ambiguous as none.
+  const defaults = kits.filter((k) => k.is_default);
+  const chosen = defaults.length === 1 ? defaults[0] : (!defaults.length && kits.length === 1 ? kits[0] : null);
+  if (!chosen) return { unchosenKits: kits.length, defaultKits: defaults.length };
+  const { data } = await db.from('templates').select('name, config')
+    .eq('id', chosen.id).eq('user_id', userId).maybeSingle();
+  return data ? { config: data.config || {}, source: `brand kit: ${data.name}` } : null;
 }
 
 // Branding the caller passed explicitly wins over the account's look.
