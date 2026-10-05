@@ -125,6 +125,23 @@ describe('admin summary SQL', () => {
     expect(d.problems.failed_searches.map((f) => f.query)).toEqual(['juggernaut exploration']);
   });
 
+  it('lists problems from a real tab opened before the range, without counting the tab in it', async () => {
+    // The tab records its one page view the evening before; its heartbeat and
+    // error fall inside the range.
+    await view('early', '2026-08-31T23:30:00Z', { referrer: 'https://www.google.com/' });
+    await db.query("insert into public.live_pings values ('early', '2026-09-01T08:00:00Z')");
+    await db.query("insert into public.error_events (session_id, message, path, seen_count, occurred_at) values ('early','Map failed to load','/app',1,'2026-09-01T08:01:00Z')");
+    await db.query("insert into public.search_events (session_id, kind, province, result_count, outcome, query_text, created_at) values ('early','company','BC',0,'empty','late night search','2026-09-01T08:02:00Z')");
+    // A data-centre tab from before the range stays out.
+    await view('dc-early', '2026-08-31T23:00:00Z', { city: 'Ashburn' });
+    await db.query("insert into public.error_events (session_id, message, path, seen_count, occurred_at) values ('dc-early','Bot error','/app',9,'2026-09-01T09:00:00Z')");
+
+    const d = await summary();
+    expect(d.problems.errors).toEqual([expect.objectContaining({ message: 'Map failed to load', people: 1 })]);
+    expect(d.problems.failed_searches.map((f) => f.query)).toEqual(['late night search']);
+    expect(d.totals).toMatchObject({ people: 0, bots: 0 });
+  });
+
   it('refuses non-admins and is never granted to anon', async () => {
     await db.exec("set test.admin = 'no'");
     await expect(summary()).rejects.toThrow(/forbidden/);

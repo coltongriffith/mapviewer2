@@ -6,6 +6,12 @@
 -- Pairs with api/client-error.js now keeping one row per tab for a repeated
 -- error (it used to fold every visitor into the first row for 10 minutes),
 -- so `people` counts each person who saw it.
+--
+-- Page views are read from 7 days before the range, so a tab opened before
+-- it (a tab records its page view once, at startup) can still be classified
+-- when it hits an error or a failed search inside the range. Every count is
+-- still of tabs that started inside the range (`cur`), so a tab open across
+-- the start is counted once, in the range it began.
 
 create or replace function public.admin_get_summary(
   p_start timestamptz, p_end timestamptz, p_tz text default 'America/Vancouver')
@@ -24,14 +30,14 @@ begin
   with
   admins as (select a.user_id from public.admin_users a),
   internal_ids as (
-    select i.session_id from public.admin_session_ids(p_start, p_end) i
+    select i.session_id from public.admin_session_ids(p_start - interval '7 days', p_end) i
   ),
   pv as (
     select v.session_id, v.created_at, v.path, nullif(v.referrer, '') as referrer,
       nullif(v.utm_source, '') as utm_source, nullif(v.utm_medium, '') as utm_medium,
       v.city, v.country, v.device, v.user_id
     from public.page_views v
-    where v.created_at >= p_start and v.created_at < p_end
+    where v.created_at >= p_start - interval '7 days' and v.created_at < p_end
       and v.session_id is not null
   ),
   sess as (
