@@ -2,6 +2,7 @@ import '../../public/acquisition.js';
 
 export function captureAttribution() { return getAttribution(); }
 export function getAttribution() { return window.emAcquisition?.get() || {}; }
+export function markInternalBrowser() { window.emAcquisition?.setInternal?.(true); }
 export function signupAttribution(user) {
   // Metadata is analytics context only; it must never authorize access.
   return window.emAcquisition?.clean(user?.user_metadata?.em_acquisition || getAttribution()) || {};

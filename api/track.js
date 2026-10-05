@@ -69,6 +69,9 @@ const EVENT_ALLOWLIST = new Set([
   'upgrade_verified_paid',
   'features_removed',
   'features_restored',
+  // Sent once per tab by a browser the owner marked as internal. The
+  // admin_session_ids() reporting helper excludes the whole tab.
+  'internal_session',
 ]);
 
 const MAX_BODY_BYTES = 8 * 1024;

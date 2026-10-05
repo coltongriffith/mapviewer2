@@ -10,6 +10,7 @@ import {
   useRpc, useDashboardWindow, useSummary, useUsersOverview, useUserDetail, useFeedback, useRevenue, useTenureOps,
 } from './admin/useDashboardData';
 import { pacificDate, addCalendarDays } from './admin/dateWindow';
+import { markInternalBrowser } from '../utils/attribution';
 
 // ── Formatting helpers ─────────────────────────────────────────────────────────
 function fmtTime(iso) {
@@ -96,6 +97,7 @@ export default function AdminPage({ onExit }) {
   const [focusedUser, setFocusedUser] = useState(null);
   const access = useRpc('admin_get_access', {}, !!user);
   const isAdmin = access.data === true;
+  useEffect(() => { if (isAdmin) markInternalBrowser(); }, [isAdmin]);
   const dashWindow = useDashboardWindow(range);
   const summary = useSummary(dashWindow, isAdmin && tab === 'overview');
   const usersOverview = useUsersOverview(isAdmin && tab === 'users');

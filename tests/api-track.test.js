@@ -76,6 +76,13 @@ describe('api/track validation', () => {
     expect(inserts[0].row.user_id).toBeNull();
   });
 
+  it('accepts the internal-browser marker used by admin reports', async () => {
+    const res = mockRes();
+    await handler(req({ kind: 'event', session_id: SID, event: 'internal_session' }, { ip: uniqueIp() }), res);
+    expect(res.statusCode).toBe(204);
+    expect(inserts[0]).toMatchObject({ table: 'product_events', row: { event: 'internal_session', user_id: null } });
+  });
+
   it('rejects oversized payloads with 413', async () => {
     const res = mockRes();
     const big = 'x'.repeat(10 * 1024);
