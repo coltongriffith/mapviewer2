@@ -77,7 +77,18 @@ export default function AgentConnectionsSection({ onError }) {
         <div className="claims-info" style={{ marginTop: 12 }}>
           <strong>Copy this key now.</strong> It will not be shown again.
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8, flexWrap: 'wrap' }}>
-            <code style={{ wordBreak: 'break-all' }}>{created.token}</code>
+            {/* A read-only field, not text: selecting text by triple-click
+                copies a trailing line break, which agent setup forms (Muse)
+                reject. A field's value never has one. */}
+            <input
+              type="text"
+              readOnly
+              value={created.token}
+              aria-label="Agent API key"
+              spellCheck={false}
+              onFocus={(e) => e.target.select()}
+              style={{ flex: '1 1 320px', minWidth: 0, fontFamily: 'ui-monospace, monospace' }}
+            />
             <button className="secondary-btn" type="button" onClick={copy}>{copied ? 'Copied' : 'Copy'}</button>
           </div>
         </div>
