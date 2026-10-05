@@ -265,6 +265,18 @@ describe('MCP account connector', () => {
     expect(result.warnings.join(' ')).not.toMatch(/No brand kit applied/);
   });
 
+  it('treats two kits marked default as no clear default', async () => {
+    db.kits = [
+      { token: 'pro-d', id: 'kit-a', name: 'Apex Critical Metals', is_default: true, config: { accentColor: '#111111' } },
+      { token: 'pro-d', id: 'kit-b', name: 'Evolution Uranium', is_default: true, config: { accentColor: '#c9a227' } },
+      { token: 'pro-d', id: 'kit-c', name: 'Star Copper', is_default: false, config: {} },
+    ];
+    const res = await call({ token: 'pro-d', body: previewBody });
+    const result = res.body.result.structuredContent;
+    expect(result.branding_applied.source).toBeNull();
+    expect(result.warnings.join(' ')).toMatch(/the account has 3 brand kits and 2 are marked default\. Pass brand_kit/);
+  });
+
   it('applies the only kit even when it is not marked default', async () => {
     db.kits = [{ token: 'free-o', id: 'kit-o', name: 'Only Kit', is_default: false, config: { accentColor: '#0a7a50' } }];
     const res = await call({ token: 'free-o', body: previewBody });

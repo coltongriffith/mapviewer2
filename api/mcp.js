@@ -655,7 +655,7 @@ async function createPreview(req, args) {
     ...(neighboursWarning ? [neighboursWarning] : []),
     'This map is generated from public registry data and is not a legal title opinion or legal survey.',
     req.account ? 'This map is saved to your ExplorationMaps account and does not expire.' : 'Anonymous preview links expire after 30 days.',
-    ...(accountChoice?.unchosenKits ? [`No brand kit applied: the account has ${accountChoice.unchosenKits} brand kits and none is the default. Pass brand_kit with the kit for this company (list_my_maps lists them), or set a default kit in ExplorationMaps.`] : []),
+    ...(accountChoice?.unchosenKits ? [`No brand kit applied: the account has ${accountChoice.unchosenKits} brand kits and ${accountChoice.defaultKits > 1 ? `${accountChoice.defaultKits} are marked default` : 'none is the default'}. Pass brand_kit with the kit for this company (list_my_maps lists them), or set a default kit in ExplorationMaps.`] : []),
     ...(req.account ? [] : [`Anonymous preview: no account branding. To use your ExplorationMaps brand kit and saved maps, add ${CONNECTOR_ORIGIN}/mcp/account as a custom connector and sign in.`]),
     'Reference overlays are configured on the map; third-party tile availability is checked when the share page renders.',
   ];
@@ -734,8 +734,11 @@ async function accountLook(req, args) {
   // most recent one would put another company's logo on the map.
   const { data: kits, error } = await db.from('templates').select('id, name, is_default').eq('user_id', userId);
   if (error || !kits?.length) return null;
-  const chosen = kits.find((k) => k.is_default) || (kits.length === 1 ? kits[0] : null);
-  if (!chosen) return { unchosenKits: kits.length };
+  // Two defaults can exist (defaults change in separate updates); that is as
+  // ambiguous as none.
+  const defaults = kits.filter((k) => k.is_default);
+  const chosen = defaults.length === 1 ? defaults[0] : (!defaults.length && kits.length === 1 ? kits[0] : null);
+  if (!chosen) return { unchosenKits: kits.length, defaultKits: defaults.length };
   const { data } = await db.from('templates').select('name, config')
     .eq('id', chosen.id).eq('user_id', userId).maybeSingle();
   return data ? { config: data.config || {}, source: `brand kit: ${data.name}` } : null;
