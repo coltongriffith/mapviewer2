@@ -593,13 +593,15 @@ async function createPreview(req, args) {
     throw await previewLimitError(req, 'network', nextClockHour());
   }
 
-  const { primary: claims, neighbours, neighboursWarning } = await resolveMapClaims(input, runClaimsSearch, clientIp(req));
+  const { primary: claims, neighbours, neighboursWarning, oversize } = await resolveMapClaims(input, runClaimsSearch, clientIp(req));
 
   if (!claims?.features?.length) {
     const error = new Error('No matching mineral claims were found.');
     error.code = 'CLAIMS_NOT_FOUND';
     throw error;
   }
+  // Refused here, before branding and saving, rather than by the share limit.
+  if (oversize) throw tooManyClaimsError(claims.features.length);
   if (Number.isInteger(input.facts_panel?.claims) && input.facts_panel.claims !== claims.features.length) {
     const error = new Error(`Published claim count (${input.facts_panel.claims}) does not match selected registry records (${claims.features.length}). Verify claim_numbers before creating the map.`);
     error.code = 'CLAIM_COUNT_MISMATCH';
@@ -635,8 +637,7 @@ async function createPreview(req, args) {
       const latest = await previewTimes(sb, req, subject);
       throw await previewLimitError(req, 'caller', latest?.length >= limit ? nextPreviewAt(latest, limit) : new Date(Date.now() + HOUR_MS));
     } else if (/SHARE_TOO_(LARGE|COMPLEX)/.test(message)) {
-      error.message = 'This claim set is too large for a preview. Pass claim_numbers for one project, or set neighbours.show to false.';
-      error.code = 'MAP_TOO_COMPLEX';
+      throw tooManyClaimsError(claims.features.length);
     }
     throw error;
   }
@@ -827,6 +828,12 @@ async function searchClaims(req, args) {
       'Registry results are informational and are not a substitute for official title records or a legal survey.',
     ],
   };
+}
+
+function tooManyClaimsError(count) {
+  const error = new Error(`${count} claims are too many for one preview. Map one project: pass its claim_numbers (up to 40), or search.query with a location.bbox around it.`);
+  error.code = 'MAP_TOO_COMPLEX';
+  return error;
 }
 
 async function callTool(req, name, args) {

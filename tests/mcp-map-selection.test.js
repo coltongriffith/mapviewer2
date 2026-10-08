@@ -149,3 +149,43 @@ describe('MCP map selection lookup', () => {
     expect(calls).toEqual(['company']);
   });
 });
+
+describe('MCP map selection share budget', () => {
+  const bulky = (number, lng) => {
+    const f = feature(number, 'Star Copper', lng);
+    return { ...f, properties: { ...f.properties, NOTE: 'x'.repeat(2000), EMPTY: null, BLANK: '' } };
+  };
+
+  it('drops empty registry fields and rounds coordinates to six places', async () => {
+    const f = feature(71071, 'Star Copper', -130.123456789);
+    const withEmpty = { ...f, properties: { ...f.properties, EMPTY: null, BLANK: '' } };
+    const result = await resolveMapClaims({ jurisdiction: 'bc', search: { query: 'Star Copper', type: 'company' }, location: {}, claim_numbers: [], neighbours: { show: false } }, async () => ({ type: 'FeatureCollection', features: [withEmpty] }), 'test');
+    const [out] = result.primary.features;
+    expect(out.properties).toEqual({ TENURE_NUMBER_ID: 71071, OWNER_NAME: 'Star Copper', FEATURE_AREA_SQM: 10000 });
+    expect(out.geometry.coordinates[0][0]).toEqual([-130.123457, 55]);
+    expect(result.oversize).toBe(false);
+  });
+
+  it('gives neighbours only the room the selected claims leave, and flags a set too large to share', async () => {
+    const many = (count, start, lng) => Array.from({ length: count }, (_, i) => bulky(start + i, lng + i * 0.001));
+    const run = (primaryCount) => resolveMapClaims(
+      { jurisdiction: 'bc', search: { query: 'Star Copper', type: 'company' }, location: {}, claim_numbers: [], neighbours: { show: true } },
+      async (args) => ({ type: 'FeatureCollection', features: args.bbox ? many(100, 900000, -129) : many(primaryCount, 1, -130) }),
+      'test',
+    );
+    const roomy = await run(10);
+    expect(roomy.neighbours.features).toHaveLength(100);
+    const tight = await run(700);
+    expect(tight.oversize).toBe(false);
+    expect(tight.neighbours.features.length).toBeLessThan(100);
+    expect(tight.neighboursWarning).toMatch(/limited/);
+    let lookups = 0;
+    const full = await resolveMapClaims(
+      { jurisdiction: 'bc', search: { query: 'Star Copper', type: 'company' }, location: {}, claim_numbers: [], neighbours: { show: true } },
+      async (args) => { if (args.bbox) lookups += 1; return { type: 'FeatureCollection', features: many(900, 1, -130) }; },
+      'test',
+    );
+    expect(full.oversize).toBe(true);
+    expect(lookups).toBe(0);
+  });
+});

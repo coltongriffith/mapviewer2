@@ -11,6 +11,24 @@ function dedupe(features) {
   });
 }
 
+// Registry records carry many empty fields and 15-digit coordinates. Neither
+// shows on a map, and both count against the share limit.
+function roundCoordinates(value) {
+  if (!Array.isArray(value)) return value;
+  return typeof value[0] === 'number' ? value.map((n) => Math.round(n * 1e6) / 1e6) : value.map(roundCoordinates);
+}
+
+function compact(feature) {
+  const properties = Object.fromEntries(Object.entries(feature?.properties || {}).filter(([, v]) => v !== null && v !== ''));
+  const geometry = feature?.geometry ? { ...feature.geometry, coordinates: roundCoordinates(feature.geometry.coordinates) } : feature?.geometry;
+  return { ...feature, properties, geometry };
+}
+
+// JSON size of the claims a preview may carry. create_shared_map refuses
+// 2 MiB of jsonb, which is about 1.2 times the JSON size, and the map
+// layout needs a little room too.
+const SHARE_CLAIMS_BYTES = 1_600_000;
+
 function keySet(features) {
   return new Set(features.flatMap(claimIdentifiers));
 }
@@ -97,10 +115,12 @@ export async function resolveMapClaims(input, search, clientIp) {
     primary = nearby.features.filter((feature) => sameClaim(feature, searchedKeys));
   }
 
-  primary = dedupe(primary);
+  primary = dedupe(primary).map(compact);
   if (!primary.length) return { primary: { type: 'FeatureCollection', features: [] }, neighbours: { type: 'FeatureCollection', features: [] }, meta: searched?.meta || null };
+  const primaryBytes = Buffer.byteLength(JSON.stringify(primary), 'utf8');
 
-  if (input.neighbours.show && !nearby && (ids.length || input.search.query)) {
+  // No room for neighbours: skip the lookup.
+  if (input.neighbours.show && !nearby && primaryBytes < SHARE_CLAIMS_BYTES && (ids.length || input.search.query)) {
     try { nearby = await search({ ...options, bbox: boundsOf(primary) }); }
     catch { nearby = null; neighboursWarning = 'Nearby-claim lookup was unavailable; the map contains only selected claims.'; }
   }
@@ -115,9 +135,11 @@ export async function resolveMapClaims(input, search, clientIp) {
   const rankedNeighbours = allNeighbours.sort((a, b) => distance(a) - distance(b));
   const neighbours = [];
   let neighbourBytes = 0;
-  for (const feature of rankedNeighbours) {
+  // Neighbours get what room the selected claims leave.
+  const neighbourBudget = Math.min(600_000, SHARE_CLAIMS_BYTES - primaryBytes);
+  for (const feature of rankedNeighbours.map(compact)) {
     const bytes = Buffer.byteLength(JSON.stringify(feature), 'utf8');
-    if (neighbours.length >= 120 || neighbourBytes + bytes > 600_000) break;
+    if (neighbours.length >= 120 || neighbourBytes + bytes > neighbourBudget) break;
     neighbours.push(feature);
     neighbourBytes += bytes;
   }
@@ -127,5 +149,7 @@ export async function resolveMapClaims(input, search, clientIp) {
     neighbours: { type: 'FeatureCollection', features: neighbours, meta: nearby?.meta },
     meta: searched?.meta || nearby?.meta || null,
     neighboursWarning,
+    // Too large to share: the caller refuses it rather than saving it.
+    oversize: primaryBytes > SHARE_CLAIMS_BYTES,
   };
 }
