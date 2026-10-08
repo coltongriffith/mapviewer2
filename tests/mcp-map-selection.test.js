@@ -189,3 +189,29 @@ describe('MCP map selection share budget', () => {
     expect(lookups).toBe(0);
   });
 });
+
+describe('MCP map selection neighbour window', () => {
+  const lookup = async (features) => {
+    const boxes = [];
+    await resolveMapClaims(
+      { jurisdiction: 'on', search: { query: 'Star Copper', type: 'company' }, location: {}, claim_numbers: [], neighbours: { show: true } },
+      async (args) => { if (args.bbox) boxes.push(args.bbox); return { type: 'FeatureCollection', features: args.bbox ? [] : features }; },
+      'test',
+    );
+    return boxes[0];
+  };
+
+  it('searches around a compact project as before', async () => {
+    const [w, s, e, n] = await lookup([feature(1, 'Star Copper', -130), feature(2, 'Star Copper', -129.95)]);
+    expect(w).toBeLessThan(-130);
+    expect(e).toBeGreaterThan(-129.94);
+    expect(n - s).toBeLessThan(0.26);
+  });
+
+  it('searches a window around the first claim when the selection spans a province', async () => {
+    const box = await lookup([feature(1, 'Star Copper', -130), feature(2, 'Star Copper', -120)]);
+    expect(box[0]).toBeCloseTo(-130.195, 2);
+    expect(box[2]).toBeCloseTo(-129.795, 2);
+    expect(box[3] - box[1]).toBeCloseTo(0.26, 5);
+  });
+});
