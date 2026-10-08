@@ -59,6 +59,19 @@ function boundsOf(features) {
 // Up to this many requested claims are looked up by number, not by company.
 const DIRECT_LOOKUP_MAX = 24;
 
+// Neighbours are ranked by distance from the first selected claim and only
+// the closest 120 are kept, so a company-wide selection searches a window
+// around it. Its whole extent can hold 10,000 cells (Ontario), paged slowly.
+const NEIGHBOUR_HALF_SPAN = [0.2, 0.13];
+
+function neighbourBounds(primary) {
+  const bounds = boundsOf(primary);
+  const center = claimCentroid(primary[0]);
+  const [dx, dy] = NEIGHBOUR_HALF_SPAN;
+  if (!bounds || !center || (bounds[2] - bounds[0] <= 2 * dx && bounds[3] - bounds[1] <= 2 * dy)) return bounds;
+  return [center.lng - dx, center.lat - dy, center.lng + dx, center.lat + dy];
+}
+
 export async function resolveMapClaims(input, search, clientIp) {
   const options = { jurisdiction: input.jurisdiction, clientIp };
   const ids = input.claim_numbers || [];
@@ -121,7 +134,7 @@ export async function resolveMapClaims(input, search, clientIp) {
 
   // No room for neighbours: skip the lookup.
   if (input.neighbours.show && !nearby && primaryBytes < SHARE_CLAIMS_BYTES && (ids.length || input.search.query)) {
-    try { nearby = await search({ ...options, bbox: boundsOf(primary) }); }
+    try { nearby = await search({ ...options, bbox: neighbourBounds(primary) }); }
     catch { nearby = null; neighboursWarning = 'Nearby-claim lookup was unavailable; the map contains only selected claims.'; }
   }
   const primaryKeys = keySet(primary);
