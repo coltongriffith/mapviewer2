@@ -108,3 +108,44 @@ describe('MCP map selection', () => {
     expect(checked.value.claims_callout).toEqual({ show: true, fields: { status: 'Active' }, source_note: null, style: 'brand' });
   });
 });
+
+describe('MCP map selection lookup', () => {
+  const input = (ids) => ({ jurisdiction: 'bc', search: { query: 'Star Copper', type: 'company' }, location: {}, claim_numbers: ids, neighbours: { show: false } });
+
+  it('looks requested claims up by number instead of re-running a large company search', async () => {
+    const calls = [];
+    const search = async (args) => {
+      calls.push(args);
+      return { type: 'FeatureCollection', features: args.type === 'number' ? [primary] : [primary, otherProject] };
+    };
+    const result = await resolveMapClaims(input(['71071']), search, 'test');
+    expect(calls.map((c) => c.type)).toEqual(['number']);
+    expect(result.primary.features.map((f) => f.properties.TENURE_NUMBER_ID)).toEqual([71071]);
+  });
+
+  it('falls back to the company search when a number lookup misses or fails', async () => {
+    const calls = [];
+    const search = async (args) => {
+      calls.push(args.type);
+      if (args.type === 'number') return { type: 'FeatureCollection', features: [] };
+      return { type: 'FeatureCollection', features: [primary, otherProject] };
+    };
+    const result = await resolveMapClaims(input(['71071']), search, 'test');
+    expect(calls).toEqual(['number', 'company']);
+    expect(result.primary.features).toHaveLength(1);
+
+    const failing = async (args) => {
+      if (args.type === 'number') throw new Error('registry down');
+      return { type: 'FeatureCollection', features: [primary] };
+    };
+    expect((await resolveMapClaims(input(['71071']), failing, 'test')).primary.features).toHaveLength(1);
+  });
+
+  it('keeps the company search for long claim lists', async () => {
+    const ids = Array.from({ length: 25 }, (_, i) => String(71071 + i));
+    const calls = [];
+    const search = async (args) => { calls.push(args.type); return { type: 'FeatureCollection', features: [] }; };
+    await expect(resolveMapClaims(input(ids), search, 'test')).rejects.toThrow(/missing/);
+    expect(calls).toEqual(['company']);
+  });
+});

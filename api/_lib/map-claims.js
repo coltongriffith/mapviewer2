@@ -38,6 +38,9 @@ function boundsOf(features) {
   return [west - padX, south - padY, east + padX, north + padY];
 }
 
+// Up to this many requested claims are looked up by number, not by company.
+const DIRECT_LOOKUP_MAX = 24;
+
 export async function resolveMapClaims(input, search, clientIp) {
   const options = { jurisdiction: input.jurisdiction, clientIp };
   const ids = input.claim_numbers || [];
@@ -50,17 +53,29 @@ export async function resolveMapClaims(input, search, clientIp) {
     nearby = await search({ ...options, bbox: input.location.bbox });
   }
 
-  if (ids.length && nearby) {
-    searched = nearby;
-  } else if (ids.length && input.search.query) {
-    searched = await search({ ...options, query: input.search.query, type: input.search.type });
-  } else if (ids.length) {
+  const byNumber = async () => {
     const results = [];
     for (let offset = 0; offset < ids.length; offset += 4) {
       const group = await Promise.all(ids.slice(offset, offset + 4).map((id) => search({ ...options, query: id, type: 'number' })));
       results.push(...group.flatMap((collection) => collection.features || []));
     }
-    searched = { type: 'FeatureCollection', features: results };
+    return { type: 'FeatureCollection', features: results };
+  };
+
+  if (ids.length && nearby) {
+    searched = nearby;
+  } else if (ids.length && input.search.query && ids.length <= DIRECT_LOOKUP_MAX) {
+    // A large holder's company search can take 15s or more; a few exact
+    // number lookups take about one. The company search stays the fallback.
+    searched = await byNumber().catch(() => null);
+    const found = keySet(searched?.features || []);
+    if (!searched || ids.some((id) => !found.has(id.toUpperCase()))) {
+      searched = await search({ ...options, query: input.search.query, type: input.search.type });
+    }
+  } else if (ids.length && input.search.query) {
+    searched = await search({ ...options, query: input.search.query, type: input.search.type });
+  } else if (ids.length) {
+    searched = await byNumber();
   } else if (input.search.query) {
     searched = await search({ ...options, query: input.search.query, type: input.search.type });
   } else {
