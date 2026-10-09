@@ -35,7 +35,7 @@ export function featureKey(f, idField) {
  * offset), the ceiling/max-pages is reached, or a later page fails (partial
  * results are kept and marked truncated). A FIRST-page failure throws.
  */
-export async function fetchAllPages({ fetchPage, pageSize, provider, idField = null, maxTotal = MAX_TOTAL_FEATURES, maxPages = MAX_PAGES }) {
+export async function fetchAllPages({ fetchPage, pageSize, provider, idField = null, maxTotal = MAX_TOTAL_FEATURES, maxPages = MAX_PAGES, concurrency = 1 }) {
   const out = [];
   const seen = new Set();
   let pagesFetched = 0;
@@ -43,10 +43,25 @@ export async function fetchAllPages({ fetchPage, pageSize, provider, idField = n
   let totalKnown = null;
   let sawFullLastPage = false;
 
+  // Once the first page comes back full, later pages are requested up to
+  // `concurrency` at a time; pages are still read in order, and any fetched
+  // past the end are dropped. Settled up front so an unread failure is quiet.
+  const lastPage = Math.min(maxPages, Math.ceil(maxTotal / pageSize)) - 1;
+  const started = new Map();
+  const request = (page) => {
+    if (!started.has(page)) {
+      started.set(page, Promise.resolve().then(() => fetchPage(page * pageSize, pageSize)).then((value) => ({ value }), (error) => ({ error })));
+    }
+    return started.get(page);
+  };
+
   for (let page = 0; page < maxPages; page++) {
+    if (page > 0) for (let ahead = page; ahead < page + concurrency && ahead <= lastPage; ahead++) request(ahead);
     let result;
     try {
-      result = await fetchPage(page * pageSize, pageSize);
+      const settled = await request(page);
+      if (settled.error) throw settled.error;
+      result = settled.value;
     } catch (e) {
       if (pagesFetched === 0) throw e;
       truncated = true; // partial data: a later page failed

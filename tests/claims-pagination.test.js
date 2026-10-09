@@ -166,3 +166,59 @@ describe('api/claims handler pagination integration', () => {
     expect(res.body.features[0].properties.OWNER_NAME).toBe('Klondike Gold Corp.');
   });
 });
+
+describe('fetchAllPages with concurrency', () => {
+  const served = (total, delay = 5) => {
+    const state = { inFlight: 0, peak: 0, offsets: [] };
+    const fetchPage = vi.fn(async (offset, count) => {
+      state.offsets.push(offset);
+      state.inFlight += 1;
+      state.peak = Math.max(state.peak, state.inFlight);
+      await new Promise((r) => setTimeout(r, delay));
+      state.inFlight -= 1;
+      return { features: range(offset, Math.max(offset, Math.min(offset + count, total))) };
+    });
+    return { fetchPage, state };
+  };
+
+  it('asks for one page alone, then later pages a few at a time, with the same result', async () => {
+    const { fetchPage, state } = served(2270);
+    const { features, meta } = await fetchAllPages({ fetchPage, pageSize: 500, provider: 'arcgis', concurrency: 3 });
+    expect(features.map((f) => f.properties.OBJECTID)).toEqual(range(0, 2270).map((f) => f.properties.OBJECTID));
+    expect(meta).toMatchObject({ returned: 2270, truncated: false, pagesFetched: 5 });
+    expect(state.offsets[0]).toBe(0);
+    expect(state.peak).toBe(3);
+  });
+
+  it('makes one request when the first page is short', async () => {
+    const { fetchPage } = served(120);
+    const { features } = await fetchAllPages({ fetchPage, pageSize: 500, provider: 'arcgis', concurrency: 3 });
+    expect(features).toHaveLength(120);
+    expect(fetchPage).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignores a failed page fetched past the end, and keeps partial results when a needed page fails', async () => {
+    const tail = vi.fn(async (offset, count) => {
+      if (offset >= 1000) throw new Error('past the end');
+      return { features: range(offset, Math.min(offset + count, 700)) };
+    });
+    const done = await fetchAllPages({ fetchPage: tail, pageSize: 500, provider: 'arcgis', concurrency: 3 });
+    expect(done.features).toHaveLength(700);
+    expect(done.meta.truncated).toBe(false);
+
+    const broken = vi.fn(async (offset, count) => {
+      if (offset === 1000) throw new Error('timeout');
+      return { features: range(offset, offset + count) };
+    });
+    const partial = await fetchAllPages({ fetchPage: broken, pageSize: 500, provider: 'arcgis', concurrency: 3, maxTotal: 3000 });
+    expect(partial.features).toHaveLength(1000);
+    expect(partial.meta.truncated).toBe(true);
+  });
+
+  it('never asks past the ceiling', async () => {
+    const { fetchPage, state } = served(10000);
+    const { features } = await fetchAllPages({ fetchPage, pageSize: 500, provider: 'arcgis', concurrency: 3, maxTotal: 1200 });
+    expect(features).toHaveLength(1200);
+    expect(Math.max(...state.offsets)).toBe(1000);
+  });
+});
