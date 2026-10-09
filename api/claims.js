@@ -360,6 +360,9 @@ async function arcgisQueryAll(layerUrl, baseParams, maxTotal = undefined) {
     return fetchAllPages({
       provider: 'arcgis',
       pageSize,
+      // A large holder's LIKE search costs the registry ~5s a page, paged in
+      // order that is 15-20s; three at a time is about one page's wait.
+      concurrency: 3,
       ...(maxTotal ? { maxTotal } : {}),
       idField,
       fetchPage: async (offset, count) => {
