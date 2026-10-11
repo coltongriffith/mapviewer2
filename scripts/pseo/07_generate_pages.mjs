@@ -21,7 +21,7 @@ const PATHS = resolvePaths(FIXTURE);
 
 const REGISTRY_BY_PROV = {
   BC: { name: 'BC Mineral Titles Online', url: 'https://www.mtonline.gov.bc.ca/mtov/home' },
-  ON: { name: 'Ontario MLAS', url: 'https://www.lioapplications.lrc.gov.on.ca/MLAS/Index.html' },
+  ON: { name: 'Ontario MLAS', url: 'https://www.lioapplications.lrc.gov.on.ca/MLAS/Index.html?viewer=MLAS.MLAS&locale=en-CA' },
 };
 const PROV_NAME = { BC: 'British Columbia', ON: 'Ontario' };
 
@@ -184,7 +184,7 @@ function companyPage({ iss, claims, neighbours, updated }) {
 <div class="wrap">
   <p class="crumb"><a href="/">Home</a> › <a href="/companies/">Companies</a> › ${esc(iss.ticker)}</p>
   <h1>${esc(iss.company)} (${esc(iss.exchange)}: ${esc(iss.ticker)}) — Mineral Claims Map</h1>
-  <p class="sub">${esc(iss.company)} holds <strong>${claims.length} mineral claims</strong>${haPhraseHtml} in ${esc(provNames)}. Data from ${registries.map((r) => `<a href="${r.url}" rel="nofollow noopener">${esc(r.name)}</a>`).join(' and ')} public records.</p>
+  <p class="sub">${esc(iss.company)} holds <strong>${claims.length} mineral claims</strong>${haPhraseHtml} in ${esc(provNames)}. Data from ${registries.map((r) => `<a href="${esc(r.url)}" rel="nofollow noopener">${esc(r.name)}</a>`).join(' and ')} public records.</p>
   <p class="updated">Claims updated ${esc(updated)}</p>
 
   <div class="map-card"><img src="${mapSvg}" alt="Map of ${esc(iss.company)} mineral claims" loading="eager"></div>

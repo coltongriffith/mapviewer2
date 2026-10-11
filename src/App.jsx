@@ -5294,8 +5294,21 @@ export default function App({ initialAction = null }) {
           {project.layers.length > 0 && (
             <section className="control-section">
               <h2 className="ins-group-title">Your layers</h2>
-              <LayerList layers={project.layers} selectedLayerId={selectedLayerId} onSelect={setSelectedLayerId} onToggleVisible={toggleLayerVisible} onRemove={removeLayer} />
+              {/* Reveal here as well as in the selection effect: clicking the layer
+                  that is already selected (an import selects its new layer)
+                  changes no state, so the effect would not run. */}
+              <LayerList
+                layers={project.layers}
+                selectedLayerId={selectedLayerId}
+                onSelect={(id) => { setSelectedLayerId(id); setCustomizeGroup('layers'); revealSection('customize', layersSectionRef); }}
+                onToggleVisible={toggleLayerVisible}
+                onRemove={removeLayer}
+              />
               <p className="ins-hint">Click a layer to style it in Customize.</p>
+              {/* The toolbar's Fit to data has no room under 900px. */}
+              <button className="ui-btn ui-btn--ghost ed-mobile-only" type="button" onClick={() => { autoFrameAll(); setInspectorOpen(false); }} disabled={!mapReady}>
+                Fit map to data
+              </button>
             </section>
           )}
           <h2 className="ins-group-title ins-context-title">Add context</h2>

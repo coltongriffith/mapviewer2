@@ -44,3 +44,18 @@ test('clicking the legend on the map opens its controls', async ({ page }) => {
   await expect(page.getByRole('tab', { name: 'Customize', exact: true })).toHaveAttribute('aria-selected', 'true');
   await expect(page.locator('#group-legend')).toBeVisible();
 });
+
+test('clicking the selected layer in Data still opens its settings', async ({ page }) => {
+  const tab = (name) => page.getByRole('tab', { name, exact: true });
+  await page.getByRole('button', { name: 'Try sample data' }).click();
+  await expect(tab('Style')).toHaveAttribute('aria-selected', 'true', { timeout: 15_000 });
+
+  // First click selects the layer; the second clicks it while it is already
+  // selected, which changes no state.
+  for (let i = 0; i < 2; i += 1) {
+    await tab('Data').click();
+    await page.locator('#ins-panel-data .layer-item').first().click();
+    await expect(tab('Customize')).toHaveAttribute('aria-selected', 'true');
+    await expect(page.locator('#group-layers')).toBeVisible();
+  }
+});

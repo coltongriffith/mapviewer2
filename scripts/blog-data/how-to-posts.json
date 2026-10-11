@@ -1589,7 +1589,7 @@
         "box": {
           "kind": "verify",
           "title": "Verify in the official MLAS",
-          "html": "Always verify current claim holder, status, expiry, and boundaries in the official <a href=\"https://www.lioapplications.lrc.gov.on.ca/MLAS/Index.html\" rel=\"nofollow noopener\" target=\"_blank\">Ontario MLAS</a> before relying on the map. Claim status can change."
+          "html": "Always verify current claim holder, status, expiry, and boundaries in the official <a href=\"https://www.lioapplications.lrc.gov.on.ca/MLAS/Index.html?viewer=MLAS.MLAS&amp;locale=en-CA\" rel=\"nofollow noopener\" target=\"_blank\">Ontario MLAS</a> before relying on the map. Claim status can change."
         }
       },
       {
