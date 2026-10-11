@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Exploration Maps — Mining Maps Without the GIS Headache</title>
-<meta name="description" content="Create investor-ready mining exploration maps in minutes. Import claims, drillholes, and targets — export polished PNG, SVG, or PDF for investor decks, NI 43-101 reports, and news releases. No GIS experience required.">
+<meta name="description" content="Create investor-ready mining exploration maps in minutes. Search public claims, import drillholes and export PNG, SVG or PDF. No GIS experience required.">
 <link rel="canonical" href="https://www.explorationmaps.com/">
 <meta property="og:title" content="Exploration Maps — Mining Maps Without the GIS Headache">
 <meta property="og:description" content="Create investor-ready mining exploration maps in minutes. No GIS experience required.">
@@ -49,8 +49,12 @@
   "@graph": [
     {
       "@type": "Organization",
+      "@id": "https://www.explorationmaps.com/#organization",
       "name": "Exploration Maps",
       "url": "https://www.explorationmaps.com",
+      "sameAs": [
+        "https://www.linkedin.com/company/exploration-maps"
+      ],
       "logo": "https://www.explorationmaps.com/og-image.png",
       "description": "Browser-based mapping tool for junior mining and exploration companies.",
       "contactPoint": {
@@ -62,6 +66,7 @@
     {
       "@type": "SoftwareApplication",
       "name": "Exploration Maps",
+      "publisher": { "@id": "https://www.explorationmaps.com/#organization" },
       "applicationCategory": "BusinessApplication",
       "operatingSystem": "Web",
       "url": "https://www.explorationmaps.com",
@@ -130,6 +135,64 @@
       <li>Technical report figures with scale bar, north arrow, and legend, for review by the report author</li>
       <li>Target generation and infrastructure/access maps</li>
     </ul>
+
+    <h2>Features</h2>
+    <ul>
+      <li><strong>Mineral claim search.</strong> Look up claims in the public
+      registries by claim number, property name or registered owner, and drop
+      the boundaries straight onto the map with their good-to or expiry dates.</li>
+      <li><strong>Drill collars and intercepts.</strong> Import a collar table as
+      CSV, fix UTM or latitude/longitude columns, and label the holes that matter
+      with grade and interval callouts.</li>
+      <li><strong>Targets and anomalies.</strong> Draw target outlines,
+      geochemical anomalies and structural trends over the claim block, or class
+      a soil or rock sample file by value.</li>
+      <li><strong>Infrastructure and access.</strong> Show roads, rail,
+      transmission lines, ports and the nearest town, with distance rings for
+      project access.</li>
+      <li><strong>Your own data.</strong> CSV, KML, KMZ, GeoJSON and multi-file
+      shapefiles, read in the projection they came in.</li>
+      <li><strong>Report-ready exports.</strong> PNG, SVG, Illustrator-ready SVG
+      and PDF from one editable layout, with coordinate frames, scale bars, north
+      arrows, legends and title blocks. A brand kit keeps your logo, colours and
+      fonts consistent from map to map.</li>
+      <li><strong>Tenure monitoring.</strong> Save a watch list of British
+      Columbia claims, including ground you do not own, and get email reminders
+      at 90, 30 and 1 day before each published good-to-date.</li>
+    </ul>
+
+    <h2>Supported jurisdictions</h2>
+    <p>Claim search reads each jurisdiction's public tenure data. In Canada:
+    British Columbia (Mineral Titles Online), Ontario (MLAS), Quebec (GESTIM),
+    Saskatchewan (MARS), Manitoba (claim-number lookup), Newfoundland and
+    Labrador (GeoAtlas mineral licences) and Yukon quartz claims. In the United
+    States: federal mining claims from the BLM MLRS for Nevada, Arizona, Utah,
+    Idaho, Montana, Wyoming, Colorado, New Mexico, California, Oregon and
+    Washington. Public data can lag the official record, so every map points
+    you back to the registry to confirm ownership, status and deadlines. See
+    <a href="/data-coverage/">data coverage and methodology</a> for sources and
+    update timing.</p>
+
+    <h2>Use cases</h2>
+    <ul>
+      <li><strong>Investor decks and news releases.</strong> A property map that
+      matches the deck it sits in, re-exported in minutes when the claims change
+      or new drill results arrive.</li>
+      <li><strong>Technical reports.</strong> Figures with a coordinate grid,
+      scale, projection and title block, prepared for review by the qualified
+      person.</li>
+      <li><strong>Website project pages.</strong> The same map at web resolution,
+      updated without going back to a GIS contractor.</li>
+      <li><strong>Competitor and land research.</strong> Search a company's
+      registered claims, map a neighbour's ground, and see who holds the
+      surrounding land before a deal or a staking program.</li>
+      <li><strong>Exploration planning.</strong> Claims, targets, collars and
+      access in one view while you decide where the next holes go.</li>
+    </ul>
+    <p>Start free: free PNG exports carry a small Exploration Maps credit. Pro
+    removes the credit and unlocks HD, SVG and PDF export for US$29 a month or
+    US$290 a year. AI assistants can build maps too, through the
+    <a href="/mcp/">Claude connector</a> or the <a href="/agent/">agent API</a>.</p>
 
     <h2>Guides &amp; resources</h2>
     <ul>

@@ -106,5 +106,41 @@
       "width": 1280,
       "height": 800
     }
+  ],
+  "/blog-img/ontario-upload-before.png": [
+    {
+      "src": "/blog-img/ontario-upload-before.webp",
+      "width": 724,
+      "height": 407
+    },
+    {
+      "src": "/blog-img/ontario-upload-before@2x.webp",
+      "width": 1280,
+      "height": 720
+    }
+  ],
+  "/blog-img/title-block.png": [
+    {
+      "src": "/blog-img/title-block.webp",
+      "width": 724,
+      "height": 643
+    },
+    {
+      "src": "/blog-img/title-block@2x.webp",
+      "width": 1448,
+      "height": 1285
+    }
+  ],
+  "/blog-img/map-claims.png": [
+    {
+      "src": "/blog-img/map-claims.webp",
+      "width": 724,
+      "height": 643
+    },
+    {
+      "src": "/blog-img/map-claims@2x.webp",
+      "width": 1448,
+      "height": 1285
+    }
   ]
 }

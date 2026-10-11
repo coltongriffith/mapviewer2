@@ -2,7 +2,7 @@
   {
     "slug": "exploration-maps-vs-arcgis",
     "title": "Exploration Maps vs ArcGIS for Mining Maps",
-    "metaDescription": "ArcGIS versus Exploration Maps for mining exploration mapping — enterprise GIS capability and licensing against a focused tool for claim maps, drill figures and investor materials.",
+    "metaDescription": "ArcGIS vs Exploration Maps for mining maps: enterprise GIS power and licensing versus a focused tool for claim maps, drill figures and investor decks.",
     "directAnswer": "Exploration Maps is purpose-built for investor-ready mining maps and can produce a polished export in 15–30 minutes with no GIS training required. ArcGIS is a full GIS platform best suited for complex spatial analysis, but requires expensive licensing, significant training, and hours of configuration to produce presentation-quality map outputs.",
     "competitor": "ArcGIS",
     "competitorUrl": "https://www.esri.com/arcgis",
@@ -103,7 +103,7 @@
   {
     "slug": "exploration-maps-vs-qgis",
     "title": "Exploration Maps vs QGIS for Exploration Mapping",
-    "metaDescription": "Where QGIS is the right tool for exploration work and where a focused map builder is — spatial analysis and projection management versus presentation-ready claim and drill figures.",
+    "metaDescription": "When QGIS is the right tool for exploration work and when a focused map builder wins: spatial analysis versus presentation-ready claim and drill maps.",
     "directAnswer": "QGIS is a full open-source GIS and it is the better tool for spatial analysis, coordinate system management, raster and geophysical processing, and advanced cartography. Exploration Maps is narrower on purpose: it produces presentation-ready exploration figures — claim maps, drill collar plans, investor and news-release figures — without a desktop install or a layout composer. Most exploration teams end up using both, with QGIS for preparation and analysis and Exploration Maps for the figure that goes out.",
     "competitor": "QGIS",
     "competitorUrl": "https://qgis.org",
@@ -199,7 +199,7 @@
   {
     "slug": "best-mining-map-software-junior-exploration",
     "title": "Best Mining Map Software for Junior Exploration Companies",
-    "metaDescription": "An honest comparison of mining map tools for junior exploration teams: Exploration Maps, QGIS, ArcGIS, MapInfo, and Illustrator. Which is fastest for clean investor-ready maps, and which is better for technical GIS analysis.",
+    "metaDescription": "An honest comparison of mining map tools for junior explorers: Exploration Maps, QGIS, ArcGIS, MapInfo and Illustrator for investor maps and GIS work.",
     "directAnswer": "If you need clean, investor-ready maps quickly and without a GIS specialist, Exploration Maps is the fastest path. If you need spatial analysis, coordinate transformations, or heavy data processing, QGIS (free) or ArcGIS remain the better tools. Many teams use both: do the analysis in a GIS, then build the presentation map in Exploration Maps. Exploration Maps is a fast map-making and visualization tool, not a replacement for a full GIS.",
     "competitor": "Multiple",
     "sections": [
@@ -331,7 +331,7 @@
   {
     "slug": "exploration-maps-vs-mapinfo",
     "title": "Exploration Maps vs MapInfo for Mining Maps",
-    "metaDescription": "Comparing Exploration Maps and MapInfo Pro for creating mining exploration maps. See which tool is faster and more practical for junior mining companies in 2025.",
+    "metaDescription": "Comparing Exploration Maps and MapInfo Pro for mining exploration maps: which tool is faster and more practical for junior mining companies.",
     "directAnswer": "MapInfo Pro is an established enterprise GIS platform used at major mining companies and geological surveys, particularly in Canada and Australia. For junior exploration companies that need investor-ready maps quickly without a dedicated GIS professional, Exploration Maps is significantly faster, lower cost, and requires no installation or training.",
     "competitor": "MapInfo",
     "competitorUrl": "https://www.precisely.com/product/precisely-mapinfo/mapinfo-pro",

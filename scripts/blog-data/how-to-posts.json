@@ -3,7 +3,7 @@
     "slug": "how-to-map-bc-mineral-claims-live-registry",
     "mapTypeId": "mining-claims-map",
     "title": "How to Map BC Mineral Claims from the Public Registry",
-    "metaDescription": "Search British Columbia mineral claims by company or claimholder, import the tenures into Exploration Maps, style them, and export a clean investor-ready map. Includes Mineral Titles Online verification steps.",
+    "metaDescription": "Search BC mineral claims by company or claimholder, import the tenures, style them and export an investor-ready map. Includes MTO verification steps.",
     "directAnswer": "To map BC mineral claims, open Exploration Maps, search a company or claimholder to pull their British Columbia tenures from public registry data, add the claims to the map, assign the Claims layer role for standard styling, add context and a title block, then export a PNG or PDF. Always confirm current ownership, status, and boundaries in BC Mineral Titles Online (MTO) before relying on the map.",
     "ctaTop": {
       "text": "Search a claimholder and create a map.",
@@ -85,7 +85,7 @@
         "box": {
           "kind": "verify",
           "title": "Verify in BC Mineral Titles Online (MTO)",
-          "html": "Always verify current ownership, status, expiry, good-to dates, and boundaries for each tenure number in <a href=\"https://www.mtonline.gov.bc.ca/\" rel=\"nofollow noopener\" target=\"_blank\">BC Mineral Titles Online</a> before relying on the map. Tenure status can change daily."
+          "html": "Always verify current ownership, status, expiry, good-to dates, and boundaries for each tenure number in <a href=\"https://www.mtonline.gov.bc.ca/mtov/home\" rel=\"nofollow noopener\" target=\"_blank\">BC Mineral Titles Online</a> before relying on the map. Tenure status can change daily."
         },
         "html": "If you want to keep watching those good-to-dates after the map is built, <a href=\"/blog/how-to-track-bc-mineral-claim-good-to-dates/\">Tenure Monitor</a> saves a claim portfolio and emails you before each deadline. It still points you back to MTO — it reads the public dataset, it is not the registry."
       },
@@ -107,7 +107,7 @@
       },
       {
         "h2": "Related guides",
-        "html": "Next, see the broader <a href=\"/blog/how-to-make-a-mining-claims-map/\">how to make a mining claims map</a> guide, compare workflows in <a href=\"/blog/how-to-search-ontario-mining-claims/\">Ontario</a>, learn to <a href=\"/blog/how-to-import-geojson-mining-map/\">import a GeoJSON or Shapefile</a>, and when you're done, <a href=\"/blog/how-to-make-a-professional-exploration-map/\">lay out and export the figure</a>. You can also start straight from the <a href=\"/bc-mineral-claims-map/\">BC mineral claims map</a> tool page."
+        "html": "Next, see the broader <a href=\"/blog/how-to-make-a-mining-claims-map/\">how to make a mining claims map</a> guide, compare workflows in <a href=\"/blog/how-to-search-ontario-mining-claims/\">Ontario</a>, learn to <a href=\"/blog/how-to-import-geojson-mining-map/\">import a GeoJSON or Shapefile</a>, and when you're done, <a href=\"/blog/how-to-make-a-professional-exploration-map/\">lay out and export the figure</a>. You can also start straight from the <a href=\"/bc-mineral-claims-map/\">BC mineral claims map</a> tool page. For worked examples, browse the <a href=\"/companies/bc/\">BC company claim maps</a>."
       }
     ],
     "faqs": [
@@ -150,7 +150,7 @@
     "slug": "how-to-track-bc-mineral-claim-good-to-dates",
     "mapTypeId": "mining-claims-map",
     "title": "BC Mineral Claim Expiry Dates: How to Track Good-to-Dates and Get Reminders",
-    "metaDescription": "Track British Columbia mineral claim expiry dates without a spreadsheet. How good-to-dates work, what moves them, and how to get email reminders at 90, 30 and 1 day. Free for 10 claims. Verify in Mineral Titles Online.",
+    "metaDescription": "Track BC mineral claim good-to-dates without a spreadsheet: what moves them, and email reminders at 90, 30 and 1 day. Free for 10 claims.",
     "directAnswer": "To track BC mineral claim good-to-dates, open Tenure Monitor in Exploration Maps, search by tenure number or registered owner, add the claims to a portfolio, and set reminder thresholds. Reminders are emailed at 90, 30 and 1 day before each good-to-date, and the portfolio flags claims whose government record has changed. Exploration Maps is not the official registry and does not file work or pay cash in lieu — confirm every deadline in BC Mineral Titles Online before acting on it.",
     "ctaTop": {
       "text": "Monitor up to 10 BC claims free.",
@@ -216,7 +216,7 @@
         "box": {
           "kind": "verify",
           "title": "A change is not a determination",
-          "html": "A status change, a termination date, or a title dropping out of the published dataset is what the government data shows. It is <strong>not</strong> confirmation that ground is available. Records leave a published dataset for several reasons, including a delayed or partial publication at the province. Check the tenure in <a href=\"https://www.mtonline.gov.bc.ca/\" rel=\"nofollow noopener\" target=\"_blank\">Mineral Titles Online</a> before acting on it."
+          "html": "A status change, a termination date, or a title dropping out of the published dataset is what the government data shows. It is <strong>not</strong> confirmation that ground is available. Records leave a published dataset for several reasons, including a delayed or partial publication at the province. Check the tenure in <a href=\"https://www.mtonline.gov.bc.ca/mtov/home\" rel=\"nofollow noopener\" target=\"_blank\">Mineral Titles Online</a> before acting on it."
         }
       },
       {
@@ -348,7 +348,7 @@
     "slug": "how-to-make-a-mining-claims-map",
     "mapTypeId": "mining-claims-map",
     "title": "How to Make a Mining Claims Map",
-    "metaDescription": "The complete guide to making a mining claims map: import public claim data, shapefiles, KML, GeoJSON, or drillhole CSVs, style your claims, and export a clean investor-ready map in minutes. Links to province-by-province search guides.",
+    "metaDescription": "Make a mining claims map: import registry data, shapefiles, KML or GeoJSON, style your claims and export an investor-ready map in minutes.",
     "directAnswer": "To make a mining claims map, get your claims into Exploration Maps — either search a claimholder to pull public registry data or import a GeoJSON, Shapefile, or KML — assign the Claims layer role for standard blue styling, add context layers and a title block, then export as PNG or PDF. Exploration Maps is a visualization tool, not the official registry, so verify ownership and boundaries with the relevant provincial registry.",
     "ctaTop": {
       "text": "Turn public claim data into a clean map.",
@@ -514,7 +514,7 @@
     "slug": "how-to-make-a-drill-results-map",
     "mapTypeId": "drill-results-map",
     "title": "How to Make a Drill Results Map",
-    "metaDescription": "Turn a drill collar CSV into a drill hole map for a news release or technical report: required columns, coordinate fixes, how to present assay intercepts, callout discipline, claims and target context, and export settings.",
+    "metaDescription": "Turn a drill collar CSV into a drill hole map for a news release: required columns, coordinate fixes, assay intercept callouts and export settings.",
     "directAnswer": "Import a collar CSV with hole IDs and WGS84 longitude/latitude, assign the Drillholes role, add a boundary for context and label selected results. Start with the downloadable 14-hole example below, then replace the fictional data with your reviewed project data.",
     "ctaTop": {
       "text": "Turn a collar CSV into a drill map.",
@@ -740,7 +740,7 @@
     "slug": "how-to-create-exploration-map-investor-presentation",
     "mapTypeId": "location-map",
     "title": "How to Create an Exploration Map for an Investor Presentation",
-    "metaDescription": "Build investor-ready exploration maps for decks, project overviews, and news releases: pick a branded theme, set a 16:9 layout, keep the legend clean, add callouts, and export sharp PNGs and PDFs.",
+    "metaDescription": "Build exploration maps for investor decks and news releases: a branded theme, 16:9 layout, clean legend, callouts, and sharp PNG and PDF exports.",
     "directAnswer": "For an investor presentation map, use a branded theme (such as Investor — Navy & White), the Landscape 16:9 ratio, a satellite or light basemap, a concise legend, and callouts for your key results — then export PNG at 2× resolution. Most decks use three maps: a regional location map, a property/claims overview, and a results map.",
     "ctaTop": {
       "text": "Import your file and export an investor-ready map.",
@@ -1089,7 +1089,7 @@
     "slug": "how-to-create-infrastructure-map",
     "mapTypeId": "infrastructure-map",
     "title": "How to Create an Infrastructure Map for a Mining Property",
-    "metaDescription": "Create a mining infrastructure map: roads, power, rail and facilities layered over your property, distance rings to ports and towns, and a clean export for studies and decks.",
+    "metaDescription": "Create a mining infrastructure map: roads, power, rail and facilities over your property, distance rings to ports and towns, and a clean export.",
     "directAnswer": "To make an infrastructure map, import your property boundary, add roads, powerlines, rail, and facilities as line and point layers, style them in muted colours under a Topographic or Satellite basemap, add distance rings to key infrastructure, and export. The story is access and cost — make distances explicit.",
     "sections": [
       {
@@ -1200,7 +1200,7 @@
     "slug": "how-to-import-csv-data-mining-map",
     "mapTypeId": "drill-results-map",
     "title": "How to Import CSV Data into a Mining Map",
-    "metaDescription": "Import drill collars, soil geochem, and rock samples from a CSV into Exploration Maps: required columns, fixing UTM and lat/long coordinate issues, labelling points, and exporting a clean map.",
+    "metaDescription": "Import drill collars, soil and rock samples from a CSV: required columns, fixing UTM and lat/long issues, labelling points and exporting a clean map.",
     "directAnswer": "To import CSV data into a mining map, click import and select your CSV — the Column Mapper opens automatically. Assign your latitude and longitude columns (in decimal degrees), click Import, and your points render immediately. Every other column is preserved as a feature property you can use for labels and callouts.",
     "ctaTop": {
       "text": "Import your file and export an investor-ready map.",
@@ -1367,7 +1367,7 @@
   {
     "slug": "how-to-create-ni-43-101-compliant-map",
     "title": "How to Prepare Map Figures for an NI 43-101 Technical Report",
-    "metaDescription": "Practical guidance on preparing map figures for an NI 43-101 technical report — figure elements, coordinate system and datum labelling, captions and numbering. The QP determines what the report requires.",
+    "metaDescription": "Prepare map figures for an NI 43-101 technical report: figure elements, coordinate system and datum labels, captions and numbering, for QP review.",
     "directAnswer": "Map figures in an NI 43-101 technical report are expected to carry a figure number and caption, a scale bar, a north arrow, a stated coordinate system and datum, a legend naming every element, and a source or date. No mapping software can make a figure compliant: NI 43-101 governs the disclosure and the report, and the qualified person responsible for the report determines what its figures must show. What a tool can do is make it straightforward to produce figures that carry those elements consistently.",
     "sections": [
       {
@@ -1375,7 +1375,7 @@
         "box": {
           "kind": "note",
           "title": "Software cannot make a figure NI 43-101 compliant",
-          "html": "National Instrument 43-101 is a Canadian Securities Administrators instrument governing disclosure of scientific and technical information about mineral projects. It applies to the disclosure and to the technical report, and responsibility for meeting it rests with the issuer and the qualified person — not with a mapping tool. This guide covers figure conventions that are widely expected in technical reports. Consult the current instrument and companion policy, and your QP, for what your report actually requires: <a href=\"https://www.bcsc.bc.ca/securities-law/law-and-policy/instrument-list/43-101-standards-of-disclosure-for-mineral-projects\" rel=\"nofollow noopener\" target=\"_blank\">NI 43-101 on the BCSC site</a>."
+          "html": "National Instrument 43-101 is a Canadian Securities Administrators instrument governing disclosure of scientific and technical information about mineral projects. It applies to the disclosure and to the technical report, and responsibility for meeting it rests with the issuer and the qualified person — not with a mapping tool. This guide covers figure conventions that are widely expected in technical reports. Consult the current instrument and companion policy, and your QP, for what your report actually requires: <a href=\"https://www.osc.ca/en/securities-law/instruments-rules-policies/4/43-101\" rel=\"nofollow noopener\" target=\"_blank\">NI 43-101 on the OSC site</a>."
         },
         "body": "That qualification is not throat-clearing. A map produced in any tool can fail a review for reasons that have nothing to do with the tool — a missing datum statement, an unlabelled figure, a scale that contradicts the text."
       },
@@ -1500,7 +1500,7 @@
     "slug": "how-to-search-ontario-mining-claims",
     "mapTypeId": "mining-claims-map",
     "title": "How to Search Ontario Mining Claims and Map Them",
-    "metaDescription": "Search Ontario mining claims by company name or claim number from public MLAS data, add them to a map, style them, and export a clean investor-ready figure. Includes MLAS verification steps.",
+    "metaDescription": "Search Ontario mining claims by company or claim number from public MLAS data, map and style them, and export an investor-ready figure.",
     "directAnswer": "To search Ontario mining claims, open Exploration Maps, choose Add Claims → Search Claims Registry, select Ontario, type a company or claim-holder name (or a claim number), pick your claim groups, and click Add to map. Assign the Claims role, style, and export. Always confirm current holder, status, and boundaries in the official Ontario MLAS before relying on the map.",
     "publishedDate": "2026-06-14",
     "ctaTop": {
@@ -1589,7 +1589,7 @@
         "box": {
           "kind": "verify",
           "title": "Verify in the official MLAS",
-          "html": "Always verify current claim holder, status, expiry, and boundaries in the official <a href=\"https://www.mlas.mndm.gov.on.ca/\" rel=\"nofollow noopener\" target=\"_blank\">Ontario MLAS</a> before relying on the map. Claim status can change."
+          "html": "Always verify current claim holder, status, expiry, and boundaries in the official <a href=\"https://www.lioapplications.lrc.gov.on.ca/MLAS/Index.html\" rel=\"nofollow noopener\" target=\"_blank\">Ontario MLAS</a> before relying on the map. Claim status can change."
         }
       },
       {
@@ -1610,7 +1610,7 @@
       },
       {
         "h2": "Related guides",
-        "html": "See the broad <a href=\"/blog/how-to-make-a-mining-claims-map/\">mining claims map guide</a>, compare with <a href=\"/blog/how-to-map-bc-mineral-claims-live-registry/\">British Columbia</a> or <a href=\"/blog/how-to-search-quebec-mining-claims/\">Quebec</a>, import your own files with the <a href=\"/blog/how-to-import-geojson-mining-map/\">GeoJSON / Shapefile guide</a>, and finish with the <a href=\"/blog/how-to-make-a-professional-exploration-map/\">professional map guide</a>."
+        "html": "See the broad <a href=\"/blog/how-to-make-a-mining-claims-map/\">mining claims map guide</a>, compare with <a href=\"/blog/how-to-map-bc-mineral-claims-live-registry/\">British Columbia</a> or <a href=\"/blog/how-to-search-quebec-mining-claims/\">Quebec</a>, import your own files with the <a href=\"/blog/how-to-import-geojson-mining-map/\">GeoJSON / Shapefile guide</a>, and finish with the <a href=\"/blog/how-to-make-a-professional-exploration-map/\">professional map guide</a>. For worked examples, browse the <a href=\"/companies/ontario/\">Ontario company claim maps</a>."
       }
     ],
     "faqs": [
@@ -1722,7 +1722,7 @@
   {
     "slug": "how-to-search-manitoba-mining-claims",
     "title": "Manitoba Mining Claims Search — Map Dispositions Free",
-    "metaDescription": "Map Manitoba mining claims by claim/tenure number: find numbers in iMaQs, pull boundaries into a styled map, and export — with honest notes on what the public data includes.",
+    "metaDescription": "Map Manitoba mining claims by claim number: find numbers in iMaQs, pull boundaries into a styled map and export, with notes on what the data covers.",
     "directAnswer": "To map Manitoba mining claims, open Exploration Maps, click 'Add Claims → Search Claims Registry', choose Manitoba, and search by claim or tenure number (e.g. CB12345). Manitoba's public claim data doesn't include holder names, so number search is the reliable route — get the numbers from the iMaQs registry, then map them in one click.",
     "publishedDate": "2026-06-14",
     "sections": [
@@ -1799,7 +1799,7 @@
     "slug": "how-to-search-newfoundland-mineral-claims",
     "mapTypeId": "mining-claims-map",
     "title": "How to Search Newfoundland Mineral Licences and Map a Project",
-    "metaDescription": "Search Newfoundland and Labrador mineral exploration licences by company or licence number from public GeoAtlas data, map a project area, and export a clean investor-ready figure. Includes verification steps.",
+    "metaDescription": "Search Newfoundland and Labrador mineral licences by company or licence number from GeoAtlas data, map the project area and export a clean figure.",
     "directAnswer": "To map Newfoundland & Labrador mineral claims (exploration licences), open Exploration Maps, choose Add Claims → Search Claims Registry, select Newfoundland & Labrador, and type a company or licensee name (or a licence number). Add the licences to your map, style them, and export. Always verify current licence holder, status, and boundaries in the official NL GeoAtlas before relying on the map.",
     "publishedDate": "2026-06-14",
     "ctaTop": {
@@ -1849,7 +1849,7 @@
         "box": {
           "kind": "verify",
           "title": "Verify in the official GeoAtlas",
-          "html": "Always verify current licence holder, status, expiry, and boundaries in the official <a href=\"https://geoatlas.gov.nl.ca/\" rel=\"nofollow noopener\" target=\"_blank\">NL GeoAtlas</a> before relying on the map. Licence status can change."
+          "html": "Always verify current licence holder, status, expiry, and boundaries in the official <a href=\"https://geoatlas.gov.nl.ca/Default.htm\" rel=\"nofollow noopener\" target=\"_blank\">NL GeoAtlas</a> before relying on the map. Licence status can change."
         }
       },
       {
@@ -1907,7 +1907,7 @@
     "slug": "how-to-search-quebec-mining-claims",
     "mapTypeId": "mining-claims-map",
     "title": "How to Search Quebec Mining Claims (GESTIM) and Map Them",
-    "metaDescription": "Search Quebec mining claims (titres miniers) by titleholder or claim number from Quebec's public GESTIM dataset, map them, and export a clean investor-ready figure. Note: Quebec uses a refreshed public dataset, not a live query.",
+    "metaDescription": "How to search Quebec mining claims in GESTIM: find titles by owner or area, check expiry dates, and export claims to a map.",
     "directAnswer": "To map Quebec mining claims, open Exploration Maps, choose Add Claims → Search Claims Registry, select Quebec, and type a titleholder (company) name or claim number. The results come from Quebec's public GESTIM titres miniers dataset, which is a refreshed public extract (not a live query), so it can lag the official registry. Always verify current title status and boundaries in GESTIM before relying on the map.",
     "publishedDate": "2026-06-25",
     "ctaTop": {
@@ -1979,7 +1979,7 @@
       },
       {
         "h2": "Related guides",
-        "html": "See the broad <a href=\"/blog/how-to-make-a-mining-claims-map/\">mining claims map guide</a>, compare with <a href=\"/blog/how-to-search-ontario-mining-claims/\">Ontario</a> or <a href=\"/blog/how-to-map-bc-mineral-claims-live-registry/\">British Columbia</a>, import your own files with the <a href=\"/blog/how-to-import-geojson-mining-map/\">GeoJSON / Shapefile guide</a>, and finish with the <a href=\"/blog/how-to-make-a-professional-exploration-map/\">professional map guide</a>."
+        "html": "See the broad <a href=\"/blog/how-to-make-a-mining-claims-map/\">mining claims map guide</a>, compare with <a href=\"/blog/how-to-search-ontario-mining-claims/\">Ontario</a> or <a href=\"/blog/how-to-map-bc-mineral-claims-live-registry/\">British Columbia</a>, import your own files with the <a href=\"/blog/how-to-import-geojson-mining-map/\">GeoJSON / Shapefile guide</a>, and finish with the <a href=\"/blog/how-to-make-a-professional-exploration-map/\">professional map guide</a>. Once the titres are on the map, the <a href=\"/mining-map-software/\">mining map software</a> handles layout and export, and the <a href=\"/drill-results-map/\">drill results map</a> adds collars and intercepts for a news release. For BC and Ontario issuers, browse the <a href=\"/companies/\">claim maps by company</a>."
       }
     ],
     "faqs": [
@@ -2019,7 +2019,7 @@
     "category": "mineral-claims",
     "title": "Yukon Quartz Claims Search — Map Claims Free",
     "fullTitle": "Yukon Quartz Claims Search | Exploration Maps",
-    "metaDescription": "Search Yukon quartz mining claims by owner or grant number, pull the boundaries into a styled map, and export — with honest notes on placer claims and what the public data covers.",
+    "metaDescription": "Search Yukon quartz claims by owner or grant number, pull the boundaries into a styled map and export, with notes on placer claims and data coverage.",
     "directAnswer": "To map Yukon quartz claims, open Exploration Maps, click 'Add Claims → Search Claims Registry', choose Yukon, and search by owner name or grant number. Matching claims are grouped geographically so you can add one block rather than everything a company holds. Quartz claims only — placer claims are a separate Yukon registry and are not included.",
     "publishedDate": "2026-08-10",
     "sections": [
@@ -2109,7 +2109,7 @@
   {
     "slug": "exploration-mapping-file-types-shapefile-kml-geojson-csv",
     "title": "Shapefile, KML, GeoJSON, and CSV: Which File Types Matter for Exploration Mapping?",
-    "metaDescription": "Shapefile vs GeoJSON vs KML vs CSV for exploration mapping — what each format is for, the gotchas (missing .prj, UTM coordinates), and how to convert between them free.",
+    "metaDescription": "Shapefile vs GeoJSON vs KML vs CSV for exploration mapping: what each format is for, gotchas like a missing .prj, and how to convert between them free.",
     "directAnswer": "Shapefile and GeoJSON carry boundaries (claims, targets), KML comes from Google Earth and some government portals, and CSV carries point data like drill collars. Exploration Maps imports all four — when you get a choice, ask for GeoJSON.",
     "sections": [
       {
@@ -2211,7 +2211,7 @@
     "mapTypeId": "mining-claims-map",
     "category": "exploration-mapping",
     "title": "How to Make a Professional Mineral Exploration Map",
-    "metaDescription": "The map elements that make an exploration figure look competent: basemap choice, scale bar, north arrow, distance rings, title block, and export settings for slides, reports and news releases.",
+    "metaDescription": "The elements of a competent exploration map: basemap, scale bar, north arrow, distance rings, title block, and export settings for slides and reports.",
     "cardSummary": "Basemap choice, scale bar, north arrow, distance rings, title block and export settings — the elements that separate a figure from an illustration.",
     "directAnswer": "A professional exploration map needs five things: a basemap that suits the audience, a legible title block with project name, company and date, a scale bar and north arrow, a legend that names every layer, and an export sized for where the map will actually be seen. Choose the basemap by output — light for reports, satellite for investor decks, topographic for access and infrastructure. Export PDF for anything printed or filed, PNG for slides and email.",
     "ctaTop": {
@@ -2360,7 +2360,7 @@
     "slug": "bc-mineral-titles-online-guide",
     "category": "mineral-claims",
     "title": "BC Mineral Titles Online (MTO): How to Find, Map and Monitor Mineral Claims",
-    "metaDescription": "What Mineral Titles Online is, what it is the authority for, and how to search, map and monitor British Columbia mineral claims — including where Exploration Maps helps and where you still need MTO.",
+    "metaDescription": "Step-by-step guide to BC Mineral Titles Online (MTO): search claims, check owners and good-to dates, and map tenures.",
     "cardSummary": "What MTO is, what it is authoritative for, and how to search, map and monitor BC mineral claims around it.",
     "directAnswer": "Mineral Titles Online (MTO) is the Province of British Columbia's official system for acquiring and administering mineral, placer and coal titles. It is where claims are staked, maintained, transferred and paid for, and it is the authoritative record of who holds a title and when it expires. Exploration Maps does not replace MTO — it reads the province's public tenure dataset so you can search claims by tenure number or registered owner, map them, and track good-to-dates, then sends you back to MTO for anything that governs a transaction or a deadline.",
     "ctaTop": {
@@ -2376,7 +2376,7 @@
       {
         "h2": "What Mineral Titles Online actually is",
         "body": "MTO is the Province of British Columbia's online system for mineral, placer and coal titles, run by the Mineral Titles Branch. It is a transactional system, not just a viewer: free miner certificate holders use it to acquire cell claims, register assessment work, pay cash in lieu, apply for leases, and transfer title.",
-        "html": "That transactional role is why MTO is the authority. A tenure's current status, its good-to-date, its registered owner and its boundaries are what MTO says they are. Any other source — including this one — is a copy of published data, and a copy can be stale, partial, or wrong. Start at <a href=\"https://www.mtonline.gov.bc.ca/\" rel=\"nofollow noopener\" target=\"_blank\">Mineral Titles Online</a>; background, rules and contacts are on the <a href=\"https://www2.gov.bc.ca/gov/content/industry/mineral-exploration-mining/mineral-titles\" rel=\"nofollow noopener\" target=\"_blank\">Mineral Titles Branch</a> site.",
+        "html": "That transactional role is why MTO is the authority. A tenure's current status, its good-to-date, its registered owner and its boundaries are what MTO says they are. Any other source — including this one — is a copy of published data, and a copy can be stale, partial, or wrong. Start at <a href=\"https://www.mtonline.gov.bc.ca/mtov/home\" rel=\"nofollow noopener\" target=\"_blank\">Mineral Titles Online</a>; background, rules and contacts are on the <a href=\"https://www2.gov.bc.ca/gov/content/industry/mineral-exploration-mining/mineral-titles\" rel=\"nofollow noopener\" target=\"_blank\">Mineral Titles Branch</a> site.",
         "box": {
           "kind": "verify",
           "title": "What must be verified in MTO",
@@ -2440,7 +2440,7 @@
       {
         "h2": "Mapping the results",
         "body": "Select the tenures you want and add them to the map. They come in as a claims layer with the boundaries from the public dataset, and the map fits to their extent. Assign the Claims role for the blue stroke and semi-transparent fill convention that most NI 43-101 figures use, add a title block and your logo, and export.",
-        "html": "If you already have a tenure file from MTO or a GIS, import it instead — GeoJSON, zipped Shapefile and KML all work. See <a href=\"/blog/how-to-map-bc-mineral-claims-live-registry/\">how to map BC mineral claims from the public registry</a> for the full walkthrough."
+        "html": "If you already have a tenure file from MTO or a GIS, import it instead — GeoJSON, zipped Shapefile and KML all work. See <a href=\"/blog/how-to-map-bc-mineral-claims-live-registry/\">how to map BC mineral claims from the public registry</a> for the full walkthrough. To lay the tenures out as an investor figure, use the <a href=\"/mining-map-software/\">mining map software</a>; for a drilling update, add collars and intercepts on a <a href=\"/drill-results-map/\">drill results map</a>. For worked examples, browse the <a href=\"/companies/\">mineral claim maps by company</a>."
       },
       {
         "h2": "Tracking good-to-dates afterwards",
@@ -2506,14 +2506,14 @@
       "how-to-map-bc-mineral-claims-live-registry"
     ],
     "publishedDate": "2026-08-06",
-    "fullTitle": "BC Mineral Titles Online (MTO) Guide",
+    "fullTitle": "MTO BC: How to Use Mineral Titles Online (2026 Guide)",
     "updatedDate": "2026-09-15"
   },
   {
     "slug": "find-mineral-claims-owned-by-company-bc",
     "category": "mineral-claims",
     "title": "How to Find Mineral Claims Owned by a Company in British Columbia",
-    "metaDescription": "Search BC mineral claims by registered owner to see a company's land position — for competitor research, project generation, due diligence and neighbouring-ground checks. Verify ownership in MTO.",
+    "metaDescription": "Search BC mineral claims by registered owner to see a company's land position, for competitor research, due diligence and neighbour checks. Verify in MTO.",
     "cardSummary": "Search by registered owner to see a company's BC land position — competitor research, project generation and due diligence.",
     "directAnswer": "To find mineral claims held by a company in British Columbia, search the province's published tenure data by registered owner. In Exploration Maps, open Add Claims → Search Claims Registry, select British Columbia, choose the registered-owner mode and enter the company name. Matches are returned as candidates grouped by confidence — company names reach the registry in clipped legal form and under previous names — so you confirm which titles are actually theirs before mapping them. Authoritative ownership must be confirmed in Mineral Titles Online.",
     "ctaTop": {
@@ -2600,7 +2600,7 @@
           "height": 640,
           "caption": "Company-page map snapshot for Goliath Resources. This separately generated snapshot is an example of the output; it is not the 94-record search observation below or a current ownership certification."
         },
-        "html": "<a href=\"/companies/got/\">View the Goliath company-page snapshot</a> or verify individual tenures in <a href=\"https://www.mtonline.gov.bc.ca/\">Mineral Titles Online</a>. Search results can change as the published record changes."
+        "html": "<a href=\"/companies/got/\">View the Goliath company-page snapshot</a> or verify individual tenures in <a href=\"https://www.mtonline.gov.bc.ca/mtov/home\">Mineral Titles Online</a>. Search results can change as the published record changes."
       },
       {
         "h2": "Read the candidates properly",
@@ -2609,7 +2609,7 @@
         "box": {
           "kind": "capability",
           "title": "What a name match is and is not",
-          "html": "Owner search matches the registered-owner field in the province's published tenure data. It is a search aid. It is not a determination of legal ownership, and a company's real land position may include titles held under a name you did not search. Confirm ownership in <a href=\"https://www.mtonline.gov.bc.ca/\" rel=\"nofollow noopener\" target=\"_blank\">Mineral Titles Online</a>."
+          "html": "Owner search matches the registered-owner field in the province's published tenure data. It is a search aid. It is not a determination of legal ownership, and a company's real land position may include titles held under a name you did not search. Confirm ownership in <a href=\"https://www.mtonline.gov.bc.ca/mtov/home\" rel=\"nofollow noopener\" target=\"_blank\">Mineral Titles Online</a>."
         }
       },
       {
@@ -2647,7 +2647,7 @@
       },
       {
         "h2": "Next steps and sources",
-        "html": "Use the <a href=\"/mining-claim-search-by-company-name/\">company-name search tool</a> to repeat the lookup. Read <a href=\"/data-coverage/\">coverage and methodology</a> before comparing results across jurisdictions."
+        "html": "Use the <a href=\"/mining-claim-search-by-company-name/\">company-name search tool</a> to repeat the lookup. Read <a href=\"/data-coverage/\">coverage and methodology</a> before comparing results across jurisdictions. Browse every published <a href=\"/companies/\">company claim map</a>, finish the figure in the <a href=\"/mining-map-software/\">mining map software</a>, or plot collars on a <a href=\"/drill-results-map/\">drill results map</a>."
       },
       {
         "h2": "How this guide was checked",
@@ -2689,7 +2689,7 @@
     "slug": "canadian-mineral-claim-registries",
     "category": "mineral-claims",
     "title": "Canadian Mineral Claim & Tenure Registry Guide",
-    "metaDescription": "The official mineral tenure registry for each Canadian jurisdiction Exploration Maps supports, what you can search in each, and which ones can be searched, mapped and monitored directly.",
+    "metaDescription": "The official mineral tenure registry for each Canadian jurisdiction we support, what each lets you search, and which can be mapped and monitored directly.",
     "cardSummary": "Official registry, searchable fields and Exploration Maps support for each Canadian jurisdiction — with links to the province-specific guides.",
     "directAnswer": "Each Canadian province and territory runs its own mineral tenure registry, and they differ in what they publish. Exploration Maps supports direct claim search for British Columbia, Ontario, Quebec, Saskatchewan, Manitoba, Newfoundland & Labrador and Yukon. All seven can be mapped. Tenure Monitor — saved claim groups with good-to-date reminders and change detection — currently covers British Columbia only. Every jurisdiction's official registry remains the authority for ownership, status and boundaries.",
     "ctaTop": {
