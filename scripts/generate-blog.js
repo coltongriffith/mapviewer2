@@ -312,6 +312,8 @@ ${body}
     <a href="/shapefile-to-map/">Shapefile to Map</a>
     <span class="site-footer-sep">·</span>
     <a href="/drill-results-map/">Drill Results Map</a>
+    <span class="site-footer-sep">·</span>
+    <a href="/companies/">Claim Maps by Company</a>
   </div>
   <div class="site-footer-links">
     <a href="/">Home</a>
@@ -319,6 +321,10 @@ ${body}
     <a href="/about/">About</a>
     <span class="site-footer-sep">·</span>
     <a href="/blog/">Guides</a>
+    <span class="site-footer-sep">·</span>
+    <a href="/mcp/">Claude Connector</a>
+    <span class="site-footer-sep">·</span>
+    <a href="/agent/">Agent API</a>
     <span class="site-footer-sep">·</span>
     <a href="/privacy/">Privacy</a>
   </div>

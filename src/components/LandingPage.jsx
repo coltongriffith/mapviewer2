@@ -552,12 +552,14 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
             <a href="/bc-mineral-claims-map/">B.C. claims map</a>
             <a href="/mining-claim-search-by-company-name/">Claim search by company</a>
             <a href="/drill-results-map/">Drill results map</a>
+            <a href="/companies/">Claim maps by company</a>
           </div>
           <div className="lm-footer-col">
             <h3>Company</h3>
             <a href="/about/">About</a>
             <a href="/blog/">Guides</a>
             <a href="/contact/">Contact</a>
+            <a href="/mcp/">Claude connector</a>
             {onOpenTenureMonitor && (
               <button type="button" onClick={onOpenTenureMonitor}>Tenure Monitor</button>
             )}

@@ -20,8 +20,8 @@ const ALL = args.includes('--all');
 const PATHS = resolvePaths(FIXTURE);
 
 const REGISTRY_BY_PROV = {
-  BC: { name: 'BC Mineral Titles Online', url: 'https://www.mtonline.gov.bc.ca/' },
-  ON: { name: 'Ontario MLAS', url: 'https://www.mlas.mndm.gov.on.ca/' },
+  BC: { name: 'BC Mineral Titles Online', url: 'https://www.mtonline.gov.bc.ca/mtov/home' },
+  ON: { name: 'Ontario MLAS', url: 'https://www.lioapplications.lrc.gov.on.ca/MLAS/Index.html' },
 };
 const PROV_NAME = { BC: 'British Columbia', ON: 'Ontario' };
 
@@ -143,7 +143,11 @@ function companyPage({ iss, claims, neighbours, updated }) {
   const ogPngPath = path.join(PATHS.assetsOut, `${iss.ticker}-og.png`);
   const ogPng = fs.existsSync(ogPngPath) ? `${SITE}/companies-assets/${iss.ticker}-og.png` : `${SITE}/og-image.png`;
   const title = `${iss.company} (${iss.exchange}: ${iss.ticker}) — Mineral Claims Map`;
-  const description = `${iss.company} holds ${claims.length} mineral claims${haPhrase} in ${provNames}. Interactive claims map, claim list, and expiry dates from public registry data.`;
+  // Meta descriptions over ~155 characters get truncated in results, so the
+  // trailing clause shortens for long company names instead of the facts.
+  const facts = `${iss.company} holds ${claims.length} mineral claims${haPhrase} in ${provNames}.`;
+  const description = [' Claims map, claim list and expiry dates from public records.', ' Claims map and expiry dates.', '']
+    .map((tail) => facts + tail).find((d) => d.length < 155) || facts;
 
   const exportCopy = PAGES.showPricing ? PAGES.pricedExportCopy : PAGES.freeExportCopy;
   const claimRows = claims.slice(0, PAGES.claimsTableMax).map((c) => `
@@ -158,15 +162,19 @@ function companyPage({ iss, claims, neighbours, updated }) {
   const schema = {
     '@context': 'https://schema.org',
     '@graph': [
-      { '@type': 'Organization', name: iss.company, tickerSymbol: `${iss.exchange}:${iss.ticker}`, url },
+      // tickerSymbol belongs to Corporation; on Organization it fails
+      // schema.org validation.
+      { '@type': 'Corporation', '@id': `${url}#company`, name: iss.company, tickerSymbol: `${iss.exchange}:${iss.ticker}` },
       {
         '@type': 'Dataset',
         name: `${iss.company} mineral claims`,
         description,
         url,
+        about: { '@id': `${url}#company` },
         creator: { '@type': 'Organization', name: SITE_NAME, url: SITE },
         dateModified: updated,
-        license: registries[0]?.url,
+        // The registry is the source of the records, not a licence for them.
+        isBasedOn: registries.map((r) => r.url),
         spatialCoverage: provNames,
       },
     ],

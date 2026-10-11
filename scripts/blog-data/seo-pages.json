@@ -4,7 +4,7 @@
     "fullTitle": "Mining Map Software for Exploration Teams | Exploration Maps",
     "h1": "Mining Map Software for Exploration Teams",
     "label": "Mining Map Software",
-    "metaDescription": "Browser-based mining and mineral exploration map software. Build claim maps, drill collar plans, target and infrastructure maps from your own GIS files or public registry data, and export figures for decks, reports and news releases.",
+    "metaDescription": "Browser-based mining map software. Build claim, drill, target and infrastructure maps from GIS files or registry data, and export for decks and reports.",
     "intro": "Exploration Maps is browser-based mining map software for building clean, investor-ready project maps from claim boundaries, drillholes, targets, and your own GIS files — without learning a full desktop GIS system.",
     "softwareApp": true,
     "sections": [
@@ -99,7 +99,7 @@
     "fullTitle": "BC Mineral Claims Map & Claim Search | Exploration Maps",
     "h1": "BC Mineral Claims Map Tool",
     "label": "BC Mineral Claims",
-    "metaDescription": "Search British Columbia mineral claims by tenure number or registered owner, map the boundaries, and track good-to-dates. Public MTO tenure data — verify in Mineral Titles Online.",
+    "metaDescription": "Search BC mineral claims by tenure number or owner, map the boundaries and track good-to-dates. Public MTO tenure data; verify in Mineral Titles Online.",
     "intro": "Exploration Maps helps you turn public British Columbia mineral claim data into a clean project map — search claims, style the blocks, add project details, and export for decks, websites, and reports.",
     "softwareApp": false,
     "sections": [
@@ -155,7 +155,7 @@
     "fullTitle": "Mining Claim Search by Company Name | Exploration Maps",
     "h1": "Mining Claim Search by Company Name",
     "label": "Claim Search",
-    "metaDescription": "Search mineral claims by company or claimholder name in six Canadian jurisdictions — BC, Ontario, Quebec, Saskatchewan, Newfoundland & Labrador and Yukon — then map the results. Confirm ownership with the responsible provincial registry.",
+    "metaDescription": "Search mineral claims by company name in six Canadian jurisdictions: BC, Ontario, Quebec, Saskatchewan, Newfoundland & Labrador and Yukon. Then map them.",
     "intro": "Search published mineral claim records by registered holder, review the candidate titles, and map the ones relevant to your project. Company names, subsidiaries and tickers do not always match the registry’s recorded owner name.",
     "softwareApp": false,
     "sections": [
@@ -193,7 +193,7 @@
           "height": 640,
           "caption": "Company-page map snapshot for Goliath Resources. This separately generated snapshot is an example of the output; it is not the 94-record search observation below or a current ownership certification."
         },
-        "html": "<a href=\"/companies/got/\">View the Goliath company-page snapshot</a> or verify individual tenures in <a href=\"https://www.mtonline.gov.bc.ca/\">Mineral Titles Online</a>. Search results can change as the published record changes."
+        "html": "<a href=\"/companies/got/\">View the Goliath company-page snapshot</a> or verify individual tenures in <a href=\"https://www.mtonline.gov.bc.ca/mtov/home\">Mineral Titles Online</a>. Search results can change as the published record changes. Or browse all <a href=\"/companies/\">mineral claim maps by company</a>."
       },
       {
         "h2": "Choose the right jurisdiction and search field",
@@ -448,7 +448,7 @@
     "label": "Tenure Monitor",
     "h1": "Mineral Tenure Monitoring & Claim Expiry Reminders",
     "fullTitle": "Mineral Tenure Monitoring & Reminders",
-    "metaDescription": "Track mineral claim expiry dates and get email reminders before each good-to-date. Monitor 10 British Columbia claims free, including ground you do not own. Verify deadlines in Mineral Titles Online.",
+    "metaDescription": "Track mineral claim expiry dates with email reminders before each good-to-date. Monitor 10 BC claims free, including ground you don't own.",
     "intro": "Tenure Monitor watches a saved group of British Columbia mineral claims, reads their published good-to-dates, and emails you before each deadline. It also tells you when the government record for a monitored claim changes — a date that moved, an owner added or removed, a title that stopped appearing in the published dataset.",
     "softwareApp": true,
     "sections": [
@@ -616,7 +616,7 @@
       },
       {
         "h2": "Official sources and detailed guides",
-        "html": "BC: <a href=\"https://www.mtonline.gov.bc.ca/\">Mineral Titles Online</a> · Ontario: <a href=\"https://ws.lioservices.lrc.gov.on.ca/arcgis2/rest/services/MLAS/mlas_op/MapServer\">MLAS mapping service</a> · Saskatchewan: <a href=\"https://gis.saskatchewan.ca/arcgis/rest/services/Economy/P_Mineral_Tenure_Crown_Dispositions/MapServer\">mineral-tenure service</a> · Manitoba: <a href=\"https://rdmaps.gov.mb.ca/arcgis/rest/services/iMaQs/imaqsMining/MapServer\">iMaQs mapping service</a> · Newfoundland &amp; Labrador: <a href=\"https://dnrmaps.gov.nl.ca/arcgis/rest/services/GeoAtlas/Mineral_Lands/MapServer\">GeoAtlas mineral lands</a> · Yukon: <a href=\"https://mapservices.gov.yk.ca/arcgis/rest/services/GeoYukon/GY_Mining/MapServer\">GeoYukon mining service</a>. See the <a href=\"/blog/canadian-mineral-claim-registries/\">Canadian registry guide</a> for official registry links including Quebec, and <a href=\"https://reports.blm.gov/report/MLRS/103/Mining-Claims-Customer-Info-Report\">BLM’s claimant report</a> for claimant records."
+        "html": "BC: <a href=\"https://www.mtonline.gov.bc.ca/mtov/home\">Mineral Titles Online</a> · Ontario: <a href=\"https://ws.lioservices.lrc.gov.on.ca/arcgis2/rest/services/MLAS/mlas_op/MapServer\">MLAS mapping service</a> · Saskatchewan: <a href=\"https://gis.saskatchewan.ca/arcgis/rest/services/Economy/P_Mineral_Tenure_Crown_Dispositions/MapServer\">mineral-tenure service</a> · Manitoba: <a href=\"https://rdmaps.gov.mb.ca/arcgis/rest/services/iMaQs/imaqsMining/MapServer\">iMaQs mapping service</a> · Newfoundland &amp; Labrador: <a href=\"https://dnrmaps.gov.nl.ca/arcgis/rest/services/GeoAtlas/Mineral_Lands/MapServer\">GeoAtlas mineral lands</a> · Yukon: <a href=\"https://mapservices.gov.yk.ca/arcgis/rest/services/GeoYukon/GY_Mining/MapServer\">GeoYukon mining service</a>. See the <a href=\"/blog/canadian-mineral-claim-registries/\">Canadian registry guide</a> for official registry links including Quebec, and <a href=\"https://reports.blm.gov/report/MLRS/103/Mining-Claims-Customer-Info-Report\">BLM’s claimant report</a> for claimant records."
       },
       {
         "h2": "Search results, company snapshots and saved maps have different dates",
