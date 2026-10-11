@@ -5,7 +5,6 @@ import Sidebar from './components/Sidebar';
 import InspectorGroup from './components/InspectorGroup';
 import LayerList from './components/LayerList';
 import LocatorInset from './components/LocatorInset';
-import LegendEditor from './components/LegendEditor';
 import CalloutsOverlay from './components/CalloutsOverlay';
 import LandingPage from './components/LandingPage';
 
@@ -21,6 +20,8 @@ import BrandMarkInline from './components/BrandMark';
 const MapCanvas = React.lazy(() => import('./components/MapCanvas'));
 const SigninLinkStatus = React.lazy(() => import('./components/SigninLinkStatus'));
 const MobileEditorBanner = React.lazy(() => import('./components/MobileEditorBanner'));
+// The legend editor loads when the Legend group opens.
+const LegendEditor = React.lazy(() => import('./components/LegendEditor'));
 // The Style step's pickers load with the step, not with the editor.
 const MapStyleGallery = React.lazy(() => import('./components/MapStyleGallery'));
 const ThemePicker = React.lazy(() => import('./components/MapStyleGallery').then((m) => ({ default: m.ThemePicker })));
@@ -5934,11 +5935,13 @@ export default function App({ initialAction = null }) {
               <input id="f-text-size-5210" type="range" min="0.6" max="1.5" step="0.05" value={project.layout.legendFontScale ?? 1} onChange={(e) => updateLayout({ legendFontScale: parseFloat(e.target.value) })} style={{ flex: 1 }} />
               <span className="range-value">{Math.round((project.layout.legendFontScale ?? 1) * 100)}%</span>
             </div>
-            <LegendEditor
-              derivedItems={derivedLegendItems}
-              layout={project.layout}
-              updateLayout={updateLayout}
-            />
+            <React.Suspense fallback={null}>
+              <LegendEditor
+                derivedItems={derivedLegendItems}
+                layout={project.layout}
+                updateLayout={updateLayout}
+              />
+            </React.Suspense>
           </InspectorGroup>
           <InspectorGroup id="elements" title="Map elements" summary="North arrow, scale bar, inset, logo" open={customizeGroup === 'elements'} onToggle={() => toggleCustomizeGroup('elements')} groupRef={elementsGroupRef}>
             <div className="element-visibility-row">
