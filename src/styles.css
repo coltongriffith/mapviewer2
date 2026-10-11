@@ -45,28 +45,6 @@ button, input, select, textarea { font: inherit; }
 .sp-map-slot { position: absolute; z-index: 8600; border: 2px dashed rgba(198,83,34,0.4); border-radius: var(--r-md); background: rgba(251,240,234,0.22); pointer-events: none; transition: background 0.1s, border-color 0.1s; }
 .sp-map-slot--active { border-color: var(--ui-action); border-style: solid; background: rgba(198,83,34,0.16); }
 
-.onboarding-card { padding: 0 0 var(--sp-4); margin-bottom: var(--sp-4); border-bottom: 1px solid var(--ui-border); }
-.onboarding-title { font-size: var(--fs-micro); font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ui-text-muted); margin-bottom: var(--sp-2); }
-/* Interactive onboarding checklist */
-.onboarding-card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-.onboarding-card-head .onboarding-title { margin-bottom: 0; }
-.onboarding-dismiss { background: none; border: none; color: var(--ui-text-muted); font-size: 13px; line-height: 1; cursor: pointer; padding: 2px 4px; }
-.onboarding-dismiss:hover { color: var(--ui-text); }
-.onboarding-checklist { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
-.onboarding-checklist li { display: flex; gap: 10px; align-items: flex-start; }
-.onboarding-checklist li.onb-locked { opacity: 0.5; }
-.onb-tick { flex: 0 0 18px; width: 18px; height: 18px; border: 1px solid var(--ui-border-strong); border-radius: var(--r-sm); display: flex; align-items: center; justify-content: center; font-size: var(--fs-micro); font-weight: 700; color: var(--ui-text-muted); margin-top: 1px; }
-.onboarding-checklist li.done .onb-tick { border-color: var(--ui-success); color: var(--ui-success); }
-.onb-body { flex: 1; min-width: 0; }
-.onb-body strong { font-size: var(--fs-sm); color: var(--ui-text); font-weight: 600; }
-.onboarding-checklist li.done .onb-body strong { color: var(--ui-text-muted); font-weight: 500; }
-.onb-actions { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
-.onb-actions button { height: var(--ctl-h-sm); font-size: var(--fs-label); font-weight: 600; padding: 0 8px; border-radius: var(--r-sm); border: 1px solid var(--ui-border); background: var(--ui-surface); color: var(--ui-text); cursor: pointer; font-family: inherit; }
-.onb-actions button:hover { background: var(--ui-surface-subtle); border-color: var(--ui-border-strong); }
-/* A tertiary action, not a selection: copper is reserved for what is
-   currently selected, so this reads as a link instead. */
-.onb-actions button.onb-link { border: none; background: none; padding: 0 2px; color: var(--ui-action); text-decoration: underline; text-underline-offset: 2px; }
-.onb-actions button.onb-link:hover { color: var(--ui-accent); }
 .secondary-btn.compact { width: auto; padding: 8px 10px; }
 
 .control-section {
@@ -628,8 +606,7 @@ button, input, select, textarea { font: inherit; }
 .app-shell[data-preview='true'] .panel-delete-btn,
 .app-shell[data-preview='true'] .prh,
 .app-shell[data-preview='true'] .panel-resize-handle,
-.app-shell[data-preview='true'] .ratio-frame-badge,
-.app-shell[data-preview='true'] .onboarding-card { display: none !important; }
+.app-shell[data-preview='true'] .ratio-frame-badge { display: none !important; }
 .app-shell[data-preview='true'] .template-zone { cursor: default; }
 .app-shell[data-preview='true'] .template-zone:hover { outline: none; }
 /* The stage is the exported artwork; the gutter around it and this hairline are
@@ -1307,6 +1284,11 @@ body.is-dragging .template-zone .panel-delete-btn { opacity: 0 !important; }
   font-family: inherit;
 }
 .sidebar-account-signin-btn:hover { background: var(--ui-surface-subtle); }
+.sidebar-account-panel--compact { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: center; gap: 4px; padding: var(--sp-2) var(--sp-3); }
+.sidebar-account-panel--compact .sidebar-account-hint { font-size: var(--fs-sm); }
+.sidebar-account-link { background: none; border: 0; padding: 0; font: inherit; font-size: var(--fs-sm); color: var(--ui-text); text-decoration: underline; text-decoration-color: var(--ui-border-strong); text-underline-offset: 2px; cursor: pointer; }
+.sidebar-account-link:hover { color: var(--ui-accent); }
+.sidebar-account-sep { font-size: var(--fs-sm); color: var(--ui-text-muted); }
 .sidebar-account-panel.signed-in { gap: 6px; }
 .sidebar-account-email { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .sidebar-account-email-btn {

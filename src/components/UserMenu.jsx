@@ -3,20 +3,25 @@ import { useAuth } from '../hooks/useAuth.jsx';
 import AuthModal from './AuthModal';
 import { FeedbackLauncher } from './FeedbackModal';
 
-export default function UserMenu({ onOpenTemplates, onOpenAccount, onOpenTenureMonitor }) {
+// `onSaveToAccount`, when given, keeps the open map for after sign-in (the
+// editor passes its account-save request); without it the link only signs in.
+export default function UserMenu({ onOpenTemplates, onOpenAccount, onOpenTenureMonitor, onSaveToAccount }) {
   const { user, signOut } = useAuth();
   const [showAuth, setShowAuth] = useState(false);
 
   if (!user) {
     return (
       <>
-        <div className="sidebar-account-panel">
-          <div className="sidebar-account-hint">Save projects to the cloud and use brand kits.</div>
-          <button className="sidebar-account-signin-btn" onClick={() => setShowAuth(true)}>
-            Sign in / Create account
+        {/* One line, not a block: the inspector's footer also carries the
+            step's Next button, and every pixel here comes out of the panel. */}
+        <div className="sidebar-account-panel sidebar-account-panel--compact">
+          <span className="sidebar-account-hint">Saved on this device.</span>
+          <button type="button" className="sidebar-account-link" onClick={() => (onSaveToAccount ? onSaveToAccount() : setShowAuth(true))}>
+            {onSaveToAccount ? 'Save to a free account' : 'Sign in to keep it'}
           </button>
+          <span className="sidebar-account-sep" aria-hidden="true">·</span>
           {/* One entry point for "this broke" / "I wish it did X", signed in or not. */}
-          <FeedbackLauncher />
+          <FeedbackLauncher className="sidebar-account-link" label="Feedback" />
         </div>
         {showAuth && <AuthModal onClose={() => setShowAuth(false)} />}
       </>

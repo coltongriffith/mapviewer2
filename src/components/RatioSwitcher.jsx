@@ -19,10 +19,10 @@ const RATIO_ICONS = {
   ),
 };
 
-export default function RatioSwitcher({ activeRatio, onRatioChange }) {
+export default function RatioSwitcher({ activeRatio, onRatioChange, label = 'Export Ratio' }) {
   return (
     <div className="ratio-switcher">
-      <label className="ratio-switcher-label">Export Ratio</label>
+      {label && <label className="ratio-switcher-label">{label}</label>}
       <div className="ratio-switcher-btns">
         {Object.values(EXPORT_RATIOS).map((r) => (
           <button

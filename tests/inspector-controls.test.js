@@ -1,0 +1,157 @@
+import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+// The editor's inspector was regrouped from object-type tabs (Data, Layers,
+// Labels, Layout, Export) into five steps (Data, Style, Customize, Annotate,
+// Export) by moving its controls, not rewriting them. This list is every
+// labelled control the inspector had at that move. A control that drops out of
+// App.jsx in a later reshuffle fails here instead of quietly disappearing from
+// the product. Two were replaced on purpose and are checked for their
+// replacements below: the Map type dropdown (the Style step's cards) and the
+// Design theme dropdown (the theme swatches).
+const CONTROL_IDS = [
+  'f-accent-5095',
+  'f-angle-0-top-4877',
+  'f-background-4606',
+  'f-background-4691',
+  'f-background-5324',
+  'f-background-color-4216',
+  'f-bg-5836',
+  'f-border-4610',
+  'f-border-5840',
+  'f-border-line-4695',
+  'f-callout-type-4586',
+  'f-callouts-5126',
+  'f-chip-color-4599',
+  'f-chip-color-4682',
+  'f-chip-color-5829',
+  'f-chip-text-4595',
+  'f-chip-text-4678',
+  'f-chip-text-5825',
+  'f-color-4792',
+  'f-color-4810',
+  'f-color-4902',
+  'f-color-4955',
+  'f-color-5012',
+  'f-company-5169',
+  'f-display-label-4286',
+  'f-display-label-raster',
+  'f-distance-label',
+  'f-figure-no-5173',
+  'f-figure-title-5137',
+  'f-filename-5376',
+  'f-fill-opacity-4371',
+  'f-fill-opacity-4512',
+  'f-font-size-4626',
+  'f-font-size-4711',
+  'f-footer-disclaimer-5214',
+  'f-height-4892',
+  'f-height-px-5428',
+  'f-image-label',
+  'f-image-opacity',
+  'f-image-width',
+  'f-inset-label-5315',
+  'f-inset-mode',
+  'f-inset-title-5314',
+  'f-label-4801',
+  'f-label-4828',
+  'f-label-4939',
+  'f-label-color-4862',
+  'f-label-size-4855',
+  'f-label-size-4965',
+  'f-labels-5125',
+  'f-layer-opacity-4378',
+  'f-layer-role-4290',
+  'f-legend-5122',
+  'f-legend-title-5208',
+  'f-logo-opacity',
+  'f-map-date-5216',
+  'f-marker-5328',
+  'f-marker-type-4804',
+  'f-mode-5038',
+  'f-opacity-4781',
+  'f-opacity-4926',
+  'f-opacity-4995',
+  'f-outline-width-4379',
+  'f-overlay-opacity-5350',
+  'f-panel-bg-5075',
+  'f-panel-corners-4254',
+  'f-panel-text-5085',
+  'f-point-size-4316',
+  'f-position-0-start-4947',
+  'f-priority-4667',
+  'f-project-5217',
+  'f-projection-5181',
+  'f-projection-frame',
+  'f-qp-credentials-5165',
+  'f-qualified-person-5161',
+  'f-raster-layer-opacity',
+  'f-region-5320',
+  'f-revision-5177',
+  'f-ring-color-4842',
+  'f-rotation-4788',
+  'f-rotation-4898',
+  'f-scale-5380',
+  'f-scale-note-5219',
+  'f-scale-override-5152',
+  'f-search-radius-4453',
+  'f-shade-color-4922',
+  'f-shade-color-4991',
+  'f-shape-fill-opacity',
+  'f-shape-width',
+  'f-size-4774',
+  'f-size-4816',
+  'f-strip-position-5145',
+  'f-stroke-width-4959',
+  'f-subtext-4581',
+  'f-subtext-4620',
+  'f-subtext-4658',
+  'f-subtext-5811',
+  'f-subtext-color-4705',
+  'f-subtitle-4182',
+  'f-subtitle-property-5141',
+  'f-template-4142',
+  'f-text-4616',
+  'f-text-4657',
+  'f-text-4771',
+  'f-text-5844',
+  'f-text-align-4718',
+  'f-text-color-4701',
+  'f-text-size-5156',
+  'f-text-size-5210',
+  'f-tile-credit',
+  'f-tile-kind',
+  'f-tile-layers',
+  'f-tile-name',
+  'f-tile-url',
+  'f-title-4176',
+  'f-title-4577',
+  'f-title-5121',
+  'f-title-5807',
+  'f-title-bg-5055',
+  'f-title-size-4189',
+  'f-title-text-5065',
+  'f-type-4661',
+  'f-type-5816',
+  'f-width-4888',
+  'f-width-px-5417',
+];
+
+const app = readFileSync(join(__dirname, '..', 'src', 'App.jsx'), 'utf8');
+
+describe('inspector controls survive the step regrouping', () => {
+  it.each(CONTROL_IDS)('%s is still rendered exactly once', (id) => {
+    const hits = app.split(`id="${id}"`).length - 1;
+    expect(hits).toBe(1);
+  });
+
+  it('replaces the map type and theme dropdowns with the Style step pickers', () => {
+    expect(app).toMatch(/<MapStyleGallery[\s\S]*?onSelect=\{pickMapStyle\}/);
+    expect(app).toMatch(/<ThemePicker[\s\S]*?updateLayout\(\{ themeId/);
+  });
+
+  it('keeps the frame shape picker, now in the Style step', () => {
+    expect(app).toMatch(/inspectorTab === 'style'[\s\S]*?<RatioSwitcher/);
+  });
+});

@@ -36,9 +36,10 @@ test('clicking a label focuses its control', async ({ page }) => {
   await page.goto('/?intent=resume');
   await expect(page.locator('.leaflet-container')).toBeVisible({ timeout: 30_000 });
 
-  // Layout is where the labelled text fields live (title, subtitle, metadata).
-  const layoutTab = page.getByRole('tab', { name: /^layout$/i });
-  if (await layoutTab.count()) await layoutTab.first().click();
+  // Customize is where the labelled text fields live (title, subtitle,
+  // metadata); its Title & text group is open by default.
+  const customizeTab = page.getByRole('tab', { name: /^customize$/i });
+  if (await customizeTab.count()) await customizeTab.first().click();
 
   // Find a label whose target is a text input — the case a user notices.
   const pair = await page.evaluate(() => {
