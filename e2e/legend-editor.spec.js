@@ -8,14 +8,9 @@ import { test, expect } from '@playwright/test';
 async function openLegendItems(page) {
   await page.goto('/?demo=1');
   await expect(page.locator('.leaflet-container').first()).toBeVisible({ timeout: 30_000 });
-  // The inspector groups controls behind tabs, and the manual legend overrides
-  // are a secondary setting: Layout → Customize design → Legend Items.
-  await page.getByRole('tab', { name: /^layout$/i }).first().click();
-  await page.getByRole('button', { name: /^Customize design/i }).first().click();
-  // The panel lives in a <details>, so its markup is in the DOM either way —
-  // open it, or every interaction below silently targets a hidden control.
-  const summary = page.getByText('Legend Items', { exact: true });
-  await summary.click();
+  // The legend's controls live in the Customize step's Legend group.
+  await page.getByRole('tab', { name: /^customize$/i }).first().click();
+  await page.locator('.ins-acc-heading button', { hasText: /^Legend/ }).first().click();
   const editor = page.locator('.legend-editor');
   await expect(editor.locator('.legend-editor-add')).toBeVisible({ timeout: 15_000 });
   return editor;

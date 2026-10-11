@@ -14,9 +14,11 @@ async function openInsetPanel(page) {
   // and the box is half of what a locator is for.
   await page.goto('/?demo=1');
   await expect(page.locator('.leaflet-container').first()).toBeVisible({ timeout: 30_000 });
-  // The inspector groups controls behind tabs; the inset lives under Layout.
-  const layoutTab = page.getByRole('tab', { name: /^layout$/i });
-  if (await layoutTab.count()) await layoutTab.first().click();
+  // The inset lives in the Customize step's Map elements group.
+  const customizeTab = page.getByRole('tab', { name: /^customize$/i });
+  if (await customizeTab.count()) await customizeTab.first().click();
+  const elements = page.locator('.ins-acc-heading button', { hasText: /^Map elements/ });
+  if (await elements.count()) await elements.first().click();
   // Open whichever collapsible section holds the inset controls.
   const control = page.locator('#f-inset-mode');
   if (await control.count() === 0) {

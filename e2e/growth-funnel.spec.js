@@ -33,13 +33,15 @@ test('company claims reach investor export and a failed email can be retried', a
   await page.goto('/companies/got/');
   await page.getByRole('link', { name: /Open this company's claims map/ }).click();
   await expect(page.locator('.leaflet-container')).toBeVisible();
-  await expect(page.getByRole('button', { name: /Use investor layout/ })).toBeVisible();
+  // The claims land on the Style step.
+  await expect(page.getByRole('radio', { name: /Investor/ })).toBeVisible();
   // Visitors can keep a useful map before they are ready to export it.
   await page.getByRole('button', { name: 'Save to a free account' }).click();
   await expect(page.getByRole('dialog')).toContainText('Sign in on this device to save your map');
   await page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).click();
-  await page.getByRole('button', { name: /Use investor layout/ }).click();
+  await page.getByRole('radio', { name: /Investor/ }).click();
   await page.screenshot({ path: testInfo.outputPath('investor-onboarding.png') });
+  await page.getByRole('tab', { name: 'Export', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Export PNG', exact: true }).first()).toBeVisible();
   await page.getByRole('button', { name: 'Export PNG', exact: true }).first().click();
   await expect(page.getByRole('dialog')).toBeVisible();
@@ -66,8 +68,11 @@ test('drill-results search entry accepts a CSV and creates a real-data layer', a
   await input.setInputFiles({ name: 'drill-collars.csv', mimeType: 'text/csv', buffer: Buffer.from('Hole ID,Longitude,Latitude\nDH-01,-125.2,54.1\nDH-02,-125.201,54.102\n') });
   await expect.poll(() => layers.some(x => x.source === 'csv' && x.feature_count === 2)).toBe(true);
   await expect(page.getByRole('dialog')).toHaveCount(0);
-  await expect(page.getByRole('tabpanel', { name: 'Layers', exact: true })).toContainText('drill-collars.csv');
-  await expect(page.getByRole('button', { name: /Use investor layout/ })).toBeVisible();
+  // The first data lands on the Style step; the new layer is listed under Data.
+  await expect(page.getByRole('tab', { name: 'Style', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('radio', { name: /Investor/ })).toBeVisible();
+  await page.getByRole('tab', { name: 'Data', exact: true }).click();
+  await expect(page.getByRole('tabpanel', { name: 'Data', exact: true })).toContainText('drill-collars.csv');
 });
 
 test('project-file imports keep upload attribution instead of registry attribution', async ({ page }, testInfo) => {
@@ -89,13 +94,15 @@ test('project-file imports keep upload attribution instead of registry attributi
   await expect(page.getByRole('dialog')).toContainText('1 feature found');
   await page.getByRole('button', { name: 'Add to map', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
-  await expect(page.getByRole('tabpanel', { name: 'Layers', exact: true })).toContainText('project-boundary.geojson');
+  await page.getByRole('tab', { name: 'Data', exact: true }).click();
+  await expect(page.getByRole('tabpanel', { name: 'Data', exact: true })).toContainText('project-boundary.geojson');
   await expect.poll(() => layers.some(x => x.source === 'upload' && x.feature_count === 1)).toBe(true);
   if (process.env.CAPTURE_GROWTH_ARTICLE) {
     await page.waitForFunction(() => [...document.querySelectorAll('.leaflet-tile')].every(tile => tile.complete && tile.naturalWidth > 0 && getComputedStyle(tile).opacity === '1'));
     await page.screenshot({ path: testInfo.outputPath('ontario-upload-before.png') });
   }
-  await page.getByRole('button', { name: /Use investor layout/ }).click();
+  await page.getByRole('tab', { name: 'Style', exact: true }).click();
+  await page.getByRole('radio', { name: /Investor/ }).click();
   if (process.env.CAPTURE_GROWTH_ARTICLE) {
     await page.waitForFunction(() => [...document.querySelectorAll('.leaflet-tile')].every(tile => tile.complete && tile.naturalWidth > 0 && getComputedStyle(tile).opacity === '1'));
     await page.screenshot({ path: testInfo.outputPath('ontario-upload-after.png') });
@@ -148,7 +155,8 @@ test('CSV uploads with unfamiliar columns reach the existing column mapper', asy
   await page.getByRole('row').filter({ has: page.getByRole('cell', { name: 'Position B', exact: true }) }).getByRole('combobox').selectOption('y');
   await page.getByRole('button', { name: 'Import drillholes', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
-  await expect(page.getByRole('tabpanel', { name: 'Layers', exact: true })).toContainText('custom-collars.csv');
+  await page.getByRole('tab', { name: 'Data', exact: true }).click();
+  await expect(page.getByRole('tabpanel', { name: 'Data', exact: true })).toContainText('custom-collars.csv');
 });
 
 test('tenure acquisition CTA opens the monitor directly', async ({ page }) => {

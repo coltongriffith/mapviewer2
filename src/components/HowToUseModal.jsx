@@ -85,7 +85,7 @@ export default function HowToUseModal({ onClose }) {
             <h3>Where things are</h3>
             <ul>
               <li><strong>Toolbar</strong> (across the top) — the <strong>Project</strong> menu, zoom, <strong>Preview</strong>, <strong>Share</strong> and the <strong>Export</strong> menu.</li>
-              <li><strong>Inspector</strong> (the rail beside the map) — every editing control, grouped into five tabs: <strong>Data</strong>, <strong>Layers</strong>, <strong>Labels</strong>, <strong>Layout</strong> and <strong>Export</strong>.</li>
+              <li><strong>Inspector</strong> (the rail beside the map) — every editing control, grouped into five numbered steps in the order a map is made: <strong>Data</strong>, <strong>Style</strong>, <strong>Customize</strong>, <strong>Annotate</strong> and <strong>Export</strong>. The <strong>Next</strong> button at the bottom moves to the following step.</li>
               <li><strong>Preview</strong> hides the editing controls so you can read the map as it will export. It changes nothing about the export itself.</li>
             </ul>
             <p>On a phone the inspector opens as a sheet from the bottom — tap <strong>Edit</strong> in the toolbar.</p>
@@ -124,7 +124,7 @@ export default function HowToUseModal({ onClose }) {
             </ul>
             <h3>Importing a GeoJSON file</h3>
             <ul>
-              <li>Open the <strong>Data</strong> tab and drop the file on the upload area, or click it to browse</li>
+              <li>Open the <strong>Data</strong> step and drop the file on the upload area, or click it to browse</li>
               <li>Select your .geojson or .json file</li>
               <li>The layer is added automatically and the map fits to your data bounds</li>
               <li>If your file contains multiple feature types (e.g., polygons and lines), they are split into separate layers automatically</li>
@@ -192,7 +192,7 @@ export default function HowToUseModal({ onClose }) {
               <li><strong>NatGeo</strong> — classic National Geographic cartography. Distinctive look for regional and overview maps.</li>
               <li><strong>Blank</strong> — no basemap, with a custom background color. Best for clean figures in technical reports.</li>
             </ul>
-            <p>Switch basemap under the <strong>Layout</strong> tab. Choosing a map type also pre-selects the basemap that suits it.</p>
+            <p>Switch basemap in the <strong>Style</strong> step. Choosing a map style also pre-selects the basemap that suits it.</p>
             <h3>Reference overlays</h3>
             <p>Independently toggle additional reference layers on top of any basemap:</p>
             <ul>
@@ -207,7 +207,7 @@ export default function HowToUseModal({ onClose }) {
           <section id="themes">
             <h2>Map Type &amp; Design Theme</h2>
             <h3>Start with the map type</h3>
-            <p>One choice sets the template, the mode and the design theme together. It is the first control in the <strong>Layout</strong> tab:</p>
+            <p>One choice sets the template, the mode and the design theme together. The map style cards are the first thing in the <strong>Style</strong> step:</p>
             <ul>
               <li><strong>Investor / presentation map</strong> — property in district context, for decks and news releases.</li>
               <li><strong>Claims and tenure map</strong> — claim blocks and ownership over regional context.</li>
@@ -225,7 +225,7 @@ export default function HowToUseModal({ onClose }) {
               <li><strong>Warm</strong>: cream panels, earthy brown borders, burnt-sienna accent. Best for environmental assessments and field geology.</li>
             </ul>
             <h3>Applying a theme</h3>
-            <p>Start with <strong>Map type</strong> at the top of the <strong>Layout</strong> tab — it sets the template, the mode and the design theme together. To override the theme on its own, open <strong>Layout → Customize design</strong> and use the <strong>Design Theme</strong> dropdown. The change applies instantly to all panels.</p>
+            <p>Start with a <strong>map style</strong> card at the top of the <strong>Style</strong> step — it sets the template, the mode and the design theme together. To change the theme on its own, pick one of the <strong>Theme</strong> swatches below the cards. The change applies instantly to all panels.</p>
             <h3>Overriding theme colors</h3>
             <p>Every theme color can be individually overridden without changing the theme:</p>
             <ul>
@@ -261,14 +261,14 @@ export default function HowToUseModal({ onClose }) {
             <h3>Legend panel</h3>
             <ul>
               <li>Switch between <strong>Auto</strong>, <strong>Compact</strong>, and <strong>Expanded</strong> legend display modes</li>
-              <li>Edit the legend title under <strong>Layout → Customize design → Text &amp; Metadata</strong></li>
+              <li>Edit the legend title under <strong>Customize → Legend</strong>, or click the legend on the map</li>
               <li>Resize by dragging: right edge (width), bottom edge (height), or corner (both)</li>
               <li>Toggle <strong>"Legend box"</strong> off to remove the panel background</li>
             </ul>
 
             <h3>Logo panel</h3>
             <ul>
-              <li>Upload your company logo from the <strong>Layers</strong> section (logo uploader at the bottom)</li>
+              <li>Upload your company logo under <strong>Style → Brand</strong></li>
               <li>Drag the right edge, bottom edge, or corner handle to resize the logo panel</li>
               <li>Toggle <strong>"Logo box"</strong> off to remove the background and display the logo directly over the map</li>
             </ul>
@@ -290,26 +290,26 @@ export default function HowToUseModal({ onClose }) {
 
             <h3>North arrow & scale bar</h3>
             <ul>
-              <li>Toggle each on or off under the <strong>Layout</strong> tab</li>
+              <li>Toggle each on or off under <strong>Customize → Map elements</strong></li>
               <li>The scale bar calculates the displayed distance automatically from the current zoom level</li>
             </ul>
 
             <h3>Positioning panels</h3>
-            <p>Every element can be placed in any of the four corners — drag it on the map, or use the corner pickers under <strong>Layout</strong>:</p>
+            <p>Every element can be placed in any of the four corners — drag it on the map. A click (without dragging) opens its settings in the <strong>Customize</strong> step:</p>
             <ul>
-              <li>Title, Logo, Legend, Inset, North Arrow, and Scale Bar each have their own corner selector</li>
+              <li>Title, Logo, Legend, Inset, North Arrow, and Scale Bar can each be dragged to any corner; <strong>Reset Element Positions</strong> under <strong>Customize → Map elements</strong> puts them back</li>
               <li>Elements assigned to the same corner stack automatically without overlapping</li>
               <li>Adjust <strong>Safe Margins</strong> to control the edge padding on all four sides</li>
             </ul>
 
             <h3>Footer</h3>
-            <p>Add a disclaimer or data source note via Design → Text & Metadata → Footer. Toggle it on or off. The footer auto-hides if it would overlap the legend, scale bar, or north arrow.</p>
+            <p>Add a disclaimer or data source note under <strong>Customize → Title &amp; text</strong>. Toggle it on or off. The footer auto-hides if it would overlap the legend, scale bar, or north arrow.</p>
           </section>
 
           {/* ── 8. Annotations ── */}
           <section id="annotations">
             <h2>Annotations</h2>
-            <p>Annotations are free-form elements placed directly on the map — not tied to imported data layers. All annotation tools are in the <strong>Labels</strong> tab of the inspector.</p>
+            <p>Annotations are free-form elements placed directly on the map — not tied to imported data layers. All annotation tools are in the <strong>Annotate</strong> step of the inspector.</p>
 
             <h3>Place Marker</h3>
             <ul>
@@ -366,7 +366,7 @@ export default function HowToUseModal({ onClose }) {
             </ul>
 
             <h3>Deleting annotations</h3>
-            <p>Click an annotation to select it, then press <kbd>Delete</kbd>. Selecting it also brings its controls up in the <strong>Labels</strong> tab, which has a <strong>Remove</strong> button.</p>
+            <p>Click an annotation to select it, then press <kbd>Delete</kbd>. Selecting it also brings its controls up in the <strong>Annotate</strong> step, which has a <strong>Remove</strong> button.</p>
           </section>
 
           {/* ── 9. Callouts ── */}
@@ -377,7 +377,7 @@ export default function HowToUseModal({ onClose }) {
             <h3>Adding callouts</h3>
             <ul>
               <li><strong>From a feature</strong>: click a drillhole or point on the map to open the inline editor. Fill in the title and subtext, then click <strong>"Add / Update Callout"</strong>.</li>
-              <li><strong>From a layer</strong>: select a layer in the <strong>Layers</strong> tab, then open <strong>Labels</strong> and click <strong>"Add From Selected Layer"</strong> to create callouts for all features at once (uses a property column as the label).</li>
+              <li><strong>From a layer</strong>: select a layer (click it on the map, or in <strong>Data</strong>), then open <strong>Annotate</strong> and click <strong>"Add From Selected Layer"</strong> to create callouts for all features at once (uses a property column as the label).</li>
               <li>Use <strong>Auto Frame All</strong> to pan and zoom so all active callouts fit within the visible viewport.</li>
             </ul>
 
@@ -422,7 +422,7 @@ export default function HowToUseModal({ onClose }) {
           <section id="export">
             <h2>Exporting Your Map</h2>
             <h3>Export formats</h3>
-            <p>All formats are under the <strong>Export</strong> menu in the toolbar. Filename, size and ratio live in the <strong>Export</strong> tab of the inspector.</p>
+            <p>All formats are under the <strong>Export</strong> menu in the toolbar. Filename and size live in the <strong>Export</strong> step of the inspector; the frame shape is set in the <strong>Style</strong> step.</p>
             <ul>
               <li><strong>Image for slides and web</strong> (PNG) — raster. Best for presentations, Word documents, email attachments and web use.</li>
               <li><strong>Vector for editing</strong> (SVG) — best when you need infinite scalability.</li>
@@ -431,7 +431,7 @@ export default function HowToUseModal({ onClose }) {
             </ul>
 
             <h3>Setting the export aspect ratio</h3>
-            <p>Use the <strong>Ratio</strong> buttons in the inspector's <strong>Export</strong> tab to lock the canvas to a specific shape before exporting:</p>
+            <p>Use the <strong>Frame shape</strong> buttons in the inspector's <strong>Style</strong> step to lock the canvas to a specific shape before you arrange the map:</p>
             <ul>
               <li><strong>Landscape 16:9</strong> — PowerPoint slides and widescreen presentations</li>
               <li><strong>Square 1:1</strong> — social media posts and equal-dimension formats</li>
@@ -460,7 +460,7 @@ export default function HowToUseModal({ onClose }) {
             <p>Enter your work email in the export dialog to unlock clean exports without the <em>explorationmaps.com</em> watermark. Your email is remembered for future sessions. A <strong>"Download with watermark"</strong> option is always available without entering an email.</p>
 
             <h3>Custom filename</h3>
-            <p>Set a custom output filename in <strong>Export → Export Settings</strong> before clicking export. The filename is saved with the project.</p>
+            <p>Set a custom output filename in the <strong>Export</strong> step before clicking export. The filename is saved with the project.</p>
           </section>
 
           {/* ── 12. Tips ── */}
@@ -557,8 +557,8 @@ export default function HowToUseModal({ onClose }) {
               <dt>Map Type</dt>
               <dd>The single choice that configures the template, the mode and the design theme at once — Investor, Claims and tenure, Drill results, Infrastructure, or NI 43-101 figure. Each one sets basemap, reference overlays, visible layer roles, inset type and composition to suit that kind of map.</dd>
 
-              <dt>Customize design</dt>
-              <dd>The secondary panel under the Layout tab holding the individual template, mode, theme, font, palette and composition controls that a map type sets for you.</dd>
+              <dt>Customize</dt>
+              <dd>The third step of the inspector: title and text, colors, fonts, legend, map elements and layer styling, one group open at a time. The template and mode a map style sets live under <strong>Style → Advanced</strong>.</dd>
 
               <dt>Inset Map</dt>
               <dd>The small locator map shown in a corner of the main canvas, indicating where the project sits within a larger geographic area (province, country, or region).</dd>

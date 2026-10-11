@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { LegendPointSwatch, LegendLineSwatch, LegendAreaSwatch } from './components/LegendSwatches.jsx';
 import RatioSwitcher from './components/RatioSwitcher';
 import Sidebar from './components/Sidebar';
+import InspectorGroup from './components/InspectorGroup';
 import LayerList from './components/LayerList';
 import LocatorInset from './components/LocatorInset';
 import LegendEditor from './components/LegendEditor';
@@ -19,8 +20,10 @@ import BrandMarkInline from './components/BrandMark';
 
 const MapCanvas = React.lazy(() => import('./components/MapCanvas'));
 const SigninLinkStatus = React.lazy(() => import('./components/SigninLinkStatus'));
-const FirstMapChecklist = React.lazy(() => import('./components/FirstMapChecklist'));
 const MobileEditorBanner = React.lazy(() => import('./components/MobileEditorBanner'));
+// The Style step's pickers load with the step, not with the editor.
+const MapStyleGallery = React.lazy(() => import('./components/MapStyleGallery'));
+const ThemePicker = React.lazy(() => import('./components/MapStyleGallery').then((m) => ({ default: m.ThemePicker })));
 const DashboardPage = React.lazy(() => import('./components/DashboardPage'));
 const AdminPage = React.lazy(() => import('./components/AdminPage'));
 const AccountPage = React.lazy(() => import('./components/AccountPage'));
@@ -42,7 +45,6 @@ import {
   ROLE_LABELS,
   POINT_ROLES,
   TEMPLATE_MODES,
-  TEMPLATE_THEMES,
 } from './projectState';
 import { EXPORT_RATIOS } from './constants';
 import { applyRoleToLayer, inferRoleFromLayer, NEUTRAL_ROLES } from './mapPresets';
@@ -180,6 +182,14 @@ const BASEMAP_OPTIONS = BASEMAP_KEYS.map((key) => ({
   label: BASEMAPS[key].label,
   thumb: basemapThumb(key),
 }));
+
+// The inspector's "Next" button for each step. Export is the last step.
+const NEXT_STEP = {
+  data: { step: 'style', label: 'Next: Pick a style' },
+  style: { step: 'customize', label: 'Next: Customize' },
+  customize: { step: 'annotate', label: 'Next: Annotate' },
+  annotate: { step: 'export', label: 'Next: Export' },
+};
 
 const MARKER_TYPES = {
   circle: 'Circle',
@@ -694,12 +704,18 @@ export default function App({ initialAction = null }) {
   const [addClaimsQuery, setAddClaimsQuery] = useState('');
   const [addClaimsAutoSearch, setAddClaimsAutoSearch] = useState(false);
   const [hasExported, setHasExported] = useState(false);
-  const [onboardingDismissed, setOnboardingDismissed] = useState(false);
   // ── Inspector ─────────────────────────────────────────────────────────────
   // Every editing control lives in one of five groups. The tab is only a view
   // over the same controls that were always here — nothing was removed, and
   // selecting something on the map reveals its group (see revealSection).
   const [inspectorTab, setInspectorTab] = useState('data');
+  // Which group of the Customize step is open: one at a time, so the step
+  // fits on one screen and a click on the map can open exactly its group.
+  const [customizeGroup, setCustomizeGroup] = useState('title');
+  const toggleCustomizeGroup = (id) => setCustomizeGroup((prev) => (prev === id ? null : id));
+  const titleGroupRef = useRef(null);
+  const legendGroupRef = useRef(null);
+  const elementsGroupRef = useRef(null);
   // Under 900px the inspector is a bottom sheet over a full-height map, so it
   // starts closed: the map is the point, the controls are on demand.
   const [inspectorOpen, setInspectorOpen] = useState(false);
@@ -829,7 +845,11 @@ export default function App({ initialAction = null }) {
 
   const template = useMemo(() => getTemplate(project.layout?.templateId || 'technical_results_v2'), [project.layout?.templateId]);
   const selectedLayer = useMemo(() => project.layers.find((layer) => layer.id === selectedLayerId) || null, [project.layers, selectedLayerId]);
-  const [collapsedSections, setCollapsedSections] = useState({ drillhole: true, elements: true, refoverlays: true, export: true, customizeDesign: true });
+  // Disclosure state for the inspector's collapsible sections. Context data
+  // (nearby claims, overlays, regions) and the Advanced style options start
+  // closed; drillhole labels start open because they are the main job of the
+  // Annotate step.
+  const [collapsedSections, setCollapsedSections] = useState({ drillhole: false, areaClaims: true, refoverlays: true, regions: true, advancedStyle: true });
   const toggleSection = (key) => setCollapsedSections((prev) => ({ ...prev, [key]: !prev[key] }));
 
   const selectedMarker = useMemo(() => project.markers?.find((marker) => marker.id === selectedMarkerId) || null, [project.markers, selectedMarkerId]);
@@ -939,18 +959,19 @@ export default function App({ initialAction = null }) {
     return [...new Set(Object.values(kitFonts).filter((f) => f && FONT_OPTIONS[f]))];
   }, [cloudTemplates]);
 
-  // Onboarding checklist progress (Add data → Style → Export). Derived from
-  // project state so steps tick off automatically; the card persists past the
-  // first layer until the map is exported and the user is signed in or the user dismisses it.
+  // Step progress for the inspector's numbered tabs, derived from project
+  // state so the ticks cannot disagree with the map: data on the map, a style
+  // picked, an export made. Customize and Annotate are optional, so they tick
+  // once visited.
   const onbStep1 = project.layers.length > 0 || (project.areaClaims?.features?.length > 0);
-  const onbStep2 = onbStep1 && (project.layout?.onboardingLayoutSelected || project.layers.some((l) => l.userStyled) || Boolean(project.layout?.logo));
-  const onbStep3 = hasExported;
-  const showOnboarding = !onboardingDismissed && !(onbStep1 && onbStep2 && onbStep3 && user);
-  useEffect(() => {
-    if (screen === 'editor' && showOnboarding) {
-      trackEventOnce('first_map_checklist_shown', onbStep1 ? 'with_data' : 'empty', { has_data: onbStep1 });
-    }
-  }, [screen, showOnboarding, onbStep1]);
+  const [visitedSteps, setVisitedSteps] = useState({});
+  const stepsDone = {
+    data: onbStep1,
+    style: onbStep1 && Boolean(project.layout?.onboardingLayoutSelected),
+    customize: Boolean(visitedSteps.customize),
+    annotate: Boolean(visitedSteps.annotate),
+    export: hasExported,
+  };
 
   useEffect(() => {
     if (!bootstrappedRef.current) {
@@ -1137,6 +1158,35 @@ export default function App({ initialAction = null }) {
     return () => clearTimeout(t);
   }, [project]);
 
+  // One step back (or forward) through the history. Shared by Ctrl+Z / Ctrl+Y
+  // and the toolbar's Undo and Redo buttons.
+  const stepHistory = (redoWanted) => {
+    const h = historyRef.current;
+    // A change made in the last 400ms hasn't been pushed yet — flush it so
+    // undo steps back from what's on screen, not from an older state.
+    if (h.pending) {
+      h.stack = h.stack.slice(0, h.index + 1);
+      h.stack.push(h.pending);
+      if (h.stack.length > 30) h.stack.shift();
+      h.index = h.stack.length - 1;
+      h.pending = null;
+    }
+    if (redoWanted) {
+      if (h.index >= h.stack.length - 1) return;
+      h.index += 1;
+    } else {
+      if (h.index <= 0) return;
+      h.index -= 1;
+    }
+    h.restoring = true;
+    // Tied to this state, not a bare flag: when the undo does not change what
+    // the map frames, the next fit (say, an import) must still frame.
+    skipAutoFitRef.current = h.stack[h.index];
+    setProject(h.stack[h.index]);
+  };
+  const stepHistoryRef = useRef(stepHistory);
+  stepHistoryRef.current = stepHistory;
+
   useEffect(() => {
     const handler = (e) => {
       if (!(e.ctrlKey || e.metaKey)) return;
@@ -1146,29 +1196,7 @@ export default function App({ initialAction = null }) {
       if (tag === 'input' || tag === 'textarea' || document.activeElement?.isContentEditable) return;
       if (screen !== 'editor') return;
       e.preventDefault();
-      const h = historyRef.current;
-      // A change made in the last 400ms hasn't been pushed yet — flush it so
-      // undo steps back from what's on screen, not from an older state.
-      if (h.pending) {
-        h.stack = h.stack.slice(0, h.index + 1);
-        h.stack.push(h.pending);
-        if (h.stack.length > 30) h.stack.shift();
-        h.index = h.stack.length - 1;
-        h.pending = null;
-      }
-      const redoWanted = key === 'y' || e.shiftKey;
-      if (redoWanted) {
-        if (h.index >= h.stack.length - 1) return;
-        h.index += 1;
-      } else {
-        if (h.index <= 0) return;
-        h.index -= 1;
-      }
-      h.restoring = true;
-      // Tied to this state, not a bare flag: when the undo does not change what
-      // the map frames, the next fit (say, an import) must still frame.
-      skipAutoFitRef.current = h.stack[h.index];
-      setProject(h.stack[h.index]);
+      stepHistoryRef.current(key === 'y' || e.shiftKey);
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
@@ -1854,21 +1882,54 @@ export default function App({ initialAction = null }) {
     });
   }, []);
 
+  // The first data a session adds lands on the Style step — "now pick a look"
+  // is the next thing to do, and the old jump to the new layer's settings left
+  // people on a form with no next step. Opening a saved map (a new project id)
+  // is not a first add. The skip flag stops the import's own layer selection,
+  // committed in the same render, from pulling the panel to Customize.
+  const prevLayerCountRef = useRef(project.layers.length);
+  const prevProjectIdRef = useRef(projectId);
+  const skipLayerRevealRef = useRef(false);
   useEffect(() => {
-    if (selectedLayerId) revealSection('layers', layersSectionRef);
+    const prevCount = prevLayerCountRef.current;
+    const sameProject = prevProjectIdRef.current === projectId;
+    prevLayerCountRef.current = project.layers.length;
+    prevProjectIdRef.current = projectId;
+    if (sameProject && prevCount === 0 && project.layers.length > 0) {
+      setInspectorTab('style');
+      skipLayerRevealRef.current = true;
+      setTimeout(() => { skipLayerRevealRef.current = false; }, 0);
+    }
+  }, [project.layers.length, projectId]);
+
+  useEffect(() => {
+    if (!selectedLayerId) return;
+    if (skipLayerRevealRef.current) return;
+    setCustomizeGroup('layers');
+    revealSection('customize', layersSectionRef);
   }, [selectedLayerId, revealSection]);
 
   useEffect(() => {
-    if (selectedMarkerId) revealSection('labels', markersSectionRef);
+    if (selectedMarkerId) revealSection('annotate', markersSectionRef);
   }, [selectedMarkerId, revealSection]);
 
   useEffect(() => {
-    if (selectedEllipseId) revealSection('labels', markersSectionRef);
+    if (selectedEllipseId) revealSection('annotate', markersSectionRef);
   }, [selectedEllipseId, revealSection]);
 
   useEffect(() => {
-    if (selectedCalloutId) revealSection('labels', calloutsSectionRef);
+    if (selectedCalloutId) revealSection('annotate', calloutsSectionRef);
   }, [selectedCalloutId, revealSection]);
+
+  // A click on a map element (title, legend, inset…) opens its group in the
+  // Customize step. Called from the element's drag handler when the pointer
+  // did not move, so dragging an element still only moves it.
+  const ELEMENT_GROUPS = { title: ['title', titleGroupRef], footer: ['title', titleGroupRef], legend: ['legend', legendGroupRef] };
+  const revealMapElement = (elementId) => {
+    const [group, ref] = ELEMENT_GROUPS[elementId] || ['elements', elementsGroupRef];
+    setCustomizeGroup(group);
+    revealSection('customize', ref);
+  };
 
 
   const updateLayout = (patch) => {
@@ -1907,6 +1968,7 @@ export default function App({ initialAction = null }) {
     let currentGridSlot = null;
     let currentMapSlot = null;
     let finalClientX = e.clientX, finalClientY = e.clientY;
+    const pressX = e.clientX, pressY = e.clientY;
 
     const sb = zonesSnapshot.sidebar || {};
     const sbLeft = sb.left ?? Math.round(mapSize.width * 0.72);
@@ -2034,6 +2096,15 @@ export default function App({ initialAction = null }) {
           setMapSize(s);
           mapSizeRef.current = s;
         }
+      }
+
+      // A press that never moved is a click: open the element's controls in
+      // the Customize step instead of re-dropping it where it already sits
+      // (a drop on the far side of the canvas centre used to move it).
+      if (Math.hypot(finalClientX - pressX, finalClientY - pressY) < 4) {
+        setDragging(null);
+        revealMapElement(id);
+        return;
       }
 
       // Helper: remove id from grid (handles string items and [id1,id2] arrays)
@@ -3736,6 +3807,32 @@ export default function App({ initialAction = null }) {
     });
   };
 
+  // A card in the Style step's gallery. Same change as the old Map type
+  // dropdown, plus a refit (the drill template moves the legend into a side
+  // rail, so the old framing no longer fits) and the default subtitle swap the
+  // first-map checklist used to make for the investor layout.
+  const pickMapStyle = (typeId) => {
+    if (!MAP_TYPES[typeId]) return;
+    const changed = mapTypeOf(project.layout) !== typeId;
+    applyMapType(typeId);
+    updateLayout({
+      onboardingLayoutSelected: true,
+      ...(typeId === 'investor' && project.layout.subtitle === 'Technical Results' ? { subtitle: 'Investor Map' } : {}),
+    });
+    if (changed) setInvestorFrameRequest((value) => value + 1);
+    trackEvent('onboarding_step', { step: 'style', via: 'card', type: typeId });
+  };
+
+  // Moving between the inspector's steps, from a tab, a Next button or a link.
+  const goToStep = (step, via = 'tab') => {
+    if (step === inspectorTab) return;
+    setInspectorTab(step);
+    trackEvent('onboarding_step', { step, via });
+  };
+  useEffect(() => {
+    setVisitedSteps((prev) => (prev[inspectorTab] ? prev : { ...prev, [inspectorTab]: true }));
+  }, [inspectorTab]);
+
   useEffect(() => {
     if (!investorFrameRequest || !mapReady) return undefined;
     // Fit after the 16:9 surface has resized; fitting the previous dimensions
@@ -5096,6 +5193,17 @@ export default function App({ initialAction = null }) {
           </div>
         </div>
         <div className="ed-toolbar-right">
+          <button className="ui-btn ui-btn--ghost ui-btn--icon ed-desktop-only" type="button" aria-label="Undo" title="Undo (Ctrl+Z)" onClick={() => stepHistory(false)}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 14L4 9l5-5" /><path d="M4 9h10a6 6 0 0 1 0 12h-3" /></svg>
+          </button>
+          <button className="ui-btn ui-btn--ghost ui-btn--icon ed-desktop-only" type="button" aria-label="Redo" title="Redo (Ctrl+Y)" onClick={() => stepHistory(true)}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 14l5-5-5-5" /><path d="M20 9H10a6 6 0 0 0 0 12h3" /></svg>
+          </button>
+          <button className="ui-btn ui-btn--ghost ed-desktop-only" type="button" title="Zoom the map to fit your data" onClick={autoFrameAll} disabled={!mapReady}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg>
+            <span className="ed-wide-label">Fit to data</span>
+          </button>
+          <span className="ed-toolbar-sep ed-desktop-only" />
           <button className="ui-btn ui-btn--ghost ui-btn--icon ed-desktop-only" type="button" aria-label="Zoom out" onClick={() => leafletMapRef.current?.zoomOut(0.5)}>&#8722;</button>
           <button className="ui-btn ui-btn--ghost ui-btn--icon ed-desktop-only" type="button" aria-label="Zoom in" onClick={() => leafletMapRef.current?.zoomIn(0.5)}>+</button>
           <span className="ed-toolbar-sep ed-desktop-only" />
@@ -5147,48 +5255,49 @@ export default function App({ initialAction = null }) {
       <div className="ed-body">
       <Sidebar
         tab={inspectorTab}
-        onTabChange={setInspectorTab}
+        onTabChange={(step) => goToStep(step, 'tab')}
+        done={stepsDone}
+        next={NEXT_STEP[inspectorTab] && { label: NEXT_STEP[inspectorTab].label, onClick: () => goToStep(NEXT_STEP[inspectorTab].step, 'next') }}
         open={inspectorOpen}
         onClose={() => setInspectorOpen(false)}
-        footer={<UserMenu onOpenTemplates={() => setShowBrandKitManager(true)} onOpenAccount={() => setScreen('dashboard')} onOpenTenureMonitor={() => { setTenureInitialFilter(null); setScreen('tenure'); }} />}
+        footer={<UserMenu onSaveToAccount={() => { requestAccountSave(); trackEvent('onboarding_step', { step: 'save', before_export: !hasExported }); }} onOpenTemplates={() => setShowBrandKitManager(true)} onOpenAccount={() => setScreen('dashboard')} onOpenTenureMonitor={() => { setTenureInitialFilter(null); setScreen('tenure'); }} />}
       >
-          {showOnboarding ? (
-            <React.Suspense fallback={null}>
-              <FirstMapChecklist onbStep1={onbStep1} onbStep2={onbStep2} onbStep3={onbStep3} user={Boolean(user)}
-                onDismiss={() => { setOnboardingDismissed(true); trackEvent('onboarding_dismissed', { step1: onbStep1, step2: onbStep2, step3: onbStep3 }); }}
-                onSearch={() => { setAddClaimsModalPath(null); setShowAddClaimsModal(true); trackEvent('onboarding_step', { step: 'add_data', via: 'claims' }); }}
-                onUpload={() => { uploadInputRef.current?.click(); trackEvent('onboarding_step', { step: 'add_data', via: 'upload' }); }}
-                onSample={() => { loadSampleData(); trackEvent('onboarding_step', { step: 'add_data', via: 'sample' }); }}
-                onInvestorLayout={() => {
-                          applyMapType('investor');
-                          handleRatioChange('landscape');
-                          updateLayout({ onboardingLayoutSelected: true,
-                            ...(project.layout.subtitle === 'Technical Results' ? { subtitle: 'Investor Map' } : {}) });
-                          setInvestorFrameRequest((value) => value + 1);
-                          trackEvent('investor_layout_selected', { format: '16:9' });
-                        }}
-                onCustomize={() => { setInspectorTab('layout'); trackEvent('onboarding_step', { step: 'style' }); }}
-                onExport={() => { handleExportClick('png'); trackEvent('onboarding_step', { step: 'export' }); }}
-                onSave={() => { requestAccountSave(); trackEvent('onboarding_step', { step: 'save', before_export: !onbStep3 }); }} />
-            </React.Suspense>
-          ) : null}
         {inspectorTab === 'data' && (
           <>
-          <UploadPanel onUploadFile={handleUploadFile} onUploadFiles={handleUploadFiles} inputRef={uploadInputRef} status={uploadStatus} layers={project.layers} />
-          <div className="add-claims-sidebar-btn-wrap">
-            <button
-              className="ui-btn ui-btn--primary ui-btn--block add-claims-sidebar-btn"
-              type="button"
-              onClick={() => { setAddClaimsModalPath(null); setShowAddClaimsModal(true); }}
-            >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0 }}>
-                <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
-                <rect x="3" y="14" width="7" height="7" rx="1"/><path d="M17.5 14v6M14.5 17h6"/>
-              </svg>
-              Add Claims
-            </button>
-          </div>
-
+          <section className="control-section ins-add-data">
+            <h2 className="ins-group-title">Add data</h2>
+            <div className="add-claims-sidebar-btn-wrap">
+              <button
+                className="ui-btn ui-btn--primary ui-btn--block add-claims-sidebar-btn"
+                type="button"
+                onClick={() => { setAddClaimsModalPath(null); setShowAddClaimsModal(true); }}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0 }}>
+                  <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+                  <rect x="3" y="14" width="7" height="7" rx="1"/><path d="M17.5 14v6M14.5 17h6"/>
+                </svg>
+                Add Claims
+              </button>
+            </div>
+            <UploadPanel onUploadFile={handleUploadFile} onUploadFiles={handleUploadFiles} inputRef={uploadInputRef} status={uploadStatus} />
+            {/* Loading the sample replaces the open map, so it is offered only
+                while there is nothing on the map to lose. */}
+            {project.layers.length === 0 && (
+              <button
+                type="button"
+                className="link-btn ins-sample-link"
+                onClick={() => { loadSampleData(); trackEvent('onboarding_step', { step: 'add_data', via: 'sample' }); }}
+              >Try sample data</button>
+            )}
+          </section>
+          {project.layers.length > 0 && (
+            <section className="control-section">
+              <h2 className="ins-group-title">Your layers</h2>
+              <LayerList layers={project.layers} selectedLayerId={selectedLayerId} onSelect={setSelectedLayerId} onToggleVisible={toggleLayerVisible} onRemove={removeLayer} />
+              <p className="ins-hint">Click a layer to style it in Customize.</p>
+            </section>
+          )}
+          <h2 className="ins-group-title ins-context-title">Add context</h2>
           <section className="control-section cs-collapsible">
             <h2 className="control-section-heading">
               <button
@@ -5336,13 +5445,635 @@ export default function App({ initialAction = null }) {
               </div>
             )}
           </section>
+          <section className="control-section cs-collapsible">
+            <h2 className="control-section-heading">
+              <button
+                type="button"
+                className="section-toggle-btn"
+                onClick={() => toggleSection('refoverlays')}
+                aria-expanded={!collapsedSections.refoverlays}
+                aria-controls="section-refoverlays"
+              >Reference Overlays <span aria-hidden="true" className={`section-chevron${collapsedSections.refoverlays ? '' : ' open'}`}>›</span></button>
+            </h2>
+            {!collapsedSections.refoverlays && <div id="section-refoverlays" className="toggle-grid">
+              <div className="control-row inline-2">
+                <div>
+                  <label htmlFor="f-overlay-opacity-5350">Overlay Opacity</label>
+                  <input id="f-overlay-opacity-5350" type="range" min="0.2" max="1" step="0.05" value={project.layout.referenceOpacity ?? 0.65} onChange={(e) => updateLayout({ referenceOpacity: Number(e.target.value) })} />
+                </div>
+                <div className="range-value">{Math.round((project.layout.referenceOpacity ?? 0.65) * 100)}%</div>
+              </div>
+              <label className="toggle-row"><input type="checkbox" checked={!!referenceOverlays.context} onChange={(e) => updateLayout({ referenceOverlays: { context: e.target.checked } })} /> <span>Roads + Settlements</span></label>
+              <label className="toggle-row"><input type="checkbox" checked={!!referenceOverlays.labels} onChange={(e) => updateLayout({ referenceOverlays: { labels: e.target.checked } })} /> <span>Reference Labels</span></label>
+              <label className="toggle-row"><input type="checkbox" checked={!!referenceOverlays.rail} onChange={(e) => updateLayout({ referenceOverlays: { rail: e.target.checked } })} /> <span>Railways</span></label>
+              <label className="toggle-row"><input type="checkbox" checked={!!referenceOverlays.geology} onChange={(e) => updateLayout({ referenceOverlays: { geology: e.target.checked } })} /> <span>Bedrock Geology (USGS)</span></label>
+              {referenceOverlays.geology && (
+                <p className="overlay-help-note">{OVERLAY_DESCRIPTIONS.geology}</p>
+              )}
+              <details className="sub-details" style={{ marginTop: 8 }}>
+                <summary>Add a tile or WMS service</summary>
+                <div className="sub-details-body">
+                  <div className="small-note" style={{ marginBottom: 6 }}>A published map service — a survey's magnetics or bedrock geology, say. It becomes a layer under Layers, above the basemap and below your data.</div>
+                  <div className="control-row inline-2">
+                    <div>
+                      <label htmlFor="f-tile-kind">Type</label>
+                      <select id="f-tile-kind" value={customTile.kind} onChange={(e) => setCustomTile((c) => ({ ...c, kind: e.target.value, error: '' }))}>
+                        <option value="xyz">Tile URL ({'{z}/{x}/{y}'})</option>
+                        <option value="wms">WMS</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label htmlFor="f-tile-name">Name</label>
+                      <input id="f-tile-name" value={customTile.name} placeholder="e.g. YGS magnetics" onChange={(e) => setCustomTile((c) => ({ ...c, name: e.target.value }))} />
+                    </div>
+                  </div>
+                  <div className="control-row">
+                    <label htmlFor="f-tile-url">{customTile.kind === 'wms' ? 'WMS endpoint' : 'Tile URL template'}</label>
+                    <input id="f-tile-url" value={customTile.url} placeholder={customTile.kind === 'wms' ? 'https://…/geoserver/wms' : 'tiles/{z}/{x}/{y}.png (https)'} onChange={(e) => setCustomTile((c) => ({ ...c, url: e.target.value, error: '' }))} />
+                  </div>
+                  {customTile.kind === 'wms' && (
+                    <div className="control-row">
+                      <label htmlFor="f-tile-layers">WMS layers</label>
+                      <input id="f-tile-layers" value={customTile.layers} placeholder="layer name(s), comma separated" onChange={(e) => setCustomTile((c) => ({ ...c, layers: e.target.value }))} />
+                    </div>
+                  )}
+                  <div className="control-row">
+                    <label htmlFor="f-tile-credit">Credit (printed on the export)</label>
+                    <input id="f-tile-credit" value={customTile.attribution} placeholder="e.g. Yukon Geological Survey" onChange={(e) => setCustomTile((c) => ({ ...c, attribution: e.target.value }))} />
+                  </div>
+                  {customTile.error && <p className="overlay-error-note">{customTile.error}</p>}
+                  <button className="secondary-btn" type="button" style={{ width: '100%' }} onClick={addCustomTileLayer}>Add as layer</button>
+                </div>
+              </details>
+              {Object.keys(overlayErrors).filter((k) => referenceOverlays[k]).length > 0 && (
+                <p className="overlay-error-note">
+                  {Object.keys(overlayErrors).filter((k) => referenceOverlays[k]).map((k) => OVERLAY_LABELS[k] || k).join(', ')}
+                  {' '}could not be loaded — the map service did not respond. Your own layers are unaffected.
+                </p>
+              )}
+            </div>}
+          </section>
+          <section className="control-section cs-collapsible">
+            <h2 className="control-section-heading">
+              <button
+                type="button"
+                className="section-toggle-btn"
+                onClick={() => toggleSection('regions')}
+                aria-expanded={!collapsedSections.regions}
+                aria-controls="section-regions"
+              >Region Highlights {(project.layout.regionHighlights || []).length > 0 && <span className="sub-badge">{project.layout.regionHighlights.length}</span>} <span aria-hidden="true" className={`section-chevron${collapsedSections.regions ? '' : ' open'}`}>›</span></button>
+            </h2>
+            {!collapsedSections.regions && <div id="section-regions" className="control-grid">
+              {(project.layout.regionHighlights || []).map((h, i) => {
+                const regionName = regionsNA.find((r) => r.id === h.regionId)?.name || h.regionId;
+                return (
+                  <div key={h.regionId} className="region-highlight-row">
+                    <span className="region-highlight-name">{regionName}</span>
+                    <ColorField value={h.color || '#ef4444'} title="Color" onChange={(e) => updateLayout({ regionHighlights: project.layout.regionHighlights.map((x, j) => j === i ? { ...x, color: e.target.value } : x) })} brandColors={brandColors} />
+                    <input type="range" min="0.1" max="1" step="0.05" value={h.opacity ?? 0.45} title="Opacity" onChange={(e) => updateLayout({ regionHighlights: project.layout.regionHighlights.map((x, j) => j === i ? { ...x, opacity: Number(e.target.value) } : x) })} />
+                    <span className="range-label">{Math.round((h.opacity ?? 0.45) * 100)}%</span>
+                    <button className="icon-btn remove-btn" type="button" title="Remove" onClick={() => updateLayout({ regionHighlights: project.layout.regionHighlights.filter((_, j) => j !== i) })}>×</button>
+                  </div>
+                );
+              })}
+              <div className="region-highlight-add-row">
+                <select value="" onChange={(e) => { const id = e.target.value; if (!id || (project.layout.regionHighlights || []).some((h) => h.regionId === id)) return; updateLayout({ regionHighlights: [...(project.layout.regionHighlights || []), { regionId: id, color: '#ef4444', opacity: 0.45 }] }); }}>
+                  <option value="">+ Add Region…</option>
+                  {regionsNA.map((r) => <option key={r.id} value={r.id}>{r.name} ({r.abbrev})</option>)}
+                </select>
+              </div>
+            </div>}
+          </section>
           </>
         )}
 
-        {inspectorTab === 'layers' && (
+        {inspectorTab === 'style' && (
+          <React.Suspense fallback={null}>
+          <section className="control-section">
+            <h2 className="ins-group-title">Map style</h2>
+            <MapStyleGallery
+              value={mapTypeOf(project.layout)}
+              onSelect={pickMapStyle}
+              onCustom={() => setCollapsedSections((prev) => ({ ...prev, advancedStyle: false }))}
+            />
+          </section>
+          <section className="control-section">
+            <h2 className="ins-group-title">Theme</h2>
+            <ThemePicker value={project.layout.themeId || 'investor_clean'} onChange={(themeId) => updateLayout({ themeId, onboardingLayoutSelected: true })} />
+          </section>
+          <section className="control-section">
+            <h2 className="ins-group-title">Frame shape</h2>
+            <RatioSwitcher label={null} activeRatio={activeRatio} onRatioChange={(ratio) => { handleRatioChange(ratio); updateLayout({ onboardingLayoutSelected: true }); }} />
+          </section>
+          <section className="control-section">
+            <h2 className="ins-group-title">Basemap</h2>
+            <div className="basemap-picker">
+              {BASEMAP_OPTIONS.map(({ key, label, thumb }) => (
+                <button
+                  key={key}
+                  type="button"
+                  className={`basemap-thumb${(project.layout.basemap || 'light') === key ? ' active' : ''}`}
+                  onClick={() => updateLayout({ basemap: key })}
+                  title={label}
+                >
+                  <div className="basemap-thumb-swatch">
+                    {thumb
+                      ? <img src={thumb} alt={label} loading="lazy" draggable={false} />
+                      : <div className="basemap-thumb-blank" style={{ background: project.layout.blankBg || '#ffffff' }} />
+                    }
+                  </div>
+                  <span className="basemap-thumb-label">{label}</span>
+                </button>
+              ))}
+            </div>
+            {(project.layout.basemap === 'blank') && (
+              <div className="control-row inline-2" style={{ marginTop: 8 }}>
+                <label htmlFor="f-background-color-4216">Background Color</label>
+                <ColorField id="f-background-color-4216" value={project.layout.blankBg || '#ffffff'} onChange={(e) => updateLayout({ blankBg: e.target.value })} brandColors={brandColors} />
+              </div>
+            )}
+          </section>
+          <section className="control-section">
+            <h2 className="ins-group-title">Brand</h2>
+            <div className={`logo-upload-card${project.layout.logo ? ' has-logo' : ''}`}>
+              {project.layout.logo ? (
+                <>
+                  <img className="logo-thumb" src={project.layout.logo} alt="Logo" />
+                  <div className="logo-card-info">
+                    <span className="logo-card-status">Brand colors applied</span>
+                    <div className="logo-card-actions">
+                      <button className="btn compact" type="button" onClick={() => logoInputRef.current?.click()}>Replace</button>
+                      <button className="secondary-btn compact" type="button" onClick={() => updateLayout({ logo: null, accentColor: null, titleBgColor: null, titleFgColor: null })}>Remove</button>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <button className="logo-upload-btn" type="button" onClick={() => logoInputRef.current?.click()}>
+                    <span className="logo-upload-icon">↑</span> Upload Logo
+                  </button>
+                  <span className="logo-card-hint">Auto-applies your brand colors</span>
+                </>
+              )}
+            </div>
+            {project.layout.logo ? (
+              <div className="control-row inline-2">
+                <div>
+                  <label htmlFor="f-logo-opacity">Logo Opacity</label>
+                  <input id="f-logo-opacity" type="range" min="0.1" max="1" step="0.05" value={project.layout.logoOpacity ?? 1} onChange={(e) => updateLayout({ logoOpacity: Number(e.target.value) })} />
+                </div>
+                <div className="range-value">{Math.round((project.layout.logoOpacity ?? 1) * 100)}%</div>
+              </div>
+            ) : null}
+            <input ref={logoInputRef} type="file" accept="image/*" onChange={handleLogoChange} hidden />
+            {/* Brand Kits */}
+            <div className="template-manager-block">
+              <div className="template-manager-header">
+                <span className="template-manager-label">Brand Kits</span>
+                {user && (
+                  <button className="btn compact secondary" type="button" onClick={() => setShowBrandKitManager(true)}>
+                    {cloudTemplates.length > 0 ? 'Manage' : '+ New kit'}
+                  </button>
+                )}
+              </div>
+              {!user ? (
+                <p className="template-manager-hint">Sign in to save and apply brand kits.</p>
+              ) : cloudTemplates.length === 0 ? (
+                <p className="template-manager-hint">No brand kits yet — open the studio to create one.</p>
+              ) : (
+                <div className="bk-side-list">
+                  {cloudTemplates.map((tmpl) => (
+                    <div key={tmpl.id} className="bk-side-card">
+                      <img className="bk-side-swatch" src={renderBrandKitSwatch(tmpl.config || {}, { width: 132, height: 46 })} alt="" />
+                      <div className="bk-side-info">
+                        <span className="bk-side-name" title={tmpl.name}>
+                          {tmpl.name || 'Untitled kit'}
+                          {tmpl.is_default && <span className="bk-side-badge">Default</span>}
+                        </span>
+                        <button
+                          className="btn compact"
+                          type="button"
+                          onClick={() => {
+                            const newLayout = applyBrandKitConfig(tmpl.config || {}, project.layout);
+                            updateLayout(Object.fromEntries(Object.entries(newLayout).filter(([k]) => newLayout[k] !== project.layout[k])));
+                            setUploadStatus({ type: 'success', message: `"${tmpl.name}" applied.` });
+                          }}
+                        >Apply</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
+          <section className="control-section cs-collapsible">
+            <h2 className="control-section-heading">
+              <button
+                type="button"
+                className="section-toggle-btn"
+                onClick={() => toggleSection('advancedStyle')}
+                aria-expanded={!collapsedSections.advancedStyle}
+                aria-controls="section-advancedStyle"
+              >Advanced: template and mode <span aria-hidden="true" className={`section-chevron${collapsedSections.advancedStyle ? '' : ' open'}`}>›</span></button>
+            </h2>
+            {!collapsedSections.advancedStyle && <div id="section-advancedStyle" className="control-grid">
+              <p className="small-note">The pieces a map style sets for you. Change one and the style reads “Custom”.</p>
+              <div className="control-row">
+                <label htmlFor="f-template-4142">Template</label>
+                <select id="f-template-4142"
+                  value={project.layout.templateId || 'technical_results_v2'}
+                  onChange={(e) => {
+                    const tid = e.target.value;
+                    const themeMap = {
+                      'technical_results_v2': 'investor_clean',
+                      'ni_43101_technical': 'ni_43101',
+                      'side_panel': 'technical_sharp',
+                    };
+                    const extra = tid === 'side_panel' ? {
+                      sidePanelPositions: {},
+                      sidePanelGrid: DEFAULT_SIDE_PANEL_GRID,
+                      insetEnabled: true,
+                      insetHeightPx: null,
+                      legendHeightPx: null,
+                      titleHeightPx: 108,
+                    } : {};
+                    updateLayout({ templateId: tid, themeId: themeMap[tid] || 'investor_clean', stripTitle: '', stripSubtitle: '', ...extra });
+                  }}
+                >
+                  <option value="technical_results_v2">Standard</option>
+                  <option value="ni_43101_technical">NI 43-101</option>
+                  <option value="side_panel">Technical</option>
+                </select>
+              </div>
+              {project.layout.templateId === 'side_panel' && Object.keys(project.layout.sidePanelPositions || {}).length > 0 && (
+                <div style={{ padding: '4px 0 6px' }}>
+                  <button className="secondary-btn" style={{ width: '100%', fontSize: 12 }} onClick={() => updateLayout({ sidePanelPositions: {} })}>
+                    Reset Panel Layout
+                  </button>
+                </div>
+              )}
+              <div className="control-row">
+                <label htmlFor="f-mode-5038">Mode</label>
+                <select id="f-mode-5038" value={project.layout.mode} onChange={(e) => applyMode(e.target.value)}>
+                  {Object.entries(TEMPLATE_MODES).map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
+                </select>
+              </div>
+            </div>}
+          </section>
+          </React.Suspense>
+        )}
+
+        {inspectorTab === 'customize' && (
           <>
-          <section className="control-section cs-collapsible" ref={layersSectionRef}>
-            <h2>Layers</h2>
+          <p className="ins-hint">Click the title, legend, a layer or any map element on the map to edit it here.</p>
+          <InspectorGroup id="title" title="Title & text" summary={project.layout.title || 'No title'} open={customizeGroup === 'title'} onToggle={() => toggleCustomizeGroup('title')} groupRef={titleGroupRef}>
+            <div className="element-visibility-row">
+              <label className="toggle-row"><input type="checkbox" checked={project.layout.showTitle !== false} onChange={(e) => updateLayout({ showTitle: e.target.checked })} /><span>Show title</span></label>
+              <label className="toggle-row"><input type="checkbox" checked={project.layout.footerEnabled !== false} onChange={(e) => updateLayout({ footerEnabled: e.target.checked })} /><span>Show footer</span></label>
+            </div>
+            <div className="control-row"><label htmlFor="f-title-4176">Title</label><input id="f-title-4176" value={localTitle} onChange={(e) => {
+              const val = e.target.value;
+              setLocalTitle(val);
+              metaDirtyRef.current.title = true;
+              clearTimeout(titleDebounceRef.current);
+              titleDebounceRef.current = setTimeout(() => { updateLayout({ title: val }); metaDirtyRef.current.title = false; }, 300);
+            }} /></div>
+            <div className="control-row"><label htmlFor="f-subtitle-4182">Subtitle</label><input id="f-subtitle-4182" value={localSubtitle} onChange={(e) => {
+              const val = e.target.value;
+              setLocalSubtitle(val);
+              metaDirtyRef.current.subtitle = true;
+              clearTimeout(subtitleDebounceRef.current);
+              subtitleDebounceRef.current = setTimeout(() => { updateLayout({ subtitle: val }); metaDirtyRef.current.subtitle = false; }, 300);
+            }} /></div>
+            <div className="control-row slider">
+              <label htmlFor="f-title-size-4189">Title Size</label>
+              <input id="f-title-size-4189" type="range" min="0.6" max="1.5" step="0.05" value={project.layout.titleFontScale ?? 1} onChange={(e) => updateLayout({ titleFontScale: parseFloat(e.target.value) })} />
+              <span className="range-value">{Math.round((project.layout.titleFontScale ?? 1) * 100)}%</span>
+            </div>
+            <div className="control-row"><label htmlFor="f-footer-disclaimer-5214">Footer / Disclaimer</label><input id="f-footer-disclaimer-5214" value={localFooterText} onChange={(e) => { const val = e.target.value; setLocalFooterText(val); metaDirtyRef.current.footerText = true; clearTimeout(footerTextDebounceRef.current); footerTextDebounceRef.current = setTimeout(() => { updateLayout({ footerText: val }); metaDirtyRef.current.footerText = false; }, 300); }} placeholder="e.g. For internal use only" /></div>
+            <div className="control-row inline-2">
+              <div><label htmlFor="f-map-date-5216">Map Date</label><input id="f-map-date-5216" value={localMapDate} onChange={(e) => { const val = e.target.value; setLocalMapDate(val); metaDirtyRef.current.mapDate = true; clearTimeout(mapDateDebounceRef.current); mapDateDebounceRef.current = setTimeout(() => { updateLayout({ mapDate: val }); metaDirtyRef.current.mapDate = false; }, 300); }} placeholder="e.g. April 2025" /></div>
+              <div><label htmlFor="f-project-5217">Project #</label><input id="f-project-5217" value={localProjectNumber} onChange={(e) => { const val = e.target.value; setLocalProjectNumber(val); metaDirtyRef.current.projectNumber = true; clearTimeout(projectNumberDebounceRef.current); projectNumberDebounceRef.current = setTimeout(() => { updateLayout({ projectNumber: val }); metaDirtyRef.current.projectNumber = false; }, 300); }} placeholder="e.g. P-2024-01" /></div>
+            </div>
+            <div className="control-row"><label htmlFor="f-scale-note-5219">Scale Note</label><input id="f-scale-note-5219" value={localMapScaleNote} onChange={(e) => { const val = e.target.value; setLocalMapScaleNote(val); metaDirtyRef.current.mapScaleNote = true; clearTimeout(mapScaleNoteDebounceRef.current); mapScaleNoteDebounceRef.current = setTimeout(() => { updateLayout({ mapScaleNote: val }); metaDirtyRef.current.mapScaleNote = false; }, 300); }} placeholder="e.g. 1:50,000" /></div>
+            {/* NI 43-101 Title Strip fields */}
+            {project.layout.templateId === 'ni_43101_technical' && (
+              <details className="sub-details" open>
+                <summary>NI 43-101 Title Strip</summary>
+                <div className="sub-details-body">
+                  <div className="control-row">
+                    <label htmlFor="f-figure-title-5137">Figure Title</label>
+                    <input id="f-figure-title-5137" type="text" value={project.layout.stripTitle || ''} placeholder="(leave blank to hide)" onChange={(e) => updateLayout({ stripTitle: e.target.value })} />
+                  </div>
+                  <div className="control-row">
+                    <label htmlFor="f-subtitle-property-5141">Subtitle / Property</label>
+                    <input id="f-subtitle-property-5141" type="text" value={project.layout.stripSubtitle || ''} placeholder="(optional)" onChange={(e) => updateLayout({ stripSubtitle: e.target.value })} />
+                  </div>
+                  <div className="control-row">
+                    <label htmlFor="f-strip-position-5145">Strip Position</label>
+                    <select id="f-strip-position-5145" value={project.layout.titleStripPosition || 'bottom'} onChange={(e) => updateLayout({ titleStripPosition: e.target.value })}>
+                      <option value="bottom">Bottom</option>
+                      <option value="top">Top</option>
+                    </select>
+                  </div>
+                  <div className="control-row">
+                    <label htmlFor="f-scale-override-5152">Scale Override</label>
+                    <input id="f-scale-override-5152" type="text" value={project.layout.manualScaleDenom || ''} placeholder="e.g. 25000 (auto if blank)" onChange={(e) => updateLayout({ manualScaleDenom: e.target.value })} />
+                  </div>
+                  <div className="control-row slider">
+                    <label htmlFor="f-text-size-5156">Text Size</label>
+                    <input id="f-text-size-5156" type="range" min="0.7" max="1.4" step="0.05" value={project.layout.stripFontScale || 1} onChange={(e) => updateLayout({ stripFontScale: parseFloat(e.target.value) })} style={{ flex: 1 }} />
+                    <span className="range-value">{Math.round((project.layout.stripFontScale || 1) * 100)}%</span>
+                  </div>
+                  <div className="control-row">
+                    <label htmlFor="f-qualified-person-5161">Qualified Person</label>
+                    <input id="f-qualified-person-5161" type="text" value={project.layout.qpName || ''} placeholder="Name, P.Geo." onChange={(e) => updateLayout({ qpName: e.target.value })} />
+                  </div>
+                  <div className="control-row">
+                    <label htmlFor="f-qp-credentials-5165">QP Credentials</label>
+                    <input id="f-qp-credentials-5165" type="text" value={project.layout.qpCredentials || ''} placeholder="P.Geo., M.Sc." onChange={(e) => updateLayout({ qpCredentials: e.target.value })} />
+                  </div>
+                  <div className="control-row">
+                    <label htmlFor="f-company-5169">Company</label>
+                    <input id="f-company-5169" type="text" value={project.layout.companyName || ''} placeholder="Company Name" onChange={(e) => updateLayout({ companyName: e.target.value })} />
+                  </div>
+                  <div className="control-row">
+                    <label htmlFor="f-figure-no-5173">Figure No.</label>
+                    <input id="f-figure-no-5173" type="text" value={project.layout.figureNumber || ''} placeholder="Fig. 3-2" onChange={(e) => updateLayout({ figureNumber: e.target.value })} />
+                  </div>
+                  <div className="control-row">
+                    <label htmlFor="f-revision-5177">Revision</label>
+                    <input id="f-revision-5177" type="text" value={project.layout.figureRevision || ''} placeholder="Rev. A" onChange={(e) => updateLayout({ figureRevision: e.target.value })} />
+                  </div>
+                  <div className="control-row">
+                    <label htmlFor="f-projection-5181">Projection</label>
+                    <input id="f-projection-5181"
+                      type="text"
+                      value={project.layout.projectionName || ''}
+                      placeholder="e.g. NAD83 / UTM Zone 10N"
+                      onChange={(e) => updateLayout({ projectionName: e.target.value })}
+                    />
+                  </div>
+                </div>
+              </details>
+            )}
+          </InspectorGroup>
+          <InspectorGroup
+            id="colors"
+            title="Colors"
+            summary={(
+              <span className="ins-acc-swatches">
+                {[project.layout.titleBgColor || themeTokens.titleFill, project.layout.titleFgColor || themeTokens.titleText, project.layout.panelBgColor || themeTokens.panelFill, project.layout.accentColor || themeTokens.titleAccent]
+                  .filter(Boolean).map((c, i) => <i key={i} style={{ background: c }} />)}
+              </span>
+            )}
+            open={customizeGroup === 'colors'}
+            onToggle={() => toggleCustomizeGroup('colors')}
+          >
+            <div className="color-overrides-grid">
+              <div className="color-override-cell">
+                <label htmlFor="f-title-bg-5055">Title bg</label>
+                <ColorField id="f-title-bg-5055"
+                  value={project.layout.titleBgColor || themeTokens.titleFill?.replace(/rgba?\([^)]+\)/i, '') || '#0c1a35'}
+                  onChange={(e) => updateLayout({ titleBgColor: e.target.value })}
+                  title="Title block background"
+                  brandColors={brandColors}
+                  onReset={project.layout.titleBgColor ? () => updateLayout({ titleBgColor: null }) : undefined}
+                />
+              </div>
+              <div className="color-override-cell">
+                <label htmlFor="f-title-text-5065">Title text</label>
+                <ColorField id="f-title-text-5065"
+                  value={project.layout.titleFgColor || themeTokens.titleText || '#ffffff'}
+                  onChange={(e) => updateLayout({ titleFgColor: e.target.value })}
+                  title="Title text color"
+                  brandColors={brandColors}
+                  onReset={project.layout.titleFgColor ? () => updateLayout({ titleFgColor: null }) : undefined}
+                />
+              </div>
+              <div className="color-override-cell">
+                <label htmlFor="f-panel-bg-5075">Panel bg</label>
+                <ColorField id="f-panel-bg-5075"
+                  value={project.layout.panelBgColor || '#ffffff'}
+                  onChange={(e) => updateLayout({ panelBgColor: e.target.value })}
+                  title="Overlay panel background"
+                  brandColors={brandColors}
+                  onReset={project.layout.panelBgColor ? () => updateLayout({ panelBgColor: null }) : undefined}
+                />
+              </div>
+              <div className="color-override-cell">
+                <label htmlFor="f-panel-text-5085">Panel text</label>
+                <ColorField id="f-panel-text-5085"
+                  value={project.layout.panelFgColor || themeTokens.bodyText || '#1e293b'}
+                  onChange={(e) => updateLayout({ panelFgColor: e.target.value })}
+                  title="Panel text color"
+                  brandColors={brandColors}
+                  onReset={project.layout.panelFgColor ? () => updateLayout({ panelFgColor: null }) : undefined}
+                />
+              </div>
+              <div className="color-override-cell">
+                <label htmlFor="f-accent-5095">Accent</label>
+                <ColorField id="f-accent-5095"
+                  value={project.layout.accentColor || themeTokens.titleAccent || '#2563eb'}
+                  onChange={(e) => updateLayout({ accentColor: e.target.value })}
+                  title="Accent color (stripe, callout borders)"
+                  brandColors={brandColors}
+                  onReset={project.layout.accentColor ? () => updateLayout({ accentColor: null }) : undefined}
+                />
+              </div>
+              {(project.layout.titleBgColor || project.layout.titleFgColor || project.layout.panelBgColor || project.layout.panelFgColor || project.layout.accentColor) && (
+                <div className="color-override-cell">
+                  <label>&nbsp;</label>
+                  <button className="swatch-reset-all" type="button" onClick={() => updateLayout({ titleBgColor: null, titleFgColor: null, panelBgColor: null, panelFgColor: null, accentColor: null })}>Reset all</button>
+                </div>
+              )}
+            </div>
+            <div className="control-row inline-2" style={{ marginTop: 10 }}>
+              <div>
+                <label htmlFor="f-panel-corners-4254">Panel Corners</label>
+                <input id="f-panel-corners-4254" type="range" min="0" max="24" step="1"
+                  value={project.layout.cornerRadius ?? themeTokens.panelRadius ?? 10}
+                  onChange={(e) => updateLayout({ cornerRadius: Number(e.target.value) })} />
+              </div>
+              <div className="range-value" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                <span>{project.layout.cornerRadius ?? themeTokens.panelRadius ?? 10}px</span>
+                {project.layout.cornerRadius != null && (
+                  <button type="button" style={{ fontSize: 10, padding: '1px 5px', background: 'none', border: '1px solid #cbd5e1', borderRadius: 4, cursor: 'pointer', color: '#64748b' }}
+                    onClick={() => updateLayout({ cornerRadius: null })} title="Reset to theme default">↺</button>
+                )}
+              </div>
+            </div>
+          </InspectorGroup>
+          <InspectorGroup id="fonts" title="Fonts" summary="Title, legend, labels, callouts" open={customizeGroup === 'fonts'} onToggle={() => toggleCustomizeGroup('fonts')}>
+            <div className="control-row inline-2">
+              <div><label htmlFor="f-title-5121">Title</label><FontSelect id="f-title-5121" value={project.layout.fonts?.title} brandFonts={brandFonts} onChange={(e) => updateLayout({ fonts: { title: e.target.value } })} /></div>
+              <div><label htmlFor="f-legend-5122">Legend</label><FontSelect id="f-legend-5122" value={project.layout.fonts?.legend} brandFonts={brandFonts} onChange={(e) => updateLayout({ fonts: { legend: e.target.value } })} /></div>
+            </div>
+            <div className="control-row inline-2">
+              <div><label htmlFor="f-labels-5125">Labels</label><FontSelect id="f-labels-5125" value={project.layout.fonts?.label} brandFonts={brandFonts} onChange={(e) => updateLayout({ fonts: { label: e.target.value } })} /></div>
+              <div><label htmlFor="f-callouts-5126">Callouts</label><FontSelect id="f-callouts-5126" value={project.layout.fonts?.callout} brandFonts={brandFonts} onChange={(e) => updateLayout({ fonts: { callout: e.target.value } })} /></div>
+            </div>
+          </InspectorGroup>
+          <InspectorGroup
+            id="legend"
+            title="Legend"
+            summary={project.layout.showLegend === false ? 'Hidden' : `${derivedLegendItems.length} item${derivedLegendItems.length === 1 ? '' : 's'}`}
+            open={customizeGroup === 'legend'}
+            onToggle={() => toggleCustomizeGroup('legend')}
+            groupRef={legendGroupRef}
+          >
+            <div className="element-visibility-row">
+              <label className="toggle-row"><input type="checkbox" checked={project.layout.showLegend !== false} onChange={(e) => updateLayout({ showLegend: e.target.checked })} /><span>Show legend</span></label>
+              <label className="toggle-row"><input type="checkbox" checked={!project.layout.legendTransparent} onChange={(e) => updateLayout({ legendTransparent: !e.target.checked })} /><span>Legend box</span></label>
+            </div>
+            <div className="control-row"><label htmlFor="f-legend-title-5208">Legend Title</label><input id="f-legend-title-5208" value={localLegendTitle} onChange={(e) => { const val = e.target.value; setLocalLegendTitle(val); metaDirtyRef.current.legendTitle = true; clearTimeout(legendTitleDebounceRef.current); legendTitleDebounceRef.current = setTimeout(() => { updateLayout({ legendTitle: val }); metaDirtyRef.current.legendTitle = false; }, 300); }} placeholder="Legend" /></div>
+            <div className="control-row slider">
+              <label htmlFor="f-text-size-5210">Text Size</label>
+              <input id="f-text-size-5210" type="range" min="0.6" max="1.5" step="0.05" value={project.layout.legendFontScale ?? 1} onChange={(e) => updateLayout({ legendFontScale: parseFloat(e.target.value) })} style={{ flex: 1 }} />
+              <span className="range-value">{Math.round((project.layout.legendFontScale ?? 1) * 100)}%</span>
+            </div>
+            <LegendEditor
+              derivedItems={derivedLegendItems}
+              layout={project.layout}
+              updateLayout={updateLayout}
+            />
+          </InspectorGroup>
+          <InspectorGroup id="elements" title="Map elements" summary="North arrow, scale bar, inset, logo" open={customizeGroup === 'elements'} onToggle={() => toggleCustomizeGroup('elements')} groupRef={elementsGroupRef}>
+            <div className="element-visibility-row">
+              <label className="toggle-row"><input type="checkbox" checked={project.layout.showNorthArrow !== false} onChange={(e) => updateLayout({ showNorthArrow: e.target.checked })} /><span>North Arrow</span></label>
+              <label className="toggle-row"><input type="checkbox" checked={project.layout.showScaleBar !== false} onChange={(e) => updateLayout({ showScaleBar: e.target.checked })} /><span>Scale Bar</span></label>
+              <label className="toggle-row"><input type="checkbox" checked={project.layout.insetEnabled !== false} onChange={(e) => updateLayout({ insetEnabled: e.target.checked })} /><span>Inset Map</span></label>
+            </div>
+            {project.layout.showNorthArrow !== false && (
+              <div className="control-row" style={{ marginTop: 10 }}>
+                <label>Compass Style</label>
+                <div className="north-arrow-style-picker">
+                  {NORTH_ARROW_STYLES.map(({ key, label }) => (
+                    <button key={key} type="button"
+                      className={`north-arrow-style-btn${(project.layout.northArrowStyle || 'classic') === key ? ' active' : ''}`}
+                      onClick={() => updateLayout({ northArrowStyle: key })}
+                      title={label}>
+                      <NorthArrow scale={52} style={key} />
+                      <span>{label}</span>
+                    </button>
+                  ))}
+                </div>
+                <label className="toggle-row" style={{ marginTop: 6 }}>
+                  <input type="checkbox" checked={!project.layout.northArrowTransparent} onChange={(e) => updateLayout({ northArrowTransparent: !e.target.checked })} />
+                  <span>Show panel box</span>
+                </label>
+              </div>
+            )}
+            <div className="element-visibility-row">
+              <label className="toggle-row"><input type="checkbox" checked={!project.layout.titleTransparent} onChange={(e) => updateLayout({ titleTransparent: !e.target.checked })} /><span>Title box</span></label>
+              <label className="toggle-row"><input type="checkbox" checked={!project.layout.logoTransparent} onChange={(e) => updateLayout({ logoTransparent: !e.target.checked })} /><span>Logo box</span></label>
+              <label className="toggle-row"><input type="checkbox" checked={!project.layout.scaleBarTransparent} onChange={(e) => updateLayout({ scaleBarTransparent: !e.target.checked })} /><span>Scale bar box</span></label>
+            </div>
+            <h3 className="ins-sub-title">Inset</h3>
+            <div className="button-row three">
+              <button className="btn" type="button" onClick={() => insetInputRef.current?.click()}>Upload Inset</button>
+            </div>
+            {project.layout.insetImage ? (
+              <div className="inset-status-card">
+                <div className="inset-preview"><img src={project.layout.insetImage} alt="Inset preview" /></div>
+                <button className="secondary-btn" type="button" onClick={() => updateLayout({ insetImage: null, insetEnabled: true })}>Remove Inset Image</button>
+              </div>
+            ) : null}
+            {project.layout.autoInsetRegion && !project.layout.insetImage && project.layout.insetEnabled !== false && (
+              <div className="inset-detected-badge">Detected: {project.layout.autoInsetRegion.name}</div>
+            )}
+            {!project.layout.insetImage && (
+              <div className="control-row">
+                <label htmlFor="f-inset-mode">Inset Style</label>
+                {/* Two choices, because there were only ever two ANSWERS. The
+                    old list offered province / country / regional / secondary
+                    zoom, which all render the same generic backdrop at slightly
+                    different zoom factors — indistinguishable in the panel, so
+                    the extra entries read as broken rather than as options.
+                    Standard keeps whichever of those a saved project already
+                    has; only an explicit change collapses it. A map tile
+                    locator (from the MCP connector) shows as its own entry so
+                    Satellite can still be chosen over it. */}
+                <select id="f-inset-mode"
+                  value={insetStyle(project.layout)}
+                  onChange={(e) => updateLayout(insetStylePatch(e.target.value))}>
+                  <option value="standard">Standard</option>
+                  <option value="satellite_locator">Satellite</option>
+                  {insetStyle(project.layout) === 'tiles' && (
+                    <option value="tiles">Map tiles ({basemapConfig(project.layout.insetBasemap).label})</option>
+                  )}
+                </select>
+              </div>
+            )}
+            <div className="control-row inline-2">
+              <div><label htmlFor="f-inset-title-5314">Inset Title</label><input id="f-inset-title-5314" value={project.layout.insetTitle ?? 'Project Locator'} onChange={(e) => updateLayout({ insetTitle: e.target.value })} placeholder="Project Locator" /></div>
+              <div><label htmlFor="f-inset-label-5315">Inset Label</label><input id="f-inset-label-5315" value={project.layout.insetLabel ?? ''} onChange={(e) => updateLayout({ insetLabel: e.target.value })} placeholder={project.layout.autoInsetRegion?.name || 'Province / State'} /></div>
+            </div>
+            {project.layout.autoInsetRegion && !project.layout.insetImage && (
+              <div className="control-row inline-2" style={{ flexWrap: 'wrap', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <label htmlFor="f-region-5320" style={{ marginBottom: 0 }}>Region</label>
+                  <ColorField id="f-region-5320" value={project.layout.insetRegionFill || '#dce8f5'} onChange={(e) => updateLayout({ insetRegionFill: e.target.value })} title="Region fill" brandColors={brandColors} />
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <label htmlFor="f-background-5324" style={{ marginBottom: 0 }}>Background</label>
+                  <ColorField id="f-background-5324" value={project.layout.insetBgFill || '#f0f4f8'} onChange={(e) => updateLayout({ insetBgFill: e.target.value })} title="Background" brandColors={brandColors} />
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <label htmlFor="f-marker-5328" style={{ marginBottom: 0 }}>Marker</label>
+                  <ColorField id="f-marker-5328" value={project.layout.insetMarkerColor || '#2563eb'} onChange={(e) => updateLayout({ insetMarkerColor: e.target.value })} title="Marker color" brandColors={brandColors} />
+                </div>
+              </div>
+            )}
+            <input ref={insetInputRef} type="file" accept="image/*" onChange={handleInsetImageChange} hidden />
+            {/* Coordinate frame and datum: the UTM tick frame any template
+                can wear (NI 43-101 always does), and the projection line
+                under the scale bar that says what the ticks are in. */}
+            <details className="sub-details">
+              <summary>Coordinate Frame &amp; Datum</summary>
+              <div className="sub-details-body">
+                <label className="toggle-row">
+                  <input
+                    type="checkbox"
+                    checked={project.layout.templateId === 'ni_43101_technical' || !!project.layout.showCoordinateFrame}
+                    disabled={project.layout.templateId === 'ni_43101_technical'}
+                    onChange={(e) => updateLayout({ showCoordinateFrame: e.target.checked })}
+                  />
+                  <span>UTM coordinate frame (ticks and labels on every edge)</span>
+                </label>
+                <label className="toggle-row">
+                  <input type="checkbox" checked={!!project.layout.showProjectionLabel} onChange={(e) => updateLayout({ showProjectionLabel: e.target.checked })} />
+                  <span>Projection under the scale bar</span>
+                </label>
+                <div className="control-row" style={{ marginTop: 6 }}>
+                  <label htmlFor="f-projection-frame">Projection / Datum</label>
+                  <input
+                    id="f-projection-frame"
+                    type="text"
+                    value={project.layout.projectionName || ''}
+                    placeholder={projectionLabel({}, leafletMapRef.current)}
+                    onChange={(e) => updateLayout({ projectionName: e.target.value })}
+                  />
+                </div>
+                <div className="small-note">Leave blank to derive the UTM zone from the map centre. Write the datum you work in, e.g. NAD83 / UTM Zone 7N.</div>
+              </div>
+            </details>
+            <div className="button-row">
+              <button
+                type="button"
+                className="secondary-btn"
+                style={{ width: '100%', marginTop: 6, fontSize: 12 }}
+                onClick={() => updateLayout({ cornerLayout: null, titleCorner: 'tl', logoCorner: 'tl', insetCorner: 'tr', northArrowCorner: 'br', scaleBarCorner: 'bl', legendCorner: 'bl' })}
+                title="Move all elements back to their default corner positions"
+              >
+                Reset Element Positions
+              </button>
+              <button type="button" className="secondary-btn" style={{ width: '100%', marginTop: 6, fontSize: 12 }} onClick={improveMap} title="Reset spacing, margins and inset size to the template's defaults">Tidy layout</button>
+            </div>
+          </InspectorGroup>
+          <InspectorGroup id="layers" title="Layers" summary={`${project.layers.length} layer${project.layers.length === 1 ? '' : 's'}`} open={customizeGroup === 'layers'} onToggle={() => toggleCustomizeGroup('layers')} groupRef={layersSectionRef}>
             <LayerList layers={project.layers} selectedLayerId={selectedLayerId} onSelect={setSelectedLayerId} onToggleVisible={toggleLayerVisible} onRemove={removeLayer} />
             {selectedLayer && (selectedLayer.type === 'raster' || selectedLayer.type === 'tiles') ? (
               <div className="control-grid" style={{ marginTop: 10 }}>
@@ -5704,11 +6435,11 @@ export default function App({ initialAction = null }) {
                 </React.Suspense>
               </div>
             ) : <p className="small-note">Select a layer to edit its display label, role, order, and colors.</p>}
-          </section>
+          </InspectorGroup>
           </>
         )}
 
-        {inspectorTab === 'labels' && (
+        {inspectorTab === 'annotate' && (
           <>
           <section className="control-section cs-collapsible" ref={drillholeSectionRef}>
             <h2 className="control-section-heading">
@@ -5789,7 +6520,6 @@ export default function App({ initialAction = null }) {
             <h2>Callouts</h2>
             <div className="button-row" style={{ marginBottom: 10 }}>
               <button className="btn primary" type="button" onClick={addCalloutFromSelectedLayer} disabled={!selectedLayer}>Add From Selected Layer</button>
-              <button className="btn" type="button" onClick={autoFrameAll}>Auto Frame All</button>
             </div>
             <div className="callout-list">
               {project.callouts.map((callout, index) => {
@@ -5972,7 +6702,7 @@ export default function App({ initialAction = null }) {
           </section>
           <section className="control-section cs-collapsible" ref={markersSectionRef}>
             <h2>Annotations</h2>
-            <div className="button-row">
+            <div className="button-row ins-tool-grid">
               <button className={`secondary-btn ${annotationTool === 'marker' ? 'active-toggle' : ''}`} type="button" onClick={() => { const next = annotationTool === 'marker' ? null : 'marker'; setAnnotationTool(next); annotationToolRef.current = next; setSelectedFeature(null); }}>Place Marker</button>
               <button className={`secondary-btn ${annotationTool === 'ellipse' ? 'active-toggle' : ''}`} type="button" onClick={() => { const next = annotationTool === 'ellipse' ? null : 'ellipse'; setAnnotationTool(next); annotationToolRef.current = next; setSelectedFeature(null); }}>Draw Dashed Area</button>
               <button className={`secondary-btn ${annotationTool === 'ring' ? 'active-toggle' : ''}`} type="button" onClick={() => { const next = annotationTool === 'ring' ? null : 'ring'; setAnnotationTool(next); annotationToolRef.current = next; setSelectedFeature(null); }}>Draw Distance Ring</button>
@@ -6313,665 +7043,27 @@ export default function App({ initialAction = null }) {
           </>
         )}
 
-        {inspectorTab === 'layout' && (
-          <>
-          <section className="control-section">
-            <h2>Map</h2>
-            <div className="control-grid">
-              <div className="control-row">
-                <label htmlFor="f-map-type">Map type</label>
-                <select
-                  id="f-map-type"
-                  value={mapTypeOf(project.layout)}
-                  onChange={(e) => applyMapType(e.target.value)}
-                >
-                  {mapTypeOf(project.layout) === 'custom' && <option value="custom">Custom — set under Customize design</option>}
-                  {Object.entries(MAP_TYPES).map(([value, t]) => (
-                    <option key={value} value={value}>{t.label}</option>
-                  ))}
-                </select>
-              </div>
-              <p className="small-note">
-                {MAP_TYPES[mapTypeOf(project.layout)]?.note
-                  || 'Template, mode and design theme are set individually. Change any of them under Customize design.'}
-              </p>
-              <div className="control-row"><label htmlFor="f-title-4176">Title</label><input id="f-title-4176" value={localTitle} onChange={(e) => {
-                const val = e.target.value;
-                setLocalTitle(val);
-                metaDirtyRef.current.title = true;
-                clearTimeout(titleDebounceRef.current);
-                titleDebounceRef.current = setTimeout(() => { updateLayout({ title: val }); metaDirtyRef.current.title = false; }, 300);
-              }} /></div>
-              <div className="control-row"><label htmlFor="f-subtitle-4182">Subtitle</label><input id="f-subtitle-4182" value={localSubtitle} onChange={(e) => {
-                const val = e.target.value;
-                setLocalSubtitle(val);
-                metaDirtyRef.current.subtitle = true;
-                clearTimeout(subtitleDebounceRef.current);
-                subtitleDebounceRef.current = setTimeout(() => { updateLayout({ subtitle: val }); metaDirtyRef.current.subtitle = false; }, 300);
-              }} /></div>
-              <div className="control-row slider">
-                <label htmlFor="f-title-size-4189">Title Size</label>
-                <input id="f-title-size-4189" type="range" min="0.6" max="1.5" step="0.05" value={project.layout.titleFontScale ?? 1} onChange={(e) => updateLayout({ titleFontScale: parseFloat(e.target.value) })} />
-                <span className="range-value">{Math.round((project.layout.titleFontScale ?? 1) * 100)}%</span>
-              </div>
-              <div className="control-row-stack">
-                <label>Basemap</label>
-                <div className="basemap-picker">
-                  {BASEMAP_OPTIONS.map(({ key, label, thumb }) => (
-                    <button
-                      key={key}
-                      type="button"
-                      className={`basemap-thumb${(project.layout.basemap || 'light') === key ? ' active' : ''}`}
-                      onClick={() => updateLayout({ basemap: key })}
-                      title={label}
-                    >
-                      <div className="basemap-thumb-swatch">
-                        {thumb
-                          ? <img src={thumb} alt={label} loading="lazy" draggable={false} />
-                          : <div className="basemap-thumb-blank" style={{ background: project.layout.blankBg || '#ffffff' }} />
-                        }
-                      </div>
-                      <span className="basemap-thumb-label">{label}</span>
-                    </button>
-                  ))}
-                </div>
-                {(project.layout.basemap === 'blank') && (
-                  <div className="control-row inline-2" style={{ marginTop: 8 }}>
-                    <label htmlFor="f-background-color-4216">Background Color</label>
-                    <ColorField id="f-background-color-4216" value={project.layout.blankBg || '#ffffff'} onChange={(e) => updateLayout({ blankBg: e.target.value })} brandColors={brandColors} />
-                  </div>
-                )}
-              </div>
-              <div className="element-visibility-row">
-                <label className="toggle-row"><input type="checkbox" checked={project.layout.showTitle !== false} onChange={(e) => updateLayout({ showTitle: e.target.checked })} /><span>Title</span></label>
-                <label className="toggle-row"><input type="checkbox" checked={project.layout.showNorthArrow !== false} onChange={(e) => updateLayout({ showNorthArrow: e.target.checked })} /><span>North Arrow</span></label>
-                <label className="toggle-row"><input type="checkbox" checked={project.layout.showScaleBar !== false} onChange={(e) => updateLayout({ showScaleBar: e.target.checked })} /><span>Scale Bar</span></label>
-                <label className="toggle-row"><input type="checkbox" checked={project.layout.showLegend !== false} onChange={(e) => updateLayout({ showLegend: e.target.checked })} /><span>Legend</span></label>
-                <label className="toggle-row"><input type="checkbox" checked={project.layout.footerEnabled !== false} onChange={(e) => updateLayout({ footerEnabled: e.target.checked })} /><span>Footer</span></label>
-                <label className="toggle-row"><input type="checkbox" checked={project.layout.insetEnabled !== false} onChange={(e) => updateLayout({ insetEnabled: e.target.checked })} /><span>Inset Map</span></label>
-              </div>
-              {/* North arrow style picker */}
-              {project.layout.showNorthArrow !== false && (
-                <div className="control-row" style={{ marginTop: 10 }}>
-                  <label>Compass Style</label>
-                  <div className="north-arrow-style-picker">
-                    {NORTH_ARROW_STYLES.map(({ key, label }) => (
-                      <button key={key} type="button"
-                        className={`north-arrow-style-btn${(project.layout.northArrowStyle || 'classic') === key ? ' active' : ''}`}
-                        onClick={() => updateLayout({ northArrowStyle: key })}
-                        title={label}>
-                        <NorthArrow scale={52} style={key} />
-                        <span>{label}</span>
-                      </button>
-                    ))}
-                  </div>
-                  <label className="toggle-row" style={{ marginTop: 6 }}>
-                    <input type="checkbox" checked={!project.layout.northArrowTransparent} onChange={(e) => updateLayout({ northArrowTransparent: !e.target.checked })} />
-                    <span>Show panel box</span>
-                  </label>
-                </div>
-              )}
-
-              {/* Corner radius */}
-              <div className="control-row inline-2" style={{ marginTop: 10 }}>
-                <div>
-                  <label htmlFor="f-panel-corners-4254">Panel Corners</label>
-                  <input id="f-panel-corners-4254" type="range" min="0" max="24" step="1"
-                    value={project.layout.cornerRadius ?? themeTokens.panelRadius ?? 10}
-                    onChange={(e) => updateLayout({ cornerRadius: Number(e.target.value) })} />
-                </div>
-                <div className="range-value" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-                  <span>{project.layout.cornerRadius ?? themeTokens.panelRadius ?? 10}px</span>
-                  {project.layout.cornerRadius != null && (
-                    <button type="button" style={{ fontSize: 10, padding: '1px 5px', background: 'none', border: '1px solid #cbd5e1', borderRadius: 4, cursor: 'pointer', color: '#64748b' }}
-                      onClick={() => updateLayout({ cornerRadius: null })} title="Reset to theme default">↺</button>
-                  )}
-                </div>
-              </div>
-
-              <button
-                type="button"
-                className="secondary-btn"
-                style={{ width: '100%', marginTop: 6, fontSize: 12 }}
-                onClick={() => updateLayout({ cornerLayout: null, titleCorner: 'tl', logoCorner: 'tl', insetCorner: 'tr', northArrowCorner: 'br', scaleBarCorner: 'bl', legendCorner: 'bl' })}
-                title="Move all elements back to their default corner positions"
-              >
-                Reset Element Positions
-              </button>
-            </div>
-          </section>
-          <div className={`logo-upload-card${project.layout.logo ? ' has-logo' : ''}`}>
-            {project.layout.logo ? (
-              <>
-                <img className="logo-thumb" src={project.layout.logo} alt="Logo" />
-                <div className="logo-card-info">
-                  <span className="logo-card-status">Brand colors applied</span>
-                  <div className="logo-card-actions">
-                    <button className="btn compact" type="button" onClick={() => logoInputRef.current?.click()}>Replace</button>
-                    <button className="secondary-btn compact" type="button" onClick={() => updateLayout({ logo: null, accentColor: null, titleBgColor: null, titleFgColor: null })}>Remove</button>
-                  </div>
-                </div>
-              </>
-            ) : (
-              <>
-                <button className="logo-upload-btn" type="button" onClick={() => logoInputRef.current?.click()}>
-                  <span className="logo-upload-icon">↑</span> Upload Logo
-                </button>
-                <span className="logo-card-hint">Auto-applies your brand colors</span>
-              </>
-            )}
-          </div>
-          {project.layout.logo ? (
-            <div className="control-row inline-2">
-              <div>
-                <label htmlFor="f-logo-opacity">Logo Opacity</label>
-                <input id="f-logo-opacity" type="range" min="0.1" max="1" step="0.05" value={project.layout.logoOpacity ?? 1} onChange={(e) => updateLayout({ logoOpacity: Number(e.target.value) })} />
-              </div>
-              <div className="range-value">{Math.round((project.layout.logoOpacity ?? 1) * 100)}%</div>
-            </div>
-          ) : null}
-          <input ref={logoInputRef} type="file" accept="image/*" onChange={handleLogoChange} hidden />
-          <section className="control-section cs-collapsible">
-            <h2 className="control-section-heading">
-              <button
-                type="button"
-                className="section-toggle-btn"
-                onClick={() => toggleSection('customizeDesign')}
-                aria-expanded={!collapsedSections.customizeDesign}
-                aria-controls="section-customizeDesign"
-              >Customize design <span aria-hidden="true" className={`section-chevron${collapsedSections.customizeDesign ? '' : ' open'}`}>›</span></button>
-            </h2>
-            {!collapsedSections.customizeDesign && <div id="section-customizeDesign" className="control-grid">
-              <p className="small-note">The pieces a map type sets for you. Change one and the map type reads “Custom”.</p>
-              <div className="control-row">
-                <label htmlFor="f-template-4142">Template</label>
-                <select id="f-template-4142"
-                  value={project.layout.templateId || 'technical_results_v2'}
-                  onChange={(e) => {
-                    const tid = e.target.value;
-                    const themeMap = {
-                      'technical_results_v2': 'investor_clean',
-                      'ni_43101_technical': 'ni_43101',
-                      'side_panel': 'technical_sharp',
-                    };
-                    const extra = tid === 'side_panel' ? {
-                      sidePanelPositions: {},
-                      sidePanelGrid: DEFAULT_SIDE_PANEL_GRID,
-                      insetEnabled: true,
-                      insetHeightPx: null,
-                      legendHeightPx: null,
-                      titleHeightPx: 108,
-                    } : {};
-                    updateLayout({ templateId: tid, themeId: themeMap[tid] || 'investor_clean', stripTitle: '', stripSubtitle: '', ...extra });
-                  }}
-                >
-                  <option value="technical_results_v2">Standard</option>
-                  <option value="ni_43101_technical">NI 43-101</option>
-                  <option value="side_panel">Technical</option>
-                </select>
-              </div>
-              {project.layout.templateId === 'side_panel' && Object.keys(project.layout.sidePanelPositions || {}).length > 0 && (
-                <div style={{ padding: '4px 0 6px' }}>
-                  <button className="secondary-btn" style={{ width: '100%', fontSize: 12 }} onClick={() => updateLayout({ sidePanelPositions: {} })}>
-                    Reset Panel Layout
-                  </button>
-                </div>
-              )}
-              <div className="control-row">
-                <label htmlFor="f-mode-5038">Mode</label>
-                <select id="f-mode-5038" value={project.layout.mode} onChange={(e) => applyMode(e.target.value)}>
-                  {Object.entries(TEMPLATE_MODES).map(([value, label]) => (
-                    <option key={value} value={value}>{label}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="control-row">
-                <label htmlFor="f-design-theme-5046">Design Theme</label>
-                <select id="f-design-theme-5046" value={project.layout.themeId || 'investor_clean'} onChange={(e) => updateLayout({ themeId: e.target.value })}>
-                  {Object.entries(TEMPLATE_THEMES).map(([value, label]) => (
-                    <option key={value} value={value}>{label}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="color-overrides-grid">
-                <div className="color-override-cell">
-                  <label htmlFor="f-title-bg-5055">Title bg</label>
-                  <ColorField id="f-title-bg-5055"
-                    value={project.layout.titleBgColor || themeTokens.titleFill?.replace(/rgba?\([^)]+\)/i, '') || '#0c1a35'}
-                    onChange={(e) => updateLayout({ titleBgColor: e.target.value })}
-                    title="Title block background"
-                    brandColors={brandColors}
-                    onReset={project.layout.titleBgColor ? () => updateLayout({ titleBgColor: null }) : undefined}
-                  />
-                </div>
-                <div className="color-override-cell">
-                  <label htmlFor="f-title-text-5065">Title text</label>
-                  <ColorField id="f-title-text-5065"
-                    value={project.layout.titleFgColor || themeTokens.titleText || '#ffffff'}
-                    onChange={(e) => updateLayout({ titleFgColor: e.target.value })}
-                    title="Title text color"
-                    brandColors={brandColors}
-                    onReset={project.layout.titleFgColor ? () => updateLayout({ titleFgColor: null }) : undefined}
-                  />
-                </div>
-                <div className="color-override-cell">
-                  <label htmlFor="f-panel-bg-5075">Panel bg</label>
-                  <ColorField id="f-panel-bg-5075"
-                    value={project.layout.panelBgColor || '#ffffff'}
-                    onChange={(e) => updateLayout({ panelBgColor: e.target.value })}
-                    title="Overlay panel background"
-                    brandColors={brandColors}
-                    onReset={project.layout.panelBgColor ? () => updateLayout({ panelBgColor: null }) : undefined}
-                  />
-                </div>
-                <div className="color-override-cell">
-                  <label htmlFor="f-panel-text-5085">Panel text</label>
-                  <ColorField id="f-panel-text-5085"
-                    value={project.layout.panelFgColor || themeTokens.bodyText || '#1e293b'}
-                    onChange={(e) => updateLayout({ panelFgColor: e.target.value })}
-                    title="Panel text color"
-                    brandColors={brandColors}
-                    onReset={project.layout.panelFgColor ? () => updateLayout({ panelFgColor: null }) : undefined}
-                  />
-                </div>
-                <div className="color-override-cell">
-                  <label htmlFor="f-accent-5095">Accent</label>
-                  <ColorField id="f-accent-5095"
-                    value={project.layout.accentColor || themeTokens.titleAccent || '#2563eb'}
-                    onChange={(e) => updateLayout({ accentColor: e.target.value })}
-                    title="Accent color (stripe, callout borders)"
-                    brandColors={brandColors}
-                    onReset={project.layout.accentColor ? () => updateLayout({ accentColor: null }) : undefined}
-                  />
-                </div>
-                {(project.layout.titleBgColor || project.layout.titleFgColor || project.layout.panelBgColor || project.layout.panelFgColor || project.layout.accentColor) && (
-                  <div className="color-override-cell">
-                    <label>&nbsp;</label>
-                    <button className="swatch-reset-all" type="button" onClick={() => updateLayout({ titleBgColor: null, titleFgColor: null, panelBgColor: null, panelFgColor: null, accentColor: null })}>Reset all</button>
-                  </div>
-                )}
-              </div>
-              <div className="button-row">
-                <button className="btn" type="button" onClick={autoFrameAll}>Refit Map</button>
-                <button className="btn primary" type="button" onClick={improveMap}>Improve Map</button>
-              </div>
-
-              {/* Fonts */}
-              <details className="sub-details">
-                <summary>Fonts</summary>
-                <div className="sub-details-body">
-                  <div className="control-row inline-2">
-                    <div><label htmlFor="f-title-5121">Title</label><FontSelect id="f-title-5121" value={project.layout.fonts?.title} brandFonts={brandFonts} onChange={(e) => updateLayout({ fonts: { title: e.target.value } })} /></div>
-                    <div><label htmlFor="f-legend-5122">Legend</label><FontSelect id="f-legend-5122" value={project.layout.fonts?.legend} brandFonts={brandFonts} onChange={(e) => updateLayout({ fonts: { legend: e.target.value } })} /></div>
-                  </div>
-                  <div className="control-row inline-2">
-                    <div><label htmlFor="f-labels-5125">Labels</label><FontSelect id="f-labels-5125" value={project.layout.fonts?.label} brandFonts={brandFonts} onChange={(e) => updateLayout({ fonts: { label: e.target.value } })} /></div>
-                    <div><label htmlFor="f-callouts-5126">Callouts</label><FontSelect id="f-callouts-5126" value={project.layout.fonts?.callout} brandFonts={brandFonts} onChange={(e) => updateLayout({ fonts: { callout: e.target.value } })} /></div>
-                  </div>
-                </div>
-              </details>
-
-              {/* NI 43-101 Title Strip fields */}
-              {project.layout.templateId === 'ni_43101_technical' && (
-                <details className="sub-details" open>
-                  <summary>NI 43-101 Title Strip</summary>
-                  <div className="sub-details-body">
-                    <div className="control-row">
-                      <label htmlFor="f-figure-title-5137">Figure Title</label>
-                      <input id="f-figure-title-5137" type="text" value={project.layout.stripTitle || ''} placeholder="(leave blank to hide)" onChange={(e) => updateLayout({ stripTitle: e.target.value })} />
-                    </div>
-                    <div className="control-row">
-                      <label htmlFor="f-subtitle-property-5141">Subtitle / Property</label>
-                      <input id="f-subtitle-property-5141" type="text" value={project.layout.stripSubtitle || ''} placeholder="(optional)" onChange={(e) => updateLayout({ stripSubtitle: e.target.value })} />
-                    </div>
-                    <div className="control-row">
-                      <label htmlFor="f-strip-position-5145">Strip Position</label>
-                      <select id="f-strip-position-5145" value={project.layout.titleStripPosition || 'bottom'} onChange={(e) => updateLayout({ titleStripPosition: e.target.value })}>
-                        <option value="bottom">Bottom</option>
-                        <option value="top">Top</option>
-                      </select>
-                    </div>
-                    <div className="control-row">
-                      <label htmlFor="f-scale-override-5152">Scale Override</label>
-                      <input id="f-scale-override-5152" type="text" value={project.layout.manualScaleDenom || ''} placeholder="e.g. 25000 (auto if blank)" onChange={(e) => updateLayout({ manualScaleDenom: e.target.value })} />
-                    </div>
-                    <div className="control-row slider">
-                      <label htmlFor="f-text-size-5156">Text Size</label>
-                      <input id="f-text-size-5156" type="range" min="0.7" max="1.4" step="0.05" value={project.layout.stripFontScale || 1} onChange={(e) => updateLayout({ stripFontScale: parseFloat(e.target.value) })} style={{ flex: 1 }} />
-                      <span className="range-value">{Math.round((project.layout.stripFontScale || 1) * 100)}%</span>
-                    </div>
-                    <div className="control-row">
-                      <label htmlFor="f-qualified-person-5161">Qualified Person</label>
-                      <input id="f-qualified-person-5161" type="text" value={project.layout.qpName || ''} placeholder="Name, P.Geo." onChange={(e) => updateLayout({ qpName: e.target.value })} />
-                    </div>
-                    <div className="control-row">
-                      <label htmlFor="f-qp-credentials-5165">QP Credentials</label>
-                      <input id="f-qp-credentials-5165" type="text" value={project.layout.qpCredentials || ''} placeholder="P.Geo., M.Sc." onChange={(e) => updateLayout({ qpCredentials: e.target.value })} />
-                    </div>
-                    <div className="control-row">
-                      <label htmlFor="f-company-5169">Company</label>
-                      <input id="f-company-5169" type="text" value={project.layout.companyName || ''} placeholder="Company Name" onChange={(e) => updateLayout({ companyName: e.target.value })} />
-                    </div>
-                    <div className="control-row">
-                      <label htmlFor="f-figure-no-5173">Figure No.</label>
-                      <input id="f-figure-no-5173" type="text" value={project.layout.figureNumber || ''} placeholder="Fig. 3-2" onChange={(e) => updateLayout({ figureNumber: e.target.value })} />
-                    </div>
-                    <div className="control-row">
-                      <label htmlFor="f-revision-5177">Revision</label>
-                      <input id="f-revision-5177" type="text" value={project.layout.figureRevision || ''} placeholder="Rev. A" onChange={(e) => updateLayout({ figureRevision: e.target.value })} />
-                    </div>
-                    <div className="control-row">
-                      <label htmlFor="f-projection-5181">Projection</label>
-                      <input id="f-projection-5181"
-                        type="text"
-                        value={project.layout.projectionName || ''}
-                        placeholder="e.g. NAD83 / UTM Zone 10N"
-                        onChange={(e) => updateLayout({ projectionName: e.target.value })}
-                      />
-                    </div>
-                  </div>
-                </details>
-              )}
-
-              {/* Coordinate frame and datum: the UTM tick frame any template
-                  can wear (NI 43-101 always does), and the projection line
-                  under the scale bar that says what the ticks are in. */}
-              <details className="sub-details">
-                <summary>Coordinate Frame &amp; Datum</summary>
-                <div className="sub-details-body">
-                  <label className="toggle-row">
-                    <input
-                      type="checkbox"
-                      checked={project.layout.templateId === 'ni_43101_technical' || !!project.layout.showCoordinateFrame}
-                      disabled={project.layout.templateId === 'ni_43101_technical'}
-                      onChange={(e) => updateLayout({ showCoordinateFrame: e.target.checked })}
-                    />
-                    <span>UTM coordinate frame (ticks and labels on every edge)</span>
-                  </label>
-                  <label className="toggle-row">
-                    <input type="checkbox" checked={!!project.layout.showProjectionLabel} onChange={(e) => updateLayout({ showProjectionLabel: e.target.checked })} />
-                    <span>Projection under the scale bar</span>
-                  </label>
-                  <div className="control-row" style={{ marginTop: 6 }}>
-                    <label htmlFor="f-projection-frame">Projection / Datum</label>
-                    <input
-                      id="f-projection-frame"
-                      type="text"
-                      value={project.layout.projectionName || ''}
-                      placeholder={projectionLabel({}, leafletMapRef.current)}
-                      onChange={(e) => updateLayout({ projectionName: e.target.value })}
-                    />
-                  </div>
-                  <div className="small-note">Leave blank to derive the UTM zone from the map centre. Write the datum you work in, e.g. NAD83 / UTM Zone 7N.</div>
-                </div>
-              </details>
-
-              {/* Panel box visibility */}
-              <details className="sub-details">
-                <summary>Panel Boxes</summary>
-                <div className="sub-details-body">
-                  <div className="small-note" style={{ marginBottom: 8 }}>Hide the background box from any panel — text stays visible.</div>
-                  <label className="toggle-row"><input type="checkbox" checked={!project.layout.titleTransparent} onChange={(e) => updateLayout({ titleTransparent: !e.target.checked })} /><span>Title box</span></label>
-                  <label className="toggle-row"><input type="checkbox" checked={!project.layout.legendTransparent} onChange={(e) => updateLayout({ legendTransparent: !e.target.checked })} /><span>Legend box</span></label>
-                  <label className="toggle-row"><input type="checkbox" checked={!project.layout.logoTransparent} onChange={(e) => updateLayout({ logoTransparent: !e.target.checked })} /><span>Logo box</span></label>
-                  <label className="toggle-row"><input type="checkbox" checked={!project.layout.scaleBarTransparent} onChange={(e) => updateLayout({ scaleBarTransparent: !e.target.checked })} /><span>Scale bar box</span></label>
-                  <label className="toggle-row"><input type="checkbox" checked={!project.layout.northArrowTransparent} onChange={(e) => updateLayout({ northArrowTransparent: !e.target.checked })} /><span>Compass box</span></label>
-                </div>
-              </details>
-
-              {/* Legend entries — rename, remove, add. Its own section rather
-                  than buried in Text & Metadata: this edits what the legend
-                  SAYS, which is a different job from how it is set. */}
-              <details className="sub-details">
-                <summary>Legend Items</summary>
-                <div className="sub-details-body">
-                  <LegendEditor
-                    derivedItems={derivedLegendItems}
-                    layout={project.layout}
-                    updateLayout={updateLayout}
-                  />
-                </div>
-              </details>
-
-              {/* Text & Metadata */}
-              <details className="sub-details">
-                <summary>Text & Metadata</summary>
-                <div className="sub-details-body">
-                  <div className="control-row"><label htmlFor="f-legend-title-5208">Legend Title</label><input id="f-legend-title-5208" value={localLegendTitle} onChange={(e) => { const val = e.target.value; setLocalLegendTitle(val); metaDirtyRef.current.legendTitle = true; clearTimeout(legendTitleDebounceRef.current); legendTitleDebounceRef.current = setTimeout(() => { updateLayout({ legendTitle: val }); metaDirtyRef.current.legendTitle = false; }, 300); }} placeholder="Legend" /></div>
-                  <div className="control-row slider">
-                    <label htmlFor="f-text-size-5210">Text Size</label>
-                    <input id="f-text-size-5210" type="range" min="0.6" max="1.5" step="0.05" value={project.layout.legendFontScale ?? 1} onChange={(e) => updateLayout({ legendFontScale: parseFloat(e.target.value) })} style={{ flex: 1 }} />
-                    <span className="range-value">{Math.round((project.layout.legendFontScale ?? 1) * 100)}%</span>
-                  </div>
-                  <div className="control-row"><label htmlFor="f-footer-disclaimer-5214">Footer / Disclaimer</label><input id="f-footer-disclaimer-5214" value={localFooterText} onChange={(e) => { const val = e.target.value; setLocalFooterText(val); metaDirtyRef.current.footerText = true; clearTimeout(footerTextDebounceRef.current); footerTextDebounceRef.current = setTimeout(() => { updateLayout({ footerText: val }); metaDirtyRef.current.footerText = false; }, 300); }} placeholder="e.g. For internal use only" /></div>
-                  <div className="control-row inline-2">
-                    <div><label htmlFor="f-map-date-5216">Map Date</label><input id="f-map-date-5216" value={localMapDate} onChange={(e) => { const val = e.target.value; setLocalMapDate(val); metaDirtyRef.current.mapDate = true; clearTimeout(mapDateDebounceRef.current); mapDateDebounceRef.current = setTimeout(() => { updateLayout({ mapDate: val }); metaDirtyRef.current.mapDate = false; }, 300); }} placeholder="e.g. April 2025" /></div>
-                    <div><label htmlFor="f-project-5217">Project #</label><input id="f-project-5217" value={localProjectNumber} onChange={(e) => { const val = e.target.value; setLocalProjectNumber(val); metaDirtyRef.current.projectNumber = true; clearTimeout(projectNumberDebounceRef.current); projectNumberDebounceRef.current = setTimeout(() => { updateLayout({ projectNumber: val }); metaDirtyRef.current.projectNumber = false; }, 300); }} placeholder="e.g. P-2024-01" /></div>
-                  </div>
-                  <div className="control-row"><label htmlFor="f-scale-note-5219">Scale Note</label><input id="f-scale-note-5219" value={localMapScaleNote} onChange={(e) => { const val = e.target.value; setLocalMapScaleNote(val); metaDirtyRef.current.mapScaleNote = true; clearTimeout(mapScaleNoteDebounceRef.current); mapScaleNoteDebounceRef.current = setTimeout(() => { updateLayout({ mapScaleNote: val }); metaDirtyRef.current.mapScaleNote = false; }, 300); }} placeholder="e.g. 1:50,000" /></div>
-                </div>
-              </details>
-
-              {/* Region Highlights */}
-              <details className="sub-details">
-                <summary>Region Highlights {(project.layout.regionHighlights || []).length > 0 && <span className="sub-badge">{project.layout.regionHighlights.length}</span>}</summary>
-                <div className="sub-details-body">
-                  {(project.layout.regionHighlights || []).map((h, i) => {
-                    const regionName = regionsNA.find((r) => r.id === h.regionId)?.name || h.regionId;
-                    return (
-                      <div key={h.regionId} className="region-highlight-row">
-                        <span className="region-highlight-name">{regionName}</span>
-                        <ColorField value={h.color || '#ef4444'} title="Color" onChange={(e) => updateLayout({ regionHighlights: project.layout.regionHighlights.map((x, j) => j === i ? { ...x, color: e.target.value } : x) })} brandColors={brandColors} />
-                        <input type="range" min="0.1" max="1" step="0.05" value={h.opacity ?? 0.45} title="Opacity" onChange={(e) => updateLayout({ regionHighlights: project.layout.regionHighlights.map((x, j) => j === i ? { ...x, opacity: Number(e.target.value) } : x) })} />
-                        <span className="range-label">{Math.round((h.opacity ?? 0.45) * 100)}%</span>
-                        <button className="icon-btn remove-btn" type="button" title="Remove" onClick={() => updateLayout({ regionHighlights: project.layout.regionHighlights.filter((_, j) => j !== i) })}>×</button>
-                      </div>
-                    );
-                  })}
-                  <div className="region-highlight-add-row">
-                    <select value="" onChange={(e) => { const id = e.target.value; if (!id || (project.layout.regionHighlights || []).some((h) => h.regionId === id)) return; updateLayout({ regionHighlights: [...(project.layout.regionHighlights || []), { regionId: id, color: '#ef4444', opacity: 0.45 }] }); }}>
-                      <option value="">+ Add Region…</option>
-                      {regionsNA.map((r) => <option key={r.id} value={r.id}>{r.name} ({r.abbrev})</option>)}
-                    </select>
-                  </div>
-                </div>
-              </details>
-
-              {/* Brand Kits */}
-              <div className="template-manager-block">
-                <div className="template-manager-header">
-                  <span className="template-manager-label">Brand Kits</span>
-                  {user && (
-                    <button className="btn compact secondary" type="button" onClick={() => setShowBrandKitManager(true)}>
-                      {cloudTemplates.length > 0 ? 'Manage' : '+ New kit'}
-                    </button>
-                  )}
-                </div>
-                {!user ? (
-                  <p className="template-manager-hint">Sign in to save and apply brand kits.</p>
-                ) : cloudTemplates.length === 0 ? (
-                  <p className="template-manager-hint">No brand kits yet — open the studio to create one.</p>
-                ) : (
-                  <div className="bk-side-list">
-                    {cloudTemplates.map((tmpl) => (
-                      <div key={tmpl.id} className="bk-side-card">
-                        <img className="bk-side-swatch" src={renderBrandKitSwatch(tmpl.config || {}, { width: 132, height: 46 })} alt="" />
-                        <div className="bk-side-info">
-                          <span className="bk-side-name" title={tmpl.name}>
-                            {tmpl.name || 'Untitled kit'}
-                            {tmpl.is_default && <span className="bk-side-badge">Default</span>}
-                          </span>
-                          <button
-                            className="btn compact"
-                            type="button"
-                            onClick={() => {
-                              const newLayout = applyBrandKitConfig(tmpl.config || {}, project.layout);
-                              updateLayout(Object.fromEntries(Object.entries(newLayout).filter(([k]) => newLayout[k] !== project.layout[k])));
-                              setUploadStatus({ type: 'success', message: `"${tmpl.name}" applied.` });
-                            }}
-                          >Apply</button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>}
-          </section>
-          <section className="control-section cs-collapsible">
-            <h2 className="control-section-heading">
-              <button
-                type="button"
-                className="section-toggle-btn"
-                onClick={() => toggleSection('elements')}
-                aria-expanded={!collapsedSections.elements}
-                aria-controls="section-elements"
-              >Inset <span aria-hidden="true" className={`section-chevron${collapsedSections.elements ? '' : ' open'}`}>›</span></button>
-            </h2>
-            {!collapsedSections.elements && <div id="section-elements" className="control-grid">
-              <div className="button-row three">
-                <button className="btn" type="button" onClick={() => insetInputRef.current?.click()}>Upload Inset</button>
-              </div>
-              {project.layout.insetImage ? (
-                <div className="inset-status-card">
-                  <div className="inset-preview"><img src={project.layout.insetImage} alt="Inset preview" /></div>
-                  <button className="secondary-btn" type="button" onClick={() => updateLayout({ insetImage: null, insetEnabled: true })}>Remove Inset Image</button>
-                </div>
-              ) : null}
-              {project.layout.autoInsetRegion && !project.layout.insetImage && project.layout.insetEnabled !== false && (
-                <div className="inset-detected-badge">Detected: {project.layout.autoInsetRegion.name}</div>
-              )}
-              {!project.layout.insetImage && (
-                <div className="control-row">
-                  <label htmlFor="f-inset-mode">Inset Style</label>
-                  {/* Two choices, because there were only ever two ANSWERS. The
-                      old list offered province / country / regional / secondary
-                      zoom, which all render the same generic backdrop at slightly
-                      different zoom factors — indistinguishable in the panel, so
-                      the extra entries read as broken rather than as options.
-                      Standard keeps whichever of those a saved project already
-                      has; only an explicit change collapses it. A map tile
-                      locator (from the MCP connector) shows as its own entry so
-                      Satellite can still be chosen over it. */}
-                  <select id="f-inset-mode"
-                    value={insetStyle(project.layout)}
-                    onChange={(e) => updateLayout(insetStylePatch(e.target.value))}>
-                    <option value="standard">Standard</option>
-                    <option value="satellite_locator">Satellite</option>
-                    {insetStyle(project.layout) === 'tiles' && (
-                      <option value="tiles">Map tiles ({basemapConfig(project.layout.insetBasemap).label})</option>
-                    )}
-                  </select>
-                </div>
-              )}
-              <div className="control-row inline-2">
-                <div><label htmlFor="f-inset-title-5314">Inset Title</label><input id="f-inset-title-5314" value={project.layout.insetTitle ?? 'Project Locator'} onChange={(e) => updateLayout({ insetTitle: e.target.value })} placeholder="Project Locator" /></div>
-                <div><label htmlFor="f-inset-label-5315">Inset Label</label><input id="f-inset-label-5315" value={project.layout.insetLabel ?? ''} onChange={(e) => updateLayout({ insetLabel: e.target.value })} placeholder={project.layout.autoInsetRegion?.name || 'Province / State'} /></div>
-              </div>
-              {project.layout.autoInsetRegion && !project.layout.insetImage && (
-                <div className="control-row inline-2" style={{ flexWrap: 'wrap', gap: 8 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <label htmlFor="f-region-5320" style={{ marginBottom: 0 }}>Region</label>
-                    <ColorField id="f-region-5320" value={project.layout.insetRegionFill || '#dce8f5'} onChange={(e) => updateLayout({ insetRegionFill: e.target.value })} title="Region fill" brandColors={brandColors} />
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <label htmlFor="f-background-5324" style={{ marginBottom: 0 }}>Background</label>
-                    <ColorField id="f-background-5324" value={project.layout.insetBgFill || '#f0f4f8'} onChange={(e) => updateLayout({ insetBgFill: e.target.value })} title="Background" brandColors={brandColors} />
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <label htmlFor="f-marker-5328" style={{ marginBottom: 0 }}>Marker</label>
-                    <ColorField id="f-marker-5328" value={project.layout.insetMarkerColor || '#2563eb'} onChange={(e) => updateLayout({ insetMarkerColor: e.target.value })} title="Marker color" brandColors={brandColors} />
-                  </div>
-                </div>
-              )}
-              <input ref={insetInputRef} type="file" accept="image/*" onChange={handleInsetImageChange} hidden />
-            </div>}
-          </section>
-          <section className="control-section cs-collapsible">
-            <h2 className="control-section-heading">
-              <button
-                type="button"
-                className="section-toggle-btn"
-                onClick={() => toggleSection('refoverlays')}
-                aria-expanded={!collapsedSections.refoverlays}
-                aria-controls="section-refoverlays"
-              >Reference Overlays <span aria-hidden="true" className={`section-chevron${collapsedSections.refoverlays ? '' : ' open'}`}>›</span></button>
-            </h2>
-            {!collapsedSections.refoverlays && <div id="section-refoverlays" className="toggle-grid">
-              <div className="control-row inline-2">
-                <div>
-                  <label htmlFor="f-overlay-opacity-5350">Overlay Opacity</label>
-                  <input id="f-overlay-opacity-5350" type="range" min="0.2" max="1" step="0.05" value={project.layout.referenceOpacity ?? 0.65} onChange={(e) => updateLayout({ referenceOpacity: Number(e.target.value) })} />
-                </div>
-                <div className="range-value">{Math.round((project.layout.referenceOpacity ?? 0.65) * 100)}%</div>
-              </div>
-              <label className="toggle-row"><input type="checkbox" checked={!!referenceOverlays.context} onChange={(e) => updateLayout({ referenceOverlays: { context: e.target.checked } })} /> <span>Roads + Settlements</span></label>
-              <label className="toggle-row"><input type="checkbox" checked={!!referenceOverlays.labels} onChange={(e) => updateLayout({ referenceOverlays: { labels: e.target.checked } })} /> <span>Reference Labels</span></label>
-              <label className="toggle-row"><input type="checkbox" checked={!!referenceOverlays.rail} onChange={(e) => updateLayout({ referenceOverlays: { rail: e.target.checked } })} /> <span>Railways</span></label>
-              <label className="toggle-row"><input type="checkbox" checked={!!referenceOverlays.geology} onChange={(e) => updateLayout({ referenceOverlays: { geology: e.target.checked } })} /> <span>Bedrock Geology (USGS)</span></label>
-              {referenceOverlays.geology && (
-                <p className="overlay-help-note">{OVERLAY_DESCRIPTIONS.geology}</p>
-              )}
-              <details className="sub-details" style={{ marginTop: 8 }}>
-                <summary>Add a tile or WMS service</summary>
-                <div className="sub-details-body">
-                  <div className="small-note" style={{ marginBottom: 6 }}>A published map service — a survey's magnetics or bedrock geology, say. It becomes a layer under Layers, above the basemap and below your data.</div>
-                  <div className="control-row inline-2">
-                    <div>
-                      <label htmlFor="f-tile-kind">Type</label>
-                      <select id="f-tile-kind" value={customTile.kind} onChange={(e) => setCustomTile((c) => ({ ...c, kind: e.target.value, error: '' }))}>
-                        <option value="xyz">Tile URL ({'{z}/{x}/{y}'})</option>
-                        <option value="wms">WMS</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label htmlFor="f-tile-name">Name</label>
-                      <input id="f-tile-name" value={customTile.name} placeholder="e.g. YGS magnetics" onChange={(e) => setCustomTile((c) => ({ ...c, name: e.target.value }))} />
-                    </div>
-                  </div>
-                  <div className="control-row">
-                    <label htmlFor="f-tile-url">{customTile.kind === 'wms' ? 'WMS endpoint' : 'Tile URL template'}</label>
-                    <input id="f-tile-url" value={customTile.url} placeholder={customTile.kind === 'wms' ? 'https://…/geoserver/wms' : 'tiles/{z}/{x}/{y}.png (https)'} onChange={(e) => setCustomTile((c) => ({ ...c, url: e.target.value, error: '' }))} />
-                  </div>
-                  {customTile.kind === 'wms' && (
-                    <div className="control-row">
-                      <label htmlFor="f-tile-layers">WMS layers</label>
-                      <input id="f-tile-layers" value={customTile.layers} placeholder="layer name(s), comma separated" onChange={(e) => setCustomTile((c) => ({ ...c, layers: e.target.value }))} />
-                    </div>
-                  )}
-                  <div className="control-row">
-                    <label htmlFor="f-tile-credit">Credit (printed on the export)</label>
-                    <input id="f-tile-credit" value={customTile.attribution} placeholder="e.g. Yukon Geological Survey" onChange={(e) => setCustomTile((c) => ({ ...c, attribution: e.target.value }))} />
-                  </div>
-                  {customTile.error && <p className="overlay-error-note">{customTile.error}</p>}
-                  <button className="secondary-btn" type="button" style={{ width: '100%' }} onClick={addCustomTileLayer}>Add as layer</button>
-                </div>
-              </details>
-              {Object.keys(overlayErrors).filter((k) => referenceOverlays[k]).length > 0 && (
-                <p className="overlay-error-note">
-                  {Object.keys(overlayErrors).filter((k) => referenceOverlays[k]).map((k) => OVERLAY_LABELS[k] || k).join(', ')}
-                  {' '}could not be loaded — the map service did not respond. Your own layers are unaffected.
-                </p>
-              )}
-            </div>}
-          </section>
-          </>
-        )}
-
         {inspectorTab === 'export' && (
           <>
-          <section className="control-section cs-collapsible">
-            <h2 className="control-section-heading">
-              <button
-                type="button"
-                className="section-toggle-btn"
-                onClick={() => toggleSection('export')}
-                aria-expanded={!collapsedSections.export}
-                aria-controls="section-export"
-              >Export <span aria-hidden="true" className={`section-chevron${collapsedSections.export ? '' : ' open'}`}>›</span></button>
-            </h2>
-            {!collapsedSections.export && <div id="section-export" className="control-grid">
-              <RatioSwitcher activeRatio={activeRatio} onRatioChange={handleRatioChange} />
+          <section className="control-section">
+            <h2 className="ins-group-title">Download</h2>
+            <div className="control-grid">
+              <div className="button-row ins-export-buttons">
+                <button className={`btn primary${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('png'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export PNG'}</button>
+                <button className={`btn${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('svg'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export SVG'}</button>
+                <button className={`btn${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('svg_ai'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title="SVG bundled with separate basemap PNG — opens correctly in Adobe Illustrator">{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'SVG (Illustrator)'}</button>
+                <button className={`btn${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('pdf'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export PDF'}</button>
+              </div>
+              {exportError && <div className="export-error-msg">{exportError}</div>}
+            </div>
+          </section>
+          <section className="control-section">
+            <h2 className="ins-group-title">Size</h2>
+            <div className="control-grid">
+              <div className="ins-frame-summary">
+                <span>Frame: <strong>{activeRatio ? `${EXPORT_RATIOS[activeRatio].label} ${EXPORT_RATIOS[activeRatio].description}` : (project.layout.exportSettings.customWidth || 0) > 0 ? `Custom ${project.layout.exportSettings.customWidth} × ${project.layout.exportSettings.customHeight} px` : 'Map window'}</strong></span>
+                <button type="button" className="link-btn" onClick={() => goToStep('style', 'frame_link')}>Change</button>
+              </div>
               <div className="control-row inline-2">
                 <div>
                   <label htmlFor="f-filename-5376">Filename</label>
@@ -7040,14 +7132,7 @@ export default function App({ initialAction = null }) {
                   <p className="export-custom-hint">The editing canvas matches this size — pan &amp; zoom to frame, then export at exactly {project.layout.exportSettings.customWidth || 0}×{project.layout.exportSettings.customHeight || 0}px.</p>
                 </div>
               )}
-              <div className="button-row">
-                <button className={`btn primary${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('png'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export PNG'}</button>
-                <button className={`btn${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('svg'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export SVG'}</button>
-                <button className={`btn${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('svg_ai'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title="SVG bundled with separate basemap PNG — opens correctly in Adobe Illustrator">{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'SVG (Illustrator)'}</button>
-                <button className={`btn${exporting ? ' loading' : !mapReady ? ' initializing' : ''}`} type="button" onClick={() => { try { handleExportClick('pdf'); } catch (err) { setExportError(`Export failed: ${err.message}`); } }} disabled={!mapReady || exporting} title={!mapReady ? 'Map is initializing, please wait…' : ''}>{exporting ? 'Exporting…' : !mapReady ? 'Initializing…' : 'Export PDF'}</button>
-              </div>
-              {exportError && <div className="export-error-msg">{exportError}</div>}
-            </div>}
+            </div>
           </section>
           </>
         )}

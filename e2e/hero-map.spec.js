@@ -12,6 +12,8 @@ test('hero opens the pictured, editable exploration map and exports a PNG', asyn
   await expect(page.locator('.map-stage')).toContainText('Geology, Soil Geochemistry & Drill Targets');
   await expect(page.locator('.map-stage img[alt="Logo"]')).toBeVisible();
 
+  // The demo lands on the Style step; its layers are listed under Data.
+  await page.getByRole('tab', { name: 'Data', exact: true }).click();
   for (const name of ['Bedrock Geology', 'Claim Boundary', 'Access / power corridor', 'Soil Samples (Cu ppm)', 'Target Areas', 'Drill Collars']) {
     await expect(page.getByRole('button', { name: `${name} visibility`, exact: true })).toHaveAttribute('aria-pressed', 'true');
   }
@@ -46,9 +48,13 @@ test('hero opens the pictured, editable exploration map and exports a PNG', asyn
   await soils.click();
   await expect(points).toHaveCount(fullCount);
   // Layer names can be edited: this is the working editor, not a static view.
+  // The selected layer's settings live in Customize › Layers.
+  await page.getByRole('tab', { name: 'Customize', exact: true }).click();
+  await page.locator('.ins-acc-heading button', { hasText: /^Layers/ }).click();
   await page.getByRole('textbox', { name: 'Display Label', exact: true }).fill('2024 drill collars');
   await expect(page.getByRole('button', { name: '2024 drill collars visibility', exact: true })).toBeVisible();
 
+  await page.getByRole('tab', { name: 'Export', exact: true }).click();
   await page.getByRole('button', { name: 'Export PNG', exact: true }).first().click();
   await expect(page.getByRole('dialog', { name: 'Export PNG — remove the watermark' })).toBeVisible();
   const downloadReady = page.waitForEvent('download', { timeout: 60_000 });

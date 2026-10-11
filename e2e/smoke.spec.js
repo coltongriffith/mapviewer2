@@ -106,8 +106,7 @@ test.describe('editor', () => {
     await page.goto('/?intent=resume');
     await expect(page.locator('.leaflet-container')).toBeVisible({ timeout: 30_000 });
 
-    // Export settings live in the inspector's Export tab, behind a collapsible
-    // section. Open both if they are not already open.
+    // The download buttons lead the inspector's Export step.
     const exportBtn = page.getByRole('button', { name: /export png/i });
     if (!(await exportBtn.count())) {
       const tab = page.getByRole('tab', { name: /^export$/i });
