@@ -40,6 +40,9 @@ const EVENT_ALLOWLIST = new Set([
   'content_cta_clicked',
   'first_map_checklist_shown',
   'mobile_continue_clicked',
+  // Phone claims viewer: opened, and what the reader did there (props.action).
+  'mobile_viewer_opened',
+  'mobile_viewer_action',
   'onboarding_dismissed',
   // Dashboard v2 product events (see supabase migration 20260713000001 +
   // src/components/admin/metrics.js for the taxonomy these feed).

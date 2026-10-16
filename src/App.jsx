@@ -20,6 +20,7 @@ import BrandMarkInline from './components/BrandMark';
 const MapCanvas = React.lazy(() => import('./components/MapCanvas'));
 const SigninLinkStatus = React.lazy(() => import('./components/SigninLinkStatus'));
 const MobileEditorBanner = React.lazy(() => import('./components/MobileEditorBanner'));
+const MobileClaimsViewer = React.lazy(() => import('./components/MobileClaimsViewer'));
 // The legend editor loads when the Legend group opens.
 const LegendEditor = React.lazy(() => import('./components/LegendEditor'));
 // The Style step's pickers load with the step, not with the editor.
@@ -67,6 +68,7 @@ import { fitProjectToTemplate } from './utils/frameMapForTemplate';
 import { getThemeTokens } from './utils/themeTokens';
 import { saveLead, getLastLeadEmail } from './utils/leadCapture';
 import { trackSearch, trackEvent, trackEventOnce } from './utils/track';
+import { isPhoneDevice } from './utils/device';
 import { createSaveCoordinator, runGuardedSave } from './utils/saveCoordinator';
 import { US_CLAIMS_ENABLED, US_STATES, US_GROUP_LABEL, US_GEOMETRY_DISCLAIMER, isUsJurisdiction } from './utils/jurisdictions';
 import { clampExportSize, canExportFormat, maxPixelRatioFor, PRO_MAX_EXPORT_PIXELS } from './utils/entitlements';
@@ -1113,16 +1115,19 @@ export default function App({ initialAction = null }) {
   // desktop. Shown once per session; impressions tracked to size mobile demand
   // before investing in full touch support.
   const [showMobileBanner, setShowMobileBanner] = useState(false);
+  // On a phone, claims from a registry search or a company page open in the
+  // claims viewer instead of the editor: { source, layerIds, title?, initialSheet? }.
+  // Choosing "Edit on this phone" turns it off for the rest of the visit.
+  const [mobileViewer, setMobileViewer] = useState(null);
+  const mobileViewerOffRef = useRef(false);
+  // Leaving the editor (browser Back, the logo) closes it: coming back later
+  // is a new visit to the editor, not to the last search.
+  useEffect(() => { if (screen !== 'editor') setMobileViewer(null); }, [screen]);
   useEffect(() => {
     if (screen !== 'editor') return;
     let dismissed = false;
     try { dismissed = !!sessionStorage.getItem('em_mobile_banner_dismissed'); } catch { /* noop */ }
-    // innerWidth lies on phones: the editor's ~945px min layout makes mobile
-    // Chrome expand the layout viewport. Detect actual small touch devices by
-    // physical screen size + coarse pointer instead.
-    const isPhone = window.matchMedia?.('(pointer: coarse)')?.matches
-      && Math.min(window.screen?.width || 9999, window.screen?.height || 9999) < 700;
-    if (dismissed || !isPhone) return;
+    if (dismissed || !isPhoneDevice()) return;
     setShowMobileBanner(true);
     trackEvent('mobile_editor_banner_shown', { screenW: window.screen?.width, screenH: window.screen?.height });
   }, [screen]);
@@ -2792,6 +2797,7 @@ export default function App({ initialAction = null }) {
       message: `Imported ${fileName} as ${ROLE_LABELS[role] || 'a layer'}${role === 'other' ? ' — set its role in the layer panel' : ''}.${preserveView ? ' The view was kept.' : ''}`,
       ...(preserveView ? { action: { label: 'Zoom to imported layer', onClick: () => fitMapToLayer(leafletMapRef.current, { geojson }) } } : {}),
     });
+    return id;
   };
 
   // Hand a monitored portfolio (or one claim) to the map editor.
@@ -3159,16 +3165,20 @@ export default function App({ initialAction = null }) {
       clearActiveProjectContext();
 
       if (geojson) {
-        await addGeoJSONAsLayer(geojson, `${label} Claims.geojson`, 'deeplink', null, 'claims');
+        const layerId = await addGeoJSONAsLayer(geojson, `${label} Claims.geojson`, 'deeplink', null, 'claims');
         updateLayout({
           title: `${label} — Mineral Claims`,
           exportSettings: { filename: `${ticker.toLowerCase()}-claims`, pixelRatio: 2 },
         });
         setScreen('editor');
         setUploadStatus({ type: 'success', message: `Loaded ${geojson.features.length} claims — style and export your map.` });
+        // A phone gets the claims viewer; "Claim this page" opens it on the
+        // email hand-off, the phone's way to save a copy to an account.
+        const phone = isPhoneDevice();
+        if (phone) setMobileViewer({ source: 'company', layerIds: [layerId], title: label, initialSheet: wantClaim ? 'desktop' : null });
         if (wantClaim) {
           trackEvent('claim_intent', { ticker, loaded: true }, null);
-          setClaimPrompt({ company: label, loaded: true });
+          if (!phone) setClaimPrompt({ company: label, loaded: true });
         }
       } else if (wantClaim) {
         // No published geometry available — the "Claim this page" CTA must still
@@ -5154,7 +5164,28 @@ export default function App({ initialAction = null }) {
         <SigninLinkStatus status={exportLinkStatus}
           onRetry={() => sendExportLink(exportLinkStatus.email)} onClose={() => setExportLinkStatus(null)} />
       </React.Suspense>}
-      {showMobileBanner && !showAuthFromGate && (
+      {mobileViewer && (
+        <React.Suspense fallback={null}>
+          <MobileClaimsViewer
+            project={project}
+            layerIds={mobileViewer.layerIds}
+            title={mobileViewer.title}
+            source={mobileViewer.source}
+            initialSheet={mobileViewer.initialSheet}
+            user={user}
+            entitlements={entitlements}
+            signInWithMagicLink={signInWithMagicLink}
+            onSaveToAccount={requestAccountSave}
+            onEditHere={() => { mobileViewerOffRef.current = true; setMobileViewer(null); }}
+            onBack={() => {
+              setMobileViewer(null);
+              if (mobileViewer.source === 'company' && window.history.length > 1) window.history.back();
+              else goToLanding();
+            }}
+          />
+        </React.Suspense>
+      )}
+      {showMobileBanner && !showAuthFromGate && !mobileViewer && (
         <React.Suspense fallback={null}>
           <MobileEditorBanner preview={previewMode} hasData={onbStep1} signedIn={Boolean(user)}
             onPreview={() => setPreviewMode(!previewMode)}
@@ -7756,7 +7787,10 @@ export default function App({ initialAction = null }) {
               handleUploadFile(file);
             }}
             onImport={(geojson, name, provenance, source = 'registry') => {
-              addGeoJSONAsLayer(geojson, `${name}.geojson`, source, provenance, 'claims');
+              const added = addGeoJSONAsLayer(geojson, `${name}.geojson`, source, provenance, 'claims');
+              if (source === 'registry' && !mobileViewerOffRef.current && isPhoneDevice()) {
+                added.then((id) => setMobileViewer((v) => (v ? { ...v, layerIds: [...v.layerIds, id] } : { source: 'search', layerIds: [id] })));
+              }
               setShowAddClaimsModal(false);
               setAddClaimsModalPath(null);
               if (screen !== 'editor') setScreen('editor');
