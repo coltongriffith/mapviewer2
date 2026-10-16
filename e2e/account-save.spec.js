@@ -33,7 +33,13 @@ async function setup(page, { migrated = false, failCreate = false } = {}) {
 async function requestSave(page, info) {
   await page.goto('/companies/got/');
   await page.getByRole('link', { name: /Open this company's claims map/ }).click();
-  const save = info.project.name.includes('mobile')
+  const mobile = info.project.name.includes('mobile');
+  if (mobile) {
+    // Phones open the claims viewer first; the editor is a choice from there.
+    await page.getByRole('region', { name: 'Claims viewer' }).getByRole('button', { name: 'Edit on desktop' }).click();
+    await page.getByRole('button', { name: 'Edit on this phone' }).click();
+  }
+  const save = mobile
     ? page.locator('.mobile-editor-banner').getByRole('button', { name: 'Save to an account' })
     : page.getByRole('button', { name: 'Save to a free account' });
   await save.click();
