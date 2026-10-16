@@ -107,6 +107,8 @@ export default function MobileClaimsViewer({
   const shareCache = useRef(null);
   const exportStarted = useRef(false);
   const openedTracked = useRef(false);
+  const chipShown = useRef(false);
+  chipShown.current = elsewhere > 0;
 
   const act = (action) => trackEvent('mobile_viewer_action', { action, source });
   const say = useCallback((message, ms = 2600) => {
@@ -124,7 +126,7 @@ export default function MobileClaimsViewer({
 
   // ── Map ────────────────────────────────────────────────────────────────────
   useEffect(() => {
-    const map = L.map(mapEl.current, { zoomControl: false, attributionControl: true });
+    const map = L.map(mapEl.current, { zoomControl: false, attributionControl: true, zoomSnap: 0.25 });
     map.attributionControl.setPrefix(false);
     L.control.scale({ imperial: false, position: 'bottomleft', maxWidth: 110 }).addTo(map);
     map.on('click', () => selectRef.current?.(null));
@@ -174,7 +176,8 @@ export default function MobileClaimsViewer({
     });
     if (!bounds?.isValid()) return;
     map.invalidateSize();
-    const bottom = (sheetRef.current?.offsetHeight || 180) + 16;
+    // Clear of the sheet, and of the "claims elsewhere" chip above it.
+    const bottom = (sheetRef.current?.offsetHeight || 180) + (chipShown.current ? 96 : 16);
     map.fitBounds(bounds, { paddingTopLeft: [16, HEADER_H], paddingBottomRight: [16, bottom], maxZoom: 15, animate });
   }, []);
 
