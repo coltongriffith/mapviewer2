@@ -137,6 +137,9 @@ test('mobile visitors can preview a company map and start saving it', async ({ b
   await page.route('**/api/track', route => route.fulfill({ status: 204 }));
   await page.goto('/companies/got/');
   await page.getByRole('link', { name: /Open this company's claims map/ }).click();
+  // Phones open the claims viewer first; the editor is a choice from there.
+  await page.getByRole('region', { name: 'Claims viewer' }).getByRole('button', { name: 'Edit on desktop' }).click();
+  await page.getByRole('button', { name: 'Edit on this phone' }).click();
   const banner = page.locator('.mobile-editor-banner');
   await expect(banner.getByRole('button', { name: 'Save to an account' })).toBeVisible();
   await banner.getByRole('button', { name: 'Preview map' }).click();

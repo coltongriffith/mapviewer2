@@ -12,7 +12,7 @@ export const ACTIVE_EVENTS = new Set([
   'editor_opened', 'first_layer_added', 'export_completed', 'share_created',
   'share_forked', 'signup_completed', 'onboarding_step', 'project_created',
   'project_saved', 'project_opened', 'registry_claims_imported', 'layer_added',
-  'element_added',
+  'element_added', 'mobile_viewer_action',
 ]);
 
 export const VALUE_EVENTS = new Set([

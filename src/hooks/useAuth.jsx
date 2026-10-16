@@ -137,18 +137,21 @@ export function AuthProvider({ children }) {
     if (error) throw error;
   }
 
-  async function signInWithMagicLink(email, { resumeEditor = false } = {}) {
+  // redirectPath sends the link somewhere other than this page: the phone
+  // viewer's hand-off points it at a shared map, opened on another device.
+  async function signInWithMagicLink(email, { resumeEditor = false, redirectPath = null, context = null } = {}) {
     if (!supabase) throw new Error('Auth not configured');
-    const emailRedirectTo = authRedirectUrl(resumeEditor
-      ? new URL('/?intent=resume', window.location.origin).href : window.location.href);
+    const target = redirectPath || (resumeEditor ? '/?intent=resume' : null);
+    const emailRedirectTo = authRedirectUrl(target ? new URL(target, window.location.origin).href : window.location.href);
+    const label = context || (resumeEditor ? 'export' : 'auth');
     const { error } = await supabase.auth.signInWithOtp({ email, options: {
       emailRedirectTo, data: { em_acquisition: getAttribution() },
     } });
     if (error) {
-      trackEvent('signup_link_failed', { context: resumeEditor ? 'export' : 'auth', code: error.code || 'send_failed' });
+      trackEvent('signup_link_failed', { context: label, code: error.code || 'send_failed' });
       throw error;
     }
-    trackEvent('signup_link_sent', { context: resumeEditor ? 'export' : 'auth' });
+    trackEvent('signup_link_sent', { context: label });
   }
 
   async function signOut() {
