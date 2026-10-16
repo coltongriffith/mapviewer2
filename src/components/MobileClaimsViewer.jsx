@@ -329,9 +329,25 @@ export default function MobileClaimsViewer({
     }
   };
 
+  // A cloud save reports failure in its result rather than throwing; only a
+  // save that reached the account may say so.
+  const SAVED = ['saved', 'saved-but-dirty', 'stale'];
   const saveToAccount = async () => {
     setBusy(true);
-    try { await onSaveToAccount?.(); setSheet('saved'); act('saved'); } finally { setBusy(false); }
+    setError('');
+    try {
+      const outcome = await onSaveToAccount?.();
+      if (SAVED.includes(outcome?.status)) { setSheet('saved'); act('saved'); return; }
+      setError(outcome?.err?.code === 'SAVE_CONFLICT'
+        ? 'This map was changed elsewhere. Open it in the editor to choose which version to keep.'
+        : 'The map could not be saved. Check your connection and try again.');
+      act('save_failed');
+    } catch {
+      setError('The map could not be saved. Check your connection and try again.');
+      act('save_failed');
+    } finally {
+      setBusy(false);
+    }
   };
 
   const downloadPng = async () => {
@@ -541,6 +557,7 @@ export default function MobileClaimsViewer({
               <>
                 <h2 id="mcv-sheet-title">Edit this map on a computer</h2>
                 <p>Save it to your account, then open Exploration Maps on your computer. It is in your dashboard.</p>
+                {error && <p className="mcv-error" role="alert">{error}</p>}
                 <button type="button" className="mcv-btn mcv-btn--primary mcv-btn--block" onClick={saveToAccount} disabled={busy}>{busy ? 'Saving…' : 'Save to my account'}</button>
                 <div className="mcv-actions">
                   <button type="button" className="mcv-btn" onClick={() => { act('edit_here'); onEditHere?.(); }}>Edit on this phone</button>

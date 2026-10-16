@@ -42,3 +42,45 @@ test('a phone emails a sign-in link that opens the shared map', async ({ page },
   expect(calls.otp[0].body.email).toBe('geologist@example.test');
   expect(new URL(calls.otp[0].redirect).pathname).toBe(`/map/${shareId}`);
 });
+
+test('a signed-in phone is told when saving to the account fails', async ({ page }, info) => {
+  test.skip(!info.project.name.includes('mobile'), 'The claims viewer is phone-only');
+  const uid = '00000000-0000-4000-8000-000000000091';
+  const user = { id: uid, email: 'phone@example.test', role: 'authenticated', created_at: '2026-09-15T00:00:00Z', email_confirmed_at: '2026-09-15T00:00:00Z', user_metadata: {} };
+  const token = `${Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url')}.${Buffer.from(JSON.stringify({ sub: uid, role: 'authenticated', exp: Math.floor(Date.now() / 1000) + 86400 })).toString('base64url')}.test-signature`;
+  const session = { user, access_token: token, refresh_token: 'synthetic-refresh', expires_in: 86400, expires_at: Math.floor(Date.now() / 1000) + 86400, token_type: 'bearer' };
+  let failCreate = true;
+  const creates = [];
+  await page.route('**/api/track', (route) => route.fulfill({ status: 204 }));
+  await page.route('https://example.supabase.co/**', (route) => {
+    const fn = new URL(route.request().url()).pathname.split('/').at(-1);
+    if (fn === 'token') return route.fulfill({ json: session });
+    if (fn === 'user') return route.fulfill({ json: user });
+    if (fn === 'user_plans') return route.fulfill({ json: { plan: 'free', source: 'signup', status: 'active' } });
+    if (fn === 'create_cloud_project') {
+      creates.push(1);
+      return failCreate
+        ? route.fulfill({ status: 503, json: { message: 'Temporary save failure', code: '503' } })
+        : route.fulfill({ json: '00000000-0000-4000-8000-000000000092' });
+    }
+    return route.fulfill({ json: [] });
+  });
+  await page.addInitScript((s) => {
+    localStorage.setItem('sb-example-auth-token', JSON.stringify(s));
+    localStorage.setItem(`em_migration_v2_${s.user.id}`, JSON.stringify({ done: true, projects: {} }));
+  }, session);
+
+  await page.goto('/companies/got/');
+  await page.getByRole('link', { name: /Open this company's claims map/ }).click();
+  await page.getByRole('region', { name: 'Claims viewer' }).getByRole('button', { name: 'Edit on desktop' }).click();
+  const sheet = page.getByRole('dialog', { name: 'Edit this map on a computer' });
+  await sheet.getByRole('button', { name: 'Save to my account' }).click();
+  await expect(sheet.getByRole('alert')).toContainText('could not be saved');
+  await expect(page.getByRole('dialog', { name: 'Saved to your account' })).toHaveCount(0);
+  expect(creates).toHaveLength(1);
+
+  failCreate = false;
+  await sheet.getByRole('button', { name: 'Save to my account' }).click();
+  await expect(page.getByRole('dialog', { name: 'Saved to your account' })).toBeVisible();
+  expect(creates).toHaveLength(2);
+});
