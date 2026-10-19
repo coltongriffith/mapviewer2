@@ -366,3 +366,36 @@ describe('claim-name results require confirmation and are never titled as a comp
     useClaimsState.crossProvinceHits = null;
   });
 });
+
+describe('adding results without ticking any', () => {
+  const caClaim = (i, lng, lat) => ({
+    type: 'Feature',
+    geometry: { type: 'Polygon', coordinates: [[[lng, lat], [lng + 0.01, lat], [lng + 0.01, lat + 0.01], [lng, lat]]] },
+    properties: { TENURE_NUMBER_ID: `10${i}`, CLAIM_NAME: `NORTH ${i}`, OWNER_NAME: 'EXAMPLE MINING LTD.', AREA_IN_HECTARES: 100 },
+  });
+
+  it('adds every claim in the list, and ticking narrows it', async () => {
+    const onImport = vi.fn();
+    useClaimsState.results = { features: [1, 2, 3].map((i) => caClaim(i, -128 + i * 0.01, 56)), meta: {} };
+    await renderRegistry(false, { initialProvince: 'bc', onImport });
+    fireEvent.click(screen.getByRole('button', { name: 'Claim #' }));
+
+    const add = await screen.findByRole('button', { name: 'Add all 3 claims to map' });
+    expect(add).not.toBeDisabled();
+    fireEvent.click(add);
+    expect(onImport.mock.calls[0][0][0].geojson.features).toHaveLength(3);
+
+    fireEvent.click(screen.getByText('NORTH 2'));
+    fireEvent.click(screen.getByRole('button', { name: 'Add 1 claim to map' }));
+    expect(onImport.mock.calls[1][0][0].geojson.features.map((f) => f.properties.CLAIM_NAME)).toEqual(['NORTH 2']);
+  });
+
+  it('adds every area of a company search', async () => {
+    const onImport = vi.fn();
+    useClaimsState.results = { features: [caClaim(1, -128, 56), caClaim(2, -128.01, 56), caClaim(3, -84, 48)], meta: {} };
+    await renderRegistry(false, { initialProvince: 'bc', onImport });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Add all 2 areas to map (3 claims)' }));
+    expect(onImport.mock.calls[0][0].map((it) => it.geojson.features.length).sort()).toEqual([1, 2]);
+  });
+});

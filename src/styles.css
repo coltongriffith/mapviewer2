@@ -1971,6 +1971,11 @@ body.is-dragging .template-zone .panel-delete-btn { opacity: 0 !important; }
   max-height: 300px; overflow-y: auto; display: grid; gap: 5px;
   border: 1px solid var(--ui-border); border-radius: var(--r-md); padding: 6px;
 }
+/* Pinned to the bottom of the scrolling card, so a phone always shows it. */
+.claims-add-bar {
+  position: sticky; bottom: -28px; z-index: 1;
+  margin: 0 -28px; padding: 10px 28px 14px; background: #fff;
+}
 /* Group cards */
 .claims-group { border: 1.5px solid var(--ui-border); border-radius: var(--r-md); overflow: hidden; transition: border-color 0.12s; }
 .claims-group.selected { border-color: var(--ui-action); background: var(--ui-surface-subtle); }
