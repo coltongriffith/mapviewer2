@@ -5,7 +5,8 @@ import React from 'react';
 // RegistrySearch with the US feature flag on/off. useClaims is mocked so no
 // network is involved; fetch is stubbed defensively anyway.
 
-vi.mock('../src/utils/track', () => ({ trackSearch: vi.fn(), trackEvent: vi.fn() }));
+const sendClaimRequest = vi.fn(async () => true);
+vi.mock('../src/utils/track', () => ({ trackSearch: vi.fn(), trackEvent: vi.fn(), sendClaimRequest }));
 
 const useClaimsState = {
   results: null, loading: false, error: null,
@@ -397,5 +398,26 @@ describe('adding results without ticking any', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: 'Add all 2 areas to map (3 claims)' }));
     expect(onImport.mock.calls[0][0].map((it) => it.geojson.features.length).sort()).toEqual([1, 2]);
+  });
+});
+
+describe('an empty search asks what they were looking for', () => {
+  it('sends a project name the registry does not know to the request inbox', async () => {
+    useClaimsState.results = { features: [], meta: {} };
+    await renderRegistry(false, { initialProvince: 'on', initialQuery: 'Torrance', autoSearch: true });
+
+    expect(screen.getByText(/Searching a project name\? Try the company that holds it/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'tell us the project' }));
+    expect(screen.getByLabelText('Project or company')).toHaveValue('Torrance');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+    expect(screen.getByRole('alert')).toHaveTextContent('Enter your email');
+    expect(sendClaimRequest).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByLabelText('Your email'), { target: { value: 'reader@example.com' } });
+    fireEvent.change(screen.getByLabelText(/Anything that helps/), { target: { value: 'Neotech Metals' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('look up “Torrance” in Ontario and reply to reader@example.com'));
+    expect(sendClaimRequest).toHaveBeenCalledWith({ email: 'reader@example.com', query: 'Torrance', province: 'on', mode: 'company', note: 'Neotech Metals' });
   });
 });

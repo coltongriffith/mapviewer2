@@ -95,6 +95,7 @@ const RATE_LIMITS = {
   event: { max: 60, windowMs: 60_000 },
   search: { max: 40, windowMs: 60_000 },
   lead: { max: 5, windowMs: 600_000 },
+  claim_request: { max: 5, windowMs: 600_000 },
 };
 const rateBuckets = new Map();
 
@@ -352,6 +353,32 @@ export default async function handler(req, res) {
         captured_at: new Date().toISOString(),
       });
       if (error) throw error;
+      return res.status(204).end();
+    }
+
+    if (kind === 'claim_request') {
+      // "Tell us the project": a search that found nothing, sent to the owner
+      // to look up by hand. Reported in the admin Feedback tab.
+      const user = await resolveUser(req, sb);
+      const email = (str(body.email, 320) || user?.email || '').trim().toLowerCase();
+      if (!EMAIL_RE.test(email)) return res.status(400).json({ error: 'invalid email' });
+      const queryText = (str(body.query_text, 200) || '').trim();
+      if (!queryText) return res.status(400).json({ error: 'query required' });
+      const province = (str(body.province, 16) || '').toLowerCase();
+      if (!/^[a-z]{2}(-[a-z]{2})?$/.test(province)) return res.status(400).json({ error: 'invalid province' });
+      const mode = str(body.mode, 32);
+      const { error } = await sb.from('claim_search_requests').insert({
+        email,
+        query_text: queryText,
+        province,
+        mode: mode && /^[a-z_]+$/.test(mode) ? mode : null,
+        note: (str(body.note, 1000) || '').trim() || null,
+        session_id: sessionId,
+        user_id: user?.id || null,
+        user_agent: str(req.headers?.['user-agent'], 300),
+      });
+      // The same person asking for the same thing twice is one request.
+      if (error && error.code !== '23505') throw error;
       return res.status(204).end();
     }
 

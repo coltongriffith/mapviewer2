@@ -71,6 +71,7 @@ export const useUsersOverview = enabled => useRpc('admin_get_users_overview', { 
 export const useRevenue = enabled => useRpc('admin_get_billing_metrics', {}, enabled);
 export const useTenureOps = enabled => useRpc('admin_get_tenure_ops', {}, enabled);
 export const useFeedback = (enabled, status = null) => useRpc('admin_get_feedback', { p_status: status, p_limit: 100 }, enabled);
+export const useClaimRequests = (enabled, openOnly = true) => useRpc('admin_get_claim_search_requests', { p_open_only: openOnly, p_limit: 200 }, enabled);
 
 export function useUserDetail() {
   const [userId, load] = useState(null);

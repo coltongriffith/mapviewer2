@@ -332,3 +332,36 @@ describe('api/track automated traffic', () => {
     expect(getUserMock).toHaveBeenCalled();
   });
 });
+
+describe('api/track claim search requests', () => {
+  const ask = (body, headers = {}) => req({ kind: 'claim_request', session_id: SID, province: 'on', mode: 'company', query_text: 'Torrance', ...body }, { ip: uniqueIp(), ...headers });
+
+  it('stores what was looked for, where, and who to reply to', async () => {
+    const res = mockRes();
+    await handler(ask({ email: ' Reader@Example.COM ', note: 'Neotech project', province: 'ON' }, { 'user-agent': 'Mozilla/5.0' }), res);
+    expect(res.statusCode).toBe(204);
+    expect(inserts).toHaveLength(1);
+    expect(inserts[0].table).toBe('claim_search_requests');
+    expect(inserts[0].row).toMatchObject({
+      email: 'reader@example.com', query_text: 'Torrance', province: 'on', mode: 'company',
+      note: 'Neotech project', session_id: SID, user_id: null, user_agent: 'Mozilla/5.0',
+    });
+  });
+
+  it('replies to a signed-in reader who left the email blank', async () => {
+    getUserMock.mockResolvedValue({ data: { user: { id: 'user-9', email: 'member@example.com' } }, error: null });
+    const res = mockRes();
+    await handler(ask({}, { authorization: 'Bearer token' }), res);
+    expect(res.statusCode).toBe(204);
+    expect(inserts[0].row).toMatchObject({ email: 'member@example.com', user_id: 'user-9' });
+  });
+
+  it('refuses a request with no way to reply, nothing to look for, or no province', async () => {
+    for (const body of [{ email: 'nope' }, { email: 'a@b.co', query_text: '   ' }, { email: 'a@b.co', province: 'ontario!' }]) {
+      const res = mockRes();
+      await handler(ask(body), res);
+      expect(res.statusCode, JSON.stringify(body)).toBe(400);
+    }
+    expect(inserts).toHaveLength(0);
+  });
+});

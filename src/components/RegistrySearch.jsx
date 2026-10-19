@@ -11,6 +11,7 @@ import { relaxationNotice } from '../utils/relaxationNotice';
 import { claimNamePrefix, sourceCredit, CLAIM_NAME_CAVEAT } from '../utils/claimProvenance';
 import { claimNotices } from '../utils/claimNotices';
 import ClaimNoticeStrip from './ClaimNoticeStrip';
+import ClaimRequestForm from './ClaimRequestForm';
 const ClaimSearchHelp = React.lazy(() => import('./FeedbackModal'));
 import { clusterFeatures, clusterLabels } from '../utils/featureClusters.js';
 
@@ -829,6 +830,8 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
             {emptyMessage.detail ? <><br /><span className="claims-empty-detail">{emptyMessage.detail}</span></> : null}
             {emptyMessage.hint ? <><br /><span className="claims-empty-hint">{emptyMessage.hint}</span></> : null}
           </p>
+          <ClaimRequestForm query={recoverySearch.query} province={recoverySearch.province}
+            provinceLabel={recoveryCfg.label} mode={recoverySearch.mode} />
           <div className="claims-recovery-actions">
             {recoveryCfg.modes.filter(m => m !== recoverySearch.mode).map(m => (
               <button type="button" className="ui-btn" key={m} onClick={() => {

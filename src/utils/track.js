@@ -136,3 +136,8 @@ export function trackLandingClick({ xPct, yPct, element, viewportW, pageH }) {
 export function trackLead({ email, projectTitle }) {
   return post({ kind: 'lead', email, project_title: projectTitle || undefined });
 }
+
+/** "Tell us the project" from an empty claim search. Resolves true when stored. */
+export function sendClaimRequest({ email, query, province, mode, note }) {
+  return post({ kind: 'claim_request', email: email || undefined, query_text: query, province, mode, note: note || undefined });
+}
