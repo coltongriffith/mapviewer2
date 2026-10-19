@@ -3,11 +3,12 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 const SummaryTab = React.lazy(() => import('./admin/SummaryTab'));
 const FeedbackTab = React.lazy(() => import('./admin/FeedbackTab'));
+const ClaimRequestsCard = React.lazy(() => import('./admin/ClaimRequestsCard'));
 const UsersTab = React.lazy(() => import('./admin/UsersTab'));
 const RevenueTab = React.lazy(() => import('./admin/RevenueTab'));
 const TenureTab = React.lazy(() => import('./admin/TenureTab'));
 import {
-  useRpc, useDashboardWindow, useSummary, useUsersOverview, useUserDetail, useFeedback, useRevenue, useTenureOps,
+  useRpc, useDashboardWindow, useSummary, useUsersOverview, useUserDetail, useFeedback, useClaimRequests, useRevenue, useTenureOps,
 } from './admin/useDashboardData';
 import { pacificDate, addCalendarDays } from './admin/dateWindow';
 import { markInternalBrowser } from '../utils/attribution';
@@ -35,6 +36,8 @@ const EVENT_KIND_META = {
   // read as emptier than they were and the Timeline buttons on the feeds
   // below (built from product_events) opened a view without the event clicked.
   product: { icon: '▸', label: 'Action' },
+  // "Tell us the project" under an empty claim search (claim_search_requests).
+  request: { icon: '✋', label: 'Search request' },
 };
 
 function SessionTimelineModal({ sessionId, events, error, onClose }) {
@@ -103,6 +106,7 @@ export default function AdminPage({ onExit }) {
   const usersOverview = useUsersOverview(isAdmin && tab === 'users');
   const [feedbackFilter, setFeedbackFilter] = useState('new');
   const feedback = useFeedback(isAdmin && tab === 'feedback', feedbackFilter);
+  const claimRequests = useClaimRequests(isAdmin && tab === 'feedback', feedbackFilter === 'new');
   const revenue = useRevenue(isAdmin && tab === 'revenue');
   const tenureOps = useTenureOps(isAdmin && tab === 'tenure');
   const userDetail = useUserDetail();
@@ -218,8 +222,12 @@ export default function AdminPage({ onExit }) {
           />
         )}
         {tab === 'feedback' && (
-          <FeedbackTab data={feedback.data} loading={feedback.loading} error={feedback.error}
-            filter={feedbackFilter} onFilter={setFeedbackFilter} onReload={feedback.reload} />
+          <>
+            <FeedbackTab data={feedback.data} loading={feedback.loading} error={feedback.error}
+              filter={feedbackFilter} onFilter={setFeedbackFilter} onReload={feedback.reload} />
+            <ClaimRequestsCard data={claimRequests.data} loading={claimRequests.loading} error={claimRequests.error}
+              onReload={claimRequests.reload} />
+          </>
         )}
         {tab === 'tenure' && (
           <TenureTab data={tenureOps.data} loading={tenureOps.loading} onReload={tenureOps.reload} />
