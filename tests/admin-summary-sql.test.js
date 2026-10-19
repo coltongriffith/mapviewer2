@@ -12,7 +12,7 @@ const start = '2026-09-01T07:00:00Z', end = '2026-09-04T07:00:00Z', tz = 'Etc/GM
 beforeAll(async () => {
   db = await PGlite.create();
   await db.exec(`
-    create role anon; create role authenticated;
+    create role anon; create role authenticated; create role service_role;
     create schema auth;
     create table auth.users (id uuid primary key, email text, created_at timestamptz, email_confirmed_at timestamptz, raw_user_meta_data jsonb);
     create table public.admin_users (user_id uuid);
@@ -26,16 +26,20 @@ beforeAll(async () => {
     create table public.error_events (session_id text, user_id uuid, message text, path text, fingerprint text, kind text, source text, seen_count integer, occurred_at timestamptz);
     create table public.feedback (id serial, status text, created_at timestamptz);
     create table public.shared_maps (id text, state jsonb, user_id uuid, creator_key text, created_at timestamptz);
+    create table public.export_events (session_id text);
     create function public.is_admin() returns boolean language sql as $$ select current_setting('test.admin', true) = 'yes' $$;
     create function public.admin_session_ids(p_start timestamptz, p_end timestamptz) returns table(session_id text) language sql as $$
       select e.session_id from public.product_events e where e.event = 'internal_session'
     $$;
     alter default privileges in schema public grant execute on functions to anon, authenticated;
   `);
-  // The newest migration that defines the function is the one in effect.
-  const sql = readFileSync('supabase/migrations/20261002130000_admin_summary_real_visitors.sql', 'utf8');
-  await db.exec(sql);
-  await db.exec(sql); // idempotent
+  // Oldest to newest; the last one to define a function is the one in effect.
+  // The crawler migration also replaces the admin_session_ids stub above.
+  for (const file of ['20261002130000_admin_summary_real_visitors.sql', '20261019120000_admin_crawler_sessions.sql']) {
+    const sql = readFileSync(`supabase/migrations/${file}`, 'utf8');
+    await db.exec(sql);
+    await db.exec(sql); // idempotent
+  }
 }, 30000);
 afterAll(async () => { await db?.close(); });
 beforeEach(async () => {
@@ -47,7 +51,7 @@ beforeEach(async () => {
 const summary = async () => (await db.query('select public.admin_get_summary($1, $2, $3) as d', [start, end, tz])).rows[0].d;
 const view = (sid, at, extra = {}) => db.query(
   'insert into public.page_views (session_id, path, referrer, city, country, device, user_id, created_at) values ($1,$2,$3,$4,$5,$6,$7,$8)',
-  [sid, extra.path || '/', extra.referrer || null, extra.city || 'Vancouver', 'CA', extra.device || 'desktop', extra.user || null, at]);
+  [sid, extra.path || '/', extra.referrer || null, extra.city || 'Vancouver', extra.country || 'CA', extra.device || 'desktop', extra.user || null, at]);
 const event = (sid, ev, at, props = null) => db.query('insert into public.product_events (session_id, event, props, created_at) values ($1,$2,$3,$4)', [sid, ev, props, at]);
 
 describe('admin summary SQL', () => {
@@ -140,6 +144,26 @@ describe('admin summary SQL', () => {
     expect(d.problems.errors).toEqual([expect.objectContaining({ message: 'Map failed to load', people: 1 })]);
     expect(d.problems.failed_searches.map((f) => f.query)).toEqual(['late night search']);
     expect(d.totals).toMatchObject({ people: 0, bots: 0 });
+  });
+
+  it('counts crawler tabs as bots, not as engaged visitors or as you', async () => {
+    // Followed a company page's "Claim this page" link and left at once.
+    await view('claim-crawler', '2026-09-02T15:00:00Z', { country: 'SG', city: 'Singapore' });
+    await event('claim-crawler', 'editor_opened', '2026-09-02T15:00:01Z');
+    await event('claim-crawler', 'layer_added', '2026-09-02T15:00:01Z', { source: 'deeplink' });
+    await event('claim-crawler', 'claim_intent', '2026-09-02T15:00:01Z');
+    // A one-page blog hit from the same crawler.
+    await view('blog-crawler', '2026-09-02T15:10:00Z', { path: '/blog/x', country: 'SG', city: 'Singapore' });
+    // A real visitor from Singapore who read two pages.
+    await view('sg-reader', '2026-09-02T16:00:00Z', { country: 'SG', city: 'Singapore' });
+    await view('sg-reader', '2026-09-02T16:02:00Z', { path: '/blog/y', country: 'SG', city: 'Singapore' });
+    // You.
+    await view('me', '2026-09-02T18:00:00Z');
+    await event('me', 'internal_session', '2026-09-02T18:00:00Z');
+
+    const d = await summary();
+    expect(d.totals).toMatchObject({ people: 1, engaged: 1, you: 1, bots: 2 });
+    expect(d.recent.map((r) => r.session_id)).toEqual(['sg-reader']);
   });
 
   it('refuses non-admins and is never granted to anon', async () => {

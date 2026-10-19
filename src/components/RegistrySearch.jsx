@@ -620,9 +620,12 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
     return groupLabel ? `${holder} – ${groupLabel}` : `${holder} Claims`;
   }
 
+  // Nothing ticked adds every result: phone searchers saw a list and a
+  // greyed-out button, and left without adding anything.
   function handleAddGroups() {
     const provenance = importProvenance();
-    const items = [...selectedGroups].sort((a, b) => a - b).map(i => {
+    const picked = selectedGroups.size ? [...selectedGroups] : groups.map((_, i) => i);
+    const items = picked.sort((a, b) => a - b).map(i => {
       const g = groups[i];
       return {
         geojson: { type: 'FeatureCollection', features: g.features },
@@ -634,6 +637,7 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
     trackEvent('registry_claims_imported', {
       province,
       mode: 'groups',
+      picked: selectedGroups.size ? 'some' : 'all',
       groups: items.length,
       features: items.reduce((n, it) => n + (it.geojson.features?.length || 0), 0),
       resolved_against: provenance.resolvedAgainst || 'n/a',
@@ -642,10 +646,12 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
   }
 
   function handleAddFlat() {
-    const features = [...selectedFlat].sort((a, b) => a - b).map(i => allFeatures[i]);
+    const features = selectedFlat.size
+      ? [...selectedFlat].sort((a, b) => a - b).map(i => allFeatures[i])
+      : allFeatures;
     const provenance = importProvenance();
     trackEvent('registry_claims_imported', {
-      province, mode: 'flat', groups: 1, features: features.length,
+      province, mode: 'flat', picked: selectedFlat.size ? 'some' : 'all', groups: 1, features: features.length,
       resolved_against: provenance.resolvedAgainst || 'n/a',
     });
     onImport([{
@@ -655,6 +661,9 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
     }]);
   }
 
+  const allGroupClaims = groups.reduce((n, g) => n + g.features.length, 0);
+  // "all 18 claims", "1 claim": "all" only reads right for more than one.
+  const countLabel = (n, all = 'all ') => `${n > 1 ? all : ''}${n} claim${n !== 1 ? 's' : ''}`;
   const allGroupsSelected = groups.length > 0 && selectedGroups.size === groups.length;
   const allFlatSelected = allFeatures.length > 0 && selectedFlat.size === allFeatures.length;
   const showOwnerPicker = mode === 'company' && results && owners.length > 1 && !activeOwner;
@@ -984,15 +993,19 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
                 })}
               </div>
 
-              <button className="share-generate-btn" disabled={selectedGroups.size === 0 || importBlocked} onClick={handleAddGroups}>
-                {importBlocked
-                  ? 'Confirm the claim-name notice above to continue'
-                  : selectedGroups.size === 0
-                    ? 'Select areas to add'
-                    : selectedGroups.size === 1
-                      ? `Add ${totalSelectedClaims} claims to map`
-                      : `Add ${selectedGroups.size} areas to map (${totalSelectedClaims} claims)`}
-              </button>
+              <div className="claims-add-bar">
+                <button className="share-generate-btn" disabled={importBlocked} onClick={handleAddGroups}>
+                  {importBlocked
+                    ? 'Confirm the claim-name notice above to continue'
+                    : selectedGroups.size === 0
+                      ? groups.length === 1
+                        ? `Add ${countLabel(groups[0].features.length)} to map`
+                        : `Add all ${groups.length} areas to map (${allGroupClaims} claims)`
+                      : selectedGroups.size === 1
+                        ? `Add ${countLabel(totalSelectedClaims, '')} to map`
+                        : `Add ${selectedGroups.size} areas to map (${totalSelectedClaims} claims)`}
+                </button>
+              </div>
             </>
           )}
         </>
@@ -1032,13 +1045,13 @@ export default function RegistrySearch({ onImport, onBack, initialProvince, init
             })}
           </div>
 
-          <button className="share-generate-btn" disabled={selectedFlat.size === 0 || importBlocked} onClick={handleAddFlat}>
-            {importBlocked
-              ? 'Confirm the claim-name notice above to continue'
-              : selectedFlat.size === 0
-                ? 'Select claims to add'
-                : `Add ${selectedFlat.size} claim${selectedFlat.size !== 1 ? 's' : ''} to map`}
-          </button>
+          <div className="claims-add-bar">
+            <button className="share-generate-btn" disabled={importBlocked} onClick={handleAddFlat}>
+              {importBlocked
+                ? 'Confirm the claim-name notice above to continue'
+                : `Add ${countLabel(selectedFlat.size || allFeatures.length, selectedFlat.size ? '' : 'all ')} to map`}
+            </button>
+          </div>
         </>
       )}
 
