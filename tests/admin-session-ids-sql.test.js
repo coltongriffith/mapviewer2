@@ -16,15 +16,18 @@ beforeAll(async () => {
     create role anon; create role authenticated; create role service_role;
     create table public.admin_users (user_id uuid);
     create table public.product_events (session_id text, user_id uuid, event text, props jsonb, created_at timestamptz);
-    create table public.page_views (session_id text, user_id uuid, created_at timestamptz, utm_source text, referrer text);
+    create table public.page_views (session_id text, user_id uuid, created_at timestamptz, utm_source text, referrer text, country text);
     create table public.landing_clicks (session_id text);
     create table public.live_pings (session_id text primary key, created_at timestamptz);
     create table public.search_events (session_id text);
     create table public.export_events (session_id text);
   `);
-  const sql = readFileSync('supabase/migrations/20260928181314_exclude_internal_and_automated_sessions.sql', 'utf8');
-  await db.exec(sql);
-  await db.exec(sql);
+  // Oldest to newest; the last one to define a function is the one in effect.
+  for (const file of ['20260928181314_exclude_internal_and_automated_sessions.sql', '20261019120000_admin_crawler_sessions.sql']) {
+    const sql = readFileSync(`supabase/migrations/${file}`, 'utf8');
+    await db.exec(sql);
+    await db.exec(sql);
+  }
 }, 30000);
 afterAll(async () => { await db?.close(); });
 beforeEach(async () => {
@@ -32,9 +35,9 @@ beforeEach(async () => {
 });
 
 async function visit(sid, { utm = 'blog', referrer = null, pingAfter = 0, pages = 1,
-  events = [['editor_opened'], ['first_map_checklist_shown']], when = t0 } = {}) {
+  events = [['editor_opened'], ['first_map_checklist_shown']], when = t0, country = 'CA' } = {}) {
   for (let i = 0; i < pages; i += 1) {
-    await db.query('insert into public.page_views values ($1, null, $2, $3, $4)', [sid, at(i * 5, when), utm, referrer]);
+    await db.query('insert into public.page_views values ($1, null, $2, $3, $4, $5)', [sid, at(i * 5, when), utm, referrer, country]);
   }
   await db.query('insert into public.live_pings values ($1, $2)', [sid, at(pingAfter, when)]);
   for (const [event, props = null] of events) {
@@ -60,9 +63,38 @@ describe('admin_session_ids', () => {
     expect(await excluded()).toEqual([]);
   });
 
+  it('counts a "Claim this page" arrival as automatic, like the deep link it rides on', async () => {
+    await visit('claim-link', { utm: 'companies', events: [['editor_opened'], ['layer_added', { source: 'deeplink' }], ['claim_intent']] });
+    expect(await excluded()).toEqual(['claim-link']);
+  });
+
+  it('excludes one-page drive-bys from SG and CN on any page, and keeps visitors there who stay', async () => {
+    await visit('sg-blog', { utm: null, country: 'SG', events: [] });
+    await visit('cn-home', { utm: null, country: 'CN', events: [['editor_opened']] });
+    await visit('sg-stayed', { utm: null, country: 'SG', pingAfter: 40, events: [] });
+    await visit('sg-referred', { utm: null, country: 'SG', referrer: 'https://www.google.com/', events: [] });
+    await visit('sg-searched', { utm: null, country: 'SG', events: [] });
+    await db.query("insert into public.search_events values ('sg-searched')");
+    // The same drive-by anywhere else is a reader who left quickly, not a crawler.
+    await visit('ca-quick', { utm: null, country: 'CA', events: [] });
+    expect(await excluded()).toEqual(['cn-home', 'sg-blog']);
+  });
+
+  it('keeps automated tabs apart from your own', async () => {
+    await visit('crawler', { utm: null, country: 'SG', events: [] });
+    await db.query("insert into public.product_events values ('mine', null, 'internal_session', null, $1)", [t0]);
+    const automated = (await db.query(
+      'select session_id from public.admin_automated_session_ids($1, $2) order by 1', [start, end],
+    )).rows.map((row) => row.session_id);
+    expect(automated).toEqual(['crawler']);
+    expect(await excluded()).toEqual(['crawler', 'mine']);
+    const anon = (await db.query("select has_function_privilege('anon', 'public.admin_automated_session_ids(timestamptz,timestamptz)', 'execute') ok")).rows[0].ok;
+    expect(anon).toBe(false);
+  });
+
   it('still excludes authenticated admins and keeps the helper private', async () => {
     await db.query('insert into public.admin_users values ($1)', [ADMIN]);
-    await db.query("insert into public.page_views values ('admin-tab', $1, $2, null, null)", [ADMIN, t0]);
+    await db.query("insert into public.page_views values ('admin-tab', $1, $2, null, null, 'CA')", [ADMIN, t0]);
     expect(await excluded()).toEqual(['admin-tab']);
     const anon = (await db.query("select has_function_privilege('anon', 'public.admin_session_ids(timestamptz,timestamptz)', 'execute') ok")).rows[0].ok;
     const service = (await db.query("select has_function_privilege('service_role', 'public.admin_session_ids(timestamptz,timestamptz)', 'execute') ok")).rows[0].ok;
