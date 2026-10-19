@@ -189,6 +189,14 @@ describe('api/track dashboard-v2 events', () => {
     }
   });
 
+  it('accepts the full-resolution offer events', async () => {
+    for (const event of ['fullres_offer_shown', 'fullres_offer_sent', 'fullres_export_completed']) {
+      const res = mockRes();
+      await handler(req({ kind: 'event', session_id: SID, event, props: { mode: 'email' } }, { ip: uniqueIp() }), res);
+      expect(res.statusCode, event).toBe(204);
+    }
+  });
+
   it('still rejects an unknown event name', async () => {
     const res = mockRes();
     await handler(req({ kind: 'event', session_id: SID, event: 'made_up_event' }, { ip: uniqueIp() }), res);
