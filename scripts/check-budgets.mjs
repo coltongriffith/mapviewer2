@@ -32,7 +32,9 @@ const BUDGETS = {
   // replace) and the main logo's opacity control live in the editor chunk.
   // 141 → 143: fixed-size scaled stage, per-ratio view persistence, legend
   // heading rename / move-to-group / drag reorder (Sept 2026).
-  maxJsChunkGzipKb: 143,
+  // 143 → 144: the free full-resolution export offered when a PNG hits the
+  // pixel cap (Oct 2026); its dialog is lazy, the export wiring is not.
+  maxJsChunkGzipKb: 144,
   initialJsGzipKb: 75,
   initialAuthJsGzipKb: 135,
   // The former configured check omitted VITE_ADMIN_EMAIL, which pruned the

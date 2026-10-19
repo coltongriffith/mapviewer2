@@ -43,6 +43,10 @@ const EVENT_ALLOWLIST = new Set([
   // Phone claims viewer: opened, and what the reader did there (props.action).
   'mobile_viewer_opened',
   'mobile_viewer_action',
+  // The one free full-resolution export offered when a free PNG hits the cap.
+  'fullres_offer_shown',
+  'fullres_offer_sent',
+  'fullres_export_completed',
   'onboarding_dismissed',
   // Dashboard v2 product events (see supabase migration 20260713000001 +
   // src/components/admin/metrics.js for the taxonomy these feed).

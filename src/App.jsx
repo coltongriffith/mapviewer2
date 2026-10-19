@@ -37,6 +37,7 @@ const RasterPlacementModal = React.lazy(() => import('./components/RasterPlaceme
 const ClassificationPanel = React.lazy(() => import('./components/ClassificationPanel'));
 const AddClaimsModal = React.lazy(() => import('./components/AddClaimsModal'));
 const UpgradeModal = React.lazy(() => import('./components/UpgradeModal'));
+const FullResOfferModal = React.lazy(() => import('./components/FullResOfferModal'));
 import { loadGeoJSON, loadCSV, loadShapefileSet, MAX_FEATURES } from './utils/importers';
 import {
   CALLOUT_TYPES,
@@ -75,6 +76,7 @@ import { clampExportSize, canExportFormat, maxPixelRatioFor, PRO_MAX_EXPORT_PIXE
 import { verifyCheckoutSession } from './utils/billing';
 import { trackVerifiedPurchase } from './utils/purchaseTracking';
 import { queueAccountSave, loadAccountSave, clearAccountSave } from './utils/projectStorage';
+import { queueFullResExport, loadFullResExport, clearFullResExport, fullResCreditUsed, markFullResCreditUsed } from './utils/fullResExport';
 import { scopingWarning } from './utils/scopingNotice';
 import { CLAIM_NAME_CAVEAT } from './utils/claimProvenance';
 import { OVERLAY_DESCRIPTIONS } from './utils/referenceOverlayCredits.js';
@@ -699,6 +701,10 @@ export default function App({ initialAction = null }) {
   const [showExportModal, setShowExportModal] = useState(false);
   // Pro upsell: null | 'export' | 'projects' | 'watermark' | 'general'
   const [upgradeReason, setUpgradeReason] = useState(null);
+  // A free PNG cut to the pixel cap: { mode: 'email' | 'credit', requestedPx,
+  // allowedPx, returning } for the one free full-resolution export.
+  const [fullResOffer, setFullResOffer] = useState(null);
+  const [fullResLink, setFullResLink] = useState(null);
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [showAddClaimsModal, setShowAddClaimsModal] = useState(false);
@@ -4480,15 +4486,23 @@ export default function App({ initialAction = null }) {
       // Pro-only resolution by editing state, replaying a request, or
       // restoring a project saved while on Pro.
       const baseSettings = project.layout?.exportSettings || {};
-      const opts = { ...baseSettings, ...extraOptions, paidTier: entitlements.clean_export };
+      const { fullResCredit, ...exportOptions } = extraOptions;
+      const opts = { ...baseSettings, ...exportOptions, paidTier: entitlements.clean_export };
+      // The account's one free full-resolution export lifts the pixel cap for
+      // this PNG only; the corner credit stays.
+      const spendingCredit = Boolean(fullResCredit) && format === 'png' && Boolean(user)
+        && !entitlements.clean_export && !fullResCreditUsed(user);
+      const pixelPlan = spendingCredit ? { ...entitlements, max_export_pixels: PRO_MAX_EXPORT_PIXELS } : entitlements;
       let resolutionClamped = false;
+      let requestedPx = 0;
       if (format === 'png') {
         const frame = mapContainerRef.current;
         const baseW = (opts.customWidth || 0) > 0 ? opts.customWidth : (frame?.clientWidth || viewportSize.width || 1600);
         const baseH = (opts.customHeight || 0) > 0 ? opts.customHeight : (frame?.clientHeight || viewportSize.height || 1000);
         const ratio = (opts.customWidth || 0) > 0 ? 1 : (Number(opts.pixelRatio) || 1);
-        const fit = clampExportSize(entitlements, baseW * ratio, baseH * ratio);
+        const fit = clampExportSize(pixelPlan, baseW * ratio, baseH * ratio);
         resolutionClamped = fit.clamped;
+        requestedPx = Math.max(Math.round(baseW * ratio), Math.round(baseH * ratio));
         if (fit.clamped) {
           // Render at the plan's ceiling rather than refusing the export —
           // the user still gets their map, plus an explicit upgrade nudge.
@@ -4497,8 +4511,8 @@ export default function App({ initialAction = null }) {
           opts.pixelRatio = 1;
           trackEvent('pro_gate_shown', {
             feature: 'export_resolution', format,
-            requested_px: Math.max(Math.round(baseW * ratio), Math.round(baseH * ratio)),
-            allowed_px: entitlements.max_export_pixels,
+            requested_px: requestedPx,
+            allowed_px: pixelPlan.max_export_pixels,
           }, user?.id);
         }
       }
@@ -4511,7 +4525,26 @@ export default function App({ initialAction = null }) {
         await exportPDF(scene, opts);
       }
       const warnings = getExportWarnings();
-      if (resolutionClamped) {
+      // Free and not yet spent: offer the full-resolution export in place of
+      // the plain upgrade prompt. An anonymous exporter pays with an email.
+      const offerFullRes = resolutionClamped && !entitlements.clean_export && !spendingCredit
+        && (!user || !fullResCreditUsed(user));
+      if (spendingCredit) {
+        clearFullResExport();
+        markFullResCreditUsed().catch(() => {});
+        trackEvent('fullres_export_completed', { px: requestedPx }, user?.id);
+        setUploadStatus({
+          type: 'success',
+          message: `Downloaded at ${requestedPx.toLocaleString()} px: your free full-resolution export. Pro gives you full resolution on every export, without the corner credit.`,
+        });
+      } else if (offerFullRes) {
+        setFullResOffer({ mode: user ? 'credit' : 'email', requestedPx, allowedPx: entitlements.max_export_pixels });
+        trackEvent('fullres_offer_shown', { mode: user ? 'credit' : 'email', requested_px: requestedPx }, user?.id);
+        setUploadStatus({
+          type: 'info',
+          message: `Exported at ${entitlements.max_export_pixels.toLocaleString()} px, the free plan's maximum.`,
+        });
+      } else if (resolutionClamped) {
         setUpgradeReason('export_resolution');
         setUploadStatus({
           type: 'info',
@@ -4551,7 +4584,7 @@ export default function App({ initialAction = null }) {
       setHasExported(true);
       // Anonymous exporter just got value — nudge them to save it to an account.
       // Once per session, and not while an auth modal is already up.
-      if (!user) {
+      if (!user && !offerFullRes) {
         try {
           if (!sessionStorage.getItem('em_post_export_nudge')) {
             sessionStorage.setItem('em_post_export_nudge', '1');
@@ -4616,6 +4649,41 @@ export default function App({ initialAction = null }) {
       setExportLinkStatus({ email, state: 'failed' });
     }
   };
+
+  const sendFullResLink = async (email) => {
+    queueFullResExport({ requestedPx: fullResOffer?.requestedPx });
+    saveDraft({ payload: project, projectId, projectName });
+    trackEvent('fullres_offer_sent', {}, null);
+    // The export gate may have just sent this address a link; that one works.
+    if (exportLinkStatus?.email === email && ['sending', 'sent'].includes(exportLinkStatus.state)) {
+      setFullResLink({ email, state: 'sent' });
+      return;
+    }
+    saveLead({ email, projectTitle: project.layout?.title || '' });
+    setFullResLink({ email, state: 'sending' });
+    try {
+      await signInWithMagicLink(email, { resumeEditor: true, context: 'fullres_export' });
+      setFullResLink({ email, state: 'sent' });
+    } catch {
+      setFullResLink({ email, state: 'failed' });
+    }
+  };
+
+  const spendFullResCredit = () => {
+    setFullResOffer(null);
+    handleExport('png', { noWatermark: true, fullResCredit: true });
+  };
+
+  // Back from the sign-in link with a full-resolution export waiting.
+  useEffect(() => {
+    if (!user || screen !== 'editor') return;
+    const pending = loadFullResExport();
+    if (!pending) return;
+    if (entitlements.clean_export || fullResCreditUsed(user)) { clearFullResExport(); return; }
+    setFullResOffer({ mode: 'credit', requestedPx: pending.requestedPx, allowedPx: entitlements.max_export_pixels, returning: true });
+    trackEvent('fullres_offer_shown', { mode: 'returning', requested_px: pending.requestedPx }, user.id);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, screen]);
 
   const handleExportModalConfirm = async (email, extraOpts = {}) => {
     setShowExportModal(false);
@@ -7808,6 +7876,22 @@ export default function App({ initialAction = null }) {
               setUpgradeReason(null);
               try { sessionStorage.removeItem('em_pro_gate_export_format'); } catch { /* noop */ }
               setScreen('account');
+            }}
+          />
+        )}
+        {fullResOffer && (
+          <FullResOfferModal
+            {...fullResOffer}
+            defaultEmail={getLastLeadEmail() || ''}
+            link={fullResLink}
+            onSendLink={sendFullResLink}
+            onUseCredit={spendFullResCredit}
+            onSeePro={() => { setFullResOffer(null); setUpgradeReason('export_resolution'); }}
+            onClose={() => {
+              // Declined after the round trip: the account keeps its export
+              // for the next time an export hits the cap.
+              if (fullResOffer.returning) clearFullResExport();
+              setFullResOffer(null);
             }}
           />
         )}
