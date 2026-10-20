@@ -96,6 +96,18 @@
     {
       "source": "/oauth/consent",
       "destination": "/index.html"
+    },
+    {
+      "source": "/3d",
+      "destination": "/3d/index.html"
+    },
+    {
+      "source": "/3D",
+      "destination": "/3d/index.html"
+    },
+    {
+      "source": "/teams",
+      "destination": "/teams/index.html"
     }
   ],
   "headers": [

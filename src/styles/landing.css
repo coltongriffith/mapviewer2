@@ -84,11 +84,11 @@
 .lm-wordmark .em-wordmark { font-weight: 300; letter-spacing: -0.015em; font-size: var(--fs-lg); }
 .lm-wordmark .em-wordmark b { font-weight: 650; }
 .lm-nav-links { display: flex; align-items: center; gap: var(--sp-4); margin-left: auto; }
-.lm-nav-links button {
+.lm-nav-links button, .lm-nav-links a {
   background: none; border: 0; padding: 4px 0; cursor: pointer;
-  font-size: var(--fs-body); font-weight: 500; color: var(--ui-text-muted);
+  font-size: var(--fs-body); font-weight: 500; color: var(--ui-text-muted); text-decoration: none;
 }
-.lm-nav-links button:hover { color: var(--ui-text); }
+.lm-nav-links button:hover, .lm-nav-links a:hover { color: var(--ui-text); }
 .lm-nav-cta { height: 34px; padding: 0 14px; font-size: var(--fs-body); }
 
 /* ── Section frame ───────────────────────────────────────────────────────── */

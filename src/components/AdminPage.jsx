@@ -4,11 +4,12 @@ import { useAuth } from '../hooks/useAuth';
 const SummaryTab = React.lazy(() => import('./admin/SummaryTab'));
 const FeedbackTab = React.lazy(() => import('./admin/FeedbackTab'));
 const ClaimRequestsCard = React.lazy(() => import('./admin/ClaimRequestsCard'));
+const TeamEnquiriesCard = React.lazy(() => import('./admin/TeamEnquiriesCard'));
 const UsersTab = React.lazy(() => import('./admin/UsersTab'));
 const RevenueTab = React.lazy(() => import('./admin/RevenueTab'));
 const TenureTab = React.lazy(() => import('./admin/TenureTab'));
 import {
-  useRpc, useDashboardWindow, useSummary, useUsersOverview, useUserDetail, useFeedback, useClaimRequests, useRevenue, useTenureOps,
+  useRpc, useDashboardWindow, useSummary, useUsersOverview, useUserDetail, useFeedback, useClaimRequests, useTeamEnquiries, useRevenue, useTenureOps,
 } from './admin/useDashboardData';
 import { pacificDate, addCalendarDays } from './admin/dateWindow';
 import { markInternalBrowser } from '../utils/attribution';
@@ -107,6 +108,7 @@ export default function AdminPage({ onExit }) {
   const [feedbackFilter, setFeedbackFilter] = useState('new');
   const feedback = useFeedback(isAdmin && tab === 'feedback', feedbackFilter);
   const claimRequests = useClaimRequests(isAdmin && tab === 'feedback', feedbackFilter === 'new');
+  const teamEnquiries = useTeamEnquiries(isAdmin && tab === 'feedback', feedbackFilter === 'new');
   const revenue = useRevenue(isAdmin && tab === 'revenue');
   const tenureOps = useTenureOps(isAdmin && tab === 'tenure');
   const userDetail = useUserDetail();
@@ -225,6 +227,8 @@ export default function AdminPage({ onExit }) {
           <>
             <FeedbackTab data={feedback.data} loading={feedback.loading} error={feedback.error}
               filter={feedbackFilter} onFilter={setFeedbackFilter} onReload={feedback.reload} />
+            <TeamEnquiriesCard data={teamEnquiries.data} loading={teamEnquiries.loading} error={teamEnquiries.error}
+              onReload={teamEnquiries.reload} />
             <ClaimRequestsCard data={claimRequests.data} loading={claimRequests.loading} error={claimRequests.error}
               onReload={claimRequests.reload} />
           </>

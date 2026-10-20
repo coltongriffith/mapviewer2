@@ -153,6 +153,7 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
             <button type="button" onClick={() => scrollTo('use-cases')} data-track="Nav: Use Cases">Use Cases</button>
             <button type="button" onClick={() => scrollTo('examples')} data-track="Nav: Examples">Examples</button>
             <button type="button" onClick={() => scrollTo('pricing')} data-track="Nav: Pricing">Pricing</button>
+            <a href="/teams/" data-track="Nav: For teams">For teams</a>
             {onOpenTenureMonitor && (
               <button type="button" onClick={onOpenTenureMonitor} data-track="Nav: Tenure Monitor">
                 Tenure Monitor
@@ -553,9 +554,11 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
             <a href="/mining-claim-search-by-company-name/">Claim search by company</a>
             <a href="/drill-results-map/">Drill results map</a>
             <a href="/companies/">Claim maps by company</a>
+            <a href="/3d">3D maps (beta)</a>
           </div>
           <div className="lm-footer-col">
             <h3>Company</h3>
+            <a href="/teams/">Exploration Maps for Teams</a>
             <a href="/about/">About</a>
             <a href="/blog/">Guides</a>
             <a href="/contact/">Contact</a>

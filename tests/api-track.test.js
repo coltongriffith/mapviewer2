@@ -11,6 +11,11 @@ vi.mock('@supabase/supabase-js', () => ({
       upsert: (row, opts) => { upserts.push({ table, row, opts }); return Promise.resolve({ error: null }); },
     }),
     auth: { getUser: getUserMock },
+    storage: {
+      from: (bucket) => ({
+        createSignedUploadUrl: (path) => Promise.resolve({ data: { signedUrl: `https://example.supabase.co/storage/v1/object/upload/sign/${bucket}/${path}?token=t` }, error: null }),
+      }),
+    },
   }),
 }));
 
@@ -363,5 +368,46 @@ describe('api/track claim search requests', () => {
       expect(res.statusCode, JSON.stringify(body)).toBe(400);
     }
     expect(inserts).toHaveLength(0);
+  });
+});
+
+describe('api/track team enquiries', () => {
+  const ask = (body, headers = {}) => req({ kind: 'team_enquiry', session_id: SID, email: 'geo@example.com', company: 'Star Copper', ...body }, { ip: uniqueIp(), 'user-agent': 'Mozilla/5.0', ...headers });
+
+  it('stores the enquiry and returns a signed upload URL per declared file', async () => {
+    const res = mockRes();
+    await handler(ask({
+      name: 'Pat', projects: 'Star project', materials: ['claims', 'sections_3d', 'bogus'], service_level: 'maps_presentation',
+      deadline: '2026-11-15', deadline_note: 'AGM deck', message: 'Drilling starts soon', ref: '3d',
+      files: [{ name: 'Collars 2026.CSV', size: 1200, type: 'text/csv' }, { name: 'huge.zip', size: 60 * 1024 * 1024 }],
+    }), res);
+    expect(res.statusCode).toBe(200);
+    expect(inserts[0].table).toBe('team_enquiries');
+    const row = inserts[0].row;
+    expect(row).toMatchObject({
+      email: 'geo@example.com', company: 'Star Copper', name: 'Pat', projects: 'Star project',
+      materials: ['claims', 'sections_3d'], service_level: 'maps_presentation', deadline: '2026-11-15', ref: '3d',
+    });
+    // The over-size file is not offered an upload slot.
+    expect(row.files).toEqual([{ name: 'Collars 2026.CSV', size: 1200, type: 'text/csv', path: `${row.id}/1-collars-2026.csv` }]);
+    expect(res.body.id).toBe(row.id);
+    expect(res.body.uploads).toHaveLength(1);
+    expect(res.body.uploads[0].url).toContain(`team-enquiries/${row.id}/1-collars-2026.csv`);
+  });
+
+  it('refuses an enquiry with no way to reply or no company', async () => {
+    for (const body of [{ email: 'nope' }, { company: '  ' }]) {
+      const res = mockRes();
+      await handler(ask(body), res);
+      expect(res.statusCode, JSON.stringify(body)).toBe(400);
+    }
+    expect(inserts).toHaveLength(0);
+  });
+
+  it('drops unknown service levels and malformed deadlines rather than storing them', async () => {
+    const res = mockRes();
+    await handler(ask({ service_level: 'platinum', deadline: 'next week', ref: '<script>' }), res);
+    expect(res.statusCode).toBe(200);
+    expect(inserts[0].row).toMatchObject({ service_level: null, deadline: null, ref: null, files: [] });
   });
 });
