@@ -190,8 +190,9 @@ describe('sitemap and canonicals agree with what exists', () => {
       expect(sitemapUrls.has(p), `${p} exists but is not in the sitemap`).toBe(true);
     }
     for (const u of sitemapUrls) {
-      // /teams/ is a Vite page (teams/index.html), built rather than copied from public/.
-      if (['/', '/about/', '/contact/', '/teams/'].includes(u)) continue;
+      // /teams/ and /3d are Vite pages (teams/index.html, 3d/index.html), built
+      // rather than copied from public/. They are checked separately below.
+      if (['/', '/about/', '/contact/', '/teams/', '/3d'].includes(u)) continue;
       expect(pages.has(u), `${u} is in the sitemap but generates no page`).toBe(true);
     }
   });
@@ -489,5 +490,153 @@ describe('claims about jurisdiction support match the product', () => {
       if (!/Ontario|Quebec|Saskatchewan|Manitoba|Newfoundland|Yukon/.test(row)) continue;
       expect(/Not yet/.test(row), `a non-BC row claims monitoring support: ${row}`).toBe(true);
     }
+  });
+});
+
+describe('Exploration Maps 3D (/3d) is indexable and described', () => {
+  // /3d was noindex while in private beta. It is now a search entry point, so
+  // the page itself has to carry its title, canonical, cards and structured
+  // data, and enough real text for a crawler that does not run WebGL.
+  const html = () => readFileSync(join(ROOT, '3d', 'index.html'), 'utf8');
+  const ld = () => [...html().matchAll(/<script type="application\/ld\+json">(.*?)<\/script>/gs)].map(m => JSON.parse(m[1]));
+
+  it('carries no noindex and a self-referential canonical', () => {
+    expect(html()).not.toMatch(/noindex/i);
+    expect(/<link rel="canonical" href="([^"]+)"/.exec(html())?.[1]).toBe(`${SITE}/3d`);
+    expect(sitemapUrls.has('/3d'), '/3d is not in the sitemap').toBe(true);
+  });
+
+  it('has a descriptive title, description and social cards with a real OG image', () => {
+    const page = html();
+    expect(/<title>(.*?)<\/title>/.exec(page)[1]).toMatch(/3D drill hole figure/i);
+    const desc = /<meta name="description" content="([^"]+)"/.exec(page)[1];
+    expect(desc).toMatch(/news releases/);
+    expect(desc).toMatch(/investor presentations/);
+    expect(desc.length).toBeLessThanOrEqual(160);
+    for (const prop of ['og:title', 'og:description', 'og:url', 'og:image']) expect(page).toContain(`property="${prop}"`);
+    for (const name of ['twitter:card', 'twitter:title', 'twitter:image']) expect(page).toContain(`name="${name}"`);
+    const og = /<meta property="og:image" content="([^"]+)"/.exec(page)[1];
+    const png = readFileSync(join(ROOT, 'public', og.replace(SITE, '')));
+    expect(png.subarray(1, 4).toString()).toBe('PNG');
+    expect([png.readUInt32BE(16), png.readUInt32BE(20)]).toEqual([1200, 630]);
+  });
+
+  it('describes itself as a free beta SoftwareApplication', () => {
+    const app = ld().flatMap(b => b['@graph'] || [b]).find(n => n['@type'] === 'SoftwareApplication');
+    expect(app).toBeTruthy();
+    expect(app.url).toBe(`${SITE}/3d`);
+    expect(app.applicationCategory).toBeTruthy();
+    expect(app.operatingSystem).toBe('Web browser');
+    expect(app.offers).toMatchObject({ '@type': 'Offer', price: '0', priceCurrency: 'USD' });
+    expect(app.softwareVersion).toMatch(/beta/i);
+    expect(app.featureList.length).toBeGreaterThan(5);
+  });
+
+  it('has one h1 and a crawlable About section that links to the guides', () => {
+    const page = html();
+    expect((page.match(/<h1[\s>]/g) || []).length).toBe(1);
+    const about = /<section class="about"[\s\S]*?<\/section>/.exec(page)?.[0];
+    expect(about, 'the About section is missing').toBeTruthy();
+    // Visible content, not a cloaked block.
+    expect(about).not.toMatch(/hidden|display:\s*none|sr-only/);
+    expect(about).toMatch(/fictional/);
+    expect(about).toMatch(/not a geological model or a mineral resource/);
+    for (const [, href] of about.matchAll(/href="(\/blog\/[^"]+)"/g)) {
+      expect(pages.has(href), `${href} linked from /3d does not exist`).toBe(true);
+    }
+  });
+});
+
+describe('the 3D and Teams launch guides', () => {
+  const NEW = [
+    'how-to-make-a-3d-drill-hole-figure',
+    'copper-equivalent-cueq-formula-calculator',
+    'grade-shells-from-drill-assays',
+    'drill-hole-cross-sections-vs-3d-block-figures',
+    'how-to-show-assays-pending-drill-holes',
+    'investor-map-figure-design-junior-mining',
+    'exploration-maps-3d-vs-leapfrog-viewer-geoscience-analyst',
+  ];
+  const words = (html) => {
+    const article = /<article>([\s\S]*?)<\/article>/.exec(html)[1]
+      .replace(/<p class="breadcrumb">[\s\S]*?<\/p>/, '')
+      .replace(/<div class="inline-cta">[\s\S]*?<\/a>\s*<\/div>/g, '');
+    return article.replace(/<[^>]+>/g, ' ').split(/\s+/).filter(w => /[A-Za-z0-9]/.test(w)).length;
+  };
+
+  it.each(NEW)('%s is a substantial, listed article', (slug) => {
+    const html = pages.get(`/blog/${slug}/`);
+    expect(html, `${slug} was not generated`).toBeTruthy();
+    expect(sitemapUrls.has(`/blog/${slug}/`)).toBe(true);
+    const n = words(html);
+    expect(n, `${slug} has ${n} words`).toBeGreaterThanOrEqual(900);
+    expect(n, `${slug} has ${n} words`).toBeLessThanOrEqual(1800);
+    expect(/<meta name="description" content="([^"]+)"/.exec(html)[1].length).toBeLessThanOrEqual(160);
+    expect(html).toContain('class="faq-section"');
+  });
+
+  it('links the new guides to each other and to the products', () => {
+    for (const slug of NEW) {
+      const html = pages.get(`/blog/${slug}/`);
+      const siblings = NEW.filter(s => s !== slug && html.includes(`href="/blog/${s}/"`));
+      expect(siblings.length, `${slug} links to only ${siblings.length} sibling guides`).toBeGreaterThanOrEqual(2);
+    }
+    expect(pages.get('/blog/investor-map-figure-design-junior-mining/')).toContain('href="/teams/');
+    expect(pages.get('/blog/copper-equivalent-cueq-formula-calculator/')).toContain('href="/3d');
+  });
+
+  it('is linked from the related existing guides', () => {
+    expect(pages.get('/blog/how-to-make-a-drill-results-map/')).toContain('href="/blog/how-to-make-a-3d-drill-hole-figure/"');
+    expect(pages.get('/blog/how-to-create-exploration-map-investor-presentation/')).toContain('href="/blog/investor-map-figure-design-junior-mining/"');
+    expect(pages.get('/blog/how-to-create-ni-43-101-compliant-map/')).toContain('href="/blog/how-to-show-assays-pending-drill-holes/"');
+  });
+
+  it('uses renders of the fictional sample, never a real company', () => {
+    for (const slug of NEW) {
+      const html = pages.get(`/blog/${slug}/`);
+      for (const [, src] of html.matchAll(/<img[^>]+src="([^"]+)"/g)) {
+        expect(src, `${slug} uses an image outside the sample renders and gallery`).toMatch(/^\/(blog-img\/3d|gallery)\//);
+        expect(existsSync(join(ROOT, 'public', src)), `${src} is missing`).toBe(true);
+      }
+    }
+  });
+
+  it('keeps the regulatory caveats on the pages that need them', () => {
+    expect(pages.get('/blog/how-to-show-assays-pending-drill-holes/')).toMatch(/not legal or regulatory advice/);
+    expect(pages.get('/blog/how-to-show-assays-pending-drill-holes/')).toMatch(/Qualified Person/);
+    expect(pages.get('/blog/grade-shells-from-drill-assays/')).toMatch(/not a geological model or mineral resource/);
+    expect(pages.get('/blog/copper-equivalent-cueq-formula-calculator/')).toMatch(/Qualified Person/);
+  });
+
+  it('agrees with the calculator: CuEq factor 0.864 at the stated assumptions', async () => {
+    const { eqFactors } = await import('../src/three-d/metal-eq.js');
+    const [au] = eqFactors({ metal: 'Cu', unit: '%', price: 4.5, recovery: 90 }, [{ metal: 'Au', unit: 'g/t', price: 3000, recovery: 80 }]);
+    expect(au.factor.toFixed(3)).toBe('0.864');
+    expect(pages.get('/blog/copper-equivalent-cueq-formula-calculator/')).toContain('0.864');
+  });
+});
+
+describe('crawl and discovery files', () => {
+  it('lets crawlers reach /3d, /teams/ and the guides', () => {
+    const robots = readFileSync(join(ROOT, 'public', 'robots.txt'), 'utf8');
+    expect(robots).toContain('Allow: /');
+    expect(robots).not.toMatch(/^Disallow:\s*\/(3d|teams|blog)?\s*$/m);
+  });
+
+  it('describes /3d, /teams/ and the new guides in llms.txt', () => {
+    const llms = readFileSync(join(ROOT, 'public', 'llms.txt'), 'utf8');
+    expect(llms).toContain(`${SITE}/3d`);
+    expect(llms).toContain(`${SITE}/teams/`);
+    for (const [, path] of llms.matchAll(/https:\/\/www\.explorationmaps\.com(\/blog\/[^)\s]+\/)/g)) {
+      expect(pages.has(path), `llms.txt links to ${path}, which does not exist`).toBe(true);
+    }
+  });
+
+  it('serves the IndexNow key file that the submit script uses', () => {
+    const script = readFileSync(join(ROOT, 'scripts', 'indexnow-submit.mjs'), 'utf8');
+    const key = /const KEY = '([0-9a-f]+)'/.exec(script)?.[1];
+    expect(key).toMatch(/^[0-9a-f]{32}$/);
+    expect(readFileSync(join(ROOT, 'public', `${key}.txt`), 'utf8').trim()).toBe(key);
+    expect(script).toContain("const HOST = 'www.explorationmaps.com'");
   });
 });
