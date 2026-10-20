@@ -22,6 +22,8 @@
 //   province in memory first; a province-wide tenure pull with geometry is the
 //   same shape of problem, and a GitHub runner is not the place to discover it.
 
+import { SourceUnavailableError } from '../lib/sourceOutage.mjs';
+
 const WFS_BASE = process.env.BC_TENURE_WFS_BASE || 'https://openmaps.gov.bc.ca/geo/pub/wfs';
 const LAYER = process.env.BC_TENURE_WFS_LAYER
   || 'pub:WHSE_MINERAL_TENURE.MTA_ACQUIRED_TENURE_SVW';
@@ -61,6 +63,10 @@ export function wfsUrl(params) {
  * Retries transient conditions only — network faults, timeouts, 429 and 5xx.
  * A 400 means we asked the wrong question and retrying just asks it four more
  * times; that fails fast so the error reaches the operator with its real cause.
+ *
+ * Exhausting the retries throws SourceUnavailableError: by then DataBC has
+ * failed every attempt for a transient reason, which is an outage on their
+ * side rather than a bug on ours (scripts/lib/sourceOutage.mjs).
  */
 export async function fetchJsonWithRetry(url, {
   attempts = MAX_ATTEMPTS,
@@ -95,7 +101,7 @@ export async function fetchJsonWithRetry(url, {
       await sleepImpl(backoff);
     }
   }
-  throw lastError || new Error('BC WFS request failed');
+  throw new SourceUnavailableError(lastError?.message || 'BC WFS request failed', { cause: lastError });
 }
 
 function sleep(ms) {

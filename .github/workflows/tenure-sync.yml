@@ -102,6 +102,10 @@ jobs:
           # Optional. Refuse to import when the database would pass this size
           # (MB). Unset = 70% of an 8 GB disk; see scripts/lib/importHeadroom.mjs.
           IMPORT_DB_SIZE_CEILING_MB: ${{ vars.IMPORT_DB_SIZE_CEILING_MB }}
+          # Optional. When DataBC cannot be reached the run is skipped with a
+          # warning (exit 0) unless the last good full sync is older than this
+          # many days. Unset = 3; see scripts/lib/sourceOutage.mjs.
+          TENURE_SYNC_MAX_STALE_DAYS: ${{ vars.TENURE_SYNC_MAX_STALE_DAYS }}
         run: |
           ARGS="--mode=${{ steps.mode.outputs.mode }}"
           if [ "${{ inputs.dry_run }}" = "true" ]; then ARGS="$ARGS --dry-run"; fi

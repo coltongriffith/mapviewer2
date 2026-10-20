@@ -54,6 +54,15 @@ jobs:
           # Optional. Refuse to import when the database would pass this size
           # (MB). Unset = 70% of an 8 GB disk; see scripts/lib/importHeadroom.mjs.
           IMPORT_DB_SIZE_CEILING_MB: ${{ vars.IMPORT_DB_SIZE_CEILING_MB }}
+          # Postgres connection string used (via psql) for the final publish,
+          # which takes longer than the 60 s the REST API allows. Use the
+          # Supabase "Session pooler" string: the direct db.<ref>.supabase.co
+          # host is IPv6-only and GitHub runners have no IPv6. Unset = REST,
+          # which fails with a message asking for this secret.
+          SUPABASE_DB_URL:           ${{ secrets.SUPABASE_DB_URL }}
+          # Optional. Days of staleness after which an unreachable GESTIM server
+          # fails the job instead of a warning. Unset = 21.
+          QC_CLAIMS_MAX_STALE_DAYS:  ${{ vars.QC_CLAIMS_MAX_STALE_DAYS }}
         run: node scripts/update-qc-claims.js
 
       # The script discards its own staging when it fails, but not when the job

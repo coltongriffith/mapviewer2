@@ -1,0 +1,35 @@
+-- ============================================================
+-- Drop the duplicate trigram index on qc_claims.owner_name_norm.
+--
+-- qc_claims carries two identical indexes:
+--
+--   qc_claims_owner_name_norm_trgm   gin (owner_name_norm gin_trgm_ops)
+--                                    created by 20260813000001
+--   qc_claims_owner_norm_trgm_idx    gin (owner_name_norm gin_trgm_ops)
+--                                    in no migration (made by hand)
+--
+-- The planner only ever uses one of them, but the weekly Quebec publish
+-- (publish_qc_import: TRUNCATE + reload of ~258k rows) has to build both. That
+-- publish took 58 s on 2026-09-15 against a 60 s ceiling, and has timed out
+-- every week since (57014, 2026-09-22 / 09-29 / 10-06). The publish now runs
+-- over a direct connection with its own timeout (scripts/update-qc-claims.js),
+-- but one GIN build fewer is time and disk saved on every reload regardless.
+--
+-- The hand-made one goes; the name the migrations know stays, so
+-- 20260813000001's rollback still names the index that exists.
+--
+-- Idempotent and self-contained: safe to run in the SQL editor more than once.
+-- DROP INDEX takes a brief exclusive lock on qc_claims; reads queue for the
+-- moment it takes to remove the index's files.
+--
+-- Rollback (not needed; the remaining index serves the same queries):
+--   create index if not exists qc_claims_owner_norm_trgm_idx
+--     on public.qc_claims using gin (owner_name_norm gin_trgm_ops);
+-- ============================================================
+
+drop index if exists public.qc_claims_owner_norm_trgm_idx;
+
+-- ── Post-migration verification (run manually) ─────────────────────────────
+--   select indexname, indexdef from pg_indexes
+--   where schemaname = 'public' and tablename = 'qc_claims' order by 1;
+--   -- expect qc_claims_owner_name_norm_trgm and no qc_claims_owner_norm_trgm_idx.
