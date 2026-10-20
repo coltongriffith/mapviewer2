@@ -292,7 +292,9 @@ dialog.acct-dialog::backdrop { background: rgba(20,33,38,0.35); }
           <label class="check"><input type="checkbox" id="opt-walls" checked>Glass block sides</label>
           <label class="check"><input type="checkbox" id="opt-ids" checked>Hole IDs</label>
           <label class="check"><input type="checkbox" id="opt-inset" checked>Plan inset</label>
+          <label class="check"><input type="checkbox" id="opt-ribbons" checked>Intercept bars beside holes</label>
         </div>
+        <label class="field" style="margin-top:8px"><span>Drill trace thickness <output id="trace-out" class="mono">1.4×</output></span><input type="range" id="trace-w" min="50" max="300" step="10" value="140"></label>
         <label class="field" style="margin-top:8px"><span>Surface opacity <output id="surf-out" class="mono">100%</output></span><input type="range" id="surf" min="15" max="100" value="100"></label>
         <div class="files" id="mesh-list" style="margin-top:8px"></div>
       </section>

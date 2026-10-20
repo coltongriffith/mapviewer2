@@ -140,9 +140,11 @@ const S = {              // style
   title: 'EXAMPLE RIDGE · MAIN ZONE', subtitle: '3D drilling model, looking northeast',
   valueCol: null, valueLabel: '', bins: [0.1, 0.2, 0.3, 0.5], coCount: 5, coMin: 20, coCut: 0.2, coIncl: 0.5,
   secAz: 135, secW: 75, surf: 1, walls: true, ids: true, inset: true, logo: null, meshes: {},
+  ribbons: true, traceWidth: 1.4,
 };
 const BIN_COLORS = ['#a3abaf', '#e2dc4f', '#ff9a1f', '#ef3b2c', '#e93ad1'];
 const MESH_COLORS = ['#ff9a1f', '#e93ad1', '#2b8fd6', '#6aa84f', '#8e5bd6'];
+const RIB_COLORS = ['#d6b48a', '#6aa84f']; // reported (broad) interval, "incl." interval
 
 function addFiles(list) {
   for (const f of list) {
@@ -360,7 +362,14 @@ function rebuildScene() {
   holes.forEach((h) => { for (let i = 0; i + 1 < h.path.length; i++) traceSeg.push(V(h.path[i].x, h.path[i].y, h.path[i].z), V(h.path[i + 1].x, h.path[i + 1].y, h.path[i + 1].z)); });
   root.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(traceSeg), new THREE.LineBasicMaterial({ color: '#59646a' })));
   const nInt = holes.reduce((s, h) => s + h.ints.length, 0);
-  G.tubes = new THREE.InstancedMesh(new THREE.CylinderGeometry(1, 1, 1, 8), new THREE.MeshLambertMaterial(), Math.max(1, nInt)); root.add(G.tubes);
+  // three 0.147 culls an InstancedMesh by its unit base geometry at the origin, not its instances.
+  G.tubes = new THREE.InstancedMesh(new THREE.CylinderGeometry(1, 1, 1, 8), new THREE.MeshLambertMaterial(), Math.max(1, nInt)); G.tubes.frustumCulled = false; root.add(G.tubes);
+  // Intercept ribbons: flat bars beside each trace, broad then "incl." nudged toward the camera.
+  // Turned to face the view in placeRibbons, so capacity is one piece per 8 m of hole.
+  const ribCap = holes.reduce((s, h) => s + Math.ceil(h.len / 8) + 1, 0), rg = new THREE.PlaneGeometry(1, 1);
+  G.ribbons = RIB_COLORS.map((c, i) => { const rm = new THREE.InstancedMesh(rg, new THREE.MeshBasicMaterial({ color: c, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2 * i, polygonOffsetUnits: -2 * i }), Math.max(1, ribCap));
+    rm.frustumCulled = false; rm.count = 0; rm.renderOrder = 1 + i; root.add(rm); return rm; });
+  G.ribbonCap = ribCap; G.ribbonView = null;
   // Meshes
   G.meshes = [];
   project.meshF.forEach((f, k) => {
@@ -374,11 +383,35 @@ function rebuildScene() {
   applyView('a', true);
 }
 
+const traceR = () => Math.max(1.5, G.diag / 330) * S.traceWidth;
+// Ribbon pieces sit 3 tube radii to the screen-right of the trace, in the plane facing the camera,
+// so they read as a bar beside the hole from any angle. Re-placed when the view turns (loop).
+function placeRibbons() {
+  if (!G?.ribbons) return;
+  camera.updateMatrixWorld();
+  const view = camera.getWorldDirection(new THREE.Vector3()), right = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0).normalize();
+  G.ribbonView = view.clone();
+  const r = traceR(), w = 2 * r, off = 3.2 * r, mx = new THREE.Matrix4(), side = new THREE.Vector3(), nrm = new THREE.Vector3(), n = [0, 0];
+  const put = (k, h, from, to) => {
+    const pieces = Math.max(1, Math.ceil((to - from) / 8));
+    for (let i = 0; i < pieces && n[k] < G.ribbonCap; i++) {
+      const a = h.posAt(from + (to - from) * i / pieces), b = h.posAt(from + (to - from) * (i + 1) / pieces), va = G.V(a.x, a.y, a.z), vb = G.V(b.x, b.y, b.z), dir = vb.clone().sub(va), len = dir.length();
+      if (len < 1e-6) continue; dir.divideScalar(len);
+      side.crossVectors(dir, view); if (side.lengthSq() < 1e-8) side.copy(right); side.normalize(); if (side.dot(right) < 0) side.negate();
+      nrm.crossVectors(side, dir).normalize(); if (nrm.dot(view) > 0) nrm.negate();
+      const c = va.add(vb).multiplyScalar(0.5).addScaledVector(side, off).addScaledVector(nrm, 0.4 * r * k);
+      mx.makeBasis(side.clone().multiplyScalar(w), dir.clone().multiplyScalar(len * 1.01), nrm).setPosition(c);
+      G.ribbons[k].setMatrixAt(n[k]++, mx);
+    }
+  };
+  if (S.ribbons) callouts.forEach(({ h, ic }) => { put(0, h, ic.broad.from, ic.broad.from + ic.broad.len); if (ic.incl) put(1, h, ic.incl.from, ic.incl.from + ic.incl.len); });
+  G.ribbons.forEach((rb, k) => { rb.count = n[k]; rb.instanceMatrix.needsUpdate = true; });
+}
 const binIndex = (v) => { if (!Number.isFinite(v)) return -1; let k = 0; S.bins.forEach((b, i) => { if (v >= b) k = i + 1; }); return k; };
 function restyle() {
   if (!G) return;
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0), col = new THREE.Color();
-  const r = Math.max(1.5, G.diag / 330); let k = 0;
+  const r = traceR(); let k = 0;
   project.holes.forEach((h) => h.ints.forEach((it) => {
     const v = it.vals[S.valueCol], bi = binIndex(v);
     const a = h.posAt(it.from), b = h.posAt(it.to), va = G.V(a.x, a.y, a.z), vb = G.V(b.x, b.y, b.z), dir = vb.clone().sub(va), len = dir.length();
@@ -396,7 +429,7 @@ function restyle() {
   const [A, Bp] = sectionEnds(), P = (p) => [(p.x - G.B.x0) / G.bw * G.topCanvas.width, (G.B.y1 - p.y) / G.bh * G.topCanvas.height];
   ctx.setLineDash([14, 9]); ctx.lineWidth = 5; ctx.strokeStyle = S.primary; ctx.beginPath(); ctx.moveTo(...P(A)); ctx.lineTo(...P(Bp)); ctx.stroke();
   ctx.lineWidth = 2; ctx.strokeStyle = '#fff'; ctx.stroke(); ctx.setLineDash([]); G.topTex.needsUpdate = true;
-  computeCallouts();
+  computeCallouts(); placeRibbons();
   drawSectionView();
 }
 function sectionEnds() {
@@ -680,13 +713,15 @@ function drawOverlay(ctx, k, forExport) {
   }
   // Legend card, bottom right
   const rows = legendRows(), meshRows = G.meshes.filter(({ name }) => S.meshes[name].show).map(({ name }) => [meshName(name), S.meshes[name].color]);
-  const R = 19 * u, lw = 192 * u, lh = 12 * u + R + 6 * u + R + rows.length * R + (meshRows.length ? 6 * u + R + meshRows.length * R : 0) + 6 * u;
+  const ribRows = S.ribbons && callouts.length ? [['Reported interval', RIB_COLORS[0]], ...(callouts.some((c) => c.ic.incl) ? [['incl.', RIB_COLORS[1]]] : [])] : [];
+  const R = 19 * u, lw = 192 * u, lh = 12 * u + R + 6 * u + R + rows.length * R + (ribRows.length ? 6 * u + ribRows.length * R : 0) + (meshRows.length ? 6 * u + R + meshRows.length * R : 0) + 6 * u;
   const lx = W - m - lw, ly = footTop - 12 * u - lh;
   ctx.fillStyle = 'rgba(255,255,255,0.96)'; ctx.strokeStyle = RULE; ctx.lineWidth = u; roundRect(ctx, lx, ly, lw, lh, 5 * u); ctx.fill(); ctx.stroke();
   let yy = ly + 12 * u; const row = (draw, t, bold, mono) => { draw(yy + R / 2); bold ? font(700, 13) : font(400, mono ? 12 : 13, mono); ctx.fillStyle = INK; ctx.textBaseline = 'middle'; ctx.fillText(fitText(ctx, t, lw - 52 * u), lx + (bold ? 12 : 44) * u, yy + R / 2); ctx.textBaseline = 'alphabetic'; yy += R; };
   row((cy) => { ctx.beginPath(); ctx.arc(lx + 23 * u, cy, 5 * u, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth = 2.4 * u; ctx.strokeStyle = INK; ctx.stroke(); }, 'Drill hole collar');
   yy += 6 * u; row(() => {}, `Assay · ${S.valueLabel}`, true);
   rows.forEach(([t, c]) => row((cy) => { ctx.fillStyle = c; roundRect(ctx, lx + 12 * u, cy - 4 * u, 22 * u, 8 * u, 4 * u); ctx.fill(); }, t, false, true));
+  if (ribRows.length) { yy += 6 * u; ribRows.forEach(([t, c]) => row((cy) => { ctx.fillStyle = c; ctx.fillRect(lx + 12 * u, cy - 3 * u, 22 * u, 6 * u); }, t)); }
   if (meshRows.length) { yy += 6 * u; row(() => {}, 'Model', true); meshRows.forEach(([t, c]) => row((cy) => { ctx.globalAlpha = 0.6; ctx.fillStyle = c; ctx.fillRect(lx + 12 * u, cy - 6 * u, 22 * u, 12 * u); ctx.globalAlpha = 1; }, t)); }
   // Orientation, bottom left: north arrow plus view direction
   const cam = getCam(), ox = m + 22 * u, oy = footTop - 34 * u, T = controls.target, n0 = proj(T), n1 = proj(T.clone().add(new THREE.Vector3(0, 0, -G.diag * 0.1)));
@@ -748,6 +783,16 @@ function drawSection(ctx, Wc, Hc, forExport) {
       const x0 = X(pa.t), y0 = Y(a.z), x1 = X(pb.t), y1 = Y(b.z), ang = Math.atan2(y1 - y0, x1 - x0), len = Math.max(1.5 * u, Math.hypot(x1 - x0, y1 - y0));
       ctx.save(); ctx.translate(x0, y0); ctx.rotate(ang); ctx.fillStyle = BIN_COLORS[bi]; ctx.fillRect(0, -barW / 2, len + 0.5 * u, barW); ctx.restore();
     });
+    // Reported interval and "incl." as bars to the right of the hole, as on the 3D figure.
+    const co = S.ribbons && callouts.find((x) => x.h === h);
+    if (co) [co.ic.broad, co.ic.incl].forEach((x, k) => {
+      if (!x) return; const p0 = h.posAt(x.from), p1 = h.posAt(x.from + x.len), q0 = pr(p0), q1 = pr(p1);
+      let nx = -(Y(p1.z) - Y(p0.z)), ny = X(q1.t) - X(q0.t); const nl = Math.hypot(nx, ny) || 1; nx /= nl; ny /= nl; if (nx < 0) { nx = -nx; ny = -ny; }
+      const off = barW * 1.45; ctx.strokeStyle = RIB_COLORS[k]; ctx.lineWidth = barW * 0.85; ctx.lineCap = 'butt'; ctx.beginPath(); let on = false;
+      for (let d = x.from; d < x.from + x.len + 2; d += 2) { const p = h.posAt(Math.min(d, x.from + x.len)), q = pr(p); if (Math.abs(q.off) > S.secW) { on = false; continue; }
+        const sx = X(q.t) + nx * off, sy = Y(p.z) + ny * off; on ? ctx.lineTo(sx, sy) : ctx.moveTo(sx, sy); on = true; }
+      ctx.stroke();
+    });
     const c = pr(h.c);
     if (Math.abs(c.off) <= S.secW) { ctx.save(); ctx.translate(X(c.t), Y(h.c.z) - 8 * u); ctx.rotate(-Math.PI / 4); ctx.fillStyle = INK; font(500, 12, true); ctx.fillText(h.id, 0, 0); ctx.restore(); }
   });
@@ -762,8 +807,13 @@ function drawSection(ctx, Wc, Hc, forExport) {
   const sy = footTop - 18 * u, sb = [10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000].find((d) => d * s >= 120 * u) || niceRound(L / 3);
   ctx.fillStyle = INK; ctx.fillRect(m, sy, sb * s / 2, 6 * u); ctx.fillStyle = '#fff'; ctx.fillRect(m + sb * s / 2, sy, sb * s / 2, 6 * u); ctx.strokeStyle = INK; ctx.lineWidth = u; ctx.strokeRect(m, sy, sb * s, 6 * u);
   font(400, 12, true); ctx.fillStyle = INK; ctx.fillText('0', m, sy - 6 * u); ctx.textAlign = 'right'; ctx.fillText(`${sb} m`, m + sb * s, sy - 6 * u); ctx.textAlign = 'left';
-  const items = legendRows().slice(0, 4).reverse(); font(400, 12, true);
-  const iw = items.map(([t]) => ctx.measureText(t).width + 36 * u); font(700, 13); const hw = ctx.measureText(S.valueLabel).width + 14 * u;
+  let items = legendRows().slice(0, 4).reverse(); font(400, 12, true);
+  // The interval bars join the strip when a hole on the section has them and there is room.
+  const ribs = S.ribbons ? callouts.filter((c) => shown.some((x) => x.h === c.h)) : [];
+  const withRibs = items.concat(ribs.length ? [['Reported interval', RIB_COLORS[0]], ...(ribs.some((c) => c.ic.incl) ? [['incl.', RIB_COLORS[1]]] : [])] : []);
+  const widthOf = (list) => list.map(([t]) => ctx.measureText(t).width + 36 * u);
+  if (withRibs.length > items.length && widthOf(withRibs).reduce((a, b) => a + b, 0) < Wc - 2 * m - sb * s - 200 * u) items = withRibs;
+  const iw = widthOf(items); font(700, 13); const hw = ctx.measureText(S.valueLabel).width + 14 * u;
   let lx = Wc - m - hw - iw.reduce((a, b) => a + b, 0); const ly = sy + 3 * u;
   ctx.fillStyle = INK; ctx.textBaseline = 'middle'; ctx.fillText(S.valueLabel, lx, ly); lx += hw;
   items.forEach(([t, c], i) => { ctx.fillStyle = c; roundRect(ctx, lx, ly - 4 * u, 22 * u, 8 * u, 4 * u); ctx.fill(); font(400, 12, true); ctx.fillStyle = INK; ctx.fillText(t, lx + 28 * u, ly); lx += iw[i]; });
@@ -782,6 +832,7 @@ function loop(now) {
   if (tween) { const k = Math.min(1, (now - tween.t0) / 900), e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
     camera.position.lerpVectors(tween.from, tween.to, e); controls.target.lerpVectors(tween.fromT, tween.toT, e); if (k >= 1) tween = null; }
   controls.update();
+  if (G && S.ribbons && S.view === '3d') { camera.updateMatrixWorld(); if (!G.ribbonView || camera.getWorldDirection(tmpV).dot(G.ribbonView) < 0.99998) placeRibbons(); }
   if (S.view === '3d') { renderer.render(scene, camera); drawOverlay(ov.getContext('2d'), DPR, false); syncCamUI(); }
   requestAnimationFrame(loop);
 }
@@ -791,7 +842,7 @@ function exportPNG(opts = {}) {
   const out = document.createElement('canvas'); out.width = f.w; out.height = f.h; const ctx = out.getContext('2d');
   if (view === 'section') { ctx.scale(f.w / W, f.h / H); drawSection(ctx, W, H, true); }
   else {
-    const k = f.w / W; tween = null; controls.update();
+    const k = f.w / W; tween = null; controls.update(); placeRibbons();
     renderer.setPixelRatio(k); renderer.setSize(W, H, false); renderer.render(scene, camera);
     ctx.drawImage(glCanvas, 0, 0, f.w, f.h); drawOverlay(ctx, k, true);
     renderer.setPixelRatio(DPR); renderer.setSize(W, H, false);
@@ -934,7 +985,8 @@ function renderStyle() {
   $('bins').querySelectorAll('[data-bin]').forEach((inp) => inp.addEventListener('change', () => { const b = S.bins.slice(); b[+inp.dataset.bin] = parseFloat(inp.value) || 0; setStyle({ bins: b }); }));
   $('co-cut').value = S.coCut; $('co-incl').value = S.coIncl; $('co-count').value = S.coCount; $('co-min').value = S.coMin;
   $('sec-az').value = S.secAz; $('sec-az-out').textContent = `${pad3(S.secAz)}°`; $('sec-w').value = S.secW;
-  $('opt-walls').checked = S.walls; $('opt-ids').checked = S.ids; $('opt-inset').checked = S.inset;
+  $('opt-walls').checked = S.walls; $('opt-ids').checked = S.ids; $('opt-inset').checked = S.inset; $('opt-ribbons').checked = S.ribbons;
+  $('trace-w').value = Math.round(S.traceWidth * 100); $('trace-out').textContent = `${S.traceWidth.toFixed(1)}×`;
   $('surf').value = Math.round(S.surf * 100); $('surf-out').textContent = `${Math.round(S.surf * 100)}%`;
   const ml = $('mesh-list'); ml.innerHTML = '';
   (project?.meshF || []).forEach((f) => { const st = S.meshes[f.name]; if (!st) return;
@@ -1074,7 +1126,8 @@ function setStyle(o = {}, render = true) {
   if (o.autoBins) rebin();
   [['coCount', 0, 12], ['coMin', 1, 1000], ['coCut', 0, 1e9], ['coIncl', 0, 1e9], ['secW', 5, 5000]].forEach(([k, lo, hi]) => { if (o[k] !== undefined) { const v = +o[k]; if (!Number.isFinite(v)) throw new Error(`${k} must be a number.`); S[k] = Math.max(lo, Math.min(hi, v)); } });
   if (o.secAz !== undefined) { S.secAz = ((Math.round(+o.secAz) % 180) + 180) % 180; refresh.secSet = true; }
-  ['walls', 'ids', 'inset'].forEach((k) => { if (o[k] !== undefined) S[k] = !!o[k]; });
+  ['walls', 'ids', 'inset', 'ribbons'].forEach((k) => { if (o[k] !== undefined) S[k] = !!o[k]; });
+  if (o.traceWidth !== undefined) { const v = +o.traceWidth; if (!Number.isFinite(v)) throw new Error('traceWidth must be a number from 0.5 to 3.'); S.traceWidth = Math.max(0.5, Math.min(3, v)); }
   if (o.surface !== undefined) S.surf = Math.max(0.15, Math.min(1, +o.surface > 1 ? +o.surface / 100 : +o.surface));
   if (o.meshes) Object.entries(o.meshes).forEach(([name, v]) => { if (!S.meshes[name]) throw new Error(`No model shape named "${name}". Loaded: ${Object.keys(S.meshes).join(', ') || 'none'}.`); Object.assign(S.meshes[name], v); });
   restyle(); if (render) renderStyle(); renderCalloutEditor(); schedulePublish();
@@ -1089,6 +1142,8 @@ $('sec-az').addEventListener('input', (e) => { setStyle({ secAz: +e.target.value
 $('opt-walls').addEventListener('change', (e) => setStyle({ walls: e.target.checked }, false));
 $('opt-ids').addEventListener('change', (e) => setStyle({ ids: e.target.checked }, false));
 $('opt-inset').addEventListener('change', (e) => setStyle({ inset: e.target.checked }, false));
+$('opt-ribbons').addEventListener('change', (e) => setStyle({ ribbons: e.target.checked }, false));
+$('trace-w').addEventListener('input', (e) => { setStyle({ traceWidth: +e.target.value / 100 }, false); $('trace-out').textContent = `${S.traceWidth.toFixed(1)}×`; });
 $('surf').addEventListener('input', (e) => { setStyle({ surface: +e.target.value / 100 }, false); $('surf-out').textContent = `${e.target.value}%`; });
 function setCallout(holeId, o = {}) {
   if (!project?.holes?.some((h) => h.id === holeId)) throw new Error(`No hole "${holeId}".`);
@@ -1126,7 +1181,7 @@ function getState() {
       candidates: callouts.slice(0, 15).map((c) => ({ holeId: c.h.id, broad: icText(c.ic.broad), fromM: Math.round(c.ic.broad.from), incl: c.ic.incl ? icText(c.ic.incl) : null })), overrides: S.coOverrides },
     brand: { company: S.company, title: S.title, subtitle: S.subtitle, footnote: S.footnote, primary: S.primary, accent: S.accent, hasLogo: !!S.logo, credit: S.credit },
     camera: G ? getCam() : null, section: { secAz: S.secAz, secW: S.secW, lookingAz: ((S.secAz - 90) % 360 + 360) % 360 },
-    display: { walls: S.walls, ids: S.ids, inset: S.inset, surface: S.surf }, meshes: S.meshes,
+    display: { walls: S.walls, ids: S.ids, inset: S.inset, surface: S.surf, ribbons: S.ribbons, traceWidth: S.traceWidth }, meshes: S.meshes,
     figureSize: { key: S.format, width: f.w, height: f.h, label: f.label }, figureSizes: Object.fromEntries(Object.entries(FORMATS).map(([k, v]) => [k, `${v.label}, ${v.w}×${v.h}`])),
   };
 }
@@ -1150,7 +1205,9 @@ JavaScript API (run in the page console or via your agent's evaluate tool):
   EM3D.setLogo(dataUrl)           Promise. Also picks primary and accent from the logo
   EM3D.setStyle({valueCol, valueLabel, bins: [4 lower limits], autoBins: true,
                  coCount, coMin, coCut, coIncl, secAz (0-179), secW,
-                 walls, ids, inset, surface (0.15-1), meshes: {name: {show, color, opacity}}})
+                 walls, ids, inset, surface (0.15-1), meshes: {name: {show, color, opacity}},
+                 ribbons (bars beside each hole: tan = reported interval, green = incl.),
+                 traceWidth (0.5-3, drill trace thickness, default 1.4)})
   EM3D.setCallout(holeId, {show, line1, line2, incl: false})   null resets a field
   EM3D.setCamera({view: "a" | "b" | "low" | "plan"}) or ({azimuth, plunge, zoom})
   EM3D.setFigureSize("slide" | "release" | "square" | "portrait" | "a4")
