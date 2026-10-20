@@ -369,9 +369,9 @@ function rebuildScene(keepCam) {
   const wall = (p0, p1) => {
     const NI = 100, pos = [], col = [], idx = [];
     for (let i = 0; i <= NI; i++) { const x = p0[0] + (p1[0] - p0[0]) * i / NI, y = p0[1] + (p1[1] - p0[1]) * i / NI, top = surf(x, y);
-      for (let j = 0; j <= NJ; j++) { const z = B.z0 + (top - B.z0) * FR[j], v = V(x, y, z); pos.push(v.x, v.y, v.z); col.push(1, 1, 1); } }
+      for (let j = 0; j <= NJ; j++) { const z = B.z0 + (top - B.z0) * FR[j], v = V(x, y, z); pos.push(v.x, v.y, v.z); col.push(1, 1, 1, 1); } }
     for (let i = 0; i < NI; i++) for (let j = 0; j < NJ; j++) { const a = i * (NJ + 1) + j, b = a + NJ + 1; idx.push(a, b, a + 1, b, b + 1, a + 1); }
-    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setIndex(idx);
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 4)); g.setIndex(idx); // RGBA: the solid block fades by row
     const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.42, side: THREE.DoubleSide, depthWrite: false })); m.renderOrder = 5;
     const dx = p1[0] - p0[0], dy = p1[1] - p0[1], l = Math.hypot(dx, dy); // corners run anticlockwise, so (dy, -dx) points out
     Object.assign(m.userData, { nj: NJ, fr: FR, n: new THREE.Vector3(dy / l, 0, dx / l), c: V((p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2, (B.z0 + zmax) / 2) });
@@ -464,32 +464,35 @@ function paintTerrain() {
     }
   }
   ctx.putImageData(out, 0, 0);
-  const pale = PALE.has(st);
-  const solid = S.blockStyle === 'solid';
-  G.walls.forEach((w) => {
-    const ca = w.geometry.attributes.color;
-    if (!ca) { w.material.color.set(solid ? '#e6e3dc' : pale ? '#f3f5f4' : '#e9ecea'); return; }
-    const { nj, fr } = w.userData;
-    for (let k = 0; k < ca.count; k++) {
-      const j = fr[k % (nj + 1)];
-      if (solid) { // cream rock, a shade darker at depth, under a thin soil band just below the terrain
-        const soil = Math.max(0, 1 - (1 - j) / 0.035) ** 1.5 * 0.85, r = 0.885 + 0.06 * j, g = 0.875 + 0.058 * j, b = 0.85 + 0.055 * j;
-        ca.setXYZ(k, r + (0.6 - r) * soil, g + (0.54 - g) * soil, b + (0.46 - b) * soil);
-      } else { const t = pale ? 0.965 + 0.035 * j : 0.92 + 0.07 * j; ca.setXYZ(k, t * (pale ? 0.995 : 0.98), t, t * 0.99); }
-    }
-    ca.needsUpdate = true;
-  });
+  G.walls.forEach((w) => { w.userData.near = undefined; });
   faceWalls();
 }
-// Solid block: the two far faces are near-opaque (and drawn before the model shapes, which do not write
-// depth), the faces toward the camera almost clear, as the agency figures cut them away. Re-run on turning.
+// Wall colour and alpha per row. Solid: pale cream rock, a shade darker at depth, under a dark soil band
+// that traces the terrain profile on every face; the far faces near-opaque, the faces toward the camera
+// almost clear apart from that band (the agency figures cut the near faces away), so holes stay visible.
+// Glass: the even translucent sides. Re-run when a face turns between near and far.
+function tintWall(w, near) {
+  const ca = w.geometry.attributes.color, { nj, fr } = w.userData, solid = S.blockStyle === 'solid', pale = PALE.has(S.terrain);
+  for (let k = 0; k < ca.count; k++) {
+    const j = fr[k % (nj + 1)];
+    if (solid) {
+      const soil = Math.min(1, Math.max(0, (j - 0.94) / 0.045)), r = 0.8 + 0.1 * j, g = 0.78 + 0.1 * j, b = 0.74 + 0.1 * j;
+      ca.setXYZW(k, r + (0.42 - r) * soil, g + (0.36 - g) * soil, b + (0.29 - b) * soil, near ? 0.1 + 0.85 * soil : 0.92 + 0.08 * soil);
+    } else { const t = pale ? 0.965 + 0.035 * j : 0.92 + 0.07 * j; ca.setXYZW(k, t * (pale ? 0.995 : 0.98), t, t * 0.99, 1); }
+  }
+  ca.needsUpdate = true; w.userData.near = near;
+}
 function faceWalls() {
   if (!G) return; const solid = S.blockStyle === 'solid', eye = camera.position;
   G.walls.forEach((w) => {
-    const d = w.userData; if (!d.n) { w.material.opacity = solid ? 0.85 : 0.6; w.renderOrder = solid ? 1 : 0; return; }
-    const near = d.n.dot(eye.clone().sub(d.c)) > 0;
-    w.material.opacity = solid ? (near ? 0.1 : 0.88) : 0.42; w.renderOrder = solid && !near ? 1 : 5;
+    const d = w.userData;
+    if (!d.n) { w.material.color.set(solid ? '#cfcac0' : PALE.has(S.terrain) ? '#f3f5f4' : '#e9ecea'); w.material.opacity = solid ? 0.9 : 0.6; w.renderOrder = solid ? 1 : 0; return; }
+    const near = solid ? d.n.dot(eye.clone().sub(d.c)) > 0 : false;
+    if (d.near !== near) tintWall(w, near);
+    // Far solid faces go first, before the model shapes (which do not write depth) and the holes' veils.
+    w.material.opacity = solid ? 1 : 0.42; w.renderOrder = solid && !near ? 1 : 5;
   });
+  (G.wallLabelMeshes || []).forEach(placeWallLabel); // keeps their minimum size as the view changes
 }
 
 // ============================================================
@@ -690,7 +693,18 @@ function placeWallLabel(mesh) {
   const R = right.clone().multiplyScalar(Math.cos(r)).addScaledVector(up, Math.sin(r)), U = up.clone().multiplyScalar(Math.cos(r)).addScaledVector(right, -Math.sin(r));
   // Letter height follows the face: about 7% of its width for a title, 4.5% for normal text.
   const faceW = Math.hypot(b[0] - a[0], b[1] - a[1]), h = (L.size === 'title' ? 0.07 : 0.045) * Math.max(faceW, 0.4 * (G.zmax - G.B.z0)) * (L.scale || 1) * (lines * 1.15 + 0.3) / 1.45;
-  mesh.matrix.makeBasis(R.multiplyScalar(h * aspect), U.multiplyScalar(h), n).setPosition(pos); mesh.updateMatrixWorld(true);
+  // Never smaller than about 22 px a line at the export size (30 px for a title), however far the camera.
+  camera.updateMatrixWorld(); const a2 = proj(pos), b2 = proj(pos.clone().addScaledVector(U, h)), k = FORMATS[S.format].w / W;
+  const linePx = Math.hypot(b2[0] - a2[0], b2[1] - a2[1]) * k * 1.45 / (lines * 1.15 + 0.3), minPx = L.size === 'title' ? 30 : 22;
+  const hh = linePx > 0 && linePx < minPx ? h * minPx / linePx : h;
+  mesh.matrix.makeBasis(R.multiplyScalar(hh * aspect), U.multiplyScalar(hh), n).setPosition(pos); mesh.updateMatrixWorld(true);
+}
+// Screen boxes of the wall labels, so hole IDs can keep off them.
+function wallLabelBoxes() {
+  return (G?.wallLabelMeshes || []).map((m) => {
+    const ps = [[-0.5, -0.5], [0.5, -0.5], [0.5, 0.5], [-0.5, 0.5]].map(([x, y]) => proj(new THREE.Vector3(x, y, 0).applyMatrix4(m.matrixWorld)));
+    return [Math.min(...ps.map((q) => q[0])), Math.min(...ps.map((q) => q[1])), Math.max(...ps.map((q) => q[0])), Math.max(...ps.map((q) => q[1]))];
+  });
 }
 function buildWallLabels() {
   if (!G) return;
@@ -1001,6 +1015,7 @@ function drawCallout(ctx, K, x, y, c, M, target) {
   const { u, font } = K, { L, w1, bw, bh } = M;
   const x0 = x + bw, y0 = y + bh / 2, xm = Math.max(x0 + 16 * u, Math.min(target[0] - 30 * u, x0 + 60 * u));
   ctx.strokeStyle = S.primary; ctx.lineWidth = 1.3 * u; ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(xm, y0); ctx.lineTo(target[0], target[1]); ctx.stroke();
+  M.leader = [[x0, y0, xm, y0], [xm, y0, target[0], target[1]]];
   ctx.beginPath(); ctx.arc(target[0], target[1], 3.6 * u, 0, Math.PI * 2); ctx.fillStyle = S.primary; ctx.fill(); ctx.lineWidth = 1.2 * u; ctx.strokeStyle = '#fff'; ctx.stroke();
   ctx.fillStyle = 'rgba(255,255,255,0.96)'; ctx.strokeStyle = RULE; ctx.lineWidth = u; roundRect(ctx, x, y, bw, bh, 4 * u); ctx.fill(); ctx.stroke();
   ctx.fillStyle = S.accent; ctx.fillRect(x + 7 * u, y + 7 * u, 4 * u, bh - 14 * u);
@@ -1076,7 +1091,7 @@ function alongLabel(ctx, K, t, pts, others) {
 }
 // Elevation ticks up the block's vertical edge at the left-front: of the two corners nearest the camera,
 // the one whose top projects furthest left. True elevations, about five ticks.
-function drawElevTicks(ctx, K, top, bottom, avoid = []) {
+function drawElevTicks(ctx, K, top, bottom, avoid = [], lines = []) {
   const { u, font } = K, C = [[G.B.x0, G.B.y0], [G.B.x1, G.B.y0], [G.B.x1, G.B.y1], [G.B.x0, G.B.y1]];
   const c = C.map(([x, y]) => ({ x, y, d: G.V(x, y, G.B.z0).distanceTo(camera.position) })).sort((p, q) => p.d - q.d).slice(0, 2)
     .map((p) => ({ ...p, zt: G.surf(p.x, p.y), s: proj(G.V(p.x, p.y, G.surf(p.x, p.y))) })).sort((p, q) => p.s[0] - q.s[0])[0];
@@ -1088,6 +1103,10 @@ function drawElevTicks(ctx, K, top, bottom, avoid = []) {
     const [x, y] = proj(G.V(c.x, c.y, z)); if (y < top + 8 * u || y > bottom - 8 * u || x < 60 * u) continue;
     const box = [x - 10 * u - ctx.measureText(`${Math.round(z)} m`).width - 4 * u, y - 9 * u, x + 2 * u, y + 9 * u];
     if (avoid.some((b) => !(box[2] < b[0] || box[0] > b[2] || box[3] < b[1] || box[1] > b[3]))) continue;
+    // ...and none within about 12 px of a callout's leader line.
+    const near = (x0, y0, x1, y1) => { const dx = x1 - x0, dy = y1 - y0, n = Math.max(1, Math.ceil(Math.hypot(dx, dy) / (4 * u)));
+      for (let i = 0; i <= n; i++) { const px = x0 + dx * i / n, py = y0 + dy * i / n; if (px > box[0] - 12 * u && px < box[2] + 12 * u && py > box[1] - 4 * u && py < box[3] + 4 * u) return true; } return false; };
+    if (lines.some((l) => near(...l))) continue;
     ctx.strokeStyle = INK; ctx.lineWidth = 1.2 * u; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x - 7 * u, y); ctx.stroke();
     const t = `${Math.round(z)} m`; ctx.lineWidth = 3 * u; ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.strokeText(t, x - 10 * u, y); ctx.fillStyle = INK; ctx.fillText(t, x - 10 * u, y);
   }
@@ -1155,14 +1174,18 @@ function drawOverlay(ctx, k, forExport) {
   const K = kit(ctx, W, H), { u, m, font, narrow } = K;
   if (!G) { font(600, 18); ctx.fillStyle = MUTED; ctx.textAlign = 'center'; ctx.fillText('Add a collar file and an assay file to build the figure.', W / 2, H / 2); ctx.restore(); return; }
   // Collars and hole IDs. occ collects what is drawn, so the scale bar and new labels can keep clear of it.
-  const placed = [], idBoxes = [], occ = [];
+  const placed = wallLabelBoxes(), idBoxes = [], occ = [];
   project.holes.forEach((h) => {
     const [cx, cy] = proj(G.V(h.c.x, h.c.y, h.c.z)), e = h.path[h.path.length - 1], [ex, ey] = proj(G.V(e.x, e.y, e.z));
     ctx.beginPath(); ctx.arc(cx, cy, 5 * u, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth = 2.4 * u; ctx.strokeStyle = INK; ctx.stroke();
     occ.push([cx - 8 * u, cy - 8 * u, cx + 8 * u, cy + 8 * u]);
     if (!S.ids) return;
     const ang = Math.atan2(ey - cy, ex - cx), flip = Math.abs(ang) > Math.PI / 2, r = 26 * u, box = [ex - r, ey - r, ex + r, ey + r];
-    if (placed.some((b) => !(box[2] < b[0] || box[0] > b[2] || box[3] < b[1] || box[1] > b[3]))) return; placed.push(box);
+    // The ID is dropped where it would land on another ID or on a label painted on the block.
+    const run = [ex + Math.cos(ang) * 6 * u, ey + Math.sin(ang) * 6 * u, ex + Math.cos(ang) * 60 * u, ey + Math.sin(ang) * 60 * u], tbox = [Math.min(run[0], run[2]), Math.min(run[1], run[3]), Math.max(run[0], run[2]), Math.max(run[1], run[3])];
+    if (placed.some((b) => !(box[2] < b[0] || box[0] > b[2] || box[3] < b[1] || box[1] > b[3]))) return;
+    if (placed.slice(0, G.wallLabelMeshes?.length || 0).some((b) => !(tbox[2] < b[0] || tbox[0] > b[2] || tbox[3] < b[1] || tbox[1] > b[3]))) return;
+    placed.push(box);
     ctx.save(); ctx.translate(ex + Math.cos(ang) * 6 * u, ey + Math.sin(ang) * 6 * u); ctx.rotate(flip ? ang + Math.PI : ang);
     font(500, 11.5, true); ctx.fillStyle = INK; ctx.textBaseline = 'middle'; ctx.textAlign = flip ? 'right' : 'left';
     ctx.lineWidth = 3 * u; ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.strokeText(h.id, 0, 0); ctx.fillText(h.id, 0, 0); ctx.restore();
@@ -1231,10 +1254,11 @@ function drawOverlay(ctx, k, forExport) {
     if (!items.length || items[0].y >= top - 1) break;
     const worst = items.reduce((a, b) => (b.rank > a.rank ? b : a)); items = items.filter((it) => it !== worst);
   }
-  items.forEach(({ c, s, M, y }) => { drawCallout(ctx, K, m, y, c, M, s); boxes.push([m, y, m + M.bw, y + M.bh + tag]); });
+  const leaders = [];
+  items.forEach(({ c, s, M, y }) => { drawCallout(ctx, K, m, y, c, M, s); boxes.push([m, y, m + M.bw, y + M.bh + tag]); leaders.push(...M.leader); });
   occ.push(...boxes.map((b) => [b[0], b[1], b[2] + 10 * u, b[3]]));
   // Drawn after the callouts so a tick never hides under a callout box.
-  if (S.elevTicks) drawElevTicks(ctx, K, headBottom, footTop, boxes);
+  if (S.elevTicks) drawElevTicks(ctx, K, headBottom, footTop, boxes, leaders);
   drawLabels(ctx, K, forExport);
   if (!forExport) overlayOcc = occ.concat(labelHits.filter((h) => h.box).map((h) => h.box));
   ctx.restore();
