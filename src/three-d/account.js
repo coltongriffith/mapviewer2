@@ -52,7 +52,7 @@ if (window.EM3D && $('acct-save')) {
   const base = window.EM3D;
   window.EM3D = Object.freeze({ ...base, help: () => base.help() + ACCOUNT_HELP, account });
   const help = $('ai-help'); if (help) help.textContent = window.EM3D.help();
-  window.addEventListener('em3d:change', (e) => { if (!baseline) baseline = e.detail; });
+  window.addEventListener('em3d:change', (e) => { if (!baseline) baseline = { ...e.detail, $files: base.filesDigest() }; });
   $('acct-save').addEventListener('click', () => run((m) => m.save()));
   $('acct-maps').addEventListener('click', () => run((m) => m.toggleMenu()));
   document.addEventListener('keydown', (e) => {

@@ -1208,6 +1208,20 @@ function getProject() {
     files: files.map((f) => ({ name: f.name, text: f.text, role: f.role, cols: f.cols ? { ...f.cols } : undefined })),
   };
 }
+// A short fingerprint of every file's raw text, so a replaced file whose
+// summary (name, rows, columns) is unchanged still counts as unsaved work.
+// Hashed once per text: files keep their string, so later calls are lookups.
+const digestCache = new WeakMap();
+function fileDigest(f) {
+  const hit = digestCache.get(f);
+  if (hit && hit.text === f.text) return hit.d;
+  let h = 0x811c9dc5; const t = f.text || '';
+  for (let i = 0; i < t.length; i++) { h ^= t.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+  const d = `${t.length}:${(h >>> 0).toString(36)}`;
+  digestCache.set(f, { text: f.text, d });
+  return d;
+}
+const filesDigest = () => files.map((f) => `${f.name}|${fileDigest(f)}`).join(',');
 async function loadProject(p) {
   if (!p || p.v !== 1 || !p.settings || typeof p.settings !== 'object' || !Array.isArray(p.files)) throw new Error('loadProject expects a project from EM3D.getProject() ({ v: 1, settings, files }).');
   if (p.files.some((f) => !f || typeof f.name !== 'string' || typeof f.text !== 'string')) throw new Error('Each project file needs a name and its text.');
@@ -1245,7 +1259,7 @@ Whole projects (to keep or move a figure):
   EM3D.loadProject(project)       Promise. Reopens a getProject() result exactly
   EM3D.getThumbnail(320)          small JPEG data URL of the preview`;
 $('ai-help').textContent = PROJECT_HELP;
-window.EM3D = Object.freeze({ ...window.EM3D, help: () => PROJECT_HELP, getProject, loadProject, getThumbnail });
+window.EM3D = Object.freeze({ ...window.EM3D, help: () => PROJECT_HELP, getProject, loadProject, getThumbnail, filesDigest });
 
 // ============================================================
 // 12. Start

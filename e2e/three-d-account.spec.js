@@ -59,7 +59,14 @@ async function fakeSupabase(page, { failUpload = false } = {}) {
       const rest = decodeURIComponent(path.slice('/storage/v1/object/'.length));
       if (method === 'POST' && rest.startsWith('list/')) {
         const { prefix } = req.postDataJSON();
-        return json([...fake.objects.keys()].filter((k) => k.startsWith(`three-d-files/${prefix}/`)).map((k) => ({ name: k.split('/').pop() })));
+        // Like Storage: the prefix's direct children, sub-folders with id null.
+        const seen = new Map();
+        for (const k of fake.objects.keys()) {
+          if (!k.startsWith(`three-d-files/${prefix}/`)) continue;
+          const [head, ...tail] = k.slice(`three-d-files/${prefix}/`.length).split('/');
+          if (!seen.has(head)) seen.set(head, { name: head, id: tail.length ? null : k });
+        }
+        return json([...seen.values()]);
       }
       if (method === 'POST') {
         if (failUpload) return json({ statusCode: '500', error: 'Internal', message: 'Storage is down' }, 500);
@@ -145,7 +152,7 @@ test.describe('account', () => {
     expect(saved.settings.settings.title).toBe('STAR · RAILS ZONE');
     expect(saved.settings.files).toBeUndefined(); // file text goes to storage, not the row
     expect(saved.thumbnail).toMatch(/^data:image\/jpeg;base64,/);
-    expect(saved.file_paths.map((f) => f.path)).toEqual(saved.file_paths.map((f) => `${uid}/${saved.id}/${f.name}`));
+    expect(saved.file_paths.map((f) => f.path.replace(/\/r[a-z0-9]+\//, '/'))).toEqual(saved.file_paths.map((f) => `${uid}/${saved.id}/${f.name}`));
     expect([...fake.objects.keys()].sort()).toEqual(saved.file_paths.map((f) => `three-d-files/${f.path}`).sort());
     await expect(page.locator('#acct-note')).toHaveText(/^Saved /);
     expect((await state(page)).brand.title).toBe('STAR · RAILS ZONE');
@@ -180,6 +187,23 @@ test.describe('account', () => {
     await expect.poll(() => fake.upserts.length).toBe(2);
     expect(fake.upserts[1]).toMatchObject({ id, name: 'NORTH ZONE' });
     expect(fake.upserts[1].settings.settings.subtitle).toBe('Version two');
+    await expect(page.locator('#acct-note')).toHaveText(/^Saved /);
+    // Each save writes its own folder; the earlier save's files go once the row moves on.
+    const stored = [...fake.objects.keys()].map((k) => k.replace(/^three-d-files\//, '')).sort();
+    expect(stored).toEqual(fake.upserts[1].file_paths.map((f) => f.path).sort());
+    expect(new Set(fake.upserts[1].file_paths.map((f) => f.path.split('/')[2])).size).toBe(1);
+    expect(fake.upserts[1].file_paths[0].path).not.toBe(fake.upserts[0].file_paths[0].path);
+
+    // A corrected file with the same name, rows and columns is still unsaved work.
+    await page.evaluate(async () => {
+      const p = window.EM3D.getProject();
+      const f = p.files[p.files.length - 1];
+      f.text = f.text.replace(/\d(?=[^\d]*$)/, (d) => String((Number(d) + 1) % 10));
+      await window.EM3D.loadProject(p);
+    });
+    await expect(page.locator('#acct-note')).toHaveText('Unsaved changes');
+    await page.locator('body').press('Control+s');
+    await expect.poll(() => fake.upserts.length).toBe(3);
     await expect(page.locator('#acct-note')).toHaveText(/^Saved /);
 
     // Work on something else, then reopen the saved figure from the list.

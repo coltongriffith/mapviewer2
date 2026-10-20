@@ -143,17 +143,21 @@ export async function saveProject(name, existingId) {
   let thumbnail = null;
   try { thumbnail = em.getThumbnail(320); } catch { /* a list without a picture is fine */ }
   const id = existingId || crypto.randomUUID();
+  const rev = `r${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+  const root = `${user.id}/${id}`, dir = `${root}/${rev}`;
   const used = new Set();
   const filePaths = files.map((f, i) => {
     let base = safeName(f.name);
     if (used.has(base)) base = `${i}-${base}`;
     used.add(base);
-    return { name: f.name, path: `${user.id}/${id}/${base}`, size: f.text.length, role: f.role, cols: f.cols };
+    return { name: f.name, path: `${dir}/${base}`, size: f.text.length, role: f.role, cols: f.cols };
   });
   try {
-    // Files first: a row is never written pointing at text that is not there.
+    // Files first, each save in a folder of its own: a row is never written
+    // pointing at text that is not there, and a failed save never touches
+    // the files the last saved row points at.
     await Promise.all(files.map(async (f, i) => {
-      const { error } = await sb.storage.from(BUCKET).upload(filePaths[i].path, f.text, { upsert: true, contentType: 'text/plain;charset=utf-8' });
+      const { error } = await sb.storage.from(BUCKET).upload(filePaths[i].path, f.text, { upsert: false, contentType: 'text/plain;charset=utf-8' });
       if (error) throw error;
     }));
     const { data, error } = await sb.from(TABLE)
@@ -163,13 +167,22 @@ export async function saveProject(name, existingId) {
     if (error) throw error;
     current = { id: data.id, name: data.name, savedAt: data.updated_at };
   } catch (err) {
+    // Best effort: this save's files are not referenced by any row.
+    try { await sb.storage.from(BUCKET).remove(filePaths.map((p) => p.path)); } catch { /* leftovers are harmless */ }
     throw explain(err, 'save this 3D map');
   }
   if (existingId) {
-    // Best effort: drop files removed from the figure since the last save.
+    // Best effort, now the row points at this save's folder: drop earlier
+    // saves' files (older rows kept them directly under the project).
     try {
-      const { data: objs } = await sb.storage.from(BUCKET).list(`${user.id}/${id}`, { limit: 1000 });
-      const stale = (objs || []).map((o) => o.name).filter((n) => !used.has(n)).map((n) => `${user.id}/${id}/${n}`);
+      const { data: objs } = await sb.storage.from(BUCKET).list(root, { limit: 1000 });
+      const stale = [];
+      for (const o of objs || []) {
+        if (o.name === rev) continue;
+        if (o.id) { stale.push(`${root}/${o.name}`); continue; }
+        const { data: inner } = await sb.storage.from(BUCKET).list(`${root}/${o.name}`, { limit: 1000 });
+        for (const x of inner || []) stale.push(`${root}/${o.name}/${x.name}`);
+      }
       if (stale.length) await sb.storage.from(BUCKET).remove(stale);
     } catch { /* leftovers are harmless */ }
   }
@@ -273,8 +286,15 @@ let user = null;
 let busy = false;
 let dirty = false;
 // What the figure looked like when last saved or opened (or when the page
-// loaded), as a signature of its state; any difference is unsaved work.
-const sig = (st) => { const { step, ...rest } = st || {}; return JSON.stringify(rest); };
+// loaded), as a signature of its state and its files' raw text; any
+// difference is unsaved work. A state captured earlier carries its own
+// $files; otherwise the files on screen now are the ones it describes.
+const sig = (st) => {
+  const { step, $files, ...rest } = st || {};
+  let files = $files;
+  if (files === undefined) try { files = studio().filesDigest(); } catch { files = null; }
+  return JSON.stringify({ ...rest, $files: files });
+};
 let savedSig = null;
 let statusT = 0;
 let pending = null; // { intent, name, id } while a sign-in link is out for a save
