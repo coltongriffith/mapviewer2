@@ -70,6 +70,8 @@ img { display: block; max-width: 100%; height: auto; }
 .chip-a { right: 4%; top: 22px; }
 .chip-b { left: 2%; bottom: 18px; }
 .chip-b i { background: var(--copper); }
+.hero-review { margin-top: 22px; color: #d5dcdc; font-size: 15.5px; }
+.hero-review a { color: #fff; text-decoration-color: #f08a5d; }
 .hero-note { margin-top: 28px; font-size: 13px; color: #8c9a9c; }
 
 /* Capabilities */
@@ -101,6 +103,7 @@ img { display: block; max-width: 100%; height: auto; }
 .plan-mid { border: 2px solid var(--slate-950); box-shadow: 0 16px 40px rgba(20, 33, 38, 0.1); }
 .plan h3 { font-size: 23px; letter-spacing: -0.01em; }
 .plan-sum { color: var(--slate-600); }
+.terms { font-size: 14.5px; color: var(--slate-600); margin-top: -4px; }
 .price { font-family: var(--mono); font-size: 14px; font-weight: 600; color: var(--slate-950); padding: 10px 0; border-top: 1px solid var(--slate-100); border-bottom: 1px solid var(--slate-100); }
 .plan ul { list-style: none; padding: 0; margin: 6px 0 14px; display: grid; gap: 8px; font-size: 15.5px; flex: 1; }
 .plan li { padding-left: 24px; position: relative; }
@@ -112,6 +115,22 @@ img { display: block; max-width: 100%; height: auto; }
 .gallery figure { margin: 0; background: var(--map-white); border: 1px solid var(--slate-200); border-radius: 10px; overflow: hidden; }
 .gallery img { width: 100%; aspect-ratio: 16 / 10; object-fit: cover; }
 .g-wide { grid-column: span 2; }
+.g-full { grid-column: 1 / -1; }
+.g-full img { aspect-ratio: 3 / 2; object-fit: contain; background: #fff; }
+.g-wide img[src*="/teams/"] { aspect-ratio: 3 / 2; object-fit: contain; background: #fff; }
+.choose { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.choose article { background: #fff; border: 1px solid var(--slate-200); border-radius: 12px; padding: 26px; display: flex; flex-direction: column; gap: 12px; }
+.choose h3 { font-size: 22px; }
+.choose ul { margin: 0; padding-left: 20px; display: grid; gap: 8px; color: var(--slate-600); font-size: 16px; flex: 1; }
+.choose li a { color: var(--slate-950); font-weight: 600; }
+.choose .btn { align-self: flex-start; }
+.choose-managed { border: 2px solid var(--slate-950) !important; }
+.faq-wrap .head { margin-bottom: 28px; }
+.faq { display: grid; gap: 10px; max-width: 860px; }
+.faq details { background: #fff; border: 1px solid var(--slate-200); border-radius: 10px; padding: 14px 18px; }
+.faq summary { cursor: pointer; font-weight: 700; font-size: 17px; }
+.faq details p { margin-top: 10px; color: var(--slate-600); }
+.checks .review-opt { grid-column: 1 / -1; font-weight: 600; color: var(--copper-dark); }
 .gallery figcaption { padding: 10px 14px 12px; font-size: 14.5px; color: var(--slate-600); }
 .gallery figcaption b { display: block; color: var(--slate-950); font-size: 16px; }
 .trust { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; margin-top: 56px; padding-top: 40px; border-top: 1px solid var(--slate-200); }
@@ -158,7 +177,7 @@ legend { font-weight: 600; font-size: 15px; margin-bottom: 8px; padding: 0; }
   .steps { grid-template-columns: 1fr; gap: 22px; }
   .steps li { padding: 0 0 0 58px; min-height: 40px; }
   .steps li::before { left: 19px; top: 44px; bottom: -18px; right: auto; width: 2px; height: auto; }
-  .plans, .trust { grid-template-columns: 1fr; }
+  .plans, .trust, .choose { grid-template-columns: 1fr; }
   .gallery { grid-template-columns: 1fr 1fr; }
   .form-intro { position: static; }
   .sent { grid-column: 1; }

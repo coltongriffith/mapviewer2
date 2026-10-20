@@ -4,12 +4,15 @@
 // enquiry, emails the owner, and returns one signed upload URL per declared
 // file; files then go straight to the private storage bucket.
 
-// Monthly pricing per service level. Leave a value empty to show the
-// "quoted after a scoping call" text while scope and costs are validated.
-const PRICES = {
-  managed_maps: '',
-  maps_presentation: '',
-  corporate: '',
+// Program terms per service level, shown on the plan cards. Leave a field empty
+// while scope and costs are validated: an empty price keeps "Quoted after a
+// scoping call", and empty terms hide the line.
+//   price:    e.g. 'From $2,000 / month'
+//   terms:    e.g. 'Up to 6 updated figures a month · 2 business days from clean data'
+const PLANS = {
+  managed_maps: { price: '', terms: '' },
+  maps_presentation: { price: '', terms: '' },
+  corporate: { price: '', terms: '' },
 };
 
 const MAX_FILES = 5;
@@ -17,8 +20,12 @@ const MAX_FILE_BYTES = 50 * 1024 * 1024;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 document.querySelectorAll('[data-plan-price]').forEach((el) => {
-  const p = PRICES[el.dataset.planPrice];
+  const p = PLANS[el.dataset.planPrice]?.price;
   if (p) el.textContent = p;
+});
+document.querySelectorAll('[data-plan-terms]').forEach((el) => {
+  const t = PLANS[el.dataset.planTerms]?.terms;
+  if (t) { el.textContent = t; el.hidden = false; }
 });
 const year = document.getElementById('year');
 if (year) year.textContent = String(new Date().getFullYear());
@@ -42,6 +49,13 @@ const ref = (params.get('ref') || '').replace(/[^a-z0-9_-]/gi, '').slice(0, 40);
 // A plan's button picks that level; a link from the 3D maker ticks 3D.
 document.querySelectorAll('[data-level]').forEach((a) => a.addEventListener('click', () => { form.elements.service_level.value = a.dataset.level; }));
 if (ref === '3d') form.querySelector('input[value="sections_3d"]').checked = true;
+// "Free review" links tick that option and point the message box at it.
+const review = () => {
+  form.querySelector('input[value="map_review"]').checked = true;
+  if (!form.elements.message.value) form.elements.message.placeholder = 'Attach your latest news-release map or deck below, or paste a link to it here';
+};
+document.querySelectorAll('[data-review]').forEach((a) => a.addEventListener('click', review));
+if (params.has('review')) review();
 
 function fail(msg, field) {
   errorEl.textContent = msg;
