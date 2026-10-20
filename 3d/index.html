@@ -215,6 +215,18 @@ dialog.acct-dialog::backdrop { background: rgba(20,33,38,0.35); }
         <p class="muted" style="margin-top:8px">Coordinates in UTM metres (lat/long works for collars). Dips can be negative or positive down.</p>
       </section>
       <section><h3>Loaded files</h3><div class="files" id="file-list"></div></section>
+      <section>
+        <h3>Location</h3>
+        <label class="field"><span>Coordinate system of your files</span>
+          <span class="row" style="flex-wrap:nowrap"><input type="text" id="crs" list="crs-list" placeholder="EPSG:26909 or UTM 9N NAD83" autocomplete="off"><button class="btn" type="button" id="crs-apply">Set</button></span></label>
+        <datalist id="crs-list">
+          <option value="EPSG:26909">NAD83 / UTM 9N (British Columbia)</option><option value="EPSG:26910">NAD83 / UTM 10N</option><option value="EPSG:26911">NAD83 / UTM 11N</option>
+          <option value="EPSG:26917">NAD83 / UTM 17N (Ontario)</option><option value="EPSG:26918">NAD83 / UTM 18N (Quebec)</option><option value="EPSG:26912">NAD83 / UTM 12N</option>
+          <option value="EPSG:32719">WGS 84 / UTM 19S (Chile, Argentina)</option><option value="EPSG:32718">WGS 84 / UTM 18S (Peru)</option><option value="EPSG:32612">WGS 84 / UTM 12N (Mexico, Arizona)</option>
+          <option value="EPSG:28350">GDA94 / MGA 50 (Western Australia)</option><option value="EPSG:4326">WGS 84 latitude/longitude</option>
+        </datalist>
+        <p class="muted" id="crs-note" style="margin-top:6px"></p>
+      </section>
       <div class="summary" id="summary" aria-live="polite"></div>
       <details><summary>See example file layouts</summary><pre id="fmt-collar"></pre><pre id="fmt-survey"></pre><pre id="fmt-assay"></pre></details>
       <button class="btn primary next" type="button" data-goto="brand">Next: Brand →</button>
@@ -298,6 +310,14 @@ dialog.acct-dialog::backdrop { background: rgba(20,33,38,0.35); }
           <label class="check"><input type="checkbox" id="opt-pending" checked>"Assays pending" from collar status</label>
           <label class="check"><input type="checkbox" id="opt-pending-none">Label holes without assays</label>
         </div>
+        <div class="grid2" style="margin-top:8px">
+          <label class="field"><span>Terrain</span><select id="terrain">
+            <option value="natural">Natural</option><option value="light">Light relief</option><option value="relief">Shaded relief</option><option value="dark">Dark slate</option>
+            <option value="satellite">Satellite</option><option value="muted">Satellite, muted</option></select></label>
+          <label class="field"><span>Surface from</span><select id="terrain-src">
+            <option value="auto">Best available</option><option value="topo">Your topography</option><option value="dem">Real elevation (DEM)</option><option value="collars">Collar elevations</option></select></label>
+        </div>
+        <label class="field" style="margin-top:8px"><span>Vertical exaggeration <output id="vex-out" class="mono">1×</output></span><input type="range" id="vex" min="1" max="5" step="0.5" value="1"></label>
         <label class="field" style="margin-top:8px"><span>Drill trace thickness <output id="trace-out" class="mono">1.4×</output></span><input type="range" id="trace-w" min="50" max="300" step="10" value="140"></label>
         <label class="field" style="margin-top:8px"><span>Surface opacity <output id="surf-out" class="mono">100%</output></span><input type="range" id="surf" min="15" max="100" value="100"></label>
         <div class="files" id="mesh-list" style="margin-top:8px"></div>

@@ -141,6 +141,7 @@ const S = {              // style
   valueCol: null, valueLabel: '', bins: [0.1, 0.2, 0.3, 0.5], coCount: 5, coMin: 20, coCut: 0.2, coIncl: 0.5,
   secAz: 135, secW: 75, surf: 1, walls: true, ids: true, inset: true, logo: null, meshes: {},
   ribbons: true, traceWidth: 1.4, pendingLabels: true, pendingNoAssays: false, valueCol2: null, elevTicks: true,
+  terrain: 'natural', terrainSource: 'auto', vex: 1, crs: null,
 };
 const BIN_COLORS = ['#a3abaf', '#e2dc4f', '#ff9a1f', '#ef3b2c', '#e93ad1'];
 const MESH_COLORS = ['#ff9a1f', '#e93ad1', '#2b8fd6', '#6aa84f', '#8e5bd6'];
@@ -180,6 +181,7 @@ function build() {
   if (latlon) {
     const arr = [...collars.values()], lat0 = arr.reduce((s, c) => s + c.y, 0) / arr.length, lon0 = arr.reduce((s, c) => s + c.x, 0) / arr.length;
     arr.forEach((c) => { c.x = (c.x - lon0) * Math.cos(lat0 * Math.PI / 180) * 111320; c.y = (c.y - lat0) * 110540; });
+    latlon = { lat0, lon0 };
     warnings.push('Collars are in latitude/longitude; converted to metres. Topography and model files need UTM metres to line up.');
   }
   // Surveys
@@ -230,7 +232,7 @@ function build() {
     };
     holes.push({ id: c.id, c, ints, len, dirAt, path: null, note: c.note });
   }
-  return { warnings, holes, topoPts, meshF, cols, posDown };
+  return { warnings, holes, topoPts, meshF, cols, posDown, latlon: latlon || null };
 }
 const noteCol = (header) => header.map(norm).findIndex((h) => /(^|_)(status|notes?|comments?|remarks?)$/.test(h));
 // "ASSAYS PENDING": the collar status or notes say so, or (when asked) the hole has no assays yet.
@@ -268,13 +270,16 @@ controls.enableDamping = true; controls.dampingFactor = 0.08; controls.maxPolarA
 let root = new THREE.Group(); scene.add(root);
 let G = null; // geometry context: origin, block, surface, holes w/ paths, meshes
 
-function rebuildScene() {
+function rebuildScene(keepCam) {
+  const cam0 = keepCam && G ? getCam() : null;
   scene.remove(root); root.traverse((o) => { o.geometry?.dispose?.(); o.material?.map?.dispose?.(); o.material?.dispose?.(); }); root = new THREE.Group(); scene.add(root);
   if (!project || project.empty) { G = null; return; }
   const holes = project.holes;
-  // Paths every 2 m
+  // Elevations as read: an earlier build may have filled or hung them from a surface.
+  holes.forEach((h) => { if (!('zRead' in h.c)) h.c.zRead = h.c.z; h.c.z = h.c.zRead; });
+  // Paths every 2 m (from 0 when the collar has no elevation; shifted onto the surface below)
   holes.forEach((h) => {
-    const pts = [{ d: 0, x: h.c.x, y: h.c.y, z: h.c.z }]; let p = { x: h.c.x, y: h.c.y, z: h.c.z };
+    const z0 = Number.isFinite(h.c.z) ? h.c.z : 0, pts = [{ d: 0, x: h.c.x, y: h.c.y, z: z0 }]; let p = { x: h.c.x, y: h.c.y, z: z0 };
     for (let d = 0; d < h.len; d += 2) { const s = Math.min(2, h.len - d), v = h.dirAt(d + s / 2); p = { x: p.x + v[0] * s, y: p.y + v[1] * s, z: p.z + v[2] * s }; pts.push({ d: d + s, ...p }); }
     h.path = pts;
     h.posAt = (d) => { const i = Math.max(0, Math.min(pts.length - 2, Math.floor(d / 2))), a = pts[i], b = pts[i + 1], t = Math.max(0, Math.min(1, (d - a.d) / ((b.d - a.d) || 1))); return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, z: a.z + (b.z - a.z) * t }; };
@@ -282,59 +287,69 @@ function rebuildScene() {
   // Block extent from the holes
   let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity, zmin = Infinity;
   holes.forEach((h) => h.path.forEach((p) => { x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); y0 = Math.min(y0, p.y); y1 = Math.max(y1, p.y); if (Number.isFinite(p.z)) zmin = Math.min(zmin, p.z); }));
-  const pad = Math.max(60, 0.14 * Math.max(x1 - x0, y1 - y0));
+  // A located project gets more ground around the drilling, for the terrain and imagery to read.
+  const pad = Math.max(60, (geo ? 0.25 : 0.14) * Math.max(x1 - x0, y1 - y0));
   const B = { x0: x0 - pad, x1: x1 + pad, y0: y0 - pad, y1: y1 + pad };
   const cx = (B.x0 + B.x1) / 2, cy = (B.y0 + B.y1) / 2, bw = B.x1 - B.x0, bh = B.y1 - B.y0, diag = Math.hypot(bw, bh);
-  // Surface: inverse-distance fit to topography points, or to collar elevations.
-  let src = project.topoPts.filter(([x, y]) => x > B.x0 - pad && x < B.x1 + pad && y > B.y0 - pad && y < B.y1 + pad);
-  if (src.length < 4) src = holes.filter((h) => Number.isFinite(h.c.z)).map((h) => [h.c.x, h.c.y, h.c.z]);
+  // Surface: uploaded topography, else the real DEM (once a coordinate system is set and its tiles
+  // load), else a fit to the collar elevations. terrainSource can force one.
+  const topo = project.topoPts.filter(([x, y]) => x > B.x0 - pad && x < B.x1 + pad && y > B.y0 - pad && y < B.y1 + pad);
+  const dem = realT.dem && realT.dem.ok && realT.dem.key === terrainKeyOf(B) ? realT.dem : null, want = S.terrainSource;
+  const using = want === 'collars' ? 'collars' : want === 'dem' && dem ? 'dem' : topo.length >= 4 ? 'topo' : dem ? 'dem' : 'collars';
+  let src = using === 'topo' ? topo : holes.filter((h) => Number.isFinite(h.c.z)).map((h) => [h.c.x, h.c.y, h.c.z]);
   if (!src.length) src = [[cx, cy, 0]];
-  const NG = 110, grid = new Float32Array((NG + 1) * (NG + 1));
+  const NG = using === 'dem' ? 200 : 110, grid = new Float32Array((NG + 1) * (NG + 1));
   for (let j = 0; j <= NG; j++) for (let i = 0; i <= NG; i++) {
-    const x = B.x0 + bw * i / NG, y = B.y0 + bh * j / NG; let sw = 0, sz = 0, exact = null;
+    const x = B.x0 + bw * i / NG, y = B.y0 + bh * j / NG; let sw = 0, sz = 0, exact = using === 'dem' ? dem.at(x, y) : null;
+    if (Number.isFinite(exact)) { grid[j * (NG + 1) + i] = exact; continue; } exact = null;
     for (const [px, py, pz] of src) { const d2 = (px - x) ** 2 + (py - y) ** 2; if (d2 < 1) { exact = pz; break; } const w = 1 / d2; sw += w; sz += w * pz; }
     grid[j * (NG + 1) + i] = exact ?? sz / sw;
   }
-  if (src.length > 60) for (let pass = 0; pass < 2; pass++) { const r = NG + 1, cp = grid.slice();
+  if (using !== 'dem' && src.length > 60) for (let pass = 0; pass < 2; pass++) { const r = NG + 1, cp = grid.slice();
     for (let j = 1; j < NG; j++) for (let i = 1; i < NG; i++) { const k = j * r + i; grid[k] = (cp[k] * 4 + cp[k - 1] + cp[k + 1] + cp[k - r] + cp[k + r]) / 8; } }
   const surf = (x, y) => {
     const fi = Math.max(0, Math.min(NG - 1e-6, (x - B.x0) / bw * NG)), fj = Math.max(0, Math.min(NG - 1e-6, (y - B.y0) / bh * NG)), i = Math.floor(fi), j = Math.floor(fj), a = fi - i, b = fj - j, r = NG + 1;
     return grid[j * r + i] * (1 - a) * (1 - b) + grid[j * r + i + 1] * a * (1 - b) + grid[(j + 1) * r + i] * (1 - a) * b + grid[(j + 1) * r + i + 1] * a * b;
   };
   // Collars with no elevation take the surface; then shift their paths.
-  holes.forEach((h) => { if (!Number.isFinite(h.c.z)) { const z = surf(h.c.x, h.c.y); h.path.forEach((p) => { p.z = z + (p.z - (Number.isFinite(h.c.z) ? h.c.z : 0)); }); h.c.z = z; } });
+  holes.forEach((h) => { if (!Number.isFinite(h.c.z)) { const z = surf(h.c.x, h.c.y); h.path.forEach((p) => { p.z += z; }); h.c.z = z; } });
+  // Collars surveyed on another datum (or illustrative) can sit well off the real terrain. Rather than
+  // float or bury the holes, hang each from the DEM surface and say so.
+  let terrainNote = '';
+  if (using === 'dem') {
+    const off = holes.map((h) => surf(h.c.x, h.c.y) - h.c.z).filter(Number.isFinite), med = off.map(Math.abs).sort((a, b) => a - b)[Math.floor(off.length / 2)] || 0;
+    if (med > 10) {
+      holes.forEach((h) => { const d = surf(h.c.x, h.c.y) - h.c.z; h.path.forEach((p) => { p.z += d; }); h.c.z += d; });
+      terrainNote = `Collar elevations sit about ${Math.round(med)} m off the real terrain, so each hole hangs from the terrain surface.`;
+    }
+  }
   zmin = Math.min(...holes.flatMap((h) => h.path.map((p) => p.z)));
   let zmax = -Infinity; for (const v of grid) zmax = Math.max(zmax, v);
   B.z0 = zmin - Math.max(25, 0.05 * diag);
   const zref = (zmax + B.z0) / 2;
-  const V = (x, y, z) => new THREE.Vector3(x - cx, z - zref, -(y - cy));
+  const vex = S.vex, V = (x, y, z) => new THREE.Vector3(x - cx, (z - zref) * vex, -(y - cy));
   // diag sizes marks (tubes, labels) by the whole block; the camera distance
   // (baseDist) adds the depth only as far as it shows at the view's plunge, so a
   // tight collar pattern with 600 m holes (Star Main) is framed from the side
   // without shrinking the plan view.
-  G = { B, cx, cy, bw, bh, diag: Math.max(diag, Math.hypot(bw, bh, zmax - B.z0)), diagH: diag, depth: zmax - B.z0, surf, V, zref, zmax };
+  G = { B, cx, cy, bw, bh, diag: Math.max(diag, Math.hypot(bw, bh, zmax - B.z0)), diagH: diag, depth: (zmax - B.z0) * vex, surf, V, zref, zmax, using, terrainNote };
 
-  // Terrain top
-  const TW = 768, TH = Math.max(64, Math.round(768 * bh / bw));
-  const base = document.createElement('canvas'); base.width = TW; base.height = TH;
+  // Terrain top: elevation and hillshade cached once per build; paintTerrain colours them by style.
   {
-    const ctx = base.getContext('2d'), img = ctx.createImageData(TW, TH), cell = bw / TW, hs = new Float32Array(TW * TH);
+    const TW = 768, TH = Math.max(64, Math.round(768 * bh / bw)), cell = bw / TW, hs = new Float32Array(TW * TH), shade = new Float32Array(TW * TH);
     for (let py = 0; py < TH; py++) for (let px = 0; px < TW; px++) hs[py * TW + px] = surf(B.x0 + px * cell, B.y1 - py * bh / TH);
     let lo = Infinity, hi = -Infinity; hs.forEach((v) => { lo = Math.min(lo, v); hi = Math.max(hi, v); });
-    const sunv = [-0.5, 0.5, 0.71], rng = mulberry32(7);
+    const sunv = [-0.5, 0.5, 0.71], rng = mulberry32(7), speck = new Uint8Array(TW * TH);
     for (let py = 0; py < TH; py++) for (let px = 0; px < TW; px++) {
       const i = py * TW + px, hx = hs[py * TW + Math.min(px + 1, TW - 1)] - hs[py * TW + Math.max(px - 1, 0)], hy = hs[Math.max(py - 1, 0) * TW + px] - hs[Math.min(py + 1, TH - 1) * TW + px];
-      const nx = -hx / (2 * cell), ny = -hy / (2 * bh / TH), l = Math.hypot(nx, ny, 1), sh = Math.max(0, (nx * sunv[0] + ny * sunv[1] + sunv[2]) / l);
-      const t = (hs[i] - lo) / ((hi - lo) || 1), f = (0.42 + 0.8 * sh) * (rng() < 0.2 ? 0.9 : 1);
-      const c = [78 + 96 * t, 100 + 74 * t, 66 + 82 * t];
-      const contour = Math.floor(hs[i] / 25) !== Math.floor(hs[Math.min(i + 1, hs.length - 1)] / 25) ? 0.82 : 1;
-      img.data[i * 4] = Math.min(255, c[0] * f * contour); img.data[i * 4 + 1] = Math.min(255, c[1] * f * contour); img.data[i * 4 + 2] = Math.min(255, c[2] * f * contour); img.data[i * 4 + 3] = 255;
+      const nx = -hx / (2 * cell), ny = -hy / (2 * bh / TH), l = Math.hypot(nx, ny, 1);
+      shade[i] = Math.max(0, (nx * sunv[0] + ny * sunv[1] + sunv[2]) / l); speck[i] = rng() < 0.2 ? 1 : 0;
     }
-    ctx.putImageData(img, 0, 0);
+    G.terr = { TW, TH, hs, shade, speck, lo, hi };
   }
-  G.topBase = base; G.topCanvas = document.createElement('canvas'); G.topCanvas.width = TW; G.topCanvas.height = TH;
+  G.topBase = document.createElement('canvas'); G.topCanvas = document.createElement('canvas');
   G.topTex = new THREE.CanvasTexture(G.topCanvas); G.topTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-  const tg = new THREE.PlaneGeometry(bw, bh, 140, Math.max(20, Math.round(140 * bh / bw)));
+  const TS = using === 'dem' ? 220 : 140, tg = new THREE.PlaneGeometry(bw, bh, TS, Math.max(20, Math.round(TS * bh / bw)));
   { const pos = tg.attributes.position; for (let i = 0; i < pos.count; i++) { const x = pos.getX(i) + cx, y = pos.getY(i) + cy, v = V(x, y, surf(x, y)); pos.setXYZ(i, v.x, v.y, v.z); } }
   G.top = new THREE.Mesh(tg, new THREE.MeshBasicMaterial({ map: G.topTex, side: THREE.DoubleSide, transparent: true })); G.top.renderOrder = 6; root.add(G.top);
 
@@ -346,7 +361,7 @@ function rebuildScene() {
       for (let j = 0; j <= NJ; j++) { const z = B.z0 + (top - B.z0) * j / NJ, v = V(x, y, z); pos.push(v.x, v.y, v.z); const t = 0.92 + 0.07 * j / NJ; col.push(t * 0.98, t, t * 0.99); } }
     for (let i = 0; i < NI; i++) for (let j = 0; j < NJ; j++) { const a = i * (NJ + 1) + j, b = a + NJ + 1; idx.push(a, b, a + 1, b, b + 1, a + 1); }
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setIndex(idx);
-    const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.42, side: THREE.DoubleSide, depthWrite: false })); m.renderOrder = 5; root.add(m); G.walls.push(m);
+    const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.42, side: THREE.DoubleSide, depthWrite: false })); m.renderOrder = 5; m.userData.nj = NJ; root.add(m); G.walls.push(m);
   };
   const C = [[B.x0, B.y0], [B.x1, B.y0], [B.x1, B.y1], [B.x0, B.y1]];
   C.forEach((p, i) => wall(p, C[(i + 1) % 4]));
@@ -357,10 +372,12 @@ function rebuildScene() {
     for (let k = 0; k < 50; k++) { const a = k / 50, b = (k + 1) / 50; seg.push(V(x + (x2 - x) * a, y + (y2 - y) * a, surf(x + (x2 - x) * a, y + (y2 - y) * a)), V(x + (x2 - x) * b, y + (y2 - y) * b, surf(x + (x2 - x) * b, y + (y2 - y) * b))); } });
   root.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(seg), new THREE.LineBasicMaterial({ color: '#8f9a9f' })));
   {
-    const c = document.createElement('canvas'); c.width = c.height = 256; const g = c.getContext('2d'), grd = g.createRadialGradient(128, 128, 10, 128, 128, 128);
-    grd.addColorStop(0, 'rgba(40,45,50,0.4)'); grd.addColorStop(0.55, 'rgba(40,45,50,0.15)'); grd.addColorStop(1, 'rgba(40,45,50,0)'); g.fillStyle = grd; g.fillRect(0, 0, 256, 256);
-    const sh = new THREE.Mesh(new THREE.PlaneGeometry(bw * 1.7, bh * 1.9), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false }));
-    sh.rotation.x = -Math.PI / 2; sh.position.copy(V(cx + bw * 0.04, cy - bh * 0.04, B.z0 - diag * 0.08)); root.add(sh);
+    // The block floats: a soft, blurred footprint shadow a little below it. Drawn as the shadow of a
+    // square held off-canvas, which blurs the same in every browser (ctx.filter does not).
+    const c = document.createElement('canvas'); c.width = c.height = 256; const g = c.getContext('2d');
+    g.shadowColor = 'rgba(28,36,40,0.5)'; g.shadowBlur = 30; g.shadowOffsetX = 1000; g.fillStyle = '#000'; g.fillRect(64 - 1000, 64, 128, 128);
+    const sh = new THREE.Mesh(new THREE.PlaneGeometry(bw * 2, bh * 2), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false }));
+    sh.rotation.x = -Math.PI / 2; sh.position.copy(V(cx + bw * 0.03, cy - bh * 0.03, B.z0 - diag * 0.07 / vex)); root.add(sh);
   }
 
   // Holes: grey trace, then coloured assay intervals
@@ -385,9 +402,228 @@ function rebuildScene() {
     const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color: st.color, transparent: true, opacity: st.opacity, depthWrite: false, side: THREE.DoubleSide }));
     m.renderOrder = 4; m.visible = st.show; root.add(m); G.meshes.push({ name: f.name, m });
   });
-  restyle();
-  applyView('a', true);
+  paintTerrain(); restyle();
+  if (cam0) setCamera(cam0, true); else applyView('a', true);
+  syncRealTerrain();
 }
+
+// Terrain looks. Light and relief are paper hillshades; satellite and muted drape imagery when it has
+// loaded and otherwise fall back to natural. Pale styles also whiten the glass sides.
+const TERRAINS = { natural: 'Natural', light: 'Light relief', dark: 'Dark slate', relief: 'Shaded relief', satellite: 'Satellite', muted: 'Satellite, muted' };
+const PALE = new Set(['light', 'relief', 'satellite', 'muted']);
+const imageryShown = () => !!G && (S.terrain === 'satellite' || S.terrain === 'muted') && !!realT.img?.ok && realT.img.key === terrainKeyOf(G.B);
+function paintTerrain() {
+  if (!G) return;
+  const T = G.terr, img = imageryShown() ? realT.img : null, tw = img ? img.w : T.TW, th = img ? img.h : T.TH, st = S.terrain;
+  if (G.topCanvas.width !== tw || G.topCanvas.height !== th) {
+    G.topCanvas.width = G.topBase.width = tw; G.topCanvas.height = G.topBase.height = th;
+    // A texture cannot change size in place.
+    G.topTex.dispose(); G.topTex = new THREE.CanvasTexture(G.topCanvas); G.topTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    if (G.top) { G.top.material.map = G.topTex; G.top.material.needsUpdate = true; }
+  }
+  const ctx = G.topBase.getContext('2d'), out = ctx.createImageData(tw, th), d = out.data, { TW, TH, hs, shade, speck, lo, hi } = T;
+  const step = Math.max(5, niceRound((hi - lo) / 14)), band = (v) => Math.floor(v / step);
+  if (img) {
+    for (let py = 0; py < th; py++) { const sy = Math.min(TH - 1, Math.floor(py * TH / th));
+      for (let px = 0; px < tw; px++) {
+        const i = py * tw + px, sh = shade[sy * TW + Math.min(TW - 1, Math.floor(px * TW / tw))];
+        let r = img.data[i * 4], g = img.data[i * 4 + 1], b = img.data[i * 4 + 2], f = 0.8 + 0.3 * sh;
+        if (st === 'muted') { const l = 0.3 * r + 0.59 * g + 0.11 * b; r = (l + (r - l) * 0.4) * 0.6 + 98; g = (l + (g - l) * 0.4) * 0.6 + 100; b = (l + (b - l) * 0.4) * 0.6 + 97; f = 0.86 + 0.22 * sh; }
+        d[i * 4] = Math.min(255, r * f); d[i * 4 + 1] = Math.min(255, g * f); d[i * 4 + 2] = Math.min(255, b * f); d[i * 4 + 3] = 255;
+      } }
+  } else {
+    for (let i = 0; i < TW * TH; i++) {
+      const sh = shade[i], t = (hs[i] - lo) / ((hi - lo) || 1), right = hs[Math.min(i + 1, hs.length - 1)], down = hs[Math.min(i + TW, hs.length - 1)];
+      const edge = band(hs[i]) !== band(right) || band(hs[i]) !== band(down), index = edge && (Math.floor(hs[i] / (step * 5)) !== Math.floor(right / (step * 5)) || Math.floor(hs[i] / (step * 5)) !== Math.floor(down / (step * 5)));
+      let c;
+      if (st === 'light') { const v = Math.min(1, 0.3 + 0.95 * sh) * (edge ? (index ? 0.9 : 0.955) : 1); c = [154 + 88 * v, 163 + 81 * v, 166 + 77 * v]; }
+      else if (st === 'relief') { const v = Math.max(0, Math.min(1, 1.25 * sh - 0.1)) * (edge ? (index ? 0.82 : 0.92) : 1); c = [(70 + 182 * v) + 8 * (t - 0.5), 78 + 175 * v, (84 + 166 * v) - 8 * (t - 0.5)]; }
+      else if (st === 'dark') { const f = (0.42 + 0.85 * sh) * (edge ? 0.86 : 1); c = [(40 + 46 * t) * f, (55 + 44 * t) * f, (61 + 42 * t) * f]; }
+      else { // natural, and satellite before its imagery arrives
+        const f = (0.42 + 0.8 * sh) * (speck[i] ? 0.9 : 1), contour = Math.floor(hs[i] / 25) !== Math.floor(right / 25) ? 0.82 : 1;
+        c = [(78 + 96 * t) * f * contour, (100 + 74 * t) * f * contour, (66 + 82 * t) * f * contour];
+      }
+      d[i * 4] = Math.min(255, c[0]); d[i * 4 + 1] = Math.min(255, c[1]); d[i * 4 + 2] = Math.min(255, c[2]); d[i * 4 + 3] = 255;
+    }
+  }
+  ctx.putImageData(out, 0, 0);
+  const pale = PALE.has(st);
+  G.walls.forEach((w) => {
+    const ca = w.geometry.attributes.color;
+    if (!ca) { w.material.color.set(pale ? '#f3f5f4' : '#e9ecea'); return; }
+    const nj = w.userData.nj; for (let k = 0; k < ca.count; k++) { const j = (k % (nj + 1)) / nj, t = pale ? 0.965 + 0.035 * j : 0.92 + 0.07 * j; ca.setXYZ(k, t * (pale ? 0.995 : 0.98), t, t * (pale ? 0.99 : 0.99)); }
+    ca.needsUpdate = true;
+  });
+}
+
+// ============================================================
+// 4b. Real terrain: coordinate system, DEM and satellite tiles
+// ============================================================
+// Tiles load as <img crossOrigin="anonymous">, not fetch(): the page's CSP allows https images but not
+// these hosts in connect-src. A tile refused by CORS never loads at all, so the mosaic canvas is never
+// tainted and exports keep working; missing tiles just leave gaps that fall back to the fitted surface.
+const DEM_URL = (z, x, y) => `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${z}/${x}/${y}.png`;
+const IMG_URL = (z, x, y) => `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`;
+const IMAGERY_CREDIT = 'Imagery: Esri, Maxar, Earthstar Geographics', DEM_CREDIT = 'Elevation: AWS Terrain Tiles';
+let geo = null;          // { code, label, guessed, fwd(x, y) -> [lon, lat] } once a coordinate system is set
+const realT = { dem: null, img: null, job: 0, promise: null, status: 'off', message: '' };
+let P4 = null;           // proj4, loaded on first use
+const UTM_FAMILIES = [   // [first EPSG code, last, first zone, south, datum, label]
+  [32601, 32660, 1, false, '+datum=WGS84', 'WGS 84'], [32701, 32760, 1, true, '+datum=WGS84', 'WGS 84'],
+  [26901, 26923, 1, false, '+ellps=GRS80 +towgs84=0,0,0,0,0,0,0', 'NAD83'], [26703, 26722, 3, false, '+ellps=clrk66 +towgs84=-8,160,176,0,0,0,0', 'NAD27'],
+  [25828, 25838, 28, false, '+ellps=GRS80 +towgs84=0,0,0,0,0,0,0', 'ETRS89'], [28349, 28356, 49, true, '+ellps=GRS80 +towgs84=0,0,0,0,0,0,0', 'GDA94 MGA'],
+  [7846, 7859, 46, true, '+ellps=GRS80 +towgs84=0,0,0,0,0,0,0', 'GDA2020 MGA'], [31965, 31976, 11, false, '+ellps=GRS80 +towgs84=0,0,0,0,0,0,0', 'SIRGAS 2000'],
+  [31977, 31985, 17, true, '+ellps=GRS80 +towgs84=0,0,0,0,0,0,0', 'SIRGAS 2000'], [24817, 24821, 17, false, '+ellps=intl +towgs84=-288,175,-376,0,0,0,0', 'PSAD56'],
+  [24877, 24881, 17, true, '+ellps=intl +towgs84=-288,175,-376,0,0,0,0', 'PSAD56'],
+];
+const DATUM_WORDS = [[/nad\s*83/i, 26901], [/nad\s*27/i, 26703], [/etrs/i, 25828], [/gda\s*2020/i, 7846], [/gda|mga/i, 28349], [/sirgas/i, 31965], [/psad/i, 24817]];
+// "EPSG:26909", 26909, "UTM 9N", "NAD83 / UTM zone 9N", "WGS84 UTM 19S", "EPSG:4326" or a proj4 string.
+function parseCRS(input) {
+  const t = String(input).trim(), utm = (zone, south, fam) => ({ def: `+proj=utm +zone=${zone}${south ? ' +south' : ''} ${fam[4]} +units=m +no_defs`, label: `${fam[5]} / UTM ${zone}${south ? 'S' : 'N'}`, utm: true });
+  if (/^\+proj=/.test(t)) return { code: t, label: 'Custom (proj4)', def: t, utm: /utm/.test(t) };
+  const m = t.match(/^(?:epsg:\s*)?(\d{4,5})$/i);
+  if (m) {
+    const n = +m[1]; if (n === 4326) return { code: 'EPSG:4326', label: 'WGS 84 latitude/longitude', latlon: true };
+    const fam = UTM_FAMILIES.find((f) => n >= f[0] && n <= f[1]);
+    if (!fam) throw new Error(`EPSG:${n} is not supported here. Use a UTM code (e.g. EPSG:326xx, 327xx, 269xx, 258xx, 283xx), "UTM 9N", EPSG:4326 or a proj4 string.`);
+    return { code: `EPSG:${n}`, ...utm(fam[2] + n - fam[0], fam[3], fam) };
+  }
+  const u = t.match(/utm\s*(?:zone\s*)?(\d{1,2})\s*([ns])?\b/i);
+  if (u) {
+    const zone = +u[1], south = /s/i.test(u[2] || '') || /south/i.test(t); if (zone < 1 || zone > 60) throw new Error('UTM zones run from 1 to 60.');
+    const hit = DATUM_WORDS.find(([re]) => re.test(t)), name = hit ? UTM_FAMILIES.find((f) => f[0] === hit[1])[5] : 'WGS 84';
+    const fam = UTM_FAMILIES.find((f) => f[5] === name && f[3] === south && zone >= f[2] && zone <= f[2] + f[1] - f[0]);
+    return fam ? { code: `EPSG:${fam[0] + zone - fam[2]}`, ...utm(zone, south, fam) } : { code: `UTM ${zone}${south ? 'S' : 'N'} ${name}`, ...utm(zone, south, UTM_FAMILIES.find((f) => f[5] === name)) };
+  }
+  if (/^(wgs\s*84|lat.?lon|latitude|geographic)/i.test(t)) return { code: 'EPSG:4326', label: 'WGS 84 latitude/longitude', latlon: true };
+  throw new Error(`"${t}" is not a coordinate system this page knows. Try "EPSG:26909", "UTM 9N NAD83" or "EPSG:4326".`);
+}
+// The forward transform from project metres to [lon, lat]; checked against the collars.
+function geoFor(c, P) {
+  if (c.latlon) {
+    const ll = P?.latlon; if (!ll) throw new Error('These collars are in metres, not latitude/longitude. Give the UTM zone or EPSG code of the files.');
+    return (x, y) => [ll.lon0 + x / (Math.cos(ll.lat0 * Math.PI / 180) * 111320), ll.lat0 + y / 110540];
+  }
+  if (P?.latlon) throw new Error('These collars are in latitude/longitude; the coordinate system is set to EPSG:4326 automatically.');
+  const f = P4(c.def, 'WGS84'), fwd = (x, y) => f.forward([x, y]);
+  const h = P?.holes?.[0];
+  if (h) {
+    if (c.utm && (h.c.x < 100000 || h.c.x > 900000 || h.c.y < 0 || h.c.y > 10000000)) throw new Error(`Collar ${h.id} at ${Math.round(h.c.x)} E, ${Math.round(h.c.y)} N is not a UTM coordinate. Check the easting and northing columns.`);
+    const [lon, lat] = fwd(h.c.x, h.c.y); if (!Number.isFinite(lon) || !Number.isFinite(lat) || Math.abs(lat) > 84) throw new Error(`${c.label} puts collar ${h.id} off the map. Check the zone and hemisphere.`);
+  }
+  return fwd;
+}
+async function setCRS(input, opts = {}) {
+  if (input === null || input === undefined || input === '') {
+    S.crs = null; geo = null; realT.dem = realT.img = null; realT.job++; realT.status = 'off';
+    renderCRS(); if (project && !project.empty) rebuildScene(true); schedulePublish(); status('Coordinate system cleared. The surface is fitted to your files.'); return getState();
+  }
+  const c = parseCRS(input);
+  if (!c.latlon && !P4) P4 = (await import('proj4')).default;
+  const fwd = geoFor(c, project && !project.empty ? project : null);
+  S.crs = c.code; geo = { ...c, guessed: !!opts.guessed, fwd }; realT.dem = realT.img = null;
+  renderCRS(); schedulePublish();
+  if (project && !project.empty) {
+    const [lon, lat] = fwd(project.holes[0].c.x, project.holes[0].c.y);
+    status(`${c.label}: collars near ${Math.abs(lat).toFixed(3)}°${lat < 0 ? 'S' : 'N'}, ${Math.abs(lon).toFixed(3)}°${lon < 0 ? 'W' : 'E'}. Loading real terrain…`);
+    rebuildScene(true); await realT.promise;
+  }
+  return getState();
+}
+// Re-check a set coordinate system against new collars; drop it with a message if it no longer fits.
+function recheckCRS() {
+  // Latitude/longitude collars locate themselves; the scene is built right after this.
+  if (!S.crs) { if (project?.latlon) { const c = parseCRS('EPSG:4326'); geo = { ...c, guessed: true, fwd: geoFor(c, project) }; S.crs = c.code; realT.dem = realT.img = null; renderCRS(); } return; }
+  // A coordinate system restored with a saved project (S.crs) is re-established here.
+  if (!geo) { setCRS(S.crs).catch((e) => { S.crs = null; renderCRS(); status(`Coordinate system cleared: ${e.message}`); }); return; }
+  try { geo.fwd = geoFor(geo, project && !project.empty ? project : null); } catch (e) { S.crs = null; geo = null; renderCRS(); status(`Coordinate system cleared: ${e.message}`); }
+}
+const lon2t = (lon, z) => (lon + 180) / 360 * 2 ** z;
+const lat2t = (lat, z) => { const r = lat * Math.PI / 180; return (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * 2 ** z; };
+// (x, y) -> [a, b] for a smooth transform, interpolated from a (n+1)² lattice over the box:
+// exact to well under a pixel over a few kilometres, and thousands of times cheaper than proj4 per texel.
+function lattice(B, fn, n = 16) {
+  const A = new Float64Array((n + 1) * (n + 1) * 2), w = B.x1 - B.x0, h = B.y1 - B.y0;
+  for (let j = 0; j <= n; j++) for (let i = 0; i <= n; i++) { const [a, b] = fn(B.x0 + w * i / n, B.y0 + h * j / n), k = (j * (n + 1) + i) * 2; A[k] = a; A[k + 1] = b; }
+  const at = (x, y) => {
+    const fi = Math.max(0, Math.min(n - 1e-9, (x - B.x0) / w * n)), fj = Math.max(0, Math.min(n - 1e-9, (y - B.y0) / h * n)), i = Math.floor(fi), j = Math.floor(fj), a = fi - i, b = fj - j, r = n + 1;
+    const k00 = (j * r + i) * 2, k10 = k00 + 2, k01 = k00 + r * 2, k11 = k01 + 2, w00 = (1 - a) * (1 - b), w10 = a * (1 - b), w01 = (1 - a) * b, w11 = a * b;
+    return [A[k00] * w00 + A[k10] * w10 + A[k01] * w01 + A[k11] * w11, A[k00 + 1] * w00 + A[k10 + 1] * w10 + A[k01 + 1] * w01 + A[k11 + 1] * w11];
+  };
+  let w0 = Infinity, e0 = -Infinity, s0 = Infinity, n0 = -Infinity; for (let k = 0; k < A.length; k += 2) { w0 = Math.min(w0, A[k]); e0 = Math.max(e0, A[k]); s0 = Math.min(s0, A[k + 1]); n0 = Math.max(n0, A[k + 1]); }
+  at.bbox = { w: w0, e: e0, s: s0, n: n0 }; return at;
+}
+function loadImage(url, ms = 20000) {
+  return new Promise((resolve) => {
+    const im = new Image(); im.crossOrigin = 'anonymous'; im.decoding = 'async';
+    const t = setTimeout(() => { im.onload = im.onerror = null; resolve(null); }, ms);
+    im.onload = () => { clearTimeout(t); resolve(im); }; im.onerror = () => { clearTimeout(t); resolve(null); }; im.src = url;
+  });
+}
+// Deepest zoom (<= maxZ) at which the box spans no more than px pixels.
+function zoomFor(bb, px, maxZ) { for (let z = maxZ; z > 1; z--) if (Math.max(lon2t(bb.e, z) - lon2t(bb.w, z), lat2t(bb.s, z) - lat2t(bb.n, z)) * 256 <= px) return z; return 2; }
+async function mosaic(urlFn, bb, z) {
+  const x0 = Math.floor(lon2t(bb.w, z)), x1 = Math.floor(lon2t(bb.e, z)), y0 = Math.floor(lat2t(bb.n, z)), y1 = Math.floor(lat2t(bb.s, z)), jobs = [];
+  for (let ty = y0; ty <= y1; ty++) for (let tx = x0; tx <= x1; tx++) jobs.push([tx, ty]);
+  const c = document.createElement('canvas'); c.width = (x1 - x0 + 1) * 256; c.height = (y1 - y0 + 1) * 256; const g = c.getContext('2d', { willReadFrequently: true });
+  let next = 0, ok = 0;
+  await Promise.all(Array.from({ length: 6 }, async () => { while (next < jobs.length) { const [tx, ty] = jobs[next++], im = await loadImage(urlFn(z, tx, ty)); if (im) { g.drawImage(im, (tx - x0) * 256, (ty - y0) * 256); ok++; } } }));
+  if (!ok) throw new Error('no tiles loaded');
+  let data; try { data = g.getImageData(0, 0, c.width, c.height).data; } catch { throw new Error('the tiles were blocked by the browser'); }
+  return { data, w: c.width, h: c.height, z, x0, y0, ok, total: jobs.length };
+}
+const pxOf = (M) => (x, y) => { const [lon, lat] = geo.fwd(x, y); return [(lon2t(lon, M.z) - M.x0) * 256 - 0.5, (lat2t(lat, M.z) - M.y0) * 256 - 0.5]; };
+async function loadDem(key, B) {
+  const bb = lattice(B, geo.fwd, 4).bbox, M = await mosaic(DEM_URL, bb, zoomFor(bb, 512, 15)), E = new Float32Array(M.w * M.h);
+  for (let i = 0; i < E.length; i++) E[i] = M.data[i * 4 + 3] < 255 ? NaN : M.data[i * 4] * 256 + M.data[i * 4 + 1] + M.data[i * 4 + 2] / 256 - 32768;
+  const toPx = lattice(B, pxOf(M));
+  const at = (x, y) => {
+    const [px, py] = toPx(x, y), i = Math.floor(px), j = Math.floor(py), a = px - i, b = py - j;
+    if (i < 0 || j < 0 || i + 1 >= M.w || j + 1 >= M.h) return NaN;
+    const k = j * M.w + i; return E[k] * (1 - a) * (1 - b) + E[k + 1] * a * (1 - b) + E[k + M.w] * (1 - a) * b + E[k + M.w + 1] * a * b;
+  };
+  return { key, ok: true, at, z: M.z, tiles: `${M.ok}/${M.total}` };
+}
+async function loadImagery(key, B) {
+  const bb = lattice(B, geo.fwd, 4).bbox, M = await mosaic(IMG_URL, bb, zoomFor(bb, 2048, 17)), toPx = lattice(B, pxOf(M));
+  const bw = B.x1 - B.x0, bh = B.y1 - B.y0, across = (lon2t(bb.e, M.z) - lon2t(bb.w, M.z)) * 256;
+  let w = Math.max(768, Math.min(2048, Math.round(across * 1.25))), h = Math.round(w * bh / bw); if (h > 2048) { w = Math.round(w * 2048 / h); h = 2048; }
+  const out = new Uint8ClampedArray(w * h * 4), src = M.data;
+  for (let py = 0; py < h; py++) for (let px = 0; px < w; px++) {
+    const [sx, sy] = toPx(B.x0 + (px + 0.5) / w * bw, B.y1 - (py + 0.5) / h * bh), i = Math.max(0, Math.min(M.w - 2, Math.floor(sx))), j = Math.max(0, Math.min(M.h - 2, Math.floor(sy)));
+    const a = Math.max(0, Math.min(1, sx - i)), b = Math.max(0, Math.min(1, sy - j)), k = (j * M.w + i) * 4, o = (py * w + px) * 4, r = M.w * 4;
+    for (let c = 0; c < 3; c++) out[o + c] = src[k + c] * (1 - a) * (1 - b) + src[k + 4 + c] * a * (1 - b) + src[k + r + c] * (1 - a) * b + src[k + r + 4 + c] * a * b;
+    out[o + 3] = 255;
+  }
+  return { key, ok: true, w, h, data: out, z: M.z, tiles: `${M.ok}/${M.total}` };
+}
+const terrainKeyOf = (B) => (geo ? `${S.crs}|${[B.x0, B.x1, B.y0, B.y1].map(Math.round).join(',')}` : '');
+// Load what the current style and source need for this block; rebuild or repaint when it lands.
+// Never blocks anything: exports taken meanwhile use the fitted surface.
+function syncRealTerrain() {
+  if (!G || !geo) { realT.status = 'off'; realT.message = geo ? '' : 'Set the coordinate system in step 1 for real terrain and satellite imagery.'; return Promise.resolve(); }
+  const key = terrainKeyOf(G.B), hasTopo = G.using === 'topo';
+  const needDem = S.terrainSource === 'dem' || (S.terrainSource === 'auto' && !hasTopo), needImg = S.terrain === 'satellite' || S.terrain === 'muted';
+  const getDem = needDem && realT.dem?.key !== key, getImg = needImg && realT.img?.key !== key;
+  if (!getDem && !getImg) {
+    if (realT.status === 'off') realT.message = hasTopo && S.terrainSource === 'auto' ? `${geo.label}. The surface is your topography; choose Satellite, or "Real elevation", to load tiles.` : `${geo.label}.`;
+    return realT.promise || Promise.resolve();
+  }
+  const job = ++realT.job; realT.status = 'loading'; realT.message = `Loading ${[getDem && 'real terrain', getImg && 'satellite imagery'].filter(Boolean).join(' and ')}…`; status(realT.message); schedulePublish();
+  realT.promise = (async () => {
+    const msgs = [], B = { ...G.B };
+    if (getDem) { try { realT.dem = await loadDem(key, B); msgs.push(`real terrain (z${realT.dem.z}, ${realT.dem.tiles} tiles)`); } catch (e) { realT.dem = { key, ok: false, error: e.message }; } }
+    if (getImg) { try { realT.img = await loadImagery(key, B); msgs.push(`satellite imagery (z${realT.img.z}, ${realT.img.tiles} tiles)`); } catch (e) { realT.img = { key, ok: false, error: e.message }; } }
+    if (job !== realT.job || !G) return;
+    const fails = [realT.dem && !realT.dem.ok && getDem && `real terrain (${realT.dem.error})`, realT.img && !realT.img.ok && getImg && `satellite imagery (${realT.img.error})`].filter(Boolean);
+    realT.status = fails.length ? (msgs.length ? 'partial' : 'failed') : 'ready';
+    if (getDem && realT.dem.ok) rebuildScene(true); else { paintTerrain(); restyle(); }
+    realT.message = [msgs.length && `Loaded ${msgs.join(' and ')}.`, fails.length && `Could not load ${fails.join(' or ')}; showing the ${getImg && !realT.img.ok ? 'natural surface' : 'fitted surface'} instead.`, G.terrainNote].filter(Boolean).join(' ');
+    status(realT.message); renderSummary(); schedulePublish();
+  })();
+  return realT.promise;
+}
+const terrainCredits = (withImagery) => [withImagery && imageryShown() && IMAGERY_CREDIT, G?.using === 'dem' && DEM_CREDIT].filter(Boolean);
 
 const traceR = () => Math.max(1.5, G.diag / 330) * S.traceWidth;
 // Ribbon pieces sit 3 tube radii to the screen-right of the trace, in the plane facing the camera,
@@ -433,8 +669,10 @@ function restyle() {
   // Section line on the top surface
   const ctx = G.topCanvas.getContext('2d'); ctx.drawImage(G.topBase, 0, 0);
   const [A, Bp] = sectionEnds(), P = (p) => [(p.x - G.B.x0) / G.bw * G.topCanvas.width, (G.B.y1 - p.y) / G.bh * G.topCanvas.height];
-  ctx.setLineDash([14, 9]); ctx.lineWidth = 5; ctx.strokeStyle = S.primary; ctx.beginPath(); ctx.moveTo(...P(A)); ctx.lineTo(...P(Bp)); ctx.stroke();
-  ctx.lineWidth = 2; ctx.strokeStyle = '#fff'; ctx.stroke(); ctx.setLineDash([]); G.topTex.needsUpdate = true;
+  const lk = G.topCanvas.width / 768;
+  ctx.setLineDash([14 * lk, 9 * lk]); const dk = S.terrain === 'dark'; // a dark line would vanish on dark slate
+  ctx.lineWidth = 5 * lk; ctx.strokeStyle = dk ? '#fff' : S.primary; ctx.beginPath(); ctx.moveTo(...P(A)); ctx.lineTo(...P(Bp)); ctx.stroke();
+  ctx.lineWidth = 2 * lk; ctx.strokeStyle = dk ? S.accent : '#fff'; ctx.stroke(); ctx.setLineDash([]); G.topTex.needsUpdate = true;
   computeCallouts(); placeRibbons();
   drawSectionView();
 }
@@ -607,15 +845,18 @@ function drawHeader(ctx, K, Wc, title, subtitle, logoW) {
   ctx.fillStyle = S.accent; ctx.fillRect(m, m, 5 * u, y - m + 5 * u);
   return y + 8 * u;
 }
-function drawFooter(ctx, K, Wc, Hc) {
+function drawFooter(ctx, K, Wc, Hc, credits = []) {
   const { u, m, font } = K, y = Hc - 17 * u, rule = y - 16 * u;
   ctx.strokeStyle = RULE; ctx.lineWidth = u; ctx.beginPath(); ctx.moveTo(m, rule); ctx.lineTo(Wc - m, rule); ctx.stroke();
   ctx.textBaseline = 'alphabetic'; let creditW = 0;
+  // A white halo keeps the footer legible where the block or its shadow runs under it.
+  const halo = (t, x, yy) => { ctx.save(); ctx.lineJoin = 'round'; ctx.lineWidth = 4 * u; ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.strokeText(t, x, yy); ctx.restore(); ctx.fillText(t, x, yy); };
   if (S.credit) {
-    font(600, 11.5); ctx.textAlign = 'right'; ctx.fillStyle = '#7c898c'; const t = 'Made with Exploration Maps'; creditW = ctx.measureText(t).width + 17 * u; ctx.fillText(t, Wc - m, y);
+    font(600, 11.5); ctx.textAlign = 'right'; ctx.fillStyle = '#7c898c'; const t = 'Made with Exploration Maps'; creditW = ctx.measureText(t).width + 17 * u; halo(t, Wc - m, y);
     const s = 10 * u, mx = Wc - m - creditW, my = y - s + u; ctx.fillStyle = INK; ctx.fillRect(mx, my, s, s); ctx.fillStyle = '#c65322'; ctx.fillRect(mx + s * 0.52, my + s * 0.18, s * 0.3, s * 0.3);
   }
-  if (S.footnote) { font(400, 11.5); ctx.textAlign = 'left'; ctx.fillStyle = MUTED; ctx.fillText(fitText(ctx, S.footnote, Wc - 2 * m - creditW - 24 * u), m, y); }
+  if (credits.length) { font(400, 10.5); ctx.textAlign = 'right'; ctx.fillStyle = '#7c898c'; const t = credits.join(' · '); halo(t, Wc - m - creditW - (creditW ? 10 * u : 0), y); creditW += ctx.measureText(t).width + 10 * u; }
+  if (S.footnote) { font(400, 11.5); ctx.textAlign = 'left'; ctx.fillStyle = MUTED; halo(fitText(ctx, S.footnote, Wc - 2 * m - creditW - 24 * u), m, y); }
   ctx.textAlign = 'left';
   return rule;
 }
@@ -760,7 +1001,7 @@ function drawOverlay(ctx, k, forExport) {
   // Frame furniture
   const logo = drawLogo(ctx, K, W, forExport);
   const headBottom = drawHeader(ctx, K, W, S.title, S.subtitle, logo.w);
-  const footTop = drawFooter(ctx, K, W, H);
+  const footTop = drawFooter(ctx, K, W, H, terrainCredits(true));
   drawScaleBar(ctx, K, footTop);
   // Plan inset under the logo
   if (S.inset) {
@@ -796,7 +1037,7 @@ function drawOverlay(ctx, k, forExport) {
   font(700, 10); ctx.fillStyle = S.primary; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('N', ox + Math.cos(ang) * 29 * u, oy + Math.sin(ang) * 29 * u);
   ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
   font(600, 13); ctx.fillStyle = INK; ctx.fillText(`Looking ${pad3(cam.azimuth)}°`, ox + 36 * u, oy - 2 * u);
-  font(400, 12, true); ctx.fillStyle = MUTED; ctx.fillText(`plunge ${cam.plunge}°`, ox + 36 * u, oy + 14 * u);
+  font(400, 12, true); ctx.fillStyle = MUTED; ctx.fillText(`plunge ${cam.plunge}°${S.vex !== 1 ? ` · VE ${S.vex}×` : ''}`, ox + 36 * u, oy + 14 * u);
   // Intercept callouts, left column between the title and the orientation box
   const maxY = oy - 36 * u; let y = headBottom + 18 * u; const boxes = [];
   shownCallouts().map((c) => { const p = c.h.posAt(c.ic.broad.mid); return { c, s: proj(G.V(p.x, p.y, p.z)) }; }).filter(({ s }) => s[2] < 1).sort((a, b) => a.s[1] - b.s[1]).forEach(({ c, s }) => {
@@ -821,7 +1062,7 @@ function drawSection(ctx, Wc, Hc, forExport) {
   const lookAz = ((S.secAz - 90) % 360 + 360) % 360;
   const logo = drawLogo(ctx, K, Wc, forExport), head = S.title.split('·')[0].trim() || S.title;
   const headBottom = drawHeader(ctx, K, Wc, `${head} · SECTION A–A′`, `Looking ${pad3(lookAz)}° · ±${S.secW} m projection · ${S.valueLabel}`, logo.w);
-  const footTop = drawFooter(ctx, K, Wc, Hc);
+  const footTop = drawFooter(ctx, K, Wc, Hc, terrainCredits(false));
   const profile = []; let zMax = -Infinity;
   for (let i = 0; i <= 200; i++) { const t = i / 200 * L, z = G.surf(A.x + d.x * t, A.y + d.y * t); profile.push([t, z]); zMax = Math.max(zMax, z); }
   const shown = project.holes.map((h) => ({ h, pts: h.path.map((p) => ({ ...p, ...pr(p) })) })).filter(({ pts }) => pts.some((p) => Math.abs(p.off) <= S.secW));
@@ -1045,7 +1286,7 @@ function renderSummary() {
   if (!project || project.empty) { sum.innerHTML = '<span class="bad">Add a collar file to see your holes.</span>'; return; }
   const mt = project.holes.reduce((s, h) => s + h.len, 0), n = project.holes.reduce((s, h) => s + h.ints.length, 0);
   sum.innerHTML = [usingSample ? 'sample project' : null, `${project.holes.length} holes`, `${Math.round(mt).toLocaleString()} m drilled`, `${n.toLocaleString()} assay intervals`, project.posDown ? 'dips read as positive-down' : null].filter(Boolean).map((t) => `<span class="pill">${t}</span>`).join('')
-    + project.warnings.map((w) => `<p class="warn">${esc(w)}</p>`).join('');
+    + project.warnings.concat(G?.terrainNote ? [G.terrainNote] : []).map((w) => `<p class="warn">${esc(w)}</p>`).join('');
 }
 function renderStyle() {
   const sel = $('value-col'); sel.innerHTML = (project?.cols || []).map((c) => `<option ${c === S.valueCol ? 'selected' : ''}>${esc(c)}</option>`).join('') || '<option>—</option>';
@@ -1057,6 +1298,7 @@ function renderStyle() {
   $('opt-walls').checked = S.walls; $('opt-ids').checked = S.ids; $('opt-inset').checked = S.inset; $('opt-ribbons').checked = S.ribbons;
   $('opt-pending').checked = S.pendingLabels; $('opt-pending-none').checked = S.pendingNoAssays; $('opt-elev').checked = S.elevTicks;
   $('value-col2').innerHTML = '<option value="">None</option>' + (project?.cols || []).filter((c) => c !== S.valueCol).map((c) => `<option ${c === S.valueCol2 ? 'selected' : ''}>${esc(c)}</option>`).join('');
+  $('terrain').value = S.terrain; $('terrain-src').value = S.terrainSource; $('vex').value = S.vex; $('vex-out').textContent = `${S.vex}×`;
   $('trace-w').value = Math.round(S.traceWidth * 100); $('trace-out').textContent = `${S.traceWidth.toFixed(1)}×`;
   $('surf').value = Math.round(S.surf * 100); $('surf-out').textContent = `${Math.round(S.surf * 100)}%`;
   const ml = $('mesh-list'); ml.innerHTML = '';
@@ -1092,7 +1334,7 @@ function syncBrandUI() {
 }
 
 function refresh() {
-  project = build();
+  project = build(); recheckCRS();
   if (!project.empty && project.holes.length) { const az = principalAz(project.holes); if (az !== null && !refresh.secSet) S.secAz = az; }
   rebuildScene(); renderFiles(); renderSummary(); renderStyle(); renderCalloutEditor(); schedulePublish();
 }
@@ -1105,7 +1347,7 @@ function principalAz(holes) {
 }
 function addUserFiles(arr) {
   if (!Array.isArray(arr) || !arr.length || arr.some((f) => !f || typeof f.name !== 'string' || typeof f.text !== 'string')) throw new Error('addFiles expects [{ name: "collars.csv", text: "HoleID,Easting,..." }].');
-  if (usingSample) { files = []; usingSample = false; S.meshes = {}; S.valueCol = null; S.coOverrides = {}; }
+  if (usingSample) { files = []; usingSample = false; S.meshes = {}; S.valueCol = null; S.coOverrides = {}; S.valueCol2 = null; }
   refresh.secSet = false; addFiles(arr); refresh();
   const added = files.filter((f) => arr.some((a) => a.name === f.name)).map((f) => `${f.name} → ${ROLE_LABEL[f.role]}`);
   status(project.empty ? `Added ${added.join(', ')}. Still need a collar file.` : `Added ${added.join(', ')}. ${project.holes.length} holes on the figure.`);
@@ -1162,11 +1404,12 @@ $('paste-add').addEventListener('click', () => {
   addUserFiles([{ name, text }]); $('paste-text').value = '';
 });
 function loadSample() {
+  S.crs = null; geo = null; renderCRS();
   files = []; usingSample = true; S.valueCol = null; S.meshes = {}; S.coOverrides = {}; refresh.secSet = false;
   addFiles(sampleFiles()); refresh(); status('Sample project loaded · illustrative data. Add your CSVs in step 1 to replace it.');
   return getState();
 }
-function clearFiles() { files = []; usingSample = false; S.meshes = {}; S.coOverrides = {}; refresh(); status('Files cleared. Add a collar file and an assay file.'); return getState(); }
+function clearFiles() { S.crs = null; geo = null; renderCRS(); files = []; usingSample = false; S.meshes = {}; S.coOverrides = {}; refresh(); status('Files cleared. Add a collar file and an assay file.'); return getState(); }
 $('load-sample').addEventListener('click', loadSample);
 $('clear-files').addEventListener('click', clearFiles);
 
@@ -1207,8 +1450,15 @@ function setStyle(o = {}, render = true) {
   ['walls', 'ids', 'inset', 'ribbons', 'pendingLabels', 'pendingNoAssays', 'elevTicks'].forEach((k) => { if (o[k] !== undefined) S[k] = !!o[k]; });
   if (o.traceWidth !== undefined) { const v = +o.traceWidth; if (!Number.isFinite(v)) throw new Error('traceWidth must be a number from 0.5 to 3.'); S.traceWidth = Math.max(0.5, Math.min(3, v)); }
   if (o.surface !== undefined) S.surf = Math.max(0.15, Math.min(1, +o.surface > 1 ? +o.surface / 100 : +o.surface));
+  let rebuild = false;
+  if (o.terrain !== undefined) { if (!TERRAINS[o.terrain]) throw new Error(`terrain must be one of: ${Object.keys(TERRAINS).join(', ')}.`); S.terrain = o.terrain; }
+  if (o.terrainSource !== undefined) { if (!['auto', 'topo', 'dem', 'collars'].includes(o.terrainSource)) throw new Error('terrainSource must be auto, topo, dem or collars.'); rebuild = rebuild || S.terrainSource !== o.terrainSource; S.terrainSource = o.terrainSource; }
+  const ve = o.verticalExaggeration ?? o.vex;
+  if (ve !== undefined) { const v = +ve; if (!Number.isFinite(v)) throw new Error('verticalExaggeration must be a number from 1 to 5.'); const nv = Math.max(1, Math.min(5, v)); rebuild = rebuild || nv !== S.vex; S.vex = nv; }
   if (o.meshes) Object.entries(o.meshes).forEach(([name, v]) => { if (!S.meshes[name]) throw new Error(`No model shape named "${name}". Loaded: ${Object.keys(S.meshes).join(', ') || 'none'}.`); Object.assign(S.meshes[name], v); });
-  restyle(); if (render) renderStyle(); renderCalloutEditor(); schedulePublish();
+  if (rebuild) rebuildScene(true); else { if (o.terrain !== undefined) { paintTerrain(); syncRealTerrain(); } restyle(); }
+  if (o.terrain !== undefined && (S.terrain === 'satellite' || S.terrain === 'muted') && !geo) status('Satellite imagery needs the coordinate system: set it in step 1 (e.g. EPSG:26909). Showing the natural surface.');
+  if (render) renderStyle(); renderCalloutEditor(); schedulePublish();
   return getState();
 }
 $('value-col').addEventListener('change', (e) => setStyle({ valueCol: e.target.value }));
@@ -1224,6 +1474,17 @@ $('opt-ribbons').addEventListener('change', (e) => setStyle({ ribbons: e.target.
 $('opt-pending').addEventListener('change', (e) => setStyle({ pendingLabels: e.target.checked }, false));
 $('opt-pending-none').addEventListener('change', (e) => setStyle({ pendingNoAssays: e.target.checked }, false));
 $('opt-elev').addEventListener('change', (e) => setStyle({ elevTicks: e.target.checked }, false));
+$('terrain').addEventListener('change', (e) => setStyle({ terrain: e.target.value }, false));
+$('terrain-src').addEventListener('change', (e) => setStyle({ terrainSource: e.target.value }, false));
+$('vex').addEventListener('change', (e) => { setStyle({ verticalExaggeration: +e.target.value }, false); $('vex-out').textContent = `${S.vex}×`; });
+$('vex').addEventListener('input', (e) => { $('vex-out').textContent = `${e.target.value}×`; });
+function renderCRS() {
+  if (document.activeElement?.id !== 'crs') $('crs').value = geo ? (geo.code.startsWith('+') ? geo.code : geo.code) : '';
+  $('crs-note').textContent = geo ? `${geo.label}${geo.guessed ? ' (from the latitude/longitude collars)' : ''}. Real terrain and satellite imagery are available in step 3.` : 'Set it to drape real terrain and satellite imagery (Layout → Terrain).';
+}
+const applyCRS = () => setCRS($('crs').value.trim() || null).catch((e) => { status(e.message); $('crs-note').textContent = e.message; });
+$('crs-apply').addEventListener('click', applyCRS);
+$('crs').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); applyCRS(); } });
 $('value-col2').addEventListener('change', (e) => setStyle({ valueCol2: e.target.value || null }));
 $('trace-w').addEventListener('input', (e) => { setStyle({ traceWidth: +e.target.value / 100 }, false); $('trace-out').textContent = `${S.traceWidth.toFixed(1)}×`; });
 $('surf').addEventListener('input', (e) => { setStyle({ surface: +e.target.value / 100 }, false); $('surf-out').textContent = `${e.target.value}%`; });
@@ -1262,6 +1523,10 @@ function getState() {
       shown: shownCallouts().map((c) => { const L = calloutLines(c); return { holeId: c.h.id, line1: L.l1 + L.l1b, line2: L.l2 }; }),
       candidates: callouts.slice(0, 15).map((c) => ({ holeId: c.h.id, broad: icText(c.ic.broad, c.h), fromM: Math.round(c.ic.broad.from), incl: c.ic.incl ? icText(c.ic.incl, c.h) : null })), overrides: S.coOverrides, valueCol2: S.valueCol2 },
     brand: { company: S.company, title: S.title, subtitle: S.subtitle, footnote: S.footnote, primary: S.primary, accent: S.accent, hasLogo: !!S.logo, credit: S.credit },
+    terrain: { style: S.terrain, styles: TERRAINS, source: S.terrainSource, surfaceFrom: G?.using || null, verticalExaggeration: S.vex,
+      crs: S.crs, crsLabel: geo?.label || null, crsGuessed: !!geo?.guessed, status: realT.status, message: realT.message || null,
+      dem: realT.dem ? (realT.dem.ok ? `z${realT.dem.z}, ${realT.dem.tiles} tiles` : `failed: ${realT.dem.error}`) : null,
+      imagery: realT.img ? (realT.img.ok ? `z${realT.img.z}, ${realT.img.tiles} tiles` : `failed: ${realT.img.error}`) : null, imageryShown: imageryShown(), note: G?.terrainNote || null, credits: G ? terrainCredits(true) : [] },
     camera: G ? getCam() : null, section: { secAz: S.secAz, secW: S.secW, lookingAz: ((S.secAz - 90) % 360 + 360) % 360 },
     display: { walls: S.walls, ids: S.ids, inset: S.inset, surface: S.surf, ribbons: S.ribbons, traceWidth: S.traceWidth, pendingLabels: S.pendingLabels, pendingNoAssays: S.pendingNoAssays, elevTicks: S.elevTicks }, meshes: S.meshes,
     figureSize: { key: S.format, width: f.w, height: f.h, label: f.label }, figureSizes: Object.fromEntries(Object.entries(FORMATS).map(([k, v]) => [k, `${v.label}, ${v.w}×${v.h}`])),
@@ -1292,7 +1557,15 @@ JavaScript API (run in the page console or via your agent's evaluate tool):
                  traceWidth (0.5-3, drill trace thickness, default 1.4),
                  valueCol2 (second grade in callouts, e.g. "Au_gpt"; null for none),
                  pendingLabels (write ASSAYS PENDING along holes whose collar status/notes say pending),
-                 pendingNoAssays (also flag holes with no assays), elevTicks (elevation ticks on the block edge)})
+                 pendingNoAssays (also flag holes with no assays), elevTicks (elevation ticks on the block edge),
+                 terrain: "natural" | "light" | "dark" | "relief" | "satellite" | "muted",
+                 terrainSource: "auto" | "topo" | "dem" | "collars"  (auto: uploaded topography,
+                   else real elevation once a coordinate system is set, else fitted to the collars),
+                 verticalExaggeration (1-5)})
+  EM3D.setCRS("EPSG:26909" | "UTM 9N NAD83" | "EPSG:4326" | proj4 string | null)
+                                  Promise. The coordinate system of the files; loads real terrain
+                                  (AWS Terrain Tiles) and, for satellite/muted, Esri imagery
+  EM3D.terrainReady()             Promise; resolves with the state once tiles have loaded or failed
   EM3D.setCallout(holeId, {show, line1, line2, incl: false})   null resets a field
   EM3D.setCamera({view: "a" | "b" | "low" | "plan"}) or ({azimuth, plunge, zoom})
   EM3D.setFigureSize("slide" | "release" | "square" | "portrait" | "a4")
@@ -1321,6 +1594,7 @@ window.EM3D = Object.freeze({
   version: 3, help: () => HELP, getState, loadSample, clearFiles, addFiles: addUserFiles, addZip, setBrand, setLogo, setStyle: (o) => setStyle(o, true), setCallout,
   setCamera: call((o = {}) => { if (!G) throw new Error('Load data first.'); showView('3d'); if (o.view) { if (!VIEWS[o.view]) throw new Error('view must be a, b, low or plan.'); applyView(o.view, true); } else setCamera(o, true); syncCamUI(); }),
   setFigureSize, showStep: call(showStep), showView: call(showView), exportPNG,
+  setCRS, terrainReady: async () => { await (realT.promise || Promise.resolve()); return getState(); },
 });
 
 // ------------------------------------------------------------
@@ -1406,7 +1680,7 @@ window.EM3D = Object.freeze({ ...window.EM3D, help: () => PROJECT_HELP, getProje
 // ============================================================
 // 12. Start
 // ============================================================
-renderSizes(); syncBrandUI();
+renderSizes(); syncBrandUI(); renderCRS();
 layoutFrame();
 loadSample();
 new ResizeObserver(() => { const c = G ? getCam() : null; layoutFrame(); if (c) setCamera(c, true); }).observe(stage);
