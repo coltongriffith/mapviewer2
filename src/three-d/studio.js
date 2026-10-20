@@ -2,6 +2,8 @@
 // A standalone page (/3d), deliberately separate from the map editor bundle.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { composite, collarGroups, autoCell, autoSearch } from './shell-core.js';
+import { METAL_DEFAULTS, defaultUnit, priceUnit, eqFactors, eqFormula, eqValue } from './metal-eq.js';
 
 const $ = (id) => document.getElementById(id);
 // ============================================================
@@ -143,6 +145,11 @@ const S = {              // style
   ribbons: true, traceWidth: 1.4, pendingLabels: true, pendingNoAssays: false, valueCol2: null, elevTicks: true,
   terrain: 'natural', terrainSource: 'auto', vex: 1, crs: null, labels: [],
   collarFit: 'collars', blockStyle: 'glass', wallLabels: [],
+  // Intervals below displayCutoff draw as the plain trace (null: all). eq: the metal-equivalent
+  // recipe ({ base, baseCol, baseUnit, basePrice, baseRecovery, metals: { Au: { col, unit, price, recovery } } }).
+  // shell: the grade shell from assays (cutoff/search/cell null = automatic). provisional: per-hole overrides.
+  displayCutoff: null, eq: null, provisional: {},
+  shell: { enabled: false, cutoff: null, opacity: 0.3, color: '#1f9e96', search: null, cell: null },
 };
 const BIN_COLORS = ['#a3abaf', '#e2dc4f', '#ff9a1f', '#ef3b2c', '#e93ad1'];
 const MESH_COLORS = ['#ff9a1f', '#e93ad1', '#2b8fd6', '#6aa84f', '#8e5bd6'];
@@ -169,15 +176,16 @@ function build() {
   const byRole = (r) => files.filter((f) => f.role === r);
   const collarF = byRole('collar'), assayF = byRole('assay'), surveyF = byRole('survey'), topoF = byRole('topo'), meshF = byRole('mesh');
   // Collars
-  const collars = new Map(); let latlon = false;
-  collarF.forEach((f) => { const ni = noteCol(f.header); f.rows.forEach((r) => {
+  const collars = new Map(), noXY = new Set(), dipBad = new Set(); let latlon = false;
+  collarF.forEach((f) => { const ni = noteCol(f.header), fi = f.header.map(norm).findIndex((h) => /(^|_)(flags?|qualifications?|provisional)$/.test(h)); f.rows.forEach((r) => {
     const c = f.cols, id = (r[c.hole] || '').trim(); if (!id) return;
     let x = num(r[c.east]), y = num(r[c.north]);
     if ((!Number.isFinite(x) || !Number.isFinite(y)) && c.lat !== undefined) { x = num(r[c.lon]); y = num(r[c.lat]); latlon = true; }
-    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    if (!Number.isFinite(x) || !Number.isFinite(y)) { noXY.add(id); return; }
+    if (Math.abs(num(r[c.dip])) > 90) dipBad.add(id);
     // A status or notes column last in the row keeps any unquoted commas ("Complete, assays pending").
     const note = ni < 0 ? '' : (ni === f.header.length - 1 ? r.slice(ni).join(',') : r[ni] || '').trim();
-    collars.set(id, { id, x, y, z: num(r[c.elev]), depth: num(r[c.depth]), az: num(r[c.az]), dip: num(r[c.dip]), note });
+    collars.set(id, { id, x, y, z: num(r[c.elev]), depth: num(r[c.depth]), az: num(r[c.az]), dip: num(r[c.dip]), note, flags: fi < 0 || fi === ni ? '' : (r[fi] || '').trim() });
   }); });
   if (latlon) {
     const arr = [...collars.values()], lat0 = arr.reduce((s, c) => s + c.y, 0) / arr.length, lon0 = arr.reduce((s, c) => s + c.x, 0) / arr.length;
@@ -190,18 +198,21 @@ function build() {
   surveyF.forEach((f) => f.rows.forEach((r) => {
     const c = f.cols, id = (r[c.hole] || '').trim(), d = num(r[c.depth]); if (!id || !Number.isFinite(d)) return;
     if (!surveys.has(id)) surveys.set(id, []);
-    surveys.get(id).push({ d, az: num(r[c.az]), dip: num(r[c.dip]) });
+    const dip = num(r[c.dip]); if (Math.abs(dip) > 90) dipBad.add(id);
+    surveys.get(id).push({ d, az: num(r[c.az]), dip });
   }));
   // Dip convention: if nearly every dip is positive, positive means down.
   const dips = [...[...surveys.values()].flat().map((s) => s.dip), ...[...collars.values()].map((c) => c.dip)].filter(Number.isFinite);
   const posDown = dips.length > 0 && dips.filter((d) => d > 0).length / dips.length > 0.9;
   const fixDip = (d) => (Number.isFinite(d) ? (posDown ? -Math.abs(d) : d) : NaN);
   // Assays
-  const assays = new Map(); let cols = [];
+  const assays = new Map(), badRows = new Set(); let cols = [], assayRows = 0;
   assayF.forEach((f) => {
     cols = cols.concat(f.grades.map((g) => g.name));
     f.rows.forEach((r) => {
       const c = f.cols, id = (r[c.hole] || '').trim(), a = num(r[c.from]), b = num(r[c.to]);
+      if (id) assayRows++;
+      if (id && !(b > a)) badRows.add(id);
       if (!id || !Number.isFinite(a) || !Number.isFinite(b) || b <= a) return;
       const vals = {}; f.grades.forEach((g) => { vals[g.name] = num(r[g.i]); });
       if (!assays.has(id)) assays.set(id, []);
@@ -209,11 +220,13 @@ function build() {
     });
   });
   cols = [...new Set(cols)];
+  applyEq(assays.values(), cols, warnings);
   if (!S.valueCol || !cols.includes(S.valueCol)) { S.valueCol = cols[0] || null; S.valueLabel = labelFor(S.valueCol); autoBins(assays); }
   if (S.valueCol2 && (!cols.includes(S.valueCol2) || S.valueCol2 === S.valueCol)) S.valueCol2 = null;
   const missing = [...assays.keys()].filter((id) => !collars.has(id));
   if (missing.length) warnings.push(`${missing.length} hole${missing.length > 1 ? 's' : ''} in the assays ${missing.length > 1 ? 'have' : 'has'} no collar (${missing.slice(0, 3).join(', ')}${missing.length > 3 ? '…' : ''}).`);
-  if (!collars.size) return { warnings, empty: true };
+  const checks = dataChecks({ collars, noXY, assays, surveys, badRows, assayRows, dipBad, missing });
+  if (!collars.size) return { warnings, empty: true, checks };
   // Elevations: fill missing collar Z from topography later
   const topoPts = [];
   topoF.forEach((f) => f.rows.forEach((r) => { const x = num(r[f.cols.east]), y = num(r[f.cols.north]), z = num(r[f.cols.elev]); if ([x, y, z].every(Number.isFinite)) topoPts.push([x, y, z]); }));
@@ -233,19 +246,76 @@ function build() {
     };
     holes.push({ id: c.id, c, ints, len, dirAt, path: null, note: c.note });
   }
-  return { warnings, holes, topoPts, meshF, cols, posDown, latlon: latlon || null };
+  return { warnings, holes, topoPts, meshF, cols, posDown, latlon: latlon || null, checks };
+}
+// Data checks: what could not be placed and what looks wrong, by hole. Counts of intervals shown
+// depend on the display cut-off, so getChecks() adds them when asked.
+function dataChecks({ collars, noXY, assays, surveys, badRows, assayRows, dipBad, missing }) {
+  const P = [], add = (kind, ids, text) => { ids = [...ids]; if (ids.length) P.push({ kind, count: ids.length, holes: ids.slice(0, 50), message: `${text(ids.length)}: ${ids.slice(0, 6).join(', ')}${ids.length > 6 ? '…' : ''}` }); };
+  const s = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+  const unplaced = [...noXY].filter((id) => !collars.has(id)), overlap = new Set(), beyond = new Set(), survey = new Set();
+  assays.forEach((list, id) => {
+    const l = list.slice().sort((p, q) => p.from - q.from), c = collars.get(id);
+    for (let i = 1; i < l.length; i++) if (l[i].from < l[i - 1].to - 1e-6) { overlap.add(id); break; }
+    if (c && Number.isFinite(c.depth) && l.some((it) => it.to > c.depth + 0.05)) beyond.add(id);
+  });
+  surveys.forEach((st, id) => {
+    const at = new Map();
+    st.forEach((x) => { const k = x.d.toFixed(2), o = at.get(k); if (!o) { at.set(k, x); return; }
+      const daz = Math.abs(((o.az - x.az) % 360 + 540) % 360 - 180); if (daz > 0.5 || Math.abs(o.dip - x.dip) > 0.5) survey.add(id); });
+  });
+  // Outliers: a collar whose nearest neighbour is over 10 times the typical spacing (and 500 m) away.
+  const cs = [...collars.values()], nn = cs.map((a) => cs.reduce((m, b) => (a === b ? m : Math.min(m, Math.hypot(a.x - b.x, a.y - b.y))), Infinity));
+  const med = nn.slice().sort((a, b) => a - b)[Math.floor(nn.length / 2)], outliers = cs.length >= 4 ? cs.filter((c, i) => nn[i] > Math.max(500, 10 * med)).map((c) => c.id) : [];
+  add('no-collar-coordinates', unplaced, (n) => `${s(n, 'hole has', 'holes have')} no collar coordinates and cannot be placed`);
+  add('assays-without-collar', missing, (n) => `${s(n, 'hole', 'holes')} in the assays ${n === 1 ? 'has' : 'have'} no collar`);
+  add('from-not-below-to', badRows, (n) => `Rows with From ≥ To (left out) in ${s(n, 'hole', 'holes')}`);
+  add('overlapping-intervals', overlap, (n) => `Overlapping intervals in ${s(n, 'hole', 'holes')}`);
+  add('beyond-hole-depth', beyond, (n) => `Intervals beyond the collar depth in ${s(n, 'hole', 'holes')}`);
+  add('conflicting-survey-depths', survey, (n) => `Survey stations at one depth with different readings in ${s(n, 'hole', 'holes')}`);
+  add('dip-out-of-range', dipBad, (n) => `Dips outside −90 to 90 in ${s(n, 'hole', 'holes')}`);
+  add('collar-outlier', outliers, (n) => `${s(n, 'collar lies', 'collars lie')} far from the others (check the coordinates)`);
+  const ids = new Set([...collars.keys(), ...noXY, ...assays.keys()]);
+  let placed = 0; collars.forEach((c, id) => { placed += (assays.get(id) || []).length; });
+  return { counts: { holes: ids.size, holesPlaced: collars.size, assaysLoaded: assayRows, assaysPlaced: placed }, problems: P };
+}
+// Metal equivalent: the derived column (e.g. CuEq_calc) on every interval. A missing component
+// gives no value, never a zero.
+const eqName = () => (S.eq ? `${S.eq.base}Eq_calc` : null);
+const metalOf = (col) => (/eq/i.test(col) ? null : (col.match(/(?:^|[^a-z])(cu|au|ag|mo|zn|pb|ni|co|pt|pd)(?![a-z])/i) || [])[1]?.replace(/^./, (c) => c.toUpperCase()) || null);
+const unitOf = (col) => (labelFor(col).match(/(%|g\/t|ppm|ppb)$/) || [])[0] || defaultUnit(metalOf(col));
+function eqInfo(e = S.eq) {
+  const ms = Object.entries(e.metals).map(([metal, m]) => ({ metal, ...m }));
+  const factors = eqFactors({ metal: e.base, unit: e.baseUnit, price: e.basePrice, recovery: e.baseRecovery }, ms);
+  const money = (v) => `US$${v.toLocaleString('en-US', { minimumFractionDigits: v < 100 ? 2 : 0, maximumFractionDigits: 2 })}`;
+  const prices = [{ metal: e.base, price: e.basePrice }, ...ms].map((m) => `${m.metal} ${money(m.price)}/${priceUnit(m.metal)}`).join(', ');
+  const recs = [{ metal: e.base, recovery: e.baseRecovery }, ...ms].map((m) => `${m.metal} ${m.recovery}%`).join(', ');
+  const formula = eqFormula(e.base, factors);
+  return { name: `${e.base}Eq_calc`, factors, formula, note: `${formula} (calculated; ${e.base} ${e.baseUnit}, ${ms.map((m) => `${m.metal} ${m.unit}`).join(', ')}). Prices ${prices}; recoveries ${recs}. Assumptions are illustrative.` };
+}
+function applyEq(lists, cols, warnings) {
+  if (!S.eq) return;
+  const e = S.eq, comp = Object.values(e.metals).map((m) => m.col), miss = [e.baseCol, ...comp].filter((c) => !cols.includes(c));
+  if (miss.length) { warnings?.push(`The metal equivalent needs ${miss.join(', ')}, which ${miss.length > 1 ? 'are' : 'is'} not in the assays.`); return; }
+  const { name, factors } = eqInfo();
+  for (const list of lists) list.forEach((it) => { it.vals[name] = eqValue(it.vals[e.baseCol], comp.map((c) => it.vals[c]), factors); });
+  if (!cols.includes(name)) cols.push(name);
 }
 const noteCol = (header) => header.map(norm).findIndex((h) => /(^|_)(status|notes?|comments?|remarks?)$/.test(h));
 // "ASSAYS PENDING": the collar status or notes say so, or (when asked) the hole has no assays yet.
 const isPending = (h) => /pending/i.test(h.note || '') || (S.pendingNoAssays && !h.ints.length);
+// Provisional position: the collar status or flags say so, unless set by hand (S.provisional).
+const PROV_RE = /provisional|projected|approximate|unverified|unsurveyed|hand-?held|flagged|uncertain/i;
+const isProvisional = (h) => (typeof S.provisional[h.id] === 'boolean' ? S.provisional[h.id] : PROV_RE.test(`${h.note || ''} ${h.c.flags || ''}`));
 function labelFor(col) {
   if (!col) return '';
+  if (S.eq && col === eqName()) return `${S.eq.base}Eq ${S.eq.baseUnit}`;
   const el = (col.match(/(cueq|aueq|ageq|li2o|u3o8|cu|au|ag|zn|pb|ni|co|mo|pt|pd)/i) || [col])[0];
   const pretty = { cueq: 'CuEq', aueq: 'AuEq', ageq: 'AgEq', li2o: 'Li₂O', u3o8: 'U₃O₈' }[el.toLowerCase()] || el.charAt(0).toUpperCase() + el.slice(1).toLowerCase();
   const unit = /pct|%|_pc\b|percent/i.test(col) ? '%' : /gpt|g_t|gt\b|g\/t/i.test(col) ? 'g/t' : /ppm/i.test(col) ? 'ppm' : /ppb/i.test(col) ? 'ppb' : '';
   return unit ? `${pretty} ${unit}` : pretty;
 }
-function niceRound(v) { if (!(v > 0)) return 0; const p = Math.pow(10, Math.floor(Math.log10(v))), m = v / p; return (m < 1.5 ? 1 : m < 2.25 ? 2 : m < 3.5 ? 3 : m < 7.5 ? 5 : 10) * p; }
+function niceRound(v) { if (!(v > 0)) return 0; const p = Math.pow(10, Math.floor(Math.log10(v))), m = v / p; return +((m < 1.5 ? 1 : m < 2.25 ? 2 : m < 3.5 ? 3 : m < 7.5 ? 5 : 10) * p).toPrecision(6); } // 0.30000000000000004 → 0.3
 function autoBins(assays) {
   const vals = []; assays.forEach((list) => list.forEach((a) => { const v = a.vals[S.valueCol]; if (Number.isFinite(v)) vals.push(v); }));
   if (!vals.length) return;
@@ -394,13 +464,15 @@ function rebuildScene(keepCam) {
     sh.rotation.x = -Math.PI / 2; sh.position.copy(V(cx + bw * 0.03, cy - bh * 0.03, B.z0 - diag * 0.07 / vex)); root.add(sh);
   }
 
-  // Holes: grey trace, then coloured assay intervals
-  const traceSeg = [];
-  holes.forEach((h) => { for (let i = 0; i + 1 < h.path.length; i++) traceSeg.push(V(h.path[i].x, h.path[i].y, h.path[i].z), V(h.path[i + 1].x, h.path[i + 1].y, h.path[i + 1].z)); });
-  root.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(traceSeg), new THREE.LineBasicMaterial({ color: '#59646a' })));
+  // Holes: grey trace, then coloured assay intervals. Provisional positions: dashed and fainter.
+  const traceSeg = [[], []];
+  holes.forEach((h) => { h.prov = isProvisional(h); for (let i = 0; i + 1 < h.path.length; i++) traceSeg[+h.prov].push(V(h.path[i].x, h.path[i].y, h.path[i].z), V(h.path[i + 1].x, h.path[i + 1].y, h.path[i + 1].z)); });
+  root.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(traceSeg[0]), new THREE.LineBasicMaterial({ color: '#59646a' })));
+  if (traceSeg[1].length) { const dl = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(traceSeg[1]), new THREE.LineDashedMaterial({ color: '#59646a', dashSize: diag / 120, gapSize: diag / 180, transparent: true, opacity: 0.75 })); dl.computeLineDistances(); root.add(dl); }
   const nInt = holes.reduce((s, h) => s + h.ints.length, 0);
   // three 0.147 culls an InstancedMesh by its unit base geometry at the origin, not its instances.
-  G.tubes = new THREE.InstancedMesh(new THREE.CylinderGeometry(1, 1, 1, 8), new THREE.MeshLambertMaterial(), Math.max(1, nInt)); G.tubes.frustumCulled = false; root.add(G.tubes);
+  const tube = (mat) => { const t = new THREE.InstancedMesh(new THREE.CylinderGeometry(1, 1, 1, 8), mat, Math.max(1, nInt)); t.frustumCulled = false; root.add(t); return t; };
+  G.tubes = tube(new THREE.MeshLambertMaterial()); G.tubesP = tube(new THREE.MeshLambertMaterial({ transparent: true, opacity: 0.55 })); G.tubesP.renderOrder = 3;
   // Intercept ribbons: flat bars beside each trace, broad then "incl." nudged toward the camera.
   // Turned to face the view in placeRibbons, so capacity is one piece per 8 m of hole.
   const ribCap = holes.reduce((s, h) => s + Math.ceil(h.len / 8) + 1, 0), rg = new THREE.PlaneGeometry(1, 1);
@@ -418,7 +490,7 @@ function rebuildScene(keepCam) {
   });
   paintTerrain(); restyle(); buildWallLabels();
   if (cam0) setCamera(cam0, true); else applyView('a', true);
-  syncRealTerrain();
+  syncRealTerrain(); syncShell();
 }
 
 // Terrain looks. Light and relief are paper hillshades; satellite and muted drape imagery when it has
@@ -744,6 +816,108 @@ function removeWallLabel(id) {
   S.wallLabels = S.wallLabels.filter((l) => l.id !== id); buildWallLabels(); renderWallLabelList(); schedulePublish(); return getState();
 }
 
+// ============================================================
+// 4d. Grade shell: an exploratory envelope estimated from the assays
+// ============================================================
+// Composites and grouping here; the estimate and the marching-cubes surface in shell-worker.js, so the
+// page never freezes. Results are cached by their inputs: a rebuilt scene (new vertical exaggeration,
+// label, colour) reuses the mesh, and a new cut-off reuses the estimated grid.
+const shell = { status: 'off', progress: 0, message: '', job: 0, worker: null, busy: false, field: null, mesh: null, waiters: [] };
+const shellCut = () => (Number.isFinite(S.shell.cutoff) ? S.shell.cutoff : S.coCut);
+const shellCutText = () => { const unit = (S.valueLabel.match(/(%|g\/t|ppm|ppb)$/) || [''])[0], el = S.valueLabel.replace(/\s*(%|g\/t|ppm|ppb)$/, ''); return `${+shellCut().toPrecision(4)}${unit === '%' ? '%' : unit ? ` ${unit}` : ''} ${el}`.trim(); };
+const shellShown = () => S.shell.enabled && !!G?.shellMesh;
+function shellInput() {
+  if (!G || !S.valueCol) return null;
+  const used = project.holes.map((h) => ({ h, comps: composite(h.ints, S.valueCol) })).filter((x) => x.comps.length), xy = used.map(({ h }) => [h.c.x, h.c.y]);
+  const groups = collarGroups(xy), holes = used.map(({ h, comps }, i) => {
+    const pts = new Float64Array(comps.length * 4); comps.forEach((c, k) => { const p = h.posAt(c.mid); pts.set([p.x, p.y, p.z, c.value], k * 4); });
+    return { group: groups[i], pts };
+  });
+  const { B } = G, search = S.shell.search || autoSearch(xy, groups);
+  let cell = S.shell.cell || autoCell(G.bw, G.bh), n = () => (Math.ceil(G.bw / cell) + 1) * (Math.ceil(G.bh / cell) + 1) * (Math.ceil((G.zmax - B.z0) / cell) + 1);
+  while (n() > 2.5e6) cell *= 1.25; // keeps a very large block to a few million grid points
+  const grid = { x0: B.x0, y0: B.y0, z0: B.z0, cell, nx: Math.ceil(G.bw / cell) + 1, ny: Math.ceil(G.bh / cell) + 1, nz: Math.ceil((G.zmax - B.z0) / cell) + 1 };
+  const top = new Float32Array(grid.nx * grid.ny);
+  for (let j = 0; j < grid.ny; j++) for (let i = 0; i < grid.nx; i++) top[j * grid.nx + i] = G.surf(B.x0 + i * cell, B.y0 + j * cell);
+  let hsh = 0x811c9dc5; const mix = (v) => { hsh = Math.imul(hsh ^ (v * 1000 | 0), 0x01000193); };
+  holes.forEach((h) => { mix(h.group); h.pts.forEach(mix); }); top.forEach(mix);
+  return { holes, grid, top, search, key: `${(hsh >>> 0).toString(36)}|${search}|${cell}|${grid.nx},${grid.ny},${grid.nz}`, holesUsed: used.length, groups: groups.length ? Math.max(...groups) + 1 : 0, composites: used.reduce((t, x) => t + x.comps.length, 0) };
+}
+function settleShell(status, message = '') {
+  shell.status = status; shell.message = message; shell.busy = status === 'building';
+  renderShellUI(); schedulePublish();
+  if (!shell.busy) shell.waiters.splice(0).forEach((res) => res(getState()));
+}
+function styleShell() { if (G?.shellMesh) { G.shellMesh.material.color.set(S.shell.color); G.shellMesh.material.opacity = S.shell.opacity; } }
+function placeShell() {
+  if (G.shellMesh) { root.remove(G.shellMesh); G.shellMesh.geometry.dispose(); G.shellMesh.material.dispose(); G.shellMesh = null; }
+  const M = shell.mesh; if (!M.indices.length) return;
+  const pos = new Float32Array(M.positions.length), [ox, oy, oz] = M.origin;
+  for (let i = 0; i < pos.length; i += 3) { const v = G.V(ox + M.positions[i], oy + M.positions[i + 1], oz + M.positions[i + 2]); pos[i] = v.x; pos[i + 1] = v.y; pos[i + 2] = v.z; }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setIndex(new THREE.BufferAttribute(M.indices, 1)); g.computeVertexNormals();
+  G.shellMesh = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ transparent: true, depthWrite: false, side: THREE.DoubleSide }));
+  G.shellMesh.renderOrder = 4; G.shellMesh.userData.key = M.key; root.add(G.shellMesh); styleShell();
+}
+function stopWorker() { if (shell.worker && shell.busy) { shell.worker.terminate(); shell.worker = null; } shell.job++; }
+function syncShell() {
+  const drop = () => { if (G?.shellMesh) { root.remove(G.shellMesh); G.shellMesh.geometry.dispose(); G.shellMesh.material.dispose(); G.shellMesh = null; } };
+  if (!S.shell.enabled) { stopWorker(); drop(); if (shell.status !== 'cancelled') settleShell('off'); return; }
+  const inp = shellInput(), iso = shellCut();
+  if (!inp || inp.groups < 3) { stopWorker(); drop(); settleShell('empty', 'A grade shell needs assays in at least three separate collar locations (collars within 20 m count as one).'); return; }
+  if (!(iso > 0)) { stopWorker(); drop(); settleShell('empty', 'Set a cut-off above zero.'); return; }
+  const key = `${inp.key}|${iso}`, info = { holesUsed: inp.holesUsed, groups: inp.groups, composites: inp.composites, search: inp.search, cell: inp.grid.cell, grid: [inp.grid.nx, inp.grid.ny, inp.grid.nz] };
+  // A cached result for these inputs: drop any build still running for older ones.
+  if (shell.mesh?.key === key) { if (shell.busy) { stopWorker(); shell.pending = null; shell.status = ''; } if (G.shellMesh?.userData.key !== key) placeShell(); else styleShell(); if (shell.status !== 'ready' && shell.status !== 'empty') settleShell(shell.mesh.indices.length ? 'ready' : 'empty', shell.mesh.indices.length ? '' : 'No part of the grid reaches the cut-off.'); return; }
+  if (shell.busy && shell.pending === key) return;
+  stopWorker(); drop();
+  if (!shell.worker) shell.worker = new Worker(new URL('./shell-worker.js', import.meta.url), { type: 'module' });
+  const id = shell.job, t0 = performance.now(), field = shell.field?.key === inp.key ? shell.field.data : null;
+  shell.pending = key; shell.progress = 0; settleShell('building');
+  shell.worker.onmessage = (e) => {
+    const d = e.data; if (d.id !== shell.job) return;
+    if (d.type === 'progress') { shell.progress = d.p; renderShellUI(); return; }
+    shell.pending = null;
+    if (d.type === 'error') { settleShell('error', d.message); return; }
+    shell.field = { key: inp.key, data: d.field };
+    shell.mesh = { key, positions: d.positions, indices: d.indices, origin: [inp.grid.x0, inp.grid.y0, inp.grid.z0], stats: { ...info, ...d.stats, ms: Math.round(performance.now() - t0) } };
+    if (G) placeShell();
+    settleShell(d.indices.length ? 'ready' : 'empty', d.indices.length ? '' : 'No part of the grid reaches the cut-off. Lower it, or widen the search radius.');
+  };
+  shell.worker.onerror = (e) => { if (id !== shell.job) return; shell.pending = null; e.preventDefault?.(); settleShell('error', e.message || 'The shell could not be built.'); };
+  shell.worker.postMessage({ id, holes: inp.holes, grid: inp.grid, top: inp.top, search: inp.search, iso, field });
+}
+function cancelShell() {
+  if (!shell.busy) return getState();
+  stopWorker(); shell.pending = null; S.shell.enabled = false; settleShell('cancelled', 'Cancelled.'); return getState();
+}
+function setShell(o = {}) {
+  const sh = S.shell;
+  if (o.enabled !== undefined) sh.enabled = !!o.enabled;
+  [['cutoff', 0, 1e9], ['search', 5, 5000], ['cell', 2, 200]].forEach(([k, lo, hi]) => {
+    if (o[k] === undefined) return; if (o[k] === null || o[k] === '' || o[k] === 'auto') { sh[k] = null; return; }
+    const v = +o[k]; if (!Number.isFinite(v)) throw new Error(`${k} must be a number, or null for automatic.`); sh[k] = Math.max(lo, Math.min(hi, v));
+  });
+  if (o.opacity !== undefined) { const v = +o.opacity; if (!Number.isFinite(v)) throw new Error('opacity must be 0.05-0.9.'); sh.opacity = Math.max(0.05, Math.min(0.9, v > 1 ? v / 100 : v)); }
+  if (o.color !== undefined) { if (!/^#[0-9a-f]{6}$/i.test(String(o.color))) throw new Error('color must be a hex colour like #1f9e96.'); sh.color = String(o.color).toLowerCase(); }
+  const done = new Promise((res) => shell.waiters.push(res));
+  if (sh.enabled && shell.status === 'cancelled') shell.status = 'off';
+  syncShell(); renderShellUI(); schedulePublish();
+  if (!shell.busy) settleShell(shell.status, shell.message);
+  return done;
+}
+function renderShellUI() {
+  const sh = S.shell, busy = shell.busy, st = shell.mesh?.stats;
+  $('shell-on').checked = sh.enabled; $('shell-color').value = sh.color;
+  if (document.activeElement?.id !== 'shell-cut') $('shell-cut').value = +shellCut().toPrecision(4);
+  $('shell-unit').textContent = S.valueLabel; $('shell-op').value = Math.round(sh.opacity * 100); $('shell-op-out').textContent = `${Math.round(sh.opacity * 100)}%`;
+  $('shell-search').value = sh.search ?? ''; $('shell-cell').value = sh.cell ?? '';
+  $('shell-search').placeholder = `auto${st ? ` (${st.search} m)` : ''}`; $('shell-cell').placeholder = `auto${st ? ` (${+st.cell.toFixed(1)} m)` : ''}`;
+  $('shell-prog').hidden = !busy; $('shell-prog').value = shell.progress; $('shell-cancel').hidden = !busy;
+  $('shell-msg').textContent = busy ? `Estimating… ${Math.round(shell.progress * 100)}%` : shell.status === 'ready' && st
+    ? `${st.cells.toLocaleString()} cells ≥ cut-off · ${st.triangles.toLocaleString()} triangles · ${st.holesUsed} holes (${st.groups} collar groups) · ${st.search} m search · ${+st.cell.toFixed(1)} m cells · ${st.ms} ms`
+    : shell.message;
+}
+
 const terrainCredits = (withImagery) => [withImagery && imageryShown() && IMAGERY_CREDIT, G?.using === 'dem' && DEM_CREDIT].filter(Boolean);
 
 const traceR = () => Math.max(1.5, G.diag / 330) * S.traceWidth;
@@ -770,22 +944,25 @@ function placeRibbons() {
   if (S.ribbons) callouts.forEach(({ h, ic }) => { put(0, h, ic.broad.from, ic.broad.from + ic.broad.len); if (ic.incl) put(1, h, ic.incl.from, ic.incl.from + ic.incl.len); });
   G.ribbons.forEach((rb, k) => { rb.count = n[k]; rb.instanceMatrix.needsUpdate = true; });
 }
+// The display cut-off: intervals below it draw as the plain trace. Callouts are unaffected.
+const intervalShown = (it) => { const v = it.vals[S.valueCol]; return Number.isFinite(v) && !(S.displayCutoff !== null && v < S.displayCutoff); };
 const binIndex = (v) => { if (!Number.isFinite(v)) return -1; let k = 0; S.bins.forEach((b, i) => { if (v >= b) k = i + 1; }); return k; };
 function restyle() {
   if (!G) return;
   // Title wall labels without their own colour are painted in the brand colour.
   if (G.wallPrimary !== S.primary && S.wallLabels.some((L) => !L.color)) buildWallLabels();
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0), col = new THREE.Color();
-  const r = traceR(); let k = 0;
+  const r = traceR(), n = [0, 0];
   project.holes.forEach((h) => h.ints.forEach((it) => {
-    const v = it.vals[S.valueCol], bi = binIndex(v);
+    const v = it.vals[S.valueCol], bi = intervalShown(it) ? binIndex(v) : -1, T = h.prov ? G.tubesP : G.tubes, k = n[+h.prov]++;
     const a = h.posAt(it.from), b = h.posAt(it.to), va = G.V(a.x, a.y, a.z), vb = G.V(b.x, b.y, b.z), dir = vb.clone().sub(va), len = dir.length();
     q.setFromUnitVectors(up, dir.normalize());
     sc.set(bi < 0 ? 0.001 : r, Math.max(0.01, len), bi < 0 ? 0.001 : r);
     m.compose(va.clone().add(vb).multiplyScalar(0.5), q, sc);
-    G.tubes.setMatrixAt(k, m); G.tubes.setColorAt(k, col.set(BIN_COLORS[Math.max(0, bi)])); k++;
+    T.setMatrixAt(k, m); T.setColorAt(k, col.set(BIN_COLORS[Math.max(0, bi)]));
   }));
-  G.tubes.count = k; G.tubes.instanceMatrix.needsUpdate = true; if (G.tubes.instanceColor) G.tubes.instanceColor.needsUpdate = true;
+  [G.tubes, G.tubesP].forEach((T, i) => { T.count = n[i]; T.instanceMatrix.needsUpdate = true; if (T.instanceColor) T.instanceColor.needsUpdate = true; });
+  styleShell();
   G.walls.forEach((w) => { w.visible = S.walls; });
   G.top.material.opacity = S.surf; G.top.material.depthWrite = S.surf >= 0.99;
   G.meshes.forEach(({ name, m: mesh }) => { const st = S.meshes[name]; mesh.visible = st.show; mesh.material.color.set(st.color); mesh.material.opacity = st.opacity; });
@@ -984,8 +1161,16 @@ function drawHeader(ctx, K, Wc, title, subtitle, logoW) {
   ctx.fillStyle = S.accent; ctx.fillRect(m, m, 5 * u, y - m + 5 * u);
   return y + 8 * u;
 }
-function drawFooter(ctx, K, Wc, Hc, credits = []) {
-  const { u, m, font } = K, y = Hc - 17 * u, rule = y - 16 * u;
+// Automatic footnote lines: the grade shell's disclosure (3D figure only, where it is drawn) and the
+// metal-equivalent formula and assumptions whenever the derived column is in use.
+function autoNotes(view) {
+  const out = [];
+  if (view === '3d' && shellShown()) out.push(`Grade shell: exploratory envelope interpolated from drill assays (≥${shellCutText()}); not a geological model or mineral resource.`);
+  const en = eqName(); if (en && [S.valueCol, S.valueCol2].includes(en)) out.push(eqInfo().note);
+  return out;
+}
+function drawFooter(ctx, K, Wc, Hc, credits = [], notes = []) {
+  const { u, m, font } = K, y = Hc - 17 * u, rule = y - 16 * u - notes.length * 15 * u;
   ctx.strokeStyle = RULE; ctx.lineWidth = u; ctx.beginPath(); ctx.moveTo(m, rule); ctx.lineTo(Wc - m, rule); ctx.stroke();
   ctx.textBaseline = 'alphabetic'; let creditW = 0;
   // A white halo keeps the footer legible where the block or its shadow runs under it.
@@ -996,7 +1181,8 @@ function drawFooter(ctx, K, Wc, Hc, credits = []) {
   }
   if (credits.length) { font(400, 10.5); ctx.textAlign = 'right'; ctx.fillStyle = '#7c898c'; const t = credits.join(' · '); halo(t, Wc - m - creditW - (creditW ? 10 * u : 0), y); creditW += ctx.measureText(t).width + 10 * u; }
   if (S.footnote) { font(400, 11.5); ctx.textAlign = 'left'; ctx.fillStyle = MUTED; halo(fitText(ctx, S.footnote, Wc - 2 * m - creditW - 24 * u), m, y); }
-  ctx.textAlign = 'left';
+  ctx.textAlign = 'left'; font(400, 10.5); ctx.fillStyle = MUTED;
+  notes.forEach((t, i) => halo(fitText(ctx, t, Wc - 2 * m), m, y - (notes.length - i) * 15 * u));
   return rule;
 }
 function tagLabel(ctx, K, t, x, y) {
@@ -1187,7 +1373,7 @@ function drawOverlay(ctx, k, forExport) {
   const placed = wallLabelBoxes(), idBoxes = [], occ = [];
   project.holes.forEach((h) => {
     const [cx, cy] = proj(G.V(h.c.x, h.c.y, h.c.z)), e = h.path[h.path.length - 1], [ex, ey] = proj(G.V(e.x, e.y, e.z));
-    ctx.beginPath(); ctx.arc(cx, cy, 5 * u, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth = 2.4 * u; ctx.strokeStyle = INK; ctx.stroke();
+    ctx.beginPath(); ctx.arc(cx, cy, 5 * u, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth = 2.4 * u; ctx.strokeStyle = INK; if (h.prov) ctx.setLineDash([2.5 * u, 2 * u]); ctx.stroke(); ctx.setLineDash([]);
     occ.push([cx - 8 * u, cy - 8 * u, cx + 8 * u, cy + 8 * u]);
     if (!S.ids) return;
     const ang = Math.atan2(ey - cy, ex - cx), flip = Math.abs(ang) > Math.PI / 2, r = 26 * u, box = [ex - r, ey - r, ex + r, ey + r];
@@ -1214,7 +1400,7 @@ function drawOverlay(ctx, k, forExport) {
   // Frame furniture
   const logo = drawLogo(ctx, K, W, forExport);
   const headBottom = drawHeader(ctx, K, W, S.title, S.subtitle, logo.w);
-  const footTop = drawFooter(ctx, K, W, H, terrainCredits(true));
+  const footTop = drawFooter(ctx, K, W, H, terrainCredits(true), autoNotes('3d'));
   occ.push(...idBoxes, [0, 0, W, headBottom], [0, footTop, W, H]);
   drawScaleBar(ctx, K, footTop, idBoxes);
   // Plan inset under the logo
@@ -1230,14 +1416,18 @@ function drawOverlay(ctx, k, forExport) {
   }
   // Legend card, bottom right
   const rows = legendRows(), meshRows = G.meshes.filter(({ name }) => S.meshes[name].show).map(({ name }) => [meshName(name), S.meshes[name].color]);
+  if (shellShown()) meshRows.unshift([`Grade shell ≥ ${shellCutText()}`, S.shell.color]);
+  const provRow = project.holes.some((h) => h.prov);
   const ribRows = S.ribbons && callouts.length ? [['Reported interval', RIB_COLORS[0]], ...(callouts.some((c) => c.ic.incl) ? [['incl.', RIB_COLORS[1]]] : [])] : [];
-  const R = 19 * u, lw = 192 * u, lh = 12 * u + R + 6 * u + R + rows.length * R + (ribRows.length ? 6 * u + ribRows.length * R : 0) + (meshRows.length ? 6 * u + R + meshRows.length * R : 0) + 6 * u;
+  const R = 19 * u, lw = 192 * u, lh = 12 * u + R * (provRow ? 2 : 1) + 6 * u + R + (rows.length + (S.displayCutoff !== null)) * R + (ribRows.length ? 6 * u + ribRows.length * R : 0) + (meshRows.length ? 6 * u + R + meshRows.length * R : 0) + 6 * u;
   const lx = W - m - lw, ly = footTop - 12 * u - lh; occ.push([lx, ly, W, footTop]);
   ctx.fillStyle = 'rgba(255,255,255,0.96)'; ctx.strokeStyle = RULE; ctx.lineWidth = u; roundRect(ctx, lx, ly, lw, lh, 5 * u); ctx.fill(); ctx.stroke();
   let yy = ly + 12 * u; const row = (draw, t, bold, mono) => { draw(yy + R / 2); bold ? font(700, 13) : font(400, mono ? 12 : 13, mono); ctx.fillStyle = INK; ctx.textBaseline = 'middle'; ctx.fillText(fitText(ctx, t, lw - 52 * u), lx + (bold ? 12 : 44) * u, yy + R / 2); ctx.textBaseline = 'alphabetic'; yy += R; };
   row((cy) => { ctx.beginPath(); ctx.arc(lx + 23 * u, cy, 5 * u, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth = 2.4 * u; ctx.strokeStyle = INK; ctx.stroke(); }, 'Drill hole collar');
+  if (provRow) row((cy) => { ctx.strokeStyle = '#59646a'; ctx.lineWidth = 2 * u; ctx.setLineDash([4 * u, 3 * u]); ctx.beginPath(); ctx.moveTo(lx + 12 * u, cy); ctx.lineTo(lx + 34 * u, cy); ctx.stroke(); ctx.setLineDash([]); }, 'Provisional position');
   yy += 6 * u; row(() => {}, `Assay · ${S.valueLabel}`, true);
   rows.forEach(([t, c]) => row((cy) => { ctx.fillStyle = c; roundRect(ctx, lx + 12 * u, cy - 4 * u, 22 * u, 8 * u, 4 * u); ctx.fill(); }, t, false, true));
+  if (S.displayCutoff !== null) row((cy) => { ctx.strokeStyle = '#59646a'; ctx.lineWidth = 1.5 * u; ctx.beginPath(); ctx.moveTo(lx + 12 * u, cy); ctx.lineTo(lx + 34 * u, cy); ctx.stroke(); }, `< ${S.displayCutoff}: trace only`, false, true);
   if (ribRows.length) { yy += 6 * u; ribRows.forEach(([t, c]) => row((cy) => { ctx.fillStyle = c; ctx.fillRect(lx + 12 * u, cy - 3 * u, 22 * u, 6 * u); }, t)); }
   if (meshRows.length) { yy += 6 * u; row(() => {}, 'Model', true); meshRows.forEach(([t, c]) => row((cy) => { ctx.globalAlpha = 0.6; ctx.fillStyle = c; ctx.fillRect(lx + 12 * u, cy - 6 * u, 22 * u, 12 * u); ctx.globalAlpha = 1; }, t)); }
   // Orientation, bottom left: north arrow plus view direction
@@ -1286,7 +1476,7 @@ function drawSection(ctx, Wc, Hc, forExport) {
   const lookAz = ((S.secAz - 90) % 360 + 360) % 360;
   const logo = drawLogo(ctx, K, Wc, forExport), head = S.title.split('·')[0].trim() || S.title;
   const headBottom = drawHeader(ctx, K, Wc, `${head} · SECTION A–A′`, `Looking ${pad3(lookAz)}° · ±${S.secW} m projection · ${S.valueLabel}`, logo.w);
-  const footTop = drawFooter(ctx, K, Wc, Hc, terrainCredits(false));
+  const footTop = drawFooter(ctx, K, Wc, Hc, terrainCredits(false), autoNotes('section'));
   const profile = []; let zMax = -Infinity;
   for (let i = 0; i <= 200; i++) { const t = i / 200 * L, z = G.surf(A.x + d.x * t, A.y + d.y * t); profile.push([t, z]); zMax = Math.max(zMax, z); }
   const shown = project.holes.map((h) => ({ h, pts: h.path.map((p) => ({ ...p, ...pr(p) })) })).filter(({ pts }) => pts.some((p) => Math.abs(p.off) <= S.secW));
@@ -1304,10 +1494,10 @@ function drawSection(ctx, Wc, Hc, forExport) {
   for (let z = Math.ceil(zBot / stepZ) * stepZ; z < zTop; z += stepZ) { ctx.beginPath(); ctx.moveTo(X(L) + 4 * u, Y(z)); ctx.lineTo(X(L) + 10 * u, Y(z)); ctx.stroke(); ctx.fillText(`${Math.round(z)} m`, X(L) + 14 * u, Y(z) + 4 * u); }
   const barW = Math.max(6 * u, Math.min(12 * u, s * 7));
   shown.forEach(({ h, pts }) => {
-    ctx.strokeStyle = '#2c3d42'; ctx.lineWidth = u; ctx.beginPath(); let on = false;
-    pts.forEach((p) => { if (Math.abs(p.off) > S.secW) { on = false; return; } on ? ctx.lineTo(X(p.t), Y(p.z)) : ctx.moveTo(X(p.t), Y(p.z)); on = true; }); ctx.stroke();
+    ctx.strokeStyle = '#2c3d42'; ctx.lineWidth = u; ctx.beginPath(); let on = false; if (h.prov) ctx.setLineDash([5 * u, 3 * u]);
+    pts.forEach((p) => { if (Math.abs(p.off) > S.secW) { on = false; return; } on ? ctx.lineTo(X(p.t), Y(p.z)) : ctx.moveTo(X(p.t), Y(p.z)); on = true; }); ctx.stroke(); ctx.setLineDash([]);
     h.ints.forEach((it) => {
-      const bi = binIndex(it.vals[S.valueCol]); if (bi < 1) return;
+      const bi = intervalShown(it) ? binIndex(it.vals[S.valueCol]) : -1; if (bi < 1) return;
       const a = h.posAt(it.from), b = h.posAt(it.to), pa = pr(a), pb = pr(b); if (Math.abs(pa.off) > S.secW) return;
       const x0 = X(pa.t), y0 = Y(a.z), x1 = X(pb.t), y1 = Y(b.z), ang = Math.atan2(y1 - y0, x1 - x0), len = Math.max(1.5 * u, Math.hypot(x1 - x0, y1 - y0));
       ctx.save(); ctx.translate(x0, y0); ctx.rotate(ang); ctx.fillStyle = BIN_COLORS[bi]; ctx.fillRect(0, -barW / 2, len + 0.5 * u, barW); ctx.restore();
@@ -1611,6 +1801,15 @@ function renderStyle() {
   $('terrain').value = S.terrain; $('terrain-src').value = S.terrainSource; $('block-style').value = S.blockStyle; $('collar-fit').value = S.collarFit; $('vex').value = S.vex; $('vex-out').textContent = `${S.vex}×`;
   $('trace-w').value = Math.round(S.traceWidth * 100); $('trace-out').textContent = `${S.traceWidth.toFixed(1)}×`;
   $('surf').value = Math.round(S.surf * 100); $('surf-out').textContent = `${Math.round(S.surf * 100)}%`;
+  // The grade column as one-click choices, the display cut-off's quick values, the shell and the
+  // metal-equivalent builder.
+  $('metric-chips').innerHTML = (project?.cols || []).map((c) => `<button type="button" class="chip" data-col="${esc(c)}" aria-pressed="${c === S.valueCol}" title="${esc(c)}">${esc(labelFor(c))}</button>`).join('');
+  $('metric-chips').querySelectorAll('[data-col]').forEach((b) => b.addEventListener('click', () => setStyle({ valueCol: b.dataset.col })));
+  const dc = S.displayCutoff;
+  $('dcut-btns').innerHTML = [null, ...dcutChoices()].map((v) => `<button type="button" class="chip" data-dcut="${v ?? ''}" aria-pressed="${v === dc}">${v === null ? 'All' : v}</button>`).join('');
+  $('dcut-btns').querySelectorAll('[data-dcut]').forEach((b) => b.addEventListener('click', () => setStyle({ displayCutoff: b.dataset.dcut === '' ? null : +b.dataset.dcut })));
+  if (document.activeElement?.id !== 'dcut') $('dcut').value = dc ?? '';
+  renderShellUI(); renderEq();
   const ml = $('mesh-list'); ml.innerHTML = '';
   (project?.meshF || []).forEach((f) => { const st = S.meshes[f.name]; if (!st) return;
     const d = document.createElement('label'); d.className = 'mesh';
@@ -1646,7 +1845,7 @@ function syncBrandUI() {
 function refresh() {
   project = build(); recheckCRS();
   if (!project.empty && project.holes.length) { const az = principalAz(project.holes); if (az !== null && !refresh.secSet) S.secAz = az; }
-  rebuildScene(); renderFiles(); renderSummary(); renderStyle(); renderCalloutEditor(); renderLabelList(); renderWallLabelList(); renderCRS(); schedulePublish();
+  rebuildScene(); renderFiles(); renderSummary(); renderChecks(); renderStyle(); renderCalloutEditor(); renderLabelList(); renderWallLabelList(); renderCRS(); schedulePublish();
 }
 function principalAz(holes) {
   const pts = holes.map((h) => [h.c.x, h.c.y]); if (pts.length < 3) return null;
@@ -1657,7 +1856,7 @@ function principalAz(holes) {
 }
 function addUserFiles(arr) {
   if (!Array.isArray(arr) || !arr.length || arr.some((f) => !f || typeof f.name !== 'string' || typeof f.text !== 'string')) throw new Error('addFiles expects [{ name: "collars.csv", text: "HoleID,Easting,..." }].');
-  if (usingSample) { files = []; usingSample = false; S.meshes = {}; S.valueCol = null; S.coOverrides = {}; S.valueCol2 = null; }
+  if (usingSample) { files = []; usingSample = false; S.meshes = {}; S.valueCol = null; S.coOverrides = {}; S.valueCol2 = null; resetDerived(); }
   refresh.secSet = false; addFiles(arr); refresh();
   const added = files.filter((f) => arr.some((a) => a.name === f.name)).map((f) => `${f.name} → ${ROLE_LABEL[f.role]}`);
   status(project.empty ? `Added ${added.join(', ')}. Still need a collar file.` : `Added ${added.join(', ')}. ${project.holes.length} holes on the figure.`);
@@ -1715,11 +1914,13 @@ $('paste-add').addEventListener('click', () => {
 });
 function loadSample() {
   S.crs = null; geo = null; renderCRS();
-  files = []; usingSample = true; S.valueCol = null; S.meshes = {}; S.coOverrides = {}; refresh.secSet = false;
+  files = []; usingSample = true; S.valueCol = null; S.meshes = {}; S.coOverrides = {}; refresh.secSet = false; resetDerived();
   addFiles(sampleFiles()); refresh(); status('Sample project loaded · illustrative data. Add your CSVs in step 1 to replace it.');
   return getState();
 }
-function clearFiles() { S.crs = null; geo = null; renderCRS(); files = []; usingSample = false; S.meshes = {}; S.coOverrides = {}; refresh(); status('Files cleared. Add a collar file and an assay file.'); return getState(); }
+// A new data set starts without the old one's equivalent recipe, display cut-off or provisional flags.
+function resetDerived() { S.eq = null; S.displayCutoff = null; S.provisional = {}; S.shell.cutoff = null; }
+function clearFiles() { S.crs = null; geo = null; renderCRS(); files = []; usingSample = false; S.meshes = {}; S.coOverrides = {}; resetDerived(); refresh(); status('Files cleared. Add a collar file and an assay file.'); return getState(); }
 $('load-sample').addEventListener('click', loadSample);
 $('clear-files').addEventListener('click', clearFiles);
 
@@ -1743,11 +1944,16 @@ function rebin() { const assays = new Map(); (project?.holes || []).forEach((h) 
 function setStyle(o = {}, render = true) {
   if (o.valueCol !== undefined) {
     const av = project?.cols || []; if (!av.includes(o.valueCol)) throw new Error(`Unknown grade column "${o.valueCol}". Available: ${av.join(', ') || 'none'}.`);
+    if (o.valueCol !== S.valueCol) { S.displayCutoff = null; S.shell.cutoff = null; }
     S.valueCol = o.valueCol; S.valueLabel = labelFor(o.valueCol); rebin();
   }
   if (o.valueLabel !== undefined) S.valueLabel = String(o.valueLabel);
   if (o.bins !== undefined) { if (!Array.isArray(o.bins) || o.bins.length !== 4 || o.bins.some((b) => !Number.isFinite(+b))) throw new Error('bins must be four numbers: the lower limit of each colour.'); S.bins = o.bins.map(Number).sort((a, b) => a - b); }
   if (o.autoBins) rebin();
+  if (o.displayCutoff !== undefined) {
+    const v = o.displayCutoff === null || o.displayCutoff === '' || o.displayCutoff === 'all' ? null : +o.displayCutoff;
+    if (v !== null && !(v >= 0)) throw new Error('displayCutoff must be a grade of 0 or more, or null to show all intervals.'); S.displayCutoff = v;
+  }
   [['coCount', 0, 12], ['coMin', 1, 1000], ['coCut', 0, 1e9], ['coIncl', 0, 1e9], ['secW', 5, 5000]].forEach(([k, lo, hi]) => { if (o[k] !== undefined) { const v = +o[k]; if (!Number.isFinite(v)) throw new Error(`${k} must be a number.`); S[k] = Math.max(lo, Math.min(hi, v)); } });
   if (o.secAz !== undefined) { S.secAz = ((Math.round(+o.secAz) % 180) + 180) % 180; refresh.secSet = true; }
   if (o.valueCol2 !== undefined) {
@@ -1771,8 +1977,109 @@ function setStyle(o = {}, render = true) {
   if (rebuild) rebuildScene(true); else { if (o.terrain !== undefined || o.blockStyle !== undefined) paintTerrain(); if (o.terrain !== undefined) syncRealTerrain(); restyle(); }
   if (rebuild && G?.terrainNote) status(G.terrainNote);
   if (o.terrain !== undefined && (S.terrain === 'satellite' || S.terrain === 'muted') && !geo) status('Satellite imagery needs the coordinate system: set it in step 1 (e.g. EPSG:26909). Showing the natural surface.');
-  if (render) renderStyle(); renderCalloutEditor(); schedulePublish();
+  if (S.shell.enabled) syncShell();
+  if (render) renderStyle(); renderCalloutEditor(); renderChecks(); schedulePublish();
   return getState();
+}
+// Quick display cut-offs from the grade distribution: rounded 50th, 70th, 85th and 95th percentiles.
+function dcutChoices() {
+  const v = []; (project?.holes || []).forEach((h) => h.ints.forEach((it) => { const x = it.vals[S.valueCol]; if (Number.isFinite(x) && x > 0) v.push(x); }));
+  if (!v.length) return []; v.sort((a, b) => a - b);
+  return [...new Set([0.5, 0.7, 0.85, 0.95].map((p) => niceRound(v[Math.floor(p * (v.length - 1))])))].filter((x) => x > 0);
+}
+$('dcut').addEventListener('change', (e) => { try { setStyle({ displayCutoff: e.target.value === '' ? null : +e.target.value }); } catch (err) { status(err.message); } });
+// Grade shell controls
+$('shell-on').addEventListener('change', (e) => { setShell({ enabled: e.target.checked }); if (e.target.checked) status('Building the grade shell from the assays…'); });
+$('shell-cut').addEventListener('change', (e) => { try { setShell({ cutoff: e.target.value === '' ? null : +e.target.value }); } catch (err) { status(err.message); } });
+$('shell-op').addEventListener('input', (e) => setShell({ opacity: +e.target.value / 100 }));
+$('shell-color').addEventListener('input', (e) => setShell({ color: e.target.value }));
+[['shell-search', 'search'], ['shell-cell', 'cell']].forEach(([id, k]) => $(id).addEventListener('change', (e) => { try { setShell({ [k]: e.target.value === '' ? null : +e.target.value }); } catch (err) { status(err.message); } }));
+$('shell-cancel').addEventListener('click', () => { cancelShell(); status('Grade shell cancelled.'); });
+// Metal equivalent
+const capMetal = (t) => String(t).charAt(0).toUpperCase() + String(t).slice(1).toLowerCase();
+function metalCols() { const m = new Map(); (project?.cols || []).filter((c) => c !== eqName()).forEach((c) => { const k = metalOf(c); if (k && !m.has(k)) m.set(k, c); }); return m; }
+function setEquivalent(o) {
+  if (!project || project.empty) throw new Error('Load assays first.');
+  const prev = eqName(), strip = () => { project.cols = project.cols.filter((c) => c !== prev); project.holes.forEach((h) => h.ints.forEach((it) => { delete it.vals[prev]; })); };
+  if (!o || o.enabled === false) {
+    if (prev) { S.eq = null; strip(); if (S.valueCol2 === prev) S.valueCol2 = null; setStyle(S.valueCol === prev ? { valueCol: project.cols[0] } : {}); }
+    return getState();
+  }
+  const present = metalCols(), list = [...present.keys()].map((k) => `${k} (${present.get(k)})`).join(', ') || 'none';
+  const base = o.base ? (present.has(capMetal(o.base)) ? capMetal(o.base) : metalOf(String(o.base))) : present.has('Cu') ? 'Cu' : [...present.keys()][0];
+  const baseCol = o.baseCol || (project.cols.includes(o.base) ? o.base : present.get(base));
+  if (!base || !baseCol) throw new Error(`No ${o.base || 'metal'} column for the base. Metal columns: ${list}.`);
+  const req = o.metals || Object.fromEntries([...present.keys()].filter((k) => k !== base && METAL_DEFAULTS[k]).map((k) => [k, {}])), metals = {};
+  Object.entries(req).forEach(([k, m]) => {
+    const metal = capMetal(k), mm = m || {}, col = mm.col || present.get(metal), price = mm.price ?? METAL_DEFAULTS[metal], recovery = mm.recovery ?? 90;
+    if (metal === base) return;
+    if (!col) throw new Error(`No ${metal} column in the assays. Metal columns: ${list}.`);
+    if (!(+price > 0)) throw new Error(`Give a price for ${metal} (US$ per ${priceUnit(metal)}).`);
+    if (!(+recovery > 0 && +recovery <= 100)) throw new Error(`${metal} recovery must be a percentage, 1-100.`);
+    metals[metal] = { col, unit: mm.unit || unitOf(col), price: +price, recovery: +recovery };
+  });
+  if (!Object.keys(metals).length) throw new Error(`Pick at least one metal besides ${base}. Metal columns: ${list}.`);
+  const next = { base, baseCol, baseUnit: o.baseUnit || unitOf(baseCol), basePrice: +(o.basePrice ?? METAL_DEFAULTS[base]), baseRecovery: +(o.baseRecovery ?? 90), metals };
+  if (!(next.baseRecovery > 0 && next.baseRecovery <= 100)) throw new Error('baseRecovery must be a percentage, 1-100.');
+  eqInfo(next); // throws on a missing base price
+  if (prev) strip();
+  const usedAs = [S.valueCol === prev, S.valueCol2 === prev];
+  S.eq = next; applyEq(project.holes.map((h) => h.ints), project.cols);
+  const name = eqName();
+  if (usedAs[1]) S.valueCol2 = name;
+  setStyle(o.use !== false || usedAs[0] ? { valueCol: name } : {});
+  if (S.valueCol === name) { S.valueLabel = labelFor(name); renderStyle(); }
+  status(`${name}: ${eqInfo().formula}.`);
+  return getState();
+}
+function eqForm() {
+  const metals = {};
+  $('eq-rows').querySelectorAll('[data-eqm]').forEach((r) => { if (r.querySelector('input[type=checkbox]').checked) metals[r.dataset.eqm] = { price: +r.querySelector('[data-p]').value, recovery: +r.querySelector('[data-r]').value }; });
+  return { base: $('eq-base').value, basePrice: +$('eq-bprice').value, baseRecovery: +$('eq-brec').value, metals };
+}
+function eqPreview() {
+  try {
+    const f = eqForm(), present = metalCols(), ms = Object.entries(f.metals).map(([metal, m]) => ({ metal, unit: unitOf(present.get(metal)), ...m }));
+    $('eq-formula').textContent = ms.length ? eqFormula(f.base, eqFactors({ metal: f.base, unit: unitOf(present.get(f.base)), price: f.basePrice, recovery: f.baseRecovery }, ms)) : 'Tick at least one other metal.';
+  } catch (e) { $('eq-formula').textContent = e.message; }
+}
+function renderEq(baseOverride) {
+  const present = metalCols(), e = S.eq, box = $('eq-body');
+  if (present.size < 2) { box.innerHTML = '<p class="muted">Needs at least two metal columns in the assays (for example Cu and Au).</p>'; return; }
+  const base = baseOverride || (e?.base && present.has(e.base) ? e.base : present.has('Cu') ? 'Cu' : [...present.keys()][0]), same = e?.base === base;
+  const val = (m, k, d) => (e?.metals?.[m]?.[k] ?? d);
+  box.innerHTML = `<div class="grid2"><label class="field" style="grid-column:1/-1"><span>Base metal</span><select id="eq-base">${[...present.keys()].map((m) => `<option ${m === base ? 'selected' : ''}>${m}</option>`).join('')}</select></label>
+    <label class="field"><span>${base} US$/${priceUnit(base)}</span><input type="number" id="eq-bprice" step="any" min="0" value="${same ? e.basePrice : METAL_DEFAULTS[base] ?? ''}"></label>
+    <label class="field"><span>${base} recovery %</span><input type="number" id="eq-brec" min="1" max="100" value="${same ? e.baseRecovery : 90}"></label></div>
+    <div id="eq-rows">${[...present.keys()].filter((m) => m !== base).map((m) => `<div class="eq-row" data-eqm="${m}"><label class="check"><input type="checkbox" ${(e ? !!e.metals[m] : !!METAL_DEFAULTS[m]) ? 'checked' : ''}>${m}</label>
+      <label class="field"><span>US$/${priceUnit(m)}</span><input type="number" data-p step="any" min="0" value="${val(m, 'price', METAL_DEFAULTS[m] ?? '')}"></label><label class="field"><span>Recovery %</span><input type="number" data-r min="1" max="100" value="${val(m, 'recovery', 90)}"></label></div>`).join('')}</div>
+    <p class="mono" id="eq-formula"></p>
+    <div class="row"><button class="btn" type="button" id="eq-apply">${e ? 'Update' : 'Add'} ${base}Eq_calc</button>${e ? '<button class="btn" type="button" id="eq-remove">Remove</button>' : ''}</div>`;
+  $('eq-base').addEventListener('change', () => renderEq($('eq-base').value));
+  box.querySelectorAll('input').forEach((i) => i.addEventListener('input', eqPreview));
+  $('eq-apply').addEventListener('click', () => { try { setEquivalent(eqForm()); } catch (err) { status(err.message); } });
+  $('eq-remove')?.addEventListener('click', () => setEquivalent(null));
+  eqPreview();
+}
+function setProvisional(holeId, flag) {
+  if (!project?.holes?.some((h) => h.id === holeId)) throw new Error(`No hole "${holeId}".`);
+  if (flag === null || flag === undefined) delete S.provisional[holeId]; else S.provisional[holeId] = !!flag;
+  rebuildScene(true); renderChecks(); schedulePublish(); return getState();
+}
+function getChecks() {
+  const C = project?.checks; if (!C) return null;
+  const hs = project.holes || [];
+  return { counts: { ...C.counts, intervalsShown: hs.reduce((t, h) => t + h.ints.filter(intervalShown).length, 0) }, problems: C.problems, provisionalHoles: hs.filter((h) => h.prov).map((h) => h.id) };
+}
+function renderChecks() {
+  const el = $('checks'), C = getChecks(), open = el.querySelector('details')?.open;
+  if (!C) { el.innerHTML = '<p class="muted">Add files to check them.</p>'; return; }
+  const c = C.counts;
+  el.innerHTML = `<div class="summary">${[[c.holes, 'holes'], [c.holesPlaced, 'placed'], [c.assaysLoaded, 'assays loaded'], [c.assaysPlaced, 'assays placed'], [c.intervalsShown, 'intervals shown']].map(([n, t]) => `<span class="pill">${n.toLocaleString()} ${t}</span>`).join('')}</div>`
+    + (C.problems.length ? `<ul class="checks">${C.problems.map((p) => `<li>${esc(p.message)}</li>`).join('')}</ul>` : '<p class="muted" style="margin-top:6px">No problems found.</p>')
+    + (project.holes?.length ? `<details${open ? ' open' : ''}><summary>Provisional positions (${C.provisionalHoles.length})</summary><p class="muted">Ticked holes draw dashed and fainter, with a legend row. Read from a collar status or flags column; change any here.</p>
+      <div class="prov-list">${project.holes.map((h) => `<label class="check"><input type="checkbox" data-prov="${esc(h.id)}" ${h.prov ? 'checked' : ''}>${esc(h.id)}</label>`).join('')}</div></details>` : '');
+  el.querySelectorAll('[data-prov]').forEach((cb) => cb.addEventListener('change', () => setProvisional(cb.dataset.prov, cb.checked)));
 }
 $('value-col').addEventListener('change', (e) => setStyle({ valueCol: e.target.value }));
 $('value-label').addEventListener('input', (e) => setStyle({ valueLabel: e.target.value }, false));
@@ -1945,7 +2252,11 @@ function getState() {
       imagery: realT.img ? (realT.img.ok ? `z${realT.img.z}, ${realT.img.tiles} tiles` : `failed: ${realT.img.error}`) : null, imageryShown: imageryShown(), note: G?.terrainNote || null, credits: G ? terrainCredits(true) : [] },
     camera: G ? getCam() : null, section: { secAz: S.secAz, secW: S.secW, lookingAz: ((S.secAz - 90) % 360 + 360) % 360 },
     labels: S.labels.map((l) => ({ ...l })), wallLabels: S.wallLabels.map((l) => ({ ...l })),
-    display: { walls: S.walls, ids: S.ids, inset: S.inset, surface: S.surf, ribbons: S.ribbons, traceWidth: S.traceWidth, pendingLabels: S.pendingLabels, pendingNoAssays: S.pendingNoAssays, elevTicks: S.elevTicks }, meshes: S.meshes,
+    display: { walls: S.walls, ids: S.ids, inset: S.inset, surface: S.surf, ribbons: S.ribbons, traceWidth: S.traceWidth, pendingLabels: S.pendingLabels, pendingNoAssays: S.pendingNoAssays, elevTicks: S.elevTicks, displayCutoff: S.displayCutoff }, meshes: S.meshes,
+    shell: { ...S.shell, cutoff: shellCut(), cutoffAuto: S.shell.cutoff === null, column: S.valueCol, legend: `Grade shell ≥ ${shellCutText()}`, shown: shellShown(), status: shell.status, progress: shell.progress, message: shell.message || null,
+      ...(shell.status === 'ready' || shell.status === 'empty' ? { cells: shell.mesh?.stats.cells ?? 0, triangles: shell.mesh?.stats.triangles ?? 0, holesUsed: shell.mesh?.stats.holesUsed ?? 0, collarGroups: shell.mesh?.stats.groups ?? 0, composites: shell.mesh?.stats.composites ?? 0, searchUsed: shell.mesh?.stats.search ?? null, cellUsed: shell.mesh?.stats.cell ?? null, grid: shell.mesh?.stats.grid ?? null, buildMs: shell.mesh?.stats.ms ?? null } : {}) },
+    equivalent: S.eq ? (() => { const i = eqInfo(); return { column: i.name, formula: i.formula, note: i.note, factors: Object.fromEntries(i.factors.map((f) => [f.metal, +f.factor.toPrecision(6)])), ...structuredClone(S.eq) }; })() : null,
+    footnoteAuto: G ? autoNotes(S.view) : [], checks: getChecks(),
     figureSize: { key: S.format, width: f.w, height: f.h, label: f.label }, figureSizes: Object.fromEntries(Object.entries(FORMATS).map(([k, v]) => [k, `${v.label}, ${v.w}×${v.h}`])),
   };
 }
@@ -1994,6 +2305,21 @@ JavaScript API (run in the page console or via your agent's evaluate tool):
                                   perspective; u 0-1 left to right seen from outside, v 0 (base) to 1 (terrain)
   EM3D.updateWallLabel(id, {...}) EM3D.removeWallLabel(id)
   EM3D.setCallout(holeId, {show, line1, line2, incl: false})   null resets a field
+  EM3D.setStyle({displayCutoff})  intervals below it draw as the plain trace (null: all); callouts unchanged
+  EM3D.setEquivalent({base: "Cu", metals: {Au: {price, recovery}, Ag: {...}}, basePrice, baseRecovery, use})
+                                  adds a derived column such as CuEq_calc (and colours by it unless use: false).
+                                  Prices in US$/lb (Cu, Mo, Zn, Pb, Ni, Co) or US$/oz (Au, Ag, Pt, Pd); defaults
+                                  Cu 4.50, Au 3,000, Ag 35, Mo 20, Zn 1.30; recoveries in %, default 90.
+                                  1% = 22.0462 lb/t, 1 g/t = 1/31.1035 oz/t. An interval missing any component
+                                  has no equivalent value (never read as zero). null removes it. The formula and
+                                  assumptions go in the footnote while the column is in use
+  EM3D.setShell({enabled, cutoff, opacity, color, search, cell})   Promise; resolves with the state once
+                                  the grade shell is built. cutoff/search/cell null = automatic. See below
+  EM3D.cancelShell()              stops a build in progress
+  EM3D.setProvisional(holeId, true | false | null)   dashed, fainter "Provisional position" (null: from the
+                                  collar status/flags column)
+  getState().checks               data checks: counts and problems (no collar, From ≥ To, overlaps, beyond depth,
+                                  conflicting survey depths, dips out of range, outlying collars)
   EM3D.setCamera({view: "a" | "b" | "low" | "plan"}) or ({azimuth, plunge, zoom})
   EM3D.setFigureSize("slide" | "release" | "square" | "portrait" | "a4")
   EM3D.showStep("data" | "brand" | "layout" | "export")
@@ -2015,6 +2341,12 @@ Without the API: every control has a visible label. The four steps are tabs
 (Data, Brand, Layout, Export) and each pane ends with a Next button.
 The status message under the preview announces each change.
 
+Grade shell: an exploratory envelope from the grade column the holes are coloured by; not a geological
+model or a resource (the footnote says so while it shows). 10 m composites; at each grid point the nearest
+composite per collar group (collars within 20 m), at most 4 groups, inverse distance squared (5 m minimum);
+3 groups needed in the search radius (75 m, or 1.5 x the group spacing); nothing above the surface; marching
+cubes at the cut-off. Full method: Layout step, "How the shell is built". Rebuilt when a project opens.
+
 Example: a branded news-release figure from pasted CSVs
   EM3D.addFiles([{name: "collars.csv", text: COLLARS}, {name: "assays.csv", text: ASSAYS}])
   EM3D.setBrand({company: "Star Copper", title: "STAR PROJECT · RAILS ZONE", subtitle: "3D drilling, looking northeast"})
@@ -2029,6 +2361,7 @@ window.EM3D = Object.freeze({
   setFigureSize, showStep: call(showStep), showView: call(showView), exportPNG,
   setCRS, terrainReady: async () => { await (realT.promise || Promise.resolve()); return getState(); },
   addLabel, updateLabel, removeLabel, exportLayers, sendToDesignDesk, addWallLabel, updateWallLabel, removeWallLabel,
+  setShell, cancelShell, setEquivalent, setProvisional: call(setProvisional), getChecks,
 });
 
 // ------------------------------------------------------------

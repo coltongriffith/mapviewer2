@@ -65,7 +65,14 @@ const BUDGETS = {
   // 140 → 160: pro figures (intercept bars, real terrain and satellite drape,
   // solid block, text and wall labels, designer layers, design-desk form) plus
   // account save; proj4 and fflate stay lazy.
-  threeDJsGzipKb: 160,
+  // 160 → 164 (Oct 2026): the grade shell's controls and composites (its estimate and marching cubes
+  // run in the lazy worker below), the metal-equivalent builder, the display cut-off and the data
+  // checks panel add ~9.6 kB to the page; they are needed as soon as data loads, so stay eager.
+  threeDJsGzipKb: 164,
+  // The /3d grade-shell worker (composites estimate and marching cubes) is its own chunk, fetched only
+  // when a shell is turned on. Vite emits workers outside the manifest graph, so it is found from the
+  // page's chunks (see below) and budgeted here rather than in the page or the app totals.
+  threeDWorkerJsGzipKb: 6,
   teamsJsGzipKb: 10,
   adminAuthJsGzipKb: 150,
   adminJsGzipKb: 85,
@@ -132,6 +139,14 @@ for (const [name, entry, limit] of STANDALONE) {
   }
   report.push(`${name} page JS: ${size.toFixed(1)} kB gzip across ${files.size} chunks`);
   if (size > limit) failures.push(`${name} page JS ${size.toFixed(1)} kB exceeds ${limit} kB`);
+  // Workers: new Worker(new URL("/assets/x.js", import.meta.url)) in a page chunk, absent from the manifest.
+  for (const file of files) {
+    for (const [, w] of (await readFile(join(DIST, file), 'utf8')).matchAll(/new Worker\(new URL\("\/?(assets\/[\w.-]+\.js)"/g)) {
+      const kb = await gzipKb(join(DIST, w)); standaloneOnly.add(join(DIST, w));
+      report.push(`${name} worker ${w}: ${kb.toFixed(1)} kB gzip (lazy)`);
+      if (kb > BUDGETS.threeDWorkerJsGzipKb) failures.push(`${name} worker ${w} ${kb.toFixed(1)} kB exceeds ${BUDGETS.threeDWorkerJsGzipKb} kB`);
+    }
+  }
 }
 
 // The app's totals leave out chunks only a standalone page loads.
