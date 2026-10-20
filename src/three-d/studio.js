@@ -140,9 +140,13 @@ const S = {              // style
   title: 'EXAMPLE RIDGE · MAIN ZONE', subtitle: '3D drilling model, looking northeast',
   valueCol: null, valueLabel: '', bins: [0.1, 0.2, 0.3, 0.5], coCount: 5, coMin: 20, coCut: 0.2, coIncl: 0.5,
   secAz: 135, secW: 75, surf: 1, walls: true, ids: true, inset: true, logo: null, meshes: {},
+  ribbons: true, traceWidth: 1.4, pendingLabels: true, pendingNoAssays: false, valueCol2: null, elevTicks: true,
+  terrain: 'natural', terrainSource: 'auto', vex: 1, crs: null, labels: [],
+  collarFit: 'collars', blockStyle: 'glass', wallLabels: [],
 };
 const BIN_COLORS = ['#a3abaf', '#e2dc4f', '#ff9a1f', '#ef3b2c', '#e93ad1'];
 const MESH_COLORS = ['#ff9a1f', '#e93ad1', '#2b8fd6', '#6aa84f', '#8e5bd6'];
+const RIB_COLORS = ['#d6b48a', '#6aa84f']; // reported (broad) interval, "incl." interval
 
 function addFiles(list) {
   for (const f of list) {
@@ -166,16 +170,19 @@ function build() {
   const collarF = byRole('collar'), assayF = byRole('assay'), surveyF = byRole('survey'), topoF = byRole('topo'), meshF = byRole('mesh');
   // Collars
   const collars = new Map(); let latlon = false;
-  collarF.forEach((f) => f.rows.forEach((r) => {
+  collarF.forEach((f) => { const ni = noteCol(f.header); f.rows.forEach((r) => {
     const c = f.cols, id = (r[c.hole] || '').trim(); if (!id) return;
     let x = num(r[c.east]), y = num(r[c.north]);
     if ((!Number.isFinite(x) || !Number.isFinite(y)) && c.lat !== undefined) { x = num(r[c.lon]); y = num(r[c.lat]); latlon = true; }
     if (!Number.isFinite(x) || !Number.isFinite(y)) return;
-    collars.set(id, { id, x, y, z: num(r[c.elev]), depth: num(r[c.depth]), az: num(r[c.az]), dip: num(r[c.dip]) });
-  }));
+    // A status or notes column last in the row keeps any unquoted commas ("Complete, assays pending").
+    const note = ni < 0 ? '' : (ni === f.header.length - 1 ? r.slice(ni).join(',') : r[ni] || '').trim();
+    collars.set(id, { id, x, y, z: num(r[c.elev]), depth: num(r[c.depth]), az: num(r[c.az]), dip: num(r[c.dip]), note });
+  }); });
   if (latlon) {
     const arr = [...collars.values()], lat0 = arr.reduce((s, c) => s + c.y, 0) / arr.length, lon0 = arr.reduce((s, c) => s + c.x, 0) / arr.length;
     arr.forEach((c) => { c.x = (c.x - lon0) * Math.cos(lat0 * Math.PI / 180) * 111320; c.y = (c.y - lat0) * 110540; });
+    latlon = { lat0, lon0 };
     warnings.push('Collars are in latitude/longitude; converted to metres. Topography and model files need UTM metres to line up.');
   }
   // Surveys
@@ -203,6 +210,7 @@ function build() {
   });
   cols = [...new Set(cols)];
   if (!S.valueCol || !cols.includes(S.valueCol)) { S.valueCol = cols[0] || null; S.valueLabel = labelFor(S.valueCol); autoBins(assays); }
+  if (S.valueCol2 && (!cols.includes(S.valueCol2) || S.valueCol2 === S.valueCol)) S.valueCol2 = null;
   const missing = [...assays.keys()].filter((id) => !collars.has(id));
   if (missing.length) warnings.push(`${missing.length} hole${missing.length > 1 ? 's' : ''} in the assays ${missing.length > 1 ? 'have' : 'has'} no collar (${missing.slice(0, 3).join(', ')}${missing.length > 3 ? '…' : ''}).`);
   if (!collars.size) return { warnings, empty: true };
@@ -223,10 +231,13 @@ function build() {
       const v = (s) => { const az = s.az * Math.PI / 180, dp = s.dip * Math.PI / 180; return [Math.sin(az) * Math.cos(dp), Math.cos(az) * Math.cos(dp), Math.sin(dp)]; };
       const va = v(a), vb = v(b), m = va.map((x, k) => x + (vb[k] - x) * t), l = Math.hypot(...m) || 1; return m.map((x) => x / l);
     };
-    holes.push({ id: c.id, c, ints, len, dirAt, path: null });
+    holes.push({ id: c.id, c, ints, len, dirAt, path: null, note: c.note });
   }
-  return { warnings, holes, topoPts, meshF, cols, posDown };
+  return { warnings, holes, topoPts, meshF, cols, posDown, latlon: latlon || null };
 }
+const noteCol = (header) => header.map(norm).findIndex((h) => /(^|_)(status|notes?|comments?|remarks?)$/.test(h));
+// "ASSAYS PENDING": the collar status or notes say so, or (when asked) the hole has no assays yet.
+const isPending = (h) => /pending/i.test(h.note || '') || (S.pendingNoAssays && !h.ints.length);
 function labelFor(col) {
   if (!col) return '';
   const el = (col.match(/(cueq|aueq|ageq|li2o|u3o8|cu|au|ag|zn|pb|ni|co|mo|pt|pd)/i) || [col])[0];
@@ -249,7 +260,9 @@ function autoBins(assays) {
 // 4. Scene
 // ============================================================
 const stage = $('stage'), glCanvas = $('gl'), ov = $('ov'), secCanvas = $('section');
-const renderer = new THREE.WebGLRenderer({ canvas: glCanvas, antialias: true, preserveDrawingBuffer: true });
+// alpha: the designer layers render the scene alone on transparent (scene.background = null);
+// the preview and the figure keep the scene's white background.
+const renderer = new THREE.WebGLRenderer({ canvas: glCanvas, antialias: true, preserveDrawingBuffer: true, alpha: true });
 let DPR = Math.min(window.devicePixelRatio || 1, 2); renderer.setPixelRatio(DPR);
 const scene = new THREE.Scene(); scene.background = new THREE.Color('#ffffff');
 const camera = new THREE.PerspectiveCamera(32, 1, 1, 1e6);
@@ -260,13 +273,16 @@ controls.enableDamping = true; controls.dampingFactor = 0.08; controls.maxPolarA
 let root = new THREE.Group(); scene.add(root);
 let G = null; // geometry context: origin, block, surface, holes w/ paths, meshes
 
-function rebuildScene() {
+function rebuildScene(keepCam) {
+  const cam0 = keepCam && G ? getCam() : null, fit0 = G?.fit || 1;
   scene.remove(root); root.traverse((o) => { o.geometry?.dispose?.(); o.material?.map?.dispose?.(); o.material?.dispose?.(); }); root = new THREE.Group(); scene.add(root);
   if (!project || project.empty) { G = null; return; }
   const holes = project.holes;
-  // Paths every 2 m
+  // Elevations as read: an earlier build may have filled or hung them from a surface.
+  holes.forEach((h) => { if (!('zRead' in h.c)) h.c.zRead = h.c.z; h.c.z = h.c.zRead; });
+  // Paths every 2 m (from 0 when the collar has no elevation; shifted onto the surface below)
   holes.forEach((h) => {
-    const pts = [{ d: 0, x: h.c.x, y: h.c.y, z: h.c.z }]; let p = { x: h.c.x, y: h.c.y, z: h.c.z };
+    const z0 = Number.isFinite(h.c.z) ? h.c.z : 0, pts = [{ d: 0, x: h.c.x, y: h.c.y, z: z0 }]; let p = { x: h.c.x, y: h.c.y, z: z0 };
     for (let d = 0; d < h.len; d += 2) { const s = Math.min(2, h.len - d), v = h.dirAt(d + s / 2); p = { x: p.x + v[0] * s, y: p.y + v[1] * s, z: p.z + v[2] * s }; pts.push({ d: d + s, ...p }); }
     h.path = pts;
     h.posAt = (d) => { const i = Math.max(0, Math.min(pts.length - 2, Math.floor(d / 2))), a = pts[i], b = pts[i + 1], t = Math.max(0, Math.min(1, (d - a.d) / ((b.d - a.d) || 1))); return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, z: a.z + (b.z - a.z) * t }; };
@@ -274,71 +290,92 @@ function rebuildScene() {
   // Block extent from the holes
   let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity, zmin = Infinity;
   holes.forEach((h) => h.path.forEach((p) => { x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); y0 = Math.min(y0, p.y); y1 = Math.max(y1, p.y); if (Number.isFinite(p.z)) zmin = Math.min(zmin, p.z); }));
-  const pad = Math.max(60, 0.14 * Math.max(x1 - x0, y1 - y0));
+  // A located project gets more ground around the drilling, for the terrain and imagery to read.
+  const pad = Math.max(60, (geo ? 0.25 : 0.14) * Math.max(x1 - x0, y1 - y0));
   const B = { x0: x0 - pad, x1: x1 + pad, y0: y0 - pad, y1: y1 + pad };
   const cx = (B.x0 + B.x1) / 2, cy = (B.y0 + B.y1) / 2, bw = B.x1 - B.x0, bh = B.y1 - B.y0, diag = Math.hypot(bw, bh);
-  // Surface: inverse-distance fit to topography points, or to collar elevations.
-  let src = project.topoPts.filter(([x, y]) => x > B.x0 - pad && x < B.x1 + pad && y > B.y0 - pad && y < B.y1 + pad);
-  if (src.length < 4) src = holes.filter((h) => Number.isFinite(h.c.z)).map((h) => [h.c.x, h.c.y, h.c.z]);
+  // Surface: uploaded topography, else the real DEM (once a coordinate system is set and its tiles
+  // load), else a fit to the collar elevations. terrainSource can force one.
+  const topo = project.topoPts.filter(([x, y]) => x > B.x0 - pad && x < B.x1 + pad && y > B.y0 - pad && y < B.y1 + pad);
+  const dem = realT.dem && realT.dem.ok && realT.dem.key === terrainKeyOf(B) ? realT.dem : null, want = S.terrainSource;
+  const using = want === 'collars' ? 'collars' : want === 'dem' && dem ? 'dem' : topo.length >= 4 ? 'topo' : dem ? 'dem' : 'collars';
+  let src = using === 'topo' ? topo : holes.filter((h) => Number.isFinite(h.c.z)).map((h) => [h.c.x, h.c.y, h.c.z]);
   if (!src.length) src = [[cx, cy, 0]];
-  const NG = 110, grid = new Float32Array((NG + 1) * (NG + 1));
+  const NG = using === 'dem' ? 200 : 110, grid = new Float32Array((NG + 1) * (NG + 1));
   for (let j = 0; j <= NG; j++) for (let i = 0; i <= NG; i++) {
-    const x = B.x0 + bw * i / NG, y = B.y0 + bh * j / NG; let sw = 0, sz = 0, exact = null;
+    const x = B.x0 + bw * i / NG, y = B.y0 + bh * j / NG; let sw = 0, sz = 0, exact = using === 'dem' ? dem.at(x, y) : null;
+    if (Number.isFinite(exact)) { grid[j * (NG + 1) + i] = exact; continue; } exact = null;
     for (const [px, py, pz] of src) { const d2 = (px - x) ** 2 + (py - y) ** 2; if (d2 < 1) { exact = pz; break; } const w = 1 / d2; sw += w; sz += w * pz; }
     grid[j * (NG + 1) + i] = exact ?? sz / sw;
   }
-  if (src.length > 60) for (let pass = 0; pass < 2; pass++) { const r = NG + 1, cp = grid.slice();
+  if (using !== 'dem' && src.length > 60) for (let pass = 0; pass < 2; pass++) { const r = NG + 1, cp = grid.slice();
     for (let j = 1; j < NG; j++) for (let i = 1; i < NG; i++) { const k = j * r + i; grid[k] = (cp[k] * 4 + cp[k - 1] + cp[k + 1] + cp[k - r] + cp[k + r]) / 8; } }
   const surf = (x, y) => {
     const fi = Math.max(0, Math.min(NG - 1e-6, (x - B.x0) / bw * NG)), fj = Math.max(0, Math.min(NG - 1e-6, (y - B.y0) / bh * NG)), i = Math.floor(fi), j = Math.floor(fj), a = fi - i, b = fj - j, r = NG + 1;
     return grid[j * r + i] * (1 - a) * (1 - b) + grid[j * r + i + 1] * a * (1 - b) + grid[(j + 1) * r + i] * (1 - a) * b + grid[(j + 1) * r + i + 1] * a * b;
   };
+  // Surveyed collar elevations are data; a DEM tile is an approximation, often on another datum. By
+  // default the DEM moves (by the median collar-minus-DEM offset) to pass through the collars; with
+  // collarFit "terrain" each hole hangs from the DEM instead.
+  let terrainNote = '';
+  if (using === 'dem') {
+    const off = holes.filter((h) => Number.isFinite(h.c.z)).map((h) => h.c.z - surf(h.c.x, h.c.y)).filter(Number.isFinite).sort((a, b) => a - b), med = off[Math.floor(off.length / 2)] || 0;
+    if (S.collarFit !== 'terrain' && Math.abs(med) >= 1) {
+      for (let k = 0; k < grid.length; k++) grid[k] += med;
+      terrainNote = `Terrain shifted ${med > 0 ? '+' : '−'}${Math.round(Math.abs(med))} m to meet the collars.`;
+    }
+  }
   // Collars with no elevation take the surface; then shift their paths.
-  holes.forEach((h) => { if (!Number.isFinite(h.c.z)) { const z = surf(h.c.x, h.c.y); h.path.forEach((p) => { p.z = z + (p.z - (Number.isFinite(h.c.z) ? h.c.z : 0)); }); h.c.z = z; } });
+  holes.forEach((h) => { if (!Number.isFinite(h.c.z)) { const z = surf(h.c.x, h.c.y); h.path.forEach((p) => { p.z += z; }); h.c.z = z; } });
+  if (using === 'dem' && S.collarFit === 'terrain') {
+    const off = holes.map((h) => surf(h.c.x, h.c.y) - h.c.z).sort((a, b) => a - b), med = off[Math.floor(off.length / 2)] || 0;
+    holes.forEach((h) => { const d = surf(h.c.x, h.c.y) - h.c.z; h.path.forEach((p) => { p.z += d; }); h.c.z += d; });
+    if (Math.abs(med) >= 1) terrainNote = `Holes hung from the terrain: collars moved ${med > 0 ? '+' : '−'}${Math.round(Math.abs(med))} m (median) to the DEM surface.`;
+  }
   zmin = Math.min(...holes.flatMap((h) => h.path.map((p) => p.z)));
   let zmax = -Infinity; for (const v of grid) zmax = Math.max(zmax, v);
   B.z0 = zmin - Math.max(25, 0.05 * diag);
   const zref = (zmax + B.z0) / 2;
-  const V = (x, y, z) => new THREE.Vector3(x - cx, z - zref, -(y - cy));
+  const vex = S.vex, V = (x, y, z) => new THREE.Vector3(x - cx, (z - zref) * vex, -(y - cy));
   // diag sizes marks (tubes, labels) by the whole block; the camera distance
   // (baseDist) adds the depth only as far as it shows at the view's plunge, so a
   // tight collar pattern with 600 m holes (Star Main) is framed from the side
   // without shrinking the plan view.
-  G = { B, cx, cy, bw, bh, diag: Math.max(diag, Math.hypot(bw, bh, zmax - B.z0)), diagH: diag, depth: zmax - B.z0, surf, V, zref, zmax };
+  G = { B, cx, cy, bw, bh, diag: Math.max(diag, Math.hypot(bw, bh, zmax - B.z0)), diagH: diag, depth: (zmax - B.z0) * vex, surf, V, zref, zmax, using, terrainNote, fit: cam0 ? fit0 : 1 };
 
-  // Terrain top
-  const TW = 768, TH = Math.max(64, Math.round(768 * bh / bw));
-  const base = document.createElement('canvas'); base.width = TW; base.height = TH;
+  // Terrain top: elevation and hillshade cached once per build; paintTerrain colours them by style.
   {
-    const ctx = base.getContext('2d'), img = ctx.createImageData(TW, TH), cell = bw / TW, hs = new Float32Array(TW * TH);
+    const TW = 768, TH = Math.max(64, Math.round(768 * bh / bw)), cell = bw / TW, hs = new Float32Array(TW * TH), shade = new Float32Array(TW * TH);
     for (let py = 0; py < TH; py++) for (let px = 0; px < TW; px++) hs[py * TW + px] = surf(B.x0 + px * cell, B.y1 - py * bh / TH);
     let lo = Infinity, hi = -Infinity; hs.forEach((v) => { lo = Math.min(lo, v); hi = Math.max(hi, v); });
-    const sunv = [-0.5, 0.5, 0.71], rng = mulberry32(7);
+    const sunv = [-0.5, 0.5, 0.71], rng = mulberry32(7), speck = new Uint8Array(TW * TH);
     for (let py = 0; py < TH; py++) for (let px = 0; px < TW; px++) {
       const i = py * TW + px, hx = hs[py * TW + Math.min(px + 1, TW - 1)] - hs[py * TW + Math.max(px - 1, 0)], hy = hs[Math.max(py - 1, 0) * TW + px] - hs[Math.min(py + 1, TH - 1) * TW + px];
-      const nx = -hx / (2 * cell), ny = -hy / (2 * bh / TH), l = Math.hypot(nx, ny, 1), sh = Math.max(0, (nx * sunv[0] + ny * sunv[1] + sunv[2]) / l);
-      const t = (hs[i] - lo) / ((hi - lo) || 1), f = (0.42 + 0.8 * sh) * (rng() < 0.2 ? 0.9 : 1);
-      const c = [78 + 96 * t, 100 + 74 * t, 66 + 82 * t];
-      const contour = Math.floor(hs[i] / 25) !== Math.floor(hs[Math.min(i + 1, hs.length - 1)] / 25) ? 0.82 : 1;
-      img.data[i * 4] = Math.min(255, c[0] * f * contour); img.data[i * 4 + 1] = Math.min(255, c[1] * f * contour); img.data[i * 4 + 2] = Math.min(255, c[2] * f * contour); img.data[i * 4 + 3] = 255;
+      const nx = -hx / (2 * cell), ny = -hy / (2 * bh / TH), l = Math.hypot(nx, ny, 1);
+      shade[i] = Math.max(0, (nx * sunv[0] + ny * sunv[1] + sunv[2]) / l); speck[i] = rng() < 0.2 ? 1 : 0;
     }
-    ctx.putImageData(img, 0, 0);
+    G.terr = { TW, TH, hs, shade, speck, lo, hi };
   }
-  G.topBase = base; G.topCanvas = document.createElement('canvas'); G.topCanvas.width = TW; G.topCanvas.height = TH;
+  G.topBase = document.createElement('canvas'); G.topCanvas = document.createElement('canvas');
   G.topTex = new THREE.CanvasTexture(G.topCanvas); G.topTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-  const tg = new THREE.PlaneGeometry(bw, bh, 140, Math.max(20, Math.round(140 * bh / bw)));
+  const TS = using === 'dem' ? 220 : 140, tg = new THREE.PlaneGeometry(bw, bh, TS, Math.max(20, Math.round(TS * bh / bw)));
   { const pos = tg.attributes.position; for (let i = 0; i < pos.count; i++) { const x = pos.getX(i) + cx, y = pos.getY(i) + cy, v = V(x, y, surf(x, y)); pos.setXYZ(i, v.x, v.y, v.z); } }
   G.top = new THREE.Mesh(tg, new THREE.MeshBasicMaterial({ map: G.topTex, side: THREE.DoubleSide, transparent: true })); G.top.renderOrder = 6; root.add(G.top);
 
   // Walls, base, edges, shadow
   G.walls = [];
+  // Rows crowd toward the top so the solid block's thin soil band under the terrain stays crisp.
+  const NJ = 30, FR = Array.from({ length: NJ + 1 }, (_, j) => 1 - (1 - j / NJ) ** 2);
   const wall = (p0, p1) => {
-    const NI = 100, NJ = 30, pos = [], col = [], idx = [];
+    const NI = 100, pos = [], col = [], idx = [];
     for (let i = 0; i <= NI; i++) { const x = p0[0] + (p1[0] - p0[0]) * i / NI, y = p0[1] + (p1[1] - p0[1]) * i / NI, top = surf(x, y);
-      for (let j = 0; j <= NJ; j++) { const z = B.z0 + (top - B.z0) * j / NJ, v = V(x, y, z); pos.push(v.x, v.y, v.z); const t = 0.92 + 0.07 * j / NJ; col.push(t * 0.98, t, t * 0.99); } }
+      for (let j = 0; j <= NJ; j++) { const z = B.z0 + (top - B.z0) * FR[j], v = V(x, y, z); pos.push(v.x, v.y, v.z); col.push(1, 1, 1, 1); } }
     for (let i = 0; i < NI; i++) for (let j = 0; j < NJ; j++) { const a = i * (NJ + 1) + j, b = a + NJ + 1; idx.push(a, b, a + 1, b, b + 1, a + 1); }
-    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setIndex(idx);
-    const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.42, side: THREE.DoubleSide, depthWrite: false })); m.renderOrder = 5; root.add(m); G.walls.push(m);
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 4)); g.setIndex(idx); // RGBA: the solid block fades by row
+    const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.42, side: THREE.DoubleSide, depthWrite: false })); m.renderOrder = 5;
+    const dx = p1[0] - p0[0], dy = p1[1] - p0[1], l = Math.hypot(dx, dy); // corners run anticlockwise, so (dy, -dx) points out
+    Object.assign(m.userData, { nj: NJ, fr: FR, n: new THREE.Vector3(dy / l, 0, dx / l), c: V((p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2, (B.z0 + zmax) / 2) });
+    root.add(m); G.walls.push(m);
   };
   const C = [[B.x0, B.y0], [B.x1, B.y0], [B.x1, B.y1], [B.x0, B.y1]];
   C.forEach((p, i) => wall(p, C[(i + 1) % 4]));
@@ -349,10 +386,12 @@ function rebuildScene() {
     for (let k = 0; k < 50; k++) { const a = k / 50, b = (k + 1) / 50; seg.push(V(x + (x2 - x) * a, y + (y2 - y) * a, surf(x + (x2 - x) * a, y + (y2 - y) * a)), V(x + (x2 - x) * b, y + (y2 - y) * b, surf(x + (x2 - x) * b, y + (y2 - y) * b))); } });
   root.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(seg), new THREE.LineBasicMaterial({ color: '#8f9a9f' })));
   {
-    const c = document.createElement('canvas'); c.width = c.height = 256; const g = c.getContext('2d'), grd = g.createRadialGradient(128, 128, 10, 128, 128, 128);
-    grd.addColorStop(0, 'rgba(40,45,50,0.4)'); grd.addColorStop(0.55, 'rgba(40,45,50,0.15)'); grd.addColorStop(1, 'rgba(40,45,50,0)'); g.fillStyle = grd; g.fillRect(0, 0, 256, 256);
-    const sh = new THREE.Mesh(new THREE.PlaneGeometry(bw * 1.7, bh * 1.9), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false }));
-    sh.rotation.x = -Math.PI / 2; sh.position.copy(V(cx + bw * 0.04, cy - bh * 0.04, B.z0 - diag * 0.08)); root.add(sh);
+    // The block floats: a soft, blurred footprint shadow a little below it. Drawn as the shadow of a
+    // square held off-canvas, which blurs the same in every browser (ctx.filter does not).
+    const c = document.createElement('canvas'); c.width = c.height = 256; const g = c.getContext('2d');
+    g.shadowColor = 'rgba(28,36,40,0.5)'; g.shadowBlur = 30; g.shadowOffsetX = 1000; g.fillStyle = '#000'; g.fillRect(64 - 1000, 64, 128, 128);
+    const sh = new THREE.Mesh(new THREE.PlaneGeometry(bw * 2, bh * 2), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false }));
+    sh.rotation.x = -Math.PI / 2; sh.position.copy(V(cx + bw * 0.03, cy - bh * 0.03, B.z0 - diag * 0.07 / vex)); root.add(sh);
   }
 
   // Holes: grey trace, then coloured assay intervals
@@ -360,7 +399,14 @@ function rebuildScene() {
   holes.forEach((h) => { for (let i = 0; i + 1 < h.path.length; i++) traceSeg.push(V(h.path[i].x, h.path[i].y, h.path[i].z), V(h.path[i + 1].x, h.path[i + 1].y, h.path[i + 1].z)); });
   root.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(traceSeg), new THREE.LineBasicMaterial({ color: '#59646a' })));
   const nInt = holes.reduce((s, h) => s + h.ints.length, 0);
-  G.tubes = new THREE.InstancedMesh(new THREE.CylinderGeometry(1, 1, 1, 8), new THREE.MeshLambertMaterial(), Math.max(1, nInt)); root.add(G.tubes);
+  // three 0.147 culls an InstancedMesh by its unit base geometry at the origin, not its instances.
+  G.tubes = new THREE.InstancedMesh(new THREE.CylinderGeometry(1, 1, 1, 8), new THREE.MeshLambertMaterial(), Math.max(1, nInt)); G.tubes.frustumCulled = false; root.add(G.tubes);
+  // Intercept ribbons: flat bars beside each trace, broad then "incl." nudged toward the camera.
+  // Turned to face the view in placeRibbons, so capacity is one piece per 8 m of hole.
+  const ribCap = holes.reduce((s, h) => s + Math.ceil(h.len / 8) + 1, 0), rg = new THREE.PlaneGeometry(1, 1);
+  G.ribbons = RIB_COLORS.map((c, i) => { const rm = new THREE.InstancedMesh(rg, new THREE.MeshBasicMaterial({ color: c, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2 * i, polygonOffsetUnits: -2 * i }), Math.max(1, ribCap));
+    rm.frustumCulled = false; rm.count = 0; rm.renderOrder = 1 + i; root.add(rm); return rm; });
+  G.ribbonCap = ribCap; G.ribbonView = null;
   // Meshes
   G.meshes = [];
   project.meshF.forEach((f, k) => {
@@ -370,15 +416,367 @@ function rebuildScene() {
     const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color: st.color, transparent: true, opacity: st.opacity, depthWrite: false, side: THREE.DoubleSide }));
     m.renderOrder = 4; m.visible = st.show; root.add(m); G.meshes.push({ name: f.name, m });
   });
-  restyle();
-  applyView('a', true);
+  paintTerrain(); restyle(); buildWallLabels();
+  if (cam0) setCamera(cam0, true); else applyView('a', true);
+  syncRealTerrain();
 }
 
+// Terrain looks. Light and relief are paper hillshades; satellite and muted drape imagery when it has
+// loaded and otherwise fall back to natural. Pale styles also whiten the glass sides.
+const TERRAINS = { natural: 'Natural', light: 'Light relief', dark: 'Dark slate', relief: 'Shaded relief', satellite: 'Satellite', muted: 'Satellite, muted' };
+const PALE = new Set(['light', 'relief', 'satellite', 'muted']);
+// Satellite tone: lifted midtones, a touch of contrast and exposure, so forest reads green and tracks show.
+const TONE = Uint8ClampedArray.from({ length: 256 }, (_, v) => 255 * (((v / 255) ** 0.74 - 0.5) * 1.08 + 0.53));
+const imageryShown = () => !!G && (S.terrain === 'satellite' || S.terrain === 'muted') && !!realT.img?.ok && realT.img.key === terrainKeyOf(G.B);
+function paintTerrain() {
+  if (!G) return;
+  const T = G.terr, img = imageryShown() ? realT.img : null, tw = img ? img.w : T.TW, th = img ? img.h : T.TH, st = S.terrain;
+  if (G.topCanvas.width !== tw || G.topCanvas.height !== th) {
+    G.topCanvas.width = G.topBase.width = tw; G.topCanvas.height = G.topBase.height = th;
+    // A texture cannot change size in place.
+    G.topTex.dispose(); G.topTex = new THREE.CanvasTexture(G.topCanvas); G.topTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    if (G.top) { G.top.material.map = G.topTex; G.top.material.needsUpdate = true; }
+  }
+  const ctx = G.topBase.getContext('2d'), out = ctx.createImageData(tw, th), d = out.data, { TW, TH, hs, shade, speck, lo, hi } = T;
+  const step = Math.max(5, niceRound((hi - lo) / 14)), band = (v) => Math.floor(v / step);
+  const natural = (i) => {
+    const sh = shade[i], t = (hs[i] - lo) / ((hi - lo) || 1), right = hs[Math.min(i + 1, hs.length - 1)];
+    const f = (0.42 + 0.8 * sh) * (speck[i] ? 0.9 : 1), contour = Math.floor(hs[i] / 25) !== Math.floor(right / 25) ? 0.82 : 1;
+    return [(78 + 96 * t) * f * contour, (100 + 74 * t) * f * contour, (66 + 82 * t) * f * contour];
+  };
+  if (img) {
+    for (let py = 0; py < th; py++) { const sy = Math.min(TH - 1, Math.floor(py * TH / th));
+      for (let px = 0; px < tw; px++) {
+        const i = py * tw + px, si = sy * TW + Math.min(TW - 1, Math.floor(px * TW / tw)), sh = shade[si];
+        if (img.data[i * 4 + 3] < 128) { const c = natural(si); d[i * 4] = Math.min(255, c[0]); d[i * 4 + 1] = Math.min(255, c[1]); d[i * 4 + 2] = Math.min(255, c[2]); d[i * 4 + 3] = 255; continue; }
+        let r = img.data[i * 4], g = img.data[i * 4 + 1], b = img.data[i * 4 + 2], f = 0.9 + 0.14 * sh;
+        if (st === 'satellite') { r = TONE[r]; g = TONE[g]; b = TONE[b]; const l = 0.3 * r + 0.59 * g + 0.11 * b; r = l + (r - l) * 1.15; g = l + (g - l) * 1.15; b = l + (b - l) * 1.15; }
+        if (st === 'muted') { const l = 0.3 * r + 0.59 * g + 0.11 * b; r = (l + (r - l) * 0.4) * 0.6 + 98; g = (l + (g - l) * 0.4) * 0.6 + 100; b = (l + (b - l) * 0.4) * 0.6 + 97; f = 0.86 + 0.22 * sh; }
+        d[i * 4] = Math.min(255, r * f); d[i * 4 + 1] = Math.min(255, g * f); d[i * 4 + 2] = Math.min(255, b * f); d[i * 4 + 3] = 255;
+      } }
+  } else {
+    for (let i = 0; i < TW * TH; i++) {
+      const sh = shade[i], t = (hs[i] - lo) / ((hi - lo) || 1), right = hs[Math.min(i + 1, hs.length - 1)], down = hs[Math.min(i + TW, hs.length - 1)];
+      const edge = band(hs[i]) !== band(right) || band(hs[i]) !== band(down), index = edge && (Math.floor(hs[i] / (step * 5)) !== Math.floor(right / (step * 5)) || Math.floor(hs[i] / (step * 5)) !== Math.floor(down / (step * 5)));
+      let c;
+      if (st === 'light') { const v = Math.min(1, 0.3 + 0.95 * sh) * (edge ? (index ? 0.9 : 0.955) : 1); c = [154 + 88 * v, 163 + 81 * v, 166 + 77 * v]; }
+      else if (st === 'relief') { const v = Math.max(0, Math.min(1, 1.25 * sh - 0.1)) * (edge ? (index ? 0.82 : 0.92) : 1); c = [(70 + 182 * v) + 8 * (t - 0.5), 78 + 175 * v, (84 + 166 * v) - 8 * (t - 0.5)]; }
+      else if (st === 'dark') { const f = (0.42 + 0.85 * sh) * (edge ? 0.86 : 1); c = [(40 + 46 * t) * f, (55 + 44 * t) * f, (61 + 42 * t) * f]; }
+      else c = natural(i); // natural, and satellite before its imagery arrives
+      d[i * 4] = Math.min(255, c[0]); d[i * 4 + 1] = Math.min(255, c[1]); d[i * 4 + 2] = Math.min(255, c[2]); d[i * 4 + 3] = 255;
+    }
+  }
+  ctx.putImageData(out, 0, 0);
+  G.walls.forEach((w) => { w.userData.near = undefined; });
+  faceWalls();
+}
+// Wall colour and alpha per row. Solid: pale cream rock, a shade darker at depth, under a dark soil band
+// that traces the terrain profile on every face; the far faces near-opaque, the faces toward the camera
+// almost clear apart from that band (the agency figures cut the near faces away), so holes stay visible.
+// Glass: the even translucent sides. Re-run when a face turns between near and far.
+function tintWall(w, near) {
+  const ca = w.geometry.attributes.color, { nj, fr } = w.userData, solid = S.blockStyle === 'solid', pale = PALE.has(S.terrain);
+  for (let k = 0; k < ca.count; k++) {
+    const j = fr[k % (nj + 1)];
+    if (solid) {
+      const soil = Math.min(1, Math.max(0, (j - 0.94) / 0.045)), r = 0.8 + 0.1 * j, g = 0.78 + 0.1 * j, b = 0.74 + 0.1 * j;
+      ca.setXYZW(k, r + (0.42 - r) * soil, g + (0.36 - g) * soil, b + (0.29 - b) * soil, near ? 0.1 + 0.85 * soil : 0.92 + 0.08 * soil);
+    } else { const t = pale ? 0.965 + 0.035 * j : 0.92 + 0.07 * j; ca.setXYZW(k, t * (pale ? 0.995 : 0.98), t, t * 0.99, 1); }
+  }
+  ca.needsUpdate = true; w.userData.near = near;
+}
+function faceWalls() {
+  if (!G) return; const solid = S.blockStyle === 'solid', eye = camera.position;
+  G.walls.forEach((w) => {
+    const d = w.userData;
+    if (!d.n) { w.material.color.set(solid ? '#cfcac0' : PALE.has(S.terrain) ? '#f3f5f4' : '#e9ecea'); w.material.opacity = solid ? 0.9 : 0.6; w.renderOrder = solid ? 1 : 0; return; }
+    const near = solid ? d.n.dot(eye.clone().sub(d.c)) > 0 : false;
+    if (d.near !== near) tintWall(w, near);
+    // Far solid faces go first, before the model shapes (which do not write depth) and the holes' veils.
+    w.material.opacity = solid ? 1 : 0.42; w.renderOrder = solid && !near ? 1 : 5;
+  });
+  (G.wallLabelMeshes || []).forEach(placeWallLabel); // keeps their minimum size as the view changes
+}
+
+// ============================================================
+// 4b. Real terrain: coordinate system, DEM and satellite tiles
+// ============================================================
+// Tiles load as <img crossOrigin="anonymous">, not fetch(): the page's CSP allows https images but not
+// these hosts in connect-src. A tile refused by CORS never loads at all, so the mosaic canvas is never
+// tainted and exports keep working; missing tiles just leave gaps that fall back to the fitted surface.
+const DEM_URL = (z, x, y) => `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${z}/${x}/${y}.png`;
+const IMG_URL = (z, x, y) => `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`;
+const IMAGERY_CREDIT = 'Imagery: Esri, Maxar, Earthstar Geographics', DEM_CREDIT = 'Elevation: AWS Terrain Tiles';
+let geo = null;          // { code, label, guessed, fwd(x, y) -> [lon, lat] } once a coordinate system is set
+const realT = { dem: null, img: null, job: 0, promise: null, status: 'off', message: '' };
+let P4 = null;           // proj4, loaded on first use
+const UTM_FAMILIES = [   // [first EPSG code, last, first zone, south, datum, label]
+  [32601, 32660, 1, false, '+datum=WGS84', 'WGS 84'], [32701, 32760, 1, true, '+datum=WGS84', 'WGS 84'],
+  [26901, 26923, 1, false, '+ellps=GRS80 +towgs84=0,0,0,0,0,0,0', 'NAD83'], [26703, 26722, 3, false, '+ellps=clrk66 +towgs84=-8,160,176,0,0,0,0', 'NAD27'],
+  [25828, 25838, 28, false, '+ellps=GRS80 +towgs84=0,0,0,0,0,0,0', 'ETRS89'], [28349, 28356, 49, true, '+ellps=GRS80 +towgs84=0,0,0,0,0,0,0', 'GDA94 MGA'],
+  [7846, 7859, 46, true, '+ellps=GRS80 +towgs84=0,0,0,0,0,0,0', 'GDA2020 MGA'], [31965, 31976, 11, false, '+ellps=GRS80 +towgs84=0,0,0,0,0,0,0', 'SIRGAS 2000'],
+  [31977, 31985, 17, true, '+ellps=GRS80 +towgs84=0,0,0,0,0,0,0', 'SIRGAS 2000'], [24817, 24821, 17, false, '+ellps=intl +towgs84=-288,175,-376,0,0,0,0', 'PSAD56'],
+  [24877, 24881, 17, true, '+ellps=intl +towgs84=-288,175,-376,0,0,0,0', 'PSAD56'],
+];
+const DATUM_WORDS = [[/nad\s*83/i, 26901], [/nad\s*27/i, 26703], [/etrs/i, 25828], [/gda\s*2020/i, 7846], [/gda|mga/i, 28349], [/sirgas/i, 31965], [/psad/i, 24817]];
+// "EPSG:26909", 26909, "UTM 9N", "NAD83 / UTM zone 9N", "WGS84 UTM 19S", "EPSG:4326" or a proj4 string.
+function parseCRS(input) {
+  const t = String(input).trim(), utm = (zone, south, fam) => ({ def: `+proj=utm +zone=${zone}${south ? ' +south' : ''} ${fam[4]} +units=m +no_defs`, label: `${fam[5]} / UTM ${zone}${south ? 'S' : 'N'}`, utm: true });
+  if (/^\+proj=/.test(t)) return { code: t, label: 'Custom (proj4)', def: t, utm: /utm/.test(t) };
+  const m = t.match(/^(?:epsg:\s*)?(\d{4,5})$/i);
+  if (m) {
+    const n = +m[1]; if (n === 4326) return { code: 'EPSG:4326', label: 'WGS 84 latitude/longitude', latlon: true };
+    const fam = UTM_FAMILIES.find((f) => n >= f[0] && n <= f[1]);
+    if (!fam) throw new Error(`EPSG:${n} is not supported here. Use a UTM code (e.g. EPSG:326xx, 327xx, 269xx, 258xx, 283xx), "UTM 9N", EPSG:4326 or a proj4 string.`);
+    return { code: `EPSG:${n}`, ...utm(fam[2] + n - fam[0], fam[3], fam) };
+  }
+  const u = t.match(/utm\s*(?:zone\s*)?(\d{1,2})\s*([ns])?\b/i);
+  if (u) {
+    const zone = +u[1], south = /s/i.test(u[2] || '') || /south/i.test(t); if (zone < 1 || zone > 60) throw new Error('UTM zones run from 1 to 60.');
+    const hit = DATUM_WORDS.find(([re]) => re.test(t)), name = hit ? UTM_FAMILIES.find((f) => f[0] === hit[1])[5] : 'WGS 84';
+    const fam = UTM_FAMILIES.find((f) => f[5] === name && f[3] === south && zone >= f[2] && zone <= f[2] + f[1] - f[0]);
+    return fam ? { code: `EPSG:${fam[0] + zone - fam[2]}`, ...utm(zone, south, fam) } : { code: `UTM ${zone}${south ? 'S' : 'N'} ${name}`, ...utm(zone, south, UTM_FAMILIES.find((f) => f[5] === name)) };
+  }
+  if (/^(wgs\s*84|lat.?lon|latitude|geographic)/i.test(t)) return { code: 'EPSG:4326', label: 'WGS 84 latitude/longitude', latlon: true };
+  throw new Error(`"${t}" is not a coordinate system this page knows. Try "EPSG:26909", "UTM 9N NAD83" or "EPSG:4326".`);
+}
+// The forward transform from project metres to [lon, lat]; checked against the collars.
+function geoFor(c, P) {
+  if (c.latlon) {
+    const ll = P?.latlon; if (!ll) throw new Error('These collars are in metres, not latitude/longitude. Give the UTM zone or EPSG code of the files.');
+    return (x, y) => [ll.lon0 + x / (Math.cos(ll.lat0 * Math.PI / 180) * 111320), ll.lat0 + y / 110540];
+  }
+  if (P?.latlon) throw new Error('These collars are in latitude/longitude; the coordinate system is set to EPSG:4326 automatically.');
+  const f = P4(c.def, 'WGS84'), fwd = (x, y) => f.forward([x, y]);
+  const h = P?.holes?.[0];
+  if (h) {
+    if (c.utm && (h.c.x < 100000 || h.c.x > 900000 || h.c.y < 0 || h.c.y > 10000000)) throw new Error(`Collar ${h.id} at ${Math.round(h.c.x)} E, ${Math.round(h.c.y)} N is not a UTM coordinate. Check the easting and northing columns.`);
+    const [lon, lat] = fwd(h.c.x, h.c.y); if (!Number.isFinite(lon) || !Number.isFinite(lat) || Math.abs(lat) > 84) throw new Error(`${c.label} puts collar ${h.id} off the map. Check the zone and hemisphere.`);
+  }
+  return fwd;
+}
+async function setCRS(input, opts = {}) {
+  if (input === null || input === undefined || input === '') {
+    S.crs = null; geo = null; realT.dem = realT.img = null; realT.job++; realT.status = 'off';
+    renderCRS(); if (project && !project.empty) rebuildScene(true); schedulePublish(); status('Coordinate system cleared. The surface is fitted to your files.'); return getState();
+  }
+  const c = parseCRS(input);
+  if (!c.latlon && !P4) P4 = (await import('proj4')).default;
+  const fwd = geoFor(c, project && !project.empty ? project : null);
+  S.crs = c.code; geo = { ...c, guessed: !!opts.guessed, fwd }; realT.dem = realT.img = null;
+  renderCRS(); schedulePublish();
+  if (project && !project.empty) {
+    const [lon, lat] = fwd(project.holes[0].c.x, project.holes[0].c.y);
+    status(`${c.label}: collars near ${Math.abs(lat).toFixed(3)}°${lat < 0 ? 'S' : 'N'}, ${Math.abs(lon).toFixed(3)}°${lon < 0 ? 'W' : 'E'}. Loading real terrain…`);
+    rebuildScene(true); await realT.promise;
+  }
+  return getState();
+}
+// Re-check a set coordinate system against new collars; drop it with a message if it no longer fits.
+function recheckCRS() {
+  // Latitude/longitude collars locate themselves; the scene is built right after this.
+  if (!S.crs) { if (project?.latlon) { const c = parseCRS('EPSG:4326'); geo = { ...c, guessed: true, fwd: geoFor(c, project) }; S.crs = c.code; realT.dem = realT.img = null; renderCRS(); } return; }
+  // A coordinate system restored with a saved project (S.crs) is re-established here.
+  // A different saved project's code (geo still describes the last one) is re-parsed too.
+  if (!geo || geo.code !== S.crs) { geo = null; realT.dem = realT.img = null; setCRS(S.crs).catch((e) => { S.crs = null; renderCRS(); status(`Coordinate system cleared: ${e.message}`); }); return; }
+  try { geo.fwd = geoFor(geo, project && !project.empty ? project : null); } catch (e) { S.crs = null; geo = null; renderCRS(); status(`Coordinate system cleared: ${e.message}`); }
+}
+const lon2t = (lon, z) => (lon + 180) / 360 * 2 ** z;
+const lat2t = (lat, z) => { const r = lat * Math.PI / 180; return (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * 2 ** z; };
+// (x, y) -> [a, b] for a smooth transform, interpolated from a (n+1)² lattice over the box:
+// exact to well under a pixel over a few kilometres, and thousands of times cheaper than proj4 per texel.
+function lattice(B, fn, n = 16) {
+  const A = new Float64Array((n + 1) * (n + 1) * 2), w = B.x1 - B.x0, h = B.y1 - B.y0;
+  for (let j = 0; j <= n; j++) for (let i = 0; i <= n; i++) { const [a, b] = fn(B.x0 + w * i / n, B.y0 + h * j / n), k = (j * (n + 1) + i) * 2; A[k] = a; A[k + 1] = b; }
+  const at = (x, y) => {
+    const fi = Math.max(0, Math.min(n - 1e-9, (x - B.x0) / w * n)), fj = Math.max(0, Math.min(n - 1e-9, (y - B.y0) / h * n)), i = Math.floor(fi), j = Math.floor(fj), a = fi - i, b = fj - j, r = n + 1;
+    const k00 = (j * r + i) * 2, k10 = k00 + 2, k01 = k00 + r * 2, k11 = k01 + 2, w00 = (1 - a) * (1 - b), w10 = a * (1 - b), w01 = (1 - a) * b, w11 = a * b;
+    return [A[k00] * w00 + A[k10] * w10 + A[k01] * w01 + A[k11] * w11, A[k00 + 1] * w00 + A[k10 + 1] * w10 + A[k01 + 1] * w01 + A[k11 + 1] * w11];
+  };
+  let w0 = Infinity, e0 = -Infinity, s0 = Infinity, n0 = -Infinity; for (let k = 0; k < A.length; k += 2) { w0 = Math.min(w0, A[k]); e0 = Math.max(e0, A[k]); s0 = Math.min(s0, A[k + 1]); n0 = Math.max(n0, A[k + 1]); }
+  at.bbox = { w: w0, e: e0, s: s0, n: n0 }; return at;
+}
+function loadImage(url, ms = 20000) {
+  return new Promise((resolve) => {
+    const im = new Image(); im.crossOrigin = 'anonymous'; im.decoding = 'async';
+    const t = setTimeout(() => { im.onload = im.onerror = null; resolve(null); }, ms);
+    im.onload = () => { clearTimeout(t); resolve(im); }; im.onerror = () => { clearTimeout(t); resolve(null); }; im.src = url;
+  });
+}
+// Deepest zoom (<= maxZ) at which the box spans no more than px pixels.
+function zoomFor(bb, px, maxZ) { for (let z = maxZ; z > 1; z--) if (Math.max(lon2t(bb.e, z) - lon2t(bb.w, z), lat2t(bb.s, z) - lat2t(bb.n, z)) * 256 <= px) return z; return 2; }
+async function mosaic(urlFn, bb, z) {
+  const x0 = Math.floor(lon2t(bb.w, z)), x1 = Math.floor(lon2t(bb.e, z)), y0 = Math.floor(lat2t(bb.n, z)), y1 = Math.floor(lat2t(bb.s, z)), jobs = [];
+  for (let ty = y0; ty <= y1; ty++) for (let tx = x0; tx <= x1; tx++) jobs.push([tx, ty]);
+  const c = document.createElement('canvas'); c.width = (x1 - x0 + 1) * 256; c.height = (y1 - y0 + 1) * 256; const g = c.getContext('2d', { willReadFrequently: true });
+  let next = 0, ok = 0;
+  await Promise.all(Array.from({ length: 6 }, async () => { while (next < jobs.length) { const [tx, ty] = jobs[next++], im = await loadImage(urlFn(z, tx, ty)); if (im) { g.drawImage(im, (tx - x0) * 256, (ty - y0) * 256); ok++; } } }));
+  if (!ok) throw new Error('no tiles loaded: offline, or the tile server is blocked');
+  let data; try { data = g.getImageData(0, 0, c.width, c.height).data; } catch { throw new Error('the tiles were blocked by the browser'); }
+  return { data, w: c.width, h: c.height, z, x0, y0, ok, total: jobs.length };
+}
+const pxOf = (M) => (x, y) => { const [lon, lat] = geo.fwd(x, y); return [(lon2t(lon, M.z) - M.x0) * 256 - 0.5, (lat2t(lat, M.z) - M.y0) * 256 - 0.5]; };
+async function loadDem(key, B) {
+  const bb = lattice(B, geo.fwd, 4).bbox, M = await mosaic(DEM_URL, bb, zoomFor(bb, 512, 15)), E = new Float32Array(M.w * M.h);
+  for (let i = 0; i < E.length; i++) E[i] = M.data[i * 4 + 3] < 255 ? NaN : M.data[i * 4] * 256 + M.data[i * 4 + 1] + M.data[i * 4 + 2] / 256 - 32768;
+  const toPx = lattice(B, pxOf(M));
+  const at = (x, y) => {
+    const [px, py] = toPx(x, y), i = Math.floor(px), j = Math.floor(py), a = px - i, b = py - j;
+    if (i < 0 || j < 0 || i + 1 >= M.w || j + 1 >= M.h) return NaN;
+    const k = j * M.w + i; return E[k] * (1 - a) * (1 - b) + E[k + 1] * a * (1 - b) + E[k + M.w] * (1 - a) * b + E[k + M.w + 1] * a * b;
+  };
+  return { key, ok: true, at, z: M.z, tiles: `${M.ok}/${M.total}` };
+}
+async function loadImagery(key, B) {
+  const bb = lattice(B, geo.fwd, 4).bbox, M = await mosaic(IMG_URL, bb, zoomFor(bb, 2048, 17)), toPx = lattice(B, pxOf(M));
+  const bw = B.x1 - B.x0, bh = B.y1 - B.y0, across = (lon2t(bb.e, M.z) - lon2t(bb.w, M.z)) * 256;
+  let w = Math.max(768, Math.min(2048, Math.round(across * 1.25))), h = Math.round(w * bh / bw); if (h > 2048) { w = Math.round(w * 2048 / h); h = 2048; }
+  const out = new Uint8ClampedArray(w * h * 4), src = M.data;
+  for (let py = 0; py < h; py++) for (let px = 0; px < w; px++) {
+    const [sx, sy] = toPx(B.x0 + (px + 0.5) / w * bw, B.y1 - (py + 0.5) / h * bh), i = Math.max(0, Math.min(M.w - 2, Math.floor(sx))), j = Math.max(0, Math.min(M.h - 2, Math.floor(sy)));
+    const a = Math.max(0, Math.min(1, sx - i)), b = Math.max(0, Math.min(1, sy - j)), k = (j * M.w + i) * 4, o = (py * w + px) * 4, r = M.w * 4;
+    // Weighted by each sample's alpha: a tile that failed to load is transparent,
+    // and stays a gap (alpha 0) for paintTerrain to fill, not a black patch.
+    const wt = [(1 - a) * (1 - b) * src[k + 3], a * (1 - b) * src[k + 7], (1 - a) * b * src[k + r + 3], a * b * src[k + r + 7]], ws = wt[0] + wt[1] + wt[2] + wt[3];
+    for (let c = 0; c < 3; c++) out[o + c] = ws ? (src[k + c] * wt[0] + src[k + 4 + c] * wt[1] + src[k + r + c] * wt[2] + src[k + r + 4 + c] * wt[3]) / ws : 0;
+    out[o + 3] = ws / 255;
+  }
+  return { key, ok: true, w, h, data: out, z: M.z, tiles: `${M.ok}/${M.total}` };
+}
+const terrainKeyOf = (B) => (geo ? `${S.crs}|${[B.x0, B.x1, B.y0, B.y1].map(Math.round).join(',')}` : '');
+// Load what the current style and source need for this block; rebuild or repaint when it lands.
+// Never blocks anything: exports taken meanwhile use the fitted surface.
+function syncRealTerrain() {
+  if (!G || !geo) { realT.status = 'off'; realT.message = geo ? '' : 'Set the coordinate system in step 1 for real terrain and satellite imagery.'; return Promise.resolve(); }
+  const key = terrainKeyOf(G.B), hasTopo = G.using === 'topo';
+  const needDem = S.terrainSource === 'dem' || (S.terrainSource === 'auto' && !hasTopo), needImg = S.terrain === 'satellite' || S.terrain === 'muted';
+  const getDem = needDem && realT.dem?.key !== key, getImg = needImg && realT.img?.key !== key;
+  if (!getDem && !getImg) {
+    if (realT.status === 'off') realT.message = hasTopo && S.terrainSource === 'auto' ? `${geo.label}. The surface is your topography; choose Satellite, or "Real elevation", to load tiles.` : `${geo.label}.`;
+    return realT.promise || Promise.resolve();
+  }
+  const job = ++realT.job; realT.status = 'loading'; realT.message = `Loading ${[getDem && 'real terrain', getImg && 'satellite imagery'].filter(Boolean).join(' and ')}…`; status(realT.message); schedulePublish();
+  realT.promise = (async () => {
+    const msgs = [], B = { ...G.B };
+    if (getDem) { try { realT.dem = await loadDem(key, B); msgs.push(`real terrain (z${realT.dem.z}, ${realT.dem.tiles} tiles)`); } catch (e) { realT.dem = { key, ok: false, error: e.message }; } }
+    if (getImg) { try { realT.img = await loadImagery(key, B); msgs.push(`satellite imagery (z${realT.img.z}, ${realT.img.tiles} tiles)`); } catch (e) { realT.img = { key, ok: false, error: e.message }; } }
+    if (job !== realT.job || !G) return;
+    const fails = [realT.dem && !realT.dem.ok && getDem && `real terrain (${realT.dem.error})`, realT.img && !realT.img.ok && getImg && `satellite imagery (${realT.img.error})`].filter(Boolean);
+    realT.status = fails.length ? (msgs.length ? 'partial' : 'failed') : 'ready';
+    if (getDem && realT.dem.ok) rebuildScene(true); else { paintTerrain(); restyle(); }
+    realT.message = [msgs.length && `Loaded ${msgs.join(' and ')}.`, fails.length && `Could not load ${fails.join(' or ')}; showing the ${getImg && !realT.img.ok ? 'natural surface' : 'fitted surface'} instead.`, G.terrainNote].filter(Boolean).join(' ');
+    status(realT.message); renderSummary(); schedulePublish();
+  })();
+  return realT.promise;
+}
+// ============================================================
+// 4c. Labels painted on the block faces
+// ============================================================
+// Text on a canvas texture, laid flat on a wall a hair outside it so it foreshortens with the face. Faces
+// are by compass (N, S, E, W: robust as the camera turns); u runs left to right as seen from outside,
+// v from the block base (0) to the terrain (1). Front-side only, so a label never reads mirrored through glass.
+const FACES = { S: [[0, 0], [1, 0], [0, -1]], E: [[1, 0], [1, 1], [1, 0]], N: [[1, 1], [0, 1], [0, 1]], W: [[0, 1], [0, 0], [-1, 0]] };
+const faceGeom = (face) => {
+  const [a, b, n] = FACES[face], P = ([i, j]) => [i ? G.B.x1 : G.B.x0, j ? G.B.y1 : G.B.y0];
+  return { a: P(a), b: P(b), n: new THREE.Vector3(n[0], 0, -n[1]) };
+};
+// The face most squarely toward the camera.
+const frontFace = () => { const d = camera.getWorldDirection(new THREE.Vector3()); return Object.keys(FACES).sort((p, q) => faceGeom(p).n.dot(d) - faceGeom(q).n.dot(d))[0]; };
+function wallLabelMesh(L) {
+  const title = L.size === 'title', lines = String(L.text).split('\n'), px = 96, c = document.createElement('canvas'), g = c.getContext('2d');
+  const fontOf = () => { g.font = `${title ? 700 : 600} ${px}px ${SANS}`; if ('letterSpacing' in g) g.letterSpacing = title ? `${px * 0.06}px` : '0px'; };
+  fontOf(); const shown = lines.map((t) => (title ? t.toUpperCase() : t)), tw = Math.max(...shown.map((t) => g.measureText(t).width)), lh = px * 1.15;
+  c.width = Math.ceil(tw + px * 0.4); c.height = Math.ceil(lh * lines.length + px * 0.3); fontOf();
+  g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = L.color || (title ? S.primary : '#4b585c');
+  shown.forEach((t, i) => g.fillText(t, c.width / 2, px * 0.15 + lh * (i + 0.5)));
+  const tex = new THREE.CanvasTexture(c); tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }));
+  mesh.renderOrder = 7; mesh.matrixAutoUpdate = false; mesh.userData = { L, aspect: c.width / c.height, lines: lines.length }; placeWallLabel(mesh); return mesh;
+}
+function placeWallLabel(mesh) {
+  const { L, aspect, lines } = mesh.userData, { a, b, n } = faceGeom(L.face), x = a[0] + (b[0] - a[0]) * L.u, y = a[1] + (b[1] - a[1]) * L.u;
+  const z = G.B.z0 + (G.surf(x, y) - G.B.z0) * L.v, pos = G.V(x, y, z).addScaledVector(n, G.diag * 0.003);
+  const right = new THREE.Vector3(b[0] - a[0], 0, -(b[1] - a[1])).normalize(), up = new THREE.Vector3(0, 1, 0), r = (L.rotation || 0) * Math.PI / 180;
+  const R = right.clone().multiplyScalar(Math.cos(r)).addScaledVector(up, Math.sin(r)), U = up.clone().multiplyScalar(Math.cos(r)).addScaledVector(right, -Math.sin(r));
+  // Letter height follows the face: about 7% of its width for a title, 4.5% for normal text.
+  const faceW = Math.hypot(b[0] - a[0], b[1] - a[1]), h = (L.size === 'title' ? 0.07 : 0.045) * Math.max(faceW, 0.4 * (G.zmax - G.B.z0)) * (L.scale || 1) * (lines * 1.15 + 0.3) / 1.45;
+  // Never smaller than about 22 px a line at the export size (30 px for a title), however far the camera.
+  camera.updateMatrixWorld(); const a2 = proj(pos), b2 = proj(pos.clone().addScaledVector(U, h)), k = FORMATS[S.format].w / W;
+  const linePx = Math.hypot(b2[0] - a2[0], b2[1] - a2[1]) * k * 1.45 / (lines * 1.15 + 0.3), minPx = L.size === 'title' ? 30 : 22;
+  const hh = linePx > 0 && linePx < minPx ? h * minPx / linePx : h;
+  mesh.matrix.makeBasis(R.multiplyScalar(hh * aspect), U.multiplyScalar(hh), n).setPosition(pos); mesh.updateMatrixWorld(true);
+}
+// Screen boxes of the wall labels, so hole IDs can keep off them.
+function wallLabelBoxes() {
+  return (G?.wallLabelMeshes || []).map((m) => {
+    const ps = [[-0.5, -0.5], [0.5, -0.5], [0.5, 0.5], [-0.5, 0.5]].map(([x, y]) => proj(new THREE.Vector3(x, y, 0).applyMatrix4(m.matrixWorld)));
+    return [Math.min(...ps.map((q) => q[0])), Math.min(...ps.map((q) => q[1])), Math.max(...ps.map((q) => q[0])), Math.max(...ps.map((q) => q[1]))];
+  });
+}
+function buildWallLabels() {
+  if (!G) return;
+  (G.wallLabelMeshes || []).forEach((m) => { root.remove(m); m.geometry.dispose(); m.material.map.dispose(); m.material.dispose(); });
+  G.wallLabelMeshes = S.wallLabels.map((L) => { const m = wallLabelMesh(L); root.add(m); return m; });
+  G.wallPrimary = S.primary;
+}
+function wallPatch(L, o) {
+  if (o.text !== undefined) { const t = String(o.text).trim(); if (!t) throw new Error('A wall label needs some text.'); L.text = t.slice(0, 120); }
+  if (o.face !== undefined) { const f = o.face === 'front' ? (G ? frontFace() : 'S') : String(o.face).toUpperCase(); if (!FACES[f]) throw new Error('face must be "N", "S", "E", "W" or "front".'); L.face = f; }
+  if (o.size !== undefined) { if (!['title', 'normal'].includes(o.size)) throw new Error('size must be "title" or "normal".'); L.size = o.size; }
+  ['u', 'v'].forEach((k) => { if (o[k] !== undefined) L[k] = clamp01(o[k], L[k]); });
+  if (o.scale !== undefined) L.scale = Math.max(0.4, Math.min(3, +o.scale || 1));
+  if (o.rotation !== undefined) L.rotation = Math.max(-90, Math.min(90, +o.rotation || 0));
+  if (o.color !== undefined) { if (o.color !== null && !/^#[0-9a-f]{6}$/i.test(o.color)) throw new Error('color must be a hex colour like #5f6e72, or null.'); L.color = o.color; }
+}
+function addWallLabel(o = {}) {
+  const n = S.wallLabels.reduce((mx, l) => Math.max(mx, +String(l.id).replace(/\D/g, '') || 0), 0) + 1;
+  const L = { id: `W${n}`, text: '', face: 'S', u: 0.5, v: 0.55, size: 'title', scale: 1, rotation: 0, color: null };
+  wallPatch(L, { face: 'front', ...o, text: o.text ?? '' });
+  S.wallLabels.push(L); buildWallLabels(); renderWallLabelList(); schedulePublish(); status(`"${L.text}" painted on the ${{ N: 'north', S: 'south', E: 'east', W: 'west' }[L.face]} face. Drag it along the face to place it.`);
+  return L.id;
+}
+function updateWallLabel(id, o = {}) {
+  const L = S.wallLabels.find((l) => l.id === id); if (!L) throw new Error(`No wall label "${id}". Wall labels: ${S.wallLabels.map((l) => l.id).join(', ') || 'none'}.`);
+  wallPatch(L, o); buildWallLabels(); renderWallLabelList(); schedulePublish(); return getState();
+}
+function removeWallLabel(id) {
+  if (!S.wallLabels.some((l) => l.id === id)) throw new Error(`No wall label "${id}".`);
+  S.wallLabels = S.wallLabels.filter((l) => l.id !== id); buildWallLabels(); renderWallLabelList(); schedulePublish(); return getState();
+}
+
+const terrainCredits = (withImagery) => [withImagery && imageryShown() && IMAGERY_CREDIT, G?.using === 'dem' && DEM_CREDIT].filter(Boolean);
+
+const traceR = () => Math.max(1.5, G.diag / 330) * S.traceWidth;
+// Ribbon pieces sit 3 tube radii to the screen-right of the trace, in the plane facing the camera,
+// so they read as a bar beside the hole from any angle. Re-placed when the view turns (loop).
+function placeRibbons() {
+  if (!G?.ribbons) return;
+  camera.updateMatrixWorld();
+  const view = camera.getWorldDirection(new THREE.Vector3()), right = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0).normalize();
+  G.ribbonView = view.clone();
+  const r = traceR(), w = 2 * r, off = 3.2 * r, mx = new THREE.Matrix4(), side = new THREE.Vector3(), nrm = new THREE.Vector3(), n = [0, 0];
+  const put = (k, h, from, to) => {
+    const pieces = Math.max(1, Math.ceil((to - from) / 8));
+    for (let i = 0; i < pieces && n[k] < G.ribbonCap; i++) {
+      const a = h.posAt(from + (to - from) * i / pieces), b = h.posAt(from + (to - from) * (i + 1) / pieces), va = G.V(a.x, a.y, a.z), vb = G.V(b.x, b.y, b.z), dir = vb.clone().sub(va), len = dir.length();
+      if (len < 1e-6) continue; dir.divideScalar(len);
+      side.crossVectors(dir, view); if (side.lengthSq() < 1e-8) side.copy(right); side.normalize(); if (side.dot(right) < 0) side.negate();
+      nrm.crossVectors(side, dir).normalize(); if (nrm.dot(view) > 0) nrm.negate();
+      const c = va.add(vb).multiplyScalar(0.5).addScaledVector(side, off).addScaledVector(nrm, 0.4 * r * k);
+      mx.makeBasis(side.clone().multiplyScalar(w), dir.clone().multiplyScalar(len * 1.01), nrm).setPosition(c);
+      G.ribbons[k].setMatrixAt(n[k]++, mx);
+    }
+  };
+  if (S.ribbons) callouts.forEach(({ h, ic }) => { put(0, h, ic.broad.from, ic.broad.from + ic.broad.len); if (ic.incl) put(1, h, ic.incl.from, ic.incl.from + ic.incl.len); });
+  G.ribbons.forEach((rb, k) => { rb.count = n[k]; rb.instanceMatrix.needsUpdate = true; });
+}
 const binIndex = (v) => { if (!Number.isFinite(v)) return -1; let k = 0; S.bins.forEach((b, i) => { if (v >= b) k = i + 1; }); return k; };
 function restyle() {
   if (!G) return;
+  // Title wall labels without their own colour are painted in the brand colour.
+  if (G.wallPrimary !== S.primary && S.wallLabels.some((L) => !L.color)) buildWallLabels();
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0), col = new THREE.Color();
-  const r = Math.max(1.5, G.diag / 330); let k = 0;
+  const r = traceR(); let k = 0;
   project.holes.forEach((h) => h.ints.forEach((it) => {
     const v = it.vals[S.valueCol], bi = binIndex(v);
     const a = h.posAt(it.from), b = h.posAt(it.to), va = G.V(a.x, a.y, a.z), vb = G.V(b.x, b.y, b.z), dir = vb.clone().sub(va), len = dir.length();
@@ -394,9 +792,11 @@ function restyle() {
   // Section line on the top surface
   const ctx = G.topCanvas.getContext('2d'); ctx.drawImage(G.topBase, 0, 0);
   const [A, Bp] = sectionEnds(), P = (p) => [(p.x - G.B.x0) / G.bw * G.topCanvas.width, (G.B.y1 - p.y) / G.bh * G.topCanvas.height];
-  ctx.setLineDash([14, 9]); ctx.lineWidth = 5; ctx.strokeStyle = S.primary; ctx.beginPath(); ctx.moveTo(...P(A)); ctx.lineTo(...P(Bp)); ctx.stroke();
-  ctx.lineWidth = 2; ctx.strokeStyle = '#fff'; ctx.stroke(); ctx.setLineDash([]); G.topTex.needsUpdate = true;
-  computeCallouts();
+  const lk = G.topCanvas.width / 768;
+  ctx.setLineDash([14 * lk, 9 * lk]); const dk = S.terrain === 'dark'; // a dark line would vanish on dark slate
+  ctx.lineWidth = 5 * lk; ctx.strokeStyle = dk ? '#fff' : S.primary; ctx.beginPath(); ctx.moveTo(...P(A)); ctx.lineTo(...P(Bp)); ctx.stroke();
+  ctx.lineWidth = 2 * lk; ctx.strokeStyle = dk ? S.accent : '#fff'; ctx.stroke(); ctx.setLineDash([]); G.topTex.needsUpdate = true;
+  computeCallouts(); placeRibbons();
   drawSectionView();
 }
 function sectionEnds() {
@@ -438,10 +838,19 @@ function computeCallouts() {
   project.holes.forEach((h) => { const ic = intercept(h.ints, S.valueCol, S.coCut, S.coIncl, S.coMin); if (ic) callouts.push({ h, ic }); });
   callouts.sort((a, b) => b.ic.broad.len * b.ic.broad.avg - a.ic.broad.len * a.ic.broad.avg);
 }
-const fmt = (v) => (v >= 100 ? v.toFixed(0) : v >= 10 ? v.toFixed(1) : v.toFixed(2));
-const unitOf = () => (S.valueLabel.match(/(%|g\/t|ppm|ppb)$/) || [''])[0];
-const elOf = () => S.valueLabel.replace(/\s*(%|g\/t|ppm|ppb)$/, '');
-const icText = (x) => `${x.len.toFixed(x.len < 10 ? 1 : 0)} m @ ${fmt(x.avg)}${unitOf() === '%' ? '%' : ' ' + unitOf()} ${elOf()}`.replace(/\s+/g, ' ').trim();
+const fmt = (v) => (v >= 100 ? v.toFixed(0) : v >= 10 ? v.toFixed(1) : v > 0 && v < 0.01 ? v.toFixed(3) : v.toFixed(2));
+const gradeText = (v, label) => { const unit = (label.match(/(%|g\/t|ppm|ppb)$/) || [''])[0], el = label.replace(/\s*(%|g\/t|ppm|ppb)$/, ''); return `${fmt(v)}${unit === '%' ? '%' : ' ' + unit} ${el}`; };
+// Length-weighted average of another column over the same depths, for the second element in a callout.
+function avgOver(ints, col, from, to) {
+  let m = 0, l = 0; ints.forEach((it) => { const v = it.vals[col], a = Math.max(from, it.from), b = Math.min(to, it.to); if (b > a && Number.isFinite(v)) { m += v * (b - a); l += b - a; } });
+  return l > 0 ? m / l : null;
+}
+const icText = (x, h) => {
+  let t = `${x.len.toFixed(x.len < 10 ? 1 : 0)} m @ ${gradeText(x.avg, S.valueLabel)}`;
+  const v2 = h && S.valueCol2 ? avgOver(h.ints, S.valueCol2, x.from, x.from + x.len) : null;
+  if (v2 !== null) t += `, ${gradeText(v2, labelFor(S.valueCol2))}`;
+  return t.replace(/\s+/g, ' ').replace(/ ,/g, ',').trim();
+};
 
 
 // ============================================================
@@ -479,7 +888,7 @@ const lookVec = (az, pl) => { const a = az * Math.PI / 180, p = pl * Math.PI / 1
 // room keeps a long, narrow footprint clear of the title and legend.
 const baseDist = (plunge) => {
   const r = plunge * Math.PI / 180;
-  return Math.hypot(G.diagH, G.depth * Math.cos(r)) * (1 + 0.25 * Math.sin(r)) * 1.65 * Math.pow(Math.max(1, 1.6 / (W / H)), 0.85);
+  return Math.hypot(G.diagH, G.depth * Math.cos(r)) * (1 + 0.25 * Math.sin(r)) * 1.65 * Math.pow(Math.max(1, 1.6 / (W / H)), 0.85) * (G.fit || 1);
 };
 // Aim a little above the block's middle so it sits below the title block, not under it.
 const camTarget = () => G.V(G.cx, G.cy, (G.B.z0 + G.zmax) / 2 + 0.1 * (G.zmax - G.B.z0));
@@ -506,7 +915,23 @@ const VIEWS = {
   low: () => ({ azimuth: S.secAz - 90, plunge: 7, zoom: 112 }),
   plan: () => ({ azimuth: 0, plunge: 89, zoom: 100 }),
 };
-function applyView(which, instant) { if (G) setCamera((VIEWS[which] || VIEWS.a)(), instant); }
+// A preset frames the block between the title and the footer: the camera only ever pulls back (G.fit),
+// for a tall or deep block whose base would otherwise cross the footer.
+function blockOverflow() {
+  camera.updateMatrixWorld(); const u = Math.sqrt(W * H) / 900, top = 118 * u, bot = H - 43 * u, cy = proj(controls.target)[1], ys = [];
+  [[G.B.x0, G.B.y0], [G.B.x1, G.B.y0], [G.B.x1, G.B.y1], [G.B.x0, G.B.y1]].forEach(([x, y]) => { ys.push(proj(G.V(x, y, G.B.z0))[1], proj(G.V(x, y, G.surf(x, y)))[1]); });
+  return Math.max(1, (Math.max(...ys) - cy) / Math.max(1, bot - cy), (cy - Math.min(...ys)) / Math.max(1, cy - top));
+}
+function applyView(which, instant) {
+  if (!G) return;
+  const v = (VIEWS[which] || VIEWS.a)(), from = camera.position.clone(), fromT = controls.target.clone();
+  G.fit = 1; setCamera(v, true);
+  for (let i = 0; i < 4; i++) { const f = blockOverflow(); if (f <= 1.005) break; G.fit *= f * 1.01; setCamera(v, true); }
+  if (!instant && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    const to = camera.position.clone(), toT = controls.target.clone(); camera.position.copy(from); controls.target.copy(fromT); controls.update();
+    tween = { from, fromT, to, toT, t0: performance.now() };
+  }
+}
 let lastCamKey = '';
 function syncCamUI() {
   if (!G) return;
@@ -559,15 +984,18 @@ function drawHeader(ctx, K, Wc, title, subtitle, logoW) {
   ctx.fillStyle = S.accent; ctx.fillRect(m, m, 5 * u, y - m + 5 * u);
   return y + 8 * u;
 }
-function drawFooter(ctx, K, Wc, Hc) {
+function drawFooter(ctx, K, Wc, Hc, credits = []) {
   const { u, m, font } = K, y = Hc - 17 * u, rule = y - 16 * u;
   ctx.strokeStyle = RULE; ctx.lineWidth = u; ctx.beginPath(); ctx.moveTo(m, rule); ctx.lineTo(Wc - m, rule); ctx.stroke();
   ctx.textBaseline = 'alphabetic'; let creditW = 0;
+  // A white halo keeps the footer legible where the block or its shadow runs under it.
+  const halo = (t, x, yy) => { ctx.save(); ctx.lineJoin = 'round'; ctx.lineWidth = 4 * u; ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.strokeText(t, x, yy); ctx.restore(); ctx.fillText(t, x, yy); };
   if (S.credit) {
-    font(600, 11.5); ctx.textAlign = 'right'; ctx.fillStyle = '#7c898c'; const t = 'Made with Exploration Maps'; creditW = ctx.measureText(t).width + 17 * u; ctx.fillText(t, Wc - m, y);
+    font(600, 11.5); ctx.textAlign = 'right'; ctx.fillStyle = '#7c898c'; const t = 'Made with Exploration Maps'; creditW = ctx.measureText(t).width + 17 * u; halo(t, Wc - m, y);
     const s = 10 * u, mx = Wc - m - creditW, my = y - s + u; ctx.fillStyle = INK; ctx.fillRect(mx, my, s, s); ctx.fillStyle = '#c65322'; ctx.fillRect(mx + s * 0.52, my + s * 0.18, s * 0.3, s * 0.3);
   }
-  if (S.footnote) { font(400, 11.5); ctx.textAlign = 'left'; ctx.fillStyle = MUTED; ctx.fillText(fitText(ctx, S.footnote, Wc - 2 * m - creditW - 24 * u), m, y); }
+  if (credits.length) { font(400, 10.5); ctx.textAlign = 'right'; ctx.fillStyle = '#7c898c'; const t = credits.join(' · '); halo(t, Wc - m - creditW - (creditW ? 10 * u : 0), y); creditW += ctx.measureText(t).width + 10 * u; }
+  if (S.footnote) { font(400, 11.5); ctx.textAlign = 'left'; ctx.fillStyle = MUTED; halo(fitText(ctx, S.footnote, Wc - 2 * m - creditW - 24 * u), m, y); }
   ctx.textAlign = 'left';
   return rule;
 }
@@ -586,7 +1014,7 @@ function shownCallouts() {
 }
 function calloutLines(c) {
   const o = S.coOverrides[c.h.id] || {};
-  return { l1: o.line1 || icText(c.ic.broad), l1b: o.line1 ? '' : ` from ${Math.round(c.ic.broad.from)} m`, l2: o.incl === false ? null : (o.line2 || (c.ic.incl ? `incl. ${icText(c.ic.incl)}` : null)) };
+  return { l1: o.line1 || icText(c.ic.broad, c.h), l1b: o.line1 ? '' : ` from ${Math.round(c.ic.broad.from)} m`, l2: o.incl === false ? null : (o.line2 || (c.ic.incl ? `incl. ${icText(c.ic.incl, c.h)}` : null)) };
 }
 function measureCallout(ctx, K, c) {
   const { font, u } = K, L = calloutLines(c);
@@ -597,6 +1025,7 @@ function drawCallout(ctx, K, x, y, c, M, target) {
   const { u, font } = K, { L, w1, bw, bh } = M;
   const x0 = x + bw, y0 = y + bh / 2, xm = Math.max(x0 + 16 * u, Math.min(target[0] - 30 * u, x0 + 60 * u));
   ctx.strokeStyle = S.primary; ctx.lineWidth = 1.3 * u; ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(xm, y0); ctx.lineTo(target[0], target[1]); ctx.stroke();
+  M.leader = [[x0, y0, xm, y0], [xm, y0, target[0], target[1]]];
   ctx.beginPath(); ctx.arc(target[0], target[1], 3.6 * u, 0, Math.PI * 2); ctx.fillStyle = S.primary; ctx.fill(); ctx.lineWidth = 1.2 * u; ctx.strokeStyle = '#fff'; ctx.stroke();
   ctx.fillStyle = 'rgba(255,255,255,0.96)'; ctx.strokeStyle = RULE; ctx.lineWidth = u; roundRect(ctx, x, y, bw, bh, 4 * u); ctx.fill(); ctx.stroke();
   ctx.fillStyle = S.accent; ctx.fillRect(x + 7 * u, y + 7 * u, 4 * u, bh - 14 * u);
@@ -614,19 +1043,22 @@ const meshName = (n) => n.replace(/\.obj$/i, '').replace(/^sample_/, '').replace
 
 // Scale bar along a base edge of the block: the nearest edge that reads roughly horizontal and whose bar
 // fits inside the frame, under the edge if there is room and otherwise just above it.
-function drawScaleBar(ctx, K, footTop) {
+function drawScaleBar(ctx, K, footTop, avoid = []) {
+  const hit = (bx) => avoid.some((b) => !(bx[2] < b[0] || bx[0] > b[2] || bx[3] < b[1] || bx[1] > b[3]));
   const { u, m, font } = K, C = [[G.B.x0, G.B.y0], [G.B.x1, G.B.y0], [G.B.x1, G.B.y1], [G.B.x0, G.B.y1]];
   const edges = C.map((p, i) => { const q = C[(i + 1) % 4]; return { p, q, d: G.V((p[0] + q[0]) / 2, (p[1] + q[1]) / 2, G.B.z0).distanceTo(camera.position) }; }).sort((a, b) => a.d - b.d).slice(0, 2);
-  for (const off of [22, -24]) for (const { p, q } of edges) {
+  for (const off of [22, -24]) for (const { p, q } of edges) for (const f0 of [0.05, 0.3, 0.55]) {
     let e0 = p, e1 = q, s0 = proj(G.V(e0[0], e0[1], G.B.z0)), s1 = proj(G.V(e1[0], e1[1], G.B.z0));
     if (s0[0] > s1[0]) { [e0, e1] = [e1, e0]; [s0, s1] = [s1, s0]; }
     const el = Math.hypot(e1[0] - e0[0], e1[1] - e0[1]), ud = [(e1[0] - e0[0]) / el, (e1[1] - e0[1]) / el], ppm = Math.hypot(s1[0] - s0[0], s1[1] - s0[1]) / el;
     if (!(ppm > 0) || s0[2] > 1 || s1[2] > 1 || Math.abs(s1[1] - s0[1]) > 0.7 * Math.abs(s1[0] - s0[0])) continue;
-    const D = [10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000].find((d) => d * ppm >= 120 * u) || 5000, st = [e0[0] + ud[0] * el * 0.05, e0[1] + ud[1] * el * 0.05];
-    if (D > el * 0.9) continue;
+    const D = [10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000].find((d) => d * ppm >= 120 * u) || 5000, st = [e0[0] + ud[0] * el * f0, e0[1] + ud[1] * el * f0];
+    if (D > el * (0.95 - f0)) continue;
     const sp = [0, 0.5, 1].map((f) => { const r = proj(G.V(st[0] + ud[0] * D * f, st[1] + ud[1] * D * f, G.B.z0)); return [r[0], r[1] + off * u]; });
     const lab = off > 0 ? 19 : -9;
     if (sp.some(([x, y]) => x < m || x > W - m || Math.max(y, y + lab * u) + 4 * u > footTop || Math.min(y, y + lab * u) < 12 * u)) continue;
+    const ys = sp.flatMap(([, y]) => [y - 4 * u, y + lab * u + (lab > 0 ? 2 : -12) * u]);
+    if (hit([Math.min(...sp.map(([x]) => x)) - 8 * u, Math.min(...ys), Math.max(...sp.map(([x]) => x)) + 28 * u, Math.max(...ys)])) continue; // keeps clear of hole IDs
     ctx.lineCap = 'butt'; ctx.lineWidth = 6 * u; ctx.strokeStyle = INK; ctx.beginPath(); ctx.moveTo(...sp[0]); ctx.lineTo(...sp[1]); ctx.stroke();
     ctx.strokeStyle = '#fff'; ctx.beginPath(); ctx.moveTo(...sp[1]); ctx.lineTo(...sp[2]); ctx.stroke();
     ctx.lineWidth = u; ctx.strokeStyle = INK; ctx.beginPath(); ctx.moveTo(sp[0][0], sp[0][1] - 3 * u); ctx.lineTo(sp[2][0], sp[2][1] - 3 * u); ctx.lineTo(sp[2][0], sp[2][1] + 3 * u); ctx.lineTo(sp[0][0], sp[0][1] + 3 * u); ctx.closePath(); ctx.stroke();
@@ -639,38 +1071,156 @@ function drawScaleBar(ctx, K, footTop) {
   const across = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0).normalize().multiplyScalar(G.diag * 0.1);
   const c0 = proj(controls.target), c1 = proj(controls.target.clone().add(across)), ppm = Math.hypot(c1[0] - c0[0], c1[1] - c0[1]) / (G.diag * 0.1);
   if (!(ppm > 0)) return;
-  const D = [10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000].find((d) => d * ppm >= 120 * u) || 5000, len = D * ppm, x = (W - len) / 2, y = footTop - 26 * u;
+  const D = [10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000].find((d) => d * ppm >= 120 * u) || 5000, len = D * ppm, y = footTop - 26 * u;
+  const x = [0.5, 0.35, 0.65].map((f) => W * f - len / 2).find((x0) => !hit([x0 - 10 * u, y - 20 * u, x0 + len + 90 * u, y + 8 * u])) ?? (W - len) / 2;
   ctx.fillStyle = INK; ctx.fillRect(x, y, len / 2, 6 * u); ctx.fillStyle = '#fff'; ctx.fillRect(x + len / 2, y, len / 2, 6 * u); ctx.strokeStyle = INK; ctx.lineWidth = u; ctx.strokeRect(x, y, len, 6 * u);
   font(400, 12, true); ctx.fillStyle = INK; ctx.textAlign = 'center'; ctx.fillText('0', x, y - 5 * u); ctx.fillText(`${D} m (at block centre)`, x + len, y - 5 * u); ctx.textAlign = 'left';
+}
+// "ASSAYS PENDING" on a white pill along a projected hole (pts: screen points down the hole), reading left to
+// right or downward. Of a few spots along and beside the hole it takes the one crossing the fewest other holes
+// (others: their screen points), so it does not hide another hole's assays. Shrinks to fit, else skipped.
+function alongLabel(ctx, K, t, pts, others) {
+  const { u, font } = K, acc = [0]; for (let i = 1; i < pts.length; i++) acc.push(acc[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+  const L = acc[acc.length - 1]; if (!(L > 0)) return;
+  let sz = 11.5; font(700, sz); setSpacing(ctx, 1.4 * u); while (sz > 8.5 && ctx.measureText(t).width + 14 * u > L * 0.8) { sz -= 0.5; font(700, sz); }
+  const w = ctx.measureText(t).width + 12 * u, hh = sz * 1.45 * u; if (w > L) { setSpacing(ctx, 0); return; }
+  const at = (d) => { let i = 1; while (i < acc.length - 1 && acc[i] < d) i++; const f = (d - acc[i - 1]) / ((acc[i] - acc[i - 1]) || 1); return [pts[i - 1][0] + (pts[i][0] - pts[i - 1][0]) * f, pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * f]; };
+  let best = null;
+  for (const f of [0.5, 0.4, 0.6, 0.3, 0.7, 0.22, 0.78]) for (const side of [0, -1, 1]) {
+    const c = Math.min(L - w / 2, Math.max(w / 2, f * L)), a = at(c - w / 2), b = at(c + w / 2), ang = Math.atan2(b[1] - a[1], b[0] - a[0]);
+    const dx = Math.cos(ang), dy = Math.sin(ang), off = side * (hh + 4 * u), cx = (a[0] + b[0]) / 2 - dy * off, cy = (a[1] + b[1]) / 2 + dx * off;
+    let hits = 0; for (const o of others) { const rx = o[0] - cx, ry = o[1] - cy; if (Math.abs(rx * dx + ry * dy) < w / 2 + 3 * u && Math.abs(-rx * dy + ry * dx) < hh / 2 + 3 * u) hits++; }
+    const score = hits * 10 + Math.abs(f - 0.5) * 4 + Math.abs(side) * 3;
+    if (!best || score < best.score) best = { score, cx, cy, ang };
+  }
+  let { ang } = best; if (ang > Math.PI / 2 + 0.01 || ang < -Math.PI / 2 + 0.01) ang += Math.PI;
+  ctx.save(); ctx.translate(best.cx, best.cy); ctx.rotate(ang);
+  ctx.fillStyle = 'rgba(255,255,255,0.94)'; roundRect(ctx, -w / 2, -hh / 2, w, hh, hh / 2); ctx.fill();
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = S.accent; ctx.fillText(t, 0.7 * u, 0.8 * u);
+  ctx.restore(); setSpacing(ctx, 0); ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+}
+// Elevation ticks up the block's vertical edge at the left-front: of the two corners nearest the camera,
+// the one whose top projects furthest left. True elevations, about five ticks.
+function drawElevTicks(ctx, K, top, bottom, avoid = [], lines = []) {
+  const { u, font } = K, C = [[G.B.x0, G.B.y0], [G.B.x1, G.B.y0], [G.B.x1, G.B.y1], [G.B.x0, G.B.y1]];
+  const c = C.map(([x, y]) => ({ x, y, d: G.V(x, y, G.B.z0).distanceTo(camera.position) })).sort((p, q) => p.d - q.d).slice(0, 2)
+    .map((p) => ({ ...p, zt: G.surf(p.x, p.y), s: proj(G.V(p.x, p.y, G.surf(p.x, p.y))) })).sort((p, q) => p.s[0] - q.s[0])[0];
+  const b0 = proj(G.V(c.x, c.y, G.B.z0));
+  if (c.s[2] > 1 || b0[2] > 1 || Math.abs(c.s[1] - b0[1]) < 70 * u) return;
+  const step = niceRound((c.zt - G.B.z0) / 5);
+  font(500, 11.5, true); ctx.textAlign = 'right'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+  for (let z = Math.ceil(G.B.z0 / step) * step; z <= c.zt - step * 0.2; z += step) {
+    const [x, y] = proj(G.V(c.x, c.y, z)); if (y < top + 8 * u || y > bottom - 8 * u || x < 60 * u) continue;
+    const box = [x - 10 * u - ctx.measureText(`${Math.round(z)} m`).width - 4 * u, y - 9 * u, x + 2 * u, y + 9 * u];
+    if (avoid.some((b) => !(box[2] < b[0] || box[0] > b[2] || box[3] < b[1] || box[1] > b[3]))) continue;
+    // ...and none within about 12 px of a callout's leader line.
+    const near = (x0, y0, x1, y1) => { const dx = x1 - x0, dy = y1 - y0, n = Math.max(1, Math.ceil(Math.hypot(dx, dy) / (4 * u)));
+      for (let i = 0; i <= n; i++) { const px = x0 + dx * i / n, py = y0 + dy * i / n; if (px > box[0] - 12 * u && px < box[2] + 12 * u && py > box[1] - 4 * u && py < box[3] + 4 * u) return true; } return false; };
+    if (lines.some((l) => near(...l))) continue;
+    ctx.strokeStyle = INK; ctx.lineWidth = 1.2 * u; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x - 7 * u, y); ctx.stroke();
+    const t = `${Math.round(z)} m`; ctx.lineWidth = 3 * u; ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.strokeText(t, x - 10 * u, y); ctx.fillStyle = INK; ctx.fillText(t, x - 10 * u, y);
+  }
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+}
+// Free-text labels, placed in 0-1 frame coordinates so they land in the same spot at every export size.
+// "title": large bold capitals in the primary colour; "normal": a rounded white pill. An arrow runs from
+// the label's edge to (ax, ay). In the preview the boxes are kept for dragging (labelHits).
+let labelHits = [], overlayOcc = [];
+function labelSize(ctx, K, L) {
+  const { u, font } = K, title = L.size === 'title', lines = String(L.text).split('\n');
+  if (title) { font(700, 26); setSpacing(ctx, 1.6 * u); } else font(600, 15);
+  const lh = (title ? 29 : 19) * u, tw = Math.max(...lines.map((t) => ctx.measureText(title ? t.toUpperCase() : t).width)), padX = title ? 4 * u : 12 * u, padY = title ? 2 * u : 7 * u;
+  return { title, lines, lh, padY, bw: tw + padX * 2, bh: lines.length * lh + padY * 2 };
+}
+// Where a new label goes when no position is given: the clear spot nearest the frame centre, away from
+// collars, hole IDs, section markers, callouts, the legend, inset and other labels (as last drawn).
+function freeSpot(L) {
+  const c = document.createElement('canvas').getContext('2d'), K = kit(c, W, H), { bw, bh } = labelSize(c, K, L); setSpacing(c, 0);
+  const pad = 10 * K.u, spots = [];
+  for (let y = 0.18; y <= 0.86; y += 0.04) for (let x = 0.12; x <= 0.88; x += 0.04) spots.push([x, y]);
+  spots.sort((a, b) => Math.hypot(a[0] - 0.5, a[1] - 0.5) - Math.hypot(b[0] - 0.5, b[1] - 0.5));
+  return spots.find(([x, y]) => { const bx = [x * W - bw / 2 - pad, y * H - bh / 2 - pad, x * W + bw / 2 + pad, y * H + bh / 2 + pad];
+    return bx[0] > 0 && bx[2] < W && !overlayOcc.some((b) => !(bx[2] < b[0] || bx[0] > b[2] || bx[3] < b[1] || bx[1] > b[3])); }) || [0.5, 0.5];
+}
+function drawLabels(ctx, K, forExport) {
+  const { u } = K, hits = [];
+  S.labels.forEach((L) => {
+    const cx = L.x * W, cy = L.y * H, { title, lines, lh, padY, bw, bh } = labelSize(ctx, K, L), box = [cx - bw / 2, cy - bh / 2, cx + bw / 2, cy + bh / 2];
+    if (L.arrow) {
+      const tx = L.ax * W, ty = L.ay * H, dx = tx - cx, dy = ty - cy, d = Math.hypot(dx, dy);
+      if (d > 4 * u) {
+        const t = Math.min(bw / 2 / (Math.abs(dx) || 1e-9), bh / 2 / (Math.abs(dy) || 1e-9)), sx = cx + dx * t + dx / d * 5 * u, sy = cy + dy * t + dy / d * 5 * u, ang = Math.atan2(dy, dx), hl = 13 * u;
+        const ex = tx - Math.cos(ang) * hl * 0.8, ey = ty - Math.sin(ang) * hl * 0.8;
+        if (Math.hypot(ex - sx, ey - sy) > 2 * u && (ex - sx) * dx + (ey - sy) * dy > 0) {
+          ctx.lineCap = 'round'; ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 6 * u; ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(ex, ey); ctx.stroke();
+          ctx.strokeStyle = S.primary; ctx.lineWidth = 2.6 * u; ctx.stroke(); ctx.lineCap = 'butt';
+        }
+        ctx.save(); ctx.translate(tx, ty); ctx.rotate(ang); ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-hl, -hl * 0.42); ctx.lineTo(-hl, hl * 0.42); ctx.closePath();
+        ctx.lineJoin = 'round'; ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 3 * u; ctx.stroke(); ctx.fillStyle = S.primary; ctx.fill(); ctx.restore();
+      }
+      if (!forExport) hits.push({ id: L.id, kind: 'tip', x: tx, y: ty, r: 12 * u + 6 });
+    }
+    if (!title) { ctx.fillStyle = 'rgba(255,255,255,0.97)'; ctx.strokeStyle = RULE; ctx.lineWidth = u; roundRect(ctx, box[0], box[1], bw, bh, Math.min(bh / 2, 16 * u)); ctx.fill(); ctx.stroke(); }
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+    lines.forEach((t, i) => {
+      const y = box[1] + padY + lh * (i + 0.5) + u, tt = title ? t.toUpperCase() : t;
+      if (title) { ctx.lineWidth = 6 * u; ctx.strokeStyle = 'rgba(255,255,255,0.88)'; ctx.strokeText(tt, cx, y); ctx.fillStyle = S.primary; } else ctx.fillStyle = INK;
+      ctx.fillText(tt, cx, y);
+    });
+    setSpacing(ctx, 0); ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    if (!forExport) {
+      hits.push({ id: L.id, kind: 'label', box: [box[0] - 4, box[1] - 4, box[2] + 4, box[3] + 4] });
+      // Handles while laying out: a dashed frame says "drag me"; a ring marks the arrow tip.
+      if (currentStep === 'layout') {
+        ctx.setLineDash([4 * u, 3 * u]); ctx.strokeStyle = 'rgba(31,120,168,0.7)'; ctx.lineWidth = u; ctx.strokeRect(box[0] - 3 * u, box[1] - 3 * u, bw + 6 * u, bh + 6 * u); ctx.setLineDash([]);
+        if (L.arrow) { ctx.beginPath(); ctx.arc(L.ax * W, L.ay * H, 6 * u, 0, Math.PI * 2); ctx.strokeStyle = '#1f78a8'; ctx.lineWidth = 1.6 * u; ctx.stroke(); }
+      }
+    }
+  });
+  if (!forExport) labelHits = hits;
 }
 function drawOverlay(ctx, k, forExport) {
   ctx.save(); ctx.scale(k, k); if (!forExport) ctx.clearRect(0, 0, W, H);
   const K = kit(ctx, W, H), { u, m, font, narrow } = K;
   if (!G) { font(600, 18); ctx.fillStyle = MUTED; ctx.textAlign = 'center'; ctx.fillText('Add a collar file and an assay file to build the figure.', W / 2, H / 2); ctx.restore(); return; }
-  // Collars and hole IDs
-  const placed = [];
+  // Collars and hole IDs. occ collects what is drawn, so the scale bar and new labels can keep clear of it.
+  const placed = wallLabelBoxes(), idBoxes = [], occ = [];
   project.holes.forEach((h) => {
     const [cx, cy] = proj(G.V(h.c.x, h.c.y, h.c.z)), e = h.path[h.path.length - 1], [ex, ey] = proj(G.V(e.x, e.y, e.z));
     ctx.beginPath(); ctx.arc(cx, cy, 5 * u, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth = 2.4 * u; ctx.strokeStyle = INK; ctx.stroke();
+    occ.push([cx - 8 * u, cy - 8 * u, cx + 8 * u, cy + 8 * u]);
     if (!S.ids) return;
     const ang = Math.atan2(ey - cy, ex - cx), flip = Math.abs(ang) > Math.PI / 2, r = 26 * u, box = [ex - r, ey - r, ex + r, ey + r];
-    if (placed.some((b) => !(box[2] < b[0] || box[0] > b[2] || box[3] < b[1] || box[1] > b[3]))) return; placed.push(box);
+    // The ID is dropped where it would land on another ID or on a label painted on the block.
+    const run = [ex + Math.cos(ang) * 6 * u, ey + Math.sin(ang) * 6 * u, ex + Math.cos(ang) * 60 * u, ey + Math.sin(ang) * 60 * u], tbox = [Math.min(run[0], run[2]), Math.min(run[1], run[3]), Math.max(run[0], run[2]), Math.max(run[1], run[3])];
+    if (placed.some((b) => !(box[2] < b[0] || box[0] > b[2] || box[3] < b[1] || box[1] > b[3]))) return;
+    if (placed.slice(0, G.wallLabelMeshes?.length || 0).some((b) => !(tbox[2] < b[0] || tbox[0] > b[2] || tbox[3] < b[1] || tbox[1] > b[3]))) return;
+    placed.push(box);
     ctx.save(); ctx.translate(ex + Math.cos(ang) * 6 * u, ey + Math.sin(ang) * 6 * u); ctx.rotate(flip ? ang + Math.PI : ang);
     font(500, 11.5, true); ctx.fillStyle = INK; ctx.textBaseline = 'middle'; ctx.textAlign = flip ? 'right' : 'left';
     ctx.lineWidth = 3 * u; ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.strokeText(h.id, 0, 0); ctx.fillText(h.id, 0, 0); ctx.restore();
+    // The rotated text runs from 6u past the hole end along the trace direction.
+    const tw = ctx.measureText(h.id).width, x0 = ex + Math.cos(ang) * 6 * u, y0 = ey + Math.sin(ang) * 6 * u, x1 = x0 + Math.cos(ang) * tw, y1 = y0 + Math.sin(ang) * tw;
+    idBoxes.push([Math.min(x0, x1) - 8 * u, Math.min(y0, y1) - 8 * u, Math.max(x0, x1) + 8 * u, Math.max(y0, y1) + 8 * u]);
   });
+  const pend = S.pendingLabels ? project.holes.filter(isPending) : [];
+  if (pend.length) {
+    const scr = new Map(project.holes.map((h) => [h, h.path.filter((p, i) => i % 3 === 0).map((p) => proj(G.V(p.x, p.y, p.z))).filter((p) => p[2] < 1)]));
+    pend.forEach((h) => { const pts = scr.get(h).filter((p, i, a) => i > a.length * 0.06); if (pts.length > 2) alongLabel(ctx, K, 'ASSAYS PENDING', pts, project.holes.filter((o) => o !== h).flatMap((o) => scr.get(o))); });
+  }
   // Section ends
   const [A, Bp] = sectionEnds();
-  [[A, 'A'], [Bp, 'A′']].forEach(([p, t]) => { const [x, y] = proj(G.V(p.x, p.y, G.surf(p.x, p.y) + G.diag * 0.035)); tagLabel(ctx, K, t, x, y); });
+  [[A, 'A'], [Bp, 'A′']].forEach(([p, t]) => { const [x, y] = proj(G.V(p.x, p.y, G.surf(p.x, p.y) + G.diag * 0.035)); tagLabel(ctx, K, t, x, y); occ.push([x - 22 * u, y - 14 * u, x + 22 * u, y + 14 * u]); });
   // Frame furniture
   const logo = drawLogo(ctx, K, W, forExport);
   const headBottom = drawHeader(ctx, K, W, S.title, S.subtitle, logo.w);
-  const footTop = drawFooter(ctx, K, W, H);
-  drawScaleBar(ctx, K, footTop);
+  const footTop = drawFooter(ctx, K, W, H, terrainCredits(true));
+  occ.push(...idBoxes, [0, 0, W, headBottom], [0, footTop, W, H]);
+  drawScaleBar(ctx, K, footTop, idBoxes);
   // Plan inset under the logo
   if (S.inset) {
     const iw = (narrow ? 118 : 150) * u, sc = iw / Math.max(G.bw, G.bh), bw = G.bw * sc, bh = G.bh * sc, ix = W - m - iw, iy = logo.bottom + 16 * u, P = (x, y) => [ix + (iw - bw) / 2 + (x - G.B.x0) * sc, iy + (G.B.y1 - y) * sc];
-    ctx.fillStyle = '#fff'; ctx.strokeStyle = RULE; ctx.lineWidth = u; roundRect(ctx, ix - 8 * u, iy - 8 * u, iw + 16 * u, bh + 34 * u, 5 * u); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#fff'; ctx.strokeStyle = RULE; ctx.lineWidth = u; roundRect(ctx, ix - 8 * u, iy - 8 * u, iw + 16 * u, bh + 34 * u, 5 * u); ctx.fill(); ctx.stroke(); occ.push([ix - 8 * u, 0, W, iy + bh + 26 * u]);
     ctx.strokeStyle = S.primary; ctx.lineWidth = 1.4 * u; ctx.strokeRect(ix + (iw - bw) / 2, iy, bw, bh);
     project.holes.forEach((h) => { ctx.strokeStyle = '#7c898c'; ctx.lineWidth = u; ctx.beginPath(); h.path.forEach((p, i) => { const [X, Y] = P(p.x, p.y); i ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y); }); ctx.stroke();
       const [X, Y] = P(h.c.x, h.c.y); ctx.fillStyle = INK; ctx.fillRect(X - 1.5 * u, Y - 1.5 * u, 3 * u, 3 * u); });
@@ -680,15 +1230,18 @@ function drawOverlay(ctx, k, forExport) {
   }
   // Legend card, bottom right
   const rows = legendRows(), meshRows = G.meshes.filter(({ name }) => S.meshes[name].show).map(({ name }) => [meshName(name), S.meshes[name].color]);
-  const R = 19 * u, lw = 192 * u, lh = 12 * u + R + 6 * u + R + rows.length * R + (meshRows.length ? 6 * u + R + meshRows.length * R : 0) + 6 * u;
-  const lx = W - m - lw, ly = footTop - 12 * u - lh;
+  const ribRows = S.ribbons && callouts.length ? [['Reported interval', RIB_COLORS[0]], ...(callouts.some((c) => c.ic.incl) ? [['incl.', RIB_COLORS[1]]] : [])] : [];
+  const R = 19 * u, lw = 192 * u, lh = 12 * u + R + 6 * u + R + rows.length * R + (ribRows.length ? 6 * u + ribRows.length * R : 0) + (meshRows.length ? 6 * u + R + meshRows.length * R : 0) + 6 * u;
+  const lx = W - m - lw, ly = footTop - 12 * u - lh; occ.push([lx, ly, W, footTop]);
   ctx.fillStyle = 'rgba(255,255,255,0.96)'; ctx.strokeStyle = RULE; ctx.lineWidth = u; roundRect(ctx, lx, ly, lw, lh, 5 * u); ctx.fill(); ctx.stroke();
   let yy = ly + 12 * u; const row = (draw, t, bold, mono) => { draw(yy + R / 2); bold ? font(700, 13) : font(400, mono ? 12 : 13, mono); ctx.fillStyle = INK; ctx.textBaseline = 'middle'; ctx.fillText(fitText(ctx, t, lw - 52 * u), lx + (bold ? 12 : 44) * u, yy + R / 2); ctx.textBaseline = 'alphabetic'; yy += R; };
   row((cy) => { ctx.beginPath(); ctx.arc(lx + 23 * u, cy, 5 * u, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth = 2.4 * u; ctx.strokeStyle = INK; ctx.stroke(); }, 'Drill hole collar');
   yy += 6 * u; row(() => {}, `Assay · ${S.valueLabel}`, true);
   rows.forEach(([t, c]) => row((cy) => { ctx.fillStyle = c; roundRect(ctx, lx + 12 * u, cy - 4 * u, 22 * u, 8 * u, 4 * u); ctx.fill(); }, t, false, true));
+  if (ribRows.length) { yy += 6 * u; ribRows.forEach(([t, c]) => row((cy) => { ctx.fillStyle = c; ctx.fillRect(lx + 12 * u, cy - 3 * u, 22 * u, 6 * u); }, t)); }
   if (meshRows.length) { yy += 6 * u; row(() => {}, 'Model', true); meshRows.forEach(([t, c]) => row((cy) => { ctx.globalAlpha = 0.6; ctx.fillStyle = c; ctx.fillRect(lx + 12 * u, cy - 6 * u, 22 * u, 12 * u); ctx.globalAlpha = 1; }, t)); }
   // Orientation, bottom left: north arrow plus view direction
+  occ.push([0, footTop - 60 * u, m + 160 * u, footTop]);
   const cam = getCam(), ox = m + 22 * u, oy = footTop - 34 * u, T = controls.target, n0 = proj(T), n1 = proj(T.clone().add(new THREE.Vector3(0, 0, -G.diag * 0.1)));
   const ang = Math.atan2(n1[1] - n0[1], n1[0] - n0[0]);
   ctx.beginPath(); ctx.arc(ox, oy, 21 * u, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.strokeStyle = RULE; ctx.lineWidth = u; ctx.stroke();
@@ -699,14 +1252,25 @@ function drawOverlay(ctx, k, forExport) {
   font(700, 10); ctx.fillStyle = S.primary; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('N', ox + Math.cos(ang) * 29 * u, oy + Math.sin(ang) * 29 * u);
   ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
   font(600, 13); ctx.fillStyle = INK; ctx.fillText(`Looking ${pad3(cam.azimuth)}°`, ox + 36 * u, oy - 2 * u);
-  font(400, 12, true); ctx.fillStyle = MUTED; ctx.fillText(`plunge ${cam.plunge}°`, ox + 36 * u, oy + 14 * u);
+  font(400, 12, true); ctx.fillStyle = MUTED; ctx.fillText(`plunge ${cam.plunge}°${S.vex !== 1 ? ` · VE ${S.vex}×` : ''}`, ox + 36 * u, oy + 14 * u);
   // Intercept callouts, left column between the title and the orientation box
-  const maxY = oy - 36 * u; let y = headBottom + 18 * u;
-  shownCallouts().map((c) => { const p = c.h.posAt(c.ic.broad.mid); return { c, s: proj(G.V(p.x, p.y, p.z)) }; }).filter(({ s }) => s[2] < 1).sort((a, b) => a.s[1] - b.s[1]).forEach(({ c, s }) => {
-    const M = measureCallout(ctx, K, c); y = Math.max(y, Math.min(s[1] - M.bh / 2, maxY - M.bh - 18 * u));
-    if (y + M.bh + 18 * u > maxY + 1) return;
-    drawCallout(ctx, K, m, y, c, M, s); y += M.bh + 30 * u;
-  });
+  // Each box goes level with its hole where it can: stacked downward, then pulled up from the bottom.
+  // Only if they still do not fit is the lowest-ranked callout dropped (ranking: metal in the interval).
+  const maxY = oy - 36 * u, top = headBottom + 18 * u, gap = 30 * u, tag = 18 * u, boxes = [];
+  let items = shownCallouts().map((c, rank) => { const p = c.h.posAt(c.ic.broad.mid); return { c, rank, s: proj(G.V(p.x, p.y, p.z)), M: measureCallout(ctx, K, c) }; }).filter(({ s }) => s[2] < 1).sort((a, b) => a.s[1] - b.s[1]);
+  for (;;) {
+    let y = top; items.forEach((it) => { it.y = Math.max(y, it.s[1] - it.M.bh / 2); y = it.y + it.M.bh + gap; });
+    for (let i = items.length - 1; i >= 0; i--) items[i].y = Math.min(items[i].y, i === items.length - 1 ? maxY - tag - items[i].M.bh : items[i + 1].y - gap - items[i].M.bh);
+    if (!items.length || items[0].y >= top - 1) break;
+    const worst = items.reduce((a, b) => (b.rank > a.rank ? b : a)); items = items.filter((it) => it !== worst);
+  }
+  const leaders = [];
+  items.forEach(({ c, s, M, y }) => { drawCallout(ctx, K, m, y, c, M, s); boxes.push([m, y, m + M.bw, y + M.bh + tag]); leaders.push(...M.leader); });
+  occ.push(...boxes.map((b) => [b[0], b[1], b[2] + 10 * u, b[3]]));
+  // Drawn after the callouts so a tick never hides under a callout box.
+  if (S.elevTicks) drawElevTicks(ctx, K, headBottom, footTop, boxes, leaders);
+  drawLabels(ctx, K, forExport);
+  if (!forExport) overlayOcc = occ.concat(labelHits.filter((h) => h.box).map((h) => h.box));
   ctx.restore();
 }
 
@@ -722,7 +1286,7 @@ function drawSection(ctx, Wc, Hc, forExport) {
   const lookAz = ((S.secAz - 90) % 360 + 360) % 360;
   const logo = drawLogo(ctx, K, Wc, forExport), head = S.title.split('·')[0].trim() || S.title;
   const headBottom = drawHeader(ctx, K, Wc, `${head} · SECTION A–A′`, `Looking ${pad3(lookAz)}° · ±${S.secW} m projection · ${S.valueLabel}`, logo.w);
-  const footTop = drawFooter(ctx, K, Wc, Hc);
+  const footTop = drawFooter(ctx, K, Wc, Hc, terrainCredits(false));
   const profile = []; let zMax = -Infinity;
   for (let i = 0; i <= 200; i++) { const t = i / 200 * L, z = G.surf(A.x + d.x * t, A.y + d.y * t); profile.push([t, z]); zMax = Math.max(zMax, z); }
   const shown = project.holes.map((h) => ({ h, pts: h.path.map((p) => ({ ...p, ...pr(p) })) })).filter(({ pts }) => pts.some((p) => Math.abs(p.off) <= S.secW));
@@ -748,9 +1312,24 @@ function drawSection(ctx, Wc, Hc, forExport) {
       const x0 = X(pa.t), y0 = Y(a.z), x1 = X(pb.t), y1 = Y(b.z), ang = Math.atan2(y1 - y0, x1 - x0), len = Math.max(1.5 * u, Math.hypot(x1 - x0, y1 - y0));
       ctx.save(); ctx.translate(x0, y0); ctx.rotate(ang); ctx.fillStyle = BIN_COLORS[bi]; ctx.fillRect(0, -barW / 2, len + 0.5 * u, barW); ctx.restore();
     });
+    // Reported interval and "incl." as bars to the right of the hole, as on the 3D figure.
+    const co = S.ribbons && callouts.find((x) => x.h === h);
+    if (co) [co.ic.broad, co.ic.incl].forEach((x, k) => {
+      if (!x) return; const p0 = h.posAt(x.from), p1 = h.posAt(x.from + x.len), q0 = pr(p0), q1 = pr(p1);
+      let nx = -(Y(p1.z) - Y(p0.z)), ny = X(q1.t) - X(q0.t); const nl = Math.hypot(nx, ny) || 1; nx /= nl; ny /= nl; if (nx < 0) { nx = -nx; ny = -ny; }
+      const off = barW * 1.45; ctx.strokeStyle = RIB_COLORS[k]; ctx.lineWidth = barW * 0.85; ctx.lineCap = 'butt'; ctx.beginPath(); let on = false;
+      for (let d = x.from; d < x.from + x.len + 2; d += 2) { const p = h.posAt(Math.min(d, x.from + x.len)), q = pr(p); if (Math.abs(q.off) > S.secW) { on = false; continue; }
+        const sx = X(q.t) + nx * off, sy = Y(p.z) + ny * off; on ? ctx.lineTo(sx, sy) : ctx.moveTo(sx, sy); on = true; }
+      ctx.stroke();
+    });
     const c = pr(h.c);
     if (Math.abs(c.off) <= S.secW) { ctx.save(); ctx.translate(X(c.t), Y(h.c.z) - 8 * u); ctx.rotate(-Math.PI / 4); ctx.fillStyle = INK; font(500, 12, true); ctx.fillText(h.id, 0, 0); ctx.restore(); }
   });
+  // Pending labels last, placed clear of the other holes on the section.
+  if (S.pendingLabels) {
+    const scr = new Map(shown.map(({ h, pts }) => [h, pts.filter((p) => Math.abs(p.off) <= S.secW).map((p) => [X(p.t), Y(p.z)])]));
+    shown.filter(({ h }) => isPending(h)).forEach(({ h }) => { const vis = scr.get(h).filter((p, i, a) => i > a.length * 0.06); if (vis.length > 2) alongLabel(ctx, K, 'ASSAYS PENDING', vis, shown.filter((o) => o.h !== h).flatMap((o) => scr.get(o.h))); });
+  }
   // Callouts for holes on this section
   let by = mt; const maxY = Hc - mb;
   shownCallouts().filter((c) => shown.some((x) => x.h === c.h)).slice(0, narrow ? 2 : 4).forEach((c) => {
@@ -762,8 +1341,13 @@ function drawSection(ctx, Wc, Hc, forExport) {
   const sy = footTop - 18 * u, sb = [10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000].find((d) => d * s >= 120 * u) || niceRound(L / 3);
   ctx.fillStyle = INK; ctx.fillRect(m, sy, sb * s / 2, 6 * u); ctx.fillStyle = '#fff'; ctx.fillRect(m + sb * s / 2, sy, sb * s / 2, 6 * u); ctx.strokeStyle = INK; ctx.lineWidth = u; ctx.strokeRect(m, sy, sb * s, 6 * u);
   font(400, 12, true); ctx.fillStyle = INK; ctx.fillText('0', m, sy - 6 * u); ctx.textAlign = 'right'; ctx.fillText(`${sb} m`, m + sb * s, sy - 6 * u); ctx.textAlign = 'left';
-  const items = legendRows().slice(0, 4).reverse(); font(400, 12, true);
-  const iw = items.map(([t]) => ctx.measureText(t).width + 36 * u); font(700, 13); const hw = ctx.measureText(S.valueLabel).width + 14 * u;
+  let items = legendRows().slice(0, 4).reverse(); font(400, 12, true);
+  // The interval bars join the strip when a hole on the section has them and there is room.
+  const ribs = S.ribbons ? callouts.filter((c) => shown.some((x) => x.h === c.h)) : [];
+  const withRibs = items.concat(ribs.length ? [['Reported interval', RIB_COLORS[0]], ...(ribs.some((c) => c.ic.incl) ? [['incl.', RIB_COLORS[1]]] : [])] : []);
+  const widthOf = (list) => list.map(([t]) => ctx.measureText(t).width + 36 * u);
+  if (withRibs.length > items.length && widthOf(withRibs).reduce((a, b) => a + b, 0) < Wc - 2 * m - sb * s - 200 * u) items = withRibs;
+  const iw = widthOf(items); font(700, 13); const hw = ctx.measureText(S.valueLabel).width + 14 * u;
   let lx = Wc - m - hw - iw.reduce((a, b) => a + b, 0); const ly = sy + 3 * u;
   ctx.fillStyle = INK; ctx.textBaseline = 'middle'; ctx.fillText(S.valueLabel, lx, ly); lx += hw;
   items.forEach(([t, c], i) => { ctx.fillStyle = c; roundRect(ctx, lx, ly - 4 * u, 22 * u, 8 * u, 4 * u); ctx.fill(); font(400, 12, true); ctx.fillStyle = INK; ctx.fillText(t, lx + 28 * u, ly); lx += iw[i]; });
@@ -782,28 +1366,115 @@ function loop(now) {
   if (tween) { const k = Math.min(1, (now - tween.t0) / 900), e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
     camera.position.lerpVectors(tween.from, tween.to, e); controls.target.lerpVectors(tween.fromT, tween.toT, e); if (k >= 1) tween = null; }
   controls.update();
+  if (G && S.view === '3d') { camera.updateMatrixWorld(); if (!G.ribbonView || camera.getWorldDirection(tmpV).dot(G.ribbonView) < 0.99998) { placeRibbons(); faceWalls(); } }
   if (S.view === '3d') { renderer.render(scene, camera); drawOverlay(ov.getContext('2d'), DPR, false); syncCamUI(); }
   requestAnimationFrame(loop);
 }
+// One export canvas at the chosen size. layer "scene" is the WebGL render alone on transparent;
+// "annotations" is the overlay alone (both for designers); "figure" is the two together.
+function figureCanvas(view, layer = 'figure') {
+  const f = FORMATS[S.format], out = document.createElement('canvas'); out.width = f.w; out.height = f.h; const ctx = out.getContext('2d');
+  if (view === 'section') { ctx.scale(f.w / W, f.h / H); drawSection(ctx, W, H, true); return out; }
+  const k = f.w / W; tween = null; controls.update(); placeRibbons(); faceWalls();
+  if (layer !== 'annotations') {
+    const bg = scene.background; if (layer === 'scene') scene.background = null; // the renderer has alpha, so this clears to transparent
+    renderer.setPixelRatio(k); renderer.setSize(W, H, false); renderer.render(scene, camera);
+    ctx.drawImage(glCanvas, 0, 0, f.w, f.h);
+    scene.background = bg; renderer.setPixelRatio(DPR); renderer.setSize(W, H, false); renderer.render(scene, camera);
+  }
+  if (layer !== 'scene') drawOverlay(ctx, k, true);
+  return out;
+}
+const fileSlug = () => (S.title.split('·')[0].trim() || 'figure').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'figure';
+function downloadURL(url, name) { const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); }
 function exportPNG(opts = {}) {
   if (!G) throw new Error('Nothing to export yet: add a collar file and an assay file.');
   const view = opts.view === 'section' ? 'section' : opts.view === '3d' ? '3d' : S.view, f = FORMATS[S.format];
-  const out = document.createElement('canvas'); out.width = f.w; out.height = f.h; const ctx = out.getContext('2d');
-  if (view === 'section') { ctx.scale(f.w / W, f.h / H); drawSection(ctx, W, H, true); }
-  else {
-    const k = f.w / W; tween = null; controls.update();
-    renderer.setPixelRatio(k); renderer.setSize(W, H, false); renderer.render(scene, camera);
-    ctx.drawImage(glCanvas, 0, 0, f.w, f.h); drawOverlay(ctx, k, true);
-    renderer.setPixelRatio(DPR); renderer.setSize(W, H, false);
-  }
-  const url = out.toDataURL('image/png');
-  if (opts.download) {
-    const a = document.createElement('a'), slug = (S.title.split('·')[0].trim() || 'figure').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-    a.href = url; a.download = `${slug || 'figure'}-${view === 'section' ? 'section' : '3d'}-${S.format}.png`; document.body.appendChild(a); a.click(); a.remove();
-  }
+  const url = figureCanvas(view).toDataURL('image/png');
+  if (opts.download) downloadURL(url, `${fileSlug()}-${view === 'section' ? 'section' : '3d'}-${S.format}.png`);
   status(`Exported ${view === 'section' ? 'section A–A′' : 'the 3D figure'} at ${f.w} × ${f.h} px.`);
   return url;
 }
+const canvasBlob = (c) => new Promise((resolve, reject) => c.toBlob((b) => (b ? resolve(b) : reject(new Error('The PNG could not be encoded.'))), 'image/png'));
+const blobDataURL = (b) => new Promise((resolve, reject) => { const r = new FileReader(); r.onload = () => resolve(r.result); r.onerror = () => reject(r.error); r.readAsDataURL(b); });
+// Designer handoff: the figure, its 3D render and annotations as separate transparent layers, the section,
+// and the settings, in one ZIP at the chosen size. PNGs are stored, not deflated: they are compressed already.
+const LAYER_FILES = { figure: 'figure.png', scene: 'scene.png', annotations: 'annotations.png', section: 'section.png', settings: 'figure-settings.json' };
+async function exportLayers(opts = {}) {
+  if (!G) throw new Error('Nothing to export yet: add a collar file and an assay file.');
+  const { zipSync } = await import('fflate'), f = FORMATS[S.format];
+  status(`Preparing layers at ${f.w} × ${f.h} px…`);
+  const bytes = async (c) => new Uint8Array(await (await canvasBlob(c)).arrayBuffer());
+  const png = { figure: await bytes(figureCanvas('3d')), scene: await bytes(figureCanvas('3d', 'scene')), annotations: await bytes(figureCanvas('3d', 'annotations')), section: await bytes(figureCanvas('section')) };
+  const settings = { ...getState(), layers: { ...LAYER_FILES, note: 'scene.png and annotations.png are transparent and stack (scene below) to make figure.png.' }, exportedAt: new Date().toISOString() };
+  const zip = zipSync({
+    ...Object.fromEntries(Object.entries(png).map(([k, v]) => [LAYER_FILES[k], [v, { level: 0 }]])),
+    [LAYER_FILES.settings]: new TextEncoder().encode(JSON.stringify(settings, null, 2)),
+  });
+  const blob = new Blob([zip], { type: 'application/zip' });
+  if (opts.download) { const url = URL.createObjectURL(blob); downloadURL(url, `${fileSlug()}-layers-${S.format}.zip`); setTimeout(() => URL.revokeObjectURL(url), 30000); }
+  status(`Layers ready: ${Object.keys(LAYER_FILES).length} files, ${(blob.size / 1048576).toFixed(1)} MB.`);
+  return opts.as === 'blob' ? blob : blobDataURL(blob);
+}
+$('export-layers').addEventListener('click', () => exportLayers({ download: true, as: 'blob' }).catch((e) => status(e.message)));
+
+// ============================================================
+// 8b. Send to the design desk (the Teams enquiry, with the figure and layers attached)
+// ============================================================
+// Same flow as /teams: POST the enquiry to /api/track, which answers with one signed upload URL per declared
+// file; each file is then PUT straight to storage. 204 means accepted without uploads (automated browsers).
+const DESK_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/, DESK_MAX_BYTES = 50 * 1024 * 1024;
+function teamsSessionId() {
+  try { let id = sessionStorage.getItem('em.teams.sid'); if (!id) { id = crypto.randomUUID().replace(/-/g, ''); sessionStorage.setItem('em.teams.sid', id); } return id; } catch { return crypto.randomUUID().replace(/-/g, ''); }
+}
+function deskMsg(text, kind) { const el = $('desk-msg'); el.textContent = text; el.className = `desk-msg ${kind || ''}`; el.hidden = !text; }
+let deskBusy = false;
+async function sendToDesignDesk(o = {}) {
+  const email = String(o.email ?? '').trim(), company = String(o.company ?? '').trim(), notes = String(o.notes ?? '').trim();
+  if (!DESK_EMAIL_RE.test(email)) throw new Error('Enter your work email so we can reply.');
+  if (!company) throw new Error('Enter your company name.');
+  if (!G) throw new Error('Nothing to send yet: add a collar file and an assay file.');
+  if (deskBusy) throw new Error('Already sending.');
+  deskBusy = true;
+  const step = (t) => { status(t); deskMsg(t, 'busy'); const b = $('desk-send'); b.disabled = true; b.textContent = t.replace(/…$/, '…'); };
+  try {
+    step('Preparing the figure and layers…');
+    const made = [['figure.png', await canvasBlob(figureCanvas('3d'))], ['layers.zip', await exportLayers({ as: 'blob' })]];
+    // Over the 50 MB upload limit: not sent, and said so below rather than dropped quietly.
+    const blobs = made.filter(([, b]) => b.size <= DESK_MAX_BYTES), tooBig = made.filter(([, b]) => b.size > DESK_MAX_BYTES).map(([n]) => n);
+    step('Sending to the design desk…');
+    const body = { kind: 'team_enquiry', session_id: teamsSessionId(), email, company, materials: ['sections_3d'], service_level: 'not_sure',
+      message: `${notes}${notes ? ' ' : ''}(sent from Exploration Maps 3D)`, ref: '3d', files: blobs.map(([name, b]) => ({ name, size: b.size, type: b.type || (name.endsWith('.zip') ? 'application/zip' : 'image/png') })) };
+    const res = await fetch('/api/track', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).catch(() => null);
+    if (!res) throw new Error('No connection to the design desk. Check your internet and try again.');
+    if (res.status === 429) throw new Error('Too many requests from this connection. Please wait a few minutes, or email support@explorationmaps.com.');
+    if (!res.ok) throw new Error(res.status === 503 ? 'The design desk is not taking requests right now (error 503). Please try again later, or email support@explorationmaps.com.' : `The design desk could not take that (error ${res.status}). Please try again, or email support@explorationmaps.com.`);
+    const out = res.status === 200 ? await res.json().catch(() => ({})) : { uploads: null };
+    const uploaded = [], failed = [...tooBig];
+    if (out.uploads) for (let i = 0; i < blobs.length; i++) {
+      const [name, b] = blobs[i], slot = out.uploads.find((x) => x?.name === name) || out.uploads[i];
+      if (!slot?.url) { failed.push(name); continue; }
+      step(`Uploading ${i + 1} of ${blobs.length}…`);
+      const up = await fetch(slot.url, { method: 'PUT', headers: { 'Content-Type': b.type || 'application/octet-stream', 'x-upsert': 'false' }, body: b }).catch(() => null);
+      (up?.ok ? uploaded : failed).push(name);
+    }
+    const lost = failed.filter((n) => !tooBig.includes(n));
+    const msg = `Sent. We'll reply to ${email}.${tooBig.length ? ` ${tooBig.join(' and ')} is over 50 MB and was not sent; we'll ask for it by email.` : ''}${lost.length ? ` ${lost.join(' and ')} did not upload; we'll ask for ${lost.length > 1 ? 'them' : 'it'} by email.` : ''}`;
+    status(msg); deskMsg(msg, 'ok'); $('desk').classList.add('sent');
+    window.gtag?.('event', 'teams_enquiry_sent', { materials: 1, files: uploaded.length, ref: '3d' });
+    return { ok: true, id: out.id || null, uploaded, failed, accepted: res.status };
+  } catch (e) {
+    status(e.message); deskMsg(e.message, 'bad'); throw e;
+  } finally { deskBusy = false; const b = $('desk-send'); b.disabled = false; b.textContent = 'Send figure and layers'; }
+}
+$('desk').addEventListener('submit', (e) => {
+  e.preventDefault();
+  ['desk-email', 'desk-company'].forEach((id) => $(id).removeAttribute('aria-invalid'));
+  const email = $('desk-email').value, company = $('desk-company').value;
+  if (!DESK_EMAIL_RE.test(email.trim())) { deskMsg('Enter your work email so we can reply.', 'bad'); $('desk-email').setAttribute('aria-invalid', 'true'); $('desk-email').focus(); return; }
+  if (!company.trim()) { deskMsg('Enter your company name.', 'bad'); $('desk-company').setAttribute('aria-invalid', 'true'); $('desk-company').focus(); return; }
+  sendToDesignDesk({ email, company, notes: $('desk-notes').value }).catch(() => {});
+});
 $('export-3d').addEventListener('click', () => exportPNG({ view: '3d', download: true }));
 $('export-section').addEventListener('click', () => exportPNG({ view: 'section', download: true }));
 
@@ -925,7 +1596,7 @@ function renderSummary() {
   if (!project || project.empty) { sum.innerHTML = '<span class="bad">Add a collar file to see your holes.</span>'; return; }
   const mt = project.holes.reduce((s, h) => s + h.len, 0), n = project.holes.reduce((s, h) => s + h.ints.length, 0);
   sum.innerHTML = [usingSample ? 'sample project' : null, `${project.holes.length} holes`, `${Math.round(mt).toLocaleString()} m drilled`, `${n.toLocaleString()} assay intervals`, project.posDown ? 'dips read as positive-down' : null].filter(Boolean).map((t) => `<span class="pill">${t}</span>`).join('')
-    + project.warnings.map((w) => `<p class="warn">${esc(w)}</p>`).join('');
+    + project.warnings.concat(G?.terrainNote ? [G.terrainNote] : []).map((w) => `<p class="warn">${esc(w)}</p>`).join('');
 }
 function renderStyle() {
   const sel = $('value-col'); sel.innerHTML = (project?.cols || []).map((c) => `<option ${c === S.valueCol ? 'selected' : ''}>${esc(c)}</option>`).join('') || '<option>—</option>';
@@ -934,7 +1605,11 @@ function renderStyle() {
   $('bins').querySelectorAll('[data-bin]').forEach((inp) => inp.addEventListener('change', () => { const b = S.bins.slice(); b[+inp.dataset.bin] = parseFloat(inp.value) || 0; setStyle({ bins: b }); }));
   $('co-cut').value = S.coCut; $('co-incl').value = S.coIncl; $('co-count').value = S.coCount; $('co-min').value = S.coMin;
   $('sec-az').value = S.secAz; $('sec-az-out').textContent = `${pad3(S.secAz)}°`; $('sec-w').value = S.secW;
-  $('opt-walls').checked = S.walls; $('opt-ids').checked = S.ids; $('opt-inset').checked = S.inset;
+  $('opt-walls').checked = S.walls; $('opt-ids').checked = S.ids; $('opt-inset').checked = S.inset; $('opt-ribbons').checked = S.ribbons;
+  $('opt-pending').checked = S.pendingLabels; $('opt-pending-none').checked = S.pendingNoAssays; $('opt-elev').checked = S.elevTicks;
+  $('value-col2').innerHTML = '<option value="">None</option>' + (project?.cols || []).filter((c) => c !== S.valueCol).map((c) => `<option ${c === S.valueCol2 ? 'selected' : ''}>${esc(c)}</option>`).join('');
+  $('terrain').value = S.terrain; $('terrain-src').value = S.terrainSource; $('block-style').value = S.blockStyle; $('collar-fit').value = S.collarFit; $('vex').value = S.vex; $('vex-out').textContent = `${S.vex}×`;
+  $('trace-w').value = Math.round(S.traceWidth * 100); $('trace-out').textContent = `${S.traceWidth.toFixed(1)}×`;
   $('surf').value = Math.round(S.surf * 100); $('surf-out').textContent = `${Math.round(S.surf * 100)}%`;
   const ml = $('mesh-list'); ml.innerHTML = '';
   (project?.meshF || []).forEach((f) => { const st = S.meshes[f.name]; if (!st) return;
@@ -948,7 +1623,7 @@ function renderCalloutEditor() {
   callouts.forEach((c) => { if (shownIds.has(c.h.id) && !cands.includes(c)) cands.push(c); });
   if (!cands.length) { el.innerHTML = '<p class="muted">No hole has an interval above the broad cut-off over the minimum length. Lower either one.</p>'; return; }
   el.innerHTML = '<p class="muted">Tick to show. Type over a line to reword it; leave it blank for the automatic text.</p>' + cands.map((c) => {
-    const id = esc(c.h.id), o = S.coOverrides[c.h.id] || {}, a1 = `${icText(c.ic.broad)} from ${Math.round(c.ic.broad.from)} m`, a2 = c.ic.incl ? `incl. ${icText(c.ic.incl)}` : '(no "incl." line)';
+    const id = esc(c.h.id), o = S.coOverrides[c.h.id] || {}, a1 = `${icText(c.ic.broad, c.h)} from ${Math.round(c.ic.broad.from)} m`, a2 = c.ic.incl ? `incl. ${icText(c.ic.incl, c.h)}` : '(no "incl." line)';
     return `<div class="callout-ed"><input type="checkbox" data-co="${id}" ${shownIds.has(c.h.id) ? 'checked' : ''} aria-label="Show callout for ${id}"><span class="id">${id}</span>`
       + `<input type="text" data-co1="${id}" value="${esc(o.line1 || '')}" placeholder="${esc(a1)}" aria-label="First line for ${id}">`
       + `<input type="text" data-co2="${id}" value="${esc(o.line2 || '')}" placeholder="${esc(a2)}" aria-label="Second line for ${id}"></div>`;
@@ -969,9 +1644,9 @@ function syncBrandUI() {
 }
 
 function refresh() {
-  project = build();
+  project = build(); recheckCRS();
   if (!project.empty && project.holes.length) { const az = principalAz(project.holes); if (az !== null && !refresh.secSet) S.secAz = az; }
-  rebuildScene(); renderFiles(); renderSummary(); renderStyle(); renderCalloutEditor(); schedulePublish();
+  rebuildScene(); renderFiles(); renderSummary(); renderStyle(); renderCalloutEditor(); renderLabelList(); renderWallLabelList(); renderCRS(); schedulePublish();
 }
 function principalAz(holes) {
   const pts = holes.map((h) => [h.c.x, h.c.y]); if (pts.length < 3) return null;
@@ -982,7 +1657,7 @@ function principalAz(holes) {
 }
 function addUserFiles(arr) {
   if (!Array.isArray(arr) || !arr.length || arr.some((f) => !f || typeof f.name !== 'string' || typeof f.text !== 'string')) throw new Error('addFiles expects [{ name: "collars.csv", text: "HoleID,Easting,..." }].');
-  if (usingSample) { files = []; usingSample = false; S.meshes = {}; S.valueCol = null; S.coOverrides = {}; }
+  if (usingSample) { files = []; usingSample = false; S.meshes = {}; S.valueCol = null; S.coOverrides = {}; S.valueCol2 = null; }
   refresh.secSet = false; addFiles(arr); refresh();
   const added = files.filter((f) => arr.some((a) => a.name === f.name)).map((f) => `${f.name} → ${ROLE_LABEL[f.role]}`);
   status(project.empty ? `Added ${added.join(', ')}. Still need a collar file.` : `Added ${added.join(', ')}. ${project.holes.length} holes on the figure.`);
@@ -1039,11 +1714,12 @@ $('paste-add').addEventListener('click', () => {
   addUserFiles([{ name, text }]); $('paste-text').value = '';
 });
 function loadSample() {
+  S.crs = null; geo = null; renderCRS();
   files = []; usingSample = true; S.valueCol = null; S.meshes = {}; S.coOverrides = {}; refresh.secSet = false;
   addFiles(sampleFiles()); refresh(); status('Sample project loaded · illustrative data. Add your CSVs in step 1 to replace it.');
   return getState();
 }
-function clearFiles() { files = []; usingSample = false; S.meshes = {}; S.coOverrides = {}; refresh(); status('Files cleared. Add a collar file and an assay file.'); return getState(); }
+function clearFiles() { S.crs = null; geo = null; renderCRS(); files = []; usingSample = false; S.meshes = {}; S.coOverrides = {}; refresh(); status('Files cleared. Add a collar file and an assay file.'); return getState(); }
 $('load-sample').addEventListener('click', loadSample);
 $('clear-files').addEventListener('click', clearFiles);
 
@@ -1074,10 +1750,28 @@ function setStyle(o = {}, render = true) {
   if (o.autoBins) rebin();
   [['coCount', 0, 12], ['coMin', 1, 1000], ['coCut', 0, 1e9], ['coIncl', 0, 1e9], ['secW', 5, 5000]].forEach(([k, lo, hi]) => { if (o[k] !== undefined) { const v = +o[k]; if (!Number.isFinite(v)) throw new Error(`${k} must be a number.`); S[k] = Math.max(lo, Math.min(hi, v)); } });
   if (o.secAz !== undefined) { S.secAz = ((Math.round(+o.secAz) % 180) + 180) % 180; refresh.secSet = true; }
-  ['walls', 'ids', 'inset'].forEach((k) => { if (o[k] !== undefined) S[k] = !!o[k]; });
+  if (o.valueCol2 !== undefined) {
+    const av = project?.cols || [], v = o.valueCol2 === '' || o.valueCol2 === 'none' ? null : o.valueCol2;
+    if (v !== null && !av.includes(v)) throw new Error(`Unknown grade column "${v}". Available: ${av.join(', ') || 'none'}, or null for none.`);
+    if (v !== null && v === S.valueCol) throw new Error('valueCol2 must differ from valueCol, the column the holes are coloured by.');
+    S.valueCol2 = v;
+  }
+  if (S.valueCol2 === S.valueCol) S.valueCol2 = null;
+  ['walls', 'ids', 'inset', 'ribbons', 'pendingLabels', 'pendingNoAssays', 'elevTicks'].forEach((k) => { if (o[k] !== undefined) S[k] = !!o[k]; });
+  if (o.traceWidth !== undefined) { const v = +o.traceWidth; if (!Number.isFinite(v)) throw new Error('traceWidth must be a number from 0.5 to 3.'); S.traceWidth = Math.max(0.5, Math.min(3, v)); }
   if (o.surface !== undefined) S.surf = Math.max(0.15, Math.min(1, +o.surface > 1 ? +o.surface / 100 : +o.surface));
+  let rebuild = false;
+  if (o.terrain !== undefined) { if (!TERRAINS[o.terrain]) throw new Error(`terrain must be one of: ${Object.keys(TERRAINS).join(', ')}.`); S.terrain = o.terrain; }
+  if (o.terrainSource !== undefined) { if (!['auto', 'topo', 'dem', 'collars'].includes(o.terrainSource)) throw new Error('terrainSource must be auto, topo, dem or collars.'); rebuild = rebuild || S.terrainSource !== o.terrainSource; S.terrainSource = o.terrainSource; }
+  const ve = o.verticalExaggeration ?? o.vex;
+  if (ve !== undefined) { const v = +ve; if (!Number.isFinite(v)) throw new Error('verticalExaggeration must be a number from 1 to 5.'); const nv = Math.max(1, Math.min(5, v)); rebuild = rebuild || nv !== S.vex; S.vex = nv; }
+  if (o.collarFit !== undefined) { if (!['collars', 'terrain'].includes(o.collarFit)) throw new Error('collarFit must be "collars" (move the terrain to the collars) or "terrain" (hang holes from the terrain).'); rebuild = rebuild || S.collarFit !== o.collarFit; S.collarFit = o.collarFit; }
+  if (o.blockStyle !== undefined) { if (!['glass', 'solid'].includes(o.blockStyle)) throw new Error('blockStyle must be "glass" or "solid".'); S.blockStyle = o.blockStyle; }
   if (o.meshes) Object.entries(o.meshes).forEach(([name, v]) => { if (!S.meshes[name]) throw new Error(`No model shape named "${name}". Loaded: ${Object.keys(S.meshes).join(', ') || 'none'}.`); Object.assign(S.meshes[name], v); });
-  restyle(); if (render) renderStyle(); renderCalloutEditor(); schedulePublish();
+  if (rebuild) rebuildScene(true); else { if (o.terrain !== undefined || o.blockStyle !== undefined) paintTerrain(); if (o.terrain !== undefined) syncRealTerrain(); restyle(); }
+  if (rebuild && G?.terrainNote) status(G.terrainNote);
+  if (o.terrain !== undefined && (S.terrain === 'satellite' || S.terrain === 'muted') && !geo) status('Satellite imagery needs the coordinate system: set it in step 1 (e.g. EPSG:26909). Showing the natural surface.');
+  if (render) renderStyle(); renderCalloutEditor(); schedulePublish();
   return getState();
 }
 $('value-col').addEventListener('change', (e) => setStyle({ valueCol: e.target.value }));
@@ -1089,6 +1783,25 @@ $('sec-az').addEventListener('input', (e) => { setStyle({ secAz: +e.target.value
 $('opt-walls').addEventListener('change', (e) => setStyle({ walls: e.target.checked }, false));
 $('opt-ids').addEventListener('change', (e) => setStyle({ ids: e.target.checked }, false));
 $('opt-inset').addEventListener('change', (e) => setStyle({ inset: e.target.checked }, false));
+$('opt-ribbons').addEventListener('change', (e) => setStyle({ ribbons: e.target.checked }, false));
+$('opt-pending').addEventListener('change', (e) => setStyle({ pendingLabels: e.target.checked }, false));
+$('opt-pending-none').addEventListener('change', (e) => setStyle({ pendingNoAssays: e.target.checked }, false));
+$('opt-elev').addEventListener('change', (e) => setStyle({ elevTicks: e.target.checked }, false));
+$('terrain').addEventListener('change', (e) => setStyle({ terrain: e.target.value }, false));
+$('terrain-src').addEventListener('change', (e) => setStyle({ terrainSource: e.target.value }, false));
+$('block-style').addEventListener('change', (e) => setStyle({ blockStyle: e.target.value }, false));
+$('collar-fit').addEventListener('change', (e) => setStyle({ collarFit: e.target.value }, false));
+$('vex').addEventListener('change', (e) => { setStyle({ verticalExaggeration: +e.target.value }, false); $('vex-out').textContent = `${S.vex}×`; });
+$('vex').addEventListener('input', (e) => { $('vex-out').textContent = `${e.target.value}×`; });
+function renderCRS() {
+  if (document.activeElement?.id !== 'crs') $('crs').value = geo ? (geo.code.startsWith('+') ? geo.code : geo.code) : '';
+  $('crs-note').textContent = geo ? `${geo.label}${geo.guessed ? ' (from the latitude/longitude collars)' : ''}. Real terrain and satellite imagery are available in step 3.` : 'Set it to drape real terrain and satellite imagery (Layout → Terrain).';
+}
+const applyCRS = () => setCRS($('crs').value.trim() || null).catch((e) => { status(e.message); $('crs-note').textContent = e.message; });
+$('crs-apply').addEventListener('click', applyCRS);
+$('crs').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); applyCRS(); } });
+$('value-col2').addEventListener('change', (e) => setStyle({ valueCol2: e.target.value || null }));
+$('trace-w').addEventListener('input', (e) => { setStyle({ traceWidth: +e.target.value / 100 }, false); $('trace-out').textContent = `${S.traceWidth.toFixed(1)}×`; });
 $('surf').addEventListener('input', (e) => { setStyle({ surface: +e.target.value / 100 }, false); $('surf-out').textContent = `${e.target.value}%`; });
 function setCallout(holeId, o = {}) {
   if (!project?.holes?.some((h) => h.id === holeId)) throw new Error(`No hole "${holeId}".`);
@@ -1106,6 +1819,107 @@ function setFigureSize(key) {
   return getState();
 }
 
+// Text labels
+const LABEL_SIZES = ['title', 'normal'];
+const clamp01 = (v, d) => (Number.isFinite(+v) && v !== null && v !== '' ? Math.max(0, Math.min(1, +v)) : d);
+function labelPatch(L, o) {
+  if (o.text !== undefined) { const t = String(o.text).trim(); if (!t) throw new Error('A label needs some text.'); L.text = t.slice(0, 200); }
+  if (o.size !== undefined) { if (!LABEL_SIZES.includes(o.size)) throw new Error('size must be "title" or "normal".'); L.size = o.size; }
+  if (o.x !== undefined) L.x = clamp01(o.x, L.x); if (o.y !== undefined) L.y = clamp01(o.y, L.y);
+  if (o.arrow !== undefined) L.arrow = !!o.arrow;
+  if (o.ax !== undefined) L.ax = clamp01(o.ax, L.ax); if (o.ay !== undefined) L.ay = clamp01(o.ay, L.ay);
+}
+function addLabel(o = {}) {
+  const n = S.labels.reduce((mx, l) => Math.max(mx, +String(l.id).replace(/\D/g, '') || 0), 0) + 1;
+  const L = { id: `L${n}`, text: '', size: 'normal', x: 0.5, y: 0.5, arrow: false, ax: null, ay: null };
+  labelPatch(L, { size: 'normal', ...o, text: o.text ?? '' });
+  if (o.x === undefined && o.y === undefined && G) [L.x, L.y] = freeSpot(L);
+  if (L.ax === null) L.ax = Math.min(0.97, L.x + 0.1); if (L.ay === null) L.ay = Math.min(0.97, L.y + 0.14);
+  S.labels.push(L); renderLabelList(); schedulePublish(); status(`Label "${L.text}" added. Drag it on the preview to place it.`);
+  return L.id;
+}
+function updateLabel(id, o = {}) {
+  const L = S.labels.find((l) => l.id === id); if (!L) throw new Error(`No label "${id}". Labels: ${S.labels.map((l) => l.id).join(', ') || 'none'}.`);
+  labelPatch(L, o); renderLabelList(); schedulePublish(); return getState();
+}
+function removeLabel(id) {
+  if (!S.labels.some((l) => l.id === id)) throw new Error(`No label "${id}".`);
+  S.labels = S.labels.filter((l) => l.id !== id); renderLabelList(); schedulePublish(); return getState();
+}
+function renderLabelList() {
+  const el = $('label-list');
+  el.innerHTML = S.labels.map((L) => `<div class="label-row"><input type="text" data-lt="${L.id}" value="${esc(L.text)}" aria-label="Text of label ${L.id}">`
+    + `<label class="check"><input type="checkbox" data-la="${L.id}" ${L.arrow ? 'checked' : ''}>Arrow</label>`
+    + `<button class="btn" type="button" data-ld="${L.id}" aria-label="Delete label ${esc(L.text)}">Delete</button></div>`).join('');
+  el.querySelectorAll('[data-lt]').forEach((i) => i.addEventListener('change', () => { try { updateLabel(i.dataset.lt, { text: i.value }); } catch (e) { status(e.message); } }));
+  el.querySelectorAll('[data-la]').forEach((i) => i.addEventListener('change', () => updateLabel(i.dataset.la, { arrow: i.checked })));
+  el.querySelectorAll('[data-ld]').forEach((b) => b.addEventListener('click', () => removeLabel(b.dataset.ld)));
+}
+$('lab-add').addEventListener('click', () => {
+  const text = $('lab-text').value.trim(); if (!text) { status('Type the label text first.'); $('lab-text').focus(); return; }
+  showView('3d'); addLabel({ text, size: $('lab-size').value, arrow: $('lab-arrow').checked }); $('lab-text').value = '';
+});
+$('lab-text').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); $('lab-add').click(); } });
+function renderWallLabelList() {
+  const el = $('wall-list'), faces = ['N', 'S', 'E', 'W'];
+  el.innerHTML = S.wallLabels.map((L) => `<div class="label-row"><input type="text" data-wt="${L.id}" value="${esc(L.text)}" aria-label="Text of wall label ${L.id}">`
+    + `<select data-wf="${L.id}" aria-label="Face of ${esc(L.text)}">${faces.map((f) => `<option ${f === L.face ? 'selected' : ''}>${f}</option>`).join('')}</select>`
+    + `<button class="btn" type="button" data-wd="${L.id}" aria-label="Delete wall label ${esc(L.text)}">Delete</button></div>`).join('');
+  el.querySelectorAll('[data-wt]').forEach((i) => i.addEventListener('change', () => { try { updateWallLabel(i.dataset.wt, { text: i.value }); } catch (e) { status(e.message); } }));
+  el.querySelectorAll('[data-wf]').forEach((i) => i.addEventListener('change', () => updateWallLabel(i.dataset.wf, { face: i.value })));
+  el.querySelectorAll('[data-wd]').forEach((b) => b.addEventListener('click', () => removeWallLabel(b.dataset.wd)));
+}
+$('wall-add').addEventListener('click', () => {
+  const text = $('wall-text').value.trim(); if (!text) { status('Type the wall label text first.'); $('wall-text').focus(); return; }
+  showView('3d'); addWallLabel({ text, face: $('wall-face').value, size: $('wall-size').value }); $('wall-text').value = '';
+});
+$('wall-text').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); $('wall-add').click(); } });
+const raycaster = new THREE.Raycaster();
+const rayAt = (e) => { const r = frameEl.getBoundingClientRect(); raycaster.setFromCamera(new THREE.Vector2((e.clientX - r.left) / r.width * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), camera); return raycaster.ray; };
+const wallLabelAt = (e) => { if (!G?.wallLabelMeshes?.length) return null; rayAt(e); return raycaster.intersectObjects(G.wallLabelMeshes, false)[0] || null; };
+// A point on a face plane, as (u, v) on that face.
+function faceUV(face, P) {
+  const { a, b } = faceGeom(face), x = P.x + G.cx, y = G.cy - P.z, z = P.y / S.vex + G.zref, dx = b[0] - a[0], dy = b[1] - a[1];
+  const u = ((x - a[0]) * dx + (y - a[1]) * dy) / (dx * dx + dy * dy), top = G.surf(Math.max(G.B.x0, Math.min(G.B.x1, x)), Math.max(G.B.y0, Math.min(G.B.y1, y)));
+  return [u, (z - G.B.z0) / ((top - G.B.z0) || 1)];
+}
+
+// Dragging: caught on the frame in the capture phase, before OrbitControls on the canvas sees it, and only
+// when the pointer is on a label or an arrow tip; anywhere else the camera orbits as usual.
+let labelDrag = null;
+function labelAt(e) {
+  const r = frameEl.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+  for (let i = labelHits.length - 1; i >= 0; i--) { const h = labelHits[i]; if (h.kind === 'tip' ? Math.hypot(x - h.x, y - h.y) <= h.r : x >= h.box[0] && x <= h.box[2] && y >= h.box[1] && y <= h.box[3]) return { h, x, y }; }
+  return null;
+}
+frameEl.addEventListener('pointerdown', (e) => {
+  if (S.view !== '3d' || e.button > 0) return; const hit = labelAt(e);
+  if (!hit) {
+    // A label on a block face: dragged along that face's plane.
+    const wh = wallLabelAt(e); if (!wh) return;
+    const mesh = wh.object, L = mesh.userData.L, [u0, v0] = faceUV(L.face, wh.point);
+    e.stopPropagation(); e.preventDefault();
+    labelDrag = { wall: mesh, du: u0 - L.u, dv: v0 - L.v, plane: new THREE.Plane().setFromNormalAndCoplanarPoint(faceGeom(L.face).n, wh.point) };
+    try { frameEl.setPointerCapture(e.pointerId); } catch { /* synthetic events */ }
+    return;
+  }
+  const L = S.labels.find((l) => l.id === hit.h.id); if (!L) return;
+  e.stopPropagation(); e.preventDefault();
+  labelDrag = { L, tip: hit.h.kind === 'tip', dx: hit.x - (hit.h.kind === 'tip' ? L.ax : L.x) * W, dy: hit.y - (hit.h.kind === 'tip' ? L.ay : L.y) * H, pid: e.pointerId };
+  try { frameEl.setPointerCapture(e.pointerId); } catch { /* synthetic events */ }
+}, true);
+frameEl.addEventListener('pointermove', (e) => {
+  if (!labelDrag) { glCanvas.style.cursor = S.view === '3d' && (labelAt(e) || wallLabelAt(e)) ? 'move' : ''; return; }
+  if (labelDrag.wall) {
+    const P = rayAt(e).intersectPlane(labelDrag.plane, new THREE.Vector3()); if (!P) return;
+    const L = labelDrag.wall.userData.L, [u, v] = faceUV(L.face, P); L.u = clamp01(u - labelDrag.du, L.u); L.v = clamp01(v - labelDrag.dv, L.v); placeWallLabel(labelDrag.wall); return;
+  }
+  const r = frameEl.getBoundingClientRect(), x = clamp01((e.clientX - r.left - labelDrag.dx) / W, 0.5), y = clamp01((e.clientY - r.top - labelDrag.dy) / H, 0.5);
+  if (labelDrag.tip) { labelDrag.L.ax = x; labelDrag.L.ay = y; } else { labelDrag.L.x = x; labelDrag.L.y = y; }
+}, true);
+const endDrag = () => { if (labelDrag) { if (labelDrag.wall) renderWallLabelList(); labelDrag = null; schedulePublish(); } };
+frameEl.addEventListener('pointerup', endDrag, true); frameEl.addEventListener('pointercancel', endDrag, true);
+
 // Format examples come from the sample files themselves.
 (() => { const s = sampleFiles(), head = (t, n) => t.split('\n').slice(0, n).join('\n');
   $('fmt-collar').textContent = `Collars\n${head(s[0].text, 4)}`; $('fmt-survey').textContent = `Surveys\n${head(s[1].text, 4)}`; $('fmt-assay').textContent = `Assays\n${head(s[2].text, 5)}`; })();
@@ -1119,14 +1933,19 @@ function getState() {
     app: 'Exploration Maps 3D', version: 3, ready: !!G, usingSample, step: currentStep, view: S.view,
     files: files.map((x) => ({ name: x.name, role: x.role, rows: x.rows ? x.rows.length : undefined,
       columns: x.cols ? Object.fromEntries(Object.entries(x.cols).map(([k, i]) => [k, x.header[i]])) : undefined, gradeColumns: x.grades && x.grades.length ? x.grades.map((g) => g.name) : undefined })),
-    project: ok ? { holes: project.holes.length, holeIds: project.holes.map((h) => h.id), metresDrilled: Math.round(project.holes.reduce((s, h) => s + h.len, 0)), intervals: project.holes.reduce((s, h) => s + h.ints.length, 0), dipsPositiveDown: project.posDown, warnings: project.warnings } : null,
+    project: ok ? { holes: project.holes.length, holeIds: project.holes.map((h) => h.id), metresDrilled: Math.round(project.holes.reduce((s, h) => s + h.len, 0)), pendingHoles: project.holes.filter(isPending).map((h) => h.id), intervals: project.holes.reduce((s, h) => s + h.ints.length, 0), dipsPositiveDown: project.posDown, warnings: project.warnings } : null,
     grade: { column: S.valueCol, label: S.valueLabel, available: project?.cols || [], bins: S.bins, binColors: BIN_COLORS },
     callouts: { coCount: S.coCount, coMin: S.coMin, coCut: S.coCut, coIncl: S.coIncl,
       shown: shownCallouts().map((c) => { const L = calloutLines(c); return { holeId: c.h.id, line1: L.l1 + L.l1b, line2: L.l2 }; }),
-      candidates: callouts.slice(0, 15).map((c) => ({ holeId: c.h.id, broad: icText(c.ic.broad), fromM: Math.round(c.ic.broad.from), incl: c.ic.incl ? icText(c.ic.incl) : null })), overrides: S.coOverrides },
+      candidates: callouts.slice(0, 15).map((c) => ({ holeId: c.h.id, broad: icText(c.ic.broad, c.h), fromM: Math.round(c.ic.broad.from), incl: c.ic.incl ? icText(c.ic.incl, c.h) : null })), overrides: S.coOverrides, valueCol2: S.valueCol2 },
     brand: { company: S.company, title: S.title, subtitle: S.subtitle, footnote: S.footnote, primary: S.primary, accent: S.accent, hasLogo: !!S.logo, credit: S.credit },
+    terrain: { style: S.terrain, styles: TERRAINS, source: S.terrainSource, surfaceFrom: G?.using || null, verticalExaggeration: S.vex, collarFit: S.collarFit, blockStyle: S.blockStyle,
+      crs: S.crs, crsLabel: geo?.label || null, crsGuessed: !!geo?.guessed, status: realT.status, message: realT.message || null,
+      dem: realT.dem ? (realT.dem.ok ? `z${realT.dem.z}, ${realT.dem.tiles} tiles` : `failed: ${realT.dem.error}`) : null,
+      imagery: realT.img ? (realT.img.ok ? `z${realT.img.z}, ${realT.img.tiles} tiles` : `failed: ${realT.img.error}`) : null, imageryShown: imageryShown(), note: G?.terrainNote || null, credits: G ? terrainCredits(true) : [] },
     camera: G ? getCam() : null, section: { secAz: S.secAz, secW: S.secW, lookingAz: ((S.secAz - 90) % 360 + 360) % 360 },
-    display: { walls: S.walls, ids: S.ids, inset: S.inset, surface: S.surf }, meshes: S.meshes,
+    labels: S.labels.map((l) => ({ ...l })), wallLabels: S.wallLabels.map((l) => ({ ...l })),
+    display: { walls: S.walls, ids: S.ids, inset: S.inset, surface: S.surf, ribbons: S.ribbons, traceWidth: S.traceWidth, pendingLabels: S.pendingLabels, pendingNoAssays: S.pendingNoAssays, elevTicks: S.elevTicks }, meshes: S.meshes,
     figureSize: { key: S.format, width: f.w, height: f.h, label: f.label }, figureSizes: Object.fromEntries(Object.entries(FORMATS).map(([k, v]) => [k, `${v.label}, ${v.w}×${v.h}`])),
   };
 }
@@ -1150,7 +1969,30 @@ JavaScript API (run in the page console or via your agent's evaluate tool):
   EM3D.setLogo(dataUrl)           Promise. Also picks primary and accent from the logo
   EM3D.setStyle({valueCol, valueLabel, bins: [4 lower limits], autoBins: true,
                  coCount, coMin, coCut, coIncl, secAz (0-179), secW,
-                 walls, ids, inset, surface (0.15-1), meshes: {name: {show, color, opacity}}})
+                 walls, ids, inset, surface (0.15-1), meshes: {name: {show, color, opacity}},
+                 ribbons (bars beside each hole: tan = reported interval, green = incl.),
+                 traceWidth (0.5-3, drill trace thickness, default 1.4),
+                 valueCol2 (second grade in callouts, e.g. "Au_gpt"; null for none),
+                 pendingLabels (write ASSAYS PENDING along holes whose collar status/notes say pending),
+                 pendingNoAssays (also flag holes with no assays), elevTicks (elevation ticks on the block edge),
+                 terrain: "natural" | "light" | "dark" | "relief" | "satellite" | "muted",
+                 terrainSource: "auto" | "topo" | "dem" | "collars"  (auto: uploaded topography,
+                   else real elevation once a coordinate system is set, else fitted to the collars),
+                 verticalExaggeration (1-5), blockStyle: "glass" | "solid" (solid: pale opaque far
+                   faces with a soil band, near faces cut away), collarFit: "collars" (default: the
+                   DEM shifts to meet the collars) | "terrain" (each hole hangs from the DEM)})
+  EM3D.setCRS("EPSG:26909" | "UTM 9N NAD83" | "EPSG:4326" | proj4 string | null)
+                                  Promise. The coordinate system of the files; loads real terrain
+                                  (AWS Terrain Tiles) and, for satellite/muted, Esri imagery
+  EM3D.terrainReady()             Promise; resolves with the state once tiles have loaded or failed
+  EM3D.addLabel({text, x, y, size: "title" | "normal", arrow, ax, ay})   returns the new id.
+                                  x, y (and the arrow tip ax, ay) are 0-1 across and down the frame,
+                                  so a label lands in the same place at every size. 3D figure only
+  EM3D.updateLabel(id, {...})     EM3D.removeLabel(id)
+  EM3D.addWallLabel({text, face: "N" | "S" | "E" | "W" | "front", u, v, size: "title" | "normal",
+                     scale, rotation, color})   returns the id. Text painted on a block face in
+                                  perspective; u 0-1 left to right seen from outside, v 0 (base) to 1 (terrain)
+  EM3D.updateWallLabel(id, {...}) EM3D.removeWallLabel(id)
   EM3D.setCallout(holeId, {show, line1, line2, incl: false})   null resets a field
   EM3D.setCamera({view: "a" | "b" | "low" | "plan"}) or ({azimuth, plunge, zoom})
   EM3D.setFigureSize("slide" | "release" | "square" | "portrait" | "a4")
@@ -1158,6 +2000,12 @@ JavaScript API (run in the page console or via your agent's evaluate tool):
   EM3D.showView("3d" | "section")
   EM3D.exportPNG({view: "3d" | "section", download: false})   returns a PNG data URL;
                                   download: true also saves the file
+  EM3D.exportLayers({download: false, as: "base64" | "blob"})   Promise. A ZIP for designers at the
+                                  figure size: figure.png, scene.png (3D alone, transparent),
+                                  annotations.png (overlay alone, transparent), section.png and
+                                  figure-settings.json. Returns a data URL (or a Blob)
+  EM3D.sendToDesignDesk({email, company, notes})   Promise. Sends the figure and layers to the
+                                  Exploration Maps design desk. Only when the user asks to
 
 Every setter returns the new state. The state is also kept as JSON in
 <script id="em3d-state">, and an "em3d:change" event fires on window after each change.
@@ -1179,6 +2027,8 @@ window.EM3D = Object.freeze({
   version: 3, help: () => HELP, getState, loadSample, clearFiles, addFiles: addUserFiles, addZip, setBrand, setLogo, setStyle: (o) => setStyle(o, true), setCallout,
   setCamera: call((o = {}) => { if (!G) throw new Error('Load data first.'); showView('3d'); if (o.view) { if (!VIEWS[o.view]) throw new Error('view must be a, b, low or plan.'); applyView(o.view, true); } else setCamera(o, true); syncCamUI(); }),
   setFigureSize, showStep: call(showStep), showView: call(showView), exportPNG,
+  setCRS, terrainReady: async () => { await (realT.promise || Promise.resolve()); return getState(); },
+  addLabel, updateLabel, removeLabel, exportLayers, sendToDesignDesk, addWallLabel, updateWallLabel, removeWallLabel,
 });
 
 // ------------------------------------------------------------
@@ -1264,7 +2114,7 @@ window.EM3D = Object.freeze({ ...window.EM3D, help: () => PROJECT_HELP, getProje
 // ============================================================
 // 12. Start
 // ============================================================
-renderSizes(); syncBrandUI();
+renderSizes(); syncBrandUI(); renderCRS(); renderLabelList(); renderWallLabelList();
 layoutFrame();
 loadSample();
 new ResizeObserver(() => { const c = G ? getCam() : null; layoutFrame(); if (c) setCamera(c, true); }).observe(stage);
