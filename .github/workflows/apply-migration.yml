@@ -1,0 +1,43 @@
+# Applies one migration file from supabase/migrations to production, in a
+# single transaction, over the direct Postgres connection (SUPABASE_DB_URL),
+# then records it in supabase_migrations.schema_migrations. Run by hand only:
+#   Actions → Apply migration → Run workflow → file name (and branch).
+name: Apply migration
+
+on:
+  workflow_dispatch:
+    inputs:
+      file:
+        description: 'Migration file name in supabase/migrations, e.g. 20261023100000_workspaces_properties.sql'
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: registry-db-import
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply and record
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          FILE: ${{ inputs.file }}
+        run: |
+          set -euo pipefail
+          [[ "$FILE" =~ ^([0-9]{14})_([a-z0-9_]+)\.sql$ ]] || { echo "::error::Expected <14-digit version>_<name>.sql"; exit 1; }
+          version="${BASH_REMATCH[1]}"; name="${BASH_REMATCH[2]}"
+          path="supabase/migrations/$FILE"
+          [ -f "$path" ] || { echo "::error::$path not found on this branch"; exit 1; }
+          if psql "$SUPABASE_DB_URL" -tAc "select 1 from supabase_migrations.schema_migrations where version = '$version'" | grep -q 1; then
+            echo "::notice::$FILE is already recorded as applied; nothing to do."; exit 0
+          fi
+          psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 --single-transaction -f "$path"
+          psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -c \
+            "insert into supabase_migrations.schema_migrations (version, name, statements) values ('$version', '$name', array[]::text[]) on conflict (version) do nothing"
+          echo "Applied and recorded $FILE" >> "$GITHUB_STEP_SUMMARY"
