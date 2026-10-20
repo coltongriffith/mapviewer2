@@ -142,5 +142,113 @@
       "width": 1448,
       "height": 1285
     }
+  ],
+  "/blog-img/3d/example-ridge-3d-figure.webp": [
+    {
+      "src": "/blog-img/3d/example-ridge-3d-figure.webp",
+      "width": 800,
+      "height": 533
+    },
+    {
+      "src": "/blog-img/3d/example-ridge-3d-figure@2x.webp",
+      "width": 1600,
+      "height": 1067
+    }
+  ],
+  "/blog-img/3d/example-ridge-section.webp": [
+    {
+      "src": "/blog-img/3d/example-ridge-section.webp",
+      "width": 800,
+      "height": 533
+    },
+    {
+      "src": "/blog-img/3d/example-ridge-section@2x.webp",
+      "width": 1600,
+      "height": 1067
+    }
+  ],
+  "/blog-img/3d/example-ridge-grade-shell.webp": [
+    {
+      "src": "/blog-img/3d/example-ridge-grade-shell.webp",
+      "width": 800,
+      "height": 533
+    },
+    {
+      "src": "/blog-img/3d/example-ridge-grade-shell@2x.webp",
+      "width": 1600,
+      "height": 1067
+    }
+  ],
+  "/blog-img/3d/example-ridge-cueq.webp": [
+    {
+      "src": "/blog-img/3d/example-ridge-cueq.webp",
+      "width": 800,
+      "height": 533
+    },
+    {
+      "src": "/blog-img/3d/example-ridge-cueq@2x.webp",
+      "width": 1600,
+      "height": 1067
+    }
+  ],
+  "/blog-img/3d/metal-equivalent-calculator.webp": [
+    {
+      "src": "/blog-img/3d/metal-equivalent-calculator.webp",
+      "width": 380,
+      "height": 452
+    },
+    {
+      "src": "/blog-img/3d/metal-equivalent-calculator@2x.webp",
+      "width": 686,
+      "height": 816
+    }
+  ],
+  "/blog-img/3d/example-ridge-assays-pending.webp": [
+    {
+      "src": "/blog-img/3d/example-ridge-assays-pending.webp",
+      "width": 800,
+      "height": 533
+    },
+    {
+      "src": "/blog-img/3d/example-ridge-assays-pending@2x.webp",
+      "width": 1600,
+      "height": 1067
+    }
+  ],
+  "/blog-img/3d/example-ridge-solid-block.webp": [
+    {
+      "src": "/blog-img/3d/example-ridge-solid-block.webp",
+      "width": 800,
+      "height": 450
+    },
+    {
+      "src": "/blog-img/3d/example-ridge-solid-block@2x.webp",
+      "width": 1600,
+      "height": 900
+    }
+  ],
+  "/blog-img/3d/editor-data-step.webp": [
+    {
+      "src": "/blog-img/3d/editor-data-step.webp",
+      "width": 800,
+      "height": 500
+    },
+    {
+      "src": "/blog-img/3d/editor-data-step@2x.webp",
+      "width": 1440,
+      "height": 900
+    }
+  ],
+  "/blog-img/3d/editor-export-step.webp": [
+    {
+      "src": "/blog-img/3d/editor-export-step.webp",
+      "width": 800,
+      "height": 500
+    },
+    {
+      "src": "/blog-img/3d/editor-export-step@2x.webp",
+      "width": 1440,
+      "height": 900
+    }
   ]
 }

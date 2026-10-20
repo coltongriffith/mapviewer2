@@ -60,7 +60,7 @@ const COMPANY_PAGES = [
 // geologist would use, not as feature-card headlines.
 const CAPABILITIES = [
   ['Mineral claims', 'Search the public registries by claim number, property name or owner, and drop the boundaries straight onto the map.'],
-  ['Drill collars and intercepts', 'Import a collar table as CSV and label the holes that matter with their intercepts.'],
+  ['Drill collars and intercepts', <>Import a collar table as CSV and label the holes that matter with their intercepts. For a 3D drill figure and section, try <a href="/3d" data-track="Features: 3D drill figures">Exploration&nbsp;Maps&nbsp;3D</a> (beta).</>],
   ['Targets and anomalies', 'Draw target outlines, geochemical anomalies and structural trends over the claim block.'],
   ['Infrastructure and access', 'Roads, rail, transmission corridors, ports and the nearest town — show project access and nearby infrastructure at a glance.'],
   ['Your own data', 'CSV, KML, KMZ, GeoJSON and multi-file shapefiles, with coordinates in the projection they came in.'],
@@ -554,7 +554,7 @@ export default function LandingPage({ onOpenEditor, onLoadSample, onLoadSampleSt
             <a href="/mining-claim-search-by-company-name/">Claim search by company</a>
             <a href="/drill-results-map/">Drill results map</a>
             <a href="/companies/">Claim maps by company</a>
-            <a href="/3d">3D maps (beta)</a>
+            <a href="/3d">3D drill figures (beta)</a>
           </div>
           <div className="lm-footer-col">
             <h3>Company</h3>

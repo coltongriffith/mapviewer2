@@ -437,5 +437,137 @@
     "publishedDate": "2026-02-02",
     "category": "gis-data",
     "updatedDate": "2026-09-05"
+  },
+  {
+    "slug": "exploration-maps-3d-vs-leapfrog-viewer-geoscience-analyst",
+    "category": "drill-results",
+    "product": "3d",
+    "ogImage": "/og/3d.png",
+    "title": "Exploration Maps 3D vs Desktop 3D Software (Leapfrog Viewer, Geoscience ANALYST)",
+    "fullTitle": "Exploration Maps 3D vs Leapfrog Viewer and Geoscience ANALYST | Exploration Maps",
+    "metaDescription": "How a browser 3D drill figure maker compares with desktop 3D viewers such as Leapfrog Viewer and Geoscience ANALYST, and where each fits in the workflow.",
+    "cardSummary": "A browser figure maker for presentation graphics, compared fairly with the desktop 3D viewers geologists already use.",
+    "competitor": "Leapfrog Viewer and Geoscience ANALYST",
+    "directAnswer": "They do different jobs. Leapfrog Viewer and Geoscience ANALYST are free desktop 3D viewers from geological software vendors, built for exploring models and data interactively alongside modelling work. Exploration Maps 3D is a browser tool (in beta) that turns collar, survey and assay CSVs into a branded, annotated 3D figure and section for news releases and investor decks. It does no geological modelling or resource estimation. Many teams will use a desktop package for the geology and a figure maker for the image that goes public.",
+    "publishedDate": "2026-10-20",
+    "updatedDate": "2026-10-20",
+    "relatedSlugs": [
+      "how-to-make-a-3d-drill-hole-figure",
+      "grade-shells-from-drill-assays",
+      "drill-hole-cross-sections-vs-3d-block-figures",
+      "exploration-maps-vs-qgis"
+    ],
+    "sections": [
+      {
+        "h2": "The short answer",
+        "body": "If your question is \"what does the orebody look like and how do these holes relate to the model?\", you want 3D geological software and its viewer. If your question is \"what figure goes in tomorrow's news release?\", you want something that produces a finished, branded, annotated image quickly and the same way every time. These overlap less than it seems, and this page sets out where each is the better tool."
+      },
+      {
+        "h2": "Leapfrog Viewer",
+        "body": "Leapfrog Viewer is a free viewer from Seequent for opening and exploring scenes and models built in Leapfrog, its implicit geological modelling software. It lets people without a Leapfrog licence, such as managers, partners or reviewers, rotate and inspect the model a geologist has built. Its strength is fidelity to that model: what the viewer shows is what the modeller built."
+      },
+      {
+        "h2": "Geoscience ANALYST",
+        "body": "Geoscience ANALYST is a free 3D visualisation application from Mira Geoscience for viewing and integrating geological, geophysical and drilling data, built around Mira's open GEOH5 data format. A paid Pro edition adds further tools. Its strength is bringing many data types into one interactive 3D scene."
+      },
+      {
+        "h2": "Exploration Maps 3D",
+        "body": "Exploration Maps 3D runs in a web browser with nothing to install. You drop in collars, assays and optionally surveys, topography and OBJ model shapes as CSV or ZIP, and it produces a figure: terrain (with a satellite drape once the coordinate system is set), a glass or solid block with wall labels, grade-coloured traces, intercept callouts, a plan inset, a section A–A′, and export sizes for slides, news releases, social posts and A4 print, plus a layers ZIP for designers. It also has presentation-focused helpers: \"Assays pending\" labels, a metal-equivalent calculator that prints its formula in the footnote, a display cut-off, data checks, and an optional grade shell interpolated from assays that is labelled as an exploratory envelope.",
+        "image": {
+          "src": "/blog-img/3d/example-ridge-3d-figure.webp",
+          "alt": "3D drill hole figure exported from Exploration Maps 3D, showing the fictional Example Ridge sample with callouts and legend",
+          "caption": "A news-release figure exported from Exploration Maps 3D, built from the Example Ridge sample (illustrative data)."
+        }
+      },
+      {
+        "h2": "What Exploration Maps 3D does not do",
+        "items": [
+          "No implicit or explicit geological modelling, and no block models",
+          "No resource estimation; its grade shell is an exploratory envelope, not an estimate",
+          "No geophysical processing or inversion",
+          "No drillhole database management or QA/QC workflow; it reads exported CSV tables",
+          "No interactive 3D scene to send to reviewers; the output is an image and a layers ZIP"
+        ],
+        "html": "Those are the jobs desktop geological software and its viewers exist for. If a figure needs a modelled solid, export it as an OBJ mesh from the software that built it, if that software supports OBJ export, and load it as a model shape; it is drawn as supplied. For what the assay-based shell does and does not mean, see <a href=\"/blog/grade-shells-from-drill-assays/\">grade shells from drill assays</a>."
+      },
+      {
+        "h2": "Where a figure maker helps",
+        "body": "Turning a viewer screenshot into a release figure usually means a designer adding a title block, legend, scale, callouts, logo and disclosure notes by hand, then doing it again next month with slightly different numbers. A figure maker builds those elements from the data: callouts come from the assays, the legend from the colour limits, the footnote from the assumptions, and the export is the right size. The next release reuses the same project with new assays.",
+        "html": "The full workflow is in <a href=\"/blog/how-to-make-a-3d-drill-hole-figure/\">how to make a 3D drill hole figure</a>."
+      },
+      {
+        "h2": "Choosing for your team",
+        "body": "A team with a modeller and a current geological model already has the 3D picture; what it often lacks is a quick, repeatable way to turn that picture into a public figure with the right callouts and notes. A team without modelling software, typically early in a drill program, may only need to show holes, grades and terrain clearly, and can do that from its CSV exports alone. Reviewers, partners and managers who need to rotate a model themselves are better served by a free desktop viewer than by a static image. And a figure that will be published should always be checked against the source the geology came from, whichever tool drew it."
+      },
+      {
+        "h2": "Using them together",
+        "items": [
+          "Model and interpret in your geological software; keep the drill database as the source of truth.",
+          "Export collars, surveys and assays as CSV, and any model solids you want shown as OBJ.",
+          "Build the public figure and section in Exploration Maps 3D, with the release's callouts and footnotes.",
+          "Have the QP review the exported figure against the model view and the release table."
+        ]
+      }
+    ],
+    "comparisonTable": {
+      "headers": [
+        "",
+        "Leapfrog Viewer",
+        "Geoscience ANALYST",
+        "Exploration Maps 3D"
+      ],
+      "rows": [
+        [
+          "Made by",
+          "Seequent",
+          "Mira Geoscience",
+          "Exploration Maps"
+        ],
+        [
+          "Main job",
+          "Viewing Leapfrog models and scenes",
+          "Viewing and integrating geoscience data in 3D",
+          "Making presentation figures from drill data"
+        ],
+        [
+          "Runs",
+          "Desktop application",
+          "Desktop application",
+          "Web browser, nothing to install"
+        ],
+        [
+          "Typical input",
+          "Scenes and models from Leapfrog",
+          "GEOH5 projects and imported data",
+          "CSV collars, surveys, assays; OBJ meshes; topography points"
+        ],
+        [
+          "Output",
+          "Interactive 3D view",
+          "Interactive 3D view",
+          "Branded PNG figures and section; designer layers ZIP"
+        ],
+        [
+          "Cost",
+          "Free viewer",
+          "Free; paid Pro edition",
+          "Free to build and export (beta)"
+        ]
+      ]
+    },
+    "faqs": [
+      {
+        "q": "Is Exploration Maps 3D a replacement for Leapfrog?",
+        "a": "No. Leapfrog is geological modelling software and Exploration Maps 3D does no modelling. Exploration Maps 3D makes presentation figures from drill data, and can show a modelled solid you export as OBJ."
+      },
+      {
+        "q": "Can I open Geoscience ANALYST or Leapfrog files in Exploration Maps 3D?",
+        "a": "Not directly. It reads CSV tables (collars, surveys, assays, topography) and OBJ meshes, loose or in a ZIP. Export those from your software or drill database."
+      },
+      {
+        "q": "Which is better for a news release figure?",
+        "a": "For a finished, branded, annotated image with callouts and disclosure notes, a figure maker is faster. For checking the geology the figure represents, use your modelling software and its viewer, and have the QP compare the two."
+      }
+    ]
   }
 ]

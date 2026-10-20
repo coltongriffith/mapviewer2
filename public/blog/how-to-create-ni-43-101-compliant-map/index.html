@@ -158,6 +158,7 @@ article strong{color:#142126}
 /* Screenshot figure placeholder */
 .blog-figure{margin:22px 0}
 .blog-figure img{display:block;width:100%;border:1px solid #dde3e3;border-radius:10px}
+.blog-figure.narrow img{max-width:380px;margin:0 auto}
 .screenshot-frame{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-height:180px;background:repeating-linear-gradient(45deg,#f6f8f7,#f6f8f7 12px,#f6f8f7 12px,#f6f8f7 24px);border:1.5px dashed #c6cecf;border-radius:10px;color:#5f6e72;font-size:0.9rem;font-weight:600;text-align:center;padding:24px}
 .screenshot-frame-icon{font-size:28px;color:#5f6e72;line-height:1}
 .blog-figure figcaption{margin-top:8px;font-size:13px;color:#5f6e72;text-align:center;font-style:italic}
@@ -215,7 +216,7 @@ article strong{color:#142126}
 <h2>The standard figure checklist</h2><p>Technical report figures follow strong conventions. Before any map goes to your QP, it should carry:</p><ul class="checklist"><li>Title block: project name, figure title, figure number</li><li>Company name and map date (effective date of the data)</li><li>Scale bar (true ground distance) and north arrow</li><li>Legend covering every symbol and line style on the figure</li><li>Location/index inset so the reader can place the map</li><li>Data sources (e.g. 'Claim boundaries: BC Mineral Titles Online, retrieved 2026-07-06')</li><li>Legible styling in print: no reliance on subtle colour differences</li></ul>
 <h2>Where each element lives in Exploration Maps</h2><div class="table-scroll"><table class="data-table"><thead><tr><th>Requirement</th><th>Where</th><th>Notes</th></tr></thead><tbody><tr><td>Title, company, date</td><td>Title block (Design section)</td><td>Shows project, subtitle, and date; add figure number to the title text</td></tr><tr><td>Scale bar / north arrow</td><td>Design section toggles</td><td>True-distance scale bar; corner-assignable</td></tr><tr><td>Legend</td><td>Per-layer legend settings</td><td>Every visible layer can carry a legend entry — audit before export</td></tr><tr><td>Location inset</td><td>Inset map (Design section)</td><td>Province/state inset places the property automatically</td></tr><tr><td>Source &amp; datum note</td><td>Footer text</td><td>E.g. 'WGS84 / Web Mercator. Claims: MTO, 2026-07-06. Not an official tenure record.'</td></tr><tr><td>Print quality</td><td>Export settings</td><td>PDF, Letter/A4, pixel ratio 3×</td></tr></tbody></table></div>
 <h2>Build it in order</h2><ul><li>Import claims/drillholes/targets and assign roles so styling follows convention</li><li>Choose the Light basemap — it prints cleanly and keeps data prominent</li><li>Fill the title block: project, figure title and number, company, date</li><li>Enable scale bar, north arrow, legend, and the location inset</li><li>Add the footer source/datum note</li><li>Set Letter or A4 ratio, frame the figure, export PDF at 3× pixel ratio</li></ul>
-<h2>What compliance actually means here</h2><div class="verify-box"><strong class="box-title">Your QP decides — this is figure craft, not legal advice</strong><div>NI 43-101 is a disclosure standard, and the Qualified Person signing the report decides what its figures must show. The checklist above reflects standard expectations reviewers look for, not a legal guarantee of compliance. Always have the QP review final figures — and verify tenure data against the official registry before it appears in a report.</div></div>
+<h2>What compliance actually means here</h2><div class="verify-box"><strong class="box-title">Your QP decides — this is figure craft, not legal advice</strong><div>NI 43-101 is a disclosure standard, and the Qualified Person signing the report decides what its figures must show. The checklist above reflects standard expectations reviewers look for, not a legal guarantee of compliance. Always have the QP review final figures — and verify tenure data against the official registry before it appears in a report. For drill figures, see also <a href="/blog/how-to-show-assays-pending-drill-holes/">how to show assays pending holes and intercepts</a> and <a href="/blog/copper-equivalent-cueq-formula-calculator/">what to state next to a CuEq number</a>.</div></div>
 <div class="inline-cta">
   <div class="inline-cta-copy">
     <strong>Build a report-ready figure in minutes.</strong>
@@ -267,7 +268,8 @@ article strong{color:#142126}
   
   <div class="sidebar-card"><h3>Related Guides</h3><ul><li><a href="/blog/how-to-make-a-professional-exploration-map/">How to Make a Professional Mineral Exploration Map</a></li>
 <li><a href="/blog/how-to-create-exploration-map-investor-presentation/">How to Create an Exploration Map for an Investor Presentation</a></li>
-<li><a href="/blog/how-to-make-a-drill-results-map/">How to Make a Drill Results Map</a></li></ul></div>
+<li><a href="/blog/how-to-make-a-drill-results-map/">How to Make a Drill Results Map</a></li>
+<li><a href="/blog/how-to-show-assays-pending-drill-holes/">How to Show 'Assays Pending' Holes and Intercepts on Drill Figures</a></li></ul></div>
   <div class="sidebar-card"><h3>Compare Tools</h3><ul>
 <li><a href="/blog/exploration-maps-vs-arcgis/">Exploration Maps vs ArcGIS</a></li>
 <li><a href="/blog/exploration-maps-vs-qgis/">Exploration Maps vs QGIS</a></li>
@@ -301,6 +303,10 @@ article strong{color:#142126}
     <a href="/drill-results-map/">Drill Results Map</a>
     <span class="site-footer-sep">·</span>
     <a href="/companies/">Claim Maps by Company</a>
+    <span class="site-footer-sep">·</span>
+    <a href="/3d">3D Drill Figures (beta)</a>
+    <span class="site-footer-sep">·</span>
+    <a href="/teams/">For Teams</a>
   </div>
   <div class="site-footer-links">
     <a href="/">Home</a>
