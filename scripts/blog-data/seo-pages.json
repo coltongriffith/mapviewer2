@@ -407,7 +407,7 @@
           "Import the boundary; label the results that need explanation.",
           "Choose a layout, save the project and check the exported figure at publication size."
         ],
-        "html": "The <a href=\"/blog/how-to-make-a-drill-results-map/\">drill-results guide</a> walks through coordinates, labels and export checks. <a href=\"/?demo=drill_plan&amp;utm_source=blog&amp;utm_medium=example&amp;utm_campaign=drill-results-map\">Open the finished demonstration map</a> to inspect the example layout. For a 3D view of the same holes, with terrain, grade-coloured traces and a section, see <a href=\"/blog/how-to-make-a-3d-drill-hole-figure/\">how to make a 3D drill hole figure</a>. For a 3D view of the same holes, with terrain, grade-coloured traces and a section, see <a href=\"/blog/how-to-make-a-3d-drill-hole-figure/\">how to make a 3D drill hole figure</a>. For a 3D view of the same holes, with terrain, grade-coloured traces and a section, see <a href=\"/blog/how-to-make-a-3d-drill-hole-figure/\">how to make a 3D drill hole figure</a>."
+        "html": "The <a href=\"/blog/how-to-make-a-drill-results-map/\">drill-results guide</a> walks through coordinates, labels and export checks. <a href=\"/?demo=drill_plan&amp;utm_source=blog&amp;utm_medium=example&amp;utm_campaign=drill-results-map\">Open the finished demonstration map</a> to inspect the example layout. For a 3D view of the same holes, with terrain, grade-coloured traces and a section, see <a href=\"/blog/how-to-make-a-3d-drill-hole-figure/\">how to make a 3D drill hole figure</a>."
       },
       {
         "h2": "Use the map to explain the program",
