@@ -300,9 +300,11 @@ function rebuildScene() {
   B.z0 = zmin - Math.max(25, 0.05 * diag);
   const zref = (zmax + B.z0) / 2;
   const V = (x, y, z) => new THREE.Vector3(x - cx, z - zref, -(y - cy));
-  // Size the scene by its depth as well as its footprint: a tight collar
-  // pattern with 600 m holes (Star Main) otherwise puts the camera inside the block.
-  G = { B, cx, cy, bw, bh, diag: Math.max(diag, Math.hypot(bw, bh, zmax - B.z0)), surf, V, zref, zmax };
+  // diag sizes marks (tubes, labels) by the whole block; the camera distance
+  // (baseDist) adds the depth only as far as it shows at the view's plunge, so a
+  // tight collar pattern with 600 m holes (Star Main) is framed from the side
+  // without shrinking the plan view.
+  G = { B, cx, cy, bw, bh, diag: Math.max(diag, Math.hypot(bw, bh, zmax - B.z0)), diagH: diag, depth: zmax - B.z0, surf, V, zref, zmax };
 
   // Terrain top
   const TW = 768, TH = Math.max(64, Math.round(768 * bh / bw));
@@ -473,21 +475,27 @@ function layoutFrame() {
 
 let tween = null;
 const lookVec = (az, pl) => { const a = az * Math.PI / 180, p = pl * Math.PI / 180; return new THREE.Vector3(Math.sin(a) * Math.cos(p), -Math.sin(p), -Math.cos(a) * Math.cos(p)); };
-const baseDist = () => G.diag * 1.65 * Math.pow(Math.max(1, 1.6 / (W / H)), 0.85);
+// Depth counts only as far as it shows at this plunge; looking down, a quarter more
+// room keeps a long, narrow footprint clear of the title and legend.
+const baseDist = (plunge) => {
+  const r = plunge * Math.PI / 180;
+  return Math.hypot(G.diagH, G.depth * Math.cos(r)) * (1 + 0.25 * Math.sin(r)) * 1.65 * Math.pow(Math.max(1, 1.6 / (W / H)), 0.85);
+};
 // Aim a little above the block's middle so it sits below the title block, not under it.
 const camTarget = () => G.V(G.cx, G.cy, (G.B.z0 + G.zmax) / 2 + 0.1 * (G.zmax - G.B.z0));
 function getCam() {
   const d = controls.target.clone().sub(camera.position), dist = d.length();
   if (!G || dist < 1e-6) return { azimuth: ((S.secAz - 90) % 360 + 360) % 360, plunge: 20, zoom: 100 };
   d.normalize();
-  return { azimuth: Math.round((Math.atan2(d.x, -d.z) * 180 / Math.PI + 360) % 360), plunge: Math.round(Math.asin(-d.y) * 180 / Math.PI), zoom: Math.round(baseDist() / dist * 100) };
+  const plunge = Math.asin(-d.y) * 180 / Math.PI;
+  return { azimuth: Math.round((Math.atan2(d.x, -d.z) * 180 / Math.PI + 360) % 360), plunge: Math.round(plunge), zoom: Math.round(baseDist(plunge) / dist * 100) };
 }
 function setCamera(o = {}, instant = true) {
   if (!G) return;
   const cur = getCam(), pick = (v, d) => (v !== undefined && v !== null && Number.isFinite(+v) ? +v : d);
   const az = ((pick(o.azimuth, cur.azimuth) % 360) + 360) % 360, pl = Math.max(3, Math.min(89, pick(o.plunge, cur.plunge))), zoom = Math.max(40, Math.min(250, pick(o.zoom, cur.zoom)));
-  const T = camTarget(), to = T.clone().sub(lookVec(az, pl).multiplyScalar(baseDist() * 100 / zoom));
-  controls.minDistance = baseDist() * 0.39; controls.maxDistance = baseDist() * 2.6;
+  const T = camTarget(), to = T.clone().sub(lookVec(az, pl).multiplyScalar(baseDist(pl) * 100 / zoom));
+  controls.minDistance = baseDist(pl) * 0.39; controls.maxDistance = baseDist(pl) * 2.6;
   if (instant || matchMedia('(prefers-reduced-motion: reduce)').matches) { tween = null; camera.position.copy(to); controls.target.copy(T); controls.update(); }
   else tween = { from: camera.position.clone(), fromT: controls.target.clone(), to, toT: T, t0: performance.now() };
 }
