@@ -17,6 +17,41 @@
   - Export high-resolution PNG and PDF maps
   - Cross-province fallback: if a company search returns nothing in the selected province, the app automatically checks the other provinces and offers to switch
 
+## Exploration Maps 3D (beta)
+
+- [Exploration Maps 3D](https://www.explorationmaps.com/3d)
+- Description: Browser tool that turns drill collars, downhole surveys and assays into a branded 3D drill hole figure and a matching cross-section A–A′ for news releases and investor presentations. Nothing to install; building and exporting figures is free, and saving figures needs a free account. It is a figure maker, not geological modelling or resource software.
+- Key features:
+  - Upload collars, surveys and assays as CSV or ZIP, with optional topography (X, Y, Z points) and OBJ model shapes; columns are matched automatically
+  - Data checks: holes with no collar, From ≥ To, overlapping intervals, intervals beyond hole depth, conflicting survey depths, dips out of range, outlying collars
+  - Real terrain (AWS Terrain Tiles) with a satellite drape (Esri imagery) once the coordinate system is set; otherwise the surface comes from uploaded topography or collar elevations
+  - Glass or solid block with labels painted on the block faces, plan inset, elevation ticks, vertical exaggeration up to 5x (printed on the figure)
+  - Grade-coloured drill traces, a display cut-off, intercept callouts (broad and "incl." intervals), intercept bars beside holes
+  - "Assays pending" labels and dashed provisional collar positions from a collar Status/Notes or flags column
+  - Section A–A′ along any azimuth with a stated projection width
+  - Optional grade shell interpolated from assays (10 m composites, inverse distance squared, marching cubes), labelled on the figure as an exploratory envelope, not a geological model or mineral resource
+  - Metal-equivalent calculator (CuEq, AuEq and others) from prices and recoveries; 1% = 22.0462 lb/t, 1 g/t = 1/31.1035 oz/t; the formula and assumptions are printed in the footnote
+  - PNG export sized Slide 16:9 (1920x1080), News release 3:2 (2400x1600), Square 1:1 (2000x2000), Portrait 4:5 (1600x2000), Print A4 landscape (3508x2480); a layers ZIP for designers
+  - Save to an Exploration Maps account; optionally send the figure and layers to the Exploration Maps design desk for hand finishing
+  - AI assistants and browser agents can drive it through a JavaScript API (window.EM3D; call EM3D.help() on the page)
+- The sample project ("Example Ridge", "Example Resources") is fictional, illustrative data.
+
+## Exploration Maps for Teams
+
+- [Exploration Maps for Teams](https://www.explorationmaps.com/teams/)
+- Description: Managed map and figure service for junior mining and exploration companies, geology teams and consultancies. The team builds the claim maps, project maps, drill plans, sections, 3D figures and investor materials in the client's style, checks them against the source data, and updates them as assays, claims and models change. Monthly retainers (Managed Maps; Maps + Presentation; Corporate Materials), quoted after a scoping call. The client's Qualified Person keeps technical sign-off and approves every figure. It is a new service; connected data-room monitoring and a client portal are in development.
+
+## Guides for 3D drill figures and investor figures
+
+- [How to make a 3D drill hole figure for a news release](https://www.explorationmaps.com/blog/how-to-make-a-3d-drill-hole-figure/)
+- [Copper equivalent (CuEq) formula and calculator for drill results](https://www.explorationmaps.com/blog/copper-equivalent-cueq-formula-calculator/) — formula, unit conversions, recoveries, worked examples, AuEq
+- [Grade shells from drill assays: what an exploratory envelope is (and isn't)](https://www.explorationmaps.com/blog/grade-shells-from-drill-assays/)
+- [Drill hole cross sections vs 3D block figures for investor presentations](https://www.explorationmaps.com/blog/drill-hole-cross-sections-vs-3d-block-figures/)
+- [How to show "assays pending" holes and intercepts on drill figures](https://www.explorationmaps.com/blog/how-to-show-assays-pending-drill-holes/)
+- [Investor map and figure design for junior mining companies](https://www.explorationmaps.com/blog/investor-map-figure-design-junior-mining/)
+- [Exploration Maps 3D vs desktop 3D software (Leapfrog Viewer, Geoscience ANALYST)](https://www.explorationmaps.com/blog/exploration-maps-3d-vs-leapfrog-viewer-geoscience-analyst/)
+- All guides: https://www.explorationmaps.com/blog/
+
 ## Blog Posts
 
 ### How to Search & Map BC Mineral Claims by Company Name — Free Tool
@@ -48,7 +83,7 @@
 - Companies often hold claims under subsidiary names (e.g., Teck Resources uses "Teck Coal Ltd." and "Highland Valley Copper Partnership").
 - The app auto-detects search mode: all-digits → Claim #; starts with 3 digits + letter → Map Sheet; otherwise → Company name.
 - Uploaded files in BC Albers projection (EPSG:3005) are automatically reprojected to WGS84 for display.
-- The app is built with React + Vite, uses MapLibre GL JS for rendering, and Vercel serverless functions to proxy BC government WFS requests.
+- The app is built with React + Vite, uses Leaflet for map rendering (three.js for Exploration Maps 3D), and Vercel serverless functions to proxy BC government WFS requests.
 
 ## Contact / About
 

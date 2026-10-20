@@ -693,7 +693,7 @@
       },
       {
         "h2": "Related guides",
-        "html": "Continue with the <a href=\"/drill-results-map/\">drill-results map tool</a>, the <a href=\"/blog/how-to-import-csv-data-mining-map/\">CSV import guide</a>, and <a href=\"/blog/how-to-make-a-professional-exploration-map/\">map layout and export guide</a>."
+        "html": "Continue with the <a href=\"/drill-results-map/\">drill-results map tool</a>, the <a href=\"/blog/how-to-import-csv-data-mining-map/\">CSV import guide</a>, and <a href=\"/blog/how-to-make-a-professional-exploration-map/\">map layout and export guide</a>. For the same drilling in three dimensions, see <a href=\"/blog/how-to-make-a-3d-drill-hole-figure/\">how to make a 3D drill hole figure</a>; for holes still at the lab, <a href=\"/blog/how-to-show-assays-pending-drill-holes/\">how to show assays pending holes</a>."
       },
       {
         "h2": "How this guide was checked",
@@ -729,7 +729,8 @@
     "relatedSlugs": [
       "how-to-import-csv-data-mining-map",
       "how-to-make-a-professional-exploration-map",
-      "how-to-create-exploration-map-investor-presentation"
+      "how-to-create-exploration-map-investor-presentation",
+      "how-to-make-a-3d-drill-hole-figure"
     ],
     "publishedDate": "2025-10-22",
     "category": "drill-results",
@@ -820,7 +821,7 @@
       },
       {
         "h2": "Related guides",
-        "html": "Build the underlying maps with the <a href=\"/blog/how-to-make-a-mining-claims-map/\">mining claims map guide</a> and the <a href=\"/blog/how-to-make-a-drill-results-map/\">drill results map guide</a>, prep a release figure with the <a href=\"/blog/how-to-make-a-drill-results-map/\">drill results map guide</a>, and export with the <a href=\"/blog/how-to-make-a-professional-exploration-map/\">professional map guide</a>."
+        "html": "Build the underlying maps with the <a href=\"/blog/how-to-make-a-mining-claims-map/\">mining claims map guide</a> and the <a href=\"/blog/how-to-make-a-drill-results-map/\">drill results map guide</a>, prep a release figure with the <a href=\"/blog/how-to-make-a-drill-results-map/\">drill results map guide</a>, and export with the <a href=\"/blog/how-to-make-a-professional-exploration-map/\">professional map guide</a>. For the full figure set a deck draws on, and who keeps it current, read <a href=\"/blog/investor-map-figure-design-junior-mining/\">investor map and figure design for junior mining companies</a>; to choose between a section and a 3D view for the results slide, see <a href=\"/blog/drill-hole-cross-sections-vs-3d-block-figures/\">cross sections vs 3D block figures</a>."
       }
     ],
     "faqs": [
@@ -848,7 +849,8 @@
     "relatedSlugs": [
       "how-to-make-a-mining-claims-map",
       "how-to-make-a-drill-results-map",
-      "how-to-make-a-professional-exploration-map"
+      "how-to-make-a-professional-exploration-map",
+      "investor-map-figure-design-junior-mining"
     ],
     "publishedDate": "2025-10-27",
     "category": "exploration-mapping",
@@ -1450,7 +1452,7 @@
         "box": {
           "kind": "verify",
           "title": "Your QP decides — this is figure craft, not legal advice",
-          "html": "NI 43-101 is a disclosure standard, and the Qualified Person signing the report decides what its figures must show. The checklist above reflects standard expectations reviewers look for, not a legal guarantee of compliance. Always have the QP review final figures — and verify tenure data against the official registry before it appears in a report."
+          "html": "NI 43-101 is a disclosure standard, and the Qualified Person signing the report decides what its figures must show. The checklist above reflects standard expectations reviewers look for, not a legal guarantee of compliance. Always have the QP review final figures — and verify tenure data against the official registry before it appears in a report. For drill figures, see also <a href=\"/blog/how-to-show-assays-pending-drill-holes/\">how to show assays pending holes and intercepts</a> and <a href=\"/blog/copper-equivalent-cueq-formula-calculator/\">what to state next to a CuEq number</a>."
         }
       },
       {
@@ -1489,7 +1491,8 @@
     "relatedSlugs": [
       "how-to-make-a-professional-exploration-map",
       "how-to-create-exploration-map-investor-presentation",
-      "how-to-make-a-drill-results-map"
+      "how-to-make-a-drill-results-map",
+      "how-to-show-assays-pending-drill-holes"
     ],
     "publishedDate": "2026-01-05",
     "category": "exploration-mapping",
@@ -2847,5 +2850,1031 @@
     "publishedDate": "2026-08-06",
     "fullTitle": "Canadian Mineral Claim & Tenure Registries | Exploration Maps",
     "updatedDate": "2026-09-15"
+  },
+  {
+    "slug": "how-to-make-a-3d-drill-hole-figure",
+    "category": "drill-results",
+    "product": "3d",
+    "ogImage": "/og/3d.png",
+    "title": "How to Make a 3D Drill Hole Figure for a News Release",
+    "metaDescription": "Step by step: turn collar, survey and assay CSVs into a branded 3D drill hole figure and A–A′ section for a news release, with callouts and export sizes.",
+    "cardSummary": "Collar, survey and assay CSVs to a branded 3D drilling figure and matching section, sized for the wire and the deck.",
+    "directAnswer": "Export collars, surveys and assays from your drill database as CSV, drop them into Exploration Maps 3D, read the data checks, set the coordinate system, then choose the grade column, colour limits and intercept callouts. Pick a camera angle and section line, and export the News release 3:2 PNG with the matching section A–A′. Everything is built in the browser from your files; the Example Ridge project shown here is fictional sample data.",
+    "publishedDate": "2026-10-20",
+    "updatedDate": "2026-10-20",
+    "ctaTop": {
+      "text": "Try it on the built-in sample first.",
+      "sub": "Example Ridge loads with the page, so you can see a finished figure before adding your own CSVs."
+    },
+    "ctaBottom": {
+      "text": "Build your 3D drill figure.",
+      "sub": "Collars, surveys and assays in; a news-release PNG and a section out."
+    },
+    "relatedSlugs": [
+      "copper-equivalent-cueq-formula-calculator",
+      "how-to-show-assays-pending-drill-holes",
+      "drill-hole-cross-sections-vs-3d-block-figures",
+      "grade-shells-from-drill-assays",
+      "how-to-make-a-drill-results-map"
+    ],
+    "sections": [
+      {
+        "h2": "What a 3D drill figure is for",
+        "body": "A plan map shows where the holes are. A 3D figure shows what they went through: how deep the mineralised intervals sit, whether neighbouring holes line up, and how big the drilled volume is. One clear 3D figure with the headline intercepts called out often does more work in a release than a page of tables, and it goes straight into the deck.",
+        "html": "The workflow below uses <a href=\"/3d\">Exploration Maps 3D</a>, a browser tool in beta. It is a figure maker, not a modelling package: it draws the data you give it, and it does not estimate resources. If you have not chosen between a section and a 3D view yet, read <a href=\"/blog/drill-hole-cross-sections-vs-3d-block-figures/\">cross sections vs 3D block figures</a> first.",
+        "image": {
+          "src": "/blog-img/3d/example-ridge-3d-figure.webp",
+          "alt": "3D drill hole figure of the fictional Example Ridge project: grade-coloured drill traces under terrain in a glass block, intercept callouts, legend and plan inset",
+          "caption": "The finished figure this guide builds, exported at News release 3:2 from the built-in Example Ridge sample (illustrative data).",
+          "eager": true
+        }
+      },
+      {
+        "h2": "What you need before you start",
+        "body": "Export these tables from your drill database or logging software as CSV. Loose files and a ZIP of them both work.",
+        "table": {
+          "headers": [
+            "File",
+            "Needed?",
+            "Columns",
+            "If you leave it out"
+          ],
+          "rows": [
+            [
+              "Collars",
+              "Required",
+              "Hole ID, Easting, Northing, Elevation, Depth (Azimuth and Dip can go here too)",
+              "No figure"
+            ],
+            [
+              "Assays",
+              "Required",
+              "Hole ID, From, To, and grade columns such as Cu %, Au g/t or CuEq",
+              "Traces draw without grade colours"
+            ],
+            [
+              "Surveys",
+              "Optional",
+              "Hole ID, Depth, Azimuth, Dip",
+              "Holes run straight from the collar orientation"
+            ],
+            [
+              "Topography",
+              "Optional",
+              "X, Y, Z points or LiDAR",
+              "The surface is fitted to collar elevations, or to real elevation once a coordinate system is set"
+            ],
+            [
+              "Model shapes",
+              "Optional",
+              "OBJ meshes, such as a modelled grade shell or geology",
+              "No model in the block"
+            ]
+          ]
+        },
+        "html": "Coordinates should be in UTM metres; latitude and longitude work for collars, but topography and model files must be in metres to line up. Dips can be negative or positive down. Have your logo ready (PNG, JPG or SVG), and agree the title and footnote wording with your Qualified Person before you start, not after."
+      },
+      {
+        "h2": "Step 1: Load your files",
+        "body": "Open Exploration Maps 3D. The sample project is on screen until you add your own data. Drag your CSVs, or a ZIP containing them, onto the drop zone in step 1, or use Choose files. Columns are matched for you by name, and the file name helps identify each table, so collars.csv, surveys.csv and assays.csv are recognised without any setup. If your data is in a spreadsheet, you can paste CSV text with a header row instead.",
+        "image": {
+          "src": "/blog-img/3d/editor-data-step.webp",
+          "alt": "Exploration Maps 3D editor on the Data step, with the drop zone, file checklist and the sample figure in the preview",
+          "caption": "Step 1 of 4: the checklist turns green as collars, assays and the optional tables are recognised."
+        }
+      },
+      {
+        "h2": "Step 2: Read the data checks before you style anything",
+        "body": "Below the file list, the Data checks panel counts what was loaded and placed, and lists problems that would otherwise show up as a wrong-looking figure. Fix these in the source file and reload rather than working around them on the figure.",
+        "items": [
+          "Assay or survey rows for a hole with no collar",
+          "Intervals where From is greater than or equal to To",
+          "Overlapping intervals in the same hole",
+          "Intervals deeper than the hole's recorded depth",
+          "Conflicting survey records at the same depth",
+          "Dips out of range",
+          "Collars far away from the rest of the program, often a coordinate typo"
+        ]
+      },
+      {
+        "h2": "Step 3: Set the coordinate system for real terrain",
+        "body": "In the Location box, enter the coordinate system of your files, for example EPSG:26909 or \"UTM 9N NAD83\". With it set, the surface can come from real elevation (AWS Terrain Tiles) with a satellite drape (Esri imagery); without it, the surface is fitted to your topography file or the collar elevations. Surveyed collars are data and a terrain tile is an approximation, so by default the terrain is moved to meet the collars. The figure credits imagery and elevation sources automatically."
+      },
+      {
+        "h2": "Step 4: Brand the figure",
+        "body": "In step 2, add your logo and the figure picks its title and accent colours from it; you can change either. Set the company name, figure title and subtitle, and the footnote. The default footnote reads \"Intervals are core lengths; true widths are not known.\" Keep that, or replace it with the wording your QP has approved. The footnote is part of the figure, so it travels with it when the image is reposted on its own."
+      },
+      {
+        "h2": "Step 5: Colour the holes and choose the callouts",
+        "body": "In step 3, pick the grade column the holes are coloured by. Four lower limits define the colour classes; Suggest from data proposes limits from your assays. The \"Show intervals ≥\" control is a display cut-off: intervals below it draw as the plain trace so the eye goes to the grade, while the callouts are calculated from the full data. If you need a metal equivalent, the calculator in the same step adds one from your prices and recoveries; see the CuEq formula guide.",
+        "html": "Intercept callouts are chosen from your assays using the number shown, a minimum length, a broad cut-off and an \"incl.\" cut-off, and you can add a second grade (for example Au g/t beside Cu %). Every callout can be edited or hidden per hole. Check each against the release table: the callout should say exactly what the release says. For the arithmetic behind an equivalent grade, read <a href=\"/blog/copper-equivalent-cueq-formula-calculator/\">the CuEq formula and calculator guide</a>."
+      },
+      {
+        "h2": "Step 6: Pick the camera and the section line",
+        "body": "Start from a preset (Facing the section, Opposite side, Low angle or Plan view), then adjust the azimuth, plunge and zoom. Look for the angle where the callout leader lines do not cross the best intervals and no hole hides behind another. The section line A–A′ is set by its azimuth and a projection width either side; holes within that distance are projected onto the section. Vertical exaggeration goes up to 5×, and the figure prints it next to the plunge whenever it is not 1×.",
+        "image": {
+          "src": "/blog-img/3d/example-ridge-section.webp",
+          "alt": "Cross-section A–A′ through the Example Ridge sample drilling with grade-coloured traces, intercept callouts, elevation scale and legend",
+          "caption": "Section A–A′ from the same data and style, exported at the same size (illustrative data)."
+        },
+        "cta": {
+          "text": "Set up the camera on the sample.",
+          "sub": "Change the azimuth and plunge and watch the callouts re-route.",
+          "href": "/3d?utm_source=blog&utm_medium=example&utm_campaign=how-to-make-a-3d-drill-hole-figure",
+          "label": "Open the sample →"
+        }
+      },
+      {
+        "h2": "Step 7: Labels, block style and context",
+        "body": "Text labels can be dragged anywhere on the frame, with an optional arrow; labels on the block are painted onto a face in perspective. Choose a glass block, or a solid block with the near faces cut away. Hole IDs, the plan inset, intercept bars and elevation ticks can each be turned off if the figure is crowded. \"Assays pending\" labels come from the collar status column.",
+        "image": {
+          "src": "/blog-img/3d/example-ridge-solid-block.webp",
+          "alt": "Example Ridge sample shown in a solid block with shaded relief terrain and a MAIN ZONE label painted on the block face",
+          "caption": "Solid block, shaded relief and a label painted on the block face, at Slide 16:9 (illustrative data)."
+        }
+      },
+      {
+        "h2": "Step 8: Export at the size you need",
+        "body": "Step 4 shows the export sizes, and the preview frame is exactly what will be exported. Download the 3D figure and the section as PNGs. Download layers for designers gives a ZIP with the full figure, the 3D render and the annotations as separate transparent PNGs, the section, and a settings file, so a designer can finish the figure without redrawing it.",
+        "table": {
+          "headers": [
+            "Size",
+            "Pixels",
+            "Use"
+          ],
+          "rows": [
+            [
+              "Slide 16:9",
+              "1920 × 1080",
+              "Presentations and decks"
+            ],
+            [
+              "News release 3:2",
+              "2400 × 1600",
+              "News releases and the website"
+            ],
+            [
+              "Square 1:1",
+              "2000 × 2000",
+              "LinkedIn and X posts"
+            ],
+            [
+              "Portrait 4:5",
+              "1600 × 2000",
+              "Instagram and fact sheets"
+            ],
+            [
+              "Print A4 landscape",
+              "3508 × 2480",
+              "300 dpi print"
+            ]
+          ]
+        },
+        "image": {
+          "src": "/blog-img/3d/editor-export-step.webp",
+          "alt": "Export step of Exploration Maps 3D listing the five figure sizes and the download buttons",
+          "caption": "Step 4 of 4: pick a size, then download the figure, the section or the designer layers."
+        }
+      },
+      {
+        "h2": "Save it, or hand it to the design desk",
+        "html": "Save stores the figure and its files in your Exploration Maps account (a free account; the sign-in link creates one), and My 3D maps reopens it for the next release. To have a figure hand-finished, send it and its layers to the design desk from the export step. To have every figure kept current as results arrive, see <a href=\"/teams/\">Exploration Maps for Teams</a>."
+      },
+      {
+        "h2": "Before it goes on the wire",
+        "checklist": [
+          "Every callout matches the release table: length, grade, element and from-depth",
+          "Lengths are described as core lengths unless true widths are known and stated",
+          "Holes drilled but not yet reported are labelled, not left as blank traces",
+          "A metal equivalent states its formula, prices and recoveries on the figure",
+          "Vertical exaggeration, if any, is shown, and the section's projection width is stated",
+          "Any grade shell is labelled as an exploratory envelope, not a model or a resource",
+          "The QP has reviewed the final exported file, not an earlier draft"
+        ],
+        "box": {
+          "kind": "verify",
+          "title": "Your QP decides",
+          "html": "This guide describes figure presentation, not disclosure requirements, and is not legal or regulatory advice. The issuer and its Qualified Person decide what a public figure must show and how results are reported; have the QP review every figure before release."
+        }
+      }
+    ],
+    "faqs": [
+      {
+        "q": "Do I need to install anything to make a 3D drill hole figure?",
+        "a": "No. Exploration Maps 3D runs in a desktop browser with WebGL. Your files are read in the browser; they are uploaded only if you save the figure to your account or send it to the design desk. Real terrain and imagery are fetched as map tiles for the area once you set a coordinate system."
+      },
+      {
+        "q": "Is Exploration Maps 3D free?",
+        "a": "Building and exporting figures is free, and the tool is in beta. Saving figures to your account needs a free Exploration Maps account. Hand finishing by the design desk and the managed Teams service are separate."
+      },
+      {
+        "q": "What if my holes have no downhole surveys?",
+        "a": "They are drawn straight from the collar azimuth and dip. That is fine for short holes, but long holes deviate, so add surveys before using the figure to show where an intercept sits at depth."
+      }
+    ]
+  },
+  {
+    "slug": "copper-equivalent-cueq-formula-calculator",
+    "category": "drill-results",
+    "product": "3d",
+    "howTo": false,
+    "ogImage": "/og/3d.png",
+    "title": "Copper Equivalent (CuEq) Formula and Calculator for Drill Results",
+    "metaDescription": "The CuEq formula explained: unit conversions, metal prices and recoveries, worked copper-gold-silver examples, gold equivalent (AuEq), and a free calculator.",
+    "cardSummary": "How a copper equivalent grade is calculated, with unit conversions, recoveries, worked examples and AuEq.",
+    "directAnswer": "CuEq (%) = Cu (%) + the sum of factor × grade for each other metal. Each factor is that metal's recovered value per unit of grade divided by the recovered value of 1% copper. At US$4.50/lb copper and US$3,000/oz gold, with 90% copper and 80% gold recovery, the gold factor is 0.864, so 0.45% Cu with 0.30 g/t Au is 0.71% CuEq. Wherever a CuEq number appears, state the prices, recoveries and formula behind it.",
+    "publishedDate": "2026-10-20",
+    "updatedDate": "2026-10-20",
+    "ctaTop": {
+      "text": "Calculate CuEq from your own assays.",
+      "sub": "The 3D maker adds a CuEq column from your prices and recoveries and writes the formula into the footnote."
+    },
+    "ctaBottom": {
+      "text": "Put the formula on the figure.",
+      "sub": "Colour holes by CuEq with the assumptions printed underneath."
+    },
+    "relatedSlugs": [
+      "how-to-make-a-3d-drill-hole-figure",
+      "how-to-show-assays-pending-drill-holes",
+      "grade-shells-from-drill-assays",
+      "how-to-make-a-drill-results-map"
+    ],
+    "sections": [
+      {
+        "h2": "What a copper equivalent grade is for",
+        "body": "Porphyry and other polymetallic deposits carry value in more than one metal. A copper equivalent (CuEq) grade expresses the gold, silver, molybdenum or zinc in an interval as the amount of copper that would be worth the same, so a single number can rank intervals, colour a drill figure or summarise a hole. It is a convenience for comparison. It is not an assay, and it is only as good as the prices and recoveries chosen, which is why readers expect to see them next to the number."
+      },
+      {
+        "h2": "The formula",
+        "body": "Work out what one unit of each metal's grade is worth per tonne at its price, multiply by its recovery, and divide by the same figure for 1% copper. That ratio is the metal's factor. Then add each metal's grade multiplied by its factor to the copper grade.",
+        "table": {
+          "headers": [
+            "Term",
+            "Meaning"
+          ],
+          "rows": [
+            [
+              "CuEq",
+              "Cu + F(Au) × Au + F(Ag) × Ag + F(Mo) × Mo + …"
+            ],
+            [
+              "F(metal)",
+              "(value per tonne of one grade unit of the metal × its recovery) ÷ (value per tonne of 1% Cu × copper recovery)"
+            ],
+            [
+              "Value of 1% Cu",
+              "22.0462 lb per tonne × copper price in US$/lb"
+            ],
+            [
+              "Value of 1 g/t Au or Ag",
+              "(1 ÷ 31.1035) troy oz per tonne × price in US$/oz"
+            ],
+            [
+              "Recovery",
+              "Expected metallurgical recovery as a fraction, or 100% for an in-situ equivalent"
+            ]
+          ]
+        }
+      },
+      {
+        "h2": "Unit conversions that trip people up",
+        "body": "Most CuEq mistakes are unit mistakes. Base metals are priced per pound and reported in percent; precious metals are priced per troy ounce and reported in grams per tonne. The conversions below are the whole trick.",
+        "table": {
+          "headers": [
+            "Grade",
+            "Per tonne",
+            "Value at an example price"
+          ],
+          "rows": [
+            [
+              "1% Cu",
+              "10,000 g = 22.0462 lb",
+              "US$99.21 at US$4.50/lb"
+            ],
+            [
+              "1 g/t Au",
+              "0.032151 troy oz",
+              "US$96.45 at US$3,000/oz"
+            ],
+            [
+              "1 g/t Ag",
+              "0.032151 troy oz",
+              "US$1.13 at US$35/oz"
+            ],
+            [
+              "1% Mo",
+              "22.0462 lb",
+              "US$440.92 at US$20/lb"
+            ],
+            [
+              "1 ppm",
+              "1 g/t",
+              "Same as g/t"
+            ],
+            [
+              "1 ppb",
+              "0.001 g/t",
+              "One thousandth of g/t"
+            ]
+          ]
+        },
+        "html": "A troy ounce is 31.1035 g, not the 28.35 g avoirdupois ounce. Using the wrong one inflates a gold factor by about 10%. A pound is 453.592 g, which is where 22.0462 lb per tonne for each 1% comes from (10,000 g ÷ 453.592 g). Example prices here are illustrative; use the prices your QP has approved."
+      },
+      {
+        "h2": "Worked example 1: copper and gold, with recoveries",
+        "body": "Assume US$4.50/lb copper at 90% recovery and US$3,000/oz gold at 80% recovery. 1% copper is worth 22.0462 × 4.50 = US$99.21 per tonne; recovered, US$89.29. 1 g/t gold is worth 3,000 ÷ 31.1035 = US$96.45 per tonne; recovered, US$77.16. The gold factor is 77.16 ÷ 89.29 = 0.864.",
+        "html": "An interval of 0.45% Cu and 0.30 g/t Au is then 0.45 + 0.864 × 0.30 = <strong>0.71% CuEq</strong>. Without recoveries (100% for both) the factor would be 96.45 ÷ 99.21 = 0.972, and the same interval would be 0.74% CuEq. That gap is why the recoveries must be stated."
+      },
+      {
+        "h2": "Worked example 2: adding silver",
+        "body": "With silver at US$35/oz and 80% recovery, 1 g/t silver is worth US$1.125 per tonne, US$0.90 recovered, giving a factor of 0.90 ÷ 89.29 = 0.0101. Add 4 g/t Ag to the interval above and the equivalent rises by 0.04, to 0.75% CuEq. Silver rarely moves a copper equivalent much, but it should still be listed in the formula if it is included."
+      },
+      {
+        "h2": "Worked example 3: molybdenum reported in ppm",
+        "body": "Molybdenum is priced per pound like copper but often reported in ppm. At US$20/lb and 85% recovery, 1% Mo is worth US$440.92 per tonne, US$374.79 recovered, so the factor per 1% Mo is 374.79 ÷ 89.29 = 4.20. Per ppm it is 4.20 ÷ 10,000 = 0.00042. An interval with 200 ppm Mo (0.02%) therefore adds 0.084% CuEq. Applying the per-percent factor to a ppm column would overstate molybdenum ten-thousand-fold, so convert or label units before you calculate."
+      },
+      {
+        "h2": "Gold equivalent (AuEq) works the same way",
+        "body": "For a gold project, swap the base metal. AuEq (g/t) = Au + F(Cu) × Cu + F(Ag) × Ag, with each factor now divided by the recovered value of 1 g/t gold. With the prices and recoveries from example 1, the copper factor is 89.29 ÷ 77.16 = 1.157 g/t AuEq per 1% Cu. An interval of 1.20 g/t Au and 0.25% Cu is 1.20 + 1.157 × 0.25 = 1.49 g/t AuEq. At equal gold and silver recoveries the silver factor is simply the price ratio, 35 ÷ 3,000 = 0.0117, so 15 g/t Ag adds 0.18 g/t AuEq."
+      },
+      {
+        "h2": "Recoveries: which ones, and from where",
+        "body": "An equivalent that applies recoveries is closer to what could be produced; one without them (in-situ) is simpler but overstates metals that recover poorly. Neither is wrong as long as the basis is stated. Recoveries should come from metallurgical test work or a reasoned assumption the QP is prepared to stand behind; a metal with no recovery basis at all is often better left out of the equivalent than included at an optimistic number. Prices and recoveries change, so date the assumptions and keep them identical across every figure and table in a release."
+      },
+      {
+        "h2": "The calculator in Exploration Maps 3D",
+        "body": "In the Layout step of Exploration Maps 3D, open Metal equivalent (CuEq, AuEq…). Choose the base metal, enter its price and recovery, tick the other metals and enter theirs. The tool adds a calculated column, for example CuEq_calc, shows the formula with each factor to three significant figures, and colours the holes by it. While the column is in use, the formula, prices and recoveries are written into the figure's footnote, so the figure cannot be separated from its assumptions. Defaults are illustrative (Cu US$4.50/lb, Au US$3,000/oz, Ag US$35/oz, Mo US$20/lb, Zn US$1.30/lb, recoveries 90%); replace them with yours.",
+        "image": {
+          "src": "/blog-img/3d/metal-equivalent-calculator.webp",
+          "alt": "Metal equivalent panel in Exploration Maps 3D with copper as the base metal, gold ticked, prices, recoveries and the resulting CuEq formula",
+          "caption": "The calculator with the example 1 assumptions: CuEq = Cu + 0.864 × Au.",
+          "narrow": true
+        },
+        "html": "Two behaviours matter for honest numbers. An interval missing any metal in the formula gets no equivalent value rather than being treated as zero. And a value written as \"&lt;0.01\" is read as 0.01, so if your convention for below-detection results is half the detection limit or zero, convert the column before loading it. Try it on the sample in <a href=\"/3d\">Exploration Maps 3D</a>, or follow <a href=\"/blog/how-to-make-a-3d-drill-hole-figure/\">the full 3D figure guide</a>."
+      },
+      {
+        "image": {
+          "src": "/blog-img/3d/example-ridge-cueq.webp",
+          "alt": "Example Ridge sample 3D figure coloured by calculated CuEq with the formula, prices and recoveries printed in the footnote",
+          "caption": "Holes coloured by CuEq_calc; the footnote carries the formula and assumptions automatically (illustrative data)."
+        }
+      },
+      {
+        "h2": "What to state next to a CuEq number",
+        "checklist": [
+          "The formula, with each factor",
+          "Metal prices and the date or basis they were chosen on",
+          "Recoveries used and their basis, or that the equivalent is in situ",
+          "Which metals are included, and how missing or below-detection values were handled",
+          "That the equivalent is calculated, not assayed, with the individual metal grades also reported"
+        ],
+        "box": {
+          "kind": "verify",
+          "title": "Not legal advice",
+          "html": "Reporting rules for metal equivalents differ between jurisdictions and codes. This page explains the arithmetic; the issuer and its Qualified Person decide what must be disclosed and how. Have the QP approve the formula and assumptions before a CuEq figure is published."
+        }
+      }
+    ],
+    "faqs": [
+      {
+        "q": "Why is 22.0462 in the CuEq formula?",
+        "a": "It converts percent to pounds per tonne. 1% of a tonne is 10,000 g, and 10,000 g divided by 453.592 g per pound is 22.0462 lb. Multiply by the copper price in US$/lb to get the value of 1% copper per tonne."
+      },
+      {
+        "q": "Does CuEq include smelter terms or costs?",
+        "a": "The common formula uses only prices and recoveries. Payabilities, treatment and refining charges and costs are not included; an equivalent built on net smelter return is a different calculation and should be described as such."
+      },
+      {
+        "q": "Should I colour my drill figure by CuEq or by copper?",
+        "a": "Use whichever the release headlines. If the release reports CuEq, colour by it and print the formula on the figure; if it reports copper and gold separately, colour by the main metal and add the second grade to the callouts."
+      },
+      {
+        "q": "How is AuEq different from CuEq?",
+        "a": "Only the base metal changes. AuEq divides each metal's recovered value by the recovered value of 1 g/t gold and is reported in g/t; CuEq divides by the recovered value of 1% copper and is reported in percent."
+      }
+    ]
+  },
+  {
+    "slug": "grade-shells-from-drill-assays",
+    "category": "drill-results",
+    "product": "3d",
+    "howTo": false,
+    "ogImage": "/og/3d.png",
+    "title": "Grade Shells from Drill Assays: What an Exploratory Envelope Is (and Isn't)",
+    "metaDescription": "How a grade shell is built from drill assays, in plain words: composites, inverse distance, search radius, cut-off, and why it is an exploratory envelope.",
+    "cardSummary": "The method behind a grade shell interpolated from drill assays, its limits, and how to label it on a public figure.",
+    "directAnswer": "A grade shell built from drill assays is a 3D surface drawn around the volume where interpolated grade is above a cut-off. It shows where the drilling says the better grade sits and how the holes connect. It is an exploratory envelope: no geological domains, variography, top cuts, density or economic limits are applied, so it implies no tonnage or contained metal, and a public figure should say so on its face.",
+    "publishedDate": "2026-10-20",
+    "updatedDate": "2026-10-20",
+    "ctaTop": {
+      "text": "Build a shell on the sample project.",
+      "sub": "Turn on the grade shell in the Layout step and change the cut-off."
+    },
+    "ctaBottom": {
+      "text": "Show the drilling, labelled honestly.",
+      "sub": "The shell's disclosure line is added to the footnote automatically."
+    },
+    "relatedSlugs": [
+      "how-to-make-a-3d-drill-hole-figure",
+      "drill-hole-cross-sections-vs-3d-block-figures",
+      "copper-equivalent-cueq-formula-calculator",
+      "exploration-maps-3d-vs-leapfrog-viewer-geoscience-analyst"
+    ],
+    "sections": [
+      {
+        "h2": "What a grade shell is",
+        "body": "Drill holes are lines through a volume. A grade shell joins them up: it estimates grade between the holes and draws the surface where that estimate crosses a chosen cut-off, so the inside of the shell is the part of the drilled ground that interpolates above it. On a figure, a shell makes a set of intercepts read as one body, which is why companies like them. It is also why they need care: the shell looks like a solid fact, and between the holes it is an interpolation."
+      },
+      {
+        "h2": "Two kinds of shell",
+        "body": "A modelled shell comes from geological modelling software, built by a geologist with domains, structural controls and judgement, and often reviewed as part of a technical report. An exploratory envelope is a quick, rule-based interpolation of the assays alone. Both have a place on an investor figure. They should never be confused, and a figure should name which one it shows.",
+        "html": "Exploration Maps 3D does both jobs separately: a modelled shell exported as an OBJ mesh is loaded as a model shape and drawn as supplied, while the grade shell option builds an exploratory envelope from the assays. If you are weighing the two approaches, <a href=\"/blog/exploration-maps-3d-vs-leapfrog-viewer-geoscience-analyst/\">the comparison with desktop 3D software</a> covers where each fits."
+      },
+      {
+        "h2": "The method in plain words",
+        "body": "This is how the grade shell in Exploration Maps 3D is built, step by step. The same description is in the tool, under How the shell is built.",
+        "items": [
+          "Composite: each hole is split into 10 m length-weighted composites of the grade column the holes are coloured by. Only assayed lengths count, and a composite needs at least 5 m assayed.",
+          "Grid: a regular grid is laid over the block, with cells about one fortieth of its width, between 5 and 25 m.",
+          "Group the collars: holes whose collars are within 20 m of each other form one collar group and count once, so a fan of holes from one pad does not outvote the rest.",
+          "Interpolate: at each grid point, the nearest composite from each group is found; the nearest groups within the search radius, at most four, are combined with inverse-distance-squared weights, with a 5 m minimum distance.",
+          "Require support: at least three groups must be in range, or the point is left unestimated.",
+          "Set the reach: the search radius is 75 m, or 1.5 times the median spacing between collar groups for wider drilling. Nothing is estimated above the terrain or collar surface.",
+          "Draw: the surface is extracted at the cut-off with marching cubes and lightly smoothed."
+        ]
+      },
+      {
+        "image": {
+          "src": "/blog-img/3d/example-ridge-grade-shell.webp",
+          "alt": "Example Ridge sample 3D figure with a translucent teal grade shell at 0.2% Cu interpolated from the drill assays, with the disclosure line in the footnote",
+          "caption": "A 0.2% Cu grade shell built from the sample assays. The footnote line is added automatically (illustrative data)."
+        }
+      },
+      {
+        "h2": "What it is not",
+        "body": "No geological domains, variography, top cuts, density or economic limits are applied, and the distances above are screening choices, not parameters fitted to your deposit. So the shell is not a geological model, not a mineral resource, and implies no tonnage or contained metal. Where drilling ends, the shell can close off or break into pieces; those edges are where the data stops, not geological limits. A shell that stops at the last hole says \"we have not drilled further\", not \"the mineralisation ends here\"."
+      },
+      {
+        "h2": "Choosing the cut-off",
+        "body": "Pick a cut-off that matches how the release describes the mineralisation, usually the broad-interval cut-off used for the callouts. Then try a cut-off either side. If a small change makes the shell grow or shrink dramatically, the drilling is not constraining it and the figure should not lean on its shape. The Advanced settings let you set the search radius and cell size; leave them automatic unless you can explain the change, and record any change you make."
+      },
+      {
+        "h2": "How to label it on a public figure",
+        "body": "When the shell is shown, Exploration Maps 3D adds this line to the figure's footnote: \"Grade shell: exploratory envelope interpolated from drill assays (≥ cut-off); not a geological model or mineral resource.\" The legend names it with its cut-off. Keep both. If you crop the figure or hand the layers to a designer, make sure the disclosure line survives, because the image will be shared without the release around it.",
+        "box": {
+          "kind": "verify",
+          "title": "Disclosure note",
+          "html": "This page explains a visualisation method; it is not legal or regulatory advice. Whether a grade shell may appear in a public figure, and how it must be described, is for the issuer and its Qualified Person to decide under the rules that apply to them. Mineral resources are estimated and disclosed under their own standards, which this method does not attempt."
+        }
+      },
+      {
+        "h2": "A checklist before you publish a shell",
+        "checklist": [
+          "The figure says it is an exploratory envelope, with its cut-off",
+          "The grade column is the one the release reports (Cu, or a stated CuEq)",
+          "The shell was checked at cut-offs either side of the one shown",
+          "Edges are not described as limits of mineralisation",
+          "No volume, tonnage or contained metal is quoted from the shell",
+          "The QP has reviewed the figure"
+        ],
+        "html": "To see the effect of the cut-off yourself, load the sample in <a href=\"/3d\">Exploration Maps 3D</a>, turn on Grade shell from assays in the Layout step, and change the value. The full figure workflow is in <a href=\"/blog/how-to-make-a-3d-drill-hole-figure/\">how to make a 3D drill hole figure</a>."
+      }
+    ],
+    "faqs": [
+      {
+        "q": "Is a grade shell a mineral resource?",
+        "a": "No. An exploratory grade shell interpolates assays to show where higher grade sits between holes. It applies no geological domains, density, top cuts or economic limits, and implies no tonnage or contained metal."
+      },
+      {
+        "q": "Why does the shell break into pieces at the edges?",
+        "a": "At least three collar groups must be within the search radius for a point to be estimated. Where drilling thins out, that condition fails and the shell closes or breaks. Those edges mark the limit of the data, not of the mineralisation."
+      },
+      {
+        "q": "Why is nothing estimated above the ground?",
+        "a": "Grade cannot exist in the air. Points above the terrain or collar surface are excluded so the shell never pokes out of the topography."
+      },
+      {
+        "q": "Can I show a shell from our geological model instead?",
+        "a": "Yes. Export it as an OBJ mesh and load it as a model shape. It is drawn as supplied; label it with what it is and who built it."
+      }
+    ]
+  },
+  {
+    "slug": "drill-hole-cross-sections-vs-3d-block-figures",
+    "category": "drill-results",
+    "product": "3d",
+    "howTo": false,
+    "ogImage": "/og/3d.png",
+    "title": "Drill Hole Cross Sections vs 3D Block Figures for Investor Presentations",
+    "metaDescription": "When a drill hole cross section beats a 3D block figure in an investor deck or news release, when it is the reverse, and how to use both without misleading.",
+    "cardSummary": "What sections and 3D block figures each show well, their traps, and which to use in a release or a deck.",
+    "directAnswer": "Use a cross section when the story is depth and continuity along one line: how far an intercept extends, how holes connect, what sits below the last result. Use a 3D block figure when the story is the whole program in its setting: how many holes, which directions, how the zone sits under the terrain. Most drill releases and decks are clearest with both, made from the same data and style, plus a plan map that shows where the section line runs.",
+    "publishedDate": "2026-10-20",
+    "updatedDate": "2026-10-20",
+    "ctaTop": {
+      "text": "Make both from one dataset.",
+      "sub": "Exploration Maps 3D exports the 3D figure and section A–A′ in the same style."
+    },
+    "ctaBottom": {
+      "text": "Export the pair for your next release.",
+      "sub": "Same colours, same callouts, same size."
+    },
+    "relatedSlugs": [
+      "how-to-make-a-3d-drill-hole-figure",
+      "investor-map-figure-design-junior-mining",
+      "grade-shells-from-drill-assays",
+      "how-to-make-a-drill-results-map"
+    ],
+    "sections": [
+      {
+        "h2": "Two figures, two different jobs",
+        "body": "Investors look at drill figures for two questions. How good is this hole, and how does it fit with the others? And how big could this be? A cross section answers the first question precisely and the second poorly. A 3D block figure answers the second at a glance and the first approximately. Choosing between them starts with which question the release or slide is trying to answer."
+      },
+      {
+        "h2": "What a cross section does well",
+        "body": "A section is a slice. It shows holes against true depth along a single line, so lengths, depths and the space between intercepts can be read off a scale. It is the natural home for a step-out story (the new hole extends the zone 120 m down dip) and for a geological interpretation drawn between holes, because the reader can see exactly where the data is.",
+        "items": [
+          "True depth and elevation along the line, with a readable scale",
+          "Continuity, or a gap, between neighbouring holes",
+          "Room for full intercept callouts without perspective crowding",
+          "Prints cleanly in a technical report and at A4"
+        ],
+        "image": {
+          "src": "/blog-img/3d/example-ridge-section.webp",
+          "alt": "Cross-section A–A′ through the fictional Example Ridge drilling with grade-coloured traces, callouts and an elevation scale",
+          "caption": "Section A–A′, ±75 m projection, from the Example Ridge sample (illustrative data)."
+        }
+      },
+      {
+        "h2": "Where sections mislead",
+        "body": "Holes are rarely all on the line. A section projects holes within a window onto the plane, so a hole 70 m in front of the section can appear to connect with one 70 m behind it. A flattering section line can be chosen to run through the best holes and miss the weak ones. And a single slice says nothing about the third dimension. The fixes are simple: state the projection width on the figure, show the section line on a plan or inset, and draw the holes that fall inside the window whether they are good or not."
+      },
+      {
+        "h2": "What a 3D block figure does well",
+        "body": "A block figure shows the whole program at once: every hole, its direction, the terrain above, and the drilled volume in context. It is the fastest way to show scale, a multi-directional program, or how a zone plunges, and it works on social media and on the first slide of a project section in a way that a section rarely does.",
+        "items": [
+          "All holes at once, including holes drilled in different directions",
+          "Terrain and the relationship between the zone and the surface",
+          "Scale of the system relative to the drilled area",
+          "A single image that reads without a technical background"
+        ],
+        "image": {
+          "src": "/blog-img/3d/example-ridge-3d-figure.webp",
+          "alt": "3D block figure of the fictional Example Ridge drilling with terrain, grade-coloured traces and intercept callouts",
+          "caption": "The same drilling as a 3D block figure, looking 029° (illustrative data)."
+        }
+      },
+      {
+        "h2": "Where 3D figures mislead",
+        "body": "Perspective foreshortens distances: a hole pointing at the camera looks short, and depth is hard to judge without a scale. Holes hide behind each other. Vertical exaggeration makes zones look steeper and thicker. And a translucent shape inside the block reads as a solid, known body even when it is an interpolation. Good 3D figures print the view direction and plunge, show any vertical exaggeration, keep a scale bar on the block, and label every shape for what it is.",
+        "html": "If you show an interpolated shape, read <a href=\"/blog/grade-shells-from-drill-assays/\">what an exploratory grade shell is (and isn't)</a> before it goes in a deck."
+      },
+      {
+        "h2": "Side by side",
+        "table": {
+          "headers": [
+            "",
+            "Cross section",
+            "3D block figure"
+          ],
+          "rows": [
+            [
+              "Best for",
+              "Depth, continuity, step-outs",
+              "Program overview, scale, setting"
+            ],
+            [
+              "Reads distance accurately",
+              "Yes, along the line",
+              "Approximately"
+            ],
+            [
+              "Shows every hole",
+              "Only those in the projection window",
+              "Yes, if none are hidden"
+            ],
+            [
+              "Main risk",
+              "Projection and a selective line",
+              "Perspective, hidden holes, exaggeration"
+            ],
+            [
+              "Must state",
+              "Section line, projection width, scale",
+              "View direction, plunge, any exaggeration, scale"
+            ],
+            [
+              "Typical place",
+              "Technical report, release detail",
+              "Release lead figure, deck, social"
+            ]
+          ]
+        }
+      },
+      {
+        "h2": "Which to use when",
+        "items": [
+          "One or two holes extending a known zone: a section through them, with the plan showing the line.",
+          "A full program or a first release from a new target: a 3D figure as the lead image, a plan map of all collars, and a section if one hole carries the news.",
+          "An investor deck: a 3D figure for the project overview slide and a section on the results slide.",
+          "A technical report: sections and plans; 3D figures support them but rarely replace them.",
+          "Social media: a 3D figure in Square or Portrait format, with the headline intercept called out."
+        ]
+      },
+      {
+        "h2": "Make them agree",
+        "body": "The worst outcome is a 3D figure and a section that disagree: different colour limits, a callout rounded differently, a hole missing from one of them. Build both from the same data and the same style. In Exploration Maps 3D the section A–A′ line is drawn on the 3D figure and in its plan inset, both figures share the grade colours and callouts, and both export at the same size, so a reader moving between them sees one story.",
+        "html": "The step-by-step workflow is in <a href=\"/blog/how-to-make-a-3d-drill-hole-figure/\">how to make a 3D drill hole figure</a>, and the plan-view counterpart is in <a href=\"/blog/how-to-make-a-drill-results-map/\">how to make a drill results map</a>. If your team would rather have the full figure set built and kept current for you, see <a href=\"/blog/investor-map-figure-design-junior-mining/\">investor map and figure design for junior mining companies</a>."
+      },
+      {
+        "h2": "A short checklist for either figure",
+        "checklist": [
+          "Callouts match the release table exactly",
+          "Core lengths are described as such unless true widths are known",
+          "Holes not yet reported are labelled as pending rather than drawn as blank traces",
+          "Scale, orientation and any projection or exaggeration are on the figure",
+          "The plan or inset shows where the section line runs",
+          "The QP has reviewed the exported figures"
+        ]
+      }
+    ],
+    "faqs": [
+      {
+        "q": "Should a drill news release use a section or a 3D figure?",
+        "a": "Use whichever answers the release's main question. A step-out on a known zone is clearest on a section; a program overview or a new discovery is clearest in 3D with a plan map. Many releases use both."
+      },
+      {
+        "q": "What is a projection window on a section?",
+        "a": "The distance either side of the section line within which holes are drawn on the section. Holes inside it are projected onto the plane, so state the width on the figure, for example ±75 m."
+      },
+      {
+        "q": "Is vertical exaggeration acceptable on a 3D figure?",
+        "a": "It can help when the topography is subtle, but it makes zones look steeper and thicker. If you use it, show it on the figure. Exploration Maps 3D prints the exaggeration next to the plunge automatically."
+      },
+      {
+        "q": "Can I make both figures from the same files?",
+        "a": "Yes. In Exploration Maps 3D the 3D figure and section A–A′ come from the same collars, surveys and assays and share colours, callouts and export size."
+      }
+    ]
+  },
+  {
+    "slug": "how-to-show-assays-pending-drill-holes",
+    "category": "drill-results",
+    "product": "3d",
+    "ogImage": "/og/3d.png",
+    "title": "How to Show 'Assays Pending' Holes and Intercepts on Drill Figures",
+    "fullTitle": "How to Show Assays Pending Holes and Intercepts (NI 43-101 Friendly Figures) | Exploration Maps",
+    "metaDescription": "Label drilled-but-unreported holes, provisional collars and intercepts clearly on plan, section and 3D drill figures, using a collar status column.",
+    "cardSummary": "Labelling holes awaiting assays, provisional collar positions and intercepts so a drill figure cannot be misread.",
+    "directAnswer": "Draw every hole in the program, and label the ones still awaiting results \"Assays pending\" rather than leaving them as blank traces that read as barren. Mark collars whose positions are not yet surveyed as provisional. Report intercepts as core length, grade and from-depth, matching the release table. In Exploration Maps 3D, a Status column in the collar file drives the pending labels. This is presentation practice, not legal advice: the QP decides what the figure must say.",
+    "publishedDate": "2026-10-20",
+    "updatedDate": "2026-10-20",
+    "ctaTop": {
+      "text": "Label pending holes from your collar file.",
+      "sub": "Add a Status column; the 3D figure writes ASSAYS PENDING along those holes."
+    },
+    "ctaBottom": {
+      "text": "Make the figure say what the release says.",
+      "sub": "Pending holes, provisional collars and intercepts, all from your data."
+    },
+    "relatedSlugs": [
+      "how-to-make-a-3d-drill-hole-figure",
+      "copper-equivalent-cueq-formula-calculator",
+      "how-to-make-a-drill-results-map",
+      "how-to-create-ni-43-101-compliant-map"
+    ],
+    "sections": [
+      {
+        "h2": "Why pending holes belong on the figure",
+        "body": "Programs report in batches. A release may cover eight holes while six more are at the lab. Leaving those six off the figure makes the program look smaller than it is, or, worse, makes the reported holes look selected. Drawing them without a label is no better: a plain grey trace sits in the same colour as low-grade core, so a reader sees six barren holes. The fix is a label on each one.",
+        "box": {
+          "kind": "verify",
+          "title": "Not legal advice: consult your QP",
+          "html": "This guide covers how to make a figure clear. It is not legal or regulatory advice and does not interpret NI 43-101 or any other disclosure rule. The issuer and its Qualified Person decide what results may be shown, how they are described, and what a figure must state. Have the QP review the final figure."
+        }
+      },
+      {
+        "h2": "Four states a hole can be in",
+        "table": {
+          "headers": [
+            "State",
+            "What to draw",
+            "Label"
+          ],
+          "rows": [
+            [
+              "Reported",
+              "Trace coloured by grade, callout for headline intervals",
+              "Hole ID; intercept as length @ grade from depth"
+            ],
+            [
+              "Drilled, assays pending",
+              "Trace drawn, not coloured as grade",
+              "\"Assays pending\" along the hole"
+            ],
+            [
+              "Drilled, not sampled or abandoned",
+              "Trace drawn",
+              "A short note such as \"not sampled\" or \"abandoned at 85 m\""
+            ],
+            [
+              "Planned",
+              "Usually a collar symbol or dashed trace on plans only",
+              "\"Planned\", kept visually distinct from drilled holes"
+            ]
+          ]
+        },
+        "body": "Each state needs to look different from the others. The main error is drawing pending and unsampled holes in the same way as low-grade results."
+      },
+      {
+        "h2": "Provisional collar positions",
+        "body": "Collars located by handheld GPS, or projected from a planned position, are often surveyed properly later. Until then, a figure that draws them the same as surveyed collars overstates the precision. Draw them visibly differently and say so in the legend. In Exploration Maps 3D, a hole whose collar status or flags say provisional, projected, approximate, unverified, unsurveyed, hand-held or uncertain is drawn dashed and fainter, and the legend adds \"Provisional position\". You can also switch the flag on or off per hole."
+      },
+      {
+        "h2": "Intercept labels that match the release",
+        "items": [
+          "Length, grade and element, with the from-depth: \"32.0 m @ 0.53% Cu from 8 m\"",
+          "Core length unless true width is known, and the footnote saying which",
+          "An \"incl.\" interval only if the release reports it, with the same cut-off",
+          "The same rounding as the release table, so the figure and text cannot disagree",
+          "A metal equivalent only with its formula, prices and recoveries stated"
+        ],
+        "html": "For equivalents, the arithmetic and what to state are in <a href=\"/blog/copper-equivalent-cueq-formula-calculator/\">the CuEq formula guide</a>."
+      },
+      {
+        "h2": "Step 1: Add a Status column to the collar file",
+        "body": "Add a column called Status (or Notes) to the collars CSV. Write \"Assays pending\" for holes awaiting results, and anything else for the rest. A status column placed last in the row can contain commas, for example \"Complete, assays pending\". Leave those holes' rows out of the assay file, or keep only the intervals already reported. The rows below are from the fictional Example Ridge sample.",
+        "table": {
+          "headers": [
+            "HoleID",
+            "Easting",
+            "Northing",
+            "Elevation",
+            "Depth",
+            "Status"
+          ],
+          "rows": [
+            [
+              "EX-018",
+              "412286.5",
+              "6422222.5",
+              "1269.7",
+              "492.2",
+              "Assays received"
+            ],
+            [
+              "EX-019",
+              "412457.0",
+              "6421525.1",
+              "1342.5",
+              "351.3",
+              "Drilled, assays pending"
+            ],
+            [
+              "EX-034",
+              "412820.0",
+              "6421470.0",
+              "1242.2",
+              "460.0",
+              "Collar provisional (handheld GPS)"
+            ]
+          ]
+        }
+      },
+      {
+        "h2": "Step 2: Turn on the pending labels",
+        "body": "Load the files in Exploration Maps 3D. In the Layout step, under Display, \"Assays pending\" from collar status is on by default and writes ASSAYS PENDING along each matching hole on the 3D figure and the section. If your file has no status column, \"Label holes without assays\" labels every hole that has no assay intervals instead; check that list carefully, because it will also catch holes that were never sampled.",
+        "image": {
+          "src": "/blog-img/3d/example-ridge-assays-pending.webp",
+          "alt": "Example Ridge sample 3D figure with two holes labelled ASSAYS PENDING and one collar drawn dashed as a provisional position",
+          "caption": "Two holes flagged \"Drilled, assays pending\" in the collar Status column, and one provisional collar, drawn dashed (illustrative data)."
+        }
+      },
+      {
+        "h2": "Step 3: Check the callouts and the footnote",
+        "body": "Callouts are calculated from the assays you loaded, so a pending hole gets none. Review each remaining callout against the release table and edit the text if your release rounds differently. Keep a footnote that says intervals are core lengths and true widths are not known, unless your QP has determined true widths. Then export the figure and the section and have both reviewed together.",
+        "html": "The rest of the figure workflow, from loading files to export sizes, is in <a href=\"/blog/how-to-make-a-3d-drill-hole-figure/\">how to make a 3D drill hole figure</a>. On a 2D collar plan the same principle applies; see <a href=\"/blog/how-to-make-a-drill-results-map/\">how to make a drill results map</a>."
+      },
+      {
+        "h2": "When results arrive",
+        "body": "Remove the pending status, add the new assay rows, and re-export. The figure updates in place, with the same camera, colours and labels, so the next release shows the same program with the gaps filled. Saving the figure to your account keeps that setup for the next batch."
+      },
+      {
+        "h2": "Pre-release checklist",
+        "checklist": [
+          "Every hole drilled in the period is on the figure",
+          "Holes awaiting results are labelled, and are not coloured like low grade",
+          "Provisional collar positions are visibly different and in the legend",
+          "Callouts match the release table, including rounding and from-depths",
+          "Core length versus true width is stated",
+          "The QP has reviewed the exported figure and section"
+        ]
+      }
+    ],
+    "faqs": [
+      {
+        "q": "Should holes with assays pending be shown on a drill figure?",
+        "a": "Generally yes, labelled clearly, so the reader sees the whole program and does not read them as barren. Whether and how to show them in a particular disclosure is for the issuer's Qualified Person to decide."
+      },
+      {
+        "q": "How do I mark a hole as pending in Exploration Maps 3D?",
+        "a": "Add a Status or Notes column to the collar CSV and write \"Assays pending\" for that hole. With \"Assays pending\" from collar status turned on, the label is drawn along the hole."
+      },
+      {
+        "q": "What does provisional position mean on the figure?",
+        "a": "The collar location is not yet surveyed, for example a handheld GPS reading. Those holes are drawn dashed and fainter, and the legend explains the symbol."
+      },
+      {
+        "q": "Is this guide NI 43-101 compliance advice?",
+        "a": "No. It describes figure clarity only. Disclosure requirements sit with the issuer and its Qualified Person."
+      }
+    ]
+  },
+  {
+    "slug": "investor-map-figure-design-junior-mining",
+    "category": "exploration-mapping",
+    "product": "teams",
+    "howTo": false,
+    "title": "Investor Map and Figure Design for Junior Mining Companies",
+    "metaDescription": "The investor figure set a junior mining company needs, design rules for maps and drill figures, and options for keeping them current, in-house or managed.",
+    "cardSummary": "The figure set a junior needs, the design rules that make it read, and who keeps it current as results arrive.",
+    "directAnswer": "A junior mining company's investor figures are a small set that every release and deck reuses: a regional location map, a claims map, a project geology and targets map, a drill plan, a section and a 3D view. They work when they share one house style, carry one message each, read at phone size and state their assumptions on the figure. The hard part is keeping them current as claims, assays and models change; you can do that in-house with self-serve tools, with a freelance designer or GIS consultant, or with a managed service such as Exploration Maps for Teams.",
+    "publishedDate": "2026-10-20",
+    "updatedDate": "2026-10-20",
+    "ctaTop": {
+      "text": "Want the figure set built and kept current?",
+      "sub": "Exploration Maps for Teams builds your maps once in your style and updates them as results land."
+    },
+    "ctaBottom": {
+      "text": "Talk to us about your project.",
+      "sub": "Send your current deck or latest release map for a free review."
+    },
+    "relatedSlugs": [
+      "how-to-create-exploration-map-investor-presentation",
+      "drill-hole-cross-sections-vs-3d-block-figures",
+      "how-to-make-a-3d-drill-hole-figure",
+      "how-to-make-a-mining-claims-map"
+    ],
+    "sections": [
+      {
+        "h2": "Why figures carry so much weight",
+        "body": "Many readers of a junior's news release look at the figure before the table, and many never get to the table. The figure is reposted on social media without the release, dropped into a newsletter, and reused in the next deck. That makes a handful of maps and drill figures some of the most widely seen material a company produces, often made in a hurry the night before a release by a geologist who would rather be doing geology."
+      },
+      {
+        "h2": "The core figure set",
+        "table": {
+          "headers": [
+            "Figure",
+            "Answers",
+            "Changes when"
+          ],
+          "rows": [
+            [
+              "Regional location",
+              "Where is it, and how do you get there?",
+              "Rarely; access or neighbours change"
+            ],
+            [
+              "Claims and land",
+              "What do you hold, and who is next door?",
+              "Staking, options, lapses"
+            ],
+            [
+              "Project geology and targets",
+              "Why here?",
+              "New mapping, geophysics or sampling"
+            ],
+            [
+              "Drill plan",
+              "Where have you drilled, and what did it hit?",
+              "Every drill release"
+            ],
+            [
+              "Cross section",
+              "How deep, and does it connect?",
+              "Every drill release on that line"
+            ],
+            [
+              "3D drilling figure",
+              "How big is the system?",
+              "Every drill release, new models"
+            ]
+          ]
+        },
+        "body": "A fact sheet and the website project page reuse cut-down versions of the same figures. Six figures, each changing on its own schedule, is the real workload.",
+        "image": {
+          "src": "/gallery/claims.png",
+          "alt": "Illustrative claims map of a fictional project made with Exploration Maps, with claim boundaries, labels and a legend",
+          "caption": "An illustrative claims map from the Exploration Maps gallery; all names and data are fictional."
+        }
+      },
+      {
+        "h2": "Design rules that make investor figures work",
+        "items": [
+          "One message per figure. If the headline is a step-out, the figure is about the step-out; everything else is context in lighter colours.",
+          "One house style. The same fonts, colours, legend order and symbols on every figure, so readers learn them once.",
+          "Phone first. Most people will see the figure on a phone. Test it at that size; if a callout cannot be read, it is too small or there are too many.",
+          "Label the story, not the dataset. Call out the intercepts the release headlines, not every hole.",
+          "Put the assumptions on the figure: core length or true width, a metal-equivalent formula, data sources, \"illustrative\" where it applies.",
+          "Scale, north and orientation on every map and section, and the view direction and plunge on 3D figures.",
+          "Honest context: neighbouring projects in a neutral style, distances that are true, and nothing implied about ground you do not hold."
+        ],
+        "html": "The step-by-step version for a deck is in <a href=\"/blog/how-to-create-exploration-map-investor-presentation/\">how to create an exploration map for an investor presentation</a>, and the choice between section and 3D is covered in <a href=\"/blog/drill-hole-cross-sections-vs-3d-block-figures/\">cross sections vs 3D block figures</a>."
+      },
+      {
+        "image": {
+          "src": "/gallery/drill-results.png",
+          "alt": "Illustrative drill results map with fourteen collars, a claim boundary and three result callouts",
+          "caption": "A drill plan in a consistent house style: collars, boundary and the three results the release headlines (illustrative)."
+        }
+      },
+      {
+        "h2": "Keeping figures current is the real job",
+        "body": "Making one good figure is a design problem. Keeping six of them consistent across three years of releases, two option agreements and a new resource model is a process problem. Figures drift: a claim that lapsed stays on the map, last quarter's colour limits differ from this quarter's, the deck shows an older section than the release. The cure is to build the base maps and house style once and treat each new result as an update to them, rather than a new drawing."
+      },
+      {
+        "h2": "Your options",
+        "table": {
+          "headers": [
+            "Option",
+            "Good for",
+            "Watch for"
+          ],
+          "rows": [
+            [
+              "In-house, self-serve tools",
+              "Teams with a geologist who can spare the time; quick figures between releases",
+              "Time on drafting instead of geology; style drift between people"
+            ],
+            [
+              "Freelance graphic designer",
+              "Polish and brand consistency",
+              "Technical errors creep in if the designer cannot read the data"
+            ],
+            [
+              "GIS or geological consultant",
+              "Complex analysis and technical report figures",
+              "Cost and turnaround for routine updates"
+            ],
+            [
+              "Managed figure service",
+              "Keeping the whole set current on a schedule",
+              "Needs a clear data hand-off and an approval step"
+            ]
+          ]
+        }
+      },
+      {
+        "h2": "Doing it yourself with Exploration Maps",
+        "html": "Exploration Maps makes claim, project and drill maps in the browser from public registry data and your own files, and <a href=\"/3d\">Exploration Maps 3D</a> (beta) turns collar, survey and assay CSVs into a branded 3D figure and section. Both are free to start. For how-tos, see <a href=\"/blog/how-to-make-a-mining-claims-map/\">making a mining claims map</a> and <a href=\"/blog/how-to-make-a-3d-drill-hole-figure/\">making a 3D drill hole figure</a>.",
+        "image": {
+          "src": "/blog-img/3d/example-ridge-3d-figure.webp",
+          "alt": "3D drill hole figure of the fictional Example Ridge sample, made with Exploration Maps 3D",
+          "caption": "A 3D drilling figure from the Exploration Maps 3D sample project (illustrative data)."
+        }
+      },
+      {
+        "h2": "Having it done: Exploration Maps for Teams",
+        "body": "Exploration Maps for Teams is a managed map and figure service for exploration companies, geology teams and consultancies. You share your data once: claims, drill database, assays, geology, models and your current deck. The team proposes a map set, sets up your visual style, and delivers figures that are checked against the source data and sent to you for approval. When assays, claims or models change, the affected figures are updated and sent back for sign-off.",
+        "items": [
+          "Three service levels, each a monthly retainer quoted after a scoping call: Managed Maps; Maps + Presentation, which adds the corporate deck and fact sheet; and Corporate Materials, which adds website project pages and priority turnaround around releases.",
+          "Your Qualified Person keeps technical sign-off, and nothing is published or sent on your behalf.",
+          "Data stays private to your account, with an NDA on request.",
+          "Every plan includes Exploration Maps and the 3D maker for your own team.",
+          "It is a new service: the connected data-room monitoring and client portal described on the Teams page are still in development."
+        ],
+        "html": "See <a href=\"/teams/\">Exploration Maps for Teams</a> for how it works, or send your latest news-release map for a free review."
+      },
+      {
+        "h2": "A figure review before every release",
+        "checklist": [
+          "Claims shown match the registry as of the release date",
+          "Callouts and tables agree to the same rounding",
+          "Pending holes are labelled, not drawn as blank traces",
+          "Assumptions (core length, equivalents, data sources) are on the figure",
+          "The figure reads on a phone",
+          "The QP has signed off the final exported files"
+        ],
+        "html": "For the labelling detail, see <a href=\"/blog/how-to-show-assays-pending-drill-holes/\">how to show assays pending holes and intercepts</a>."
+      }
+    ],
+    "faqs": [
+      {
+        "q": "What maps does a junior mining investor presentation need?",
+        "a": "Usually a regional location map, a claims map, a project geology and targets map, a drill plan, and a section or 3D figure for the latest results. Reuse the same figures, in the same style, in releases, the deck, the fact sheet and the website."
+      },
+      {
+        "q": "Who checks the technical content if we outsource figures?",
+        "a": "Your team does. With Exploration Maps for Teams, figures are checked against your source data and sent to you for approval; your Qualified Person keeps technical sign-off, and nothing is published without your approval."
+      },
+      {
+        "q": "Can we keep making quick figures ourselves?",
+        "a": "Yes. Exploration Maps and the 3D maker are self-serve, and Teams plans include them for your team, so routine figures can stay in-house and the important ones go to the mapping desk."
+      },
+      {
+        "q": "How much does a managed figure service cost?",
+        "a": "Exploration Maps for Teams plans are monthly retainers quoted after a scoping call, because the figure set and update frequency vary by project."
+      }
+    ]
   }
 ]
