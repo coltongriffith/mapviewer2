@@ -120,6 +120,20 @@ input[type="color"] { width: 34px; height: 26px; border: 1px solid var(--slate-2
 .label-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; align-items: center; }
 .label-row select { width: auto; }
 .label-row .btn { padding: 4px 9px; font-size: 13px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font: inherit; font-size: 13.5px; font-weight: 600; color: var(--slate-800); background: #fff; border: 1px solid var(--slate-300); border-radius: 999px; padding: 4px 12px; cursor: pointer; }
+.chip:hover { border-color: var(--slate-600); }
+.chip[aria-pressed="true"] { background: var(--slate-950); border-color: var(--slate-950); color: #fff; }
+.metric .chip { font-size: 15px; padding: 6px 14px; }
+ul.checks { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 3px; font-size: 13px; color: var(--warn); }
+.prov-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 4px 10px; margin-top: 6px; }
+.prov-list .check { font-family: var(--mono); font-size: 12px; }
+.eq-row { display: grid; grid-template-columns: minmax(0, 1fr) 96px 86px; gap: 8px; align-items: end; margin-top: 6px; }
+.eq-row .check { padding-bottom: 6px; }
+#eq-formula { margin: 8px 0; background: var(--slate-050); padding: 6px 8px; border-radius: 5px; }
+.shell-status { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 6px; }
+.shell-status progress { width: 110px; }
+.shell-status .btn { padding: 3px 9px; font-size: 13px; }
 
 .stage { position: relative; min-width: 0; overflow: hidden; background: var(--workspace); }
 .toolbar { position: absolute; top: 10px; left: 12px; right: 12px; z-index: 6; display: flex; justify-content: space-between; gap: 8px; align-items: center; pointer-events: none; }
@@ -239,6 +253,10 @@ dialog.acct-dialog::backdrop { background: rgba(20,33,38,0.35); }
         <p class="muted" id="crs-note" style="margin-top:6px"></p>
       </section>
       <div class="summary" id="summary" aria-live="polite"></div>
+      <section>
+        <h3>Data checks</h3>
+        <div id="checks" aria-live="polite"></div>
+      </section>
       <details><summary>See example file layouts</summary><pre id="fmt-collar"></pre><pre id="fmt-survey"></pre><pre id="fmt-assay"></pre></details>
       <button class="btn primary next" type="button" data-goto="brand">Next: Brand →</button>
     </div>
@@ -275,12 +293,43 @@ dialog.acct-dialog::backdrop { background: rgba(20,33,38,0.35); }
         <p>Choose what colours the holes, which intercepts to call out, and the camera.</p></div>
       <section>
         <h3>Colour holes by</h3>
-        <div class="grid2">
+        <div class="chips metric" id="metric-chips" role="group" aria-label="Grade column"></div>
+        <div class="grid2" style="margin-top:8px">
           <label class="field"><span>Grade column</span><select id="value-col"></select></label>
           <label class="field"><span>Label and unit</span><input type="text" id="value-label"></label>
         </div>
         <div class="grid4 bins" id="bins" style="margin-top:8px"></div>
         <div class="row" style="margin-top:6px"><button class="btn" type="button" id="auto-bins">Suggest from data</button><span class="muted">Lower limit of each colour</span></div>
+        <div class="field" style="margin-top:10px"><span>Show intervals ≥ (lower ones draw as the plain trace; callouts are unaffected)</span>
+          <div class="row"><span class="chips" id="dcut-btns" role="group" aria-label="Show intervals at or above"></span><input type="number" id="dcut" step="any" min="0" placeholder="other" aria-label="Show intervals at or above this grade" style="width:84px"></div></div>
+        <details style="margin-top:10px">
+          <summary>Metal equivalent (CuEq, AuEq…)</summary>
+          <p class="muted" style="margin:6px 0">Adds a calculated column from your prices and recoveries: % → lb/t × 22.0462, g/t → oz/t ÷ 31.1035. An interval missing any metal gets no value. The formula and assumptions are added to the footnote while it is in use.</p>
+          <div id="eq-body"></div>
+        </details>
+      </section>
+      <section>
+        <h3>Grade shell from assays</h3>
+        <label class="check"><input type="checkbox" id="shell-on">Show an exploratory grade shell</label>
+        <p class="muted" style="margin-top:4px">For drilling without a model OBJ: an envelope interpolated from the assays at a cut-off. Not a geological model or a resource; the footnote says so.</p>
+        <div class="grid2" style="margin-top:8px">
+          <label class="field"><span>Cut-off <output id="shell-unit" class="mono"></output></span><input type="number" id="shell-cut" step="any" min="0"></label>
+          <label class="field"><span>Colour</span><input type="color" id="shell-color" value="#1f9e96"></label>
+        </div>
+        <label class="field" style="margin-top:8px"><span>Opacity <output id="shell-op-out" class="mono"></output></span><input type="range" id="shell-op" min="5" max="90"></label>
+        <div class="shell-status"><progress id="shell-prog" max="1" value="0" hidden></progress><span class="muted" id="shell-msg" aria-live="polite"></span><button class="btn" type="button" id="shell-cancel" hidden>Cancel</button></div>
+        <details style="margin-top:8px">
+          <summary>Advanced</summary>
+          <div class="grid2" style="margin-top:8px">
+            <label class="field"><span>Search radius (m)</span><input type="number" id="shell-search" min="5" step="5" placeholder="auto"></label>
+            <label class="field"><span>Cell size (m)</span><input type="number" id="shell-cell" min="2" placeholder="auto"></label>
+          </div>
+        </details>
+        <details style="margin-top:8px">
+          <summary>How the shell is built</summary>
+          <p class="muted" style="margin-top:6px">10 m length-weighted composites down each hole, from the grade column the holes are coloured by (only assayed lengths count; a composite needs 5 m assayed). On a grid over the block (cells about 1/40 of its width, 5–25 m), each point takes the nearest composite from each hole; holes whose collars are within 20 m form one collar group and count once. The nearest groups within the search radius, at most four, are combined with inverse-distance-squared weights (5 m minimum distance), and at least three groups must be in range. The search radius is 75 m, or 1.5 times the median spacing between collar groups for wider drilling. Nothing is estimated above the terrain or collar surface. The surface is drawn by marching cubes at the cut-off and lightly smoothed.</p>
+          <p class="muted" style="margin-top:6px">No geological domains, variography, top cuts, density or economic limits are applied, and the distances are screening choices. The shell can break up or close where the drilling ends; those edges are not geological limits. No tonnage or contained metal is implied.</p>
+        </details>
       </section>
       <section>
         <h3>Intercept callouts</h3>
