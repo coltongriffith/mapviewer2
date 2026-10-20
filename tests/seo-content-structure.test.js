@@ -190,7 +190,8 @@ describe('sitemap and canonicals agree with what exists', () => {
       expect(sitemapUrls.has(p), `${p} exists but is not in the sitemap`).toBe(true);
     }
     for (const u of sitemapUrls) {
-      if (['/', '/about/', '/contact/'].includes(u)) continue;
+      // /teams/ is a Vite page (teams/index.html), built rather than copied from public/.
+      if (['/', '/about/', '/contact/', '/teams/'].includes(u)) continue;
       expect(pages.has(u), `${u} is in the sitemap but generates no page`).toBe(true);
     }
   });

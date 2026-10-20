@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Exploration Maps 3D</title>
+<meta name="description" content="Turn drill collars and assays into a branded 3D drilling figure and cross-section, sized for slides, news releases, social posts and print.">
+<!-- Beta: reachable by link, kept out of search until it is announced. -->
+<meta name="robots" content="noindex, follow">
+<meta name="theme-color" content="#142126">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<script async src="https://www.googletagmanager.com/gtag/js?id=AW-18358773663"></script>
+<script defer src="/gtag-init.js"></script>
+<script src="https://analytics.ahrefs.com/analytics.js" data-key="Nj1JOEhHV5bRKYBBoUJVVg" async></script>
+<style>
+/* Layout: Exploration Maps editor chrome. A four-step panel on the left, a grey workspace on the right
+   holding the figure frame at the exact proportions of the chosen export size.
+   Deliberately a single light look, matching the Exploration Maps app. */
+:root {
+  --slate-950: #142126; --slate-800: #2c3d42; --slate-600: #5f6e72; --slate-500: #7c898c; --slate-300: #c6cecf;
+  --slate-200: #dde3e3; --slate-100: #edf1f0; --slate-050: #f6f8f7; --map-white: #fcfbf7; --copper: #c65322;
+  --copper-soft: #fbf0ea; --focus: #1f78a8; --ok: #2f7d4a; --warn: #9a5a07; --bad: #b42318; --workspace: #e4e8e7;
+  --font: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body { background: var(--map-white); color: var(--slate-950); font-family: var(--font); font-size: 15px; line-height: 1.45; overflow: hidden; }
+.app { display: grid; grid-template-columns: 380px minmax(0, 1fr); height: 100%; }
+.panel { background: #fff; border-right: 1px solid var(--slate-200); display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.brandbar { display: flex; align-items: center; gap: 10px; padding: 12px 16px 12px max(16px, env(safe-area-inset-left, 0px)); border-bottom: 1px solid var(--slate-200); }
+.brandbar > svg { width: 30px; height: 30px; flex: none; }
+.brandbar .name { font-weight: 700; font-size: 17px; letter-spacing: -0.01em; color: inherit; text-decoration: none; }
+.badge { font-family: var(--mono); font-size: 11px; font-weight: 600; border: 1px solid var(--slate-300); border-radius: 4px; padding: 1px 6px; color: var(--slate-600); }
+.badge.cu { border-color: var(--copper); color: var(--copper); }
+.steps { display: grid; grid-template-columns: repeat(4, 1fr); border-bottom: 1px solid var(--slate-200); }
+.step { font: inherit; font-weight: 600; font-size: 14px; color: var(--slate-600); background: none; border: 0; border-bottom: 3px solid transparent; padding: 9px 4px 7px; cursor: pointer; display: grid; justify-items: center; gap: 1px; }
+.step b { display: inline-grid; place-items: center; width: 21px; height: 21px; border-radius: 50%; border: 1.5px solid currentColor; font-size: 12px; }
+.step.done b { background: var(--ok); border-color: var(--ok); color: #fff; }
+.step[aria-selected="true"] { color: var(--slate-950); border-bottom-color: var(--copper); }
+.pane { overflow-y: auto; padding: 16px 18px 24px max(18px, env(safe-area-inset-left, 0px)); display: flex; flex-direction: column; gap: 18px; min-height: 0; flex: 1; }
+.pane-head .kicker { font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--copper); font-weight: 700; }
+.pane-head h2 { margin: 2px 0 4px; font-size: 21px; line-height: 1.15; }
+.pane-head p { margin: 0; color: var(--slate-600); font-size: 14px; }
+h3 { margin: 0 0 8px; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--slate-600); font-weight: 700; }
+p { margin: 0; }
+.muted { color: var(--slate-600); font-size: 13.5px; }
+ol.how { margin: 0; padding-left: 20px; display: grid; gap: 3px; font-size: 14px; }
+.drop { border: 2px dashed var(--slate-300); border-radius: 8px; padding: 16px; text-align: center; display: grid; gap: 8px; background: var(--slate-050); }
+.drop.over { border-color: var(--copper); background: var(--copper-soft); }
+.drop strong { font-size: 16px; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.btn { font: inherit; font-size: 14px; font-weight: 600; color: var(--slate-950); background: #fff; border: 1px solid var(--slate-200); border-radius: 6px; padding: 7px 12px; cursor: pointer; line-height: 1.2; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.btn:hover { border-color: var(--slate-500); background: var(--slate-050); }
+.btn.primary { background: var(--slate-950); border-color: var(--slate-950); color: #fff; }
+.btn.primary:hover { background: var(--slate-800); }
+.btn.next { align-self: flex-end; }
+:where(button, a, input, select, textarea, summary, label.btn):focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.need { display: grid; gap: 7px; }
+.need-item { display: grid; grid-template-columns: 22px 1fr; gap: 0 8px; font-size: 14px; }
+.need-item .dot { width: 16px; height: 16px; margin-top: 2px; border-radius: 50%; border: 2px solid var(--slate-300); display: grid; place-items: center; color: #fff; font-size: 11px; font-style: normal; font-weight: 700; }
+.need-item.ok .dot { background: var(--ok); border-color: var(--ok); }
+.need-item.ok .dot::after { content: "✓"; }
+.need-item.opt .dot { border-style: dashed; }
+.need-item span { font-weight: 600; }
+.need-item small { grid-column: 2; color: var(--slate-600); font-size: 13px; }
+.files { display: grid; gap: 8px; }
+.file { border: 1px solid var(--slate-200); border-radius: 8px; padding: 9px 10px; display: grid; gap: 6px; font-size: 13.5px; }
+.file-head { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+.file-head .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.maps { display: grid; grid-template-columns: auto 1fr; gap: 4px 8px; align-items: center; font-size: 13px; }
+.maps label { color: var(--slate-600); }
+select, input[type="text"], input[type="number"], textarea { font: inherit; font-size: 14px; color: var(--slate-950); background: #fff; border: 1px solid var(--slate-200); border-radius: 5px; padding: 5px 7px; min-width: 0; width: 100%; }
+textarea { font-family: var(--mono); font-size: 12px; resize: vertical; }
+.warn { color: var(--warn); font-size: 13px; }
+.bad { color: var(--bad); font-size: 13px; }
+.summary { display: flex; flex-wrap: wrap; gap: 6px; }
+.pill { font-family: var(--mono); font-size: 12px; background: var(--slate-050); border: 1px solid var(--slate-200); border-radius: 999px; padding: 2px 9px; }
+.field { display: grid; gap: 4px; font-size: 14px; }
+.field > span { color: var(--slate-600); font-size: 13px; display: flex; justify-content: space-between; gap: 6px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.bins i { display: block; height: 6px; border-radius: 3px; margin-bottom: 3px; }
+details { border: 1px solid var(--slate-200); border-radius: 8px; padding: 8px 10px; }
+summary { cursor: pointer; font-weight: 600; font-size: 14px; }
+pre { font-family: var(--mono); font-size: 11.5px; background: var(--slate-050); padding: 8px; border-radius: 6px; overflow-x: auto; margin: 8px 0 0; white-space: pre; }
+.check { display: flex; gap: 8px; align-items: center; font-size: 14px; }
+.check input, input[type="range"] { accent-color: var(--slate-950); }
+input[type="range"] { width: 100%; }
+.mono { font-family: var(--mono); font-size: 12px; }
+.mesh { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; font-size: 13.5px; }
+input[type="color"] { width: 34px; height: 26px; border: 1px solid var(--slate-200); border-radius: 4px; padding: 1px; background: #fff; }
+.logo-box { display: grid; grid-template-columns: 96px 1fr; gap: 12px; align-items: center; border: 1px solid var(--slate-200); border-radius: 8px; padding: 10px; }
+.logo-prev { width: 96px; height: 56px; border: 1px dashed var(--slate-300); border-radius: 6px; display: grid; place-items: center; background: #fff; overflow: hidden; color: var(--slate-500); font-size: 12px; }
+.logo-prev img { max-width: 90px; max-height: 50px; }
+.swatches { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+.swatches label { display: flex; gap: 6px; align-items: center; font-size: 13.5px; }
+.callout-ed { display: grid; grid-template-columns: auto 1fr; gap: 4px 8px; align-items: center; border-top: 1px solid var(--slate-100); padding-top: 8px; }
+.callout-ed .id { font-family: var(--mono); font-size: 12px; font-weight: 600; }
+.callout-ed input[type="text"] { grid-column: 2; font-size: 13px; padding: 3px 6px; }
+.sizes { display: grid; gap: 6px; }
+.sizes label { display: flex; gap: 8px; align-items: center; border: 1px solid var(--slate-200); border-radius: 6px; padding: 7px 10px; cursor: pointer; font-size: 14px; }
+.sizes label:has(input:checked) { border-color: var(--slate-950); background: var(--slate-050); }
+.sizes small { margin-left: auto; font-family: var(--mono); font-size: 11.5px; color: var(--slate-600); }
+.upgrade { border: 1px solid var(--copper); background: var(--copper-soft); border-radius: 8px; padding: 12px; display: grid; gap: 8px; }
+.upgrade strong { font-size: 16px; }
+
+.stage { position: relative; min-width: 0; overflow: hidden; background: var(--workspace); }
+.toolbar { position: absolute; top: 10px; left: 12px; right: 12px; z-index: 6; display: flex; justify-content: space-between; gap: 8px; align-items: center; pointer-events: none; }
+.toolbar > * { pointer-events: auto; }
+.tabs { display: inline-flex; background: #fff; border: 1px solid var(--slate-200); border-radius: 8px; padding: 3px; }
+.tab { font: inherit; font-size: 14px; font-weight: 600; color: var(--slate-600); background: none; border: 0; padding: 5px 12px; border-radius: 6px; cursor: pointer; }
+.tab[aria-selected="true"] { background: var(--slate-950); color: #fff; }
+.frame-label { font-family: var(--mono); font-size: 12px; color: var(--slate-600); background: rgba(255,255,255,0.8); padding: 3px 8px; border-radius: 4px; }
+.frame { position: absolute; background: #fff; box-shadow: 0 1px 2px rgba(20,33,38,0.08), 0 8px 24px rgba(20,33,38,0.12); overflow: hidden; }
+#gl, #ov, #section { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+#ov { pointer-events: none; }
+.status { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); z-index: 6; background: var(--slate-950); color: #fff; font-size: 13.5px; padding: 6px 12px; border-radius: 999px; max-width: 90%; text-align: center; }
+
+@media (max-width: 820px) {
+  body { overflow: auto; }
+  .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto; height: auto; }
+  .stage { order: 1; height: 62vh; }
+  .panel { order: 2; border-right: 0; border-top: 1px solid var(--slate-200); }
+  .pane { overflow: visible; padding-right: max(18px, env(safe-area-inset-right, 0px)); }
+  .frame-label { display: none; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="panel" aria-label="Exploration Maps 3D builder">
+    <div class="brandbar">
+      <svg viewBox="0 0 480 480" aria-hidden="true"><rect width="480" height="480" rx="77" fill="#fcfbf7"/><svg x="52.8" y="52.8" width="374.4" height="374.4" viewBox="18 40 427 450"><path fill="#142126" d="M60 40H180V85H410V250H445V480H30V385H60Z"/><path fill="none" stroke="#fff" stroke-width="22" d="M18 180H132L205 250H240V325L320 400V490"/><path fill="none" stroke="#fff" stroke-width="22" d="M205 250L260 195"/><rect x="250" y="145" width="90" height="90" fill="#fff"/><rect x="273" y="168" width="44" height="44" fill="#c65322"/></svg></svg>
+      <a class="name" href="/">Exploration Maps</a><span class="badge cu">3D</span><span class="badge">Beta</span>
+    </div>
+    <div class="steps" role="tablist" aria-label="Steps">
+      <button class="step" role="tab" id="step-data" aria-controls="pane-data" aria-selected="true"><b>1</b>Data</button>
+      <button class="step" role="tab" id="step-brand" aria-controls="pane-brand" aria-selected="false"><b>2</b>Brand</button>
+      <button class="step" role="tab" id="step-layout" aria-controls="pane-layout" aria-selected="false"><b>3</b>Layout</button>
+      <button class="step" role="tab" id="step-export" aria-controls="pane-export" aria-selected="false"><b>4</b>Export</button>
+    </div>
+
+    <!-- STEP 1 -->
+    <div class="pane" id="pane-data" role="tabpanel" aria-labelledby="step-data">
+      <div class="pane-head"><div class="kicker">Step 1 of 4</div><h2>Add your drill data</h2>
+        <p>Export collars and assays from your drill database as CSV and drop them in. The sample project is showing until you do.</p></div>
+      <div class="drop" id="drop">
+        <strong>Drop CSV files here</strong>
+        <span class="muted">Collars, assays, surveys, topography, or OBJ model shapes. Columns are matched for you.</span>
+        <div class="row" style="justify-content:center">
+          <label class="btn primary" for="file-input">Choose files</label>
+          <input type="file" id="file-input" multiple accept=".csv,.txt,.obj" hidden>
+          <button class="btn" type="button" id="load-sample">Use sample project</button>
+          <button class="btn" type="button" id="clear-files">Clear</button>
+        </div>
+      </div>
+      <details id="paste-box">
+        <summary>Or paste data as text</summary>
+        <label class="field" style="margin-top:8px"><span>File name (helps detect the type, e.g. collars.csv)</span><input type="text" id="paste-name" value="pasted.csv"></label>
+        <label class="field" style="margin-top:6px"><span>CSV text with a header row</span><textarea id="paste-text" rows="6" placeholder="HoleID,Easting,Northing,Elevation,Depth&#10;EX-001,412310.5,6421790.2,1346.1,420"></textarea></label>
+        <button class="btn" type="button" id="paste-add" style="margin-top:6px">Add pasted data</button>
+      </details>
+      <section>
+        <h3>Checklist</h3>
+        <div class="need">
+          <div class="need-item" id="need-collar"><i class="dot"></i><span>Collars · required</span><small>Hole ID, Easting, Northing, Elevation, Depth. Azimuth and Dip can go here too.</small></div>
+          <div class="need-item" id="need-assay"><i class="dot"></i><span>Assays · required</span><small>Hole ID, From, To, and grade columns (Cu %, Au g/t, CuEq…).</small></div>
+          <div class="need-item opt" id="need-survey"><i class="dot"></i><span>Surveys · optional</span><small>Hole ID, Depth, Azimuth, Dip. Without it, holes run straight.</small></div>
+          <div class="need-item opt" id="need-topo"><i class="dot"></i><span>Topography · optional</span><small>X, Y, Z points or LiDAR. Without it, the surface is fitted to the collars.</small></div>
+          <div class="need-item opt" id="need-mesh"><i class="dot"></i><span>Model shapes · optional</span><small>Grade shells or geology as OBJ meshes.</small></div>
+        </div>
+        <p class="muted" style="margin-top:8px">Coordinates in UTM metres (lat/long works for collars). Dips can be negative or positive down.</p>
+      </section>
+      <section><h3>Loaded files</h3><div class="files" id="file-list"></div></section>
+      <div class="summary" id="summary" aria-live="polite"></div>
+      <details><summary>See example file layouts</summary><pre id="fmt-collar"></pre><pre id="fmt-survey"></pre><pre id="fmt-assay"></pre></details>
+      <button class="btn primary next" type="button" data-goto="brand">Next: Brand →</button>
+    </div>
+
+    <!-- STEP 2 -->
+    <div class="pane" id="pane-brand" role="tabpanel" aria-labelledby="step-brand" hidden>
+      <div class="pane-head"><div class="kicker">Step 2 of 4</div><h2>Brand it as your company</h2>
+        <p>Add your logo and the figure takes its colours. Adjust anything below.</p></div>
+      <div class="logo-box">
+        <div class="logo-prev" id="logo-prev">No logo</div>
+        <div class="field"><span>Company logo (PNG, JPG or SVG)</span><input type="file" id="logo-input" accept="image/*"><button class="btn" type="button" id="logo-clear" style="justify-self:start;padding:3px 9px">Remove logo</button></div>
+      </div>
+      <section>
+        <h3>Brand colours</h3>
+        <div class="swatches">
+          <label for="col-primary"><input type="color" id="col-primary" value="#142126">Titles and labels</label>
+          <label for="col-accent"><input type="color" id="col-accent" value="#c65322">Accent</label>
+        </div>
+        <p class="muted" style="margin-top:6px" id="col-note">Picked automatically when you add a logo.</p>
+      </section>
+      <section class="grid2">
+        <label class="field" style="grid-column:1/-1"><span>Company name</span><input type="text" id="company" value="Example Resources"></label>
+        <label class="field" style="grid-column:1/-1"><span>Figure title</span><input type="text" id="title" value="EXAMPLE RIDGE · MAIN ZONE"></label>
+        <label class="field" style="grid-column:1/-1"><span>Subtitle</span><input type="text" id="subtitle" value="3D drilling model · illustrative data"></label>
+        <label class="field" style="grid-column:1/-1"><span>Footnote</span><input type="text" id="footnote" value="Intervals are core lengths; true widths are not known. Illustrative data."></label>
+      </section>
+      <label class="check"><input type="checkbox" id="credit" checked>Show "Made with Exploration Maps" (removed on Pro)</label>
+      <button class="btn primary next" type="button" data-goto="layout">Next: Layout →</button>
+    </div>
+
+    <!-- STEP 3 -->
+    <div class="pane" id="pane-layout" role="tabpanel" aria-labelledby="step-layout" hidden>
+      <div class="pane-head"><div class="kicker">Step 3 of 4</div><h2>Set up the figure</h2>
+        <p>Choose what colours the holes, which intercepts to call out, and the camera.</p></div>
+      <section>
+        <h3>Colour holes by</h3>
+        <div class="grid2">
+          <label class="field"><span>Grade column</span><select id="value-col"></select></label>
+          <label class="field"><span>Label and unit</span><input type="text" id="value-label"></label>
+        </div>
+        <div class="grid4 bins" id="bins" style="margin-top:8px"></div>
+        <div class="row" style="margin-top:6px"><button class="btn" type="button" id="auto-bins">Suggest from data</button><span class="muted">Lower limit of each colour</span></div>
+      </section>
+      <section>
+        <h3>Intercept callouts</h3>
+        <div class="grid2">
+          <label class="field"><span>Number shown</span><input type="number" id="co-count" min="0" max="8"></label>
+          <label class="field"><span>Minimum length (m)</span><input type="number" id="co-min" min="1"></label>
+          <label class="field"><span>Broad cut-off</span><input type="number" id="co-cut" step="any"></label>
+          <label class="field"><span>"incl." cut-off</span><input type="number" id="co-incl" step="any"></label>
+        </div>
+        <div id="callout-editor" style="display:grid;gap:8px;margin-top:10px"></div>
+      </section>
+      <section>
+        <h3>Camera</h3>
+        <div class="grid2">
+          <button class="btn" type="button" data-view="a">Facing the section</button>
+          <button class="btn" type="button" data-view="b">Opposite side</button>
+          <button class="btn" type="button" data-view="low">Low angle</button>
+          <button class="btn" type="button" data-view="plan">Plan view</button>
+        </div>
+        <label class="field" style="margin-top:8px"><span>Looking toward (azimuth) <output id="cam-az-out" class="mono"></output></span><input type="range" id="cam-az" min="0" max="359"></label>
+        <label class="field"><span>Plunge (angle down) <output id="cam-pl-out" class="mono"></output></span><input type="range" id="cam-pl" min="3" max="89"></label>
+        <label class="field"><span>Zoom <output id="cam-zoom-out" class="mono"></output></span><input type="range" id="cam-zoom" min="40" max="250"></label>
+      </section>
+      <section>
+        <h3>Section line A–A′</h3>
+        <label class="field"><span>Azimuth <output id="sec-az-out" class="mono"></output></span><input type="range" id="sec-az" min="0" max="179"></label>
+        <label class="field"><span>Projection either side (m)</span><input type="number" id="sec-w" min="5"></label>
+      </section>
+      <section>
+        <h3>Display</h3>
+        <div class="row" style="gap:14px">
+          <label class="check"><input type="checkbox" id="opt-walls" checked>Glass block sides</label>
+          <label class="check"><input type="checkbox" id="opt-ids" checked>Hole IDs</label>
+          <label class="check"><input type="checkbox" id="opt-inset" checked>Plan inset</label>
+        </div>
+        <label class="field" style="margin-top:8px"><span>Surface opacity <output id="surf-out" class="mono">100%</output></span><input type="range" id="surf" min="15" max="100" value="100"></label>
+        <div class="files" id="mesh-list" style="margin-top:8px"></div>
+      </section>
+      <button class="btn primary next" type="button" data-goto="export">Next: Export →</button>
+    </div>
+
+    <!-- STEP 4 -->
+    <div class="pane" id="pane-export" role="tabpanel" aria-labelledby="step-export" hidden>
+      <div class="pane-head"><div class="kicker">Step 4 of 4</div><h2>Export</h2>
+        <p>Pick a size. The preview frame shows exactly what will be exported.</p></div>
+      <section>
+        <h3>Figure size</h3>
+        <div class="sizes" id="sizes" role="radiogroup" aria-label="Figure size"></div>
+      </section>
+      <section class="row">
+        <button class="btn primary" type="button" id="export-3d">Download 3D figure (PNG)</button>
+        <button class="btn primary" type="button" id="export-section">Download section (PNG)</button>
+      </section>
+      <div class="upgrade">
+        <strong>Want it hand-finished?</strong>
+        <p class="muted">Send this project to the Exploration Maps design desk. We refine geology, labels and layout to your brand and return print-ready files within 48 hours.</p>
+        <a class="btn" id="request-design" href="/teams/?ref=3d#enquire" style="justify-self:start">Request design finishing</a>
+      </div>
+      <details>
+        <summary>For AI assistants and browser agents</summary>
+        <pre id="ai-help"></pre>
+      </details>
+    </div>
+  </aside>
+
+  <main class="stage" id="stage" aria-label="Figure preview">
+    <div class="toolbar">
+      <div class="tabs" role="tablist" aria-label="Figure">
+        <button class="tab" role="tab" id="view-3d" aria-selected="true">3D figure</button>
+        <button class="tab" role="tab" id="view-section" aria-selected="false">Section A–A′</button>
+      </div>
+      <span class="frame-label" id="frame-label"></span>
+    </div>
+    <div class="frame" id="frame">
+      <canvas id="gl" aria-label="3D drilling figure"></canvas>
+      <canvas id="ov" aria-hidden="true"></canvas>
+      <canvas id="section" hidden aria-label="Cross-section A–A′"></canvas>
+    </div>
+    <div class="status" id="status" role="status" aria-live="polite">Sample project loaded · illustrative data</div>
+  </main>
+</div>
+<!-- Current figure state as JSON, for AI assistants and browser agents (see the Export step). -->
+<script type="application/json" id="em3d-state">{}</script>
+<script type="module" src="/src/three-d/studio.js"></script>
+</body>
+</html>

@@ -924,6 +924,7 @@ function buildSitemap(allUrls, landingUrls = []) {
   const staticEntries = [
     entry(`${SITE}/about/`),
     entry(`${SITE}/contact/`),
+    entry(`${SITE}/teams/`),
   ].join('\n');
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${homepage}\n${landingEntries}\n${blogEntries}\n${staticEntries}\n</urlset>`;
 }

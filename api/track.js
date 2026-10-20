@@ -96,6 +96,7 @@ const RATE_LIMITS = {
   search: { max: 40, windowMs: 60_000 },
   lead: { max: 5, windowMs: 600_000 },
   claim_request: { max: 5, windowMs: 600_000 },
+  team_enquiry: { max: 3, windowMs: 600_000 },
 };
 const rateBuckets = new Map();
 
@@ -142,6 +143,29 @@ const searchTerm = (v) => {
   return collapsed ? redact(collapsed).slice(0, MAX_QUERY_TEXT) : null;
 };
 const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
+
+// Exploration Maps for Teams (/teams). The form's choices, checked here so a
+// row only ever holds values the admin view knows how to show.
+const TEAM_MATERIALS = new Set(['claims', 'project_maps', 'results', 'sections_3d', 'investor', 'presentation', 'fact_sheet', 'website']);
+const TEAM_LEVELS = new Set(['managed_maps', 'maps_presentation', 'corporate', 'not_sure']);
+const TEAM_MAX_FILES = 5;
+const TEAM_MAX_FILE_BYTES = 50 * 1024 * 1024;
+const TEAM_BUCKET = 'team-enquiries';
+
+// Declared files become storage paths under the enquiry's own folder. Names are
+// reduced to a safe slug; the original name is kept in the row for display.
+export function teamFiles(list) {
+  if (!Array.isArray(list)) return [];
+  return list.slice(0, TEAM_MAX_FILES).flatMap((f, i) => {
+    const name = str(f?.name, 200);
+    const size = num(f?.size);
+    if (!name || size === null || size <= 0 || size > TEAM_MAX_FILE_BYTES) return [];
+    const dot = name.lastIndexOf('.');
+    const ext = dot > 0 ? name.slice(dot + 1).toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 10) : '';
+    const stem = (dot > 0 ? name.slice(0, dot) : name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'file';
+    return [{ name, size, type: str(f?.type, 100) || null, file: `${i + 1}-${stem}${ext ? `.${ext}` : ''}` }];
+  });
+}
 
 function geoFromHeaders(h) {
   const dec = (v) => { if (!v) return null; try { return decodeURIComponent(v); } catch { return v; } };
@@ -213,7 +237,7 @@ export default async function handler(req, res) {
 
   // Without the service key we accept and drop — analytics never breaks the UI.
   if (!SUPABASE_URL || !SERVICE_KEY) {
-    if (body.event === 'signup_completed') return res.status(503).json({ error: 'tracking unavailable' });
+    if (body.event === 'signup_completed' || kind === 'team_enquiry') return res.status(503).json({ error: 'tracking unavailable' });
     return res.status(204).end();
   }
   const sb = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
@@ -380,6 +404,46 @@ export default async function handler(req, res) {
       // The same person asking for the same thing twice is one request.
       if (error && error.code !== '23505') throw error;
       return res.status(204).end();
+    }
+
+    if (kind === 'team_enquiry') {
+      // A person is waiting on this one, so it answers with the enquiry id and
+      // a signed upload URL per declared file instead of a silent 204.
+      const email = (str(body.email, 320) || '').trim().toLowerCase();
+      if (!EMAIL_RE.test(email)) return res.status(400).json({ error: 'invalid email' });
+      const company = (str(body.company, 200) || '').trim();
+      if (!company) return res.status(400).json({ error: 'company required' });
+      const materials = Array.isArray(body.materials) ? [...new Set(body.materials.filter((m) => TEAM_MATERIALS.has(m)))] : [];
+      const level = TEAM_LEVELS.has(body.service_level) ? body.service_level : null;
+      const deadline = /^\d{4}-\d{2}-\d{2}$/.test(String(body.deadline || '')) ? body.deadline : null;
+      const ref = str(body.ref, 40);
+      const declared = teamFiles(body.files);
+      const id = globalThis.crypto.randomUUID();
+      const files = declared.map((f) => ({ name: f.name, size: f.size, type: f.type, path: `${id}/${f.file}` }));
+      const { error } = await sb.from('team_enquiries').insert({
+        id,
+        name: (str(body.name, 200) || '').trim() || null,
+        email,
+        company,
+        projects: (str(body.projects, 500) || '').trim() || null,
+        materials,
+        service_level: level,
+        deadline,
+        deadline_note: (str(body.deadline_note, 300) || '').trim() || null,
+        message: (str(body.message, 3000) || '').trim() || null,
+        files,
+        ref: ref && /^[a-z0-9_-]+$/i.test(ref) ? ref : null,
+        session_id: sessionId,
+        user_agent: str(req.headers?.['user-agent'], 300),
+      });
+      if (error) throw error;
+      const uploads = [];
+      for (const f of files) {
+        const { data, error: upErr } = await sb.storage.from(TEAM_BUCKET).createSignedUploadUrl(f.path);
+        // The enquiry stands without its files; the form says which failed.
+        uploads.push(upErr || !data?.signedUrl ? { name: f.name, url: null } : { name: f.name, url: data.signedUrl });
+      }
+      return res.status(200).json({ id, uploads });
     }
 
     return res.status(400).json({ error: 'unknown kind' });

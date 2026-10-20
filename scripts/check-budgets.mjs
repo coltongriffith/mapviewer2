@@ -59,6 +59,11 @@ const BUDGETS = {
   // 809 → 810: the lazy /oauth/consent page for MCP account sign-in.
   // 810 → 812: Download PNG on shared maps (the MCP png_download_url).
   totalJsGzipKb: 812,
+  // Standalone pages (/3d, /teams) are separate Vite entries that never share
+  // the app's chunks, so they are budgeted on their own instead of in the
+  // totals above. /3d carries three.js (~109 kB gzip) and its editor.
+  threeDJsGzipKb: 140,
+  teamsJsGzipKb: 10,
   adminAuthJsGzipKb: 150,
   adminJsGzipKb: 85,
   editorAuthJsGzipKb: 335,
@@ -102,7 +107,32 @@ if (distFiles.length === 0) {
 }
 
 // ── JavaScript ──
-const jsFiles = distFiles.filter((f) => extname(f) === '.js');
+const manifest = JSON.parse(await readFile(join(DIST, '.vite/manifest.json'), 'utf8'));
+function reachable(key, files = new Set()) {
+  const chunk = manifest[key];
+  if (!chunk || files.has(chunk.file)) return files;
+  files.add(chunk.file);
+  for (const imported of chunk.imports || []) reachable(imported, files);
+  return files;
+}
+const appReach = reachable('index.html');
+const STANDALONE = [['3d', '3d/index.html', BUDGETS.threeDJsGzipKb], ['teams', 'teams/index.html', BUDGETS.teamsJsGzipKb]];
+const standaloneOnly = new Set();
+for (const [name, entry, limit] of STANDALONE) {
+  if (!manifest[entry]) throw new Error(`Missing standalone entry: ${entry}`);
+  const files = reachable(entry);
+  if ([...files].some((file) => /\/(App-|vendor-leaflet-|vendor-export-)/.test(`/${file}`))) failures.push(`${name} page loads the editor`);
+  let size = 0;
+  for (const file of files) {
+    size += await gzipKb(join(DIST, file));
+    if (!appReach.has(file)) standaloneOnly.add(join(DIST, file));
+  }
+  report.push(`${name} page JS: ${size.toFixed(1)} kB gzip across ${files.size} chunks`);
+  if (size > limit) failures.push(`${name} page JS ${size.toFixed(1)} kB exceeds ${limit} kB`);
+}
+
+// The app's totals leave out chunks only a standalone page loads.
+const jsFiles = distFiles.filter((f) => extname(f) === '.js' && !standaloneOnly.has(f));
 let totalJs = 0;
 let biggestJs = { file: '', kb: 0 };
 for (const f of jsFiles) {
@@ -115,7 +145,6 @@ if (biggestJs.kb > BUDGETS.maxJsChunkGzipKb) {
   failures.push(`largest JS chunk ${biggestJs.kb} kB gzip exceeds ${BUDGETS.maxJsChunkGzipKb} kB (${biggestJs.file})`);
 }
 
-const manifest = JSON.parse(await readFile(join(DIST, '.vite/manifest.json'), 'utf8'));
 const initialFiles = new Set();
 function collectInitial(key, files = initialFiles) {
   const chunk = manifest[key];
