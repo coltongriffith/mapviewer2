@@ -300,7 +300,9 @@ function rebuildScene() {
   B.z0 = zmin - Math.max(25, 0.05 * diag);
   const zref = (zmax + B.z0) / 2;
   const V = (x, y, z) => new THREE.Vector3(x - cx, z - zref, -(y - cy));
-  G = { B, cx, cy, bw, bh, diag, surf, V, zref, zmax };
+  // Size the scene by its depth as well as its footprint: a tight collar
+  // pattern with 600 m holes (Star Main) otherwise puts the camera inside the block.
+  G = { B, cx, cy, bw, bh, diag: Math.max(diag, Math.hypot(bw, bh, zmax - B.z0)), surf, V, zref, zmax };
 
   // Terrain top
   const TW = 768, TH = Math.max(64, Math.round(768 * bh / bw));
@@ -472,7 +474,8 @@ function layoutFrame() {
 let tween = null;
 const lookVec = (az, pl) => { const a = az * Math.PI / 180, p = pl * Math.PI / 180; return new THREE.Vector3(Math.sin(a) * Math.cos(p), -Math.sin(p), -Math.cos(a) * Math.cos(p)); };
 const baseDist = () => G.diag * 1.65 * Math.pow(Math.max(1, 1.6 / (W / H)), 0.85);
-const camTarget = () => G.V(G.cx, G.cy, (G.B.z0 + G.zmax) / 2);
+// Aim a little above the block's middle so it sits below the title block, not under it.
+const camTarget = () => G.V(G.cx, G.cy, (G.B.z0 + G.zmax) / 2 + 0.1 * (G.zmax - G.B.z0));
 function getCam() {
   const d = controls.target.clone().sub(camera.position), dist = d.length();
   if (!G || dist < 1e-6) return { azimuth: ((S.secAz - 90) % 360 + 360) % 360, plunge: 20, zoom: 100 };
@@ -624,7 +627,9 @@ function drawScaleBar(ctx, K, footTop) {
     return;
   }
   // No near edge has room: a flat bar at the scale of the block centre.
-  const c0 = proj(controls.target), c1 = proj(controls.target.clone().add(new THREE.Vector3(G.diag * 0.1, 0, 0))), ppm = Math.hypot(c1[0] - c0[0], c1[1] - c0[1]) / (G.diag * 0.1);
+  // Measured along the screen's own horizontal, so a view looking along an axis is not foreshortened.
+  const across = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0).normalize().multiplyScalar(G.diag * 0.1);
+  const c0 = proj(controls.target), c1 = proj(controls.target.clone().add(across)), ppm = Math.hypot(c1[0] - c0[0], c1[1] - c0[1]) / (G.diag * 0.1);
   if (!(ppm > 0)) return;
   const D = [10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000].find((d) => d * ppm >= 120 * u) || 5000, len = D * ppm, x = (W - len) / 2, y = footTop - 26 * u;
   ctx.fillStyle = INK; ctx.fillRect(x, y, len / 2, 6 * u); ctx.fillStyle = '#fff'; ctx.fillRect(x + len / 2, y, len / 2, 6 * u); ctx.strokeStyle = INK; ctx.lineWidth = u; ctx.strokeRect(x, y, len, 6 * u);
@@ -746,7 +751,7 @@ function drawSection(ctx, Wc, Hc, forExport) {
   });
   tagLabel(ctx, K, 'A', X(0), Y(profile[0][1]) - 24 * u); tagLabel(ctx, K, 'A′', X(L), Y(profile[200][1]) - 24 * u);
   // Bottom strip: scale bar left, horizontal legend right
-  const sy = footTop - 18 * u, sb = niceRound(L / 6);
+  const sy = footTop - 18 * u, sb = [10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000].find((d) => d * s >= 120 * u) || niceRound(L / 3);
   ctx.fillStyle = INK; ctx.fillRect(m, sy, sb * s / 2, 6 * u); ctx.fillStyle = '#fff'; ctx.fillRect(m + sb * s / 2, sy, sb * s / 2, 6 * u); ctx.strokeStyle = INK; ctx.lineWidth = u; ctx.strokeRect(m, sy, sb * s, 6 * u);
   font(400, 12, true); ctx.fillStyle = INK; ctx.fillText('0', m, sy - 6 * u); ctx.textAlign = 'right'; ctx.fillText(`${sb} m`, m + sb * s, sy - 6 * u); ctx.textAlign = 'left';
   const items = legendRows().slice(0, 4).reverse(); font(400, 12, true);
