@@ -6,6 +6,7 @@ import { promisify } from 'node:util';
 import shp from 'shpjs';
 import JSZip from 'jszip';
 import { checkImportHeadroom, describeRefusal } from './lib/importHeadroom.mjs';
+import { SourceUnavailableError, isSourceUnavailable, QC_MAX_STALE_DAYS, maxStaleDays, judgeOutage, describeOutage, announceSkippedRun } from './lib/sourceOutage.mjs';
 export const SOURCE_URL = 'https://diffusion.mern.gouv.qc.ca/Public/GESTIM/telechargements/Province_shape/TITRES_ACTIFS_ACTIVE_TITLES.zip';
 export const BATCH_SIZE = 1000;
 // Re-check disk headroom this often while staging (~50 MB of jsonb per check).
@@ -43,20 +44,31 @@ export function validateRows(rows, { minRows = 100000, maxRows = 400000 } = {}) 
   }
   return rows;
 }
-export async function downloadActive(url = SOURCE_URL) {
+// curl exit codes meaning the host could not be reached or did not answer in time:
+// DNS (6), connect (7), timeout (28), TLS (35), empty reply (52), send/recv (55, 56).
+const UNREACHABLE_CURL_EXITS = new Set([6, 7, 28, 35, 52, 55, 56]);
+// The GESTIM server being down (2026-10-13), as opposed to a 404 or a non-ZIP body,
+// which mean the dataset itself changed and must fail loudly.
+export function isSourceOutage(e) {
+  if (UNREACHABLE_CURL_EXITS.has(e?.code)) return true;
+  return e?.code === 22 && /returned error: (429|5\d\d)/.test(String(e?.stderr || e?.message));
+}
+export async function downloadActive(url = SOURCE_URL, { run = promisify(execFile), pause = ms => new Promise(r => setTimeout(r, ms)) } = {}) {
   assertActiveSource(url);
   let lastError;
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
       // IPv4 avoids unreliable government-host connections on dual-stack runners.
       // No redirects: a download can never switch to a different dataset or host.
-      const { stdout: buf } = await promisify(execFile)('curl', ['--ipv4', '--fail', '--silent', '--show-error', '--connect-timeout', '30', '--max-time', '120', url], { encoding: 'buffer', maxBuffer: 64 * 1024 * 1024 });
+      const { stdout: buf } = await run('curl', ['--ipv4', '--fail', '--silent', '--show-error', '--connect-timeout', '30', '--max-time', '120', url], { encoding: 'buffer', maxBuffer: 64 * 1024 * 1024 });
       if (buf.length < 4 || buf[0] !== 0x50 || buf[1] !== 0x4b) throw new Error('Active archive is not a ZIP');
       console.log(`Downloaded ${(buf.length / 1e6).toFixed(1)} MB from the active archive.`);
       return buf;
-    } catch (e) { lastError = e; if (attempt < 3) await new Promise(r => setTimeout(r, attempt * 2000)); }
+    } catch (e) { lastError = e; if (attempt < 3) await pause(attempt * 2000); }
   }
-  throw lastError; // Never discover another dataset after failure.
+  // Never discover another dataset after failure.
+  if (isSourceOutage(lastError)) throw new SourceUnavailableError(String(lastError.stderr || lastError.message).trim().split('\n').pop(), { cause: lastError });
+  throw lastError;
 }
 export async function prepareRows(buf) {
   const zip = await JSZip.loadAsync(buf);
@@ -89,7 +101,42 @@ export async function prepareRows(buf) {
 }
 // `guard(phase)` throws to stop the import; it runs inside the try, so a refusal
 // discards staging exactly like any other failure. See scripts/lib/importHeadroom.mjs.
-export async function publishRows(rows, rpc, { guard } = {}) {
+// publish_qc_import truncates and reloads 258k rows (generated geometry, a GIST and
+// three trigram indexes). On 2026-09-15 that took 58 s; from 2026-09-22 it passed the
+// 60 s statement timeout that PostgREST calls cannot raise, every week. So it runs over
+// a direct Postgres connection (SUPABASE_DB_URL) with its own timeout; REST remains
+// the fallback when that secret is not configured.
+export const PUBLISH_STATEMENT_TIMEOUT = '10min';
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export function isRestTimeout(e) {
+  return /\b57014\b|statement timeout|HTTP 504|aborted due to timeout/i.test(String(e?.message)) || e?.name === 'TimeoutError';
+}
+export async function publishOverRest(rpc, runId) {
+  try {
+    return await rpc('publish_qc_import', { p_run_id: runId });
+  } catch (e) {
+    if (isRestTimeout(e)) throw new Error('publish_qc_import cannot finish inside the 60 s REST API limit; add the SUPABASE_DB_URL repository secret (Supabase session pooler connection string) so it runs over Postgres.', { cause: e });
+    throw e;
+  }
+}
+// psql via execFile: no shell, the URL is one argv entry, and the run id is a validated
+// uuid. -1 wraps both commands in one transaction, so SET LOCAL holds for the publish
+// even through a transaction-mode pooler.
+export async function publishOverPostgres(dbUrl, runId, { run = promisify(execFile) } = {}) {
+  if (!UUID.test(String(runId))) throw new Error('Refusing to publish: import run id is not a uuid');
+  try {
+    const { stdout } = await run('psql', [dbUrl, '-X', '-q', '-t', '-A', '-v', 'ON_ERROR_STOP=1', '-1',
+      '-c', `set local statement_timeout = '${PUBLISH_STATEMENT_TIMEOUT}'`,
+      '-c', `select public.publish_qc_import('${runId}'::uuid)`], { timeout: 11 * 60_000 });
+    // The count is the only bare integer psql prints (-q hides SET/BEGIN/COMMIT tags).
+    return Number(String(stdout).split('\n').map(l => l.trim()).filter(l => /^\d+$/.test(l)).pop());
+  } catch (e) {
+    // Only psql's own words: Node's message for a failed execFile repeats the argv,
+    // and the argv carries the connection string.
+    throw new Error(`publish_qc_import over Postgres failed: ${String(e.stderr || (e.killed ? 'psql timed out' : e.code)).trim().slice(0, 300)}`);
+  }
+}
+export async function publishRows(rows, rpc, { guard, publish = runId => publishOverRest(rpc, runId) } = {}) {
   validateRows(rows);
   const run = await rpc('begin_qc_import', { p_expected_rows: rows.length });
   try {
@@ -100,7 +147,7 @@ export async function publishRows(rows, rpc, { guard } = {}) {
     }
     // Publication writes a whole new copy of qc_claims while the old one is still held.
     if (guard) await guard('publish');
-    const result = await rpc('publish_qc_import', { p_run_id: run });
+    const result = await publish(run);
     if (result !== rows.length) throw new Error(`Publication count mismatch: ${result}`);
     console.log(`Published ${result} active Quebec titles atomically.`);
   } catch (e) {
@@ -132,6 +179,9 @@ function connect() {
   return {
     rpc: (name, args) => call(`rpc/${name}`, { method: 'POST', body: JSON.stringify(args) }, name),
     readRunId: async () => (await call('qc_import_state?select=run_id', { method: 'GET' }, 'qc_import_state'))[0]?.run_id || null,
+    // Every publish replaces the whole table with rows sharing one retrieval date, so
+    // any row's date is the last successful publish (no index needed, no full scan).
+    readLastPublished: async () => (await call('qc_claims?select=source_updated_at&limit=1', { method: 'GET' }, 'qc_claims'))[0]?.source_updated_at || null,
   };
 }
 async function main() {
@@ -141,7 +191,14 @@ async function main() {
     return;
   }
   const archiveInput = process.argv.indexOf('--archive');
-  const buf = archiveInput >= 0 ? fs.readFileSync(process.argv[archiveInput + 1]) : await downloadActive(process.env.QC_CLAIMS_URL || SOURCE_URL);
+  let buf;
+  try {
+    buf = archiveInput >= 0 ? fs.readFileSync(process.argv[archiveInput + 1]) : await downloadActive(process.env.QC_CLAIMS_URL || SOURCE_URL);
+  } catch (e) {
+    if (!isSourceUnavailable(e)) throw e;
+    await concludeSourceOutage(e, connect().readLastPublished);
+    return;
+  }
   const archiveOutput = process.argv.indexOf('--archive-out');
   if (archiveOutput >= 0) fs.writeFileSync(process.argv[archiveOutput + 1], buf);
   const rows = await prepareRows(buf);
@@ -149,12 +206,25 @@ async function main() {
   if (out >= 0) fs.writeFileSync(process.argv[out + 1], JSON.stringify(rows));
   if (process.argv.includes('--dry-run')) return;
   const { rpc } = connect();
+  const dbUrl = process.env.SUPABASE_DB_URL?.trim();
+  const publish = dbUrl ? runId => publishOverPostgres(dbUrl, runId) : runId => publishOverRest(rpc, runId);
   const guard = async (phase) => {
     const headroom = await checkImportHeadroom(() => rpc('import_headroom', {}), { importer: 'qc', phase });
     if (!headroom.ok) throw new Error(describeRefusal(headroom));
   };
   // Before anything is staged, so a refusal leaves nothing behind.
   await guard('preflight');
-  await publishRows(rows, rpc, { guard });
+  await publishRows(rows, rpc, { guard, publish });
+}
+// GESTIM down before anything was written: a warning and exit 0, unless the titles we
+// serve are older than QC_CLAIMS_MAX_STALE_DAYS (see scripts/lib/sourceOutage.mjs).
+export async function concludeSourceOutage(error, readLastPublished, { log = console.log } = {}) {
+  const limit = maxStaleDays('QC_CLAIMS_MAX_STALE_DAYS', QC_MAX_STALE_DAYS);
+  // A database error here is a real failure, so it is not caught.
+  const verdict = judgeOutage({ lastSuccessAt: await readLastPublished(), maxStaleDays: limit });
+  const summary = describeOutage('The Quebec GESTIM server', error, verdict, limit);
+  if (verdict.stale) throw new Error(summary);
+  announceSkippedRun('Quebec claims source unreachable', summary, { log });
+  return verdict;
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main().catch(e => { console.error(e.message); process.exitCode = 1; });

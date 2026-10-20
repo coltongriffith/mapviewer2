@@ -20,9 +20,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
+      # Download to a file, then extract. Piped straight into tar, a bad
+      # download (2026-10-08: ~160 kB that was not gzip) surfaced only as
+      # "gzip: stdin: not in gzip format". -f fails on an HTTP error with its
+      # status, and --retry rides out a transient release-CDN blip.
       - name: Install MCP publisher
         run: |
-          curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
+          ASSET="mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz"
+          ARCHIVE="$RUNNER_TEMP/$ASSET"
+          curl -fsSL --retry 3 --retry-all-errors --retry-delay 5 -o "$ARCHIVE" \
+            "https://github.com/modelcontextprotocol/registry/releases/latest/download/$ASSET"
+          tar -xzf "$ARCHIVE" mcp-publisher
 
       - name: Validate registry metadata
         run: ./mcp-publisher validate ./server.json

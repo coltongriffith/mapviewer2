@@ -78,6 +78,10 @@ import {
   BATCH_SIZE, chunked,
 } from './db.mjs';
 import { checkImportHeadroom, describeRefusal } from '../lib/importHeadroom.mjs';
+import {
+  isSourceUnavailable, TENURE_MAX_STALE_DAYS, maxStaleDays, judgeOutage, describeOutage,
+  announceSkippedRun,
+} from '../lib/sourceOutage.mjs';
 
 const JURISDICTION = 'BC';
 
@@ -102,7 +106,18 @@ async function main() {
   // Deliberately before any database work: if the layer has changed shape, the
   // right outcome is a loud failure with the real field list in the log, not a
   // half-written import.
-  const sample = await fetchSampleFeature({ log });
+  let sample;
+  try {
+    sample = await fetchSampleFeature({ log });
+  } catch (e) {
+    // DataBC down before we have touched the database (2026-10-14).
+    if (!isSourceUnavailable(e) || opts.discover) throw e;
+    const sb = createServiceClient();
+    const run = await startRun(sb, { mode: opts.mode, source: SOURCE_ID, jurisdiction: JURISDICTION });
+    const outage = await concludeSourceOutage(sb, run.id, e, { log });
+    if (outage.stale) process.exitCode = 1;
+    return;
+  }
   let resolution;
   try {
     resolution = resolveFields(sample.properties);
@@ -440,6 +455,13 @@ async function main() {
           + '<code>tenure_import_staging</code> for this run id and the next sync will '
           + 'simply re-read the province.</p>',
       }).catch(() => {});
+    } else if (isSourceUnavailable(e)) {
+      // The first page never arrived, so nothing was staged. Skip the run
+      // quietly unless the data is going stale (scripts/lib/sourceOutage.mjs).
+      await clearStaging(sb, run.id).catch(() => {});
+      const outage = await concludeSourceOutage(sb, run.id, e, { log });
+      if (!outage.stale) return;
+      throw new Error(outage.summary);
     } else {
       await clearStaging(sb, run.id).catch(() => {});
       await finishRun(sb, run.id, {
@@ -711,6 +733,43 @@ async function recordAbsenceEvents(sb, runId, reconciliation) {
   }
   await insertChangeEvents(sb, events);
   return events.length;
+}
+
+/**
+ * Record a run the B.C. source could not serve, and decide whether anyone
+ * needs to hear about it.
+ *
+ * Recorded as `failed` with the outage in error_summary, like any other run
+ * that wrote nothing. Not stale: a warning annotation, no email, exit 0. Stale
+ * (the last good FULL run is older than TENURE_SYNC_MAX_STALE_DAYS), or the
+ * age cannot be read: the administrator is emailed and the caller fails.
+ */
+async function concludeSourceOutage(sb, runId, error, { log }) {
+  const limit = maxStaleDays('TENURE_SYNC_MAX_STALE_DAYS', TENURE_MAX_STALE_DAYS);
+  let verdict;
+  try {
+    const last = await lastSuccessfulRun(sb, { source: SOURCE_ID, mode: 'full' });
+    verdict = judgeOutage({ lastSuccessAt: last?.completed_at, maxStaleDays: limit });
+  } catch (e) {
+    // Cannot confirm the data is fresh, so do not claim it is.
+    log(`[tenure-sync] could not read the last successful full run: ${e.message}`);
+    verdict = { stale: true, ageDays: null };
+  }
+  const summary = describeOutage('The B.C. tenure source (DataBC WFS)', error, verdict, limit);
+  await finishRun(sb, runId, {
+    status: 'failed', alerts_safe: false, error_summary: summary.slice(0, 2000),
+  }).catch((e) => log(`[tenure-sync] could not record the outage: ${e.message}`));
+  if (verdict.stale) {
+    await notifyAdmin(sb, {
+      subject: 'Tenure Monitor: B.C. source unreachable and stored data is going stale',
+      body: `<p>${escapeHtml(summary)}</p><p>Run <code>${runId}</code> wrote nothing. `
+        + 'Stored tenure records are unchanged.</p>',
+    });
+    log(`[tenure-sync] ${summary}`);
+  } else {
+    announceSkippedRun('B.C. tenure source unreachable', summary, { log });
+  }
+  return { stale: verdict.stale, summary };
 }
 
 async function reportSchemaFailure(e, opts) {
