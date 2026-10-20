@@ -252,7 +252,7 @@ export const TOPO_CREDIT = 'Basemap: Esri';
 const inset = { key: null, canvas: null, status: 'off', message: '', promise: null, frame: null };
 export function syncInset() {
   const S = H.S, G = H.G, geo = H.geo();
-  if (S.insetStyle === 'plan' || !G || !geo) { inset.status = S.insetStyle === 'plan' ? 'off' : 'needs-crs'; inset.message = S.insetStyle !== 'plan' && !geo ? 'A map inset needs the coordinate system (step 1).' : ''; return Promise.resolve(); }
+  if (S.insetStyle === 'plan' || !G || !geo) { inset.key = null; inset.status = S.insetStyle === 'plan' ? 'off' : 'needs-crs'; inset.message = S.insetStyle !== 'plan' && !geo ? 'A map inset needs the coordinate system (step 1).' : ''; return Promise.resolve(); }
   const key = `${S.insetStyle}|${S.crs}|${[G.B.x0, G.B.x1, G.B.y0, G.B.y1].map(Math.round)}`;
   if (inset.key === key) return inset.promise || Promise.resolve();
   inset.key = key; inset.canvas = null; inset.status = 'loading';

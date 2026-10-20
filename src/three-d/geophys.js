@@ -89,7 +89,7 @@ export function init(host) { H = host; }
 const cfg = () => H.S.geophys;
 const cache = { key: null, P: null, curt: {}, faces: {}, meshes: [], G: null };
 function dataNow() {
-  const fs = H.files().filter((f) => f.role === 'geophys'), key = fs.map((f) => `${f.name}|${f.rows.length}|${JSON.stringify(f.cols)}`).join(';');
+  const fs = H.files().filter((f) => f.role === 'geophys'), key = fs.map((f) => `${f.name}|${H.digest(f)}|${JSON.stringify(f.cols)}`).join(';');
   if (cache.key !== key) {
     cache.key = key; cache.P = readPoints(fs); cache.curt = {}; cache.faces = {};
     const f = fs[0]; cache.prop = f ? f.header[f.cols.value] : null;

@@ -197,7 +197,7 @@ export function faceState() { return Object.fromEntries(Object.entries(layer.mes
 // ---------- geology painter ----------
 const cache = { logsKey: null, logs: null, samples: null, samplesKey: null, grids: {} };
 function logsNow() {
-  const fs = H.files().filter((f) => f.role === 'litho'), key = fs.map((f) => `${f.name}|${f.rows.length}|${JSON.stringify(f.cols)}`).join(';');
+  const fs = H.files().filter((f) => f.role === 'litho'), key = fs.map((f) => `${f.name}|${H.digest(f)}|${JSON.stringify(f.cols)}`).join(';');
   if (cache.logsKey !== key) { cache.logsKey = key; cache.logs = readLogs(fs); cache.samplesKey = null; }
   return cache.logs;
 }

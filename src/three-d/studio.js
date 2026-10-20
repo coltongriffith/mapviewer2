@@ -2289,7 +2289,7 @@ function extWanted() {
 }
 let extHost = null;
 const host = () => (extHost ||= {
-  S, get G() { return G; }, get project() { return project; }, get root() { return root; }, get api() { return EXT_API; }, files: () => files, geo: () => geo,
+  S, get G() { return G; }, get project() { return project; }, get root() { return root; }, get api() { return EXT_API; }, files: () => files, digest: (f) => fileDigest(f), geo: () => geo,
   camera, renderer, proj, sectionEnds, faceGeom, textOn, roundRect, fitText, esc, INK, MUTED, RULE, BIN_COLORS, binIndex, traceR, calloutLines, shownCallouts, isPending, setSpacing,
   mosaic, zoomFor, lon2t, lat2t, IMG_URL, IMAGERY_CREDIT, status, redraw: () => { extScene(); drawSectionView(); schedulePublish(); },
 });
