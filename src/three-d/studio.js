@@ -282,6 +282,7 @@ function dataChecks({ collars, noXY, assays, surveys, badRows, assayRows, dipBad
 // Metal equivalent: the derived column (e.g. CuEq_calc) on every interval. A missing component
 // gives no value, never a zero.
 const eqName = () => (S.eq ? `${S.eq.base}Eq_calc` : null);
+let eqApplied = false; // whether eqName() on the project is ours (false when an uploaded column has that name)
 const metalOf = (col) => (/eq/i.test(col) ? null : (col.match(/(?:^|[^a-z])(cu|au|ag|mo|zn|pb|ni|co|pt|pd)(?![a-z])/i) || [])[1]?.replace(/^./, (c) => c.toUpperCase()) || null);
 const unitOf = (col) => (labelFor(col).match(/(%|g\/t|ppm|ppb)$/) || [])[0] || defaultUnit(metalOf(col));
 function eqInfo(e = S.eq) {
@@ -298,6 +299,9 @@ function applyEq(lists, cols, warnings) {
   const e = S.eq, comp = Object.values(e.metals).map((m) => m.col), miss = [e.baseCol, ...comp].filter((c) => !cols.includes(c));
   if (miss.length) { warnings?.push(`The metal equivalent needs ${miss.join(', ')}, which ${miss.length > 1 ? 'are' : 'is'} not in the assays.`); return; }
   const { name, factors } = eqInfo();
+  // An uploaded column of the same name is the user's data: never overwrite it.
+  if (cols.includes(name)) { eqApplied = false; warnings?.push(`The assays already have a column named ${name}, so the calculated equivalent was not added. Rename that column to use the calculator.`); return; }
+  eqApplied = true;
   for (const list of lists) list.forEach((it) => { it.vals[name] = eqValue(it.vals[e.baseCol], comp.map((c) => it.vals[c]), factors); });
   if (!cols.includes(name)) cols.push(name);
 }
@@ -1919,7 +1923,11 @@ function loadSample() {
   return getState();
 }
 // A new data set starts without the old one's equivalent recipe, display cut-off or provisional flags.
-function resetDerived() { S.eq = null; S.displayCutoff = null; S.provisional = {}; S.shell.cutoff = null; }
+function resetDerived() {
+  S.eq = null; eqApplied = false; S.displayCutoff = null; S.provisional = {}; S.shell.cutoff = null;
+  // The shell belongs to the old data: switch it off and stop any build still running.
+  S.shell.enabled = false; shell.pending = null; shell.mesh = null; shell.field = null; syncShell();
+}
 function clearFiles() { S.crs = null; geo = null; renderCRS(); files = []; usingSample = false; S.meshes = {}; S.coOverrides = {}; resetDerived(); refresh(); status('Files cleared. Add a collar file and an assay file.'); return getState(); }
 $('load-sample').addEventListener('click', loadSample);
 $('clear-files').addEventListener('click', clearFiles);
@@ -2000,9 +2008,10 @@ const capMetal = (t) => String(t).charAt(0).toUpperCase() + String(t).slice(1).t
 function metalCols() { const m = new Map(); (project?.cols || []).filter((c) => c !== eqName()).forEach((c) => { const k = metalOf(c); if (k && !m.has(k)) m.set(k, c); }); return m; }
 function setEquivalent(o) {
   if (!project || project.empty) throw new Error('Load assays first.');
-  const prev = eqName(), strip = () => { project.cols = project.cols.filter((c) => c !== prev); project.holes.forEach((h) => h.ints.forEach((it) => { delete it.vals[prev]; })); };
+  const prev = eqApplied ? eqName() : null, strip = () => { project.cols = project.cols.filter((c) => c !== prev); project.holes.forEach((h) => h.ints.forEach((it) => { delete it.vals[prev]; })); };
   if (!o || o.enabled === false) {
-    if (prev) { S.eq = null; strip(); if (S.valueCol2 === prev) S.valueCol2 = null; setStyle(S.valueCol === prev ? { valueCol: project.cols[0] } : {}); }
+    if (prev) { S.eq = null; strip(); eqApplied = false; if (S.valueCol2 === prev) S.valueCol2 = null; setStyle(S.valueCol === prev ? { valueCol: project.cols[0] } : {}); }
+    else S.eq = null;
     return getState();
   }
   const present = metalCols(), list = [...present.keys()].map((k) => `${k} (${present.get(k)})`).join(', ') || 'none';
@@ -2021,7 +2030,8 @@ function setEquivalent(o) {
   if (!Object.keys(metals).length) throw new Error(`Pick at least one metal besides ${base}. Metal columns: ${list}.`);
   const next = { base, baseCol, baseUnit: o.baseUnit || unitOf(baseCol), basePrice: +(o.basePrice ?? METAL_DEFAULTS[base]), baseRecovery: +(o.baseRecovery ?? 90), metals };
   if (!(next.baseRecovery > 0 && next.baseRecovery <= 100)) throw new Error('baseRecovery must be a percentage, 1-100.');
-  eqInfo(next); // throws on a missing base price
+  const nextName = eqInfo(next).name; // throws on a missing base price
+  if (nextName !== prev && project.cols.includes(nextName)) throw new Error(`The assays already have a column named ${nextName}. Rename it in your file to use the calculator, or colour by that column directly.`);
   if (prev) strip();
   const usedAs = [S.valueCol === prev, S.valueCol2 === prev];
   S.eq = next; applyEq(project.holes.map((h) => h.ints), project.cols);
