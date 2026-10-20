@@ -41,10 +41,15 @@ insert into storage.buckets (id, name, public, file_size_limit)
 values ('team-enquiries', 'team-enquiries', false, 52428800)
 on conflict (id) do update set public = false, file_size_limit = excluded.file_size_limit;
 
-drop policy if exists "Admins read team enquiry files" on storage.objects;
-create policy "Admins read team enquiry files" on storage.objects
-  for select to authenticated
-  using (bucket_id = 'team-enquiries' and public.is_admin());
+do $$
+begin
+  if not exists (select 1 from pg_policies where schemaname = 'storage' and tablename = 'objects'
+                 and policyname = 'Admins read team enquiry files') then
+    create policy "Admins read team enquiry files" on storage.objects
+      for select to authenticated
+      using (bucket_id = 'team-enquiries' and public.is_admin());
+  end if;
+end $$;
 
 -- ── Owner email ─────────────────────────────────────────────────────────────
 create or replace function public.send_team_enquiry_notification(p_id uuid)
@@ -122,10 +127,15 @@ $$;
 
 revoke all on function public.on_team_enquiry_created_notify() from public, anon, authenticated;
 
-drop trigger if exists on_team_enquiry_created_notify on public.team_enquiries;
-create trigger on_team_enquiry_created_notify
-  after insert on public.team_enquiries
-  for each row execute function public.on_team_enquiry_created_notify();
+do $$
+begin
+  if not exists (select 1 from pg_trigger where tgname = 'on_team_enquiry_created_notify'
+                 and tgrelid = 'public.team_enquiries'::regclass) then
+    create trigger on_team_enquiry_created_notify
+      after insert on public.team_enquiries
+      for each row execute function public.on_team_enquiry_created_notify();
+  end if;
+end $$;
 
 -- ── Admin ───────────────────────────────────────────────────────────────────
 -- Shape is what src/components/admin/TeamEnquiriesCard.jsx renders:
