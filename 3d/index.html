@@ -120,6 +120,9 @@ input[type="color"] { width: 34px; height: 26px; border: 1px solid var(--slate-2
 .label-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; align-items: center; }
 .label-row select { width: auto; }
 .label-row .btn { padding: 4px 9px; font-size: 13px; }
+#ext-geology input, #ext-geophys input, #ext-tags input, #ext-tags textarea, #ext-geophys select, #ext-geology select { box-sizing: border-box; max-width: 100%; }
+.geo-legend .label-row { grid-template-columns: auto auto minmax(0, 1fr) auto; gap: 6px; }
+.geo-legend input[type="color"] { width: 30px; height: 26px; padding: 0; border: 1px solid var(--slate-300); border-radius: 4px; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip { font: inherit; font-size: 13.5px; font-weight: 600; color: var(--slate-800); background: #fff; border: 1px solid var(--slate-300); border-radius: 999px; padding: 4px 12px; cursor: pointer; }
 .chip:hover { border-color: var(--slate-600); }
@@ -217,7 +220,7 @@ dialog.acct-dialog::backdrop { background: rgba(20,33,38,0.35); }
         <span class="muted">Collars, assays, surveys, topography, or OBJ model shapes, loose or in a ZIP. Columns are matched for you.</span>
         <div class="row" style="justify-content:center">
           <label class="btn primary" for="file-input">Choose files</label>
-          <input type="file" id="file-input" multiple accept=".csv,.txt,.obj,.zip" hidden>
+          <input type="file" id="file-input" multiple accept=".csv,.txt,.obj,.xyz,.dat,.zip" hidden>
           <button class="btn" type="button" id="load-sample">Use sample project</button>
           <button class="btn" type="button" id="clear-files">Clear</button>
         </div>
@@ -236,6 +239,8 @@ dialog.acct-dialog::backdrop { background: rgba(20,33,38,0.35); }
           <div class="need-item opt" id="need-survey"><i class="dot"></i><span>Surveys · optional</span><small>Hole ID, Depth, Azimuth, Dip. Without it, holes run straight.</small></div>
           <div class="need-item opt" id="need-topo"><i class="dot"></i><span>Topography · optional</span><small>X, Y, Z points or LiDAR. Without it, the surface is fitted to the collars.</small></div>
           <div class="need-item opt" id="need-mesh"><i class="dot"></i><span>Model shapes · optional</span><small>Grade shells or geology as OBJ meshes.</small></div>
+          <div class="need-item opt" id="need-litho"><i class="dot"></i><span>Lithology or alteration · optional</span><small>Hole ID, From, To, Code. Painted on the block faces.</small></div>
+          <div class="need-item opt" id="need-geophys"><i class="dot"></i><span>Geophysics · optional</span><small>X, Y, Z and chargeability or resistivity (CSV or Geosoft XYZ).</small></div>
         </div>
         <p class="muted" style="margin-top:8px">Coordinates in UTM metres (lat/long works for collars). Dips can be negative or positive down.</p>
       </section>
@@ -381,6 +386,32 @@ dialog.acct-dialog::backdrop { background: rgba(20,33,38,0.35); }
         <p class="muted" style="margin-top:6px">Painted on the face in perspective. Drag it on the preview to move it along the face.</p>
         <div class="files" id="wall-list" style="margin-top:8px"></div>
       </section>
+      <!-- Geology, geophysics and hole tags: the controls below load their layer (geology.js, geophys.js, tags.js) on first use. -->
+      <section id="ext-geology">
+        <h3>Geology on the block</h3>
+        <label class="check"><input type="checkbox" data-ext="geology.enabled">Paint lithology or alteration on the block faces</label>
+        <p class="muted" style="margin-top:4px">From a log with Hole ID, From, To and a code column (step 1), interpolated between holes; or a drawn section image per face.</p>
+        <div id="geo-ui" style="margin-top:8px"></div>
+      </section>
+      <section id="ext-geophys">
+        <h3>Geophysics</h3>
+        <label class="field"><span>Show IP, MT or resistivity</span><select data-ext="geophys.mode"><option value="off">Off</option><option value="curtain">As curtains</option><option value="faces">On the block faces</option></select></label>
+        <div id="gp-ui" style="margin-top:8px"></div>
+      </section>
+      <section id="ext-tags">
+        <h3>Hole tags and callouts</h3>
+        <div class="grid2">
+          <label class="field"><span>Hole ID tags</span><select data-ext="tags.at"><option value="toe">At the end of the hole</option><option value="collar">Pills at the collar</option><option value="both">Both</option></select></label>
+          <label class="field"><span>Inset</span><select data-ext="style.insetStyle"><option value="plan">Plan of drilling</option><option value="satellite">Location map, satellite</option><option value="topo">Location map, topographic</option></select></label>
+        </div>
+        <label class="check" style="margin-top:6px"><input type="checkbox" data-ext="style.histograms">Grade histogram bars along holes</label>
+        <div id="tag-ui" style="margin-top:8px"></div>
+        <div class="grid2" style="margin-top:8px">
+          <label class="field" style="grid-column:1/-1"><span>Stat box title</span><input type="text" id="stat-title" placeholder="e.g. Mineral resource" maxlength="200"></label>
+          <label class="field" style="grid-column:1/-1"><span>Rows, one per line</span><textarea id="stat-rows" rows="3" placeholder="Indicated: 133 koz @ 1.07 g/t Au&#10;Inferred: 41 koz @ 0.88 g/t Au"></textarea></label>
+        </div>
+        <button class="btn" type="button" id="stat-add" style="margin-top:6px">Add stat box</button>
+      </section>
       <section>
         <h3>Display</h3>
         <div class="row" style="gap:14px">
@@ -495,6 +526,36 @@ dialog.acct-dialog::backdrop { background: rgba(20,33,38,0.35); }
     <div class="actions"><button class="btn primary" type="button" id="acct-sent-close">OK</button></div>
   </div>
 </dialog>
+<!-- API notes for the geology, geophysics and hole-tag layers (shown with EM3D.help()). -->
+<script type="text/plain" id="ext-help">Geology, geophysics and hole tags (Promises; each resolves with the state):
+  Lithology/alteration file: Hole ID, From, To, Code (and optional Description), CSV or in a ZIP.
+  EM3D.setGeology({enabled, faces: "far" | "all" | ["N", "E"], opacity, anisotropy (1-20: how much further
+                   layers reach sideways than up and down), search (m, null = auto), smooth, texture,
+                   section (also paint the A–A′ plane), title: "Lithology" | "Alteration",
+                   legend: [{code, name, color, show, order}], note})
+                                  Indicator inverse-distance interpolation of the logged codes along the hole
+                                  traces, blurred then the highest weight wins; plain beyond the search radius.
+                                  The footnote says it is schematic while it shows
+  EM3D.setFaceImage("N" | "S" | "E" | "W", dataUrl | null)   a drawn section stretched over a face
+  Geophysics file: X, Y, Z and a value column (chargeability, resistivity, conductivity...), CSV or
+  Geosoft XYZ with "Line" records; an optional line column.
+  EM3D.setGeophys({mode: "curtain" | "faces" | "off", lines: "auto" | "section" | "all" | [lineIds] |
+                   [{from: [x, y], to: [x, y]}], ramp: "geophys" | "viridis" | "grey", log (null = from
+                   the column name), min, max, opacity, faces, search, width (curtain corridor, m)})
+  EM3D.setTags({at: "toe" | "collar" | "both", style: "dark" | "light", fadePrevious,
+                status: {holeId: "new" | "previous" | "planned" | "none" | null}, newLabel, prevLabel,
+                plannedLabel, autoGroup, groupRadius})   collar ID pills; new vs previously released from a
+                                  status, year or campaign column. Planned holes (status "planned", no assays)
+                                  draw dashed with a "Planned" legend row
+  EM3D.groupCallouts([holeIds] | "auto" | null)   one box listing several holes' intercepts
+  EM3D.addStatBox({title, rows: ["Indicated: 133 koz @ 1.07 g/t Au"], x, y})   returns its id; a label of
+                                  kind "stat" (EM3D.updateLabel / removeLabel; drag it on the preview)
+  EM3D.setStyle({histograms: true})   grade bars along each hole, length by grade
+  EM3D.setStyle({insetStyle: "plan" | "satellite" | "topo"})   a map inset around the property (needs the
+                                  coordinate system)
+  EM3D.layersReady()              Promise; resolves once the layers, face images and inset have loaded
+  getState().geology / .geophys / .tags
+</script>
 <!-- Current figure state as JSON, for AI assistants and browser agents (see the Export step). -->
 <script type="application/json" id="em3d-state">{}</script>
 <script type="module" src="/src/three-d/studio.js"></script>

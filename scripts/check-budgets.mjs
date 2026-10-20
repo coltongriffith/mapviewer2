@@ -68,7 +68,14 @@ const BUDGETS = {
   // 160 → 164 (Oct 2026): the grade shell's controls and composites (its estimate and marching cubes
   // run in the lazy worker below), the metal-equivalent builder, the display cut-off and the data
   // checks panel add ~9.6 kB to the page; they are needed as soon as data loads, so stay eager.
-  threeDJsGzipKb: 164,
+  // 164 → 168 (Oct 2026): geology on the block faces, geophysics curtains and hole tags. Their logic is
+  // in lazy chunks (geology.js, geophys.js, tags.js, budgeted below); the page keeps the file-role
+  // detection for lithology logs and Geosoft XYZ (roles.js, needed the moment a file is added), the
+  // hook points, the settings defaults saved with a figure, and the EM3D methods (~4.6 kB).
+  threeDJsGzipKb: 168,
+  // /3d's own modules fetched on first use (the geology, geophysics and tag layers, the account
+  // client). They never load with the page or the app, so they sit outside the page and app totals.
+  threeDLazyJsGzipKb: 32,
   // The /3d grade-shell worker (composites estimate and marching cubes) is its own chunk, fetched only
   // when a shell is turned on. Vite emits workers outside the manifest graph, so it is found from the
   // page's chunks (see below) and budgeted here rather than in the page or the app totals.
@@ -146,6 +153,15 @@ for (const [name, entry, limit] of STANDALONE) {
       report.push(`${name} worker ${w}: ${kb.toFixed(1)} kB gzip (lazy)`);
       if (kb > BUDGETS.threeDWorkerJsGzipKb) failures.push(`${name} worker ${w} ${kb.toFixed(1)} kB exceeds ${BUDGETS.threeDWorkerJsGzipKb} kB`);
     }
+  }
+  // Lazy chunks: the page's own modules (src/three-d/) it imports on first use. Shared vendors it
+  // imports lazily (proj4, fflate, Supabase) stay in the app totals, as before.
+  if (name === '3d') {
+    const lazy = new Set();
+    for (const key of manifest[entry].dynamicImports || []) if (key.startsWith('src/three-d/') && !appReach.has(manifest[key].file) && !files.has(manifest[key].file)) lazy.add(manifest[key].file);
+    let lz = 0; for (const file of lazy) { lz += await gzipKb(join(DIST, file)); standaloneOnly.add(join(DIST, file)); }
+    report.push(`${name} lazy JS: ${lz.toFixed(1)} kB gzip across ${lazy.size} chunks (loaded on first use)`);
+    if (lz > BUDGETS.threeDLazyJsGzipKb) failures.push(`${name} lazy JS ${lz.toFixed(1)} kB exceeds ${BUDGETS.threeDLazyJsGzipKb} kB`);
   }
 }
 

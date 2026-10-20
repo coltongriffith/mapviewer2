@@ -115,6 +115,36 @@ test('a figure survives getProject, clearFiles and loadProject unchanged', async
   expect(after.figureSize.key).toBe('square');
 });
 
+test('geology, geophysics, tags and a face image survive getProject and loadProject', async ({ page }) => {
+  await open3d(page);
+  const { before, after, roles } = await page.evaluate(async () => {
+    const E = window.EM3D, ids = E.getState().project.holeIds;
+    const lith = ['HoleID,From,To,Lith,Description', ...ids.flatMap((id) => [`${id},0,40,COV,Cover`, `${id},40,400,POR,Porphyry`])].join('\n');
+    const pts = ['/ X Y Z CHARG', 'Line 100'];
+    const holes = E.getProject().files.find((f) => /collar/.test(f.name)).text.split('\n').slice(1, 6).map((l) => l.split(','));
+    holes.forEach(([, x, y, z]) => { for (let d = 0; d < 300; d += 30) pts.push(`${x} ${y} ${+z - d} ${10 + d / 10}`); });
+    // Adding files replaces the sample, so its own files go in again alongside the new ones.
+    const base = E.getProject().files.map(({ name, text }) => ({ name, text }));
+    E.addFiles([...base, { name: 'lithology.csv', text: lith }, { name: 'ip_model.xyz', text: pts.join('\n') }]);
+    const c = document.createElement('canvas'); c.width = 8; c.height = 8; c.getContext('2d').fillRect(0, 0, 4, 4);
+    await E.setGeology({ enabled: true, faces: ['N', 'E'], title: 'Alteration', legend: [{ code: 'POR', name: 'Porphyry (altered)', color: '#c5c8ea' }] });
+    await E.setFaceImage('S', c.toDataURL('image/png'));
+    await E.setGeophys({ mode: 'curtain', lines: 'section', ramp: 'viridis' });
+    await E.setTags({ at: 'collar', status: { [ids[0]]: 'new' } });
+    await E.addStatBox({ title: 'Resource', rows: ['Indicated: 1 Mt'] });
+    const project = JSON.parse(JSON.stringify(E.getProject()));
+    const before = E.getState();
+    E.clearFiles();
+    const after = await E.loadProject(project);
+    return { before, after, roles: after.files.map((f) => f.role) };
+  });
+  expect(roles).toEqual(expect.arrayContaining(['litho', 'geophys']));
+  for (const k of ['geology', 'geophys', 'tags', 'labels', 'footnoteAuto']) expect(after[k]).toEqual(before[k]);
+  expect(after.geology).toMatchObject({ enabled: true, title: 'Alteration', faces: ['N', 'E'], images: { S: true } });
+  expect(after.geology.legend.find((e) => e.code === 'POR').name).toBe('Porphyry (altered)');
+  expect(after.footnoteAuto).toEqual(expect.arrayContaining(['Geology on block faces interpolated from drill logs; schematic.', 'Geophysics: illustrative inversion model']));
+});
+
 test.describe('account', () => {
   test.skip(!process.env.E2E_ADMIN, 'Requires the configured client build with isolated auth fixtures');
   // Software WebGL and several page loads per test: allow more than the default minute.
