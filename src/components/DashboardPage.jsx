@@ -8,6 +8,8 @@ import {
 import { listPortfolios, portfolioSummary, lastSync } from '../utils/tenureMonitor';
 import { remainingTenureSlots } from '../utils/entitlements';
 import { formatSyncTimestamp } from '../utils/tenureDates';
+import { listMyWorkspaces, listProperties, pickActive, setActiveWorkspaceId } from '../utils/workspace';
+import { jurisdictionLabel } from '../utils/jurisdictions';
 
 // The signed-in home.
 //
@@ -214,9 +216,60 @@ function TenureCard({ onOpen }) {
   );
 }
 
+/**
+ * The company's properties, above the personal maps, for a user who is in a
+ * workspace. Renders nothing otherwise (including when workspaces cannot be
+ * loaded: personal maps must never wait on them).
+ */
+function WorkspaceProperties({ onOpenWorkspace, onOpenProperty }) {
+  const { user } = useAuth();
+  const [state, setState] = useState(null);
+  useEffect(() => {
+    if (!user) return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const list = await listMyWorkspaces();
+        const org = pickActive(list);
+        if (!org) { if (!cancelled) setState(null); return; }
+        const properties = await listProperties(org.id);
+        if (!cancelled) setState({ org, list, properties });
+      } catch {
+        if (!cancelled) setState(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [user]);
+  if (!state) return null;
+  const { org, properties } = state;
+  return (
+    <section className="dash-projects" aria-labelledby="dash-ws-h" style={{ marginBottom: 28 }}>
+      <div className="dash-panel-head">
+        <h2 id="dash-ws-h">{org.name} <span className="dash-count">{properties.length}</span></h2>
+        <button className="dash-link" type="button" onClick={() => { setActiveWorkspaceId(org.id); onOpenWorkspace(); }}>Open workspace →</button>
+      </div>
+      {properties.length === 0 ? (
+        <p className="dash-muted">No properties yet. Open the workspace to add the company&apos;s first exploration project.</p>
+      ) : (
+        <div className="dash-grid">
+          {properties.map((p) => (
+            <div key={p.id} className="dash-tile">
+              <div className="dash-tile-body" style={{ padding: 12 }}>
+                <button className="dash-tile-name" type="button" onClick={() => onOpenProperty(p.slug)}>{p.name}</button>
+                <span className="dash-tile-date">{[jurisdictionLabel(p.jurisdiction), (p.commodities || []).join(' · ')].filter(Boolean).join(' — ') || 'Property'}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export default function DashboardPage({
   onOpenProject, onNewProject, onOpenEditor, onOpenTenureMonitor,
   onOpenAccount, onOpenBrandKits, onSearchClaims, onExit,
+  onOpenWorkspace = () => {}, onOpenProperty = () => {},
 }) {
   const { user, signOut } = useAuth();
   const [projects, setProjects] = useState([]);
@@ -273,6 +326,7 @@ export default function DashboardPage({
           </button>
         </div>
         <nav className="dash-header-nav" aria-label="Account">
+          <button className="dash-link" type="button" onClick={onOpenWorkspace}>Company workspace</button>
           <button className="dash-link" type="button" onClick={onOpenTenureMonitor}>Tenure Monitor</button>
           <button className="dash-link" type="button" onClick={onOpenBrandKits}>Brand kits</button>
           <button className="dash-link" type="button" onClick={onOpenAccount}>Settings &amp; billing</button>
@@ -303,6 +357,8 @@ export default function DashboardPage({
         )}
 
         <div className="dash-columns">
+          <div>
+          <WorkspaceProperties onOpenWorkspace={onOpenWorkspace} onOpenProperty={onOpenProperty} />
           <section className="dash-projects">
             <div className="dash-panel-head">
               <h2>Your maps {projects.length > 0 && <span className="dash-count">{projects.length}</span>}</h2>
@@ -358,6 +414,7 @@ export default function DashboardPage({
               </div>
             )}
           </section>
+          </div>
 
           <aside className="dash-side">
             <TenureCard onOpen={onOpenTenureMonitor} />

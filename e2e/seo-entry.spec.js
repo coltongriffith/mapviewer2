@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 test('workspaces are noindex while public landing pages and sitemaps stay indexable', async ({ request }) => {
-  for (const path of ['/admin', '/admin/', '/account', '/dashboard/projects', '/tenure-monitor', '/map/example']) {
+  for (const path of ['/admin', '/admin/', '/account', '/dashboard/projects', '/tenure-monitor', '/map/example', '/workspace', '/workspace/p/rails', '/invite']) {
     const response = await request.get(path);
     expect(response.status(), path).toBe(200);
     expect(response.headers()['x-robots-tag'], path).toContain('noindex');

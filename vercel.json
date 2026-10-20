@@ -94,6 +94,18 @@
       "destination": "/index.html"
     },
     {
+      "source": "/workspace",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/workspace/:path*",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/invite",
+      "destination": "/index.html"
+    },
+    {
       "source": "/oauth/consent",
       "destination": "/index.html"
     },
@@ -187,6 +199,24 @@
     },
     {
       "source": "/tenure-monitor/:path*",
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, follow"
+        }
+      ]
+    },
+    {
+      "source": "/workspace/:path*",
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, follow"
+        }
+      ]
+    },
+    {
+      "source": "/invite/:path*",
       "headers": [
         {
           "key": "X-Robots-Tag",

@@ -22,6 +22,7 @@ export async function listCloudProjects() {
     .from('projects')
     .select('id, name, updated_at, thumbnail, revision')
     .eq('user_id', user.id)
+    .is('org_id', null)       // company maps live on their property's page
     .is('deleted_at', null)   // trashed projects are restorable, not listed
     .order('updated_at', { ascending: false });
   if (error) throw error;
@@ -41,6 +42,7 @@ export async function listTrashedProjects() {
     .from('projects')
     .select('id, name, updated_at, deleted_at')
     .eq('user_id', user.id)
+    .is('org_id', null)
     .not('deleted_at', 'is', null)
     .order('deleted_at', { ascending: false });
   if (error) throw error;
@@ -53,13 +55,14 @@ export async function restoreCloudProject(id) {
   return Boolean(data);
 }
 
+// No user_id filter: row-level security already limits the write to the
+// owner of a personal map or an editor of a company map.
 export async function updateProjectThumbnail(id, thumbnail) {
-  const user = await currentUser();
+  await currentUser();
   const { error } = await requireSupabase()
     .from('projects')
     .update({ thumbnail })
-    .eq('id', id)
-    .eq('user_id', user.id);
+    .eq('id', id);
   if (error) throw error;
 }
 
@@ -68,6 +71,13 @@ export async function updateProjectThumbnail(id, thumbnail) {
 // the same transaction as the insert, so it cannot be bypassed with a direct
 // Supabase call or raced by two tabs. The client's only job is to turn the
 // server's PROJECT_LIMIT error into the upgrade message.
+// A viewer of a company workspace opened one of its maps.
+function readOnlyError() {
+  const err = new Error('You have view-only access to this map, so changes are not saved. Use Save As to keep a personal copy, or ask a workspace admin for editor access.');
+  err.code = 'ORG_READ_ONLY';
+  return err;
+}
+
 function projectLimitError() {
   const err = new Error(
     `The free plan saves up to ${FREE_PROJECT_LIMIT} cloud projects — upgrade to Pro for unlimited projects. Your work is still safe in this browser.`,
@@ -87,7 +97,7 @@ function projectLimitError() {
  *   deliberately overwrite (the user chose to after being warned).
  * @returns {Promise<string|{id:string, revision:number}>}
  */
-export async function saveCloudProject({ id, name, payload, silent = false, expectedRevision }) {
+export async function saveCloudProject({ id, name, payload, silent = false, expectedRevision, propertyId = null }) {
   await currentUser(); // throws when signed out — the guard is the point, not the value
 
   const cleanName = (name || payload?.layout?.title || 'Untitled map');
@@ -108,6 +118,7 @@ export async function saveCloudProject({ id, name, payload, silent = false, expe
         throw e;
       }
       if (/PROJECT_NOT_FOUND/.test(error.message || '')) throw new Error('Project not found in cloud');
+      if (/ORG_READ_ONLY/.test(error.message || '')) throw readOnlyError();
       throw error;
     }
     // "Worked on this project" — deduped per project per tab-session so the
@@ -117,10 +128,18 @@ export async function saveCloudProject({ id, name, payload, silent = false, expe
     return { id, revision: data };
   } else {
     // Transactional create + quota check. Direct INSERT on projects is
-    // revoked, so this RPC is the only way a new row can appear.
-    const { data, error } = await requireSupabase()
-      .rpc('create_cloud_project', { p_name: cleanName, p_payload: payload });
+    // revoked, so this RPC is the only way a new row can appear. A map made
+    // inside a company property counts against the company, not the person.
+    const { data, error } = propertyId
+      ? await requireSupabase().rpc('create_org_project', { p_property: propertyId, p_name: cleanName, p_payload: payload })
+      : await requireSupabase().rpc('create_cloud_project', { p_name: cleanName, p_payload: payload });
     if (error) {
+      if (/ORG_PROJECT_LIMIT/.test(error.message || '')) {
+        const e = new Error('This workspace has reached its map limit on the current plan.');
+        e.code = 'ORG_PROJECT_LIMIT';
+        throw e;
+      }
+      if (/ORG_READ_ONLY/.test(error.message || '')) throw readOnlyError();
       if (/PROJECT_LIMIT/.test(error.message || '')) throw projectLimitError();
       throw error;
     }
@@ -130,13 +149,14 @@ export async function saveCloudProject({ id, name, payload, silent = false, expe
   }
 }
 
+// Personal maps and the maps of the user's workspaces: row-level security
+// decides which, so a viewer can open a company map too.
 export async function loadCloudProject(id) {
-  const user = await currentUser();
+  await currentUser();
   const { data, error } = await requireSupabase()
     .from('projects')
     .select('*')
     .eq('id', id)
-    .eq('user_id', user.id)
     .single();
   if (error) throw error;
   return data;
@@ -151,12 +171,11 @@ export async function deleteCloudProject(id) {
 }
 
 export async function renameCloudProject(id, name) {
-  const user = await currentUser();
+  await currentUser();
   const { error } = await requireSupabase()
     .from('projects')
     .update({ name, updated_at: new Date().toISOString() })
-    .eq('id', id)
-    .eq('user_id', user.id);
+    .eq('id', id);
   if (error) throw error;
 }
 
