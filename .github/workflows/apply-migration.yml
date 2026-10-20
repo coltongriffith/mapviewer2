@@ -34,10 +34,17 @@ jobs:
           version="${BASH_REMATCH[1]}"; name="${BASH_REMATCH[2]}"
           path="supabase/migrations/$FILE"
           [ -f "$path" ] || { echo "::error::$path not found on this branch"; exit 1; }
-          if psql "$SUPABASE_DB_URL" -tAc "select 1 from supabase_migrations.schema_migrations where version = '$version'" | grep -q 1; then
-            echo "::notice::$FILE is already recorded as applied; nothing to do."; exit 0
+          # schema_migrations is keyed by version alone, so a version shared by two
+          # files could never record both: refuse rather than skip one silently.
+          if [ "$(ls supabase/migrations/${version}_*.sql | wc -l)" -ne 1 ]; then
+            echo "::error::More than one migration file uses version $version; rename one first."; exit 1
           fi
-          psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 --single-transaction -f "$path"
-          psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -c \
-            "insert into supabase_migrations.schema_migrations (version, name, statements) values ('$version', '$name', array[]::text[]) on conflict (version) do nothing"
+          recorded="$(psql "$SUPABASE_DB_URL" -tAc "select name from supabase_migrations.schema_migrations where version = '$version'")"
+          if [ -n "$recorded" ]; then
+            if [ "$recorded" = "$name" ]; then echo "::notice::$FILE is already recorded as applied; nothing to do."; exit 0; fi
+            echo "::error::Version $version is already recorded under the name '$recorded'."; exit 1
+          fi
+          # The file and its history row commit together or not at all.
+          psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 --single-transaction -f "$path" -c \
+            "insert into supabase_migrations.schema_migrations (version, name, statements) values ('$version', '$name', array[]::text[])"
           echo "Applied and recorded $FILE" >> "$GITHUB_STEP_SUMMARY"
