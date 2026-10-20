@@ -1190,11 +1190,14 @@ function autoNotes(view) {
   return out;
 }
 // The automatic notes go on one line joined by " · ", wrapping to at most two; longer, they become a
-// compact "Notes" block in smaller type (three lines at most).
+// compact "Notes" block in smaller type.
 function drawFooter(ctx, K, Wc, Hc, credits = [], notes = []) {
   const { u, m, font } = K, y = Hc - 17 * u, wide = Wc - 2 * m, mw = (t) => ctx.measureText(t).width;
   font(400, 10.5); let lines = wrapNotes(notes, mw, wide), block = !lines, lh = 15 * u;
-  if (block) { font(400, 9.5); lh = 13 * u; lines = wrapNotes(notes, mw, wide - 44 * u, 99).slice(0, 3); lines[2] &&= fitText(ctx, lines[2], wide - 44 * u); }
+  // Disclosures are never dropped: the block's type shrinks (to 8 pt) to stay within three lines,
+  // and grows past three only if it still has to.
+  let fs = 9.5;
+  if (block) { for (;;) { font(400, fs); lines = wrapNotes(notes, mw, wide - 44 * u, 99); if (lines.length <= 3 || fs <= 8) break; fs -= 0.5; } lh = (fs + 3.5) * u; }
   const rule = y - 16 * u - lines.length * lh - (lines.length ? 3 * u : 0);
   ctx.strokeStyle = RULE; ctx.lineWidth = u; ctx.beginPath(); ctx.moveTo(m, rule); ctx.lineTo(Wc - m, rule); ctx.stroke();
   ctx.textBaseline = 'alphabetic'; let creditW = 0;
@@ -1208,7 +1211,7 @@ function drawFooter(ctx, K, Wc, Hc, credits = [], notes = []) {
   if (S.footnote) { font(400, 11.5); ctx.textAlign = 'left'; ctx.fillStyle = MUTED; halo(fitText(ctx, S.footnote, Wc - 2 * m - creditW - 24 * u), m, y); }
   ctx.textAlign = 'left'; ctx.fillStyle = MUTED; const ny = (i) => y - 3 * u - (lines.length - i) * lh;
   if (block && lines.length) { font(700, 9.5); ctx.fillStyle = INK; halo('Notes', m, ny(0)); ctx.fillStyle = MUTED; }
-  font(400, block ? 9.5 : 10.5); lines.forEach((t, i) => halo(t, m + (block ? 44 * u : 0), ny(i)));
+  font(400, block ? fs : 10.5); lines.forEach((t, i) => halo(t, m + (block ? 44 * u : 0), ny(i)));
   return rule;
 }
 function tagLabel(ctx, K, t, x, y) {
