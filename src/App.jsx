@@ -30,6 +30,7 @@ const DashboardPage = React.lazy(() => import('./components/DashboardPage'));
 const AdminPage = React.lazy(() => import('./components/AdminPage'));
 const AccountPage = React.lazy(() => import('./components/AccountPage'));
 const TenureMonitorPage = React.lazy(() => import('./components/tenure/TenureMonitorPage'));
+const WorkspaceScreens = React.lazy(() => import('./components/workspace/WorkspaceScreens'));
 const ExportHDModal = React.lazy(() => import('./components/ExportHDModal'));
 const HowToUseModal = React.lazy(() => import('./components/HowToUseModal'));
 const ColumnMapperModal = React.lazy(() => import('./components/ColumnMapperModal'));
@@ -72,6 +73,7 @@ import { trackSearch, trackEvent, trackEventOnce } from './utils/track';
 import { isPhoneDevice } from './utils/device';
 import { createSaveCoordinator, runGuardedSave } from './utils/saveCoordinator';
 import { US_CLAIMS_ENABLED, US_STATES, US_GROUP_LABEL, US_GEOMETRY_DISCLAIMER, isUsJurisdiction } from './utils/jurisdictions';
+import { parseWorkspacePath, propertyPath } from './utils/workspaceRoutes';
 import { clampExportSize, canExportFormat, maxPixelRatioFor, PRO_MAX_EXPORT_PIXELS } from './utils/entitlements';
 import { verifyCheckoutSession } from './utils/billing';
 import { trackVerifiedPurchase } from './utils/purchaseTracking';
@@ -681,9 +683,28 @@ export default function App({ initialAction = null }) {
     if (window.location.pathname === '/dashboard') return 'dashboard';
     if (window.location.pathname === '/account') return 'account';
     if (window.location.pathname === '/tenure-monitor') return 'tenure';
+    const workspaceRoute = parseWorkspacePath(window.location.pathname);
+    if (workspaceRoute) return workspaceRoute.screen;
     if (window.location.pathname.startsWith('/map/')) return 'shared_view';
     return 'landing';
   });
+  // Which property the property screen shows: { orgSlug, slug }; orgSlug is
+  // null for an older /workspace/p/<slug> link (see utils/workspaceRoutes.js).
+  const [propertyRef, setPropertyRef] = useState(() => {
+    const r = parseWorkspacePath(window.location.pathname);
+    return r?.screen === 'property' ? { orgSlug: r.orgSlug, slug: r.slug } : null;
+  });
+  // { replace: true } rewrites an older link to the canonical one in place, so
+  // Back does not return to the old form and redirect forward again.
+  const replaceUrlRef = useRef(false);
+  const openProperty = (orgSlug, slug, { replace = false } = {}) => {
+    replaceUrlRef.current = replace;
+    setPropertyRef({ orgSlug: orgSlug || null, slug });
+    setScreen('property');
+  };
+  // Where the open cloud map lives: null for a personal map, otherwise
+  // { orgId, orgName, orgSlug, role, readOnly, propertyId, propertyName, propertySlug }.
+  const [projectHome, setProjectHome] = useState(null);
   // A filter the dashboard's attention rows asked the monitor to open on.
   // Cleared on every other route into the monitor so it cannot linger and
   // silently filter a later visit the user did not ask to be filtered.
@@ -1031,12 +1052,27 @@ export default function App({ initialAction = null }) {
     }).catch(() => {});
   }, [project.layers, project.layout.autoInsetRegion, projectId]);
 
+  // Which company property (if any) the open cloud map belongs to, and the
+  // user's role there: the toolbar shows it, and a viewer's edits are never
+  // sent to the server. Loaded lazily, and only asks about the map when the
+  // user is in a workspace at all.
+  useEffect(() => {
+    setProjectHome(null);
+    if (!user || !projectId || !supabase) return undefined;
+    let cancelled = false;
+    import('./utils/workspace')
+      .then(({ getProjectHome }) => getProjectHome(projectId))
+      .then((home) => { if (!cancelled) setProjectHome(home); })
+      .catch(() => { /* treated as a personal map; the server still decides */ });
+    return () => { cancelled = true; };
+  }, [user, projectId]);
+
   // Auto cloud-save for signed-in users editing a saved (cloud) project. The
   // local draft above already persists every 250ms; this mirrors it to the
   // cloud after ~10s of quiet so an hour of edits isn't stranded in one browser
   // until the user remembers to click Save. Manual Save/Save As still work.
   useEffect(() => {
-    if (!user || !projectId || !isDirty || !supabase) return;
+    if (!user || !projectId || !isDirty || !supabase || projectHome?.readOnly) return;
     const t = window.setTimeout(async () => {
       const snapshot = JSON.stringify(project);
       // Ticket + snapshot captured at fire time. After the await, the
@@ -1063,7 +1099,10 @@ export default function App({ initialAction = null }) {
       });
       if (outcome.status === 'error') {
         const err = outcome.err;
-        if (err?.code === 'SAVE_CONFLICT') {
+        if (err?.code === 'ORG_READ_ONLY') {
+          setProjectHome((h) => (h ? { ...h, readOnly: true } : h));
+          setUploadStatus({ type: 'error', message: err.message });
+        } else if (err?.code === 'SAVE_CONFLICT') {
           // Another tab/device saved since we loaded. Never silently clobber:
           // stop autosaving and let the user choose (P1-01).
           setSaveConflict({ name: projectName });
@@ -1096,7 +1135,7 @@ export default function App({ initialAction = null }) {
       }
     }, 10000);
     return () => window.clearTimeout(t);
-  }, [project, user, projectId, projectName, isDirty]);
+  }, [project, user, projectId, projectName, isDirty, projectHome?.readOnly]);
 
   // Warn before leaving with unsaved cloud changes. Only for signed-in users:
   // anonymous work is continuously persisted to the local draft, so a prompt
@@ -1525,13 +1564,18 @@ export default function App({ initialAction = null }) {
       : screen === 'dashboard' ? '/dashboard'
         : screen === 'account' ? '/account'
           : screen === 'tenure' ? '/tenure-monitor'
-            : (screen === 'shared_view' && sharedMapId) ? `/map/${sharedMapId}`
-              : '/';
+            : screen === 'workspace' ? '/workspace'
+              : (screen === 'property' && propertyRef) ? propertyPath(propertyRef.orgSlug, propertyRef.slug)
+                : screen === 'invite' ? '/invite'
+                  : (screen === 'shared_view' && sharedMapId) ? `/map/${sharedMapId}`
+                    : '/';
+    const replace = replaceUrlRef.current;
+    replaceUrlRef.current = false;
     if (window.location.pathname === target) return;
     try {
-      window.history.pushState({ screen, sharedMapId: sharedMapId || null }, '', target);
+      window.history[replace ? 'replaceState' : 'pushState']({ screen, sharedMapId: sharedMapId || null }, '', target);
     } catch { /* history unavailable — URL simply won't track */ }
-  }, [screen, sharedMapId]);
+  }, [screen, sharedMapId, propertyRef]);
 
   // A signed-in customer landing on "/" should see their work, not the pitch.
   //
@@ -1605,7 +1649,11 @@ export default function App({ initialAction = null }) {
       else if (path === '/dashboard') setScreen('dashboard');
       else if (path === '/account') setScreen('account');
       else if (path === '/tenure-monitor') setScreen('tenure');
-      else if (path.startsWith('/map/')) {
+      else if (parseWorkspacePath(path)) {
+        const r = parseWorkspacePath(path);
+        if (r.screen === 'property') setPropertyRef({ orgSlug: r.orgSlug, slug: r.slug });
+        setScreen(r.screen);
+      } else if (path.startsWith('/map/')) {
         setSharedMapId(path.slice(5));
         setScreen('shared_view');
       } else {
@@ -4726,6 +4774,10 @@ export default function App({ initialAction = null }) {
 
   const saveCurrentProject = async (nextName = null, accountSave = null) => {
     const nameToSave = (nextName || accountSave?.projectName || projectName || project.layout?.title || 'Untitled map').trim();
+    if (user && !accountSave && projectId && projectHome?.readOnly) {
+      setUploadStatus({ type: 'error', message: `View only: changes to ${projectHome.propertyName || projectHome.orgName} maps are not saved. Use Save As for a personal copy.` });
+      return undefined;
+    }
     if (user) {
       // Snapshot + ticket BEFORE the await: edits made while the save is in
       // flight must not be masked (dirty stays set), and a workspace switch
@@ -4748,6 +4800,9 @@ export default function App({ initialAction = null }) {
           if (err?.code === 'SAVE_CONFLICT') {
             setSaveConflict({ name: nameToSave });
             setUploadStatus({ type: 'error', message: 'This project was changed elsewhere. Reload it, or choose Overwrite to keep this version.' });
+          } else if (err?.code === 'ORG_READ_ONLY') {
+            setProjectHome((h) => (h ? { ...h, readOnly: true } : h));
+            setUploadStatus({ type: 'error', message: err.message });
           } else {
             setUploadStatus({ type: 'error', message: `Cloud save failed: ${err.message}. Your work is still saved in this browser.` });
           }
@@ -4764,7 +4819,7 @@ export default function App({ initialAction = null }) {
           || (requested?.nonce === pending.nonce && requested.ticket.stillCurrent()))) clearAccountSave(pending.nonce);
         saveDraft({ payload: payloadToSave, projectId: cloudId, projectName: nameToSave });
         listCloudProjects().then(setRecentProjects).catch(() => {});
-        setUploadStatus({ type: 'success', message: `Saved to cloud: ${nameToSave}` });
+        setUploadStatus({ type: 'success', message: projectHome?.propertyName && projectId === cloudId ? `Saved to ${projectHome.propertyName}: ${nameToSave}` : `Saved to cloud: ${nameToSave}` });
         captureAndStoreThumbnail(cloudId, true);
       }
       return outcome;
@@ -4839,10 +4894,13 @@ export default function App({ initialAction = null }) {
       const snapshot = JSON.stringify(project);
       const payloadToSave = project;
       const ticket = saveCoordRef.current.begin();
+      // A company map's editors save the copy into the same property; a
+      // viewer's copy (or a personal map's) goes to their personal maps.
+      const intoProperty = projectHome && !projectHome.readOnly ? projectHome : null;
       const outcome = await runGuardedSave({
         ticket,
         snapshot,
-        doSave: () => saveCloudProject({ id: null, name: nameToSave, payload: payloadToSave }),
+        doSave: () => saveCloudProject({ id: null, name: nameToSave, payload: payloadToSave, propertyId: intoProperty?.propertyId || null }),
         getCurrentSerialized: () => lastSerializedRef.current,
         onSaved: () => { lastSavedSnapshotRef.current = snapshot; setIsDirty(false); },
         onMismatch: () => { lastSavedSnapshotRef.current = snapshot; },
@@ -4857,7 +4915,7 @@ export default function App({ initialAction = null }) {
         setProjectName(nameToSave);
         saveDraft({ payload: payloadToSave, projectId: cloudId, projectName: nameToSave });
         listCloudProjects().then(setRecentProjects).catch(() => {});
-        setUploadStatus({ type: 'success', message: `Saved to cloud as: ${nameToSave}` });
+        setUploadStatus({ type: 'success', message: intoProperty?.propertyName ? `Saved to ${intoProperty.propertyName} as: ${nameToSave}` : `Saved to cloud as: ${nameToSave}` });
         captureAndStoreThumbnail(cloudId, true);
       }
     } else {
@@ -5054,6 +5112,26 @@ export default function App({ initialAction = null }) {
     setUploadStatus({ type: 'success', message: 'Started a new blank project workspace.' });
   };
 
+  // "New map in this property": the row is created in the property first, so
+  // every save after this goes to the company, then the editor opens it.
+  const startPropertyMap = async (property) => {
+    const base = createInitialProjectState();
+    const blank = { ...base, layout: { ...seedLayoutWithSettings(base.layout), title: property.name } };
+    const name = `${property.name} map`;
+    const created = await saveCloudProject({ id: null, name, payload: blank, propertyId: property.id });
+    await openProjectFromRecent({ id: created.id, name, payload: blank, revision: created.revision ?? 1 });
+    setScreen('editor');
+  };
+
+  // A sign-in link that lost its way back to /invite (Supabase falls back to
+  // the site root for an unlisted redirect) still finishes the invite.
+  useEffect(() => {
+    if (!user || !['landing', 'dashboard'].includes(screen)) return;
+    import('./utils/workspace').then(({ pendingInviteToken }) => {
+      if (pendingInviteToken()) setScreen('invite');
+    }).catch(() => {});
+  }, [user, screen]);
+
   const initialActionHandled = useRef(false);
   useEffect(() => {
     if (!initialAction || initialActionHandled.current) return;
@@ -5161,6 +5239,21 @@ export default function App({ initialAction = null }) {
     );
   }
 
+  if (screen === 'invite' || screen === 'workspace' || screen === 'property') {
+    return (
+      <React.Suspense fallback={<div className="shared-map-loading" role="status">Opening the workspace…</div>}>
+        <WorkspaceScreens
+          screen={screen}
+          propertyRef={propertyRef}
+          go={(to) => { if (to === 'landing') goToLanding(); else { if (to === 'tenure') setTenureInitialFilter(null); setScreen(to); } }}
+          onOpenProperty={openProperty}
+          onOpenMap={(entry) => { openProjectFromRecent(entry); setScreen('editor'); }}
+          onNewMap={startPropertyMap}
+        />
+      </React.Suspense>
+    );
+  }
+
   if (screen === 'dashboard') {
     // Same gate /account has. Somebody arriving on /dashboard signed out — a
     // bookmark, a shared link, an expired session — gets an explanation and a
@@ -5190,6 +5283,8 @@ export default function App({ initialAction = null }) {
         onOpenAccount={() => setScreen('account')}
         onOpenBrandKits={() => { setScreen('editor'); setShowBrandKitManager(true); }}
         onSearchClaims={() => { setScreen('editor'); setAddClaimsModalPath('registry'); setShowAddClaimsModal(true); }}
+        onOpenWorkspace={() => setScreen('workspace')}
+        onOpenProperty={openProperty}
         onExit={goToLanding}
       />
       </React.Suspense>
@@ -5278,6 +5373,18 @@ export default function App({ initialAction = null }) {
           </Menu>
           <div className="ed-doc">
             <span className="ed-doc-name" title={project.layout.title || 'Project Map'}>{project.layout.title || 'Project Map'}</span>
+            {projectHome && (
+              <button
+                type="button"
+                className={`ed-doc-home${projectHome.readOnly ? ' ed-doc-home--readonly' : ''}`}
+                title={`${projectHome.orgName}${projectHome.propertyName ? ` › ${projectHome.propertyName}` : ''}${projectHome.readOnly ? ' (view only: changes are not saved)' : ''}`}
+                onClick={() => {
+                  if (projectHome.propertySlug) openProperty(projectHome.orgSlug, projectHome.propertySlug); else setScreen('workspace');
+                }}
+              >
+                {projectHome.propertyName || projectHome.orgName}{projectHome.readOnly ? ' · View only' : ''}
+              </button>
+            )}
             {!user && !isDirty ? (
               <button
                 type="button"
@@ -5287,7 +5394,7 @@ export default function App({ initialAction = null }) {
               >On this device — sign in to keep</button>
             ) : (
               <span className={`ed-doc-state${isDirty ? ' ed-doc-state--dirty' : saveFlash ? ' ed-doc-state--saved' : ''}`}>
-                {isDirty ? 'Unsaved' : saveFlash ? 'Saved' : user ? 'Saved to cloud' : 'Saved'}
+                {projectHome?.readOnly ? (isDirty ? 'Not saved (view only)' : 'View only') : isDirty ? 'Unsaved' : saveFlash ? 'Saved' : user ? 'Saved to cloud' : 'Saved'}
               </span>
             )}
           </div>
@@ -5360,7 +5467,7 @@ export default function App({ initialAction = null }) {
         next={NEXT_STEP[inspectorTab] && { label: NEXT_STEP[inspectorTab].label, onClick: () => goToStep(NEXT_STEP[inspectorTab].step, 'next') }}
         open={inspectorOpen}
         onClose={() => setInspectorOpen(false)}
-        footer={<UserMenu onSaveToAccount={() => { requestAccountSave(); trackEvent('onboarding_step', { step: 'save', before_export: !hasExported }); }} onOpenTemplates={() => setShowBrandKitManager(true)} onOpenAccount={() => setScreen('dashboard')} onOpenTenureMonitor={() => { setTenureInitialFilter(null); setScreen('tenure'); }} />}
+        footer={<UserMenu onSaveToAccount={() => { requestAccountSave(); trackEvent('onboarding_step', { step: 'save', before_export: !hasExported }); }} onOpenTemplates={() => setShowBrandKitManager(true)} onOpenAccount={() => setScreen('dashboard')} onOpenTenureMonitor={() => { setTenureInitialFilter(null); setScreen('tenure'); }} onOpenWorkspace={() => setScreen('workspace')} />}
       >
         {inspectorTab === 'data' && (
           <>

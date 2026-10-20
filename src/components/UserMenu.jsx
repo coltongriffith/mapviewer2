@@ -1,11 +1,40 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '../hooks/useAuth.jsx';
 import AuthModal from './AuthModal';
 import { FeedbackLauncher } from './FeedbackModal';
 
 // `onSaveToAccount`, when given, keeps the open map for after sign-in (the
 // editor passes its account-save request); without it the link only signs in.
-export default function UserMenu({ onOpenTemplates, onOpenAccount, onOpenTenureMonitor, onSaveToAccount }) {
+// Personal / company switcher. The workspace module loads only once a user
+// is signed in, so the editor's first load does not grow.
+function WorkspaceSwitch({ onOpenAccount, onOpenWorkspace }) {
+  const [state, setState] = useState({ list: [], active: 'personal' });
+  useEffect(() => {
+    let cancelled = false;
+    import('../utils/workspace').then(async ({ listMyWorkspaces, getActiveWorkspaceId }) => {
+      const list = await listMyWorkspaces();
+      if (!cancelled) setState({ list, active: list.some((w) => w.id === getActiveWorkspaceId()) ? getActiveWorkspaceId() : 'personal' });
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+  if (!state.list.length) {
+    return <button className="sidebar-account-action-btn" onClick={onOpenWorkspace} title="Share properties, maps and 3D figures with your company">Company workspace</button>;
+  }
+  const choose = async (id) => {
+    const { setActiveWorkspaceId } = await import('../utils/workspace');
+    setActiveWorkspaceId(id);
+    setState((s) => ({ ...s, active: id }));
+    if (id === 'personal') onOpenAccount?.(); else onOpenWorkspace();
+  };
+  return (
+    <select className="sidebar-account-action-btn" aria-label="Workspace" value={state.active} onChange={(e) => choose(e.target.value)}>
+      <option value="personal">Personal</option>
+      {state.list.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+    </select>
+  );
+}
+
+export default function UserMenu({ onOpenTemplates, onOpenAccount, onOpenTenureMonitor, onSaveToAccount, onOpenWorkspace }) {
   const { user, signOut } = useAuth();
   const [showAuth, setShowAuth] = useState(false);
 
@@ -52,6 +81,7 @@ export default function UserMenu({ onOpenTemplates, onOpenAccount, onOpenTenureM
             Tenure Monitor
           </button>
         )}
+        {onOpenWorkspace && <WorkspaceSwitch onOpenAccount={onOpenAccount} onOpenWorkspace={onOpenWorkspace} />}
         <button className="sidebar-account-action-btn muted" onClick={signOut}>
           Sign out
         </button>

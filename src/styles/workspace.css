@@ -1,0 +1,94 @@
+/* Company workspace, property and invite pages. Built on the dashboard's
+   surfaces (dash-shell, dash-header, dash-panel) so the signed-in screens read
+   as one product; only what those classes do not cover lives here. */
+.ws-switcher { display: inline-flex; align-items: center; gap: 6px; }
+.ws-switcher select {
+  height: var(--ctl-h); font: inherit; font-size: var(--fs-body); padding: 0 8px; max-width: 220px;
+  border: 1px solid var(--ui-border-strong); border-radius: var(--r-md); background: var(--ui-surface); color: var(--ui-text);
+}
+.ws-switcher select:focus { outline: 2px solid var(--ui-focus); outline-offset: 1px; }
+
+.ws-badge {
+  display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 650;
+  letter-spacing: 0.02em; background: var(--ui-surface-subtle); border: 1px solid var(--ui-border); color: var(--ui-text-muted);
+  vertical-align: middle; white-space: nowrap;
+}
+.ws-badge--viewer { background: #fbf6e9; border-color: #e7d9ad; color: #6b5414; }
+.ws-badge--active { background: #eaf4ee; border-color: #bfdcc9; color: #245c37; }
+.ws-badge--option { background: #eef2fb; border-color: #c6d2ee; color: #2d4a8a; }
+.ws-badge--sold, .ws-badge--dormant { color: var(--ui-text-muted); }
+
+.ws-stack { display: flex; flex-direction: column; gap: 20px; }
+.ws-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.ws-form { display: grid; gap: 10px; grid-template-columns: minmax(0, 1fr); }
+.ws-form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr)); gap: 10px; }
+.ws-field { display: grid; gap: 4px; font-size: 13px; color: var(--ui-text-muted); min-width: 0; }
+.ws-field select { max-width: 100%; min-width: 0; text-overflow: ellipsis; }
+/* Long emails and option labels must wrap or truncate, never widen the page. */
+.ws-page .dash-columns > *, .ws-page .ws-stack > * { min-width: 0; }
+.ws-page .ws-row > * { min-width: 0; max-width: 100%; }
+.ws-field input, .ws-field select, .ws-field textarea {
+  font: inherit; font-size: var(--fs-body); color: var(--ui-text); background: var(--ui-surface);
+  border: 1px solid var(--ui-border-strong); border-radius: var(--r-md); padding: 6px 8px; min-height: var(--ctl-h);
+}
+.ws-field textarea { min-height: 80px; resize: vertical; }
+.ws-field input:focus, .ws-field select:focus, .ws-field textarea:focus { outline: 2px solid var(--ui-focus); outline-offset: 1px; }
+.ws-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+.ws-actions .btn, .ws-row .btn { width: auto; padding: 0 14px; height: var(--ctl-h); }
+
+.ws-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.ws-list > li {
+  display: flex; align-items: center; gap: 10px; padding: 9px 0; border-top: 1px solid var(--ui-border);
+  font-size: 13px; flex-wrap: wrap;
+}
+.ws-list > li:first-child { border-top: 0; }
+.ws-list-main { flex: 1 1 200px; min-width: 0; display: grid; gap: 2px; }
+.ws-list-main b { overflow-wrap: anywhere; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.ws-list-main small { color: var(--ui-text-muted); font-size: 12px; }
+.ws-list select { height: 28px; font: inherit; font-size: 12.5px; border: 1px solid var(--ui-border-strong); border-radius: var(--r-md); background: var(--ui-surface); }
+
+.ws-properties { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(230px, 100%), 1fr)); gap: 14px; }
+.ws-property {
+  text-align: left; font: inherit; color: inherit; cursor: pointer; display: grid; gap: 6px; align-content: start;
+  background: var(--ui-surface); border: 1px solid var(--ui-border); border-radius: var(--r-md); padding: 14px;
+}
+.ws-property:hover { border-color: var(--ui-border-strong); }
+.ws-property h3 { margin: 0; font-size: 15px; font-weight: 600; }
+.ws-property p { margin: 0; font-size: 12.5px; color: var(--ui-text-muted); }
+
+.ws-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--ui-border); margin-bottom: 18px; overflow-x: auto; }
+.ws-tab {
+  background: none; border: 0; border-bottom: 2px solid transparent; padding: 10px 12px; margin-bottom: -1px;
+  font: inherit; font-size: var(--fs-body); font-weight: 550; color: var(--ui-text-muted); cursor: pointer; white-space: nowrap;
+}
+.ws-tab[aria-selected="true"] { color: var(--ui-text); border-bottom-color: var(--ui-action); }
+.ws-tab:hover { color: var(--ui-text); }
+
+.ws-dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 18px; margin: 0; font-size: 13.5px; }
+.ws-dl dt { color: var(--ui-text-muted); }
+.ws-dl dd { margin: 0; white-space: pre-wrap; }
+
+.ws-activity { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.ws-activity li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; padding: 8px 0; border-top: 1px solid var(--ui-border); font-size: 13px; }
+.ws-activity li:first-child { border-top: 0; }
+.ws-activity small { color: var(--ui-text-muted); font-size: 12px; }
+.ws-activity time { color: var(--ui-text-muted); font-size: 12px; white-space: nowrap; }
+
+.ws-link-box { min-width: 0; display: flex; gap: 6px; align-items: center; background: var(--ui-surface-subtle); border: 1px solid var(--ui-border); border-radius: var(--r-md); padding: 6px 8px; }
+.ws-link-box code { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+
+.ws-notice { margin: 0 0 16px; padding: 10px 12px; border-radius: var(--r-md); font-size: 13px; background: #fbf6e9; border: 1px solid #e7d9ad; color: #5a4611; }
+.ws-error { margin: 0 0 16px; padding: 10px 12px; border-radius: var(--r-md); font-size: 13px; background: #f9eeee; border: 1px solid #e8c5c5; color: var(--ui-danger); }
+.ws-ok { margin: 0; font-size: 13px; color: #245c37; }
+
+.ws-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.ws-table th, .ws-table td { text-align: left; padding: 6px 8px; border-top: 1px solid var(--ui-border); }
+.ws-table th { color: var(--ui-text-muted); font-weight: 600; border-top: 0; }
+.ws-table-wrap { overflow-x: auto; }
+
+@media (max-width: 640px) {
+  .ws-dl { grid-template-columns: 1fr; }
+  .ws-dl dt { margin-top: 6px; }
+}
+.ws-page .dash-header { height: auto; min-height: 60px; flex-wrap: wrap; gap: 8px; padding-top: 8px; padding-bottom: 8px; }
+.ws-page .dash-header-nav { flex-wrap: wrap; min-width: 0; }

@@ -35,3 +35,33 @@ export const US_CLAIM_TYPES = [
 ];
 
 export const isUsJurisdiction = (value) => typeof value === 'string' && value.startsWith('us-');
+
+// Canadian provinces and territories, by the same lower-case codes the claim
+// search uses ('bc', 'on', ...).
+export const CA_PROVINCES = [
+  { value: 'bc', label: 'British Columbia' },
+  { value: 'ab', label: 'Alberta' },
+  { value: 'sk', label: 'Saskatchewan' },
+  { value: 'mb', label: 'Manitoba' },
+  { value: 'on', label: 'Ontario' },
+  { value: 'qc', label: 'Quebec' },
+  { value: 'nb', label: 'New Brunswick' },
+  { value: 'ns', label: 'Nova Scotia' },
+  { value: 'pe', label: 'Prince Edward Island' },
+  { value: 'nl', label: 'Newfoundland & Labrador' },
+  { value: 'yt', label: 'Yukon' },
+  { value: 'nt', label: 'Northwest Territories' },
+  { value: 'nu', label: 'Nunavut' },
+];
+
+// Where a workspace property (exploration project) sits. Stored as the code;
+// public.properties checks the shape ('xx', 'us-xx' or 'other').
+export const PROPERTY_JURISDICTIONS = [
+  ...CA_PROVINCES,
+  ...US_STATES,
+  { value: 'other', label: 'Elsewhere' },
+];
+
+export function jurisdictionLabel(value) {
+  return PROPERTY_JURISDICTIONS.find((j) => j.value === value)?.label || '';
+}
