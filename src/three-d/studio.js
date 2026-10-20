@@ -142,6 +142,7 @@ const S = {              // style
   secAz: 135, secW: 75, surf: 1, walls: true, ids: true, inset: true, logo: null, meshes: {},
   ribbons: true, traceWidth: 1.4, pendingLabels: true, pendingNoAssays: false, valueCol2: null, elevTicks: true,
   terrain: 'natural', terrainSource: 'auto', vex: 1, crs: null, labels: [],
+  collarFit: 'collars', blockStyle: 'glass', wallLabels: [],
 };
 const BIN_COLORS = ['#a3abaf', '#e2dc4f', '#ff9a1f', '#ef3b2c', '#e93ad1'];
 const MESH_COLORS = ['#ff9a1f', '#e93ad1', '#2b8fd6', '#6aa84f', '#8e5bd6'];
@@ -273,7 +274,7 @@ let root = new THREE.Group(); scene.add(root);
 let G = null; // geometry context: origin, block, surface, holes w/ paths, meshes
 
 function rebuildScene(keepCam) {
-  const cam0 = keepCam && G ? getCam() : null;
+  const cam0 = keepCam && G ? getCam() : null, fit0 = G?.fit || 1;
   scene.remove(root); root.traverse((o) => { o.geometry?.dispose?.(); o.material?.map?.dispose?.(); o.material?.dispose?.(); }); root = new THREE.Group(); scene.add(root);
   if (!project || project.empty) { G = null; return; }
   const holes = project.holes;
@@ -313,17 +314,23 @@ function rebuildScene(keepCam) {
     const fi = Math.max(0, Math.min(NG - 1e-6, (x - B.x0) / bw * NG)), fj = Math.max(0, Math.min(NG - 1e-6, (y - B.y0) / bh * NG)), i = Math.floor(fi), j = Math.floor(fj), a = fi - i, b = fj - j, r = NG + 1;
     return grid[j * r + i] * (1 - a) * (1 - b) + grid[j * r + i + 1] * a * (1 - b) + grid[(j + 1) * r + i] * (1 - a) * b + grid[(j + 1) * r + i + 1] * a * b;
   };
-  // Collars with no elevation take the surface; then shift their paths.
-  holes.forEach((h) => { if (!Number.isFinite(h.c.z)) { const z = surf(h.c.x, h.c.y); h.path.forEach((p) => { p.z += z; }); h.c.z = z; } });
-  // Collars surveyed on another datum (or illustrative) can sit well off the real terrain. Rather than
-  // float or bury the holes, hang each from the DEM surface and say so.
+  // Surveyed collar elevations are data; a DEM tile is an approximation, often on another datum. By
+  // default the DEM moves (by the median collar-minus-DEM offset) to pass through the collars; with
+  // collarFit "terrain" each hole hangs from the DEM instead.
   let terrainNote = '';
   if (using === 'dem') {
-    const off = holes.map((h) => surf(h.c.x, h.c.y) - h.c.z).filter(Number.isFinite), med = off.map(Math.abs).sort((a, b) => a - b)[Math.floor(off.length / 2)] || 0;
-    if (med > 10) {
-      holes.forEach((h) => { const d = surf(h.c.x, h.c.y) - h.c.z; h.path.forEach((p) => { p.z += d; }); h.c.z += d; });
-      terrainNote = `Collar elevations sit about ${Math.round(med)} m off the real terrain, so each hole hangs from the terrain surface.`;
+    const off = holes.filter((h) => Number.isFinite(h.c.z)).map((h) => h.c.z - surf(h.c.x, h.c.y)).filter(Number.isFinite).sort((a, b) => a - b), med = off[Math.floor(off.length / 2)] || 0;
+    if (S.collarFit !== 'terrain' && Math.abs(med) >= 1) {
+      for (let k = 0; k < grid.length; k++) grid[k] += med;
+      terrainNote = `Terrain shifted ${med > 0 ? '+' : '−'}${Math.round(Math.abs(med))} m to meet the collars.`;
     }
+  }
+  // Collars with no elevation take the surface; then shift their paths.
+  holes.forEach((h) => { if (!Number.isFinite(h.c.z)) { const z = surf(h.c.x, h.c.y); h.path.forEach((p) => { p.z += z; }); h.c.z = z; } });
+  if (using === 'dem' && S.collarFit === 'terrain') {
+    const off = holes.map((h) => surf(h.c.x, h.c.y) - h.c.z).sort((a, b) => a - b), med = off[Math.floor(off.length / 2)] || 0;
+    holes.forEach((h) => { const d = surf(h.c.x, h.c.y) - h.c.z; h.path.forEach((p) => { p.z += d; }); h.c.z += d; });
+    if (Math.abs(med) >= 1) terrainNote = `Holes hung from the terrain: collars moved ${med > 0 ? '+' : '−'}${Math.round(Math.abs(med))} m (median) to the DEM surface.`;
   }
   zmin = Math.min(...holes.flatMap((h) => h.path.map((p) => p.z)));
   let zmax = -Infinity; for (const v of grid) zmax = Math.max(zmax, v);
@@ -334,7 +341,7 @@ function rebuildScene(keepCam) {
   // (baseDist) adds the depth only as far as it shows at the view's plunge, so a
   // tight collar pattern with 600 m holes (Star Main) is framed from the side
   // without shrinking the plan view.
-  G = { B, cx, cy, bw, bh, diag: Math.max(diag, Math.hypot(bw, bh, zmax - B.z0)), diagH: diag, depth: (zmax - B.z0) * vex, surf, V, zref, zmax, using, terrainNote };
+  G = { B, cx, cy, bw, bh, diag: Math.max(diag, Math.hypot(bw, bh, zmax - B.z0)), diagH: diag, depth: (zmax - B.z0) * vex, surf, V, zref, zmax, using, terrainNote, fit: cam0 ? fit0 : 1 };
 
   // Terrain top: elevation and hillshade cached once per build; paintTerrain colours them by style.
   {
@@ -357,13 +364,18 @@ function rebuildScene(keepCam) {
 
   // Walls, base, edges, shadow
   G.walls = [];
+  // Rows crowd toward the top so the solid block's thin soil band under the terrain stays crisp.
+  const NJ = 30, FR = Array.from({ length: NJ + 1 }, (_, j) => 1 - (1 - j / NJ) ** 2);
   const wall = (p0, p1) => {
-    const NI = 100, NJ = 30, pos = [], col = [], idx = [];
+    const NI = 100, pos = [], col = [], idx = [];
     for (let i = 0; i <= NI; i++) { const x = p0[0] + (p1[0] - p0[0]) * i / NI, y = p0[1] + (p1[1] - p0[1]) * i / NI, top = surf(x, y);
-      for (let j = 0; j <= NJ; j++) { const z = B.z0 + (top - B.z0) * j / NJ, v = V(x, y, z); pos.push(v.x, v.y, v.z); const t = 0.92 + 0.07 * j / NJ; col.push(t * 0.98, t, t * 0.99); } }
+      for (let j = 0; j <= NJ; j++) { const z = B.z0 + (top - B.z0) * FR[j], v = V(x, y, z); pos.push(v.x, v.y, v.z); col.push(1, 1, 1); } }
     for (let i = 0; i < NI; i++) for (let j = 0; j < NJ; j++) { const a = i * (NJ + 1) + j, b = a + NJ + 1; idx.push(a, b, a + 1, b, b + 1, a + 1); }
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setIndex(idx);
-    const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.42, side: THREE.DoubleSide, depthWrite: false })); m.renderOrder = 5; m.userData.nj = NJ; root.add(m); G.walls.push(m);
+    const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.42, side: THREE.DoubleSide, depthWrite: false })); m.renderOrder = 5;
+    const dx = p1[0] - p0[0], dy = p1[1] - p0[1], l = Math.hypot(dx, dy); // corners run anticlockwise, so (dy, -dx) points out
+    Object.assign(m.userData, { nj: NJ, fr: FR, n: new THREE.Vector3(dy / l, 0, dx / l), c: V((p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2, (B.z0 + zmax) / 2) });
+    root.add(m); G.walls.push(m);
   };
   const C = [[B.x0, B.y0], [B.x1, B.y0], [B.x1, B.y1], [B.x0, B.y1]];
   C.forEach((p, i) => wall(p, C[(i + 1) % 4]));
@@ -404,7 +416,7 @@ function rebuildScene(keepCam) {
     const m = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color: st.color, transparent: true, opacity: st.opacity, depthWrite: false, side: THREE.DoubleSide }));
     m.renderOrder = 4; m.visible = st.show; root.add(m); G.meshes.push({ name: f.name, m });
   });
-  paintTerrain(); restyle();
+  paintTerrain(); restyle(); buildWallLabels();
   if (cam0) setCamera(cam0, true); else applyView('a', true);
   syncRealTerrain();
 }
@@ -413,6 +425,8 @@ function rebuildScene(keepCam) {
 // loaded and otherwise fall back to natural. Pale styles also whiten the glass sides.
 const TERRAINS = { natural: 'Natural', light: 'Light relief', dark: 'Dark slate', relief: 'Shaded relief', satellite: 'Satellite', muted: 'Satellite, muted' };
 const PALE = new Set(['light', 'relief', 'satellite', 'muted']);
+// Satellite tone: lifted midtones, a touch of contrast and exposure, so forest reads green and tracks show.
+const TONE = Uint8ClampedArray.from({ length: 256 }, (_, v) => 255 * (((v / 255) ** 0.74 - 0.5) * 1.08 + 0.53));
 const imageryShown = () => !!G && (S.terrain === 'satellite' || S.terrain === 'muted') && !!realT.img?.ok && realT.img.key === terrainKeyOf(G.B);
 function paintTerrain() {
   if (!G) return;
@@ -429,7 +443,8 @@ function paintTerrain() {
     for (let py = 0; py < th; py++) { const sy = Math.min(TH - 1, Math.floor(py * TH / th));
       for (let px = 0; px < tw; px++) {
         const i = py * tw + px, sh = shade[sy * TW + Math.min(TW - 1, Math.floor(px * TW / tw))];
-        let r = img.data[i * 4], g = img.data[i * 4 + 1], b = img.data[i * 4 + 2], f = 0.8 + 0.3 * sh;
+        let r = img.data[i * 4], g = img.data[i * 4 + 1], b = img.data[i * 4 + 2], f = 0.9 + 0.14 * sh;
+        if (st === 'satellite') { r = TONE[r]; g = TONE[g]; b = TONE[b]; const l = 0.3 * r + 0.59 * g + 0.11 * b; r = l + (r - l) * 1.15; g = l + (g - l) * 1.15; b = l + (b - l) * 1.15; }
         if (st === 'muted') { const l = 0.3 * r + 0.59 * g + 0.11 * b; r = (l + (r - l) * 0.4) * 0.6 + 98; g = (l + (g - l) * 0.4) * 0.6 + 100; b = (l + (b - l) * 0.4) * 0.6 + 97; f = 0.86 + 0.22 * sh; }
         d[i * 4] = Math.min(255, r * f); d[i * 4 + 1] = Math.min(255, g * f); d[i * 4 + 2] = Math.min(255, b * f); d[i * 4 + 3] = 255;
       } }
@@ -450,11 +465,30 @@ function paintTerrain() {
   }
   ctx.putImageData(out, 0, 0);
   const pale = PALE.has(st);
+  const solid = S.blockStyle === 'solid';
   G.walls.forEach((w) => {
     const ca = w.geometry.attributes.color;
-    if (!ca) { w.material.color.set(pale ? '#f3f5f4' : '#e9ecea'); return; }
-    const nj = w.userData.nj; for (let k = 0; k < ca.count; k++) { const j = (k % (nj + 1)) / nj, t = pale ? 0.965 + 0.035 * j : 0.92 + 0.07 * j; ca.setXYZ(k, t * (pale ? 0.995 : 0.98), t, t * (pale ? 0.99 : 0.99)); }
+    if (!ca) { w.material.color.set(solid ? '#e6e3dc' : pale ? '#f3f5f4' : '#e9ecea'); return; }
+    const { nj, fr } = w.userData;
+    for (let k = 0; k < ca.count; k++) {
+      const j = fr[k % (nj + 1)];
+      if (solid) { // cream rock, a shade darker at depth, under a thin soil band just below the terrain
+        const soil = Math.max(0, 1 - (1 - j) / 0.035) ** 1.5 * 0.85, r = 0.885 + 0.06 * j, g = 0.875 + 0.058 * j, b = 0.85 + 0.055 * j;
+        ca.setXYZ(k, r + (0.6 - r) * soil, g + (0.54 - g) * soil, b + (0.46 - b) * soil);
+      } else { const t = pale ? 0.965 + 0.035 * j : 0.92 + 0.07 * j; ca.setXYZ(k, t * (pale ? 0.995 : 0.98), t, t * 0.99); }
+    }
     ca.needsUpdate = true;
+  });
+  faceWalls();
+}
+// Solid block: the two far faces are near-opaque (and drawn before the model shapes, which do not write
+// depth), the faces toward the camera almost clear, as the agency figures cut them away. Re-run on turning.
+function faceWalls() {
+  if (!G) return; const solid = S.blockStyle === 'solid', eye = camera.position;
+  G.walls.forEach((w) => {
+    const d = w.userData; if (!d.n) { w.material.opacity = solid ? 0.85 : 0.6; w.renderOrder = solid ? 1 : 0; return; }
+    const near = d.n.dot(eye.clone().sub(d.c)) > 0;
+    w.material.opacity = solid ? (near ? 0.1 : 0.88) : 0.42; w.renderOrder = solid && !near ? 1 : 5;
   });
 }
 
@@ -625,6 +659,69 @@ function syncRealTerrain() {
   })();
   return realT.promise;
 }
+// ============================================================
+// 4c. Labels painted on the block faces
+// ============================================================
+// Text on a canvas texture, laid flat on a wall a hair outside it so it foreshortens with the face. Faces
+// are by compass (N, S, E, W: robust as the camera turns); u runs left to right as seen from outside,
+// v from the block base (0) to the terrain (1). Front-side only, so a label never reads mirrored through glass.
+const FACES = { S: [[0, 0], [1, 0], [0, -1]], E: [[1, 0], [1, 1], [1, 0]], N: [[1, 1], [0, 1], [0, 1]], W: [[0, 1], [0, 0], [-1, 0]] };
+const faceGeom = (face) => {
+  const [a, b, n] = FACES[face], P = ([i, j]) => [i ? G.B.x1 : G.B.x0, j ? G.B.y1 : G.B.y0];
+  return { a: P(a), b: P(b), n: new THREE.Vector3(n[0], 0, -n[1]) };
+};
+// The face most squarely toward the camera.
+const frontFace = () => { const d = camera.getWorldDirection(new THREE.Vector3()); return Object.keys(FACES).sort((p, q) => faceGeom(p).n.dot(d) - faceGeom(q).n.dot(d))[0]; };
+function wallLabelMesh(L) {
+  const title = L.size === 'title', lines = String(L.text).split('\n'), px = 96, c = document.createElement('canvas'), g = c.getContext('2d');
+  const fontOf = () => { g.font = `${title ? 700 : 600} ${px}px ${SANS}`; if ('letterSpacing' in g) g.letterSpacing = title ? `${px * 0.06}px` : '0px'; };
+  fontOf(); const shown = lines.map((t) => (title ? t.toUpperCase() : t)), tw = Math.max(...shown.map((t) => g.measureText(t).width)), lh = px * 1.15;
+  c.width = Math.ceil(tw + px * 0.4); c.height = Math.ceil(lh * lines.length + px * 0.3); fontOf();
+  g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = L.color || (title ? S.primary : '#4b585c');
+  shown.forEach((t, i) => g.fillText(t, c.width / 2, px * 0.15 + lh * (i + 0.5)));
+  const tex = new THREE.CanvasTexture(c); tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }));
+  mesh.renderOrder = 7; mesh.matrixAutoUpdate = false; mesh.userData = { L, aspect: c.width / c.height, lines: lines.length }; placeWallLabel(mesh); return mesh;
+}
+function placeWallLabel(mesh) {
+  const { L, aspect, lines } = mesh.userData, { a, b, n } = faceGeom(L.face), x = a[0] + (b[0] - a[0]) * L.u, y = a[1] + (b[1] - a[1]) * L.u;
+  const z = G.B.z0 + (G.surf(x, y) - G.B.z0) * L.v, pos = G.V(x, y, z).addScaledVector(n, G.diag * 0.003);
+  const right = new THREE.Vector3(b[0] - a[0], 0, -(b[1] - a[1])).normalize(), up = new THREE.Vector3(0, 1, 0), r = (L.rotation || 0) * Math.PI / 180;
+  const R = right.clone().multiplyScalar(Math.cos(r)).addScaledVector(up, Math.sin(r)), U = up.clone().multiplyScalar(Math.cos(r)).addScaledVector(right, -Math.sin(r));
+  // Letter height follows the face: about 7% of its width for a title, 4.5% for normal text.
+  const faceW = Math.hypot(b[0] - a[0], b[1] - a[1]), h = (L.size === 'title' ? 0.07 : 0.045) * Math.max(faceW, 0.4 * (G.zmax - G.B.z0)) * (L.scale || 1) * (lines * 1.15 + 0.3) / 1.45;
+  mesh.matrix.makeBasis(R.multiplyScalar(h * aspect), U.multiplyScalar(h), n).setPosition(pos); mesh.updateMatrixWorld(true);
+}
+function buildWallLabels() {
+  if (!G) return;
+  (G.wallLabelMeshes || []).forEach((m) => { root.remove(m); m.geometry.dispose(); m.material.map.dispose(); m.material.dispose(); });
+  G.wallLabelMeshes = S.wallLabels.map((L) => { const m = wallLabelMesh(L); root.add(m); return m; });
+}
+function wallPatch(L, o) {
+  if (o.text !== undefined) { const t = String(o.text).trim(); if (!t) throw new Error('A wall label needs some text.'); L.text = t.slice(0, 120); }
+  if (o.face !== undefined) { const f = o.face === 'front' ? (G ? frontFace() : 'S') : String(o.face).toUpperCase(); if (!FACES[f]) throw new Error('face must be "N", "S", "E", "W" or "front".'); L.face = f; }
+  if (o.size !== undefined) { if (!['title', 'normal'].includes(o.size)) throw new Error('size must be "title" or "normal".'); L.size = o.size; }
+  ['u', 'v'].forEach((k) => { if (o[k] !== undefined) L[k] = clamp01(o[k], L[k]); });
+  if (o.scale !== undefined) L.scale = Math.max(0.4, Math.min(3, +o.scale || 1));
+  if (o.rotation !== undefined) L.rotation = Math.max(-90, Math.min(90, +o.rotation || 0));
+  if (o.color !== undefined) { if (o.color !== null && !/^#[0-9a-f]{6}$/i.test(o.color)) throw new Error('color must be a hex colour like #5f6e72, or null.'); L.color = o.color; }
+}
+function addWallLabel(o = {}) {
+  const n = S.wallLabels.reduce((mx, l) => Math.max(mx, +String(l.id).replace(/\D/g, '') || 0), 0) + 1;
+  const L = { id: `W${n}`, text: '', face: 'S', u: 0.5, v: 0.55, size: 'title', scale: 1, rotation: 0, color: null };
+  wallPatch(L, { face: 'front', ...o, text: o.text ?? '' });
+  S.wallLabels.push(L); buildWallLabels(); renderWallLabelList(); schedulePublish(); status(`"${L.text}" painted on the ${{ N: 'north', S: 'south', E: 'east', W: 'west' }[L.face]} face. Drag it along the face to place it.`);
+  return L.id;
+}
+function updateWallLabel(id, o = {}) {
+  const L = S.wallLabels.find((l) => l.id === id); if (!L) throw new Error(`No wall label "${id}". Wall labels: ${S.wallLabels.map((l) => l.id).join(', ') || 'none'}.`);
+  wallPatch(L, o); buildWallLabels(); renderWallLabelList(); schedulePublish(); return getState();
+}
+function removeWallLabel(id) {
+  if (!S.wallLabels.some((l) => l.id === id)) throw new Error(`No wall label "${id}".`);
+  S.wallLabels = S.wallLabels.filter((l) => l.id !== id); buildWallLabels(); renderWallLabelList(); schedulePublish(); return getState();
+}
+
 const terrainCredits = (withImagery) => [withImagery && imageryShown() && IMAGERY_CREDIT, G?.using === 'dem' && DEM_CREDIT].filter(Boolean);
 
 const traceR = () => Math.max(1.5, G.diag / 330) * S.traceWidth;
@@ -767,7 +864,7 @@ const lookVec = (az, pl) => { const a = az * Math.PI / 180, p = pl * Math.PI / 1
 // room keeps a long, narrow footprint clear of the title and legend.
 const baseDist = (plunge) => {
   const r = plunge * Math.PI / 180;
-  return Math.hypot(G.diagH, G.depth * Math.cos(r)) * (1 + 0.25 * Math.sin(r)) * 1.65 * Math.pow(Math.max(1, 1.6 / (W / H)), 0.85);
+  return Math.hypot(G.diagH, G.depth * Math.cos(r)) * (1 + 0.25 * Math.sin(r)) * 1.65 * Math.pow(Math.max(1, 1.6 / (W / H)), 0.85) * (G.fit || 1);
 };
 // Aim a little above the block's middle so it sits below the title block, not under it.
 const camTarget = () => G.V(G.cx, G.cy, (G.B.z0 + G.zmax) / 2 + 0.1 * (G.zmax - G.B.z0));
@@ -794,7 +891,23 @@ const VIEWS = {
   low: () => ({ azimuth: S.secAz - 90, plunge: 7, zoom: 112 }),
   plan: () => ({ azimuth: 0, plunge: 89, zoom: 100 }),
 };
-function applyView(which, instant) { if (G) setCamera((VIEWS[which] || VIEWS.a)(), instant); }
+// A preset frames the block between the title and the footer: the camera only ever pulls back (G.fit),
+// for a tall or deep block whose base would otherwise cross the footer.
+function blockOverflow() {
+  camera.updateMatrixWorld(); const u = Math.sqrt(W * H) / 900, top = 118 * u, bot = H - 43 * u, cy = proj(controls.target)[1], ys = [];
+  [[G.B.x0, G.B.y0], [G.B.x1, G.B.y0], [G.B.x1, G.B.y1], [G.B.x0, G.B.y1]].forEach(([x, y]) => { ys.push(proj(G.V(x, y, G.B.z0))[1], proj(G.V(x, y, G.surf(x, y)))[1]); });
+  return Math.max(1, (Math.max(...ys) - cy) / Math.max(1, bot - cy), (cy - Math.min(...ys)) / Math.max(1, cy - top));
+}
+function applyView(which, instant) {
+  if (!G) return;
+  const v = (VIEWS[which] || VIEWS.a)(), from = camera.position.clone(), fromT = controls.target.clone();
+  G.fit = 1; setCamera(v, true);
+  for (let i = 0; i < 4; i++) { const f = blockOverflow(); if (f <= 1.005) break; G.fit *= f * 1.01; setCamera(v, true); }
+  if (!instant && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    const to = camera.position.clone(), toT = controls.target.clone(); camera.position.copy(from); controls.target.copy(fromT); controls.update();
+    tween = { from, fromT, to, toT, t0: performance.now() };
+  }
+}
 let lastCamKey = '';
 function syncCamUI() {
   if (!G) return;
@@ -905,19 +1018,22 @@ const meshName = (n) => n.replace(/\.obj$/i, '').replace(/^sample_/, '').replace
 
 // Scale bar along a base edge of the block: the nearest edge that reads roughly horizontal and whose bar
 // fits inside the frame, under the edge if there is room and otherwise just above it.
-function drawScaleBar(ctx, K, footTop) {
+function drawScaleBar(ctx, K, footTop, avoid = []) {
+  const hit = (bx) => avoid.some((b) => !(bx[2] < b[0] || bx[0] > b[2] || bx[3] < b[1] || bx[1] > b[3]));
   const { u, m, font } = K, C = [[G.B.x0, G.B.y0], [G.B.x1, G.B.y0], [G.B.x1, G.B.y1], [G.B.x0, G.B.y1]];
   const edges = C.map((p, i) => { const q = C[(i + 1) % 4]; return { p, q, d: G.V((p[0] + q[0]) / 2, (p[1] + q[1]) / 2, G.B.z0).distanceTo(camera.position) }; }).sort((a, b) => a.d - b.d).slice(0, 2);
-  for (const off of [22, -24]) for (const { p, q } of edges) {
+  for (const off of [22, -24]) for (const { p, q } of edges) for (const f0 of [0.05, 0.3, 0.55]) {
     let e0 = p, e1 = q, s0 = proj(G.V(e0[0], e0[1], G.B.z0)), s1 = proj(G.V(e1[0], e1[1], G.B.z0));
     if (s0[0] > s1[0]) { [e0, e1] = [e1, e0]; [s0, s1] = [s1, s0]; }
     const el = Math.hypot(e1[0] - e0[0], e1[1] - e0[1]), ud = [(e1[0] - e0[0]) / el, (e1[1] - e0[1]) / el], ppm = Math.hypot(s1[0] - s0[0], s1[1] - s0[1]) / el;
     if (!(ppm > 0) || s0[2] > 1 || s1[2] > 1 || Math.abs(s1[1] - s0[1]) > 0.7 * Math.abs(s1[0] - s0[0])) continue;
-    const D = [10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000].find((d) => d * ppm >= 120 * u) || 5000, st = [e0[0] + ud[0] * el * 0.05, e0[1] + ud[1] * el * 0.05];
-    if (D > el * 0.9) continue;
+    const D = [10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000].find((d) => d * ppm >= 120 * u) || 5000, st = [e0[0] + ud[0] * el * f0, e0[1] + ud[1] * el * f0];
+    if (D > el * (0.95 - f0)) continue;
     const sp = [0, 0.5, 1].map((f) => { const r = proj(G.V(st[0] + ud[0] * D * f, st[1] + ud[1] * D * f, G.B.z0)); return [r[0], r[1] + off * u]; });
     const lab = off > 0 ? 19 : -9;
     if (sp.some(([x, y]) => x < m || x > W - m || Math.max(y, y + lab * u) + 4 * u > footTop || Math.min(y, y + lab * u) < 12 * u)) continue;
+    const ys = sp.flatMap(([, y]) => [y - 4 * u, y + lab * u + (lab > 0 ? 2 : -12) * u]);
+    if (hit([Math.min(...sp.map(([x]) => x)) - 8 * u, Math.min(...ys), Math.max(...sp.map(([x]) => x)) + 28 * u, Math.max(...ys)])) continue; // keeps clear of hole IDs
     ctx.lineCap = 'butt'; ctx.lineWidth = 6 * u; ctx.strokeStyle = INK; ctx.beginPath(); ctx.moveTo(...sp[0]); ctx.lineTo(...sp[1]); ctx.stroke();
     ctx.strokeStyle = '#fff'; ctx.beginPath(); ctx.moveTo(...sp[1]); ctx.lineTo(...sp[2]); ctx.stroke();
     ctx.lineWidth = u; ctx.strokeStyle = INK; ctx.beginPath(); ctx.moveTo(sp[0][0], sp[0][1] - 3 * u); ctx.lineTo(sp[2][0], sp[2][1] - 3 * u); ctx.lineTo(sp[2][0], sp[2][1] + 3 * u); ctx.lineTo(sp[0][0], sp[0][1] + 3 * u); ctx.closePath(); ctx.stroke();
@@ -930,7 +1046,8 @@ function drawScaleBar(ctx, K, footTop) {
   const across = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0).normalize().multiplyScalar(G.diag * 0.1);
   const c0 = proj(controls.target), c1 = proj(controls.target.clone().add(across)), ppm = Math.hypot(c1[0] - c0[0], c1[1] - c0[1]) / (G.diag * 0.1);
   if (!(ppm > 0)) return;
-  const D = [10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000].find((d) => d * ppm >= 120 * u) || 5000, len = D * ppm, x = (W - len) / 2, y = footTop - 26 * u;
+  const D = [10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000].find((d) => d * ppm >= 120 * u) || 5000, len = D * ppm, y = footTop - 26 * u;
+  const x = [0.5, 0.35, 0.65].map((f) => W * f - len / 2).find((x0) => !hit([x0 - 10 * u, y - 20 * u, x0 + len + 90 * u, y + 8 * u])) ?? (W - len) / 2;
   ctx.fillStyle = INK; ctx.fillRect(x, y, len / 2, 6 * u); ctx.fillStyle = '#fff'; ctx.fillRect(x + len / 2, y, len / 2, 6 * u); ctx.strokeStyle = INK; ctx.lineWidth = u; ctx.strokeRect(x, y, len, 6 * u);
   font(400, 12, true); ctx.fillStyle = INK; ctx.textAlign = 'center'; ctx.fillText('0', x, y - 5 * u); ctx.fillText(`${D} m (at block centre)`, x + len, y - 5 * u); ctx.textAlign = 'left';
 }
@@ -979,14 +1096,27 @@ function drawElevTicks(ctx, K, top, bottom, avoid = []) {
 // Free-text labels, placed in 0-1 frame coordinates so they land in the same spot at every export size.
 // "title": large bold capitals in the primary colour; "normal": a rounded white pill. An arrow runs from
 // the label's edge to (ax, ay). In the preview the boxes are kept for dragging (labelHits).
-let labelHits = [];
+let labelHits = [], overlayOcc = [];
+function labelSize(ctx, K, L) {
+  const { u, font } = K, title = L.size === 'title', lines = String(L.text).split('\n');
+  if (title) { font(700, 26); setSpacing(ctx, 1.6 * u); } else font(600, 15);
+  const lh = (title ? 29 : 19) * u, tw = Math.max(...lines.map((t) => ctx.measureText(title ? t.toUpperCase() : t).width)), padX = title ? 4 * u : 12 * u, padY = title ? 2 * u : 7 * u;
+  return { title, lines, lh, padY, bw: tw + padX * 2, bh: lines.length * lh + padY * 2 };
+}
+// Where a new label goes when no position is given: the clear spot nearest the frame centre, away from
+// collars, hole IDs, section markers, callouts, the legend, inset and other labels (as last drawn).
+function freeSpot(L) {
+  const c = document.createElement('canvas').getContext('2d'), K = kit(c, W, H), { bw, bh } = labelSize(c, K, L); setSpacing(c, 0);
+  const pad = 10 * K.u, spots = [];
+  for (let y = 0.18; y <= 0.86; y += 0.04) for (let x = 0.12; x <= 0.88; x += 0.04) spots.push([x, y]);
+  spots.sort((a, b) => Math.hypot(a[0] - 0.5, a[1] - 0.5) - Math.hypot(b[0] - 0.5, b[1] - 0.5));
+  return spots.find(([x, y]) => { const bx = [x * W - bw / 2 - pad, y * H - bh / 2 - pad, x * W + bw / 2 + pad, y * H + bh / 2 + pad];
+    return bx[0] > 0 && bx[2] < W && !overlayOcc.some((b) => !(bx[2] < b[0] || bx[0] > b[2] || bx[3] < b[1] || bx[1] > b[3])); }) || [0.5, 0.5];
+}
 function drawLabels(ctx, K, forExport) {
-  const { u, font } = K, hits = [];
+  const { u } = K, hits = [];
   S.labels.forEach((L) => {
-    const title = L.size === 'title', lines = String(L.text).split('\n'), cx = L.x * W, cy = L.y * H;
-    if (title) { font(700, 26); setSpacing(ctx, 1.6 * u); } else font(600, 15);
-    const lh = (title ? 29 : 19) * u, tw = Math.max(...lines.map((t) => ctx.measureText(title ? t.toUpperCase() : t).width)), padX = title ? 4 * u : 12 * u, padY = title ? 2 * u : 7 * u;
-    const bw = tw + padX * 2, bh = lines.length * lh + padY * 2, box = [cx - bw / 2, cy - bh / 2, cx + bw / 2, cy + bh / 2];
+    const cx = L.x * W, cy = L.y * H, { title, lines, lh, padY, bw, bh } = labelSize(ctx, K, L), box = [cx - bw / 2, cy - bh / 2, cx + bw / 2, cy + bh / 2];
     if (L.arrow) {
       const tx = L.ax * W, ty = L.ay * H, dx = tx - cx, dy = ty - cy, d = Math.hypot(dx, dy);
       if (d > 4 * u) {
@@ -1024,17 +1154,21 @@ function drawOverlay(ctx, k, forExport) {
   ctx.save(); ctx.scale(k, k); if (!forExport) ctx.clearRect(0, 0, W, H);
   const K = kit(ctx, W, H), { u, m, font, narrow } = K;
   if (!G) { font(600, 18); ctx.fillStyle = MUTED; ctx.textAlign = 'center'; ctx.fillText('Add a collar file and an assay file to build the figure.', W / 2, H / 2); ctx.restore(); return; }
-  // Collars and hole IDs
-  const placed = [];
+  // Collars and hole IDs. occ collects what is drawn, so the scale bar and new labels can keep clear of it.
+  const placed = [], idBoxes = [], occ = [];
   project.holes.forEach((h) => {
     const [cx, cy] = proj(G.V(h.c.x, h.c.y, h.c.z)), e = h.path[h.path.length - 1], [ex, ey] = proj(G.V(e.x, e.y, e.z));
     ctx.beginPath(); ctx.arc(cx, cy, 5 * u, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth = 2.4 * u; ctx.strokeStyle = INK; ctx.stroke();
+    occ.push([cx - 8 * u, cy - 8 * u, cx + 8 * u, cy + 8 * u]);
     if (!S.ids) return;
     const ang = Math.atan2(ey - cy, ex - cx), flip = Math.abs(ang) > Math.PI / 2, r = 26 * u, box = [ex - r, ey - r, ex + r, ey + r];
     if (placed.some((b) => !(box[2] < b[0] || box[0] > b[2] || box[3] < b[1] || box[1] > b[3]))) return; placed.push(box);
     ctx.save(); ctx.translate(ex + Math.cos(ang) * 6 * u, ey + Math.sin(ang) * 6 * u); ctx.rotate(flip ? ang + Math.PI : ang);
     font(500, 11.5, true); ctx.fillStyle = INK; ctx.textBaseline = 'middle'; ctx.textAlign = flip ? 'right' : 'left';
     ctx.lineWidth = 3 * u; ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.strokeText(h.id, 0, 0); ctx.fillText(h.id, 0, 0); ctx.restore();
+    // The rotated text runs from 6u past the hole end along the trace direction.
+    const tw = ctx.measureText(h.id).width, x0 = ex + Math.cos(ang) * 6 * u, y0 = ey + Math.sin(ang) * 6 * u, x1 = x0 + Math.cos(ang) * tw, y1 = y0 + Math.sin(ang) * tw;
+    idBoxes.push([Math.min(x0, x1) - 8 * u, Math.min(y0, y1) - 8 * u, Math.max(x0, x1) + 8 * u, Math.max(y0, y1) + 8 * u]);
   });
   const pend = S.pendingLabels ? project.holes.filter(isPending) : [];
   if (pend.length) {
@@ -1043,16 +1177,17 @@ function drawOverlay(ctx, k, forExport) {
   }
   // Section ends
   const [A, Bp] = sectionEnds();
-  [[A, 'A'], [Bp, 'A′']].forEach(([p, t]) => { const [x, y] = proj(G.V(p.x, p.y, G.surf(p.x, p.y) + G.diag * 0.035)); tagLabel(ctx, K, t, x, y); });
+  [[A, 'A'], [Bp, 'A′']].forEach(([p, t]) => { const [x, y] = proj(G.V(p.x, p.y, G.surf(p.x, p.y) + G.diag * 0.035)); tagLabel(ctx, K, t, x, y); occ.push([x - 22 * u, y - 14 * u, x + 22 * u, y + 14 * u]); });
   // Frame furniture
   const logo = drawLogo(ctx, K, W, forExport);
   const headBottom = drawHeader(ctx, K, W, S.title, S.subtitle, logo.w);
   const footTop = drawFooter(ctx, K, W, H, terrainCredits(true));
-  drawScaleBar(ctx, K, footTop);
+  occ.push(...idBoxes, [0, 0, W, headBottom], [0, footTop, W, H]);
+  drawScaleBar(ctx, K, footTop, idBoxes);
   // Plan inset under the logo
   if (S.inset) {
     const iw = (narrow ? 118 : 150) * u, sc = iw / Math.max(G.bw, G.bh), bw = G.bw * sc, bh = G.bh * sc, ix = W - m - iw, iy = logo.bottom + 16 * u, P = (x, y) => [ix + (iw - bw) / 2 + (x - G.B.x0) * sc, iy + (G.B.y1 - y) * sc];
-    ctx.fillStyle = '#fff'; ctx.strokeStyle = RULE; ctx.lineWidth = u; roundRect(ctx, ix - 8 * u, iy - 8 * u, iw + 16 * u, bh + 34 * u, 5 * u); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#fff'; ctx.strokeStyle = RULE; ctx.lineWidth = u; roundRect(ctx, ix - 8 * u, iy - 8 * u, iw + 16 * u, bh + 34 * u, 5 * u); ctx.fill(); ctx.stroke(); occ.push([ix - 8 * u, 0, W, iy + bh + 26 * u]);
     ctx.strokeStyle = S.primary; ctx.lineWidth = 1.4 * u; ctx.strokeRect(ix + (iw - bw) / 2, iy, bw, bh);
     project.holes.forEach((h) => { ctx.strokeStyle = '#7c898c'; ctx.lineWidth = u; ctx.beginPath(); h.path.forEach((p, i) => { const [X, Y] = P(p.x, p.y); i ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y); }); ctx.stroke();
       const [X, Y] = P(h.c.x, h.c.y); ctx.fillStyle = INK; ctx.fillRect(X - 1.5 * u, Y - 1.5 * u, 3 * u, 3 * u); });
@@ -1064,7 +1199,7 @@ function drawOverlay(ctx, k, forExport) {
   const rows = legendRows(), meshRows = G.meshes.filter(({ name }) => S.meshes[name].show).map(({ name }) => [meshName(name), S.meshes[name].color]);
   const ribRows = S.ribbons && callouts.length ? [['Reported interval', RIB_COLORS[0]], ...(callouts.some((c) => c.ic.incl) ? [['incl.', RIB_COLORS[1]]] : [])] : [];
   const R = 19 * u, lw = 192 * u, lh = 12 * u + R + 6 * u + R + rows.length * R + (ribRows.length ? 6 * u + ribRows.length * R : 0) + (meshRows.length ? 6 * u + R + meshRows.length * R : 0) + 6 * u;
-  const lx = W - m - lw, ly = footTop - 12 * u - lh;
+  const lx = W - m - lw, ly = footTop - 12 * u - lh; occ.push([lx, ly, W, footTop]);
   ctx.fillStyle = 'rgba(255,255,255,0.96)'; ctx.strokeStyle = RULE; ctx.lineWidth = u; roundRect(ctx, lx, ly, lw, lh, 5 * u); ctx.fill(); ctx.stroke();
   let yy = ly + 12 * u; const row = (draw, t, bold, mono) => { draw(yy + R / 2); bold ? font(700, 13) : font(400, mono ? 12 : 13, mono); ctx.fillStyle = INK; ctx.textBaseline = 'middle'; ctx.fillText(fitText(ctx, t, lw - 52 * u), lx + (bold ? 12 : 44) * u, yy + R / 2); ctx.textBaseline = 'alphabetic'; yy += R; };
   row((cy) => { ctx.beginPath(); ctx.arc(lx + 23 * u, cy, 5 * u, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth = 2.4 * u; ctx.strokeStyle = INK; ctx.stroke(); }, 'Drill hole collar');
@@ -1073,6 +1208,7 @@ function drawOverlay(ctx, k, forExport) {
   if (ribRows.length) { yy += 6 * u; ribRows.forEach(([t, c]) => row((cy) => { ctx.fillStyle = c; ctx.fillRect(lx + 12 * u, cy - 3 * u, 22 * u, 6 * u); }, t)); }
   if (meshRows.length) { yy += 6 * u; row(() => {}, 'Model', true); meshRows.forEach(([t, c]) => row((cy) => { ctx.globalAlpha = 0.6; ctx.fillStyle = c; ctx.fillRect(lx + 12 * u, cy - 6 * u, 22 * u, 12 * u); ctx.globalAlpha = 1; }, t)); }
   // Orientation, bottom left: north arrow plus view direction
+  occ.push([0, footTop - 60 * u, m + 160 * u, footTop]);
   const cam = getCam(), ox = m + 22 * u, oy = footTop - 34 * u, T = controls.target, n0 = proj(T), n1 = proj(T.clone().add(new THREE.Vector3(0, 0, -G.diag * 0.1)));
   const ang = Math.atan2(n1[1] - n0[1], n1[0] - n0[0]);
   ctx.beginPath(); ctx.arc(ox, oy, 21 * u, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.strokeStyle = RULE; ctx.lineWidth = u; ctx.stroke();
@@ -1085,15 +1221,22 @@ function drawOverlay(ctx, k, forExport) {
   font(600, 13); ctx.fillStyle = INK; ctx.fillText(`Looking ${pad3(cam.azimuth)}°`, ox + 36 * u, oy - 2 * u);
   font(400, 12, true); ctx.fillStyle = MUTED; ctx.fillText(`plunge ${cam.plunge}°${S.vex !== 1 ? ` · VE ${S.vex}×` : ''}`, ox + 36 * u, oy + 14 * u);
   // Intercept callouts, left column between the title and the orientation box
-  const maxY = oy - 36 * u; let y = headBottom + 18 * u; const boxes = [];
-  shownCallouts().map((c) => { const p = c.h.posAt(c.ic.broad.mid); return { c, s: proj(G.V(p.x, p.y, p.z)) }; }).filter(({ s }) => s[2] < 1).sort((a, b) => a.s[1] - b.s[1]).forEach(({ c, s }) => {
-    const M = measureCallout(ctx, K, c); y = Math.max(y, Math.min(s[1] - M.bh / 2, maxY - M.bh - 18 * u));
-    if (y + M.bh + 18 * u > maxY + 1) return;
-    drawCallout(ctx, K, m, y, c, M, s); boxes.push([m, y, m + M.bw, y + M.bh + 18 * u]); y += M.bh + 30 * u;
-  });
+  // Each box goes level with its hole where it can: stacked downward, then pulled up from the bottom.
+  // Only if they still do not fit is the lowest-ranked callout dropped (ranking: metal in the interval).
+  const maxY = oy - 36 * u, top = headBottom + 18 * u, gap = 30 * u, tag = 18 * u, boxes = [];
+  let items = shownCallouts().map((c, rank) => { const p = c.h.posAt(c.ic.broad.mid); return { c, rank, s: proj(G.V(p.x, p.y, p.z)), M: measureCallout(ctx, K, c) }; }).filter(({ s }) => s[2] < 1).sort((a, b) => a.s[1] - b.s[1]);
+  for (;;) {
+    let y = top; items.forEach((it) => { it.y = Math.max(y, it.s[1] - it.M.bh / 2); y = it.y + it.M.bh + gap; });
+    for (let i = items.length - 1; i >= 0; i--) items[i].y = Math.min(items[i].y, i === items.length - 1 ? maxY - tag - items[i].M.bh : items[i + 1].y - gap - items[i].M.bh);
+    if (!items.length || items[0].y >= top - 1) break;
+    const worst = items.reduce((a, b) => (b.rank > a.rank ? b : a)); items = items.filter((it) => it !== worst);
+  }
+  items.forEach(({ c, s, M, y }) => { drawCallout(ctx, K, m, y, c, M, s); boxes.push([m, y, m + M.bw, y + M.bh + tag]); });
+  occ.push(...boxes.map((b) => [b[0], b[1], b[2] + 10 * u, b[3]]));
   // Drawn after the callouts so a tick never hides under a callout box.
   if (S.elevTicks) drawElevTicks(ctx, K, headBottom, footTop, boxes);
   drawLabels(ctx, K, forExport);
+  if (!forExport) overlayOcc = occ.concat(labelHits.filter((h) => h.box).map((h) => h.box));
   ctx.restore();
 }
 
@@ -1189,7 +1332,7 @@ function loop(now) {
   if (tween) { const k = Math.min(1, (now - tween.t0) / 900), e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
     camera.position.lerpVectors(tween.from, tween.to, e); controls.target.lerpVectors(tween.fromT, tween.toT, e); if (k >= 1) tween = null; }
   controls.update();
-  if (G && S.ribbons && S.view === '3d') { camera.updateMatrixWorld(); if (!G.ribbonView || camera.getWorldDirection(tmpV).dot(G.ribbonView) < 0.99998) placeRibbons(); }
+  if (G && S.view === '3d') { camera.updateMatrixWorld(); if (!G.ribbonView || camera.getWorldDirection(tmpV).dot(G.ribbonView) < 0.99998) { placeRibbons(); faceWalls(); } }
   if (S.view === '3d') { renderer.render(scene, camera); drawOverlay(ov.getContext('2d'), DPR, false); syncCamUI(); }
   requestAnimationFrame(loop);
 }
@@ -1198,7 +1341,7 @@ function loop(now) {
 function figureCanvas(view, layer = 'figure') {
   const f = FORMATS[S.format], out = document.createElement('canvas'); out.width = f.w; out.height = f.h; const ctx = out.getContext('2d');
   if (view === 'section') { ctx.scale(f.w / W, f.h / H); drawSection(ctx, W, H, true); return out; }
-  const k = f.w / W; tween = null; controls.update(); placeRibbons();
+  const k = f.w / W; tween = null; controls.update(); placeRibbons(); faceWalls();
   if (layer !== 'annotations') {
     const bg = scene.background; if (layer === 'scene') scene.background = null; // the renderer has alpha, so this clears to transparent
     renderer.setPixelRatio(k); renderer.setSize(W, H, false); renderer.render(scene, camera);
@@ -1428,7 +1571,7 @@ function renderStyle() {
   $('opt-walls').checked = S.walls; $('opt-ids').checked = S.ids; $('opt-inset').checked = S.inset; $('opt-ribbons').checked = S.ribbons;
   $('opt-pending').checked = S.pendingLabels; $('opt-pending-none').checked = S.pendingNoAssays; $('opt-elev').checked = S.elevTicks;
   $('value-col2').innerHTML = '<option value="">None</option>' + (project?.cols || []).filter((c) => c !== S.valueCol).map((c) => `<option ${c === S.valueCol2 ? 'selected' : ''}>${esc(c)}</option>`).join('');
-  $('terrain').value = S.terrain; $('terrain-src').value = S.terrainSource; $('vex').value = S.vex; $('vex-out').textContent = `${S.vex}×`;
+  $('terrain').value = S.terrain; $('terrain-src').value = S.terrainSource; $('block-style').value = S.blockStyle; $('collar-fit').value = S.collarFit; $('vex').value = S.vex; $('vex-out').textContent = `${S.vex}×`;
   $('trace-w').value = Math.round(S.traceWidth * 100); $('trace-out').textContent = `${S.traceWidth.toFixed(1)}×`;
   $('surf').value = Math.round(S.surf * 100); $('surf-out').textContent = `${Math.round(S.surf * 100)}%`;
   const ml = $('mesh-list'); ml.innerHTML = '';
@@ -1466,7 +1609,7 @@ function syncBrandUI() {
 function refresh() {
   project = build(); recheckCRS();
   if (!project.empty && project.holes.length) { const az = principalAz(project.holes); if (az !== null && !refresh.secSet) S.secAz = az; }
-  rebuildScene(); renderFiles(); renderSummary(); renderStyle(); renderCalloutEditor(); schedulePublish();
+  rebuildScene(); renderFiles(); renderSummary(); renderStyle(); renderCalloutEditor(); renderLabelList(); renderWallLabelList(); renderCRS(); schedulePublish();
 }
 function principalAz(holes) {
   const pts = holes.map((h) => [h.c.x, h.c.y]); if (pts.length < 3) return null;
@@ -1585,8 +1728,11 @@ function setStyle(o = {}, render = true) {
   if (o.terrainSource !== undefined) { if (!['auto', 'topo', 'dem', 'collars'].includes(o.terrainSource)) throw new Error('terrainSource must be auto, topo, dem or collars.'); rebuild = rebuild || S.terrainSource !== o.terrainSource; S.terrainSource = o.terrainSource; }
   const ve = o.verticalExaggeration ?? o.vex;
   if (ve !== undefined) { const v = +ve; if (!Number.isFinite(v)) throw new Error('verticalExaggeration must be a number from 1 to 5.'); const nv = Math.max(1, Math.min(5, v)); rebuild = rebuild || nv !== S.vex; S.vex = nv; }
+  if (o.collarFit !== undefined) { if (!['collars', 'terrain'].includes(o.collarFit)) throw new Error('collarFit must be "collars" (move the terrain to the collars) or "terrain" (hang holes from the terrain).'); rebuild = rebuild || S.collarFit !== o.collarFit; S.collarFit = o.collarFit; }
+  if (o.blockStyle !== undefined) { if (!['glass', 'solid'].includes(o.blockStyle)) throw new Error('blockStyle must be "glass" or "solid".'); S.blockStyle = o.blockStyle; }
   if (o.meshes) Object.entries(o.meshes).forEach(([name, v]) => { if (!S.meshes[name]) throw new Error(`No model shape named "${name}". Loaded: ${Object.keys(S.meshes).join(', ') || 'none'}.`); Object.assign(S.meshes[name], v); });
-  if (rebuild) rebuildScene(true); else { if (o.terrain !== undefined) { paintTerrain(); syncRealTerrain(); } restyle(); }
+  if (rebuild) rebuildScene(true); else { if (o.terrain !== undefined || o.blockStyle !== undefined) paintTerrain(); if (o.terrain !== undefined) syncRealTerrain(); restyle(); }
+  if (rebuild && G?.terrainNote) status(G.terrainNote);
   if (o.terrain !== undefined && (S.terrain === 'satellite' || S.terrain === 'muted') && !geo) status('Satellite imagery needs the coordinate system: set it in step 1 (e.g. EPSG:26909). Showing the natural surface.');
   if (render) renderStyle(); renderCalloutEditor(); schedulePublish();
   return getState();
@@ -1606,6 +1752,8 @@ $('opt-pending-none').addEventListener('change', (e) => setStyle({ pendingNoAssa
 $('opt-elev').addEventListener('change', (e) => setStyle({ elevTicks: e.target.checked }, false));
 $('terrain').addEventListener('change', (e) => setStyle({ terrain: e.target.value }, false));
 $('terrain-src').addEventListener('change', (e) => setStyle({ terrainSource: e.target.value }, false));
+$('block-style').addEventListener('change', (e) => setStyle({ blockStyle: e.target.value }, false));
+$('collar-fit').addEventListener('change', (e) => setStyle({ collarFit: e.target.value }, false));
 $('vex').addEventListener('change', (e) => { setStyle({ verticalExaggeration: +e.target.value }, false); $('vex-out').textContent = `${S.vex}×`; });
 $('vex').addEventListener('input', (e) => { $('vex-out').textContent = `${e.target.value}×`; });
 function renderCRS() {
@@ -1648,6 +1796,7 @@ function addLabel(o = {}) {
   const n = S.labels.reduce((mx, l) => Math.max(mx, +String(l.id).replace(/\D/g, '') || 0), 0) + 1;
   const L = { id: `L${n}`, text: '', size: 'normal', x: 0.5, y: 0.5, arrow: false, ax: null, ay: null };
   labelPatch(L, { size: 'normal', ...o, text: o.text ?? '' });
+  if (o.x === undefined && o.y === undefined && G) [L.x, L.y] = freeSpot(L);
   if (L.ax === null) L.ax = Math.min(0.97, L.x + 0.1); if (L.ay === null) L.ay = Math.min(0.97, L.y + 0.14);
   S.labels.push(L); renderLabelList(); schedulePublish(); status(`Label "${L.text}" added. Drag it on the preview to place it.`);
   return L.id;
@@ -1674,6 +1823,30 @@ $('lab-add').addEventListener('click', () => {
   showView('3d'); addLabel({ text, size: $('lab-size').value, arrow: $('lab-arrow').checked }); $('lab-text').value = '';
 });
 $('lab-text').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); $('lab-add').click(); } });
+function renderWallLabelList() {
+  const el = $('wall-list'), faces = ['N', 'S', 'E', 'W'];
+  el.innerHTML = S.wallLabels.map((L) => `<div class="label-row"><input type="text" data-wt="${L.id}" value="${esc(L.text)}" aria-label="Text of wall label ${L.id}">`
+    + `<select data-wf="${L.id}" aria-label="Face of ${esc(L.text)}">${faces.map((f) => `<option ${f === L.face ? 'selected' : ''}>${f}</option>`).join('')}</select>`
+    + `<button class="btn" type="button" data-wd="${L.id}" aria-label="Delete wall label ${esc(L.text)}">Delete</button></div>`).join('');
+  el.querySelectorAll('[data-wt]').forEach((i) => i.addEventListener('change', () => { try { updateWallLabel(i.dataset.wt, { text: i.value }); } catch (e) { status(e.message); } }));
+  el.querySelectorAll('[data-wf]').forEach((i) => i.addEventListener('change', () => updateWallLabel(i.dataset.wf, { face: i.value })));
+  el.querySelectorAll('[data-wd]').forEach((b) => b.addEventListener('click', () => removeWallLabel(b.dataset.wd)));
+}
+$('wall-add').addEventListener('click', () => {
+  const text = $('wall-text').value.trim(); if (!text) { status('Type the wall label text first.'); $('wall-text').focus(); return; }
+  showView('3d'); addWallLabel({ text, face: $('wall-face').value, size: $('wall-size').value }); $('wall-text').value = '';
+});
+$('wall-text').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); $('wall-add').click(); } });
+const raycaster = new THREE.Raycaster();
+const rayAt = (e) => { const r = frameEl.getBoundingClientRect(); raycaster.setFromCamera(new THREE.Vector2((e.clientX - r.left) / r.width * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), camera); return raycaster.ray; };
+const wallLabelAt = (e) => { if (!G?.wallLabelMeshes?.length) return null; rayAt(e); return raycaster.intersectObjects(G.wallLabelMeshes, false)[0] || null; };
+// A point on a face plane, as (u, v) on that face.
+function faceUV(face, P) {
+  const { a, b } = faceGeom(face), x = P.x + G.cx, y = G.cy - P.z, z = P.y / S.vex + G.zref, dx = b[0] - a[0], dy = b[1] - a[1];
+  const u = ((x - a[0]) * dx + (y - a[1]) * dy) / (dx * dx + dy * dy), top = G.surf(Math.max(G.B.x0, Math.min(G.B.x1, x)), Math.max(G.B.y0, Math.min(G.B.y1, y)));
+  return [u, (z - G.B.z0) / ((top - G.B.z0) || 1)];
+}
+
 // Dragging: caught on the frame in the capture phase, before OrbitControls on the canvas sees it, and only
 // when the pointer is on a label or an arrow tip; anywhere else the camera orbits as usual.
 let labelDrag = null;
@@ -1683,18 +1856,31 @@ function labelAt(e) {
   return null;
 }
 frameEl.addEventListener('pointerdown', (e) => {
-  if (S.view !== '3d' || e.button > 0) return; const hit = labelAt(e); if (!hit) return;
+  if (S.view !== '3d' || e.button > 0) return; const hit = labelAt(e);
+  if (!hit) {
+    // A label on a block face: dragged along that face's plane.
+    const wh = wallLabelAt(e); if (!wh) return;
+    const mesh = wh.object, L = mesh.userData.L, [u0, v0] = faceUV(L.face, wh.point);
+    e.stopPropagation(); e.preventDefault();
+    labelDrag = { wall: mesh, du: u0 - L.u, dv: v0 - L.v, plane: new THREE.Plane().setFromNormalAndCoplanarPoint(faceGeom(L.face).n, wh.point) };
+    try { frameEl.setPointerCapture(e.pointerId); } catch { /* synthetic events */ }
+    return;
+  }
   const L = S.labels.find((l) => l.id === hit.h.id); if (!L) return;
   e.stopPropagation(); e.preventDefault();
   labelDrag = { L, tip: hit.h.kind === 'tip', dx: hit.x - (hit.h.kind === 'tip' ? L.ax : L.x) * W, dy: hit.y - (hit.h.kind === 'tip' ? L.ay : L.y) * H, pid: e.pointerId };
   try { frameEl.setPointerCapture(e.pointerId); } catch { /* synthetic events */ }
 }, true);
 frameEl.addEventListener('pointermove', (e) => {
-  if (!labelDrag) { glCanvas.style.cursor = S.view === '3d' && labelAt(e) ? 'move' : ''; return; }
+  if (!labelDrag) { glCanvas.style.cursor = S.view === '3d' && (labelAt(e) || wallLabelAt(e)) ? 'move' : ''; return; }
+  if (labelDrag.wall) {
+    const P = rayAt(e).intersectPlane(labelDrag.plane, new THREE.Vector3()); if (!P) return;
+    const L = labelDrag.wall.userData.L, [u, v] = faceUV(L.face, P); L.u = clamp01(u - labelDrag.du, L.u); L.v = clamp01(v - labelDrag.dv, L.v); placeWallLabel(labelDrag.wall); return;
+  }
   const r = frameEl.getBoundingClientRect(), x = clamp01((e.clientX - r.left - labelDrag.dx) / W, 0.5), y = clamp01((e.clientY - r.top - labelDrag.dy) / H, 0.5);
   if (labelDrag.tip) { labelDrag.L.ax = x; labelDrag.L.ay = y; } else { labelDrag.L.x = x; labelDrag.L.y = y; }
 }, true);
-const endDrag = () => { if (labelDrag) { labelDrag = null; schedulePublish(); } };
+const endDrag = () => { if (labelDrag) { if (labelDrag.wall) renderWallLabelList(); labelDrag = null; schedulePublish(); } };
 frameEl.addEventListener('pointerup', endDrag, true); frameEl.addEventListener('pointercancel', endDrag, true);
 
 // Format examples come from the sample files themselves.
@@ -1716,12 +1902,12 @@ function getState() {
       shown: shownCallouts().map((c) => { const L = calloutLines(c); return { holeId: c.h.id, line1: L.l1 + L.l1b, line2: L.l2 }; }),
       candidates: callouts.slice(0, 15).map((c) => ({ holeId: c.h.id, broad: icText(c.ic.broad, c.h), fromM: Math.round(c.ic.broad.from), incl: c.ic.incl ? icText(c.ic.incl, c.h) : null })), overrides: S.coOverrides, valueCol2: S.valueCol2 },
     brand: { company: S.company, title: S.title, subtitle: S.subtitle, footnote: S.footnote, primary: S.primary, accent: S.accent, hasLogo: !!S.logo, credit: S.credit },
-    terrain: { style: S.terrain, styles: TERRAINS, source: S.terrainSource, surfaceFrom: G?.using || null, verticalExaggeration: S.vex,
+    terrain: { style: S.terrain, styles: TERRAINS, source: S.terrainSource, surfaceFrom: G?.using || null, verticalExaggeration: S.vex, collarFit: S.collarFit, blockStyle: S.blockStyle,
       crs: S.crs, crsLabel: geo?.label || null, crsGuessed: !!geo?.guessed, status: realT.status, message: realT.message || null,
       dem: realT.dem ? (realT.dem.ok ? `z${realT.dem.z}, ${realT.dem.tiles} tiles` : `failed: ${realT.dem.error}`) : null,
       imagery: realT.img ? (realT.img.ok ? `z${realT.img.z}, ${realT.img.tiles} tiles` : `failed: ${realT.img.error}`) : null, imageryShown: imageryShown(), note: G?.terrainNote || null, credits: G ? terrainCredits(true) : [] },
     camera: G ? getCam() : null, section: { secAz: S.secAz, secW: S.secW, lookingAz: ((S.secAz - 90) % 360 + 360) % 360 },
-    labels: S.labels.map((l) => ({ ...l })),
+    labels: S.labels.map((l) => ({ ...l })), wallLabels: S.wallLabels.map((l) => ({ ...l })),
     display: { walls: S.walls, ids: S.ids, inset: S.inset, surface: S.surf, ribbons: S.ribbons, traceWidth: S.traceWidth, pendingLabels: S.pendingLabels, pendingNoAssays: S.pendingNoAssays, elevTicks: S.elevTicks }, meshes: S.meshes,
     figureSize: { key: S.format, width: f.w, height: f.h, label: f.label }, figureSizes: Object.fromEntries(Object.entries(FORMATS).map(([k, v]) => [k, `${v.label}, ${v.w}×${v.h}`])),
   };
@@ -1755,7 +1941,9 @@ JavaScript API (run in the page console or via your agent's evaluate tool):
                  terrain: "natural" | "light" | "dark" | "relief" | "satellite" | "muted",
                  terrainSource: "auto" | "topo" | "dem" | "collars"  (auto: uploaded topography,
                    else real elevation once a coordinate system is set, else fitted to the collars),
-                 verticalExaggeration (1-5)})
+                 verticalExaggeration (1-5), blockStyle: "glass" | "solid" (solid: pale opaque far
+                   faces with a soil band, near faces cut away), collarFit: "collars" (default: the
+                   DEM shifts to meet the collars) | "terrain" (each hole hangs from the DEM)})
   EM3D.setCRS("EPSG:26909" | "UTM 9N NAD83" | "EPSG:4326" | proj4 string | null)
                                   Promise. The coordinate system of the files; loads real terrain
                                   (AWS Terrain Tiles) and, for satellite/muted, Esri imagery
@@ -1764,6 +1952,10 @@ JavaScript API (run in the page console or via your agent's evaluate tool):
                                   x, y (and the arrow tip ax, ay) are 0-1 across and down the frame,
                                   so a label lands in the same place at every size. 3D figure only
   EM3D.updateLabel(id, {...})     EM3D.removeLabel(id)
+  EM3D.addWallLabel({text, face: "N" | "S" | "E" | "W" | "front", u, v, size: "title" | "normal",
+                     scale, rotation, color})   returns the id. Text painted on a block face in
+                                  perspective; u 0-1 left to right seen from outside, v 0 (base) to 1 (terrain)
+  EM3D.updateWallLabel(id, {...}) EM3D.removeWallLabel(id)
   EM3D.setCallout(holeId, {show, line1, line2, incl: false})   null resets a field
   EM3D.setCamera({view: "a" | "b" | "low" | "plan"}) or ({azimuth, plunge, zoom})
   EM3D.setFigureSize("slide" | "release" | "square" | "portrait" | "a4")
@@ -1799,7 +1991,7 @@ window.EM3D = Object.freeze({
   setCamera: call((o = {}) => { if (!G) throw new Error('Load data first.'); showView('3d'); if (o.view) { if (!VIEWS[o.view]) throw new Error('view must be a, b, low or plan.'); applyView(o.view, true); } else setCamera(o, true); syncCamUI(); }),
   setFigureSize, showStep: call(showStep), showView: call(showView), exportPNG,
   setCRS, terrainReady: async () => { await (realT.promise || Promise.resolve()); return getState(); },
-  addLabel, updateLabel, removeLabel, exportLayers, sendToDesignDesk,
+  addLabel, updateLabel, removeLabel, exportLayers, sendToDesignDesk, addWallLabel, updateWallLabel, removeWallLabel,
 });
 
 // ------------------------------------------------------------
@@ -1885,7 +2077,7 @@ window.EM3D = Object.freeze({ ...window.EM3D, help: () => PROJECT_HELP, getProje
 // ============================================================
 // 12. Start
 // ============================================================
-renderSizes(); syncBrandUI(); renderCRS(); renderLabelList();
+renderSizes(); syncBrandUI(); renderCRS(); renderLabelList(); renderWallLabelList();
 layoutFrame();
 loadSample();
 new ResizeObserver(() => { const c = G ? getCam() : null; layoutFrame(); if (c) setCamera(c, true); }).observe(stage);

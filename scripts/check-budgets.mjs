@@ -62,9 +62,10 @@ const BUDGETS = {
   // Standalone pages (/3d, /teams) are separate Vite entries that never share
   // the app's chunks, so they are budgeted on their own instead of in the
   // totals above. /3d carries three.js (~109 kB gzip) and its editor.
-  // 140 → 150: pro figures (intercept bars, real terrain and satellite drape,
-  // text labels, designer layers, design-desk form); proj4 and fflate stay lazy.
-  threeDJsGzipKb: 150,
+  // 140 → 160: pro figures (intercept bars, real terrain and satellite drape,
+  // solid block, text and wall labels, designer layers, design-desk form) plus
+  // account save; proj4 and fflate stay lazy.
+  threeDJsGzipKb: 160,
   teamsJsGzipKb: 10,
   adminAuthJsGzipKb: 150,
   adminJsGzipKb: 85,
