@@ -62,6 +62,7 @@ function explain(err, doing) {
 
 // ── Lazy client ─────────────────────────────────────────────────────────────
 let clientPromise = null;
+let homes = null; // company workspaces for one signed-in user: { uid, promise } (see listHomes)
 function client() {
   if (!configured) {
     const e = plain(`Saving to an account is not available on this site right now. ${KEEP}`, null, 'NOT_CONFIGURED');
@@ -69,7 +70,12 @@ function client() {
   }
   if (!clientPromise) {
     clientPromise = import('@supabase/supabase-js')
-      .then(({ createClient }) => createClient(SUPABASE_URL, SUPABASE_KEY))
+      .then(({ createClient }) => {
+        const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
+        // Another account (or none) must never see the last one's companies.
+        try { sb.auth.onAuthStateChange((event) => { if (event !== 'TOKEN_REFRESHED') homes = null; }); } catch { /* the user-id key still guards */ }
+        return sb;
+      })
       .catch((err) => { clientPromise = null; throw explain(err, 'connect to your account'); });
   }
   return clientPromise;
@@ -118,6 +124,7 @@ export async function signOut() {
   const sb = await client();
   await sb.auth.signOut();
   current = null;
+  homes = null;
 }
 
 // ── Projects ────────────────────────────────────────────────────────────────
@@ -128,10 +135,12 @@ const safeName = (name) => (String(name).replace(/[^\w.-]+/g, '_').replace(/^\.+
 // ── Company workspaces ──────────────────────────────────────────────────────
 // The user's workspaces and their live properties, with the user's role.
 // Any failure means "no workspaces": the personal account works as before.
-let homesPromise = null;
-export function listHomes({ fresh = false } = {}) {
-  if (homesPromise && !fresh) return homesPromise;
-  homesPromise = (async () => {
+// Cached per signed-in user; dropped on sign-in, sign-out and account change.
+export async function listHomes({ fresh = false } = {}) {
+  const u = await getUser().catch(() => null);
+  if (!u) return { orgs: [], properties: [] };
+  if (homes && homes.uid === u.id && !fresh) return homes.promise;
+  const promise = (async () => {
     const sb = await client();
     const { data: orgs, error } = await sb.rpc('get_my_workspaces');
     if (error || !Array.isArray(orgs) || !orgs.length) return { orgs: [], properties: [] };
@@ -142,7 +151,8 @@ export function listHomes({ fresh = false } = {}) {
       .map((p) => ({ id: p.id, name: p.name, slug: p.slug, orgId: p.org_id, orgName: byId.get(p.org_id).name, role: byId.get(p.org_id).role }));
     return { orgs, properties };
   })().catch(() => ({ orgs: [], properties: [] }));
-  return homesPromise;
+  homes = { uid: u.id, promise };
+  return promise;
 }
 const canEdit = (role) => ['editor', 'admin', 'owner'].includes(role);
 async function homeOf(row) {

@@ -200,7 +200,7 @@ function Properties({ org, properties, onChanged, onOpenProperty }) {
             </div>
           ) : (
             <div key={p.id} className="ws-property" role="group" aria-label={p.name}>
-              <button type="button" className="dash-tile-name" style={{ fontSize: 15 }} onClick={() => onOpenProperty(p.slug)}>{p.name}</button>
+              <button type="button" className="dash-tile-name" style={{ fontSize: 15 }} onClick={() => onOpenProperty(org.slug, p.slug)}>{p.name}</button>
               <p>{propertySummary(p) || 'No details yet'}</p>
               <div className="ws-row"><StatusBadge status={p.status} />
                 {perms.edit && <button type="button" className="dash-link" onClick={() => setEditing(p.id)} aria-label={`Edit ${p.name}`}>Edit</button>}

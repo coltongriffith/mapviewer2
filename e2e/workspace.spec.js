@@ -18,8 +18,12 @@ const FIG = '00000000-0000-4000-8000-0000000000d1';
 const org = (role) => ({ id: ORG, name: 'Star Copper Corp.', slug: 'star-copper-corp', plan: 'free', role, member_count: 2, property_count: 1 });
 const property = { id: PROP, org_id: ORG, name: 'Rails Copper-Gold', slug: 'rails-copper-gold', jurisdiction: 'bc', commodities: ['Cu', 'Au'], status: 'active', description: 'Porphyry target', crs: null, created_at: '2026-10-02T00:00:00Z', updated_at: '2026-10-02T00:00:00Z' };
 
-async function fakeSupabase(page, { role = 'owner', orgs = [org(role)] } = {}) {
-  const fake = { rpc: [], orgs, properties: orgs.length ? [property] : [], invites: [] };
+const ORG2 = '00000000-0000-4000-8000-0000000000a2';
+const jvOrg = { id: ORG2, name: 'North Rock JV', slug: 'north-rock-jv', plan: 'free', role: 'viewer', member_count: 3, property_count: 1 };
+const jvProperty = { ...property, id: '00000000-0000-4000-8000-0000000000b2', org_id: ORG2, name: 'Rails JV', description: 'Joint venture ground' };
+
+async function fakeSupabase(page, { role = 'owner', orgs = [org(role)], properties = null } = {}) {
+  const fake = { rpc: [], orgs, properties: properties || (orgs.length ? [property] : []), invites: [] };
   await page.route('**/api/track', (route) => route.fulfill({ status: 204 }));
   await page.route('https://example.supabase.co/**', async (route) => {
     const req = route.request(), url = new URL(req.url()), path = url.pathname, method = req.method();
@@ -62,8 +66,8 @@ async function fakeSupabase(page, { role = 'owner', orgs = [org(role)] } = {}) {
         fake.properties.push(p);
         return json([p], 201);
       }
-      const slug = url.searchParams.get('slug');
-      return rows(fake.properties.filter((p) => !slug || `eq.${p.slug}` === slug));
+      const slug = url.searchParams.get('slug'), orgId = url.searchParams.get('org_id');
+      return rows(fake.properties.filter((p) => (!slug || `eq.${p.slug}` === slug) && (!orgId || `eq.${p.org_id}` === orgId)));
     }
     if (path === '/rest/v1/projects') {
       if (url.searchParams.get('property_id')) return rows([{ id: MAP, name: 'Rails claims', updated_at: '2026-10-19T00:00:00Z', thumbnail: null, revision: 3, user_id: 'u2' }]);
@@ -110,7 +114,7 @@ test('the property page lists its map and its 3D figure', async ({ page }) => {
   await fakeSupabase(page, { role: 'editor' });
   await page.goto('/workspace');
   await page.getByRole('button', { name: 'Rails Copper-Gold', exact: true }).click();
-  await expect(page).toHaveURL(/\/workspace\/p\/rails-copper-gold$/);
+  await expect(page).toHaveURL(/\/workspace\/star-copper-corp\/p\/rails-copper-gold$/);
   await expect(page.getByRole('heading', { level: 1, name: /Rails Copper-Gold/ })).toBeVisible();
   await expect(page.getByText('Porphyry target')).toBeVisible();
 
@@ -134,7 +138,7 @@ test('a viewer gets the same pages without editing controls', async ({ page }) =
   await expect(page.getByRole('button', { name: 'Edit Rails Copper-Gold' })).toHaveCount(0);
   await expect(page.getByRole('combobox', { name: /Role for/ })).toHaveCount(0);
 
-  await page.goto('/workspace/p/rails-copper-gold');
+  await page.goto('/workspace/star-copper-corp/p/rails-copper-gold');
   await expect(page.getByText(/View only\. You can open every map/)).toBeVisible();
   await expect(page.getByRole('button', { name: 'Edit details' })).toHaveCount(0);
   await page.getByRole('tab', { name: 'Maps' }).click();
@@ -144,6 +148,27 @@ test('a viewer gets the same pages without editing controls', async ({ page }) =
   await page.getByRole('tab', { name: '3D figures' }).click();
   await expect(page.getByRole('button', { name: 'Open Rails 3D section' })).toBeVisible();
   await expect(page.getByRole('link', { name: '+ New 3D figure' })).toHaveCount(0);
+});
+
+test('an older property link opens directly when only one company has that address', async ({ page }) => {
+  await fakeSupabase(page, { role: 'editor' });
+  await page.goto('/workspace/p/rails-copper-gold');
+  await expect(page.getByRole('heading', { level: 1, name: /Rails Copper-Gold/ })).toBeVisible();
+  await expect(page).toHaveURL(/\/workspace\/star-copper-corp\/p\/rails-copper-gold$/);
+});
+
+test('an older property link shared by two companies asks which one', async ({ page }) => {
+  await fakeSupabase(page, { role: 'editor', orgs: [org('editor'), jvOrg], properties: [property, jvProperty] });
+  await page.goto('/workspace/p/rails-copper-gold');
+  await expect(page.getByRole('heading', { name: 'Which property did you mean?' })).toBeVisible();
+  await expect(page).toHaveURL(/\/workspace\/p\/rails-copper-gold$/);
+  await page.getByRole('button', { name: 'Open in North Rock JV' }).click();
+  await expect(page).toHaveURL(/\/workspace\/north-rock-jv\/p\/rails-copper-gold$/);
+  await expect(page.getByRole('heading', { level: 1, name: /Rails JV/ })).toBeVisible();
+  await expect(page.getByText('Joint venture ground')).toBeVisible();
+  // Each company's address opens its own property.
+  await page.goto('/workspace/star-copper-corp/p/rails-copper-gold');
+  await expect(page.getByRole('heading', { level: 1, name: /Rails Copper-Gold/ })).toBeVisible();
 });
 
 test('an invite link signed out asks to sign in and keeps the token', async ({ page }) => {

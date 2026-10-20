@@ -161,15 +161,34 @@ export function clearInviteToken() {
 }
 
 // ── Workspaces and members ──────────────────────────────────────────────────
+// The list is cached for 30 s per signed-in user, and dropped whenever the
+// session changes hands (sign-in, sign-out, another account), so one
+// account's workspaces are never shown to the next.
 let mineCache = null; // { userId, at, promise }
-export function listMyWorkspaces({ fresh = false } = {}) {
-  const run = async () => {
-    const data = await rpc('get_my_workspaces');
-    return Array.isArray(data) ? data : [];
-  };
-  if (!fresh && mineCache && Date.now() - mineCache.at < 30_000) return mineCache.promise;
-  const promise = run().catch((e) => { mineCache = null; throw e; });
-  mineCache = { at: Date.now(), promise };
+let watchingAuth = false;
+function watchAuth() {
+  if (watchingAuth || !supabase?.auth?.onAuthStateChange) return;
+  watchingAuth = true;
+  supabase.auth.onAuthStateChange((event, session) => {
+    if (event === 'TOKEN_REFRESHED' && mineCache?.userId === session?.user?.id) return;
+    mineCache = null;
+  });
+}
+async function currentUserId() {
+  try {
+    const { data } = await sb().auth.getSession();
+    return data?.session?.user?.id || null;
+  } catch { return null; }
+}
+export async function listMyWorkspaces({ fresh = false } = {}) {
+  watchAuth();
+  const userId = await currentUserId();
+  if (!userId) return [];
+  if (!fresh && mineCache?.userId === userId && Date.now() - mineCache.at < 30_000) return mineCache.promise;
+  const promise = rpc('get_my_workspaces')
+    .then((data) => (Array.isArray(data) ? data : []))
+    .catch((e) => { if (mineCache?.promise === promise) mineCache = null; throw e; });
+  mineCache = { userId, at: Date.now(), promise };
   return promise;
 }
 export const forgetWorkspaces = () => { mineCache = null; };
@@ -205,10 +224,29 @@ const PROPERTY_COLS = 'id, org_id, name, slug, jurisdiction, commodities, status
 export const listProperties = (orgId) => rows(sb().from('properties').select(PROPERTY_COLS)
   .eq('org_id', orgId).is('deleted_at', null).order('name', { ascending: true }));
 
-/** Property for /workspace/p/<slug>: prefers the active workspace. */
-export async function getPropertyBySlug(slug, preferOrgId = getActiveWorkspaceId()) {
+/**
+ * The property behind a property URL (see workspaceRoutes.js).
+ *   { property, org }   exactly one match
+ *   { choices: [...] }  an older /workspace/p/<slug> link that matches a
+ *                       property in more than one of the user's companies
+ *   null                nothing the user can see
+ * Never guesses between companies: slugs are unique only within one.
+ */
+export async function resolveProperty({ orgSlug = null, slug }) {
+  if (!slug) return null;
+  const mine = await listMyWorkspaces();
+  if (orgSlug) {
+    const org = mine.find((w) => w.slug === orgSlug);
+    if (!org) return null;
+    const list = await rows(sb().from('properties').select(PROPERTY_COLS)
+      .eq('org_id', org.id).eq('slug', slug).is('deleted_at', null));
+    return list[0] ? { property: list[0], org } : null;
+  }
   const list = await rows(sb().from('properties').select(PROPERTY_COLS).eq('slug', slug).is('deleted_at', null));
-  return list.find((p) => p.org_id === preferOrgId) || list[0] || null;
+  const matches = list.map((property) => ({ property, org: mine.find((w) => w.id === property.org_id) })).filter((m) => m.org);
+  if (matches.length === 1) return matches[0];
+  if (matches.length > 1) return { choices: matches };
+  return null;
 }
 
 function propertyFields(f) {
@@ -320,6 +358,7 @@ export async function getProjectHome(projectId) {
   return {
     orgId: org.id,
     orgName: org.name,
+    orgSlug: org.slug || null,
     role: org.role,
     readOnly: !hasRole(org.role, 'editor'),
     propertyId: property?.id || data.property_id || null,

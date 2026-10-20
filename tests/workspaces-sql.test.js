@@ -114,7 +114,12 @@ async function as(uid, q, params) {
 }
 const one = async (uid, q, params) => (await as(uid, q, params)).rows[0];
 const val = async (uid, q, params) => Object.values((await as(uid, q, params)).rows[0] || {})[0];
-const su = async (q, params) => (await db.query(q, params)).rows;
+// As the database owner with no signed-in user (the service role's view).
+const su = async (q, params) => {
+  await db.exec('reset role');
+  await db.query(`select set_config('request.jwt.claim.sub', '', false)`);
+  return (await db.query(q, params)).rows;
+};
 
 const S = {}; // ids created along the way
 
@@ -395,6 +400,18 @@ describe('maps', () => {
     expect((await as(E, `update public.projects set thumbnail = 'data:x' where id = $1`, [S.map])).affectedRows).toBe(1);
   });
 
+  it('leaves deleting and restoring company maps to admins', async () => {
+    expect(await val(E, `select public.trash_cloud_project($1)`, [S.map])).toBe(false);
+    await expect(as(E, `update public.projects set deleted_at = now() where id = $1`, [S.map])).rejects.toThrow(/only an owner or admin/);
+    expect(await val(A, `select public.trash_cloud_project($1)`, [S.map])).toBe(true);
+    expect(await val(E, `select public.restore_cloud_project($1)`, [S.map])).toBe(false);
+    await expect(as(E, `update public.projects set deleted_at = null where id = $1`, [S.map])).rejects.toThrow(/only an owner or admin|row-level/);
+    expect(await val(O, `select public.restore_cloud_project($1)`, [S.map])).toBe(true);
+    expect((await as(V, `select deleted_at from public.projects where id = $1`, [S.map])).rows).toEqual([{ deleted_at: null }]);
+    // Editing is still fine.
+    expect((await as(E, `update public.projects set name = name where id = $1`, [S.map])).affectedRows).toBe(1);
+  });
+
   it('never moves a map through a plain update', async () => {
     await expect(as(E, `update public.projects set org_id = null where id = $1`, [S.map])).rejects.toThrow(/OWNERSHIP_CHANGE/);
     await expect(as(E, `update public.projects set org_id = $2 where id = $1`, [S.personal1, S.org])).rejects.toThrow(/OWNERSHIP_CHANGE|row-level/);
@@ -439,7 +456,7 @@ describe('maps', () => {
     await su(`insert into public.projects (user_id, org_id, property_id, name) select $1, $2, $3, 'filler ' || g from generate_series(1, 25) g`, [E, S.org, S.prop]);
     await expect(as(E, `select public.create_org_project($1, 'Over', '{}')`, [S.prop])).rejects.toThrow(/ORG_PROJECT_LIMIT/);
     await expect(as(E, `select public.move_to_property('map', $1, $2)`, [S.personal3, S.prop])).rejects.toThrow(/ORG_PROJECT_LIMIT/);
-    await db.exec(`update public.projects set deleted_at = now() where name like 'filler %'`);
+    await su(`update public.projects set deleted_at = now() where name like 'filler %'`);
   });
 });
 
@@ -462,6 +479,19 @@ describe('3D figures and their files', () => {
     await expect(as(V, `insert into public.three_d_projects (id, name, settings, org_id, property_id) values ($1, 'x', '{}', $2, $3)
       on conflict (id) do update set name = excluded.name`, [S.fig, S.org, S.prop])).rejects.toThrow(/row-level security/);
     await expect(as(E, `update public.three_d_projects set org_id = null where id = $1`, [S.fig])).rejects.toThrow(/OWNERSHIP_CHANGE/);
+  });
+
+  it('leaves deleting company figures to admins, whichever way it is tried', async () => {
+    await expect(as(E, `update public.three_d_projects set deleted_at = now() where id = $1`, [S.fig])).rejects.toThrow(/only an owner or admin/);
+    await expect(as(E, `insert into public.three_d_projects (id, name, settings, org_id, property_id, deleted_at) values ($1, 'x', '{}', $2, $3, now())
+      on conflict (id) do update set deleted_at = excluded.deleted_at`, [S.fig, S.org, S.prop])).rejects.toThrow(/only an owner or admin/);
+    expect((await as(V, `update public.three_d_projects set deleted_at = now() where id = $1`, [S.fig])).affectedRows).toBe(0);
+    expect((await as(A, `update public.three_d_projects set deleted_at = now() where id = $1`, [S.fig])).affectedRows).toBe(1);
+    await expect(as(E, `update public.three_d_projects set deleted_at = null where id = $1`, [S.fig])).rejects.toThrow(/only an owner or admin/);
+    expect((await as(A, `update public.three_d_projects set deleted_at = null where id = $1`, [S.fig])).affectedRows).toBe(1);
+    // Personal figures: the owner deletes as before.
+    const f = await one(E, `insert into public.three_d_projects (name, settings) values ('Mine', '{}') returning id`);
+    expect((await as(E, `update public.three_d_projects set deleted_at = now() where id = $1`, [f.id])).affectedRows).toBe(1);
   });
 
   it('keeps org/<org>/ files to members, writable by editors only', async () => {
@@ -554,8 +584,10 @@ describe('activity log', () => {
     expect(has('created', 'figure', /Rails 3D/)).toBe(true);
     expect(has('moved', 'portfolio', /Rails claims/)).toBe(true);
     // Two saves and a thumbnail by E (one "created" row covers them), one by A.
-    const edits = rows.filter((r) => r.entity_type === 'map' && /Rails claims/.test(r.summary) && r.action === 'updated');
+    const edits = rows.filter((r) => r.entity_type === 'map' && /^Edited map "Rails claims"/.test(r.summary) && r.action === 'updated');
     expect(edits.map((r) => r.actor)).toEqual([A]);
+    expect(rows.filter((r) => /map "Rails claims"/.test(r.summary) && /^(Deleted|Restored)/.test(r.summary)).map((r) => [r.action, r.actor]))
+      .toEqual([['deleted', A], ['updated', O]]);
     // Personal work never appears.
     expect(rows.some((r) => /Personal (two|three)|Renamed/.test(r.summary))).toBe(false);
   });

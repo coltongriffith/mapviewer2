@@ -6,8 +6,8 @@
 -- ROLES  viewer < editor < admin < owner
 --   viewer  read everything in the workspace (investors, JV partners, auditors)
 --   editor  create and change properties, maps, figures (geologists, consultants)
---   admin   + invite, change roles (not owners'), soft-delete properties,
---             move items back to a personal account
+--   admin   + invite, change roles (not owners'), delete (soft) properties,
+--             maps and 3D figures, move items back to a personal account
 --   owner   + everything about owners. An organization always keeps one.
 --
 -- OWNERSHIP OF A ROW
@@ -182,10 +182,13 @@ create index if not exists properties_org_idx on public.properties (org_id, name
 
 -- Org of a live property the caller belongs to (null when missing,
 -- soft-deleted or not theirs, so it reveals nothing about other companies).
+-- With no signed-in user (service role, maintenance) it is not gated; anon
+-- cannot execute it.
 create or replace function public.ws_property_org(p_property uuid)
 returns uuid language sql stable security definer set search_path = '' as $$
   select p.org_id from public.properties p
-  where p.id = p_property and p.deleted_at is null and public.has_org_role(p.org_id, 'viewer')
+  where p.id = p_property and p.deleted_at is null
+    and (auth.uid() is null or public.has_org_role(p.org_id, 'viewer'))
 $$;
 
 
@@ -439,6 +442,13 @@ create index if not exists monitored_portfolios_property_idx
 -- Browser UPDATEs never move a row between owners (see header). Runs as the
 -- caller (no SECURITY DEFINER) so current_user tells a PostgREST request from
 -- one of the move RPCs below or a foreign-key action.
+--
+-- Deleting (or restoring) a company map or 3D figure is an admin decision,
+-- whichever path it takes: a direct UPDATE of deleted_at, a 3D upsert, or
+-- trash_cloud_project / restore_cloud_project. Editors can edit company work
+-- but not remove it, the same rule as for properties. Applies to every
+-- signed-in caller, RPCs included; the service role and foreign-key actions
+-- (no auth.uid()) are not affected.
 create or replace function public.ws_guard_ownership()
 returns trigger language plpgsql set search_path = '' as $$
 begin
@@ -446,6 +456,13 @@ begin
      and (new.user_id is distinct from old.user_id or new.org_id is distinct from old.org_id
           or new.property_id is distinct from old.property_id) then
     raise exception 'OWNERSHIP_CHANGE: use move_to_property or move_to_personal' using errcode = '42501';
+  end if;
+  -- Field access, not to_jsonb(): a map row carries up to 8 MB of payload.
+  -- Nested so deleted_at is only read on the tables that have it.
+  if tg_table_name in ('projects', 'three_d_projects') and old.org_id is not null and auth.uid() is not null then
+    if new.deleted_at is distinct from old.deleted_at and not public.has_org_role(old.org_id, 'admin') then
+      raise exception 'forbidden: only an owner or admin can delete or restore company work' using errcode = '42501';
+    end if;
   end if;
   return new;
 end;
@@ -617,6 +634,8 @@ begin
 end;
 $$;
 
+-- Trash and restore: personal maps by their owner as before; company maps by
+-- admins and up only, as for 3D figures and properties (ws_guard_ownership).
 create or replace function public.trash_cloud_project(p_id uuid)
 returns boolean
 language plpgsql security definer set search_path = ''
@@ -627,7 +646,7 @@ begin
   update public.projects p set deleted_at = now()
    where p.id = p_id and p.deleted_at is null
      and ((p.org_id is null and p.user_id = v_user)
-          or (p.org_id is not null and public.has_org_role(p.org_id, 'editor')));
+          or (p.org_id is not null and public.has_org_role(p.org_id, 'admin')));
   get diagnostics v_rows = row_count;
   return v_rows > 0;
 end;
@@ -644,7 +663,7 @@ begin
    where p.id = p_id and p.deleted_at is not null
      and p.deleted_at > now() - interval '30 days'
      and ((p.org_id is null and p.user_id = v_user)
-          or (p.org_id is not null and public.has_org_role(p.org_id, 'editor')));
+          or (p.org_id is not null and public.has_org_role(p.org_id, 'admin')));
   get diagnostics v_rows = row_count;
   return v_rows > 0;
 end;
@@ -983,8 +1002,9 @@ begin
     return null;
   end if;
 
-  v_old_del := to_jsonb(old) ->> 'deleted_at';
-  v_new_del := to_jsonb(new) ->> 'deleted_at';
+  -- (Portfolios returned above; field access avoids copying a map's payload.)
+  v_old_del := old.deleted_at::text;
+  v_new_del := new.deleted_at::text;
   if v_old_del is null and v_new_del is not null then
     perform public.log_org_activity(new.org_id, new.property_id, 'deleted', v_kind, new.id,
       'Deleted ' || v_label || ' "' || left(new.name, 120) || '"');

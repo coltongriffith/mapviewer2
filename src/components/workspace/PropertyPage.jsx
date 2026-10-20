@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../../hooks/useAuth.jsx';
 import {
-  getPropertyBySlug, updateProperty, listPropertyMaps, listPropertyFigures, listPersonalFigures,
+  resolveProperty, updateProperty, listPropertyMaps, listPropertyFigures, listPersonalFigures,
   getPropertyClaims, listMyPortfolios, moveToProperty, moveToPersonal, moveFigureToProperty,
   moveFigureToPersonal, permissions, setActiveWorkspaceId, formatWhen,
 } from '../../utils/workspace';
@@ -225,7 +225,7 @@ function ClaimsTab({ property, perms, userId, onOpenTenureMonitor }) {
   );
 }
 
-export default function PropertyPage({ slug, onExit, onOpenDashboard, onOpenWorkspace, onOpenMap, onNewMap, onOpenTenureMonitor }) {
+export default function PropertyPage({ orgSlug = null, slug, onExit, onOpenDashboard, onOpenWorkspace, onOpenProperty, onOpenMap, onNewMap, onOpenTenureMonitor }) {
   const { user } = useAuth();
   const ws = useWorkspaces();
   const [property, setProperty] = useState(undefined);
@@ -235,15 +235,28 @@ export default function PropertyPage({ slug, onExit, onOpenDashboard, onOpenWork
     return TABS.some((x) => x.id === t) ? t : 'overview';
   });
   const [editing, setEditing] = useState(false);
+  // An older /workspace/p/<slug> link that more than one company matches.
+  const [choices, setChoices] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
     setProperty(undefined);
-    getPropertyBySlug(slug)
-      .then((p) => { if (!cancelled) { setProperty(p); if (p) setActiveWorkspaceId(p.org_id); } })
+    setChoices(null);
+    resolveProperty({ orgSlug, slug })
+      .then((r) => {
+        if (cancelled) return;
+        if (r?.choices) { setChoices(r.choices); setProperty(null); return; }
+        setProperty(r?.property || null);
+        if (!r) return;
+        setActiveWorkspaceId(r.property.org_id);
+        // An older link that resolved to one property: show its full address.
+        if (!orgSlug && r.org.slug) onOpenProperty?.(r.org.slug, r.property.slug, { replace: true });
+      })
       .catch((e) => { if (!cancelled) { setError(e.message); setProperty(null); } });
     return () => { cancelled = true; };
-  }, [slug]);
+  // onOpenProperty is a fresh closure on every render of the shell.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orgSlug, slug]);
 
   const org = property ? ws.list.find((w) => w.id === property.org_id) : null;
   const perms = permissions(org?.role);
@@ -255,7 +268,22 @@ export default function PropertyPage({ slug, onExit, onOpenDashboard, onOpenWork
       </WorkspaceHeader>
       <main className="dash-main">
         <ErrorNote error={error} onDismiss={() => setError(null)} />
-        {property === undefined || (property && ws.loading) ? <p className="dash-muted">Loading the property…</p> : !property ? (
+        {choices ? (
+          <section className="dash-panel" aria-labelledby="ws-choose-h" style={{ maxWidth: 560 }}>
+            <h2 id="ws-choose-h">Which property did you mean?</h2>
+            <p className="dash-panel-lead">This link matches a property in more than one of your company workspaces.</p>
+            <ul className="ws-list">
+              {choices.map(({ property: p, org: o }) => (
+                <li key={p.id}>
+                  <span className="ws-list-main"><b>{p.name}</b><small>{o.name}</small></span>
+                  <button type="button" className="btn" onClick={() => onOpenProperty?.(o.slug, p.slug, { replace: true })}>
+                    Open in {o.name}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : property === undefined || (property && ws.loading) ? <p className="dash-muted">Loading the property…</p> : !property ? (
           <div className="dash-empty">
             <p><strong>Property not found.</strong></p>
             <p className="dash-muted">It may have been deleted, or you are not a member of its workspace.</p>

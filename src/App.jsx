@@ -73,6 +73,7 @@ import { trackSearch, trackEvent, trackEventOnce } from './utils/track';
 import { isPhoneDevice } from './utils/device';
 import { createSaveCoordinator, runGuardedSave } from './utils/saveCoordinator';
 import { US_CLAIMS_ENABLED, US_STATES, US_GROUP_LABEL, US_GEOMETRY_DISCLAIMER, isUsJurisdiction } from './utils/jurisdictions';
+import { parseWorkspacePath, propertyPath } from './utils/workspaceRoutes';
 import { clampExportSize, canExportFormat, maxPixelRatioFor, PRO_MAX_EXPORT_PIXELS } from './utils/entitlements';
 import { verifyCheckoutSession } from './utils/billing';
 import { trackVerifiedPurchase } from './utils/purchaseTracking';
@@ -682,19 +683,27 @@ export default function App({ initialAction = null }) {
     if (window.location.pathname === '/dashboard') return 'dashboard';
     if (window.location.pathname === '/account') return 'account';
     if (window.location.pathname === '/tenure-monitor') return 'tenure';
-    if (/^\/workspace\/?$/.test(window.location.pathname)) return 'workspace';
-    if (/^\/workspace\/p\/[^/]+/.test(window.location.pathname)) return 'property';
-    if (/^\/invite\/?$/.test(window.location.pathname)) return 'invite';
+    const workspaceRoute = parseWorkspacePath(window.location.pathname);
+    if (workspaceRoute) return workspaceRoute.screen;
     if (window.location.pathname.startsWith('/map/')) return 'shared_view';
     return 'landing';
   });
-  // /workspace/p/<slug>: which property the property screen shows.
-  const [propertySlug, setPropertySlug] = useState(() => {
-    const m = window.location.pathname.match(/^\/workspace\/p\/([^/]+)/);
-    return m ? decodeURIComponent(m[1]) : null;
+  // Which property the property screen shows: { orgSlug, slug }; orgSlug is
+  // null for an older /workspace/p/<slug> link (see utils/workspaceRoutes.js).
+  const [propertyRef, setPropertyRef] = useState(() => {
+    const r = parseWorkspacePath(window.location.pathname);
+    return r?.screen === 'property' ? { orgSlug: r.orgSlug, slug: r.slug } : null;
   });
+  // { replace: true } rewrites an older link to the canonical one in place, so
+  // Back does not return to the old form and redirect forward again.
+  const replaceUrlRef = useRef(false);
+  const openProperty = (orgSlug, slug, { replace = false } = {}) => {
+    replaceUrlRef.current = replace;
+    setPropertyRef({ orgSlug: orgSlug || null, slug });
+    setScreen('property');
+  };
   // Where the open cloud map lives: null for a personal map, otherwise
-  // { orgId, orgName, role, readOnly, propertyId, propertyName, propertySlug }.
+  // { orgId, orgName, orgSlug, role, readOnly, propertyId, propertyName, propertySlug }.
   const [projectHome, setProjectHome] = useState(null);
   // A filter the dashboard's attention rows asked the monitor to open on.
   // Cleared on every other route into the monitor so it cannot linger and
@@ -1556,15 +1565,17 @@ export default function App({ initialAction = null }) {
         : screen === 'account' ? '/account'
           : screen === 'tenure' ? '/tenure-monitor'
             : screen === 'workspace' ? '/workspace'
-              : (screen === 'property' && propertySlug) ? `/workspace/p/${encodeURIComponent(propertySlug)}`
+              : (screen === 'property' && propertyRef) ? propertyPath(propertyRef.orgSlug, propertyRef.slug)
                 : screen === 'invite' ? '/invite'
                   : (screen === 'shared_view' && sharedMapId) ? `/map/${sharedMapId}`
                     : '/';
+    const replace = replaceUrlRef.current;
+    replaceUrlRef.current = false;
     if (window.location.pathname === target) return;
     try {
-      window.history.pushState({ screen, sharedMapId: sharedMapId || null }, '', target);
+      window.history[replace ? 'replaceState' : 'pushState']({ screen, sharedMapId: sharedMapId || null }, '', target);
     } catch { /* history unavailable — URL simply won't track */ }
-  }, [screen, sharedMapId, propertySlug]);
+  }, [screen, sharedMapId, propertyRef]);
 
   // A signed-in customer landing on "/" should see their work, not the pitch.
   //
@@ -1638,12 +1649,11 @@ export default function App({ initialAction = null }) {
       else if (path === '/dashboard') setScreen('dashboard');
       else if (path === '/account') setScreen('account');
       else if (path === '/tenure-monitor') setScreen('tenure');
-      else if (/^\/workspace\/?$/.test(path)) setScreen('workspace');
-      else if (/^\/workspace\/p\/[^/]+/.test(path)) {
-        setPropertySlug(decodeURIComponent(path.split('/')[3]));
-        setScreen('property');
-      } else if (/^\/invite\/?$/.test(path)) setScreen('invite');
-      else if (path.startsWith('/map/')) {
+      else if (parseWorkspacePath(path)) {
+        const r = parseWorkspacePath(path);
+        if (r.screen === 'property') setPropertyRef({ orgSlug: r.orgSlug, slug: r.slug });
+        setScreen(r.screen);
+      } else if (path.startsWith('/map/')) {
         setSharedMapId(path.slice(5));
         setScreen('shared_view');
       } else {
@@ -5234,9 +5244,9 @@ export default function App({ initialAction = null }) {
       <React.Suspense fallback={<div className="shared-map-loading" role="status">Opening the workspace…</div>}>
         <WorkspaceScreens
           screen={screen}
-          propertySlug={propertySlug}
+          propertyRef={propertyRef}
           go={(to) => { if (to === 'landing') goToLanding(); else { if (to === 'tenure') setTenureInitialFilter(null); setScreen(to); } }}
-          onOpenProperty={(slug) => { setPropertySlug(slug); setScreen('property'); }}
+          onOpenProperty={openProperty}
           onOpenMap={(entry) => { openProjectFromRecent(entry); setScreen('editor'); }}
           onNewMap={startPropertyMap}
         />
@@ -5274,7 +5284,7 @@ export default function App({ initialAction = null }) {
         onOpenBrandKits={() => { setScreen('editor'); setShowBrandKitManager(true); }}
         onSearchClaims={() => { setScreen('editor'); setAddClaimsModalPath('registry'); setShowAddClaimsModal(true); }}
         onOpenWorkspace={() => setScreen('workspace')}
-        onOpenProperty={(slug) => { setPropertySlug(slug); setScreen('property'); }}
+        onOpenProperty={openProperty}
         onExit={goToLanding}
       />
       </React.Suspense>
@@ -5369,7 +5379,7 @@ export default function App({ initialAction = null }) {
                 className={`ed-doc-home${projectHome.readOnly ? ' ed-doc-home--readonly' : ''}`}
                 title={`${projectHome.orgName}${projectHome.propertyName ? ` › ${projectHome.propertyName}` : ''}${projectHome.readOnly ? ' (view only: changes are not saved)' : ''}`}
                 onClick={() => {
-                  if (projectHome.propertySlug) { setPropertySlug(projectHome.propertySlug); setScreen('property'); } else setScreen('workspace');
+                  if (projectHome.propertySlug) openProperty(projectHome.orgSlug, projectHome.propertySlug); else setScreen('workspace');
                 }}
               >
                 {projectHome.propertyName || projectHome.orgName}{projectHome.readOnly ? ' · View only' : ''}

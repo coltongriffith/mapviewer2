@@ -7,7 +7,7 @@ import InvitePage from './InvitePage';
 
 // The /workspace, /workspace/p/<slug> and /invite screens, loaded on demand
 // so the map editor's own chunk does not carry them.
-export default function WorkspaceScreens({ screen, propertySlug, go, onOpenProperty, onOpenMap, onNewMap }) {
+export default function WorkspaceScreens({ screen, propertyRef, go, onOpenProperty, onOpenMap, onNewMap }) {
   const { user, loading } = useAuth();
   const [showAuth, setShowAuth] = useState(false);
 
@@ -34,8 +34,10 @@ export default function WorkspaceScreens({ screen, propertySlug, go, onOpenPrope
   }
   return (
     <PropertyPage
-      key={propertySlug}
-      slug={propertySlug}
+      key={`${propertyRef?.orgSlug || ''}/${propertyRef?.slug || ''}`}
+      orgSlug={propertyRef?.orgSlug || null}
+      slug={propertyRef?.slug || null}
+      onOpenProperty={onOpenProperty}
       onExit={() => go('landing')}
       onOpenDashboard={() => go('dashboard')}
       onOpenWorkspace={() => go('workspace')}

@@ -255,7 +255,7 @@ function WorkspaceProperties({ onOpenWorkspace, onOpenProperty }) {
           {properties.map((p) => (
             <div key={p.id} className="dash-tile">
               <div className="dash-tile-body" style={{ padding: 12 }}>
-                <button className="dash-tile-name" type="button" onClick={() => onOpenProperty(p.slug)}>{p.name}</button>
+                <button className="dash-tile-name" type="button" onClick={() => onOpenProperty(org.slug, p.slug)}>{p.name}</button>
                 <span className="dash-tile-date">{[jurisdictionLabel(p.jurisdiction), (p.commodities || []).join(' · ')].filter(Boolean).join(' — ') || 'Property'}</span>
               </div>
             </div>

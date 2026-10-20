@@ -11,16 +11,23 @@ function query(table) {
   const q = { table, filters: [] };
   const chain = new Proxy(q, {
     get(target, prop) {
-      if (prop === 'then') return (res, rej) => Promise.resolve({ data: tableRows[table] ?? [], error: null }).then(res, rej);
-      if (prop === 'maybeSingle') return async () => ({ data: (tableRows[table] ?? [])[0] ?? null, error: null });
+      const matching = () => (tableRows[table] ?? []).filter((r) => target.filters
+        .every(([op, col, v]) => op !== 'eq' || !(col in r) || r[col] === v));
+      if (prop === 'then') return (res, rej) => Promise.resolve({ data: matching(), error: null }).then(res, rej);
+      if (prop === 'maybeSingle') return async () => ({ data: matching()[0] ?? null, error: null });
       return (...args) => { target.filters.push([prop, ...args]); return chain; };
     },
   });
   calls.push(q);
   return chain;
 }
+const auth = { uid: 'user-1', listener: null };
 vi.mock('../src/lib/supabase', () => ({
   supabase: {
+    auth: {
+      getSession: async () => ({ data: { session: auth.uid ? { user: { id: auth.uid } } : null } }),
+      onAuthStateChange: (cb) => { auth.listener = cb; return { data: { subscription: { unsubscribe() {} } } }; },
+    },
     rpc: vi.fn(async (fn, args) => {
       calls.push({ rpc: fn, args });
       const r = rpcResults[fn];
@@ -32,6 +39,7 @@ vi.mock('../src/lib/supabase', () => ({
 }));
 
 const ws = await import('../src/utils/workspace.js');
+const routes = await import('../src/utils/workspaceRoutes.js');
 
 beforeEach(() => {
   calls.length = 0;
@@ -39,6 +47,7 @@ beforeEach(() => {
   for (const k of Object.keys(tableRows)) delete tableRows[k];
   localStorage.clear();
   ws.forgetWorkspaces();
+  auth.uid = 'user-1';
 });
 
 describe('roles', () => {
@@ -129,6 +138,29 @@ describe('calls', () => {
     expect(calls.filter((c) => c.rpc === 'get_my_workspaces')).toHaveLength(2);
   });
 
+  it('never serves one account\'s workspaces to another', async () => {
+    rpcResults.get_my_workspaces = [{ id: 'a', name: 'A', role: 'owner' }];
+    expect(await ws.listMyWorkspaces()).toHaveLength(1);
+    auth.uid = 'user-2';
+    rpcResults.get_my_workspaces = [];
+    expect(await ws.listMyWorkspaces()).toEqual([]);
+    expect(calls.filter((c) => c.rpc === 'get_my_workspaces')).toHaveLength(2);
+    auth.uid = null;
+    expect(await ws.listMyWorkspaces()).toEqual([]);
+    expect(calls.filter((c) => c.rpc === 'get_my_workspaces')).toHaveLength(2);
+  });
+
+  it('drops the cache when the session changes, but not on a token refresh', async () => {
+    rpcResults.get_my_workspaces = [{ id: 'a', name: 'A', role: 'owner' }];
+    await ws.listMyWorkspaces();
+    auth.listener('TOKEN_REFRESHED', { user: { id: 'user-1' } });
+    await ws.listMyWorkspaces();
+    expect(calls.filter((c) => c.rpc === 'get_my_workspaces')).toHaveLength(1);
+    auth.listener('SIGNED_OUT', null);
+    await ws.listMyWorkspaces();
+    expect(calls.filter((c) => c.rpc === 'get_my_workspaces')).toHaveLength(2);
+  });
+
   it('picks the active workspace, or the first, or personal', () => {
     const list = [{ id: 'a' }, { id: 'b' }];
     expect(ws.pickActive(list, 'b').id).toBe('b');
@@ -142,11 +174,11 @@ describe('calls', () => {
     expect(await ws.getProjectHome('m1')).toBeNull();
     expect(calls.some((c) => c.table === 'projects')).toBe(false);
     ws.forgetWorkspaces();
-    rpcResults.get_my_workspaces = [{ id: 'org1', name: 'Star', role: 'viewer' }];
+    rpcResults.get_my_workspaces = [{ id: 'org1', name: 'Star', slug: 'star', role: 'viewer' }];
     tableRows.projects = [{ org_id: 'org1', property_id: 'p1' }];
     tableRows.properties = [{ id: 'p1', name: 'Rails', slug: 'rails' }];
     expect(await ws.getProjectHome('m1')).toEqual({
-      orgId: 'org1', orgName: 'Star', role: 'viewer', readOnly: true, propertyId: 'p1', propertyName: 'Rails', propertySlug: 'rails',
+      orgId: 'org1', orgName: 'Star', orgSlug: 'star', role: 'viewer', readOnly: true, propertyId: 'p1', propertyName: 'Rails', propertySlug: 'rails',
     });
   });
 
@@ -162,5 +194,40 @@ describe('calls', () => {
     expect(ws.pendingInviteToken()).toBeNull();
     ws.clearInviteToken();
     expect(ws.pendingInviteToken()).toBeNull();
+  });
+});
+
+describe('property addresses', () => {
+  it('parse and build the workspace routes', () => {
+    expect(routes.parseWorkspacePath('/workspace')).toEqual({ screen: 'workspace', orgSlug: null, slug: null });
+    expect(routes.parseWorkspacePath('/workspace/star/p/rails/')).toEqual({ screen: 'property', orgSlug: 'star', slug: 'rails' });
+    expect(routes.parseWorkspacePath('/workspace/p/rails')).toEqual({ screen: 'property', orgSlug: null, slug: 'rails' });
+    // A company whose slug is "p" still resolves by shape.
+    expect(routes.parseWorkspacePath('/workspace/p/p/rails')).toEqual({ screen: 'property', orgSlug: 'p', slug: 'rails' });
+    expect(routes.parseWorkspacePath('/invite')).toEqual({ screen: 'invite', orgSlug: null, slug: null });
+    expect(routes.parseWorkspacePath('/workspace/star')).toBeNull();
+    expect(routes.parseWorkspacePath('/dashboard')).toBeNull();
+    expect(routes.propertyPath('star', 'rails')).toBe('/workspace/star/p/rails');
+    expect(routes.propertyPath(null, 'rails')).toBe('/workspace/p/rails');
+  });
+
+  const orgs = [{ id: 'o1', slug: 'star', name: 'Star', role: 'owner' }, { id: 'o2', slug: 'north', name: 'North', role: 'viewer' }];
+  const props = [{ id: 'p1', org_id: 'o1', slug: 'rails', name: 'Rails' }, { id: 'p2', org_id: 'o2', slug: 'rails', name: 'Rails JV' }, { id: 'p3', org_id: 'o2', slug: 'dome', name: 'Dome' }];
+
+  it('resolve exactly one property per company address', async () => {
+    rpcResults.get_my_workspaces = orgs;
+    tableRows.properties = props;
+    expect(await ws.resolveProperty({ orgSlug: 'north', slug: 'rails' })).toEqual({ property: props[1], org: orgs[1] });
+    expect(await ws.resolveProperty({ orgSlug: 'star', slug: 'dome' })).toBeNull();
+    expect(await ws.resolveProperty({ orgSlug: 'elsewhere', slug: 'rails' })).toBeNull();
+  });
+
+  it('open an old link when it is unambiguous, and offer a choice when it is not', async () => {
+    rpcResults.get_my_workspaces = orgs;
+    tableRows.properties = props;
+    expect(await ws.resolveProperty({ slug: 'dome' })).toEqual({ property: props[2], org: orgs[1] });
+    const r = await ws.resolveProperty({ slug: 'rails' });
+    expect(r.choices.map((c) => c.org.slug)).toEqual(['star', 'north']);
+    expect(await ws.resolveProperty({ slug: 'nowhere' })).toBeNull();
   });
 });
