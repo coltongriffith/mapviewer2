@@ -75,7 +75,7 @@ ol.how { margin: 0; padding-left: 20px; display: grid; gap: 3px; font-size: 14px
 .file-head .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .maps { display: grid; grid-template-columns: auto 1fr; gap: 4px 8px; align-items: center; font-size: 13px; }
 .maps label { color: var(--slate-600); }
-select, input[type="text"], input[type="number"], textarea { font: inherit; font-size: 14px; color: var(--slate-950); background: #fff; border: 1px solid var(--slate-200); border-radius: 5px; padding: 5px 7px; min-width: 0; width: 100%; }
+select, input[type="text"], input[type="email"], input[type="number"], textarea { font: inherit; font-size: 14px; color: var(--slate-950); background: #fff; border: 1px solid var(--slate-200); border-radius: 5px; padding: 5px 7px; min-width: 0; width: 100%; }
 textarea { font-family: var(--mono); font-size: 12px; resize: vertical; }
 .warn { color: var(--warn); font-size: 13px; }
 .bad { color: var(--bad); font-size: 13px; }
@@ -109,6 +109,16 @@ input[type="color"] { width: 34px; height: 26px; border: 1px solid var(--slate-2
 .sizes small { margin-left: auto; font-family: var(--mono); font-size: 11.5px; color: var(--slate-600); }
 .upgrade { border: 1px solid var(--copper); background: var(--copper-soft); border-radius: 8px; padding: 12px; display: grid; gap: 8px; }
 .upgrade strong { font-size: 16px; }
+.upgrade textarea { font-family: var(--font); font-size: 14px; }
+.upgrade input, .upgrade textarea, .label-row input[type="text"], #crs { box-sizing: border-box; }
+.upgrade [aria-invalid="true"] { border-color: var(--bad); }
+.upgrade.sent .field, .upgrade.sent #desk-send { display: none; }
+.desk-msg { font-size: 13.5px; margin: 0; }
+.desk-msg.ok { color: var(--ok); font-weight: 600; }
+.desk-msg.bad { color: var(--bad); }
+.desk-msg.busy { color: var(--slate-600); }
+.label-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; align-items: center; }
+.label-row .btn { padding: 4px 9px; font-size: 13px; }
 
 .stage { position: relative; min-width: 0; overflow: hidden; background: var(--workspace); }
 .toolbar { position: absolute; top: 10px; left: 12px; right: 12px; z-index: 6; display: flex; justify-content: space-between; gap: 8px; align-items: center; pointer-events: none; }
@@ -300,6 +310,17 @@ dialog.acct-dialog::backdrop { background: rgba(20,33,38,0.35); }
         <label class="field"><span>Projection either side (m)</span><input type="number" id="sec-w" min="5"></label>
       </section>
       <section>
+        <h3>Text labels</h3>
+        <div class="grid2">
+          <label class="field" style="grid-column:1/-1"><span>Text</span><input type="text" id="lab-text" placeholder="e.g. TARGET ZONE" maxlength="200"></label>
+          <label class="field"><span>Style</span><select id="lab-size"><option value="title">Title (large, bold)</option><option value="normal">Normal</option></select></label>
+          <label class="check" style="align-self:end;padding-bottom:6px"><input type="checkbox" id="lab-arrow">With arrow</label>
+        </div>
+        <button class="btn" type="button" id="lab-add" style="margin-top:8px">Add text label</button>
+        <p class="muted" style="margin-top:6px">Drag a label on the preview to place it, and the ring to aim its arrow.</p>
+        <div class="files" id="label-list" style="margin-top:8px"></div>
+      </section>
+      <section>
         <h3>Display</h3>
         <div class="row" style="gap:14px">
           <label class="check"><input type="checkbox" id="opt-walls" checked>Glass block sides</label>
@@ -337,11 +358,20 @@ dialog.acct-dialog::backdrop { background: rgba(20,33,38,0.35); }
         <button class="btn primary" type="button" id="export-3d">Download 3D figure (PNG)</button>
         <button class="btn primary" type="button" id="export-section">Download section (PNG)</button>
       </section>
-      <div class="upgrade">
+      <section>
+        <button class="btn" type="button" id="export-layers">Download layers for designers (ZIP)</button>
+        <p class="muted" style="margin-top:6px">The figure, the 3D render and the annotations as separate transparent PNGs, the section, and the settings, at the size above.</p>
+      </section>
+      <form class="upgrade" id="desk" novalidate>
         <strong>Want it hand-finished?</strong>
-        <p class="muted">Send this project to the Exploration Maps design desk. We refine geology, labels and layout to your brand and return print-ready files within 48 hours.</p>
-        <a class="btn" id="request-design" href="/teams/?ref=3d#enquire" style="justify-self:start">Request design finishing</a>
-      </div>
+        <p class="muted">Send this figure and its layers to the Exploration Maps design desk. We refine geology, labels and layout to your brand and return print-ready files within 48 hours.</p>
+        <label class="field"><span>Work email</span><input type="email" id="desk-email" autocomplete="email" required></label>
+        <label class="field"><span>Company</span><input type="text" id="desk-company" autocomplete="organization" required></label>
+        <label class="field"><span>Notes (optional)</span><textarea id="desk-notes" rows="3" placeholder="What should we add or change?"></textarea></label>
+        <button class="btn primary" type="submit" id="desk-send" style="justify-self:start">Send figure and layers</button>
+        <p class="desk-msg" id="desk-msg" role="status" aria-live="polite" hidden></p>
+        <a class="muted" id="request-design" href="/teams/?ref=3d">or see Exploration Maps for Teams</a>
+      </form>
       <details>
         <summary>For AI assistants and browser agents</summary>
         <pre id="ai-help"></pre>

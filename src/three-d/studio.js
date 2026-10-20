@@ -141,7 +141,7 @@ const S = {              // style
   valueCol: null, valueLabel: '', bins: [0.1, 0.2, 0.3, 0.5], coCount: 5, coMin: 20, coCut: 0.2, coIncl: 0.5,
   secAz: 135, secW: 75, surf: 1, walls: true, ids: true, inset: true, logo: null, meshes: {},
   ribbons: true, traceWidth: 1.4, pendingLabels: true, pendingNoAssays: false, valueCol2: null, elevTicks: true,
-  terrain: 'natural', terrainSource: 'auto', vex: 1, crs: null,
+  terrain: 'natural', terrainSource: 'auto', vex: 1, crs: null, labels: [],
 };
 const BIN_COLORS = ['#a3abaf', '#e2dc4f', '#ff9a1f', '#ef3b2c', '#e93ad1'];
 const MESH_COLORS = ['#ff9a1f', '#e93ad1', '#2b8fd6', '#6aa84f', '#8e5bd6'];
@@ -259,7 +259,9 @@ function autoBins(assays) {
 // 4. Scene
 // ============================================================
 const stage = $('stage'), glCanvas = $('gl'), ov = $('ov'), secCanvas = $('section');
-const renderer = new THREE.WebGLRenderer({ canvas: glCanvas, antialias: true, preserveDrawingBuffer: true });
+// alpha: the designer layers render the scene alone on transparent (scene.background = null);
+// the preview and the figure keep the scene's white background.
+const renderer = new THREE.WebGLRenderer({ canvas: glCanvas, antialias: true, preserveDrawingBuffer: true, alpha: true });
 let DPR = Math.min(window.devicePixelRatio || 1, 2); renderer.setPixelRatio(DPR);
 const scene = new THREE.Scene(); scene.background = new THREE.Color('#ffffff');
 const camera = new THREE.PerspectiveCamera(32, 1, 1, 1e6);
@@ -568,7 +570,7 @@ async function mosaic(urlFn, bb, z) {
   const c = document.createElement('canvas'); c.width = (x1 - x0 + 1) * 256; c.height = (y1 - y0 + 1) * 256; const g = c.getContext('2d', { willReadFrequently: true });
   let next = 0, ok = 0;
   await Promise.all(Array.from({ length: 6 }, async () => { while (next < jobs.length) { const [tx, ty] = jobs[next++], im = await loadImage(urlFn(z, tx, ty)); if (im) { g.drawImage(im, (tx - x0) * 256, (ty - y0) * 256); ok++; } } }));
-  if (!ok) throw new Error('no tiles loaded');
+  if (!ok) throw new Error('no tiles loaded: offline, or the tile server is blocked');
   let data; try { data = g.getImageData(0, 0, c.width, c.height).data; } catch { throw new Error('the tiles were blocked by the browser'); }
   return { data, w: c.width, h: c.height, z, x0, y0, ok, total: jobs.length };
 }
@@ -974,6 +976,50 @@ function drawElevTicks(ctx, K, top, bottom, avoid = []) {
   }
   ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
 }
+// Free-text labels, placed in 0-1 frame coordinates so they land in the same spot at every export size.
+// "title": large bold capitals in the primary colour; "normal": a rounded white pill. An arrow runs from
+// the label's edge to (ax, ay). In the preview the boxes are kept for dragging (labelHits).
+let labelHits = [];
+function drawLabels(ctx, K, forExport) {
+  const { u, font } = K, hits = [];
+  S.labels.forEach((L) => {
+    const title = L.size === 'title', lines = String(L.text).split('\n'), cx = L.x * W, cy = L.y * H;
+    if (title) { font(700, 26); setSpacing(ctx, 1.6 * u); } else font(600, 15);
+    const lh = (title ? 29 : 19) * u, tw = Math.max(...lines.map((t) => ctx.measureText(title ? t.toUpperCase() : t).width)), padX = title ? 4 * u : 12 * u, padY = title ? 2 * u : 7 * u;
+    const bw = tw + padX * 2, bh = lines.length * lh + padY * 2, box = [cx - bw / 2, cy - bh / 2, cx + bw / 2, cy + bh / 2];
+    if (L.arrow) {
+      const tx = L.ax * W, ty = L.ay * H, dx = tx - cx, dy = ty - cy, d = Math.hypot(dx, dy);
+      if (d > 4 * u) {
+        const t = Math.min(bw / 2 / (Math.abs(dx) || 1e-9), bh / 2 / (Math.abs(dy) || 1e-9)), sx = cx + dx * t + dx / d * 5 * u, sy = cy + dy * t + dy / d * 5 * u, ang = Math.atan2(dy, dx), hl = 13 * u;
+        const ex = tx - Math.cos(ang) * hl * 0.8, ey = ty - Math.sin(ang) * hl * 0.8;
+        if (Math.hypot(ex - sx, ey - sy) > 2 * u && (ex - sx) * dx + (ey - sy) * dy > 0) {
+          ctx.lineCap = 'round'; ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 6 * u; ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(ex, ey); ctx.stroke();
+          ctx.strokeStyle = S.primary; ctx.lineWidth = 2.6 * u; ctx.stroke(); ctx.lineCap = 'butt';
+        }
+        ctx.save(); ctx.translate(tx, ty); ctx.rotate(ang); ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-hl, -hl * 0.42); ctx.lineTo(-hl, hl * 0.42); ctx.closePath();
+        ctx.lineJoin = 'round'; ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 3 * u; ctx.stroke(); ctx.fillStyle = S.primary; ctx.fill(); ctx.restore();
+      }
+      if (!forExport) hits.push({ id: L.id, kind: 'tip', x: tx, y: ty, r: 12 * u + 6 });
+    }
+    if (!title) { ctx.fillStyle = 'rgba(255,255,255,0.97)'; ctx.strokeStyle = RULE; ctx.lineWidth = u; roundRect(ctx, box[0], box[1], bw, bh, Math.min(bh / 2, 16 * u)); ctx.fill(); ctx.stroke(); }
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+    lines.forEach((t, i) => {
+      const y = box[1] + padY + lh * (i + 0.5) + u, tt = title ? t.toUpperCase() : t;
+      if (title) { ctx.lineWidth = 6 * u; ctx.strokeStyle = 'rgba(255,255,255,0.88)'; ctx.strokeText(tt, cx, y); ctx.fillStyle = S.primary; } else ctx.fillStyle = INK;
+      ctx.fillText(tt, cx, y);
+    });
+    setSpacing(ctx, 0); ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    if (!forExport) {
+      hits.push({ id: L.id, kind: 'label', box: [box[0] - 4, box[1] - 4, box[2] + 4, box[3] + 4] });
+      // Handles while laying out: a dashed frame says "drag me"; a ring marks the arrow tip.
+      if (currentStep === 'layout') {
+        ctx.setLineDash([4 * u, 3 * u]); ctx.strokeStyle = 'rgba(31,120,168,0.7)'; ctx.lineWidth = u; ctx.strokeRect(box[0] - 3 * u, box[1] - 3 * u, bw + 6 * u, bh + 6 * u); ctx.setLineDash([]);
+        if (L.arrow) { ctx.beginPath(); ctx.arc(L.ax * W, L.ay * H, 6 * u, 0, Math.PI * 2); ctx.strokeStyle = '#1f78a8'; ctx.lineWidth = 1.6 * u; ctx.stroke(); }
+      }
+    }
+  });
+  if (!forExport) labelHits = hits;
+}
 function drawOverlay(ctx, k, forExport) {
   ctx.save(); ctx.scale(k, k); if (!forExport) ctx.clearRect(0, 0, W, H);
   const K = kit(ctx, W, H), { u, m, font, narrow } = K;
@@ -1047,6 +1093,7 @@ function drawOverlay(ctx, k, forExport) {
   });
   // Drawn after the callouts so a tick never hides under a callout box.
   if (S.elevTicks) drawElevTicks(ctx, K, headBottom, footTop, boxes);
+  drawLabels(ctx, K, forExport);
   ctx.restore();
 }
 
@@ -1146,25 +1193,108 @@ function loop(now) {
   if (S.view === '3d') { renderer.render(scene, camera); drawOverlay(ov.getContext('2d'), DPR, false); syncCamUI(); }
   requestAnimationFrame(loop);
 }
+// One export canvas at the chosen size. layer "scene" is the WebGL render alone on transparent;
+// "annotations" is the overlay alone (both for designers); "figure" is the two together.
+function figureCanvas(view, layer = 'figure') {
+  const f = FORMATS[S.format], out = document.createElement('canvas'); out.width = f.w; out.height = f.h; const ctx = out.getContext('2d');
+  if (view === 'section') { ctx.scale(f.w / W, f.h / H); drawSection(ctx, W, H, true); return out; }
+  const k = f.w / W; tween = null; controls.update(); placeRibbons();
+  if (layer !== 'annotations') {
+    const bg = scene.background; if (layer === 'scene') scene.background = null; // the renderer has alpha, so this clears to transparent
+    renderer.setPixelRatio(k); renderer.setSize(W, H, false); renderer.render(scene, camera);
+    ctx.drawImage(glCanvas, 0, 0, f.w, f.h);
+    scene.background = bg; renderer.setPixelRatio(DPR); renderer.setSize(W, H, false); renderer.render(scene, camera);
+  }
+  if (layer !== 'scene') drawOverlay(ctx, k, true);
+  return out;
+}
+const fileSlug = () => (S.title.split('·')[0].trim() || 'figure').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'figure';
+function downloadURL(url, name) { const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); }
 function exportPNG(opts = {}) {
   if (!G) throw new Error('Nothing to export yet: add a collar file and an assay file.');
   const view = opts.view === 'section' ? 'section' : opts.view === '3d' ? '3d' : S.view, f = FORMATS[S.format];
-  const out = document.createElement('canvas'); out.width = f.w; out.height = f.h; const ctx = out.getContext('2d');
-  if (view === 'section') { ctx.scale(f.w / W, f.h / H); drawSection(ctx, W, H, true); }
-  else {
-    const k = f.w / W; tween = null; controls.update(); placeRibbons();
-    renderer.setPixelRatio(k); renderer.setSize(W, H, false); renderer.render(scene, camera);
-    ctx.drawImage(glCanvas, 0, 0, f.w, f.h); drawOverlay(ctx, k, true);
-    renderer.setPixelRatio(DPR); renderer.setSize(W, H, false);
-  }
-  const url = out.toDataURL('image/png');
-  if (opts.download) {
-    const a = document.createElement('a'), slug = (S.title.split('·')[0].trim() || 'figure').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-    a.href = url; a.download = `${slug || 'figure'}-${view === 'section' ? 'section' : '3d'}-${S.format}.png`; document.body.appendChild(a); a.click(); a.remove();
-  }
+  const url = figureCanvas(view).toDataURL('image/png');
+  if (opts.download) downloadURL(url, `${fileSlug()}-${view === 'section' ? 'section' : '3d'}-${S.format}.png`);
   status(`Exported ${view === 'section' ? 'section A–A′' : 'the 3D figure'} at ${f.w} × ${f.h} px.`);
   return url;
 }
+const canvasBlob = (c) => new Promise((resolve, reject) => c.toBlob((b) => (b ? resolve(b) : reject(new Error('The PNG could not be encoded.'))), 'image/png'));
+const blobDataURL = (b) => new Promise((resolve, reject) => { const r = new FileReader(); r.onload = () => resolve(r.result); r.onerror = () => reject(r.error); r.readAsDataURL(b); });
+// Designer handoff: the figure, its 3D render and annotations as separate transparent layers, the section,
+// and the settings, in one ZIP at the chosen size. PNGs are stored, not deflated: they are compressed already.
+const LAYER_FILES = { figure: 'figure.png', scene: 'scene.png', annotations: 'annotations.png', section: 'section.png', settings: 'figure-settings.json' };
+async function exportLayers(opts = {}) {
+  if (!G) throw new Error('Nothing to export yet: add a collar file and an assay file.');
+  const { zipSync } = await import('fflate'), f = FORMATS[S.format];
+  status(`Preparing layers at ${f.w} × ${f.h} px…`);
+  const bytes = async (c) => new Uint8Array(await (await canvasBlob(c)).arrayBuffer());
+  const png = { figure: await bytes(figureCanvas('3d')), scene: await bytes(figureCanvas('3d', 'scene')), annotations: await bytes(figureCanvas('3d', 'annotations')), section: await bytes(figureCanvas('section')) };
+  const settings = { ...getState(), layers: { ...LAYER_FILES, note: 'scene.png and annotations.png are transparent and stack (scene below) to make figure.png.' }, exportedAt: new Date().toISOString() };
+  const zip = zipSync({
+    ...Object.fromEntries(Object.entries(png).map(([k, v]) => [LAYER_FILES[k], [v, { level: 0 }]])),
+    [LAYER_FILES.settings]: new TextEncoder().encode(JSON.stringify(settings, null, 2)),
+  });
+  const blob = new Blob([zip], { type: 'application/zip' });
+  if (opts.download) { const url = URL.createObjectURL(blob); downloadURL(url, `${fileSlug()}-layers-${S.format}.zip`); setTimeout(() => URL.revokeObjectURL(url), 30000); }
+  status(`Layers ready: ${Object.keys(LAYER_FILES).length} files, ${(blob.size / 1048576).toFixed(1)} MB.`);
+  return opts.as === 'blob' ? blob : blobDataURL(blob);
+}
+$('export-layers').addEventListener('click', () => exportLayers({ download: true, as: 'blob' }).catch((e) => status(e.message)));
+
+// ============================================================
+// 8b. Send to the design desk (the Teams enquiry, with the figure and layers attached)
+// ============================================================
+// Same flow as /teams: POST the enquiry to /api/track, which answers with one signed upload URL per declared
+// file; each file is then PUT straight to storage. 204 means accepted without uploads (automated browsers).
+const DESK_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/, DESK_MAX_BYTES = 50 * 1024 * 1024;
+function teamsSessionId() {
+  try { let id = sessionStorage.getItem('em.teams.sid'); if (!id) { id = crypto.randomUUID().replace(/-/g, ''); sessionStorage.setItem('em.teams.sid', id); } return id; } catch { return crypto.randomUUID().replace(/-/g, ''); }
+}
+function deskMsg(text, kind) { const el = $('desk-msg'); el.textContent = text; el.className = `desk-msg ${kind || ''}`; el.hidden = !text; }
+let deskBusy = false;
+async function sendToDesignDesk(o = {}) {
+  const email = String(o.email ?? '').trim(), company = String(o.company ?? '').trim(), notes = String(o.notes ?? '').trim();
+  if (!DESK_EMAIL_RE.test(email)) throw new Error('Enter your work email so we can reply.');
+  if (!company) throw new Error('Enter your company name.');
+  if (!G) throw new Error('Nothing to send yet: add a collar file and an assay file.');
+  if (deskBusy) throw new Error('Already sending.');
+  deskBusy = true;
+  const step = (t) => { status(t); deskMsg(t, 'busy'); const b = $('desk-send'); b.disabled = true; b.textContent = t.replace(/…$/, '…'); };
+  try {
+    step('Preparing the figure and layers…');
+    const blobs = [['figure.png', await canvasBlob(figureCanvas('3d'))], ['layers.zip', await exportLayers({ as: 'blob' })]].filter(([, b]) => b.size <= DESK_MAX_BYTES);
+    step('Sending to the design desk…');
+    const body = { kind: 'team_enquiry', session_id: teamsSessionId(), email, company, materials: ['sections_3d'], service_level: 'not_sure',
+      message: `${notes}${notes ? ' ' : ''}(sent from Exploration Maps 3D)`, ref: '3d', files: blobs.map(([name, b]) => ({ name, size: b.size, type: b.type || (name.endsWith('.zip') ? 'application/zip' : 'image/png') })) };
+    const res = await fetch('/api/track', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).catch(() => null);
+    if (!res) throw new Error('No connection to the design desk. Check your internet and try again.');
+    if (res.status === 429) throw new Error('Too many requests from this connection. Please wait a few minutes, or email support@explorationmaps.com.');
+    if (!res.ok) throw new Error(res.status === 503 ? 'The design desk is not taking requests right now (error 503). Please try again later, or email support@explorationmaps.com.' : `The design desk could not take that (error ${res.status}). Please try again, or email support@explorationmaps.com.`);
+    const out = res.status === 200 ? await res.json().catch(() => ({})) : { uploads: null };
+    const uploaded = [], failed = [];
+    if (out.uploads) for (let i = 0; i < blobs.length; i++) {
+      const [name, b] = blobs[i], slot = out.uploads.find((x) => x?.name === name) || out.uploads[i];
+      if (!slot?.url) { failed.push(name); continue; }
+      step(`Uploading ${i + 1} of ${blobs.length}…`);
+      const up = await fetch(slot.url, { method: 'PUT', headers: { 'Content-Type': b.type || 'application/octet-stream', 'x-upsert': 'false' }, body: b }).catch(() => null);
+      (up?.ok ? uploaded : failed).push(name);
+    }
+    const msg = `Sent. We'll reply to ${email}.${failed.length ? ` ${failed.join(' and ')} did not upload; we'll ask for ${failed.length > 1 ? 'them' : 'it'} by email.` : ''}`;
+    status(msg); deskMsg(msg, 'ok'); $('desk').classList.add('sent');
+    window.gtag?.('event', 'teams_enquiry_sent', { materials: 1, files: uploaded.length, ref: '3d' });
+    return { ok: true, id: out.id || null, uploaded, failed, accepted: res.status };
+  } catch (e) {
+    status(e.message); deskMsg(e.message, 'bad'); throw e;
+  } finally { deskBusy = false; const b = $('desk-send'); b.disabled = false; b.textContent = 'Send figure and layers'; }
+}
+$('desk').addEventListener('submit', (e) => {
+  e.preventDefault();
+  ['desk-email', 'desk-company'].forEach((id) => $(id).removeAttribute('aria-invalid'));
+  const email = $('desk-email').value, company = $('desk-company').value;
+  if (!DESK_EMAIL_RE.test(email.trim())) { deskMsg('Enter your work email so we can reply.', 'bad'); $('desk-email').setAttribute('aria-invalid', 'true'); $('desk-email').focus(); return; }
+  if (!company.trim()) { deskMsg('Enter your company name.', 'bad'); $('desk-company').setAttribute('aria-invalid', 'true'); $('desk-company').focus(); return; }
+  sendToDesignDesk({ email, company, notes: $('desk-notes').value }).catch(() => {});
+});
 $('export-3d').addEventListener('click', () => exportPNG({ view: '3d', download: true }));
 $('export-section').addEventListener('click', () => exportPNG({ view: 'section', download: true }));
 
@@ -1504,6 +1634,69 @@ function setFigureSize(key) {
   return getState();
 }
 
+// Text labels
+const LABEL_SIZES = ['title', 'normal'];
+const clamp01 = (v, d) => (Number.isFinite(+v) && v !== null && v !== '' ? Math.max(0, Math.min(1, +v)) : d);
+function labelPatch(L, o) {
+  if (o.text !== undefined) { const t = String(o.text).trim(); if (!t) throw new Error('A label needs some text.'); L.text = t.slice(0, 200); }
+  if (o.size !== undefined) { if (!LABEL_SIZES.includes(o.size)) throw new Error('size must be "title" or "normal".'); L.size = o.size; }
+  if (o.x !== undefined) L.x = clamp01(o.x, L.x); if (o.y !== undefined) L.y = clamp01(o.y, L.y);
+  if (o.arrow !== undefined) L.arrow = !!o.arrow;
+  if (o.ax !== undefined) L.ax = clamp01(o.ax, L.ax); if (o.ay !== undefined) L.ay = clamp01(o.ay, L.ay);
+}
+function addLabel(o = {}) {
+  const n = S.labels.reduce((mx, l) => Math.max(mx, +String(l.id).replace(/\D/g, '') || 0), 0) + 1;
+  const L = { id: `L${n}`, text: '', size: 'normal', x: 0.5, y: 0.5, arrow: false, ax: null, ay: null };
+  labelPatch(L, { size: 'normal', ...o, text: o.text ?? '' });
+  if (L.ax === null) L.ax = Math.min(0.97, L.x + 0.1); if (L.ay === null) L.ay = Math.min(0.97, L.y + 0.14);
+  S.labels.push(L); renderLabelList(); schedulePublish(); status(`Label "${L.text}" added. Drag it on the preview to place it.`);
+  return L.id;
+}
+function updateLabel(id, o = {}) {
+  const L = S.labels.find((l) => l.id === id); if (!L) throw new Error(`No label "${id}". Labels: ${S.labels.map((l) => l.id).join(', ') || 'none'}.`);
+  labelPatch(L, o); renderLabelList(); schedulePublish(); return getState();
+}
+function removeLabel(id) {
+  if (!S.labels.some((l) => l.id === id)) throw new Error(`No label "${id}".`);
+  S.labels = S.labels.filter((l) => l.id !== id); renderLabelList(); schedulePublish(); return getState();
+}
+function renderLabelList() {
+  const el = $('label-list');
+  el.innerHTML = S.labels.map((L) => `<div class="label-row"><input type="text" data-lt="${L.id}" value="${esc(L.text)}" aria-label="Text of label ${L.id}">`
+    + `<label class="check"><input type="checkbox" data-la="${L.id}" ${L.arrow ? 'checked' : ''}>Arrow</label>`
+    + `<button class="btn" type="button" data-ld="${L.id}" aria-label="Delete label ${esc(L.text)}">Delete</button></div>`).join('');
+  el.querySelectorAll('[data-lt]').forEach((i) => i.addEventListener('change', () => { try { updateLabel(i.dataset.lt, { text: i.value }); } catch (e) { status(e.message); } }));
+  el.querySelectorAll('[data-la]').forEach((i) => i.addEventListener('change', () => updateLabel(i.dataset.la, { arrow: i.checked })));
+  el.querySelectorAll('[data-ld]').forEach((b) => b.addEventListener('click', () => removeLabel(b.dataset.ld)));
+}
+$('lab-add').addEventListener('click', () => {
+  const text = $('lab-text').value.trim(); if (!text) { status('Type the label text first.'); $('lab-text').focus(); return; }
+  showView('3d'); addLabel({ text, size: $('lab-size').value, arrow: $('lab-arrow').checked }); $('lab-text').value = '';
+});
+$('lab-text').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); $('lab-add').click(); } });
+// Dragging: caught on the frame in the capture phase, before OrbitControls on the canvas sees it, and only
+// when the pointer is on a label or an arrow tip; anywhere else the camera orbits as usual.
+let labelDrag = null;
+function labelAt(e) {
+  const r = frameEl.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+  for (let i = labelHits.length - 1; i >= 0; i--) { const h = labelHits[i]; if (h.kind === 'tip' ? Math.hypot(x - h.x, y - h.y) <= h.r : x >= h.box[0] && x <= h.box[2] && y >= h.box[1] && y <= h.box[3]) return { h, x, y }; }
+  return null;
+}
+frameEl.addEventListener('pointerdown', (e) => {
+  if (S.view !== '3d' || e.button > 0) return; const hit = labelAt(e); if (!hit) return;
+  const L = S.labels.find((l) => l.id === hit.h.id); if (!L) return;
+  e.stopPropagation(); e.preventDefault();
+  labelDrag = { L, tip: hit.h.kind === 'tip', dx: hit.x - (hit.h.kind === 'tip' ? L.ax : L.x) * W, dy: hit.y - (hit.h.kind === 'tip' ? L.ay : L.y) * H, pid: e.pointerId };
+  try { frameEl.setPointerCapture(e.pointerId); } catch { /* synthetic events */ }
+}, true);
+frameEl.addEventListener('pointermove', (e) => {
+  if (!labelDrag) { glCanvas.style.cursor = S.view === '3d' && labelAt(e) ? 'move' : ''; return; }
+  const r = frameEl.getBoundingClientRect(), x = clamp01((e.clientX - r.left - labelDrag.dx) / W, 0.5), y = clamp01((e.clientY - r.top - labelDrag.dy) / H, 0.5);
+  if (labelDrag.tip) { labelDrag.L.ax = x; labelDrag.L.ay = y; } else { labelDrag.L.x = x; labelDrag.L.y = y; }
+}, true);
+const endDrag = () => { if (labelDrag) { labelDrag = null; schedulePublish(); } };
+frameEl.addEventListener('pointerup', endDrag, true); frameEl.addEventListener('pointercancel', endDrag, true);
+
 // Format examples come from the sample files themselves.
 (() => { const s = sampleFiles(), head = (t, n) => t.split('\n').slice(0, n).join('\n');
   $('fmt-collar').textContent = `Collars\n${head(s[0].text, 4)}`; $('fmt-survey').textContent = `Surveys\n${head(s[1].text, 4)}`; $('fmt-assay').textContent = `Assays\n${head(s[2].text, 5)}`; })();
@@ -1528,6 +1721,7 @@ function getState() {
       dem: realT.dem ? (realT.dem.ok ? `z${realT.dem.z}, ${realT.dem.tiles} tiles` : `failed: ${realT.dem.error}`) : null,
       imagery: realT.img ? (realT.img.ok ? `z${realT.img.z}, ${realT.img.tiles} tiles` : `failed: ${realT.img.error}`) : null, imageryShown: imageryShown(), note: G?.terrainNote || null, credits: G ? terrainCredits(true) : [] },
     camera: G ? getCam() : null, section: { secAz: S.secAz, secW: S.secW, lookingAz: ((S.secAz - 90) % 360 + 360) % 360 },
+    labels: S.labels.map((l) => ({ ...l })),
     display: { walls: S.walls, ids: S.ids, inset: S.inset, surface: S.surf, ribbons: S.ribbons, traceWidth: S.traceWidth, pendingLabels: S.pendingLabels, pendingNoAssays: S.pendingNoAssays, elevTicks: S.elevTicks }, meshes: S.meshes,
     figureSize: { key: S.format, width: f.w, height: f.h, label: f.label }, figureSizes: Object.fromEntries(Object.entries(FORMATS).map(([k, v]) => [k, `${v.label}, ${v.w}×${v.h}`])),
   };
@@ -1566,6 +1760,10 @@ JavaScript API (run in the page console or via your agent's evaluate tool):
                                   Promise. The coordinate system of the files; loads real terrain
                                   (AWS Terrain Tiles) and, for satellite/muted, Esri imagery
   EM3D.terrainReady()             Promise; resolves with the state once tiles have loaded or failed
+  EM3D.addLabel({text, x, y, size: "title" | "normal", arrow, ax, ay})   returns the new id.
+                                  x, y (and the arrow tip ax, ay) are 0-1 across and down the frame,
+                                  so a label lands in the same place at every size. 3D figure only
+  EM3D.updateLabel(id, {...})     EM3D.removeLabel(id)
   EM3D.setCallout(holeId, {show, line1, line2, incl: false})   null resets a field
   EM3D.setCamera({view: "a" | "b" | "low" | "plan"}) or ({azimuth, plunge, zoom})
   EM3D.setFigureSize("slide" | "release" | "square" | "portrait" | "a4")
@@ -1573,6 +1771,12 @@ JavaScript API (run in the page console or via your agent's evaluate tool):
   EM3D.showView("3d" | "section")
   EM3D.exportPNG({view: "3d" | "section", download: false})   returns a PNG data URL;
                                   download: true also saves the file
+  EM3D.exportLayers({download: false, as: "base64" | "blob"})   Promise. A ZIP for designers at the
+                                  figure size: figure.png, scene.png (3D alone, transparent),
+                                  annotations.png (overlay alone, transparent), section.png and
+                                  figure-settings.json. Returns a data URL (or a Blob)
+  EM3D.sendToDesignDesk({email, company, notes})   Promise. Sends the figure and layers to the
+                                  Exploration Maps design desk. Only when the user asks to
 
 Every setter returns the new state. The state is also kept as JSON in
 <script id="em3d-state">, and an "em3d:change" event fires on window after each change.
@@ -1595,6 +1799,7 @@ window.EM3D = Object.freeze({
   setCamera: call((o = {}) => { if (!G) throw new Error('Load data first.'); showView('3d'); if (o.view) { if (!VIEWS[o.view]) throw new Error('view must be a, b, low or plan.'); applyView(o.view, true); } else setCamera(o, true); syncCamUI(); }),
   setFigureSize, showStep: call(showStep), showView: call(showView), exportPNG,
   setCRS, terrainReady: async () => { await (realT.promise || Promise.resolve()); return getState(); },
+  addLabel, updateLabel, removeLabel, exportLayers, sendToDesignDesk,
 });
 
 // ------------------------------------------------------------
@@ -1680,7 +1885,7 @@ window.EM3D = Object.freeze({ ...window.EM3D, help: () => PROJECT_HELP, getProje
 // ============================================================
 // 12. Start
 // ============================================================
-renderSizes(); syncBrandUI(); renderCRS();
+renderSizes(); syncBrandUI(); renderCRS(); renderLabelList();
 layoutFrame();
 loadSample();
 new ResizeObserver(() => { const c = G ? getCam() : null; layoutFrame(); if (c) setCamera(c, true); }).observe(stage);
