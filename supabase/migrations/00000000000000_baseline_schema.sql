@@ -233,23 +233,25 @@ alter table public.leads                enable row level security;
 
 -- Owner-scoped access. Every policy compares auth.uid() to the row's owner —
 -- a caller can never read or write another account's rows.
+-- Organizations and memberships: read and written only through the
+-- workspace RPCs and policies in 20261023100000_workspaces_properties.sql.
+-- The FOR ALL "own orgs" / "own memberships" policies that used to be
+-- created here let anyone add themselves to any organization; this block
+-- only removes them, so re-running the baseline cannot bring them back.
 drop policy if exists "own orgs" on public.organizations;
-create policy "own orgs" on public.organizations for all to authenticated
-  using (auth.uid() = owner_id) with check (auth.uid() = owner_id);
-
 drop policy if exists "own memberships" on public.organization_members;
-create policy "own memberships" on public.organization_members for all to authenticated
-  using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
+-- Personal maps only (org_id is null); company maps follow the workspace
+-- roles from 20261023100000.
 drop policy if exists "users select own projects" on public.projects;
 create policy "users select own projects" on public.projects for select to authenticated
-  using (auth.uid() = user_id);
+  using (auth.uid() = user_id and org_id is null);
 drop policy if exists "users update own projects" on public.projects;
 create policy "users update own projects" on public.projects for update to authenticated
-  using (auth.uid() = user_id) with check (auth.uid() = user_id);
+  using (auth.uid() = user_id and org_id is null) with check (auth.uid() = user_id and org_id is null);
 drop policy if exists "users delete own projects" on public.projects;
 create policy "users delete own projects" on public.projects for delete to authenticated
-  using (auth.uid() = user_id);
+  using (auth.uid() = user_id and org_id is null);
 -- NOTE: INSERT is deliberately NOT granted here. Project creation goes through
 -- create_cloud_project() so the plan quota is enforced transactionally
 -- (20260728000002).
@@ -313,7 +315,8 @@ revoke all on table public.projects, public.templates, public.account_settings,
 grant select, update, delete on table public.projects to authenticated;
 grant select, insert, update, delete on table public.templates to authenticated;
 grant select, insert, update on table public.account_settings to authenticated;
-grant select, insert, update, delete on table public.organizations, public.organization_members to authenticated;
+-- organizations / organization_members: grants are set by 20261023100000
+-- (select only; every change goes through an RPC).
 
 -- shared_maps and admin_users: service role / RPC only.
 revoke all on table public.shared_maps, public.admin_users from anon, authenticated;
