@@ -58,6 +58,15 @@ export function refineRole(entry, role, name) {
     }
     return role;
   }
+  // A lithology legend: a code column and a name or colour column, no holes and no coordinates (QMD, Quartz
+  // monzodiorite, #e3b8c8).
+  if (!has('hole') && !has('east') && !has('north')) {
+    const code = n.findIndex((h) => LITHO_NAME.test(h)), name = n.findIndex((h, i) => i !== code && DESC_NAME.test(h)), color = n.findIndex((h) => /^(colou?r|hex|colou?r_hex|fill|rgb)$/.test(h));
+    if (code >= 0 && (name >= 0 || color >= 0) && share(rows, code, (v) => !isNum(v)) > 0.5) {
+      Object.assign(cols, { code }, name >= 0 ? { desc: name } : {}, color >= 0 ? { color } : {});
+      return 'lithlegend';
+    }
+  }
   if (has('east', 'north', 'elev') && !(role === 'collar' && (has('depth') || has('az') || has('dip')))) {
     const free = n.map((h, i) => ({ h, i })).filter(({ i }) => !used.has(i));
     const value = free.find(({ h, i }) => GEOPHYS_NAME.test(h) && share(rows, i, isNum) > 0.8)

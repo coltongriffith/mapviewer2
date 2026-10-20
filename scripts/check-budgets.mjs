@@ -75,7 +75,10 @@ const BUDGETS = {
   threeDJsGzipKb: 168,
   // /3d's own modules fetched on first use (the geology, geophysics and tag layers, the account
   // client). They never load with the page or the app, so they sit outside the page and app totals.
-  threeDLazyJsGzipKb: 32,
+  // 32 → 34 (Oct 2026, round 4): per-hole tags, grouped pending tags, callouts beside or bracketed on their
+  // hole, the lithology legend file, and the design desk moved out of the page into desk.js (1.8 kB) to
+  // keep the page inside its budget.
+  threeDLazyJsGzipKb: 34,
   // The /3d grade-shell worker (composites estimate and marching cubes) is its own chunk, fetched only
   // when a shell is turned on. Vite emits workers outside the manifest graph, so it is found from the
   // page's chunks (see below) and budgeted here rather than in the page or the app totals.
