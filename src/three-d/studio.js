@@ -1181,6 +1181,86 @@ window.EM3D = Object.freeze({
   setFigureSize, showStep: call(showStep), showView: call(showView), exportPNG,
 });
 
+// ------------------------------------------------------------
+// Project snapshots: a whole figure as plain data, for saving to an account
+// (src/three-d/account.js) and reopening. Generic over S, so style fields
+// added later are saved without changing this block. Images (the logo)
+// travel as data URLs; anything else that is not plain data is left out.
+// ------------------------------------------------------------
+function toPlain(v, depth = 0) {
+  if (v === null || typeof v === 'string' || typeof v === 'boolean') return v;
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+  if (typeof v !== 'object' || depth > 12) return undefined;
+  if (v instanceof HTMLImageElement) return { $image: v.currentSrc || v.src };
+  if (v instanceof HTMLCanvasElement) { try { return { $image: v.toDataURL('image/png') }; } catch { return undefined; } }
+  if (Array.isArray(v)) return v.map((x) => { const p = toPlain(x, depth + 1); return p === undefined ? null : p; });
+  const proto = Object.getPrototypeOf(v); if (proto !== Object.prototype && proto !== null) return undefined;
+  const out = {}; for (const [k, x] of Object.entries(v)) { const p = toPlain(x, depth + 1); if (p !== undefined) out[k] = p; }
+  return out;
+}
+const S_DEFAULTS = toPlain(S);
+const isImg = (v) => v && typeof v === 'object' && typeof v.$image === 'string';
+const loadImg = (src) => new Promise((resolve, reject) => { const img = new Image(); img.onload = () => resolve(img); img.onerror = () => reject(new Error('A saved image could not be loaded.')); img.src = src; });
+function getProject() {
+  return {
+    v: 1, app: 'Exploration Maps 3D', settings: toPlain(S), camera: G ? getCam() : null, usingSample, secSet: !!refresh.secSet,
+    // Raw text, plus any file type or column the user picked by hand.
+    files: files.map((f) => ({ name: f.name, text: f.text, role: f.role, cols: f.cols ? { ...f.cols } : undefined })),
+  };
+}
+// A short fingerprint of every file's raw text, so a replaced file whose
+// summary (name, rows, columns) is unchanged still counts as unsaved work.
+// Hashed once per text: files keep their string, so later calls are lookups.
+const digestCache = new WeakMap();
+function fileDigest(f) {
+  const hit = digestCache.get(f);
+  if (hit && hit.text === f.text) return hit.d;
+  let h = 0x811c9dc5; const t = f.text || '';
+  for (let i = 0; i < t.length; i++) { h ^= t.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+  const d = `${t.length}:${(h >>> 0).toString(36)}`;
+  digestCache.set(f, { text: f.text, d });
+  return d;
+}
+const filesDigest = () => files.map((f) => `${f.name}|${fileDigest(f)}`).join(',');
+async function loadProject(p) {
+  if (!p || p.v !== 1 || !p.settings || typeof p.settings !== 'object' || !Array.isArray(p.files)) throw new Error('loadProject expects a project from EM3D.getProject() ({ v: 1, settings, files }).');
+  if (p.files.some((f) => !f || typeof f.name !== 'string' || typeof f.text !== 'string')) throw new Error('Each project file needs a name and its text.');
+  const saved = { ...S_DEFAULTS, ...p.settings }, { logo, ...rest } = saved, imgs = {};
+  await Promise.all(Object.entries(rest).filter(([, v]) => isImg(v)).map(async ([k, v]) => { imgs[k] = await loadImg(v.$image); }));
+  if (isImg(logo)) await setLogo(logo.$image, { autoColor: false }); else await setLogo(null);
+  Object.entries(rest).forEach(([k, v]) => { S[k] = imgs[k] || (v && typeof v === 'object' ? structuredClone(v) : v); });
+  files = []; usingSample = !!p.usingSample; addFiles(p.files.map(({ name, text }) => ({ name, text })));
+  p.files.forEach((sf) => {
+    const f = files.find((x) => x.name === sf.name); if (!f) return;
+    if (f.header && sf.cols && typeof sf.cols === 'object') f.cols = Object.fromEntries(Object.entries(sf.cols).filter(([, i]) => Number.isInteger(i)));
+    if (sf.role && (sf.role === 'mesh' ? !!f.mesh : !!f.header && ROLE_LABEL[sf.role])) f.role = sf.role;
+    if (f.header) f.grades = f.role === 'assay' ? gradeCols(f.header, f.cols, f.rows) : [];
+  });
+  refresh.secSet = true; refresh(); refresh.secSet = !!p.secSet;
+  syncBrandUI(); renderSizes(); layoutFrame(); restyle(); showView(S.view === 'section' ? 'section' : '3d');
+  if (p.camera && G) setCamera(p.camera, true);
+  lastCamKey = ''; syncCamUI(); drawSectionView(); schedulePublish();
+  status(project && !project.empty ? `Figure opened · ${project.holes.length} holes.` : 'Figure opened. Add a collar file to see the holes.');
+  return getState();
+}
+// A small JPEG of the preview, for project lists.
+function getThumbnail(width = 320) {
+  if (!G) return null;
+  const h = Math.max(1, Math.round(width * H / W)), c = document.createElement('canvas'); c.width = width; c.height = h;
+  const ctx = c.getContext('2d'); ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, width, h);
+  if (S.view === 'section') ctx.drawImage(secCanvas, 0, 0, width, h);
+  else { renderer.render(scene, camera); ctx.drawImage(glCanvas, 0, 0, width, h); ctx.drawImage(ov, 0, 0, width, h); }
+  return c.toDataURL('image/jpeg', 0.8);
+}
+const PROJECT_HELP = `${HELP}
+
+Whole projects (to keep or move a figure):
+  EM3D.getProject()               { v: 1, settings, camera, files: [{name, text, role, cols}] }
+  EM3D.loadProject(project)       Promise. Reopens a getProject() result exactly
+  EM3D.getThumbnail(320)          small JPEG data URL of the preview`;
+$('ai-help').textContent = PROJECT_HELP;
+window.EM3D = Object.freeze({ ...window.EM3D, help: () => PROJECT_HELP, getProject, loadProject, getThumbnail, filesDigest });
+
 // ============================================================
 // 12. Start
 // ============================================================

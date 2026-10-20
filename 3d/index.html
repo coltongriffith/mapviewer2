@@ -120,6 +120,36 @@ input[type="color"] { width: 34px; height: 26px; border: 1px solid var(--slate-2
 .frame { position: absolute; background: #fff; box-shadow: 0 1px 2px rgba(20,33,38,0.08), 0 8px 24px rgba(20,33,38,0.12); overflow: hidden; }
 #gl, #ov, #section { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 #ov { pointer-events: none; }
+/* Account: Save and My 3D maps in the preview's top bar, a menu of saved figures, a sign-in dialog. */
+.toolbar:has(.acct) { justify-content: flex-start; }
+.toolbar > .frame-label { margin-left: auto; }
+.acct { display: inline-flex; gap: 6px; align-items: center; position: relative; }
+.acct .btn { padding: 6px 11px; }
+.acct-note { font-size: 12.5px; color: var(--slate-600); background: rgba(255,255,255,0.85); padding: 3px 8px; border-radius: 4px; white-space: nowrap; }
+.acct-menu, .acct-menu *, dialog.acct-dialog, dialog.acct-dialog * { box-sizing: border-box; }
+.acct-menu { position: absolute; top: calc(100% + 6px); right: 0; width: min(380px, calc(100vw - 32px)); background: #fff; border: 1px solid var(--slate-200); border-radius: 8px; box-shadow: 0 8px 24px rgba(20,33,38,0.16); padding: 12px; display: grid; gap: 10px; z-index: 8; }
+.acct-menu h3 { margin: 0; }
+.acct-menu-body { max-height: min(420px, 60vh); overflow-y: auto; }
+.acct-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.acct-item { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 4px 10px; align-items: center; border: 1px solid var(--slate-200); border-radius: 8px; padding: 6px; }
+.acct-item.current { border-color: var(--slate-500); }
+.acct-item img, .acct-noimg { width: 96px; height: 54px; object-fit: cover; border-radius: 4px; background: var(--slate-100); grid-row: span 2; display: block; }
+.acct-meta { display: grid; min-width: 0; font-size: 14px; }
+.acct-meta b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.acct-meta small { color: var(--slate-600); font-size: 12.5px; }
+.acct-acts { display: flex; gap: 6px; }
+.acct-acts .btn { padding: 3px 9px; font-size: 13px; }
+.btn.danger { border-color: var(--bad); color: var(--bad); }
+.acct-menu-foot { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; border-top: 1px solid var(--slate-100); padding-top: 10px; }
+.acct-who { margin-right: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; min-width: 0; flex: 1 1 120px; }
+.acct-menu-foot:not(:has(.acct-who)) { justify-content: flex-end; }
+dialog.acct-dialog { border: 1px solid var(--slate-200); border-radius: 10px; padding: 18px; width: min(420px, calc(100vw - 32px)); color: var(--slate-950); box-shadow: 0 16px 48px rgba(20,33,38,0.25); }
+dialog.acct-dialog::backdrop { background: rgba(20,33,38,0.35); }
+.acct-dialog h2 { margin: 0 0 4px; font-size: 20px; }
+.acct-dialog form, .acct-dialog .stack { display: grid; gap: 12px; }
+.acct-dialog .link { font: inherit; font-size: 13.5px; background: none; border: 0; padding: 0; color: var(--focus); text-decoration: underline; cursor: pointer; justify-self: start; }
+.acct-dialog input[type="email"], .acct-dialog input[type="password"] { font: inherit; font-size: 14px; color: var(--slate-950); background: #fff; border: 1px solid var(--slate-200); border-radius: 5px; padding: 6px 8px; width: 100%; }
+.acct-dialog .actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
 .status { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); z-index: 6; background: var(--slate-950); color: #fff; font-size: 13.5px; padding: 6px 12px; border-radius: 999px; max-width: 90%; text-align: center; }
 
 @media (max-width: 820px) {
@@ -129,6 +159,13 @@ input[type="color"] { width: 34px; height: 26px; border: 1px solid var(--slate-2
   .panel { order: 2; border-right: 0; border-top: 1px solid var(--slate-200); }
   .pane { overflow: visible; padding-right: max(18px, env(safe-area-inset-right, 0px)); }
   .frame-label { display: none; }
+  .toolbar { flex-wrap: wrap; }
+  .acct-note { display: none; }
+  .acct-menu-body { max-height: 30vh; }
+  /* The toolbar wraps here, so anchor the menu to its full width rather
+     than to the buttons, which may sit at the left edge. */
+  .acct { position: static; }
+  .acct-menu { left: 0; right: 0; width: auto; }
 }
 </style>
 </head>
@@ -293,6 +330,16 @@ input[type="color"] { width: 34px; height: 26px; border: 1px solid var(--slate-2
         <button class="tab" role="tab" id="view-section" aria-selected="false">Section A–A′</button>
       </div>
       <span class="frame-label" id="frame-label"></span>
+      <div class="acct">
+        <span class="acct-note" id="acct-note" aria-live="polite" hidden></span>
+        <button class="btn" type="button" id="acct-maps" aria-haspopup="true" aria-expanded="false" aria-controls="acct-menu">My 3D maps</button>
+        <button class="btn primary" type="button" id="acct-save">Save</button>
+        <div class="acct-menu" id="acct-menu" role="region" aria-label="My 3D maps" hidden>
+          <h3>My 3D maps</h3>
+          <div class="acct-menu-body" id="acct-menu-body"></div>
+          <div class="acct-menu-foot" id="acct-menu-foot"></div>
+        </div>
+      </div>
     </div>
     <div class="frame" id="frame">
       <canvas id="gl" aria-label="3D drilling figure"></canvas>
@@ -302,8 +349,36 @@ input[type="color"] { width: 34px; height: 26px; border: 1px solid var(--slate-2
     <div class="status" id="status" role="status" aria-live="polite">Sample project loaded · illustrative data</div>
   </main>
 </div>
+<dialog class="acct-dialog" id="acct-dialog" aria-labelledby="acct-title">
+  <form id="acct-form" novalidate>
+    <div><h2 id="acct-title">Save to your account</h2><p class="muted" id="acct-intro"></p></div>
+    <label class="field" id="acct-name-row"><span>Name</span><input type="text" id="acct-name" maxlength="200" autocomplete="off"></label>
+    <p class="bad" id="acct-error" role="alert" hidden></p>
+    <div class="stack" id="acct-signin">
+      <label class="field"><span>Email</span><input type="email" id="acct-email" autocomplete="email" inputmode="email"></label>
+      <label class="field" id="acct-password-row" hidden><span>Password</span><input type="password" id="acct-password" autocomplete="current-password"></label>
+      <div class="actions">
+        <button class="btn" type="button" id="acct-cancel">Cancel</button>
+        <button class="btn primary" type="submit" id="acct-link-btn">Email me a sign-in link</button>
+        <button class="btn primary" type="submit" id="acct-password-btn" hidden>Sign in with password</button>
+      </div>
+      <button class="link" type="button" id="acct-use-password">Use a password instead</button>
+      <p class="muted" id="acct-new">New to Exploration Maps? The link creates a free account.</p>
+    </div>
+    <div class="actions" id="acct-name-actions" hidden>
+      <button class="btn" type="button" id="acct-name-cancel">Cancel</button>
+      <button class="btn primary" type="submit" id="acct-name-save">Save</button>
+    </div>
+  </form>
+  <div class="stack" id="acct-sent" hidden>
+    <h2>Check your email</h2>
+    <p id="acct-sent-text"></p>
+    <div class="actions"><button class="btn primary" type="button" id="acct-sent-close">OK</button></div>
+  </div>
+</dialog>
 <!-- Current figure state as JSON, for AI assistants and browser agents (see the Export step). -->
 <script type="application/json" id="em3d-state">{}</script>
 <script type="module" src="/src/three-d/studio.js"></script>
+<script type="module" src="/src/three-d/account.js"></script>
 </body>
 </html>

@@ -1,0 +1,246 @@
+import { test, expect } from '@playwright/test';
+
+// Exploration Maps 3D (/3d): whole-figure snapshots, and Save / My 3D maps
+// against an in-memory Supabase (auth, REST and storage are all mocked; no
+// request leaves the browser). The account tests need the configured client
+// build (dist-auth-check, VITE_SUPABASE_URL=https://example.supabase.co).
+
+// three.js needs WebGL; headless Chromium provides it through SwiftShader.
+test.use({
+  launchOptions: {
+    args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'],
+    ...(process.env.PLAYWRIGHT_CHROMIUM_PATH ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH } : {}),
+  },
+});
+
+const uid = '00000000-0000-4000-8000-0000000003d1';
+const user = { id: uid, email: 'three-d@example.test', role: 'authenticated', aud: 'authenticated', created_at: '2026-10-01T00:00:00Z', email_confirmed_at: '2026-10-01T00:00:00Z', user_metadata: {}, app_metadata: {} };
+const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
+const token = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: uid, role: 'authenticated', exp: Math.floor(Date.now() / 1000) + 86400 })}.test-signature`;
+const session = { user, access_token: token, refresh_token: 'synthetic-refresh', expires_in: 86400, expires_at: Math.floor(Date.now() / 1000) + 86400, token_type: 'bearer' };
+const AUTH_KEY = 'sb-example-auth-token';
+
+async function fakeSupabase(page, { failUpload = false } = {}) {
+  const fake = { requests: [], otp: [], rows: new Map(), objects: new Map(), upserts: [], patches: [] };
+  await page.route('https://example.supabase.co/**', async (route) => {
+    const req = route.request(), url = new URL(req.url()), path = url.pathname, method = req.method();
+    fake.requests.push(`${method} ${path}`);
+    const json = (body, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+    if (path.startsWith('/auth/v1/')) {
+      const fn = path.split('/').pop();
+      if (fn === 'otp') { fake.otp.push({ email: req.postDataJSON().email, redirect: url.searchParams.get('redirect_to') }); return json({}); }
+      if (fn === 'token') return json(session);
+      if (fn === 'user') return json(user);
+      if (fn === 'logout') return route.fulfill({ status: 204 });
+      return json({});
+    }
+    if (path === '/rest/v1/three_d_projects') {
+      const single = (req.headers().accept || '').includes('vnd.pgrst.object');
+      if (method === 'GET') {
+        const id = url.searchParams.get('id');
+        const rows = [...fake.rows.values()].filter((r) => r.deleted_at === null && (!id || id === `eq.${r.id}`))
+          .sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+        return json(single ? rows[0] : rows);
+      }
+      if (method === 'POST') {
+        const body = req.postDataJSON(), row = Array.isArray(body) ? body[0] : body, prev = fake.rows.get(row.id), now = new Date().toISOString();
+        const full = { user_id: uid, created_at: prev?.created_at || now, ...prev, ...row, updated_at: now };
+        fake.rows.set(row.id, full); fake.upserts.push(structuredClone(full));
+        return json(single ? full : [full], 201);
+      }
+      if (method === 'PATCH') {
+        const id = (url.searchParams.get('id') || '').slice(3), r = fake.rows.get(id);
+        if (!r || r.deleted_at !== null) return json([]);
+        Object.assign(r, req.postDataJSON()); fake.patches.push(id);
+        return json([{ id }]);
+      }
+    }
+    if (path.startsWith('/storage/v1/object/')) {
+      const rest = decodeURIComponent(path.slice('/storage/v1/object/'.length));
+      if (method === 'POST' && rest.startsWith('list/')) {
+        const { prefix } = req.postDataJSON();
+        // Like Storage: the prefix's direct children, sub-folders with id null.
+        const seen = new Map();
+        for (const k of fake.objects.keys()) {
+          if (!k.startsWith(`three-d-files/${prefix}/`)) continue;
+          const [head, ...tail] = k.slice(`three-d-files/${prefix}/`.length).split('/');
+          if (!seen.has(head)) seen.set(head, { name: head, id: tail.length ? null : k });
+        }
+        return json([...seen.values()]);
+      }
+      if (method === 'POST') {
+        if (failUpload) return json({ statusCode: '500', error: 'Internal', message: 'Storage is down' }, 500);
+        fake.objects.set(rest, req.postData()); return json({ Key: rest, Id: rest });
+      }
+      if (method === 'GET') {
+        const text = fake.objects.get(rest);
+        return text === undefined ? json({ statusCode: '404', error: 'not_found', message: 'Object not found' }, 400) : route.fulfill({ status: 200, contentType: 'text/plain', body: text });
+      }
+      if (method === 'DELETE') { req.postDataJSON().prefixes.forEach((p) => fake.objects.delete(`three-d-files/${p}`)); return json([]); }
+    }
+    return json({});
+  });
+  return fake;
+}
+
+async function open3d(page, path = '/3d') {
+  await page.goto(path);
+  await page.waitForFunction(() => window.EM3D?.getState().ready);
+}
+const state = (page) => page.evaluate(() => window.EM3D.getState());
+
+test('a figure survives getProject, clearFiles and loadProject unchanged', async ({ page }) => {
+  await open3d(page);
+  const { before, after, cleared } = await page.evaluate(async () => {
+    const E = window.EM3D;
+    const c = document.createElement('canvas'); c.width = 40; c.height = 20;
+    const g = c.getContext('2d'); g.fillStyle = '#0b3954'; g.fillRect(0, 0, 20, 20); g.fillStyle = '#e4572e'; g.fillRect(20, 0, 20, 20);
+    await E.setLogo(c.toDataURL('image/png'));
+    E.setBrand({ company: 'Star Copper', title: 'STAR · RAILS', subtitle: 'Looking north', primary: '#0b3954', accent: '#e4572e', credit: false });
+    const ids = E.getState().project.holeIds;
+    E.setStyle({ coCount: 3, coMin: 15, secAz: 120, walls: false, surface: 0.6 });
+    E.setCallout(ids[3], { show: true, line1: 'Custom first line' });
+    E.setCamera({ azimuth: 200, plunge: 35, zoom: 130 });
+    E.setFigureSize('square');
+    const project = JSON.parse(JSON.stringify(E.getProject()));
+    const before = E.getState();
+    const cleared = E.clearFiles().files.length;
+    const after = await E.loadProject(project);
+    return { before, after, cleared };
+  });
+  expect(cleared).toBe(0);
+  expect(after).toEqual(before);
+  expect(after.brand).toMatchObject({ title: 'STAR · RAILS', hasLogo: true, credit: false });
+  expect(after.camera).toEqual({ azimuth: 200, plunge: 35, zoom: 130 });
+  expect(after.figureSize.key).toBe('square');
+});
+
+test.describe('account', () => {
+  test.skip(!process.env.E2E_ADMIN, 'Requires the configured client build with isolated auth fixtures');
+  // Software WebGL and several page loads per test: allow more than the default minute.
+  test.setTimeout(150_000);
+
+  test('signed out: Save asks to sign in, keeps the figure across the email link, then saves it', async ({ page }) => {
+    const fake = await fakeSupabase(page);
+    await open3d(page);
+    expect(fake.requests).toEqual([]); // supabase-js is not even loaded for a signed-out visitor
+    await page.evaluate(() => window.EM3D.setBrand({ title: 'STAR · RAILS ZONE' }));
+
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'Save to your account' });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByLabel('Name')).toHaveValue('STAR · RAILS ZONE');
+    await dialog.getByLabel('Name').fill('Rails zone 3D');
+    await dialog.getByLabel('Email').fill(user.email);
+    await dialog.getByRole('button', { name: 'Email me a sign-in link' }).click();
+    await expect(page.getByRole('heading', { name: 'Check your email' })).toBeVisible();
+    expect(fake.otp).toEqual([{ email: user.email, redirect: `${new URL(page.url()).origin}/3d` }]);
+    expect(fake.upserts).toHaveLength(0);
+
+    // Back on /3d before the link is used: the figure comes back, unsaved.
+    await open3d(page);
+    await expect.poll(async () => (await state(page)).brand.title).toBe('STAR · RAILS ZONE');
+    await expect(page.locator('#status')).toContainText('Sign in to finish saving it');
+    expect(fake.upserts).toHaveLength(0);
+
+    // The email link: the session lands in storage and /3d opens fresh.
+    await page.evaluate(([k, s]) => localStorage.setItem(k, JSON.stringify(s)), [AUTH_KEY, session]);
+    await open3d(page);
+    await expect.poll(() => fake.upserts.length).toBe(1);
+    const saved = fake.upserts[0];
+    expect(saved.name).toBe('Rails zone 3D');
+    expect(saved.settings.settings.title).toBe('STAR · RAILS ZONE');
+    expect(saved.settings.files).toBeUndefined(); // file text goes to storage, not the row
+    expect(saved.thumbnail).toMatch(/^data:image\/jpeg;base64,/);
+    expect(saved.file_paths.map((f) => f.path.replace(/\/r[a-z0-9]+\//, '/'))).toEqual(saved.file_paths.map((f) => `${uid}/${saved.id}/${f.name}`));
+    expect([...fake.objects.keys()].sort()).toEqual(saved.file_paths.map((f) => `three-d-files/${f.path}`).sort());
+    await expect(page.locator('#acct-note')).toHaveText(/^Saved /);
+    expect((await state(page)).brand.title).toBe('STAR · RAILS ZONE');
+    await expect.poll(() => page.evaluate(() => localStorage.getItem('em3d.pendingSave.v1.flag'))).toBeNull();
+    expect(new URL(page.url()).searchParams.get('project')).toBe(saved.id);
+
+    // A reload reopens the saved figure and does not save it again.
+    await open3d(page, `/3d?project=${saved.id}`);
+    await expect(page.locator('#acct-note')).toHaveText(/^Saved /);
+    expect((await state(page)).brand.title).toBe('STAR · RAILS ZONE');
+    expect(fake.upserts).toHaveLength(1);
+  });
+
+  test('signed in: save, Ctrl/Cmd+S, list, open and delete', async ({ page }) => {
+    const fake = await fakeSupabase(page);
+    await page.addInitScript(([k, s]) => localStorage.setItem(k, JSON.stringify(s)), [AUTH_KEY, session]);
+    await open3d(page);
+    await page.evaluate(() => window.EM3D.setBrand({ title: 'NORTH ZONE' }));
+
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'Save to your account' });
+    await expect(dialog.getByLabel('Name')).toHaveValue('NORTH ZONE');
+    await expect(dialog.getByLabel('Email')).toBeHidden();
+    await dialog.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect.poll(() => fake.upserts.length).toBe(1);
+    await expect(page.locator('#acct-note')).toHaveText(/^Saved /);
+    const id = fake.upserts[0].id;
+
+    await page.evaluate(() => window.EM3D.setBrand({ subtitle: 'Version two' }));
+    await expect(page.locator('#acct-note')).toHaveText('Unsaved changes');
+    await page.locator('body').press('Control+s');
+    await expect.poll(() => fake.upserts.length).toBe(2);
+    expect(fake.upserts[1]).toMatchObject({ id, name: 'NORTH ZONE' });
+    expect(fake.upserts[1].settings.settings.subtitle).toBe('Version two');
+    await expect(page.locator('#acct-note')).toHaveText(/^Saved /);
+    // Each save writes its own folder; the earlier save's files go once the row moves on.
+    const stored = [...fake.objects.keys()].map((k) => k.replace(/^three-d-files\//, '')).sort();
+    expect(stored).toEqual(fake.upserts[1].file_paths.map((f) => f.path).sort());
+    expect(new Set(fake.upserts[1].file_paths.map((f) => f.path.split('/')[2])).size).toBe(1);
+    expect(fake.upserts[1].file_paths[0].path).not.toBe(fake.upserts[0].file_paths[0].path);
+
+    // A corrected file with the same name, rows and columns is still unsaved work.
+    await page.evaluate(async () => {
+      const p = window.EM3D.getProject();
+      const f = p.files[p.files.length - 1];
+      f.text = f.text.replace(/\d(?=[^\d]*$)/, (d) => String((Number(d) + 1) % 10));
+      await window.EM3D.loadProject(p);
+    });
+    await expect(page.locator('#acct-note')).toHaveText('Unsaved changes');
+    await page.locator('body').press('Control+s');
+    await expect.poll(() => fake.upserts.length).toBe(3);
+    await expect(page.locator('#acct-note')).toHaveText(/^Saved /);
+
+    // Work on something else, then reopen the saved figure from the list.
+    await page.evaluate(() => { window.EM3D.loadSample(); window.EM3D.setBrand({ title: 'SOMETHING ELSE' }); });
+    await page.getByRole('button', { name: 'My 3D maps' }).click();
+    const menu = page.getByRole('region', { name: 'My 3D maps' });
+    await expect(menu.getByText('NORTH ZONE')).toBeVisible();
+    await expect(menu.locator('img')).toHaveAttribute('src', /^data:image\/jpeg/);
+    await expect(menu.getByText(user.email)).toBeVisible();
+    const open = menu.getByRole('button', { name: 'Open NORTH ZONE' });
+    await open.click();
+    await expect(open).toHaveText('Replace current figure?'); // unsaved work is not dropped on one click
+    await open.click();
+    await expect(menu).toBeHidden();
+    await expect.poll(async () => (await state(page)).brand).toMatchObject({ title: 'NORTH ZONE', subtitle: 'Version two' });
+
+    await page.getByRole('button', { name: 'My 3D maps' }).click();
+    const del = menu.getByRole('button', { name: 'Delete NORTH ZONE' });
+    await del.click();
+    await expect(del).toHaveText('Confirm delete');
+    await del.click();
+    await expect(menu.getByText('No saved 3D maps yet')).toBeVisible();
+    expect(fake.patches).toEqual([id]);
+    expect(fake.rows.get(id).deleted_at).toBeTruthy();
+    expect((await state(page)).brand.title).toBe('NORTH ZONE'); // the figure on screen stays
+  });
+
+  test('a failed save says so plainly and keeps the figure', async ({ page }) => {
+    const fake = await fakeSupabase(page, { failUpload: true });
+    await page.addInitScript(([k, s]) => localStorage.setItem(k, JSON.stringify(s)), [AUTH_KEY, session]);
+    await open3d(page);
+    await page.evaluate(() => window.EM3D.setBrand({ title: 'KEEP ME' }));
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await page.getByRole('dialog', { name: 'Save to your account' }).getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(page.locator('#status')).toContainText('Your figure is still here in this browser.');
+    expect(fake.upserts).toHaveLength(0); // no row points at files that were not stored
+    expect((await state(page)).brand.title).toBe('KEEP ME');
+    await expect(page.locator('#acct-note')).toBeHidden();
+  });
+});
