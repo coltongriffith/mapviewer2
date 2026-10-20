@@ -800,11 +800,18 @@ end;
 $$;
 
 -- ── 10. Moving between owners ────────────────────────────────────────────
--- May the caller take this row out of where it is? Its personal owner, or an
--- editor of the organization it is in.
-create or replace function public.ws_can_edit_source(p_org uuid, p_owner uuid)
+-- May the caller take this row out of where it is and into p_target_org?
+-- Its personal owner; an editor of its organization for a move between that
+-- organization's own properties; an admin of its organization for a move to
+-- another company (taking work out of a company is an admin decision, as in
+-- move_to_personal).
+create or replace function public.ws_can_edit_source(p_org uuid, p_owner uuid, p_target_org uuid)
 returns boolean language sql stable security definer set search_path = '' as $$
-  select case when p_org is null then p_owner = auth.uid() else public.has_org_role(p_org, 'editor') end
+  select case
+    when p_org is null then p_owner = auth.uid()
+    when p_org = p_target_org then public.has_org_role(p_org, 'editor')
+    else public.has_org_role(p_org, 'admin')
+  end
 $$;
 
 create or replace function public.move_to_property(p_kind text, p_id uuid, p_property uuid)
@@ -835,7 +842,7 @@ begin
   if p_kind = 'map' then
     select p.org_id, p.user_id into v_src_org, v_src_owner from public.projects p
      where p.id = p_id and p.deleted_at is null for update;
-    if not found or not public.ws_can_edit_source(v_src_org, v_src_owner) then
+    if not found or not public.ws_can_edit_source(v_src_org, v_src_owner, v_org) then
       raise exception 'NOT_FOUND' using errcode = 'P0002';
     end if;
     if v_src_org is distinct from v_org then
@@ -853,7 +860,7 @@ begin
   elsif p_kind = 'figure' then
     select t.org_id, t.user_id, t.file_paths into v_src_org, v_src_owner, v_paths from public.three_d_projects t
      where t.id = p_id and t.deleted_at is null for update;
-    if not found or not public.ws_can_edit_source(v_src_org, v_src_owner) then
+    if not found or not public.ws_can_edit_source(v_src_org, v_src_owner, v_org) then
       raise exception 'NOT_FOUND' using errcode = 'P0002';
     end if;
     if v_src_org is distinct from v_org then
@@ -867,7 +874,7 @@ begin
     -- tells the property which portfolio holds its claims.
     select m.org_id, m.user_id into v_src_org, v_src_owner from public.monitored_portfolios m
      where m.id = p_id for update;
-    if not found or not public.ws_can_edit_source(v_src_org, v_src_owner) then
+    if not found or not public.ws_can_edit_source(v_src_org, v_src_owner, v_org) then
       raise exception 'NOT_FOUND' using errcode = 'P0002';
     end if;
     update public.monitored_portfolios set org_id = v_org, property_id = p_property where id = p_id;
@@ -900,12 +907,14 @@ begin
     select t.org_id, t.user_id, t.file_paths into v_org, v_owner, v_paths from public.three_d_projects t
      where t.id = p_id and t.deleted_at is null for update;
   else
-    select m.org_id into v_org from public.monitored_portfolios m where m.id = p_id for update;
+    select m.org_id, m.user_id into v_org, v_owner from public.monitored_portfolios m where m.id = p_id for update;
   end if;
-  if v_org is null or not public.has_org_role(v_org, 'viewer') then
+  if v_org is null or not (public.has_org_role(v_org, 'viewer') or (p_kind = 'portfolio' and v_owner = v_user)) then
     raise exception 'NOT_FOUND' using errcode = 'P0002';
   end if;
-  if not public.has_org_role(v_org, 'admin') then
+  -- A portfolio's owner can always take it back (it is their plan and their
+  -- alert emails), even after leaving the company.
+  if not public.has_org_role(v_org, 'admin') and not (p_kind = 'portfolio' and v_owner = v_user) then
     raise exception 'forbidden: only an owner or admin can move work out of the workspace' using errcode = '42501';
   end if;
 
@@ -1241,6 +1250,13 @@ begin
   if i.expires_at <= now() then
     raise exception 'INVITE_EXPIRED: this invite has expired; ask for a new one' using errcode = 'P0001';
   end if;
+  -- The inviter must still be allowed to grant this role: an admin who was
+  -- demoted or removed cannot leave working admin invites behind.
+  if public.ws_role_rank((select m.role from public.organization_members m
+                          where m.org_id = i.org_id and m.user_id = i.invited_by))
+     < greatest(public.ws_role_rank('admin'), public.ws_role_rank(case when i.role = 'owner' then 'owner' else 'admin' end)) then
+    raise exception 'INVITE_INVALID: this invite is no longer valid; ask for a new one' using errcode = 'P0001';
+  end if;
 
   select lower(u.email::text), u.email_confirmed_at into v_email, v_confirmed from auth.users u where u.id = v_user;
   -- Never says which address the invite was for.
@@ -1540,7 +1556,7 @@ begin
     'public.save_cloud_project(uuid, text, jsonb, integer)', 'public.trash_cloud_project(uuid)',
     'public.restore_cloud_project(uuid)', 'public.create_org_project(uuid, text, jsonb)',
     'public.ws_storage_org(text)', 'public.ws_figure_root(uuid, uuid, uuid)',
-    'public.ws_rebase_figure_files(jsonb, text, text)', 'public.ws_can_edit_source(uuid, uuid)',
+    'public.ws_rebase_figure_files(jsonb, text, text)', 'public.ws_can_edit_source(uuid, uuid, uuid)',
     'public.move_to_property(text, uuid, uuid)', 'public.move_to_personal(text, uuid)',
     'public.ws_activity_items()', 'public.ws_activity_properties()', 'public.ws_activity_members()',
     'public.ws_activity_invites()', 'public.send_org_invite_email(uuid, text)',

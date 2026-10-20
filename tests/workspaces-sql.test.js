@@ -102,7 +102,7 @@ beforeAll(async () => {
   await db.exec(read('20261022100000_three_d_projects.sql'));
   await db.exec(MIGRATION);
   await db.exec(MIGRATION);
-});
+}, 120_000); // a fresh PGlite with pgcrypto, under a parallel suite, can take a while
 afterAll(async () => db?.close());
 
 // Run one statement as a signed-in user (or anon), as PostgREST would.
@@ -303,6 +303,14 @@ describe('roles', () => {
     await as(A, `select public.set_member_role($1, $2, 'owner')`, [S.org, O]);
     await as(O, `select public.set_member_role($1, $2, 'admin')`, [S.org, A]);
     expect(await val(A, `select public.org_role($1)`, [S.org])).toBe('admin');
+  });
+
+  it('voids an invite whose sender has since lost the right to send it', async () => {
+    const r = await invite(A, S.org, 'pro@star.test', 'editor');
+    await as(O, `select public.set_member_role($1, $2, 'editor')`, [S.org, A]);
+    await expect(as(P, `select public.accept_org_invite($1)`, [r.token])).rejects.toThrow(/INVITE_INVALID/);
+    await as(O, `select public.set_member_role($1, $2, 'admin')`, [S.org, A]);
+    await as(A, `select public.revoke_org_invite($1)`, [r.id]);
   });
 
   it('lets anyone leave, and admins remove editors and viewers', async () => {
@@ -586,6 +594,10 @@ describe('leaving the company', () => {
     expect((await as(E, `select name from storage.objects where name like 'org/%'`)).rows).toEqual([]);
     // Their personal maps are theirs as before.
     expect((await as(E, `select name from public.projects order by name`)).rows.map((r) => r.name)).toEqual(['Personal three', 'Renamed']);
+    // And the claim portfolio they linked is still theirs to take back.
+    await val(E, `select public.move_to_personal('portfolio', $1)`, [S.portfolio]);
+    expect(await one(E, `select org_id, property_id from public.monitored_portfolios where id = $1`, [S.portfolio])).toEqual({ org_id: null, property_id: null });
+    expect(await val(V, `select public.get_property_claims($1)`, [S.prop])).toEqual([]);
   });
 
   it('keeps one company out of another', async () => {
@@ -595,5 +607,19 @@ describe('leaving the company', () => {
     await expect(as(X, `select public.move_to_property('map', $1, $2)`, [S.map, pb.id])).rejects.toThrow(/NOT_FOUND/);
     await expect(as(X, `select public.create_org_project($1, 'x', '{}')`, [S.prop])).rejects.toThrow(/PROPERTY_NOT_FOUND/);
     expect(await val(X, `select public.has_org_role($1, 'viewer')`, [S.org])).toBe(false);
+    S.propB = pb.id;
+  });
+
+  it('takes work to another company only on an admin\'s say-so', async () => {
+    // A is in both companies: an admin here, an editor at the rival.
+    await su(`delete from public.org_invites where org_id = $1`, [S.orgB]);
+    const r = await invite(X, S.orgB, 'admin@star.test', 'editor');
+    await val(A, `select public.accept_org_invite($1)`, [r.token]);
+    await as(O, `select public.set_member_role($1, $2, 'editor')`, [S.org, A]);
+    await expect(as(A, `select public.move_to_property('map', $1, $2)`, [S.map, S.propB])).rejects.toThrow(/NOT_FOUND/);
+    await as(O, `select public.set_member_role($1, $2, 'admin')`, [S.org, A]);
+    await val(A, `select public.move_to_property('map', $1, $2)`, [S.map, S.propB]);
+    expect((await as(O, `select id from public.projects where id = $1`, [S.map])).rows).toEqual([]);
+    expect(await one(X, `select org_id, property_id from public.projects where id = $1`, [S.map])).toEqual({ org_id: S.orgB, property_id: S.propB });
   });
 });
