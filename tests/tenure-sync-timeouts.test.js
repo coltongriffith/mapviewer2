@@ -158,6 +158,8 @@ vi.mock('../scripts/tenure-sync/db.mjs', async (importOriginal) => {
     interruptedRun: async () => db.interrupted,
     clearStaging: async (_sb, runId) => { db.clearedStaging.push(runId); },
     clearStaleStaging: async () => 0,
+    // Plenty of room, nothing else running: the disk guard has its own tests.
+    importHeadroom: async () => ({ checked_at: new Date().toISOString(), database_bytes: 1, qc_claims_bytes: 0, tenure_bytes: 0 }),
     stageRows: async () => {},
     // The current run's promotion sees no batches. A resume of the PRIOR run
     // fails, which is the situation under test: on 2026-08-07 the resume got

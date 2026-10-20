@@ -5,8 +5,11 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import shp from 'shpjs';
 import JSZip from 'jszip';
+import { checkImportHeadroom, describeRefusal } from './lib/importHeadroom.mjs';
 export const SOURCE_URL = 'https://diffusion.mern.gouv.qc.ca/Public/GESTIM/telechargements/Province_shape/TITRES_ACTIFS_ACTIVE_TITLES.zip';
 export const BATCH_SIZE = 1000;
+// Re-check disk headroom this often while staging (~50 MB of jsonb per check).
+export const HEADROOM_CHECK_EVERY = 50;
 export function sourceDate(value) {
   if (value == null || value === '') return null;
   const d = new Date(value);
@@ -84,24 +87,59 @@ export async function prepareRows(buf) {
   console.log(`Validated ${rows.length} active titles with WGS84 polygon geometry.`);
   return rows;
 }
-export async function publishRows(rows, rpc) {
+// `guard(phase)` throws to stop the import; it runs inside the try, so a refusal
+// discards staging exactly like any other failure. See scripts/lib/importHeadroom.mjs.
+export async function publishRows(rows, rpc, { guard } = {}) {
   validateRows(rows);
   const run = await rpc('begin_qc_import', { p_expected_rows: rows.length });
   try {
     for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+      if (guard && i > 0 && (i / BATCH_SIZE) % HEADROOM_CHECK_EVERY === 0) await guard('publish');
       await rpc('stage_qc_import_batch', { p_run_id: run, p_batch_no: i / BATCH_SIZE, p_rows: rows.slice(i, i + BATCH_SIZE) });
       if (i % 25000 === 0) console.log(`Staged ${Math.min(i + BATCH_SIZE, rows.length)}/${rows.length}`);
     }
+    // Publication writes a whole new copy of qc_claims while the old one is still held.
+    if (guard) await guard('publish');
     const result = await rpc('publish_qc_import', { p_run_id: run });
     if (result !== rows.length) throw new Error(`Publication count mismatch: ${result}`);
     console.log(`Published ${result} active Quebec titles atomically.`);
   } catch (e) {
     // Only staging is discarded, including if a successful commit's response was lost.
-    await rpc('abort_qc_import', { p_run_id: run }).catch(() => {});
+    // Said out loud when it fails: on 2026-10-20 this was swallowed while a full
+    // staged copy sat in a full database. The workflow's cleanup step retries it.
+    await rpc('abort_qc_import', { p_run_id: run }).catch((err) => console.error(`abort_qc_import failed, staging left in place: ${err.message}`));
     throw e;
   }
 }
+// Discard the staging of an import that never reached its own abort (job cancelled,
+// timed out, or the database was down when it tried). Run by the workflow on failure.
+export async function abortStaleImport(rpc, readRunId) {
+  const runId = await readRunId();
+  if (!runId) { console.log('No Quebec import in progress; nothing to discard.'); return false; }
+  const discarded = await rpc('abort_qc_import', { p_run_id: runId });
+  console.log(discarded ? `Discarded staging for interrupted Quebec import ${runId}.` : `Import ${runId} had already finished.`);
+  return discarded;
+}
+function connect() {
+  const url = process.env.SUPABASE_URL, key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required');
+  const headers = { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' };
+  const call = async (path, init, label) => {
+    const r = await fetch(`${url}/rest/v1/${path}`, { headers, signal: AbortSignal.timeout(180000), ...init });
+    if (!r.ok) throw new Error(`${label}: HTTP ${r.status}: ${(await r.text()).slice(0, 250)}`);
+    return r.json();
+  };
+  return {
+    rpc: (name, args) => call(`rpc/${name}`, { method: 'POST', body: JSON.stringify(args) }, name),
+    readRunId: async () => (await call('qc_import_state?select=run_id', { method: 'GET' }, 'qc_import_state'))[0]?.run_id || null,
+  };
+}
 async function main() {
+  if (process.argv.includes('--abort-stale')) {
+    const { rpc, readRunId } = connect();
+    await abortStaleImport(rpc, readRunId);
+    return;
+  }
   const archiveInput = process.argv.indexOf('--archive');
   const buf = archiveInput >= 0 ? fs.readFileSync(process.argv[archiveInput + 1]) : await downloadActive(process.env.QC_CLAIMS_URL || SOURCE_URL);
   const archiveOutput = process.argv.indexOf('--archive-out');
@@ -110,13 +148,13 @@ async function main() {
   const out = process.argv.indexOf('--output');
   if (out >= 0) fs.writeFileSync(process.argv[out + 1], JSON.stringify(rows));
   if (process.argv.includes('--dry-run')) return;
-  const url = process.env.SUPABASE_URL, key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required');
-  const rpc = async (name, args) => {
-    const r = await fetch(`${url}/rest/v1/rpc/${name}`, { method: 'POST', headers: { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' }, body: JSON.stringify(args), signal: AbortSignal.timeout(180000) });
-    if (!r.ok) throw new Error(`${name}: HTTP ${r.status}: ${(await r.text()).slice(0, 250)}`);
-    return r.json();
+  const { rpc } = connect();
+  const guard = async (phase) => {
+    const headroom = await checkImportHeadroom(() => rpc('import_headroom', {}), { importer: 'qc', phase });
+    if (!headroom.ok) throw new Error(describeRefusal(headroom));
   };
-  await publishRows(rows, rpc);
+  // Before anything is staged, so a refusal leaves nothing behind.
+  await guard('preflight');
+  await publishRows(rows, rpc, { guard });
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main().catch(e => { console.error(e.message); process.exitCode = 1; });

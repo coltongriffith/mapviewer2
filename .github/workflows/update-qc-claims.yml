@@ -1,10 +1,16 @@
 name: Update Quebec Claims
 
 on:
-  # Quebec refreshes its public claims file every Monday; reload Tuesday 11:00 UTC
+  # Quebec refreshes its public claims file every Monday; reload early Tuesday
   # (after the source has been published) so our copy stays a few days fresh.
+  # 05:00 UTC, not 11:00: 11:00 is also the B.C. tenure full sync, and on
+  # 2026-10-20 GitHub delivered both 4.5 hours late in the same second; the two
+  # bulk imports together filled the database disk. 05:00 sits in the widest
+  # gap between the tenure crons (11, 15, 23 UTC) even when delivery is hours late.
+  # Cron timing is best-effort: the shared concurrency group below and the
+  # headroom check in the script are what actually keep them apart.
   schedule:
-    - cron: '0 11 * * 2'
+    - cron: '0 5 * * 2'
 
   # Allow manual trigger from the Actions tab (for testing / first load).
   workflow_dispatch:
@@ -13,7 +19,11 @@ permissions:
   contents: read
 
 concurrency:
-  group: qc-claims-refresh
+  # Shared with tenure-sync.yml: one bulk registry import against the database
+  # at a time, queued rather than cancelled. GitHub keeps only ONE pending run
+  # per group, so a third arrival replaces the waiting one; with the staggered
+  # crons that takes a manual dispatch while one import runs and one waits.
+  group: registry-db-import
   cancel-in-progress: false
 
 jobs:
@@ -41,4 +51,18 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           # Optional URL must still identify the official active-titles archive.
           QC_CLAIMS_URL:             ${{ secrets.QC_CLAIMS_URL }}
+          # Optional. Refuse to import when the database would pass this size
+          # (MB). Unset = 70% of an 8 GB disk; see scripts/lib/importHeadroom.mjs.
+          IMPORT_DB_SIZE_CEILING_MB: ${{ vars.IMPORT_DB_SIZE_CEILING_MB }}
         run: node scripts/update-qc-claims.js
+
+      # The script discards its own staging when it fails, but not when the job
+      # is cancelled or times out, or when the database is down at that moment
+      # (2026-10-20). Otherwise a full staged copy would sit until next week's run.
+      - name: Discard staging left by a failed or cancelled run
+        if: failure() || cancelled()
+        timeout-minutes: 5
+        env:
+          SUPABASE_URL:              ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: node scripts/update-qc-claims.js --abort-stale

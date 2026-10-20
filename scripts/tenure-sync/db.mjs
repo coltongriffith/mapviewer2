@@ -224,10 +224,54 @@ export async function* readStaged(sb, runId, batchSize = BATCH_SIZE) {
   }
 }
 
-/** Always called, on both the success and the abort path. */
-export async function clearStaging(sb, runId) {
-  const { error } = await sb.from('tenure_import_staging').delete().eq('import_run_id', runId);
-  if (error) console.warn(`[tenure-sync] could not clear staging for run ${runId}: ${error.message}`);
+/**
+ * Rows per staging DELETE. One run stages ~42,000 rows carrying ~77 MB of
+ * payload; deleting all of it in one statement can outrun the 60s
+ * service_role statement timeout, and this function only warns on failure —
+ * so a run that "cleared" its staging could leave every row behind. That is
+ * how 42,000 rows survived the 2026-10-20 incident. Batches of this size each
+ * finish in well under a second.
+ *
+ * DELETE rather than TRUNCATE on purpose: TRUNCATE needs an exclusive lock,
+ * and on 2026-10-20 one sat for over a minute against this table with no
+ * visible blocker while batched DELETEs went straight through.
+ */
+export const STAGING_DELETE_BATCH = 5000;
+
+/**
+ * Always called, on both the success and the abort path.
+ *
+ * Deletes in keyset batches on (import_run_id, id) — the staging index — and
+ * returns how many rows went, so callers can tell "nothing left" from "could
+ * not delete".
+ */
+export async function clearStaging(sb, runId, { batchSize = STAGING_DELETE_BATCH } = {}) {
+  let removed = 0;
+  for (;;) {
+    // The id that closes this batch: the batchSize-th staged row, or nothing
+    // when fewer than that remain and the last delete can take the rest.
+    const { data: edge, error: edgeErr } = await sb
+      .from('tenure_import_staging')
+      .select('id')
+      .eq('import_run_id', runId)
+      .order('id', { ascending: true })
+      .range(batchSize - 1, batchSize - 1);
+    if (edgeErr) {
+      console.warn(`[tenure-sync] could not clear staging for run ${runId}: ${edgeErr.message}`);
+      return removed;
+    }
+    let del = sb.from('tenure_import_staging').delete({ count: 'exact' }).eq('import_run_id', runId);
+    if (edge?.length) del = del.lte('id', edge[0].id);
+    const { count, error } = await del;
+    if (error) {
+      console.warn(`[tenure-sync] could not clear staging for run ${runId}: ${error.message}`);
+      return removed;
+    }
+    removed += count || 0;
+    // No edge means that was the remainder. A zero count with an edge would
+    // mean no progress; stop rather than spin.
+    if (!edge?.length || !count) return removed;
+  }
 }
 
 /**
@@ -239,40 +283,47 @@ export async function clearStaging(sb, runId) {
  * failures had grown the table to 84,641 rows, none of which any future run
  * would look at.
  *
- * Called only after a run SUCCEEDS. At that point the mirror is fully
- * promoted, so every earlier run's staging is definitionally dead: there is
- * nothing left for it to recover. Anything staged for a LATER run (a
- * concurrent job, however unlikely) is untouched.
+ * Called at the START of every run, after the resume attempt, and again after
+ * a run SUCCEEDS. Only sweeping on success meant a streak of failures stacked
+ * one province of staging per run, exactly when the database was least able
+ * to afford it; and a job killed outright (the 2026-10-20 run is still
+ * recorded as `running`) is never resumed, because interruptedRun only looks
+ * at `failed` runs. `keep` names the one prior run whose staging is still
+ * worth holding: one whose resume failed and may be retried.
+ *
+ * Anything staged for a LATER run (a concurrent job, however unlikely) is
+ * untouched: only rows created before this run started are considered.
  */
-export async function clearStaleStaging(sb, runId, runStartedAt) {
-  const { data: stale, error: findErr } = await sb
-    .from('tenure_import_runs')
-    .select('id')
-    .lt('started_at', runStartedAt)
-    .neq('id', runId);
-  if (findErr) {
-    console.warn(`[tenure-sync] could not look for stale staging: ${findErr.message}`);
-    return 0;
-  }
-  const ids = (stale || []).map((r) => r.id);
-  if (!ids.length) return 0;
-
+export async function clearStaleStaging(sb, runId, runStartedAt, { keep = [] } = {}) {
+  const spared = [runId, ...keep].filter(Boolean);
   let removed = 0;
-  // Chunked for the same reason loadOwnersFor is: these are UUIDs, and a
-  // whole run history in one `.in()` builds a URL the edge refuses.
-  for (const chunk of chunked(ids, 200)) {
+  // One leftover run per pass, cleared in batches. Bounded so a table that
+  // will not shrink cannot hold the run here.
+  for (let pass = 0; pass < 100; pass++) {
     const { data, error } = await sb
       .from('tenure_import_staging')
-      .delete()
-      .in('import_run_id', chunk)
-      .select('id');
+      .select('import_run_id')
+      .lt('created_at', runStartedAt)
+      .not('import_run_id', 'in', `(${spared.join(',')})`)
+      .order('id', { ascending: true })
+      .limit(1);
     if (error) {
-      console.warn(`[tenure-sync] could not clear stale staging: ${error.message}`);
+      console.warn(`[tenure-sync] could not look for stale staging: ${error.message}`);
       return removed;
     }
-    removed += (data || []).length;
+    if (!data?.length) return removed;
+    const cleared = await clearStaging(sb, data[0].import_run_id);
+    if (!cleared) return removed;
+    removed += cleared;
   }
   return removed;
+}
+
+/** Disk and concurrency snapshot for scripts/lib/importHeadroom.mjs. */
+export async function importHeadroom(sb) {
+  const { data, error } = await sb.rpc('import_headroom');
+  if (error) throw new Error(error.message);
+  return data;
 }
 
 // ── Tenures ────────────────────────────────────────────────────────────────
