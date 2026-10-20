@@ -13,6 +13,11 @@
 // file list, thumbnail) and the raw CSV/OBJ text in the private bucket
 // three-d-files under <uid>/<project id>/<file>. See
 // supabase/migrations/20261022100000_three_d_projects.sql.
+//
+// Company workspaces (20261023100000_workspaces_properties.sql): a figure
+// can belong to a property of the user's company instead. Its row then
+// carries org_id and property_id, its files live under org/<org>/<id>/, and
+// the database lets every member read it and editors and up save it.
 import { authRedirectUrl } from '../utils/authRedirect.js';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
@@ -57,6 +62,7 @@ function explain(err, doing) {
 
 // ── Lazy client ─────────────────────────────────────────────────────────────
 let clientPromise = null;
+let homes = null; // company workspaces for one signed-in user: { uid, promise } (see listHomes)
 function client() {
   if (!configured) {
     const e = plain(`Saving to an account is not available on this site right now. ${KEEP}`, null, 'NOT_CONFIGURED');
@@ -64,7 +70,12 @@ function client() {
   }
   if (!clientPromise) {
     clientPromise = import('@supabase/supabase-js')
-      .then(({ createClient }) => createClient(SUPABASE_URL, SUPABASE_KEY))
+      .then(({ createClient }) => {
+        const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
+        // Another account (or none) must never see the last one's companies.
+        try { sb.auth.onAuthStateChange((event) => { if (event !== 'TOKEN_REFRESHED') homes = null; }); } catch { /* the user-id key still guards */ }
+        return sb;
+      })
       .catch((err) => { clientPromise = null; throw explain(err, 'connect to your account'); });
   }
   return clientPromise;
@@ -113,6 +124,7 @@ export async function signOut() {
   const sb = await client();
   await sb.auth.signOut();
   current = null;
+  homes = null;
 }
 
 // ── Projects ────────────────────────────────────────────────────────────────
@@ -120,31 +132,76 @@ let current = null; // { id, name, savedAt } of the figure open in the editor
 
 const safeName = (name) => (String(name).replace(/[^\w.-]+/g, '_').replace(/^\.+/, '').slice(-120) || 'file');
 
+// ── Company workspaces ──────────────────────────────────────────────────────
+// The user's workspaces and their live properties, with the user's role.
+// Any failure means "no workspaces": the personal account works as before.
+// Cached per signed-in user; dropped on sign-in, sign-out and account change.
+export async function listHomes({ fresh = false } = {}) {
+  const u = await getUser().catch(() => null);
+  if (!u) return { orgs: [], properties: [] };
+  if (homes && homes.uid === u.id && !fresh) return homes.promise;
+  const promise = (async () => {
+    const sb = await client();
+    const { data: orgs, error } = await sb.rpc('get_my_workspaces');
+    if (error || !Array.isArray(orgs) || !orgs.length) return { orgs: [], properties: [] };
+    const { data: props } = await sb.from('properties').select('id, name, slug, org_id')
+      .in('org_id', orgs.map((o) => o.id)).is('deleted_at', null).order('name', { ascending: true });
+    const byId = new Map(orgs.map((o) => [o.id, o]));
+    const properties = (Array.isArray(props) ? props : []).filter((p) => byId.has(p.org_id))
+      .map((p) => ({ id: p.id, name: p.name, slug: p.slug, orgId: p.org_id, orgName: byId.get(p.org_id).name, role: byId.get(p.org_id).role }));
+    return { orgs, properties };
+  })().catch(() => ({ orgs: [], properties: [] }));
+  homes = { uid: u.id, promise };
+  return promise;
+}
+const canEdit = (role) => ['editor', 'admin', 'owner'].includes(role);
+async function homeOf(row) {
+  if (!row?.org_id) return null;
+  const { orgs, properties } = await listHomes();
+  const org = orgs.find((o) => o.id === row.org_id);
+  const prop = properties.find((p) => p.id === row.property_id);
+  return { orgId: row.org_id, propertyId: row.property_id || null, propertyName: prop?.name || null, orgName: org?.name || 'Company workspace', role: org?.role || 'viewer' };
+}
+
 export async function listProjects() {
-  const user = await requireUser('see your saved 3D maps');
+  await requireUser('see your saved 3D maps');
   const sb = await client();
+  // Row-level security returns the user's own figures and their companies'.
   const { data, error } = await sb.from(TABLE)
-    .select('id, name, thumbnail, created_at, updated_at')
-    .eq('user_id', user.id)
+    .select('id, name, thumbnail, created_at, updated_at, org_id, property_id')
     .is('deleted_at', null)
     .order('updated_at', { ascending: false })
     .limit(200);
   if (error) throw explain(error, 'load your saved 3D maps');
-  return (data || []).map((r) => ({ id: r.id, name: r.name, thumbnail: r.thumbnail || null, createdAt: r.created_at, updatedAt: r.updated_at }));
+  const list = [];
+  for (const r of data || []) {
+    list.push({ id: r.id, name: r.name, thumbnail: r.thumbnail || null, createdAt: r.created_at, updatedAt: r.updated_at, home: await homeOf(r) });
+  }
+  return list;
 }
 
-export async function saveProject(name, existingId) {
+/**
+ * @param {string} name
+ * @param {string|null} existingId  the figure to overwrite, or null for a new one
+ * @param {{orgId:string, propertyId:string, propertyName?:string, orgName?:string, role?:string}|null} [dest]
+ *   a company property for a new figure (an existing one stays where it is)
+ */
+export async function saveProject(name, existingId, dest = null) {
   const title = String(name || '').trim().slice(0, 200);
   if (!title) throw Object.assign(plain('Give the 3D map a name first.'), { plain: true });
   const user = await requireUser('save this 3D map');
   const sb = await client();
+  const home = existingId ? (current?.id === existingId ? current.home : null) : dest;
+  if (home && !canEdit(home.role)) {
+    throw Object.assign(plain(`You have view-only access to ${home.propertyName || home.orgName}, so this figure cannot be saved there. Use Save as new to keep a personal copy.`), { plain: true, code: 'READ_ONLY' });
+  }
   const em = studio();
   const { files, ...settings } = em.getProject();
   let thumbnail = null;
   try { thumbnail = em.getThumbnail(320); } catch { /* a list without a picture is fine */ }
   const id = existingId || crypto.randomUUID();
   const rev = `r${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
-  const root = `${user.id}/${id}`, dir = `${root}/${rev}`;
+  const root = home ? `org/${home.orgId}/${id}` : `${user.id}/${id}`, dir = `${root}/${rev}`;
   const used = new Set();
   const filePaths = files.map((f, i) => {
     let base = safeName(f.name);
@@ -160,12 +217,14 @@ export async function saveProject(name, existingId) {
       const { error } = await sb.storage.from(BUCKET).upload(filePaths[i].path, f.text, { upsert: false, contentType: 'text/plain;charset=utf-8' });
       if (error) throw error;
     }));
+    const row = { id, name: title, settings, file_paths: filePaths, thumbnail, updated_at: new Date().toISOString(), deleted_at: null };
+    if (home) Object.assign(row, { org_id: home.orgId, property_id: home.propertyId });
     const { data, error } = await sb.from(TABLE)
-      .upsert({ id, name: title, settings, file_paths: filePaths, thumbnail, updated_at: new Date().toISOString(), deleted_at: null }, { onConflict: 'id' })
+      .upsert(row, { onConflict: 'id' })
       .select('id, name, updated_at')
       .single();
     if (error) throw error;
-    current = { id: data.id, name: data.name, savedAt: data.updated_at };
+    current = { id: data.id, name: data.name, savedAt: data.updated_at, home };
   } catch (err) {
     // Best effort: this save's files are not referenced by any row.
     try { await sb.storage.from(BUCKET).remove(filePaths.map((p) => p.path)); } catch { /* leftovers are harmless */ }
@@ -194,7 +253,7 @@ export async function openProject(id) {
   const sb = await client();
   let project, row;
   try {
-    const res = await sb.from(TABLE).select('id, name, settings, file_paths, updated_at').eq('id', id).is('deleted_at', null).maybeSingle();
+    const res = await sb.from(TABLE).select('id, name, settings, file_paths, updated_at, org_id, property_id').eq('id', id).is('deleted_at', null).maybeSingle();
     if (res.error) throw res.error;
     row = res.data;
     if (!row) throw Object.assign(plain('That 3D map was not found. It may have been deleted.'), { plain: true });
@@ -216,7 +275,7 @@ export async function openProject(id) {
     try { await em.loadProject(backup); } catch { /* the editor keeps whatever it has */ }
     throw Object.assign(plain(`That 3D map could not be opened (${err.message}). The figure you had is back.`, err), { plain: true });
   }
-  current = { id: row.id, name: row.name, savedAt: row.updated_at };
+  current = { id: row.id, name: row.name, savedAt: row.updated_at, home: await homeOf(row) };
   return { ...current, state: em.getState() };
 }
 
@@ -311,8 +370,9 @@ function renderNote() {
   if (busy) { note.textContent = 'Saving…'; note.hidden = false; return; }
   if (!current) { note.hidden = true; return; }
   note.hidden = false;
-  note.textContent = dirty ? 'Unsaved changes' : `Saved ${fmtWhen(current.savedAt, { timeStyle: 'short' })}`;
-  note.title = dirty ? `Last saved ${when(current.savedAt)}` : `${current.name} · saved ${when(current.savedAt)}`;
+  const where = current.home ? ` · ${current.home.propertyName || current.home.orgName}${canEdit(current.home.role) ? '' : ' (view only)'}` : '';
+  note.textContent = (dirty ? 'Unsaved changes' : `Saved ${fmtWhen(current.savedAt, { timeStyle: 'short' })}`) + where;
+  note.title = dirty ? `Last saved ${when(current.savedAt)}${where}` : `${current.name} · saved ${when(current.savedAt)}${where}`;
 }
 function setUrlProject(id) {
   try {
@@ -324,7 +384,7 @@ function setUrlProject(id) {
 
 // Dialog: sign in (optionally saving afterwards), or name a first save.
 let dialogMode = null; // 'save-signin' | 'signin' | 'name'
-function openDialog(mode, { error = '', asNew = false } = {}) {
+function openDialog(mode, { error = '', asNew = false, toProperty = false } = {}) {
   const d = $('acct-dialog'); if (!d) return;
   dialogMode = mode;
   const saving = mode !== 'signin';
@@ -335,6 +395,8 @@ function openDialog(mode, { error = '', asNew = false } = {}) {
       ? 'Sign in to keep this figure in your Exploration Maps account and open it again later. It stays in this browser while you sign in.'
       : 'Sign in to see and open the 3D maps saved to your account.';
   $('acct-name-row').hidden = !saving;
+  const destRow = $('acct-dest-row');
+  if (destRow) { destRow.hidden = true; if (mode === 'name') fillDest(toProperty); }
   if (saving) { let t = ''; try { t = studio().getState().brand.title; } catch { /* default below */ } $('acct-name').value = (asNew && current ? `${current.name} (copy)` : current?.name) || t || 'Untitled 3D map'; }
   $('acct-signin').hidden = mode === 'name';
   $('acct-name-actions').hidden = mode !== 'name';
@@ -349,6 +411,28 @@ function openDialog(mode, { error = '', asNew = false } = {}) {
   if (!d.open) d.showModal();
   (mode === 'name' ? $('acct-name') : $('acct-email')).focus();
 }
+// "Save to": personal, or a property of a company the user edits for.
+async function fillDest(toProperty = false) {
+  const row = $('acct-dest-row'), sel = $('acct-dest');
+  if (!row || !sel) return;
+  const { properties } = await listHomes();
+  const editable = properties.filter((p) => canEdit(p.role));
+  if (!editable.length || dialogMode !== 'name') return;
+  const groups = new Map();
+  for (const p of editable) { if (!groups.has(p.orgName)) groups.set(p.orgName, []); groups.get(p.orgName).push(p); }
+  sel.innerHTML = '<option value="">My personal 3D maps</option>' + [...groups].map(([org, list]) =>
+    `<optgroup label="${esc(org)}">${list.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</optgroup>`).join('');
+  const preferred = current?.home && canEdit(current.home.role) ? current.home.propertyId : toProperty ? editable[0].id : '';
+  sel.value = editable.some((p) => p.id === preferred) ? preferred : '';
+  row.hidden = false;
+}
+async function chosenDest() {
+  const id = $('acct-dest-row')?.hidden ? '' : ($('acct-dest')?.value || '');
+  if (!id) return null;
+  const p = (await listHomes()).properties.find((x) => x.id === id);
+  return p ? { orgId: p.orgId, propertyId: p.id, propertyName: p.name, orgName: p.orgName, role: p.role } : null;
+}
+
 function showError(msg) { const e = $('acct-error'); e.textContent = msg || ''; e.hidden = !msg; }
 function closeDialog() { const d = $('acct-dialog'); if (d?.open) d.close(); dialogMode = null; }
 
@@ -359,16 +443,20 @@ export async function save({ asNew = false } = {}) {
   if (!user) { openDialog('save-signin'); return; }
   // A first save, or Save as new, asks for a name; the name step always creates a new row.
   if (!current || asNew) { openDialog('name', { asNew }); return; }
+  if (current.home && !canEdit(current.home.role)) {
+    say(`You have view-only access to ${current.home.propertyName || current.home.orgName}, so changes here are not saved. Use Save as new in My 3D maps to keep a personal copy.`);
+    return;
+  }
   await doSave(current.name, current.id);
 }
-async function doSave(name, id) {
+async function doSave(name, id, dest = null) {
   busy = true; renderNote(); renderButtons();
   try {
-    const res = await saveProject(name, id);
+    const res = await saveProject(name, id, dest);
     if (pending) { pending = null; clearTimeout(pendingT); await clearStash(); }
     setUrlProject(res.id);
     settle();
-    say(`Saved “${res.name}” to your account at ${fmtWhen(res.savedAt, { timeStyle: 'short' })}.`);
+    say(`Saved “${res.name}” to ${res.home ? (res.home.propertyName || res.home.orgName) : 'your account'} at ${fmtWhen(res.savedAt, { timeStyle: 'short' })}.`);
     if (!$('acct-menu').hidden) renderMenu();
     return true;
   } catch (err) {
@@ -405,15 +493,27 @@ async function renderMenu() {
     if (err.code === 'SIGNED_OUT') { user = null; renderButtons(); foot.innerHTML = '<button class="btn primary" type="button" data-acct="signin">Sign in</button>'; }
     return;
   }
-  body.innerHTML = menuItems.length
-    ? `<ul class="acct-list">${menuItems.map((p) => `<li class="acct-item${current?.id === p.id ? ' current' : ''}">
+  // Personal figures first, then each company property's, under its name.
+  const item = (p) => `<li class="acct-item${current?.id === p.id ? ' current' : ''}">
         ${/^data:image\/(jpeg|png|webp);base64,/.test(p.thumbnail || '') ? `<img src="${esc(p.thumbnail)}" alt="" width="96" height="54">` : '<span class="acct-noimg" aria-hidden="true"></span>'}
-        <span class="acct-meta"><b title="${esc(p.name)}">${esc(p.name)}</b><small>${current?.id === p.id ? 'Open now · ' : ''}${esc(when(p.updatedAt))}</small></span>
+        <span class="acct-meta"><b title="${esc(p.name)}">${esc(p.name)}</b><small>${current?.id === p.id ? 'Open now · ' : ''}${esc(when(p.updatedAt))}${p.home && !canEdit(p.home.role) ? ' · view only' : ''}</small></span>
         <span class="acct-acts"><button class="btn" type="button" data-open="${esc(p.id)}" aria-label="Open ${esc(p.name)}">Open</button>
-        <button class="btn acct-del" type="button" data-del="${esc(p.id)}" aria-label="Delete ${esc(p.name)}">Delete</button></span></li>`).join('')}</ul>`
+        ${p.home && !['admin', 'owner'].includes(p.home.role) ? '' : `<button class="btn acct-del" type="button" data-del="${esc(p.id)}" aria-label="Delete ${esc(p.name)}">Delete</button>`}</span></li>`;
+  const groups = new Map();
+  for (const p of menuItems) {
+    const key = p.home ? `${p.home.orgName} · ${p.home.propertyName || 'Workspace'}` : '';
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(p);
+  }
+  const keys = [...groups.keys()].sort((a, b) => (a === '' ? -1 : b === '' ? 1 : a.localeCompare(b)));
+  const titled = keys.length > 1 || (keys.length === 1 && keys[0] !== '');
+  body.innerHTML = menuItems.length
+    ? keys.map((k) => `${titled ? `<h4 class="acct-group">${esc(k || 'Personal')}</h4>` : ''}<ul class="acct-list"${titled ? ` aria-label="${esc(k || 'Personal')}"` : ''}>${groups.get(k).map(item).join('')}</ul>`).join('')
     : '<p class="muted">No saved 3D maps yet. Use Save to keep this figure.</p>';
+  const toProperty = (await listHomes()).properties.some((p) => canEdit(p.role));
   foot.innerHTML = `<span class="muted acct-who" title="${esc(user.email)}">${esc(user.email)}</span>`
     + (current ? '<button class="btn" type="button" data-acct="save-new">Save as new</button>' : '')
+    + (toProperty ? '<button class="btn" type="button" data-acct="save-prop">Save to property…</button>' : '')
     + '<button class="btn" type="button" data-acct="signout">Sign out</button>';
 }
 export function toggleMenu(show) {
@@ -452,6 +552,7 @@ async function onMenuClick(e) {
   if (act === 'signin') { toggleMenu(false); openDialog('signin'); }
   else if (act === 'retry') renderMenu();
   else if (act === 'save-new') { toggleMenu(false); save({ asNew: true }); }
+  else if (act === 'save-prop') { toggleMenu(false); openDialog('name', { asNew: Boolean(current), toProperty: true }); }
   else if (act === 'signout') {
     try { await signOut(); } catch { /* local sign-out still clears */ }
     user = null; current = null; setUrlProject(null); renderNote(); renderButtons(); renderMenu();
@@ -502,8 +603,9 @@ function wire() {
     if (dialogMode === 'name') {
       const name = $('acct-name').value.trim();
       if (!name) { showError('Give the 3D map a name.'); return; }
+      const dest = await chosenDest();
       closeDialog();
-      await doSave(name, null);
+      await doSave(name, null, dest);
       return;
     }
     const email = $('acct-email').value.trim();

@@ -1,0 +1,182 @@
+import { test, expect } from '@playwright/test';
+
+// Company workspaces against an in-memory Supabase (auth, REST and RPC are
+// mocked; no request leaves the browser). Needs the configured client build
+// (dist-auth-check, VITE_SUPABASE_URL=https://example.supabase.co).
+test.skip(!process.env.E2E_ADMIN, 'Requires the configured client build with isolated auth fixtures');
+
+const uid = '00000000-0000-4000-8000-0000000000e1';
+const user = { id: uid, email: 'geo@star.test', role: 'authenticated', aud: 'authenticated', created_at: '2026-10-01T00:00:00Z', email_confirmed_at: '2026-10-01T00:00:00Z', user_metadata: {}, app_metadata: {} };
+const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
+const token = `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: uid, role: 'authenticated', exp: Math.floor(Date.now() / 1000) + 86400 })}.test-signature`;
+const session = { user, access_token: token, refresh_token: 'synthetic-refresh', expires_in: 86400, expires_at: Math.floor(Date.now() / 1000) + 86400, token_type: 'bearer' };
+
+const ORG = '00000000-0000-4000-8000-0000000000a1';
+const PROP = '00000000-0000-4000-8000-0000000000b1';
+const MAP = '00000000-0000-4000-8000-0000000000c1';
+const FIG = '00000000-0000-4000-8000-0000000000d1';
+const org = (role) => ({ id: ORG, name: 'Star Copper Corp.', slug: 'star-copper-corp', plan: 'free', role, member_count: 2, property_count: 1 });
+const property = { id: PROP, org_id: ORG, name: 'Rails Copper-Gold', slug: 'rails-copper-gold', jurisdiction: 'bc', commodities: ['Cu', 'Au'], status: 'active', description: 'Porphyry target', crs: null, created_at: '2026-10-02T00:00:00Z', updated_at: '2026-10-02T00:00:00Z' };
+
+const ORG2 = '00000000-0000-4000-8000-0000000000a2';
+const jvOrg = { id: ORG2, name: 'North Rock JV', slug: 'north-rock-jv', plan: 'free', role: 'viewer', member_count: 3, property_count: 1 };
+const jvProperty = { ...property, id: '00000000-0000-4000-8000-0000000000b2', org_id: ORG2, name: 'Rails JV', description: 'Joint venture ground' };
+
+async function fakeSupabase(page, { role = 'owner', orgs = [org(role)], properties = null } = {}) {
+  const fake = { rpc: [], orgs, properties: properties || (orgs.length ? [property] : []), invites: [] };
+  await page.route('**/api/track', (route) => route.fulfill({ status: 204 }));
+  await page.route('https://example.supabase.co/**', async (route) => {
+    const req = route.request(), url = new URL(req.url()), path = url.pathname, method = req.method();
+    const json = (body, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+    const single = (req.headers().accept || '').includes('vnd.pgrst.object');
+    const rows = (list) => (single ? (list[0] ? json(list[0]) : json({ code: 'PGRST116', message: 'no rows' }, 406)) : json(list));
+    if (path.startsWith('/auth/v1/')) {
+      const fn = path.split('/').pop();
+      if (fn === 'token') return json(session);
+      if (fn === 'user') return json(user);
+      return json({});
+    }
+    if (path.startsWith('/rest/v1/rpc/')) {
+      const fn = path.split('/').pop(), args = req.postDataJSON() || {};
+      fake.rpc.push({ fn, args });
+      if (fn === 'get_my_workspaces') return json(fake.orgs);
+      if (fn === 'create_organization') {
+        fake.orgs = [{ id: ORG, name: args.p_name, slug: 'star-copper-corp', plan: 'free', role: 'owner', member_count: 1, property_count: 0 }];
+        return json({ id: ORG, name: args.p_name, slug: 'star-copper-corp', role: 'owner' });
+      }
+      if (fn === 'list_org_members') {
+        return json([{ user_id: uid, email: user.email, role: fake.orgs[0]?.role || 'owner', joined_at: '2026-10-02T00:00:00Z', is_me: true },
+          ...(fake.orgs[0]?.member_count > 1 ? [{ user_id: 'u2', email: 'cfo@star.test', role: 'admin', joined_at: '2026-10-02T00:00:00Z', is_me: false }] : [])]);
+      }
+      if (fn === 'list_org_invites') return json(fake.invites);
+      if (fn === 'create_org_invite') {
+        const t = 'a'.repeat(64);
+        const inv = { id: 'i1', email: args.p_email, role: args.p_role, expires_at: '2026-11-03T00:00:00Z', created_at: '2026-10-20T00:00:00Z', token: t, link: `https://www.explorationmaps.com/invite?token=${t}` };
+        fake.invites = [{ id: 'i1', email: args.p_email, role: args.p_role, expires_at: inv.expires_at, created_at: inv.created_at }];
+        return json(inv);
+      }
+      if (fn === 'get_org_activity') return json([{ id: 'a1', created_at: '2026-10-20T10:00:00Z', action: 'created', entity_type: 'map', property_id: PROP, property_name: property.name, actor_email: 'cfo@star.test', summary: 'Created map "Rails claims"' }]);
+      if (fn === 'get_property_claims') return json([]);
+      return json(null);
+    }
+    if (path === '/rest/v1/properties') {
+      if (method === 'POST') {
+        const body = req.postDataJSON();
+        const p = { ...property, ...body, id: 'p-new', slug: 'new-property' };
+        fake.properties.push(p);
+        return json([p], 201);
+      }
+      const slug = url.searchParams.get('slug'), orgId = url.searchParams.get('org_id');
+      return rows(fake.properties.filter((p) => (!slug || `eq.${p.slug}` === slug) && (!orgId || `eq.${p.org_id}` === orgId)));
+    }
+    if (path === '/rest/v1/projects') {
+      if (url.searchParams.get('property_id')) return rows([{ id: MAP, name: 'Rails claims', updated_at: '2026-10-19T00:00:00Z', thumbnail: null, revision: 3, user_id: 'u2' }]);
+      return rows([]);
+    }
+    if (path === '/rest/v1/three_d_projects') {
+      if (url.searchParams.get('property_id')) return rows([{ id: FIG, name: 'Rails 3D section', updated_at: '2026-10-18T00:00:00Z', thumbnail: null }]);
+      return rows([]);
+    }
+    if (path === '/rest/v1/user_plans') return single ? json({ plan: 'free', source: 'signup', status: 'active' }) : json([]);
+    return single ? json({ code: 'PGRST116', message: 'no rows' }, 406) : json([]);
+  });
+  await page.addInitScript((s) => {
+    localStorage.setItem('sb-example-auth-token', JSON.stringify(s));
+    localStorage.setItem(`em_migration_v2_${s.user.id}`, JSON.stringify({ done: true, projects: {} }));
+  }, session);
+  return fake;
+}
+
+test('creates a company workspace and invites a colleague', async ({ page }) => {
+  const fake = await fakeSupabase(page, { orgs: [] });
+  await page.goto('/workspace');
+  await expect(page.getByRole('heading', { name: 'Create a company workspace' })).toBeVisible();
+  await page.getByLabel('Company name').fill('Star Copper Corp.');
+  await page.getByRole('button', { name: 'Create workspace' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: /Star Copper Corp\./ })).toBeVisible();
+  expect(fake.rpc.find((c) => c.fn === 'create_organization').args).toEqual({ p_name: 'Star Copper Corp.' });
+  await expect(page.getByRole('region', { name: /Members/ }).getByText('geo@star.test (you)')).toBeVisible();
+
+  const invites = page.getByRole('region', { name: 'Invite people' });
+  await invites.getByLabel('Email').fill('investor@fund.test');
+  await invites.getByLabel('Role').selectOption('viewer');
+  await invites.getByRole('button', { name: 'Send invite' }).click();
+  await expect(invites.getByText(/Invite sent to investor@fund\.test/)).toBeVisible();
+  await expect(invites.locator('code')).toHaveText(`https://www.explorationmaps.com/invite?token=${'a'.repeat(64)}`);
+  await expect(invites.getByRole('button', { name: 'Copy link' })).toBeVisible();
+  await expect(invites.getByRole('list', { name: 'Pending invites' }).getByText('investor@fund.test')).toBeVisible();
+  expect(fake.rpc.find((c) => c.fn === 'create_org_invite').args).toEqual({ p_org: ORG, p_email: 'investor@fund.test', p_role: 'viewer' });
+  // Phone width: nothing widens the page.
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1);
+});
+
+test('the property page lists its map and its 3D figure', async ({ page }) => {
+  await fakeSupabase(page, { role: 'editor' });
+  await page.goto('/workspace');
+  await page.getByRole('button', { name: 'Rails Copper-Gold', exact: true }).click();
+  await expect(page).toHaveURL(/\/workspace\/star-copper-corp\/p\/rails-copper-gold$/);
+  await expect(page.getByRole('heading', { level: 1, name: /Rails Copper-Gold/ })).toBeVisible();
+  await expect(page.getByText('Porphyry target')).toBeVisible();
+
+  await page.getByRole('tab', { name: 'Maps' }).click();
+  await expect(page.getByRole('button', { name: 'Open Rails claims' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '+ New map in this property' })).toBeVisible();
+
+  await page.getByRole('tab', { name: '3D figures' }).click();
+  await expect(page.getByRole('button', { name: 'Open Rails 3D section' })).toBeVisible();
+
+  await page.getByRole('tab', { name: 'Activity' }).click();
+  await expect(page.getByText('Created map "Rails claims"')).toBeVisible();
+});
+
+test('a viewer gets the same pages without editing controls', async ({ page }) => {
+  await fakeSupabase(page, { role: 'viewer' });
+  await page.goto('/workspace');
+  await expect(page.getByText(/You have view-only access to Star Copper Corp\./)).toBeVisible();
+  await expect(page.getByRole('button', { name: '+ New property' })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Invite people' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Edit Rails Copper-Gold' })).toHaveCount(0);
+  await expect(page.getByRole('combobox', { name: /Role for/ })).toHaveCount(0);
+
+  await page.goto('/workspace/star-copper-corp/p/rails-copper-gold');
+  await expect(page.getByText(/View only\. You can open every map/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Edit details' })).toHaveCount(0);
+  await page.getByRole('tab', { name: 'Maps' }).click();
+  await expect(page.getByRole('button', { name: 'Open Rails claims' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '+ New map in this property' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Move one of my maps here' })).toHaveCount(0);
+  await page.getByRole('tab', { name: '3D figures' }).click();
+  await expect(page.getByRole('button', { name: 'Open Rails 3D section' })).toBeVisible();
+  await expect(page.getByRole('link', { name: '+ New 3D figure' })).toHaveCount(0);
+});
+
+test('an older property link opens directly when only one company has that address', async ({ page }) => {
+  await fakeSupabase(page, { role: 'editor' });
+  await page.goto('/workspace/p/rails-copper-gold');
+  await expect(page.getByRole('heading', { level: 1, name: /Rails Copper-Gold/ })).toBeVisible();
+  await expect(page).toHaveURL(/\/workspace\/star-copper-corp\/p\/rails-copper-gold$/);
+});
+
+test('an older property link shared by two companies asks which one', async ({ page }) => {
+  await fakeSupabase(page, { role: 'editor', orgs: [org('editor'), jvOrg], properties: [property, jvProperty] });
+  await page.goto('/workspace/p/rails-copper-gold');
+  await expect(page.getByRole('heading', { name: 'Which property did you mean?' })).toBeVisible();
+  await expect(page).toHaveURL(/\/workspace\/p\/rails-copper-gold$/);
+  await page.getByRole('button', { name: 'Open in North Rock JV' }).click();
+  await expect(page).toHaveURL(/\/workspace\/north-rock-jv\/p\/rails-copper-gold$/);
+  await expect(page.getByRole('heading', { level: 1, name: /Rails JV/ })).toBeVisible();
+  await expect(page.getByText('Joint venture ground')).toBeVisible();
+  // Each company's address opens its own property.
+  await page.goto('/workspace/star-copper-corp/p/rails-copper-gold');
+  await expect(page.getByRole('heading', { level: 1, name: /Rails Copper-Gold/ })).toBeVisible();
+});
+
+test('an invite link signed out asks to sign in and keeps the token', async ({ page }) => {
+  await page.route('**/api/track', (route) => route.fulfill({ status: 204 }));
+  await page.route('https://example.supabase.co/**', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
+  const t = 'b'.repeat(64);
+  await page.goto(`/invite?token=${t}`);
+  await expect(page.getByRole('heading', { name: /invited to a company workspace/ })).toBeVisible();
+  await expect(page).toHaveURL(/\/invite$/);
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('em.pendingInvite.v1')).token)).toBe(t);
+});

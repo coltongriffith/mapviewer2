@@ -183,6 +183,9 @@ ul.checks { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 3px; font-s
 .acct-menu h3 { margin: 0; }
 .acct-menu-body { max-height: min(420px, 60vh); overflow-y: auto; }
 .acct-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.acct-group { margin: 10px 0 6px; font-size: 12.5px; font-weight: 650; color: var(--slate-600); }
+.acct-group:first-child { margin-top: 0; }
+.acct-dialog select { font: inherit; font-size: 14px; color: var(--slate-950); background: #fff; border: 1px solid var(--slate-200); border-radius: 5px; padding: 6px 8px; width: 100%; }
 .acct-item { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 4px 10px; align-items: center; border: 1px solid var(--slate-200); border-radius: 8px; padding: 6px; }
 .acct-item.current { border-color: var(--slate-500); }
 .acct-item img, .acct-noimg { width: 96px; height: 54px; object-fit: cover; border-radius: 4px; background: var(--slate-100); grid-row: span 2; display: block; }
@@ -554,6 +557,7 @@ dialog.acct-dialog::backdrop { background: rgba(20,33,38,0.35); }
   <form id="acct-form" novalidate>
     <div><h2 id="acct-title">Save to your account</h2><p class="muted" id="acct-intro"></p></div>
     <label class="field" id="acct-name-row"><span>Name</span><input type="text" id="acct-name" maxlength="200" autocomplete="off"></label>
+    <label class="field" id="acct-dest-row" hidden><span>Save to</span><select id="acct-dest"></select></label>
     <p class="bad" id="acct-error" role="alert" hidden></p>
     <div class="stack" id="acct-signin">
       <label class="field"><span>Email</span><input type="email" id="acct-email" autocomplete="email" inputmode="email"></label>

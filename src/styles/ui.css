@@ -179,6 +179,14 @@
 .ed-doc-state--dirty { color: var(--ui-warning); }
 .ed-doc-state--saved { color: var(--ui-success); }
 .ed-doc-state--action { cursor: pointer; text-decoration: underline dotted; text-underline-offset: 2px; }
+/* The company property a map belongs to. */
+.ed-doc-home {
+  font: inherit; font-size: var(--fs-micro); font-weight: 600; white-space: nowrap; cursor: pointer;
+  max-width: 200px; overflow: hidden; text-overflow: ellipsis;
+  padding: 1px 7px; border-radius: 999px; border: 1px solid var(--ui-border); background: var(--ui-surface-subtle); color: var(--ui-text-muted);
+}
+.ed-doc-home:hover { border-color: var(--ui-border-strong); color: var(--ui-text); }
+.ed-doc-home--readonly { background: #fbf6e9; border-color: #e7d9ad; color: #6b5414; }
 
 /* ── Inspector ────────────────────────────────────────────────────────────── */
 .inspector {

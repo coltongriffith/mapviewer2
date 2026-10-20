@@ -34,7 +34,10 @@ const BUDGETS = {
   // heading rename / move-to-group / drag reorder (Sept 2026).
   // 143 → 144: the free full-resolution export offered when a PNG hits the
   // pixel cap (Oct 2026); its dialog is lazy, the export wiring is not.
-  maxJsChunkGzipKb: 144,
+  // 144 → 146: company workspaces (Oct 2026). The pages are a lazy chunk; the
+  // editor keeps the routes, the property chip and view-only save guard for
+  // company maps, and the personal / company switcher in the account menu.
+  maxJsChunkGzipKb: 146,
   initialJsGzipKb: 75,
   initialAuthJsGzipKb: 135,
   // The former configured check omitted VITE_ADMIN_EMAIL, which pruned the
