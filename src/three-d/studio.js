@@ -1847,7 +1847,7 @@ function renderSummary() {
 function renderStyle() {
   const sel = $('value-col'); sel.innerHTML = (project?.cols || []).map((c) => `<option ${c === S.valueCol ? 'selected' : ''}>${esc(c)}</option>`).join('') || '<option>—</option>';
   $('value-label').value = S.valueLabel;
-  $('bins').innerHTML = S.bins.map((b, i) => `<label class="field"><i style="background:${BIN_COLORS[i + 1]}"></i><input type="number" step="any" data-bin="${i}" value="${b}" aria-label="Lower limit of colour ${i + 1}"></label>`).join('');
+  $('bins').innerHTML = S.bins.map((b, i) => `<label class="field"><i style="background:${BIN_COLORS[i + 1]}"></i><input type="number" step="any" data-bin="${i}" value="${esc(b)}" aria-label="Lower limit of colour ${i + 1}"></label>`).join('');
   $('bins').querySelectorAll('[data-bin]').forEach((inp) => inp.addEventListener('change', () => { const b = S.bins.slice(); b[+inp.dataset.bin] = parseFloat(inp.value) || 0; setStyle({ bins: b }); }));
   $('co-cut').value = S.coCut; $('co-incl').value = S.coIncl; $('co-count').value = S.coCount; $('co-min').value = S.coMin;
   $('sec-az').value = S.secAz; $('sec-az-out').textContent = `${pad3(S.secAz)}°`; $('sec-w').value = S.secW;
@@ -1871,7 +1871,7 @@ function renderStyle() {
   const ml = $('mesh-list'); ml.innerHTML = '';
   (project?.meshF || []).forEach((f) => { const st = S.meshes[f.name]; if (!st) return;
     const d = document.createElement('label'); d.className = 'mesh';
-    d.innerHTML = `<input type="checkbox" ${st.show ? 'checked' : ''} aria-label="Show ${esc(f.name)}"><span>${esc(meshName(f.name))}</span><input type="color" value="${st.color}" aria-label="Colour of ${esc(f.name)}">`;
+    d.innerHTML = `<input type="checkbox" ${st.show ? 'checked' : ''} aria-label="Show ${esc(f.name)}"><span>${esc(meshName(f.name))}</span><input type="color" value="${esc(st.color)}" aria-label="Colour of ${esc(f.name)}">`;
     const [cb, , cp] = d.children; cb.addEventListener('change', () => { st.show = cb.checked; restyle(); schedulePublish(); }); cp.addEventListener('input', () => { st.color = cp.value; restyle(); schedulePublish(); });
     ml.appendChild(d); });
 }
@@ -2140,10 +2140,10 @@ function renderEq(baseOverride) {
   const base = baseOverride || (e?.base && present.has(e.base) ? e.base : present.has('Cu') ? 'Cu' : [...present.keys()][0]), same = e?.base === base;
   const val = (m, k, d) => (e?.metals?.[m]?.[k] ?? d);
   box.innerHTML = `<div class="grid2"><label class="field" style="grid-column:1/-1"><span>Base metal</span><select id="eq-base">${[...present.keys()].map((m) => `<option ${m === base ? 'selected' : ''}>${m}</option>`).join('')}</select></label>
-    <label class="field"><span>${base} US$/${priceUnit(base)}</span><input type="number" id="eq-bprice" step="any" min="0" value="${same ? e.basePrice : METAL_DEFAULTS[base] ?? ''}"></label>
-    <label class="field"><span>${base} recovery %</span><input type="number" id="eq-brec" min="1" max="100" value="${same ? e.baseRecovery : 90}"></label></div>
+    <label class="field"><span>${base} US$/${priceUnit(base)}</span><input type="number" id="eq-bprice" step="any" min="0" value="${esc(same ? e.basePrice : METAL_DEFAULTS[base] ?? '')}"></label>
+    <label class="field"><span>${base} recovery %</span><input type="number" id="eq-brec" min="1" max="100" value="${esc(same ? e.baseRecovery : 90)}"></label></div>
     <div id="eq-rows">${[...present.keys()].filter((m) => m !== base).map((m) => `<div class="eq-row" data-eqm="${m}"><label class="check"><input type="checkbox" ${(e ? !!e.metals[m] : !!METAL_DEFAULTS[m]) ? 'checked' : ''}>${m}</label>
-      <label class="field"><span>US$/${priceUnit(m)}</span><input type="number" data-p step="any" min="0" value="${val(m, 'price', METAL_DEFAULTS[m] ?? '')}"></label><label class="field"><span>Recovery %</span><input type="number" data-r min="1" max="100" value="${val(m, 'recovery', 90)}"></label></div>`).join('')}</div>
+      <label class="field"><span>US$/${priceUnit(m)}</span><input type="number" data-p step="any" min="0" value="${esc(val(m, 'price', METAL_DEFAULTS[m] ?? ''))}"></label><label class="field"><span>Recovery %</span><input type="number" data-r min="1" max="100" value="${esc(val(m, 'recovery', 90))}"></label></div>`).join('')}</div>
     <p class="mono" id="eq-formula"></p>
     <div class="row"><button class="btn" type="button" id="eq-apply">${e ? 'Update' : 'Add'} ${base}Eq_calc</button>${e ? '<button class="btn" type="button" id="eq-remove">Remove</button>' : ''}</div>`;
   $('eq-base').addEventListener('change', () => renderEq($('eq-base').value));
@@ -2251,9 +2251,9 @@ function removeLabel(id) {
 }
 function renderLabelList() {
   const el = $('label-list');
-  el.innerHTML = S.labels.map((L) => `<div class="label-row"><input type="text" data-lt="${L.id}" value="${esc(L.text)}" aria-label="Text of label ${L.id}">`
-    + `<label class="check"><input type="checkbox" data-la="${L.id}" ${L.arrow ? 'checked' : ''}>Arrow</label>`
-    + `<button class="btn" type="button" data-ld="${L.id}" aria-label="Delete label ${esc(L.text)}">Delete</button></div>`).join('');
+  el.innerHTML = S.labels.map((L) => `<div class="label-row"><input type="text" data-lt="${esc(L.id)}" value="${esc(L.text)}" aria-label="Text of label ${esc(L.id)}">`
+    + `<label class="check"><input type="checkbox" data-la="${esc(L.id)}" ${L.arrow ? 'checked' : ''}>Arrow</label>`
+    + `<button class="btn" type="button" data-ld="${esc(L.id)}" aria-label="Delete label ${esc(L.text)}">Delete</button></div>`).join('');
   el.querySelectorAll('[data-lt]').forEach((i) => i.addEventListener('change', () => { try { updateLabel(i.dataset.lt, { text: i.value }); } catch (e) { status(e.message); } }));
   el.querySelectorAll('[data-la]').forEach((i) => i.addEventListener('change', () => updateLabel(i.dataset.la, { arrow: i.checked })));
   el.querySelectorAll('[data-ld]').forEach((b) => b.addEventListener('click', () => removeLabel(b.dataset.ld)));
@@ -2265,10 +2265,10 @@ $('lab-add').addEventListener('click', () => {
 $('lab-text').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); $('lab-add').click(); } });
 function renderWallLabelList() {
   const el = $('wall-list'), faces = ['N', 'S', 'E', 'W'];
-  el.innerHTML = S.wallLabels.map((L) => `<div class="label-row"><input type="text" data-wt="${L.id}" value="${esc(L.text)}" aria-label="Text of wall label ${L.id}">`
-    + `<select data-wf="${L.id}" aria-label="Face of ${esc(L.text)}">${faces.map((f) => `<option ${f === L.face ? 'selected' : ''}>${f}</option>`).join('')}</select>`
-    + (S.geology.legend.length ? `<select data-wu="${L.id}" aria-label="Unit colour of ${esc(L.text)}"><option value="">No unit</option>${S.geology.legend.map((e) => `<option value="${esc(e.code)}" ${e.code === L.unit ? 'selected' : ''}>${esc(e.name)}</option>`).join('')}</select>` : '') // EXT hook
-    + `<button class="btn" type="button" data-wd="${L.id}" aria-label="Delete wall label ${esc(L.text)}">Delete</button></div>`).join('');
+  el.innerHTML = S.wallLabels.map((L) => `<div class="label-row"><input type="text" data-wt="${esc(L.id)}" value="${esc(L.text)}" aria-label="Text of wall label ${esc(L.id)}">`
+    + `<select data-wf="${esc(L.id)}" aria-label="Face of ${esc(L.text)}">${faces.map((f) => `<option ${f === L.face ? 'selected' : ''}>${f}</option>`).join('')}</select>`
+    + (S.geology.legend.length ? `<select data-wu="${esc(L.id)}" aria-label="Unit colour of ${esc(L.text)}"><option value="">No unit</option>${S.geology.legend.map((e) => `<option value="${esc(e.code)}" ${e.code === L.unit ? 'selected' : ''}>${esc(e.name)}</option>`).join('')}</select>` : '') // EXT hook
+    + `<button class="btn" type="button" data-wd="${esc(L.id)}" aria-label="Delete wall label ${esc(L.text)}">Delete</button></div>`).join('');
   el.querySelectorAll('[data-wt]').forEach((i) => i.addEventListener('change', () => { try { updateWallLabel(i.dataset.wt, { text: i.value }); } catch (e) { status(e.message); } }));
   el.querySelectorAll('[data-wf]').forEach((i) => i.addEventListener('change', () => updateWallLabel(i.dataset.wf, { face: i.value })));
   el.querySelectorAll('[data-wu]').forEach((i) => i.addEventListener('change', () => updateWallLabel(i.dataset.wu, { unit: i.value || null }))); // EXT hook
