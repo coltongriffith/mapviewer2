@@ -439,10 +439,16 @@ function paintTerrain() {
   }
   const ctx = G.topBase.getContext('2d'), out = ctx.createImageData(tw, th), d = out.data, { TW, TH, hs, shade, speck, lo, hi } = T;
   const step = Math.max(5, niceRound((hi - lo) / 14)), band = (v) => Math.floor(v / step);
+  const natural = (i) => {
+    const sh = shade[i], t = (hs[i] - lo) / ((hi - lo) || 1), right = hs[Math.min(i + 1, hs.length - 1)];
+    const f = (0.42 + 0.8 * sh) * (speck[i] ? 0.9 : 1), contour = Math.floor(hs[i] / 25) !== Math.floor(right / 25) ? 0.82 : 1;
+    return [(78 + 96 * t) * f * contour, (100 + 74 * t) * f * contour, (66 + 82 * t) * f * contour];
+  };
   if (img) {
     for (let py = 0; py < th; py++) { const sy = Math.min(TH - 1, Math.floor(py * TH / th));
       for (let px = 0; px < tw; px++) {
-        const i = py * tw + px, sh = shade[sy * TW + Math.min(TW - 1, Math.floor(px * TW / tw))];
+        const i = py * tw + px, si = sy * TW + Math.min(TW - 1, Math.floor(px * TW / tw)), sh = shade[si];
+        if (img.data[i * 4 + 3] < 128) { const c = natural(si); d[i * 4] = Math.min(255, c[0]); d[i * 4 + 1] = Math.min(255, c[1]); d[i * 4 + 2] = Math.min(255, c[2]); d[i * 4 + 3] = 255; continue; }
         let r = img.data[i * 4], g = img.data[i * 4 + 1], b = img.data[i * 4 + 2], f = 0.9 + 0.14 * sh;
         if (st === 'satellite') { r = TONE[r]; g = TONE[g]; b = TONE[b]; const l = 0.3 * r + 0.59 * g + 0.11 * b; r = l + (r - l) * 1.15; g = l + (g - l) * 1.15; b = l + (b - l) * 1.15; }
         if (st === 'muted') { const l = 0.3 * r + 0.59 * g + 0.11 * b; r = (l + (r - l) * 0.4) * 0.6 + 98; g = (l + (g - l) * 0.4) * 0.6 + 100; b = (l + (b - l) * 0.4) * 0.6 + 97; f = 0.86 + 0.22 * sh; }
@@ -456,10 +462,7 @@ function paintTerrain() {
       if (st === 'light') { const v = Math.min(1, 0.3 + 0.95 * sh) * (edge ? (index ? 0.9 : 0.955) : 1); c = [154 + 88 * v, 163 + 81 * v, 166 + 77 * v]; }
       else if (st === 'relief') { const v = Math.max(0, Math.min(1, 1.25 * sh - 0.1)) * (edge ? (index ? 0.82 : 0.92) : 1); c = [(70 + 182 * v) + 8 * (t - 0.5), 78 + 175 * v, (84 + 166 * v) - 8 * (t - 0.5)]; }
       else if (st === 'dark') { const f = (0.42 + 0.85 * sh) * (edge ? 0.86 : 1); c = [(40 + 46 * t) * f, (55 + 44 * t) * f, (61 + 42 * t) * f]; }
-      else { // natural, and satellite before its imagery arrives
-        const f = (0.42 + 0.8 * sh) * (speck[i] ? 0.9 : 1), contour = Math.floor(hs[i] / 25) !== Math.floor(right / 25) ? 0.82 : 1;
-        c = [(78 + 96 * t) * f * contour, (100 + 74 * t) * f * contour, (66 + 82 * t) * f * contour];
-      }
+      else c = natural(i); // natural, and satellite before its imagery arrives
       d[i * 4] = Math.min(255, c[0]); d[i * 4 + 1] = Math.min(255, c[1]); d[i * 4 + 2] = Math.min(255, c[2]); d[i * 4 + 3] = 255;
     }
   }
@@ -574,7 +577,8 @@ function recheckCRS() {
   // Latitude/longitude collars locate themselves; the scene is built right after this.
   if (!S.crs) { if (project?.latlon) { const c = parseCRS('EPSG:4326'); geo = { ...c, guessed: true, fwd: geoFor(c, project) }; S.crs = c.code; realT.dem = realT.img = null; renderCRS(); } return; }
   // A coordinate system restored with a saved project (S.crs) is re-established here.
-  if (!geo) { setCRS(S.crs).catch((e) => { S.crs = null; renderCRS(); status(`Coordinate system cleared: ${e.message}`); }); return; }
+  // A different saved project's code (geo still describes the last one) is re-parsed too.
+  if (!geo || geo.code !== S.crs) { geo = null; realT.dem = realT.img = null; setCRS(S.crs).catch((e) => { S.crs = null; renderCRS(); status(`Coordinate system cleared: ${e.message}`); }); return; }
   try { geo.fwd = geoFor(geo, project && !project.empty ? project : null); } catch (e) { S.crs = null; geo = null; renderCRS(); status(`Coordinate system cleared: ${e.message}`); }
 }
 const lon2t = (lon, z) => (lon + 180) / 360 * 2 ** z;
@@ -631,8 +635,11 @@ async function loadImagery(key, B) {
   for (let py = 0; py < h; py++) for (let px = 0; px < w; px++) {
     const [sx, sy] = toPx(B.x0 + (px + 0.5) / w * bw, B.y1 - (py + 0.5) / h * bh), i = Math.max(0, Math.min(M.w - 2, Math.floor(sx))), j = Math.max(0, Math.min(M.h - 2, Math.floor(sy)));
     const a = Math.max(0, Math.min(1, sx - i)), b = Math.max(0, Math.min(1, sy - j)), k = (j * M.w + i) * 4, o = (py * w + px) * 4, r = M.w * 4;
-    for (let c = 0; c < 3; c++) out[o + c] = src[k + c] * (1 - a) * (1 - b) + src[k + 4 + c] * a * (1 - b) + src[k + r + c] * (1 - a) * b + src[k + r + 4 + c] * a * b;
-    out[o + 3] = 255;
+    // Weighted by each sample's alpha: a tile that failed to load is transparent,
+    // and stays a gap (alpha 0) for paintTerrain to fill, not a black patch.
+    const wt = [(1 - a) * (1 - b) * src[k + 3], a * (1 - b) * src[k + 7], (1 - a) * b * src[k + r + 3], a * b * src[k + r + 7]], ws = wt[0] + wt[1] + wt[2] + wt[3];
+    for (let c = 0; c < 3; c++) out[o + c] = ws ? (src[k + c] * wt[0] + src[k + 4 + c] * wt[1] + src[k + r + c] * wt[2] + src[k + r + 4 + c] * wt[3]) / ws : 0;
+    out[o + 3] = ws / 255;
   }
   return { key, ok: true, w, h, data: out, z: M.z, tiles: `${M.ok}/${M.total}` };
 }
@@ -710,6 +717,7 @@ function buildWallLabels() {
   if (!G) return;
   (G.wallLabelMeshes || []).forEach((m) => { root.remove(m); m.geometry.dispose(); m.material.map.dispose(); m.material.dispose(); });
   G.wallLabelMeshes = S.wallLabels.map((L) => { const m = wallLabelMesh(L); root.add(m); return m; });
+  G.wallPrimary = S.primary;
 }
 function wallPatch(L, o) {
   if (o.text !== undefined) { const t = String(o.text).trim(); if (!t) throw new Error('A wall label needs some text.'); L.text = t.slice(0, 120); }
@@ -765,6 +773,8 @@ function placeRibbons() {
 const binIndex = (v) => { if (!Number.isFinite(v)) return -1; let k = 0; S.bins.forEach((b, i) => { if (v >= b) k = i + 1; }); return k; };
 function restyle() {
   if (!G) return;
+  // Title wall labels without their own colour are painted in the brand colour.
+  if (G.wallPrimary !== S.primary && S.wallLabels.some((L) => !L.color)) buildWallLabels();
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0), col = new THREE.Color();
   const r = traceR(); let k = 0;
   project.holes.forEach((h) => h.ints.forEach((it) => {
@@ -1429,7 +1439,9 @@ async function sendToDesignDesk(o = {}) {
   const step = (t) => { status(t); deskMsg(t, 'busy'); const b = $('desk-send'); b.disabled = true; b.textContent = t.replace(/…$/, '…'); };
   try {
     step('Preparing the figure and layers…');
-    const blobs = [['figure.png', await canvasBlob(figureCanvas('3d'))], ['layers.zip', await exportLayers({ as: 'blob' })]].filter(([, b]) => b.size <= DESK_MAX_BYTES);
+    const made = [['figure.png', await canvasBlob(figureCanvas('3d'))], ['layers.zip', await exportLayers({ as: 'blob' })]];
+    // Over the 50 MB upload limit: not sent, and said so below rather than dropped quietly.
+    const blobs = made.filter(([, b]) => b.size <= DESK_MAX_BYTES), tooBig = made.filter(([, b]) => b.size > DESK_MAX_BYTES).map(([n]) => n);
     step('Sending to the design desk…');
     const body = { kind: 'team_enquiry', session_id: teamsSessionId(), email, company, materials: ['sections_3d'], service_level: 'not_sure',
       message: `${notes}${notes ? ' ' : ''}(sent from Exploration Maps 3D)`, ref: '3d', files: blobs.map(([name, b]) => ({ name, size: b.size, type: b.type || (name.endsWith('.zip') ? 'application/zip' : 'image/png') })) };
@@ -1438,7 +1450,7 @@ async function sendToDesignDesk(o = {}) {
     if (res.status === 429) throw new Error('Too many requests from this connection. Please wait a few minutes, or email support@explorationmaps.com.');
     if (!res.ok) throw new Error(res.status === 503 ? 'The design desk is not taking requests right now (error 503). Please try again later, or email support@explorationmaps.com.' : `The design desk could not take that (error ${res.status}). Please try again, or email support@explorationmaps.com.`);
     const out = res.status === 200 ? await res.json().catch(() => ({})) : { uploads: null };
-    const uploaded = [], failed = [];
+    const uploaded = [], failed = [...tooBig];
     if (out.uploads) for (let i = 0; i < blobs.length; i++) {
       const [name, b] = blobs[i], slot = out.uploads.find((x) => x?.name === name) || out.uploads[i];
       if (!slot?.url) { failed.push(name); continue; }
@@ -1446,7 +1458,8 @@ async function sendToDesignDesk(o = {}) {
       const up = await fetch(slot.url, { method: 'PUT', headers: { 'Content-Type': b.type || 'application/octet-stream', 'x-upsert': 'false' }, body: b }).catch(() => null);
       (up?.ok ? uploaded : failed).push(name);
     }
-    const msg = `Sent. We'll reply to ${email}.${failed.length ? ` ${failed.join(' and ')} did not upload; we'll ask for ${failed.length > 1 ? 'them' : 'it'} by email.` : ''}`;
+    const lost = failed.filter((n) => !tooBig.includes(n));
+    const msg = `Sent. We'll reply to ${email}.${tooBig.length ? ` ${tooBig.join(' and ')} is over 50 MB and was not sent; we'll ask for it by email.` : ''}${lost.length ? ` ${lost.join(' and ')} did not upload; we'll ask for ${lost.length > 1 ? 'them' : 'it'} by email.` : ''}`;
     status(msg); deskMsg(msg, 'ok'); $('desk').classList.add('sent');
     window.gtag?.('event', 'teams_enquiry_sent', { materials: 1, files: uploaded.length, ref: '3d' });
     return { ok: true, id: out.id || null, uploaded, failed, accepted: res.status };
