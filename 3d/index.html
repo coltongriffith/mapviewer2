@@ -402,6 +402,8 @@ dialog.acct-dialog::backdrop { background: rgba(20,33,38,0.35); }
         <h3>Hole tags and callouts</h3>
         <div class="grid2">
           <label class="field"><span>Hole ID tags</span><select data-ext="tags.at"><option value="toe">At the end of the hole</option><option value="collar">Pills at the collar</option><option value="both">Both</option></select></label>
+          <label class="field"><span>Which holes get IDs</span><select data-ext="tags.idMode"><option value="all">All holes</option><option value="key">Key holes only (callouts, new, ticked)</option></select></label>
+          <label class="field"><span>"Assays pending"</span><select data-ext="tags.pending"><option value="collar">Small tag at the collars</option><option value="trace">Along each hole</option></select></label>
           <label class="field"><span>Inset</span><select data-ext="style.insetStyle"><option value="plan">Plan of drilling</option><option value="satellite">Location map, satellite</option><option value="topo">Location map, topographic</option></select></label>
         </div>
         <label class="check" style="margin-top:6px"><input type="checkbox" data-ext="style.histograms">Grade histogram bars along holes</label>
@@ -537,6 +539,8 @@ dialog.acct-dialog::backdrop { background: rgba(20,33,38,0.35); }
                                   traces, blurred then the highest weight wins; plain beyond the search radius.
                                   The footnote says it is schematic while it shows
   EM3D.setFaceImage("N" | "S" | "E" | "W", dataUrl | null)   a drawn section stretched over a face
+  EM3D.addWallLabel({..., unit: code}) / updateWallLabel(id, {unit})   a label on the block written in a
+                                  darker shade of that unit's legend colour (null: back to its own colour)
   Geophysics file: X, Y, Z and a value column (chargeability, resistivity, conductivity...), CSV or
   Geosoft XYZ with "Line" records; an optional line column.
   EM3D.setGeophys({mode: "curtain" | "faces" | "off", lines: "auto" | "section" | "all" | [lineIds] |
@@ -544,7 +548,9 @@ dialog.acct-dialog::backdrop { background: rgba(20,33,38,0.35); }
                    the column name), min, max, opacity, faces, search, width (curtain corridor, m)})
   EM3D.setTags({at: "toe" | "collar" | "both", style: "dark" | "light", fadePrevious,
                 status: {holeId: "new" | "previous" | "planned" | "none" | null}, newLabel, prevLabel,
-                plannedLabel, autoGroup, groupRadius})   collar ID pills; new vs previously released from a
+                plannedLabel, autoGroup, groupRadius, idMode: "all" | "key" (IDs on the callout holes, the
+                new holes and any set by hand), showId: {holeId: true | false | null},
+                pending: "collar" (one small ASSAYS PENDING tag per group of pending holes) | "trace"})   collar ID pills; new vs previously released from a
                                   status, year or campaign column. Planned holes (status "planned", no assays)
                                   draw dashed with a "Planned" legend row
   EM3D.groupCallouts([holeIds] | "auto" | null)   one box listing several holes' intercepts

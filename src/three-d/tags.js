@@ -83,11 +83,20 @@ function pillColors(st) {
   if (st === 'planned') return { fill: '#ffffff', text: S.primary, line: S.primary, dash: true };
   return dark ? { fill: c, text: H.textOn(c), line: c } : { fill: '#ffffff', text: st === 'previous' ? '#5f6e72' : st === 'new' ? S.accent : H.INK, line: c };
 }
-// Collar pills: drawn after the collars and the toe IDs; boxes added to occ so later furniture keeps clear.
-export function drawPills(ctx, K, { placed, occ, W, H: Hh }) {
-  const S = H.S; if (!S.ids || T().at === 'toe') return;
+// Which holes carry an ID: a per-hole choice, else all, or (key holes only) the callout, new and planned holes.
+export function idShown(h) {
+  const t = T(), v = t.showId?.[h.id]; if (typeof v === 'boolean') return v;
+  return t.idMode !== 'key' || ['new', 'planned'].includes(statusOf(h)) || H.shownCallouts().some((c) => c.h === h);
+}
+// Collar pills and small "ASSAYS PENDING" tags: drawn after the collars, the toe IDs and the legends; boxes
+// go into occ so later furniture keeps clear.
+export function drawPills(ctx, K, opts) {
+  const S = H.S; if (S.ids && T().at !== 'toe') drawIdPills(ctx, K, opts);
+  if (S.pendingLabels && T().pending === 'collar') drawPending(ctx, K, opts);
+}
+function drawIdPills(ctx, K, { placed, occ, W, H: Hh }) {
   const { u, font } = K; font(700, 12.5);
-  const items = H.project.holes.map((h) => {
+  const items = H.project.holes.filter(idShown).map((h) => {
     const s = H.proj(H.G.V(h.c.x, h.c.y, h.c.z)); if (s[2] > 1) return null;
     const st = statusOf(h), pri = st === 'new' ? 0 : st === 'planned' ? 2 : st === 'previous' ? 3 : 1;
     return { hole: h, st, pri, x: s[0], y: s[1] - 4 * u, w: ctx.measureText(h.id).width + 14 * u, h: 20 * u };
@@ -111,6 +120,24 @@ export function drawPills(ctx, K, { placed, occ, W, H: Hh }) {
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
     placed.push(p.box); occ.push(p.box);
   });
+}
+// One small tag per group of adjacent pending collars, with a thin leader to each.
+function drawPending(ctx, K, { placed, occ, W, H: Hh }) {
+  const { u, font } = K, hs = H.project.holes.filter(H.isPending).map((h) => ({ h, s: H.proj(H.G.V(h.c.x, h.c.y, h.c.z)) })).filter((p) => p.s[2] < 1);
+  if (!hs.length) return;
+  font(700, 9.5); H.setSpacing(ctx, 1.1 * u); const t = 'ASSAYS PENDING', w = ctx.measureText(t).width + 14 * u, hh = 16 * u;
+  const groups = clusters(hs.map((p) => p.s), 70 * u).map((g) => g.map((i) => hs[i]));
+  const items = groups.map((g) => ({ g, x: g.reduce((a, p) => a + p.s[0], 0) / g.length, y: Math.min(...g.map((p) => p.s[1])) + 14 * u, w, h: hh }));
+  const res = placePills(items, [...placed, ...occ.filter((b) => b[3] - b[1] < Hh * 0.5)], { W, H: Hh, unit: u, pad: 3 * u });
+  res.forEach((p) => {
+    ctx.strokeStyle = H.S.accent; ctx.lineWidth = 0.9 * u; ctx.setLineDash([2 * u, 2 * u]);
+    p.g.forEach(({ s }) => { if (Math.hypot(s[0] - p.cx, s[1] - p.cy) > hh) { ctx.beginPath(); ctx.moveTo(s[0], s[1]); ctx.lineTo(p.cx, p.cy); ctx.stroke(); } });
+    ctx.setLineDash([]);
+    H.roundRect(ctx, p.cx - w / 2, p.cy - hh / 2, w, hh, hh / 2); ctx.fillStyle = 'rgba(255,255,255,0.96)'; ctx.fill(); ctx.lineWidth = u; ctx.stroke();
+    ctx.fillStyle = H.S.accent; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(t, p.cx + 0.5 * u, p.cy + 0.6 * u);
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; placed.push(p.box); occ.push(p.box);
+  });
+  H.setSpacing(ctx, 0);
 }
 // Legend rows for the statuses in use: [{ label, draw(ctx, x, cy, u) }].
 export function legendRows() {
@@ -281,6 +308,13 @@ export function set(o = {}) {
   const t = T();
   if (o.at !== undefined) { if (!['toe', 'collar', 'both'].includes(o.at)) throw new Error('at must be "collar" (pills at the collar), "toe" (IDs at the end of the hole) or "both".'); t.at = o.at; }
   if (o.style !== undefined) { if (!['dark', 'light'].includes(o.style)) throw new Error('style must be "dark" (filled pills, white text) or "light" (white pills, coloured text).'); t.style = o.style; }
+  if (o.idMode !== undefined) { if (!['all', 'key'].includes(o.idMode)) throw new Error('idMode must be "all" or "key" (the callout holes, the new holes and any shown by hand).'); t.idMode = o.idMode; }
+  if (o.pending !== undefined) { if (!['collar', 'trace'].includes(o.pending)) throw new Error('pending must be "collar" (a small tag per group of pending holes) or "trace" (along each hole).'); t.pending = o.pending; }
+  if (o.showId !== undefined) {
+    if (!o.showId || typeof o.showId !== 'object') throw new Error('showId must be { holeId: true | false | null }.');
+    const ids = new Set((H.project?.holes || []).map((h) => h.id)); t.showId = { ...(t.showId || {}) };
+    Object.entries(o.showId).forEach(([id, v]) => { if (!ids.has(id)) throw new Error(`No hole "${id}".`); if (v === null) delete t.showId[id]; else t.showId[id] = !!v; });
+  }
   if (o.fadePrevious !== undefined) t.fadePrevious = !!o.fadePrevious;
   if (o.autoGroup !== undefined) t.autoGroup = !!o.autoGroup;
   if (o.groupRadius !== undefined) t.groupRadius = Math.max(30, Math.min(600, +o.groupRadius || 140));
@@ -305,10 +339,11 @@ export function renderUI(el) {
     <div class="row" style="gap:14px;margin-top:6px"><label class="check"><input type="checkbox" data-t="fadePrevious" ${t.fadePrevious ? 'checked' : ''}>Fade previously released holes</label>
       <label class="check"><input type="checkbox" data-t="autoGroup" ${t.autoGroup ? 'checked' : ''}>Group nearby intercept callouts</label>
       ${(t.groups || []).length ? '<button class="btn" type="button" data-tx="groups">Clear callout groups</button>' : ''}</div>
-    ${hs.length ? `<details style="margin-top:6px"><summary>Hole status (new, previous, planned)</summary><p class="muted">Read from the collar status, year or campaign columns; change any here.</p>
-      <div class="files">${hs.map((h) => `<label class="field" style="grid-template-columns:1fr auto;display:grid;align-items:center;gap:6px"><span class="mono">${esc(h.id)}</span><select data-ts="${esc(h.id)}">${['auto', 'new', 'previous', 'planned', 'none'].map((v) => `<option value="${v}" ${(t.status[h.id] || 'auto') === v ? 'selected' : ''}>${v === 'auto' ? `Auto (${st.status.get(h.id) || 'none'})` : v}</option>`).join('')}</select></label>`).join('')}</div></details>` : ''}`;
+    ${hs.length ? `<details style="margin-top:6px"><summary>Holes: ID shown, status (new, previous, planned)</summary><p class="muted">Status from the collar status, year or campaign columns; change any here. Untick a hole to hide its ID.</p>
+      <div class="files">${hs.map((h) => `<label class="field" style="grid-template-columns:auto 1fr auto;display:grid;align-items:center;gap:6px"><input type="checkbox" data-tid="${esc(h.id)}" ${idShown(h) ? 'checked' : ''} aria-label="Show the ID of ${esc(h.id)}"><span class="mono">${esc(h.id)}</span><select data-ts="${esc(h.id)}">${['auto', 'new', 'previous', 'planned', 'none'].map((v) => `<option value="${v}" ${(t.status[h.id] || 'auto') === v ? 'selected' : ''}>${v === 'auto' ? `Auto (${st.status.get(h.id) || 'none'})` : v}</option>`).join('')}</select></label>`).join('')}</div></details>` : ''}`;
   const apply = (o) => H.api.setTags(o).catch((e) => H.status(e.message));
   el.querySelectorAll('[data-t]').forEach((i) => i.addEventListener('change', () => apply({ [i.dataset.t]: i.type === 'checkbox' ? i.checked : i.value })));
   el.querySelectorAll('[data-ts]').forEach((s) => s.addEventListener('change', () => apply({ status: { [s.dataset.ts]: s.value === 'auto' ? null : s.value } })));
+  el.querySelectorAll('[data-tid]').forEach((c) => c.addEventListener('change', () => apply({ showId: { [c.dataset.tid]: c.checked } })));
   el.querySelector('[data-tx="groups"]')?.addEventListener('click', () => H.api.groupCallouts(null));
 }
