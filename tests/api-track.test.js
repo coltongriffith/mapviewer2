@@ -377,7 +377,7 @@ describe('api/track team enquiries', () => {
   it('stores the enquiry and returns a signed upload URL per declared file', async () => {
     const res = mockRes();
     await handler(ask({
-      name: 'Pat', projects: 'Star project', materials: ['claims', 'sections_3d', 'bogus'], service_level: 'maps_presentation',
+      name: 'Pat', projects: 'Star project', materials: ['claims', 'sections_3d', 'map_review', 'bogus'], service_level: 'maps_presentation',
       deadline: '2026-11-15', deadline_note: 'AGM deck', message: 'Drilling starts soon', ref: '3d',
       files: [{ name: 'Collars 2026.CSV', size: 1200, type: 'text/csv' }, { name: 'huge.zip', size: 60 * 1024 * 1024 }],
     }), res);
@@ -386,7 +386,7 @@ describe('api/track team enquiries', () => {
     const row = inserts[0].row;
     expect(row).toMatchObject({
       email: 'geo@example.com', company: 'Star Copper', name: 'Pat', projects: 'Star project',
-      materials: ['claims', 'sections_3d'], service_level: 'maps_presentation', deadline: '2026-11-15', ref: '3d',
+      materials: ['claims', 'sections_3d', 'map_review'], service_level: 'maps_presentation', deadline: '2026-11-15', ref: '3d',
     });
     // The over-size file is not offered an upload slot.
     expect(row.files).toEqual([{ name: 'Collars 2026.CSV', size: 1200, type: 'text/csv', path: `${row.id}/1-collars-2026.csv` }]);

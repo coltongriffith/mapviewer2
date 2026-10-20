@@ -61,6 +61,7 @@
           <li>For exploration companies, geology teams and consultancies</li>
           <li>Your geologists keep doing the geology; we keep the figures current</li>
         </ul>
+        <p class="hero-review">Not ready for a retainer? <a href="#enquire" data-review>Send us your latest news-release map for a free review.</a></p>
       </div>
       <div class="hero-art" aria-hidden="true">
         <figure class="stack s1"><img src="/gallery/regional.webp" srcset="/gallery/regional.webp 640w, /gallery/regional@2x.webp 1280w" sizes="(max-width: 720px) 100vw, 560px" alt="" width="640" height="400"><figcaption>Regional location</figcaption></figure>
@@ -138,13 +139,14 @@
       <div class="head">
         <p class="kicker">Three service levels</p>
         <h2>Pick how much of your story we keep current</h2>
-        <p>Every plan is a monthly retainer, scoped to your projects and drilling schedule after a short call.</p>
+        <p>Every plan is a monthly retainer. Your base maps and house style are built once and locked, so each new result is a quick, faithful update rather than a new project.</p>
       </div>
       <div class="plans">
         <article class="plan">
           <h3>Managed Maps</h3>
           <p class="plan-sum">Maps and ongoing updates.</p>
           <p class="price" data-plan-price="managed_maps">Quoted after a scoping call</p>
+          <p class="terms" data-plan-terms="managed_maps" hidden></p>
           <ul>
             <li>Agreed map set for each project</li>
             <li>Updates as results and claims change</li>
@@ -157,6 +159,7 @@
           <h3>Maps + Presentation</h3>
           <p class="plan-sum">Maps, deck and fact-sheet maintenance.</p>
           <p class="price" data-plan-price="maps_presentation">Quoted after a scoping call</p>
+          <p class="terms" data-plan-terms="maps_presentation" hidden></p>
           <ul>
             <li>Everything in Managed Maps</li>
             <li>Corporate deck kept current</li>
@@ -169,6 +172,7 @@
           <h3>Corporate Materials</h3>
           <p class="plan-sum">Maps, presentation and website maintenance.</p>
           <p class="price" data-plan-price="corporate">Quoted after a scoping call</p>
+          <p class="terms" data-plan-terms="corporate" hidden></p>
           <ul>
             <li>Everything in Maps + Presentation</li>
             <li>Project pages on your website kept current</li>
@@ -181,8 +185,39 @@
     </div>
   </section>
 
+  <!-- Self-serve or managed -->
+  <section class="band band-tint" id="choose">
+    <div class="wrap">
+      <div class="head">
+        <p class="kicker">Software and a service</p>
+        <h2>Make it yourself, or have us keep it current</h2>
+        <p>The same tools our team uses are open to yours. Start a figure yourself and hand it to us whenever you want it finished or kept up to date.</p>
+      </div>
+      <div class="choose">
+        <article>
+          <h3>Do it yourself</h3>
+          <ul>
+            <li><a href="/">Exploration Maps</a>: claim, project and drill maps from public registry data and your files</li>
+            <li><a href="/3d">3D maker (beta)</a>: drop drill CSVs, add your logo, export a branded 3D figure and section</li>
+            <li>Free to start, Pro for full-resolution and vector exports</li>
+          </ul>
+          <a class="btn btn-ghost" href="/3d">Try the 3D maker</a>
+        </article>
+        <article class="choose-managed">
+          <h3>We do it for you</h3>
+          <ul>
+            <li>We build your base maps and house style once, then update them as results land</li>
+            <li>A geologist-reviewed figure set for every release, deck and fact sheet</li>
+            <li>Send a figure from the 3D maker to our design desk with one click and we finish it by hand</li>
+          </ul>
+          <a class="btn btn-cu" href="#enquire">Discuss your project</a>
+        </article>
+      </div>
+    </div>
+  </section>
+
   <!-- 5. Examples and trust -->
-  <section class="band band-tint" id="examples">
+  <section class="band" id="examples">
     <div class="wrap">
       <div class="head">
         <p class="kicker">Examples</p>
@@ -195,7 +230,8 @@
         <figure><img src="/gallery/drill-results.webp" srcset="/gallery/drill-results.webp 640w, /gallery/drill-results@2x.webp 1280w" sizes="(max-width: 720px) 100vw, 560px" alt="Drill plan with assay callouts" loading="lazy" width="640" height="400"><figcaption><b>Results</b> Drill plans and assay callouts</figcaption></figure>
         <figure><img src="/gallery/geology.webp" srcset="/gallery/geology.webp 640w, /gallery/geology@2x.webp 1280w" sizes="(max-width: 720px) 100vw, 560px" alt="Geology map with targets" loading="lazy" width="640" height="400"><figcaption><b>Geology</b> Units, structures and targets</figcaption></figure>
         <figure><img src="/gallery/target.webp" srcset="/gallery/target.webp 640w, /gallery/target@2x.webp 1280w" sizes="(max-width: 720px) 100vw, 560px" alt="Target map with ranked exploration targets" loading="lazy" width="640" height="400"><figcaption><b>Targets</b> Ranked targets for the next program</figcaption></figure>
-        <figure class="g-wide"><img src="/teams/3d-example.webp" alt="3D drilling figure with terrain, drill holes coloured by copper grade and intercept callouts" loading="lazy" width="1200" height="800"><figcaption><b>3D</b> Drilling and grade in three dimensions. <a href="/3d">Try the 3D map maker (beta)</a></figcaption></figure>
+        <figure class="g-wide"><img src="/teams/3d-example.webp" alt="3D drilling figure with terrain, drill holes coloured by copper grade and intercept callouts" loading="lazy" width="1200" height="800"><figcaption><b>3D drilling</b> Terrain, grade-coloured holes and intercept callouts, sized for a news release. <a href="/3d">Made with the 3D maker</a></figcaption></figure>
+        <figure class="g-full"><img src="/teams/section-example.webp" alt="Cross-section through the same drilling with grade-coloured holes, elevation scale and intercept callouts" loading="lazy" width="1200" height="800"><figcaption><b>Section A–A′</b> The same drilling in cross-section, from the same data and style, so every figure in a release agrees.</figcaption></figure>
       </div>
 
       <div class="trust">
@@ -224,6 +260,24 @@
         <h2>Add a mapping desk without hiring one</h2>
       </div>
       <p>Consulting geologists run the programs; their clients still need current figures for every release and every meeting. We work alongside your team as its mapping desk, under your name or ours.</p>
+    </div>
+  </section>
+
+  <!-- FAQ -->
+  <section class="band band-tint" id="faq">
+    <div class="wrap faq-wrap">
+      <div class="head">
+        <p class="kicker">Questions</p>
+        <h2>What teams ask before they start</h2>
+      </div>
+      <div class="faq">
+        <details><summary>What data do you need from us?</summary><p>Whatever you have: collar, survey and assay tables from your drill database, claim lists, geology and geophysics files, models as OBJ or DXF, and your current deck. Spreadsheets, shapefiles and PDFs are all fine. We tell you if anything is missing.</p></details>
+        <details><summary>We have a geologist but no GIS person. Is that who this is for?</summary><p>Yes. Your geologists keep doing the geology and sign off the technical content. We take on the drafting, styling and updating, so their time goes to the program, not to the maps.</p></details>
+        <details><summary>How fast are updates?</summary><p>Turnaround is agreed in your plan and set around your release schedule. Because your base maps and style are built once, a new set of results is an update, not a new project.</p></details>
+        <details><summary>Who checks the figures?</summary><p>We check every figure against your source data and send it to you for approval. Your Qualified Person keeps technical sign-off, and nothing is published without your approval.</p></details>
+        <details><summary>Can we keep using the software ourselves?</summary><p>Yes. Every plan includes Exploration Maps and the 3D maker for your team, so you can make quick figures in-house and send the important ones to us.</p></details>
+        <details><summary>What if we stop drilling for a season?</summary><p>Tell us and we'll pause or scale the plan back. Your base maps and style stay ready for when the program restarts.</p></details>
+      </div>
     </div>
   </section>
 
@@ -256,6 +310,7 @@
             <label><input type="checkbox" name="materials" value="presentation">Presentation</label>
             <label><input type="checkbox" name="materials" value="fact_sheet">Fact sheet</label>
             <label><input type="checkbox" name="materials" value="website">Website</label>
+            <label class="review-opt"><input type="checkbox" name="materials" value="map_review">A free review of our current maps</label>
           </div>
         </fieldset>
         <label>Service level

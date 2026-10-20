@@ -4,7 +4,7 @@ import { relTime } from './metrics';
 
 const MATERIAL_LABEL = {
   claims: 'Claims and land', project_maps: 'Project maps', results: 'Exploration results', sections_3d: 'Sections and 3D',
-  investor: 'Investor maps', presentation: 'Presentation', fact_sheet: 'Fact sheet', website: 'Website',
+  investor: 'Investor maps', presentation: 'Presentation', fact_sheet: 'Fact sheet', website: 'Website', map_review: 'Free map review',
 };
 const LEVEL_LABEL = { managed_maps: 'Managed Maps', maps_presentation: 'Maps + Presentation', corporate: 'Corporate Materials', not_sure: 'Not sure' };
 const fmtSize = (b) => (b >= 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`);

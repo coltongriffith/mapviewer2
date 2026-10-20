@@ -146,7 +146,7 @@ const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
 
 // Exploration Maps for Teams (/teams). The form's choices, checked here so a
 // row only ever holds values the admin view knows how to show.
-const TEAM_MATERIALS = new Set(['claims', 'project_maps', 'results', 'sections_3d', 'investor', 'presentation', 'fact_sheet', 'website']);
+const TEAM_MATERIALS = new Set(['claims', 'project_maps', 'results', 'sections_3d', 'investor', 'presentation', 'fact_sheet', 'website', 'map_review']);
 const TEAM_LEVELS = new Set(['managed_maps', 'maps_presentation', 'corporate', 'not_sure']);
 const TEAM_MAX_FILES = 5;
 const TEAM_MAX_FILE_BYTES = 50 * 1024 * 1024;
