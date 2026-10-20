@@ -980,7 +980,46 @@ function addUserFiles(arr) {
   status(project.empty ? `Added ${added.join(', ')}. Still need a collar file.` : `Added ${added.join(', ')}. ${project.holes.length} holes on the figure.`);
   return getState();
 }
-async function readFileList(fl) { const arr = await Promise.all([...fl].map((f) => f.text().then((text) => ({ name: f.name, text })))); addUserFiles(arr); }
+// A .zip is unpacked here, in the browser: its CSV, TXT and OBJ files load as if
+// dropped one by one. Folders, Mac resource forks, READMEs and anything else are skipped.
+const DATA_FILE = /\.(csv|txt|obj)$/i;
+const MAX_ZIP_BYTES = 200 * 1024 * 1024;
+async function unzipDataFiles(buffer) {
+  const { unzipSync } = await import('fflate');
+  let total = 0;
+  const entries = unzipSync(new Uint8Array(buffer), {
+    filter: (f) => {
+      const keep = DATA_FILE.test(f.name) && !/(^|\/)(__MACOSX|\.)/.test(f.name) && !/(^|\/)readme[^/]*$/i.test(f.name);
+      if (keep) total += f.originalSize;
+      if (total > MAX_ZIP_BYTES) throw new Error('That ZIP unpacks to more than 200 MB. Send the drill files on their own.');
+      return keep;
+    },
+  });
+  const decoder = new TextDecoder();
+  return Object.entries(entries).map(([path, bytes]) => ({ name: path.split('/').pop(), text: decoder.decode(bytes) }));
+}
+async function readFileList(fl) {
+  try {
+    const arr = (await Promise.all([...fl].map(async (f) => (/\.zip$/i.test(f.name)
+      ? unzipDataFiles(await f.arrayBuffer())
+      : [{ name: f.name, text: await f.text() }])))).flat();
+    if (!arr.length) { status('No CSV, TXT or OBJ files found in that ZIP.'); return; }
+    addUserFiles(arr);
+  } catch (e) {
+    status(e.message && !/^invalid/i.test(e.message) ? e.message : 'That file could not be read. Use CSV, TXT, OBJ or a ZIP of them.');
+  }
+}
+// For assistants: a ZIP as a data URL, base64 string or ArrayBuffer.
+async function addZip(zip) {
+  let buf = zip;
+  if (typeof zip === 'string') {
+    const b64 = zip.replace(/^data:[^,]*,/, ''), bin = atob(b64);
+    buf = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+  }
+  const arr = await unzipDataFiles(buf instanceof Uint8Array ? buf.buffer : buf);
+  if (!arr.length) throw new Error('No CSV, TXT or OBJ files found in that ZIP.');
+  return addUserFiles(arr);
+}
 $('file-input').addEventListener('change', (e) => { if (e.target.files.length) readFileList(e.target.files); e.target.value = ''; });
 const drop = $('drop');
 ['dragenter', 'dragover'].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.add('over'); }));
@@ -1095,6 +1134,7 @@ JavaScript API (run in the page console or via your agent's evaluate tool):
   EM3D.getState()                 files, holes, grade columns, callouts, brand, camera, size
   EM3D.loadSample()               illustrative project
   EM3D.clearFiles()
+  EM3D.addZip(dataUrlOrBase64)    Promise. Unpacks a ZIP and adds its CSV/TXT/OBJ files
   EM3D.addFiles([{name, text}])   CSV or OBJ text. The file name helps detect the type:
                                   collars, surveys, assays, topography, or a .obj model shape
   EM3D.setBrand({company, title, subtitle, footnote, primary, accent, credit})
@@ -1128,7 +1168,7 @@ Example: a branded news-release figure from pasted CSVs
 $('ai-help').textContent = HELP;
 const call = (fn) => (...args) => { const r = fn(...args); return r === undefined ? getState() : r; };
 window.EM3D = Object.freeze({
-  version: 3, help: () => HELP, getState, loadSample, clearFiles, addFiles: addUserFiles, setBrand, setLogo, setStyle: (o) => setStyle(o, true), setCallout,
+  version: 3, help: () => HELP, getState, loadSample, clearFiles, addFiles: addUserFiles, addZip, setBrand, setLogo, setStyle: (o) => setStyle(o, true), setCallout,
   setCamera: call((o = {}) => { if (!G) throw new Error('Load data first.'); showView('3d'); if (o.view) { if (!VIEWS[o.view]) throw new Error('view must be a, b, low or plan.'); applyView(o.view, true); } else setCamera(o, true); syncCamUI(); }),
   setFigureSize, showStep: call(showStep), showView: call(showView), exportPNG,
 });
