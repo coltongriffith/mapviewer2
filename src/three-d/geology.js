@@ -41,6 +41,18 @@ export function syncLegend(legend, codes) {
   });
   return out.sort((a, b) => a.order - b.order).map((e, i) => ({ ...e, order: i }));
 }
+// Hidden codes. "nearest": their intervals are left out, so the faces are interpolated as if they did not
+// exist and the nearest visible units fill in; "other": they fold into one muted "Other" unit. Returns the
+// class of each code (codes left out have none) and the classes in order (codes, plus OTHER at the end).
+export const OTHER = '\u0000other', OTHER_COLOR = '#d5d1c8';
+export function foldCodes(legend, codes, mode = 'nearest') {
+  const by = new Map((legend || []).map((e) => [e.code, e])), shown = codes.filter((c) => by.get(c)?.show !== false), index = new Map(shown.map((c, i) => [c, i]));
+  const other = mode === 'other' && shown.length < codes.length;
+  if (other) codes.forEach((c) => { if (!index.has(c)) index.set(c, shown.length); });
+  return { index, classes: other ? [...shown, OTHER] : shown, other };
+}
+// Colour strength: 1 is the legend colour; higher deepens it away from white (pastels read pale on a face).
+export const deepen = (hex, k = 1) => `#${rgbOf(hex).map((v) => Math.round(Math.max(0, Math.min(255, 255 - (255 - v) * k))).toString(16).padStart(2, '0')).join('')}`;
 // Points along each interval: { x, y, z, c (code index), n }. holes: [{ id, posAt(d) }].
 export function logSamples(holes, byHole, codeIndex, maxSamples = 6000) {
   let metres = 0; holes.forEach((h) => (byHole.get(h.id) || []).forEach((it) => { metres += it.to - it.from; }));
@@ -112,7 +124,7 @@ export function smoothClasses(G, radius = 2) {
 }
 
 // ---------- canvases ----------
-const rgbOf = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+function rgbOf(h) { return [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)); }
 // Classes to an RGBA canvas. colors[c] = '#rrggbb' or null (hidden). Contacts are drawn a shade darker,
 // and texture adds a faint bedding striation and grain, as on hand-coloured sections.
 export function classCanvas(cls, nx, ny, colors, texture = true) {
@@ -207,10 +219,9 @@ export function legendNow() {
 export const autoSearch = () => { const G = H.G; return Math.round(Math.max(40, 0.55 * Math.max(G.bw, G.bh))); };
 const searchNow = () => (Number.isFinite(cfg().search) && cfg().search > 0 ? cfg().search : autoSearch());
 function samplesNow() {
-  const L = logsNow(), G = H.G, codes = L.codes.map((c) => c.code), key = `${cache.logsKey}|${codes.join(',')}`;
+  const L = logsNow(), G = H.G, codes = L.codes.map((c) => c.code), fold = foldCodes(cfg().legend, codes, cfg().hidden), key = `${cache.logsKey}|${[...fold.index].join(',')}`;
   if (cache.samplesKey !== key || cache.samplesG !== G) {
-    const idx = new Map(codes.map((c, i) => [c, i]));
-    cache.samples = logSamples(H.project.holes.filter((h) => h.path), L.byHole, idx); cache.samplesKey = key; cache.samplesG = G; cache.codes = codes; cache.grids = {};
+    cache.samples = logSamples(H.project.holes.filter((h) => h.path), L.byHole, fold.index); cache.samplesKey = key; cache.samplesG = G; cache.codes = codes; cache.fold = fold; cache.grids = {};
   }
   return cache.samples;
 }
@@ -218,11 +229,14 @@ function samplesNow() {
 export function planeClasses(key, a, b, sizeOverride) {
   const P = samplesNow(), g = cfg(), [nx, ny] = sizeOverride || gridSize(a, b), k = `${key}|${a}|${b}|${nx}x${ny}|${g.anisotropy}|${searchNow()}|${g.smooth}`;
   let hit = cache.grids[key]; if (hit && hit.k === k) return hit;
-  const grid = classifyGrid(P, cache.codes.length, nx, ny, planeSampler(a, b)(nx, ny), { aniso: Math.max(1, g.anisotropy || 1), search: searchNow() });
+  const grid = classifyGrid(P, cache.fold.classes.length, nx, ny, planeSampler(a, b)(nx, ny), { aniso: Math.max(1, g.anisotropy || 1), search: searchNow() });
   hit = { k, nx, ny, cls: smoothClasses(grid, g.smooth ?? 2), canvas: null, ck: null, covered: grid.cover.reduce((s, v) => s + v, 0) / (nx * ny) };
   cache.grids[key] = hit; return hit;
 }
-function colorsNow() { const by = new Map(cfg().legend.map((e) => [e.code, e])); return cache.codes.map((c) => { const e = by.get(c); return e && e.show !== false ? e.color : null; }); }
+// Face colours: the legend colour at the wall colour strength, the same as the legend swatches.
+const strength = () => cfg().strength ?? 1.3;
+const colorOf = (code) => deepen(code === OTHER ? OTHER_COLOR : cfg().legend.find((e) => e.code === code)?.color || OTHER_COLOR, strength());
+function colorsNow() { return cache.fold.classes.map(colorOf); }
 function geologyCanvas(key, a, b) {
   const hit = planeClasses(key, a, b), cols = colorsNow(), ck = `${cols.join()}|${cfg().texture}`;
   if (!hit.canvas || hit.ck !== ck) { hit.canvas = classCanvas(hit.cls, hit.nx, hit.ny, cols, cfg().texture !== false); hit.ck = ck; }
@@ -260,9 +274,10 @@ export const geologyShown = () => cfg().enabled && hasLogs() && Object.values(la
 // ---------- figure furniture: legend block, 2D section, footnote, state ----------
 export function legendBlock() {
   if (!geologyShown()) return null;
-  const present = new Set(cache.codes || []), rows = cfg().legend.filter((e) => e.show !== false && present.has(e.code));
+  const present = new Set(cache.codes || []), rows = cfg().legend.filter((e) => e.show !== false && present.has(e.code)).map((e) => ({ label: e.name || e.code, color: colorOf(e.code) }));
+  if (cache.fold?.other) rows.push({ label: 'Other', color: colorOf(OTHER) });
   if (!rows.length) return null;
-  return { title: cfg().title || 'Lithology', rows: rows.map((e) => ({ label: e.name || e.code, color: e.color })) };
+  return { title: cfg().title || 'Lithology', rows };
 }
 // Paints the section view: the plane A→A′ classified at the section's own resolution, clipped by the profile.
 export function drawSection2D(ctx, { A, Bp, X, Y, L, clip }) {
@@ -293,6 +308,8 @@ export function set(o = {}) {
   if (o.anisotropy !== undefined) { const v = +o.anisotropy; if (!Number.isFinite(v)) throw new Error('anisotropy must be 1-20 (how much further layers reach sideways than up and down).'); g.anisotropy = Math.max(1, Math.min(20, v)); }
   if (o.search !== undefined) { if (o.search === null || o.search === 'auto' || o.search === '') g.search = null; else { const v = +o.search; if (!(v > 0)) throw new Error('search must be a distance in metres, or null for automatic.'); g.search = Math.min(20000, v); } }
   if (o.smooth !== undefined) g.smooth = Math.max(0, Math.min(8, Math.round(+o.smooth) || 0));
+  if (o.strength !== undefined) { const v = +o.strength; if (!Number.isFinite(v)) throw new Error('strength must be 0.5-2 (1: the legend colour; higher: deeper).'); g.strength = Math.max(0.5, Math.min(2, v)); }
+  if (o.hidden !== undefined) { if (!['nearest', 'other'].includes(o.hidden)) throw new Error('hidden must be "nearest" (hidden codes give way to the nearest visible unit) or "other" (one muted "Other" unit).'); g.hidden = o.hidden; }
   ['texture', 'section'].forEach((k) => { if (o[k] !== undefined) g[k] = !!o[k]; });
   if (o.title !== undefined) g.title = String(o.title).slice(0, 40) || 'Lithology';
   if (o.note !== undefined) g.note = o.note === null ? '' : String(o.note).slice(0, 200);
@@ -329,12 +346,18 @@ export function renderUI(el) {
     </div>
     <datalist id="geo-titles"><option value="Lithology"><option value="Alteration"><option value="Geology"></datalist>
     <div class="row" ${faces === 'chosen' ? '' : 'hidden'} style="gap:12px;margin-top:6px">${FACE_KEYS.map((f) => `<label class="check"><input type="checkbox" data-gf="${f}" ${Array.isArray(g.faces) && g.faces.includes(f) ? 'checked' : ''}>${f}</label>`).join('')}</div>
-    <label class="field" style="margin-top:8px"><span>Opacity <output class="mono">${Math.round(g.opacity * 100)}%</output></span><input type="range" min="10" max="100" data-g="opacity" value="${Math.round(g.opacity * 100)}"></label>
-    <div class="grid2">
+    <div class="grid2" style="margin-top:8px">
+      <label class="field"><span>Opacity <output class="mono">${Math.round(g.opacity * 100)}%</output></span><input type="range" min="10" max="100" data-g="opacity" value="${Math.round(g.opacity * 100)}"></label>
+      <label class="field"><span>Colour strength <output class="mono">${(g.strength ?? 1.3).toFixed(1)}×</output></span><input type="range" min="50" max="200" step="10" data-g="strength" value="${Math.round((g.strength ?? 1.3) * 100)}"></label>
+    </div>
+    <details style="margin-top:8px"><summary>Advanced</summary>
+    <label class="field" style="margin-top:6px"><span>Hidden codes</span><select data-g="hidden"><option value="nearest" ${g.hidden !== 'other' ? 'selected' : ''}>Give way to the nearest visible unit</option><option value="other" ${g.hidden === 'other' ? 'selected' : ''}>One muted "Other" unit</option></select></label>
+    <div class="grid2" style="margin-top:6px">
       <label class="field"><span>Anisotropy (sideways ÷ vertical reach)</span><input type="number" min="1" max="20" step="0.5" data-g="anisotropy" value="${g.anisotropy}"></label>
       <label class="field"><span>Search radius (m)</span><input type="number" min="5" data-g="search" value="${g.search ?? ''}" placeholder="auto${H.G ? ` (${searchNow()} m)` : ''}"></label>
     </div>
     <div class="row" style="gap:14px;margin-top:6px"><label class="check"><input type="checkbox" data-g="texture" ${g.texture !== false ? 'checked' : ''}>Subtle texture</label><label class="check"><input type="checkbox" data-g="section" ${g.section ? 'checked' : ''}>Also on the A–A′ plane</label></div>
+    </details>
     ${legend.length ? `<div class="files geo-legend" style="margin-top:8px">${legend.map((e, i) => `<div class="label-row" style="${present.size && !present.has(e.code) ? 'opacity:.55' : ''}">
       <input type="checkbox" data-gs="${i}" ${e.show !== false ? 'checked' : ''} aria-label="Show ${esc(e.code)}"><input type="color" data-gc="${i}" value="${e.color}" aria-label="Colour of ${esc(e.code)}">
       <input type="text" data-gn="${i}" value="${esc(e.name)}" aria-label="Name of ${esc(e.code)}" title="Code ${esc(e.code)}">
@@ -345,11 +368,12 @@ export function renderUI(el) {
   const apply = (o) => H.api.setGeology(o).catch((e) => H.status(e.message));
   el.querySelectorAll('[data-g]').forEach((inp) => inp.addEventListener(inp.type === 'range' || inp.type === 'text' ? 'change' : 'change', () => {
     const k = inp.dataset.g; let v = inp.type === 'checkbox' ? inp.checked : inp.value;
-    if (k === 'opacity') v = +v / 100; if (k === 'anisotropy') v = +v; if (k === 'search') v = v === '' ? null : +v;
+    if (k === 'opacity' || k === 'strength') v = +v / 100; if (k === 'anisotropy') v = +v; if (k === 'search') v = v === '' ? null : +v;
     if (k === 'faces' && v === 'chosen') v = Array.isArray(g.faces) ? g.faces : ['N', 'E'];
     apply({ [k]: v });
   }));
   el.querySelector('[data-g="opacity"]').addEventListener('input', (e) => { e.target.previousElementSibling.querySelector('output').textContent = `${e.target.value}%`; });
+  el.querySelector('[data-g="strength"]').addEventListener('input', (e) => { e.target.previousElementSibling.querySelector('output').textContent = `${(e.target.value / 100).toFixed(1)}×`; });
   el.querySelectorAll('[data-gf]').forEach((cb) => cb.addEventListener('change', () => apply({ faces: FACE_KEYS.filter((f) => el.querySelector(`[data-gf="${f}"]`).checked) })));
   const L = () => cfg().legend;
   el.querySelectorAll('[data-gs]').forEach((cb) => cb.addEventListener('change', () => apply({ legend: [{ code: L()[+cb.dataset.gs].code, show: cb.checked }] })));
@@ -365,9 +389,8 @@ export function renderUI(el) {
   el.querySelectorAll('[data-gx]').forEach((b) => b.addEventListener('click', () => H.api.setFaceImage(b.dataset.gx, null)));
 }
 
-// ---------- legend blocks (geology rows, geophysics colour bar), drawn beside the main legend ----------
+// ---------- legend sections (geology rows, geophysics colour bar), drawn in the page's legend cards ----------
 // blocks: { title, rows: [{ label, color }] } or { title, bar: { lo, hi, log, color(t) -> [r, g, b] } }.
-// Laid out right to left from `right`, bottom-aligned at `bottom`. Returns the boxes drawn.
 const niceStep = (span, n) => { const r = span / n, p = 10 ** Math.floor(Math.log10(r)), m = r / p; return (m < 1.5 ? 1 : m < 3 ? 2 : m < 7 ? 5 : 10) * p; };
 export function barTicks(lo, hi, log) {
   if (log) {
@@ -377,35 +400,19 @@ export function barTicks(lo, hi, log) {
   const st = niceStep(hi - lo, 4), out = []; for (let v = Math.ceil(lo / st) * st; v <= hi + 1e-9; v += st) out.push(+v.toPrecision(6)); return out;
 }
 const tickText = (v, log) => { const x = log ? 10 ** v : v, a = Math.abs(x); return a >= 1000 ? `${+(x / 1000).toPrecision(3)}k` : a >= 10 || a === 0 ? String(Math.round(x)) : a >= 1 ? String(+x.toFixed(1)) : String(+x.toPrecision(2)); };
-export function drawBlocks(ctx, K, blocks, { right, left, bottom, top = 0, maxRight = Infinity }) {
-  const { u, font } = K, boxes = []; let x1 = right, x0 = left;
-  for (const b of blocks) {
-    font(700, 13); const tw = ctx.measureText(b.title).width;
-    let w, h;
-    if (b.bar) { w = Math.max(200 * u, tw + 24 * u); h = 12 * u + 19 * u + 16 * u + 18 * u + 8 * u; }
-    else { font(400, 13); const lw = Math.max(...b.rows.map((r) => ctx.measureText(r.label).width)); w = Math.min(260 * u, Math.max(150 * u, tw + 24 * u, lw + 56 * u)); h = 12 * u + 19 * u + b.rows.length * 19 * u + 6 * u; }
-    const x = left !== undefined ? x0 : x1 - w, y = bottom - h;
-    if (y < top || x + w > maxRight) continue; // no room
-    ctx.fillStyle = 'rgba(255,255,255,0.96)'; ctx.strokeStyle = H.RULE; ctx.lineWidth = u; H.roundRect(ctx, x, y, w, h, 5 * u); ctx.fill(); ctx.stroke();
-    ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
-    font(700, 13); ctx.fillStyle = H.INK; ctx.fillText(H.fitText(ctx, b.title, w - 24 * u), x + 12 * u, y + 12 * u + 9.5 * u);
-    let yy = y + 12 * u + 19 * u;
-    if (b.bar) {
-      const bx = x + 12 * u, bw = w - 24 * u, by = yy + 2 * u, bh = 13 * u, { lo, hi, log } = b.bar;
-      for (let i = 0; i < Math.ceil(bw); i++) { const c = b.bar.color(i / bw); ctx.fillStyle = `rgb(${c[0] | 0},${c[1] | 0},${c[2] | 0})`; ctx.fillRect(bx + i, by, 1.5, bh); }
-      ctx.strokeStyle = H.RULE; ctx.lineWidth = u; ctx.strokeRect(bx, by, bw, bh);
-      font(400, 11, true); ctx.fillStyle = H.INK; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
-      let last = -Infinity;
-      barTicks(lo, hi, log).forEach((v) => {
-        const tx = bx + (v - lo) / ((hi - lo) || 1) * bw, t = tickText(v, log), tw2 = ctx.measureText(t).width; if (tx - tw2 / 2 < last + 4 * u) return; last = tx + tw2 / 2;
-        ctx.fillRect(tx - 0.5 * u, by + bh, u, 4 * u); ctx.fillText(t, Math.max(bx + tw2 / 2, Math.min(bx + bw - tw2 / 2, tx)), by + bh + 15 * u);
-      });
-      ctx.textAlign = 'left';
-    } else b.rows.forEach((r) => {
-      ctx.fillStyle = r.color; ctx.fillRect(x + 12 * u, yy + 3.5 * u, 24 * u, 12 * u); ctx.strokeStyle = 'rgba(20,33,38,0.25)'; ctx.lineWidth = 0.8 * u; ctx.strokeRect(x + 12 * u, yy + 3.5 * u, 24 * u, 12 * u);
-      font(400, 13); ctx.fillStyle = H.INK; ctx.textBaseline = 'middle'; ctx.fillText(H.fitText(ctx, r.label, w - 56 * u), x + 44 * u, yy + 9.5 * u); yy += 19 * u;
+// A legend block as a section of the page's legend card: unit swatches, or the geophysics colour bar.
+export function sectionOf(b) {
+  if (!b.bar) return { key: 'lithology', title: b.title, rows: b.rows.map((r) => ({ label: r.label, draw: (ctx, x, cy, u) => { ctx.fillStyle = r.color; ctx.fillRect(x, cy - 6 * u, 24 * u, 12 * u); ctx.strokeStyle = 'rgba(20,33,38,0.25)'; ctx.lineWidth = 0.8 * u; ctx.strokeRect(x, cy - 6 * u, 24 * u, 12 * u); } })) };
+  return { key: 'geophys', title: b.title, rows: [{ h: 36, full: (ctx, { u, font }, bx, y, bw) => {
+    const by = y + 2 * u, bh = 13 * u, { lo, hi, log } = b.bar;
+    for (let i = 0; i < Math.ceil(bw); i++) { const c = b.bar.color(i / bw); ctx.fillStyle = `rgb(${c[0] | 0},${c[1] | 0},${c[2] | 0})`; ctx.fillRect(bx + i, by, 1.5, bh); }
+    ctx.strokeStyle = H.RULE; ctx.lineWidth = u; ctx.strokeRect(bx, by, bw, bh);
+    font(400, 11, true); ctx.fillStyle = H.INK; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+    let last = -Infinity;
+    barTicks(lo, hi, log).forEach((v) => {
+      const tx = bx + (v - lo) / ((hi - lo) || 1) * bw, t = tickText(v, log), tw2 = ctx.measureText(t).width; if (tx - tw2 / 2 < last + 4 * u) return; last = tx + tw2 / 2;
+      ctx.fillRect(tx - 0.5 * u, by + bh, u, 4 * u); ctx.fillText(t, Math.max(bx + tw2 / 2, Math.min(bx + bw - tw2 / 2, tx)), by + bh + 15 * u);
     });
-    ctx.textBaseline = 'alphabetic'; boxes.push([x, y, x + w, y + h]); x1 = x - 10 * u; x0 = x + w + 10 * u;
-  }
-  return boxes;
+    ctx.textAlign = 'left';
+  } }] };
 }

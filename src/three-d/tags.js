@@ -2,6 +2,9 @@
 // intercept boxes, free-form stat boxes, grade histogram bars along holes, and a real-map location
 // inset. Loaded on first use by studio.js (EXT hook).
 import * as THREE from 'three';
+import { placePills } from './layout.js';
+
+export { placePills };
 
 // ---------- pure ----------
 const YES = /^(y|yes|true|1|new|x)$/i, NO = /^(n|no|false|0)$/i;
@@ -34,28 +37,6 @@ export function holeStatuses(holes, manual = {}) {
   else if (!ys.length) { const cs = [...new Set(camp.values())].sort(); if (cs.length > 1) camp.forEach((c, id) => { if (!out.get(id)) out.set(id, c === cs[cs.length - 1] ? 'new' : 'previous'); }); }
   Object.entries(manual || {}).forEach(([id, st]) => { if (out.has(id) && ['new', 'previous', 'planned'].includes(st)) out.set(id, st); else if (out.has(id) && st === 'none') out.set(id, null); });
   return { status: out, newestYear: ys.length > 1 ? Math.max(...ys) : null };
-}
-const hits = (a, b) => !(a[2] < b[0] || a[0] > b[2] || a[3] < b[1] || a[1] > b[3]);
-const overlapArea = (a, b) => Math.max(0, Math.min(a[2], b[2]) - Math.max(a[0], b[0])) * Math.max(0, Math.min(a[3], b[3]) - Math.max(a[1], b[1]));
-// Pill placement: each { x, y, w, h } (anchor and size) tries spots above, beside and further out, and
-// takes the first clear of `avoid`, the frame edge and the pills already placed; failing that, the spot
-// with the least overlap. Returns { cx, cy, box, leader } per item.
-export function placePills(items, avoid, { W, H, unit = 1, pad = 4 }) {
-  const placed = [], out = [];
-  const spots = [[0, -1], [1, -0.7], [-1, -0.7], [0, -2], [1.3, -1.7], [-1.3, -1.7], [0, 1], [1.2, 0.6], [-1.2, 0.6], [0, -3], [1.6, -2.7], [-1.6, -2.7], [0, 2], [2, 0], [-2, 0], [0, -4], [2, -3.7], [-2, -3.7]];
-  for (const it of items) {
-    let best = null;
-    for (const [sx, sy] of spots) {
-      const cx = it.x + sx * (it.w / 2 + 8 * unit), cy = it.y + sy * (it.h + 6 * unit), box = [cx - it.w / 2 - pad, cy - it.h / 2 - pad, cx + it.w / 2 + pad, cy + it.h / 2 + pad];
-      if (box[0] < 0 || box[1] < 0 || box[2] > W || box[3] > H) continue;
-      const cost = [...avoid, ...placed].reduce((s, b) => s + (hits(box, b) ? overlapArea(box, b) + 1 : 0), 0);
-      if (!best || cost < best.cost) best = { cx, cy, box, cost, far: Math.abs(sx) > 1.1 || Math.abs(sy) > 1.1 };
-      if (cost === 0) break;
-    }
-    if (!best) best = { cx: it.x, cy: it.y - it.h, box: [it.x - it.w / 2, it.y - it.h * 1.5, it.x + it.w / 2, it.y - it.h / 2], far: false };
-    placed.push(best.box); out.push({ ...it, cx: best.cx, cy: best.cy, box: best.box, leader: best.far });
-  }
-  return out;
 }
 // Single-linkage clusters of screen points closer than r. Returns arrays of indices (singletons included).
 export function clusters(pts, r) {
