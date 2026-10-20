@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { composite, collarGroups, autoCell, autoSearch } from './shell-core.js';
 import { METAL_DEFAULTS, defaultUnit, priceUnit, eqFactors, eqFormula, eqValue } from './metal-eq.js';
+import { isXYZ, parseXYZ, refineRole } from './roles.js';
 
 const $ = (id) => document.getElementById(id);
 // ============================================================
@@ -67,6 +68,9 @@ function roleOf(cols, name) {
 const ROLE_LABEL = { collar: 'Collars', survey: 'Surveys', assay: 'Assays', topo: 'Topography', mesh: 'Model shape', unknown: 'Not recognised' };
 const ROLE_FIELDS = { collar: ['hole', 'east', 'north', 'elev', 'depth', 'az', 'dip'], survey: ['hole', 'depth', 'az', 'dip'], assay: ['hole', 'from', 'to'], topo: ['east', 'north', 'elev'] };
 const FIELD_LABEL = { hole: 'Hole ID', east: 'Easting', north: 'Northing', elev: 'Elevation', depth: 'Depth', az: 'Azimuth', dip: 'Dip', from: 'From', to: 'To', lat: 'Latitude', lon: 'Longitude' };
+// EXT hook: lithology/alteration logs and geophysics points (detected in roles.js, drawn by geology.js and geophys.js).
+Object.assign(ROLE_LABEL, { litho: 'Lithology / alteration', geophys: 'Geophysics' }); Object.assign(FIELD_LABEL, { code: 'Code', desc: 'Description', value: 'Value', line: 'Line' });
+Object.assign(ROLE_FIELDS, { litho: ['hole', 'from', 'to', 'code', 'desc'], geophys: ['east', 'north', 'elev', 'value', 'line'] });
 
 function parseOBJ(text) {
   const v = [], f = [];
@@ -160,9 +164,9 @@ function addFiles(list) {
     const entry = { name: f.name, text: f.text };
     if (/\.obj$/i.test(f.name)) { entry.role = 'mesh'; entry.mesh = parseOBJ(f.text); }
     else {
-      const { header, rows } = parseCSV(f.text);
+      const { header, rows } = isXYZ(f.name, f.text) ? parseXYZ(f.text) : parseCSV(f.text); // EXT hook: Geosoft XYZ
       Object.assign(entry, { header, rows, cols: matchCols(header) });
-      entry.role = roleOf(entry.cols, f.name);
+      entry.role = refineRole(entry, roleOf(entry.cols, f.name), f.name); // EXT hook: lithology, geophysics
       entry.grades = entry.role === 'assay' ? gradeCols(header, entry.cols, rows) : [];
     }
     files = files.filter((x) => x.name !== entry.name);
@@ -185,7 +189,7 @@ function build() {
     if (Math.abs(num(r[c.dip])) > 90) dipBad.add(id);
     // A status or notes column last in the row keeps any unquoted commas ("Complete, assays pending").
     const note = ni < 0 ? '' : (ni === f.header.length - 1 ? r.slice(ni).join(',') : r[ni] || '').trim();
-    collars.set(id, { id, x, y, z: num(r[c.elev]), depth: num(r[c.depth]), az: num(r[c.az]), dip: num(r[c.dip]), note, flags: fi < 0 || fi === ni ? '' : (r[fi] || '').trim() });
+    collars.set(id, { id, x, y, z: num(r[c.elev]), depth: num(r[c.depth]), az: num(r[c.az]), dip: num(r[c.dip]), note, flags: fi < 0 || fi === ni ? '' : (r[fi] || '').trim(), raw: Object.fromEntries(f.header.map((k, i) => [k, r[i]])) }); // raw: EXT hook (hole status)
   }); });
   if (latlon) {
     const arr = [...collars.values()], lat0 = arr.reduce((s, c) => s + c.y, 0) / arr.length, lon0 = arr.reduce((s, c) => s + c.x, 0) / arr.length;
@@ -469,10 +473,13 @@ function rebuildScene(keepCam) {
   }
 
   // Holes: grey trace, then coloured assay intervals. Provisional positions: dashed and fainter.
-  const traceSeg = [[], []];
-  holes.forEach((h) => { h.prov = isProvisional(h); for (let i = 0; i + 1 < h.path.length; i++) traceSeg[+h.prov].push(V(h.path[i].x, h.path[i].y, h.path[i].z), V(h.path[i + 1].x, h.path[i + 1].y, h.path[i + 1].z)); });
+  const traceSeg = [[], [], [], []]; // EXT hook: [2] planned, [3] faded previously released
+  holes.forEach((h) => { h.planned = isPlanned(h); }); // EXT hook: before extFade reads the statuses
+  holes.forEach((h) => { h.prov = isProvisional(h); for (let i = 0; i + 1 < h.path.length; i++) traceSeg[h.planned ? 2 : h.prov ? 1 : extFade(h) ? 3 : 0].push(V(h.path[i].x, h.path[i].y, h.path[i].z), V(h.path[i + 1].x, h.path[i + 1].y, h.path[i + 1].z)); });
   root.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(traceSeg[0]), new THREE.LineBasicMaterial({ color: '#59646a' })));
   if (traceSeg[1].length) { const dl = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(traceSeg[1]), new THREE.LineDashedMaterial({ color: '#59646a', dashSize: diag / 120, gapSize: diag / 180, transparent: true, opacity: 0.75 })); dl.computeLineDistances(); root.add(dl); }
+  if (traceSeg[2].length) { const dl = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(traceSeg[2]), new THREE.LineDashedMaterial({ color: S.primary, dashSize: diag / 90, gapSize: diag / 150 })); dl.computeLineDistances(); root.add(dl); } // EXT hook
+  if (traceSeg[3].length) root.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(traceSeg[3]), new THREE.LineBasicMaterial({ color: '#b7c0c3' }))); // EXT hook
   const nInt = holes.reduce((s, h) => s + h.ints.length, 0);
   // three 0.147 culls an InstancedMesh by its unit base geometry at the origin, not its instances.
   const tube = (mat) => { const t = new THREE.InstancedMesh(new THREE.CylinderGeometry(1, 1, 1, 8), mat, Math.max(1, nInt)); t.frustumCulled = false; root.add(t); return t; };
@@ -494,7 +501,7 @@ function rebuildScene(keepCam) {
   });
   paintTerrain(); restyle(); buildWallLabels();
   if (cam0) setCamera(cam0, true); else applyView('a', true);
-  syncRealTerrain(); syncShell();
+  syncRealTerrain(); syncShell(); extScene(); // EXT hook
 }
 
 // Terrain looks. Light and relief are paper hillshades; satellite and muted drape imagery when it has
@@ -572,6 +579,7 @@ function faceWalls() {
     w.material.opacity = solid ? 1 : 0.42; w.renderOrder = solid && !near ? 1 : 5;
   });
   (G.wallLabelMeshes || []).forEach(placeWallLabel); // keeps their minimum size as the view changes
+  extView(); // EXT hook: painted faces follow the near/far turn
 }
 
 // ============================================================
@@ -763,7 +771,7 @@ function wallLabelMesh(L) {
   const fontOf = () => { g.font = `${title ? 700 : 600} ${px}px ${SANS}`; if ('letterSpacing' in g) g.letterSpacing = title ? `${px * 0.06}px` : '0px'; };
   fontOf(); const shown = lines.map((t) => (title ? t.toUpperCase() : t)), tw = Math.max(...shown.map((t) => g.measureText(t).width)), lh = px * 1.15;
   c.width = Math.ceil(tw + px * 0.4); c.height = Math.ceil(lh * lines.length + px * 0.3); fontOf();
-  g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = L.color || (title ? S.primary : '#4b585c');
+  g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = unitInk(L.unit) || L.color || (title ? S.primary : '#4b585c'); // unitInk: EXT hook
   shown.forEach((t, i) => g.fillText(t, c.width / 2, px * 0.15 + lh * (i + 0.5)));
   const tex = new THREE.CanvasTexture(c); tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }));
@@ -803,6 +811,7 @@ function wallPatch(L, o) {
   if (o.scale !== undefined) L.scale = Math.max(0.4, Math.min(3, +o.scale || 1));
   if (o.rotation !== undefined) L.rotation = Math.max(-90, Math.min(90, +o.rotation || 0));
   if (o.color !== undefined) { if (o.color !== null && !/^#[0-9a-f]{6}$/i.test(o.color)) throw new Error('color must be a hex colour like #5f6e72, or null.'); L.color = o.color; }
+  if (o.unit !== undefined) { if (o.unit !== null && !S.geology.legend.some((e) => e.code === String(o.unit))) throw new Error(`unit must be a code in the geology legend (${S.geology.legend.map((e) => e.code).join(', ') || 'none loaded'}), or null.`); L.unit = o.unit === null ? null : String(o.unit); } // EXT hook
 }
 function addWallLabel(o = {}) {
   const n = S.wallLabels.reduce((mx, l) => Math.max(mx, +String(l.id).replace(/\D/g, '') || 0), 0) + 1;
@@ -922,7 +931,7 @@ function renderShellUI() {
     : shell.message;
 }
 
-const terrainCredits = (withImagery) => [withImagery && imageryShown() && IMAGERY_CREDIT, G?.using === 'dem' && DEM_CREDIT].filter(Boolean);
+const terrainCredits = (withImagery) => [...new Set([withImagery && imageryShown() && IMAGERY_CREDIT, G?.using === 'dem' && DEM_CREDIT].filter(Boolean).concat(withImagery ? extCredits() : []))]; // EXT hook: map inset
 
 const traceR = () => Math.max(1.5, G.diag / 330) * S.traceWidth;
 // Ribbon pieces sit 3 tube radii to the screen-right of the trace, in the plane facing the camera,
@@ -947,6 +956,7 @@ function placeRibbons() {
   };
   if (S.ribbons) callouts.forEach(({ h, ic }) => { put(0, h, ic.broad.from, ic.broad.from + ic.broad.len); if (ic.incl) put(1, h, ic.incl.from, ic.incl.from + ic.incl.len); });
   G.ribbons.forEach((rb, k) => { rb.count = n[k]; rb.instanceMatrix.needsUpdate = true; });
+  EXT.tags?.placeHistograms(); // EXT hook: grade histogram bars
 }
 // The display cut-off: intervals below it draw as the plain trace. Callouts are unaffected.
 const intervalShown = (it) => { const v = it.vals[S.valueCol]; return Number.isFinite(v) && !(S.displayCutoff !== null && v < S.displayCutoff); };
@@ -963,7 +973,7 @@ function restyle() {
     q.setFromUnitVectors(up, dir.normalize());
     sc.set(bi < 0 ? 0.001 : r, Math.max(0.01, len), bi < 0 ? 0.001 : r);
     m.compose(va.clone().add(vb).multiplyScalar(0.5), q, sc);
-    T.setMatrixAt(k, m); T.setColorAt(k, col.set(BIN_COLORS[Math.max(0, bi)]));
+    T.setMatrixAt(k, m); col.set(BIN_COLORS[Math.max(0, bi)]); if (extFade(h)) col.lerp(new THREE.Color('#ffffff'), 0.6); T.setColorAt(k, col); // EXT hook: fade
   }));
   [G.tubes, G.tubesP].forEach((T, i) => { T.count = n[i]; T.instanceMatrix.needsUpdate = true; if (T.instanceColor) T.instanceColor.needsUpdate = true; });
   styleShell();
@@ -977,7 +987,7 @@ function restyle() {
   ctx.setLineDash([14 * lk, 9 * lk]); const dk = S.terrain === 'dark'; // a dark line would vanish on dark slate
   ctx.lineWidth = 5 * lk; ctx.strokeStyle = dk ? '#fff' : S.primary; ctx.beginPath(); ctx.moveTo(...P(A)); ctx.lineTo(...P(Bp)); ctx.stroke();
   ctx.lineWidth = 2 * lk; ctx.strokeStyle = dk ? S.accent : '#fff'; ctx.stroke(); ctx.setLineDash([]); G.topTex.needsUpdate = true;
-  computeCallouts(); placeRibbons();
+  computeCallouts(); placeRibbons(); extRestyle(); // EXT hook
   drawSectionView();
 }
 function sectionEnds() {
@@ -1171,6 +1181,7 @@ function autoNotes(view) {
   const out = [];
   if (view === '3d' && shellShown()) out.push(`Grade shell: exploratory envelope interpolated from drill assays (≥${shellCutText()}); not a geological model or mineral resource.`);
   const en = eqName(); if (en && [S.valueCol, S.valueCol2].includes(en)) out.push(eqInfo().note);
+  out.push(...extNotes(view)); // EXT hook: geology and geophysics disclosures
   return out;
 }
 function drawFooter(ctx, K, Wc, Hc, credits = [], notes = []) {
@@ -1227,7 +1238,8 @@ function drawCallout(ctx, K, x, y, c, M, target) {
   ctx.fillStyle = S.primary; ctx.fillRect(x, y + bh + u, tw, 17 * u); ctx.fillStyle = textOn(S.primary); ctx.fillText(c.h.id, x + 6 * u, y + bh + 13.5 * u);
 }
 function legendRows() {
-  return S.bins.map((b, i) => [i === 3 ? `≥ ${b}` : `${b} – ${S.bins[i + 1]}`, BIN_COLORS[i + 1]]).reverse().concat([[`< ${S.bins[0]}`, BIN_COLORS[0]]]);
+  const dc = S.displayCutoff, up = (i) => (i < 0 ? S.bins[0] : i === 3 ? Infinity : S.bins[i + 1]); // EXT hook: rows under the cut-off merge into its "trace only" row
+  return S.bins.map((b, i) => [i === 3 ? `≥ ${b}` : `${b} – ${S.bins[i + 1]}`, BIN_COLORS[i + 1], up(i)]).reverse().concat([[`< ${S.bins[0]}`, BIN_COLORS[0], up(-1)]]).filter((r) => dc === null || r[2] > dc);
 }
 const meshName = (n) => n.replace(/\.obj$/i, '').replace(/^sample_/, '').replace(/_/g, ' ');
 
@@ -1254,7 +1266,7 @@ function drawScaleBar(ctx, K, footTop, avoid = []) {
     ctx.lineWidth = u; ctx.strokeStyle = INK; ctx.beginPath(); ctx.moveTo(sp[0][0], sp[0][1] - 3 * u); ctx.lineTo(sp[2][0], sp[2][1] - 3 * u); ctx.lineTo(sp[2][0], sp[2][1] + 3 * u); ctx.lineTo(sp[0][0], sp[0][1] + 3 * u); ctx.closePath(); ctx.stroke();
     font(400, 12, true); ctx.fillStyle = INK; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
     ctx.fillText('0', sp[0][0], sp[0][1] + lab * u); ctx.fillText(String(D / 2), sp[1][0], sp[1][1] + lab * u); ctx.fillText(`${D} m`, sp[2][0], sp[2][1] + lab * u); ctx.textAlign = 'left';
-    return;
+    return [Math.min(...sp.map(([x]) => x)) - 8 * u, Math.min(...ys), Math.max(...sp.map(([x]) => x)) + 28 * u, Math.max(...ys)]; // its box, for the collision pass
   }
   // No near edge has room: a flat bar at the scale of the block centre.
   // Measured along the screen's own horizontal, so a view looking along an axis is not foreshortened.
@@ -1265,6 +1277,7 @@ function drawScaleBar(ctx, K, footTop, avoid = []) {
   const x = [0.5, 0.35, 0.65].map((f) => W * f - len / 2).find((x0) => !hit([x0 - 10 * u, y - 20 * u, x0 + len + 90 * u, y + 8 * u])) ?? (W - len) / 2;
   ctx.fillStyle = INK; ctx.fillRect(x, y, len / 2, 6 * u); ctx.fillStyle = '#fff'; ctx.fillRect(x + len / 2, y, len / 2, 6 * u); ctx.strokeStyle = INK; ctx.lineWidth = u; ctx.strokeRect(x, y, len, 6 * u);
   font(400, 12, true); ctx.fillStyle = INK; ctx.textAlign = 'center'; ctx.fillText('0', x, y - 5 * u); ctx.fillText(`${D} m (at block centre)`, x + len, y - 5 * u); ctx.textAlign = 'left';
+  return [x - 10 * u, y - 20 * u, x + len + 90 * u, y + 8 * u];
 }
 // "ASSAYS PENDING" on a white pill along a projected hole (pts: screen points down the hole), reading left to
 // right or downward. Of a few spots along and beside the hole it takes the one crossing the fewest other holes
@@ -1317,6 +1330,7 @@ function drawElevTicks(ctx, K, top, bottom, avoid = [], lines = []) {
 // the label's edge to (ax, ay). In the preview the boxes are kept for dragging (labelHits).
 let labelHits = [], overlayOcc = [];
 function labelSize(ctx, K, L) {
+  if (L.kind === 'stat' && EXT.tags) return EXT.tags.statSize(ctx, K, L); // EXT hook: stat boxes
   const { u, font } = K, title = L.size === 'title', lines = String(L.text).split('\n');
   if (title) { font(700, 26); setSpacing(ctx, 1.6 * u); } else font(600, 15);
   const lh = (title ? 29 : 19) * u, tw = Math.max(...lines.map((t) => ctx.measureText(title ? t.toUpperCase() : t).width)), padX = title ? 4 * u : 12 * u, padY = title ? 2 * u : 7 * u;
@@ -1335,6 +1349,7 @@ function freeSpot(L) {
 function drawLabels(ctx, K, forExport) {
   const { u } = K, hits = [];
   S.labels.forEach((L) => {
+    if (L.kind === 'stat') { extStat(ctx, K, L, hits, forExport); return; } // EXT hook: stat boxes
     const cx = L.x * W, cy = L.y * H, { title, lines, lh, padY, bw, bh } = labelSize(ctx, K, L), box = [cx - bw / 2, cy - bh / 2, cx + bw / 2, cy + bh / 2];
     if (L.arrow) {
       const tx = L.ax * W, ty = L.ay * H, dx = tx - cx, dy = ty - cy, d = Math.hypot(dx, dy);
@@ -1377,9 +1392,9 @@ function drawOverlay(ctx, k, forExport) {
   const placed = wallLabelBoxes(), idBoxes = [], occ = [];
   project.holes.forEach((h) => {
     const [cx, cy] = proj(G.V(h.c.x, h.c.y, h.c.z)), e = h.path[h.path.length - 1], [ex, ey] = proj(G.V(e.x, e.y, e.z));
-    ctx.beginPath(); ctx.arc(cx, cy, 5 * u, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth = 2.4 * u; ctx.strokeStyle = INK; if (h.prov) ctx.setLineDash([2.5 * u, 2 * u]); ctx.stroke(); ctx.setLineDash([]);
+    ctx.beginPath(); ctx.arc(cx, cy, 5 * u, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth = 2.4 * u; ctx.strokeStyle = INK; if (h.prov || h.planned) ctx.setLineDash([2.5 * u, 2 * u]); ctx.stroke(); ctx.setLineDash([]);
     occ.push([cx - 8 * u, cy - 8 * u, cx + 8 * u, cy + 8 * u]);
-    if (!S.ids) return;
+    if (!S.ids || S.tags.at === 'collar' || (EXT.tags && !EXT.tags.idShown(h))) return; // EXT hook: collar pills instead; key holes only
     const ang = Math.atan2(ey - cy, ex - cx), flip = Math.abs(ang) > Math.PI / 2, r = 26 * u, box = [ex - r, ey - r, ex + r, ey + r];
     // The ID is dropped where it would land on another ID or on a label painted on the block.
     const run = [ex + Math.cos(ang) * 6 * u, ey + Math.sin(ang) * 6 * u, ex + Math.cos(ang) * 60 * u, ey + Math.sin(ang) * 60 * u], tbox = [Math.min(run[0], run[2]), Math.min(run[1], run[3]), Math.max(run[0], run[2]), Math.max(run[1], run[3])];
@@ -1393,7 +1408,7 @@ function drawOverlay(ctx, k, forExport) {
     const tw = ctx.measureText(h.id).width, x0 = ex + Math.cos(ang) * 6 * u, y0 = ey + Math.sin(ang) * 6 * u, x1 = x0 + Math.cos(ang) * tw, y1 = y0 + Math.sin(ang) * tw;
     idBoxes.push([Math.min(x0, x1) - 8 * u, Math.min(y0, y1) - 8 * u, Math.max(x0, x1) + 8 * u, Math.max(y0, y1) + 8 * u]);
   });
-  const pend = S.pendingLabels ? project.holes.filter(isPending) : [];
+  const pend = S.pendingLabels && !(S.tags.pending === 'collar' && EXT.tags) ? project.holes.filter(isPending) : []; // EXT hook: or small collar tags (tags.js)
   if (pend.length) {
     const scr = new Map(project.holes.map((h) => [h, h.path.filter((p, i) => i % 3 === 0).map((p) => proj(G.V(p.x, p.y, p.z))).filter((p) => p[2] < 1)]));
     pend.forEach((h) => { const pts = scr.get(h).filter((p, i, a) => i > a.length * 0.06); if (pts.length > 2) alongLabel(ctx, K, 'ASSAYS PENDING', pts, project.holes.filter((o) => o !== h).flatMap((o) => scr.get(o))); });
@@ -1406,9 +1421,8 @@ function drawOverlay(ctx, k, forExport) {
   const headBottom = drawHeader(ctx, K, W, S.title, S.subtitle, logo.w);
   const footTop = drawFooter(ctx, K, W, H, terrainCredits(true), autoNotes('3d'));
   occ.push(...idBoxes, [0, 0, W, headBottom], [0, footTop, W, H]);
-  drawScaleBar(ctx, K, footTop, idBoxes);
-  // Plan inset under the logo
-  if (S.inset) {
+  // Plan inset under the logo (EXT hook: or a map inset)
+  if (S.inset && !EXT.tags?.drawInset(ctx, K, { W, top: logo.bottom + 16 * u, occ })) {
     const iw = (narrow ? 118 : 150) * u, sc = iw / Math.max(G.bw, G.bh), bw = G.bw * sc, bh = G.bh * sc, ix = W - m - iw, iy = logo.bottom + 16 * u, P = (x, y) => [ix + (iw - bw) / 2 + (x - G.B.x0) * sc, iy + (G.B.y1 - y) * sc];
     ctx.fillStyle = '#fff'; ctx.strokeStyle = RULE; ctx.lineWidth = u; roundRect(ctx, ix - 8 * u, iy - 8 * u, iw + 16 * u, bh + 34 * u, 5 * u); ctx.fill(); ctx.stroke(); occ.push([ix - 8 * u, 0, W, iy + bh + 26 * u]);
     ctx.strokeStyle = S.primary; ctx.lineWidth = 1.4 * u; ctx.strokeRect(ix + (iw - bw) / 2, iy, bw, bh);
@@ -1421,19 +1435,23 @@ function drawOverlay(ctx, k, forExport) {
   // Legend card, bottom right
   const rows = legendRows(), meshRows = G.meshes.filter(({ name }) => S.meshes[name].show).map(({ name }) => [meshName(name), S.meshes[name].color]);
   if (shellShown()) meshRows.unshift([`Grade shell ≥ ${shellCutText()}`, S.shell.color]);
-  const provRow = project.holes.some((h) => h.prov);
+  const provRow = project.holes.some((h) => h.prov), extRows = extLegendRows(); // EXT hook: planned, new and previous rows
   const ribRows = S.ribbons && callouts.length ? [['Reported interval', RIB_COLORS[0]], ...(callouts.some((c) => c.ic.incl) ? [['incl.', RIB_COLORS[1]]] : [])] : [];
-  const R = 19 * u, lw = 192 * u, lh = 12 * u + R * (provRow ? 2 : 1) + 6 * u + R + (rows.length + (S.displayCutoff !== null)) * R + (ribRows.length ? 6 * u + ribRows.length * R : 0) + (meshRows.length ? 6 * u + R + meshRows.length * R : 0) + 6 * u;
+  const R = 19 * u, lw = 192 * u, lh = 12 * u + R * (provRow ? 2 : 1) + extRows.length * R + 6 * u + R + (rows.length + (S.displayCutoff !== null)) * R + (ribRows.length ? 6 * u + ribRows.length * R : 0) + (meshRows.length ? 6 * u + R + meshRows.length * R : 0) + 6 * u;
   const lx = W - m - lw, ly = footTop - 12 * u - lh; occ.push([lx, ly, W, footTop]);
   ctx.fillStyle = 'rgba(255,255,255,0.96)'; ctx.strokeStyle = RULE; ctx.lineWidth = u; roundRect(ctx, lx, ly, lw, lh, 5 * u); ctx.fill(); ctx.stroke();
   let yy = ly + 12 * u; const row = (draw, t, bold, mono) => { draw(yy + R / 2); bold ? font(700, 13) : font(400, mono ? 12 : 13, mono); ctx.fillStyle = INK; ctx.textBaseline = 'middle'; ctx.fillText(fitText(ctx, t, lw - 52 * u), lx + (bold ? 12 : 44) * u, yy + R / 2); ctx.textBaseline = 'alphabetic'; yy += R; };
   row((cy) => { ctx.beginPath(); ctx.arc(lx + 23 * u, cy, 5 * u, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth = 2.4 * u; ctx.strokeStyle = INK; ctx.stroke(); }, 'Drill hole collar');
   if (provRow) row((cy) => { ctx.strokeStyle = '#59646a'; ctx.lineWidth = 2 * u; ctx.setLineDash([4 * u, 3 * u]); ctx.beginPath(); ctx.moveTo(lx + 12 * u, cy); ctx.lineTo(lx + 34 * u, cy); ctx.stroke(); ctx.setLineDash([]); }, 'Provisional position');
+  extRows.forEach((r) => row((cy) => r.draw(ctx, lx + 12 * u, cy, u), r.label)); // EXT hook
   yy += 6 * u; row(() => {}, `Assay · ${S.valueLabel}`, true);
   rows.forEach(([t, c]) => row((cy) => { ctx.fillStyle = c; roundRect(ctx, lx + 12 * u, cy - 4 * u, 22 * u, 8 * u, 4 * u); ctx.fill(); }, t, false, true));
   if (S.displayCutoff !== null) row((cy) => { ctx.strokeStyle = '#59646a'; ctx.lineWidth = 1.5 * u; ctx.beginPath(); ctx.moveTo(lx + 12 * u, cy); ctx.lineTo(lx + 34 * u, cy); ctx.stroke(); }, `< ${S.displayCutoff}: trace only`, false, true);
   if (ribRows.length) { yy += 6 * u; ribRows.forEach(([t, c]) => row((cy) => { ctx.fillStyle = c; ctx.fillRect(lx + 12 * u, cy - 3 * u, 22 * u, 6 * u); }, t)); }
   if (meshRows.length) { yy += 6 * u; row(() => {}, 'Model', true); meshRows.forEach(([t, c]) => row((cy) => { ctx.globalAlpha = 0.6; ctx.fillStyle = c; ctx.fillRect(lx + 12 * u, cy - 6 * u, 22 * u, 12 * u); ctx.globalAlpha = 1; }, t)); }
+  const extBoxes = extLegendBlocks(ctx, K, { right: lx - 10 * u, bottom: footTop - 12 * u, top: headBottom + 20 * u }); occ.push(...extBoxes); // EXT hook: lithology, geophysics
+  const sbBox = drawScaleBar(ctx, K, footTop, idBoxes.concat(extBoxes, [[lx, ly, W, footTop]])); if (sbBox) occ.push(sbBox); // after the legends (EXT hook), so it keeps clear of them
+  EXT.tags?.drawPills(ctx, K, { placed: placed.concat(labelHits.filter((h) => h.box).map((h) => h.box)), occ, W, H }); // EXT hook: collar ID pills, clear of labels
   // Orientation, bottom left: north arrow plus view direction
   occ.push([0, footTop - 60 * u, m + 160 * u, footTop]);
   const cam = getCam(), ox = m + 22 * u, oy = footTop - 34 * u, T = controls.target, n0 = proj(T), n1 = proj(T.clone().add(new THREE.Vector3(0, 0, -G.diag * 0.1)));
@@ -1452,6 +1470,7 @@ function drawOverlay(ctx, k, forExport) {
   // Only if they still do not fit is the lowest-ranked callout dropped (ranking: metal in the interval).
   const maxY = oy - 36 * u, top = headBottom + 18 * u, gap = 30 * u, tag = 18 * u, boxes = [];
   let items = shownCallouts().map((c, rank) => { const p = c.h.posAt(c.ic.broad.mid); return { c, rank, s: proj(G.V(p.x, p.y, p.z)), M: measureCallout(ctx, K, c) }; }).filter(({ s }) => s[2] < 1).sort((a, b) => a.s[1] - b.s[1]);
+  items = extGroups(ctx, K, items); // EXT hook: grouped intercept boxes
   for (;;) {
     let y = top; items.forEach((it) => { it.y = Math.max(y, it.s[1] - it.M.bh / 2); y = it.y + it.M.bh + gap; });
     for (let i = items.length - 1; i >= 0; i--) items[i].y = Math.min(items[i].y, i === items.length - 1 ? maxY - tag - items[i].M.bh : items[i + 1].y - gap - items[i].M.bh);
@@ -1459,10 +1478,10 @@ function drawOverlay(ctx, k, forExport) {
     const worst = items.reduce((a, b) => (b.rank > a.rank ? b : a)); items = items.filter((it) => it !== worst);
   }
   const leaders = [];
-  items.forEach(({ c, s, M, y }) => { drawCallout(ctx, K, m, y, c, M, s); boxes.push([m, y, m + M.bw, y + M.bh + tag]); leaders.push(...M.leader); });
+  items.forEach((it) => { const { c, s, M, y } = it; if (it.group) EXT.tags.drawGroup(ctx, K, m, y, it); else drawCallout(ctx, K, m, y, c, M, s); boxes.push([m, y, m + M.bw, y + M.bh + tag]); leaders.push(...M.leader); });
   occ.push(...boxes.map((b) => [b[0], b[1], b[2] + 10 * u, b[3]]));
   // Drawn after the callouts so a tick never hides under a callout box.
-  if (S.elevTicks) drawElevTicks(ctx, K, headBottom, footTop, boxes, leaders);
+  if (S.elevTicks) drawElevTicks(ctx, K, headBottom, footTop, boxes.concat(sbBox ? [sbBox] : [], extBoxes, labelHits.filter((h) => h.box).map((h) => h.box)), leaders); // EXT hook: and the scale bar, legends, labels
   drawLabels(ctx, K, forExport);
   if (!forExport) overlayOcc = occ.concat(labelHits.filter((h) => h.box).map((h) => h.box));
   ctx.restore();
@@ -1491,6 +1510,7 @@ function drawSection(ctx, Wc, Hc, forExport) {
   const s = Math.min((Wc - ml - mr) / L, (Hc - mt - mb) / (zTop - zBot)), ox = ml + ((Wc - ml - mr) - L * s) / 2, oy = mt + ((Hc - mt - mb) - (zTop - zBot) * s) / 2 + (zTop - zBot) * s;
   const X = (t) => ox + t * s, Y = (z) => oy - (z - zBot) * s;
   ctx.fillStyle = '#eef1f0'; ctx.beginPath(); ctx.moveTo(X(0), Y(zBot)); profile.forEach(([t, z]) => ctx.lineTo(X(t), Y(z))); ctx.lineTo(X(L), Y(zBot)); ctx.closePath(); ctx.fill();
+  extSection(ctx, { A, Bp, X, Y, L, clip: () => { ctx.beginPath(); ctx.moveTo(X(0), Y(zBot)); profile.forEach(([t, z]) => ctx.lineTo(X(t), Y(z))); ctx.lineTo(X(L), Y(zBot)); ctx.closePath(); ctx.clip(); } }); // EXT hook
   ctx.strokeStyle = S.primary; ctx.lineWidth = 1.8 * u; ctx.beginPath(); profile.forEach(([t, z], i) => (i ? ctx.lineTo(X(t), Y(z)) : ctx.moveTo(X(t), Y(z)))); ctx.stroke();
   // Elevation ticks
   font(400, 11, true); ctx.fillStyle = MUTED; ctx.strokeStyle = RULE; ctx.lineWidth = u;
@@ -1498,7 +1518,7 @@ function drawSection(ctx, Wc, Hc, forExport) {
   for (let z = Math.ceil(zBot / stepZ) * stepZ; z < zTop; z += stepZ) { ctx.beginPath(); ctx.moveTo(X(L) + 4 * u, Y(z)); ctx.lineTo(X(L) + 10 * u, Y(z)); ctx.stroke(); ctx.fillText(`${Math.round(z)} m`, X(L) + 14 * u, Y(z) + 4 * u); }
   const barW = Math.max(6 * u, Math.min(12 * u, s * 7));
   shown.forEach(({ h, pts }) => {
-    ctx.strokeStyle = '#2c3d42'; ctx.lineWidth = u; ctx.beginPath(); let on = false; if (h.prov) ctx.setLineDash([5 * u, 3 * u]);
+    ctx.strokeStyle = '#2c3d42'; ctx.lineWidth = u; ctx.beginPath(); let on = false; if (h.prov || h.planned) ctx.setLineDash([5 * u, 3 * u]);
     pts.forEach((p) => { if (Math.abs(p.off) > S.secW) { on = false; return; } on ? ctx.lineTo(X(p.t), Y(p.z)) : ctx.moveTo(X(p.t), Y(p.z)); on = true; }); ctx.stroke(); ctx.setLineDash([]);
     h.ints.forEach((it) => {
       const bi = intervalShown(it) ? binIndex(it.vals[S.valueCol]) : -1; if (bi < 1) return;
@@ -1530,6 +1550,7 @@ function drawSection(ctx, Wc, Hc, forExport) {
     const M = measureCallout(ctx, K, c); if (by + M.bh + 18 * u > maxY) return;
     const p = c.h.posAt(c.ic.broad.mid), q = pr(p); drawCallout(ctx, K, m, by, c, M, [X(q.t), Y(p.z)]); by += M.bh + 34 * u;
   });
+  if (!narrow) extLegendBlocks(ctx, K, { left: m, bottom: footTop - 52 * u, top: by, maxRight: ox - 10 * u }); // EXT hook: lithology, geophysics
   tagLabel(ctx, K, 'A', X(0), Y(profile[0][1]) - 24 * u); tagLabel(ctx, K, 'A′', X(L), Y(profile[200][1]) - 24 * u);
   // Bottom strip: scale bar left, horizontal legend right
   const sy = footTop - 18 * u, sb = [10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000].find((d) => d * s >= 120 * u) || niceRound(L / 3);
@@ -1759,7 +1780,7 @@ function renderFiles() {
   list.innerHTML = '';
   files.forEach((f, fi) => {
     const div = document.createElement('div'); div.className = 'file';
-    const roles = ['collar', 'survey', 'assay', 'topo', 'mesh', 'unknown'];
+    const roles = ['collar', 'survey', 'assay', 'topo', 'mesh', 'litho', 'geophys', 'unknown']; // EXT hook: litho, geophys
     let html = `<div class="file-head"><span class="name" title="${esc(f.name)}">${esc(f.name)}</span>
       <select data-role="${fi}" aria-label="File type for ${esc(f.name)}">${roles.map((r) => `<option value="${r}" ${r === f.role ? 'selected' : ''}>${ROLE_LABEL[r]}</option>`).join('')}</select></div>`;
     if (f.role === 'mesh') html += `<span class="muted">${f.mesh.v.length.toLocaleString()} vertices · ${(f.mesh.f.length / 3).toLocaleString()} triangles</span>`;
@@ -1768,7 +1789,7 @@ function renderFiles() {
       const fields = ROLE_FIELDS[f.role] || [];
       if (fields.length) {
         html += '<div class="maps">' + fields.map((k) => `<label for="m-${fi}-${k}">${FIELD_LABEL[k]}</label><select id="m-${fi}-${k}" data-map="${fi}" data-key="${k}"><option value="">—</option>${f.header.map((h, i) => `<option value="${i}" ${f.cols[k] === i ? 'selected' : ''}>${esc(h)}</option>`).join('')}</select>`).join('') + '</div>';
-        const req = { collar: ['hole', 'east', 'north'], survey: ['hole', 'depth'], assay: ['hole', 'from', 'to'], topo: ['east', 'north', 'elev'] }[f.role] || [];
+        const req = { collar: ['hole', 'east', 'north'], survey: ['hole', 'depth'], assay: ['hole', 'from', 'to'], topo: ['east', 'north', 'elev'], litho: ['hole', 'from', 'to', 'code'], geophys: ['east', 'north', 'elev', 'value'] }[f.role] || [];
         const miss = req.filter((k) => f.cols[k] === undefined);
         if (miss.length) html += `<span class="bad">Pick a column for ${miss.map((k) => FIELD_LABEL[k]).join(', ')}.</span>`;
         if (f.role === 'assay') html += f.grades.length ? `<span class="muted">Grade columns: ${f.grades.map((g) => esc(g.name)).join(', ')}</span>` : '<span class="bad">No numeric grade columns found.</span>';
@@ -1786,7 +1807,7 @@ function renderFiles() {
 }
 function renderSummary() {
   const sum = $('summary'), roles = new Set(files.map((f) => f.role));
-  ['collar', 'assay', 'survey', 'topo', 'mesh'].forEach((r) => $(`need-${r}`).classList.toggle('ok', roles.has(r)));
+  ['collar', 'assay', 'survey', 'topo', 'mesh', 'litho', 'geophys'].forEach((r) => $(`need-${r}`).classList.toggle('ok', roles.has(r)));
   if (!project || project.empty) { sum.innerHTML = '<span class="bad">Add a collar file to see your holes.</span>'; return; }
   const mt = project.holes.reduce((s, h) => s + h.len, 0), n = project.holes.reduce((s, h) => s + h.ints.length, 0);
   sum.innerHTML = [usingSample ? 'sample project' : null, `${project.holes.length} holes`, `${Math.round(mt).toLocaleString()} m drilled`, `${n.toLocaleString()} assay intervals`, project.posDown ? 'dips read as positive-down' : null].filter(Boolean).map((t) => `<span class="pill">${t}</span>`).join('')
@@ -1813,7 +1834,7 @@ function renderStyle() {
   $('dcut-btns').innerHTML = [null, ...dcutChoices()].map((v) => `<button type="button" class="chip" data-dcut="${v ?? ''}" aria-pressed="${v === dc}">${v === null ? 'All' : v}</button>`).join('');
   $('dcut-btns').querySelectorAll('[data-dcut]').forEach((b) => b.addEventListener('click', () => setStyle({ displayCutoff: b.dataset.dcut === '' ? null : +b.dataset.dcut })));
   if (document.activeElement?.id !== 'dcut') $('dcut').value = dc ?? '';
-  renderShellUI(); renderEq();
+  renderShellUI(); renderEq(); extUI(); // EXT hook
   const ml = $('mesh-list'); ml.innerHTML = '';
   (project?.meshF || []).forEach((f) => { const st = S.meshes[f.name]; if (!st) return;
     const d = document.createElement('label'); d.className = 'mesh';
@@ -1861,14 +1882,14 @@ function principalAz(holes) {
 function addUserFiles(arr) {
   if (!Array.isArray(arr) || !arr.length || arr.some((f) => !f || typeof f.name !== 'string' || typeof f.text !== 'string')) throw new Error('addFiles expects [{ name: "collars.csv", text: "HoleID,Easting,..." }].');
   if (usingSample) { files = []; usingSample = false; S.meshes = {}; S.valueCol = null; S.coOverrides = {}; S.valueCol2 = null; resetDerived(); }
-  refresh.secSet = false; addFiles(arr); refresh();
+  refresh.secSet = false; addFiles(arr); extAutoOn(arr); refresh(); // extAutoOn: EXT hook
   const added = files.filter((f) => arr.some((a) => a.name === f.name)).map((f) => `${f.name} → ${ROLE_LABEL[f.role]}`);
   status(project.empty ? `Added ${added.join(', ')}. Still need a collar file.` : `Added ${added.join(', ')}. ${project.holes.length} holes on the figure.`);
   return getState();
 }
 // A .zip is unpacked here, in the browser: its CSV, TXT and OBJ files load as if
 // dropped one by one. Folders, Mac resource forks, READMEs and anything else are skipped.
-const DATA_FILE = /\.(csv|txt|obj)$/i;
+const DATA_FILE = /\.(csv|txt|obj|xyz|dat)$/i; // xyz, dat: EXT hook (Geosoft XYZ geophysics)
 const MAX_ZIP_BYTES = 200 * 1024 * 1024;
 async function unzipDataFiles(buffer) {
   const { unzipSync } = await import('fflate');
@@ -1925,6 +1946,7 @@ function loadSample() {
 // A new data set starts without the old one's equivalent recipe, display cut-off or provisional flags.
 function resetDerived() {
   S.eq = null; eqApplied = false; S.displayCutoff = null; S.provisional = {}; S.shell.cutoff = null;
+  S.tags.status = {}; S.tags.groups = []; S.geology.legend = []; // EXT hook: per-hole tags and codes belong to the old data
   // The shell belongs to the old data: switch it off and stop any build still running.
   S.shell.enabled = false; shell.pending = null; shell.mesh = null; shell.field = null; syncShell();
 }
@@ -1972,6 +1994,7 @@ function setStyle(o = {}, render = true) {
   }
   if (S.valueCol2 === S.valueCol) S.valueCol2 = null;
   ['walls', 'ids', 'inset', 'ribbons', 'pendingLabels', 'pendingNoAssays', 'elevTicks'].forEach((k) => { if (o[k] !== undefined) S[k] = !!o[k]; });
+  extStyle(o); // EXT hook: histograms, insetStyle
   if (o.traceWidth !== undefined) { const v = +o.traceWidth; if (!Number.isFinite(v)) throw new Error('traceWidth must be a number from 0.5 to 3.'); S.traceWidth = Math.max(0.5, Math.min(3, v)); }
   if (o.surface !== undefined) S.surf = Math.max(0.15, Math.min(1, +o.surface > 1 ? +o.surface / 100 : +o.surface));
   let rebuild = false;
@@ -2140,10 +2163,12 @@ function setFigureSize(key) {
 const LABEL_SIZES = ['title', 'normal'];
 const clamp01 = (v, d) => (Number.isFinite(+v) && v !== null && v !== '' ? Math.max(0, Math.min(1, +v)) : d);
 function labelPatch(L, o) {
+  if (o.title !== undefined && o.text === undefined) o = { ...o, text: o.title }; // EXT hook: stat box title
   if (o.text !== undefined) { const t = String(o.text).trim(); if (!t) throw new Error('A label needs some text.'); L.text = t.slice(0, 200); }
   if (o.size !== undefined) { if (!LABEL_SIZES.includes(o.size)) throw new Error('size must be "title" or "normal".'); L.size = o.size; }
   if (o.x !== undefined) L.x = clamp01(o.x, L.x); if (o.y !== undefined) L.y = clamp01(o.y, L.y);
   if (o.arrow !== undefined) L.arrow = !!o.arrow;
+  if (o.rows !== undefined && L.kind === 'stat') L.rows = (Array.isArray(o.rows) ? o.rows : [o.rows]).map((r) => String(r).trim().slice(0, 120)).filter(Boolean).slice(0, 12); // EXT hook
   if (o.ax !== undefined) L.ax = clamp01(o.ax, L.ax); if (o.ay !== undefined) L.ay = clamp01(o.ay, L.ay);
 }
 function addLabel(o = {}) {
@@ -2181,9 +2206,11 @@ function renderWallLabelList() {
   const el = $('wall-list'), faces = ['N', 'S', 'E', 'W'];
   el.innerHTML = S.wallLabels.map((L) => `<div class="label-row"><input type="text" data-wt="${L.id}" value="${esc(L.text)}" aria-label="Text of wall label ${L.id}">`
     + `<select data-wf="${L.id}" aria-label="Face of ${esc(L.text)}">${faces.map((f) => `<option ${f === L.face ? 'selected' : ''}>${f}</option>`).join('')}</select>`
+    + (S.geology.legend.length ? `<select data-wu="${L.id}" aria-label="Unit colour of ${esc(L.text)}"><option value="">No unit</option>${S.geology.legend.map((e) => `<option value="${esc(e.code)}" ${e.code === L.unit ? 'selected' : ''}>${esc(e.name)}</option>`).join('')}</select>` : '') // EXT hook
     + `<button class="btn" type="button" data-wd="${L.id}" aria-label="Delete wall label ${esc(L.text)}">Delete</button></div>`).join('');
   el.querySelectorAll('[data-wt]').forEach((i) => i.addEventListener('change', () => { try { updateWallLabel(i.dataset.wt, { text: i.value }); } catch (e) { status(e.message); } }));
   el.querySelectorAll('[data-wf]').forEach((i) => i.addEventListener('change', () => updateWallLabel(i.dataset.wf, { face: i.value })));
+  el.querySelectorAll('[data-wu]').forEach((i) => i.addEventListener('change', () => updateWallLabel(i.dataset.wu, { unit: i.value || null }))); // EXT hook
   el.querySelectorAll('[data-wd]').forEach((b) => b.addEventListener('click', () => removeWallLabel(b.dataset.wd)));
 }
 $('wall-add').addEventListener('click', () => {
@@ -2242,6 +2269,127 @@ frameEl.addEventListener('pointerup', endDrag, true); frameEl.addEventListener('
   $('fmt-collar').textContent = `Collars\n${head(s[0].text, 4)}`; $('fmt-survey').textContent = `Surveys\n${head(s[1].text, 4)}`; $('fmt-assay').textContent = `Assays\n${head(s[2].text, 5)}`; })();
 
 // ============================================================
+// 10b. Optional layers: geology on the faces, geophysics, hole tags (EXT)
+// ============================================================
+// The logic lives in geology.js, geophys.js and tags.js, loaded the first time a layer is used; the
+// lines marked "EXT hook" elsewhere call in here. Settings stay in S as plain data, so the account
+// save keeps them (face images as data URLs, like the logo).
+Object.assign(S, {
+  geology: { enabled: false, title: 'Lithology', faces: 'far', opacity: 0.85, anisotropy: 4, search: null, smooth: 2, texture: true, section: false, legend: [], images: {}, note: 'Geology on block faces interpolated from drill logs; schematic.' },
+  geophys: { mode: 'off', lines: 'auto', ramp: 'geophys', log: null, min: null, max: null, opacity: 0.85, faces: 'far', search: null, width: null, property: null, label: null, unit: null, note: 'Geophysics: illustrative inversion model' },
+  tags: { at: 'toe', style: 'dark', status: {}, fadePrevious: false, newLabel: '', prevLabel: 'Previously released', plannedLabel: 'Planned', groups: [], autoGroup: false, groupRadius: 140, idMode: 'all', showId: {}, pending: 'collar' },
+  histograms: false, insetStyle: 'plan',
+});
+const EXT = {}, extLoading = {}, EXT_IMPORT = { geology: () => import('./geology.js'), geophys: () => import('./geophys.js'), tags: () => import('./tags.js') };
+const hasRole = (r) => files.some((f) => f.role === r);
+function extWanted() {
+  const gp = S.geophys.mode !== 'off' && hasRole('geophys'), t = S.tags;
+  return { geology: (S.geology.enabled && hasRole('litho')) || Object.keys(S.geology.images || {}).length > 0 || gp, geophys: gp,
+    tags: t.at !== 'toe' || t.fadePrevious || t.idMode !== 'all' || Object.keys(t.showId).length > 0 || (S.pendingLabels && t.pending === 'collar' && !!project?.holes?.some(isPending)) || t.autoGroup || t.groups.length > 0 || Object.keys(t.status).length > 0 || S.histograms || S.insetStyle !== 'plan' || S.labels.some((l) => l.kind === 'stat') };
+}
+let extHost = null;
+const host = () => (extHost ||= {
+  S, get G() { return G; }, get project() { return project; }, get root() { return root; }, get api() { return EXT_API; }, files: () => files, digest: (f) => fileDigest(f), geo: () => geo,
+  camera, renderer, proj, sectionEnds, faceGeom, textOn, roundRect, fitText, esc, INK, MUTED, RULE, BIN_COLORS, binIndex, traceR, calloutLines, shownCallouts, isPending, setSpacing,
+  mosaic, zoomFor, lon2t, lat2t, IMG_URL, IMAGERY_CREDIT, status, redraw: () => { extScene(); drawSectionView(); schedulePublish(); },
+});
+const extLoad = (k) => (extLoading[k] ||= EXT_IMPORT[k]().then((m) => { m.init(host()); EXT[k] = m; return m; }));
+async function extReady() {
+  const want = extWanted();
+  await Promise.all(Object.keys(EXT_IMPORT).filter((k) => want[k]).map(extLoad));
+  extScene();
+  await Promise.all([EXT.geology?.imagesReady(), EXT.tags?.syncInset()]);
+  extScene(); renderExtUI(); schedulePublish();
+}
+function extScene() {
+  if (Object.entries(extWanted()).some(([k, v]) => v && !EXT[k])) { extReady().catch((e) => status(e.message)); return; }
+  if (!G) return;
+  EXT.geophys?.syncCurtains(); EXT.geology?.syncFaces(); EXT.tags?.placeHistograms(); EXT.tags?.syncInset();
+}
+const extView = () => { if (G) EXT.geology?.syncFaces(); };
+const extRestyle = () => { if (G) { EXT.geophys?.syncCurtains(); EXT.geology?.syncFaces(); } };
+const extFade = (h) => !!EXT.tags?.fade(h);
+// A wall label linked to a geology unit is written in a darker shade of the unit's legend colour.
+const unitInk = (code) => { const e = code && S.geology.legend.find((x) => x.code === code); return e ? toHex(hexRgb(e.color).map((v) => v * 0.55)) : null; };
+// Planned holes: a status of "planned" (collar column or set by hand) and no assays. Drawn dashed in the
+// brand colour, following the provisional-position pattern.
+const isPlanned = (h) => (S.tags.status[h.id] ? S.tags.status[h.id] === 'planned' : /\b(planned|proposed)\b/i.test(`${h.note || ''} ${h.c.raw ? Object.values(h.c.raw).join(' ') : ''}`) && !h.ints.length);
+const extCredits = () => EXT.tags?.insetCredits() || [];
+const extNotes = () => [EXT.geology?.note(), EXT.geophys?.note()].filter(Boolean);
+function extLegendRows() {
+  const rows = project.holes.some((h) => h.planned) ? [{ label: S.tags.plannedLabel || 'Planned', draw: (ctx, x, cy, u) => { ctx.strokeStyle = S.primary; ctx.lineWidth = 2 * u; ctx.setLineDash([5 * u, 3 * u]); ctx.beginPath(); ctx.moveTo(x, cy); ctx.lineTo(x + 22 * u, cy); ctx.stroke(); ctx.setLineDash([]); } }] : [];
+  return EXT.tags ? EXT.tags.legendRows().concat(rows) : rows;
+}
+const extLegendBlocks = (ctx, K, box) => (EXT.geology ? EXT.geology.drawBlocks(ctx, K, [EXT.geology.legendBlock(), EXT.geophys?.legendBlock()].filter(Boolean), box) : []);
+const extGroups = (ctx, K, items) => (EXT.tags && (S.tags.autoGroup || S.tags.groups.length) ? EXT.tags.groupItems(ctx, K, items) : items);
+function extStat(ctx, K, L, hits, forExport) {
+  if (!EXT.tags) return; const { u } = K, box = EXT.tags.drawStat(ctx, K, L, W, H);
+  if (forExport) return; hits.push({ id: L.id, kind: 'label', box: [box[0] - 4, box[1] - 4, box[2] + 4, box[3] + 4] });
+  if (currentStep === 'layout') { ctx.setLineDash([4 * u, 3 * u]); ctx.strokeStyle = 'rgba(31,120,168,0.7)'; ctx.lineWidth = u; ctx.strokeRect(box[0] - 3 * u, box[1] - 3 * u, box[2] - box[0] + 6 * u, box[3] - box[1] + 6 * u); ctx.setLineDash([]); }
+}
+const extSection = (ctx, o) => { EXT.geology?.drawSection2D(ctx, o); EXT.geophys?.drawSection2D(ctx, o); };
+function extAutoOn(arr) { // a lithology or geophysics file added by the user switches its layer on
+  const roles = new Set(files.filter((f) => arr.some((a) => a.name === f.name)).map((f) => f.role));
+  if (roles.has('litho')) S.geology.enabled = true;
+  if (roles.has('geophys') && S.geophys.mode === 'off') S.geophys.mode = 'curtain';
+}
+function extStyle(o) {
+  if (o.histograms !== undefined) S.histograms = !!o.histograms;
+  if (o.insetStyle !== undefined) { if (!['plan', 'satellite', 'topo'].includes(o.insetStyle)) throw new Error('insetStyle must be "plan" (plan of drilling), "satellite" or "topo" (a map around the property; needs the coordinate system).'); S.insetStyle = o.insetStyle; }
+  if (o.histograms !== undefined || o.insetStyle !== undefined) extReady().catch((e) => status(e.message));
+}
+function extState() {
+  const imgs = (g) => ({ ...structuredClone({ ...g, images: undefined }), images: Object.fromEntries(Object.keys(g.images || {}).map((k) => [k, true])) });
+  return { geology: EXT.geology ? EXT.geology.state() : imgs(S.geology), geophys: EXT.geophys ? EXT.geophys.state() : structuredClone(S.geophys), tags: EXT.tags ? EXT.tags.state() : { ...structuredClone(S.tags), histograms: S.histograms, insetStyle: S.insetStyle } };
+}
+function renderExtUI() {
+  document.querySelectorAll('[data-ext]').forEach((el) => { const [g, k] = el.dataset.ext.split('.'), v = g === 'style' ? S[k] : S[g][k]; if (el.type === 'checkbox') el.checked = !!v; else el.value = v; });
+  [['geology', 'geo-ui'], ['geophys', 'gp-ui'], ['tags', 'tag-ui']].forEach(([k, id]) => { if (EXT[k]) EXT[k].renderUI($(id)); });
+}
+const extUI = () => renderExtUI();
+document.querySelectorAll('[data-ext]').forEach((el) => el.addEventListener('change', () => {
+  const [g, k] = el.dataset.ext.split('.'), v = el.type === 'checkbox' ? el.checked : el.value;
+  Promise.resolve().then(() => (g === 'style' ? setStyle({ [k]: v }, false) : EXT_API[{ geology: 'setGeology', geophys: 'setGeophys', tags: 'setTags' }[g]]({ [k]: v }))).catch((e) => status(e.message));
+}));
+$('stat-add').addEventListener('click', () => {
+  const title = $('stat-title').value.trim(); if (!title) { status('Type the stat box title first.'); $('stat-title').focus(); return; }
+  showView('3d'); EXT_API.addStatBox({ title, rows: $('stat-rows').value.split('\n') }).then(() => { $('stat-title').value = ''; $('stat-rows').value = ''; }).catch((e) => status(e.message));
+});
+const EXT_API = {
+  async setGeology(o = {}) { (await extLoad('geology')).set(o); await extReady(); if (S.wallLabels.some((L) => L.unit)) buildWallLabels(); renderWallLabelList(); return getState(); },
+  async setFaceImage(face, src) { await (await extLoad('geology')).setImage(face, src ?? null); await extReady(); status(src ? `Image painted on the ${String(face).toUpperCase()} face.` : 'Face image removed.'); return getState(); },
+  async setGeophys(o = {}) { await extLoad('geology'); (await extLoad('geophys')).set(o); await extReady(); return getState(); },
+  async setTags(o = {}) {
+    (await extLoad('tags')).set(o);
+    if (o.fadePrevious !== undefined || o.status !== undefined) rebuildScene(true); else restyle();
+    await extReady(); drawSectionView(); return getState();
+  },
+  async groupCallouts(ids) {
+    const t = S.tags;
+    if (ids === null || (Array.isArray(ids) && !ids.length)) t.groups = [];
+    else if (ids === 'auto') t.autoGroup = true;
+    else {
+      if (!Array.isArray(ids) || ids.length < 2) throw new Error('groupCallouts takes two or more hole IDs, "auto" (group nearby callouts), or null to clear the groups.');
+      const known = new Set((project?.holes || []).map((h) => h.id)), bad = ids.filter((id) => !known.has(id)); if (bad.length) throw new Error(`No hole ${bad.map((b) => `"${b}"`).join(', ')}.`);
+      const none = ids.filter((id) => !callouts.some((c) => c.h.id === id)); if (none.length) status(`${none.join(', ')} ${none.length > 1 ? 'have' : 'has'} no interval above the broad cut-off, so no callout to group.`);
+      t.groups = t.groups.map((g) => g.filter((id) => !ids.includes(id))).filter((g) => g.length > 1).concat([[...new Set(ids)]]);
+      ids.forEach((id) => { if (callouts.some((c) => c.h.id === id)) S.coOverrides[id] = { ...(S.coOverrides[id] || {}), show: true }; });
+    }
+    await extReady(); renderCalloutEditor(); drawSectionView(); schedulePublish(); return getState();
+  },
+  async addStatBox(o = {}) {
+    const rows = (Array.isArray(o.rows) ? o.rows : o.rows === undefined ? [] : [o.rows]).map((r) => String(r).trim()).filter(Boolean).slice(0, 12).map((r) => r.slice(0, 120));
+    await extLoad('tags');
+    const id = addLabel({ text: o.title ?? o.text ?? '', x: o.x, y: o.y, size: 'normal' }), L = S.labels.find((l) => l.id === id);
+    L.kind = 'stat'; L.rows = rows; if (o.x === undefined && o.y === undefined && G) [L.x, L.y] = freeSpot(L);
+    renderLabelList(); schedulePublish(); status(`Stat box "${L.text}" added. Drag it on the preview to place it.`); return id;
+  },
+  layersReady: async () => { await extReady(); return getState(); },
+};
+// The API notes for these layers are kept in the page (#ext-help), out of the script bundle.
+const EXT_HELP = `\n${$('ext-help').textContent.trim()}`;
+
+// ============================================================
 // 11. For AI assistants and browser agents
 // ============================================================
 function getState() {
@@ -2267,6 +2415,7 @@ function getState() {
       ...(shell.status === 'ready' || shell.status === 'empty' ? { cells: shell.mesh?.stats.cells ?? 0, triangles: shell.mesh?.stats.triangles ?? 0, holesUsed: shell.mesh?.stats.holesUsed ?? 0, collarGroups: shell.mesh?.stats.groups ?? 0, composites: shell.mesh?.stats.composites ?? 0, searchUsed: shell.mesh?.stats.search ?? null, cellUsed: shell.mesh?.stats.cell ?? null, grid: shell.mesh?.stats.grid ?? null, buildMs: shell.mesh?.stats.ms ?? null } : {}) },
     equivalent: S.eq ? (() => { const i = eqInfo(); return { column: i.name, formula: i.formula, note: i.note, factors: Object.fromEntries(i.factors.map((f) => [f.metal, +f.factor.toPrecision(6)])), ...structuredClone(S.eq) }; })() : null,
     footnoteAuto: G ? autoNotes(S.view) : [], checks: getChecks(),
+    ...extState(), // EXT hook: geology, geophys, tags
     figureSize: { key: S.format, width: f.w, height: f.h, label: f.label }, figureSizes: Object.fromEntries(Object.entries(FORMATS).map(([k, v]) => [k, `${v.label}, ${v.w}×${v.h}`])),
   };
 }
@@ -2432,6 +2581,7 @@ async function loadProject(p) {
   refresh.secSet = true; refresh(); refresh.secSet = !!p.secSet;
   syncBrandUI(); renderSizes(); layoutFrame(); restyle(); showView(S.view === 'section' ? 'section' : '3d');
   if (p.camera && G) setCamera(p.camera, true);
+  await extReady(); // EXT hook: layers, face images and the map inset
   lastCamKey = ''; syncCamUI(); drawSectionView(); schedulePublish();
   status(project && !project.empty ? `Figure opened · ${project.holes.length} holes.` : 'Figure opened. Add a collar file to see the holes.');
   return getState();
@@ -2453,6 +2603,9 @@ Whole projects (to keep or move a figure):
   EM3D.getThumbnail(320)          small JPEG data URL of the preview`;
 $('ai-help').textContent = PROJECT_HELP;
 window.EM3D = Object.freeze({ ...window.EM3D, help: () => PROJECT_HELP, getProject, loadProject, getThumbnail, filesDigest });
+// EXT hook: the geology, geophysics and hole-tag methods, in one block (section 10b).
+const FULL_HELP = `${PROJECT_HELP}\n${EXT_HELP}`; $('ai-help').textContent = FULL_HELP;
+window.EM3D = Object.freeze({ ...window.EM3D, help: () => FULL_HELP, ...EXT_API });
 
 // ============================================================
 // 12. Start
