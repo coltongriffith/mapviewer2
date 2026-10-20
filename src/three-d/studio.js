@@ -140,7 +140,7 @@ const S = {              // style
   title: 'EXAMPLE RIDGE · MAIN ZONE', subtitle: '3D drilling model, looking northeast',
   valueCol: null, valueLabel: '', bins: [0.1, 0.2, 0.3, 0.5], coCount: 5, coMin: 20, coCut: 0.2, coIncl: 0.5,
   secAz: 135, secW: 75, surf: 1, walls: true, ids: true, inset: true, logo: null, meshes: {},
-  ribbons: true, traceWidth: 1.4,
+  ribbons: true, traceWidth: 1.4, pendingLabels: true, pendingNoAssays: false, valueCol2: null, elevTicks: true,
 };
 const BIN_COLORS = ['#a3abaf', '#e2dc4f', '#ff9a1f', '#ef3b2c', '#e93ad1'];
 const MESH_COLORS = ['#ff9a1f', '#e93ad1', '#2b8fd6', '#6aa84f', '#8e5bd6'];
@@ -168,13 +168,15 @@ function build() {
   const collarF = byRole('collar'), assayF = byRole('assay'), surveyF = byRole('survey'), topoF = byRole('topo'), meshF = byRole('mesh');
   // Collars
   const collars = new Map(); let latlon = false;
-  collarF.forEach((f) => f.rows.forEach((r) => {
+  collarF.forEach((f) => { const ni = noteCol(f.header); f.rows.forEach((r) => {
     const c = f.cols, id = (r[c.hole] || '').trim(); if (!id) return;
     let x = num(r[c.east]), y = num(r[c.north]);
     if ((!Number.isFinite(x) || !Number.isFinite(y)) && c.lat !== undefined) { x = num(r[c.lon]); y = num(r[c.lat]); latlon = true; }
     if (!Number.isFinite(x) || !Number.isFinite(y)) return;
-    collars.set(id, { id, x, y, z: num(r[c.elev]), depth: num(r[c.depth]), az: num(r[c.az]), dip: num(r[c.dip]) });
-  }));
+    // A status or notes column last in the row keeps any unquoted commas ("Complete, assays pending").
+    const note = ni < 0 ? '' : (ni === f.header.length - 1 ? r.slice(ni).join(',') : r[ni] || '').trim();
+    collars.set(id, { id, x, y, z: num(r[c.elev]), depth: num(r[c.depth]), az: num(r[c.az]), dip: num(r[c.dip]), note });
+  }); });
   if (latlon) {
     const arr = [...collars.values()], lat0 = arr.reduce((s, c) => s + c.y, 0) / arr.length, lon0 = arr.reduce((s, c) => s + c.x, 0) / arr.length;
     arr.forEach((c) => { c.x = (c.x - lon0) * Math.cos(lat0 * Math.PI / 180) * 111320; c.y = (c.y - lat0) * 110540; });
@@ -205,6 +207,7 @@ function build() {
   });
   cols = [...new Set(cols)];
   if (!S.valueCol || !cols.includes(S.valueCol)) { S.valueCol = cols[0] || null; S.valueLabel = labelFor(S.valueCol); autoBins(assays); }
+  if (S.valueCol2 && (!cols.includes(S.valueCol2) || S.valueCol2 === S.valueCol)) S.valueCol2 = null;
   const missing = [...assays.keys()].filter((id) => !collars.has(id));
   if (missing.length) warnings.push(`${missing.length} hole${missing.length > 1 ? 's' : ''} in the assays ${missing.length > 1 ? 'have' : 'has'} no collar (${missing.slice(0, 3).join(', ')}${missing.length > 3 ? '…' : ''}).`);
   if (!collars.size) return { warnings, empty: true };
@@ -225,10 +228,13 @@ function build() {
       const v = (s) => { const az = s.az * Math.PI / 180, dp = s.dip * Math.PI / 180; return [Math.sin(az) * Math.cos(dp), Math.cos(az) * Math.cos(dp), Math.sin(dp)]; };
       const va = v(a), vb = v(b), m = va.map((x, k) => x + (vb[k] - x) * t), l = Math.hypot(...m) || 1; return m.map((x) => x / l);
     };
-    holes.push({ id: c.id, c, ints, len, dirAt, path: null });
+    holes.push({ id: c.id, c, ints, len, dirAt, path: null, note: c.note });
   }
   return { warnings, holes, topoPts, meshF, cols, posDown };
 }
+const noteCol = (header) => header.map(norm).findIndex((h) => /(^|_)(status|notes?|comments?|remarks?)$/.test(h));
+// "ASSAYS PENDING": the collar status or notes say so, or (when asked) the hole has no assays yet.
+const isPending = (h) => /pending/i.test(h.note || '') || (S.pendingNoAssays && !h.ints.length);
 function labelFor(col) {
   if (!col) return '';
   const el = (col.match(/(cueq|aueq|ageq|li2o|u3o8|cu|au|ag|zn|pb|ni|co|mo|pt|pd)/i) || [col])[0];
@@ -471,10 +477,19 @@ function computeCallouts() {
   project.holes.forEach((h) => { const ic = intercept(h.ints, S.valueCol, S.coCut, S.coIncl, S.coMin); if (ic) callouts.push({ h, ic }); });
   callouts.sort((a, b) => b.ic.broad.len * b.ic.broad.avg - a.ic.broad.len * a.ic.broad.avg);
 }
-const fmt = (v) => (v >= 100 ? v.toFixed(0) : v >= 10 ? v.toFixed(1) : v.toFixed(2));
-const unitOf = () => (S.valueLabel.match(/(%|g\/t|ppm|ppb)$/) || [''])[0];
-const elOf = () => S.valueLabel.replace(/\s*(%|g\/t|ppm|ppb)$/, '');
-const icText = (x) => `${x.len.toFixed(x.len < 10 ? 1 : 0)} m @ ${fmt(x.avg)}${unitOf() === '%' ? '%' : ' ' + unitOf()} ${elOf()}`.replace(/\s+/g, ' ').trim();
+const fmt = (v) => (v >= 100 ? v.toFixed(0) : v >= 10 ? v.toFixed(1) : v > 0 && v < 0.01 ? v.toFixed(3) : v.toFixed(2));
+const gradeText = (v, label) => { const unit = (label.match(/(%|g\/t|ppm|ppb)$/) || [''])[0], el = label.replace(/\s*(%|g\/t|ppm|ppb)$/, ''); return `${fmt(v)}${unit === '%' ? '%' : ' ' + unit} ${el}`; };
+// Length-weighted average of another column over the same depths, for the second element in a callout.
+function avgOver(ints, col, from, to) {
+  let m = 0, l = 0; ints.forEach((it) => { const v = it.vals[col], a = Math.max(from, it.from), b = Math.min(to, it.to); if (b > a && Number.isFinite(v)) { m += v * (b - a); l += b - a; } });
+  return l > 0 ? m / l : null;
+}
+const icText = (x, h) => {
+  let t = `${x.len.toFixed(x.len < 10 ? 1 : 0)} m @ ${gradeText(x.avg, S.valueLabel)}`;
+  const v2 = h && S.valueCol2 ? avgOver(h.ints, S.valueCol2, x.from, x.from + x.len) : null;
+  if (v2 !== null) t += `, ${gradeText(v2, labelFor(S.valueCol2))}`;
+  return t.replace(/\s+/g, ' ').replace(/ ,/g, ',').trim();
+};
 
 
 // ============================================================
@@ -619,7 +634,7 @@ function shownCallouts() {
 }
 function calloutLines(c) {
   const o = S.coOverrides[c.h.id] || {};
-  return { l1: o.line1 || icText(c.ic.broad), l1b: o.line1 ? '' : ` from ${Math.round(c.ic.broad.from)} m`, l2: o.incl === false ? null : (o.line2 || (c.ic.incl ? `incl. ${icText(c.ic.incl)}` : null)) };
+  return { l1: o.line1 || icText(c.ic.broad, c.h), l1b: o.line1 ? '' : ` from ${Math.round(c.ic.broad.from)} m`, l2: o.incl === false ? null : (o.line2 || (c.ic.incl ? `incl. ${icText(c.ic.incl, c.h)}` : null)) };
 }
 function measureCallout(ctx, K, c) {
   const { font, u } = K, L = calloutLines(c);
@@ -676,6 +691,48 @@ function drawScaleBar(ctx, K, footTop) {
   ctx.fillStyle = INK; ctx.fillRect(x, y, len / 2, 6 * u); ctx.fillStyle = '#fff'; ctx.fillRect(x + len / 2, y, len / 2, 6 * u); ctx.strokeStyle = INK; ctx.lineWidth = u; ctx.strokeRect(x, y, len, 6 * u);
   font(400, 12, true); ctx.fillStyle = INK; ctx.textAlign = 'center'; ctx.fillText('0', x, y - 5 * u); ctx.fillText(`${D} m (at block centre)`, x + len, y - 5 * u); ctx.textAlign = 'left';
 }
+// "ASSAYS PENDING" on a white pill along a projected hole (pts: screen points down the hole), reading left to
+// right or downward. Of a few spots along and beside the hole it takes the one crossing the fewest other holes
+// (others: their screen points), so it does not hide another hole's assays. Shrinks to fit, else skipped.
+function alongLabel(ctx, K, t, pts, others) {
+  const { u, font } = K, acc = [0]; for (let i = 1; i < pts.length; i++) acc.push(acc[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+  const L = acc[acc.length - 1]; if (!(L > 0)) return;
+  let sz = 11.5; font(700, sz); setSpacing(ctx, 1.4 * u); while (sz > 8.5 && ctx.measureText(t).width + 14 * u > L * 0.8) { sz -= 0.5; font(700, sz); }
+  const w = ctx.measureText(t).width + 12 * u, hh = sz * 1.45 * u; if (w > L) { setSpacing(ctx, 0); return; }
+  const at = (d) => { let i = 1; while (i < acc.length - 1 && acc[i] < d) i++; const f = (d - acc[i - 1]) / ((acc[i] - acc[i - 1]) || 1); return [pts[i - 1][0] + (pts[i][0] - pts[i - 1][0]) * f, pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * f]; };
+  let best = null;
+  for (const f of [0.5, 0.4, 0.6, 0.3, 0.7, 0.22, 0.78]) for (const side of [0, -1, 1]) {
+    const c = Math.min(L - w / 2, Math.max(w / 2, f * L)), a = at(c - w / 2), b = at(c + w / 2), ang = Math.atan2(b[1] - a[1], b[0] - a[0]);
+    const dx = Math.cos(ang), dy = Math.sin(ang), off = side * (hh + 4 * u), cx = (a[0] + b[0]) / 2 - dy * off, cy = (a[1] + b[1]) / 2 + dx * off;
+    let hits = 0; for (const o of others) { const rx = o[0] - cx, ry = o[1] - cy; if (Math.abs(rx * dx + ry * dy) < w / 2 + 3 * u && Math.abs(-rx * dy + ry * dx) < hh / 2 + 3 * u) hits++; }
+    const score = hits * 10 + Math.abs(f - 0.5) * 4 + Math.abs(side) * 3;
+    if (!best || score < best.score) best = { score, cx, cy, ang };
+  }
+  let { ang } = best; if (ang > Math.PI / 2 + 0.01 || ang < -Math.PI / 2 + 0.01) ang += Math.PI;
+  ctx.save(); ctx.translate(best.cx, best.cy); ctx.rotate(ang);
+  ctx.fillStyle = 'rgba(255,255,255,0.94)'; roundRect(ctx, -w / 2, -hh / 2, w, hh, hh / 2); ctx.fill();
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = S.accent; ctx.fillText(t, 0.7 * u, 0.8 * u);
+  ctx.restore(); setSpacing(ctx, 0); ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+}
+// Elevation ticks up the block's vertical edge at the left-front: of the two corners nearest the camera,
+// the one whose top projects furthest left. True elevations, about five ticks.
+function drawElevTicks(ctx, K, top, bottom, avoid = []) {
+  const { u, font } = K, C = [[G.B.x0, G.B.y0], [G.B.x1, G.B.y0], [G.B.x1, G.B.y1], [G.B.x0, G.B.y1]];
+  const c = C.map(([x, y]) => ({ x, y, d: G.V(x, y, G.B.z0).distanceTo(camera.position) })).sort((p, q) => p.d - q.d).slice(0, 2)
+    .map((p) => ({ ...p, zt: G.surf(p.x, p.y), s: proj(G.V(p.x, p.y, G.surf(p.x, p.y))) })).sort((p, q) => p.s[0] - q.s[0])[0];
+  const b0 = proj(G.V(c.x, c.y, G.B.z0));
+  if (c.s[2] > 1 || b0[2] > 1 || Math.abs(c.s[1] - b0[1]) < 70 * u) return;
+  const step = niceRound((c.zt - G.B.z0) / 5);
+  font(500, 11.5, true); ctx.textAlign = 'right'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+  for (let z = Math.ceil(G.B.z0 / step) * step; z <= c.zt - step * 0.2; z += step) {
+    const [x, y] = proj(G.V(c.x, c.y, z)); if (y < top + 8 * u || y > bottom - 8 * u || x < 60 * u) continue;
+    const box = [x - 10 * u - ctx.measureText(`${Math.round(z)} m`).width - 4 * u, y - 9 * u, x + 2 * u, y + 9 * u];
+    if (avoid.some((b) => !(box[2] < b[0] || box[0] > b[2] || box[3] < b[1] || box[1] > b[3]))) continue;
+    ctx.strokeStyle = INK; ctx.lineWidth = 1.2 * u; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x - 7 * u, y); ctx.stroke();
+    const t = `${Math.round(z)} m`; ctx.lineWidth = 3 * u; ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.strokeText(t, x - 10 * u, y); ctx.fillStyle = INK; ctx.fillText(t, x - 10 * u, y);
+  }
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+}
 function drawOverlay(ctx, k, forExport) {
   ctx.save(); ctx.scale(k, k); if (!forExport) ctx.clearRect(0, 0, W, H);
   const K = kit(ctx, W, H), { u, m, font, narrow } = K;
@@ -692,6 +749,11 @@ function drawOverlay(ctx, k, forExport) {
     font(500, 11.5, true); ctx.fillStyle = INK; ctx.textBaseline = 'middle'; ctx.textAlign = flip ? 'right' : 'left';
     ctx.lineWidth = 3 * u; ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.strokeText(h.id, 0, 0); ctx.fillText(h.id, 0, 0); ctx.restore();
   });
+  const pend = S.pendingLabels ? project.holes.filter(isPending) : [];
+  if (pend.length) {
+    const scr = new Map(project.holes.map((h) => [h, h.path.filter((p, i) => i % 3 === 0).map((p) => proj(G.V(p.x, p.y, p.z))).filter((p) => p[2] < 1)]));
+    pend.forEach((h) => { const pts = scr.get(h).filter((p, i, a) => i > a.length * 0.06); if (pts.length > 2) alongLabel(ctx, K, 'ASSAYS PENDING', pts, project.holes.filter((o) => o !== h).flatMap((o) => scr.get(o))); });
+  }
   // Section ends
   const [A, Bp] = sectionEnds();
   [[A, 'A'], [Bp, 'A′']].forEach(([p, t]) => { const [x, y] = proj(G.V(p.x, p.y, G.surf(p.x, p.y) + G.diag * 0.035)); tagLabel(ctx, K, t, x, y); });
@@ -736,12 +798,14 @@ function drawOverlay(ctx, k, forExport) {
   font(600, 13); ctx.fillStyle = INK; ctx.fillText(`Looking ${pad3(cam.azimuth)}°`, ox + 36 * u, oy - 2 * u);
   font(400, 12, true); ctx.fillStyle = MUTED; ctx.fillText(`plunge ${cam.plunge}°`, ox + 36 * u, oy + 14 * u);
   // Intercept callouts, left column between the title and the orientation box
-  const maxY = oy - 36 * u; let y = headBottom + 18 * u;
+  const maxY = oy - 36 * u; let y = headBottom + 18 * u; const boxes = [];
   shownCallouts().map((c) => { const p = c.h.posAt(c.ic.broad.mid); return { c, s: proj(G.V(p.x, p.y, p.z)) }; }).filter(({ s }) => s[2] < 1).sort((a, b) => a.s[1] - b.s[1]).forEach(({ c, s }) => {
     const M = measureCallout(ctx, K, c); y = Math.max(y, Math.min(s[1] - M.bh / 2, maxY - M.bh - 18 * u));
     if (y + M.bh + 18 * u > maxY + 1) return;
-    drawCallout(ctx, K, m, y, c, M, s); y += M.bh + 30 * u;
+    drawCallout(ctx, K, m, y, c, M, s); boxes.push([m, y, m + M.bw, y + M.bh + 18 * u]); y += M.bh + 30 * u;
   });
+  // Drawn after the callouts so a tick never hides under a callout box.
+  if (S.elevTicks) drawElevTicks(ctx, K, headBottom, footTop, boxes);
   ctx.restore();
 }
 
@@ -796,6 +860,11 @@ function drawSection(ctx, Wc, Hc, forExport) {
     const c = pr(h.c);
     if (Math.abs(c.off) <= S.secW) { ctx.save(); ctx.translate(X(c.t), Y(h.c.z) - 8 * u); ctx.rotate(-Math.PI / 4); ctx.fillStyle = INK; font(500, 12, true); ctx.fillText(h.id, 0, 0); ctx.restore(); }
   });
+  // Pending labels last, placed clear of the other holes on the section.
+  if (S.pendingLabels) {
+    const scr = new Map(shown.map(({ h, pts }) => [h, pts.filter((p) => Math.abs(p.off) <= S.secW).map((p) => [X(p.t), Y(p.z)])]));
+    shown.filter(({ h }) => isPending(h)).forEach(({ h }) => { const vis = scr.get(h).filter((p, i, a) => i > a.length * 0.06); if (vis.length > 2) alongLabel(ctx, K, 'ASSAYS PENDING', vis, shown.filter((o) => o.h !== h).flatMap((o) => scr.get(o.h))); });
+  }
   // Callouts for holes on this section
   let by = mt; const maxY = Hc - mb;
   shownCallouts().filter((c) => shown.some((x) => x.h === c.h)).slice(0, narrow ? 2 : 4).forEach((c) => {
@@ -986,6 +1055,8 @@ function renderStyle() {
   $('co-cut').value = S.coCut; $('co-incl').value = S.coIncl; $('co-count').value = S.coCount; $('co-min').value = S.coMin;
   $('sec-az').value = S.secAz; $('sec-az-out').textContent = `${pad3(S.secAz)}°`; $('sec-w').value = S.secW;
   $('opt-walls').checked = S.walls; $('opt-ids').checked = S.ids; $('opt-inset').checked = S.inset; $('opt-ribbons').checked = S.ribbons;
+  $('opt-pending').checked = S.pendingLabels; $('opt-pending-none').checked = S.pendingNoAssays; $('opt-elev').checked = S.elevTicks;
+  $('value-col2').innerHTML = '<option value="">None</option>' + (project?.cols || []).filter((c) => c !== S.valueCol).map((c) => `<option ${c === S.valueCol2 ? 'selected' : ''}>${esc(c)}</option>`).join('');
   $('trace-w').value = Math.round(S.traceWidth * 100); $('trace-out').textContent = `${S.traceWidth.toFixed(1)}×`;
   $('surf').value = Math.round(S.surf * 100); $('surf-out').textContent = `${Math.round(S.surf * 100)}%`;
   const ml = $('mesh-list'); ml.innerHTML = '';
@@ -1000,7 +1071,7 @@ function renderCalloutEditor() {
   callouts.forEach((c) => { if (shownIds.has(c.h.id) && !cands.includes(c)) cands.push(c); });
   if (!cands.length) { el.innerHTML = '<p class="muted">No hole has an interval above the broad cut-off over the minimum length. Lower either one.</p>'; return; }
   el.innerHTML = '<p class="muted">Tick to show. Type over a line to reword it; leave it blank for the automatic text.</p>' + cands.map((c) => {
-    const id = esc(c.h.id), o = S.coOverrides[c.h.id] || {}, a1 = `${icText(c.ic.broad)} from ${Math.round(c.ic.broad.from)} m`, a2 = c.ic.incl ? `incl. ${icText(c.ic.incl)}` : '(no "incl." line)';
+    const id = esc(c.h.id), o = S.coOverrides[c.h.id] || {}, a1 = `${icText(c.ic.broad, c.h)} from ${Math.round(c.ic.broad.from)} m`, a2 = c.ic.incl ? `incl. ${icText(c.ic.incl, c.h)}` : '(no "incl." line)';
     return `<div class="callout-ed"><input type="checkbox" data-co="${id}" ${shownIds.has(c.h.id) ? 'checked' : ''} aria-label="Show callout for ${id}"><span class="id">${id}</span>`
       + `<input type="text" data-co1="${id}" value="${esc(o.line1 || '')}" placeholder="${esc(a1)}" aria-label="First line for ${id}">`
       + `<input type="text" data-co2="${id}" value="${esc(o.line2 || '')}" placeholder="${esc(a2)}" aria-label="Second line for ${id}"></div>`;
@@ -1126,7 +1197,14 @@ function setStyle(o = {}, render = true) {
   if (o.autoBins) rebin();
   [['coCount', 0, 12], ['coMin', 1, 1000], ['coCut', 0, 1e9], ['coIncl', 0, 1e9], ['secW', 5, 5000]].forEach(([k, lo, hi]) => { if (o[k] !== undefined) { const v = +o[k]; if (!Number.isFinite(v)) throw new Error(`${k} must be a number.`); S[k] = Math.max(lo, Math.min(hi, v)); } });
   if (o.secAz !== undefined) { S.secAz = ((Math.round(+o.secAz) % 180) + 180) % 180; refresh.secSet = true; }
-  ['walls', 'ids', 'inset', 'ribbons'].forEach((k) => { if (o[k] !== undefined) S[k] = !!o[k]; });
+  if (o.valueCol2 !== undefined) {
+    const av = project?.cols || [], v = o.valueCol2 === '' || o.valueCol2 === 'none' ? null : o.valueCol2;
+    if (v !== null && !av.includes(v)) throw new Error(`Unknown grade column "${v}". Available: ${av.join(', ') || 'none'}, or null for none.`);
+    if (v !== null && v === S.valueCol) throw new Error('valueCol2 must differ from valueCol, the column the holes are coloured by.');
+    S.valueCol2 = v;
+  }
+  if (S.valueCol2 === S.valueCol) S.valueCol2 = null;
+  ['walls', 'ids', 'inset', 'ribbons', 'pendingLabels', 'pendingNoAssays', 'elevTicks'].forEach((k) => { if (o[k] !== undefined) S[k] = !!o[k]; });
   if (o.traceWidth !== undefined) { const v = +o.traceWidth; if (!Number.isFinite(v)) throw new Error('traceWidth must be a number from 0.5 to 3.'); S.traceWidth = Math.max(0.5, Math.min(3, v)); }
   if (o.surface !== undefined) S.surf = Math.max(0.15, Math.min(1, +o.surface > 1 ? +o.surface / 100 : +o.surface));
   if (o.meshes) Object.entries(o.meshes).forEach(([name, v]) => { if (!S.meshes[name]) throw new Error(`No model shape named "${name}". Loaded: ${Object.keys(S.meshes).join(', ') || 'none'}.`); Object.assign(S.meshes[name], v); });
@@ -1143,6 +1221,10 @@ $('opt-walls').addEventListener('change', (e) => setStyle({ walls: e.target.chec
 $('opt-ids').addEventListener('change', (e) => setStyle({ ids: e.target.checked }, false));
 $('opt-inset').addEventListener('change', (e) => setStyle({ inset: e.target.checked }, false));
 $('opt-ribbons').addEventListener('change', (e) => setStyle({ ribbons: e.target.checked }, false));
+$('opt-pending').addEventListener('change', (e) => setStyle({ pendingLabels: e.target.checked }, false));
+$('opt-pending-none').addEventListener('change', (e) => setStyle({ pendingNoAssays: e.target.checked }, false));
+$('opt-elev').addEventListener('change', (e) => setStyle({ elevTicks: e.target.checked }, false));
+$('value-col2').addEventListener('change', (e) => setStyle({ valueCol2: e.target.value || null }));
 $('trace-w').addEventListener('input', (e) => { setStyle({ traceWidth: +e.target.value / 100 }, false); $('trace-out').textContent = `${S.traceWidth.toFixed(1)}×`; });
 $('surf').addEventListener('input', (e) => { setStyle({ surface: +e.target.value / 100 }, false); $('surf-out').textContent = `${e.target.value}%`; });
 function setCallout(holeId, o = {}) {
@@ -1174,14 +1256,14 @@ function getState() {
     app: 'Exploration Maps 3D', version: 3, ready: !!G, usingSample, step: currentStep, view: S.view,
     files: files.map((x) => ({ name: x.name, role: x.role, rows: x.rows ? x.rows.length : undefined,
       columns: x.cols ? Object.fromEntries(Object.entries(x.cols).map(([k, i]) => [k, x.header[i]])) : undefined, gradeColumns: x.grades && x.grades.length ? x.grades.map((g) => g.name) : undefined })),
-    project: ok ? { holes: project.holes.length, holeIds: project.holes.map((h) => h.id), metresDrilled: Math.round(project.holes.reduce((s, h) => s + h.len, 0)), intervals: project.holes.reduce((s, h) => s + h.ints.length, 0), dipsPositiveDown: project.posDown, warnings: project.warnings } : null,
+    project: ok ? { holes: project.holes.length, holeIds: project.holes.map((h) => h.id), metresDrilled: Math.round(project.holes.reduce((s, h) => s + h.len, 0)), pendingHoles: project.holes.filter(isPending).map((h) => h.id), intervals: project.holes.reduce((s, h) => s + h.ints.length, 0), dipsPositiveDown: project.posDown, warnings: project.warnings } : null,
     grade: { column: S.valueCol, label: S.valueLabel, available: project?.cols || [], bins: S.bins, binColors: BIN_COLORS },
     callouts: { coCount: S.coCount, coMin: S.coMin, coCut: S.coCut, coIncl: S.coIncl,
       shown: shownCallouts().map((c) => { const L = calloutLines(c); return { holeId: c.h.id, line1: L.l1 + L.l1b, line2: L.l2 }; }),
-      candidates: callouts.slice(0, 15).map((c) => ({ holeId: c.h.id, broad: icText(c.ic.broad), fromM: Math.round(c.ic.broad.from), incl: c.ic.incl ? icText(c.ic.incl) : null })), overrides: S.coOverrides },
+      candidates: callouts.slice(0, 15).map((c) => ({ holeId: c.h.id, broad: icText(c.ic.broad, c.h), fromM: Math.round(c.ic.broad.from), incl: c.ic.incl ? icText(c.ic.incl, c.h) : null })), overrides: S.coOverrides, valueCol2: S.valueCol2 },
     brand: { company: S.company, title: S.title, subtitle: S.subtitle, footnote: S.footnote, primary: S.primary, accent: S.accent, hasLogo: !!S.logo, credit: S.credit },
     camera: G ? getCam() : null, section: { secAz: S.secAz, secW: S.secW, lookingAz: ((S.secAz - 90) % 360 + 360) % 360 },
-    display: { walls: S.walls, ids: S.ids, inset: S.inset, surface: S.surf, ribbons: S.ribbons, traceWidth: S.traceWidth }, meshes: S.meshes,
+    display: { walls: S.walls, ids: S.ids, inset: S.inset, surface: S.surf, ribbons: S.ribbons, traceWidth: S.traceWidth, pendingLabels: S.pendingLabels, pendingNoAssays: S.pendingNoAssays, elevTicks: S.elevTicks }, meshes: S.meshes,
     figureSize: { key: S.format, width: f.w, height: f.h, label: f.label }, figureSizes: Object.fromEntries(Object.entries(FORMATS).map(([k, v]) => [k, `${v.label}, ${v.w}×${v.h}`])),
   };
 }
@@ -1207,7 +1289,10 @@ JavaScript API (run in the page console or via your agent's evaluate tool):
                  coCount, coMin, coCut, coIncl, secAz (0-179), secW,
                  walls, ids, inset, surface (0.15-1), meshes: {name: {show, color, opacity}},
                  ribbons (bars beside each hole: tan = reported interval, green = incl.),
-                 traceWidth (0.5-3, drill trace thickness, default 1.4)})
+                 traceWidth (0.5-3, drill trace thickness, default 1.4),
+                 valueCol2 (second grade in callouts, e.g. "Au_gpt"; null for none),
+                 pendingLabels (write ASSAYS PENDING along holes whose collar status/notes say pending),
+                 pendingNoAssays (also flag holes with no assays), elevTicks (elevation ticks on the block edge)})
   EM3D.setCallout(holeId, {show, line1, line2, incl: false})   null resets a field
   EM3D.setCamera({view: "a" | "b" | "low" | "plan"}) or ({azimuth, plunge, zoom})
   EM3D.setFigureSize("slide" | "release" | "square" | "portrait" | "a4")

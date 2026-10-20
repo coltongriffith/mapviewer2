@@ -266,6 +266,7 @@ dialog.acct-dialog::backdrop { background: rgba(20,33,38,0.35); }
           <label class="field"><span>Minimum length (m)</span><input type="number" id="co-min" min="1"></label>
           <label class="field"><span>Broad cut-off</span><input type="number" id="co-cut" step="any"></label>
           <label class="field"><span>"incl." cut-off</span><input type="number" id="co-incl" step="any"></label>
+          <label class="field" style="grid-column:1/-1"><span>Also show in callouts</span><select id="value-col2"></select></label>
         </div>
         <div id="callout-editor" style="display:grid;gap:8px;margin-top:10px"></div>
       </section>
@@ -293,6 +294,9 @@ dialog.acct-dialog::backdrop { background: rgba(20,33,38,0.35); }
           <label class="check"><input type="checkbox" id="opt-ids" checked>Hole IDs</label>
           <label class="check"><input type="checkbox" id="opt-inset" checked>Plan inset</label>
           <label class="check"><input type="checkbox" id="opt-ribbons" checked>Intercept bars beside holes</label>
+          <label class="check"><input type="checkbox" id="opt-elev" checked>Elevation ticks</label>
+          <label class="check"><input type="checkbox" id="opt-pending" checked>"Assays pending" from collar status</label>
+          <label class="check"><input type="checkbox" id="opt-pending-none">Label holes without assays</label>
         </div>
         <label class="field" style="margin-top:8px"><span>Drill trace thickness <output id="trace-out" class="mono">1.4×</output></span><input type="range" id="trace-w" min="50" max="300" step="10" value="140"></label>
         <label class="field" style="margin-top:8px"><span>Surface opacity <output id="surf-out" class="mono">100%</output></span><input type="range" id="surf" min="15" max="100" value="100"></label>
