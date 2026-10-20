@@ -228,6 +228,7 @@ article strong{color:#142126}
 /* Screenshot figure placeholder */
 .blog-figure{margin:22px 0}
 .blog-figure img{display:block;width:100%;border:1px solid #dde3e3;border-radius:10px}
+.blog-figure.narrow img{max-width:380px;margin:0 auto}
 .screenshot-frame{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-height:180px;background:repeating-linear-gradient(45deg,#f6f8f7,#f6f8f7 12px,#f6f8f7 12px,#f6f8f7 24px);border:1.5px dashed #c6cecf;border-radius:10px;color:#5f6e72;font-size:0.9rem;font-weight:600;text-align:center;padding:24px}
 .screenshot-frame-icon{font-size:28px;color:#5f6e72;line-height:1}
 .blog-figure figcaption{margin-top:8px;font-size:13px;color:#5f6e72;text-align:center;font-style:italic}
@@ -314,6 +315,10 @@ ${body}
     <a href="/drill-results-map/">Drill Results Map</a>
     <span class="site-footer-sep">·</span>
     <a href="/companies/">Claim Maps by Company</a>
+    <span class="site-footer-sep">·</span>
+    <a href="/3d">3D Drill Figures (beta)</a>
+    <span class="site-footer-sep">·</span>
+    <a href="/teams/">For Teams</a>
   </div>
   <div class="site-footer-links">
     <a href="/">Home</a>
@@ -336,16 +341,26 @@ ${body}
 
 // ─── Sidebar ──────────────────────────────────────────────────────────────────
 
-function sidebar({ relatedHtml = '', compareHtml = '', howToHtml = '', locationHtml = '', appHref = '/', monitor = false } = {}) {
+// CTA card copy per destination. Posts about Exploration Maps 3D or the Teams
+// service send readers there instead of to the 2D editor.
+const SIDEBAR_CTA = {
+  monitor: { h: 'Track your BC claims', p: 'Save a watch list and receive reminders for published good-to-dates. Free for up to 10 claims.', label: 'Open monitor →' },
+  '3d': { h: 'Make a 3D drill figure', p: 'Drop collar, survey and assay CSVs into the browser and export a branded 3D figure and section. Beta, free to use.', label: 'Open Exploration Maps 3D →' },
+  teams: { h: 'Have us keep it current', p: 'Exploration Maps for Teams builds your figure set in your style and updates it as results arrive.', label: 'Discuss your project →' },
+  editor: { h: 'Create Your Map Now', p: 'No GIS experience needed. Import your data, choose a theme, and export in minutes.', label: 'Open Exploration Maps →' },
+};
+
+function sidebar({ relatedHtml = '', compareHtml = '', howToHtml = '', locationHtml = '', appHref = '/', monitor = false, product = null } = {}) {
+  const card = SIDEBAR_CTA[monitor ? 'monitor' : product || 'editor'];
   const comparisons = compareHtml ? `<div class="sidebar-card"><h3>Compare Tools</h3><ul>${compareHtml}</ul></div>` : '';
   const howToGuide = howToHtml ? `<div class="sidebar-card"><h3>Step-by-Step Guide</h3><ul>${howToHtml}</ul></div>` : '';
   const relatedCard = relatedHtml ? `<div class="sidebar-card"><h3>Related Guides</h3><ul>${relatedHtml}</ul></div>` : '';
   const locationCard = locationHtml ? `<div class="sidebar-card"><h3>By Region</h3><ul>${locationHtml}</ul></div>` : '';
   return `<aside>
   <div class="cta-card">
-    <h3>${monitor ? 'Track your BC claims' : 'Create Your Map Now'}</h3>
-    <p>${monitor ? 'Save a watch list and receive reminders for published good-to-dates. Free for up to 10 claims.' : 'No GIS experience needed. Import your data, choose a theme, and export in minutes.'}</p>
-    <a class="cta-btn" href="${esc(appHref)}">${monitor ? 'Open monitor →' : 'Open Exploration Maps →'}</a>
+    <h3>${esc(card.h)}</h3>
+    <p>${esc(card.p)}</p>
+    <a class="cta-btn" href="${esc(appHref)}">${esc(card.label)}</a>
   </div>
   ${howToGuide}
   ${relatedCard}
@@ -399,7 +414,10 @@ function appLink({ intent = null, region = null, demo = null, campaign = '' } = 
 }
 
 // Keep navigation, article and landing-page actions aligned with search intent.
-function contentAction({ slug = '', mapTypeId } = {}) {
+function contentAction({ slug = '', mapTypeId, product } = {}) {
+  const utm = `utm_source=blog&utm_medium=cta&utm_campaign=${encodeURIComponent(slug)}`;
+  if (product === '3d') return { monitor: false, product, href: `/3d?${utm}`, label: 'Open Exploration Maps 3D →' };
+  if (product === 'teams') return { monitor: false, product, href: `/teams/?${utm}#enquire`, label: 'Discuss your project →' };
   const monitor = ['mineral-tenure-monitoring', 'how-to-track-bc-mineral-claim-good-to-dates'].includes(slug);
   if (monitor) return { monitor, href: `/tenure-monitor?utm_source=blog&utm_medium=cta&utm_campaign=${encodeURIComponent(slug)}`, label: 'Monitor my claims →' };
   const region = (slug.match(/search-([a-z-]+?)-(?:mining|mineral|quartz)-claims/) || [])[1]
@@ -433,7 +451,9 @@ function inlineCta({ text, sub = '', href = '/', label = 'Open Exploration Maps 
 // `eager: true` for above-the-fold hero images (the LCP candidate) — loads
 // immediately at high fetch priority instead of the default lazy, which would
 // defer the main visual's fetch. Inline screenshots keep the lazy default.
-function figureBlock({ alt = '', caption = '', src = '', eager = false, width, height } = {}) {
+// `narrow: true` draws a small UI crop at its own size (380 px) instead of
+// stretching it to the column width.
+function figureBlock({ alt = '', caption = '', src = '', eager = false, width, height, narrow = false } = {}) {
   const label = caption || alt || 'App screenshot';
   const loadAttrs = eager ? 'loading="eager" fetchpriority="high"' : 'loading="lazy"';
   const variants = imageVariants[src];
@@ -441,7 +461,7 @@ function figureBlock({ alt = '', caption = '', src = '', eager = false, width, h
   let responsive = '';
   if (variants) {
     dimensions = `width="${variants[0].width}" height="${variants[0].height}"`;
-    responsive = `srcset="${variants.map(v => `${esc(v.src)} ${v.width}w`).join(', ')}" sizes="(max-width: 768px) calc(100vw - 48px), 724px"`;
+    responsive = `srcset="${variants.map(v => `${esc(v.src)} ${v.width}w`).join(', ')}" sizes="${narrow ? '(max-width: 428px) calc(100vw - 48px), 380px' : '(max-width: 768px) calc(100vw - 48px), 724px'}"`;
     src = variants[0].src;
   } else if (src.endsWith('.png') && src.startsWith('/')) {
     const png = readFileSync(join(ROOT, 'public', src));
@@ -452,7 +472,7 @@ function figureBlock({ alt = '', caption = '', src = '', eager = false, width, h
   const inner = src
     ? `<img src="${esc(src)}" alt="${esc(alt || caption)}" ${dimensions} ${responsive} decoding="async" ${loadAttrs}>`
     : `<div class="screenshot-frame"><span class="screenshot-frame-icon">▦</span><span>${esc(label)}</span></div>`;
-  return `<figure class="blog-figure">${inner}${caption ? `<figcaption>${esc(caption)}</figcaption>` : ''}</figure>`;
+  return `<figure class="blog-figure${narrow ? ' narrow' : ''}">${inner}${caption ? `<figcaption>${esc(caption)}</figcaption>` : ''}</figure>`;
 }
 
 function checklistBlock(items) {
@@ -574,7 +594,9 @@ function buildHowToPage(post, allPosts) {
     '@context': 'https://schema.org',
     '@graph': [
       articleSchema(post.title, post.metaDescription, url, post.publishedDate, post.updatedDate),
-      {
+      // Explainers (a formula, a method) are not procedures; they set howTo:false
+      // so they carry Article markup only rather than a HowTo of their headings.
+      post.howTo !== false && {
         '@type': 'HowTo',
         name: post.title,
         description: post.directAnswer,
@@ -591,7 +613,7 @@ function buildHowToPage(post, allPosts) {
           })),
       },
       breadcrumbSchema(post.title, url),
-    ],
+    ].filter(Boolean),
   };
 
   const pubDate = postDates(post);
@@ -620,13 +642,13 @@ function buildHowToPage(post, allPosts) {
       ${bottomCta}
       ${faqBlock(post.faqs)}
     </article>
-    ${sidebar({ relatedHtml: related, compareHtml: COMP_LINKS, locationHtml, appHref: postApp, monitor: action.monitor })}
+    ${sidebar({ relatedHtml: related, compareHtml: COMP_LINKS, locationHtml, appHref: postApp, monitor: action.monitor, product: action.product })}
   </div>
 </div>`;
 
   return pageShell({
     title: post.title, fullTitle: post.fullTitle, description: post.metaDescription,
-    canonical: url, schema, body, action,
+    canonical: url, schema, body, action, ...(post.ogImage ? { ogImage: `${SITE}${post.ogImage}` } : {}),
   });
 }
 
@@ -664,6 +686,7 @@ function buildCompPage(post, allPosts) {
 </div>` : '';
 
   const compPubDate = postDates(post);
+  const compAction = contentAction(post);
 
   const body = `
 <div class="page-wrap">
@@ -673,17 +696,18 @@ function buildCompPage(post, allPosts) {
       <h1>${esc(post.title)}</h1>
       <p class="direct-answer">${esc(post.directAnswer)}</p>
       ${heroFigureForPost(post)}
-      ${renderSections(post.sections || [], contentAction(post))}
+      ${renderSections(post.sections || [], compAction)}
       ${tableHtml}
       ${faqBlock(post.faqs)}
     </article>
-    ${sidebar({ relatedHtml: related, locationHtml: locLinksHtml, appHref: appLink({ demo: 'aurora_demo', campaign: post.slug }) })}
+    ${sidebar({ relatedHtml: related, locationHtml: locLinksHtml, appHref: compAction.product ? compAction.href : appLink({ demo: 'aurora_demo', campaign: post.slug }), product: compAction.product })}
   </div>
 </div>`;
 
   return pageShell({
     title: post.title, fullTitle: post.fullTitle, description: post.metaDescription,
-    canonical: url, schema, body,
+    canonical: url, schema, body, ...(compAction.product ? { action: compAction } : {}),
+    ...(post.ogImage ? { ogImage: `${SITE}${post.ogImage}` } : {}),
   });
 }
 
@@ -913,6 +937,10 @@ function buildSitemap(allUrls, landingUrls = []) {
     [`${SITE}/agent/`, '2026-09-19'],
     [`${SITE}/muse/`, '2026-09-19'],
     [`${SITE}/mcp/`, '2026-09-20'],
+    // Standalone Vite pages. /teams/ was last revised in #275; /3d became
+    // indexable, with its About section, on the same date.
+    [`${SITE}/teams/`, '2026-10-20'],
+    [`${SITE}/3d`, '2026-10-20'],
   ]);
   const entry = url => `  <url><loc>${esc(url)}</loc>${revisions.get(url) ? `<lastmod>${revisions.get(url)}</lastmod>` : ''}</url>`;
   const homepage = entry(`${SITE}/`);
@@ -925,6 +953,9 @@ function buildSitemap(allUrls, landingUrls = []) {
     entry(`${SITE}/about/`),
     entry(`${SITE}/contact/`),
     entry(`${SITE}/teams/`),
+    // /3d is a standalone Vite page (3d/index.html). Its canonical has no
+    // trailing slash, matching the /3d rewrite in vercel.json.
+    entry(`${SITE}/3d`),
   ].join('\n');
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${homepage}\n${landingEntries}\n${blogEntries}\n${staticEntries}\n</urlset>`;
 }

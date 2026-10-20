@@ -1,0 +1,71 @@
+name: IndexNow
+
+# After a push to main changes a sitemap, wait for the Vercel production
+# deployment of that commit to serve it, then tell IndexNow (Bing, Yandex,
+# Seznam, Naver and others) which URLs are new or changed.
+#
+# Never fails the run: scripts/indexnow-submit.mjs reports problems as
+# warnings and exits 0, and the job is continue-on-error as a backstop, so a
+# slow deploy or an IndexNow outage shows up as an annotation, not a failure
+# email. Google does not use IndexNow; the sitemap is submitted in Search
+# Console instead.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'public/sitemap.xml'
+      - 'public/sitemap-companies.xml'
+  workflow_dispatch:
+    inputs:
+      all:
+        description: 'Submit every sitemap URL, not just the changed ones'
+        type: boolean
+        default: false
+
+concurrency:
+  group: indexnow
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  submit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      # The base to diff the sitemap against is the commit main pointed at
+      # before this push. Fetch just that commit; if it cannot be fetched (a
+      # force-push, a new branch) the script falls back to recent lastmods.
+      - name: Fetch the previous main commit
+        id: base
+        continue-on-error: true
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          if [ -n "$BEFORE" ] && [ "$BEFORE" != "0000000000000000000000000000000000000000" ]; then
+            git fetch --no-tags --depth=1 origin "$BEFORE" && echo "since=$BEFORE" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      # Polls the live sitemap until this commit's entries appear (up to 20
+      # minutes), checks the key file is served, then submits.
+      - name: Submit new and changed URLs to IndexNow
+        continue-on-error: true
+        env:
+          INDEXNOW_SINCE: ${{ steps.base.outputs.since || 'HEAD^' }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.all }}" = "true" ]; then
+            node scripts/indexnow-submit.mjs --all
+          else
+            node scripts/indexnow-submit.mjs
+          fi

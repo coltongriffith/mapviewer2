@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Copper Equivalent (CuEq) Formula and Calculator for Drill Results | Exploration Maps</title>
+<meta name="description" content="The CuEq formula explained: unit conversions, metal prices and recoveries, worked copper-gold-silver examples, gold equivalent (AuEq), and a free calculator.">
+<link rel="canonical" href="https://www.explorationmaps.com/blog/copper-equivalent-cueq-formula-calculator/">
+
+<meta property="og:title" content="Copper Equivalent (CuEq) Formula and Calculator for Drill Results">
+<meta property="og:description" content="The CuEq formula explained: unit conversions, metal prices and recoveries, worked copper-gold-silver examples, gold equivalent (AuEq), and a free calculator.">
+<meta property="og:url" content="https://www.explorationmaps.com/blog/copper-equivalent-cueq-formula-calculator/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Exploration Maps">
+<meta property="og:image" content="https://www.explorationmaps.com/og/3d.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Copper Equivalent (CuEq) Formula and Calculator for Drill Results">
+<meta name="twitter:description" content="The CuEq formula explained: unit conversions, metal prices and recoveries, worked copper-gold-silver examples, gold equivalent (AuEq), and a free calculator.">
+<meta name="twitter:image" content="https://www.explorationmaps.com/og/3d.png">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Copper Equivalent (CuEq) Formula and Calculator for Drill Results","description":"The CuEq formula explained: unit conversions, metal prices and recoveries, worked copper-gold-silver examples, gold equivalent (AuEq), and a free calculator.","url":"https://www.explorationmaps.com/blog/copper-equivalent-cueq-formula-calculator/","datePublished":"2026-10-20","dateModified":"2026-10-20","author":{"@type":"Organization","name":"Exploration Maps","url":"https://www.explorationmaps.com"},"publisher":{"@type":"Organization","name":"Exploration Maps","url":"https://www.explorationmaps.com"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://www.explorationmaps.com"},{"@type":"ListItem","position":2,"name":"Blog","item":"https://www.explorationmaps.com/blog/"},{"@type":"ListItem","position":3,"name":"Copper Equivalent (CuEq) Formula and Calculator for Drill Results","item":"https://www.explorationmaps.com/blog/copper-equivalent-cueq-formula-calculator/"}]}]}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Source+Sans+3:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{font-size:16px;-webkit-text-size-adjust:100%}
+body{font-family:'Source Sans 3','Segoe UI',system-ui,-apple-system,sans-serif;color:#142126;background:#fff;line-height:1.6}
+a{color:#142126;text-decoration:underline;text-decoration-color:#c6cecf;text-underline-offset:3px}a:hover{text-decoration-color:#c65322}
+img{max-width:100%;height:auto}
+/* Nav */
+.nav{display:flex;align-items:center;justify-content:space-between;padding:0 24px;height:56px;border-bottom:1px solid #dde3e3;background:#fff;position:sticky;top:0;z-index:100}
+.nav-brand{display:flex;align-items:center;gap:8px;font-size:15px;font-weight:700;color:#142126;text-decoration:none}
+.nav-brand svg{flex-shrink:0}
+.nav-cta{background:#142126;color:#fff;padding:7px 16px;border-radius:8px;font-size:13px;font-weight:600;white-space:nowrap}
+.nav-cta:hover{background:#2c3d42;text-decoration:none}
+/* Layout */
+.page-wrap{max-width:1100px;margin:0 auto;padding:0 24px}
+.blog-layout{display:grid;grid-template-columns:1fr 280px;gap:48px;padding:48px 0 80px;align-items:start}
+/* Grid items default to min-width:auto, so a wide child sizes the column
+   instead of scrolling inside it — which is how one six-column table set
+   the page width on a phone and dragged every paragraph out with it. */
+.blog-layout>*{min-width:0}
+@media(max-width:768px){.blog-layout{grid-template-columns:1fr;padding:32px 0 60px}}
+/* Article */
+article h1{font-size:2rem;font-weight:800;line-height:1.2;color:#142126;margin-bottom:16px}
+@media(max-width:600px){article h1{font-size:1.5rem}}
+.direct-answer{font-size:1.05rem;color:#5f6e72;background:#f6f8f7;border-left:4px solid #142126;padding:14px 18px;border-radius:0 8px 8px 0;margin-bottom:32px;line-height:1.65}
+.breadcrumb{font-size:13px;color:#5f6e72;margin-bottom:20px}
+.breadcrumb a{color:#5f6e72}
+.breadcrumb span{margin:0 6px}
+article h2{font-size:1.35rem;font-weight:700;color:#142126;margin:40px 0 12px;padding-bottom:8px;border-bottom:2px solid #dde3e3}
+article h2:first-of-type{margin-top:0}
+article h3{font-size:1.05rem;font-weight:700;color:#142126;margin:28px 0 8px}
+article p{margin-bottom:16px;color:#5f6e72;line-height:1.75}
+article ul,article ol{padding-left:22px;margin-bottom:16px}
+article li{margin-bottom:6px;color:#5f6e72;line-height:1.65}
+article strong{color:#142126}
+/* Steps */
+.steps-list{list-style:none;padding:0;counter-reset:step}
+.steps-list li{counter-increment:step;display:flex;gap:14px;margin-bottom:16px;align-items:flex-start}
+.steps-list li::before{content:counter(step);display:flex;align-items:center;justify-content:center;width:28px;height:28px;min-width:28px;background:#142126;color:#fff;border-radius:50%;font-size:13px;font-weight:700;margin-top:2px}
+/* Comparison table */
+.comparison-table{width:100%;border-collapse:collapse;margin:20px 0;font-size:14px}
+.comparison-table th{background:#142126;color:#fff;padding:10px 14px;text-align:left;font-weight:600}
+.comparison-table td{padding:9px 14px;border-bottom:1px solid #dde3e3;vertical-align:top}
+.comparison-table tr:nth-child(even) td{background:#f6f8f7}
+.comparison-table tr:first-child td:first-child{font-weight:600}
+/* FAQ */
+.faq-section{margin:48px 0 0}
+.faq-section h2{font-size:1.35rem;font-weight:700;color:#142126;margin-bottom:20px;padding-bottom:8px;border-bottom:2px solid #dde3e3}
+.faq-item{border:1px solid #dde3e3;border-radius:10px;margin-bottom:12px;overflow:hidden}
+.faq-q{font-weight:700;color:#142126;padding:14px 18px;font-size:0.95rem;background:#f6f8f7}
+.faq-a{padding:12px 18px;color:#5f6e72;font-size:0.9rem;line-height:1.7;border-top:1px solid #dde3e3}
+/* Sidebar */
+.sidebar-card{background:#f6f8f7;border:1px solid #dde3e3;border-radius:12px;padding:24px;margin-bottom:24px}
+.sidebar-card h3{font-size:14px;font-weight:700;color:#142126;margin-bottom:12px;text-transform:uppercase;letter-spacing:0.05em}
+.sidebar-card ul{list-style:none;padding:0}
+.sidebar-card li{margin-bottom:8px;font-size:14px}
+.sidebar-card a{color:#142126}
+.cta-card{background:#142126;border-radius:12px;padding:28px 24px;color:#fff;text-align:center;margin-bottom:24px}
+.cta-card h3{font-size:1.1rem;font-weight:700;margin-bottom:10px;color:#fff}
+.cta-card p{font-size:13px;color:#dde3e3;margin-bottom:18px;line-height:1.6}
+.cta-btn{display:inline-block;background:#fff;color:#142126;padding:10px 22px;border-radius:8px;font-weight:700;font-size:14px;text-decoration:none}
+.cta-btn:hover{background:#f6f8f7;text-decoration:none}
+/* Blog index */
+.blog-index-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:24px;padding:24px 0 40px}
+.blog-card{border:1px solid #dde3e3;border-radius:12px;padding:24px;display:flex;flex-direction:column;gap:8px;transition:border-color .15s,box-shadow .15s}
+.blog-card:hover{border-color:#142126;box-shadow:0 4px 16px rgba(37,99,235,0.1)}
+.blog-card-tag{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#142126}
+.blog-card h3{font-size:1rem;font-weight:700;color:#142126;line-height:1.35}
+.blog-card p{font-size:13px;color:#5f6e72;line-height:1.6;flex:1}
+.blog-card a{font-size:13px;font-weight:600;color:#142126}
+/* Hero */
+.page-hero{padding:48px 0 32px;border-bottom:1px solid #dde3e3;margin-bottom:0}
+.page-hero-label{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#142126;margin-bottom:10px}
+.page-hero h1{font-size:2.2rem;font-weight:800;color:#142126;max-width:720px;line-height:1.2;margin-bottom:12px}
+@media(max-width:600px){.page-hero h1{font-size:1.6rem}}
+.page-hero p{font-size:1.05rem;color:#5f6e72;max-width:580px;line-height:1.65}
+/* Index section headers */
+.index-section-head{display:flex;align-items:baseline;justify-content:space-between;margin:40px 0 4px;padding-top:8px;border-top:2px solid #dde3e3}
+.index-section-head h2{font-size:1.1rem;font-weight:700;color:#142126}
+.index-section-head a{font-size:13px;color:#142126}
+.table-scroll{overflow-x:auto;max-width:100%;-webkit-overflow-scrolling:touch;margin:16px 0}
+.table-scroll .data-table{margin:0;min-width:520px}
+.index-count{display:inline-block;margin-left:6px;padding:1px 8px;border-radius:999px;background:#eef2f7;color:#5f6e72;font-size:12px;font-weight:600;vertical-align:middle}
+.index-section-intro{margin:0 0 16px;color:#5f6e72;font-size:14px;max-width:60ch}
+.index-foot{text-align:center;color:#5f6e72;font-size:14px;padding:48px 0}
+.index-foot a{color:#142126}
+/* Index TOC */
+.index-toc{display:flex;flex-wrap:wrap;gap:8px;padding:24px 0 8px;border-bottom:1px solid #dde3e3;margin-bottom:8px}
+.index-toc a{font-size:13px;font-weight:600;color:#5f6e72;background:#f6f8f7;padding:4px 12px;border-radius:999px;text-decoration:none}
+.index-toc a:hover{background:#f6f8f7;color:#2c3d42}
+/* Location table */
+.location-table{width:100%;border-collapse:collapse;font-size:13px;margin:12px 0 32px}
+.location-table th{background:#f6f8f7;text-align:left;padding:8px 12px;font-weight:700;color:#5f6e72;border:1px solid #dde3e3}
+.location-table td{padding:7px 12px;border:1px solid #dde3e3;color:#5f6e72}
+.location-table tr:nth-child(even) td{background:#f6f8f7}
+/* Category hub */
+.hub-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:20px;padding:24px 0 48px}
+.hub-card{border:1px solid #dde3e3;border-radius:10px;padding:20px;display:flex;flex-direction:column;gap:6px}
+.hub-card h3{font-size:0.95rem;font-weight:700;color:#142126}
+.hub-card p{font-size:13px;color:#5f6e72;line-height:1.55;flex:1}
+.hub-card a{font-size:13px;font-weight:600;color:#142126}
+/* Tip box */
+.tip-box{background:#f0fdf4;border-left:4px solid #287454;padding:12px 16px;border-radius:0 8px 8px 0;margin:16px 0;color:#5f6e72;line-height:1.7}
+/* Data sources table */
+.data-table{width:100%;border-collapse:collapse;font-size:13px;margin:12px 0 20px}
+.data-table th{background:#f6f8f7;text-align:left;padding:8px 12px;font-weight:700;color:#5f6e72;border:1px solid #dde3e3}
+.data-table td{padding:7px 12px;border:1px solid #dde3e3;color:#5f6e72;vertical-align:top}
+.data-table tr:nth-child(even) td{background:#f6f8f7}
+/* Post date */
+.post-date{color:#5f6e72;font-size:12px}
+/* SEO landing page */
+.lp-wrap{max-width:820px;margin:0 auto;padding:0 24px}
+.lp article h2{font-size:1.45rem}
+.lp-intro{font-size:1.15rem;color:#5f6e72;line-height:1.7;margin:0 0 8px}
+.lp .lp-plan-note{font-size:0.9rem;margin-bottom:24px}
+.lp-cta{background:#142126;border-radius:14px;padding:32px 28px;color:#fff;text-align:center;margin:40px 0}
+.lp-cta h2{color:#fff !important;border:none !important;margin:0 0 8px !important;padding:0 !important;font-size:1.3rem}
+.lp-cta p{color:#dde3e3;margin:0 0 18px;font-size:0.98rem}
+.lp-cta a{display:inline-block;background:#fff;color:#142126;padding:12px 26px;border-radius:9px;font-weight:700;font-size:15px;text-decoration:none}
+.lp-cta a:hover{background:#f6f8f7;text-decoration:none}
+.lp-related{border-top:2px solid #dde3e3;margin-top:48px;padding-top:24px}
+.lp-related h2{font-size:1.2rem;border:none;padding:0}
+.lp-related-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px;margin-top:8px}
+.lp-related-card{border:1px solid #dde3e3;border-radius:10px;padding:16px 18px;display:block;text-decoration:none}
+.lp-related-card:hover{border-color:#142126;box-shadow:0 4px 14px rgba(37,99,235,0.1);text-decoration:none}
+.lp-related-card strong{display:block;color:#142126;font-size:0.98rem;margin-bottom:4px}
+.lp-related-card span{color:#5f6e72;font-size:13px;line-height:1.5}
+.disclaimer-box{background:#faf5ea;border-left:4px solid #9a6715;padding:14px 18px;border-radius:0 8px 8px 0;margin:24px 0;color:#5f6e72;line-height:1.7;font-size:0.95rem}
+/* Inline CTA band */
+.inline-cta{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;background:#f6f8f7;border:1px solid #c7d7fe;border-radius:12px;padding:18px 22px;margin:28px 0}
+.inline-cta-copy{display:flex;flex-direction:column;gap:2px}
+.inline-cta-copy strong{font-size:1.02rem;color:#142126;font-weight:700}
+.inline-cta-copy span{font-size:0.9rem;color:#5f6e72}
+.inline-cta-btn{display:inline-block;background:#142126;color:#fff;padding:10px 20px;border-radius:9px;font-weight:700;font-size:14px;white-space:nowrap;text-decoration:none}
+.inline-cta-btn:hover{background:#2c3d42;text-decoration:none}
+/* Screenshot figure placeholder */
+.blog-figure{margin:22px 0}
+.blog-figure img{display:block;width:100%;border:1px solid #dde3e3;border-radius:10px}
+.blog-figure.narrow img{max-width:380px;margin:0 auto}
+.screenshot-frame{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-height:180px;background:repeating-linear-gradient(45deg,#f6f8f7,#f6f8f7 12px,#f6f8f7 12px,#f6f8f7 24px);border:1.5px dashed #c6cecf;border-radius:10px;color:#5f6e72;font-size:0.9rem;font-weight:600;text-align:center;padding:24px}
+.screenshot-frame-icon{font-size:28px;color:#5f6e72;line-height:1}
+.blog-figure figcaption{margin-top:8px;font-size:13px;color:#5f6e72;text-align:center;font-style:italic}
+/* Checklist */
+.checklist{list-style:none;padding:0;margin:16px 0}
+.checklist li{position:relative;padding-left:30px;margin-bottom:10px;color:#5f6e72;line-height:1.6}
+.checklist li::before{content:'✓';position:absolute;left:0;top:0;display:flex;align-items:center;justify-content:center;width:20px;height:20px;background:#287454;color:#fff;border-radius:50%;font-size:12px;font-weight:700}
+/* Source / verify / capability boxes */
+.box-title{display:block;font-size:0.95rem;font-weight:700;margin-bottom:6px}
+.source-box{background:#f6f8f7;border-left:4px solid #5f6e72;padding:14px 18px;border-radius:0 8px 8px 0;margin:24px 0;color:#5f6e72;line-height:1.7;font-size:0.92rem}
+.source-box .box-title{color:#5f6e72}
+.verify-box{background:#faf5ea;border-left:4px solid #9a6715;padding:14px 18px;border-radius:0 8px 8px 0;margin:24px 0;color:#5f6e72;line-height:1.7;font-size:0.92rem}
+.verify-box .box-title{color:#9a6715}
+.capability-box{background:#f6f8f7;border-left:4px solid #142126;padding:14px 18px;border-radius:0 8px 8px 0;margin:24px 0;color:#5f6e72;line-height:1.7;font-size:0.92rem}
+.capability-box .box-title{color:#2c3d42}
+.capability-box ul{padding-left:20px;margin:6px 0}
+.note-box{background:#f6f8f7;border-left:4px solid #5f6e72;padding:14px 18px;border-radius:0 8px 8px 0;margin:24px 0;color:#5f6e72;line-height:1.7;font-size:0.92rem}
+/* Footer */
+.site-footer{border-top:1px solid #dde3e3;padding:28px 24px;text-align:center;font-size:13px;color:#5f6e72;margin-top:40px}
+.site-footer-links{margin-bottom:8px;display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:6px}
+.site-footer a{color:#5f6e72}
+.site-footer-sep{color:#c6cecf}
+</style>
+<!-- Google tag (gtag.js) — the config lives in /gtag-init.js rather than inline
+     because our CSP is script-src 'self' with no 'unsafe-inline'. -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=AW-18358773663"></script>
+<script defer src="/gtag-init.js"></script>
+<script src="https://analytics.ahrefs.com/analytics.js" data-key="Nj1JOEhHV5bRKYBBoUJVVg" async></script>
+<script defer src="/acquisition.js"></script>
+</head>
+<body>
+<nav class="nav">
+  <a class="nav-brand" href="/">
+    <svg width="20" height="20" viewBox="0 0 480 520" fill="none" aria-hidden="true"><path fill="#142126" d="M60 40H180V85H410V250H445V480H30V385H60Z"/><path fill="none" stroke="#ffffff" stroke-width="22" d="M18 180H132L205 250H240V325L320 400V490"/><path fill="none" stroke="#ffffff" stroke-width="22" d="M205 250L260 195"/><rect x="250" y="145" width="90" height="90" fill="#ffffff"/><rect x="273" y="168" width="44" height="44" fill="#c65322"/></svg>
+    Exploration Maps
+  </a>
+  <a class="nav-cta" href="/3d?utm_source=blog&amp;utm_medium=cta&amp;utm_campaign=copper-equivalent-cueq-formula-calculator">Open Exploration Maps 3D →</a>
+</nav>
+
+<div class="page-wrap">
+  <div class="blog-layout">
+    <article>
+      <p class="breadcrumb"><a href="/">Home</a><span>›</span><a href="/blog/">Blog</a><span>›</span><a href="/blog/how-to/">How-to Guides</a><span>›</span>Copper Equivalent (CuEq) Formula and Calculator for Drill Results <span class="post-date">· Published <time datetime="2026-10-20">October 20, 2026</time></span> <span class="post-date">· Updated <time datetime="2026-10-20">October 20, 2026</time></span></p>
+      <h1>Copper Equivalent (CuEq) Formula and Calculator for Drill Results</h1>
+      <p class="direct-answer">CuEq (%) = Cu (%) + the sum of factor × grade for each other metal. Each factor is that metal's recovered value per unit of grade divided by the recovered value of 1% copper. At US$4.50/lb copper and US$3,000/oz gold, with 90% copper and 80% gold recovery, the gold factor is 0.864, so 0.45% Cu with 0.30 g/t Au is 0.71% CuEq. Wherever a CuEq number appears, state the prices, recoveries and formula behind it.</p>
+      
+      <div class="inline-cta">
+  <div class="inline-cta-copy">
+    <strong>Calculate CuEq from your own assays.</strong>
+    <span>The 3D maker adds a CuEq column from your prices and recoveries and writes the formula into the footnote.</span>
+  </div>
+  <a class="inline-cta-btn" href="/3d?utm_source=blog&amp;utm_medium=cta&amp;utm_campaign=copper-equivalent-cueq-formula-calculator&amp;utm_content=top">Open Exploration Maps 3D →</a>
+</div>
+      <h2>What a copper equivalent grade is for</h2><p>Porphyry and other polymetallic deposits carry value in more than one metal. A copper equivalent (CuEq) grade expresses the gold, silver, molybdenum or zinc in an interval as the amount of copper that would be worth the same, so a single number can rank intervals, colour a drill figure or summarise a hole. It is a convenience for comparison. It is not an assay, and it is only as good as the prices and recoveries chosen, which is why readers expect to see them next to the number.</p>
+<h2>The formula</h2><p>Work out what one unit of each metal's grade is worth per tonne at its price, multiply by its recovery, and divide by the same figure for 1% copper. That ratio is the metal's factor. Then add each metal's grade multiplied by its factor to the copper grade.</p><div class="table-scroll"><table class="data-table"><thead><tr><th>Term</th><th>Meaning</th></tr></thead><tbody><tr><td>CuEq</td><td>Cu + F(Au) × Au + F(Ag) × Ag + F(Mo) × Mo + …</td></tr><tr><td>F(metal)</td><td>(value per tonne of one grade unit of the metal × its recovery) ÷ (value per tonne of 1% Cu × copper recovery)</td></tr><tr><td>Value of 1% Cu</td><td>22.0462 lb per tonne × copper price in US$/lb</td></tr><tr><td>Value of 1 g/t Au or Ag</td><td>(1 ÷ 31.1035) troy oz per tonne × price in US$/oz</td></tr><tr><td>Recovery</td><td>Expected metallurgical recovery as a fraction, or 100% for an in-situ equivalent</td></tr></tbody></table></div>
+<h2>Unit conversions that trip people up</h2><p>Most CuEq mistakes are unit mistakes. Base metals are priced per pound and reported in percent; precious metals are priced per troy ounce and reported in grams per tonne. The conversions below are the whole trick.</p><p>A troy ounce is 31.1035 g, not the 28.35 g avoirdupois ounce. Using the wrong one inflates a gold factor by about 10%. A pound is 453.592 g, which is where 22.0462 lb per tonne for each 1% comes from (10,000 g ÷ 453.592 g). Example prices here are illustrative; use the prices your QP has approved.</p><div class="table-scroll"><table class="data-table"><thead><tr><th>Grade</th><th>Per tonne</th><th>Value at an example price</th></tr></thead><tbody><tr><td>1% Cu</td><td>10,000 g = 22.0462 lb</td><td>US$99.21 at US$4.50/lb</td></tr><tr><td>1 g/t Au</td><td>0.032151 troy oz</td><td>US$96.45 at US$3,000/oz</td></tr><tr><td>1 g/t Ag</td><td>0.032151 troy oz</td><td>US$1.13 at US$35/oz</td></tr><tr><td>1% Mo</td><td>22.0462 lb</td><td>US$440.92 at US$20/lb</td></tr><tr><td>1 ppm</td><td>1 g/t</td><td>Same as g/t</td></tr><tr><td>1 ppb</td><td>0.001 g/t</td><td>One thousandth of g/t</td></tr></tbody></table></div>
+<h2>Worked example 1: copper and gold, with recoveries</h2><p>Assume US$4.50/lb copper at 90% recovery and US$3,000/oz gold at 80% recovery. 1% copper is worth 22.0462 × 4.50 = US$99.21 per tonne; recovered, US$89.29. 1 g/t gold is worth 3,000 ÷ 31.1035 = US$96.45 per tonne; recovered, US$77.16. The gold factor is 77.16 ÷ 89.29 = 0.864.</p><p>An interval of 0.45% Cu and 0.30 g/t Au is then 0.45 + 0.864 × 0.30 = <strong>0.71% CuEq</strong>. Without recoveries (100% for both) the factor would be 96.45 ÷ 99.21 = 0.972, and the same interval would be 0.74% CuEq. That gap is why the recoveries must be stated.</p>
+<h2>Worked example 2: adding silver</h2><p>With silver at US$35/oz and 80% recovery, 1 g/t silver is worth US$1.125 per tonne, US$0.90 recovered, giving a factor of 0.90 ÷ 89.29 = 0.0101. Add 4 g/t Ag to the interval above and the equivalent rises by 0.04, to 0.75% CuEq. Silver rarely moves a copper equivalent much, but it should still be listed in the formula if it is included.</p>
+<h2>Worked example 3: molybdenum reported in ppm</h2><p>Molybdenum is priced per pound like copper but often reported in ppm. At US$20/lb and 85% recovery, 1% Mo is worth US$440.92 per tonne, US$374.79 recovered, so the factor per 1% Mo is 374.79 ÷ 89.29 = 4.20. Per ppm it is 4.20 ÷ 10,000 = 0.00042. An interval with 200 ppm Mo (0.02%) therefore adds 0.084% CuEq. Applying the per-percent factor to a ppm column would overstate molybdenum ten-thousand-fold, so convert or label units before you calculate.</p>
+<h2>Gold equivalent (AuEq) works the same way</h2><p>For a gold project, swap the base metal. AuEq (g/t) = Au + F(Cu) × Cu + F(Ag) × Ag, with each factor now divided by the recovered value of 1 g/t gold. With the prices and recoveries from example 1, the copper factor is 89.29 ÷ 77.16 = 1.157 g/t AuEq per 1% Cu. An interval of 1.20 g/t Au and 0.25% Cu is 1.20 + 1.157 × 0.25 = 1.49 g/t AuEq. At equal gold and silver recoveries the silver factor is simply the price ratio, 35 ÷ 3,000 = 0.0117, so 15 g/t Ag adds 0.18 g/t AuEq.</p>
+<h2>Recoveries: which ones, and from where</h2><p>An equivalent that applies recoveries is closer to what could be produced; one without them (in-situ) is simpler but overstates metals that recover poorly. Neither is wrong as long as the basis is stated. Recoveries should come from metallurgical test work or a reasoned assumption the QP is prepared to stand behind; a metal with no recovery basis at all is often better left out of the equivalent than included at an optimistic number. Prices and recoveries change, so date the assumptions and keep them identical across every figure and table in a release.</p>
+<h2>The calculator in Exploration Maps 3D</h2><p>In the Layout step of Exploration Maps 3D, open Metal equivalent (CuEq, AuEq…). Choose the base metal, enter its price and recovery, tick the other metals and enter theirs. The tool adds a calculated column, for example CuEq_calc, shows the formula with each factor to three significant figures, and colours the holes by it. While the column is in use, the formula, prices and recoveries are written into the figure's footnote, so the figure cannot be separated from its assumptions. Defaults are illustrative (Cu US$4.50/lb, Au US$3,000/oz, Ag US$35/oz, Mo US$20/lb, Zn US$1.30/lb, recoveries 90%); replace them with yours.</p><p>Two behaviours matter for honest numbers. An interval missing any metal in the formula gets no equivalent value rather than being treated as zero. And a value written as "&lt;0.01" is read as 0.01, so if your convention for below-detection results is half the detection limit or zero, convert the column before loading it. Try it on the sample in <a href="/3d">Exploration Maps 3D</a>, or follow <a href="/blog/how-to-make-a-3d-drill-hole-figure/">the full 3D figure guide</a>.</p><figure class="blog-figure narrow"><img src="/blog-img/3d/metal-equivalent-calculator.webp" alt="Metal equivalent panel in Exploration Maps 3D with copper as the base metal, gold ticked, prices, recoveries and the resulting CuEq formula" width="380" height="452" srcset="/blog-img/3d/metal-equivalent-calculator.webp 380w, /blog-img/3d/metal-equivalent-calculator@2x.webp 686w" sizes="(max-width: 428px) calc(100vw - 48px), 380px" decoding="async" loading="lazy"><figcaption>The calculator with the example 1 assumptions: CuEq = Cu + 0.864 × Au.</figcaption></figure>
+<figure class="blog-figure"><img src="/blog-img/3d/example-ridge-cueq.webp" alt="Example Ridge sample 3D figure coloured by calculated CuEq with the formula, prices and recoveries printed in the footnote" width="800" height="533" srcset="/blog-img/3d/example-ridge-cueq.webp 800w, /blog-img/3d/example-ridge-cueq@2x.webp 1600w" sizes="(max-width: 768px) calc(100vw - 48px), 724px" decoding="async" loading="lazy"><figcaption>Holes coloured by CuEq_calc; the footnote carries the formula and assumptions automatically (illustrative data).</figcaption></figure>
+<h2>What to state next to a CuEq number</h2><ul class="checklist"><li>The formula, with each factor</li><li>Metal prices and the date or basis they were chosen on</li><li>Recoveries used and their basis, or that the equivalent is in situ</li><li>Which metals are included, and how missing or below-detection values were handled</li><li>That the equivalent is calculated, not assayed, with the individual metal grades also reported</li></ul><div class="verify-box"><strong class="box-title">Not legal advice</strong><div>Reporting rules for metal equivalents differ between jurisdictions and codes. This page explains the arithmetic; the issuer and its Qualified Person decide what must be disclosed and how. Have the QP approve the formula and assumptions before a CuEq figure is published.</div></div>
+      <div class="inline-cta">
+  <div class="inline-cta-copy">
+    <strong>Put the formula on the figure.</strong>
+    <span>Colour holes by CuEq with the assumptions printed underneath.</span>
+  </div>
+  <a class="inline-cta-btn" href="/3d?utm_source=blog&amp;utm_medium=cta&amp;utm_campaign=copper-equivalent-cueq-formula-calculator&amp;utm_content=bottom">Open Exploration Maps 3D →</a>
+</div>
+      <section class="faq-section" aria-label="Frequently Asked Questions">
+  <h2>Frequently Asked Questions</h2>
+  <div class="faq-item">
+    <div class="faq-q">Why is 22.0462 in the CuEq formula?</div>
+    <div class="faq-a">It converts percent to pounds per tonne. 1% of a tonne is 10,000 g, and 10,000 g divided by 453.592 g per pound is 22.0462 lb. Multiply by the copper price in US$/lb to get the value of 1% copper per tonne.</div>
+  </div>
+<div class="faq-item">
+    <div class="faq-q">Does CuEq include smelter terms or costs?</div>
+    <div class="faq-a">The common formula uses only prices and recoveries. Payabilities, treatment and refining charges and costs are not included; an equivalent built on net smelter return is a different calculation and should be described as such.</div>
+  </div>
+<div class="faq-item">
+    <div class="faq-q">Should I colour my drill figure by CuEq or by copper?</div>
+    <div class="faq-a">Use whichever the release headlines. If the release reports CuEq, colour by it and print the formula on the figure; if it reports copper and gold separately, colour by the main metal and add the second grade to the callouts.</div>
+  </div>
+<div class="faq-item">
+    <div class="faq-q">How is AuEq different from CuEq?</div>
+    <div class="faq-a">Only the base metal changes. AuEq divides each metal's recovered value by the recovered value of 1 g/t gold and is reported in g/t; CuEq divides by the recovered value of 1% copper and is reported in percent.</div>
+  </div>
+</section>
+    </article>
+    <aside>
+  <div class="cta-card">
+    <h3>Make a 3D drill figure</h3>
+    <p>Drop collar, survey and assay CSVs into the browser and export a branded 3D figure and section. Beta, free to use.</p>
+    <a class="cta-btn" href="/3d?utm_source=blog&amp;utm_medium=cta&amp;utm_campaign=copper-equivalent-cueq-formula-calculator">Open Exploration Maps 3D →</a>
+  </div>
+  
+  <div class="sidebar-card"><h3>Related Guides</h3><ul><li><a href="/blog/how-to-make-a-3d-drill-hole-figure/">How to Make a 3D Drill Hole Figure for a News Release</a></li>
+<li><a href="/blog/how-to-show-assays-pending-drill-holes/">How to Show 'Assays Pending' Holes and Intercepts on Drill Figures</a></li>
+<li><a href="/blog/grade-shells-from-drill-assays/">Grade Shells from Drill Assays: What an Exploratory Envelope Is (and Isn't)</a></li>
+<li><a href="/blog/how-to-make-a-drill-results-map/">How to Make a Drill Results Map</a></li></ul></div>
+  <div class="sidebar-card"><h3>Compare Tools</h3><ul>
+<li><a href="/blog/exploration-maps-vs-arcgis/">Exploration Maps vs ArcGIS</a></li>
+<li><a href="/blog/exploration-maps-vs-qgis/">Exploration Maps vs QGIS</a></li>
+<li><a href="/blog/best-mining-map-software-junior-exploration/">Best Mining Map Software</a></li></ul></div>
+  
+  <div class="sidebar-card">
+    <h3>Map Types</h3>
+    <ul>
+      <li><a href="/blog/how-to-make-a-mining-claims-map/">Mining Claims Map Guide</a></li>
+<li><a href="/blog/how-to-make-a-drill-results-map/">Drill Results Map Guide</a></li>
+<li><a href="/blog/how-to-create-exploration-map-investor-presentation/">Location Map Guide</a></li>
+<li><a href="/blog/how-to-create-target-generation-map/">Target Generation Map Guide</a></li>
+<li><a href="/blog/how-to-create-infrastructure-map/">Infrastructure Map Guide</a></li>
+    </ul>
+  </div>
+</aside>
+  </div>
+</div>
+<footer class="site-footer">
+  <div class="site-footer-links">
+    <a href="/mining-map-software/">Mining Map Software</a>
+    <span class="site-footer-sep">·</span>
+    <a href="/mineral-tenure-monitoring/">Tenure Monitoring</a>
+    <span class="site-footer-sep">·</span>
+    <a href="/bc-mineral-claims-map/">BC Claims Map</a>
+    <span class="site-footer-sep">·</span>
+    <a href="/mining-claim-search-by-company-name/">Claim Search by Company</a>
+    <span class="site-footer-sep">·</span>
+    <a href="/shapefile-to-map/">Shapefile to Map</a>
+    <span class="site-footer-sep">·</span>
+    <a href="/drill-results-map/">Drill Results Map</a>
+    <span class="site-footer-sep">·</span>
+    <a href="/companies/">Claim Maps by Company</a>
+    <span class="site-footer-sep">·</span>
+    <a href="/3d">3D Drill Figures (beta)</a>
+    <span class="site-footer-sep">·</span>
+    <a href="/teams/">For Teams</a>
+  </div>
+  <div class="site-footer-links">
+    <a href="/">Home</a>
+    <span class="site-footer-sep">·</span>
+    <a href="/about/">About</a>
+    <span class="site-footer-sep">·</span>
+    <a href="/blog/">Guides</a>
+    <span class="site-footer-sep">·</span>
+    <a href="/mcp/">Claude Connector</a>
+    <span class="site-footer-sep">·</span>
+    <a href="/agent/">Agent API</a>
+    <span class="site-footer-sep">·</span>
+    <a href="/privacy/">Privacy</a>
+  </div>
+  <p>© 2026 Exploration Maps</p>
+</footer>
+</body>
+</html>

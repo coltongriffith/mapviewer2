@@ -360,6 +360,7 @@
 .lm-def { padding: var(--sp-3) 0; border-top: 1px solid var(--ui-border); }
 .lm-def dt { font-size: var(--fs-md); font-weight: 600; margin-bottom: 4px; }
 .lm-def dd { margin: 0; font-size: var(--fs-body); color: var(--ui-text-muted); line-height: 1.6; }
+.lm-def dd a { color: var(--ui-text); font-weight: 600; text-underline-offset: 3px; }
 
 /* ── Showcase ────────────────────────────────────────────────────────────── */
 .lm-showcase { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-4); }

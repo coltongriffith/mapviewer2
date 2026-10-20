@@ -6,11 +6,37 @@ test('workspaces are noindex while public landing pages and sitemaps stay indexa
     expect(response.status(), path).toBe(200);
     expect(response.headers()['x-robots-tag'], path).toContain('noindex');
   }
-  for (const path of ['/', '/mineral-tenure-monitoring/', '/drill-results-map/', '/companies/got/', '/sitemap.xml', '/sitemap-companies.xml']) {
+  for (const path of ['/', '/mineral-tenure-monitoring/', '/drill-results-map/', '/companies/got/', '/sitemap.xml', '/sitemap-companies.xml', '/3d', '/teams/', '/blog/how-to-make-a-3d-drill-hole-figure/']) {
     const response = await request.get(path);
     expect(response.status(), path).toBe(200);
     expect(response.headers()['x-robots-tag'] || '', path).not.toContain('noindex');
   }
+});
+
+test('/3d is indexable, canonical, and has readable text beside the WebGL figure', async ({ page, request }) => {
+  await page.route('**/api/track', route => route.fulfill({ status: 204 }));
+  // Out of private beta: no robots meta, no noindex header, its own canonical.
+  const raw = await (await request.get('/3d')).text();
+  expect(raw).not.toMatch(/noindex/i);
+  expect(raw).toContain('<link rel="canonical" href="https://www.explorationmaps.com/3d">');
+  await page.goto('/3d');
+  expect(await page.locator('meta[name="robots"]').count()).toBe(0);
+  await expect(page).toHaveTitle(/3D Drill Hole Figure/);
+  // The About section is in the DOM and visible to someone who scrolls step 1.
+  const about = page.locator('#about');
+  await expect(about.getByRole('heading', { level: 1 })).toHaveText(/drill hole figures for news releases/);
+  await about.scrollIntoViewIfNeeded();
+  await expect(about).toBeVisible();
+  await expect(about.getByRole('link', { name: /How to make a 3D drill hole figure/ })).toHaveAttribute('href', '/blog/how-to-make-a-3d-drill-hole-figure/');
+  const ld = JSON.parse(await page.locator('script[type="application/ld+json"]').first().textContent());
+  expect(ld['@graph'].find(n => n['@type'] === 'SoftwareApplication').offers.price).toBe('0');
+});
+
+test('the IndexNow key file is served as plain text', async ({ request }) => {
+  const key = '6d5bb92fcd17d7914e6fd6a69b364a1f';
+  const response = await request.get(`/${key}.txt`);
+  expect(response.status()).toBe(200);
+  expect((await response.text()).trim()).toBe(key);
 });
 
 test('the good-to-date guide opens the tenure monitor from its main action', async ({ page }) => {

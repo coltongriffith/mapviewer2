@@ -158,6 +158,7 @@ article strong{color:#142126}
 /* Screenshot figure placeholder */
 .blog-figure{margin:22px 0}
 .blog-figure img{display:block;width:100%;border:1px solid #dde3e3;border-radius:10px}
+.blog-figure.narrow img{max-width:380px;margin:0 auto}
 .screenshot-frame{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-height:180px;background:repeating-linear-gradient(45deg,#f6f8f7,#f6f8f7 12px,#f6f8f7 12px,#f6f8f7 24px);border:1.5px dashed #c6cecf;border-radius:10px;color:#5f6e72;font-size:0.9rem;font-weight:600;text-align:center;padding:24px}
 .screenshot-frame-icon{font-size:28px;color:#5f6e72;line-height:1}
 .blog-figure figcaption{margin-top:8px;font-size:13px;color:#5f6e72;text-align:center;font-style:italic}
@@ -214,7 +215,7 @@ article strong{color:#142126}
     <p class="lp-plan-note">Start free. Free PNG exports keep a small Exploration Maps credit. Pro removes that credit for US$29/month or US$290/year.</p>
     <h2>Start with a complete example</h2><p><a href="/examples/cedar-ridge-collars.csv" download>Download the 14-collar CSV</a> · <a href="/examples/cedar-ridge-claims.geojson" download>Download its claim boundary</a> · <a href="/examples/README.txt">Sample notes and reuse</a></p><figure class="blog-figure"><img src="/gallery/drill-results.webp" alt="Fourteen Cedar Ridge demonstration drill collars inside a claim boundary with three result callouts" width="640" height="400" srcset="/gallery/drill-results.webp 640w, /gallery/drill-results@2x.webp 1000w" sizes="(max-width: 768px) calc(100vw - 48px), 724px" decoding="async" loading="lazy"><figcaption>Finished Drill Results gallery example. The downloadable CSV contains these 14 collar locations; all company names, claims and assay labels are fictional.</figcaption></figure>
 <h2>What your collar file needs</h2><div class="table-scroll"><table class="data-table"><thead><tr><th>Field</th><th>Purpose</th></tr></thead><tbody><tr><td>HoleID</td><td>Identifies the collar and its label.</td></tr><tr><td>Longitude / Latitude</td><td>WGS84 decimal-degree location.</td></tr><tr><td>Result or other attributes</td><td>Optional text you can use in callouts; the app does not validate assay results.</td></tr></tbody></table></div>
-<h2>Build the map in four steps</h2><p>The <a href="/blog/how-to-make-a-drill-results-map/">drill-results guide</a> walks through coordinates, labels and export checks. <a href="/?demo=drill_plan&amp;utm_source=blog&amp;utm_medium=example&amp;utm_campaign=drill-results-map">Open the finished demonstration map</a> to inspect the example layout.</p><ul><li>Upload the CSV and confirm any coordinate mapping prompt.</li><li>Assign Drillholes and check the collar positions.</li><li>Import the boundary; label the results that need explanation.</li><li>Choose a layout, save the project and check the exported figure at publication size.</li></ul>
+<h2>Build the map in four steps</h2><p>The <a href="/blog/how-to-make-a-drill-results-map/">drill-results guide</a> walks through coordinates, labels and export checks. <a href="/?demo=drill_plan&amp;utm_source=blog&amp;utm_medium=example&amp;utm_campaign=drill-results-map">Open the finished demonstration map</a> to inspect the example layout. For a 3D view of the same holes, with terrain, grade-coloured traces and a section, see <a href="/blog/how-to-make-a-3d-drill-hole-figure/">how to make a 3D drill hole figure</a>.</p><ul><li>Upload the CSV and confirm any coordinate mapping prompt.</li><li>Assign Drillholes and check the collar positions.</li><li>Import the boundary; label the results that need explanation.</li><li>Choose a layout, save the project and check the exported figure at publication size.</li></ul>
 <h2>Use the map to explain the program</h2><p>Keep the collar pattern visible, use a small number of readable labels, and include the program date and source. An imported boundary provides spatial context; it does not certify title ownership. The issuer and its reviewers remain responsible for the information published.</p>
 <h2>Return for the next update</h2><p>Save to an account if you want to reopen the project later. When new collars arrive, add the reviewed data, check labels and dates, and export the revised map.</p><p>See <a href="/data-coverage/">data coverage and methodology</a> for how uploaded and demonstration data are handled.</p>
     
@@ -258,6 +259,10 @@ article strong{color:#142126}
     <a href="/drill-results-map/">Drill Results Map</a>
     <span class="site-footer-sep">·</span>
     <a href="/companies/">Claim Maps by Company</a>
+    <span class="site-footer-sep">·</span>
+    <a href="/3d">3D Drill Figures (beta)</a>
+    <span class="site-footer-sep">·</span>
+    <a href="/teams/">For Teams</a>
   </div>
   <div class="site-footer-links">
     <a href="/">Home</a>
