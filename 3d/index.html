@@ -166,6 +166,8 @@ ul.checks { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 3px; font-s
 .tabs { display: inline-flex; background: #fff; border: 1px solid var(--slate-200); border-radius: 8px; padding: 3px; }
 .tab { font: inherit; font-size: 14px; font-weight: 600; color: var(--slate-600); background: none; border: 0; padding: 5px 12px; border-radius: 6px; cursor: pointer; }
 .tab[aria-selected="true"] { background: var(--slate-950); color: #fff; }
+.toolbar > .btn { padding: 6px 11px; }
+.btn[aria-pressed="true"] { background: var(--slate-950); border-color: var(--slate-950); color: #fff; }
 .frame-label { font-family: var(--mono); font-size: 12px; color: var(--slate-600); background: rgba(255,255,255,0.8); padding: 3px 8px; border-radius: 4px; }
 .frame { position: absolute; background: #fff; box-shadow: 0 1px 2px rgba(20,33,38,0.08), 0 8px 24px rgba(20,33,38,0.12); overflow: hidden; }
 #gl, #ov, #section { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
@@ -527,6 +529,7 @@ dialog.acct-dialog::backdrop { background: rgba(20,33,38,0.35); }
         <button class="tab" role="tab" id="view-3d" aria-selected="true">3D figure</button>
         <button class="tab" role="tab" id="view-section" aria-selected="false">Section A–A′</button>
       </div>
+      <button class="btn" type="button" id="lock-view" aria-pressed="false" title="Stop the mouse and trackpad from turning, zooming or panning the view">Lock view</button>
       <span class="frame-label" id="frame-label"></span>
       <div class="acct">
         <span class="acct-note" id="acct-note" aria-live="polite" hidden></span>
@@ -574,6 +577,95 @@ dialog.acct-dialog::backdrop { background: rgba(20,33,38,0.35); }
     <div class="actions"><button class="btn primary" type="button" id="acct-sent-close">OK</button></div>
   </div>
 </dialog>
+<!-- API notes for the 3D editor (shown with EM3D.help() and in the Export step). -->
+<script type="text/plain" id="core-help">Exploration Maps 3D can be driven by an AI assistant or browser agent.
+
+JavaScript API (run in the page console or via your agent's evaluate tool):
+  EM3D.help()                     this text
+  EM3D.getState()                 files, holes, grade columns, callouts, brand, camera, size
+  EM3D.loadSample()               illustrative project
+  EM3D.clearFiles()
+  EM3D.addZip(dataUrlOrBase64)    Promise. Unpacks a ZIP and adds its CSV/TXT/OBJ files
+  EM3D.addFiles([{name, text}])   CSV or OBJ text. The file name helps detect the type:
+                                  collars, surveys, assays, topography, or a .obj model shape
+  EM3D.setBrand({company, title, subtitle, footnote, primary, accent, credit})
+                                  colours as hex, e.g. primary: "#0b3954"
+  EM3D.setLogo(dataUrl)           Promise. Also picks primary and accent from the logo
+  EM3D.setStyle({valueCol, valueLabel, bins: [4 lower limits], autoBins: true,
+                 coCount, coMin, coCut, coIncl, secAz (0-179), secW,
+                 walls, ids, inset, surface (0.15-1), meshes: {name: {show, color, opacity}},
+                 ribbons (bars beside each hole: tan = reported interval, green = incl.),
+                 traceWidth (0.5-3, drill trace thickness, default 1.4),
+                 valueCol2 (second grade in callouts, e.g. "Au_gpt"; null for none),
+                 pendingLabels (write ASSAYS PENDING along holes whose collar status/notes say pending),
+                 pendingNoAssays (also flag holes with no assays), elevTicks (elevation ticks on the block edge),
+                 terrain: "natural" | "light" | "dark" | "relief" | "satellite" | "muted",
+                 terrainSource: "auto" | "topo" | "dem" | "collars"  (auto: uploaded topography,
+                   else real elevation once a coordinate system is set, else fitted to the collars),
+                 verticalExaggeration (1-5), blockStyle: "glass" | "solid" (solid: pale opaque far
+                   faces with a soil band, near faces cut away), collarFit: "collars" (default: the
+                   DEM shifts to meet the collars) | "terrain" (each hole hangs from the DEM)})
+  EM3D.setCRS("EPSG:26909" | "UTM 9N NAD83" | "EPSG:4326" | proj4 string | null)
+                                  Promise. The coordinate system of the files; loads real terrain
+                                  (AWS Terrain Tiles) and, for satellite/muted, Esri imagery
+  EM3D.terrainReady()             Promise; resolves with the state once tiles have loaded or failed
+  EM3D.addLabel({text, x, y, size: "title" | "normal", arrow, ax, ay})   returns the new id.
+                                  x, y (and the arrow tip ax, ay) are 0-1 across and down the frame,
+                                  so a label lands in the same place at every size. 3D figure only
+  EM3D.updateLabel(id, {...})     EM3D.removeLabel(id)
+  EM3D.addWallLabel({text, face: "N" | "S" | "E" | "W" | "front", u, v, size: "title" | "normal",
+                     scale, rotation, color})   returns the id. Text painted on a block face in
+                                  perspective; u 0-1 left to right seen from outside, v 0 (base) to 1 (terrain)
+  EM3D.updateWallLabel(id, {...}) EM3D.removeWallLabel(id)
+  EM3D.setCallout(holeId, {show, line1, line2, incl: false})   null resets a field
+  EM3D.setStyle({displayCutoff})  intervals below it draw as the plain trace (null: all); callouts unchanged
+  EM3D.setEquivalent({base: "Cu", metals: {Au: {price, recovery}, Ag: {...}}, basePrice, baseRecovery, use})
+                                  adds a derived column such as CuEq_calc (and colours by it unless use: false).
+                                  Prices in US$/lb (Cu, Mo, Zn, Pb, Ni, Co) or US$/oz (Au, Ag, Pt, Pd); defaults
+                                  Cu 4.50, Au 3,000, Ag 35, Mo 20, Zn 1.30; recoveries in %, default 90.
+                                  1% = 22.0462 lb/t, 1 g/t = 1/31.1035 oz/t. An interval missing any component
+                                  has no equivalent value (never read as zero). null removes it. The formula and
+                                  assumptions go in the footnote while the column is in use
+  EM3D.setShell({enabled, cutoff, opacity, color, search, cell})   Promise; resolves with the state once
+                                  the grade shell is built. cutoff/search/cell null = automatic. See below
+  EM3D.cancelShell()              stops a build in progress
+  EM3D.setProvisional(holeId, true | false | null)   dashed, fainter "Provisional position" (null: from the
+                                  collar status/flags column)
+  getState().checks               data checks: counts and problems (no collar, From ≥ To, overlaps, beyond depth,
+                                  conflicting survey depths, dips out of range, outlying collars)
+  EM3D.setCamera({view: "a" | "b" | "low" | "plan"}) or ({azimuth, plunge, zoom})
+  EM3D.setFigureSize("slide" | "release" | "square" | "portrait" | "a4")
+  EM3D.showStep("data" | "brand" | "layout" | "export")
+  EM3D.showView("3d" | "section")
+  EM3D.exportPNG({view: "3d" | "section", download: false})   returns a PNG data URL;
+                                  download: true also saves the file
+  EM3D.exportLayers({download: false, as: "base64" | "blob"})   Promise. A ZIP for designers at the
+                                  figure size: figure.png, scene.png (3D alone, transparent),
+                                  annotations.png (overlay alone, transparent), section.png and
+                                  figure-settings.json. Returns a data URL (or a Blob)
+  EM3D.sendToDesignDesk({email, company, notes})   Promise. Sends the figure and layers to the
+                                  Exploration Maps design desk. Only when the user asks to
+
+Every setter returns the new state. The state is also kept as JSON in
+<script id="em3d-state">, and an "em3d:change" event fires on window after each change.
+Errors are thrown with a plain-language message that names the valid options.
+
+Without the API: every control has a visible label. The four steps are tabs
+(Data, Brand, Layout, Export) and each pane ends with a Next button.
+The status message under the preview announces each change.
+
+Grade shell: an exploratory envelope from the grade column the holes are coloured by; not a geological
+model or a resource (the footnote says so while it shows). 10 m composites; at each grid point the nearest
+composite per collar group (collars within 20 m), at most 4 groups, inverse distance squared (5 m minimum);
+3 groups needed in the search radius (75 m, or 1.5 x the group spacing); nothing above the surface; marching
+cubes at the cut-off. Full method: Layout step, "How the shell is built". Rebuilt when a project opens.
+
+Example: a branded news-release figure from pasted CSVs
+  EM3D.addFiles([{name: "collars.csv", text: COLLARS}, {name: "assays.csv", text: ASSAYS}])
+  EM3D.setBrand({company: "Star Copper", title: "STAR PROJECT · RAILS ZONE", subtitle: "3D drilling, looking northeast"})
+  EM3D.setStyle({valueCol: "Cu_pct", coCount: 4})
+  EM3D.setFigureSize("release"); EM3D.setCamera({view: "a"})
+  EM3D.exportPNG({view: "3d"})</script>
 <!-- API notes for the geology, geophysics and hole-tag layers (shown with EM3D.help()). -->
 <script type="text/plain" id="ext-help">Geology, geophysics and hole tags (Promises; each resolves with the state):
   Lithology/alteration file: Hole ID, From, To, Code (and optional Description), CSV or in a ZIP.

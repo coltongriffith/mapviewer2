@@ -5,6 +5,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { composite, collarGroups, autoCell, autoSearch } from './shell-core.js';
 import { METAL_DEFAULTS, defaultUnit, priceUnit, eqFactors, eqFormula, eqValue } from './metal-eq.js';
 import { isXYZ, parseXYZ, refineRole } from './roles.js';
+import { makeLayout, isClick, legendRows as binRows, wrapNotes } from './layout.js';
 
 const $ = (id) => document.getElementById(id);
 // ============================================================
@@ -148,7 +149,7 @@ const S = {              // style
   secAz: 135, secW: 75, surf: 1, walls: true, ids: true, inset: true, logo: null, meshes: {},
   ribbons: true, traceWidth: 1.4, pendingLabels: true, pendingNoAssays: false, valueCol2: null, elevTicks: true,
   terrain: 'natural', terrainSource: 'auto', vex: 1, crs: null, labels: [],
-  collarFit: 'collars', blockStyle: 'glass', wallLabels: [],
+  collarFit: 'collars', blockStyle: 'glass', wallLabels: [], lockView: false,
   // Intervals below displayCutoff draw as the plain trace (null: all). eq: the metal-equivalent
   // recipe ({ base, baseCol, baseUnit, basePrice, baseRecovery, metals: { Au: { col, unit, price, recovery } } }).
   // shell: the grade shell from assays (cutoff/search/cell null = automatic). provisional: per-hole overrides.
@@ -444,7 +445,7 @@ function rebuildScene(keepCam) {
   G.walls = [];
   // Rows crowd toward the top so the solid block's thin soil band under the terrain stays crisp.
   const NJ = 30, FR = Array.from({ length: NJ + 1 }, (_, j) => 1 - (1 - j / NJ) ** 2);
-  const wall = (p0, p1) => {
+  const wall = (p0, p1, face) => {
     const NI = 100, pos = [], col = [], idx = [];
     for (let i = 0; i <= NI; i++) { const x = p0[0] + (p1[0] - p0[0]) * i / NI, y = p0[1] + (p1[1] - p0[1]) * i / NI, top = surf(x, y);
       for (let j = 0; j <= NJ; j++) { const z = B.z0 + (top - B.z0) * FR[j], v = V(x, y, z); pos.push(v.x, v.y, v.z); col.push(1, 1, 1, 1); } }
@@ -452,11 +453,11 @@ function rebuildScene(keepCam) {
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 4)); g.setIndex(idx); // RGBA: the solid block fades by row
     const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.42, side: THREE.DoubleSide, depthWrite: false })); m.renderOrder = 5;
     const dx = p1[0] - p0[0], dy = p1[1] - p0[1], l = Math.hypot(dx, dy); // corners run anticlockwise, so (dy, -dx) points out
-    Object.assign(m.userData, { nj: NJ, fr: FR, n: new THREE.Vector3(dy / l, 0, dx / l), c: V((p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2, (B.z0 + zmax) / 2) });
+    Object.assign(m.userData, { face, nj: NJ, fr: FR, n: new THREE.Vector3(dy / l, 0, dx / l), c: V((p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2, (B.z0 + zmax) / 2) });
     root.add(m); G.walls.push(m);
   };
   const C = [[B.x0, B.y0], [B.x1, B.y0], [B.x1, B.y1], [B.x0, B.y1]];
-  C.forEach((p, i) => wall(p, C[(i + 1) % 4]));
+  C.forEach((p, i) => wall(p, C[(i + 1) % 4], 'SENW'[i])); // in the order of geology.js FACE_KEYS
   const baseM = new THREE.Mesh(new THREE.PlaneGeometry(bw, bh), new THREE.MeshBasicMaterial({ color: '#e9ecea', transparent: true, opacity: 0.6, depthWrite: false, side: THREE.DoubleSide }));
   baseM.rotation.x = -Math.PI / 2; baseM.position.copy(V(cx, cy, B.z0)); root.add(baseM); G.walls.push(baseM);
   const seg = [];
@@ -550,36 +551,39 @@ function paintTerrain() {
     }
   }
   ctx.putImageData(out, 0, 0);
-  G.walls.forEach((w) => { w.userData.near = undefined; });
+  G.walls.forEach((w) => { w.userData.tk = undefined; });
   faceWalls();
 }
 // Wall colour and alpha per row. Solid: pale cream rock, a shade darker at depth, under a dark soil band
 // that traces the terrain profile on every face; the far faces near-opaque, the faces toward the camera
 // almost clear apart from that band (the agency figures cut the near faces away), so holes stay visible.
-// Glass: the even translucent sides. Re-run when a face turns between near and far.
-function tintWall(w, near) {
+// Glass: the even translucent sides. Re-run when a face turns between near and far. While geology or
+// geophysics paints a face (clear), the near faces drop their veil and the painted face's own wall goes
+// under the paint, so painted faces show their true colour.
+function tintWall(w, near, clear) {
   const ca = w.geometry.attributes.color, { nj, fr } = w.userData, solid = S.blockStyle === 'solid', pale = PALE.has(S.terrain);
   for (let k = 0; k < ca.count; k++) {
     const j = fr[k % (nj + 1)];
     if (solid) {
       const soil = Math.min(1, Math.max(0, (j - 0.94) / 0.045)), r = 0.8 + 0.1 * j, g = 0.78 + 0.1 * j, b = 0.74 + 0.1 * j;
-      ca.setXYZW(k, r + (0.42 - r) * soil, g + (0.36 - g) * soil, b + (0.29 - b) * soil, near ? 0.1 + 0.85 * soil : 0.92 + 0.08 * soil);
+      ca.setXYZW(k, r + (0.42 - r) * soil, g + (0.36 - g) * soil, b + (0.29 - b) * soil, near ? (clear ? 0 : 0.1) + 0.85 * soil : 0.92 + 0.08 * soil);
     } else { const t = pale ? 0.965 + 0.035 * j : 0.92 + 0.07 * j; ca.setXYZW(k, t * (pale ? 0.995 : 0.98), t, t * 0.99, 1); }
   }
-  ca.needsUpdate = true; w.userData.near = near;
+  ca.needsUpdate = true;
 }
 function faceWalls() {
-  if (!G) return; const solid = S.blockStyle === 'solid', eye = camera.position;
+  if (!G) return; extView(); // EXT hook: painted faces follow the near/far turn
+  const solid = S.blockStyle === 'solid', eye = camera.position, painted = extPainted();
   G.walls.forEach((w) => {
     const d = w.userData;
     if (!d.n) { w.material.color.set(solid ? '#cfcac0' : PALE.has(S.terrain) ? '#f3f5f4' : '#e9ecea'); w.material.opacity = solid ? 0.9 : 0.6; w.renderOrder = solid ? 1 : 0; return; }
-    const near = solid ? d.n.dot(eye.clone().sub(d.c)) > 0 : false;
-    if (d.near !== near) tintWall(w, near);
-    // Far solid faces go first, before the model shapes (which do not write depth) and the holes' veils.
-    w.material.opacity = solid ? 1 : 0.42; w.renderOrder = solid && !near ? 1 : 5;
+    const near = d.n.dot(eye.clone().sub(d.c)) > 0, clear = near && painted.size > 0, tk = `${solid && near}|${clear}`;
+    if (d.tk !== tk) { tintWall(w, solid && near, clear); d.tk = tk; }
+    // Far solid faces and painted faces go first, before the paint, the model shapes (which do not write
+    // depth) and the holes' veils.
+    w.material.opacity = solid ? 1 : clear ? 0.15 : 0.42; w.renderOrder = (solid && !near) || painted.has(d.face) ? 1 : 5;
   });
   (G.wallLabelMeshes || []).forEach(placeWallLabel); // keeps their minimum size as the view changes
-  extView(); // EXT hook: painted faces follow the near/far turn
 }
 
 // ============================================================
@@ -979,6 +983,7 @@ function restyle() {
   styleShell();
   G.walls.forEach((w) => { w.visible = S.walls; });
   G.top.material.opacity = S.surf; G.top.material.depthWrite = S.surf >= 0.99;
+  if (controls.enabled === !!S.lockView) { controls.enabled = !S.lockView; if (S.lockView) stopOrbit(); } $('lock-view').setAttribute('aria-pressed', String(!!S.lockView));
   G.meshes.forEach(({ name, m: mesh }) => { const st = S.meshes[name]; mesh.visible = st.show; mesh.material.color.set(st.color); mesh.material.opacity = st.opacity; });
   // Section line on the top surface
   const ctx = G.topCanvas.getContext('2d'); ctx.drawImage(G.topBase, 0, 0);
@@ -1184,8 +1189,16 @@ function autoNotes(view) {
   out.push(...extNotes(view)); // EXT hook: geology and geophysics disclosures
   return out;
 }
+// The automatic notes go on one line joined by " · ", wrapping to at most two; longer, they become a
+// compact "Notes" block in smaller type.
 function drawFooter(ctx, K, Wc, Hc, credits = [], notes = []) {
-  const { u, m, font } = K, y = Hc - 17 * u, rule = y - 16 * u - notes.length * 15 * u;
+  const { u, m, font } = K, y = Hc - 17 * u, wide = Wc - 2 * m, mw = (t) => ctx.measureText(t).width;
+  font(400, 10.5); let lines = wrapNotes(notes, mw, wide), block = !lines, lh = 15 * u;
+  // Disclosures are never dropped: the block's type shrinks (to 8 pt) to stay within three lines,
+  // and grows past three only if it still has to.
+  let fs = 9.5;
+  if (block) { for (;;) { font(400, fs); lines = wrapNotes(notes, mw, wide - 44 * u, 99); if (lines.length <= 3 || fs <= 8) break; fs -= 0.5; } lh = (fs + 3.5) * u; }
+  const rule = y - 16 * u - lines.length * lh - (lines.length ? 3 * u : 0);
   ctx.strokeStyle = RULE; ctx.lineWidth = u; ctx.beginPath(); ctx.moveTo(m, rule); ctx.lineTo(Wc - m, rule); ctx.stroke();
   ctx.textBaseline = 'alphabetic'; let creditW = 0;
   // A white halo keeps the footer legible where the block or its shadow runs under it.
@@ -1196,8 +1209,9 @@ function drawFooter(ctx, K, Wc, Hc, credits = [], notes = []) {
   }
   if (credits.length) { font(400, 10.5); ctx.textAlign = 'right'; ctx.fillStyle = '#7c898c'; const t = credits.join(' · '); halo(t, Wc - m - creditW - (creditW ? 10 * u : 0), y); creditW += ctx.measureText(t).width + 10 * u; }
   if (S.footnote) { font(400, 11.5); ctx.textAlign = 'left'; ctx.fillStyle = MUTED; halo(fitText(ctx, S.footnote, Wc - 2 * m - creditW - 24 * u), m, y); }
-  ctx.textAlign = 'left'; font(400, 10.5); ctx.fillStyle = MUTED;
-  notes.forEach((t, i) => halo(fitText(ctx, t, Wc - 2 * m), m, y - (notes.length - i) * 15 * u));
+  ctx.textAlign = 'left'; ctx.fillStyle = MUTED; const ny = (i) => y - 3 * u - (lines.length - i) * lh;
+  if (block && lines.length) { font(700, 9.5); ctx.fillStyle = INK; halo('Notes', m, ny(0)); ctx.fillStyle = MUTED; }
+  font(400, block ? fs : 10.5); lines.forEach((t, i) => halo(t, m + (block ? 44 * u : 0), ny(i)));
   return rule;
 }
 function tagLabel(ctx, K, t, x, y) {
@@ -1237,16 +1251,58 @@ function drawCallout(ctx, K, x, y, c, M, target) {
   font(600, 11, true); const tw = ctx.measureText(c.h.id).width + 12 * u;
   ctx.fillStyle = S.primary; ctx.fillRect(x, y + bh + u, tw, 17 * u); ctx.fillStyle = textOn(S.primary); ctx.fillText(c.h.id, x + 6 * u, y + bh + 13.5 * u);
 }
-function legendRows() {
-  const dc = S.displayCutoff, up = (i) => (i < 0 ? S.bins[0] : i === 3 ? Infinity : S.bins[i + 1]); // EXT hook: rows under the cut-off merge into its "trace only" row
-  return S.bins.map((b, i) => [i === 3 ? `≥ ${b}` : `${b} – ${S.bins[i + 1]}`, BIN_COLORS[i + 1], up(i)]).reverse().concat([[`< ${S.bins[0]}`, BIN_COLORS[0], up(-1)]]).filter((r) => dc === null || r[2] > dc);
-}
+const legendRows = () => binRows(S.bins, S.displayCutoff, BIN_COLORS); // rows under the cut-off merge into its "trace only" row
 const meshName = (n) => n.replace(/\.obj$/i, '').replace(/^sample_/, '').replace(/_/g, ' ');
+// Legend sections: { key, title, rows: [{ label, mono, sep, draw(ctx, x, cy, u) } or { h, full(ctx, K, x, y, w) }] },
+// measured and drawn as cards the same way on the 3D figure and the section.
+const swLine = (c, w, dash) => (ctx, x, cy, u) => { ctx.strokeStyle = c; ctx.lineWidth = w * u; ctx.setLineDash(dash ? [dash * u, 3 * u] : []); ctx.beginPath(); ctx.moveTo(x, cy); ctx.lineTo(x + 22 * u, cy); ctx.stroke(); ctx.setLineDash([]); };
+function legendSecs() {
+  const holes = [{ label: 'Drill hole collar', draw: (ctx, x, cy, u) => { ctx.beginPath(); ctx.arc(x + 11 * u, cy, 5 * u, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth = 2.4 * u; ctx.strokeStyle = INK; ctx.stroke(); } }];
+  if (project.holes.some((h) => h.prov)) holes.push({ label: 'Provisional position', draw: swLine('#59646a', 2, 4) });
+  holes.push(...extLegendRows()); // EXT hook: planned, new and previous rows
+  const assays = legendRows().map(([label, c]) => ({ label, mono: true, draw: (ctx, x, cy, u) => { ctx.fillStyle = c; roundRect(ctx, x, cy - 4 * u, 22 * u, 8 * u, 4 * u); ctx.fill(); } }));
+  if (S.displayCutoff !== null) assays.push({ label: `< ${S.displayCutoff}: trace only`, mono: true, draw: swLine('#59646a', 1.5) });
+  if (S.ribbons && callouts.length) [['Reported interval', RIB_COLORS[0]], ...(callouts.some((c) => c.ic.incl) ? [['incl.', RIB_COLORS[1]]] : [])].forEach(([label, c], i) => assays.push({ label, sep: !i, draw: (ctx, x, cy, u) => { ctx.fillStyle = c; ctx.fillRect(x, cy - 3 * u, 22 * u, 6 * u); } }));
+  const model = G.meshes.filter(({ name }) => S.meshes[name].show).map(({ name }) => [meshName(name), S.meshes[name].color]);
+  if (shellShown()) model.unshift([`Grade shell ≥ ${shellCutText()}`, S.shell.color]);
+  return [{ key: 'holes', rows: holes }, { key: 'assays', title: `Assay · ${S.valueLabel}`, rows: assays },
+    { key: 'model', title: 'Model', rows: model.map(([label, c]) => ({ label, draw: (ctx, x, cy, u) => { ctx.globalAlpha = 0.6; ctx.fillStyle = c; ctx.fillRect(x, cy - 6 * u, 22 * u, 12 * u); ctx.globalAlpha = 1; } })) }].filter((s) => s.rows.length);
+}
+function cardSize(ctx, K, secs) {
+  const { u, font } = K; let h = 12 * u, w = 192 * u;
+  secs.forEach((s, i) => {
+    if (i) h += 6 * u;
+    if (s.title) { font(700, 13); w = Math.max(w, ctx.measureText(s.title).width + 24 * u); h += 19 * u; }
+    s.rows.forEach((r) => { h += ((r.h || 19) + (r.sep ? 6 : 0)) * u; if (r.label) { font(400, r.mono ? 12 : 13, r.mono); w = Math.max(w, ctx.measureText(r.label).width + 56 * u); } });
+  });
+  return [Math.min(w, 280 * u), h + 6 * u];
+}
+function drawCard(ctx, K, x, y, w, h, secs) {
+  const { u, font } = K; let yy = y + 12 * u;
+  ctx.fillStyle = 'rgba(255,255,255,0.96)'; ctx.strokeStyle = RULE; ctx.lineWidth = u; roundRect(ctx, x, y, w, h, 5 * u); ctx.fill(); ctx.stroke();
+  secs.forEach((s, i) => {
+    if (i) yy += 6 * u;
+    ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+    if (s.title) { font(700, 13); ctx.fillStyle = INK; ctx.fillText(fitText(ctx, s.title, w - 24 * u), x + 12 * u, yy + 9.5 * u); yy += 19 * u; }
+    s.rows.forEach((r) => {
+      if (r.sep) yy += 6 * u;
+      if (r.full) r.full(ctx, K, x + 12 * u, yy, w - 24 * u);
+      else { r.draw(ctx, x + 12 * u, yy + 9.5 * u, u); font(400, r.mono ? 12 : 13, r.mono); ctx.fillStyle = INK; ctx.textBaseline = 'middle'; ctx.textAlign = 'left'; ctx.fillText(fitText(ctx, r.label, w - 56 * u), x + 44 * u, yy + 9.5 * u); }
+      yy += (r.h || 19) * u;
+    });
+  });
+  ctx.textBaseline = 'alphabetic';
+}
+// The block's box on screen (its base and terrain corners), which legends keep off where they can.
+function blockBox() {
+  const ps = []; [[G.B.x0, G.B.y0], [G.B.x1, G.B.y0], [G.B.x1, G.B.y1], [G.B.x0, G.B.y1]].forEach(([x, y]) => { ps.push(proj(G.V(x, y, G.B.z0)), proj(G.V(x, y, G.surf(x, y)))); });
+  return [Math.min(...ps.map((p) => p[0])), Math.min(...ps.map((p) => p[1])), Math.max(...ps.map((p) => p[0])), Math.max(...ps.map((p) => p[1]))];
+}
 
 // Scale bar along a base edge of the block: the nearest edge that reads roughly horizontal and whose bar
 // fits inside the frame, under the edge if there is room and otherwise just above it.
-function drawScaleBar(ctx, K, footTop, avoid = []) {
-  const hit = (bx) => avoid.some((b) => !(bx[2] < b[0] || bx[0] > b[2] || bx[3] < b[1] || bx[1] > b[3]));
+// Placed in the figure's layout pass (lay): kept clear of everything placed before it, drawn at flush.
+function drawScaleBar(ctx, K, footTop, lay) {
   const { u, m, font } = K, C = [[G.B.x0, G.B.y0], [G.B.x1, G.B.y0], [G.B.x1, G.B.y1], [G.B.x0, G.B.y1]];
   const edges = C.map((p, i) => { const q = C[(i + 1) % 4]; return { p, q, d: G.V((p[0] + q[0]) / 2, (p[1] + q[1]) / 2, G.B.z0).distanceTo(camera.position) }; }).sort((a, b) => a.d - b.d).slice(0, 2);
   for (const off of [22, -24]) for (const { p, q } of edges) for (const f0 of [0.05, 0.3, 0.55]) {
@@ -1260,13 +1316,15 @@ function drawScaleBar(ctx, K, footTop, avoid = []) {
     const lab = off > 0 ? 19 : -9;
     if (sp.some(([x, y]) => x < m || x > W - m || Math.max(y, y + lab * u) + 4 * u > footTop || Math.min(y, y + lab * u) < 12 * u)) continue;
     const ys = sp.flatMap(([, y]) => [y - 4 * u, y + lab * u + (lab > 0 ? 2 : -12) * u]);
-    if (hit([Math.min(...sp.map(([x]) => x)) - 8 * u, Math.min(...ys), Math.max(...sp.map(([x]) => x)) + 28 * u, Math.max(...ys)])) continue; // keeps clear of hole IDs
-    ctx.lineCap = 'butt'; ctx.lineWidth = 6 * u; ctx.strokeStyle = INK; ctx.beginPath(); ctx.moveTo(...sp[0]); ctx.lineTo(...sp[1]); ctx.stroke();
-    ctx.strokeStyle = '#fff'; ctx.beginPath(); ctx.moveTo(...sp[1]); ctx.lineTo(...sp[2]); ctx.stroke();
-    ctx.lineWidth = u; ctx.strokeStyle = INK; ctx.beginPath(); ctx.moveTo(sp[0][0], sp[0][1] - 3 * u); ctx.lineTo(sp[2][0], sp[2][1] - 3 * u); ctx.lineTo(sp[2][0], sp[2][1] + 3 * u); ctx.lineTo(sp[0][0], sp[0][1] + 3 * u); ctx.closePath(); ctx.stroke();
-    font(400, 12, true); ctx.fillStyle = INK; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
-    ctx.fillText('0', sp[0][0], sp[0][1] + lab * u); ctx.fillText(String(D / 2), sp[1][0], sp[1][1] + lab * u); ctx.fillText(`${D} m`, sp[2][0], sp[2][1] + lab * u); ctx.textAlign = 'left';
-    return [Math.min(...sp.map(([x]) => x)) - 8 * u, Math.min(...ys), Math.max(...sp.map(([x]) => x)) + 28 * u, Math.max(...ys)]; // its box, for the collision pass
+    const box = [Math.min(...sp.map(([x]) => x)) - 8 * u, Math.min(...ys), Math.max(...sp.map(([x]) => x)) + 28 * u, Math.max(...ys)];
+    if (!lay.clear(box)) continue; // keeps clear of hole IDs, legends and labels
+    return lay.add(box, 2, () => {
+      ctx.lineCap = 'butt'; ctx.lineWidth = 6 * u; ctx.strokeStyle = INK; ctx.beginPath(); ctx.moveTo(...sp[0]); ctx.lineTo(...sp[1]); ctx.stroke();
+      ctx.strokeStyle = '#fff'; ctx.beginPath(); ctx.moveTo(...sp[1]); ctx.lineTo(...sp[2]); ctx.stroke();
+      ctx.lineWidth = u; ctx.strokeStyle = INK; ctx.beginPath(); ctx.moveTo(sp[0][0], sp[0][1] - 3 * u); ctx.lineTo(sp[2][0], sp[2][1] - 3 * u); ctx.lineTo(sp[2][0], sp[2][1] + 3 * u); ctx.lineTo(sp[0][0], sp[0][1] + 3 * u); ctx.closePath(); ctx.stroke();
+      font(400, 12, true); ctx.fillStyle = INK; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+      ctx.fillText('0', sp[0][0], sp[0][1] + lab * u); ctx.fillText(String(D / 2), sp[1][0], sp[1][1] + lab * u); ctx.fillText(`${D} m`, sp[2][0], sp[2][1] + lab * u); ctx.textAlign = 'left';
+    });
   }
   // No near edge has room: a flat bar at the scale of the block centre.
   // Measured along the screen's own horizontal, so a view looking along an axis is not foreshortened.
@@ -1274,10 +1332,12 @@ function drawScaleBar(ctx, K, footTop, avoid = []) {
   const c0 = proj(controls.target), c1 = proj(controls.target.clone().add(across)), ppm = Math.hypot(c1[0] - c0[0], c1[1] - c0[1]) / (G.diag * 0.1);
   if (!(ppm > 0)) return;
   const D = [10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000].find((d) => d * ppm >= 120 * u) || 5000, len = D * ppm, y = footTop - 26 * u;
-  const x = [0.5, 0.35, 0.65].map((f) => W * f - len / 2).find((x0) => !hit([x0 - 10 * u, y - 20 * u, x0 + len + 90 * u, y + 8 * u])) ?? (W - len) / 2;
-  ctx.fillStyle = INK; ctx.fillRect(x, y, len / 2, 6 * u); ctx.fillStyle = '#fff'; ctx.fillRect(x + len / 2, y, len / 2, 6 * u); ctx.strokeStyle = INK; ctx.lineWidth = u; ctx.strokeRect(x, y, len, 6 * u);
-  font(400, 12, true); ctx.fillStyle = INK; ctx.textAlign = 'center'; ctx.fillText('0', x, y - 5 * u); ctx.fillText(`${D} m (at block centre)`, x + len, y - 5 * u); ctx.textAlign = 'left';
-  return [x - 10 * u, y - 20 * u, x + len + 90 * u, y + 8 * u];
+  // Nudged along the bottom; with no room it pushes out lower-priority items (elevation ticks), or is left out.
+  return lay.place([0.5, 0.35, 0.65, 0.2, 0.8].map((f) => W * f - len / 2).map((x) => [x - 10 * u, y - 20 * u, x + len + 90 * u, y + 8 * u]), 2, ([bx]) => {
+    const x = bx + 10 * u;
+    ctx.fillStyle = INK; ctx.fillRect(x, y, len / 2, 6 * u); ctx.fillStyle = '#fff'; ctx.fillRect(x + len / 2, y, len / 2, 6 * u); ctx.strokeStyle = INK; ctx.lineWidth = u; ctx.strokeRect(x, y, len, 6 * u);
+    font(400, 12, true); ctx.fillStyle = INK; ctx.textAlign = 'center'; ctx.fillText('0', x, y - 5 * u); ctx.fillText(`${D} m (at block centre)`, x + len, y - 5 * u); ctx.textAlign = 'left';
+  });
 }
 // "ASSAYS PENDING" on a white pill along a projected hole (pts: screen points down the hole), reading left to
 // right or downward. Of a few spots along and beside the hole it takes the one crossing the fewest other holes
@@ -1304,26 +1364,30 @@ function alongLabel(ctx, K, t, pts, others) {
 }
 // Elevation ticks up the block's vertical edge at the left-front: of the two corners nearest the camera,
 // the one whose top projects furthest left. True elevations, about five ticks.
-function drawElevTicks(ctx, K, top, bottom, avoid = [], lines = []) {
+// Each tick is the lowest-priority item of the layout pass: dropped where anything else needs the room.
+function drawElevTicks(ctx, K, top, bottom, lay, lines = []) {
   const { u, font } = K, C = [[G.B.x0, G.B.y0], [G.B.x1, G.B.y0], [G.B.x1, G.B.y1], [G.B.x0, G.B.y1]];
   const c = C.map(([x, y]) => ({ x, y, d: G.V(x, y, G.B.z0).distanceTo(camera.position) })).sort((p, q) => p.d - q.d).slice(0, 2)
     .map((p) => ({ ...p, zt: G.surf(p.x, p.y), s: proj(G.V(p.x, p.y, G.surf(p.x, p.y))) })).sort((p, q) => p.s[0] - q.s[0])[0];
   const b0 = proj(G.V(c.x, c.y, G.B.z0));
   if (c.s[2] > 1 || b0[2] > 1 || Math.abs(c.s[1] - b0[1]) < 70 * u) return;
   const step = niceRound((c.zt - G.B.z0) / 5);
-  font(500, 11.5, true); ctx.textAlign = 'right'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+  font(500, 11.5, true);
   for (let z = Math.ceil(G.B.z0 / step) * step; z <= c.zt - step * 0.2; z += step) {
     const [x, y] = proj(G.V(c.x, c.y, z)); if (y < top + 8 * u || y > bottom - 8 * u || x < 60 * u) continue;
     const box = [x - 10 * u - ctx.measureText(`${Math.round(z)} m`).width - 4 * u, y - 9 * u, x + 2 * u, y + 9 * u];
-    if (avoid.some((b) => !(box[2] < b[0] || box[0] > b[2] || box[3] < b[1] || box[1] > b[3]))) continue;
+    if (!lay.clear(box)) continue;
     // ...and none within about 12 px of a callout's leader line.
     const near = (x0, y0, x1, y1) => { const dx = x1 - x0, dy = y1 - y0, n = Math.max(1, Math.ceil(Math.hypot(dx, dy) / (4 * u)));
       for (let i = 0; i <= n; i++) { const px = x0 + dx * i / n, py = y0 + dy * i / n; if (px > box[0] - 12 * u && px < box[2] + 12 * u && py > box[1] - 4 * u && py < box[3] + 4 * u) return true; } return false; };
     if (lines.some((l) => near(...l))) continue;
-    ctx.strokeStyle = INK; ctx.lineWidth = 1.2 * u; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x - 7 * u, y); ctx.stroke();
-    const t = `${Math.round(z)} m`; ctx.lineWidth = 3 * u; ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.strokeText(t, x - 10 * u, y); ctx.fillStyle = INK; ctx.fillText(t, x - 10 * u, y);
+    lay.add(box, 0, () => {
+      font(500, 11.5, true); ctx.textAlign = 'right'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+      ctx.strokeStyle = INK; ctx.lineWidth = 1.2 * u; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x - 7 * u, y); ctx.stroke();
+      const t = `${Math.round(z)} m`; ctx.lineWidth = 3 * u; ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.strokeText(t, x - 10 * u, y); ctx.fillStyle = INK; ctx.fillText(t, x - 10 * u, y);
+      ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    });
   }
-  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
 }
 // Free-text labels, placed in 0-1 frame coordinates so they land in the same spot at every export size.
 // "title": large bold capitals in the primary colour; "normal": a rounded white pill. An arrow runs from
@@ -1420,7 +1484,9 @@ function drawOverlay(ctx, k, forExport) {
   const logo = drawLogo(ctx, K, W, forExport);
   const headBottom = drawHeader(ctx, K, W, S.title, S.subtitle, logo.w);
   const footTop = drawFooter(ctx, K, W, H, terrainCredits(true), autoNotes('3d'));
-  occ.push(...idBoxes, [0, 0, W, headBottom], [0, footTop, W, H]);
+  // The layout pass: everything below registers its box in occ; the text labels, placed by hand, first.
+  occ.push(...idBoxes, [0, 0, W, headBottom], [0, footTop, W, H], ...S.labels.map((L) => { const { bw, bh } = labelSize(ctx, K, L); setSpacing(ctx, 0); return [L.x * W - bw / 2, L.y * H - bh / 2, L.x * W + bw / 2, L.y * H + bh / 2]; }));
+  const lay = makeLayout(W, H, 6 * u, occ);
   // Plan inset under the logo (EXT hook: or a map inset)
   if (S.inset && !EXT.tags?.drawInset(ctx, K, { W, top: logo.bottom + 16 * u, occ })) {
     const iw = (narrow ? 118 : 150) * u, sc = iw / Math.max(G.bw, G.bh), bw = G.bw * sc, bh = G.bh * sc, ix = W - m - iw, iy = logo.bottom + 16 * u, P = (x, y) => [ix + (iw - bw) / 2 + (x - G.B.x0) * sc, iy + (G.B.y1 - y) * sc];
@@ -1432,25 +1498,17 @@ function drawOverlay(ctx, k, forExport) {
     font(700, 11); ctx.fillStyle = S.primary; ctx.fillText('N ↑', ix + (iw - bw) / 2 + 3 * u, iy + 12 * u);
     font(400, 11); ctx.fillStyle = MUTED; ctx.textAlign = 'center'; ctx.fillText('Plan of drilling', ix + iw / 2, iy + bh + 18 * u); ctx.textAlign = 'left';
   }
-  // Legend card, bottom right
-  const rows = legendRows(), meshRows = G.meshes.filter(({ name }) => S.meshes[name].show).map(({ name }) => [meshName(name), S.meshes[name].color]);
-  if (shellShown()) meshRows.unshift([`Grade shell ≥ ${shellCutText()}`, S.shell.color]);
-  const provRow = project.holes.some((h) => h.prov), extRows = extLegendRows(); // EXT hook: planned, new and previous rows
-  const ribRows = S.ribbons && callouts.length ? [['Reported interval', RIB_COLORS[0]], ...(callouts.some((c) => c.ic.incl) ? [['incl.', RIB_COLORS[1]]] : [])] : [];
-  const R = 19 * u, lw = 192 * u, lh = 12 * u + R * (provRow ? 2 : 1) + extRows.length * R + 6 * u + R + (rows.length + (S.displayCutoff !== null)) * R + (ribRows.length ? 6 * u + ribRows.length * R : 0) + (meshRows.length ? 6 * u + R + meshRows.length * R : 0) + 6 * u;
-  const lx = W - m - lw, ly = footTop - 12 * u - lh; occ.push([lx, ly, W, footTop]);
-  ctx.fillStyle = 'rgba(255,255,255,0.96)'; ctx.strokeStyle = RULE; ctx.lineWidth = u; roundRect(ctx, lx, ly, lw, lh, 5 * u); ctx.fill(); ctx.stroke();
-  let yy = ly + 12 * u; const row = (draw, t, bold, mono) => { draw(yy + R / 2); bold ? font(700, 13) : font(400, mono ? 12 : 13, mono); ctx.fillStyle = INK; ctx.textBaseline = 'middle'; ctx.fillText(fitText(ctx, t, lw - 52 * u), lx + (bold ? 12 : 44) * u, yy + R / 2); ctx.textBaseline = 'alphabetic'; yy += R; };
-  row((cy) => { ctx.beginPath(); ctx.arc(lx + 23 * u, cy, 5 * u, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth = 2.4 * u; ctx.strokeStyle = INK; ctx.stroke(); }, 'Drill hole collar');
-  if (provRow) row((cy) => { ctx.strokeStyle = '#59646a'; ctx.lineWidth = 2 * u; ctx.setLineDash([4 * u, 3 * u]); ctx.beginPath(); ctx.moveTo(lx + 12 * u, cy); ctx.lineTo(lx + 34 * u, cy); ctx.stroke(); ctx.setLineDash([]); }, 'Provisional position');
-  extRows.forEach((r) => row((cy) => r.draw(ctx, lx + 12 * u, cy, u), r.label)); // EXT hook
-  yy += 6 * u; row(() => {}, `Assay · ${S.valueLabel}`, true);
-  rows.forEach(([t, c]) => row((cy) => { ctx.fillStyle = c; roundRect(ctx, lx + 12 * u, cy - 4 * u, 22 * u, 8 * u, 4 * u); ctx.fill(); }, t, false, true));
-  if (S.displayCutoff !== null) row((cy) => { ctx.strokeStyle = '#59646a'; ctx.lineWidth = 1.5 * u; ctx.beginPath(); ctx.moveTo(lx + 12 * u, cy); ctx.lineTo(lx + 34 * u, cy); ctx.stroke(); }, `< ${S.displayCutoff}: trace only`, false, true);
-  if (ribRows.length) { yy += 6 * u; ribRows.forEach(([t, c]) => row((cy) => { ctx.fillStyle = c; ctx.fillRect(lx + 12 * u, cy - 3 * u, 22 * u, 6 * u); }, t)); }
-  if (meshRows.length) { yy += 6 * u; row(() => {}, 'Model', true); meshRows.forEach(([t, c]) => row((cy) => { ctx.globalAlpha = 0.6; ctx.fillStyle = c; ctx.fillRect(lx + 12 * u, cy - 6 * u, 22 * u, 12 * u); ctx.globalAlpha = 1; }, t)); }
-  const extBoxes = extLegendBlocks(ctx, K, { right: lx - 10 * u, bottom: footTop - 12 * u, top: headBottom + 20 * u }); occ.push(...extBoxes); // EXT hook: lithology, geophysics
-  const sbBox = drawScaleBar(ctx, K, footTop, idBoxes.concat(extBoxes, [[lx, ly, W, footTop]])); if (sbBox) occ.push(sbBox); // after the legends (EXT hook), so it keeps clear of them
+  // Legend cards: the main card bottom right, the layers' cards (EXT hook: lithology, geophysics) beside or
+  // above it. Each takes the first spot clear of what is placed and, where it can, of the block itself.
+  const trTop = Math.max(...occ.filter((b) => b[1] === 0 && b[2] >= W - 1).map((b) => b[3])) + 12 * u, soft = [blockBox()];
+  let prev = null;
+  [legendSecs(), ...extSections().map((s) => [s])].forEach((secs) => {
+    const [w, h] = cardSize(ctx, K, secs), at = (x, y) => [x, y, x + w, y + h];
+    const cands = [...(prev ? [at(prev[0] - 10 * u - w, prev[3] - h), at(prev[2] - w, prev[1] - 10 * u - h)] : []), at(W - m - w, footTop - 12 * u - h), at(W - m - w, trTop), at(m, footTop - 72 * u - h), at(m, headBottom + 18 * u)];
+    prev = lay.place(cands, Infinity, null, soft) || lay.add(cands[0]);
+    drawCard(ctx, K, prev[0], prev[1], w, h, secs);
+  });
+  drawScaleBar(ctx, K, footTop, lay); // after the legends, so it keeps clear of them
   EXT.tags?.drawPills(ctx, K, { placed: placed.concat(labelHits.filter((h) => h.box).map((h) => h.box)), occ, W, H }); // EXT hook: collar ID pills, clear of labels
   // Orientation, bottom left: north arrow plus view direction
   occ.push([0, footTop - 60 * u, m + 160 * u, footTop]);
@@ -1480,10 +1538,12 @@ function drawOverlay(ctx, k, forExport) {
   const leaders = [];
   items.forEach((it) => { const { c, s, M, y } = it; if (it.group) EXT.tags.drawGroup(ctx, K, m, y, it); else drawCallout(ctx, K, m, y, c, M, s); boxes.push([m, y, m + M.bw, y + M.bh + tag]); leaders.push(...M.leader); });
   occ.push(...boxes.map((b) => [b[0], b[1], b[2] + 10 * u, b[3]]));
-  // Drawn after the callouts so a tick never hides under a callout box.
-  if (S.elevTicks) drawElevTicks(ctx, K, headBottom, footTop, boxes.concat(sbBox ? [sbBox] : [], extBoxes, labelHits.filter((h) => h.box).map((h) => h.box)), leaders); // EXT hook: and the scale bar, legends, labels
+  // Placed after the callouts so a tick never hides under a callout box; the deferred items (scale bar,
+  // ticks) are drawn now, those pushed out by something more important left out.
+  if (S.elevTicks) drawElevTicks(ctx, K, headBottom, footTop, lay, leaders);
+  lay.flush();
   drawLabels(ctx, K, forExport);
-  if (!forExport) overlayOcc = occ.concat(labelHits.filter((h) => h.box).map((h) => h.box));
+  if (!forExport) overlayOcc = occ.slice();
   ctx.restore();
 }
 
@@ -1550,7 +1610,7 @@ function drawSection(ctx, Wc, Hc, forExport) {
     const M = measureCallout(ctx, K, c); if (by + M.bh + 18 * u > maxY) return;
     const p = c.h.posAt(c.ic.broad.mid), q = pr(p); drawCallout(ctx, K, m, by, c, M, [X(q.t), Y(p.z)]); by += M.bh + 34 * u;
   });
-  if (!narrow) extLegendBlocks(ctx, K, { left: m, bottom: footTop - 52 * u, top: by, maxRight: ox - 10 * u }); // EXT hook: lithology, geophysics
+  if (!narrow) { let x = m; extSections().forEach((s) => { const [w, h] = cardSize(ctx, K, [s]), y = footTop - 52 * u - h; if (y < by || x + w > ox - 10 * u) return; drawCard(ctx, K, x, y, w, h, [s]); x += w + 10 * u; }); } // EXT hook: lithology, geophysics
   tagLabel(ctx, K, 'A', X(0), Y(profile[0][1]) - 24 * u); tagLabel(ctx, K, 'A′', X(L), Y(profile[200][1]) - 24 * u);
   // Bottom strip: scale bar left, horizontal legend right
   const sy = footTop - 18 * u, sb = [10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000].find((d) => d * s >= 120 * u) || niceRound(L / 3);
@@ -1993,7 +2053,7 @@ function setStyle(o = {}, render = true) {
     S.valueCol2 = v;
   }
   if (S.valueCol2 === S.valueCol) S.valueCol2 = null;
-  ['walls', 'ids', 'inset', 'ribbons', 'pendingLabels', 'pendingNoAssays', 'elevTicks'].forEach((k) => { if (o[k] !== undefined) S[k] = !!o[k]; });
+  ['walls', 'ids', 'inset', 'ribbons', 'pendingLabels', 'pendingNoAssays', 'elevTicks', 'lockView'].forEach((k) => { if (o[k] !== undefined) S[k] = !!o[k]; });
   extStyle(o); // EXT hook: histograms, insetStyle
   if (o.traceWidth !== undefined) { const v = +o.traceWidth; if (!Number.isFinite(v)) throw new Error('traceWidth must be a number from 0.5 to 3.'); S.traceWidth = Math.max(0.5, Math.min(3, v)); }
   if (o.surface !== undefined) S.surf = Math.max(0.15, Math.min(1, +o.surface > 1 ? +o.surface / 100 : +o.surface));
@@ -2253,7 +2313,7 @@ frameEl.addEventListener('pointerdown', (e) => {
   try { frameEl.setPointerCapture(e.pointerId); } catch { /* synthetic events */ }
 }, true);
 frameEl.addEventListener('pointermove', (e) => {
-  if (!labelDrag) { glCanvas.style.cursor = S.view === '3d' && (labelAt(e) || wallLabelAt(e)) ? 'move' : ''; return; }
+  if (!labelDrag) { glCanvas.style.cursor = S.view === '3d' && (labelAt(e) || wallLabelAt(e)) ? 'move' : S.lockView ? 'default' : ''; return; }
   if (labelDrag.wall) {
     const P = rayAt(e).intersectPlane(labelDrag.plane, new THREE.Vector3()); if (!P) return;
     const L = labelDrag.wall.userData.L, [u, v] = faceUV(L.face, P); L.u = clamp01(u - labelDrag.du, L.u); L.v = clamp01(v - labelDrag.dv, L.v); placeWallLabel(labelDrag.wall); return;
@@ -2261,8 +2321,22 @@ frameEl.addEventListener('pointermove', (e) => {
   const r = frameEl.getBoundingClientRect(), x = clamp01((e.clientX - r.left - labelDrag.dx) / W, 0.5), y = clamp01((e.clientY - r.top - labelDrag.dy) / H, 0.5);
   if (labelDrag.tip) { labelDrag.L.ax = x; labelDrag.L.ay = y; } else { labelDrag.L.x = x; labelDrag.L.y = y; }
 }, true);
-const endDrag = () => { if (labelDrag) { if (labelDrag.wall) renderWallLabelList(); labelDrag = null; schedulePublish(); } };
+const endDrag = () => { press = null; if (labelDrag) { if (labelDrag.wall) renderWallLabelList(); labelDrag = null; schedulePublish(); } };
 frameEl.addEventListener('pointerup', endDrag, true); frameEl.addEventListener('pointercancel', endDrag, true);
+// A click on or near the preview never moves the camera: the orbit controls on the canvas see no movement
+// until the press has gone 4 px and lasted 150 ms (isClick). The wheel zooms only when it starts over the
+// canvas (not momentum carried over from the panel), and Lock view turns orbit, zoom and pan off.
+let press = null, wheelOut = 0;
+frameEl.addEventListener('pointerdown', (e) => { press = { x: e.clientX, y: e.clientY, t: performance.now() }; }, true);
+frameEl.addEventListener('pointermove', (e) => {
+  if (!press || press.drag || labelDrag) return;
+  if (isClick(e.clientX - press.x, e.clientY - press.y, performance.now() - press.t)) e.stopPropagation(); else press.drag = true;
+}, true);
+addEventListener('wheel', (e) => { if (e.target !== glCanvas) wheelOut = performance.now(); }, { capture: true, passive: true });
+frameEl.addEventListener('wheel', (e) => { const t = performance.now(); if (t - wheelOut < 400) wheelOut = t; if (S.lockView || wheelOut === t) e.stopPropagation(); }, { capture: true, passive: true }); // a stream that began elsewhere stays ignored until it pauses
+$('lock-view').addEventListener('click', () => setStyle({ lockView: !S.lockView }, false));
+// Locking also stops any orbit still easing out (damping), so the view stays exactly where it is.
+function stopOrbit() { const p = camera.position.clone(), t = controls.target.clone(); controls.enableDamping = false; controls.update(); controls.enableDamping = true; camera.position.copy(p); controls.target.copy(t); controls.update(); }
 
 // Format examples come from the sample files themselves.
 (() => { const s = sampleFiles(), head = (t, n) => t.split('\n').slice(0, n).join('\n');
@@ -2275,7 +2349,7 @@ frameEl.addEventListener('pointerup', endDrag, true); frameEl.addEventListener('
 // lines marked "EXT hook" elsewhere call in here. Settings stay in S as plain data, so the account
 // save keeps them (face images as data URLs, like the logo).
 Object.assign(S, {
-  geology: { enabled: false, title: 'Lithology', faces: 'far', opacity: 0.85, anisotropy: 4, search: null, smooth: 2, texture: true, section: false, legend: [], images: {}, note: 'Geology on block faces interpolated from drill logs; schematic.' },
+  geology: { enabled: false, title: 'Lithology', faces: 'far', opacity: 0.85, strength: 1.3, hidden: 'nearest', anisotropy: 4, search: null, smooth: 2, texture: true, section: false, legend: [], images: {}, note: 'Geology on block faces interpolated from drill logs; schematic.' },
   geophys: { mode: 'off', lines: 'auto', ramp: 'geophys', log: null, min: null, max: null, opacity: 0.85, faces: 'far', search: null, width: null, property: null, label: null, unit: null, note: 'Geophysics: illustrative inversion model' },
   tags: { at: 'toe', style: 'dark', status: {}, fadePrevious: false, newLabel: '', prevLabel: 'Previously released', plannedLabel: 'Planned', groups: [], autoGroup: false, groupRadius: 140, idMode: 'all', showId: {}, pending: 'collar' },
   histograms: false, insetStyle: 'plan',
@@ -2304,10 +2378,11 @@ async function extReady() {
 function extScene() {
   if (Object.entries(extWanted()).some(([k, v]) => v && !EXT[k])) { extReady().catch((e) => status(e.message)); return; }
   if (!G) return;
-  EXT.geophys?.syncCurtains(); EXT.geology?.syncFaces(); EXT.tags?.placeHistograms(); EXT.tags?.syncInset();
+  EXT.geophys?.syncCurtains(); faceWalls(); EXT.tags?.placeHistograms(); EXT.tags?.syncInset();
 }
 const extView = () => { if (G) EXT.geology?.syncFaces(); };
-const extRestyle = () => { if (G) { EXT.geophys?.syncCurtains(); EXT.geology?.syncFaces(); } };
+const extRestyle = () => { if (G) { EXT.geophys?.syncCurtains(); faceWalls(); } };
+const extPainted = () => new Set(EXT.geology ? Object.keys(EXT.geology.faceState()).filter((k) => k !== 'section') : []);
 const extFade = (h) => !!EXT.tags?.fade(h);
 // A wall label linked to a geology unit is written in a darker shade of the unit's legend colour.
 const unitInk = (code) => { const e = code && S.geology.legend.find((x) => x.code === code); return e ? toHex(hexRgb(e.color).map((v) => v * 0.55)) : null; };
@@ -2320,7 +2395,7 @@ function extLegendRows() {
   const rows = project.holes.some((h) => h.planned) ? [{ label: S.tags.plannedLabel || 'Planned', draw: (ctx, x, cy, u) => { ctx.strokeStyle = S.primary; ctx.lineWidth = 2 * u; ctx.setLineDash([5 * u, 3 * u]); ctx.beginPath(); ctx.moveTo(x, cy); ctx.lineTo(x + 22 * u, cy); ctx.stroke(); ctx.setLineDash([]); } }] : [];
   return EXT.tags ? EXT.tags.legendRows().concat(rows) : rows;
 }
-const extLegendBlocks = (ctx, K, box) => (EXT.geology ? EXT.geology.drawBlocks(ctx, K, [EXT.geology.legendBlock(), EXT.geophys?.legendBlock()].filter(Boolean), box) : []);
+const extSections = () => (EXT.geology ? [EXT.geology.legendBlock(), EXT.geophys?.legendBlock()].filter(Boolean).map(EXT.geology.sectionOf) : []);
 const extGroups = (ctx, K, items) => (EXT.tags && (S.tags.autoGroup || S.tags.groups.length) ? EXT.tags.groupItems(ctx, K, items) : items);
 function extStat(ctx, K, L, hits, forExport) {
   if (!EXT.tags) return; const { u } = K, box = EXT.tags.drawStat(ctx, K, L, W, H);
@@ -2424,94 +2499,8 @@ function schedulePublish() {
   if (pubT) return;
   pubT = setTimeout(() => { pubT = 0; const st = getState(); $('em3d-state').textContent = JSON.stringify(st); window.dispatchEvent(new CustomEvent('em3d:change', { detail: st })); }, 60);
 }
-const HELP = `Exploration Maps 3D can be driven by an AI assistant or browser agent.
-
-JavaScript API (run in the page console or via your agent's evaluate tool):
-  EM3D.help()                     this text
-  EM3D.getState()                 files, holes, grade columns, callouts, brand, camera, size
-  EM3D.loadSample()               illustrative project
-  EM3D.clearFiles()
-  EM3D.addZip(dataUrlOrBase64)    Promise. Unpacks a ZIP and adds its CSV/TXT/OBJ files
-  EM3D.addFiles([{name, text}])   CSV or OBJ text. The file name helps detect the type:
-                                  collars, surveys, assays, topography, or a .obj model shape
-  EM3D.setBrand({company, title, subtitle, footnote, primary, accent, credit})
-                                  colours as hex, e.g. primary: "#0b3954"
-  EM3D.setLogo(dataUrl)           Promise. Also picks primary and accent from the logo
-  EM3D.setStyle({valueCol, valueLabel, bins: [4 lower limits], autoBins: true,
-                 coCount, coMin, coCut, coIncl, secAz (0-179), secW,
-                 walls, ids, inset, surface (0.15-1), meshes: {name: {show, color, opacity}},
-                 ribbons (bars beside each hole: tan = reported interval, green = incl.),
-                 traceWidth (0.5-3, drill trace thickness, default 1.4),
-                 valueCol2 (second grade in callouts, e.g. "Au_gpt"; null for none),
-                 pendingLabels (write ASSAYS PENDING along holes whose collar status/notes say pending),
-                 pendingNoAssays (also flag holes with no assays), elevTicks (elevation ticks on the block edge),
-                 terrain: "natural" | "light" | "dark" | "relief" | "satellite" | "muted",
-                 terrainSource: "auto" | "topo" | "dem" | "collars"  (auto: uploaded topography,
-                   else real elevation once a coordinate system is set, else fitted to the collars),
-                 verticalExaggeration (1-5), blockStyle: "glass" | "solid" (solid: pale opaque far
-                   faces with a soil band, near faces cut away), collarFit: "collars" (default: the
-                   DEM shifts to meet the collars) | "terrain" (each hole hangs from the DEM)})
-  EM3D.setCRS("EPSG:26909" | "UTM 9N NAD83" | "EPSG:4326" | proj4 string | null)
-                                  Promise. The coordinate system of the files; loads real terrain
-                                  (AWS Terrain Tiles) and, for satellite/muted, Esri imagery
-  EM3D.terrainReady()             Promise; resolves with the state once tiles have loaded or failed
-  EM3D.addLabel({text, x, y, size: "title" | "normal", arrow, ax, ay})   returns the new id.
-                                  x, y (and the arrow tip ax, ay) are 0-1 across and down the frame,
-                                  so a label lands in the same place at every size. 3D figure only
-  EM3D.updateLabel(id, {...})     EM3D.removeLabel(id)
-  EM3D.addWallLabel({text, face: "N" | "S" | "E" | "W" | "front", u, v, size: "title" | "normal",
-                     scale, rotation, color})   returns the id. Text painted on a block face in
-                                  perspective; u 0-1 left to right seen from outside, v 0 (base) to 1 (terrain)
-  EM3D.updateWallLabel(id, {...}) EM3D.removeWallLabel(id)
-  EM3D.setCallout(holeId, {show, line1, line2, incl: false})   null resets a field
-  EM3D.setStyle({displayCutoff})  intervals below it draw as the plain trace (null: all); callouts unchanged
-  EM3D.setEquivalent({base: "Cu", metals: {Au: {price, recovery}, Ag: {...}}, basePrice, baseRecovery, use})
-                                  adds a derived column such as CuEq_calc (and colours by it unless use: false).
-                                  Prices in US$/lb (Cu, Mo, Zn, Pb, Ni, Co) or US$/oz (Au, Ag, Pt, Pd); defaults
-                                  Cu 4.50, Au 3,000, Ag 35, Mo 20, Zn 1.30; recoveries in %, default 90.
-                                  1% = 22.0462 lb/t, 1 g/t = 1/31.1035 oz/t. An interval missing any component
-                                  has no equivalent value (never read as zero). null removes it. The formula and
-                                  assumptions go in the footnote while the column is in use
-  EM3D.setShell({enabled, cutoff, opacity, color, search, cell})   Promise; resolves with the state once
-                                  the grade shell is built. cutoff/search/cell null = automatic. See below
-  EM3D.cancelShell()              stops a build in progress
-  EM3D.setProvisional(holeId, true | false | null)   dashed, fainter "Provisional position" (null: from the
-                                  collar status/flags column)
-  getState().checks               data checks: counts and problems (no collar, From ≥ To, overlaps, beyond depth,
-                                  conflicting survey depths, dips out of range, outlying collars)
-  EM3D.setCamera({view: "a" | "b" | "low" | "plan"}) or ({azimuth, plunge, zoom})
-  EM3D.setFigureSize("slide" | "release" | "square" | "portrait" | "a4")
-  EM3D.showStep("data" | "brand" | "layout" | "export")
-  EM3D.showView("3d" | "section")
-  EM3D.exportPNG({view: "3d" | "section", download: false})   returns a PNG data URL;
-                                  download: true also saves the file
-  EM3D.exportLayers({download: false, as: "base64" | "blob"})   Promise. A ZIP for designers at the
-                                  figure size: figure.png, scene.png (3D alone, transparent),
-                                  annotations.png (overlay alone, transparent), section.png and
-                                  figure-settings.json. Returns a data URL (or a Blob)
-  EM3D.sendToDesignDesk({email, company, notes})   Promise. Sends the figure and layers to the
-                                  Exploration Maps design desk. Only when the user asks to
-
-Every setter returns the new state. The state is also kept as JSON in
-<script id="em3d-state">, and an "em3d:change" event fires on window after each change.
-Errors are thrown with a plain-language message that names the valid options.
-
-Without the API: every control has a visible label. The four steps are tabs
-(Data, Brand, Layout, Export) and each pane ends with a Next button.
-The status message under the preview announces each change.
-
-Grade shell: an exploratory envelope from the grade column the holes are coloured by; not a geological
-model or a resource (the footnote says so while it shows). 10 m composites; at each grid point the nearest
-composite per collar group (collars within 20 m), at most 4 groups, inverse distance squared (5 m minimum);
-3 groups needed in the search radius (75 m, or 1.5 x the group spacing); nothing above the surface; marching
-cubes at the cut-off. Full method: Layout step, "How the shell is built". Rebuilt when a project opens.
-
-Example: a branded news-release figure from pasted CSVs
-  EM3D.addFiles([{name: "collars.csv", text: COLLARS}, {name: "assays.csv", text: ASSAYS}])
-  EM3D.setBrand({company: "Star Copper", title: "STAR PROJECT · RAILS ZONE", subtitle: "3D drilling, looking northeast"})
-  EM3D.setStyle({valueCol: "Cu_pct", coCount: 4})
-  EM3D.setFigureSize("release"); EM3D.setCamera({view: "a"})
-  EM3D.exportPNG({view: "3d"})`;
+// The API notes are kept in the page (#core-help), out of the script bundle, like the layers' (#ext-help).
+const HELP = $('core-help').textContent.trim();
 $('ai-help').textContent = HELP;
 const call = (fn) => (...args) => { const r = fn(...args); return r === undefined ? getState() : r; };
 window.EM3D = Object.freeze({
