@@ -10,6 +10,7 @@
 // SUPABASE_SERVICE_ROLE_KEY from the environment.
 //
 // THE SHAPE OF A RUN
+//   0. confirm the database has room and Quebec is not mid-import   (disk guard)
 //   1. resolve the layer's real field names, or stop                (schema gate)
 //   2. stream every page into staging                               (flat memory)
 //   3. judge the whole run against the last good one                (guardrails)
@@ -72,10 +73,11 @@ import {
   createServiceClient, startRun, finishRun, lastSuccessfulRun, loadExisting,
   upsertTenures, upsertOwners, pruneOwners, insertSnapshots, insertChangeEvents,
   reconcile, monitoredTenureNumbers, notifyAdmin, stageRows, readStaged, clearStaging,
-  clearStaleStaging,
+  clearStaleStaging, importHeadroom,
   markPromotionStarted, interruptedRun,
   BATCH_SIZE, chunked,
 } from './db.mjs';
+import { checkImportHeadroom, describeRefusal } from '../lib/importHeadroom.mjs';
 
 const JURISDICTION = 'BC';
 
@@ -129,6 +131,30 @@ async function main() {
   const runStarted = run.started_at || new Date().toISOString();
   log(`[tenure-sync] run ${run.id} (${opts.mode}) started at ${runStarted}`);
 
+  // ── 0. Disk headroom ─────────────────────────────────────────────────────
+  // Before the resume and before staging, so a refusal writes nothing but
+  // this run's own record. See scripts/lib/importHeadroom.mjs for 2026-10-20.
+  const headroom = await checkImportHeadroom(() => importHeadroom(sb), {
+    importer: 'tenure', phase: 'preflight', mode: opts.mode,
+  });
+  if (!headroom.ok) {
+    const summary = describeRefusal(headroom);
+    await finishRun(sb, run.id, {
+      status: 'aborted', alerts_safe: false,
+      schema_fingerprint: resolution.fingerprint, resolved_fields: resolution.fields,
+      guardrail_report: { headroom: headroom.report },
+      error_summary: summary.slice(0, 2000),
+    });
+    await notifyAdmin(sb, {
+      subject: 'Tenure Monitor: B.C. sync skipped to protect database disk',
+      body: `<p>${escapeHtml(summary)}</p><p>Run <code>${run.id}</code> wrote nothing. `
+        + 'Stored tenure data is unchanged.</p>',
+    });
+    log(`[tenure-sync] ${summary}`);
+    process.exitCode = 1;
+    return;
+  }
+
   const stats = {
     recordsReceived: 0,
     recordsRejected: 0,
@@ -150,7 +176,16 @@ async function main() {
     // Before this run stages a single row, an earlier interrupted promotion is
     // completed, so the diff below is taken against a settled dataset rather
     // than one that is part old and part new.
-    await resumeInterruptedPromotion(sb, { log });
+    const retained = await resumeInterruptedPromotion(sb, { log });
+
+    // Everything any other earlier run left in staging is dead weight now —
+    // the resume above was its only use — and on a database short of room it
+    // is the first thing to give back. Done here, not only after a success, so
+    // a run of failures cannot stack up a province of staging each.
+    const sweptAtStart = await clearStaleStaging(sb, run.id, run.started_at, {
+      keep: retained ? [retained] : [],
+    });
+    if (sweptAtStart > 0) log(`[tenure-sync] cleared ${sweptAtStart} leftover staging rows before staging.`);
 
     // ── 2. Stream into staging ─────────────────────────────────────────────
     let cqlFilter = null;
@@ -197,7 +232,25 @@ async function main() {
     stats.truncated = streamResult.truncated;
 
     // ── 3. Judge ───────────────────────────────────────────────────────────
-    const evaluation = evaluateRun(stats, baseline, thresholds);
+    let evaluation = evaluateRun(stats, baseline, thresholds);
+
+    // Promotion rewrites every tenure and owner row. Re-check the disk now
+    // that staging is in, and treat a refusal as one more guardrail: the abort
+    // path below clears staging and leaves trusted rows alone.
+    if (evaluation.verdict === VERDICT.OK && !opts.dryRun) {
+      const room = await checkImportHeadroom(() => importHeadroom(sb), {
+        importer: 'tenure', phase: 'promote', mode: opts.mode,
+      });
+      if (!room.ok) {
+        evaluation = {
+          ...evaluation,
+          verdict: VERDICT.ABORT,
+          alertsSafe: false,
+          reasons: [...evaluation.reasons, describeRefusal(room)],
+          report: { ...evaluation.report, headroom: room.report },
+        };
+      }
+    }
     log(`[tenure-sync] guardrails: ${summarize(evaluation)}`);
 
     if (evaluation.verdict === VERDICT.ABORT || opts.dryRun) {
@@ -422,6 +475,9 @@ async function main() {
  * titles that were ABSENT from a dataset, and the retained staging is a
  * dataset we already know is incompletely applied. The next full run draws
  * that conclusion, from a complete pull.
+ *
+ * @returns the prior run's id when its staging is still retained (the resume
+ *   failed and may be retried), otherwise null.
  */
 async function resumeInterruptedPromotion(sb, { log }) {
   let prior;
@@ -430,9 +486,9 @@ async function resumeInterruptedPromotion(sb, { log }) {
   } catch (e) {
     // Never let recovery bookkeeping stop tonight's sync from running.
     log(`[tenure-sync] could not check for an interrupted run: ${e.message}`);
-    return;
+    return null;
   }
-  if (!prior) return;
+  if (!prior) return null;
 
   log(`[tenure-sync] resuming interrupted run ${prior.id} — ${prior.staged} staged rows retained.`);
 
@@ -464,9 +520,11 @@ async function resumeInterruptedPromotion(sb, { log }) {
     }).catch(() => {});
     log(`[tenure-sync] resume complete: ${promoted.processed} applied, `
       + `${promoted.changeEvents} change events.`);
+    return null;
   } catch (e) {
     log(`[tenure-sync] resume of ${prior.id} failed (${e.message}) — continuing with `
       + 'tonight\'s pull, which supersedes it.');
+    return prior.id;
   }
 }
 

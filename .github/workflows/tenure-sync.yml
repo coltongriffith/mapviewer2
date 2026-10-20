@@ -42,7 +42,13 @@ concurrency:
   # Two importers writing the same tables would interleave their staging and
   # confuse reconciliation. Queue rather than cancel: a half-finished run that
   # is killed mid-promotion is exactly the state this feature must not enter.
-  group: tenure-sync
+  #
+  # The group is shared with update-qc-claims.yml. On 2026-10-20 this job and
+  # the Quebec refresh ran at the same time and between them filled the
+  # database disk, so no bulk registry import runs alongside another. GitHub
+  # keeps only one PENDING run per group (a newer arrival replaces it); for
+  # this job that only ever drops a run the next cadence repeats.
+  group: registry-db-import
   cancel-in-progress: false
 
 permissions:
@@ -93,6 +99,9 @@ jobs:
           # data event. Unset = the defaults in guardrails.mjs.
           TENURE_SYNC_MIN_RECORD_RATIO: ${{ vars.TENURE_SYNC_MIN_RECORD_RATIO }}
           TENURE_SYNC_MAX_REJECT_RATIO: ${{ vars.TENURE_SYNC_MAX_REJECT_RATIO }}
+          # Optional. Refuse to import when the database would pass this size
+          # (MB). Unset = 70% of an 8 GB disk; see scripts/lib/importHeadroom.mjs.
+          IMPORT_DB_SIZE_CEILING_MB: ${{ vars.IMPORT_DB_SIZE_CEILING_MB }}
         run: |
           ARGS="--mode=${{ steps.mode.outputs.mode }}"
           if [ "${{ inputs.dry_run }}" = "true" ]; then ARGS="$ARGS --dry-run"; fi
