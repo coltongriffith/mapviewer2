@@ -45,6 +45,10 @@ function toRegExp(source) {
   const WILDCARD = '\u0000WILDCARD\u0000';
   const SEGMENT = '\u0000SEGMENT\u0000';
   const REST = '\u0000REST\u0000';
+  // `/((?!3d/embed/[^/]+/?$).*)`: "everything except ..." as a negative lookahead,
+  // which path-to-regexp passes through as raw regex. Kept verbatim.
+  const lookaheads = [];
+  source = source.replace(/\(\(\?!([^()]*)\)\.\*\)/g, (_, inner) => `\u0000LOOK${lookaheads.push(inner) - 1}\u0000`);
 
   const pattern = source
     // `{/}?` is path-to-regexp's optional-trailing-slash group. The final
@@ -60,7 +64,8 @@ function toRegExp(source) {
     .split(WILDCARD).join('.*')
     .split(REST).join('(?:/.*)?')
     .split(SEGMENT).join('[^/]+');
-  return new RegExp(`^${pattern}/?$`);
+  const full = lookaheads.reduce((p, inner, i) => p.split(`\u0000LOOK${i}\u0000`).join(`((?!${inner}).*)`), pattern);
+  return new RegExp(`^${full}/?$`);
 }
 
 const rewrites = (config.rewrites || []).map((r) => ({ re: toRegExp(r.source), dest: r.destination }));
