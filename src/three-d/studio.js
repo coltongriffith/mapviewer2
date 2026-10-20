@@ -300,7 +300,11 @@ function rebuildScene() {
   B.z0 = zmin - Math.max(25, 0.05 * diag);
   const zref = (zmax + B.z0) / 2;
   const V = (x, y, z) => new THREE.Vector3(x - cx, z - zref, -(y - cy));
-  G = { B, cx, cy, bw, bh, diag, surf, V, zref, zmax };
+  // diag sizes marks (tubes, labels) by the whole block; the camera distance
+  // (baseDist) adds the depth only as far as it shows at the view's plunge, so a
+  // tight collar pattern with 600 m holes (Star Main) is framed from the side
+  // without shrinking the plan view.
+  G = { B, cx, cy, bw, bh, diag: Math.max(diag, Math.hypot(bw, bh, zmax - B.z0)), diagH: diag, depth: zmax - B.z0, surf, V, zref, zmax };
 
   // Terrain top
   const TW = 768, TH = Math.max(64, Math.round(768 * bh / bw));
@@ -471,20 +475,27 @@ function layoutFrame() {
 
 let tween = null;
 const lookVec = (az, pl) => { const a = az * Math.PI / 180, p = pl * Math.PI / 180; return new THREE.Vector3(Math.sin(a) * Math.cos(p), -Math.sin(p), -Math.cos(a) * Math.cos(p)); };
-const baseDist = () => G.diag * 1.65 * Math.pow(Math.max(1, 1.6 / (W / H)), 0.85);
-const camTarget = () => G.V(G.cx, G.cy, (G.B.z0 + G.zmax) / 2);
+// Depth counts only as far as it shows at this plunge; looking down, a quarter more
+// room keeps a long, narrow footprint clear of the title and legend.
+const baseDist = (plunge) => {
+  const r = plunge * Math.PI / 180;
+  return Math.hypot(G.diagH, G.depth * Math.cos(r)) * (1 + 0.25 * Math.sin(r)) * 1.65 * Math.pow(Math.max(1, 1.6 / (W / H)), 0.85);
+};
+// Aim a little above the block's middle so it sits below the title block, not under it.
+const camTarget = () => G.V(G.cx, G.cy, (G.B.z0 + G.zmax) / 2 + 0.1 * (G.zmax - G.B.z0));
 function getCam() {
   const d = controls.target.clone().sub(camera.position), dist = d.length();
   if (!G || dist < 1e-6) return { azimuth: ((S.secAz - 90) % 360 + 360) % 360, plunge: 20, zoom: 100 };
   d.normalize();
-  return { azimuth: Math.round((Math.atan2(d.x, -d.z) * 180 / Math.PI + 360) % 360), plunge: Math.round(Math.asin(-d.y) * 180 / Math.PI), zoom: Math.round(baseDist() / dist * 100) };
+  const plunge = Math.asin(-d.y) * 180 / Math.PI;
+  return { azimuth: Math.round((Math.atan2(d.x, -d.z) * 180 / Math.PI + 360) % 360), plunge: Math.round(plunge), zoom: Math.round(baseDist(plunge) / dist * 100) };
 }
 function setCamera(o = {}, instant = true) {
   if (!G) return;
   const cur = getCam(), pick = (v, d) => (v !== undefined && v !== null && Number.isFinite(+v) ? +v : d);
   const az = ((pick(o.azimuth, cur.azimuth) % 360) + 360) % 360, pl = Math.max(3, Math.min(89, pick(o.plunge, cur.plunge))), zoom = Math.max(40, Math.min(250, pick(o.zoom, cur.zoom)));
-  const T = camTarget(), to = T.clone().sub(lookVec(az, pl).multiplyScalar(baseDist() * 100 / zoom));
-  controls.minDistance = baseDist() * 0.39; controls.maxDistance = baseDist() * 2.6;
+  const T = camTarget(), to = T.clone().sub(lookVec(az, pl).multiplyScalar(baseDist(pl) * 100 / zoom));
+  controls.minDistance = baseDist(pl) * 0.39; controls.maxDistance = baseDist(pl) * 2.6;
   if (instant || matchMedia('(prefers-reduced-motion: reduce)').matches) { tween = null; camera.position.copy(to); controls.target.copy(T); controls.update(); }
   else tween = { from: camera.position.clone(), fromT: controls.target.clone(), to, toT: T, t0: performance.now() };
 }
@@ -624,7 +635,9 @@ function drawScaleBar(ctx, K, footTop) {
     return;
   }
   // No near edge has room: a flat bar at the scale of the block centre.
-  const c0 = proj(controls.target), c1 = proj(controls.target.clone().add(new THREE.Vector3(G.diag * 0.1, 0, 0))), ppm = Math.hypot(c1[0] - c0[0], c1[1] - c0[1]) / (G.diag * 0.1);
+  // Measured along the screen's own horizontal, so a view looking along an axis is not foreshortened.
+  const across = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0).normalize().multiplyScalar(G.diag * 0.1);
+  const c0 = proj(controls.target), c1 = proj(controls.target.clone().add(across)), ppm = Math.hypot(c1[0] - c0[0], c1[1] - c0[1]) / (G.diag * 0.1);
   if (!(ppm > 0)) return;
   const D = [10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000].find((d) => d * ppm >= 120 * u) || 5000, len = D * ppm, x = (W - len) / 2, y = footTop - 26 * u;
   ctx.fillStyle = INK; ctx.fillRect(x, y, len / 2, 6 * u); ctx.fillStyle = '#fff'; ctx.fillRect(x + len / 2, y, len / 2, 6 * u); ctx.strokeStyle = INK; ctx.lineWidth = u; ctx.strokeRect(x, y, len, 6 * u);
@@ -746,7 +759,7 @@ function drawSection(ctx, Wc, Hc, forExport) {
   });
   tagLabel(ctx, K, 'A', X(0), Y(profile[0][1]) - 24 * u); tagLabel(ctx, K, 'A′', X(L), Y(profile[200][1]) - 24 * u);
   // Bottom strip: scale bar left, horizontal legend right
-  const sy = footTop - 18 * u, sb = niceRound(L / 6);
+  const sy = footTop - 18 * u, sb = [10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000].find((d) => d * s >= 120 * u) || niceRound(L / 3);
   ctx.fillStyle = INK; ctx.fillRect(m, sy, sb * s / 2, 6 * u); ctx.fillStyle = '#fff'; ctx.fillRect(m + sb * s / 2, sy, sb * s / 2, 6 * u); ctx.strokeStyle = INK; ctx.lineWidth = u; ctx.strokeRect(m, sy, sb * s, 6 * u);
   font(400, 12, true); ctx.fillStyle = INK; ctx.fillText('0', m, sy - 6 * u); ctx.textAlign = 'right'; ctx.fillText(`${sb} m`, m + sb * s, sy - 6 * u); ctx.textAlign = 'left';
   const items = legendRows().slice(0, 4).reverse(); font(400, 12, true);
@@ -975,7 +988,46 @@ function addUserFiles(arr) {
   status(project.empty ? `Added ${added.join(', ')}. Still need a collar file.` : `Added ${added.join(', ')}. ${project.holes.length} holes on the figure.`);
   return getState();
 }
-async function readFileList(fl) { const arr = await Promise.all([...fl].map((f) => f.text().then((text) => ({ name: f.name, text })))); addUserFiles(arr); }
+// A .zip is unpacked here, in the browser: its CSV, TXT and OBJ files load as if
+// dropped one by one. Folders, Mac resource forks, READMEs and anything else are skipped.
+const DATA_FILE = /\.(csv|txt|obj)$/i;
+const MAX_ZIP_BYTES = 200 * 1024 * 1024;
+async function unzipDataFiles(buffer) {
+  const { unzipSync } = await import('fflate');
+  let total = 0;
+  const entries = unzipSync(new Uint8Array(buffer), {
+    filter: (f) => {
+      const keep = DATA_FILE.test(f.name) && !/(^|\/)(__MACOSX|\.)/.test(f.name) && !/(^|\/)readme[^/]*$/i.test(f.name);
+      if (keep) total += f.originalSize;
+      if (total > MAX_ZIP_BYTES) throw new Error('That ZIP unpacks to more than 200 MB. Send the drill files on their own.');
+      return keep;
+    },
+  });
+  const decoder = new TextDecoder();
+  return Object.entries(entries).map(([path, bytes]) => ({ name: path.split('/').pop(), text: decoder.decode(bytes) }));
+}
+async function readFileList(fl) {
+  try {
+    const arr = (await Promise.all([...fl].map(async (f) => (/\.zip$/i.test(f.name)
+      ? unzipDataFiles(await f.arrayBuffer())
+      : [{ name: f.name, text: await f.text() }])))).flat();
+    if (!arr.length) { status('No CSV, TXT or OBJ files found in that ZIP.'); return; }
+    addUserFiles(arr);
+  } catch (e) {
+    status(e.message && !/^invalid/i.test(e.message) ? e.message : 'That file could not be read. Use CSV, TXT, OBJ or a ZIP of them.');
+  }
+}
+// For assistants: a ZIP as a data URL, base64 string or ArrayBuffer.
+async function addZip(zip) {
+  let buf = zip;
+  if (typeof zip === 'string') {
+    const b64 = zip.replace(/^data:[^,]*,/, ''), bin = atob(b64);
+    buf = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+  }
+  const arr = await unzipDataFiles(buf instanceof Uint8Array ? buf.buffer : buf);
+  if (!arr.length) throw new Error('No CSV, TXT or OBJ files found in that ZIP.');
+  return addUserFiles(arr);
+}
 $('file-input').addEventListener('change', (e) => { if (e.target.files.length) readFileList(e.target.files); e.target.value = ''; });
 const drop = $('drop');
 ['dragenter', 'dragover'].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.add('over'); }));
@@ -1090,6 +1142,7 @@ JavaScript API (run in the page console or via your agent's evaluate tool):
   EM3D.getState()                 files, holes, grade columns, callouts, brand, camera, size
   EM3D.loadSample()               illustrative project
   EM3D.clearFiles()
+  EM3D.addZip(dataUrlOrBase64)    Promise. Unpacks a ZIP and adds its CSV/TXT/OBJ files
   EM3D.addFiles([{name, text}])   CSV or OBJ text. The file name helps detect the type:
                                   collars, surveys, assays, topography, or a .obj model shape
   EM3D.setBrand({company, title, subtitle, footnote, primary, accent, credit})
@@ -1123,7 +1176,7 @@ Example: a branded news-release figure from pasted CSVs
 $('ai-help').textContent = HELP;
 const call = (fn) => (...args) => { const r = fn(...args); return r === undefined ? getState() : r; };
 window.EM3D = Object.freeze({
-  version: 3, help: () => HELP, getState, loadSample, clearFiles, addFiles: addUserFiles, setBrand, setLogo, setStyle: (o) => setStyle(o, true), setCallout,
+  version: 3, help: () => HELP, getState, loadSample, clearFiles, addFiles: addUserFiles, addZip, setBrand, setLogo, setStyle: (o) => setStyle(o, true), setCallout,
   setCamera: call((o = {}) => { if (!G) throw new Error('Load data first.'); showView('3d'); if (o.view) { if (!VIEWS[o.view]) throw new Error('view must be a, b, low or plan.'); applyView(o.view, true); } else setCamera(o, true); syncCamUI(); }),
   setFigureSize, showStep: call(showStep), showView: call(showView), exportPNG,
 });

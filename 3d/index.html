@@ -151,11 +151,11 @@ input[type="color"] { width: 34px; height: 26px; border: 1px solid var(--slate-2
       <div class="pane-head"><div class="kicker">Step 1 of 4</div><h2>Add your drill data</h2>
         <p>Export collars and assays from your drill database as CSV and drop them in. The sample project is showing until you do.</p></div>
       <div class="drop" id="drop">
-        <strong>Drop CSV files here</strong>
-        <span class="muted">Collars, assays, surveys, topography, or OBJ model shapes. Columns are matched for you.</span>
+        <strong>Drop CSV or ZIP files here</strong>
+        <span class="muted">Collars, assays, surveys, topography, or OBJ model shapes, loose or in a ZIP. Columns are matched for you.</span>
         <div class="row" style="justify-content:center">
           <label class="btn primary" for="file-input">Choose files</label>
-          <input type="file" id="file-input" multiple accept=".csv,.txt,.obj" hidden>
+          <input type="file" id="file-input" multiple accept=".csv,.txt,.obj,.zip" hidden>
           <button class="btn" type="button" id="load-sample">Use sample project</button>
           <button class="btn" type="button" id="clear-files">Clear</button>
         </div>
