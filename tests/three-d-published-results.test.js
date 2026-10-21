@@ -5,6 +5,7 @@ import { readResults, readFiles, readAll, lengthCheck, pubCallouts, pubLines, st
 import { refineRole } from '../src/three-d/roles.js';
 import { ribbonPieces } from '../src/three-d/intercepts.js';
 import { createHistory } from '../src/three-d/history.js';
+import { withDefaults, LEGACY_V1, LEGACY_V2, DESIGN_VERSION } from '../src/three-d/design-version.js';
 
 // A release table for the built-in Example Ridge sample (fictional): a parent and its "incl." on EX-021, two
 // separate results on EX-014 (the second with a published length that disagrees with its depths), and a draft.
@@ -139,6 +140,16 @@ describe('callouts from published results', () => {
     expect(pubLines(c, { 'EX14-01': { line1: 'No depths recorded' } }).l1).toBe('30 m @ 0.61% Cu');
     // setCallout ties new wording to the depths it has now.
     const cur = {}; tie(cur, { line1: 'x' }, 'published', [40, 75]); expect(cur.at).toEqual([40, 75]);
+  });
+});
+
+describe('callout source and figure design versions', () => {
+  it('opens every earlier figure with calculated callouts, as made, and keeps a chosen source', () => {
+    const NOW = { calloutMode: 'calculated', pubOverrides: {}, coOverrides: {} };
+    expect([LEGACY_V1, LEGACY_V2].some((T) => 'calloutMode' in T || 'pubOverrides' in T)).toBe(false); // no new default to undo
+    for (const v of [undefined, 1, 2, DESIGN_VERSION]) expect(withDefaults({ ...(v ? { designVersion: v } : {}), coOverrides: { 'S-1': { line1: 'x' } } }, NOW)).toMatchObject({ calloutMode: 'calculated', pubOverrides: {}, coOverrides: { 'S-1': { line1: 'x' } } });
+    const saved = withDefaults({ designVersion: DESIGN_VERSION, calloutMode: 'published', pubOverrides: { R1: { line1: 'y', at: [1, 2] } } }, NOW);
+    expect(withDefaults(JSON.parse(JSON.stringify(saved)), NOW)).toMatchObject({ calloutMode: 'published', pubOverrides: { R1: { line1: 'y', at: [1, 2] } } });
   });
 });
 

@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { shouldMerge, placePills } from '../src/three-d/layout.js';
+import { shouldMerge } from '../src/three-d/layout.js';
+import { placePills } from '../src/three-d/leaders.js';
 import { init, drawPills, legendRows, tagShown, idShown, pendingGroups, weight, fade, highlightOf, set as setTags } from '../src/three-d/tags.js';
 import { readLegendFiles, applyLegendFile } from '../src/three-d/geology.js';
 import { refineRole } from '../src/three-d/roles.js';
@@ -45,7 +46,7 @@ function host(holes, tags = {}, extra = {}) {
   const fills = [];
   ctx.fillText = (t) => fills.push(t);
   init({ S, project: { holes }, G: { V: (x, y, z) => ({ x, y, z }) }, proj: (v) => [v.x, 500 - v.y / 10, 0], shownCallouts: () => extra.callouts || [], isPending: (h) => /pending/.test(h.note),
-    roundRect: () => {}, textOn: () => '#fff', setSpacing: () => {}, INK: '#142126', brandTone: () => S.accent });
+    roundRect: () => {}, textOn: () => '#fff', setSpacing: () => {}, INK: '#142126', brandTone: () => S.accent, paper: (a = 1) => `rgba(255,255,255,${a})`, pri: () => S.primary });
   return { S, fills, draw: () => { fills.length = 0; drawPills(ctx, K, { placed: [], occ: [], W: 2000, H: 1000 }); return fills.slice(); } };
 }
 const hole = (id, x, year, note = '') => ({ id, note, c: { x, y: 0, z: 1000, raw: { Year: String(year), Status: note } }, ints: [{}] });

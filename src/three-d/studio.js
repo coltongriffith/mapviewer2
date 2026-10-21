@@ -5,7 +5,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { composite, collarGroups, autoCell, autoSearch } from './shell-core.js';
 import { METAL_DEFAULTS, defaultUnit, priceUnit, eqFactors, eqFormula, eqValue } from './metal-eq.js';
 import { isXYZ, parseXYZ, refineRole } from './roles.js';
-import { makeLayout, isClick, legendRows as binRows, wrapNotes, shouldMerge } from './layout.js';
+import { makeLayout, isClick, legendRows as binRows, wrapNotes, shouldMerge, hits as boxHits } from './layout.js';
 import { DESIGN_VERSION, FEATURES, uses, withDefaults } from './design-version.js';
 import { intercept, calloutText, avgOver, ribbonPieces } from './intercepts.js';
 
@@ -168,7 +168,15 @@ const S = {              // style
   // Files taken from the property's data library: { [file name]: { libFileId, version } } (library.js).
   libRefs: {},
   // shell.color null: the brand accent (brandTone). throughTerrain: a faint ghost where the terrain hides it.
-  shell: { enabled: false, cutoff: null, opacity: 0.3, color: null, search: null, cell: null, throughTerrain: false },
+  // shading: "solid+edges" (lit, outlined), "solid" or "glass" (the old haze). shells: up to three named
+  // cut-offs [{ cutoff, color, label }] drawn together; empty: the one shell at cutoff.
+  shell: { enabled: false, cutoff: null, opacity: 0.6, color: null, search: null, cell: null, throughTerrain: false, shading: 'solid+edges', shells: [], ramp: 'brand' },
+  // The light and the look: sun azimuth and altitude (degrees), terrain shadow strength, relief darkening
+  // (ao), haze (0-1) and the light or dark presentation theme. projection: perspective or orthographic.
+  // edge: the block's outline colour (crisp near-black; grey before round 5).
+  scene: { sunAz: 315, sunAlt: 40, shadow: 0.35, ao: 0.5, haze: 0, theme: 'light', edge: '#1e1d26' }, projection: 'perspective',
+  // autoLabels: a label whose arrow cannot run straight or bend once moves near its tip (unless dragged).
+  autoLabels: true,
   // Satellite imagery tone: saturation, contrast, warmth (-1 cool to 1 warm) and shaded-relief blend (0-1).
   imagery: { saturation: 1.05, contrast: 1.12, warmth: 0.25, relief: 0.55 },
 };
@@ -361,8 +369,18 @@ const renderer = new THREE.WebGLRenderer({ canvas: glCanvas, antialias: true, pr
 let DPR = Math.min(window.devicePixelRatio || 1, 2); renderer.setPixelRatio(DPR);
 const scene = new THREE.Scene(); scene.background = new THREE.Color('#ffffff');
 const camera = new THREE.PerspectiveCamera(32, 1, 1, 1e6);
+// Orthographic: the same camera with a parallel projection sized to its distance from the target, so
+// framing, zoom (a dolly), pan, the presets and the export all work unchanged in both projections.
+const ortho = () => S.projection === 'orthographic', perspMatrix = camera.updateProjectionMatrix.bind(camera);
+camera.updateProjectionMatrix = () => {
+  if (!ortho()) { perspMatrix(); return; }
+  const h = Math.max(1, controls.target.distanceTo(camera.position)) * Math.tan(camera.fov * Math.PI / 360), w = h * camera.aspect;
+  camera.projectionMatrix.makeOrthographic(-w, w, h, -h, camera.near, camera.far); camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
+};
 scene.add(new THREE.HemisphereLight('#ffffff', '#c9c4bb', 0.9));
 const sun = new THREE.DirectionalLight('#ffffff', 0.55); sun.position.set(-1, 2, 1.2); scene.add(sun);
+// The terrain's sun (S.scene): its hillshade and the relief's soft cast shadows, baked into the terrain image.
+const sunDir = () => { const a = S.scene.sunAz * Math.PI / 180, e = Math.max(5, S.scene.sunAlt) * Math.PI / 180; return [Math.sin(a) * Math.cos(e), Math.cos(a) * Math.cos(e), Math.sin(e)]; }; // east, north, up
 const controls = new OrbitControls(camera, glCanvas);
 controls.enableDamping = true; controls.dampingFactor = 0.08; controls.maxPolarAngle = Math.PI * 0.49;
 let root = new THREE.Group(); scene.add(root);
@@ -441,16 +459,16 @@ function rebuildScene(keepCam) {
 
   // Terrain top: elevation and hillshade cached once per build; paintTerrain colours them by style.
   {
-    const TW = 768, TH = Math.max(64, Math.round(768 * bh / bw)), cell = bw / TW, hs = new Float32Array(TW * TH), shade = new Float32Array(TW * TH);
+    const TW = 768, TH = Math.max(64, Math.round(768 * bh / bw)), cell = bw / TW, hs = new Float32Array(TW * TH);
     for (let py = 0; py < TH; py++) for (let px = 0; px < TW; px++) hs[py * TW + px] = surf(B.x0 + px * cell, B.y1 - py * bh / TH);
     let lo = Infinity, hi = -Infinity; hs.forEach((v) => { lo = Math.min(lo, v); hi = Math.max(hi, v); });
-    const sunv = [-0.5, 0.5, 0.71], rng = mulberry32(7), speck = new Uint8Array(TW * TH);
-    for (let py = 0; py < TH; py++) for (let px = 0; px < TW; px++) {
-      const i = py * TW + px, hx = hs[py * TW + Math.min(px + 1, TW - 1)] - hs[py * TW + Math.max(px - 1, 0)], hy = hs[Math.max(py - 1, 0) * TW + px] - hs[Math.min(py + 1, TH - 1) * TW + px];
-      const nx = -hx / (2 * cell), ny = -hy / (2 * bh / TH), l = Math.hypot(nx, ny, 1);
-      shade[i] = Math.max(0, (nx * sunv[0] + ny * sunv[1] + sunv[2]) / l); speck[i] = rng() < 0.2 ? 1 : 0;
-    }
-    G.terr = { TW, TH, hs, shade, speck, lo, hi };
+    const rng = mulberry32(7), speck = Uint8Array.from(hs, () => (rng() < 0.2 ? 1 : 0));
+    // Hollows: how far each point lies below its neighbourhood (a 9-cell box mean), 0-1, darkened by S.scene.ao.
+    const mean = boxMean(boxMean(hs, TW, TH, 9, 1), TW, TH, 9, TW), hol = new Float32Array(TW * TH); let sd = 0;
+    hs.forEach((v, i) => { hol[i] = mean[i] - v; sd += hol[i] * hol[i]; }); sd = Math.sqrt(sd / hs.length) || 1;
+    hol.forEach((v, i) => { hol[i] = Math.max(0, Math.min(1, v / (2.5 * sd))); });
+    G.terr = { TW, TH, hs, shade: new Float32Array(TW * TH), hol, speck, lo, hi, cell };
+    shadeTerrain();
   }
   G.topBase = document.createElement('canvas'); G.topCanvas = document.createElement('canvas');
   G.topTex = new THREE.CanvasTexture(G.topCanvas); G.topTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
@@ -480,7 +498,7 @@ function rebuildScene(keepCam) {
   const seg = [];
   C.forEach(([x, y], i) => { const [x2, y2] = C[(i + 1) % 4]; seg.push(V(x, y, B.z0), V(x2, y2, B.z0), V(x, y, B.z0), V(x, y, surf(x, y)));
     for (let k = 0; k < 50; k++) { const a = k / 50, b = (k + 1) / 50; seg.push(V(x + (x2 - x) * a, y + (y2 - y) * a, surf(x + (x2 - x) * a, y + (y2 - y) * a)), V(x + (x2 - x) * b, y + (y2 - y) * b, surf(x + (x2 - x) * b, y + (y2 - y) * b))); } });
-  root.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(seg), new THREE.LineBasicMaterial({ color: '#8f9a9f' })));
+  root.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(seg), new THREE.LineBasicMaterial({ color: S.scene.edge })));
   {
     // The block floats: a soft, blurred footprint shadow a little below it. Drawn as the shadow of a
     // square held off-canvas, which blurs the same in every browser (ctx.filter does not).
@@ -527,6 +545,36 @@ const PALE = new Set(['light', 'relief', 'satellite', 'muted']);
 // Satellite tone: lifted midtones, a touch of contrast and exposure, so forest reads green and tracks show.
 const TONE = Uint8ClampedArray.from({ length: 256 }, (_, v) => 255 * (((v / 255) ** 0.74 - 0.5) * 1.08 + 0.53));
 const imageryShown = () => !!G && (S.terrain === 'satellite' || S.terrain === 'muted') && !!realT.img?.ok && realT.img.key === terrainKeyOf(G.B);
+// A box mean of width n along one axis (step 1: rows, step w: columns) of a w × h grid.
+function boxMean(a, w, h, n, step) {
+  const out = new Float32Array(a.length), r = n >> 1, len = step === 1 ? w : h, lines = step === 1 ? h : w, at = (l, k) => (step === 1 ? l * w + k : k * w + l);
+  for (let l = 0; l < lines; l++) { let sum = 0, c = 0; for (let k = -r; k < len; k++) {
+    if (k + r < len) { sum += a[at(l, k + r)]; c++; } if (k - r - 1 >= 0) { sum -= a[at(l, k - r - 1)]; c--; } if (k >= 0 && k < len) out[at(l, k)] = sum / c; } }
+  return out;
+}
+// Hillshade and cast shadows from the sun (S.scene), cached per build and sun. Shadows are traced over a
+// half-size grid of the (exaggerated) relief toward the sun and softened, then multiplied into the terrain
+// image by paintTerrain: no shadow map, so no cost per frame.
+function shadeTerrain() {
+  const T = G.terr, { TW, TH, hs, shade, cell } = T, sv = sunDir(), ry = G.bh / TH;
+  for (let py = 0; py < TH; py++) for (let px = 0; px < TW; px++) {
+    const i = py * TW + px, hx = hs[py * TW + Math.min(px + 1, TW - 1)] - hs[py * TW + Math.max(px - 1, 0)], hy = hs[Math.max(py - 1, 0) * TW + px] - hs[Math.min(py + 1, TH - 1) * TW + px];
+    const nx = -hx / (2 * cell), ny = -hy / (2 * ry), l = Math.hypot(nx, ny, 1);
+    shade[i] = Math.max(0, (nx * sv[0] + ny * sv[1] + sv[2]) / l);
+  }
+  T.cast = S.scene.shadow > 0 ? castShadows(hs, TW, TH, cell, ry, sv, S.vex, T.hi) : null;
+}
+function castShadows(hs, TW, TH, cx, cy, sv, vex, hi) {
+  // Steps of two cells toward the sun; the ray climbs at the sun's altitude over the exaggerated relief.
+  const w = TW >> 1, h = TH >> 1, out = new Float32Array(w * h), hz = Math.hypot(sv[0], sv[1]) || 1e-6, D = 2 * Math.min(cx, cy);
+  const dx = sv[0] / hz * D / cx, dy = -sv[1] / hz * D / cy, rise = D * sv[2] / hz / vex, at = (x, y) => hs[Math.min(TH - 1, Math.round(y)) * TW + Math.min(TW - 1, Math.round(x))];
+  for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
+    let x = i * 2, y = j * 2, z = at(x, y);
+    for (let k = 0; k < 400 && z < hi; k++) { x += dx; y += dy; z += rise; if (x < 0 || y < 0 || x >= TW || y >= TH) break; if (at(x, y) > z) { out[j * w + i] = 1; break; } }
+  }
+  const soft = boxMean(boxMean(out, w, h, 5, 1), w, h, 5, w);
+  return { w, h, soft };
+}
 function paintTerrain() {
   if (!G) return;
   const T = G.terr, img = imageryShown() ? realT.img : null, tw = img ? img.w : T.TW, th = img ? img.h : T.TH, st = S.terrain;
@@ -536,7 +584,8 @@ function paintTerrain() {
     G.topTex.dispose(); G.topTex = new THREE.CanvasTexture(G.topCanvas); G.topTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
     if (G.top) { G.top.material.map = G.topTex; G.top.material.needsUpdate = true; }
   }
-  const ctx = G.topBase.getContext('2d'), out = ctx.createImageData(tw, th), d = out.data, { TW, TH, hs, shade, speck, lo, hi } = T;
+  const ctx = G.topBase.getContext('2d'), out = ctx.createImageData(tw, th), d = out.data, { TW, TH, hs, shade, speck, lo, hi, hol, cast: C } = T, ao = 0.45 * S.scene.ao;
+  const castAt = (x, y) => (C ? C.soft[Math.min(C.h - 1, y >> 1) * C.w + Math.min(C.w - 1, x >> 1)] : 0); // cast shadow, 0-1
   const step = Math.max(5, niceRound((hi - lo) / 14)), band = (v) => Math.floor(v / step);
   const natural = (i) => {
     const sh = shade[i], t = (hs[i] - lo) / ((hi - lo) || 1), right = hs[Math.min(i + 1, hs.length - 1)];
@@ -556,6 +605,7 @@ function paintTerrain() {
           if (rel || uses(S, 'imageryRelief')) f = 1 - 0.6 * rel + 0.85 * rel * sh; // the hillshade multiplied in, so slopes read
         }
         if (st === 'muted') { const l = 0.3 * r + 0.59 * g + 0.11 * b; r = (l + (r - l) * 0.4) * 0.6 + 98; g = (l + (g - l) * 0.4) * 0.6 + 100; b = (l + (b - l) * 0.4) * 0.6 + 97; f = 0.86 + 0.22 * sh; }
+        f *= (1 - ao * hol[si]) * (1 - S.scene.shadow * castAt(si % TW, sy));
         d[i * 4] = Math.min(255, Math.max(0, r * f)); d[i * 4 + 1] = Math.min(255, Math.max(0, g * f)); d[i * 4 + 2] = Math.min(255, Math.max(0, b * f)); d[i * 4 + 3] = 255;
       } }
   } else {
@@ -567,7 +617,7 @@ function paintTerrain() {
       else if (st === 'relief') { const v = Math.max(0, Math.min(1, 1.25 * sh - 0.1)) * (edge ? (index ? 0.82 : 0.92) : 1); c = [(70 + 182 * v) + 8 * (t - 0.5), 78 + 175 * v, (84 + 166 * v) - 8 * (t - 0.5)]; }
       else if (st === 'dark') { const f = (0.42 + 0.85 * sh) * (edge ? 0.86 : 1); c = [(40 + 46 * t) * f, (55 + 44 * t) * f, (61 + 42 * t) * f]; }
       else c = natural(i); // natural, and satellite before its imagery arrives
-      d[i * 4] = Math.min(255, c[0]); d[i * 4 + 1] = Math.min(255, c[1]); d[i * 4 + 2] = Math.min(255, c[2]); d[i * 4 + 3] = 255;
+      const k = (1 - ao * hol[i]) * (1 - S.scene.shadow * castAt(i % TW, Math.floor(i / TW))); d[i * 4] = Math.min(255, c[0] * k); d[i * 4 + 1] = Math.min(255, c[1] * k); d[i * 4 + 2] = Math.min(255, c[2] * k); d[i * 4 + 3] = 255;
     }
   }
   ctx.putImageData(out, 0, 0);
@@ -859,9 +909,17 @@ function removeWallLabel(id) {
 // Composites and grouping here; the estimate and the marching-cubes surface in shell-worker.js, so the
 // page never freezes. Results are cached by their inputs: a rebuilt scene (new vertical exaggeration,
 // label, colour) reuses the mesh, and a new cut-off reuses the estimated grid.
-const shell = { status: 'off', progress: 0, message: '', job: 0, worker: null, busy: false, field: null, mesh: null, waiters: [] };
+const shell = { status: 'off', progress: 0, message: '', job: 0, worker: null, busy: false, field: null, mesh: null, waiters: [], placing: Promise.resolve() };
 const shellCut = () => (Number.isFinite(S.shell.cutoff) ? S.shell.cutoff : S.coCut);
-const shellCutText = () => { const unit = (S.valueLabel.match(/(%|g\/t|ppm|ppb)$/) || [''])[0], el = S.valueLabel.replace(/\s*(%|g\/t|ppm|ppb)$/, ''); return `${+shellCut().toPrecision(4)}${unit === '%' ? '%' : unit ? ` ${unit}` : ''} ${el}`.trim(); };
+// "0.3% CuEq", or "0.2, 0.5 and 1% CuEq" for nested shells.
+const shellCutText = (cuts = shellList().map((x) => x.cutoff)) => { const unit = (S.valueLabel.match(/(%|g\/t|ppm|ppb)$/) || [''])[0], el = S.valueLabel.replace(/\s*(%|g\/t|ppm|ppb)$/, ''), v = cuts.map((c) => +c.toPrecision(4)); return `${v.length > 1 ? `${v.slice(0, -1).join(', ')} and ${v[v.length - 1]}` : v[0]}${unit === '%' ? '%' : unit ? ` ${unit}` : ''} ${el}`.trim(); };
+// The shells drawn: the named cut-offs (S.shell.shells), else the one at cutoff. Without a colour of their
+// own, nested shells take tones of the brand accent: lighter for the lowest cut-off, deeper for the highest.
+function shellList() {
+  const L = S.shell.shells?.length ? S.shell.shells : [{ cutoff: shellCut(), color: S.shell.color }], n = L.length;
+  return L.map((x) => { const rank = L.filter((y) => y.cutoff < x.cutoff).length;
+    return { cutoff: x.cutoff, label: x.label || null, rank, color: x.color || (n > 1 && EXT.look ? EXT.look.tone(S.shell.ramp, brandTone('shell'), rank / (n - 1)) : brandTone('shell')) }; }); // EXT hook
+}
 const shellShown = () => S.shell.enabled && !!G?.shellMesh;
 function shellInput() {
   if (!G || !S.valueCol) return null;
@@ -883,36 +941,25 @@ function shellInput() {
 function settleShell(status, message = '') {
   shell.status = status; shell.message = message; shell.busy = status === 'building';
   renderShellUI(); schedulePublish();
-  if (!shell.busy) shell.waiters.splice(0).forEach((res) => res(getState()));
+  // EM3D.setShell resolves once the surfaces are on the figure (look.js may still be loading), state published.
+  if (!shell.busy) { const w = shell.waiters.splice(0); shell.placing.then(() => { schedulePublish(); w.forEach((res) => res(getState())); }); }
 }
-const shellColor = () => S.shell.color || brandTone('shell');
-function styleShell() {
-  const m = G?.shellMesh; if (!m) return; m.material.color.set(shellColor()); m.material.opacity = S.shell.opacity;
-  const gh = m.userData.ghost; gh.material.color.set(shellColor()); gh.material.opacity = Math.min(0.4, S.shell.opacity + 0.1); gh.visible = !!S.shell.throughTerrain;
-}
-function dropShell() { const m = G?.shellMesh; if (!m) return; root.remove(m); m.geometry.dispose(); m.material.dispose(); m.userData.ghost.material.dispose(); G.shellMesh = null; }
-function placeShell() {
-  dropShell();
-  const M = shell.mesh; if (!M.indices.length) return;
-  const pos = new Float32Array(M.positions.length), [ox, oy, oz] = M.origin;
-  for (let i = 0; i < pos.length; i += 3) { const v = G.V(ox + M.positions[i], oy + M.positions[i + 1], oz + M.positions[i + 2]); pos[i] = v.x; pos[i + 1] = v.y; pos[i + 2] = v.z; }
-  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setIndex(new THREE.BufferAttribute(M.indices, 1)); g.computeVertexNormals();
-  G.shellMesh = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ transparent: true, depthWrite: false, side: THREE.DoubleSide }));
-  G.shellMesh.renderOrder = 4; G.shellMesh.userData.key = M.key;
-  // The ghost: the same surface drawn after the terrain only where something nearer (the terrain) hides it.
-  const gh = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, depthFunc: THREE.GreaterDepth, side: THREE.DoubleSide }));
-  gh.renderOrder = 6.5; G.shellMesh.userData.ghost = gh; G.shellMesh.add(gh); root.add(G.shellMesh); styleShell();
-}
+const shellColor = () => shellList()[0].color;
+// The surfaces are drawn by look.js (solid, outlined, nested), loaded with the first shell.
+const styleShell = () => EXT.look?.styleShells();
+function dropShell() { const g = G?.shellMesh; if (!g) return; root.remove(g); g.traverse((o) => { o.geometry?.dispose(); o.material?.dispose(); }); G.shellMesh = null; }
+const placeShell = () => (shell.placing = extLoad('look').then((m) => { if (G && shell.mesh && S.shell.enabled) m.placeShells(); schedulePublish(); }).catch((e) => status(e.message)));
+const shellParts = () => shell.mesh?.parts.some((p) => p.indices.length);
 function stopWorker() { if (shell.worker && shell.busy) { shell.worker.terminate(); shell.worker = null; } shell.job++; }
 function syncShell() {
   const drop = dropShell;
   if (!S.shell.enabled) { stopWorker(); drop(); if (shell.status !== 'cancelled') settleShell('off'); return; }
-  const inp = shellInput(), iso = shellCut();
+  const inp = shellInput(), isos = shellList().map((x) => x.cutoff);
   if (!inp || inp.groups < 3) { stopWorker(); drop(); settleShell('empty', 'A grade shell needs assays in at least three separate collar locations (collars within 20 m count as one).'); return; }
-  if (!(iso > 0)) { stopWorker(); drop(); settleShell('empty', 'Set a cut-off above zero.'); return; }
-  const key = `${inp.key}|${iso}`, info = { holesUsed: inp.holesUsed, groups: inp.groups, composites: inp.composites, search: inp.search, cell: inp.grid.cell, grid: [inp.grid.nx, inp.grid.ny, inp.grid.nz] };
+  if (!isos.every((v) => v > 0)) { stopWorker(); drop(); settleShell('empty', 'Set a cut-off above zero.'); return; }
+  const key = `${inp.key}|${isos}`, info = { holesUsed: inp.holesUsed, groups: inp.groups, composites: inp.composites, search: inp.search, cell: inp.grid.cell, grid: [inp.grid.nx, inp.grid.ny, inp.grid.nz] };
   // A cached result for these inputs: drop any build still running for older ones.
-  if (shell.mesh?.key === key) { if (shell.busy) { stopWorker(); shell.pending = null; shell.status = ''; } if (G.shellMesh?.userData.key !== key) placeShell(); else styleShell(); if (shell.status !== 'ready' && shell.status !== 'empty') settleShell(shell.mesh.indices.length ? 'ready' : 'empty', shell.mesh.indices.length ? '' : 'No part of the grid reaches the cut-off.'); return; }
+  if (shell.mesh?.key === key) { if (shell.busy) { stopWorker(); shell.pending = null; shell.status = ''; } if (G.shellMesh?.userData.key !== key) placeShell(); else styleShell(); if (shell.status !== 'ready' && shell.status !== 'empty') settleShell(shellParts() ? 'ready' : 'empty', shellParts() ? '' : 'No part of the grid reaches the cut-off.'); return; }
   if (shell.busy && shell.pending === key) return;
   stopWorker(); drop();
   if (!shell.worker) shell.worker = new Worker(new URL('./shell-worker.js', import.meta.url), { type: 'module' });
@@ -924,19 +971,21 @@ function syncShell() {
     shell.pending = null;
     if (d.type === 'error') { settleShell('error', d.message); return; }
     shell.field = { key: inp.key, data: d.field };
-    shell.mesh = { key, positions: d.positions, indices: d.indices, origin: [inp.grid.x0, inp.grid.y0, inp.grid.z0], stats: { ...info, ...d.stats, ms: Math.round(performance.now() - t0) } };
+    shell.mesh = { key, parts: d.parts, origin: [inp.grid.x0, inp.grid.y0, inp.grid.z0], stats: { ...info, ...d.stats, ms: Math.round(performance.now() - t0) } };
     if (G) placeShell();
-    settleShell(d.indices.length ? 'ready' : 'empty', d.indices.length ? '' : 'No part of the grid reaches the cut-off. Lower it, or widen the search radius.');
+    settleShell(shellParts() ? 'ready' : 'empty', shellParts() ? '' : 'No part of the grid reaches the cut-off. Lower it, or widen the search radius.');
   };
   shell.worker.onerror = (e) => { if (id !== shell.job) return; shell.pending = null; e.preventDefault?.(); settleShell('error', e.message || 'The shell could not be built.'); };
-  shell.worker.postMessage({ id, holes: inp.holes, grid: inp.grid, top: inp.top, search: inp.search, iso, field });
+  shell.worker.postMessage({ id, holes: inp.holes, grid: inp.grid, top: inp.top, search: inp.search, isos, field });
 }
 function cancelShell() {
   if (!shell.busy) return getState();
   stopWorker(); shell.pending = null; S.shell.enabled = false; settleShell('cancelled', 'Cancelled.'); return getState();
 }
 function setShell(o = {}) {
-  const sh = S.shell;
+  const sh = S.shell, { shading, ramp, shells, ...rest } = o;
+  // The shading, ramp and nested shells are checked by look.js (EXT hook), which draws them.
+  if ([shading, ramp, shells].some((v) => v !== undefined)) return extLoad('look').then((m) => { m.patchShell(sh, { shading, ramp, shells }); return setShell(rest); });
   if (o.enabled !== undefined) sh.enabled = !!o.enabled;
   [['cutoff', 0, 1e9], ['search', 5, 5000], ['cell', 2, 200]].forEach(([k, lo, hi]) => {
     if (o[k] === undefined) return; if (o[k] === null || o[k] === '' || o[k] === 'auto') { sh[k] = null; return; }
@@ -954,9 +1003,10 @@ function setShell(o = {}) {
 function renderShellUI() {
   const sh = S.shell, busy = shell.busy, st = shell.mesh?.stats;
   $('shell-on').checked = sh.enabled; $('shell-color').value = shellColor(); $('shell-ghost').checked = !!sh.throughTerrain;
-  if (document.activeElement?.id !== 'shell-cut') $('shell-cut').value = +shellCut().toPrecision(4);
+  if (document.activeElement?.id !== 'shell-cut') $('shell-cut').value = +shellCut().toPrecision(4); $('shell-cut').disabled = !!sh.shells?.length;
   $('shell-unit').textContent = S.valueLabel; $('shell-op').value = Math.round(sh.opacity * 100); $('shell-op-out').textContent = `${Math.round(sh.opacity * 100)}%`;
-  $('shell-search').value = sh.search ?? ''; $('shell-cell').value = sh.cell ?? '';
+  $('shell-search').value = sh.search ?? ''; $('shell-cell').value = sh.cell ?? ''; $('shell-shade').value = sh.shading || 'solid+edges'; $('shell-ramp').value = sh.ramp || 'brand';
+  if (document.activeElement?.id !== 'shell-cuts') $('shell-cuts').value = (sh.shells || []).map((x) => x.cutoff).join(', ');
   $('shell-search').placeholder = `auto${st ? ` (${st.search} m)` : ''}`; $('shell-cell').placeholder = `auto${st ? ` (${+st.cell.toFixed(1)} m)` : ''}`;
   $('shell-prog').hidden = !busy; $('shell-prog').value = shell.progress; $('shell-cancel').hidden = !busy;
   $('shell-msg').textContent = busy ? `Estimating… ${Math.round(shell.progress * 100)}%` : shell.status === 'ready' && st
@@ -1112,22 +1162,25 @@ const baseDist = (plunge) => {
   const r = plunge * Math.PI / 180;
   return Math.hypot(G.diagH, G.depth * Math.cos(r)) * (1 + 0.25 * Math.sin(r)) * 1.65 * Math.pow(Math.max(1, 1.6 / (W / H)), 0.85) * (G.fit || 1);
 };
-// Aim a little above the block's middle so it sits below the title block, not under it.
-const camTarget = () => G.V(G.cx, G.cy, (G.B.z0 + G.zmax) / 2 + 0.1 * (G.zmax - G.B.z0));
+// Aim a little above the block's middle so it sits below the title block, not under it; aim shifts it
+// (the orthographic framing, saved with the camera as pan).
+const aim = new THREE.Vector3();
+const camTarget = () => G.V(G.cx, G.cy, (G.B.z0 + G.zmax) / 2 + 0.1 * (G.zmax - G.B.z0)).add(aim);
 function getCam() {
   const d = controls.target.clone().sub(camera.position), dist = d.length();
   if (!G || dist < 1e-6) return { azimuth: ((S.secAz - 90) % 360 + 360) % 360, plunge: 20, zoom: 100 };
   d.normalize();
   const plunge = Math.asin(-d.y) * 180 / Math.PI;
-  return { azimuth: Math.round((Math.atan2(d.x, -d.z) * 180 / Math.PI + 360) % 360), plunge: Math.round(plunge), zoom: Math.round(baseDist(plunge) / dist * 100) };
+  return { azimuth: Math.round((Math.atan2(d.x, -d.z) * 180 / Math.PI + 360) % 360), plunge: Math.round(plunge), zoom: Math.round(baseDist(plunge) / dist * 100), ...(aim.lengthSq() > 0.01 ? { pan: aim.toArray().map((v) => Math.round(v * 10) / 10) } : {}) };
 }
 function setCamera(o = {}, instant = true) {
   if (!G) return;
   const cur = getCam(), pick = (v, d) => (v !== undefined && v !== null && Number.isFinite(+v) ? +v : d);
+  if (Array.isArray(o.pan) && o.pan.length === 3 && o.pan.every((v) => Number.isFinite(+v))) aim.fromArray(o.pan.map(Number)); else if (o.pan === null) aim.set(0, 0, 0);
   const az = ((pick(o.azimuth, cur.azimuth) % 360) + 360) % 360, pl = Math.max(3, Math.min(89, pick(o.plunge, cur.plunge))), zoom = Math.max(40, Math.min(250, pick(o.zoom, cur.zoom)));
   const T = camTarget(), to = T.clone().sub(lookVec(az, pl).multiplyScalar(baseDist(pl) * 100 / zoom));
   controls.minDistance = baseDist(pl) * 0.39; controls.maxDistance = baseDist(pl) * 2.6;
-  if (instant || matchMedia('(prefers-reduced-motion: reduce)').matches) { tween = null; camera.position.copy(to); controls.target.copy(T); controls.update(); }
+  if (instant || matchMedia('(prefers-reduced-motion: reduce)').matches) { tween = null; camera.position.copy(to); controls.target.copy(T); controls.update(); camera.updateProjectionMatrix(); }
   else tween = { from: camera.position.clone(), fromT: controls.target.clone(), to, toT: T, t0: performance.now() };
 }
 // Presets. "Facing the section" looks perpendicular to A–A′ with A on the left, as in the section view.
@@ -1144,11 +1197,13 @@ function blockOverflow() {
   [[G.B.x0, G.B.y0], [G.B.x1, G.B.y0], [G.B.x1, G.B.y1], [G.B.x0, G.B.y1]].forEach(([x, y]) => { ys.push(proj(G.V(x, y, G.B.z0))[1], proj(G.V(x, y, G.surf(x, y)))[1]); });
   return Math.max(1, (Math.max(...ys) - cy) / Math.max(1, bot - cy), (cy - Math.min(...ys)) / Math.max(1, cy - top));
 }
-function applyView(which, instant) {
+const applyView = (which, instant) => frameView((VIEWS[which] || VIEWS.a)(), instant);
+function frameView(v, instant) {
   if (!G) return;
-  const v = (VIEWS[which] || VIEWS.a)(), from = camera.position.clone(), fromT = controls.target.clone();
-  G.fit = 1; setCamera(v, true);
+  const from = camera.position.clone(), fromT = controls.target.clone();
+  aim.set(0, 0, 0); G.fit = 1; setCamera(v, true);
   for (let i = 0; i < 4; i++) { const f = blockOverflow(); if (f <= 1.005) break; G.fit *= f * 1.01; setCamera(v, true); }
+  if (ortho()) EXT.look?.frameContent(); // EXT hook: loaded with the orthographic projection
   if (!instant && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
     const to = camera.position.clone(), toT = controls.target.clone(); camera.position.copy(from); controls.target.copy(fromT); controls.update();
     tween = { from, fromT, to, toT, t0: performance.now() };
@@ -1166,11 +1221,32 @@ function syncCamUI() {
   schedulePublish();
 }
 
+// The scene (S.scene): sun, shadows, relief darkening, haze and theme; and the projection (S.projection).
+// Validated in look.js (loaded on first use); the page applies the result.
+async function setScene(o = {}) {
+  (await extLoad('look')).patchScene(S.scene, o);
+  applyTheme(); if (G) { if (o.edge) rebuildScene(true); shadeTerrain(); paintTerrain(); restyle(); } extScene(); drawSectionView(); renderExtUI(); schedulePublish();
+  return getState();
+}
+const hazeNow = () => { if (EXT.look) EXT.look.haze(); }; // EXT hook: look.js loads with the first haze
+async function setView(o = {}) {
+  if (o.projection !== undefined) { if (!['perspective', 'orthographic'].includes(o.projection)) throw new Error('projection must be "perspective" or "orthographic".'); S.projection = o.projection; }
+  if (ortho()) await extLoad('look');
+  if (G) { const c = getCam(); frameView({ azimuth: c.azimuth, plunge: c.plunge, zoom: 100 }, true); }
+  renderExtUI(); schedulePublish(); return getState();
+}
+
 // ============================================================
 // 6. Figure overlay (drawn on a canvas so exports match the preview exactly)
 // ============================================================
 const SANS = '"Source Sans 3", "Segoe UI", sans-serif', MONO = '"IBM Plex Mono", monospace';
-const INK = '#142126', MUTED = '#5f6e72', RULE = '#c6cecf';
+// The overlay palette, light or dark (S.scene.theme): ink, muted text, rules and the paper (cards, halos).
+let INK = '#142126', MUTED = '#5f6e72', RULE = '#c6cecf', PAPER = '255,255,255';
+const paper = (a = 1) => `rgba(${PAPER},${a})`, dark = () => S.scene.theme === 'dark';
+function applyTheme() {
+  [INK, MUTED, RULE, PAPER] = dark() ? ['#e6ecee', '#a4b1b5', '#3b484c', '22,29,32'] : ['#142126', '#5f6e72', '#c6cecf', '255,255,255'];
+  scene.background.set(dark() ? '#161d20' : '#ffffff');
+}
 const tmpV = new THREE.Vector3();
 const proj = (v) => { tmpV.copy(v).project(camera); return [(tmpV.x + 1) / 2 * W, (1 - tmpV.y) / 2 * H, tmpV.z]; };
 function roundRect(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
@@ -1182,10 +1258,12 @@ function kit(ctx, Wc, Hc) {
 function fitText(ctx, t, maxW) { if (ctx.measureText(t).width <= maxW) return t; while (t.length > 1 && ctx.measureText(`${t}…`).width > maxW) t = t.slice(0, -1); return `${t}…`; }
 const hexRgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
 const lumOf = (rgb) => { const c = rgb.map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; };
-const textOn = (hex) => (lumOf(hexRgb(hex)) > 0.45 ? INK : '#ffffff');
+const textOn = (hex) => (lumOf(hexRgb(hex)) > 0.45 ? '#142126' : '#ffffff');
+// The primary colour for text and lines on the paper: light ink instead where a dark primary would vanish.
+const pri = () => (dark() && lumOf(hexRgb(S.primary)) < 0.2 ? INK : S.primary);
 // Brand colours for figure furniture (S.primary and S.accent, set from the logo): legend headers, highlighted
 // (new) holes, the grade shell. Grade, geophysics and lithology colours stay scientific, never from here.
-const brandTone = (kind) => ({ head: uses(S, 'brandHeadings') ? S.primary : INK, highlight: S.accent, shell: S.accent }[kind] || S.accent);
+const brandTone = (kind) => ({ head: uses(S, 'brandHeadings') ? pri() : INK, highlight: S.accent, shell: S.accent }[kind] || S.accent);
 function setSpacing(ctx, px) { if ('letterSpacing' in ctx) ctx.letterSpacing = `${px}px`; }
 
 function drawLogo(ctx, K, Wc, forExport) {
@@ -1204,7 +1282,7 @@ function drawHeader(ctx, K, Wc, title, subtitle, logoW) {
   ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
   if (S.company) { font(700, 13); setSpacing(ctx, 1.4 * u); ctx.fillStyle = S.accent; y += 12 * u; ctx.fillText(fitText(ctx, S.company.toUpperCase(), maxW), x, y); setSpacing(ctx, 0); y += 6 * u; }
   let ts = 30; font(700, ts); while (ts > 17 && ctx.measureText(title).width > maxW) { ts -= 1; font(700, ts); }
-  y += ts * u * 0.98; ctx.fillStyle = S.primary; ctx.fillText(fitText(ctx, title, maxW), x, y);
+  y += ts * u * 0.98; ctx.fillStyle = pri(); ctx.fillText(fitText(ctx, title, maxW), x, y);
   if (subtitle) { font(400, 16); ctx.fillStyle = MUTED; y += 22 * u; ctx.fillText(fitText(ctx, subtitle, maxW), x, y); }
   ctx.fillStyle = S.accent; ctx.fillRect(m, m, 5 * u, y - m + 5 * u);
   return y + 8 * u;
@@ -1230,11 +1308,11 @@ function drawFooter(ctx, K, Wc, Hc, credits = [], notes = []) {
   if (block) { for (;;) { font(400, fs); lines = wrapNotes(notes, mw, wide - 44 * u, 99); if (lines.length <= 3 || fs <= 8) break; fs -= 0.5; } lh = (fs + 3.5) * u; }
   const g = band ? 3 * u : 0, rule = y - 16 * u - lines.length * lh - (lines.length ? g : 0);
   // The footer is a white band: the block or its shadow never shows through the notes and credits.
-  if (band) { ctx.fillStyle = '#ffffff'; ctx.fillRect(0, rule, Wc, Hc - rule); }
+  if (band) { ctx.fillStyle = paper(); ctx.fillRect(0, rule, Wc, Hc - rule); }
   ctx.strokeStyle = RULE; ctx.lineWidth = u; ctx.beginPath(); ctx.moveTo(m, rule); ctx.lineTo(Wc - m, rule); ctx.stroke();
   ctx.textBaseline = 'alphabetic'; let creditW = 0;
   // A white halo keeps the footer legible where the block or its shadow runs under it.
-  const halo = (t, x, yy) => { ctx.save(); ctx.lineJoin = 'round'; ctx.lineWidth = 4 * u; ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.strokeText(t, x, yy); ctx.restore(); ctx.fillText(t, x, yy); };
+  const halo = (t, x, yy) => { ctx.save(); ctx.lineJoin = 'round'; ctx.lineWidth = 4 * u; ctx.strokeStyle = paper(0.9); ctx.strokeText(t, x, yy); ctx.restore(); ctx.fillText(t, x, yy); };
   if (S.credit) {
     font(600, 11.5); ctx.textAlign = 'right'; ctx.fillStyle = '#7c898c'; const t = 'Made with Exploration Maps'; creditW = ctx.measureText(t).width + 17 * u; halo(t, Wc - m, y);
     const s = 10 * u, mx = Wc - m - creditW, my = y - s + u; ctx.fillStyle = INK; ctx.fillRect(mx, my, s, s); ctx.fillStyle = '#c65322'; ctx.fillRect(mx + s * 0.52, my + s * 0.18, s * 0.3, s * 0.3);
@@ -1248,8 +1326,8 @@ function drawFooter(ctx, K, Wc, Hc, credits = [], notes = []) {
 }
 function tagLabel(ctx, K, t, x, y) {
   const { u, font } = K; font(700, 15); const w = Math.max(24 * u, ctx.measureText(t).width + 12 * u);
-  ctx.fillStyle = S.primary; roundRect(ctx, x - w / 2, y - 12 * u, w, 24 * u, 3 * u); ctx.fill();
-  ctx.fillStyle = textOn(S.primary); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(t, x, y + u); ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  ctx.fillStyle = pri(); roundRect(ctx, x - w / 2, y - 12 * u, w, 24 * u, 3 * u); ctx.fill();
+  ctx.fillStyle = textOn(pri()); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(t, x, y + u); ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
 }
 
 // Callouts: the top intercepts, minus any hidden, plus any forced on, with optional reworded lines.
@@ -1274,17 +1352,17 @@ function drawCallout(ctx, K, x, y, c, M, target) {
   const { u, font } = K, { L, w1, bw, bh } = M;
   // The leader leaves the side facing the hole.
   const r = target[0] >= x + bw / 2, x0 = r ? x + bw : x, y0 = y + bh / 2, xm = r ? Math.max(x0 + 16 * u, Math.min(target[0] - 30 * u, x0 + 60 * u)) : Math.min(x0 - 16 * u, Math.max(target[0] + 30 * u, x0 - 60 * u));
-  ctx.strokeStyle = S.primary; ctx.lineWidth = 1.3 * u; ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(xm, y0); ctx.lineTo(target[0], target[1]); ctx.stroke();
+  ctx.strokeStyle = pri(); ctx.lineWidth = 1.3 * u; ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(xm, y0); ctx.lineTo(target[0], target[1]); ctx.stroke();
   M.leader = [[x0, y0, xm, y0], [xm, y0, target[0], target[1]]];
-  ctx.beginPath(); ctx.arc(target[0], target[1], 3.6 * u, 0, Math.PI * 2); ctx.fillStyle = S.primary; ctx.fill(); ctx.lineWidth = 1.2 * u; ctx.strokeStyle = '#fff'; ctx.stroke();
-  ctx.fillStyle = 'rgba(255,255,255,0.96)'; ctx.strokeStyle = RULE; ctx.lineWidth = u; roundRect(ctx, x, y, bw, bh, 4 * u); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.arc(target[0], target[1], 3.6 * u, 0, Math.PI * 2); ctx.fillStyle = pri(); ctx.fill(); ctx.lineWidth = 1.2 * u; ctx.strokeStyle = '#fff'; ctx.stroke();
+  ctx.fillStyle = paper(0.96); ctx.strokeStyle = RULE; ctx.lineWidth = u; roundRect(ctx, x, y, bw, bh, 4 * u); ctx.fill(); ctx.stroke();
   ctx.fillStyle = S.accent; ctx.fillRect(x + 7 * u, y + 7 * u, 4 * u, bh - 14 * u);
   ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
   font(700, 15); ctx.fillStyle = INK; ctx.fillText(L.l1, x + 18 * u, y + 20 * u);
   if (L.l1b) { font('italic 400', 13); ctx.fillStyle = MUTED; ctx.fillText(L.l1b, x + 18 * u + w1, y + 20 * u); }
   if (L.l2) { font(600, 13.5); ctx.fillStyle = INK; ctx.fillText(L.l2, x + 18 * u, y + 40 * u); }
   font(600, 11, true); const tw = ctx.measureText(c.h.id).width + 12 * u;
-  ctx.fillStyle = S.primary; ctx.fillRect(x, y + bh + u, tw, 17 * u); ctx.fillStyle = textOn(S.primary); ctx.fillText(c.h.id, x + 6 * u, y + bh + 13.5 * u);
+  ctx.fillStyle = pri(); ctx.fillRect(x, y + bh + u, tw, 17 * u); ctx.fillStyle = textOn(pri()); ctx.fillText(c.h.id, x + 6 * u, y + bh + 13.5 * u);
 }
 const ribLabel = () => (S.calloutMode === 'published' ? 'Published interval' : 'Reported interval');
 const legendRows = () => binRows(S.bins, S.displayCutoff, BIN_COLORS); // rows under the cut-off merge into its "trace only" row
@@ -1293,14 +1371,14 @@ const meshName = (n) => n.replace(/\.obj$/i, '').replace(/^sample_/, '').replace
 // measured and drawn as cards the same way on the 3D figure and the section.
 const swLine = (c, w, dash) => (ctx, x, cy, u) => { ctx.strokeStyle = c; ctx.lineWidth = w * u; ctx.setLineDash(dash ? [dash * u, 3 * u] : []); ctx.beginPath(); ctx.moveTo(x, cy); ctx.lineTo(x + 22 * u, cy); ctx.stroke(); ctx.setLineDash([]); };
 function legendSecs() {
-  const holes = [{ label: 'Drill hole collar', draw: (ctx, x, cy, u) => { ctx.beginPath(); ctx.arc(x + 11 * u, cy, 5 * u, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth = 2.4 * u; ctx.strokeStyle = INK; ctx.stroke(); } }];
+  const holes = [{ label: 'Drill hole collar', draw: (ctx, x, cy, u) => { ctx.beginPath(); ctx.arc(x + 11 * u, cy, 5 * u, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth = 2.4 * u; ctx.strokeStyle = '#142126'; ctx.stroke(); } }];
   if (project.holes.some((h) => h.prov)) holes.push({ label: 'Provisional position', draw: swLine('#59646a', 2, 4) });
   holes.push(...extLegendRows()); // EXT hook: planned, new and previous rows
   const assays = legendRows().map(([label, c]) => ({ label, mono: true, draw: (ctx, x, cy, u) => { ctx.fillStyle = c; roundRect(ctx, x, cy - 4 * u, 22 * u, 8 * u, 4 * u); ctx.fill(); } }));
   if (S.displayCutoff !== null) assays.push({ label: `< ${S.displayCutoff}: trace only`, mono: true, draw: swLine('#59646a', 1.5) });
   if (S.ribbons && callouts.length) [[ribLabel(), RIB_COLORS[0]], ...(callouts.some((c) => c.ic.incl) ? [['incl.', RIB_COLORS[1]]] : [])].forEach(([label, c], i) => assays.push({ label, sep: !i, draw: (ctx, x, cy, u) => { ctx.fillStyle = c; ctx.fillRect(x, cy - 3 * u, 22 * u, 6 * u); } }));
   const model = G.meshes.filter(({ name }) => S.meshes[name].show).map(({ name }) => [meshName(name), S.meshes[name].color]);
-  if (shellShown()) model.unshift([`Grade shell ≥ ${shellCutText()}`, shellColor()]);
+  if (shellShown()) model.unshift(...shellList().map((x) => [x.label || `Grade shell ≥ ${shellCutText([x.cutoff])}`, x.color]));
   return [{ key: 'holes', rows: holes }, { key: 'assays', title: `Assay · ${S.valueLabel}`, rows: assays },
     { key: 'model', title: 'Model', rows: model.map(([label, c]) => ({ label, draw: (ctx, x, cy, u) => { ctx.globalAlpha = 0.6; ctx.fillStyle = c; ctx.fillRect(x, cy - 6 * u, 22 * u, 12 * u); ctx.globalAlpha = 1; } })) }].filter((s) => s.rows.length);
 }
@@ -1315,7 +1393,7 @@ function cardSize(ctx, K, secs) {
 }
 function drawCard(ctx, K, x, y, w, h, secs) {
   const { u, font } = K; let yy = y + 12 * u;
-  ctx.fillStyle = 'rgba(255,255,255,0.96)'; ctx.strokeStyle = RULE; ctx.lineWidth = u; roundRect(ctx, x, y, w, h, 5 * u); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = paper(0.96); ctx.strokeStyle = RULE; ctx.lineWidth = u; roundRect(ctx, x, y, w, h, 5 * u); ctx.fill(); ctx.stroke();
   secs.forEach((s, i) => {
     if (i) yy += 6 * u;
     ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
@@ -1356,7 +1434,7 @@ function drawScaleBar(ctx, K, footTop, lay) {
     if (!lay.clear(box)) continue; // keeps clear of hole IDs, legends and labels
     return lay.add(box.map((v, i) => v + (i < 2 ? -6 : 6) * u), 2, () => { // a margin, so no tick crowds the "0"
       ctx.lineCap = 'butt'; ctx.lineWidth = 6 * u; ctx.strokeStyle = INK; ctx.beginPath(); ctx.moveTo(...sp[0]); ctx.lineTo(...sp[1]); ctx.stroke();
-      ctx.strokeStyle = '#fff'; ctx.beginPath(); ctx.moveTo(...sp[1]); ctx.lineTo(...sp[2]); ctx.stroke();
+      ctx.strokeStyle = paper(); ctx.beginPath(); ctx.moveTo(...sp[1]); ctx.lineTo(...sp[2]); ctx.stroke();
       ctx.lineWidth = u; ctx.strokeStyle = INK; ctx.beginPath(); ctx.moveTo(sp[0][0], sp[0][1] - 3 * u); ctx.lineTo(sp[2][0], sp[2][1] - 3 * u); ctx.lineTo(sp[2][0], sp[2][1] + 3 * u); ctx.lineTo(sp[0][0], sp[0][1] + 3 * u); ctx.closePath(); ctx.stroke();
       font(400, 12, true); ctx.fillStyle = INK; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
       ctx.fillText('0', sp[0][0], sp[0][1] + lab * u); ctx.fillText(String(D / 2), sp[1][0], sp[1][1] + lab * u); ctx.fillText(`${D} m`, sp[2][0], sp[2][1] + lab * u); ctx.textAlign = 'left';
@@ -1371,7 +1449,7 @@ function drawScaleBar(ctx, K, footTop, lay) {
   // Nudged along the bottom; with no room it pushes out lower-priority items (elevation ticks), or is left out.
   return lay.place([0.5, 0.35, 0.65, 0.2, 0.8].map((f) => W * f - len / 2).map((x) => [x - 10 * u, y - 20 * u, x + len + 90 * u, y + 8 * u]), 2, ([bx]) => {
     const x = bx + 10 * u;
-    ctx.fillStyle = INK; ctx.fillRect(x, y, len / 2, 6 * u); ctx.fillStyle = '#fff'; ctx.fillRect(x + len / 2, y, len / 2, 6 * u); ctx.strokeStyle = INK; ctx.lineWidth = u; ctx.strokeRect(x, y, len, 6 * u);
+    ctx.fillStyle = INK; ctx.fillRect(x, y, len / 2, 6 * u); ctx.fillStyle = paper(); ctx.fillRect(x + len / 2, y, len / 2, 6 * u); ctx.strokeStyle = INK; ctx.lineWidth = u; ctx.strokeRect(x, y, len, 6 * u);
     font(400, 12, true); ctx.fillStyle = INK; ctx.textAlign = 'center'; ctx.fillText('0', x, y - 5 * u); ctx.fillText(`${D} m (at block centre)`, x + len, y - 5 * u); ctx.textAlign = 'left';
   });
 }
@@ -1394,7 +1472,7 @@ function alongLabel(ctx, K, t, pts, others) {
   }
   let { ang } = best; if (ang > Math.PI / 2 + 0.01 || ang < -Math.PI / 2 + 0.01) ang += Math.PI;
   ctx.save(); ctx.translate(best.cx, best.cy); ctx.rotate(ang);
-  ctx.fillStyle = 'rgba(255,255,255,0.94)'; roundRect(ctx, -w / 2, -hh / 2, w, hh, hh / 2); ctx.fill();
+  ctx.fillStyle = paper(0.94); roundRect(ctx, -w / 2, -hh / 2, w, hh, hh / 2); ctx.fill();
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = S.accent; ctx.fillText(t, 0.7 * u, 0.8 * u);
   ctx.restore(); setSpacing(ctx, 0); ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
 }
@@ -1420,7 +1498,7 @@ function drawElevTicks(ctx, K, top, bottom, lay, lines = []) {
     lay.add(box, 0, () => {
       font(500, 11.5, true); ctx.textAlign = 'right'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
       ctx.strokeStyle = INK; ctx.lineWidth = 1.2 * u; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x - 7 * u, y); ctx.stroke();
-      const t = `${Math.round(z)} m`; ctx.lineWidth = 3 * u; ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.strokeText(t, x - 10 * u, y); ctx.fillStyle = INK; ctx.fillText(t, x - 10 * u, y);
+      const t = `${Math.round(z)} m`; ctx.lineWidth = 3 * u; ctx.strokeStyle = paper(0.9); ctx.strokeText(t, x - 10 * u, y); ctx.fillStyle = INK; ctx.fillText(t, x - 10 * u, y);
       ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
     });
   }
@@ -1446,35 +1524,41 @@ function freeSpot(L) {
   return spots.find(([x, y]) => { const bx = [x * W - bw / 2 - pad, y * H - bh / 2 - pad, x * W + bw / 2 + pad, y * H + bh / 2 + pad];
     return bx[0] > 0 && bx[2] < W && !overlayOcc.some((b) => !(bx[2] < b[0] || bx[0] > b[2] || bx[3] < b[1] || bx[1] > b[3])); }) || [0.5, 0.5];
 }
-function drawLabels(ctx, K, forExport) {
+function drawLabels(ctx, K, forExport, obst = [], area = [0, 0, W, H]) {
   const { u } = K, hits = [];
   S.labels.forEach((L) => {
     if (L.kind === 'stat') { extStat(ctx, K, L, hits, forExport); return; } // EXT hook: stat boxes
-    const cx = L.x * W, cy = L.y * H, { title, lines, lh, padY, bw, bh } = labelSize(ctx, K, L), box = [cx - bw / 2, cy - bh / 2, cx + bw / 2, cy + bh / 2];
+    const { title, lines, lh, padY, bw, bh } = labelSize(ctx, K, L), [tx, ty] = L.arrow ? tipAt(L) : [];
+    // An arrow's leader runs straight or bends once around the cards, their text and the markers (layout.js);
+    // where it cannot, the label moves near its tip, off the block, unless it was dragged there (pinned).
+    const x0 = L.x * W, y0 = L.y * H, others = obst.filter((b) => Math.abs(b[0] - (x0 - bw / 2)) > 0.5 || Math.abs(b[1] - (y0 - bh / 2)) > 0.5);
+    const { at: [cx, cy], pts } = !L.arrow ? { at: [x0, y0] } : !uses(S, 'clearLeaders') || !EXT.look ? { at: [x0, y0], pts: [[x0, y0], [tx, ty]] } : EXT.look.leaderSpot([x0, y0], [tx, ty], [bw, bh], others, { frame: area, soft: [blockBox()], pad: 5 * u, unit: u, pinned: L.pinned || S.autoLabels === false });
+    const box = [cx - bw / 2, cy - bh / 2, cx + bw / 2, cy + bh / 2];
     if (L.arrow) {
-      const [tx, ty] = tipAt(L), dx = tx - cx, dy = ty - cy, d = Math.hypot(dx, dy);
+      while (pts.length > 2 && Math.hypot(tx - pts[pts.length - 2][0], ty - pts[pts.length - 2][1]) < 30 * u) pts.splice(-2, 1); // no bend at the head
+      const [qx, qy] = pts[1], dx = qx - cx, dy = qy - cy, d = Math.hypot(tx - cx, ty - cy);
       if (d > 4 * u) {
-        const t = Math.min(bw / 2 / (Math.abs(dx) || 1e-9), bh / 2 / (Math.abs(dy) || 1e-9)), sx = cx + dx * t + dx / d * 5 * u, sy = cy + dy * t + dy / d * 5 * u, ang = Math.atan2(dy, dx), hl = 13 * u;
-        const ex = tx - Math.cos(ang) * hl * 0.8, ey = ty - Math.sin(ang) * hl * 0.8;
-        if (Math.hypot(ex - sx, ey - sy) > 2 * u && (ex - sx) * dx + (ey - sy) * dy > 0) {
-          ctx.lineCap = 'round'; ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 6 * u; ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(ex, ey); ctx.stroke();
-          ctx.strokeStyle = S.primary; ctx.lineWidth = 2.6 * u; ctx.stroke(); ctx.lineCap = 'butt';
+        const t = Math.min(bw / 2 / (Math.abs(dx) || 1e-9), bh / 2 / (Math.abs(dy) || 1e-9)), l0 = Math.hypot(dx, dy) || 1, [px, py] = pts[pts.length - 2], hl = 13 * u, ang = Math.atan2(ty - py, tx - px);
+        const line = [[cx + dx * Math.min(1, t) + dx / l0 * 5 * u, cy + dy * Math.min(1, t) + dy / l0 * 5 * u], ...pts.slice(1, -1), [tx - Math.cos(ang) * hl * 0.8, ty - Math.sin(ang) * hl * 0.8]];
+        if (t < 1 && Math.hypot(tx - px, ty - py) > hl) {
+          ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.beginPath(); line.forEach((p, i) => (i ? ctx.lineTo(...p) : ctx.moveTo(...p)));
+          ctx.strokeStyle = paper(0.9); ctx.lineWidth = 6 * u; ctx.stroke(); ctx.strokeStyle = pri(); ctx.lineWidth = 2.6 * u; ctx.stroke(); ctx.lineCap = 'butt';
         }
         ctx.save(); ctx.translate(tx, ty); ctx.rotate(ang); ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-hl, -hl * 0.42); ctx.lineTo(-hl, hl * 0.42); ctx.closePath();
-        ctx.lineJoin = 'round'; ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 3 * u; ctx.stroke(); ctx.fillStyle = S.primary; ctx.fill(); ctx.restore();
+        ctx.lineJoin = 'round'; ctx.strokeStyle = paper(0.9); ctx.lineWidth = 3 * u; ctx.stroke(); ctx.fillStyle = pri(); ctx.fill(); ctx.restore();
       }
       if (!forExport) hits.push({ id: L.id, kind: 'tip', x: tx, y: ty, r: 12 * u + 6 });
     }
-    if (!title) { ctx.fillStyle = 'rgba(255,255,255,0.97)'; ctx.strokeStyle = RULE; ctx.lineWidth = u; roundRect(ctx, box[0], box[1], bw, bh, Math.min(bh / 2, 16 * u)); ctx.fill(); ctx.stroke(); }
+    if (!title) { ctx.fillStyle = paper(0.97); ctx.strokeStyle = RULE; ctx.lineWidth = u; roundRect(ctx, box[0], box[1], bw, bh, Math.min(bh / 2, 16 * u)); ctx.fill(); ctx.stroke(); }
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
     lines.forEach((t, i) => {
       const y = box[1] + padY + lh * (i + 0.5) + u, tt = title ? t.toUpperCase() : t;
-      if (title) { ctx.lineWidth = 6 * u; ctx.strokeStyle = 'rgba(255,255,255,0.88)'; ctx.strokeText(tt, cx, y); ctx.fillStyle = S.primary; } else ctx.fillStyle = INK;
+      if (title) { ctx.lineWidth = 6 * u; ctx.strokeStyle = paper(0.88); ctx.strokeText(tt, cx, y); ctx.fillStyle = pri(); } else ctx.fillStyle = INK;
       ctx.fillText(tt, cx, y);
     });
     setSpacing(ctx, 0); ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
     if (!forExport) {
-      hits.push({ id: L.id, kind: 'label', box: [box[0] - 4, box[1] - 4, box[2] + 4, box[3] + 4] });
+      hits.push({ id: L.id, kind: 'label', at: [cx, cy], box: [box[0] - 4, box[1] - 4, box[2] + 4, box[3] + 4] });
       // Handles while laying out: a dashed frame says "drag me"; a ring marks the arrow tip.
       if (currentStep === 'layout') {
         ctx.setLineDash([4 * u, 3 * u]); ctx.strokeStyle = 'rgba(31,120,168,0.7)'; ctx.lineWidth = u; ctx.strokeRect(box[0] - 3 * u, box[1] - 3 * u, bw + 6 * u, bh + 6 * u); ctx.setLineDash([]);
@@ -1492,7 +1576,7 @@ function drawOverlay(ctx, k, forExport) {
   const placed = wallLabelBoxes(), idBoxes = [], occ = [], hits = [];
   project.holes.forEach((h) => {
     const [cx, cy] = proj(G.V(h.c.x, h.c.y, h.c.z)), e = h.path[h.path.length - 1], [ex, ey] = proj(G.V(e.x, e.y, e.z));
-    ctx.beginPath(); ctx.arc(cx, cy, 5 * u, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth = 2.4 * u; ctx.strokeStyle = EXT.tags?.highlightOf(h) || INK; if (h.prov || h.planned) ctx.setLineDash([2.5 * u, 2 * u]); ctx.stroke(); ctx.setLineDash([]);
+    ctx.beginPath(); ctx.arc(cx, cy, 5 * u, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth = 2.4 * u; ctx.strokeStyle = EXT.tags?.highlightOf(h) || '#142126'; if (h.prov || h.planned) ctx.setLineDash([2.5 * u, 2 * u]); ctx.stroke(); ctx.setLineDash([]);
     occ.push([cx - 8 * u, cy - 8 * u, cx + 8 * u, cy + 8 * u]);
     // EXT hook: key holes only (the default past 12 holes, when tags.js decides), and no ID where a pill is.
     if (!S.ids || (EXT.tags ? !EXT.tags.idShown(h) || (S.tags.at === 'collar' && EXT.tags.tagShown(h)) : S.tags.at === 'collar' || (S.tags.idMode !== 'all' && project.holes.length > 12))) return;
@@ -1504,7 +1588,7 @@ function drawOverlay(ctx, k, forExport) {
     placed.push(box);
     ctx.save(); ctx.translate(ex + Math.cos(ang) * 6 * u, ey + Math.sin(ang) * 6 * u); ctx.rotate(flip ? ang + Math.PI : ang);
     font(500, 11.5, true); ctx.fillStyle = INK; ctx.textBaseline = 'middle'; ctx.textAlign = flip ? 'right' : 'left';
-    ctx.lineWidth = 3 * u; ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.strokeText(h.id, 0, 0); ctx.fillText(h.id, 0, 0); ctx.restore();
+    ctx.lineWidth = 3 * u; ctx.strokeStyle = paper(0.9); ctx.strokeText(h.id, 0, 0); ctx.fillText(h.id, 0, 0); ctx.restore();
     // The rotated text runs from 6u past the hole end along the trace direction.
     const tw = ctx.measureText(h.id).width, x0 = ex + Math.cos(ang) * 6 * u, y0 = ey + Math.sin(ang) * 6 * u, x1 = x0 + Math.cos(ang) * tw, y1 = y0 + Math.sin(ang) * tw;
     idBoxes.push([Math.min(x0, x1) - 8 * u, Math.min(y0, y1) - 8 * u, Math.max(x0, x1) + 8 * u, Math.max(y0, y1) + 8 * u]);
@@ -1514,29 +1598,36 @@ function drawOverlay(ctx, k, forExport) {
     const scr = new Map(project.holes.map((h) => [h, h.path.filter((p, i) => i % 3 === 0).map((p) => proj(G.V(p.x, p.y, p.z))).filter((p) => p[2] < 1)]));
     pend.forEach((h) => { const pts = scr.get(h).filter((p, i, a) => i > a.length * 0.06); if (pts.length > 2) alongLabel(ctx, K, 'ASSAYS PENDING', pts, project.holes.filter((o) => o !== h).flatMap((o) => scr.get(o))); });
   }
-  // Section ends
-  const [A, Bp] = sectionEnds();
-  [[A, 'A'], [Bp, 'A′']].forEach(([p, t]) => { const [x, y] = proj(G.V(p.x, p.y, G.surf(p.x, p.y) + G.diag * 0.035)); tagLabel(ctx, K, t, x, y); occ.push([x - 22 * u, y - 14 * u, x + 22 * u, y + 14 * u]); });
+  // Section ends: above the terrain, nudged off the text labels; drawn after the pills, which keep their
+  // leaders off them.
+  const [A, Bp] = sectionEnds(), labBoxes = S.labels.map((L) => { const { bw, bh } = labelSize(ctx, K, L); setSpacing(ctx, 0); return [L.x * W - bw / 2, L.y * H - bh / 2, L.x * W + bw / 2, L.y * H + bh / 2]; });
+  const marks = [[A, 'A'], [Bp, 'A′']].map(([p, t]) => {
+    const [x0, y0] = proj(G.V(p.x, p.y, G.surf(p.x, p.y) + G.diag * 0.035)), at = ([dx, dy]) => [x0 + dx * u, y0 + dy * u];
+    const [x, y] = (uses(S, 'clearLeaders') ? [[0, 0], [0, -34], [-40, -10], [40, -10], [0, -68]] : [[0, 0]]).map(at).find(([a, b]) => !labBoxes.some((l) => boxHits([a - 22 * u, b - 14 * u, a + 22 * u, b + 14 * u], l))) || [x0, y0];
+    occ.push([x - 22 * u, y - 14 * u, x + 22 * u, y + 14 * u]); if (uses(S, 'clearLeaders')) return [t, x, y];
+    tagLabel(ctx, K, t, x, y); return null; // figures before version 3: under the pills
+  }).filter(Boolean);
   // Frame furniture
   const logo = drawLogo(ctx, K, W, forExport);
   const headBottom = drawHeader(ctx, K, W, S.title, S.subtitle, logo.w);
   const footTop = drawFooter(ctx, K, W, H, terrainCredits(true), autoNotes('3d'));
   // The layout pass: everything below registers its box in occ; the text labels, placed by hand, first.
-  occ.push(...idBoxes, [0, 0, W, headBottom], [0, footTop, W, H], ...S.labels.map((L) => { const { bw, bh } = labelSize(ctx, K, L); setSpacing(ctx, 0); return [L.x * W - bw / 2, L.y * H - bh / 2, L.x * W + bw / 2, L.y * H + bh / 2]; }));
+  occ.push(...idBoxes, [0, 0, W, headBottom], [0, footTop, W, H], ...labBoxes);
   const lay = makeLayout(W, H, 6 * u, occ);
   // Plan inset under the logo (EXT hook: or a map inset)
   if (S.inset && !EXT.tags?.drawInset(ctx, K, { W, top: logo.bottom + 16 * u, occ })) {
     const iw = (narrow ? 118 : 150) * u, sc = iw / Math.max(G.bw, G.bh), bw = G.bw * sc, bh = G.bh * sc, ix = W - m - iw, iy = logo.bottom + 16 * u, P = (x, y) => [ix + (iw - bw) / 2 + (x - G.B.x0) * sc, iy + (G.B.y1 - y) * sc];
-    ctx.fillStyle = '#fff'; ctx.strokeStyle = RULE; ctx.lineWidth = u; roundRect(ctx, ix - 8 * u, iy - 8 * u, iw + 16 * u, bh + 34 * u, 5 * u); ctx.fill(); ctx.stroke(); occ.push([ix - 8 * u, 0, W, iy + bh + 26 * u]);
-    ctx.strokeStyle = S.primary; ctx.lineWidth = 1.4 * u; ctx.strokeRect(ix + (iw - bw) / 2, iy, bw, bh);
+    ctx.fillStyle = paper(); ctx.strokeStyle = RULE; ctx.lineWidth = u; roundRect(ctx, ix - 8 * u, iy - 8 * u, iw + 16 * u, bh + 34 * u, 5 * u); ctx.fill(); ctx.stroke(); occ.push([ix - 8 * u, 0, W, iy + bh + 26 * u]);
+    ctx.strokeStyle = pri(); ctx.lineWidth = 1.4 * u; ctx.strokeRect(ix + (iw - bw) / 2, iy, bw, bh);
     project.holes.forEach((h) => { ctx.strokeStyle = '#7c898c'; ctx.lineWidth = u; ctx.beginPath(); h.path.forEach((p, i) => { const [X, Y] = P(p.x, p.y); i ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y); }); ctx.stroke();
       const [X, Y] = P(h.c.x, h.c.y); ctx.fillStyle = INK; ctx.fillRect(X - 1.5 * u, Y - 1.5 * u, 3 * u, 3 * u); });
     ctx.setLineDash([5 * u, 3 * u]); ctx.strokeStyle = S.accent; ctx.lineWidth = 1.6 * u; ctx.beginPath(); ctx.moveTo(...P(A.x, A.y)); ctx.lineTo(...P(Bp.x, Bp.y)); ctx.stroke(); ctx.setLineDash([]);
-    font(700, 11); ctx.fillStyle = S.primary; ctx.fillText('N ↑', ix + (iw - bw) / 2 + 3 * u, iy + 12 * u);
+    font(700, 11); ctx.fillStyle = pri(); ctx.fillText('N ↑', ix + (iw - bw) / 2 + 3 * u, iy + 12 * u);
     font(400, 11); ctx.fillStyle = MUTED; ctx.textAlign = 'center'; ctx.fillText('Plan of drilling', ix + iw / 2, iy + bh + 18 * u); ctx.textAlign = 'left';
   }
   // EXT hook: collar pills and pending tags, before the legends so those keep clear of them.
   EXT.tags?.drawPills(ctx, K, { placed: placed.concat(labelHits.filter((h) => h.box).map((h) => h.box)), occ, W, H });
+  marks.forEach(([t, x, y]) => tagLabel(ctx, K, t, x, y));
   // Legends: one card (S.legend.merge "one", or "auto" with three or more blocks) or the main card and the
   // layers' cards (EXT hook: lithology, geophysics). A card docked to a corner or dragged stays put; the
   // others take the first spot clear of what is placed and, where they can, of the block itself.
@@ -1559,12 +1650,12 @@ function drawOverlay(ctx, k, forExport) {
   occ.push([0, footTop - 60 * u, m + 160 * u, footTop]);
   const cam = getCam(), ox = m + 22 * u, oy = footTop - 34 * u, T = controls.target, n0 = proj(T), n1 = proj(T.clone().add(new THREE.Vector3(0, 0, -G.diag * 0.1)));
   const ang = Math.atan2(n1[1] - n0[1], n1[0] - n0[0]);
-  ctx.beginPath(); ctx.arc(ox, oy, 21 * u, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.strokeStyle = RULE; ctx.lineWidth = u; ctx.stroke();
+  ctx.beginPath(); ctx.arc(ox, oy, 21 * u, 0, Math.PI * 2); ctx.fillStyle = paper(); ctx.fill(); ctx.strokeStyle = RULE; ctx.lineWidth = u; ctx.stroke();
   ctx.save(); ctx.translate(ox, oy); ctx.rotate(ang + Math.PI / 2);
-  ctx.beginPath(); ctx.moveTo(0, -15 * u); ctx.lineTo(6 * u, 7 * u); ctx.lineTo(0, 3 * u); ctx.closePath(); ctx.fillStyle = S.primary; ctx.fill();
-  ctx.beginPath(); ctx.moveTo(0, -15 * u); ctx.lineTo(-6 * u, 7 * u); ctx.lineTo(0, 3 * u); ctx.closePath(); ctx.fillStyle = '#fff'; ctx.fill(); ctx.strokeStyle = S.primary; ctx.lineWidth = u; ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(0, -15 * u); ctx.lineTo(6 * u, 7 * u); ctx.lineTo(0, 3 * u); ctx.closePath(); ctx.fillStyle = pri(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(0, -15 * u); ctx.lineTo(-6 * u, 7 * u); ctx.lineTo(0, 3 * u); ctx.closePath(); ctx.fillStyle = paper(); ctx.fill(); ctx.strokeStyle = pri(); ctx.lineWidth = u; ctx.stroke();
   ctx.restore();
-  font(700, 10); ctx.fillStyle = S.primary; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('N', ox + Math.cos(ang) * 29 * u, oy + Math.sin(ang) * 29 * u);
+  font(700, 10); ctx.fillStyle = pri(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('N', ox + Math.cos(ang) * 29 * u, oy + Math.sin(ang) * 29 * u);
   ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
   font(600, 13); ctx.fillStyle = INK; ctx.fillText(`Looking ${pad3(cam.azimuth)}°`, ox + 36 * u, oy - 2 * u);
   font(400, 12, true); ctx.fillStyle = MUTED; ctx.fillText(`plunge ${cam.plunge}°${S.vex !== 1 ? ` · VE ${S.vex}×` : ''}`, ox + 36 * u, oy + 14 * u);
@@ -1588,6 +1679,8 @@ function drawOverlay(ctx, k, forExport) {
   occ.push(...boxes.map((b) => [b[0], b[1], b[2] + 10 * u, b[3]]));
   // Callouts beside or bracketed on their hole: placed clear of the column and of its leaders.
   if (free.length) {
+    // ...and of the text labels' arrows, so a box set beside its hole never sits on one.
+    if (uses(S, 'clearLeaders')) S.labels.filter((L) => L.arrow).forEach((L) => leaders.push([L.x * W, L.y * H, ...tipAt(L).slice(0, 2)]));
     leaders.forEach(([x0, y0, x1, y1]) => { const n = Math.ceil(Math.hypot(x1 - x0, y1 - y0) / (12 * u)); for (let i = 0; i <= n; i++) { const x = x0 + (x1 - x0) * i / n, y = y0 + (y1 - y0) * i / n; occ.push([x - 2 * u, y - 2 * u, x + 2 * u, y + 2 * u]); } });
     EXT.tags.drawFree(ctx, K, free, { lay, W, H, hits });
   }
@@ -1595,7 +1688,7 @@ function drawOverlay(ctx, k, forExport) {
   // ticks) are drawn now, those pushed out by something more important left out.
   if (S.elevTicks) drawElevTicks(ctx, K, headBottom, footTop, lay, leaders);
   lay.flush();
-  drawLabels(ctx, K, forExport);
+  drawLabels(ctx, K, forExport, occ.filter((b) => b[2] - b[0] < W - 1 && (b[2] - b[0] > 18 * u || b[3] - b[1] > 18 * u)), [0, headBottom, W, footTop]);
   if (!forExport) { overlayOcc = occ.slice(); labelHits = labelHits.concat(hits); } // legends and callouts drag too
   ctx.restore();
 }
@@ -1604,7 +1697,7 @@ function drawOverlay(ctx, k, forExport) {
 // 7. Section A–A′
 // ============================================================
 function drawSection(ctx, Wc, Hc, forExport) {
-  ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, Wc, Hc);
+  ctx.fillStyle = paper(); ctx.fillRect(0, 0, Wc, Hc);
   const K = kit(ctx, Wc, Hc), { u, m, font, narrow } = K;
   if (!G) { font(600, 18); ctx.fillStyle = MUTED; ctx.textAlign = 'center'; ctx.fillText('Add a collar file and an assay file to build the section.', Wc / 2, Hc / 2); ctx.textAlign = 'left'; return; }
   const [A, Bp] = sectionEnds(), L = Math.hypot(Bp.x - A.x, Bp.y - A.y), d = { x: (Bp.x - A.x) / L, y: (Bp.y - A.y) / L }, perp = { x: -d.y, y: d.x };
@@ -1622,16 +1715,16 @@ function drawSection(ctx, Wc, Hc, forExport) {
   const ml = narrow ? m + 8 * u : Math.min(330 * u, Wc * 0.27), mr = m + 70 * u, mt = Math.max(headBottom, logo.bottom) + 40 * u, mb = Hc - footTop + 56 * u;
   const s = Math.min((Wc - ml - mr) / L, (Hc - mt - mb) / (zTop - zBot)), ox = ml + ((Wc - ml - mr) - L * s) / 2, oy = mt + ((Hc - mt - mb) - (zTop - zBot) * s) / 2 + (zTop - zBot) * s;
   const X = (t) => ox + t * s, Y = (z) => oy - (z - zBot) * s;
-  ctx.fillStyle = '#eef1f0'; ctx.beginPath(); ctx.moveTo(X(0), Y(zBot)); profile.forEach(([t, z]) => ctx.lineTo(X(t), Y(z))); ctx.lineTo(X(L), Y(zBot)); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = dark() ? '#273236' : '#eef1f0'; ctx.beginPath(); ctx.moveTo(X(0), Y(zBot)); profile.forEach(([t, z]) => ctx.lineTo(X(t), Y(z))); ctx.lineTo(X(L), Y(zBot)); ctx.closePath(); ctx.fill();
   extSection(ctx, { A, Bp, X, Y, L, clip: () => { ctx.beginPath(); ctx.moveTo(X(0), Y(zBot)); profile.forEach(([t, z]) => ctx.lineTo(X(t), Y(z))); ctx.lineTo(X(L), Y(zBot)); ctx.closePath(); ctx.clip(); } }); // EXT hook
-  ctx.strokeStyle = S.primary; ctx.lineWidth = 1.8 * u; ctx.beginPath(); profile.forEach(([t, z], i) => (i ? ctx.lineTo(X(t), Y(z)) : ctx.moveTo(X(t), Y(z)))); ctx.stroke();
+  ctx.strokeStyle = pri(); ctx.lineWidth = 1.8 * u; ctx.beginPath(); profile.forEach(([t, z], i) => (i ? ctx.lineTo(X(t), Y(z)) : ctx.moveTo(X(t), Y(z)))); ctx.stroke();
   // Elevation ticks
   font(400, 11, true); ctx.fillStyle = MUTED; ctx.strokeStyle = RULE; ctx.lineWidth = u;
   const stepZ = niceRound((zTop - zBot) / 5);
   for (let z = Math.ceil(zBot / stepZ) * stepZ; z < zTop; z += stepZ) { ctx.beginPath(); ctx.moveTo(X(L) + 4 * u, Y(z)); ctx.lineTo(X(L) + 10 * u, Y(z)); ctx.stroke(); ctx.fillText(`${Math.round(z)} m`, X(L) + 14 * u, Y(z) + 4 * u); }
   const barW = Math.max(6 * u, Math.min(12 * u, s * 7));
   shown.forEach(({ h, pts }) => {
-    ctx.strokeStyle = '#2c3d42'; ctx.lineWidth = u; ctx.beginPath(); let on = false; if (h.prov || h.planned) ctx.setLineDash([5 * u, 3 * u]);
+    ctx.strokeStyle = dark() ? '#c9d2d4' : '#2c3d42'; ctx.lineWidth = u; ctx.beginPath(); let on = false; if (h.prov || h.planned) ctx.setLineDash([5 * u, 3 * u]);
     pts.forEach((p) => { if (Math.abs(p.off) > S.secW) { on = false; return; } on ? ctx.lineTo(X(p.t), Y(p.z)) : ctx.moveTo(X(p.t), Y(p.z)); on = true; }); ctx.stroke(); ctx.setLineDash([]);
     h.ints.forEach((it) => {
       const bi = intervalShown(it) ? binIndex(it.vals[S.valueCol]) : -1; if (bi < 1) return;
@@ -1666,7 +1759,7 @@ function drawSection(ctx, Wc, Hc, forExport) {
   tagLabel(ctx, K, 'A', X(0), Y(profile[0][1]) - 24 * u); tagLabel(ctx, K, 'A′', X(L), Y(profile[200][1]) - 24 * u);
   // Bottom strip: scale bar left, horizontal legend right
   const sy = footTop - 18 * u, sb = [10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000].find((d) => d * s >= 120 * u) || niceRound(L / 3);
-  ctx.fillStyle = INK; ctx.fillRect(m, sy, sb * s / 2, 6 * u); ctx.fillStyle = '#fff'; ctx.fillRect(m + sb * s / 2, sy, sb * s / 2, 6 * u); ctx.strokeStyle = INK; ctx.lineWidth = u; ctx.strokeRect(m, sy, sb * s, 6 * u);
+  ctx.fillStyle = INK; ctx.fillRect(m, sy, sb * s / 2, 6 * u); ctx.fillStyle = paper(); ctx.fillRect(m + sb * s / 2, sy, sb * s / 2, 6 * u); ctx.strokeStyle = INK; ctx.lineWidth = u; ctx.strokeRect(m, sy, sb * s, 6 * u);
   font(400, 12, true); ctx.fillStyle = INK; ctx.fillText('0', m, sy - 6 * u); ctx.textAlign = 'right'; ctx.fillText(`${sb} m`, m + sb * s, sy - 6 * u); ctx.textAlign = 'left';
   let items = legendRows().slice(0, 4).reverse(); font(400, 12, true);
   // The interval bars join the strip when a hole on the section has them and there is room.
@@ -1692,7 +1785,7 @@ function drawSectionView() {
 function loop(now) {
   if (tween) { const k = Math.min(1, (now - tween.t0) / 900), e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
     camera.position.lerpVectors(tween.from, tween.to, e); controls.target.lerpVectors(tween.fromT, tween.toT, e); if (k >= 1) tween = null; }
-  controls.update();
+  controls.update(); if (ortho()) camera.updateProjectionMatrix(); hazeNow();
   if (G && S.view === '3d') { camera.updateMatrixWorld(); if (!G.ribbonView || camera.getWorldDirection(tmpV).dot(G.ribbonView) < 0.99998) { placeRibbons(); faceWalls(); } }
   if (S.view === '3d') { renderer.render(scene, camera); drawOverlay(ov.getContext('2d'), DPR, false); syncCamUI(); }
   requestAnimationFrame(loop);
@@ -1702,7 +1795,7 @@ function loop(now) {
 function figureCanvas(view, layer = 'figure') {
   const f = FORMATS[S.format], out = document.createElement('canvas'); out.width = f.w; out.height = f.h; const ctx = out.getContext('2d');
   if (view === 'section') { ctx.scale(f.w / W, f.h / H); drawSection(ctx, W, H, true); return out; }
-  const k = f.w / W; tween = null; controls.update(); placeRibbons(); faceWalls();
+  const k = f.w / W; tween = null; controls.update(); camera.updateProjectionMatrix(); hazeNow(); placeRibbons(); faceWalls();
   if (layer !== 'annotations') {
     const bg = scene.background; if (layer === 'scene') scene.background = null; // the renderer has alpha, so this clears to transparent
     renderer.setPixelRatio(k); renderer.setSize(W, H, false); renderer.render(scene, camera);
@@ -2096,6 +2189,9 @@ $('shell-op').addEventListener('input', (e) => setShell({ opacity: +e.target.val
 $('shell-color').addEventListener('input', (e) => setShell({ color: e.target.value }));
 [['shell-search', 'search'], ['shell-cell', 'cell']].forEach(([id, k]) => $(id).addEventListener('change', (e) => { try { setShell({ [k]: e.target.value === '' ? null : +e.target.value }); } catch (err) { status(err.message); } }));
 $('shell-ghost').addEventListener('change', (e) => setShell({ throughTerrain: e.target.checked }));
+$('shell-shade').addEventListener('change', (e) => setShell({ shading: e.target.value }));
+$('shell-ramp').addEventListener('change', (e) => setShell({ ramp: e.target.value }));
+$('shell-cuts').addEventListener('change', (e) => setShell({ shells: e.target.value.split(/[,;\s]+/).filter(Boolean).map((c) => ({ cutoff: +c })) }).catch((err) => { status(err.message); renderShellUI(); }));
 $('shell-cancel').addEventListener('click', () => { cancelShell(); status('Grade shell cancelled.'); });
 // Metal equivalent
 const capMetal = (t) => String(t).charAt(0).toUpperCase() + String(t).slice(1).toLowerCase();
@@ -2136,35 +2232,9 @@ function setEquivalent(o) {
   status(`${name}: ${eqInfo().formula}.`);
   return getState();
 }
-function eqForm() {
-  const metals = {};
-  $('eq-rows').querySelectorAll('[data-eqm]').forEach((r) => { if (r.querySelector('input[type=checkbox]').checked) metals[r.dataset.eqm] = { price: +r.querySelector('[data-p]').value, recovery: +r.querySelector('[data-r]').value }; });
-  return { base: $('eq-base').value, basePrice: +$('eq-bprice').value, baseRecovery: +$('eq-brec').value, metals };
-}
-function eqPreview() {
-  try {
-    const f = eqForm(), present = metalCols(), ms = Object.entries(f.metals).map(([metal, m]) => ({ metal, unit: unitOf(present.get(metal)), ...m }));
-    $('eq-formula').textContent = ms.length ? eqFormula(f.base, eqFactors({ metal: f.base, unit: unitOf(present.get(f.base)), price: f.basePrice, recovery: f.baseRecovery }, ms)) : 'Tick at least one other metal.';
-  } catch (e) { $('eq-formula').textContent = e.message; }
-}
-function renderEq(baseOverride) {
-  const present = metalCols(), e = S.eq, box = $('eq-body');
-  if (present.size < 2) { box.innerHTML = '<p class="muted">Needs at least two metal columns in the assays (for example Cu and Au).</p>'; return; }
-  const base = baseOverride || (e?.base && present.has(e.base) ? e.base : present.has('Cu') ? 'Cu' : [...present.keys()][0]), same = e?.base === base;
-  const val = (m, k, d) => (e?.metals?.[m]?.[k] ?? d);
-  box.innerHTML = `<div class="grid2"><label class="field" style="grid-column:1/-1"><span>Base metal</span><select id="eq-base">${[...present.keys()].map((m) => `<option ${m === base ? 'selected' : ''}>${m}</option>`).join('')}</select></label>
-    <label class="field"><span>${base} US$/${priceUnit(base)}</span><input type="number" id="eq-bprice" step="any" min="0" value="${esc(same ? e.basePrice : METAL_DEFAULTS[base] ?? '')}"></label>
-    <label class="field"><span>${base} recovery %</span><input type="number" id="eq-brec" min="1" max="100" value="${esc(same ? e.baseRecovery : 90)}"></label></div>
-    <div id="eq-rows">${[...present.keys()].filter((m) => m !== base).map((m) => `<div class="eq-row" data-eqm="${m}"><label class="check"><input type="checkbox" ${(e ? !!e.metals[m] : !!METAL_DEFAULTS[m]) ? 'checked' : ''}>${m}</label>
-      <label class="field"><span>US$/${priceUnit(m)}</span><input type="number" data-p step="any" min="0" value="${esc(val(m, 'price', METAL_DEFAULTS[m] ?? ''))}"></label><label class="field"><span>Recovery %</span><input type="number" data-r min="1" max="100" value="${esc(val(m, 'recovery', 90))}"></label></div>`).join('')}</div>
-    <p class="mono" id="eq-formula"></p>
-    <div class="row"><button class="btn" type="button" id="eq-apply">${e ? 'Update' : 'Add'} ${base}Eq_calc</button>${e ? '<button class="btn" type="button" id="eq-remove">Remove</button>' : ''}</div>`;
-  $('eq-base').addEventListener('change', () => renderEq($('eq-base').value));
-  box.querySelectorAll('input').forEach((i) => i.addEventListener('input', eqPreview));
-  $('eq-apply').addEventListener('click', () => { try { setEquivalent(eqForm()); } catch (err) { status(err.message); } });
-  $('eq-remove')?.addEventListener('click', () => setEquivalent(null));
-  eqPreview();
-}
+// The builder's form (panels.js) loads when its panel is first opened, and redraws while it is open.
+function renderEq() { if ($('eq-box').open) import('./panels.js').then((m) => m.renderEq({ S, metalCols, unitOf, setEquivalent, status, esc })); }
+$('eq-box').addEventListener('toggle', renderEq);
 function setProvisional(holeId, flag) {
   if (!project?.holes?.some((h) => h.id === holeId)) throw new Error(`No hole "${holeId}".`);
   if (flag === null || flag === undefined) delete S.provisional[holeId]; else S.provisional[holeId] = !!flag;
@@ -2175,16 +2245,8 @@ function getChecks() {
   const hs = project.holes || [];
   return { counts: { ...C.counts, intervalsShown: hs.reduce((t, h) => t + h.ints.filter(intervalShown).length, 0) }, problems: C.problems, provisionalHoles: hs.filter((h) => h.prov).map((h) => h.id) };
 }
-function renderChecks() {
-  const el = $('checks'), C = getChecks(), open = el.querySelector('details')?.open;
-  if (!C) { el.innerHTML = '<p class="muted">Add files to check them.</p>'; return; }
-  const c = C.counts;
-  el.innerHTML = `<div class="summary">${[[c.holes, 'holes'], [c.holesPlaced, 'placed'], [c.assaysLoaded, 'assays loaded'], [c.assaysPlaced, 'assays placed'], [c.intervalsShown, 'intervals shown']].map(([n, t]) => `<span class="pill">${n.toLocaleString()} ${t}</span>`).join('')}</div>`
-    + (C.problems.length ? `<ul class="checks">${C.problems.map((p) => `<li>${esc(p.message)}</li>`).join('')}</ul>` : '<p class="muted" style="margin-top:6px">No problems found.</p>')
-    + (project.holes?.length ? `<details${open ? ' open' : ''}><summary>Provisional positions (${C.provisionalHoles.length})</summary><p class="muted">Ticked holes draw dashed and fainter, with a legend row. Read from a collar status or flags column; change any here.</p>
-      <div class="prov-list">${project.holes.map((h) => `<label class="check"><input type="checkbox" data-prov="${esc(h.id)}" ${h.prov ? 'checked' : ''}>${esc(h.id)}</label>`).join('')}</div></details>` : '');
-  el.querySelectorAll('[data-prov]').forEach((cb) => cb.addEventListener('change', () => setProvisional(cb.dataset.prov, cb.checked)));
-}
+// The data checks list (panels.js, loaded with the first data).
+const renderChecks = () => import('./panels.js').then((m) => m.renderChecks({ getChecks, project, esc, setProvisional }));
 $('value-col').addEventListener('change', (e) => setStyle({ valueCol: e.target.value }));
 $('value-label').addEventListener('input', (e) => setStyle({ valueLabel: e.target.value }, false));
 $('auto-bins').addEventListener('click', () => { setStyle({ autoBins: true }); status('Colour limits and cut-offs suggested from the data.'); });
@@ -2246,7 +2308,7 @@ function labelPatch(L, o) {
   if (o.text !== undefined) { const t = String(o.text).trim(); if (!t) throw new Error('A label needs some text.'); L.text = t.slice(0, 200); }
   if (o.size !== undefined) { if (!LABEL_SIZES.includes(o.size)) throw new Error('size must be "title" or "normal".'); L.size = o.size; }
   if (o.x !== undefined) L.x = clamp01(o.x, L.x); if (o.y !== undefined) L.y = clamp01(o.y, L.y);
-  if (o.arrow !== undefined) L.arrow = !!o.arrow;
+  if (o.arrow !== undefined) L.arrow = !!o.arrow; if (o.pinned !== undefined) L.pinned = !!o.pinned;
   if (o.rows !== undefined && L.kind === 'stat') L.rows = (Array.isArray(o.rows) ? o.rows : [o.rows]).map((r) => String(r).trim().slice(0, 120)).filter(Boolean).slice(0, 12); // EXT hook
   if (o.ax !== undefined) L.ax = clamp01(o.ax, L.ax); if (o.ay !== undefined) L.ay = clamp01(o.ay, L.ay);
 }
@@ -2256,7 +2318,7 @@ function labelPatch(L, o) {
 function anchorTip(L) {
   L.aw = null; if (!G || !L.arrow) return;
   const r = frameEl.getBoundingClientRect(); rayAt({ clientX: r.left + L.ax * W, clientY: r.top + L.ay * H });
-  const p = raycaster.intersectObjects([G.top, G.tubes, G.tubesP, G.shellMesh, ...G.meshes.map((x) => x.m)].filter((o) => o?.visible), false)[0]?.point;
+  const p = raycaster.intersectObjects([G.top, G.tubes, G.tubesP, ...(G.shellMesh?.children || []), ...G.meshes.map((x) => x.m)].filter((o) => o?.visible), false)[0]?.point;
   if (p) L.aw = [p.x + G.cx, G.cy - p.z, p.y / S.vex + G.zref].map((v) => Math.round(v * 10) / 10);
 }
 const tipAt = (L) => (L.aw && G ? proj(G.V(...L.aw)) : [L.ax * W, L.ay * H]);
@@ -2267,12 +2329,12 @@ function addLabel(o = {}) {
   if (o.x === undefined && o.y === undefined && G) [L.x, L.y] = freeSpot(L);
   if (L.ax === null) L.ax = Math.min(0.97, L.x + 0.1); if (L.ay === null) L.ay = Math.min(0.97, L.y + 0.14);
   anchorTip(L);
-  S.labels.push(L); renderLabelList(); schedulePublish(); status(`Label "${L.text}" added. Drag it on the preview to place it.`);
+  S.labels.push(L); renderLabelList(); schedulePublish(); if (L.arrow) extScene(); // EXT hook: look.js routes the arrow status(`Label "${L.text}" added. Drag it on the preview to place it.`);
   return L.id;
 }
 function updateLabel(id, o = {}) {
   const L = S.labels.find((l) => l.id === id); if (!L) throw new Error(`No label "${id}". Labels: ${S.labels.map((l) => l.id).join(', ') || 'none'}.`);
-  labelPatch(L, o); if (o.ax !== undefined || o.ay !== undefined || o.arrow !== undefined) anchorTip(L); renderLabelList(); schedulePublish(); return getState();
+  labelPatch(L, o); if (o.ax !== undefined || o.ay !== undefined || o.arrow !== undefined) anchorTip(L); if (L.arrow) extScene(); renderLabelList(); schedulePublish(); return getState();
 }
 function removeLabel(id) {
   if (!S.labels.some((l) => l.id === id)) throw new Error(`No label "${id}".`);
@@ -2309,7 +2371,11 @@ $('wall-add').addEventListener('click', () => {
 });
 $('wall-text').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); $('wall-add').click(); } });
 const raycaster = new THREE.Raycaster();
-const rayAt = (e) => { const r = frameEl.getBoundingClientRect(); raycaster.setFromCamera(new THREE.Vector2((e.clientX - r.left) / r.width * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1), camera); return raycaster.ray; };
+const rayAt = (e) => {
+  const r = frameEl.getBoundingClientRect(), x = (e.clientX - r.left) / r.width * 2 - 1, y = -((e.clientY - r.top) / r.height) * 2 + 1; raycaster.setFromCamera(new THREE.Vector2(x, y), camera);
+  if (ortho()) { raycaster.ray.origin.set(x, y, -1).unproject(camera); camera.getWorldDirection(raycaster.ray.direction); } // parallel rays
+  return raycaster.ray;
+};
 const wallLabelAt = (e) => { if (!G?.wallLabelMeshes?.length) return null; rayAt(e); return raycaster.intersectObjects(G.wallLabelMeshes, false)[0] || null; };
 // A point on a face plane, as (u, v) on that face.
 function faceUV(face, P) {
@@ -2345,7 +2411,7 @@ frameEl.addEventListener('pointerdown', (e) => {
     return;
   }
   const L = S.labels.find((l) => l.id === hit.h.id); if (!L) return;
-  e.stopPropagation(); e.preventDefault();
+  e.stopPropagation(); e.preventDefault(); if (hit.h.at) [L.x, L.y] = [hit.h.at[0] / W, hit.h.at[1] / H]; // where it was drawn
   if (hit.h.kind === 'tip') { [L.ax, L.ay] = tipAt(L).slice(0, 2).map((v, i) => clamp01(v / (i ? H : W), 0.5)); L.aw = null; } // dragged on the frame, anchored on release
   labelDrag = { L, tip: hit.h.kind === 'tip', dx: hit.x - (hit.h.kind === 'tip' ? L.ax : L.x) * W, dy: hit.y - (hit.h.kind === 'tip' ? L.ay : L.y) * H, pid: e.pointerId };
   try { frameEl.setPointerCapture(e.pointerId); } catch { /* synthetic events */ }
@@ -2358,9 +2424,9 @@ frameEl.addEventListener('pointermove', (e) => {
   }
   if (labelDrag.make) { labelDrag.L = labelDrag.make(); labelDrag.make = null; extScene(); }
   const r = frameEl.getBoundingClientRect(), x = clamp01((e.clientX - r.left - labelDrag.dx) / W, 0.5), y = clamp01((e.clientY - r.top - labelDrag.dy) / H, 0.5);
-  if (labelDrag.tip) { labelDrag.L.ax = x; labelDrag.L.ay = y; } else { labelDrag.L.x = x; labelDrag.L.y = y; }
+  if (labelDrag.tip) { labelDrag.L.ax = x; labelDrag.L.ay = y; } else { labelDrag.L.x = x; labelDrag.L.y = y; labelDrag.moved = true; }
 }, true);
-const endDrag = () => { press = null; if (labelDrag) { if (labelDrag.tip) anchorTip(labelDrag.L); if (labelDrag.wall) renderWallLabelList(); if (labelDrag.kind) renderLegendUI(); labelDrag = null; schedulePublish(); } };
+const endDrag = () => { press = null; if (labelDrag) { if (labelDrag.tip) anchorTip(labelDrag.L); else if (labelDrag.moved && labelDrag.pid !== undefined) labelDrag.L.pinned = true; if (labelDrag.wall) renderWallLabelList(); if (labelDrag.kind) renderLegendUI(); labelDrag = null; schedulePublish(); } };
 frameEl.addEventListener('pointerup', endDrag, true); frameEl.addEventListener('pointercancel', endDrag, true);
 // A click on or near the preview never moves the camera: the orbit controls on the canvas see no movement
 // until the press has gone 4 px and lasted 150 ms (isClick). The wheel zooms only when it starts over the
@@ -2388,23 +2454,27 @@ function stopOrbit() { const p = camera.position.clone(), t = controls.target.cl
 // lines marked "EXT hook" elsewhere call in here. Settings stay in S as plain data, so the account
 // save keeps them (face images as data URLs, like the logo).
 Object.assign(S, {
-  geology: { enabled: false, title: 'Lithology', faces: 'far', opacity: 0.85, strength: 1.3, hidden: 'nearest', anisotropy: 4, search: null, smooth: 2, texture: true, section: false, legend: [], images: {}, note: 'Geology on block faces interpolated from drill logs; schematic.' },
+  geology: { enabled: false, title: 'Lithology', faces: 'far', opacity: 0.85, strength: 1.3, hidden: 'nearest', anisotropy: 4, search: null, smooth: 2, texture: true, section: false, legend: [], images: {}, note: 'Geology on block faces interpolated from drill logs; schematic.', contacts: true, labels: true, clean: true },
   geophys: { mode: 'off', lines: 'auto', ramp: 'geophys', log: null, min: null, max: null, opacity: 0.85, faces: 'far', search: null, width: null, property: null, label: null, unit: null, note: 'Geophysics: illustrative inversion model' },
   tags: { at: 'toe', style: 'dark', status: {}, fadePrevious: false, newLabel: '', prevLabel: 'Previously released', plannedLabel: 'Planned', groups: [], autoGroup: false, groupRadius: 140, emphasis: 'auto', highlight: {}, highlightNew: true, idMode: 'auto', showId: {}, showTag: {}, hideRows: [], pending: 'collar' },
   histograms: false, insetStyle: 'plan',
 });
-const EXT = {}, extLoading = {}, EXT_IMPORT = { geology: () => import('./geology.js'), geophys: () => import('./geophys.js'), tags: () => import('./tags.js') };
+const EXT = {}, extLoading = {}, EXT_IMPORT = { geology: () => import('./geology.js'), geophys: () => import('./geophys.js'), tags: () => import('./tags.js'), look: () => import('./look.js') };
 const hasRole = (r) => files.some((f) => f.role === r);
 function extWanted() {
   const gp = S.geophys.mode !== 'off' && hasRole('geophys'), t = S.tags;
-  return { geology: (S.geology.enabled && hasRole('litho')) || Object.keys(S.geology.images || {}).length > 0 || gp, geophys: gp,
+  return { look: S.shell.enabled || ortho() || S.scene.haze > 0 || (uses(S, 'clearLeaders') && S.labels.some((l) => l.arrow)), geology: (S.geology.enabled && hasRole('litho')) || Object.keys(S.geology.images || {}).length > 0 || gp, geophys: gp,
     tags: t.at !== 'toe' || t.fadePrevious || t.idMode === 'key' || (t.idMode !== 'all' && (project?.holes?.length || 0) > 12) || Object.keys(t.showId).length > 0 || Object.keys(t.showTag || {}).length > 0 || t.emphasis === 'key' || Object.keys(t.highlight || {}).length > 0
       || S.coPlacement !== 'column' || Object.values(coMap()).some((o) => o.placement || o.x !== undefined) || (S.pendingLabels && t.pending === 'collar' && !!project?.holes?.some(isPending)) || t.autoGroup || t.groups.length > 0 || Object.keys(t.status).length > 0 || S.histograms || S.insetStyle !== 'plan' || S.labels.some((l) => l.kind === 'stat') };
 }
 let extHost = null;
 const host = () => (extHost ||= {
   S, get G() { return G; }, get project() { return project; }, get root() { return root; }, get api() { return EXT_API; }, files: () => files, digest: (f) => fileDigest(f), geo: () => geo,
-  camera, renderer, proj, sectionEnds, faceGeom, textOn, roundRect, fitText, esc, INK, MUTED, RULE, BIN_COLORS, binIndex, traceR, calloutLines, shownCallouts, coOv, isPending, setSpacing, drawCallout, brandTone, figureCanvas, exportLayers, canvasBlob,
+  get INK() { return INK; }, get MUTED() { return MUTED; }, get RULE() { return RULE; }, paper, pri, shell, shellList, dropShell, exportScale: () => FORMATS[S.format].w / W,
+  frame: () => [W, H], aim, controls, getCam, setCamera, blockOverflow, scene,
+  get occ() { return overlayOcc; }, // what the painted unit names keep clear of (geology.js), with the prominent holes:
+  prominent: (h) => !!EXT.tags && (EXT.tags.weight(h) > 1 || !!EXT.tags.highlightOf(h) || EXT.tags.statusOf(h) === 'new'),
+  camera, renderer, proj, sectionEnds, faceGeom, textOn, roundRect, fitText, esc, BIN_COLORS, binIndex, traceR, calloutLines, shownCallouts, coOv, isPending, setSpacing, drawCallout, brandTone, figureCanvas, exportLayers, canvasBlob,
   mosaic, zoomFor, lon2t, lat2t, IMG_URL, IMAGERY_CREDIT, status, redraw: () => { extScene(); drawSectionView(); schedulePublish(); },
 });
 const extLoad = (k) => (extLoading[k] ||= EXT_IMPORT[k]().then((m) => { m.init(host()); EXT[k] = m; return m; }));
@@ -2434,7 +2504,7 @@ const isPlanned = (h) => (S.tags.status[h.id] ? S.tags.status[h.id] === 'planned
 const extCredits = () => EXT.tags?.insetCredits() || [];
 const extNotes = () => [EXT.geology?.note(), EXT.geophys?.note()].filter(Boolean);
 function extLegendRows() {
-  const rows = project.holes.some((h) => h.planned) ? [{ label: S.tags.plannedLabel || 'Planned', draw: (ctx, x, cy, u) => { ctx.strokeStyle = S.primary; ctx.lineWidth = 2 * u; ctx.setLineDash([5 * u, 3 * u]); ctx.beginPath(); ctx.moveTo(x, cy); ctx.lineTo(x + 22 * u, cy); ctx.stroke(); ctx.setLineDash([]); } }] : [];
+  const rows = project.holes.some((h) => h.planned) ? [{ label: S.tags.plannedLabel || 'Planned', draw: (ctx, x, cy, u) => { ctx.strokeStyle = pri(); ctx.lineWidth = 2 * u; ctx.setLineDash([5 * u, 3 * u]); ctx.beginPath(); ctx.moveTo(x, cy); ctx.lineTo(x + 22 * u, cy); ctx.stroke(); ctx.setLineDash([]); } }] : [];
   return EXT.tags ? EXT.tags.legendRows().concat(rows) : rows;
 }
 const extSections = () => (EXT.geology ? [EXT.geology.legendBlock(), EXT.geophys?.legendBlock()].filter(Boolean).map(EXT.geology.sectionOf) : []);
@@ -2462,13 +2532,13 @@ function extState() {
   return { geology: EXT.geology ? EXT.geology.state() : imgs(S.geology), geophys: EXT.geophys ? EXT.geophys.state() : structuredClone(S.geophys), tags: EXT.tags ? EXT.tags.state() : { ...structuredClone(S.tags), histograms: S.histograms, insetStyle: S.insetStyle } };
 }
 function renderExtUI() {
-  document.querySelectorAll('[data-ext]').forEach((el) => { const [g, k] = el.dataset.ext.split('.'), v = g === 'style' ? S[k] : S[g][k]; if (el.type === 'checkbox') el.checked = !!v; else el.value = v; });
+  document.querySelectorAll('[data-ext]').forEach((el) => { const [g, k] = el.dataset.ext.split('.'), v = g === 'style' || g === 'view' ? S[k] : S[g][k]; if (el.type === 'checkbox') el.checked = !!v; else el.value = v; });
   [['geology', 'geo-ui'], ['geophys', 'gp-ui'], ['tags', 'tag-ui']].forEach(([k, id]) => { if (EXT[k]) EXT[k].renderUI($(id)); });
 }
 const extUI = () => renderExtUI();
 document.querySelectorAll('[data-ext]').forEach((el) => el.addEventListener('change', () => {
   const [g, k] = el.dataset.ext.split('.'), v = el.type === 'checkbox' ? el.checked : el.value;
-  Promise.resolve().then(() => (g === 'style' ? setStyle({ [k]: v }, false) : g === 'imagery' ? setStyle({ imagery: { [k]: +v } }, false) : EXT_API[{ geology: 'setGeology', geophys: 'setGeophys', tags: 'setTags' }[g]]({ [k]: v }))).catch((e) => status(e.message));
+  Promise.resolve().then(() => (g === 'style' ? setStyle({ [k]: v }, false) : g === 'imagery' ? setStyle({ imagery: { [k]: +v } }, false) : g === 'scene' ? setScene({ [k]: el.type === 'range' ? +v : v }) : g === 'view' ? setView({ [k]: v }) : EXT_API[{ geology: 'setGeology', geophys: 'setGeophys', tags: 'setTags' }[g]]({ [k]: v }))).catch((e) => status(e.message));
 }));
 $('stat-add').addEventListener('click', () => {
   const title = $('stat-title').value.trim(); if (!title) { status('Type the stat box title first.'); $('stat-title').focus(); return; }
@@ -2518,7 +2588,7 @@ function getState() {
       crs: S.crs, crsLabel: geo?.label || null, crsGuessed: !!geo?.guessed, status: realT.status, message: realT.message || null,
       dem: realT.dem ? (realT.dem.ok ? `z${realT.dem.z}, ${realT.dem.tiles} tiles` : `failed: ${realT.dem.error}`) : null,
       imagery: realT.img ? (realT.img.ok ? `z${realT.img.z}, ${realT.img.tiles} tiles` : `failed: ${realT.img.error}`) : null, imageryShown: imageryShown(), note: G?.terrainNote || null, credits: G ? terrainCredits(true) : [] },
-    camera: G ? getCam() : null, section: { secAz: S.secAz, secW: S.secW, lookingAz: ((S.secAz - 90) % 360 + 360) % 360 },
+    camera: G ? getCam() : null, scene: { ...S.scene, projection: S.projection }, section: { secAz: S.secAz, secW: S.secW, lookingAz: ((S.secAz - 90) % 360 + 360) % 360 },
     labels: S.labels.map((l) => ({ ...l })), wallLabels: S.wallLabels.map((l) => ({ ...l })),
     display: { walls: S.walls, ids: S.ids, inset: S.inset, surface: S.surf, ribbons: S.ribbons, traceWidth: S.traceWidth, pendingLabels: S.pendingLabels, pendingNoAssays: S.pendingNoAssays, elevTicks: S.elevTicks, displayCutoff: S.displayCutoff, lockView: S.lockView, imagery: { ...S.imagery }, legend: structuredClone(S.legend), coPlacement: S.coPlacement, blockMargin: S.blockMargin, blockExtent: S.blockExtent && { ...S.blockExtent } }, meshes: S.meshes,
     shell: { ...S.shell, cutoff: shellCut(), cutoffAuto: S.shell.cutoff === null, column: S.valueCol, legend: `Grade shell ≥ ${shellCutText()}`, shown: shellShown(), status: shell.status, progress: shell.progress, message: shell.message || null,
@@ -2544,7 +2614,7 @@ window.EM3D = Object.freeze({
   setFigureSize, showStep: call(showStep), showView: call(showView), exportPNG,
   setCRS, terrainReady: async () => { await (realT.promise || Promise.resolve()); return getState(); },
   addLabel, updateLabel, removeLabel, exportLayers, sendToDesignDesk, addWallLabel, updateWallLabel, removeWallLabel,
-  setShell, cancelShell, setEquivalent, setProvisional: call(setProvisional), getChecks,
+  setShell, cancelShell, setEquivalent, setProvisional: call(setProvisional), getChecks, setScene, setView,
 });
 
 // ------------------------------------------------------------
@@ -2612,7 +2682,7 @@ async function loadProject(p) {
 }
 // After settings are put into S wholesale (a project opened, a history step): the panel, frame and layers.
 async function settle(cam) {
-  syncBrandUI(); renderSizes(); layoutFrame(); restyle(); showView(S.view === 'section' ? 'section' : '3d');
+  applyTheme(); syncBrandUI(); renderSizes(); layoutFrame(); restyle(); showView(S.view === 'section' ? 'section' : '3d');
   if (cam && G) setCamera(cam, true);
   await extReady(); // EXT hook: layers, face images and the map inset
   lastCamKey = ''; syncCamUI(); drawSectionView(); schedulePublish();
