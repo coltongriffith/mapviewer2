@@ -1924,32 +1924,26 @@ function drawDistanceTicksCanvas(ctx, scene, scale) {
   ctx.lineWidth = scale;
   ctx.strokeStyle = '#000000';
 
-  for (const { px, label } of ticks.x) {
-    ctx.beginPath(); ctx.moveTo(px, mapTop); ctx.lineTo(px, mapTop - tickLen); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(px, mapBottom); ctx.lineTo(px, mapBottom + tickLen); ctx.stroke();
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'bottom';
-    ctx.fillText(label, px, mapTop - tickLen - 2 * scale);
-    ctx.textBaseline = 'top';
-    ctx.fillText(label, px, mapBottom + tickLen + 2 * scale);
+  // Each edge has its own crossings (computeGridTicks): grid lines converge.
+  ctx.textAlign = 'center';
+  for (const [list, y, dir, base] of [[ticks.top, mapTop, -1, 'bottom'], [ticks.bottom, mapBottom, 1, 'top']]) {
+    for (const { px, label } of list) {
+      ctx.beginPath(); ctx.moveTo(px, y); ctx.lineTo(px, y + dir * tickLen); ctx.stroke();
+      ctx.textBaseline = base;
+      ctx.fillText(label, px, y + dir * (tickLen + 2 * scale));
+    }
   }
-  for (const { py, label } of ticks.y) {
-    ctx.beginPath(); ctx.moveTo(mapLeft, py); ctx.lineTo(mapLeft - tickLen, py); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(mapRight, py); ctx.lineTo(mapRight + tickLen, py); ctx.stroke();
-    ctx.save();
-    ctx.translate(mapLeft - tickLen - 2 * scale, py);
-    ctx.rotate(-Math.PI / 2);
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'bottom';
-    ctx.fillText(label, 0, 0);
-    ctx.restore();
-    ctx.save();
-    ctx.translate(mapRight + tickLen + 2 * scale, py);
-    ctx.rotate(Math.PI / 2);
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'bottom';
-    ctx.fillText(label, 0, 0);
-    ctx.restore();
+  for (const [list, x, dir] of [[ticks.left, mapLeft, -1], [ticks.right, mapRight, 1]]) {
+    for (const { py, label } of list) {
+      ctx.beginPath(); ctx.moveTo(x, py); ctx.lineTo(x + dir * tickLen, py); ctx.stroke();
+      ctx.save();
+      ctx.translate(x + dir * (tickLen + 2 * scale), py);
+      ctx.rotate(dir * Math.PI / 2);
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      ctx.fillText(label, 0, 0);
+      ctx.restore();
+    }
   }
   ctx.textAlign = 'left';
   ctx.textBaseline = 'alphabetic';
@@ -1971,21 +1965,22 @@ function renderDistanceTicksSvg(scene, scale) {
     `<rect x="${mapRight}" y="${mapTop}" width="${area.right - mapRight}" height="${mapBottom - mapTop}" fill="#ffffff" />`,
     `<rect x="${mapLeft}" y="${mapTop}" width="${mapRight - mapLeft}" height="${mapBottom - mapTop}" fill="none" stroke="#000000" stroke-width="${1.5 * scale}" />`,
   ];
-  for (const { px, label } of ticks.x) {
-    parts.push(
-      `<line x1="${px}" y1="${mapTop}" x2="${px}" y2="${mapTop - tickLen}" stroke="#000" stroke-width="${scale}" />`,
-      `<line x1="${px}" y1="${mapBottom}" x2="${px}" y2="${mapBottom + tickLen}" stroke="#000" stroke-width="${scale}" />`,
-      t(px, mapTop - tickLen - 2 * scale, ' dominant-baseline="auto"', label),
-      t(px, mapBottom + tickLen + 2 * scale, ' dominant-baseline="hanging"', label),
-    );
+  // Each edge has its own crossings (computeGridTicks): grid lines converge.
+  for (const [list, y, dir, base] of [[ticks.top, mapTop, -1, 'auto'], [ticks.bottom, mapBottom, 1, 'hanging']]) {
+    for (const { px, label } of list) {
+      parts.push(
+        `<line x1="${px}" y1="${y}" x2="${px}" y2="${y + dir * tickLen}" stroke="#000" stroke-width="${scale}" />`,
+        t(px, y + dir * (tickLen + 2 * scale), ` dominant-baseline="${base}"`, label),
+      );
+    }
   }
-  for (const { py, label } of ticks.y) {
-    parts.push(
-      `<line x1="${mapLeft}" y1="${py}" x2="${mapLeft - tickLen}" y2="${py}" stroke="#000" stroke-width="${scale}" />`,
-      `<line x1="${mapRight}" y1="${py}" x2="${mapRight + tickLen}" y2="${py}" stroke="#000" stroke-width="${scale}" />`,
-      `<text text-anchor="middle" font-family="${FRAME_FONT}" font-size="${fontSize}" fill="#000" transform="translate(${mapLeft - tickLen - 2 * scale},${py}) rotate(-90)">${escapeXml(label)}</text>`,
-      `<text text-anchor="middle" font-family="${FRAME_FONT}" font-size="${fontSize}" fill="#000" transform="translate(${mapRight + tickLen + 2 * scale},${py}) rotate(90)">${escapeXml(label)}</text>`,
-    );
+  for (const [list, x, dir] of [[ticks.left, mapLeft, -1], [ticks.right, mapRight, 1]]) {
+    for (const { py, label } of list) {
+      parts.push(
+        `<line x1="${x}" y1="${py}" x2="${x + dir * tickLen}" y2="${py}" stroke="#000" stroke-width="${scale}" />`,
+        `<text text-anchor="middle" font-family="${FRAME_FONT}" font-size="${fontSize}" fill="#000" transform="translate(${x + dir * (tickLen + 2 * scale)},${py}) rotate(${dir * 90})">${escapeXml(label)}</text>`,
+      );
+    }
   }
   return `<g id="em-coordinate-frame">${parts.join('')}</g>`;
 }
