@@ -184,7 +184,7 @@ const BUDGETS = {
   // entries above add up; neither adds the other's code.
   // 170.6 → 170.9 (Oct 2026, drill database 2B, measured 170.56, configured 170.57): the drillSource hooks and the
   // hole-path switch (+0.18 kB); 170.6 left ~30 B, inside chunk-hash churn.
-  // 170.9 → 171.3 (Oct 2026, round 5E, measured 171.00, configured 171.02; +0.41 kB over main): the block section's hooks (~0.4 kB): the holes
+  // 170.9 → 171.3 (Oct 2026, round 5E, measured 171.06, configured 171.08; +0.48 kB over main, the polish's bare-page and bar-palette hooks included): the block section's hooks (~0.4 kB): the holes
   // shown (holeOn on the traces, tubes, collars, callouts, pending tags and section), the block.js entry in drawOverlay (its
   // traces; the logo, title block, legend cards, scale bar and elevation ticks it takes onto the side face), no section
   // letters or line on a block section, the "heading" wall label handed to block.js, the settings and the three EM3D methods.
@@ -257,7 +257,11 @@ const BUDGETS = {
   // faces (blend, dashed contacts, fade, names in capitals; geology.js +1.4), grade bars in the face's plane with a halo,
   // plain brackets and plain IDs (tags.js +1.2), the thin arrow with text (shapes.js +0.35). Fetched only for a figure
   // with holes hidden, a block look or a heading on the block, or on "Block section".
-  threeDLazyJsGzipKb: 119.7,
+  // 119.7 → 121.1 (Oct 2026, round 5E polish, measured 120.60, configured 120.84): the block section's orange bar ramp
+  // and its legend rows, bars merged to a display interval and capped at the front face's width, larger unit names
+  // in their own darker hue on the front face only, the bare page (credits alone), brackets kept off the bars' side,
+  // and the tubes kept hidden by the plan view's sync while the block draws its traces (~1.4 kB, all lazy).
+  threeDLazyJsGzipKb: 121.1,
   // The /3d grade-shell worker (composites estimate and marching cubes) is its own chunk, fetched only
   // when a shell is turned on. Vite emits workers outside the manifest graph, so it is found from the
   // page's chunks (see below) and budgeted here rather than in the page or the app totals.

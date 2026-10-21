@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { roundBelow, depthTicks, extentAround, init, setBlock, setHolesShown, BLOCK } from '../src/three-d/block.js';
-import { histLength, bracketLines } from '../src/three-d/tags.js';
-import { fadeAt, blurMasked } from '../src/three-d/geology.js';
+import { roundBelow, depthTicks, extentAround, init, setBlock, setHolesShown, BLOCK, assayRows } from '../src/three-d/block.js';
+import { histLength, bracketLines, mergeInts, orangeClass, ORANGE } from '../src/three-d/tags.js';
+import { fadeAt, blurMasked, unitInk } from '../src/three-d/geology.js';
 import { withDefaults } from '../src/three-d/design-version.js';
 
 // Exploration Maps 3D round 5E: the block section (block.js), its bars, brackets and softer faces.
@@ -71,5 +71,22 @@ describe('bars, brackets and faces', () => {
     const [b] = blurMasked([a], m, 6, 1, 1);
     expect(b[0]).toBe(0); expect(b[2]).toBeGreaterThan(0); expect(b[3]).toBeLessThan(100); expect(b[4]).toBeGreaterThan(50); expect(b[4]).toBeLessThanOrEqual(100); // never the 999 of the empty cell
     expect(blurMasked([a], m, 6, 1, 0)[0]).toBe(a);
+  });
+  it('merges dense assays into bars of at least the display interval, never across a gap', () => {
+    const ints = [[0, 1, 1], [1, 2, 3], [2, 3, 0.5], [3, 4, 0.5], [6, 8, 2], [8, 9, NaN], [9, 10, 4]].map(([from, to, v]) => ({ from, to, vals: { cu: v } }));
+    expect(mergeInts(ints, 'cu', 2)).toEqual([{ from: 0, to: 2, v: 2 }, { from: 2, to: 4, v: 0.5 }, { from: 6, to: 8, v: 2 }, { from: 9, to: 10, v: 4 }]);
+    expect(mergeInts(ints, 'cu', 1).length).toBe(6); // already as long: one bar per assay
+  });
+  it('colours the bars in four orange classes from the colour limits, the legend the same', () => {
+    const b = [0.05, 0.1, 0.2, 0.5];
+    expect([0.01, 0.07, 0.15, 0.3, 0.6].map((v) => orangeClass(v, b))).toEqual([0, 1, 2, 2, 3]);
+    const host = { S: { histograms: true, bins: b, block: { hist: { side: 'face', palette: 'orange' } } } };
+    init(host);
+    expect(assayRows()).toEqual([['≥ 0.5', ORANGE[3]], ['0.1 – 0.5', ORANGE[2]], ['0.05 – 0.1', ORANGE[1]], ['< 0.05', ORANGE[0]]]);
+    host.S.block.hist.palette = 'bins'; expect(assayRows()).toBe(null);
+  });
+  it('writes unit names in a darker, stronger shade of their colour', () => {
+    expect(unitInk('#c3d3d8')).toBe('#387689'); // the pale blue-grey cover: a deep slate blue
+    expect(unitInk('#f1b5d3')).toMatch(/^#[0-9a-f]{6}$/);
   });
 });

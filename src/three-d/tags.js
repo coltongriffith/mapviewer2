@@ -323,12 +323,13 @@ function plainBracket(ctx, K, it, lay) {
   const ws = lines.map((t) => { font(800, 15); return ctx.measureText(t).width; }), tw = Math.max(...ws), lh = 16.5 * u, th = lines.length * lh + 4 * u;
   // Level with the bracket's middle, else nudged up or down along it (within its length), else the spot overlapping least.
   const off = 9 * u, x0Of = (side) => (side > 0 ? Math.max(a[0], e[0]) + off + 9 * u : Math.min(a[0], e[0]) - off - 9 * u - tw), boxOf = ([side, k]) => [x0Of(side) - 3 * u, mid[1] + k * th - th / 2, x0Of(side) + tw + 3 * u, mid[1] + k * th + th / 2];
-  const reach = Math.abs(e[1] - a[1]) / 2 / th + 0.5, cands = [0, -0.7, 0.7, -1.4, 1.4, -2.1, 2.1].filter((k) => !k || Math.abs(k) <= reach).flatMap((k) => [[-1, k], [1, k]]);
+  // With the grade bars on the face (to the right of the hole) only the left side, opposite them.
+  const away = H.S.histograms && H.S.block?.hist?.side === 'face', reach = Math.abs(e[1] - a[1]) / 2 / th + 0.5, cands = [0, -0.7, 0.7, -1.4, 1.4, -2.1, 2.1, -2.8, 2.8].filter((k) => !k || Math.abs(k) <= reach).flatMap((k) => (away ? [[-1, k]] : [[-1, k], [1, k]]));
   const on = (bx) => lay.boxes.reduce((t, o) => t + overlapArea(bx, o), 0), pick = cands.find((c) => lay.clear(boxOf(c))) || cands.reduce((m, c) => (on(boxOf(c)) < on(boxOf(m)) ? c : m)), side = pick[0], box = lay.add(boxOf(pick));
   let nx = -dy, ny = dx; if (nx * side < 0) { nx = -nx; ny = -ny; }
   const tick = 7 * u, q = (p, k) => [p[0] + nx * k, p[1] + ny * k];
   ctx.lineJoin = 'miter'; ctx.lineCap = 'butt'; ctx.beginPath(); ctx.moveTo(...q(a, off - tick)); ctx.lineTo(...q(a, off)); ctx.lineTo(...q(e, off)); ctx.lineTo(...q(e, off - tick));
-  ctx.strokeStyle = H.paper(0.9); ctx.lineWidth = 5 * u; ctx.stroke(); ctx.strokeStyle = H.INK; ctx.lineWidth = 2.2 * u; ctx.stroke();
+  ctx.strokeStyle = H.paper(0.8); ctx.lineWidth = 4 * u; ctx.stroke(); ctx.strokeStyle = H.INK; ctx.lineWidth = 1.7 * u; ctx.stroke();
   ctx.textBaseline = 'middle'; ctx.textAlign = side > 0 ? 'left' : 'right'; ctx.lineJoin = 'round';
   const x = side > 0 ? box[0] + 3 * u : box[2] - 3 * u;
   lines.forEach((t, i) => {
@@ -368,9 +369,29 @@ export function drawStat(ctx, K, L, Wf, Hf) {
 // With the block's traces over the faces (S.block.traces "overlay") they draw over the opaque faces too.
 const hist = { G: null, mesh: null, halo: null };
 export const histLength = (v, lo, hi, log) => (log ? Math.log(Math.max(v, lo) / lo) / Math.log(hi / lo || 10) : v / hi);
-function frontAlong(view) {
-  const f = ['S', 'E', 'N', 'W'].map((k) => H.faceGeom(k)).sort((p, q) => p.n.dot(view) - q.n.dot(view))[0];
-  return new THREE.Vector3(f.b[0] - f.a[0], 0, -(f.b[1] - f.a[1])).normalize();
+const front = (view) => ['S', 'E', 'N', 'W'].map((k) => H.faceGeom(k)).sort((p, q) => p.n.dot(view) - q.n.dot(view))[0];
+const frontLen = (view) => { const f = front(view); return Math.hypot(f.b[0] - f.a[0], f.b[1] - f.a[1]); };
+function frontAlong(view) { const f = front(view); return new THREE.Vector3(f.b[0] - f.a[0], 0, -(f.b[1] - f.a[1])).normalize(); }
+// The block's bar palette (S.block.hist.palette "orange", as the reference): four classes from the colour limits,
+// below the first, to the second, to the fourth, and above it.
+export const ORANGE = ['#f6efb4', '#f1dd3a', '#f7ae5c', '#e65a10'];
+export const orangeClass = (v, b) => (v < b[0] ? 0 : v < b[1] ? 1 : v < b[3] ? 2 : 3);
+// The intervals as bars on a face: consecutive assays merged (length-weighted) to at least w metres, w the larger of
+// 2 m, the usual assay length, and what draws about 2.5 px thick in the export; a gap in the sampling starts a new bar.
+export function mergeInts(ints, col, w) {
+  const out = []; let cur = null;
+  ints.forEach((it) => {
+    const v = it.vals[col]; if (!Number.isFinite(v)) { cur = null; return; }
+    if (cur && Math.abs(it.from - cur.to) > 1e-6) cur = null;
+    if (!cur) { cur = { from: it.from, to: it.from, s: 0 }; out.push(cur); }
+    cur.s += v * (it.to - it.from); cur.to = it.to; if (cur.to - cur.from >= w - 1e-9) cur = null;
+  });
+  return out.map((c) => ({ from: c.from, to: c.to, v: c.s / (c.to - c.from) }));
+}
+function displayInts(h, col, G) {
+  const ls = h.ints.map((it) => it.to - it.from).sort((a, b) => a - b), med = ls[Math.floor(ls.length / 2)] || 2, mid = h.len / 2;
+  const p = h.posAt(mid), q = h.posAt(Math.min(h.len, mid + 10)), a = H.proj(G.V(p.x, p.y, p.z)), b = H.proj(G.V(q.x, q.y, q.z)), ppm = Math.hypot(b[0] - a[0], b[1] - a[1]) / 10 * H.exportScale();
+  return mergeInts(h.ints, col, Math.max(2, med, ppm > 0 ? 2.5 / ppm : 0));
 }
 export function placeHistograms() {
   const G = H.G, S = H.S, B = S.block?.hist, face = B?.side === 'face', over = S.block?.traces === 'overlay';
@@ -381,7 +402,7 @@ export function placeHistograms() {
     hist.mesh.frustumCulled = false; hist.mesh.renderOrder = 2; H.root.add(hist.mesh); hist.G = G; hist.halo = null;
   }
   if (face && B.halo !== false && !hist.halo) {
-    hist.halo = new THREE.InstancedMesh(hist.mesh.geometry, new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.7, side: THREE.DoubleSide, depthWrite: false }), hist.mesh.instanceMatrix.count);
+    hist.halo = new THREE.InstancedMesh(hist.mesh.geometry, new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false }), hist.mesh.instanceMatrix.count);
     hist.halo.frustumCulled = false; H.root.add(hist.halo);
   }
   [hist.mesh, hist.halo].forEach((m, i) => { if (!m) return; const mt = m.material; if (mt.depthTest === over || (i === 0 && mt.transparent !== over)) { mt.depthTest = !over; if (!i) mt.transparent = over; mt.needsUpdate = true; } m.renderOrder = over ? 9 - i * 0.5 : 2 - i * 0.1; });
@@ -389,18 +410,23 @@ export function placeHistograms() {
   const view = cam.getWorldDirection(new THREE.Vector3()), right = new THREE.Vector3().setFromMatrixColumn(cam.matrixWorld, 0).normalize(), along = face && frontAlong(view);
   const vals = []; H.project.holes.forEach((h) => h.ints.forEach((it) => { const v = it.vals[S.valueCol]; if (Number.isFinite(v)) vals.push(v); }));
   vals.sort((a, b) => a - b); const vmax = Math.max(S.bins[3] * 1.5, vals[Math.floor(0.98 * (vals.length - 1))] || 1), vlo = S.bins[0] > 0 ? S.bins[0] : vmax / 100;
-  const r = H.traceR(), off = face ? 0.6 * r : 2.4 * r, Lmax = G.diag * (face ? 0.075 * (B.length || 1) : 0.1), mx = new THREE.Matrix4(), side = new THREE.Vector3(), nrm = new THREE.Vector3(), col = new THREE.Color(), white = new THREE.Color('#ffffff');
+  // On the face: bars from the trace, to at most ~5.5% of the front face's width, intervals merged to at least 2 m
+  // (and about 2.5 px in the export) where samples are dense; the orange palette colours every grade, the lowest too
+  // (log-scaled from half the first colour limit, so the lowest stay short).
+  const pal = face && B.palette === 'orange', r = H.traceR(), off = face ? 0 : 2.4 * r, Lmax = face ? frontLen(view) * 0.055 * (B.length || 1) : G.diag * 0.1, mx = new THREE.Matrix4(), side = new THREE.Vector3(), nrm = new THREE.Vector3(), col = new THREE.Color(), white = new THREE.Color('#ffffff');
+  const cut = (v) => S.displayCutoff !== null && S.displayCutoff !== undefined && v < S.displayCutoff;
   let n = 0, hn = 0;
-  H.project.holes.filter(holeOn).forEach((h) => h.ints.forEach((it) => {
-    const v = it.vals[S.valueCol], bi = H.binIndex(v); if (!(bi >= 1) || (S.displayCutoff !== null && S.displayCutoff !== undefined && v < S.displayCutoff)) return;
+  H.project.holes.filter(holeOn).forEach((h) => (face ? displayInts(h, S.valueCol, G) : h.ints.map((it) => ({ from: it.from, to: it.to, v: it.vals[S.valueCol] }))).forEach((it) => {
+    const v = it.v, bi = H.binIndex(v); if (pal ? !Number.isFinite(v) || cut(v) : !(bi >= 1) || cut(v)) return;
     const a = h.posAt(it.from), b = h.posAt(it.to), va = G.V(a.x, a.y, a.z), vb = G.V(b.x, b.y, b.z), dir = vb.clone().sub(va), len = dir.length(); if (len < 1e-6) return; dir.divideScalar(len);
     if (face) { side.copy(along).addScaledVector(dir, -along.dot(dir)); if (side.lengthSq() < 1e-6) side.copy(right); side.normalize(); if (side.dot(right) < 0) side.negate(); } // in the face's plane, screen-right
     else { side.crossVectors(dir, view); if (side.lengthSq() < 1e-8) side.copy(right); side.normalize(); if (side.dot(right) > 0) side.negate(); } // screen-left of the trace
     nrm.crossVectors(side, dir).normalize(); if (nrm.dot(view) > 0) nrm.negate();
-    const L = Math.max(r, Lmax * Math.min(1, face ? histLength(v, vlo, vmax, B.scale === 'log') : v / vmax)), c = va.add(vb).multiplyScalar(0.5).addScaledVector(side, off + L / 2), th = len * (face ? 0.82 : 0.98);
+    const t = face ? histLength(v, pal ? vlo / 2 : vlo, vmax, B.scale === 'log') : v / vmax, L = Math.max(pal ? 0.5 * r : r, Lmax * Math.min(1, t)), c = va.add(vb).multiplyScalar(0.5).addScaledVector(side, off + L / 2), th = len * (face ? 0.8 : 0.98);
     mx.makeBasis(side.clone().multiplyScalar(L), dir.clone().multiplyScalar(th), nrm).setPosition(c);
-    hist.mesh.setMatrixAt(n, mx); col.set(H.BIN_COLORS[bi]); if (fade(h)) col.lerp(white, 0.55); hist.mesh.setColorAt(n, col); n++;
-    if (hist.halo && hn < hist.halo.instanceMatrix.count) { const e = 0.9 * r; mx.makeBasis(side.clone().multiplyScalar(L + 2 * e), dir.clone().multiplyScalar(len + 2 * e), nrm).setPosition(c.addScaledVector(nrm, -0.2 * r)); hist.halo.setMatrixAt(hn++, mx); }
+    hist.mesh.setMatrixAt(n, mx); col.set(pal ? ORANGE[orangeClass(v, S.bins)] : H.BIN_COLORS[bi]); if (fade(h)) col.lerp(white, 0.55); hist.mesh.setColorAt(n, col); n++;
+    // No halo on the lowest grades (orange palette), which would read as a band along the hole.
+    if (hist.halo && hn < hist.halo.instanceMatrix.count && (!pal || v >= S.bins[0])) { const e = 0.3 * r; mx.makeBasis(side.clone().multiplyScalar(L + 2 * e), dir.clone().multiplyScalar(len + 2 * e), nrm).setPosition(c.addScaledVector(nrm, -0.2 * r)); hist.halo.setMatrixAt(hn++, mx); }
   }));
   hist.mesh.count = n; hist.mesh.visible = true; hist.mesh.instanceMatrix.needsUpdate = true; if (hist.mesh.instanceColor) hist.mesh.instanceColor.needsUpdate = true;
   if (hist.halo) { hist.halo.count = hn; hist.halo.visible = face && B.halo !== false; hist.halo.instanceMatrix.needsUpdate = true; }

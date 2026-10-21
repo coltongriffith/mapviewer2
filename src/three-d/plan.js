@@ -48,7 +48,9 @@ export function holeBars(h, P, ints, min, off) {
 const on = () => !!H.G && isPlanView(H.getCam().plunge);
 const feat = () => uses(S, 'planView');
 // The tubes hide in a plan view; the bars stand in for them (studio.js placeRibbons, extScene).
-export function sync() { const G = H.G; if (!G?.tubes) return; G.tubes.visible = G.tubesP.visible = !(feat() && on()); }
+// The tubes: hidden in a plan view, and while a block section draws its traces over the faces (block.js), whichever
+// sync runs last (this one runs with the ribbons, on every turn of the camera and before every export).
+export function sync() { const G = H.G; if (!G?.tubes) return; G.tubes.visible = G.tubesP.visible = !(feat() && on()) && S.block?.traces !== 'overlay'; }
 
 let barBoxes = [];
 const holeOn = (h) => !S.holesShown || S.holesShown.includes(h.id); // the holes shown (block.js)

@@ -56,7 +56,7 @@ test('the block section preset sets an opaque block of the chosen holes, its fur
   // The news-release size (3:2), as the reference figure: the side face has room for the legend.
   const st = await page.evaluate(async (holes) => { window.EM3D.setFigureSize('release'); return window.EM3D.applyPreset('blockSection', { holes }); }, HOLES);
   expect(st.holesShown).toEqual(HOLES);
-  expect(st.block).toMatchObject({ furniture: true, traces: 'overlay', brackets: 'plain', page: 'clean', hist: { side: 'face' } });
+  expect(st.block).toMatchObject({ furniture: true, traces: 'overlay', brackets: 'plain', page: 'bare', hist: { side: 'face', scale: 'log', palette: 'orange' } });
   expect(st.geology).toMatchObject({ enabled: true, faces: 'all', opacity: 1, labelStyle: 'caps', blend: 1, fade: 0.3 });
   expect(st.tags).toMatchObject({ at: 'collar', style: 'plain', idMode: 'all', emphasis: 'none', histograms: true });
   expect(st.display).toMatchObject({ coPlacement: 'bracket', ribbons: false, inset: false });
@@ -74,6 +74,13 @@ test('the block section preset sets an opaque block of the chosen holes, its fur
   expect(t.some((x) => /^– \d+ m$/.test(x))).toBe(true);
   expect(t).toContain('Lithology');
   expect(t).not.toContain('A′'); expect(t).not.toContain(st.brand.title);
+  // The block alone on white: no compass or "Looking …", no notes or footnote; the sources kept, small.
+  expect(t.some((x) => /^Looking /.test(x))).toBe(false);
+  expect(t.some((x) => /schematic|true widths/.test(x))).toBe(false);
+  expect(t.some((x) => /Made with Exploration Maps/.test(x))).toBe(true);
+  // The legend's assay rows in the bars' orange ramp: four classes from the colour limits.
+  const b = st.grade.bins;
+  expect(t).toEqual(expect.arrayContaining([`≥ ${b[3]}`, `${b[1]} – ${b[3]}`, `${b[0]} – ${b[1]}`, `< ${b[0]}`]));
   // The furniture is drawn in the face's perspective: skewed text in the editable annotations.
   const zip = unzipSync(Buffer.from((await page.evaluate(() => window.EM3D.exportLayers({ svg: true }))).split(',')[1], 'base64'));
   const svg = new TextDecoder().decode(zip['annotations.svg']);
@@ -133,6 +140,37 @@ test('plain brackets: the length over the grade beside each hole, no chip or "in
   // Back to cards: the round-4 bracket with its chip and card.
   const card = await textsOf(page, async () => { await window.EM3D.setBlock({ brackets: 'card' }); return window.EM3D.exportPNG({ view: '3d' }); });
   expect(card.some((x) => /^\d+ m @ [\d.]+% Cu$/.test(x))).toBe(true);
+});
+
+test('the block\'s traces stay over the faces: the tubes stay hidden after the camera turns and in every export', async ({ page }) => {
+  await open3d(page);
+  await withLogs(page);
+  const r = await page.evaluate(async (holes) => {
+    const E = window.EM3D; await E.applyPreset('blockSection', { holes }); E.setStyle({ histograms: false });
+    const scene = async () => { const z = await E.exportLayers(); return z; };
+    // Turned away and back (the ribbons and plan view re-sync on every turn), then exported.
+    const c = E.getState().camera; E.setCamera({ azimuth: (c.azimuth + 40) % 360 }); await new Promise((res) => { requestAnimationFrame(() => requestAnimationFrame(res)); }); E.setCamera(c);
+    const a = await scene();
+    // Other grade colours would recolour the tubes: the scene, without them, does not change.
+    E.setStyle({ bins: [0.01, 0.02, 0.03, 0.04] }); const b = await scene();
+    await E.setBlock({ traces: 'tubes' }); const c2 = await scene();
+    return [a, b, c2];
+  }, HOLES);
+  const scenes = r.map((z) => Buffer.from(unzipSync(Buffer.from(z.split(',')[1], 'base64'))['scene.png']).toString('base64'));
+  expect(scenes[0] === scenes[1]).toBe(true);
+  expect(scenes[2] === scenes[1]).toBe(false); // with the tubes back, they show
+});
+
+test('a hidden hole leaves the section too, chosen or not: no trace, bars or ID', async ({ page }) => {
+  await open3d(page);
+  const t = await textsOf(page, async () => {
+    const E = window.EM3D; await E.setSection({ holes: ['EX-015', 'EX-021'] }); await E.setHolesShown(['EX-015']);
+    return E.exportPNG({ view: 'section' });
+  });
+  expect(t.some((x) => x.startsWith('EX-015'))).toBe(true);
+  expect(t.some((x) => x.includes('EX-021'))).toBe(false);
+  const both = await textsOf(page, async () => { await window.EM3D.setHolesShown(null); return window.EM3D.exportPNG({ view: 'section' }); });
+  expect(both.some((x) => x.includes('EX-021'))).toBe(true);
 });
 
 test('an earlier figure keeps its look: the pre-round-4 figure and a version 4 figure, before and after a block section', async ({ page }) => {

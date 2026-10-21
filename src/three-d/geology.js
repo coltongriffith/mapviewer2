@@ -274,6 +274,17 @@ function softCanvas(cls, nx, ny, colors, texture, contacts, o) {
   g.putImageData(img, 0, 0); return c;
 }
 
+// A name's ink in capitals: the unit's own hue, more saturated and dark (lightness 0.38), so it reads on its unit.
+export function unitInk(hex) {
+  const [r, g, b] = rgbOf(hex).map((v) => v / 255), mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
+  const h = !d ? 0 : mx === r ? ((g - b) / d + 6) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4, l0 = (mx + mn) / 2, s0 = d ? d / (1 - Math.abs(2 * l0 - 1)) : 0;
+  const sat = Math.min(1, s0 * 1.4 + 0.12), l = 0.38, c = (1 - Math.abs(2 * l - 1)) * sat, x = c * (1 - Math.abs((h % 2) - 1)), m = l - c / 2;
+  const [p, q, t] = [[c, x, 0], [x, c, 0], [0, c, x], [0, x, c], [x, 0, c], [c, 0, x]][Math.floor(h) % 6];
+  return `#${[p, q, t].map((v) => Math.round((v + m) * 255).toString(16).padStart(2, '0')).join('')}`;
+}
+// The face most squarely toward the camera.
+const frontFace = () => { const d = H.camera.getWorldDirection(new THREE.Vector3()); return FACE_KEYS.slice().sort((p, q) => H.faceGeom(p).n.dot(d) - H.faceGeom(q).n.dot(d))[0]; };
+
 // ---------- the faces and the section plane ----------
 let H = null; // host (studio.js), set by init
 export function init(host) { H = host; }
@@ -383,14 +394,18 @@ function geologyCanvas(key, a, b) {
   const hit = planeClasses(key, a, b), cols = colorsNow(), ck = `${cols.join()}|${cfg().texture}|${cfg().contacts}${softKey()}`;
   if (!hit.base || hit.ck !== ck) { hit.base = fill(hit, cols); hit.ck = ck; hit.lk = null; }
   if (key === 'section' || cfg().labels === false) return hit.base;
+  // A block section (block.js) names its units on the front face only, as the reference figure does.
+  if (H.S.block && key !== frontFace()) return hit.base;
   // Unit names in about 22 px type in the export, mirrored on a face seen from inside the block; none on a
   // face seen nearly edge-on (under 300 px across in the export, foreshortened to under 45%, or receding so
   // steeply that its names would slope by more than about 50°).
   const G = H.G, len = Math.hypot(b[0] - a[0], b[1] - a[1]), ht = G.zmax - G.B.z0, zm = G.B.z0 + ht / 2, at = (u, z) => H.proj(G.V(a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u, z));
   const p0 = at(0.5, zm), p1 = at(0.5, zm + 10), pv = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) / 10, e0 = at(0, zm), e1 = at(1, zm), ph = Math.hypot(e1[0] - e0[0], e1[1] - e0[1]) / len, k = H.exportScale();
   if (ph * len * k < 300 || ph < 0.45 * pv / H.S.vex || Math.abs(e1[1] - e0[1]) > 1.2 * Math.abs(e1[0] - e0[0])) return hit.base; // and none sloping steeply
-  const size = Math.min(ht * 0.06, Math.max(ht * 0.015, 22 / (pv * k || 1))), bucket = Math.round(Math.log(size) / Math.log(1.2));
-  const mirror = faceWanted('far', key), font = labelFont(), lk = `${ck}|${bucket}|${mirror}|${cfg().legend.map((e) => e.name).join()}|${viewKey()}|${font}${cfg().labelStyle === 'caps' ? '|caps' : ''}${H.S.block ? `|b${H.S.holesShown}` : ''}`;
+  // In capitals (a block section's names) about 24 u in the export, the cap height 1.6 times the bracket text's.
+  const fm = H.format?.(), want = cfg().labelStyle === 'caps' && fm ? 24 * Math.sqrt(fm.w * fm.h) / 900 : 22;
+  const size = Math.min(ht * (want > 22 ? 0.1 : 0.06), Math.max(ht * 0.015, want / (pv * k || 1))), bucket = Math.round(Math.log(size) / Math.log(1.2));
+  const mirror = faceWanted('far', key), font = labelFont(), lk = `${ck}|${bucket}|${mirror}|${cfg().legend.map((e) => e.name).join()}|${viewKey()}|${font}${cfg().labelStyle === 'caps' ? '|caps' : ''}${H.S.block ? `|b${H.S.holesShown}|${H.format?.().w}` : ''}`;
   if (hit.lk !== lk) { hit.canvas = labelCanvas(hit, cols, 1.2 ** bucket, len, ht, mirror, { at, ph, pv }, font); hit.lk = lk; }
   return hit.canvas;
 }
@@ -441,7 +456,7 @@ function labelCanvas(hit, cols, size, len, ht, mirror, scr, font) {
       let best = null; for (let n = 0, k = 0; k < deep.length && n < 80; k += step) { const p = deep[k]; if (!fits(p)) continue; n++; const r = room(p); if (r > 0 && (!best || r > best.r)) best = { ...p, r }; }
       if (!best) continue;
       g.save(); g.translate((best.i + 0.5) * f, (best.j + 0.5) * f); g.scale(mirror ? -1 : 1, ky / kx);
-      g.fillStyle = `#${rgbOf(cols[cl]).map((v) => Math.round(v * 0.45).toString(16).padStart(2, '0')).join('')}`;
+      g.fillStyle = caps ? unitInk(cols[cl]) : `#${rgbOf(cols[cl]).map((v) => Math.round(v * 0.45).toString(16).padStart(2, '0')).join('')}`;
       lines.forEach((t, i) => g.fillText(t, 0, (i - (lines.length - 1) / 2) * size * 1.1 * kx)); g.restore();
       return;
     }

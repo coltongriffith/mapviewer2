@@ -992,8 +992,9 @@ Whole projects (to keep or move a figure):
                                   side face, the camera 38° round from the front. Only sets settings; change any after
   EM3D.setHolesShown([holeIds] | null)   only these holes drawn (trace, ID, bars, callouts); they all still
                                   shape the geology and the shell. getState().holesShown
-  EM3D.setBlock({furniture, traces: "overlay" | "tubes", brackets: "plain" | "card", page: "clean" | "full",
-                 hist: {side: "face" | "screen", scale: "linear" | "log", halo, length}, holes} | null)
+  EM3D.setBlock({furniture, traces: "overlay" | "tubes", brackets: "plain" | "card", page: "bare" (the block
+                 alone, credits only) | "clean" | "full", hist: {side: "face" | "screen", scale: "linear" | "log",
+                 halo, length, palette: "orange" | "bins"}, holes} | null)
                                   the block look (getState().block); furniture falls back to the page where the
                                   side face is too foreshortened
   EM3D.setGeology({faces: "near", blend (0-3: soft contacts), dash (dashed contact lines), fade (0-1),

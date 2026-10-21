@@ -1264,7 +1264,8 @@ function legendSecs() {
   const holes = [{ label: 'Drill hole collar', draw: (ctx, x, cy, u) => { ctx.beginPath(); ctx.arc(x + 11 * u, cy, 5 * u, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth = 2.4 * u; ctx.strokeStyle = '#142126'; ctx.stroke(); } }];
   if (project.holes.some((h) => h.prov)) holes.push({ label: 'Provisional position', draw: swLine('#59646a', 2, 4) });
   holes.push(...extLegendRows()); // EXT hook: planned, new and previous rows
-  const assays = legendRows().map(([label, c]) => ({ label, mono: true, draw: (ctx, x, cy, u) => { ctx.fillStyle = c; roundRect(ctx, x, cy - 4 * u, 22 * u, 8 * u, 4 * u); ctx.fill(); } }));
+  // EXT hook: the block's bar palette (block.js) in place of the grade colours
+  const assays = (EXT.block?.assayRows() || legendRows()).map(([label, c]) => ({ label, mono: true, draw: (ctx, x, cy, u) => { ctx.fillStyle = c; roundRect(ctx, x, cy - 4 * u, 22 * u, 8 * u, 4 * u); ctx.fill(); } }));
   if (S.displayCutoff !== null) assays.push({ label: `< ${S.displayCutoff}: trace only`, mono: true, draw: swLine('#59646a', 1.5) });
   if (S.ribbons && callouts.length) [[ribLabel(), RIB_COLORS[0]], ...(callouts.some((c) => c.ic.incl) ? [['incl.', RIB_COLORS[1]]] : [])].forEach(([label, c], i) => assays.push({ label, sep: !i, draw: (ctx, x, cy, u) => { ctx.fillStyle = c; ctx.fillRect(x, cy - 3 * u, 22 * u, 6 * u); } }));
   const model = G.meshes.filter(({ name }) => S.meshes[name].show).map(({ name }) => [meshName(name), S.meshes[name].color]);
@@ -1508,7 +1509,7 @@ function drawOverlay(ctx, k, forExport) {
   // Frame furniture
   const logo = BK?.logo ? { w: 0, bottom: m } : drawLogo(ctx, K, W, forExport);
   const headBottom = BK?.head ? m : drawHeader(ctx, K, W, S.title, S.subtitle, logo.w);
-  const footTop = drawFooter(ctx, K, W, H, terrainCredits(true), autoNotes('3d'));
+  const footTop = BK?.foot ? BK.foot(terrainCredits(true)) : drawFooter(ctx, K, W, H, terrainCredits(true), autoNotes('3d')); // EXT hook: a block section's credits alone
   // The layout pass: everything below registers its box in occ; the text labels, placed by hand, first.
   occ.push(...idBoxes, [0, 0, W, headBottom], [0, footTop, W, H], ...labBoxes);
   const lay = makeLayout(W, H, 6 * u, occ);
@@ -1549,6 +1550,7 @@ function drawOverlay(ctx, k, forExport) {
   occ.push([0, footTop - 60 * u, m + 160 * u, footTop]);
   const cam = getCam(), ox = m + 22 * u, oy = footTop - 34 * u, T = controls.target, n0 = proj(T), n1 = proj(T.clone().add(new THREE.Vector3(0, 0, -G.diag * 0.1)));
   const ang = Math.atan2(n1[1] - n0[1], n1[0] - n0[0]);
+  if (!BK?.bare) { // EXT hook: none on a bare block section
   ctx.beginPath(); ctx.arc(ox, oy, 21 * u, 0, Math.PI * 2); ctx.fillStyle = paper(); ctx.fill(); ctx.strokeStyle = RULE; ctx.lineWidth = u; ctx.stroke();
   ctx.save(); ctx.translate(ox, oy); ctx.rotate(ang + Math.PI / 2);
   ctx.beginPath(); ctx.moveTo(0, -15 * u); ctx.lineTo(6 * u, 7 * u); ctx.lineTo(0, 3 * u); ctx.closePath(); ctx.fillStyle = pri(); ctx.fill();
@@ -1558,7 +1560,7 @@ function drawOverlay(ctx, k, forExport) {
   ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
   const [t1, t2] = PV?.foot || [`Looking ${pad3(cam.azimuth)}°`, `plunge ${cam.plunge}°${S.vex !== 1 ? ` · VE ${S.vex}×` : ''}`];
   font(600, 13); ctx.fillStyle = INK; ctx.fillText(t1, ox + 36 * u, oy - 2 * u);
-  font(400, 12, true); ctx.fillStyle = MUTED; ctx.fillText(t2, ox + 36 * u, oy + 14 * u);
+  font(400, 12, true); ctx.fillStyle = MUTED; ctx.fillText(t2, ox + 36 * u, oy + 14 * u); }
   // Intercept callouts, left column between the title and the orientation box
   // Each box goes level with its hole where it can: stacked downward, then pulled up from the bottom.
   // Only if they still do not fit is the lowest-ranked callout dropped (ranking: metal in the interval).
@@ -1603,7 +1605,7 @@ function drawSection(ctx, Wc, Hc, forExport) {
   const [A, Bp] = sectionEnds(), F = secFrame(A, Bp), L = F.L, pr = (p) => toSection(F, p), w = S.secW;
   // Chosen holes (S.section.holes) project whole onto the plane. Otherwise the holes within the width, cut at
   // the slab's edges (design version 3; an earlier figure keeps the 2 m points inside it).
-  const pick = S.section?.holes, chosen = pick && project.holes.filter((h) => pick.includes(h.id)), clean = !!chosen || uses(S, 'cleanSection'), inW = (p) => Math.abs(pr(p).off) <= w;
+  const pick = S.section?.holes, chosen = pick && project.holes.filter((h) => pick.includes(h.id) && holeOn(h)), clean = !!chosen || uses(S, 'cleanSection'), inW = (p) => Math.abs(pr(p).off) <= w;
   const cut = (pts) => (chosen ? [pts] : clean ? clipPath(F, pts, w) : pts.reduce((r, p, i) => { if (inW(p)) { if (i && inW(pts[i - 1])) r[r.length - 1].push(p); else r.push([p]); } return r; }, []));
   const lookAz = ((S.secAz - 90) % 360 + 360) % 360;
   const logo = drawLogo(ctx, K, Wc, forExport), head = S.title.split('·')[0].trim() || S.title;

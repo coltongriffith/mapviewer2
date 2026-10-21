@@ -12,14 +12,17 @@
 //                       foreshortened or they do not fit),
 //     traces: "overlay" thin black traces drawn over the faces (the tubes hidden), the grade bars over them too,
 //     brackets: "plain" a bracket and bold "154 m @ 0.51% Cu" text beside the hole (tags.js), or "card",
-//     page: "clean"     no title block at the top while the block carries a heading, or "full",
-//     hist: { side: "face" (in the front face's plane) | "screen", scale: "linear" | "log", halo, length } }.
+//     page: "bare"      the block alone on white: no title block, compass or notes, the credits small; "clean": no
+//                       title block while the block carries a heading; or "full",
+//     hist: { side: "face" (in the front face's plane) | "screen", scale: "linear" | "log", halo, length,
+//             palette: "orange" (four classes, pale yellow to deep orange, as the reference) | "bins" } }.
 import { fitLine } from './section-geometry.js';
+import { ORANGE } from './tags.js';
 
 let H, S;
 export function init(host) { H = host; S = host.S; }
 
-export const BLOCK = { furniture: true, traces: 'overlay', brackets: 'plain', page: 'clean', hist: { side: 'face', scale: 'linear', halo: true, length: 1 } };
+export const BLOCK = { furniture: true, traces: 'overlay', brackets: 'plain', page: 'bare', hist: { side: 'face', scale: 'log', halo: true, length: 1, palette: 'orange' } };
 const FACES = ['S', 'E', 'N', 'W'], RAD = Math.PI / 180, LOOK = { S: 0, E: 270, N: 180, W: 90 }; // looking at each face from outside
 const dx2 = (g) => (g.b[0] - g.a[0]) ** 2 + (g.b[1] - g.a[1]) ** 2;
 const at = (g, u) => [g.a[0] + (g.b[0] - g.a[0]) * u, g.a[1] + (g.b[1] - g.a[1]) * u];
@@ -53,12 +56,13 @@ function patch(b, o) {
   if (o.furniture !== undefined) b.furniture = !!o.furniture;
   if (o.traces !== undefined) { if (!['overlay', 'tubes'].includes(o.traces)) throw new Error('traces must be "overlay" (thin black lines over the faces) or "tubes" (the coloured tubes).'); b.traces = o.traces; }
   if (o.brackets !== undefined) { if (!['plain', 'card'].includes(o.brackets)) throw new Error('brackets must be "plain" (a bracket and bold text) or "card".'); b.brackets = o.brackets; }
-  if (o.page !== undefined) { if (!['clean', 'full'].includes(o.page)) throw new Error('page must be "clean" (no title block while the block has a heading) or "full".'); b.page = o.page; }
+  if (o.page !== undefined) { if (!['bare', 'clean', 'full'].includes(o.page)) throw new Error('page must be "bare" (the block alone, credits only), "clean" (no title block while the block has a heading) or "full".'); b.page = o.page; }
   if (o.hist !== undefined) {
     const h = o.hist || {}, x = { ...(b.hist || BLOCK.hist) };
     if (h.side !== undefined) { if (!['face', 'screen'].includes(h.side)) throw new Error('hist.side must be "face" (in the face\'s plane) or "screen".'); x.side = h.side; }
     if (h.scale !== undefined) { if (!['linear', 'log'].includes(h.scale)) throw new Error('hist.scale must be "linear" or "log".'); x.scale = h.scale; }
     if (h.halo !== undefined) x.halo = !!h.halo;
+    if (h.palette !== undefined) { if (!['orange', 'bins'].includes(h.palette)) throw new Error('hist.palette must be "orange" (pale yellow to deep orange) or "bins" (the figure\'s grade colours).'); x.palette = h.palette; }
     if (h.length !== undefined) { const v = +h.length; if (!Number.isFinite(v)) throw new Error('hist.length must be a number, 0.3-3 (1: the usual length).'); x.length = Math.max(0.3, Math.min(3, v)); }
     b.hist = x;
   }
@@ -90,8 +94,8 @@ function pick() {
 function frame(v) {
   const G = H.G; H.aim.set(0, 0, 0); G.fit = 1; H.setCamera(v, true);
   for (let i = 0; i < 4; i++) { const f = H.blockOverflow(); if (f <= 1.005) break; G.fit *= f * 1.01; H.setCamera(v, true); }
-  if (S.block?.page !== 'clean') return;
-  const [W, Hf] = H.frame(), u = Math.sqrt(W * Hf) / 900, top = 80 * u, bot = Hf - 64 * u, B = G.B, up = new H.aim.constructor(0, 1, 0);
+  if (S.block?.page === 'full') return;
+  const [W, Hf] = H.frame(), u = Math.sqrt(W * Hf) / 900, top = 80 * u, bot = Hf - (S.block.page === 'bare' ? 36 : 64) * u, B = G.B, up = new H.aim.constructor(0, 1, 0);
   const box = () => { const ps = []; [[B.x0, B.y0], [B.x1, B.y0], [B.x1, B.y1], [B.x0, B.y1]].forEach(([x, y]) => { ps.push(H.proj(G.V(x, y, B.z0)), H.proj(G.V(x, y, G.surf(x, y)))); }); return [Math.min(...ps.map((q) => q[0])), Math.min(...ps.map((q) => q[1])), Math.max(...ps.map((q) => q[0])), Math.max(...ps.map((q) => q[1]))]; };
   for (let i = 0; i < 4; i++) {
     H.camera.updateMatrixWorld(); const b = box(), t = H.controls.target, ppu = H.proj(t.clone().add(up))[1] - H.proj(t)[1];
@@ -174,14 +178,28 @@ export function begin(ctx, K) {
   const B = S.block; if (!B || !H.G) return null;
   if (B.traces === 'overlay') traces(ctx, K);
   const F = B.furniture !== false ? plan(ctx, K) : null;
-  return { head: B.page === 'clean' && S.wallLabels.some((l) => l.size === 'heading' || l.size === 'title'), logo: !!F?.logo, legend: !!F?.legend, ticks: !!F?.ticks, scale: !!F?.scale, draw: (lay) => F && furniture(ctx, K, lay, F) };
+  const bare = B.page === 'bare';
+  return { head: B.page !== 'full' && S.wallLabels.some((l) => l.size === 'heading' || l.size === 'title'), bare, foot: bare && ((credits) => foot(ctx, K, credits)), logo: !!F?.logo, legend: !!F?.legend, ticks: !!F?.ticks, scale: !!F?.scale, draw: (lay) => F && furniture(ctx, K, lay, F) };
+}
+// A bare block section's foot: the sources (imagery, elevation) and the Exploration Maps credit, small, bottom right.
+// Returns the footer's top for the layout pass.
+function foot(ctx, K, credits) {
+  const { u, m, font } = K, [W, Hf] = H.frame(), t = [...credits, ...(S.credit ? ['Made with Exploration Maps'] : [])].join(' · ');
+  if (t) { font(400, 9.5); ctx.textAlign = 'right'; ctx.textBaseline = 'alphabetic'; ctx.fillStyle = H.MUTED; ctx.fillText(t, W - m, Hf - 14 * u); ctx.textAlign = 'left'; }
+  return Hf - 30 * u;
+}
+// The legend's assay rows in the bars' orange palette (studio.js legendSecs), highest first; null with the usual colours.
+export function assayRows() {
+  if (!S.histograms || S.block?.hist?.palette !== 'orange' || S.block.hist.side !== 'face') return null;
+  const b = S.bins;
+  return [[`≥ ${b[3]}`, ORANGE[3]], [`${b[1]} – ${b[3]}`, ORANGE[2]], [`${b[0]} – ${b[1]}`, ORANGE[1]], [`< ${b[0]}`, ORANGE[0]]];
 }
 function traces(ctx, K) {
   const G = H.G, { u } = K;
   H.project.holes.filter(H.holeOn).forEach((h) => {
     const pts = h.path.map((p) => H.proj(G.V(p.x, p.y, p.z))); if (pts.some((p) => p[2] > 1)) return;
     ctx.beginPath(); pts.forEach((p, i) => (i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]))); ctx.lineJoin = 'round';
-    ctx.setLineDash(h.prov || h.planned ? [6 * u, 4 * u] : []); ctx.strokeStyle = H.paper(0.55); ctx.lineWidth = 3.6 * u; ctx.stroke(); ctx.strokeStyle = h.planned ? H.pri() : H.INK; ctx.lineWidth = 1.7 * u; ctx.stroke(); ctx.setLineDash([]);
+    ctx.setLineDash(h.prov || h.planned ? [6 * u, 4 * u] : []); ctx.strokeStyle = h.planned ? H.pri() : H.INK; ctx.lineWidth = 0.85 * u; ctx.stroke(); ctx.setLineDash([]); // ~1.5 px at 2000 px wide
   });
 }
 // The screen frame at (uu, z) on face g: P, and the screen vectors per metre along the face (a, left to right as seen
@@ -294,7 +312,9 @@ export function renderUI(el) {
   const holes = H.project?.holes || [], on = new Set(S.holesShown || holes.map((h) => h.id)), b = S.block, esc = H.esc, co = new Set(H.shownCallouts().map((c) => c.h.id)), hb = b?.hist || BLOCK.hist;
   el.innerHTML = `${b ? `<div class="row" style="gap:14px;flex-wrap:wrap"><label class="check"><input type="checkbox" data-bk="furniture" ${b.furniture !== false ? 'checked' : ''}>Legend, logo, depths and scale on the side face</label>
       <label class="check"><input type="checkbox" data-bk="traces" ${b.traces === 'overlay' ? 'checked' : ''}>Thin traces over the faces</label><label class="check"><input type="checkbox" data-bk="brackets" ${b.brackets === 'plain' ? 'checked' : ''}>Plain brackets</label>
-      <label class="check"><input type="checkbox" data-bk="page" ${b.page === 'clean' ? 'checked' : ''}>No title block (the heading is on the block)</label></div>
+      </div>
+    <div class="grid2" style="margin-top:6px"><label class="field"><span>Page</span><select data-bs="page">${[['bare', 'The block alone (credits only)'], ['clean', 'No title block'], ['full', 'Title block, compass and notes']].map(([v, t]) => `<option value="${v}" ${b.page === v ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
+      <label class="field"><span>Bar colours</span><select data-bh="palette"><option value="orange" ${hb.palette === 'orange' ? 'selected' : ''}>Orange ramp</option><option value="bins" ${hb.palette !== 'orange' ? 'selected' : ''}>The grade colours</option></select></label></div>
     <div class="grid2" style="margin-top:6px"><label class="field"><span>Grade bars</span><select data-bh="side"><option value="face" ${hb.side === 'face' ? 'selected' : ''}>On the front face</option><option value="screen" ${hb.side !== 'face' ? 'selected' : ''}>Facing the camera</option></select></label>
       <label class="field"><span>Bar length</span><select data-bh="scale"><option value="linear" ${hb.scale !== 'log' ? 'selected' : ''}>By grade</option><option value="log" ${hb.scale === 'log' ? 'selected' : ''}>By grade, log scale</option></select></label></div>
     <button class="btn" type="button" data-bk-off style="margin-top:6px">Turn the block look off</button>` : ''}
@@ -308,7 +328,8 @@ export function renderUI(el) {
   el.querySelector('[data-hs-all]')?.addEventListener('click', () => run(() => H.api.setHolesShown(null)));
   el.querySelector('[data-hs-sec]')?.addEventListener('click', () => run(() => H.api.setHolesShown(S.section.holes)));
   el.querySelector('[data-bk-off]')?.addEventListener('click', () => run(() => H.api.setBlock(null)));
-  const V = { traces: ['overlay', 'tubes'], brackets: ['plain', 'card'], page: ['clean', 'full'] };
+  el.querySelectorAll('[data-bs]').forEach((x) => x.addEventListener('change', () => run(() => H.api.setBlock({ [x.dataset.bs]: x.value }))));
+  const V = { traces: ['overlay', 'tubes'], brackets: ['plain', 'card'] };
   el.querySelectorAll('[data-bk]').forEach((cb) => cb.addEventListener('change', () => run(() => H.api.setBlock({ [cb.dataset.bk]: V[cb.dataset.bk] ? V[cb.dataset.bk][cb.checked ? 0 : 1] : cb.checked }))));
   el.querySelectorAll('[data-bh]').forEach((s) => s.addEventListener('change', () => run(() => H.api.setBlock({ hist: { [s.dataset.bh]: s.value } }))));
   const q = el.querySelector('[data-hq]'), filter = () => el.querySelectorAll('.prov-list label').forEach((l) => { l.hidden = !!query && !l.textContent.toLowerCase().includes(query); });
