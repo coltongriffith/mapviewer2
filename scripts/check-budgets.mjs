@@ -88,7 +88,9 @@ const BUDGETS = {
   // 819 → 826 (measured 824.8): the publication check, as totalAuthJsGzipKb above.
   // 826 → 825.5 (Oct 2026, after the /3d trim below; measured 825.2): lowered to what ships, plus 0.3.
   // 825.5 → 828.5 (measured 828.2): the figure style and brand kit style apply, as totalAuthJsGzipKb above.
-  totalJsGzipKb: 828.5,
+  // 828.5 → 828.8 (measured 828.5 in CI): the stale-chunk reload guard and lazyGuarded wrapper in the main entry
+  // (~0.3 kB); chunk-hash churn alone moves this total by about ±20 B, so 828.5 left no room.
+  totalJsGzipKb: 828.8,
   // Standalone pages (/3d, /teams) are separate Vite entries that never share
   // the app's chunks, so they are budgeted on their own instead of in the
   // totals above. /3d carries three.js (~109 kB gzip) and its editor.
