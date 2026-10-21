@@ -128,7 +128,11 @@ const BUDGETS = {
   // 168.5 kept (Oct 2026, figure style, measured 168.34, configured 168.36): the typography hook fits — the brand style
   // saved with a figure, the wait for its fonts as a figure settles, EM3D.setFigureStyle and the lazy chunk's
   // entry. The adapter and the font loading are lazy (typography.js, below).
-  threeDJsGzipKb: 168.5,
+  // 168.5 → 169.3 (Oct 2026, round 5B, measured 168.98, configured 169.0): the hooks for map overlays and shapes
+  // (~0.64 kB): GeoJSON and KML files taken as overlays when added (and kept beside the sample), the overlay areas
+  // painted with the terrain, the draw and section hooks, the legend rows, the saved settings, getState and the six
+  // EM3D methods. Their parsing, placing, drawing and panels are lazy (overlays.js, shapes.js, below).
+  threeDJsGzipKb: 169.3,
   // /3d's own modules fetched on first use (the geology, geophysics and tag layers, the account
   // client). They never load with the page or the app, so they sit outside the page and app totals.
   // 32 → 34 (Oct 2026, round 4): per-hole tags, grouped pending tags, callouts beside or bracketed on their
@@ -160,7 +164,13 @@ const BUDGETS = {
   // 3.2, panels.js +2.6, desk.js +0.6, unzip.js 0.5; split chunks compress a little less well together).
   // 73.3 → 74.4 (Oct 2026, measured 73.9, configured 74.15): typography.js (~1.2 kB), the brand fonts and
   // EM3D.setFigureStyle, fetched only for a figure with a brand style.
-  threeDLazyJsGzipKb: 74.4,
+  // 74.4 → 89.7 (Oct 2026, round 5B, measured 89.2, configured 89.4): map overlays (overlays.js, ~7.8 kB: GeoJSON,
+  // KML and CSV points read, placed with the figure's coordinate system, areas painted on the terrain, lines and
+  // points draped and hidden behind ridges, legend rows and the Layout list), shapes (shapes.js, ~4.9 kB: ellipses,
+  // dimension lines and arrows on the figure and section, and their list), the draping maths both share
+  // (drape.js, 0.9 kB) and zipped shapefiles read in unzip.js (shp.js, +1.1 kB). Fetched only for a figure with
+  // an overlay or a shape, or a ZIP.
+  threeDLazyJsGzipKb: 89.7,
   // The /3d grade-shell worker (composites estimate and marching cubes) is its own chunk, fetched only
   // when a shell is turned on. Vite emits workers outside the manifest graph, so it is found from the
   // page's chunks (see below) and budgeted here rather than in the page or the app totals.

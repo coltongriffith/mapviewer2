@@ -107,15 +107,15 @@ const stroke = (ctx, u, pts, colour, w, dash, faint) => {
 };
 const head = (ctx, [x, y], ang, l, colour) => { ctx.save(); ctx.translate(x, y); ctx.rotate(ang); ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-l, -l * 0.4); ctx.lineTo(-l, l * 0.4); ctx.closePath(); ctx.fillStyle = colour; ctx.fill(); ctx.restore(); };
 // Draws one shape from screen points: ellipse runs (faint: where the terrain hides them), or the two ends of a
-// dimension line or arrow. An ellipse's name goes beside it, above or below, where it is clear of avoid.
-function drawShape(ctx, K, s, geo, occ, avoid = []) {
+// dimension line or arrow. An ellipse's name goes beside it, above or below, where it is clear of occ.
+function drawShape(ctx, K, s, geo, occ) {
   const { u, font, m } = K, c = colourOf(s), w = (s.width || 2) * u;
   if (s.type === 'ellipse') {
     (geo.faint || []).forEach((r) => stroke(ctx, u, r, c, w, s.dash !== false, true)); geo.runs.forEach((r) => stroke(ctx, u, r, c, w, s.dash !== false));
     const all = geo.runs.concat(geo.faint || []).flat(); if (!s.text || !all.length) return;
     const xs = all.map((q) => q[0]), ys = all.map((q) => q[1]), [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)], [pw, ph] = pillSize(ctx, K, s.text);
     const cands = [[x1 + 8 * u + pw / 2, (y0 + y1) / 2], [x0 - 8 * u - pw / 2, (y0 + y1) / 2], [(x0 + x1) / 2, y0 - 6 * u - ph / 2], [(x0 + x1) / 2, y1 + 6 * u + ph / 2]];
-    const at = cands.find(([x, y]) => !avoid.concat(occ || []).some((b) => hits([x - pw / 2, y - ph / 2, x + pw / 2, y + ph / 2], b, 2 * u))) || cands[0];
+    const at = cands.find(([x, y]) => !(occ || []).some((b) => hits([x - pw / 2, y - ph / 2, x + pw / 2, y + ph / 2], b, 2 * u))) || cands[0];
     pill(ctx, K, s.text, at[0], at[1], 0, H.INK, occ, c); return;
   }
   let [a, b] = geo.ends; const t = textOf(s, s.from, s.to), ang = Math.atan2(b[1] - a[1], b[0] - a[0]);
@@ -142,14 +142,13 @@ function drawShape(ctx, K, s, geo, occ, avoid = []) {
   if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
   const xs = poly.map((q) => q[0]), ys = poly.map((q) => q[1]); occ?.push([Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)]);
 }
-// On the 3D figure, over the overlays and under the collars and labels.
+// On the 3D figure, over the overlays and collars, under the callouts and labels.
 export function draw(ctx, K, occ) {
   const G = H.G; if (!G || !S.shapes.length) return;
   const cam = H.camera, p = cam.position, d = cam.getWorldDirection(p.clone()), [W] = H.frame();
   const seen = sightTest(G.B, G.surf, G.zmax, S.projection === 'orthographic' ? { dir: [-d.x, d.z, -d.y / S.vex] } : { eye: [p.x + G.cx, G.cy - p.z, p.y / S.vex + G.zref] }, Math.max(0.5, (G.terr.hi - G.terr.lo) * 0.01));
   const toScreen = (x, y, z) => H.proj(G.V(x, y, z)), end = (q) => toScreen(q[0], q[1], q[2] ?? G.surf(q[0], q[1]));
-  const k = { ...K, W }, avoid = H.project.holes.map((h) => { const [x, y] = toScreen(h.c.x, h.c.y, h.c.z); return [x - 8 * K.u, y - 8 * K.u, x + 8 * K.u, y + 8 * K.u]; });
-  ctx.save();
+  const k = { ...K, W }; ctx.save();
   S.shapes.forEach((s) => {
     // On the terrain: drawn only where it shows. At depth: faint where the terrain is in front of it.
     if (s.type === 'ellipse') {
@@ -159,7 +158,7 @@ export function draw(ctx, K, occ) {
         if (cur && v !== was) { cur.push(p2); cur = null; } // the runs meet where the terrain starts to hide it
         if (!cur) runs[+!v].push(cur = []); cur.push(p2); was = v;
       });
-      drawShape(ctx, k, s, { runs: runs[0], faint: s.at.length < 3 ? [] : runs[1] }, occ, avoid); return;
+      drawShape(ctx, k, s, { runs: runs[0], faint: s.at.length < 3 ? [] : runs[1] }, occ); return;
     }
     const a = end(s.from), b = end(s.to); if (a[2] > 1 || b[2] > 1) return;
     drawShape(ctx, k, s, { ends: [a, b] }, occ);

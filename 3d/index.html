@@ -92,6 +92,7 @@ ol.how { margin: 0; padding-left: 20px; display: grid; gap: 3px; font-size: 14px
 .file-head .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .file-head .check, .file-head .row { min-width: 0; flex-wrap: nowrap; }
 .file-head .row .btn { padding: 4px 9px; font-size: 13px; }
+.file input[type="text"], .file input[type="number"] { box-sizing: border-box; }
 .maps { display: grid; grid-template-columns: auto 1fr; gap: 4px 8px; align-items: center; font-size: 13px; }
 .maps label { color: var(--slate-600); }
 select, input[type="text"], input[type="email"], input[type="number"], textarea { font: inherit; font-size: 14px; color: var(--slate-950); background: #fff; border: 1px solid var(--slate-200); border-radius: 5px; padding: 5px 7px; min-width: 0; width: 100%; }
@@ -515,14 +516,14 @@ html.em3d-embed .share-credit:hover { text-decoration: underline; }
       <!-- Map overlays and annotation shapes: their lists load with the first one (overlays.js, shapes.js). -->
       <section id="ext-overlays">
         <h3>Map overlays</h3>
-        <p class="muted">Claims, targets, faults or soil points draped on the terrain, from GeoJSON, KML or a zipped shapefile (or a CSV of points given the Map overlay type in step 1). Each gets a legend row.</p>
+        <p class="muted">Claims, targets, faults or soil points draped on the terrain, from GeoJSON, KML or a zipped shapefile.</p>
         <label class="btn" for="ov-file" style="margin-top:8px">Add GeoJSON, KML or shapefile</label>
         <input type="file" id="ov-file" multiple accept=".geojson,.json,.kml,.zip" hidden>
         <div class="files" id="ov-ui" style="margin-top:8px"></div>
       </section>
       <section id="ext-shapes">
         <h3>Shapes</h3>
-        <p class="muted">Placed in the files' coordinates, so they stay put as the camera turns, and drawn on the section where they lie within its width.</p>
+        <p class="muted">Ellipses, dimension lines and arrows, fixed in place as the camera turns; also on the section where they lie within its width.</p>
         <div class="row" style="margin-top:8px"><button class="btn" type="button" data-shape="ellipse">Add ellipse</button><button class="btn" type="button" data-shape="dimension">Add dimension</button><button class="btn" type="button" data-shape="arrow">Add arrow</button></div>
         <div class="files" id="shape-ui" style="margin-top:8px"></div>
       </section>
