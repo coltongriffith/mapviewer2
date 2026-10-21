@@ -63,7 +63,8 @@ function BrandKitCard({ kit, onApply, onUse, onSetDefault, onRename, onDelete, o
           </>
         ) : (
           <>
-            <button className="btn compact" type="button" onClick={() => onApply(kit)}>Apply</button>
+            <button className="btn compact" type="button" onClick={() => onApply(kit, 'style')} title="Colours, fonts and logo only">Apply style</button>
+            <button className="btn compact secondary" type="button" onClick={() => onApply(kit, 'full')} title="The kit's whole saved layout">Full template</button>
             <button className="acct-icon-btn" title="New project from this kit" type="button" onClick={() => onUse(kit)}>＋</button>
             {!kit.is_default && (
               <button className="acct-icon-btn" title="Set as default" type="button" onClick={() => onSetDefault(kit.id)}>★</button>
@@ -420,7 +421,7 @@ export default function AccountPage({ onExit, onOpenDashboard, onApplyBrandKit, 
                 <BrandKitCard
                   key={kit.id}
                   kit={kit}
-                  onApply={(k) => onApplyBrandKit(k.config || {})}
+                  onApply={(k, mode) => onApplyBrandKit(k, mode)}
                   onUse={(k) => onUseKit(k.config || {})}
                   onSetDefault={(id) => { setDefaultBrandKit(id).then(refreshBrandKits).catch(surfaceActionError('Setting the default kit')); }}
                   onRename={(id, name) => { updateBrandKit(id, { name }).then(refreshBrandKits).catch(surfaceActionError('Renaming the kit')); }}

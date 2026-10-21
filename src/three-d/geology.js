@@ -344,8 +344,8 @@ function geologyCanvas(key, a, b) {
   const p0 = at(0.5, zm), p1 = at(0.5, zm + 10), pv = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) / 10, e0 = at(0, zm), e1 = at(1, zm), ph = Math.hypot(e1[0] - e0[0], e1[1] - e0[1]) / len, k = H.exportScale();
   if (ph * len * k < 300 || ph < 0.45 * pv / H.S.vex || Math.abs(e1[1] - e0[1]) > 1.2 * Math.abs(e1[0] - e0[0])) return hit.base; // and none sloping steeply
   const size = Math.min(ht * 0.06, Math.max(ht * 0.015, 22 / (pv * k || 1))), bucket = Math.round(Math.log(size) / Math.log(1.2));
-  const mirror = faceWanted('far', key), lk = `${ck}|${bucket}|${mirror}|${cfg().legend.map((e) => e.name).join()}|${viewKey()}`;
-  if (hit.lk !== lk) { hit.canvas = labelCanvas(hit, cols, 1.2 ** bucket, len, ht, mirror, { at, ph, pv }); hit.lk = lk; }
+  const mirror = faceWanted('far', key), font = labelFont(), lk = `${ck}|${bucket}|${mirror}|${cfg().legend.map((e) => e.name).join()}|${viewKey()}|${font}`;
+  if (hit.lk !== lk) { hit.canvas = labelCanvas(hit, cols, 1.2 ** bucket, len, ht, mirror, { at, ph, pv }, font); hit.lk = lk; }
   return hit.canvas;
 }
 // Each name goes where it fits inside its unit's largest patch and lies farthest from the holes, collars,
@@ -358,7 +358,10 @@ export function boxesKey(boxes) {
 }
 // Names are re-placed when the view turns 5°, zooms 10% or the overlay changes.
 const viewKey = () => { const c = H.getCam(); return `${Math.round(c.azimuth / 5)}|${Math.round(c.plunge / 5)}|${Math.round(c.zoom / 10)}|${boxesKey(H.occ)}|${H.frame()}`; };
-function labelCanvas(hit, cols, size, len, ht, mirror, scr) {
+// The figure's sans (typography.js sets a brand family once loaded). Part of the names' cache key, so a
+// font change repaints them rather than reusing names drawn in the earlier face.
+export const labelFont = () => H?.fonts?.() || '"Source Sans 3", "Segoe UI", sans-serif';
+function labelCanvas(hit, cols, size, len, ht, mirror, scr, font) {
   const c = document.createElement('canvas'), { nx, ny, f } = hit; c.width = hit.base.width; c.height = hit.base.height;
   const g = c.getContext('2d'), kx = c.width / len, ky = c.height / ht, names = cache.fold.classes.map((code) => (code === OTHER ? null : cfg().legend.find((e) => e.code === code)?.name || code));
   // What a name keeps clear of: the key, highlighted and new holes and the grade shell on screen, and the
@@ -367,7 +370,7 @@ function labelCanvas(hit, cols, size, len, ht, mirror, scr) {
   const pts = H.project.holes.filter(H.prominent).flatMap((h) => h.path.filter((p, i) => i % 2 === 0).map((p) => H.proj(H.G.V(p.x, p.y, p.z)))), v = new THREE.Vector3();
   (H.G.shellMesh?.children || []).forEach((m) => { const a = m.geometry.attributes.position; for (let i = 0; i < a.count; i += 2) pts.push(H.proj(v.fromBufferAttribute(a, i))); });
   const boxes = H.occ.filter((b) => b[2] - b[0] < H.frame()[0] - 1), zt = H.G.zmax;
-  g.drawImage(hit.base, 0, 0); g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = `600 ${size * kx}px "Source Sans 3", "Segoe UI", sans-serif`;
+  g.drawImage(hit.base, 0, 0); g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = `600 ${size * kx}px ${font}`;
   labelSpots(hit.cls, nx, ny, len / nx, ht / ny).forEach(({ c: cl, spots }) => {
     if (!names[cl] || !cols[cl]) return;
     // On one line, else on two (split at the space nearest the middle), so a name fits between the holes.

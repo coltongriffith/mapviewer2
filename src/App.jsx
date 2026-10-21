@@ -140,6 +140,7 @@ import {
   cloneSharedMapToCloud,
   loadSharedMap,
 } from './utils/cloudStorage';
+import { applyBrandKitStyle, applyBrandKitTemplate } from './brandKit';
 import { useAuth } from './hooks/useAuth';
 import { useStorageUsage } from './hooks/useStorageUsage';
 import { supabase } from './lib/supabase';
@@ -2010,6 +2011,15 @@ export default function App({ initialAction = null }) {
         exportSettings: patch.exportSettings ? { ...(prev.layout?.exportSettings || {}), ...patch.exportSettings } : prev.layout?.exportSettings,
       },
     }));
+  };
+
+  // A saved brand kit on this map. "style": its colours, fonts and logo only (shared/brandKit.js), so the
+  // extent, layers, callout text and data colours stay; "full": its whole saved layout, as Apply always did.
+  // Either way the map records the kit id, revision and the style applied (layout.brandStyle).
+  const applyKitToMap = (kit, mode = 'style') => {
+    const next = (mode === 'full' ? applyBrandKitTemplate : applyBrandKitStyle)(kit, project.layout);
+    updateLayout(Object.fromEntries(Object.entries(next).filter(([k]) => next[k] !== project.layout[k])));
+    setUploadStatus({ type: 'success', message: `"${kit.name || 'Brand kit'}" ${mode === 'full' ? 'template' : 'style'} applied.` });
   };
 
   const SP_SIDEBAR_ELEMENTS = ['inset', 'legend', 'logo', 'title', 'footer', 'northArrow', 'scaleBar'];
@@ -5219,8 +5229,8 @@ export default function App({ initialAction = null }) {
         <AccountPage
           onExit={() => setScreen('dashboard')}
           onOpenDashboard={() => setScreen('dashboard')}
-          onApplyBrandKit={(config) => {
-            updateLayout(applyBrandKitConfig(config, project.layout));
+          onApplyBrandKit={(kit, mode) => {
+            applyKitToMap(kit, mode);
             setScreen('editor');
           }}
           onUseKit={(config) => {
@@ -5914,15 +5924,12 @@ export default function App({ initialAction = null }) {
                           {tmpl.name || 'Untitled kit'}
                           {tmpl.is_default && <span className="bk-side-badge">Default</span>}
                         </span>
-                        <button
-                          className="btn compact"
-                          type="button"
-                          onClick={() => {
-                            const newLayout = applyBrandKitConfig(tmpl.config || {}, project.layout);
-                            updateLayout(Object.fromEntries(Object.entries(newLayout).filter(([k]) => newLayout[k] !== project.layout[k])));
-                            setUploadStatus({ type: 'success', message: `"${tmpl.name}" applied.` });
-                          }}
-                        >Apply</button>
+                        <span className="bk-side-actions">
+                          <button className="btn compact" type="button" onClick={() => applyKitToMap(tmpl, 'style')}
+                            title="Colours, fonts and logo only. The map's layout, extent, layers and data stay as they are.">Apply style</button>
+                          <button className="btn compact secondary" type="button" onClick={() => applyKitToMap(tmpl, 'full')}
+                            title="The kit's whole saved layout (template, panel positions and sizes, inset, footer) as well as its style.">Full template</button>
+                        </span>
                       </div>
                     </div>
                   ))}
@@ -8001,10 +8008,11 @@ export default function App({ initialAction = null }) {
             setShowBrandKitManager(false);
             setUpgradeReason('brand_kit');
           }}
-          applyToProject={(config) => {
+          applyToProject={(config, mode, kit) => {
+            setShowBrandKitManager(false);
+            if (kit) { applyKitToMap(kit, mode); return; }
             const newLayout = applyBrandKitConfig(config || {}, project.layout);
             updateLayout(Object.fromEntries(Object.entries(newLayout).filter(([k]) => newLayout[k] !== project.layout[k])));
-            setShowBrandKitManager(false);
             setUploadStatus({ type: 'success', message: 'Brand kit applied to your map.' });
           }}
         />
