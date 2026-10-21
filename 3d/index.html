@@ -21,6 +21,8 @@
 <meta name="twitter:image" content="https://www.explorationmaps.com/og/3d.png">
 <meta name="twitter:image:alt" content="3D drill hole figure of the fictional Example Ridge sample project made with Exploration Maps 3D">
 <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"SoftwareApplication","name":"Exploration Maps 3D","alternateName":"Exploration Maps 3D drill hole figure maker","description":"Browser tool, in beta, that turns drill collars, surveys and assays (CSV or ZIP) into a branded 3D drill hole figure and cross-section A–A′ for news releases and investor presentations, with grade-coloured traces, intercept callouts, a metal-equivalent calculator and an exploratory grade shell.","url":"https://www.explorationmaps.com/3d","image":"https://www.explorationmaps.com/og/3d.png","screenshot":"https://www.explorationmaps.com/og/3d.png","applicationCategory":"DesignApplication","applicationSubCategory":"3D drill hole visualization","operatingSystem":"Web browser","browserRequirements":"Requires a desktop browser with WebGL.","softwareVersion":"Beta","isAccessibleForFree":true,"offers":{"@type":"Offer","price":"0","priceCurrency":"USD","description":"Building and exporting figures is free; saving figures needs a free Exploration Maps account."},"featureList":["Upload collars, surveys and assays as CSV or ZIP, with optional OBJ model shapes and topography","Real terrain with a satellite drape once the coordinate system is set","Glass or solid block with labels on the block faces","Grade-coloured drill traces with intercept callouts and a display cut-off","Assays pending and provisional-position labels from the collar status","Cross-section A–A′ with a stated projection width","Exploratory grade shell interpolated from assays, labelled as not a model or resource","Metal-equivalent (CuEq, AuEq) calculator from prices and recoveries","Data checks for missing collars, overlapping intervals and survey conflicts","PNG export sized for slides, news releases, square, portrait and A4 print, plus a designer layers ZIP","Save to an Exploration Maps account or send to the design desk"],"publisher":{"@type":"Organization","name":"Exploration Maps","url":"https://www.explorationmaps.com"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://www.explorationmaps.com"},{"@type":"ListItem","position":2,"name":"Exploration Maps 3D","item":"https://www.explorationmaps.com/3d"}]}]}</script>
+<!-- Shared figures (/3d/share/<id>, /3d/embed/<id>) open read-only; this marks the page before it paints. -->
+<script src="/3d/mode.js"></script>
 <meta name="theme-color" content="#142126">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48">
@@ -221,6 +223,38 @@ dialog.acct-dialog::backdrop { background: rgba(20,33,38,0.35); }
      than to the buttons, which may sit at the left edge. */
   .acct { position: static; }
   .acct-menu { left: 0; right: 0; width: auto; }
+}
+/* Share: the dialog (src/three-d/share.js), and shared figures, read-only (/3d/share/<id>) or for an iframe
+   (/3d/embed/<id>). public/3d/mode.js sets html.em3d-viewer / .em3d-embed before the page paints. */
+dialog.share-dialog { width: min(520px, calc(100vw - 32px)); }
+.share-dialog .stack { gap: 10px; }
+.share-dialog input[type="text"], .share-dialog textarea { box-sizing: border-box; font-family: var(--mono); font-size: 12.5px; }
+.share-dialog .url-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; }
+.share-dialog .note { font-size: 13px; color: var(--slate-600); }
+.share-dialog .ok { color: var(--ok); font-size: 13.5px; }
+.share-list { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 6px; max-height: 220px; overflow-y: auto; }
+.share-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 8px; align-items: center; border: 1px solid var(--slate-200); border-radius: 6px; padding: 6px 8px; font-size: 13.5px; }
+.share-list b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.share-list small { color: var(--slate-600); font-size: 12px; grid-column: 1; }
+.share-list .acct-acts { grid-row: span 2; grid-column: 2; }
+.share-bar, .share-credit, .share-msg { display: none; }
+html.em3d-viewer body { overflow: hidden; }
+html.em3d-viewer .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; height: 100%; }
+html.em3d-viewer .panel, html.em3d-viewer .acct, html.em3d-viewer .frame-label, html.em3d-viewer .about { display: none !important; }
+html.em3d-viewer .stage { order: 0; height: 100%; }
+html.em3d-viewer:not(.em3d-shown) .frame, html.em3d-viewer:not(.em3d-shown) .toolbar .tabs, html.em3d-viewer:not(.em3d-shown) .status { visibility: hidden; }
+html.em3d-viewer .share-bar { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: flex-end; margin-left: auto; }
+html.em3d-viewer .share-bar .btn { padding: 6px 11px; }
+.share-note { font-size: 13.5px; color: var(--slate-800); background: rgba(255,255,255,0.9); padding: 4px 9px; border-radius: 4px; }
+.share-note a { color: var(--slate-950); font-weight: 600; }
+html.em3d-viewer .share-msg:not([hidden]) { display: grid; position: absolute; inset: 0; z-index: 7; place-content: center; justify-items: center; gap: 10px; padding: 24px; text-align: center; }
+.share-msg h1 { margin: 0; font-size: 22px; }
+.share-msg p { max-width: 420px; color: var(--slate-600); }
+html.em3d-embed .share-bar, html.em3d-embed .status { display: none !important; }
+html.em3d-embed .share-credit { display: block; position: absolute; right: 8px; bottom: 6px; z-index: 6; font-size: 12px; font-weight: 600; color: var(--slate-800); background: rgba(255,255,255,0.85); padding: 2px 7px; border-radius: 4px; text-decoration: none; }
+html.em3d-embed .share-credit:hover { text-decoration: underline; }
+@media (max-width: 820px) {
+  html.em3d-viewer .stage { height: 100vh; height: 100dvh; }
 }
 </style>
 </head>
@@ -559,6 +593,7 @@ dialog.acct-dialog::backdrop { background: rgba(20,33,38,0.35); }
       <div class="acct">
         <span class="acct-note" id="acct-note" aria-live="polite" hidden></span>
         <button class="btn" type="button" id="acct-maps" aria-haspopup="true" aria-expanded="false" aria-controls="acct-menu">My 3D maps</button>
+        <button class="btn" type="button" id="share-open" aria-haspopup="dialog">Share</button>
         <button class="btn primary" type="button" id="acct-save">Save</button>
         <div class="acct-menu" id="acct-menu" role="region" aria-label="My 3D maps" hidden>
           <h3>My 3D maps</h3>
@@ -725,6 +760,16 @@ Example: a branded news-release figure from pasted CSVs
                                   coordinate system)
   EM3D.layersReady()              Promise; resolves once the layers, face images and inset have loaded
   getState().geology / .geophys / .tags
+</script>
+<!-- API notes for share links (src/three-d/share.js; shown with EM3D.help()). -->
+<script type="text/plain" id="share-help">Share links (all Promises; anyone with a link can view the figure, read-only, and its data files):
+  EM3D.share.create()             a new link: { id, url, embedUrl, embedCode }. Signed out, it expires in 30 days
+  EM3D.share.update(id)           points an existing link of yours at the figure as it is now
+  EM3D.share.revoke(id)           the link stops working; true when revoked
+  EM3D.share.list()               your links: [{ id, url, title, createdAt, views, active, ... }]
+  EM3D.share.open()               the Share dialog
+  /3d/share/<id> is the read-only viewer and /3d/embed/<id> the version for an iframe; add ?download=png to
+  download the PNG.
 </script>
 <!-- Current figure state as JSON, for AI assistants and browser agents (see the Export step). -->
 <script type="application/json" id="em3d-state">{}</script>

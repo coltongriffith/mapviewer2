@@ -82,7 +82,10 @@ const BUDGETS = {
   // hole, the lithology legend file, and the design desk moved out of the page into desk.js (1.8 kB) to
   // keep the page inside its budget.
   // 34 → 36 (Oct 2026): company workspaces (#282) add the property picker to the account client.
-  threeDLazyJsGzipKb: 36,
+  // 36 → 43 (Oct 2026): share links (share.js: the Share dialog, EM3D.share and the read-only viewer for
+  // /3d/share/<id> and /3d/embed/<id>, ~6.5 kB). Loaded on the first click on Share, or at once on a shared
+  // figure; the page itself only gains the hook in account.js.
+  threeDLazyJsGzipKb: 43,
   // The /3d grade-shell worker (composites estimate and marching cubes) is its own chunk, fetched only
   // when a shell is turned on. Vite emits workers outside the manifest graph, so it is found from the
   // page's chunks (see below) and budgeted here rather than in the page or the app totals.
