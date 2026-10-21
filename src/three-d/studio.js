@@ -1761,8 +1761,9 @@ function loop(now) {
 }
 // One export canvas at the chosen size. layer "scene" is the WebGL render alone on transparent;
 // "annotations" is the overlay alone (both for designers); "figure" is the two together.
-function figureCanvas(view, layer = 'figure') {
-  const f = FORMATS[S.format], out = document.createElement('canvas'); out.width = f.w; out.height = f.h; const ctx = out.getContext('2d');
+// wrap(ctx) can stand in for the canvas's context (desk.js: the annotations SVG's recorder).
+function figureCanvas(view, layer = 'figure', wrap = (c) => c) {
+  const f = FORMATS[S.format], out = document.createElement('canvas'); out.width = f.w; out.height = f.h; const ctx = wrap(out.getContext('2d'));
   if (view === 'section') { ctx.scale(f.w / W, f.h / H); drawSection(ctx, W, H, true); return out; }
   const k = f.w / W; tween = null; controls.update(); camera.updateProjectionMatrix(); hazeNow(); placeRibbons(); faceWalls();
   if (layer !== 'annotations') {
@@ -1789,7 +1790,7 @@ function exportPNG(opts = {}) {
 // Designer handoff: the figure, its 3D render and annotations as separate transparent layers, the section
 // and the settings in one ZIP (desk.js, loaded on first use, like the design desk that sends it).
 const exportLayers = (o) => desk().then((m) => m.exportLayers(o));
-$('export-layers').addEventListener('click', () => exportLayers({ download: true, as: 'blob' }).catch((e) => status(e.message)));
+$('export-layers').addEventListener('click', () => exportLayers({ download: true, as: 'blob', svg: $('export-svg').checked }).catch((e) => status(e.message)));
 
 // ============================================================
 // 8b. Send to the design desk (the Teams enquiry, with the figure and layers attached)
