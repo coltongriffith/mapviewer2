@@ -60,9 +60,9 @@ describe('roles', () => {
   });
 
   it('offers each role only what the database allows', () => {
-    expect(ws.permissions('viewer')).toMatchObject({ read: true, edit: false, invite: false, deleteProperty: false });
-    expect(ws.permissions('editor')).toMatchObject({ edit: true, invite: false, moveOut: false });
-    expect(ws.permissions('admin')).toMatchObject({ invite: true, deleteProperty: true, moveOut: true, manageOwners: false });
+    expect(ws.permissions('viewer')).toMatchObject({ read: true, edit: false, invite: false, deleteProperty: false, deleteFile: false });
+    expect(ws.permissions('editor')).toMatchObject({ edit: true, invite: false, moveOut: false, deleteFile: false });
+    expect(ws.permissions('admin')).toMatchObject({ invite: true, deleteProperty: true, deleteFile: true, moveOut: true, manageOwners: false });
     expect(ws.permissions('owner').manageOwners).toBe(true);
     expect(ws.assignableRoles('admin')).toEqual(['admin', 'editor', 'viewer']);
     expect(ws.assignableRoles('editor')).toEqual([]);

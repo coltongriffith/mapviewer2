@@ -215,6 +215,14 @@ dialog.acct-dialog::backdrop { background: rgba(20,33,38,0.35); }
 .acct-dialog input[type="email"], .acct-dialog input[type="password"] { font: inherit; font-size: 14px; color: var(--slate-950); background: #fff; border: 1px solid var(--slate-200); border-radius: 5px; padding: 6px 8px; width: 100%; }
 .acct-dialog .actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
 .status { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); z-index: 6; background: var(--slate-950); color: #fff; font-size: 13.5px; padding: 6px 12px; border-radius: 999px; max-width: 90%; text-align: center; }
+/* Property data library: the picker in step 1 and the "newer data" notice. */
+.lib-item { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+.lib-item .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lib-item .btn { padding: 3px 9px; font-size: 13px; flex: none; }
+.lib-notice { position: absolute; top: 52px; left: 50%; transform: translateX(-50%); z-index: 6; display: flex; gap: 8px; align-items: center; max-width: 90%; background: var(--copper-soft); border: 1px solid var(--copper); border-radius: 999px; padding: 4px 6px 4px 12px; font-size: 13.5px; }
+.lib-notice[hidden] { display: none; }
+.lib-notice .btn { padding: 3px 10px; font-size: 13px; }
+.lib-notice .lib-x { font: inherit; font-size: 16px; line-height: 1; background: none; border: 0; padding: 2px 6px; color: var(--slate-600); cursor: pointer; }
 
 @media (max-width: 820px) {
   body { overflow: auto; }
@@ -229,6 +237,7 @@ dialog.acct-dialog::backdrop { background: rgba(20,33,38,0.35); }
   /* The toolbar wraps here, so anchor the menu to its full width rather
      than to the buttons, which may sit at the left edge. */
   .acct { position: static; }
+  .lib-notice { top: auto; bottom: 52px; border-radius: 12px; }
   .acct-menu { left: 0; right: 0; width: auto; }
 }
 /* Share: the dialog (src/three-d/share.js), and shared figures, read-only (/3d/share/<id>) or for an iframe
@@ -291,8 +300,13 @@ html.em3d-embed .share-credit:hover { text-decoration: underline; }
           <input type="file" id="file-input" multiple accept=".csv,.txt,.obj,.xyz,.dat,.zip" hidden>
           <button class="btn" type="button" id="load-sample">Use sample project</button>
           <button class="btn" type="button" id="clear-files">Clear</button>
+          <button class="btn" type="button" id="lib-add" aria-expanded="false" aria-controls="lib-pick" hidden>From property library</button>
         </div>
       </div>
+      <section id="lib-pick" aria-label="Property library" hidden>
+        <h3>Property library</h3>
+        <div class="files" id="lib-list"></div>
+      </section>
       <details id="paste-box">
         <summary>Or paste data as text</summary>
         <label class="field" style="margin-top:8px"><span>File name (helps detect the type, e.g. collars.csv)</span><input type="text" id="paste-name" value="pasted.csv"></label>
@@ -628,6 +642,11 @@ html.em3d-embed .share-credit:hover { text-decoration: underline; }
       <canvas id="ov" aria-hidden="true"></canvas>
       <canvas id="section" hidden aria-label="Cross-section A–A′"></canvas>
     </div>
+    <div class="lib-notice" id="lib-notice" role="status" hidden>
+      <span id="lib-notice-text"></span>
+      <button class="btn" type="button" id="lib-update">Update</button>
+      <button class="lib-x" type="button" id="lib-dismiss" aria-label="Keep the current data">×</button>
+    </div>
     <div class="status" id="status" role="status" aria-live="polite">Sample project loaded · illustrative data</div>
   </main>
 </div>
@@ -678,7 +697,8 @@ JavaScript API (run in the page console or via your agent's evaluate tool):
   EM3D.clearFiles()
   EM3D.addZip(dataUrlOrBase64)    Promise. Unpacks a ZIP and adds its CSV/TXT/OBJ files
   EM3D.addFiles([{name, text}])   CSV or OBJ text. The file name helps detect the type:
-                                  collars, surveys, assays, topography, or a .obj model shape
+                                  collars, surveys, assays, topography, or a .obj model shape.
+                                  lib: {libFileId, version} marks a file from the property's data library
   EM3D.setBrand({company, title, subtitle, footnote, primary, accent, credit})
                                   colours as hex, e.g. primary: "#0b3954"
   EM3D.setLogo(dataUrl)           Promise. Also picks primary and accent from the logo
