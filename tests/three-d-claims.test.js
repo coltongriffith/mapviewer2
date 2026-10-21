@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { searchClaims, claimsInBbox, bboxAround, toClaims, mergeClaims, splitClaims, ownersOf, claimContains, claimsCredit, registryOf } from '../shared/claimSearch.js';
 import { claimFrame } from '../src/three-d/tags.js';
+import { asGeoJSON } from '../src/three-d/claims.js';
 
 const sq = (x, y, d = 0.01) => ({ type: 'Polygon', coordinates: [[[x, y], [x + d, y], [x + d, y + d], [x, y + d], [x, y]]] });
 const bc = (n, owner, x, y, extra = {}) => ({ type: 'Feature', properties: { TENURE_NUMBER_ID: n, CLAIM_NAME: `C${n}`, OWNER_NAME: owner, TITLE_TYPE_DESCRIPTION: 'Mineral', GOOD_TO_DATE: '2028-01-01', AREA_IN_HECTARES: '20.51', ...extra }, geometry: sq(x, y) });
@@ -79,6 +80,20 @@ describe('claims as figure data', () => {
     expect(claimsCredit('bc', new Date('2026-10-21T15:00:00Z'))).toBe('Claims: BC Mineral Titles Online, retrieved 2026-10-21');
     expect(registryOf('us-nv')).toBe('BLM MLRS');
     expect(registryOf('on')).toBe('Ontario MLAS');
+  });
+});
+
+describe('claims already on the figure', () => {
+  it('a multi-part claim split by overlays.js comes back whole, and survives the merge with fresh results', () => {
+    const ring = (x) => [[[x, 0], [x + 1, 0], [x + 1, 1], [x, 0]]];
+    const o = { data: { features: [{ g: 'A', c: ring(0), p: { number: '7', owner: 'A' } }, { g: 'A', c: ring(5), p: { number: '7', owner: 'A' } }, { g: 'A', c: ring(9), p: { number: '8' } }, { g: 'L', c: [[0, 0], [1, 1]], p: {} }] } };
+    const fc = asGeoJSON(o);
+    expect(fc.features.map((f) => [f.properties.number, f.geometry.type, f.geometry.coordinates.length])).toEqual([['7', 'MultiPolygon', 2], ['8', 'MultiPolygon', 1]]);
+    const merged = mergeClaims({ features: [] }, fc);
+    expect(merged.features.find((f) => f.properties.number === '7').geometry.coordinates).toEqual([ring(0), ring(5)]); // both parts kept
+    // Fresh registry geometry of the same number wins over what the figure had.
+    const fresh = { type: 'Feature', properties: { TENURE_NUMBER_ID: 7 }, geometry: { type: 'Polygon', coordinates: ring(20) } };
+    expect(mergeClaims({ features: [fresh] }, fc).features[0].geometry).toEqual(fresh.geometry);
   });
 });
 

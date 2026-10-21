@@ -315,11 +315,11 @@ export function inset(ctx, P, u, [x, y, w, h]) {
   });
   ctx.restore();
 }
-// The claim map inset's areas (tags.js): the registry claims (role "claims"), else the area overlays shown in the
-// inset; each { o, feats } in the figure's metres.
+// The claim map inset's areas (tags.js): of the area overlays shown in the inset (inInset: not set inset: false),
+// the registry claims (role "claims"), else all of them; each { o, feats } in the figure's metres.
 export function claimShapes() {
-  const fills = S.overlays.filter((o) => o.show !== false && o.kind === 'fill'), claims = fills.filter((o) => o.role === 'claims');
-  return (claims.length ? claims : fills.filter(inInset)).map((o) => ({ o, feats: placed(o) || [] })).filter((x) => x.feats.length);
+  const fills = S.overlays.filter((o) => o.kind === 'fill' && inInset(o)), claims = fills.filter((o) => o.role === 'claims');
+  return (claims.length ? claims : fills).map((o) => ({ o, feats: placed(o) || [] })).filter((x) => x.feats.length);
 }
 // The sources of the overlays shown ("Claims: BC Mineral Titles Online, retrieved 2026-10-21"), for the footer.
 export const credits = () => [...new Set(S.overlays.filter((o) => o.show !== false && o.credit).map((o) => o.credit))];

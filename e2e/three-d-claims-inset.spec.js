@@ -84,6 +84,8 @@ test('claims around the model: project in the accent, neighbours grey, the claim
   ]);
   expect(st.overlays[0].color).toBe(st.brand.accent);
   expect(st.overlays[1].color).toBe('#9aa3a5');
+  // On the terrain: hairline outlines only, no fill (the fills are the claim map's).
+  expect(st.overlays.map((o) => [o.opacity, o.width])).toEqual([[0, 1.2], [0, 0.8]]);
   // The figure: the claim map's title, tenure numbers where they fit, the credit in the footer.
   const texts = await textsOf(page, () => window.EM3D.exportPNG({ view: '3d' }));
   expect(texts).toContain('Claims');
@@ -95,6 +97,15 @@ test('claims around the model: project in the accent, neighbours grey, the claim
   expect(accent).toBeGreaterThan(300);
   expect(grey).toBeGreaterThan(300);
   expect(ground).toBeGreaterThan(50);
+  // The fill opacity control still fills a claim on the terrain; the claim map is drawn the same either way.
+  const fill = await page.evaluate(async (id) => { const E = window.EM3D, a = E.exportPNG({ view: '3d' }); await E.updateOverlay(id, { opacity: 0.3 }); const b = E.exportPNG({ view: '3d' }); await E.updateOverlay(id, { opacity: 0 }); return [a !== b, a === E.exportPNG({ view: '3d' })]; }, st.overlays[0].id);
+  expect(fill).toEqual([true, true]);
+  // Neighbours set out of the inset leave the claim map with the project's claims alone.
+  const withNb = await page.evaluate(() => window.EM3D.exportPNG({ view: '3d' }));
+  await page.evaluate((id) => window.EM3D.updateOverlay(id, { inset: false }), st.overlays[1].id);
+  expect((await page.evaluate(() => window.EM3D.getState())).tags.inset.message).toBe('Inset: claim map (3 claims).');
+  expect(await page.evaluate(() => window.EM3D.exportPNG({ view: '3d' })) !== withNb).toBe(true);
+  await page.evaluate((id) => window.EM3D.updateOverlay(id, { inset: true }), st.overlays[1].id);
   // The plan inset again: no claim map, the credit stays with the claims on the terrain.
   await page.evaluate(() => window.EM3D.setStyle({ insetStyle: 'plan' }));
   const plan = await textsOf(page, () => window.EM3D.exportPNG({ view: '3d' }));

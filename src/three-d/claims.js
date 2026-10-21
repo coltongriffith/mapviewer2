@@ -2,7 +2,8 @@
 // /api/claims and /api/bc-claims proxies) searched by holder, claim number or name, or round the model, and
 // added as area overlays (overlays.js) with role "claims": the project's in the brand accent, their neighbours
 // grey (or, asked, in their holder's colour, a few holders at most), each with the registry's credit for the
-// footer. Loaded by studio.js on the first click on Find claims or call of EM3D.findClaims.
+// footer. On the terrain they are hairline outlines with no fill (opacity 0; the fill opacity control turns one
+// on); the claim map inset fills them. Loaded by studio.js on the first click on Find claims or call of EM3D.findClaims.
 import { searchClaims, claimsInBbox, bboxAround, toClaims, mergeClaims, splitClaims, ownersOf, claimsCredit, registryOf, claimContains } from '../../shared/claimSearch.js';
 
 let H, S;
@@ -18,8 +19,17 @@ function footprint() {
   const B = G.B; return [[B.x0, B.y0], [B.x1, B.y0], [B.x1, B.y1], [B.x0, B.y1]].map(([x, y]) => geo.fwd(x, y));
 }
 const claimsOf = (group) => S.overlays.filter((o) => o.role === 'claims' && (o.group || 'project') === group);
-// An overlay's areas back to GeoJSON (overlays.js keeps them as { g: "A", c: rings, p }).
-const asGeoJSON = (o) => ({ type: 'FeatureCollection', features: (o.data?.features || []).filter((f) => f.g === 'A').map((f) => ({ type: 'Feature', properties: f.p || {}, geometry: { type: 'Polygon', coordinates: f.c } })) });
+// An overlay's areas back to GeoJSON (overlays.js keeps them as { g: "A", c: rings, p }, a multi-part claim split
+// into its parts): the parts of one claim number put back together as one MultiPolygon, so none is lost.
+export function asGeoJSON(o) {
+  const by = new Map(), features = [];
+  (o.data?.features || []).filter((f) => f.g === 'A').forEach((f) => {
+    const n = f.p?.number, had = n != null && by.get(String(n));
+    if (had) { had.geometry.coordinates.push(f.c); return; }
+    const g = { type: 'Feature', properties: f.p || {}, geometry: { type: 'MultiPolygon', coordinates: [f.c] } }; features.push(g); if (n != null) by.set(String(n), g);
+  });
+  return { type: 'FeatureCollection', features };
+}
 // The claims in place of the group's overlays, keeping their style.
 async function put(group, sets) {
   const old = claimsOf(group), keep = old[0] || {}, ids = [];
@@ -27,7 +37,7 @@ async function put(group, sets) {
   for (const s of sets) {
     if (!s.fc.features.length) continue;
     const r = await H.api.addOverlay({ name: s.name, data: { type: 'FeatureCollection', features: s.fc.features }, crs: 'EPSG:4326', kind: 'fill', role: 'claims', group, credit: s.credit, label: s.label, color: s.color ?? keep.color,
-      opacity: keep.opacity ?? (group === 'project' ? 0.3 : 0.15), width: keep.width ?? (group === 'project' ? 2 : 1), inset: true });
+      opacity: keep.opacity ?? 0, width: keep.width ?? (group === 'project' ? 1.2 : 0.8), inset: true }); // on the terrain: outlines only (fills in the claim map)
     ids.push(...[r].flat());
   }
   return ids;
@@ -49,7 +59,7 @@ export async function find(o = {}) {
     const c = ll.reduce((a, p) => [a[0] + p[0] / 4, a[1] + p[1] / 4], [0, 0]), had = claimsOf('project').flatMap((x) => asGeoJSON(x).features);
     const owner = o.owner ?? (numbers.length ? null : had.find((f) => f.properties.owner)?.properties.owner || fc.features.find((f) => claimContains(f, c))?.properties.owner);
     ({ project, neighbours } = splitClaims(fc, { owner, numbers: [...numbers, ...had.map((f) => f.properties.number)] }));
-    project = mergeClaims({ features: had }, project);
+    project = mergeClaims(project, { features: had }); // the registry's fresh geometry first
   } else {
     const q = String(o.query ?? '').trim(); if (!q) throw new Error('findClaims needs a query (a holder, claim numbers or a claim name), or around: true.');
     if (!['company', 'number', 'name'].includes(type)) throw new Error('type must be "company" (the holder), "number" (claim numbers, several at once) or "name".');
