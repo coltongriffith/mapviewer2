@@ -107,9 +107,14 @@ export async function list(id = figureId()) {
 }
 
 let shown = null; // { version, project, figureId } while a version is on screen
-/** Opens version `n` (its number, or its id) of the open figure, read-only. */
-export async function open(n, { force = false } = {}) {
-  const fid = host.frozen()?.figureId || figureId();
+// Can this reader still open the live figure? A version outlives it (deleted, or moved where they cannot follow).
+async function liveFigure(sb, id) {
+  if (host.current()?.id === id) return true;
+  try { const { data } = await sb.from('three_d_projects').select('id').eq('id', id).is('deleted_at', null).maybeSingle(); return !!data; } catch { return false; }
+}
+/** Opens version `n` (its number, or its id) of the open figure, or of `figure` (an id), read-only. */
+export async function open(n, { force = false, figure = null } = {}) {
+  const fid = figure || host.frozen()?.figureId || figureId();
   if (!fid) throw plain('Open a saved figure first.');
   if (host.dirty() && !force) throw Object.assign(plain('This figure has unsaved changes. Save it first, or open the version anyway with { force: true }.'), { code: 'UNSAVED' });
   const sb = await host.client();
@@ -135,10 +140,10 @@ export async function open(n, { force = false } = {}) {
     if (backup) { exitView(); try { await em().loadProject(backup); } catch { /* the editor keeps whatever it has */ } }
     throw plain(`That version could not be opened (${err.message}).`, err);
   }
-  const v = toVersion(row);
-  shown = { version: v, project, figureId: row.figure_id };
+  const v = toVersion(row), live = await liveFigure(sb, row.figure_id);
+  shown = { version: v, project, figureId: row.figure_id, live };
   host.setFrozen({ ...v, figureId: row.figure_id });
-  bar(v);
+  bar(v, live);
   setUrl(row.figure_id, v.version);
   return { ...v, state: em().getState() };
 }
@@ -157,6 +162,7 @@ function exitView() {
 /** Back to the figure as last saved. */
 export async function close() {
   if (!shown) return null;
+  if (!shown.live) throw plain('The figure this version was published from is no longer available to you. Start a new figure from this version to keep working on it.');
   const fid = shown.figureId;
   exitView(); shown = null;
   setUrl(fid, null);
@@ -190,7 +196,7 @@ function btn(text, fn, primary = false) {
   b.addEventListener('click', () => Promise.resolve().then(fn).catch((err) => host.say(err.message)));
   return b;
 }
-function bar(v) {
+function bar(v, live) {
   $('ver-bar')?.remove();
   const box = document.createElement('div');
   box.className = 'share-bar'; box.id = 'ver-bar';
@@ -200,7 +206,7 @@ function bar(v) {
   box.append(note,
     btn('Download PNG', () => em().exportPNG({ view: em().getState().view, download: true }), true),
     btn('Start a new figure from this version', startCopy),
-    btn('Back to the current figure', close));
+    ...(live ? [btn('Back to the current figure', close)] : [])); // no live figure to go back to
   document.querySelector('.toolbar').appendChild(box);
 }
 

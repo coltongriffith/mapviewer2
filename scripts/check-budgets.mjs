@@ -223,7 +223,10 @@ const BUDGETS = {
   // its hooks in account-core.js (+0.4 kB: the read-only guard on Save and the change notices, the lazy loader, the
   // menu button and the ?version= boot). The page gains only the four EM3D.account names and the gap-note check
   // (+0.03 kB, inside its budget).
-  threeDLazyJsGzipKb: 109.6,
+  // 109.6 → 109.8 (review fixes, measured 109.24, configured 109.47, + 0.3): saveProject itself refuses while a version is
+  // open (every save path, the API included), and a ?version= link reads the version on its own, so it opens when the
+  // live figure is deleted or out of reach (then without "Back to the current figure"); ~0.18 kB.
+  threeDLazyJsGzipKb: 109.8,
   // The /3d grade-shell worker (composites estimate and marching cubes) is its own chunk, fetched only
   // when a shell is turned on. Vite emits workers outside the manifest graph, so it is found from the
   // page's chunks (see below) and budgeted here rather than in the page or the app totals.

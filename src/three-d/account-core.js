@@ -217,6 +217,8 @@ export const isConflict = (loadedAt, savedAt) => !!(loadedAt && savedAt && Date.
  * @param {{force?:boolean}} [opts]  force: overwrite even when the saved copy is newer than this one
  */
 export async function saveProject(name, existingId, dest = null, { force = false } = {}) {
+  // Every save path (the button, Ctrl/Cmd+S, EM3D.account.saveProject): a version on screen never overwrites the figure.
+  if (frozen) throw Object.assign(plain('A published version is open read-only. Start a new figure from it to save.', null, 'READ_ONLY'), { plain: true });
   const title = String(name || '').trim().slice(0, 200);
   if (!title) throw Object.assign(plain('Give the 3D map a name first.'), { plain: true });
   const user = await requireUser('save this 3D map');
@@ -720,10 +722,12 @@ async function boot() {
   if (stash && !user) { pending = { intent: stash.intent, name: stash.name, id: stash.id || null }; say('Restored the figure you were saving. Sign in to finish saving it.'); return; }
   if (stash) await clearStash();
   const q = new URLSearchParams(location.search), wanted = q.get('project'), n = q.get('version');
-  if (wanted && user) {
-    try { const res = await openProject(wanted); settle(); say(`Opened “${res.name}”.`); } catch (err) { setUrlProject(null); say(err.message); return; }
-    // /3d?project=<id>&version=<n>: that published version, read-only.
-    if (/^\d+$/.test(n || '')) await openVersion(Number(n)).catch((err) => say(err.message));
+  if (wanted && user && /^\d+$/.test(n || '')) {
+    // /3d?project=<id>&version=<n>: that published version, read-only, read on its own: it opens even when
+    // the live figure has been deleted or moved where this reader cannot follow.
+    await openVersion(Number(n), { figure: wanted, force: true }).catch((err) => { setUrlProject(null); say(err.message); });
+  } else if (wanted && user) {
+    try { const res = await openProject(wanted); settle(); say(`Opened “${res.name}”.`); } catch (err) { setUrlProject(null); say(err.message); }
   }
 }
 

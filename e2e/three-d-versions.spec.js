@@ -108,7 +108,7 @@ const exports = (page, section = false) => page.evaluate(async (sec) => {
 
 test.describe('published versions', () => {
   test.skip(!process.env.E2E_ADMIN, 'Requires the configured client build with isolated auth fixtures');
-  test.setTimeout(240_000); // software WebGL, full-size exports and three page loads
+  test.setTimeout(300_000); // software WebGL, full-size exports and four page loads
 
   test('publish, edit, then open version 1: read-only and drawn byte for byte as before the edit', async ({ page, context }) => {
     const errors = [];
@@ -173,6 +173,11 @@ test.describe('published versions', () => {
     await page.locator('body').press('Control+s');
     await expect(page.locator('#status')).toContainText('read-only');
     expect(fake.upserts).toHaveLength(2);
+    // ...and neither does the API: the version on screen never overwrites the live figure.
+    const refused = await page.evaluate((i) => window.EM3D.account.saveProject('RAILS RELEASE', i).then(() => 'saved', (e) => `${e.code}: ${e.message}`), id);
+    expect(refused).toBe('READ_ONLY: A published version is open read-only. Start a new figure from it to save.');
+    expect(fake.upserts).toHaveLength(2);
+    expect(fake.rows.get(id).settings.settings.title).toBe('RAILS EDITED');
     const [download] = await Promise.all([page.waitForEvent('download'), page.locator('#ver-bar').getByRole('button', { name: 'Download PNG' }).click()]);
     expect(download.suggestedFilename()).toMatch(/\.png$/);
 
@@ -197,6 +202,14 @@ test.describe('published versions', () => {
     expect(fake.upserts[2].settings.settings).toEqual(fake.versions[0].snapshot.settings.settings);
     expect(fake.rows.get(id).settings.settings.title).toBe('RAILS EDITED'); // the figure itself is untouched
     expect(fake.versions).toHaveLength(1);
+
+    // The live figure deleted: the link still opens the version (read on its own), with nothing to go back to.
+    fake.rows.get(id).deleted_at = new Date().toISOString();
+    await open3d(page, `/3d?project=${id}&version=1`);
+    await expect(page.locator('#ver-banner')).toHaveText('Published version 1 · News release 2026-10-21 · read-only');
+    await expect(page.locator('#ver-bar').getByRole('button', { name: 'Start a new figure from this version' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Back to the current figure' })).toHaveCount(0);
+    expect((await exports(page)).fig).toBe(v1.fig);
     expect(errors).toEqual([]);
   });
 });
