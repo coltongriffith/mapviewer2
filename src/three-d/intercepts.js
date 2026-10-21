@@ -12,13 +12,16 @@
 // result then says what the reported interval spans (gap: the widest unsampled gap in m, overlap: true), so
 // the page can warn and offer a recalculation.
 export const TOL = 0.01;
+// One column's samples, in depth order; sampled: overlaps trimmed or dropped as above.
+function samples(ints, col, sampled) {
+  const seq = ints.map((it) => ({ from: it.from, to: it.to, v: it.vals[col] })).filter((it) => Number.isFinite(it.v));
+  if (!sampled) return seq;
+  const out = [];
+  seq.sort((a, b) => a.from - b.from).forEach((it) => { const p = out[out.length - 1]; if (!p || it.from >= p.to - TOL) out.push(it); else if (it.to > p.to + TOL) out.push({ ...it, from: p.to }); });
+  return out;
+}
 export function intercept(ints, col, cut, inclCut, minLen, sampled = true) {
-  let seq = ints.map((it) => ({ from: it.from, to: it.to, v: it.vals[col] })).filter((it) => Number.isFinite(it.v));
-  if (sampled) {
-    const out = [];
-    seq.sort((a, b) => a.from - b.from).forEach((it) => { const p = out[out.length - 1]; if (!p || it.from >= p.to - TOL) out.push(it); else if (it.to > p.to + TOL) out.push({ ...it, from: p.to }); });
-    seq = out;
-  }
+  const seq = samples(ints, col, sampled);
   const lenOf = (run) => run.reduce((s, x) => s + (x.to - x.from), 0), spanOf = (run) => (sampled ? lenOf(run) : run[run.length - 1].to - run[0].from);
   let best = null, start = -1, lastHit = -1;
   const close = () => {
@@ -43,6 +46,13 @@ export function intercept(ints, col, cut, inclCut, minLen, sampled = true) {
   let gap = 0, overlap = false;
   for (let i = 1; i < run.length; i++) { const d = run[i].from - run[i - 1].to; if (d > TOL) gap = Math.max(gap, d); if (d < -TOL) overlap = true; }
   return { broad, incl, gap, overlap };
+}
+
+// Length-weighted average of another column over the same depths, for the second element in a callout;
+// sampled: overlapping metres count once, as for the first.
+export function avgOver(ints, col, from, to, sampled = true) {
+  let m = 0, l = 0; samples(ints, col, sampled).forEach((it) => { const a = Math.max(from, it.from), b = Math.min(to, it.to); if (b > a) { m += it.v * (b - a); l += b - a; } });
+  return l > 0 ? m / l : null;
 }
 
 // A callout's text lines: the automatic ones from the intercept (text(x) words an interval), unless reworded

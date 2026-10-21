@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { intercept, calloutText } from '../src/three-d/intercepts.js';
+import { intercept, calloutText, avgOver } from '../src/three-d/intercepts.js';
 
 // The calculation as it stood in studio.js before it moved here (7d595fda), for comparison.
 function before(ints, col, cut, inclCut, minLen) {
@@ -122,5 +122,18 @@ describe('intercepts', () => {
     expect(calloutText(ic, {}, text)).toEqual({ l1: '20 m @ 1.5', l1b: ' from 0 m', l2: 'incl. 10 m @ 1' });
     expect(calloutText(ic, { line1: '20 m of 1.5% Cu', line2: 'incl. high grade' }, text)).toEqual({ l1: '20 m of 1.5% Cu', l1b: '', l2: 'incl. high grade' });
     expect(calloutText(ic, { incl: false }, text).l2).toBeNull();
+  });
+});
+
+describe('second element average', () => {
+  // 0–10 m and a re-assay at 5–15 m: the intercept is 15 m, so the second grade is over 15 m, not 20.
+  const ints = [{ from: 0, to: 10, vals: { cu: 1, au: 1 } }, { from: 5, to: 15, vals: { cu: 1, au: 4 } }];
+  it('counts overlapping metres once when sampled', () => {
+    const ic = intercept(ints, 'cu', 0.2, 0.5, 1, true);
+    expect(ic.broad.len).toBe(15);
+    expect(avgOver(ints, 'au', ic.broad.from, ic.broad.from + ic.broad.len, true)).toBeCloseTo((10 * 1 + 5 * 4) / 15);
+  });
+  it('keeps the earlier weighting for version 1 figures', () => {
+    expect(avgOver(ints, 'au', 0, 15, false)).toBeCloseTo((10 * 1 + 10 * 4) / 20);
   });
 });

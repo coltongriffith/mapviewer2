@@ -7,7 +7,7 @@ import { METAL_DEFAULTS, defaultUnit, priceUnit, eqFactors, eqFormula, eqValue }
 import { isXYZ, parseXYZ, refineRole } from './roles.js';
 import { makeLayout, isClick, legendRows as binRows, wrapNotes, shouldMerge } from './layout.js';
 import { DESIGN_VERSION, FEATURES, uses, withDefaults } from './design-version.js';
-import { intercept, calloutText } from './intercepts.js';
+import { intercept, calloutText, avgOver } from './intercepts.js';
 
 const $ = (id) => document.getElementById(id);
 // ============================================================
@@ -1042,14 +1042,9 @@ function computeCallouts() {
 }
 const fmt = (v) => (v >= 100 ? v.toFixed(0) : v >= 10 ? v.toFixed(1) : v > 0 && v < 0.01 ? v.toFixed(3) : v.toFixed(2));
 const gradeText = (v, label) => { const unit = (label.match(/(%|g\/t|ppm|ppb)$/) || [''])[0], el = label.replace(/\s*(%|g\/t|ppm|ppb)$/, ''); return `${fmt(v)}${unit === '%' ? '%' : ' ' + unit} ${el}`; };
-// Length-weighted average of another column over the same depths, for the second element in a callout.
-function avgOver(ints, col, from, to) {
-  let m = 0, l = 0; ints.forEach((it) => { const v = it.vals[col], a = Math.max(from, it.from), b = Math.min(to, it.to); if (b > a && Number.isFinite(v)) { m += v * (b - a); l += b - a; } });
-  return l > 0 ? m / l : null;
-}
 const icText = (x, h) => {
   let t = `${x.len.toFixed(x.len < 10 ? 1 : 0)} m @ ${gradeText(x.avg, S.valueLabel)}`;
-  const v2 = h && S.valueCol2 ? avgOver(h.ints, S.valueCol2, x.from, x.from + x.len) : null;
+  const v2 = h && S.valueCol2 ? avgOver(h.ints, S.valueCol2, x.from, x.from + x.len, uses(S, 'sampledIntercepts')) : null;
   if (v2 !== null) t += `, ${gradeText(v2, labelFor(S.valueCol2))}`;
   return t.replace(/\s+/g, ' ').replace(/ ,/g, ',').trim();
 };
