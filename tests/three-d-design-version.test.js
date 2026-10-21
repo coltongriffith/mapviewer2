@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { DESIGN_VERSION, LEGACY_V1, FEATURES, uses, withDefaults } from '../src/three-d/design-version.js';
+import { DESIGN_VERSION, LEGACY_V1, LEGACY_V2, FEATURES, uses, withDefaults } from '../src/three-d/design-version.js';
 import { intercept } from '../src/three-d/intercepts.js';
 
 // A figure saved before the October 2026 design rounds: getProject() then, with no designVersion.
@@ -39,9 +39,23 @@ describe('figure design versions', () => {
   });
 
   it('a current figure takes today\'s defaults for anything missing, and every new behaviour', () => {
-    const S = withDefaults({ designVersion: 2, title: 'NEW' }, NOW);
-    expect(S).toMatchObject({ designVersion: 2, title: 'NEW', imagery: NOW.imagery, legend: NOW.legend, tags: { emphasis: 'auto', idMode: 'auto', highlightNew: true }, geology: { strength: 1.3, hidden: 'nearest' } });
+    const S = withDefaults({ designVersion: DESIGN_VERSION, title: 'NEW' }, NOW);
+    expect(S).toMatchObject({ designVersion: DESIGN_VERSION, title: 'NEW', imagery: NOW.imagery, legend: NOW.legend, tags: { emphasis: 'auto', idMode: 'auto', highlightNew: true }, geology: { strength: 1.3, hidden: 'nearest' } });
     for (const f of Object.keys(FEATURES)) expect(uses(S, f), f).toBe(true);
+  });
+
+  it('opens a version 2 figure without round 5\'s look, and a version 1 figure with both tables', () => {
+    const now = { ...NOW, shell: { ...NOW.shell, shading: 'solid+edges' }, scene: { sunAz: 315, sunAlt: 40, shadow: 0.35, ao: 0.5, haze: 0, theme: 'light', edge: '#1e1d26' }, autoLabels: true };
+    const two = withDefaults({ designVersion: 2, shell: { enabled: true, opacity: 0.3 }, geology: { enabled: true } }, now);
+    expect(two.shell).toMatchObject({ enabled: true, opacity: 0.3, shading: 'glass' });
+    expect(two.scene).toEqual(LEGACY_V2.scene);
+    expect(two.geology).toMatchObject({ enabled: true, contacts: false, labels: false, clean: false });
+    expect(two.autoLabels).toBe(false);
+    expect(uses(two, 'holeTags')).toBe(true); expect(uses(two, 'clearLeaders')).toBe(false);
+    expect(withDefaults({ designVersion: 2, autoLabels: true }, now).autoLabels).toBe(true); // a saved choice wins
+    const one = withDefaults(legacy.settings, now);
+    expect(one.shell).toMatchObject({ color: '#1f9e96', shading: 'glass' }); expect(one.scene.shadow).toBe(0);
+    expect(withDefaults({ designVersion: 3 }, now)).toMatchObject({ scene: now.scene, autoLabels: true, shell: { shading: 'solid+edges' } });
   });
 
   it('keeps the version through a save and reopen', () => {

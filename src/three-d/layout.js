@@ -1,5 +1,5 @@
 // Figure layout helpers for Exploration Maps 3D: pure functions shared by the page (studio.js) and the
-// hole tags (tags.js). Boxes are [x0, y0, x1, y1] in frame pixels.
+// hole tags (tags.js); leaders and pills are in leaders.js. Boxes are [x0, y0, x1, y1] in frame pixels.
 
 export const hits = (a, b, pad = 0) => !(a[2] + pad < b[0] || a[0] - pad > b[2] || a[3] + pad < b[1] || a[1] - pad > b[3]);
 export const overlapArea = (a, b) => Math.max(0, Math.min(a[2], b[2]) - Math.max(a[0], b[0])) * Math.max(0, Math.min(a[3], b[3]) - Math.max(a[1], b[1]));
@@ -29,29 +29,6 @@ export function makeLayout(W, H, pad = 0, boxes = []) {
     flush() { const m = [...meta.entries()]; meta.clear(); m.forEach(([b, x]) => { if (boxes.includes(b)) x.draw(b); }); },
   };
   return L;
-}
-
-// Pill placement: each { x, y, w, h } (anchor and size) tries spots above, beside and further out, and
-// takes the first clear of `avoid`, the frame edge and the pills already placed; failing that, the spot
-// with the least overlap, or (drop) none: items come in priority order, so the lowest-priority pills are
-// the ones left out rather than drawn over another. Returns { cx, cy, box, leader } per item placed.
-export function placePills(items, avoid, { W, H, unit = 1, pad = 4, drop = false }) {
-  const placed = [], out = [];
-  const spots = [[0, -1], [1, -0.7], [-1, -0.7], [0, -2], [1.3, -1.7], [-1.3, -1.7], [0, 1], [1.2, 0.6], [-1.2, 0.6], [0, -3], [1.6, -2.7], [-1.6, -2.7], [0, 2], [2, 0], [-2, 0], [0, -4], [2, -3.7], [-2, -3.7]];
-  for (const it of items) {
-    let best = null;
-    for (const [sx, sy] of spots) {
-      const cx = it.x + sx * (it.w / 2 + 8 * unit), cy = it.y + sy * (it.h + 6 * unit), box = [cx - it.w / 2 - pad, cy - it.h / 2 - pad, cx + it.w / 2 + pad, cy + it.h / 2 + pad];
-      if (box[0] < 0 || box[1] < 0 || box[2] > W || box[3] > H) continue;
-      const cost = [...avoid, ...placed].reduce((s, b) => s + (hits(box, b) ? overlapArea(box, b) + 1 : 0), 0);
-      if (!best || cost < best.cost) best = { cx, cy, box, cost, far: Math.abs(sx) > 1.1 || Math.abs(sy) > 1.1 };
-      if (cost === 0) break;
-    }
-    if (drop && (!best || best.cost > 0)) continue;
-    if (!best) best = { cx: it.x, cy: it.y - it.h, box: [it.x - it.w / 2, it.y - it.h * 1.5, it.x + it.w / 2, it.y - it.h / 2], far: false };
-    placed.push(best.box); out.push({ ...it, cx: best.cx, cy: best.cy, box: best.box, leader: best.far });
-  }
-  return out;
 }
 
 // A press on the preview that moved under 4 px, or lasted under 150 ms, is a click: the camera stays put.
