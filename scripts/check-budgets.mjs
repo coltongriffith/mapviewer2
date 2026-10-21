@@ -87,7 +87,13 @@ const BUDGETS = {
   // 169 → 170 (Oct 2026): figure design versions (design-version.js: earlier figures keep their look) and
   // gap-aware intercepts (intercepts.js) with the warning on earlier figures, ~0.9 kB. Both run as a figure
   // opens and on every restyle, so they stay in the page.
-  threeDJsGzipKb: 170,
+  // 170 → 172 (Oct 2026, round 5A): the sun's soft terrain shadows, the darker hollows and the light/dark
+  // presentation palette are on from the first frame, as are the orthographic projection's hooks, the
+  // leaders routed around cards (layout.js) and the section markers kept off labels and pill leaders;
+  // three.js gains the shadow, matcap, edge and fog classes they use (0.7 kB, in the shared vendor chunk). The
+  // shells' drawing, the orthographic framing, the haze and the scene checks went to look.js, and the
+  // metal-equivalent form to eq-form.js (0.7 kB), to keep the rest out of the page.
+  threeDJsGzipKb: 172,
   // /3d's own modules fetched on first use (the geology, geophysics and tag layers, the account
   // client). They never load with the page or the app, so they sit outside the page and app totals.
   // 32 → 34 (Oct 2026, round 4): per-hole tags, grouped pending tags, callouts beside or bracketed on their
@@ -104,7 +110,10 @@ const BUDGETS = {
   // 47 → 48 (Oct 2026): the property data library picker and newer-data notice (library.js, ~1.4 kB),
   // fetched by account-core.js only for a figure in a company property. Counted here now that the
   // walk follows lazy imports of lazy modules; before, it would have landed in the app's totals.
-  threeDLazyJsGzipKb: 48,
+  // 48 → 54 (Oct 2026, round 5A): look.js (solid outlined and nested grade shells, the orthographic framing,
+  // haze, the scene checks; ~3.2 kB), contact lines, cleaned faces and unit names in geology.js (~1.3 kB), and
+  // the metal-equivalent form moved out of the page (eq-form.js, 0.7 kB).
+  threeDLazyJsGzipKb: 54,
   // The /3d grade-shell worker (composites estimate and marching cubes) is its own chunk, fetched only
   // when a shell is turned on. Vite emits workers outside the manifest graph, so it is found from the
   // page's chunks (see below) and budgeted here rather than in the page or the app totals.
