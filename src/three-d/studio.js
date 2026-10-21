@@ -153,7 +153,7 @@ let usingSample = true;
 const S = {              // style
   title: 'EXAMPLE RIDGE · MAIN ZONE', subtitle: '3D drilling model, looking northeast',
   valueCol: null, valueLabel: '', bins: [0.1, 0.2, 0.3, 0.5], coCount: 5, coMin: 20, coCut: 0.2, coIncl: 0.5,
-  secAz: 135, secW: 75, section: null, surf: 1, // section: { holes: chosen IDs, a, b: the line's ends } (section.js) walls: true, ids: true, inset: true, logo: null, meshes: {},
+  secAz: 135, secW: 75, section: null, surf: 1, walls: true, ids: true, inset: true, logo: null, meshes: {}, // section: { holes: chosen IDs, a, b: the line's ends } (section.js)
   ribbons: true, traceWidth: 1.4, pendingLabels: true, pendingNoAssays: false, valueCol2: null, elevTicks: true,
   terrain: 'natural', terrainSource: 'auto', vex: 1, crs: null, labels: [],
   collarFit: 'collars', blockStyle: 'glass', wallLabels: [], lockView: false,
@@ -1332,12 +1332,13 @@ function tagLabel(ctx, K, t, x, y) {
   ctx.fillStyle = textOn(pri()); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(t, x, y + u); ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
 }
 
-// Callouts: the top intercepts, minus any hidden, plus any forced on, with optional reworded lines.
-function shownCallouts() {
+// Callouts: the top intercepts (of `from`, e.g. a section's chosen holes), minus any hidden, plus any forced on,
+// with optional reworded lines.
+function shownCallouts(from = callouts) {
   const ov_ = coOv;
-  if (S.calloutMode !== 'calculated') return callouts.slice(); // published: the ticked results; manual: the ticked holes
-  const list = callouts.filter((c) => ov_(c).show !== false).slice(0, S.coCount);
-  callouts.forEach((c) => { if (ov_(c).show === true && !list.includes(c)) list.push(c); });
+  if (S.calloutMode !== 'calculated') return from.slice(); // published: the ticked results; manual: the ticked holes
+  const list = from.filter((c) => ov_(c).show !== false).slice(0, S.coCount);
+  from.forEach((c) => { if (ov_(c).show === true && !list.includes(c)) list.push(c); });
   return list;
 }
 const calloutLines = (c) => (c.pub ? PR.pubLines(c, S.pubOverrides) : calloutText(c.ic, S.coOverrides[c.key] || {}, (x) => icText(x, c.h)));
@@ -1757,7 +1758,7 @@ function drawSection(ctx, Wc, Hc, forExport) {
   // stacked down then pulled up from the bottom, the lowest-ranked left out only if they still do not fit.
   const cards = narrow ? [] : extSections().map((sec) => [sec, ...cardSize(ctx, K, [sec])]), cardTop = Math.min(Infinity, ...cards.map(([, , h]) => footTop - 52 * u - h)); // EXT hook: lithology, geophysics
   const onSec = (c) => shown.some((x) => x.h === c.h), maxY = Math.min(Hc - mb, clean ? cardTop - 12 * u : Infinity) - 18 * u, gap = 34 * u;
-  let cos = (chosen ? callouts.filter((c) => onSec(c) && S.coOverrides[c.h.id]?.show !== false).slice(0, S.coCount) : shownCallouts().filter(onSec)).slice(0, narrow ? 2 : 4)
+  let cos = shownCallouts(chosen ? callouts.filter(onSec) : callouts).filter(onSec).slice(0, narrow ? 2 : 4)
     .map((c, rank) => { const p = c.h.posAt(c.ic.broad.mid); return { c, rank, s: XY(p), M: measureCallout(ctx, K, c) }; }), by = mt;
   if (clean) {
     cos.sort((a, b) => a.s[1] - b.s[1]);

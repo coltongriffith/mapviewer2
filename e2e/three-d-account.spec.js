@@ -146,14 +146,16 @@ test('holes chosen for the section and its fitted line survive getProject and lo
   await open3d(page);
   const r = await page.evaluate(async () => {
     const E = window.EM3D, ids = E.getState().project.holeIds.slice(0, 5);
+    const { walls, ids: holeIds, inset } = E.getProject().settings, defaults = { walls, ids: holeIds, inset };
     const chosen = (await E.setSection({ holes: ids })).section;
     const project = JSON.parse(JSON.stringify(E.getProject())), before = E.getState();
     E.clearFiles(); const after = await E.loadProject(project);
     const png = E.exportPNG({ view: 'section' }).length;
     const old = JSON.parse(JSON.stringify(project)); delete old.settings.section; old.settings.designVersion = 2;
     const earlier = (await E.loadProject(old)).section;
-    return { ids, chosen, saved: project.settings.section, before, after, png, earlier };
+    return { ids, chosen, saved: project.settings.section, before, after, png, earlier, defaults };
   });
+  expect(r.defaults).toEqual({ walls: true, ids: true, inset: true }); // a new figure keeps its block sides, hole IDs and inset
   expect(r.chosen.holes).toEqual(r.ids);
   expect(r.chosen.ends).toHaveLength(2);
   expect(r.saved).toEqual({ holes: r.ids, a: r.chosen.ends[0], b: r.chosen.ends[1] });
