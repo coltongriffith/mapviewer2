@@ -40,7 +40,12 @@ const BUDGETS = {
   // 146 → 147: hatch/cross/dot legend swatches (Oct 2026). The shared pattern
   // description (shared/fillPattern.js), the patterned area swatch and the
   // pattern-spacing control land in the editor chunk; ~0.6 KiB.
-  maxJsChunkGzipKb: 147,
+  // 147 → 148: callout leader routing (Oct 2026). The scorer is a lazy chunk
+  // (loaded only for scored-layout projects, Auto-arrange and export); the
+  // editor keeps the shared leader geometry the overlay must draw (elbow,
+  // curve, anchor mark), the Auto-arrange action, the overlap list and the
+  // leader/anchor-mark controls; ~1.0 KiB.
+  maxJsChunkGzipKb: 148,
   initialJsGzipKb: 75,
   initialAuthJsGzipKb: 135,
   // The former configured check omitted VITE_ADMIN_EMAIL, which pruned the
@@ -60,13 +65,16 @@ const BUDGETS = {
   // 876 → 877: the lazy /oauth/consent page for MCP account sign-in.
   // 877 → 878: Download PNG on shared maps (the MCP png_download_url).
   // 878 → 879: patterned legend swatches (shared/fillPattern.js) and the property data library client.
-  totalAuthJsGzipKb: 879,
+  // 879 → 882: callout leader routing — the lazy scored-layout chunk (~2 KiB),
+  // shared leader geometry in the editor and export renderer (~1.3 KiB).
+  totalAuthJsGzipKb: 882,
   // 805 → 808: placed and callout logos, SVG font embedding (Sept 2026).
   // 808 → 809: shared-map viewer opens at the saved view on the fixed stage.
   // 809 → 810: the lazy /oauth/consent page for MCP account sign-in.
   // 810 → 812: Download PNG on shared maps (the MCP png_download_url).
   // 812 → 813: patterned legend swatches (shared/fillPattern.js) and the property data library client.
-  totalJsGzipKb: 813,
+  // 813 → 817: callout leader routing, as totalAuthJsGzipKb above.
+  totalJsGzipKb: 817,
   // Standalone pages (/3d, /teams) are separate Vite entries that never share
   // the app's chunks, so they are budgeted on their own instead of in the
   // totals above. /3d carries three.js (~109 kB gzip) and its editor.

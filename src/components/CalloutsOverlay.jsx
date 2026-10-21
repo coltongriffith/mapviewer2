@@ -1,15 +1,24 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { resolveCalloutBoxes, panelObstacles, leaderEndpoint, arrowheadPoints, calloutLogoSize } from '../utils/calloutLayout';
+import { resolveCalloutBoxes, panelObstacles, arrowheadPoints, calloutLogoSize } from '../utils/calloutLayout';
+import { leaderGeometry, leaderTangentFrom, leaderSvgD, anchorMark } from '../../shared/leaderGeometry.js';
 import { computeSnap } from '../utils/layout';
 import { screenScale } from '../utils/stageScale.js';
 
-export default function CalloutsOverlay({ map, callouts, selectedCalloutId, onSelect, onMove, onUpdate, fontFamily, zones, layout }) {
+export default function CalloutsOverlay({ map, callouts, selectedCalloutId, onSelect, onMove, onUpdate, onConflicts, fontFamily, zones, layout }) {
   const [tick, setTick] = useState(0);
+  // The scored layout (layout.layoutAlgorithm >= 2) is a lazy chunk; until it
+  // arrives, or if it cannot load, the legacy placement is drawn.
+  const scored = layout?.layoutAlgorithm >= 2;
+  const [scorer, setScorer] = useState(null);
   const [editingField, setEditingField] = useState(null);
   const [snapGuides, setSnapGuides] = useState([]);
   const dragRef = useRef(null);
 
   useEffect(() => { setEditingField(null); }, [selectedCalloutId]);
+
+  useEffect(() => {
+    if (scored && !scorer) import('../utils/calloutScorer.js').then(setScorer, () => {});
+  }, [scored, scorer]);
 
   useEffect(() => {
     if (!map) return undefined;
@@ -62,7 +71,15 @@ export default function CalloutsOverlay({ map, callouts, selectedCalloutId, onSe
   // Same obstacles the exporters use (renderScene placeCallouts), so a card
   // the editor moved off the legend is off the legend in the PNG too.
   const obstacles = useMemo(() => panelObstacles(zones, layout || {}), [zones, layout]);
-  const placed = useMemo(() => resolveCalloutBoxes(callouts, map, { obstacles }), [callouts, map, tick, obstacles]);
+  const placed = useMemo(
+    () => (scored && scorer ? scorer.resolveScoredBoxes : resolveCalloutBoxes)(callouts, map, { obstacles }),
+    [callouts, map, tick, obstacles, scored, scorer],
+  );
+  // Cards still in conflict, for the editor's list. Keyed so the parent only
+  // hears about a change.
+  const conflicts = placed.filter((c) => c.collidesWith).map((c) => ({ id: c.id, text: c.text, with: c.collidesWith }));
+  const conflictKey = JSON.stringify(conflicts);
+  useEffect(() => { onConflicts?.(conflicts); }, [conflictKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="callouts-overlay">
@@ -75,20 +92,22 @@ export default function CalloutsOverlay({ map, callouts, selectedCalloutId, onSe
           return (
             <React.Fragment key={`${callout.id}-leader`}>
               {(callout.type === 'leader' || callout.type === 'boxed') ? (() => {
-                const ep = leaderEndpoint(callout.anchorPx, callout);
-                const head = style.arrowhead ? arrowheadPoints(ep, callout.anchorPx, 9) : null;
+                // shared/leaderGeometry.js: the path every exporter draws.
+                const g = leaderGeometry(callout.anchorPx, callout, style.leaderShape);
+                const color = style.border || '#102640';
+                const head = style.arrowhead ? arrowheadPoints(leaderTangentFrom(g), g.start, 9) : null;
+                const mark = anchorMark(style);
                 return (
                   <>
-                    <line
-                      x1={callout.anchorPx.x}
-                      y1={callout.anchorPx.y}
-                      x2={ep.x}
-                      y2={ep.y}
-                      stroke={style.border || '#102640'}
+                    <path
+                      d={leaderSvgD(g)}
+                      fill="none"
+                      stroke={color}
                       strokeWidth="1.4"
                       strokeDasharray={callout.type === 'leader' ? '5 3' : ''}
                     />
-                    {head && <polygon points={head.map((pt) => `${pt.x},${pt.y}`).join(' ')} fill={style.border || '#102640'} />}
+                    {head && <polygon points={head.map((pt) => `${pt.x},${pt.y}`).join(' ')} fill={color} />}
+                    {mark && <circle cx={g.start.x} cy={g.start.y} r={mark.r} fill={mark.filled ? color : 'none'} stroke={mark.filled ? 'none' : color} strokeWidth="1.4" />}
                   </>
                 );
               })() : null}
