@@ -20,13 +20,29 @@ export function gridTicks(lo, hi, n = 5) {
   for (let k = Math.ceil(lo / step - 1e-9); k * step <= hi + 1e-9; k++) values.push(+(k * step).toPrecision(12));
   return { step, values };
 }
-// A bar along a hole's plan trace: [s0, s1] in pixels from the collar, at least min long (grown about its middle)
-// and starting clear of the collar marker (off).
+// A span [s0, s1] along a line, at least min long (grown about its middle) and, when it would reach into
+// [-off, off] (the collar marker, at 0), moved to start at off.
 export function barSpan(s0, s1, min, off = 0) {
   let a = Math.min(s0, s1), b = Math.max(s0, s1);
   if (b - a < min) { const c = (a + b) / 2; a = c - min / 2; b = c + min / 2; }
-  if (a < off) { b += off - a; a = off; }
+  if (off > 0 && a < off && b > -off) { b += off - a; a = off; }
   return [a, b];
+}
+// An interval's bar from its own ends on screen (a, b): along a→b where that is long enough to give a direction,
+// else along the first of dirs (the trace there, then the whole hole) that has one; at least min long about its
+// middle, and kept off the collar marker (c, radius off) when it lies across it. Returns [x0, y0, x1, y1].
+export function barOf(a, b, dirs, min, c = null, off = 0) {
+  const len = (v) => Math.hypot(v[0], v[1]), ab = [b[0] - a[0], b[1] - a[1]], v = [ab, ...dirs].find((x, i) => len(x) > (i ? 1e-6 : min / 4)) || [1, 0], d = [v[0] / len(v), v[1] / len(v)];
+  const m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], h = Math.abs(ab[0] * d[0] + ab[1] * d[1]) / 2;
+  // Along d from the collar's foot on the line through m; the collar counts only if it lies on that line.
+  const tc = c ? (c[0] - m[0]) * d[0] + (c[1] - m[1]) * d[1] : 0, onIt = c && Math.abs((c[0] - m[0]) * d[1] - (c[1] - m[1]) * d[0]) < off;
+  const [s0, s1] = barSpan(-h - (onIt ? tc : 0), h - (onIt ? tc : 0), min, onIt ? off : 0), o = onIt ? tc : 0;
+  return [m[0] + d[0] * (s0 + o), m[1] + d[1] * (s0 + o), m[0] + d[0] * (s1 + o), m[1] + d[1] * (s1 + o)];
+}
+// A hole's interval bars: P(depth) its point on screen, ints the intervals shown.
+export function holeBars(h, P, ints, min, off) {
+  const c = P(0), e = P(h.len), whole = [e[0] - c[0], e[1] - c[1]];
+  return ints.map((it) => { const p = P(Math.max(0, it.from - 10)), q = P(Math.min(h.len, it.to + 10)); return barOf(P(it.from), P(it.to), [[q[0] - p[0], q[1] - p[1]], whole], min, c, off); });
 }
 
 const on = () => !!H.G && isPlanView(H.getCam().plunge);
@@ -78,19 +94,17 @@ function gridLabels(ctx, K, lay, grid) {
   });
 }
 
-// The intervals as flat bars along the plan trace, highest grades on top; their boxes, merged a few at a time, are
+// The intervals as flat bars along the plan trace, each on its own stretch of it (a surveyed hole bends), highest grades on top; their boxes, merged a few at a time, are
 // kept for the IDs to keep off.
 function drawBars(ctx, K) {
   const G = H.G, { u } = K, w = 5 * u, min = 9 * u, off = 7 * u, list = [], tags = H.ext('tags');
   H.project.holes.forEach((h) => {
-    const P = (d) => { const p = h.posAt(d); return H.proj(G.V(p.x, p.y, p.z)); }, c = P(0); if (c[2] > 1) return;
-    const e = P(h.len), L = Math.hypot(e[0] - c[0], e[1] - c[1]), d = L > 2 * u ? [(e[0] - c[0]) / L, (e[1] - c[1]) / L] : [1, 0];
-    const along = (q) => (q[0] - c[0]) * d[0] + (q[1] - c[1]) * d[1], alpha = tags?.fade(h) ? 0.35 : h.prov ? 0.6 : 1;
+    const P = (d) => { const p = h.posAt(d); return H.proj(G.V(p.x, p.y, p.z)); }; if (P(0)[2] > 1) return;
+    const alpha = tags?.fade(h) ? 0.35 : h.prov ? 0.6 : 1, ints = h.ints.map((it) => [it, H.intervalShown(it) ? H.binIndex(it.vals[S.valueCol]) : -1]).filter(([, bi]) => bi > 0);
     let box = null;
-    h.ints.forEach((it) => {
-      const bi = H.intervalShown(it) ? H.binIndex(it.vals[S.valueCol]) : -1; if (bi < 1) return;
-      const [a, b] = barSpan(along(P(it.from)), along(P(it.to)), min, off), x0 = c[0] + d[0] * a, y0 = c[1] + d[1] * a, x1 = c[0] + d[0] * b, y1 = c[1] + d[1] * b;
-      list.push({ bi, alpha, x0, y0, len: b - a, ang: Math.atan2(d[1], d[0]) });
+    holeBars(h, P, ints.map(([it]) => it), min, off).forEach(([x0, y0, x1, y1], k) => {
+      const bi = ints[k][1];
+      list.push({ bi, alpha, x0, y0, len: Math.hypot(x1 - x0, y1 - y0), ang: Math.atan2(y1 - y0, x1 - x0) });
       const bb = [Math.min(x0, x1) - w / 2, Math.min(y0, y1) - w / 2, Math.max(x0, x1) + w / 2, Math.max(y0, y1) + w / 2];
       if (box && Math.max(box[2], bb[2]) - Math.min(box[0], bb[0]) < 18 * u && Math.max(box[3], bb[3]) - Math.min(box[1], bb[1]) < 18 * u) box.splice(0, 4, Math.min(box[0], bb[0]), Math.min(box[1], bb[1]), Math.max(box[2], bb[2]), Math.max(box[3], bb[3]));
       else barBoxes.push(box = bb);

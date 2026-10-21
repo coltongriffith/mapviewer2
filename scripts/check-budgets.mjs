@@ -194,12 +194,13 @@ const BUDGETS = {
   // live text, and the font embedding), plus ~0.4 kB in desk.js. Fetched only when "Include editable annotations
   // (SVG)" is ticked or EM3D.exportLayers({ svg: true }) is called. The page gains only the recorder's hand-off in
   // figureCanvas and the checkbox (+0.015 kB, inside its budget).
-  // 100.45 → 104.1 (Oct 2026, round 5D, measured 103.58, configured 103.81, + 0.3): plan.js (~2.5 kB: the plan view's
-  // interval bars, grid with its eastings and northings, and hole IDs placed on short leaders; fetched for figures of
+  // 100.45 → 104.5 (Oct 2026, round 5D, measured 103.94, configured 104.18, + 0.3): plan.js (~2.8 kB: the plan view's
+  // interval bars, each on its own stretch of a surveyed trace, grid with its eastings and northings, and hole IDs
+  // placed on short leaders; fetched for figures of
   // design version 5 or with the grid on), section.js +0.55 (pad-merged and staggered section IDs, grade-ranked holes),
   // overlays.js +0.3 (claims outlined in the inset), shapes.js +0.2 (views: both, 3D or section), the callout editor's
-  // second published line (+0.1) and the location inset's outline hook in tags.js.
-  threeDLazyJsGzipKb: 104.1,
+  // second published line with its own depths and stale-wording note (+0.2) and the location inset's outline hook in tags.js.
+  threeDLazyJsGzipKb: 104.5,
   // The /3d grade-shell worker (composites estimate and marching cubes) is its own chunk, fetched only
   // when a shell is turned on. Vite emits workers outside the manifest graph, so it is found from the
   // page's chunks (see below) and budgeted here rather than in the page or the app totals.

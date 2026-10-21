@@ -1,10 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
 import { gradeRank, joinIds, padMerge, crowded } from '../src/three-d/section-fit.js';
 import { secFrame } from '../src/three-d/section-geometry.js';
-import { gridTicks, barSpan, isPlanView } from '../src/three-d/plan.js';
+import { gridTicks, barSpan, barOf, holeBars, isPlanView } from '../src/three-d/plan.js';
 import { due, stampOf, watchVersion } from '../src/three-d/version-check.js';
 import { DESIGN_VERSION, LEGACY_V4, FEATURES, uses, withDefaults } from '../src/three-d/design-version.js';
-import { pubLines, staleNotes } from '../src/three-d/published-results.js';
+import { pubLines, staleNotes, tie, textOf } from '../src/three-d/published-results.js';
 
 // A straight hole down from (x, y, 1000) at the given dip, with 10 m intervals of the given grades.
 function hole(id, x, y, grades, dip = -90) {
@@ -73,6 +73,25 @@ describe('plan views', () => {
     expect(barSpan(30, 31, 9, 7)).toEqual([26, 35]); // grown about its middle
     expect(barSpan(40, 80, 9, 7)).toEqual([40, 80]); // long enough already
     expect(barSpan(20, 10, 9, 0)).toEqual([10, 20]);
+    expect(barSpan(-30, -20, 9, 7)).toEqual([-30, -20]); // clear of the collar already
+  });
+  it('puts each interval of a doglegged hole on its own stretch of the plan trace', () => {
+    // Plan pixels: 100 m east from the collar at (0, 0), then 100 m north (the screen's y grows down the page here).
+    const h = { len: 200 }, P = (d) => (d <= 100 ? [d, 0, 0.5] : [100, -(d - 100), 0.5]);
+    const ints = [{ from: 0, to: 2 }, { from: 20, to: 30 }, { from: 140, to: 160 }, { from: 150, to: 152 }, { from: 96, to: 104 }];
+    const [nearCollar, east, north, short, bend] = holeBars(h, P, ints, 9, 7).map((b) => b.map((v) => Math.round(v * 10) / 10 + 0));
+    expect(east).toEqual([20, 0, 30, 0]); // on the first leg, where it is
+    expect(north).toEqual([100, -40, 100, -60]); // on the second leg, not on the collar–toe diagonal
+    expect(short).toEqual([100, -46.5, 100, -55.5]); // grown to 9 px about its middle, along the second leg
+    expect(nearCollar).toEqual([7, 0, 16, 0]); // moved off the collar marker, downhole
+    expect(bend).toEqual([94.8, 1.2, 101.2, -5.2]); // across the bend: along its own ends (96, 0)–(100, -4), grown to 9 px
+    // The old way, every bar on the line from the collar to the toe (45°), would have put the second leg's interval at (≈35, ≈-35).
+    expect(Math.hypot(north[0] - 35, north[1] + 35)).toBeGreaterThan(50);
+  });
+  it('gives a vertical hole\'s bars a direction and keeps them beside the collar', () => {
+    const P = () => [50, 50, 0.5];
+    expect(holeBars({ len: 100 }, P, [{ from: 10, to: 20 }], 9, 7)[0]).toEqual([57, 50, 66, 50]);
+    expect(barOf([10, 10], [10, 10.5], [[0, 0], [0, 4]], 9, null, 0)).toEqual([10, 5.75, 10, 14.75]); // too short: the next direction
   });
 });
 
@@ -128,9 +147,23 @@ describe('published callouts: the second line', () => {
   it('rewords per result, kept while the depths are those it was written for', () => {
     const c = { pub: top, kids: [kid] };
     expect(pubLines(c).l2).toBe('incl. 20 m @ 0.5% Cu from 40 m');
-    expect(pubLines(c, { R1: { line2: 'incl. the high-grade core', at: [10, 110] } }).l2).toBe('incl. the high-grade core');
-    expect(pubLines({ pub: top, kids: [] }, { R1: { line2: 'Open at depth', at: [10, 110] } }).l2).toBe('Open at depth'); // a second line where there was none
-    expect(pubLines(c, { R1: { line2: 'old words', at: [0, 100] } }).l2).toBe('incl. 20 m @ 0.5% Cu from 40 m'); // the result moved
-    expect(staleNotes([top], { R1: { line1: 'x', line2: 'y', at: [10, 110] } })).toEqual([]);
+    expect(pubLines(c, { R1: { line2: 'incl. the high-grade core', at2: [10, 110] } }).l2).toBe('incl. the high-grade core');
+    expect(pubLines({ pub: top, kids: [] }, { R1: { line2: 'Open at depth', at2: [10, 110] } }).l2).toBe('Open at depth'); // a second line where there was none
+    expect(pubLines(c, { R1: { line2: 'old words', at2: [0, 100] } }).l2).toBe('incl. 20 m @ 0.5% Cu from 40 m'); // the result moved
+    expect(staleNotes([top], { R1: { line1: 'x', line2: 'y', at: [10, 110], at2: [10, 110] } })).toEqual([]);
+  });
+  it('keeps each line\'s own depths: rewording one never revives the other\'s stale wording', () => {
+    const c = { pub: top, kids: [kid] }, ov = { R1: {} };
+    tie(ov.R1, { line1: 'written for 0-100' }, 'published', [0, 100]); ov.R1.line1 = 'written for 0-100'; // the table had R1 at 0–100 then
+    // The table now has R1 at 10–110; the second line is reworded for those depths.
+    tie(ov.R1, { line2: 'new second line' }, 'published', [10, 110]); ov.R1.line2 = 'new second line';
+    expect(ov.R1).toEqual({ line1: 'written for 0-100', at: [0, 100], line2: 'new second line', at2: [10, 110] });
+    expect(pubLines(c, ov)).toEqual({ l1: '100 m @ 0.5% Cu', l1b: ' from 10 m', l2: 'new second line' }); // line1 still the approved text
+    expect(textOf(top, ov).l1).toBe('100 m @ 0.5% Cu');
+    expect(staleNotes([top], ov)).toEqual(['R1: your wording was written for 0–100 m; the result is now 10–110 m, so its approved text is shown. Retype it to keep yours.']);
+    // And the other way: a second line written for old depths stays stale when line1 is reworded.
+    const o2 = { line2: 'old second', at2: [0, 100] }; tie(o2, { line1: 'new first' }, 'published', [10, 110]); o2.line1 = 'new first';
+    expect(pubLines(c, { R1: o2 })).toEqual({ l1: 'new first', l1b: '', l2: 'incl. 20 m @ 0.5% Cu from 40 m' });
+    expect(staleNotes([top], { R1: o2 })[0]).toMatch(/^R1: your second line was written for 0–100 m; the result is now 10–110 m/);
   });
 });

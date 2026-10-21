@@ -171,7 +171,7 @@ test('a published callout\'s second line is reworded per result and survives sav
   }, RELEASE);
   expect(r.auto).toEqual(['incl. 60.0 m @ 0.81% Cu from 120 m', null, null]);
   expect(r.set).toEqual([['EX21-01', 'incl. 60.0 m @ 0.81% Cu from 120 m'], ['EX14-01', 'Open up-dip; follow-up planned'], ['EX14-02', null]]);
-  expect(r.saved).toEqual({ line2: 'Open up-dip; follow-up planned', at: [40, 70] });
+  expect(r.saved).toEqual({ line2: 'Open up-dip; follow-up planned', at2: [40, 70] }); // its own depths, apart from line1's
   expect(r.after).toEqual(r.set);
   expect(r.same).toBe(true);
   // The editor has a second box per top result, and typing there rewords that result's second line.

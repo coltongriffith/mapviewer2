@@ -52,14 +52,14 @@ function published(el, H) {
         + `<span class="id">${id} · ${esc(r.holeId)} ${m(r.fromM)}–${m(r.toM)} m${kid ? ' · incl.' : ''}</span>`
         + `<input type="text" data-pt="${id}" value="${esc(o.line1 && !PR.stale(o, r) ? o.line1 : '')}" placeholder="${esc(t.l1 + t.l1b)}" aria-label="Wording for ${id}">`
         // The second line of a callout (its "incl." results, or none): reworded per result, like the first.
-        + (kid ? '' : `<input type="text" data-pt2="${id}" value="${esc(o.line2 && !PR.stale(o, r) ? o.line2 : '')}" placeholder="${esc(kids(r) || '(no second line)')}" aria-label="Second line for ${id}">`)
+        + (kid ? '' : `<input type="text" data-pt2="${id}" value="${esc(o.line2 && !PR.stale2(o, r) ? o.line2 : '')}" placeholder="${esc(kids(r) || '(no second line)')}" aria-label="Second line for ${id}">`)
         + flags.map((p) => `<span class="warn" style="grid-column:2">${esc(p.message)}</span>`).join('') + '</div>';
     }).join('');
   el.querySelectorAll('[data-pc]').forEach((cb) => cb.addEventListener('change', () => H.setCallout(cb.dataset.pc, { show: cb.checked })));
   // Typing rewords that result only, for the depths it has now; the box redraws without rebuilding the panel.
   el.querySelectorAll('[data-pt],[data-pt2]').forEach((inp) => inp.addEventListener('input', () => {
     const id = inp.dataset.pt || inp.dataset.pt2, k = inp.dataset.pt ? 'line1' : 'line2', o = ov[id] || (ov[id] = {});
-    if (inp.value) { o[k] = inp.value; o.at = PR.atOf(results, id); } else delete o[k];
+    if (inp.value) { o[k] = inp.value; o[k === 'line1' ? 'at' : 'at2'] = PR.atOf(results, id); } else delete o[k]; // each line keeps its own depths (tie)
     H.redraw();
   }));
 }
