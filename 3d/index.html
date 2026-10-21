@@ -519,8 +519,9 @@ html.em3d-embed .share-credit:hover { text-decoration: underline; }
       <!-- Map overlays and annotation shapes: their lists load with the first one (overlays.js, shapes.js). -->
       <section id="ext-overlays">
         <h3>Map overlays</h3>
-        <p class="muted">Claims, targets, faults or soil points draped on the terrain, from GeoJSON, KML or a zipped shapefile.</p>
-        <label class="btn" for="ov-file" style="margin-top:8px">Add GeoJSON, KML or shapefile</label>
+        <p class="muted">Claims, targets, faults or soil points draped on the terrain, from GeoJSON, KML or a zipped shapefile, or claims found in the registries.</p>
+        <div class="row" style="margin-top:8px"><label class="btn" for="ov-file">Add GeoJSON, KML or shapefile</label><button class="btn" type="button" id="ov-claims">Find claims</button></div>
+        <div id="ov-claims-ui" style="margin-top:8px"></div>
         <input type="file" id="ov-file" multiple accept=".geojson,.json,.kml,.zip" hidden>
         <div class="files" id="ov-ui" style="margin-top:8px"></div>
       </section>
@@ -548,7 +549,7 @@ html.em3d-embed .share-credit:hover { text-decoration: underline; }
           <label class="field"><span>Hole ID tags</span><select data-ext="tags.at"><option value="toe">At the end of the hole</option><option value="collar">Pills at the collar</option><option value="both">Both</option></select></label>
           <label class="field"><span>Which holes get IDs and tags</span><select data-ext="tags.idMode"><option value="auto">Automatic (all up to 12 holes, else key holes)</option><option value="all">All holes</option><option value="key">Key holes only (callouts, new, ticked)</option></select></label>
           <label class="field"><span>"Assays pending"</span><select data-ext="tags.pending"><option value="collar">Small tag at the collars</option><option value="trace">Along each hole</option></select></label>
-          <label class="field"><span>Inset</span><select data-ext="style.insetStyle"><option value="plan">Plan of drilling</option><option value="satellite">Location map, satellite</option><option value="topo">Location map, topographic</option></select></label>
+          <label class="field"><span>Inset</span><select data-ext="style.insetStyle"><option value="plan">Plan of drilling</option><option value="satellite">Location map, satellite</option><option value="topo">Location map, topographic</option><option value="claims">Claim map</option></select></label>
         </div>
         <label class="check" style="margin-top:6px"><input type="checkbox" data-ext="style.histograms">Grade histogram bars along holes</label>
         <div id="tag-ui" style="margin-top:8px"></div>
@@ -929,8 +930,18 @@ Whole projects (to keep or move a figure):
   EM3D.addStatBox({title, rows: ["Indicated: 133 koz @ 1.07 g/t Au"], x, y})   returns its id; a label of
                                   kind "stat" (EM3D.updateLabel / removeLabel; drag it on the preview)
   EM3D.setStyle({histograms: true})   grade bars along each hole, length by grade
-  EM3D.setStyle({insetStyle: "plan" | "satellite" | "topo"})   a map inset around the property (needs the
-                                  coordinate system)
+  EM3D.setStyle({insetStyle: "plan" | "satellite" | "topo" | "claims"})   a map inset around the property (needs
+                                  the coordinate system); "claims": the claim map, the claims (findClaims, else
+                                  the area overlays) round the block, the project's in the accent, others grey
+  EM3D.findClaims({query, type: "company" | "number" | "name", province: "bc" | "on" | "sk" | "mb" | "nl" | "yt"
+                   | "qc", owner})   claims from the registries (the 2D app's search), added as area overlays
+                                  with role "claims" and the registry's credit in the footer; type "number"
+                                  takes several numbers at once; owner keeps only that holder's claims
+  EM3D.findClaims({around: true, province, owner, numbers, pad, byOwner, inset})   every claim round the block
+                                  (needs the coordinate system): the project's (owner's, the numbers given, else
+                                  the holder under the block) in the accent, the neighbours grey (byOwner: a few
+                                  holders in their own colour). The inset turns to the claim map unless inset:
+                                  false. Returns { registry, found, project, neighbours, owners, overlays }
   EM3D.addOverlay({name, data | file, kind: "fill" | "line" | "points", color, dash: "solid" | "dashed" |
                    "dotted" (or true / false), width, opacity (0-1; an area's fill), label, labelField, crs})   a map overlay
                                   draped on the terrain: claims, targets, faults, soil points. data: GeoJSON

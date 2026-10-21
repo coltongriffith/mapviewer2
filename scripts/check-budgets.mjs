@@ -226,7 +226,14 @@ const BUDGETS = {
   // design version 5 or with the grid on), section.js +0.55 (pad-merged and staggered section IDs, grade-ranked holes),
   // overlays.js +0.3 (claims outlined in the inset), shapes.js +0.2 (views: both, 3D or section), the callout editor's
   // second published line with its own depths and stale-wording note (+0.2) and the location inset's outline hook in tags.js.
-  threeDLazyJsGzipKb: 104.5,
+  // 104.5 → 110.5 (Oct 2026, claim map inset, measured 109.94, configured 110.16, + 0.3): claims.js (~4.45 kB with
+  // shared/claimSearch.js: "Find claims" by holder, numbers or name and "Claims around the model" through the 2D
+  // app's /api/claims and /api/bc-claims, added as area overlays with role "claims" and the registry's credit;
+  // fetched only on the first click on Find claims or EM3D.findClaims), tags.js +1.4 (insetStyle "claims": the claim
+  // map fitted to the block and the project's claims, tenure labels where they fit, the north arrow and scale bar
+  // shared with the location inset) and overlays.js +0.15 (role, group and credit; the footer credit). The page
+  // gains only the hooks (+0.12 kB, inside its budget).
+  threeDLazyJsGzipKb: 110.5,
   // The /3d grade-shell worker (composites estimate and marching cubes) is its own chunk, fetched only
   // when a shell is turned on. Vite emits workers outside the manifest graph, so it is found from the
   // page's chunks (see below) and budgeted here rather than in the page or the app totals.

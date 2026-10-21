@@ -2271,7 +2271,7 @@ Object.assign(S, {
   tags: { at: 'toe', style: 'dark', status: {}, fadePrevious: false, newLabel: '', prevLabel: 'Previously released', plannedLabel: 'Planned', groups: [], autoGroup: false, groupRadius: 140, emphasis: 'auto', highlight: {}, highlightNew: true, idMode: 'auto', showId: {}, showTag: {}, hideRows: [], pending: 'collar' },
   histograms: false, insetStyle: 'plan', overlays: [], shapes: [], // overlays.js, shapes.js
 });
-const EXT = {}, extLoading = {}, EXT_IMPORT = { geology: () => import('./geology.js'), geophys: () => import('./geophys.js'), tags: () => import('./tags.js'), look: () => import('./look.js'), section: () => import('./section.js'), type: () => import('./typography.js'), overlays: () => import('./overlays.js'), shapes: () => import('./shapes.js'), sections: () => import('./sections.js'), plan: () => import('./plan.js') };
+const EXT = {}, extLoading = {}, EXT_IMPORT = { geology: () => import('./geology.js'), geophys: () => import('./geophys.js'), tags: () => import('./tags.js'), look: () => import('./look.js'), section: () => import('./section.js'), type: () => import('./typography.js'), overlays: () => import('./overlays.js'), shapes: () => import('./shapes.js'), sections: () => import('./sections.js'), plan: () => import('./plan.js'), claims: () => import('./claims.js') };
 const hasRole = (r) => files.some((f) => f.role === r);
 function extWanted() {
   const gp = S.geophys.mode !== 'off' && hasRole('geophys'), t = S.tags;
@@ -2318,7 +2318,7 @@ const unitInk = (code) => { const e = code && S.geology.legend.find((x) => x.cod
 // Planned holes: a status of "planned" (collar column or set by hand) and no assays. Drawn dashed in the
 // brand colour, following the provisional-position pattern.
 const isPlanned = (h) => (S.tags.status[h.id] ? S.tags.status[h.id] === 'planned' : /\b(planned|proposed)\b/i.test(`${h.note || ''} ${h.c.raw ? Object.values(h.c.raw).join(' ') : ''}`) && !h.ints.length);
-const extCredits = () => EXT.tags?.insetCredits() || [];
+const extCredits = () => [...(EXT.tags?.insetCredits() || []), ...(EXT.overlays?.credits() || [])]; // and the claims' registry
 const extNotes = () => [EXT.geology?.note(), EXT.geophys?.note()].filter(Boolean);
 function extLegendRows() {
   const rows = project.holes.some((h) => h.planned) ? [{ label: S.tags.plannedLabel || 'Planned', draw: (ctx, x, cy, u) => { ctx.strokeStyle = pri(); ctx.lineWidth = 2 * u; ctx.setLineDash([5 * u, 3 * u]); ctx.beginPath(); ctx.moveTo(x, cy); ctx.lineTo(x + 22 * u, cy); ctx.stroke(); ctx.setLineDash([]); } }] : [];
@@ -2341,7 +2341,7 @@ function extAutoOn(arr) { // a lithology or geophysics file added by the user sw
 }
 function extStyle(o) {
   if (o.histograms !== undefined) S.histograms = !!o.histograms;
-  if (o.insetStyle !== undefined) { if (!['plan', 'satellite', 'topo'].includes(o.insetStyle)) throw new Error('insetStyle must be "plan" (plan of drilling), "satellite" or "topo" (a map around the property; needs the coordinate system).'); S.insetStyle = o.insetStyle; }
+  if (o.insetStyle !== undefined) { if (!['plan', 'satellite', 'topo', 'claims'].includes(o.insetStyle)) throw new Error('insetStyle must be "plan" (plan of drilling), "satellite" or "topo" (a map around the property; needs the coordinate system) or "claims" (the claim map).'); S.insetStyle = o.insetStyle; }
   if (o.histograms !== undefined || o.insetStyle !== undefined) extReady().catch((e) => status(e.message));
 }
 function extState() {
@@ -2388,6 +2388,9 @@ const EXT_API = {
 // Named sections (sections.js): addSection, updateSection, removeSection, setActiveSection.
 [['overlays', 'Overlay'], ['shapes', 'Shape'], ['sections', 'Section']].forEach(([k, n]) => ['add', 'update', 'remove', 'setActive'].forEach((a) => { if (a !== 'setActive' || n === 'Section') EXT_API[a + n] = async (...x) => { const r = await (await extLoad(k))[a](...x); await extReady(); return r ?? getState(); }; }));
 $('sec-add').addEventListener('click', () => EXT_API.addSection().catch((e) => status(e.message)));
+// Claims from the registries (claims.js): EM3D.findClaims and the Find claims panel.
+EXT_API.findClaims = async (o) => { const r = await (await extLoad('claims')).find(o); await extReady(); return r; };
+$('ov-claims').addEventListener('click', () => extLoad('claims').then((m) => m.renderUI($('ov-claims-ui'))).catch((e) => status(e.message)));
 $('ov-file').addEventListener('change', (e) => { if (e.target.files.length) readFileList(e.target.files); e.target.value = ''; });
 document.querySelectorAll('[data-shape]').forEach((b) => b.addEventListener('click', () => { showView('3d'); EXT_API.addShape({ type: b.dataset.shape }).catch((e) => status(e.message)); }));
 // The API notes for these layers are kept in the page (#ext-help), out of the script bundle.
