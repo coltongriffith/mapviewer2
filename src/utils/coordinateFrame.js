@@ -137,26 +137,34 @@ export function haversineMeters(lat1, lng1, lat2, lng2) {
  * Eastings are computed in the zone of the map centre, so a map straddling a
  * 6° zone boundary does not jump. (The single `x` and `y` lists drawn on both
  * opposite edges are gone; every renderer reads top/bottom/left/right.)
+ *
+ * A frame wider than a zone (more than 6° of longitude), or reaching more than
+ * 6° from the zone's central meridian or past 84°N/80°S, gets no ticks
+ * (`suppressed`): the Transverse Mercator series is meaningless out there and
+ * a world view used to come back with ~140 000 crossings.
  */
+export const UTM_MAX_SPAN_DEG = 6;
+export const MAX_TICKS_PER_EDGE = 50;
+
 export function computeGridTicks(map, frame, scale = 1) {
   if (!map || !frame) return null;
   const size = map.getSize?.();
   if (!size || !size.x || !size.y) return null;
-  const cx = size.x / 2, cy = size.y / 2;
-  const centerLL = map.containerPointToLatLng([cx, cy]);
-  const leftLL = map.containerPointToLatLng([0, cy]);
-  const rightLL = map.containerPointToLatLng([size.x, cy]);
-  const topLL = map.containerPointToLatLng([cx, 0]);
-  const botLL = map.containerPointToLatLng([cx, size.y]);
-  const totalW = haversineMeters(leftLL.lat, leftLL.lng, rightLL.lat, rightLL.lng);
-  const totalH = haversineMeters(topLL.lat, topLL.lng, botLL.lat, botLL.lng);
-  // Aim for ~6 across and ~5 down the FRAME, not the container.
-  const frameW = Math.max(1, frame.right - frame.left);
-  const frameH = Math.max(1, frame.bottom - frame.top);
-  const xInterval = pickUTMInterval(totalW * (frameW / size.x), 6);
-  const yInterval = pickUTMInterval(totalH * (frameH / size.y), 5);
-
+  const s = scale;
+  const centerLL = map.containerPointToLatLng([size.x / 2, size.y / 2]);
   const centre = latlngToUTM(centerLL.lat, centerLL.lng);
+  const cm = (centre.zone - 1) * 6 - 180 + 3;
+  const result = {
+    zone: centre.zone, hemisphere: centre.hemisphere, xInterval: null, yInterval: null,
+    top: [], bottom: [], left: [], right: [], suppressed: true,
+    frame: { left: frame.left * s, top: frame.top * s, right: frame.right * s, bottom: frame.bottom * s },
+  };
+  const corners = [[frame.left, frame.top], [frame.right, frame.top], [frame.left, frame.bottom], [frame.right, frame.bottom]]
+    .map((p) => map.containerPointToLatLng(p));
+  const lngs = corners.map((ll) => ll.lng);
+  if (Math.max(...lngs) - Math.min(...lngs) > UTM_MAX_SPAN_DEG
+    || corners.some((ll) => !(Math.abs(ll.lng - cm) <= UTM_MAX_SPAN_DEG && ll.lat <= 84 && ll.lat >= -80))) return result;
+
   // Northings on one continuous axis: the southern hemisphere's 10 000 000 m
   // false northing is removed for the arithmetic and put back for the label,
   // so a map across the equator still gets its ticks.
@@ -165,25 +173,40 @@ export function computeGridTicks(map, frame, scale = 1) {
     const u = latlngToUTM(ll.lat, ll.lng, centre.zone);
     return ll.lat < 0 ? { ...u, northing: u.northing - 10000000 } : u;
   };
-  const s = scale;
-  const across = (y) => solveEdge((x) => utmAt(x, y).easting, frame.left, frame.right, xInterval)
+  const eAt = (y) => (x) => utmAt(x, y).easting;
+  const nAt = (x) => (y) => utmAt(x, y).northing;
+  // The interval comes from the grid range each pair of edges actually spans:
+  // ~6 ticks across and ~5 down the frame.
+  const xInterval = pickUTMInterval(Math.max(edgeRange(eAt(frame.top), frame.left, frame.right), edgeRange(eAt(frame.bottom), frame.left, frame.right)), 6);
+  const yInterval = pickUTMInterval(Math.max(edgeRange(nAt(frame.left), frame.top, frame.bottom), edgeRange(nAt(frame.right), frame.top, frame.bottom)), 5);
+  const across = (y) => solveEdge(eAt(y), frame.left, frame.right, xInterval)
     .map(({ t, v }) => ({ px: t * s, easting: v, label: fmtUTMEasting(v) }));
-  const down = (x) => solveEdge((y) => utmAt(x, y).northing, frame.top, frame.bottom, yInterval)
+  const down = (x) => solveEdge(nAt(x), frame.top, frame.bottom, yInterval)
     .map(({ t, v }) => ({ py: t * s, northing: v, label: fmtUTMNorthing(v >= 0 ? v : v + 10000000) }));
   return {
-    zone: centre.zone, hemisphere: centre.hemisphere, xInterval, yInterval,
+    ...result, xInterval, yInterval, suppressed: false,
     top: across(frame.top), bottom: across(frame.bottom), left: down(frame.left), right: down(frame.right),
-    frame: { left: frame.left * s, top: frame.top * s, right: frame.right * s, bottom: frame.bottom * s },
   };
+}
+
+/** How far `value(t)` ranges over t from `a` to `b` (sampled). */
+function edgeRange(value, a, b, samples = 16) {
+  let lo = Infinity, hi = -Infinity;
+  for (let i = 0; i <= samples; i += 1) {
+    const v = value(a + ((b - a) * i) / samples);
+    lo = Math.min(lo, v); hi = Math.max(hi, v);
+  }
+  return hi - lo;
 }
 
 /**
  * Every multiple of `interval` that `value(t)` passes for t from `a` to `b`,
  * with the t where it does, sorted by t. The edge is sampled first so each
  * value is bracketed even where the projection bends, then each crossing is
- * bisected to under a thousandth of a pixel. Never interpolated.
+ * bisected to under a thousandth of a pixel. Never interpolated. Stops at
+ * `max` crossings, so a runaway projection cannot flood the frame.
  */
-export function solveEdge(value, a, b, interval, samples = 32) {
+export function solveEdge(value, a, b, interval, samples = 32, max = MAX_TICKS_PER_EDGE) {
   const out = [];
   if (!(b > a) || !(interval > 0)) return out;
   let t0 = a;
@@ -191,7 +214,7 @@ export function solveEdge(value, a, b, interval, samples = 32) {
   for (let i = 1; i <= samples; i += 1) {
     const t1 = a + ((b - a) * i) / samples;
     const v1 = value(t1);
-    for (let k = Math.ceil(Math.min(v0, v1) / interval); k * interval <= Math.max(v0, v1); k += 1) {
+    for (let k = Math.ceil(Math.min(v0, v1) / interval); k * interval <= Math.max(v0, v1) && out.length < max; k += 1) {
       const v = k * interval;
       // A value on a sample point belongs to the segment before it.
       if (v === v0 && i > 1) continue;

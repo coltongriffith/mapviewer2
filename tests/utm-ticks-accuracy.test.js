@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import proj4 from 'proj4';
-import { computeGridTicks, getMapFrame, solveEdge } from '../src/utils/coordinateFrame.js';
+import { computeGridTicks, getMapFrame, solveEdge, MAX_TICKS_PER_EDGE } from '../src/utils/coordinateFrame.js';
 
 // B1 acceptance: every UTM tick on the coordinate frame lands within 1 px of
 // where that grid line really crosses the frame rule, at zooms 14–19.
@@ -119,6 +119,31 @@ describe('UTM frame ticks are within 1 px of the true grid crossing', () => {
     const oldLng = -123 + ((663250 - 500000) / mPerLngRad) * (180 / Math.PI);
     const oldPx = map.latLngToContainerPoint([c.lat, oldLng]).x;
     expect(Math.abs(oldPx - truth)).toBeGreaterThan(10);
+  });
+});
+
+describe('zoomed out, the frame stays cheap and bounded', () => {
+  const frame = getMapFrame({ templateId: 'ni_43101_technical' }, { width: 1600, height: 1000 });
+  // A world view used to come back with ~140 000 crossings and take ~1.6 s:
+  // the Transverse Mercator series runs away far from the central meridian.
+  for (const zoom of [2, 3, 4, 5, 6, 7, 8, 9]) {
+    it(`z${zoom} at 50.6°N, 120.7°W`, () => {
+      const map = mercatorMap({ lat: 50.6, lng: -120.7, zoom });
+      computeGridTicks(map, frame, 1); // warm up the JIT, then time a real call
+      const t0 = performance.now();
+      const t = computeGridTicks(map, frame, 1);
+      const ms = performance.now() - t0;
+      expect(ms).toBeLessThan(20);
+      for (const edge of ['top', 'bottom', 'left', 'right']) expect(t[edge].length).toBeLessThanOrEqual(MAX_TICKS_PER_EDGE);
+      // Wider than a zone (z2–z8 here): no UTM ticks rather than wrong ones.
+      // At z9 the frame spans ~4° inside zone 10, so the grid is drawn again.
+      expect(t.suppressed).toBe(zoom <= 8);
+      if (zoom === 9) for (const edge of ['top', 'bottom', 'left', 'right']) expect(t[edge].length).toBeGreaterThan(0);
+    });
+  }
+
+  it('caps the crossings on one edge', () => {
+    expect(solveEdge((t) => t * 1000, 0, 1000, 1)).toHaveLength(MAX_TICKS_PER_EDGE);
   });
 });
 
