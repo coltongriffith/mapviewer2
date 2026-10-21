@@ -277,6 +277,7 @@ export default function AnnotationOverlay({
                 const pos = getPointAtFraction(expandedPts, (poly.labelAngle || 0) / 360);
                 return (
                   <text
+                    className="map-label"
                     x={pos.x} y={pos.y}
                     fontSize={labelFontSize}
                     fontWeight={poly.labelBold !== false ? '700' : '400'}
@@ -455,6 +456,7 @@ export default function AnnotationOverlay({
                       <path id={`ring-arc-outer-${ellipse.id}`} d={arcPathOuter} />
                     </defs>
                     <text
+                      className="map-label"
                       fontSize={labelFontSize}
                       fontWeight={ellipse.labelBold !== false ? '700' : '400'}
                       fill={labelColor}
@@ -514,6 +516,7 @@ export default function AnnotationOverlay({
         {/* Map-wide region text labels */}
         {placedMarkers.filter((m) => m.type === 'maplabel').map((m) => (
           <text
+            className="map-label"
             key={`maplabel-${m.id}`}
             x={m.x} y={m.y}
             textAnchor="middle" dominantBaseline="middle"

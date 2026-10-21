@@ -52,7 +52,12 @@ const BUDGETS = {
   // 148.3 → 148.6 (Oct 2026, export options, measured 148.32 configured, ~+0.33 kB): legend height and note-in-legend
   // sizing must stay in App because the editor's live legend box uses the same template code as the exporter, plus
   // the lazy ExportBackground hook (owner-requested 2D transparent/standalone).
-  maxJsChunkGzipKb: 148.6,
+  // 148.6 → 149.9 (Oct 2026, 2D Studio style, measured 149.59 configured, +1.27 kB over 148.32): what the editor
+  // must know synchronously to place Studio's cards — their zone sizes (utils/studioLayout.js: the title card's rows,
+  // the scale-north card, ~0.55 kB), the Studio theme tokens and picker entry (~0.15 kB), the two new north arrow
+  // styles (rose, split; ~0.2 kB, offered in every theme's picker) — and the hand-off to the lazy StudioCard and
+  // StudioControls chunks in the stage and inspector (~0.35 kB). The cards' layout and painting are lazy.
+  maxJsChunkGzipKb: 149.9,
   initialJsGzipKb: 75,
   initialAuthJsGzipKb: 135,
   // The former configured check omitted VITE_ADMIN_EMAIL, which pruned the
@@ -109,7 +114,11 @@ const BUDGETS = {
   // and the 2D export options: the footer note always exported (its wrapping and the free-strip fallback in the lazy
   // renderScene chunk), Standalone's note in the legend, the fitted legend for new maps, the blank-basemap transparent
   // toggle (a lazy ExportBackground chunk) and the Map use and Fit controls (the lazy LegendEditor chunk).
-  totalAuthJsGzipKb: 917.1,
+  // 917.1 → 931.6 (Oct 2026, 2D Studio style, measured 931.2): utils/studioCards.js (the Studio cards as primitives
+  // and their canvas/SVG painters, a 6.5 kB chunk shared by the exporter and the stage), the lazy StudioCard (2.9 kB)
+  // and StudioControls (1.9 kB) chunks, the renderer's Studio branches, legend/callout shells, label halo and font
+  // weights (+1.5 kB in the lazy renderScene chunk), and App +1.27 kB as maxJsChunkGzipKb above.
+  totalAuthJsGzipKb: 931.6,
   // 805 → 808: placed and callout logos, SVG font embedding (Sept 2026).
   // 808 → 809: shared-map viewer opens at the saved view on the fixed stage.
   // 809 → 810: the lazy /oauth/consent page for MCP account sign-in.
@@ -128,7 +137,8 @@ const BUDGETS = {
   // 847.2 → 847.4 (measured 847.05): the results review fixes, as totalAuthJsGzipKb above.
   // 847.4 → 848.5 (measured 848.21): hole-ID labels at their collar, as totalAuthJsGzipKb above.
   // 848.5 → 850.0 (measured 849.70): the export options, as totalAuthJsGzipKb above.
-  totalJsGzipKb: 850.0,
+  // 850.0 → 864.4 (measured 864.0): the 2D Studio style, as totalAuthJsGzipKb above.
+  totalJsGzipKb: 864.4,
   // Standalone pages (/3d, /teams) are separate Vite entries that never share
   // the app's chunks, so they are budgeted on their own instead of in the
   // totals above. /3d carries three.js (~109 kB gzip) and its editor.
@@ -284,7 +294,8 @@ const BUDGETS = {
   adminJsGzipKb: 85,
   // 335 → 335.3 (Oct 2026, measured 334.98): the same ~0.07 kB in App, as maxJsChunkGzipKb above.
   // 335.3 → 335.6 (Oct 2026, export options, measured 335.30): the same App code as maxJsChunkGzipKb above.
-  editorAuthJsGzipKb: 335.6,
+  // 335.6 → 337.0 (Oct 2026, 2D Studio style, measured 336.6): the same App code as maxJsChunkGzipKb above.
+  editorAuthJsGzipKb: 337.0,
   editorJsGzipKb: 270,
   claimsAuthJsGzipKb: 355,
   claimsJsGzipKb: 290,

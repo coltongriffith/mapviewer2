@@ -74,6 +74,8 @@ export const NORTH_ARROW_STYLES = [
   { key: 'arrow',      label: 'Simple Arrow' },
   { key: 'decorative', label: 'Decorative'   },
   { key: 'surveyor',   label: 'Surveyor'     },
+  { key: 'rose',       label: 'Studio Rose'  },
+  { key: 'split',      label: 'Split Arrow'  },
 ];
 
 export default function NorthArrow({ scale = 100, style: arrowStyle = 'classic' }) {
