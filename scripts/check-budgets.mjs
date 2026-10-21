@@ -75,17 +75,25 @@ const BUDGETS = {
   // in lazy chunks (geology.js, geophys.js, tags.js, budgeted below); the page keeps the file-role
   // detection for lithology logs and Geosoft XYZ (roles.js, needed the moment a file is added), the
   // hook points, the settings defaults saved with a figure, and the EM3D methods (~4.6 kB).
-  threeDJsGzipKb: 168,
+  // 168 → 169 (Oct 2026, round 4): the click-versus-drag gate and Lock view, the one layout pass, legend
+  // cards that dock and drag, the imagery tone, the shell seen through the terrain, and the history hooks
+  // (Ctrl/Cmd+Z needs them from the first change). The API notes, the design desk and the logo colour
+  // picker moved out of the page to pay for most of it; what remains is under 0.1 kB over.
+  threeDJsGzipKb: 169,
   // /3d's own modules fetched on first use (the geology, geophysics and tag layers, the account
   // client). They never load with the page or the app, so they sit outside the page and app totals.
   // 32 → 34 (Oct 2026, round 4): per-hole tags, grouped pending tags, callouts beside or bracketed on their
   // hole, the lithology legend file, and the design desk moved out of the page into desk.js (1.8 kB) to
   // keep the page inside its budget.
   // 34 → 36 (Oct 2026): company workspaces (#282) add the property picker to the account client.
-  // 36 → 43 (Oct 2026): share links (share.js: the Share dialog, EM3D.share and the read-only viewer for
+  // 36 → 39 (Oct 2026, round 4 group C): undo/redo and the History panel (history.js, 1.9 kB), key-hole
+  // emphasis and highlighted holes (tags.js), and the logo colour picker moved out of the page
+  // (logo-colours.js) to keep the page inside its budget; the save-conflict check in the account client.
+  // 39 → 40: the configured (Supabase) build of the account client is ~0.3 kB larger than the plain one.
+  // 40 → 47 (Oct 2026): share links (share.js: the Share dialog, EM3D.share and the read-only viewer for
   // /3d/share/<id> and /3d/embed/<id>, ~6.5 kB). Loaded on the first click on Share, or at once on a shared
   // figure; the page itself only gains the hook in account.js.
-  threeDLazyJsGzipKb: 43,
+  threeDLazyJsGzipKb: 47,
   // The /3d grade-shell worker (composites estimate and marching cubes) is its own chunk, fetched only
   // when a shell is turned on. Vite emits workers outside the manifest graph, so it is found from the
   // page's chunks (see below) and budgeted here rather than in the page or the app totals.

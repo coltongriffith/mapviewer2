@@ -169,6 +169,13 @@ ul.checks { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 3px; font-s
 .tab { font: inherit; font-size: 14px; font-weight: 600; color: var(--slate-600); background: none; border: 0; padding: 5px 12px; border-radius: 6px; cursor: pointer; }
 .tab[aria-selected="true"] { background: var(--slate-950); color: #fff; }
 .toolbar > .btn { padding: 6px 11px; }
+.acct-menu.hist { left: 0; right: auto; width: min(320px, calc(100vw - 32px)); }
+.hist ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; max-height: min(360px, 50vh); overflow-y: auto; }
+.hist li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; font-size: 13px; padding: 4px 6px; border-radius: 5px; }
+.hist li[aria-current="true"] { background: var(--slate-050); font-weight: 600; }
+.hist li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hist li small { color: var(--slate-600); font-family: var(--mono); font-size: 11px; }
+.hist .btn { padding: 3px 9px; font-size: 13px; }
 .btn[aria-pressed="true"] { background: var(--slate-950); border-color: var(--slate-950); color: #fff; }
 .frame-label { font-family: var(--mono); font-size: 12px; color: var(--slate-600); background: rgba(255,255,255,0.8); padding: 3px 8px; border-radius: 4px; }
 .frame { position: absolute; background: #fff; box-shadow: 0 1px 2px rgba(20,33,38,0.08), 0 8px 24px rgba(20,33,38,0.12); overflow: hidden; }
@@ -407,6 +414,7 @@ html.em3d-embed .share-credit:hover { text-decoration: underline; }
           <label class="field"><span>Colour</span><input type="color" id="shell-color" value="#1f9e96"></label>
         </div>
         <label class="field" style="margin-top:8px"><span>Opacity <output id="shell-op-out" class="mono"></output></span><input type="range" id="shell-op" min="5" max="90"></label>
+        <label class="check" style="margin-top:6px"><input type="checkbox" id="shell-ghost">Show it faintly through the terrain</label>
         <div class="shell-status"><progress id="shell-prog" max="1" value="0" hidden></progress><span class="muted" id="shell-msg" aria-live="polite"></span><button class="btn" type="button" id="shell-cancel" hidden>Cancel</button></div>
         <details style="margin-top:8px">
           <summary>Advanced</summary>
@@ -529,6 +537,15 @@ html.em3d-embed .share-credit:hover { text-decoration: underline; }
           <label class="field"><span>Block sides</span><select id="block-style"><option value="glass">Glass</option><option value="solid">Solid block</option></select></label>
           <label class="field"><span>Real elevation vs collars</span><select id="collar-fit"><option value="collars">Move terrain to collars</option><option value="terrain">Hang holes from terrain</option></select></label>
         </div>
+        <details style="margin-top:8px">
+          <summary>Satellite imagery tone</summary>
+          <div class="grid2" style="margin-top:8px">
+            <label class="field"><span>Saturation</span><input type="range" data-ext="imagery.saturation" min="0" max="2" step="0.05"></label>
+            <label class="field"><span>Contrast</span><input type="range" data-ext="imagery.contrast" min="0.5" max="2" step="0.05"></label>
+            <label class="field"><span>Warmth</span><input type="range" data-ext="imagery.warmth" min="-1" max="1" step="0.05"></label>
+            <label class="field"><span>Shaded relief</span><input type="range" data-ext="imagery.relief" min="0" max="1" step="0.05"></label>
+          </div>
+        </details>
         <label class="field" style="margin-top:8px"><span>Vertical exaggeration <output id="vex-out" class="mono">1×</output></span><input type="range" id="vex" min="1" max="5" step="0.5" value="1"></label>
         <label class="field" style="margin-top:8px"><span>Drill trace thickness <output id="trace-out" class="mono">1.4×</output></span><input type="range" id="trace-w" min="50" max="300" step="10" value="140"></label>
         <label class="field" style="margin-top:8px"><span>Surface opacity <output id="surf-out" class="mono">100%</output></span><input type="range" id="surf" min="15" max="100" value="100"></label>
@@ -589,6 +606,10 @@ html.em3d-embed .share-credit:hover { text-decoration: underline; }
         <button class="tab" role="tab" id="view-section" aria-selected="false">Section A–A′</button>
       </div>
       <button class="btn" type="button" id="lock-view" aria-pressed="false" title="Stop the mouse and trackpad from turning, zooming or panning the view">Lock view</button>
+      <div class="acct">
+        <button class="btn" type="button" id="hist-btn" aria-haspopup="true" aria-expanded="false" aria-controls="hist" title="Recent changes (Ctrl/Cmd+Z to undo, Shift+Ctrl/Cmd+Z to redo)">History</button>
+        <div class="acct-menu hist" id="hist" role="region" aria-label="History" hidden></div>
+      </div>
       <span class="frame-label" id="frame-label"></span>
       <div class="acct">
         <span class="acct-note" id="acct-note" aria-live="polite" hidden></span>
@@ -637,6 +658,15 @@ html.em3d-embed .share-credit:hover { text-decoration: underline; }
     <p id="acct-sent-text"></p>
     <div class="actions"><button class="btn primary" type="button" id="acct-sent-close">OK</button></div>
   </div>
+  <div class="stack" id="acct-conflict" hidden>
+    <h2 id="acct-conflict-title">Saved somewhere else since you opened it</h2>
+    <p id="acct-conflict-text"></p>
+    <div class="actions">
+      <button class="btn" type="button" id="acct-reload">Reload saved version</button>
+      <button class="btn" type="button" id="acct-asnew">Save as new</button>
+      <button class="btn primary" type="button" id="acct-overwrite">Overwrite</button>
+    </div>
+  </div>
 </dialog>
 <!-- API notes for the 3D editor (shown with EM3D.help() and in the Export step). -->
 <script type="text/plain" id="core-help">Exploration Maps 3D can be driven by an AI assistant or browser agent.
@@ -665,7 +695,13 @@ JavaScript API (run in the page console or via your agent's evaluate tool):
                    else real elevation once a coordinate system is set, else fitted to the collars),
                  verticalExaggeration (1-5), blockStyle: "glass" | "solid" (solid: pale opaque far
                    faces with a soil band, near faces cut away), collarFit: "collars" (default: the
-                   DEM shifts to meet the collars) | "terrain" (each hole hangs from the DEM)})
+                   DEM shifts to meet the collars) | "terrain" (each hole hangs from the DEM),
+                 lockView (no orbit, zoom or pan with the mouse; the camera API still works),
+                 imagery: {saturation (0-2), contrast (0.5-2), warmth (-1 to 1), relief (0-1)} (satellite tone),
+                 legend: {merge: "auto" | "one" | "separate", pos: {main | lithology | geophys: "auto" |
+                   "tl" | "tr" | "bl" | "br" | {x, y}}} (cards' top-left, 0-1 of the frame; drag them too),
+                 coPlacement: "column" | "beside" | "bracket" (where callouts go),
+                 blockMargin (m around the drilling, null = auto), blockExtent: {x0, x1, y0, y1, z0} or null})
   EM3D.setCRS("EPSG:26909" | "UTM 9N NAD83" | "EPSG:4326" | proj4 string | null)
                                   Promise. The coordinate system of the files; loads real terrain
                                   (AWS Terrain Tiles) and, for satellite/muted, Esri imagery
@@ -678,7 +714,10 @@ JavaScript API (run in the page console or via your agent's evaluate tool):
                      scale, rotation, color})   returns the id. Text painted on a block face in
                                   perspective; u 0-1 left to right seen from outside, v 0 (base) to 1 (terrain)
   EM3D.updateWallLabel(id, {...}) EM3D.removeWallLabel(id)
-  EM3D.setCallout(holeId, {show, line1, line2, incl: false})   null resets a field
+  EM3D.setCallout(holeId, {show, line1, line2, incl: false, placement: "column" | "beside" | "bracket",
+                  x, y})   null resets a field; x, y place the box (0-1 of the frame), its leader follows
+  EM3D.undo() / EM3D.redo()       Promises. Step through the settings history (Ctrl/Cmd+Z, Shift+Ctrl/Cmd+Z)
+  EM3D.history()                  Promise: {entries: [{label, at}], current}; the History button lists them
   EM3D.setStyle({displayCutoff})  intervals below it draw as the plain trace (null: all); callouts unchanged
   EM3D.setEquivalent({base: "Cu", metals: {Au: {price, recovery}, Ag: {...}}, basePrice, baseRecovery, use})
                                   adds a derived column such as CuEq_calc (and colours by it unless use: false).
@@ -687,7 +726,8 @@ JavaScript API (run in the page console or via your agent's evaluate tool):
                                   1% = 22.0462 lb/t, 1 g/t = 1/31.1035 oz/t. An interval missing any component
                                   has no equivalent value (never read as zero). null removes it. The formula and
                                   assumptions go in the footnote while the column is in use
-  EM3D.setShell({enabled, cutoff, opacity, color, search, cell})   Promise; resolves with the state once
+  EM3D.setShell({enabled, cutoff, opacity, color (null = brand accent), throughTerrain (a faint ghost where
+                 the terrain hides it), search, cell})   Promise; resolves with the state once
                                   the grade shell is built. cutoff/search/cell null = automatic. See below
   EM3D.cancelShell()              stops a build in progress
   EM3D.setProvisional(holeId, true | false | null)   dashed, fainter "Provisional position" (null: from the
@@ -733,7 +773,11 @@ Example: a branded news-release figure from pasted CSVs
   EM3D.setGeology({enabled, faces: "far" | "all" | ["N", "E"], opacity, anisotropy (1-20: how much further
                    layers reach sideways than up and down), search (m, null = auto), smooth, texture,
                    section (also paint the A–A′ plane), title: "Lithology" | "Alteration",
-                   legend: [{code, name, color, show, order}], note})
+                   legend: [{code, name, color, show, order}], note, strength (colour strength on the faces
+                   and in the legend, 0.5-2, default 1.3), hidden: "nearest" (hidden codes give way to the
+                   nearest visible unit) | "other" (one muted "Other" unit)})
+  Lithology legend file: Code, Name and an optional Colour column (QMD, Quartz monzodiorite, #e3b8c8); it
+                                  names and colours the units unless set by hand in the legend editor
                                   Indicator inverse-distance interpolation of the logged codes along the hole
                                   traces, blurred then the highest weight wins; plain beyond the search radius.
                                   The footnote says it is schematic while it shows
@@ -747,8 +791,12 @@ Example: a branded news-release figure from pasted CSVs
                    the column name), min, max, opacity, faces, search, width (curtain corridor, m)})
   EM3D.setTags({at: "toe" | "collar" | "both", style: "dark" | "light", fadePrevious,
                 status: {holeId: "new" | "previous" | "planned" | "none" | null}, newLabel, prevLabel,
-                plannedLabel, autoGroup, groupRadius, idMode: "all" | "key" (IDs on the callout holes, the
-                new holes and any set by hand), showId: {holeId: true | false | null},
+                plannedLabel, autoGroup, groupRadius (m: pending holes and callouts within it share one tag
+                or box), idMode: "auto" (all up to 12 holes, else key) | "all" | "key" (the callout, new and
+                planned holes and any set by hand), showId: {holeId: true | false | null} (the ID at the end
+                of the hole), showTag: {holeId: true | false | null} (the pill at the collar, apart from the
+                ID), hideRows: ["new" | "previous"], emphasis: "auto" | "key" (key holes bold, others thin
+                and grey) | "none", highlight: {holeId: "#hex" | "brand" | null}, highlightNew: "#hex" | "brand" | null,
                 pending: "collar" (one small ASSAYS PENDING tag per group of pending holes) | "trace"})   collar ID pills; new vs previously released from a
                                   status, year or campaign column. Planned holes (status "planned", no assays)
                                   draw dashed with a "Planned" legend row

@@ -43,7 +43,9 @@ const ACCOUNT_HELP = `
 Exploration Maps account (all Promises; saving needs a signed-in visitor):
   EM3D.account.getUser()          { id, email } or null
   EM3D.account.listProjects()     [{ id, name, thumbnail, createdAt, updatedAt }]
-  EM3D.account.saveProject(name, existingId?)   saves the figure; returns { id, name, savedAt }
+  EM3D.account.saveProject(name, existingId?, dest?, { force })   saves the figure; returns { id, name, savedAt }.
+                                  Throws code "CONFLICT" when the saved copy is newer than the one opened
+                                  here (force: true overwrites it)
   EM3D.account.openProject(id)    reopens a saved figure
   EM3D.account.deleteProject(id)  removes it from the list
 The Save button (or Ctrl/Cmd+S) does the same for a person, and asks them to sign in first.`;

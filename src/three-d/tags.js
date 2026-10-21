@@ -57,7 +57,32 @@ export function statuses() {
   return stCache.res;
 }
 export const statusOf = (h) => statuses().status.get(h.id) || null;
-export const fade = (h) => !!T().fadePrevious && statusOf(h) === 'previous';
+// Hole display. emphasis "key": key holes bold, the others thin and grey; "auto" does so past 12 holes, so a
+// dense figure reads with no setup. highlight: a hole's own trace colour ("brand": the brand accent).
+const emph = () => (T().emphasis === 'auto' || T().emphasis === undefined ? ((H.project?.holes?.length || 0) > 12 ? 'key' : 'none') : T().emphasis);
+export const fade = (h) => (!!T().fadePrevious && statusOf(h) === 'previous') || (emph() === 'key' && !keyHole(h));
+export const weight = (h) => (emph() !== 'key' ? 1 : keyHole(h) ? 1.25 : 0.55);
+export function highlightOf(h) {
+  const v = T().highlight?.[h.id]; if (v) return v === 'brand' ? H.brandTone('highlight') : v;
+  return T().highlightNew !== false && emph() === 'key' && statusOf(h) === 'new' ? H.brandTone('highlight') : null; // new holes in the brand accent
+}
+// Highlighted traces as thin tubes along the whole hole, rebuilt when the holes or colours change.
+// Thin cylinders every 8 m (one instanced mesh, like the assay tubes), so no extra three.js code ships.
+const hl = { key: null, mesh: null };
+export function syncHoles() {
+  const G = H.G, list = G ? H.project.holes.map((h) => [h, highlightOf(h)]).filter(([, c]) => c) : [], key = `${list.map(([h, c]) => h.id + c).join()}|${H.S.traceWidth}`;
+  if (hl.G === G && hl.key === key) return;
+  if (hl.mesh) { hl.mesh.parent?.remove(hl.mesh); hl.mesh.geometry.dispose(); hl.mesh.material.dispose(); hl.mesh = null; }
+  hl.G = G; hl.key = key; if (!list.length) return;
+  const segs = []; list.forEach(([h, c]) => { for (let d = 0; d < h.len; d += 8) segs.push([h, d, Math.min(h.len, d + 8), c]); });
+  const m = hl.mesh = new THREE.InstancedMesh(new THREE.CylinderGeometry(1, 1, 1, 6), new THREE.MeshLambertMaterial(), segs.length), r = H.traceR() * 0.5;
+  const mx = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), col = new THREE.Color();
+  segs.forEach(([h, a, b, c], i) => {
+    const p = h.posAt(a), e = h.posAt(b), va = G.V(p.x, p.y, p.z), vb = G.V(e.x, e.y, e.z), dir = vb.clone().sub(va), len = dir.length();
+    q.setFromUnitVectors(up, dir.normalize()); mx.compose(va.add(vb).multiplyScalar(0.5), q, new THREE.Vector3(r, len, r)); m.setMatrixAt(i, mx); m.setColorAt(i, col.set(c));
+  });
+  m.frustumCulled = false; H.root.add(m);
+}
 const GREY = '#8b979b';
 function pillColors(st) {
   const S = H.S, dark = T().style !== 'light', c = st === 'new' ? S.accent : st === 'previous' ? GREY : S.primary;
@@ -79,7 +104,6 @@ export function idShown(h) {
 export function tagShown(h) {
   const t = T(), v = t.showTag?.[h.id]; if (typeof v === 'boolean') return v;
   if (t.at === 'toe' || t.status[h.id] === 'none') return false;
-  if (H.S.pendingLabels && t.pending === 'collar' && H.isPending(h)) return false; // the group's pending tag says it
   return mode() === 'key' ? keyHole(h) : statusOf(h) !== null || ![...statuses().status.values()].some(Boolean);
 }
 // Collar pills and small "ASSAYS PENDING" tags, placed before the legends (which keep clear of them): the
@@ -203,21 +227,22 @@ export function drawGroup(ctx, K, x, y, g) {
 }
 
 // ---------- callouts off the column: beside the hole, as a bracket on it, or where dragged ----------
-// Takes the callouts whose placement (per hole, else S.coPlacement) is not the left column, or which
-// were dragged (x, y in 0-1 of the frame), draws them through the layout pass and returns the rest.
-export function freeCallouts(ctx, K, items, { lay, W, H: Hh, hits }) {
-  const S = H.S, { u } = K, col = [];
+// The callouts whose placement (per hole, else S.coPlacement) is not the left column, or which were
+// dragged (x, y in 0-1 of the frame), apart from the column's: { col, free }. The page draws the column
+// first, then drawFree places these clear of it and of its leaders.
+const placementOf = (it) => { const o = H.S.coOverrides[it.c?.h.id] || {}; return Number.isFinite(o.x) && Number.isFinite(o.y) ? 'free' : it.group ? 'column' : o.placement || H.S.coPlacement || 'column'; };
+export const splitCallouts = (items) => ({ col: items.filter((it) => placementOf(it) === 'column'), free: items.filter((it) => placementOf(it) !== 'column') });
+export function drawFree(ctx, K, items, { lay, W, H: Hh, hits }) {
+  const S = H.S, { u } = K;
   items.forEach((it) => {
-    const o = S.coOverrides[it.c?.h.id] || {}, pl = o.placement || S.coPlacement || 'column', free = Number.isFinite(o.x) && Number.isFinite(o.y);
-    if (it.group || (!free && pl === 'column')) { col.push(it); return; }
-    if (!free && pl === 'bracket') { const box = drawBracket(ctx, K, it, lay); if (box) hits.push({ kind: 'callout', id: it.c.h.id, box }); return; }
+    const o = S.coOverrides[it.c.h.id] || {}, free = placementOf(it) === 'free';
+    if (placementOf(it) === 'bracket') { hits.push({ kind: 'callout', id: it.c.h.id, box: drawBracket(ctx, K, it, lay) }); return; }
     const { M, s } = it, tag = 18 * u, at = (x, y) => [x, y, x + M.bw, y + M.bh + tag];
     const cands = free ? [at(Math.min(o.x * W, W - M.bw), Math.min(o.y * Hh, Hh - M.bh - tag))]
       : [[1, -0.5], [-1, -0.5], [1, -1.4], [-1, -1.4], [1, 0.4], [-1, 0.4], [1.8, -0.5], [-1.8, -0.5]].map(([sx, sy]) => at(sx > 0 ? s[0] + 40 * u * sx : s[0] + 40 * u * sx - M.bw, s[1] + sy * M.bh));
     const box = free ? lay.add(cands[0]) : lay.place(cands, Infinity) || lay.add(cands[0]);
     H.drawCallout(ctx, K, box[0], box[1], it.c, M, s); hits.push({ kind: 'callout', id: it.c.h.id, box });
   });
-  return col;
 }
 // A bracket along the reported interval, a hair to the side of the hole, with the hole ID and the grade
 // text beside it (the side with room).
@@ -226,14 +251,18 @@ function drawBracket(ctx, K, it, lay) {
   const P = (d) => { const p = c.h.posAt(d); return H.proj(H.G.V(p.x, p.y, p.z)); }, a = P(b.from), e = P(b.from + b.len);
   let dx = e[0] - a[0], dy = e[1] - a[1]; const len = Math.hypot(dx, dy) || 1; dx /= len; dy /= len;
   font(700, 14); const w1 = ctx.measureText(L.l1).width; font(600, 13); const w2 = L.l2 ? ctx.measureText(L.l2).width : 0;
-  font(600, 11, true); const chip = ctx.measureText(c.h.id).width + 12 * u, tw = Math.max(w1, w2, chip), th = (L.l2 ? 60 : 42) * u, mid = [(a[0] + e[0]) / 2, (a[1] + e[1]) / 2];
+  font(600, 11, true); const chip = ctx.measureText(c.h.id).width + 12 * u, tw = Math.max(w1, w2, chip) + 12 * u, th = (L.l2 ? 64 : 46) * u, mid = [(a[0] + e[0]) / 2, (a[1] + e[1]) / 2];
   const off = 9 * u, x0Of = (side) => (side > 0 ? Math.max(a[0], e[0]) + off + 12 * u : Math.min(a[0], e[0]) - off - 12 * u - tw), boxOf = (side) => [x0Of(side) - 4 * u, mid[1] - th / 2, x0Of(side) + tw + 4 * u, mid[1] + th / 2];
-  const side = [1, -1].find((sd) => lay.clear(boxOf(sd))) || 1, x0 = x0Of(side), box = lay.add(boxOf(side));
+  const side = [1, -1].find((sd) => lay.clear(boxOf(sd))) || 1, box = lay.add(boxOf(side)), x0 = x0Of(side) + 6 * u;
   let nx = -dy, ny = dx; if (nx * side < 0) { nx = -nx; ny = -ny; }
-  ctx.strokeStyle = S.primary; ctx.lineWidth = 1.6 * u; ctx.lineJoin = 'round'; ctx.beginPath();
-  ctx.moveTo(a[0] + nx * (off - 5 * u), a[1] + ny * (off - 5 * u)); ctx.lineTo(a[0] + nx * off, a[1] + ny * off); ctx.lineTo(e[0] + nx * off, e[1] + ny * off); ctx.lineTo(e[0] + nx * (off - 5 * u), e[1] + ny * (off - 5 * u)); ctx.stroke();
-  const halo = (t, x, y) => { ctx.lineWidth = 4 * u; ctx.strokeStyle = 'rgba(255,255,255,0.92)'; ctx.strokeText(t, x, y); ctx.fillText(t, x, y); };
-  ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; let y = box[1] + 9 * u;
+  // The bracket: the brand colour over a white halo, so it reads on any face; end ticks point at the hole.
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.beginPath();
+  ctx.moveTo(a[0] + nx * (off - 8 * u), a[1] + ny * (off - 8 * u)); ctx.lineTo(a[0] + nx * off, a[1] + ny * off); ctx.lineTo(e[0] + nx * off, e[1] + ny * off); ctx.lineTo(e[0] + nx * (off - 8 * u), e[1] + ny * (off - 8 * u));
+  ctx.strokeStyle = 'rgba(255,255,255,0.95)'; ctx.lineWidth = 5.5 * u; ctx.stroke(); ctx.strokeStyle = S.primary; ctx.lineWidth = 2.4 * u; ctx.stroke(); ctx.lineCap = 'butt';
+  // A white card behind the text, so it reads over a busy block face.
+  ctx.fillStyle = 'rgba(255,255,255,0.94)'; ctx.strokeStyle = H.RULE; ctx.lineWidth = u; H.roundRect(ctx, box[0], box[1], box[2] - box[0], box[3] - box[1], 4 * u); ctx.fill(); ctx.stroke();
+  const halo = (t, x, y) => ctx.fillText(t, x, y);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; let y = box[1] + 13 * u;
   font(600, 11, true); ctx.fillStyle = S.primary; ctx.fillRect(x0, y - 8.5 * u, chip, 17 * u); ctx.fillStyle = H.textOn(S.primary); ctx.fillText(c.h.id, x0 + 6 * u, y);
   y += 20 * u; font(700, 14); ctx.fillStyle = H.INK; halo(L.l1, x0, y);
   if (L.l2) { y += 18 * u; font(600, 13); ctx.fillStyle = H.INK; halo(L.l2, x0, y); }
@@ -365,6 +394,18 @@ export function set(o = {}) {
     Object.entries(o[k]).forEach(([id, v]) => { if (!ids.has(id)) throw new Error(`No hole "${id}".`); if (v === null) delete t[k][id]; else t[k][id] = !!v; });
   });
   if (o.fadePrevious !== undefined) t.fadePrevious = !!o.fadePrevious;
+  if (o.emphasis !== undefined) { if (!['auto', 'none', 'key'].includes(o.emphasis)) throw new Error('emphasis must be "key" (key holes bold, the others thin and grey), "none", or "auto" (key past 12 holes).'); t.emphasis = o.emphasis; }
+  const hex = (v, k) => { if (v === null || v === 'brand' || /^#[0-9a-f]{6}$/i.test(v)) return v; throw new Error(`${k} must be a hex colour like #c9a227, "brand" (the brand accent) or null.`); };
+  if (o.highlight !== undefined) {
+    if (!o.highlight || typeof o.highlight !== 'object') throw new Error('highlight must be { holeId: "#hex" | "brand" | null }.');
+    const ids = new Set((H.project?.holes || []).map((h) => h.id)); t.highlight = { ...(t.highlight || {}) };
+    Object.entries(o.highlight).forEach(([id, v]) => { if (!ids.has(id)) throw new Error(`No hole "${id}".`); if (hex(v, 'A highlight') === null) delete t.highlight[id]; else t.highlight[id] = v; });
+  }
+  if (o.highlightNew !== undefined) { // every hole of status "new", at once
+    const v = hex(o.highlightNew === true ? 'brand' : o.highlightNew || null, 'highlightNew'); t.highlight = { ...(t.highlight || {}) };
+    t.highlightNew = !!v; // false also turns off the automatic highlight of key-hole mode
+    (H.project?.holes || []).filter((h) => statusOf(h) === 'new').forEach((h) => { if (v) t.highlight[h.id] = v; else delete t.highlight[h.id]; });
+  }
   if (o.autoGroup !== undefined) t.autoGroup = !!o.autoGroup;
   if (o.groupRadius !== undefined) t.groupRadius = Math.max(5, Math.min(5000, +o.groupRadius || 140));
   ['newLabel', 'prevLabel', 'plannedLabel'].forEach((k) => { if (o[k] !== undefined) t[k] = o[k] === null ? '' : String(o[k]).slice(0, 60); });
@@ -388,13 +429,18 @@ export function renderUI(el) {
     <div class="row" style="gap:14px;margin-top:6px"><label class="check"><input type="checkbox" data-t="fadePrevious" ${t.fadePrevious ? 'checked' : ''}>Fade previously released holes</label>
       <label class="check"><input type="checkbox" data-t="autoGroup" ${t.autoGroup ? 'checked' : ''}>Group nearby intercept callouts</label>
       ${(t.groups || []).length ? '<button class="btn" type="button" data-tx="groups">Clear callout groups</button>' : ''}</div>
-    <label class="field" style="margin-top:6px"><span>Group pending holes and callouts within (m)</span><input type="number" min="5" step="10" data-t="groupRadius" value="${esc(t.groupRadius)}"></label>
+    <div class="grid2" style="margin-top:6px">
+      <label class="field"><span>Hole display</span><select data-t="emphasis"><option value="auto" ${(t.emphasis || 'auto') === 'auto' ? 'selected' : ''}>Automatic (key holes bold past 12 holes)</option><option value="key" ${t.emphasis === 'key' ? 'selected' : ''}>Key holes bold, others thin and grey</option><option value="none" ${t.emphasis === 'none' ? 'selected' : ''}>All the same</option></select></label>
+      <label class="field"><span>Group pending holes and callouts within (m)</span><input type="number" min="5" step="10" data-t="groupRadius" value="${esc(t.groupRadius)}"></label>
+    </div>
+    <label class="check" style="margin-top:6px"><input type="checkbox" data-t="highlightNew" ${hs.some((h) => statusOf(h) === 'new') && hs.filter((h) => statusOf(h) === 'new').every((h) => highlightOf(h)) ? 'checked' : ''}>New holes in the brand colour</label>
     ${hs.length ? `<details style="margin-top:6px"><summary>Holes: ID, tag and status</summary><p class="muted">ID: the hole ID at the end of the hole. Tag: a pill at the collar. Status from the collar status, year or campaign columns; "none" means no status pill.</p>
-      <div class="files">${hs.map((h) => `<div style="grid-template-columns:auto auto 1fr auto;display:grid;align-items:center;gap:6px"><input type="checkbox" data-tid="${esc(h.id)}" ${idShown(h) ? 'checked' : ''} aria-label="Show the ID of ${esc(h.id)}" title="ID"><input type="checkbox" data-tg="${esc(h.id)}" ${tagShown(h) ? 'checked' : ''} aria-label="Tag ${esc(h.id)} at the collar" title="Tag"><span class="mono">${esc(h.id)}</span><select data-ts="${esc(h.id)}" aria-label="Status of ${esc(h.id)}">${['auto', 'new', 'previous', 'planned', 'none'].map((v) => `<option value="${v}" ${(t.status[h.id] || 'auto') === v ? 'selected' : ''}>${v === 'auto' ? `Auto (${st.status.get(h.id) || 'none'})` : v}</option>`).join('')}</select></div>`).join('')}</div></details>` : ''}`;
+      <div class="files">${hs.map((h) => `<div style="grid-template-columns:auto auto 1fr auto auto;display:grid;align-items:center;gap:6px"><input type="checkbox" data-tid="${esc(h.id)}" ${idShown(h) ? 'checked' : ''} aria-label="Show the ID of ${esc(h.id)}" title="ID"><input type="checkbox" data-tg="${esc(h.id)}" ${tagShown(h) ? 'checked' : ''} aria-label="Tag ${esc(h.id)} at the collar" title="Tag"><span class="mono">${esc(h.id)}</span><select data-ts="${esc(h.id)}" aria-label="Status of ${esc(h.id)}">${['auto', 'new', 'previous', 'planned', 'none'].map((v) => `<option value="${v}" ${(t.status[h.id] || 'auto') === v ? 'selected' : ''}>${v === 'auto' ? `Auto (${st.status.get(h.id) || 'none'})` : v}</option>`).join('')}</select><input type="checkbox" data-th="${esc(h.id)}" ${t.highlight?.[h.id] ? 'checked' : ''} aria-label="Highlight ${esc(h.id)} in the brand colour" title="Highlight"></div>`).join('')}</div></details>` : ''}`;
   const apply = (o) => H.api.setTags(o).catch((e) => H.status(e.message));
   el.querySelectorAll('[data-t]').forEach((i) => i.addEventListener('change', () => apply({ [i.dataset.t]: i.type === 'checkbox' ? i.checked : i.value })));
   el.querySelectorAll('[data-ts]').forEach((s) => s.addEventListener('change', () => apply({ status: { [s.dataset.ts]: s.value === 'auto' ? null : s.value } })));
   el.querySelectorAll('[data-tid]').forEach((c) => c.addEventListener('change', () => apply({ showId: { [c.dataset.tid]: c.checked } })));
   el.querySelectorAll('[data-tg]').forEach((c) => c.addEventListener('change', () => apply({ showTag: { [c.dataset.tg]: c.checked } })));
+  el.querySelectorAll('[data-th]').forEach((c) => c.addEventListener('change', () => apply({ highlight: { [c.dataset.th]: c.checked ? 'brand' : null } })));
   el.querySelector('[data-tx="groups"]')?.addEventListener('click', () => H.api.groupCallouts(null));
 }

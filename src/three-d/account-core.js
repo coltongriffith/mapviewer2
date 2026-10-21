@@ -180,13 +180,17 @@ export async function listProjects() {
   return list;
 }
 
+// A save would overwrite a newer version: the saved row's updated_at is later than the version this tab
+// opened or last saved (another tab, another computer, or an older copy reopened).
+export const isConflict = (loadedAt, savedAt) => !!(loadedAt && savedAt && Date.parse(savedAt) > Date.parse(loadedAt));
 /**
  * @param {string} name
  * @param {string|null} existingId  the figure to overwrite, or null for a new one
  * @param {{orgId:string, propertyId:string, propertyName?:string, orgName?:string, role?:string}|null} [dest]
  *   a company property for a new figure (an existing one stays where it is)
+ * @param {{force?:boolean}} [opts]  force: overwrite even when the saved copy is newer than this one
  */
-export async function saveProject(name, existingId, dest = null) {
+export async function saveProject(name, existingId, dest = null, { force = false } = {}) {
   const title = String(name || '').trim().slice(0, 200);
   if (!title) throw Object.assign(plain('Give the 3D map a name first.'), { plain: true });
   const user = await requireUser('save this 3D map');
@@ -194,6 +198,14 @@ export async function saveProject(name, existingId, dest = null) {
   const home = existingId ? (current?.id === existingId ? current.home : null) : dest;
   if (home && !canEdit(home.role)) {
     throw Object.assign(plain(`You have view-only access to ${home.propertyName || home.orgName}, so this figure cannot be saved there. Use Save as new to keep a personal copy.`), { plain: true, code: 'READ_ONLY' });
+  }
+  const guarded = !!(existingId && !force && current?.id === existingId && current.savedAt);
+  const conflict = (savedAt) => Object.assign(plain(`“${current.name}” was saved somewhere else${savedAt ? ` at ${when(savedAt)}` : ''}, after this copy was opened. Overwrite it, save this as a new 3D map, or reload the saved version.`), { plain: true, code: 'CONFLICT', savedAt });
+  if (guarded) {
+    // Early check before uploading; the write below is conditional as well.
+    const { data, error } = await sb.from(TABLE).select('updated_at').eq('id', existingId).is('deleted_at', null).maybeSingle();
+    if (error) throw explain(error, 'save this 3D map');
+    if (isConflict(current.savedAt, data?.updated_at)) throw conflict(data.updated_at);
   }
   const em = studio();
   const { files, ...settings } = em.getProject();
@@ -219,11 +231,13 @@ export async function saveProject(name, existingId, dest = null) {
     }));
     const row = { id, name: title, settings, file_paths: filePaths, thumbnail, updated_at: new Date().toISOString(), deleted_at: null };
     if (home) Object.assign(row, { org_id: home.orgId, property_id: home.propertyId });
-    const { data, error } = await sb.from(TABLE)
-      .upsert(row, { onConflict: 'id' })
-      .select('id, name, updated_at')
-      .single();
+    // Overwriting the version this tab opened: only if it is still that version, so two
+    // tabs saving at once cannot silently overwrite each other.
+    const { data, error } = guarded
+      ? await sb.from(TABLE).update(row).eq('id', id).eq('updated_at', current.savedAt).select('id, name, updated_at').maybeSingle()
+      : await sb.from(TABLE).upsert(row, { onConflict: 'id' }).select('id, name, updated_at').single();
     if (error) throw error;
+    if (!data) throw conflict(null);
     current = { id: data.id, name: data.name, savedAt: data.updated_at, home };
   } catch (err) {
     // Best effort: this save's files are not referenced by any row.
@@ -387,6 +401,9 @@ let dialogMode = null; // 'save-signin' | 'signin' | 'name'
 function openDialog(mode, { error = '', asNew = false, toProperty = false } = {}) {
   const d = $('acct-dialog'); if (!d) return;
   dialogMode = mode;
+  // A save conflict: overwrite, save as new or reload, in place of the form.
+  $('acct-conflict').hidden = mode !== 'conflict'; d.setAttribute('aria-labelledby', mode === 'conflict' ? 'acct-conflict-title' : 'acct-title');
+  if (mode === 'conflict') { $('acct-form').hidden = true; $('acct-sent').hidden = true; $('acct-conflict-text').textContent = error; if (!d.open) d.showModal(); $('acct-reload').focus(); return; }
   const saving = mode !== 'signin';
   $('acct-title').textContent = saving ? 'Save to your account' : 'Sign in to Exploration Maps';
   $('acct-intro').textContent = mode === 'name'
@@ -436,7 +453,7 @@ async function chosenDest() {
 function showError(msg) { const e = $('acct-error'); e.textContent = msg || ''; e.hidden = !msg; }
 function closeDialog() { const d = $('acct-dialog'); if (d?.open) d.close(); dialogMode = null; }
 
-export async function save({ asNew = false } = {}) {
+export async function save({ asNew = false, force = false } = {}) {
   if (busy || $('acct-dialog')?.open) return;
   if (!configured) { say(`Saving to an account is not available on this site right now. ${KEEP}`); return; }
   try { user = await getUser(); } catch (err) { say(err.message); return; }
@@ -447,12 +464,12 @@ export async function save({ asNew = false } = {}) {
     say(`You have view-only access to ${current.home.propertyName || current.home.orgName}, so changes here are not saved. Use Save as new in My 3D maps to keep a personal copy.`);
     return;
   }
-  await doSave(current.name, current.id);
+  await doSave(current.name, current.id, null, { force });
 }
-async function doSave(name, id, dest = null) {
+async function doSave(name, id, dest = null, opts) {
   busy = true; renderNote(); renderButtons();
   try {
-    const res = await saveProject(name, id, dest);
+    const res = await saveProject(name, id, dest, opts);
     if (pending) { pending = null; clearTimeout(pendingT); await clearStash(); }
     setUrlProject(res.id);
     settle();
@@ -461,6 +478,7 @@ async function doSave(name, id, dest = null) {
     return true;
   } catch (err) {
     if (err.code === 'SIGNED_OUT') { user = null; renderButtons(); openDialog('save-signin', { error: err.message }); }
+    else if (err.code === 'CONFLICT') openDialog('conflict', { error: err.message });
     else say(err.message);
     return false;
   } finally {
@@ -593,9 +611,15 @@ function wire() {
     $('acct-password-row').hidden = false; $('acct-use-password').hidden = true; $('acct-link-btn').hidden = true; $('acct-password-btn').hidden = false; $('acct-new').hidden = true; $('acct-password').focus();
   });
   $('acct-cancel').addEventListener('click', closeDialog);
+  $('acct-overwrite').addEventListener('click', () => { closeDialog(); save({ force: true }); });
+  $('acct-asnew').addEventListener('click', () => { closeDialog(); save({ asNew: true }); });
+  $('acct-reload').addEventListener('click', async () => {
+    closeDialog(); if (!current) return;
+    try { const res = await openProject(current.id); settle(); say(`Reloaded “${res.name}” as saved at ${fmtWhen(res.savedAt, { timeStyle: 'short' })}.`); } catch (err) { say(err.message); }
+  });
   $('acct-name-cancel').addEventListener('click', closeDialog);
   $('acct-sent-close').addEventListener('click', closeDialog);
-  $('acct-dialog').addEventListener('close', () => { dialogMode = null; });
+  $('acct-dialog').addEventListener('close', () => { if (!$('acct-dialog').open) dialogMode = null; }); // the close event comes late: the dialog may be open again in another mode
   $('acct-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     showError('');

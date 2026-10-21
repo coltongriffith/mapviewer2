@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { shouldMerge, placePills } from '../src/three-d/layout.js';
-import { init, drawPills, legendRows, tagShown, idShown, pendingGroups } from '../src/three-d/tags.js';
+import { init, drawPills, legendRows, tagShown, idShown, pendingGroups, weight, fade, highlightOf, set as setTags } from '../src/three-d/tags.js';
 import { readLegendFiles, applyLegendFile } from '../src/three-d/geology.js';
 import { refineRole } from '../src/three-d/roles.js';
 
@@ -45,7 +45,7 @@ function host(holes, tags = {}, extra = {}) {
   const fills = [];
   ctx.fillText = (t) => fills.push(t);
   init({ S, project: { holes }, G: { V: (x, y, z) => ({ x, y, z }) }, proj: (v) => [v.x, 500 - v.y / 10, 0], shownCallouts: () => extra.callouts || [], isPending: (h) => /pending/.test(h.note),
-    roundRect: () => {}, textOn: () => '#fff', setSpacing: () => {}, INK: '#142126' });
+    roundRect: () => {}, textOn: () => '#fff', setSpacing: () => {}, INK: '#142126', brandTone: () => S.accent });
   return { S, fills, draw: () => { fills.length = 0; drawPills(ctx, K, { placed: [], occ: [], W: 2000, H: 1000 }); return fills.slice(); } };
 }
 const hole = (id, x, year, note = '') => ({ id, note, c: { x, y: 0, z: 1000, raw: { Year: String(year), Status: note } }, ints: [{}] });
@@ -54,8 +54,9 @@ describe('hole tags', () => {
   let holes;
   beforeEach(() => { holes = [hole('S-073', 0, 2026), hole('S-076', 60, 2026, 'assays pending'), hole('S-079', 120, 2026, 'assays pending'), hole('S-037', 400, 2014), hole('S-048', 600, 2014)]; });
   it('gives each hole its own tag setting, apart from its ID', () => {
+    host(holes); expect(holes.filter(tagShown).map((h) => h.id)).toEqual(['S-073', 'S-076', 'S-079', 'S-037', 'S-048']); // pending holes keep their pills beside the group tag
     const H = host(holes, { showTag: { 'S-037': true, 'S-048': false } });
-    expect(holes.filter(tagShown).map((h) => h.id)).toEqual(['S-073', 'S-037']); // pending holes share one tag
+    expect(holes.filter(tagShown).map((h) => h.id)).toEqual(['S-073', 'S-076', 'S-079', 'S-037']);
     expect(holes.every(idShown)).toBe(true);
     H.S.ids = false; expect(H.draw()).toContain('S-073'); // hole IDs off keeps the tags
   });
@@ -85,6 +86,34 @@ describe('hole tags', () => {
     host(many, {}, { callouts: [{ h: many[10] }] });
     expect(many.filter(idShown).map((h) => h.id)).toEqual(['H-0', 'H-1', 'H-2', 'H-10']);
     expect(many.filter(tagShown).map((h) => h.id)).toEqual(['H-0', 'H-1', 'H-2', 'H-10']);
+  });
+});
+
+describe('Star sample: pending holes S-076 and S-079', () => {
+  // The Star collars (star_main_collars.csv): two holes with assays pending, about 105 m apart.
+  const star = () => [hole('S-073', 0, 2026), { ...hole('S-076', 0, 2026, 'Complete, assays pending'), c: { x: 339740, y: 6458372, z: 1175, raw: { Year: '2026' } } },
+    { ...hole('S-079', 0, 2026, 'In progress, assays pending'), c: { x: 339661, y: 6458442, z: 1183, raw: { Year: '2026' } } }, hole('S-037', 400, 2014)];
+  it('draws one grouped ASSAYS PENDING tag with groupRadius 400 (and with the default)', () => {
+    expect(host(star(), { groupRadius: 400 }).draw().filter((t) => /PENDING/.test(t))).toEqual(['2026 · ASSAYS PENDING']);
+    expect(host(star()).draw().filter((t) => /PENDING/.test(t))).toEqual(['2026 · ASSAYS PENDING']);
+  });
+});
+
+describe('hole display', () => {
+  const many = () => Array.from({ length: 20 }, (_, i) => hole(`H-${i}`, i * 50, i < 3 ? 2026 : 2014));
+  it('past 12 holes, key holes are bold and the previously released ones thin and grey by default', () => {
+    const hs = many(); host(hs);
+    expect(weight(hs[0])).toBeGreaterThan(1); expect(fade(hs[0])).toBe(false);
+    expect(weight(hs[8])).toBeLessThan(1); expect(fade(hs[8])).toBe(true);
+    setTags({ emphasis: 'none' });
+    expect(weight(hs[8])).toBe(1); expect(fade(hs[8])).toBe(false);
+  });
+  it('highlights holes in the brand colour, live, or a colour of their own', () => {
+    const hs = many(), H = host(hs, { emphasis: 'none' });
+    setTags({ highlightNew: 'brand', highlight: { 'H-9': '#336699' } });
+    expect(hs.map(highlightOf).filter(Boolean)).toEqual(['#c65322', '#c65322', '#c65322', '#336699']);
+    H.S.accent = '#0b7a75'; expect(highlightOf(hs[0])).toBe('#0b7a75'); // follows the brand
+    expect(() => setTags({ highlight: { 'H-1': 'gold' } })).toThrow(/hex colour/);
   });
 });
 
