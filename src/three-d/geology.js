@@ -41,6 +41,21 @@ export function syncLegend(legend, codes) {
   });
   return out.sort((a, b) => a.order - b.order).map((e, i) => ({ ...e, order: i }));
 }
+// A lithology legend file (code, name, optional colour): rows -> Map code -> { name, color }.
+export function readLegendFiles(files) {
+  const m = new Map();
+  files.forEach((f) => f.rows.forEach((r) => {
+    const c = f.cols, code = String(r[c.code] ?? '').trim(); if (!code) return;
+    const name = c.desc !== undefined ? String(r[c.desc] ?? '').trim() : '', raw = c.color !== undefined ? String(r[c.color] ?? '').trim().replace(/^([0-9a-f]{6})$/i, '#$1') : '';
+    m.set(code, { name, color: /^#[0-9a-f]{6}$/i.test(raw) ? raw.toLowerCase() : '' });
+  }));
+  return m;
+}
+// Names and colours from the file, except where set by hand in the legend editor (nameSet, colorSet).
+export const applyLegendFile = (legend, file) => legend.map((e) => {
+  const f = file.get(e.code); if (!f) return e;
+  return { ...e, ...(f.name && !e.nameSet ? { name: f.name } : {}), ...(f.color && !e.colorSet ? { color: f.color } : {}) };
+});
 // Hidden codes. "nearest": their intervals are left out, so the faces are interpolated as if they did not
 // exist and the nearest visible units fill in; "other": they fold into one muted "Other" unit. Returns the
 // class of each code (codes left out have none) and the classes in order (codes, plus OTHER at the end).
@@ -214,7 +229,7 @@ function logsNow() {
   return cache.logs;
 }
 export function legendNow() {
-  const L = logsNow(); cfg().legend = syncLegend(cfg().legend, L.codes); return cfg().legend;
+  const L = logsNow(); cfg().legend = applyLegendFile(syncLegend(cfg().legend, L.codes), readLegendFiles(H.files().filter((f) => f.role === 'lithlegend'))); return cfg().legend;
 }
 export const autoSearch = () => { const G = H.G; return Math.round(Math.max(40, 0.55 * Math.max(G.bw, G.bh))); };
 const searchNow = () => (Number.isFinite(cfg().search) && cfg().search > 0 ? cfg().search : autoSearch());
@@ -320,7 +335,7 @@ export function set(o = {}) {
       if (!e || e.code === undefined) throw new Error('Each legend entry needs its code.');
       if (e.color !== undefined && !/^#[0-9a-f]{6}$/i.test(e.color)) throw new Error(`Colour for ${e.code} must be a hex colour like #f1dca2.`);
       const t = cur.get(String(e.code)) || { code: String(e.code), name: String(e.code), color: PASTEL[cur.size % PASTEL.length], show: true, order: g.legend.length + i };
-      if (e.name !== undefined) t.name = String(e.name).slice(0, 60); if (e.color !== undefined) t.color = e.color.toLowerCase(); if (e.show !== undefined) t.show = !!e.show; if (e.order !== undefined) t.order = +e.order;
+      if (e.name !== undefined) { t.name = String(e.name).slice(0, 60); t.nameSet = true; } if (e.color !== undefined) { t.color = e.color.toLowerCase(); t.colorSet = true; } if (e.show !== undefined) t.show = !!e.show; if (e.order !== undefined) t.order = +e.order;
       cur.set(t.code, t);
     });
     g.legend = [...cur.values()].sort((a, b) => a.order - b.order).map((e, i) => ({ ...e, order: i }));

@@ -17,7 +17,9 @@ export function makeLayout(W, H, pad = 0, boxes = []) {
     clear: (b, soft = []) => inFrame(b) && !blockers(b).length && !soft.some((o) => hits(b, o, pad)),
     add(b, pri = Infinity, draw) { boxes.push(b); if (draw) meta.set(b, { pri, draw }); return b; },
     place(cands, pri = 1, draw, soft = []) {
-      for (const s of [soft, []]) for (const b of cands) if (L.clear(b, s)) return L.add(b, pri, draw);
+      for (const b of cands) if (L.clear(b, soft)) return L.add(b, pri, draw);
+      const ok = cands.filter((b) => L.clear(b)), on = (b) => soft.reduce((a, s) => a + overlapArea(b, s), 0); // else the least on the soft areas
+      if (ok.length) return L.add(ok.reduce((a, b) => (on(b) < on(a) ? b : a)), pri, draw);
       for (const b of cands) {
         const bl = inFrame(b) ? blockers(b) : null;
         if (bl && bl.every((o) => meta.get(o)?.pri < pri)) { bl.forEach((o) => { boxes.splice(boxes.indexOf(o), 1); meta.delete(o); }); return L.add(b, pri, draw); }
@@ -31,8 +33,9 @@ export function makeLayout(W, H, pad = 0, boxes = []) {
 
 // Pill placement: each { x, y, w, h } (anchor and size) tries spots above, beside and further out, and
 // takes the first clear of `avoid`, the frame edge and the pills already placed; failing that, the spot
-// with the least overlap. Returns { cx, cy, box, leader } per item.
-export function placePills(items, avoid, { W, H, unit = 1, pad = 4 }) {
+// with the least overlap, or (drop) none: items come in priority order, so the lowest-priority pills are
+// the ones left out rather than drawn over another. Returns { cx, cy, box, leader } per item placed.
+export function placePills(items, avoid, { W, H, unit = 1, pad = 4, drop = false }) {
   const placed = [], out = [];
   const spots = [[0, -1], [1, -0.7], [-1, -0.7], [0, -2], [1.3, -1.7], [-1.3, -1.7], [0, 1], [1.2, 0.6], [-1.2, 0.6], [0, -3], [1.6, -2.7], [-1.6, -2.7], [0, 2], [2, 0], [-2, 0], [0, -4], [2, -3.7], [-2, -3.7]];
   for (const it of items) {
@@ -44,6 +47,7 @@ export function placePills(items, avoid, { W, H, unit = 1, pad = 4 }) {
       if (!best || cost < best.cost) best = { cx, cy, box, cost, far: Math.abs(sx) > 1.1 || Math.abs(sy) > 1.1 };
       if (cost === 0) break;
     }
+    if (drop && (!best || best.cost > 0)) continue;
     if (!best) best = { cx: it.x, cy: it.y - it.h, box: [it.x - it.w / 2, it.y - it.h * 1.5, it.x + it.w / 2, it.y - it.h / 2], far: false };
     placed.push(best.box); out.push({ ...it, cx: best.cx, cy: best.cy, box: best.box, leader: best.far });
   }
@@ -85,6 +89,6 @@ export function wrapNotes(notes, measure, maxW, maxLines = 2) {
 // One legend card instead of several: "auto" merges when three or more blocks have something to show
 // (the holes block counts only beyond the plain collar row).
 export function shouldMerge(sections, mode = 'auto') {
-  if (mode === true || mode === false) return mode;
+  if (mode === 'one' || mode === 'separate') return mode === 'one';
   return sections.filter((s) => s.rows.length > (s.key === 'holes' ? 1 : 0)).length >= 3;
 }

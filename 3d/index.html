@@ -395,7 +395,9 @@ dialog.acct-dialog::backdrop { background: rgba(20,33,38,0.35); }
           <label class="field"><span>Broad cut-off</span><input type="number" id="co-cut" step="any"></label>
           <label class="field"><span>"incl." cut-off</span><input type="number" id="co-incl" step="any"></label>
           <label class="field" style="grid-column:1/-1"><span>Also show in callouts</span><select id="value-col2"></select></label>
+          <label class="field" style="grid-column:1/-1"><span>Callouts go</span><select id="co-place"><option value="column">In a column at the left</option><option value="beside">Beside each hole</option><option value="bracket">As a bracket on the hole</option></select></label>
         </div>
+        <p class="muted" style="margin-top:6px">Drag a callout on the preview to move it; its leader follows.</p>
         <div id="callout-editor" style="display:grid;gap:8px;margin-top:10px"></div>
       </section>
       <section>
@@ -409,6 +411,14 @@ dialog.acct-dialog::backdrop { background: rgba(20,33,38,0.35); }
         <label class="field" style="margin-top:8px"><span>Looking toward (azimuth) <output id="cam-az-out" class="mono"></output></span><input type="range" id="cam-az" min="0" max="359"></label>
         <label class="field"><span>Plunge (angle down) <output id="cam-pl-out" class="mono"></output></span><input type="range" id="cam-pl" min="3" max="89"></label>
         <label class="field"><span>Zoom <output id="cam-zoom-out" class="mono"></output></span><input type="range" id="cam-zoom" min="40" max="250"></label>
+      </section>
+      <section>
+        <h3>Legend</h3>
+        <div class="grid2">
+          <label class="field"><span>Cards</span><select id="lg-merge"><option value="auto">Automatic</option><option value="one">One card</option><option value="separate">Separate cards</option></select></label>
+          <label class="field"><span>Position</span><select id="lg-pos"><option value="auto">Automatic, off the block</option><option value="br">Bottom right</option><option value="bl">Bottom left</option><option value="tr">Top right</option><option value="tl">Top left</option><option value="moved" disabled>Moved by hand</option></select></label>
+        </div>
+        <p class="muted" style="margin-top:6px">Drag a legend on the preview to move it.</p>
       </section>
       <section>
         <h3>Section line A–A′</h3>
@@ -453,7 +463,7 @@ dialog.acct-dialog::backdrop { background: rgba(20,33,38,0.35); }
         <h3>Hole tags and callouts</h3>
         <div class="grid2">
           <label class="field"><span>Hole ID tags</span><select data-ext="tags.at"><option value="toe">At the end of the hole</option><option value="collar">Pills at the collar</option><option value="both">Both</option></select></label>
-          <label class="field"><span>Which holes get IDs</span><select data-ext="tags.idMode"><option value="all">All holes</option><option value="key">Key holes only (callouts, new, ticked)</option></select></label>
+          <label class="field"><span>Which holes get IDs and tags</span><select data-ext="tags.idMode"><option value="auto">Automatic (all up to 12 holes, else key holes)</option><option value="all">All holes</option><option value="key">Key holes only (callouts, new, ticked)</option></select></label>
           <label class="field"><span>"Assays pending"</span><select data-ext="tags.pending"><option value="collar">Small tag at the collars</option><option value="trace">Along each hole</option></select></label>
           <label class="field"><span>Inset</span><select data-ext="style.insetStyle"><option value="plan">Plan of drilling</option><option value="satellite">Location map, satellite</option><option value="topo">Location map, topographic</option></select></label>
         </div>
@@ -488,6 +498,18 @@ dialog.acct-dialog::backdrop { background: rgba(20,33,38,0.35); }
         <label class="field" style="margin-top:8px"><span>Vertical exaggeration <output id="vex-out" class="mono">1×</output></span><input type="range" id="vex" min="1" max="5" step="0.5" value="1"></label>
         <label class="field" style="margin-top:8px"><span>Drill trace thickness <output id="trace-out" class="mono">1.4×</output></span><input type="range" id="trace-w" min="50" max="300" step="10" value="140"></label>
         <label class="field" style="margin-top:8px"><span>Surface opacity <output id="surf-out" class="mono">100%</output></span><input type="range" id="surf" min="15" max="100" value="100"></label>
+        <details style="margin-top:8px">
+          <summary>Block extent</summary>
+          <label class="field" style="margin-top:8px"><span>Margin around the drilling (m)</span><input type="number" id="block-margin" min="0" step="10"></label>
+          <div class="grid2" style="margin-top:6px">
+            <label class="field"><span>Easting from</span><input type="number" data-bx="x0" step="any"></label>
+            <label class="field"><span>Easting to</span><input type="number" data-bx="x1" step="any"></label>
+            <label class="field"><span>Northing from</span><input type="number" data-bx="y0" step="any"></label>
+            <label class="field"><span>Northing to</span><input type="number" data-bx="y1" step="any"></label>
+            <label class="field"><span>Base elevation (m)</span><input type="number" data-bx="z0" step="any"></label>
+            <button class="btn" type="button" id="block-reset" style="align-self:end">Automatic</button>
+          </div>
+        </details>
         <div class="files" id="mesh-list" style="margin-top:8px"></div>
       </section>
       <button class="btn primary next" type="button" data-goto="export">Next: Export →</button>

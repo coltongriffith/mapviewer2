@@ -5,7 +5,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { composite, collarGroups, autoCell, autoSearch } from './shell-core.js';
 import { METAL_DEFAULTS, defaultUnit, priceUnit, eqFactors, eqFormula, eqValue } from './metal-eq.js';
 import { isXYZ, parseXYZ, refineRole } from './roles.js';
-import { makeLayout, isClick, legendRows as binRows, wrapNotes } from './layout.js';
+import { makeLayout, isClick, legendRows as binRows, wrapNotes, shouldMerge } from './layout.js';
 
 const $ = (id) => document.getElementById(id);
 // ============================================================
@@ -70,8 +70,9 @@ const ROLE_LABEL = { collar: 'Collars', survey: 'Surveys', assay: 'Assays', topo
 const ROLE_FIELDS = { collar: ['hole', 'east', 'north', 'elev', 'depth', 'az', 'dip'], survey: ['hole', 'depth', 'az', 'dip'], assay: ['hole', 'from', 'to'], topo: ['east', 'north', 'elev'] };
 const FIELD_LABEL = { hole: 'Hole ID', east: 'Easting', north: 'Northing', elev: 'Elevation', depth: 'Depth', az: 'Azimuth', dip: 'Dip', from: 'From', to: 'To', lat: 'Latitude', lon: 'Longitude' };
 // EXT hook: lithology/alteration logs and geophysics points (detected in roles.js, drawn by geology.js and geophys.js).
-Object.assign(ROLE_LABEL, { litho: 'Lithology / alteration', geophys: 'Geophysics' }); Object.assign(FIELD_LABEL, { code: 'Code', desc: 'Description', value: 'Value', line: 'Line' });
-Object.assign(ROLE_FIELDS, { litho: ['hole', 'from', 'to', 'code', 'desc'], geophys: ['east', 'north', 'elev', 'value', 'line'] });
+// lithlegend: a code-to-name (and colour) list for the lithology legend.
+Object.assign(ROLE_LABEL, { litho: 'Lithology / alteration', geophys: 'Geophysics', lithlegend: 'Lithology legend' }); Object.assign(FIELD_LABEL, { code: 'Code', desc: 'Description', value: 'Value', line: 'Line', color: 'Colour' });
+Object.assign(ROLE_FIELDS, { litho: ['hole', 'from', 'to', 'code', 'desc'], geophys: ['east', 'north', 'elev', 'value', 'line'], lithlegend: ['code', 'desc', 'color'] });
 
 function parseOBJ(text) {
   const v = [], f = [];
@@ -154,6 +155,9 @@ const S = {              // style
   // recipe ({ base, baseCol, baseUnit, basePrice, baseRecovery, metals: { Au: { col, unit, price, recovery } } }).
   // shell: the grade shell from assays (cutoff/search/cell null = automatic). provisional: per-hole overrides.
   displayCutoff: null, eq: null, provisional: {},
+  // legend: one card or several ("auto" merges three or more blocks), each card "auto", a corner or {x, y}.
+  // coPlacement: where callouts go unless set per hole. Block: margin (m) around the drilling, extent limits.
+  legend: { merge: 'auto', pos: {} }, coPlacement: 'column', blockMargin: null, blockExtent: null,
   shell: { enabled: false, cutoff: null, opacity: 0.3, color: '#1f9e96', search: null, cell: null },
 };
 const BIN_COLORS = ['#a3abaf', '#e2dc4f', '#ff9a1f', '#ef3b2c', '#e93ad1'];
@@ -369,9 +373,10 @@ function rebuildScene(keepCam) {
   // Block extent from the holes
   let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity, zmin = Infinity;
   holes.forEach((h) => h.path.forEach((p) => { x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); y0 = Math.min(y0, p.y); y1 = Math.max(y1, p.y); if (Number.isFinite(p.z)) zmin = Math.min(zmin, p.z); }));
-  // A located project gets more ground around the drilling, for the terrain and imagery to read.
-  const pad = Math.max(60, (geo ? 0.25 : 0.14) * Math.max(x1 - x0, y1 - y0));
-  const B = { x0: x0 - pad, x1: x1 + pad, y0: y0 - pad, y1: y1 + pad };
+  // A located project gets more ground around the drilling, for the terrain and imagery to read; a margin
+  // set by hand overrides it, and any extent limit set by hand wins.
+  const pad = Number.isFinite(S.blockMargin) ? S.blockMargin : Math.max(60, (geo ? 0.25 : 0.14) * Math.max(x1 - x0, y1 - y0)), E = S.blockExtent || {};
+  const B = { x0: E.x0 ?? x0 - pad, x1: E.x1 ?? x1 + pad, y0: E.y0 ?? y0 - pad, y1: E.y1 ?? y1 + pad };
   const cx = (B.x0 + B.x1) / 2, cy = (B.y0 + B.y1) / 2, bw = B.x1 - B.x0, bh = B.y1 - B.y0, diag = Math.hypot(bw, bh);
   // Surface: uploaded topography, else the real DEM (once a coordinate system is set and its tiles
   // load), else a fit to the collar elevations. terrainSource can force one.
@@ -413,7 +418,7 @@ function rebuildScene(keepCam) {
   }
   zmin = Math.min(...holes.flatMap((h) => h.path.map((p) => p.z)));
   let zmax = -Infinity; for (const v of grid) zmax = Math.max(zmax, v);
-  B.z0 = zmin - Math.max(25, 0.05 * diag);
+  B.z0 = Number.isFinite(E.z0) && E.z0 < zmax - 10 ? E.z0 : zmin - Math.max(25, 0.05 * diag);
   const zref = (zmax + B.z0) / 2;
   const vex = S.vex, V = (x, y, z) => new THREE.Vector3(x - cx, (z - zref) * vex, -(y - cy));
   // diag sizes marks (tubes, labels) by the whole block; the camera distance
@@ -1157,6 +1162,9 @@ function fitText(ctx, t, maxW) { if (ctx.measureText(t).width <= maxW) return t;
 const hexRgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
 const lumOf = (rgb) => { const c = rgb.map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; };
 const textOn = (hex) => (lumOf(hexRgb(hex)) > 0.45 ? INK : '#ffffff');
+// Brand colours for figure furniture (S.primary and S.accent, set from the logo): legend headers, highlights,
+// key-hole traces, the grade shell. Grade, geophysics and lithology colours stay scientific, never from here.
+const brandTone = (kind) => ({ head: S.primary, key: S.primary, highlight: S.accent, shell: S.accent }[kind] || S.accent);
 function setSpacing(ctx, px) { if ('letterSpacing' in ctx) ctx.letterSpacing = `${px}px`; }
 
 function drawLogo(ctx, K, Wc, forExport) {
@@ -1238,7 +1246,8 @@ function measureCallout(ctx, K, c) {
 }
 function drawCallout(ctx, K, x, y, c, M, target) {
   const { u, font } = K, { L, w1, bw, bh } = M;
-  const x0 = x + bw, y0 = y + bh / 2, xm = Math.max(x0 + 16 * u, Math.min(target[0] - 30 * u, x0 + 60 * u));
+  // The leader leaves the side facing the hole.
+  const r = target[0] >= x + bw / 2, x0 = r ? x + bw : x, y0 = y + bh / 2, xm = r ? Math.max(x0 + 16 * u, Math.min(target[0] - 30 * u, x0 + 60 * u)) : Math.min(x0 - 16 * u, Math.max(target[0] + 30 * u, x0 - 60 * u));
   ctx.strokeStyle = S.primary; ctx.lineWidth = 1.3 * u; ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(xm, y0); ctx.lineTo(target[0], target[1]); ctx.stroke();
   M.leader = [[x0, y0, xm, y0], [xm, y0, target[0], target[1]]];
   ctx.beginPath(); ctx.arc(target[0], target[1], 3.6 * u, 0, Math.PI * 2); ctx.fillStyle = S.primary; ctx.fill(); ctx.lineWidth = 1.2 * u; ctx.strokeStyle = '#fff'; ctx.stroke();
@@ -1283,7 +1292,7 @@ function drawCard(ctx, K, x, y, w, h, secs) {
   secs.forEach((s, i) => {
     if (i) yy += 6 * u;
     ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
-    if (s.title) { font(700, 13); ctx.fillStyle = INK; ctx.fillText(fitText(ctx, s.title, w - 24 * u), x + 12 * u, yy + 9.5 * u); yy += 19 * u; }
+    if (s.title) { font(700, 13); ctx.fillStyle = brandTone('head'); ctx.fillText(fitText(ctx, s.title, w - 24 * u), x + 12 * u, yy + 9.5 * u); yy += 19 * u; }
     s.rows.forEach((r) => {
       if (r.sep) yy += 6 * u;
       if (r.full) r.full(ctx, K, x + 12 * u, yy, w - 24 * u);
@@ -1453,12 +1462,13 @@ function drawOverlay(ctx, k, forExport) {
   const K = kit(ctx, W, H), { u, m, font, narrow } = K;
   if (!G) { font(600, 18); ctx.fillStyle = MUTED; ctx.textAlign = 'center'; ctx.fillText('Add a collar file and an assay file to build the figure.', W / 2, H / 2); ctx.restore(); return; }
   // Collars and hole IDs. occ collects what is drawn, so the scale bar and new labels can keep clear of it.
-  const placed = wallLabelBoxes(), idBoxes = [], occ = [];
+  const placed = wallLabelBoxes(), idBoxes = [], occ = [], hits = [];
   project.holes.forEach((h) => {
     const [cx, cy] = proj(G.V(h.c.x, h.c.y, h.c.z)), e = h.path[h.path.length - 1], [ex, ey] = proj(G.V(e.x, e.y, e.z));
     ctx.beginPath(); ctx.arc(cx, cy, 5 * u, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth = 2.4 * u; ctx.strokeStyle = INK; if (h.prov || h.planned) ctx.setLineDash([2.5 * u, 2 * u]); ctx.stroke(); ctx.setLineDash([]);
     occ.push([cx - 8 * u, cy - 8 * u, cx + 8 * u, cy + 8 * u]);
-    if (!S.ids || S.tags.at === 'collar' || (EXT.tags && !EXT.tags.idShown(h))) return; // EXT hook: collar pills instead; key holes only
+    // EXT hook: key holes only (the default past 12 holes, when tags.js decides), and no ID where a pill is.
+    if (!S.ids || (EXT.tags ? !EXT.tags.idShown(h) || (S.tags.at === 'collar' && EXT.tags.tagShown(h)) : S.tags.at === 'collar' || project.holes.length > 12)) return;
     const ang = Math.atan2(ey - cy, ex - cx), flip = Math.abs(ang) > Math.PI / 2, r = 26 * u, box = [ex - r, ey - r, ex + r, ey + r];
     // The ID is dropped where it would land on another ID or on a label painted on the block.
     const run = [ex + Math.cos(ang) * 6 * u, ey + Math.sin(ang) * 6 * u, ex + Math.cos(ang) * 60 * u, ey + Math.sin(ang) * 60 * u], tbox = [Math.min(run[0], run[2]), Math.min(run[1], run[3]), Math.max(run[0], run[2]), Math.max(run[1], run[3])];
@@ -1472,7 +1482,7 @@ function drawOverlay(ctx, k, forExport) {
     const tw = ctx.measureText(h.id).width, x0 = ex + Math.cos(ang) * 6 * u, y0 = ey + Math.sin(ang) * 6 * u, x1 = x0 + Math.cos(ang) * tw, y1 = y0 + Math.sin(ang) * tw;
     idBoxes.push([Math.min(x0, x1) - 8 * u, Math.min(y0, y1) - 8 * u, Math.max(x0, x1) + 8 * u, Math.max(y0, y1) + 8 * u]);
   });
-  const pend = S.pendingLabels && !(S.tags.pending === 'collar' && EXT.tags) ? project.holes.filter(isPending) : []; // EXT hook: or small collar tags (tags.js)
+  const pend = S.pendingLabels && S.tags.pending !== 'collar' ? project.holes.filter(isPending) : []; // EXT hook: or one tag per group at the collars (tags.js)
   if (pend.length) {
     const scr = new Map(project.holes.map((h) => [h, h.path.filter((p, i) => i % 3 === 0).map((p) => proj(G.V(p.x, p.y, p.z))).filter((p) => p[2] < 1)]));
     pend.forEach((h) => { const pts = scr.get(h).filter((p, i, a) => i > a.length * 0.06); if (pts.length > 2) alongLabel(ctx, K, 'ASSAYS PENDING', pts, project.holes.filter((o) => o !== h).flatMap((o) => scr.get(o))); });
@@ -1498,18 +1508,26 @@ function drawOverlay(ctx, k, forExport) {
     font(700, 11); ctx.fillStyle = S.primary; ctx.fillText('N ↑', ix + (iw - bw) / 2 + 3 * u, iy + 12 * u);
     font(400, 11); ctx.fillStyle = MUTED; ctx.textAlign = 'center'; ctx.fillText('Plan of drilling', ix + iw / 2, iy + bh + 18 * u); ctx.textAlign = 'left';
   }
-  // Legend cards: the main card bottom right, the layers' cards (EXT hook: lithology, geophysics) beside or
-  // above it. Each takes the first spot clear of what is placed and, where it can, of the block itself.
-  const trTop = Math.max(...occ.filter((b) => b[1] === 0 && b[2] >= W - 1).map((b) => b[3])) + 12 * u, soft = [blockBox()];
+  // EXT hook: collar pills and pending tags, before the legends so those keep clear of them.
+  EXT.tags?.drawPills(ctx, K, { placed: placed.concat(labelHits.filter((h) => h.box).map((h) => h.box)), occ, W, H });
+  // Legends: one card (S.legend.merge "one", or "auto" with three or more blocks) or the main card and the
+  // layers' cards (EXT hook: lithology, geophysics). A card docked to a corner or dragged stays put; the
+  // others take the first spot clear of what is placed and, where they can, of the block itself.
+  const trTop = Math.max(...occ.filter((b) => b[1] === 0 && b[2] >= W - 1).map((b) => b[3])) + 12 * u, soft = [blockBox()], main = legendSecs(), ext = extSections(), LG = S.legend;
+  const hs = main.filter((s) => s.key === 'holes'), one = [...main.filter((s) => s.key !== 'holes'), ...ext, ...hs.map((s) => ({ ...s, title: 'Holes' }))];
+  let merge = shouldMerge([...main, ...ext], LG.merge);
+  if (merge && LG.merge === 'auto' && !LG.pos.main) { const [w, h] = cardSize(ctx, K, one); merge = lay.clear([W - m - w, footTop - 12 * u - h, W - m, footTop - 12 * u], soft) || lay.clear([W - m - w, trTop, W - m, trTop + h], soft); } // only where one card fits at the right
+  const cards = merge ? [['main', one]] : [['main', main], ...ext.map((s) => [s.key, [s]])], cardBoxes = [];
   let prev = null;
-  [legendSecs(), ...extSections().map((s) => [s])].forEach((secs) => {
-    const [w, h] = cardSize(ctx, K, secs), at = (x, y) => [x, y, x + w, y + h];
-    const cands = [...(prev ? [at(prev[0] - 10 * u - w, prev[3] - h), at(prev[2] - w, prev[1] - 10 * u - h)] : []), at(W - m - w, footTop - 12 * u - h), at(W - m - w, trTop), at(m, footTop - 72 * u - h), at(m, headBottom + 18 * u)];
-    prev = lay.place(cands, Infinity, null, soft) || lay.add(cands[0]);
-    drawCard(ctx, K, prev[0], prev[1], w, h, secs);
+  const fixed = (k) => +(!!LG.pos[k] && LG.pos[k] !== 'auto'); // cards placed by hand go first
+  cards.sort((a, b) => fixed(b[0]) - fixed(a[0])).forEach(([key, secs]) => {
+    const [w, h] = cardSize(ctx, K, secs), at = (x, y) => [x, y, x + w, y + h], p = LG.pos[key];
+    const corner = { br: at(W - m - w, footTop - 12 * u - h), tr: at(W - m - w, trTop), bl: at(m, footTop - 72 * u - h), tl: at(m, headBottom + 18 * u) };
+    const cands = [...(prev ? [at(prev[0] - 10 * u - w, prev[3] - h), at(prev[2] - w, prev[1] - 10 * u - h)] : []), corner.br, corner.tr, corner.bl, corner.tl];
+    const box = p?.x !== undefined ? lay.add(at(Math.max(0, Math.min(W - w, p.x * W)), Math.max(0, Math.min(H - h, p.y * H)))) : corner[p] ? lay.add(corner[p]) : lay.place(cands, Infinity, null, soft) || lay.add(cands[0]);
+    drawCard(ctx, K, box[0], box[1], w, h, secs); hits.push({ kind: 'legend', id: key, box }); cardBoxes.push(box); prev = box;
   });
   drawScaleBar(ctx, K, footTop, lay); // after the legends, so it keeps clear of them
-  EXT.tags?.drawPills(ctx, K, { placed: placed.concat(labelHits.filter((h) => h.box).map((h) => h.box)), occ, W, H }); // EXT hook: collar ID pills, clear of labels
   // Orientation, bottom left: north arrow plus view direction
   occ.push([0, footTop - 60 * u, m + 160 * u, footTop]);
   const cam = getCam(), ox = m + 22 * u, oy = footTop - 34 * u, T = controls.target, n0 = proj(T), n1 = proj(T.clone().add(new THREE.Vector3(0, 0, -G.diag * 0.1)));
@@ -1526,9 +1544,12 @@ function drawOverlay(ctx, k, forExport) {
   // Intercept callouts, left column between the title and the orientation box
   // Each box goes level with its hole where it can: stacked downward, then pulled up from the bottom.
   // Only if they still do not fit is the lowest-ranked callout dropped (ranking: metal in the interval).
-  const maxY = oy - 36 * u, top = headBottom + 18 * u, gap = 30 * u, tag = 18 * u, boxes = [];
+  // The column keeps above and below any legend card on the left.
+  const gap = 30 * u, left = cardBoxes.filter((b) => b[0] < W * 0.3), tag = 18 * u, boxes = [];
+  const maxY = Math.min(oy - 36 * u, ...left.filter((b) => b[1] > H / 2).map((b) => b[1] - 12 * u)), top = Math.max(headBottom + 18 * u, ...left.filter((b) => b[1] <= H / 2).map((b) => b[3] + 12 * u));
   let items = shownCallouts().map((c, rank) => { const p = c.h.posAt(c.ic.broad.mid); return { c, rank, s: proj(G.V(p.x, p.y, p.z)), M: measureCallout(ctx, K, c) }; }).filter(({ s }) => s[2] < 1).sort((a, b) => a.s[1] - b.s[1]);
   items = extGroups(ctx, K, items); // EXT hook: grouped intercept boxes
+  if (EXT.tags) items = EXT.tags.freeCallouts(ctx, K, items, { lay, W, H, hits }); // EXT hook: beside, bracket or dragged
   for (;;) {
     let y = top; items.forEach((it) => { it.y = Math.max(y, it.s[1] - it.M.bh / 2); y = it.y + it.M.bh + gap; });
     for (let i = items.length - 1; i >= 0; i--) items[i].y = Math.min(items[i].y, i === items.length - 1 ? maxY - tag - items[i].M.bh : items[i + 1].y - gap - items[i].M.bh);
@@ -1536,14 +1557,14 @@ function drawOverlay(ctx, k, forExport) {
     const worst = items.reduce((a, b) => (b.rank > a.rank ? b : a)); items = items.filter((it) => it !== worst);
   }
   const leaders = [];
-  items.forEach((it) => { const { c, s, M, y } = it; if (it.group) EXT.tags.drawGroup(ctx, K, m, y, it); else drawCallout(ctx, K, m, y, c, M, s); boxes.push([m, y, m + M.bw, y + M.bh + tag]); leaders.push(...M.leader); });
+  items.forEach((it) => { const { c, s, M, y } = it; if (it.group) EXT.tags.drawGroup(ctx, K, m, y, it); else { drawCallout(ctx, K, m, y, c, M, s); hits.push({ kind: 'callout', id: c.h.id, box: [m, y, m + M.bw, y + M.bh] }); } boxes.push([m, y, m + M.bw, y + M.bh + tag]); leaders.push(...M.leader); });
   occ.push(...boxes.map((b) => [b[0], b[1], b[2] + 10 * u, b[3]]));
   // Placed after the callouts so a tick never hides under a callout box; the deferred items (scale bar,
   // ticks) are drawn now, those pushed out by something more important left out.
   if (S.elevTicks) drawElevTicks(ctx, K, headBottom, footTop, lay, leaders);
   lay.flush();
   drawLabels(ctx, K, forExport);
-  if (!forExport) overlayOcc = occ.slice();
+  if (!forExport) { overlayOcc = occ.slice(); labelHits = labelHits.concat(hits); } // legends and callouts drag too
   ctx.restore();
 }
 
@@ -1696,60 +1717,10 @@ $('export-layers').addEventListener('click', () => exportLayers({ download: true
 // ============================================================
 // 8b. Send to the design desk (the Teams enquiry, with the figure and layers attached)
 // ============================================================
-// Same flow as /teams: POST the enquiry to /api/track, which answers with one signed upload URL per declared
-// file; each file is then PUT straight to storage. 204 means accepted without uploads (automated browsers).
-const DESK_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/, DESK_MAX_BYTES = 50 * 1024 * 1024;
-function teamsSessionId() {
-  try { let id = sessionStorage.getItem('em.teams.sid'); if (!id) { id = crypto.randomUUID().replace(/-/g, ''); sessionStorage.setItem('em.teams.sid', id); } return id; } catch { return crypto.randomUUID().replace(/-/g, ''); }
-}
-function deskMsg(text, kind) { const el = $('desk-msg'); el.textContent = text; el.className = `desk-msg ${kind || ''}`; el.hidden = !text; }
-let deskBusy = false;
-async function sendToDesignDesk(o = {}) {
-  const email = String(o.email ?? '').trim(), company = String(o.company ?? '').trim(), notes = String(o.notes ?? '').trim();
-  if (!DESK_EMAIL_RE.test(email)) throw new Error('Enter your work email so we can reply.');
-  if (!company) throw new Error('Enter your company name.');
-  if (!G) throw new Error('Nothing to send yet: add a collar file and an assay file.');
-  if (deskBusy) throw new Error('Already sending.');
-  deskBusy = true;
-  const step = (t) => { status(t); deskMsg(t, 'busy'); const b = $('desk-send'); b.disabled = true; b.textContent = t.replace(/…$/, '…'); };
-  try {
-    step('Preparing the figure and layers…');
-    const made = [['figure.png', await canvasBlob(figureCanvas('3d'))], ['layers.zip', await exportLayers({ as: 'blob' })]];
-    // Over the 50 MB upload limit: not sent, and said so below rather than dropped quietly.
-    const blobs = made.filter(([, b]) => b.size <= DESK_MAX_BYTES), tooBig = made.filter(([, b]) => b.size > DESK_MAX_BYTES).map(([n]) => n);
-    step('Sending to the design desk…');
-    const body = { kind: 'team_enquiry', session_id: teamsSessionId(), email, company, materials: ['sections_3d'], service_level: 'not_sure',
-      message: `${notes}${notes ? ' ' : ''}(sent from Exploration Maps 3D)`, ref: '3d', files: blobs.map(([name, b]) => ({ name, size: b.size, type: b.type || (name.endsWith('.zip') ? 'application/zip' : 'image/png') })) };
-    const res = await fetch('/api/track', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).catch(() => null);
-    if (!res) throw new Error('No connection to the design desk. Check your internet and try again.');
-    if (res.status === 429) throw new Error('Too many requests from this connection. Please wait a few minutes, or email support@explorationmaps.com.');
-    if (!res.ok) throw new Error(res.status === 503 ? 'The design desk is not taking requests right now (error 503). Please try again later, or email support@explorationmaps.com.' : `The design desk could not take that (error ${res.status}). Please try again, or email support@explorationmaps.com.`);
-    const out = res.status === 200 ? await res.json().catch(() => ({})) : { uploads: null };
-    const uploaded = [], failed = [...tooBig];
-    if (out.uploads) for (let i = 0; i < blobs.length; i++) {
-      const [name, b] = blobs[i], slot = out.uploads.find((x) => x?.name === name) || out.uploads[i];
-      if (!slot?.url) { failed.push(name); continue; }
-      step(`Uploading ${i + 1} of ${blobs.length}…`);
-      const up = await fetch(slot.url, { method: 'PUT', headers: { 'Content-Type': b.type || 'application/octet-stream', 'x-upsert': 'false' }, body: b }).catch(() => null);
-      (up?.ok ? uploaded : failed).push(name);
-    }
-    const lost = failed.filter((n) => !tooBig.includes(n));
-    const msg = `Sent. We'll reply to ${email}.${tooBig.length ? ` ${tooBig.join(' and ')} is over 50 MB and was not sent; we'll ask for it by email.` : ''}${lost.length ? ` ${lost.join(' and ')} did not upload; we'll ask for ${lost.length > 1 ? 'them' : 'it'} by email.` : ''}`;
-    status(msg); deskMsg(msg, 'ok'); $('desk').classList.add('sent');
-    window.gtag?.('event', 'teams_enquiry_sent', { materials: 1, files: uploaded.length, ref: '3d' });
-    return { ok: true, id: out.id || null, uploaded, failed, accepted: res.status };
-  } catch (e) {
-    status(e.message); deskMsg(e.message, 'bad'); throw e;
-  } finally { deskBusy = false; const b = $('desk-send'); b.disabled = false; b.textContent = 'Send figure and layers'; }
-}
-$('desk').addEventListener('submit', (e) => {
-  e.preventDefault();
-  ['desk-email', 'desk-company'].forEach((id) => $(id).removeAttribute('aria-invalid'));
-  const email = $('desk-email').value, company = $('desk-company').value;
-  if (!DESK_EMAIL_RE.test(email.trim())) { deskMsg('Enter your work email so we can reply.', 'bad'); $('desk-email').setAttribute('aria-invalid', 'true'); $('desk-email').focus(); return; }
-  if (!company.trim()) { deskMsg('Enter your company name.', 'bad'); $('desk-company').setAttribute('aria-invalid', 'true'); $('desk-company').focus(); return; }
-  sendToDesignDesk({ email, company, notes: $('desk-notes').value }).catch(() => {});
-});
+// The desk lives in desk.js, loaded on first use: the form's submit or EM3D.sendToDesignDesk.
+const desk = () => import('./desk.js').then((m) => { m.init(host()); return m; });
+const sendToDesignDesk = (o) => desk().then((m) => m.sendToDesignDesk(o));
+$('desk').addEventListener('submit', (e) => { e.preventDefault(); desk().then((m) => m.submit(), (err) => status(err.message)); });
 $('export-3d').addEventListener('click', () => exportPNG({ view: '3d', download: true }));
 $('export-section').addEventListener('click', () => exportPNG({ view: 'section', download: true }));
 
@@ -1840,7 +1811,7 @@ function renderFiles() {
   list.innerHTML = '';
   files.forEach((f, fi) => {
     const div = document.createElement('div'); div.className = 'file';
-    const roles = ['collar', 'survey', 'assay', 'topo', 'mesh', 'litho', 'geophys', 'unknown']; // EXT hook: litho, geophys
+    const roles = ['collar', 'survey', 'assay', 'topo', 'mesh', 'litho', 'lithlegend', 'geophys', 'unknown']; // EXT hook: litho, lithlegend, geophys
     let html = `<div class="file-head"><span class="name" title="${esc(f.name)}">${esc(f.name)}</span>
       <select data-role="${fi}" aria-label="File type for ${esc(f.name)}">${roles.map((r) => `<option value="${r}" ${r === f.role ? 'selected' : ''}>${ROLE_LABEL[r]}</option>`).join('')}</select></div>`;
     if (f.role === 'mesh') html += `<span class="muted">${f.mesh.v.length.toLocaleString()} vertices · ${(f.mesh.f.length / 3).toLocaleString()} triangles</span>`;
@@ -1849,7 +1820,7 @@ function renderFiles() {
       const fields = ROLE_FIELDS[f.role] || [];
       if (fields.length) {
         html += '<div class="maps">' + fields.map((k) => `<label for="m-${fi}-${k}">${FIELD_LABEL[k]}</label><select id="m-${fi}-${k}" data-map="${fi}" data-key="${k}"><option value="">—</option>${f.header.map((h, i) => `<option value="${i}" ${f.cols[k] === i ? 'selected' : ''}>${esc(h)}</option>`).join('')}</select>`).join('') + '</div>';
-        const req = { collar: ['hole', 'east', 'north'], survey: ['hole', 'depth'], assay: ['hole', 'from', 'to'], topo: ['east', 'north', 'elev'], litho: ['hole', 'from', 'to', 'code'], geophys: ['east', 'north', 'elev', 'value'] }[f.role] || [];
+        const req = { collar: ['hole', 'east', 'north'], survey: ['hole', 'depth'], assay: ['hole', 'from', 'to'], topo: ['east', 'north', 'elev'], litho: ['hole', 'from', 'to', 'code'], lithlegend: ['code', 'desc'], geophys: ['east', 'north', 'elev', 'value'] }[f.role] || [];
         const miss = req.filter((k) => f.cols[k] === undefined);
         if (miss.length) html += `<span class="bad">Pick a column for ${miss.map((k) => FIELD_LABEL[k]).join(', ')}.</span>`;
         if (f.role === 'assay') html += f.grades.length ? `<span class="muted">Grade columns: ${f.grades.map((g) => esc(g.name)).join(', ')}</span>` : '<span class="bad">No numeric grade columns found.</span>';
@@ -1894,7 +1865,9 @@ function renderStyle() {
   $('dcut-btns').innerHTML = [null, ...dcutChoices()].map((v) => `<button type="button" class="chip" data-dcut="${v ?? ''}" aria-pressed="${v === dc}">${v === null ? 'All' : v}</button>`).join('');
   $('dcut-btns').querySelectorAll('[data-dcut]').forEach((b) => b.addEventListener('click', () => setStyle({ displayCutoff: b.dataset.dcut === '' ? null : +b.dataset.dcut })));
   if (document.activeElement?.id !== 'dcut') $('dcut').value = dc ?? '';
-  renderShellUI(); renderEq(); extUI(); // EXT hook
+  renderShellUI(); renderEq(); extUI(); renderLegendUI(); // EXT hook
+  $('co-place').value = S.coPlacement; $('block-margin').value = S.blockMargin ?? ''; $('block-margin').placeholder = 'auto';
+  document.querySelectorAll('[data-bx]').forEach((i) => { const k = i.dataset.bx; i.value = S.blockExtent?.[k] ?? ''; i.placeholder = G ? Math.round(G.B[k]) : ''; });
   const ml = $('mesh-list'); ml.innerHTML = '';
   (project?.meshF || []).forEach((f) => { const st = S.meshes[f.name]; if (!st) return;
     const d = document.createElement('label'); d.className = 'mesh';
@@ -2055,9 +2028,26 @@ function setStyle(o = {}, render = true) {
   if (S.valueCol2 === S.valueCol) S.valueCol2 = null;
   ['walls', 'ids', 'inset', 'ribbons', 'pendingLabels', 'pendingNoAssays', 'elevTicks', 'lockView'].forEach((k) => { if (o[k] !== undefined) S[k] = !!o[k]; });
   extStyle(o); // EXT hook: histograms, insetStyle
+  if (o.coPlacement !== undefined) { if (!['column', 'beside', 'bracket'].includes(o.coPlacement)) throw new Error('coPlacement must be "column" (left column), "beside" (a box beside each hole) or "bracket" (a bracket on the hole with the grade beside it).'); S.coPlacement = o.coPlacement; extScene(); }
+  if (o.legend !== undefined) {
+    const l = o.legend || {}, LG = S.legend;
+    if (l.merge !== undefined) { if (!['auto', 'one', 'separate'].includes(l.merge)) throw new Error('legend.merge must be "auto" (one card once three or more blocks show), "one" or "separate".'); LG.merge = l.merge; }
+    Object.entries(l.pos || {}).forEach(([k, v]) => {
+      if (!['main', 'lithology', 'geophys'].includes(k)) throw new Error('Legend cards are "main", "lithology" and "geophys".');
+      if (v === null || v === 'auto') delete LG.pos[k]; else if (['tl', 'tr', 'bl', 'br'].includes(v)) LG.pos[k] = v;
+      else if (v && Number.isFinite(+v.x) && Number.isFinite(+v.y)) LG.pos[k] = { x: clamp01(v.x, 0), y: clamp01(v.y, 0) };
+      else throw new Error('A legend position is "auto", a corner ("tl", "tr", "bl", "br") or {x, y}: its top-left corner, 0-1 across and down the frame.');
+    });
+  }
   if (o.traceWidth !== undefined) { const v = +o.traceWidth; if (!Number.isFinite(v)) throw new Error('traceWidth must be a number from 0.5 to 3.'); S.traceWidth = Math.max(0.5, Math.min(3, v)); }
   if (o.surface !== undefined) S.surf = Math.max(0.15, Math.min(1, +o.surface > 1 ? +o.surface / 100 : +o.surface));
   let rebuild = false;
+  if (o.blockMargin !== undefined) { const v = [null, '', 'auto'].includes(o.blockMargin) ? null : +o.blockMargin; if (v !== null && !(v >= 0)) throw new Error('blockMargin must be metres around the drilling (0 or more), or null for automatic.'); rebuild = rebuild || v !== S.blockMargin; S.blockMargin = v === null ? null : Math.min(v, 20000); }
+  if (o.blockExtent !== undefined) {
+    const e = o.blockExtent ? Object.fromEntries(['x0', 'x1', 'y0', 'y1', 'z0'].map((k) => [k, [null, undefined, ''].includes(o.blockExtent[k]) ? null : +o.blockExtent[k]]).filter(([, v]) => v !== null)) : null;
+    if (e && (Object.values(e).some((v) => !Number.isFinite(v)) || e.x0 >= e.x1 || e.y0 >= e.y1)) throw new Error('blockExtent is {x0, x1, y0, y1, z0}: easting and northing limits (x0 < x1, y0 < y1) and the base elevation, in the files\' units; null for any automatic.');
+    S.blockExtent = e && Object.keys(e).length ? e : null; rebuild = true;
+  }
   if (o.terrain !== undefined) { if (!TERRAINS[o.terrain]) throw new Error(`terrain must be one of: ${Object.keys(TERRAINS).join(', ')}.`); S.terrain = o.terrain; }
   if (o.terrainSource !== undefined) { if (!['auto', 'topo', 'dem', 'collars'].includes(o.terrainSource)) throw new Error('terrainSource must be auto, topo, dem or collars.'); rebuild = rebuild || S.terrainSource !== o.terrainSource; S.terrainSource = o.terrainSource; }
   const ve = o.verticalExaggeration ?? o.vex;
@@ -2078,6 +2068,14 @@ function dcutChoices() {
   if (!v.length) return []; v.sort((a, b) => a - b);
   return [...new Set([0.5, 0.7, 0.85, 0.95].map((p) => niceRound(v[Math.floor(p * (v.length - 1))])))].filter((x) => x > 0);
 }
+function renderLegendUI() { $('lg-merge').value = S.legend.merge; const p = S.legend.pos.main; $('lg-pos').value = p?.x !== undefined ? 'moved' : p || 'auto'; }
+$('lg-merge').addEventListener('change', (e) => setStyle({ legend: { merge: e.target.value } }, false));
+$('lg-pos').addEventListener('change', (e) => setStyle({ legend: { pos: { main: e.target.value } } }, false));
+$('co-place').addEventListener('change', (e) => setStyle({ coPlacement: e.target.value }, false));
+const tryStyle = (o) => { try { setStyle(o); } catch (err) { status(err.message); } };
+$('block-margin').addEventListener('change', (e) => tryStyle({ blockMargin: e.target.value }));
+document.querySelectorAll('[data-bx]').forEach((i) => i.addEventListener('change', () => tryStyle({ blockExtent: { ...(S.blockExtent || {}), [i.dataset.bx]: i.value } })));
+$('block-reset').addEventListener('click', () => setStyle({ blockMargin: null, blockExtent: null }));
 $('dcut').addEventListener('change', (e) => { try { setStyle({ displayCutoff: e.target.value === '' ? null : +e.target.value }); } catch (err) { status(err.message); } });
 // Grade shell controls
 $('shell-on').addEventListener('change', (e) => { setShell({ enabled: e.target.checked }); if (e.target.checked) status('Building the grade shell from the assays…'); });
@@ -2207,6 +2205,9 @@ function setCallout(holeId, o = {}) {
   if (!project?.holes?.some((h) => h.id === holeId)) throw new Error(`No hole "${holeId}".`);
   const cur = S.coOverrides[holeId] || {};
   ['show', 'line1', 'line2', 'incl'].forEach((k) => { if (o[k] === null) delete cur[k]; else if (o[k] !== undefined) cur[k] = k === 'show' || k === 'incl' ? !!o[k] : String(o[k]); });
+  if (o.placement === null) delete cur.placement; else if (o.placement !== undefined) { if (!['column', 'beside', 'bracket'].includes(o.placement)) throw new Error('placement must be "column", "beside" or "bracket", or null for the figure\'s setting.'); cur.placement = o.placement; }
+  ['x', 'y'].forEach((k) => { if (o[k] === null) delete cur[k]; else if (o[k] !== undefined) cur[k] = clamp01(o[k], 0.5); }); // the box's top-left, 0-1 of the frame
+  if (o.placement !== undefined || o.x !== undefined) extScene();
   S.coOverrides[holeId] = cur;
   if (cur.show && !callouts.some((c) => c.h.id === holeId)) status(`${holeId} has no interval above the broad cut-off, so it has no callout.`);
   renderCalloutEditor(); drawSectionView(); schedulePublish();
@@ -2307,6 +2308,13 @@ frameEl.addEventListener('pointerdown', (e) => {
     try { frameEl.setPointerCapture(e.pointerId); } catch { /* synthetic events */ }
     return;
   }
+  if (hit.h.kind === 'legend' || hit.h.kind === 'callout') {
+    // A legend card or a callout: dragged by its top-left corner, kept (x, y) from the first move on.
+    const { kind, id, box } = hit.h; e.stopPropagation(); e.preventDefault();
+    labelDrag = { kind, dx: hit.x - box[0], dy: hit.y - box[1], make: () => (kind === 'legend' ? (S.legend.pos[id] = {}) : (S.coOverrides[id] ||= {})) };
+    try { frameEl.setPointerCapture(e.pointerId); } catch { /* synthetic events */ }
+    return;
+  }
   const L = S.labels.find((l) => l.id === hit.h.id); if (!L) return;
   e.stopPropagation(); e.preventDefault();
   labelDrag = { L, tip: hit.h.kind === 'tip', dx: hit.x - (hit.h.kind === 'tip' ? L.ax : L.x) * W, dy: hit.y - (hit.h.kind === 'tip' ? L.ay : L.y) * H, pid: e.pointerId };
@@ -2318,10 +2326,11 @@ frameEl.addEventListener('pointermove', (e) => {
     const P = rayAt(e).intersectPlane(labelDrag.plane, new THREE.Vector3()); if (!P) return;
     const L = labelDrag.wall.userData.L, [u, v] = faceUV(L.face, P); L.u = clamp01(u - labelDrag.du, L.u); L.v = clamp01(v - labelDrag.dv, L.v); placeWallLabel(labelDrag.wall); return;
   }
+  if (labelDrag.make) { labelDrag.L = labelDrag.make(); labelDrag.make = null; extScene(); }
   const r = frameEl.getBoundingClientRect(), x = clamp01((e.clientX - r.left - labelDrag.dx) / W, 0.5), y = clamp01((e.clientY - r.top - labelDrag.dy) / H, 0.5);
   if (labelDrag.tip) { labelDrag.L.ax = x; labelDrag.L.ay = y; } else { labelDrag.L.x = x; labelDrag.L.y = y; }
 }, true);
-const endDrag = () => { press = null; if (labelDrag) { if (labelDrag.wall) renderWallLabelList(); labelDrag = null; schedulePublish(); } };
+const endDrag = () => { press = null; if (labelDrag) { if (labelDrag.wall) renderWallLabelList(); if (labelDrag.kind) renderLegendUI(); labelDrag = null; schedulePublish(); } };
 frameEl.addEventListener('pointerup', endDrag, true); frameEl.addEventListener('pointercancel', endDrag, true);
 // A click on or near the preview never moves the camera: the orbit controls on the canvas see no movement
 // until the press has gone 4 px and lasted 150 ms (isClick). The wheel zooms only when it starts over the
@@ -2351,7 +2360,7 @@ function stopOrbit() { const p = camera.position.clone(), t = controls.target.cl
 Object.assign(S, {
   geology: { enabled: false, title: 'Lithology', faces: 'far', opacity: 0.85, strength: 1.3, hidden: 'nearest', anisotropy: 4, search: null, smooth: 2, texture: true, section: false, legend: [], images: {}, note: 'Geology on block faces interpolated from drill logs; schematic.' },
   geophys: { mode: 'off', lines: 'auto', ramp: 'geophys', log: null, min: null, max: null, opacity: 0.85, faces: 'far', search: null, width: null, property: null, label: null, unit: null, note: 'Geophysics: illustrative inversion model' },
-  tags: { at: 'toe', style: 'dark', status: {}, fadePrevious: false, newLabel: '', prevLabel: 'Previously released', plannedLabel: 'Planned', groups: [], autoGroup: false, groupRadius: 140, idMode: 'all', showId: {}, pending: 'collar' },
+  tags: { at: 'toe', style: 'dark', status: {}, fadePrevious: false, newLabel: '', prevLabel: 'Previously released', plannedLabel: 'Planned', groups: [], autoGroup: false, groupRadius: 140, idMode: 'auto', showId: {}, showTag: {}, hideRows: [], pending: 'collar' },
   histograms: false, insetStyle: 'plan',
 });
 const EXT = {}, extLoading = {}, EXT_IMPORT = { geology: () => import('./geology.js'), geophys: () => import('./geophys.js'), tags: () => import('./tags.js') };
@@ -2359,12 +2368,13 @@ const hasRole = (r) => files.some((f) => f.role === r);
 function extWanted() {
   const gp = S.geophys.mode !== 'off' && hasRole('geophys'), t = S.tags;
   return { geology: (S.geology.enabled && hasRole('litho')) || Object.keys(S.geology.images || {}).length > 0 || gp, geophys: gp,
-    tags: t.at !== 'toe' || t.fadePrevious || t.idMode !== 'all' || Object.keys(t.showId).length > 0 || (S.pendingLabels && t.pending === 'collar' && !!project?.holes?.some(isPending)) || t.autoGroup || t.groups.length > 0 || Object.keys(t.status).length > 0 || S.histograms || S.insetStyle !== 'plan' || S.labels.some((l) => l.kind === 'stat') };
+    tags: t.at !== 'toe' || t.fadePrevious || t.idMode === 'key' || (t.idMode !== 'all' && (project?.holes?.length || 0) > 12) || Object.keys(t.showId).length > 0 || Object.keys(t.showTag || {}).length > 0
+      || S.coPlacement !== 'column' || Object.values(S.coOverrides).some((o) => o.placement || o.x !== undefined) || (S.pendingLabels && t.pending === 'collar' && !!project?.holes?.some(isPending)) || t.autoGroup || t.groups.length > 0 || Object.keys(t.status).length > 0 || S.histograms || S.insetStyle !== 'plan' || S.labels.some((l) => l.kind === 'stat') };
 }
 let extHost = null;
 const host = () => (extHost ||= {
   S, get G() { return G; }, get project() { return project; }, get root() { return root; }, get api() { return EXT_API; }, files: () => files, digest: (f) => fileDigest(f), geo: () => geo,
-  camera, renderer, proj, sectionEnds, faceGeom, textOn, roundRect, fitText, esc, INK, MUTED, RULE, BIN_COLORS, binIndex, traceR, calloutLines, shownCallouts, isPending, setSpacing,
+  camera, renderer, proj, sectionEnds, faceGeom, textOn, roundRect, fitText, esc, INK, MUTED, RULE, BIN_COLORS, binIndex, traceR, calloutLines, shownCallouts, isPending, setSpacing, drawCallout, brandTone, figureCanvas, exportLayers, canvasBlob,
   mosaic, zoomFor, lon2t, lat2t, IMG_URL, IMAGERY_CREDIT, status, redraw: () => { extScene(); drawSectionView(); schedulePublish(); },
 });
 const extLoad = (k) => (extLoading[k] ||= EXT_IMPORT[k]().then((m) => { m.init(host()); EXT[k] = m; return m; }));
@@ -2406,6 +2416,8 @@ const extSection = (ctx, o) => { EXT.geology?.drawSection2D(ctx, o); EXT.geophys
 function extAutoOn(arr) { // a lithology or geophysics file added by the user switches its layer on
   const roles = new Set(files.filter((f) => arr.some((a) => a.name === f.name)).map((f) => f.role));
   if (roles.has('litho')) S.geology.enabled = true;
+  // A lithology legend file renames (and recolours) the units: legend, wall labels and section together.
+  if (roles.has('lithlegend') && hasRole('litho')) extLoad('geology').then((m) => { if (G) m.legendNow(); buildWallLabels(); renderWallLabelList(); renderExtUI(); drawSectionView(); schedulePublish(); }).catch((e) => status(e.message));
   if (roles.has('geophys') && S.geophys.mode === 'off') S.geophys.mode = 'curtain';
 }
 function extStyle(o) {
