@@ -34,8 +34,9 @@ import { diagnostic } from '../../shared/figureDiagnostics.js';
 // pass options.exportContext to read them back.
 export function createExportContext() { return { warnings: [], diagnostics: [] }; }
 let _lastExportContext = createExportContext();
-// Compatibility wrapper for the single-export UI: the warnings of the export
-// started most recently, as the module-global accumulator used to return.
+// Compatibility wrapper: the warnings of the render started most recently, as
+// the module-global accumulator used to return. Any render (a project
+// thumbnail too) replaces it, so the editor's download passes its own context.
 export function getExportWarnings() { return _lastExportContext.warnings; }
 function withExportContext(scene, options) {
   const exportContext = options?.exportContext || createExportContext();
@@ -505,6 +506,18 @@ function titleBlockLines(layout, availW, scale, top, wrap, titleFont) {
   const meta = [layout.mapDate, layout.projectNumber, layout.mapScaleNote].filter(Boolean);
   if (meta.length) add('meta', meta.join('  ·  '), 10 * scale * tfs, 400, 0.8, 6 * scale);
   return out;
+}
+// The title's text sizes in 1x px as the export sets them, for the preflight:
+// the title block, or the technical template's title strip in its place.
+export function titleTextSizes(scene) {
+  const layout = scene.project.layout || {};
+  if (scene.template?.id === 'ni_43101_technical') {
+    const fs = Math.max(0.7, Math.min(1.4, Number(layout.stripFontScale || 1)));
+    return [{ kind: 'title strip label', px: 8 * fs }, { kind: 'title strip value', px: 11 * fs }];
+  }
+  if (layout.showTitle === false) return [];
+  const sizes = new Map(titleBlockLines(layout, Infinity, 1, 0, (font, text) => [text], '').map((l) => [l.kind, l.size]));
+  return [...sizes].map(([kind, px]) => ({ kind: kind === 'meta' ? 'title meta' : kind, px }));
 }
 function drawTitleBlockCanvas(ctx, scene, scale) {
   if (scene.project.layout?.showTitle === false) return;

@@ -16,7 +16,7 @@
 import { diagnostic, mergeDiagnostics, unionBounds, needsReview } from '../../shared/figureDiagnostics.js';
 import {
   createExportContext, ensureExportFonts, getTileImages, loadImage, placeCallouts, calloutCardMetrics,
-  legendLayoutReport, exportFrame, getTheme, fitText,
+  legendLayoutReport, exportFrame, getTheme, fitText, titleTextSizes,
 } from './renderScene.js';
 import { PDF_SIZES } from './exportPDF.js';
 import { hasVisibleFeatures } from '../utils/featureIdentity.js';
@@ -73,6 +73,22 @@ function textMeasurer() {
   };
 }
 
+// A tile that loaded with nothing in it (a transparent placeholder answered
+// with HTTP 200). Sampled on a small canvas; an image that cannot be read (no
+// canvas, a tainted cross-origin canvas) counts as fine.
+export function isBlankImage(img) {
+  try {
+    const c = document.createElement('canvas');
+    c.width = 16; c.height = 16;
+    const ctx = c.getContext('2d');
+    if (!ctx?.getImageData) return false;
+    ctx.drawImage(img, 0, 0, 16, 16);
+    const d = ctx.getImageData(0, 0, 16, 16).data;
+    for (let i = 3; i < d.length; i += 4) if (d[i] !== 0) return false;
+    return true;
+  } catch { return false; }
+}
+
 function frameBox(scene) {
   const f = exportFrame(scene, 1);
   return f ? { left: f.mapLeft, top: f.mapTop, right: f.mapRight, bottom: f.mapBottom } : { left: 0, top: 0, right: scene.width, bottom: scene.height };
@@ -94,12 +110,13 @@ async function checkImagery(scene, { timeoutMs, load }, out) {
   }
   // The export draws tiles fetched with CORS: a tile that cannot be fetched
   // that way is a blank square in the file even if the editor shows it.
-  const results = await Promise.all(tiles.map((t) => withTimeout(load(t.href, 'anonymous', timeoutMs), timeoutMs)));
+  const probe = (t) => load(t.href, 'anonymous', timeoutMs).then((img) => (isBlankImage(img) ? Promise.reject(new Error('blank')) : img));
+  const results = await Promise.all(tiles.map((t) => withTimeout(probe(t), timeoutMs)));
   const failed = tiles.filter((_, i) => results[i] === 'failed');
   const slow = tiles.filter((_, i) => results[i] === 'timeout');
   const box = (list) => unionBounds(list.map((t) => ({ left: t.x, top: t.y, width: t.width, height: t.height })));
   if (failed.length) {
-    out.push(diagnostic({ code: 'imagery-tile-failed', bounds: box(failed), message: `${failed.length} of ${tiles.length} imagery tiles failed to load and will export blank`, action: 'pan the map slightly or switch basemap, then check again' }));
+    out.push(diagnostic({ code: 'imagery-tile-failed', bounds: box(failed), message: `${failed.length} of ${tiles.length} imagery tiles failed to load or are empty, and will export blank`, action: 'pan the map slightly or switch basemap, then check again' }));
   }
   if (slow.length) {
     out.push(diagnostic({ code: 'imagery-timeout', bounds: box(slow), message: `${slow.length} imagery tile${slow.length === 1 ? ' was' : 's were'} still loading after ${Math.round(timeoutMs / 1000)} s`, action: 'check the connection and run the check again' }));
@@ -177,8 +194,10 @@ function checkMarkerLabels(scene, measure, sizes, out) {
       px = marker.size || 28;
       measure.font = `${marker.bold !== false ? '700' : '400'} ${px}px ${labelFont}, Arial, sans-serif`;
       const w = measure.measureText(String(marker.label).toUpperCase()).width;
-      if (marker.rotation) { sizes.push({ kind: 'map label', px, id: marker.id }); continue; }
-      box = { left: p.x - w / 2, top: p.y - px / 2, width: w, height: px };
+      // A rotated label: the bounding box of the turned text.
+      const a = ((Number(marker.rotation) || 0) * Math.PI) / 180, cos = Math.abs(Math.cos(a)), sin = Math.abs(Math.sin(a));
+      const bw = w * cos + px * sin, bh = w * sin + px * cos;
+      box = { left: p.x - bw / 2, top: p.y - bh / 2, width: bw, height: bh };
     } else {
       px = 12;
       measure.font = `700 ${px}px ${labelFont}, Arial, sans-serif`;
@@ -261,6 +280,7 @@ export async function runPreflight(scene, options = {}) {
   checkCallouts(s, measure, sizes, out);
   checkMarkerLabels(s, measure, sizes, out);
   checkLegend(s, measure, sizes, out);
+  sizes.push(...titleTextSizes(s).map((t) => ({ ...t, id: 'title' })));
   checkTextSize(s, options, sizes, out);
   return mergeDiagnostics(out, context.diagnostics);
 }

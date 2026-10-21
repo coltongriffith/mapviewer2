@@ -47,7 +47,7 @@ test('the publication check lists findings before the download and can be overri
   await expect(check).toBeVisible({ timeout: 30_000 });
   await expect(check).toContainText(/\d+ warnings? to review before downloading/);
   if (!(await check.locator('details').evaluate((d) => d.open))) await check.getByText('Show details').click();
-  await expect(check.getByText(/imagery tiles failed to load and will export blank/)).toBeVisible();
+  await expect(check.getByText(/imagery tiles failed to load or are empty, and will export blank/)).toBeVisible();
   expect(downloaded).toBe(false);
   if (process.env.F3_SCREENSHOT) await check.screenshot({ path: process.env.F3_SCREENSHOT });
   await page.screenshot({ path: testInfo.outputPath('publication-check.png') });

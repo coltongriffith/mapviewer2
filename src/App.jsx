@@ -4520,7 +4520,7 @@ export default function App({ initialAction = null }) {
     }
     setExporting(true);
     try {
-      const [{ buildScene }, { exportPNG }, { exportSVG }, { getExportWarnings }] = await Promise.all([
+      const [{ buildScene }, { exportPNG }, { exportSVG }, { createExportContext }] = await Promise.all([
         import('./export/buildScene'),
         import('./export/exportPNG'),
         import('./export/exportSVG'),
@@ -4566,7 +4566,9 @@ export default function App({ initialAction = null }) {
       // restoring a project saved while on Pro.
       const baseSettings = project.layout?.exportSettings || {};
       const { fullResCredit, preflightOk, ...exportOptions } = extraOptions;
-      const opts = { ...baseSettings, ...exportOptions, paidTier: entitlements.clean_export };
+      // This export's own warnings: a thumbnail render started meanwhile has its own.
+      const exportContext = createExportContext();
+      const opts = { ...baseSettings, ...exportOptions, paidTier: entitlements.clean_export, exportContext };
       // The account's one free full-resolution export lifts the pixel cap for
       // this PNG only; the corner credit stays.
       const spendingCredit = Boolean(fullResCredit) && format === 'png' && Boolean(user)
@@ -4612,7 +4614,7 @@ export default function App({ initialAction = null }) {
         const { exportPDF } = await import('./export/exportPDF');
         await exportPDF(scene, opts);
       }
-      const warnings = getExportWarnings();
+      const warnings = exportContext.warnings;
       // Free and not yet spent: offer the full-resolution export in place of
       // the plain upgrade prompt. An anonymous exporter pays with an email.
       const offerFullRes = resolutionClamped && !entitlements.clean_export && !spendingCredit

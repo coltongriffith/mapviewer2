@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { runPreflight, textScale } from '../src/export/preflight.js';
+import { runPreflight, textScale, isBlankImage } from '../src/export/preflight.js';
 import { renderSceneToSvg, createExportContext, getExportWarnings, ensureExportFonts } from '../src/export/renderScene.js';
 import { getTemplate } from '../src/templates';
 
@@ -51,6 +51,26 @@ describe('runPreflight', () => {
     const d = list.find((x) => x.code === 'imagery-tile-failed');
     expect(d).toMatchObject({ severity: 'warning', bounds: { left: 256, top: 0, width: 256, height: 256 } });
     expect(d.message).toMatch(/1 of 2 imagery tiles failed to load/);
+  });
+
+  it('reports a tile that answered 200 with a transparent placeholder', async () => {
+    // A tiny canvas that reads back what was drawn: all-zero pixels for the
+    // blank tile, opaque for the rest.
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(() => {
+      let drawn = null;
+      return { drawImage: (img) => { drawn = img; }, getImageData: (x, y, w, h) => ({ data: new Uint8ClampedArray(w * h * 4).fill(drawn?.blank ? 0 : 255) }) };
+    });
+    const load = (href) => Promise.resolve({ blank: String(href).includes('empty-') });
+    const list = await runPreflight(scene({ tiles: ['https://tiles.example/1.png', 'https://tiles.example/empty-2.png'] }), { loadImage: load });
+    expect(list.find((x) => x.code === 'imagery-tile-failed')).toMatchObject({ bounds: { left: 256, width: 256 } });
+    expect(list.find((x) => x.code === 'imagery-tile-failed').message).toMatch(/1 of 2 imagery tiles failed to load or are empty/);
+  });
+
+  it('treats a tile it cannot inspect as healthy', () => {
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      drawImage() {}, getImageData() { throw new DOMException('The canvas has been tainted by cross-origin data.', 'SecurityError'); },
+    });
+    expect(isBlankImage({})).toBe(false);
   });
 
   it('reports a basemap with no tiles, and fully transparent imagery', async () => {
@@ -111,6 +131,30 @@ describe('runPreflight', () => {
     expect(list.find((d) => d.code === 'asset-missing')).toMatchObject({ elementId: 'logo' });
   });
 
+  it('checks a rotated map label against the frame by its turned box', async () => {
+    // 200 px of text, turned 90°, centred 60 px above the bottom edge: level it
+    // fits; standing upright its lower half runs off the frame.
+    const measure = { font: '', measureText: () => ({ width: 200 }) };
+    const label = { id: 'ml', type: 'maplabel', lat: 440, lng: 400, label: 'Ridge', size: 20 };
+    const level = await runPreflight(scene({ layout: { basemap: 'blank' }, markers: [label] }), { loadImage, measure });
+    expect(codes(level)).not.toContain('label-clipped');
+    const turned = await runPreflight(scene({ layout: { basemap: 'blank' }, markers: [{ ...label, rotation: 90 }] }), { loadImage, measure });
+    const d = turned.find((x) => x.code === 'label-clipped');
+    expect(d).toMatchObject({ elementId: 'ml' });
+    expect(d.bounds.height).toBeCloseTo(200);
+  });
+
+  it('includes the title block and the technical title strip in the text-size check', async () => {
+    // titleFontScale 0.6 sets a 10 px date line at 6 px.
+    const small = await runPreflight(scene({ layout: { basemap: 'blank', showTitle: true, title: 'Cedar', mapDate: 'Oct 2026', titleFontScale: 0.6 } }), { loadImage });
+    expect(small.find((d) => d.code === 'text-too-small')).toMatchObject({ elementId: 'title' });
+    expect(small.find((d) => d.code === 'text-too-small').message).toMatch(/^Title meta text shows at 6 px/);
+    expect(codes(await runPreflight(scene({ layout: { basemap: 'blank', showTitle: true, title: 'Cedar', mapDate: 'Oct 2026' } }), { loadImage }))).not.toContain('text-too-small');
+    const strip = scene({ layout: { basemap: 'blank', templateId: 'ni_43101_technical', stripFontScale: 0.7 } });
+    strip.template = getTemplate('ni_43101_technical');
+    expect((await runPreflight(strip, { loadImage })).find((d) => d.code === 'text-too-small').message).toMatch(/^Title strip label text shows at 5.6 px/);
+  });
+
   it('measures print text in points at the page size, slides at slide size', () => {
     const s = scene();
     expect(textScale(s, { format: 'pdf', pdfSize: 'news_release' })).toMatchObject({ medium: 'print', unit: 'pt' });
@@ -155,6 +199,18 @@ describe('export context', () => {
     expect(getExportWarnings()).toBe(cb.warnings);
     // The scene passed in is not given a context of its own.
     expect(a.exportContext).toBeUndefined();
+  });
+
+  it('a render started later (a thumbnail) does not take over an export’s warnings', async () => {
+    globalThis.fetch = fontFetch();
+    const download = createExportContext();
+    const first = renderSceneToSvg(scene({ layout: { basemap: 'blank', fonts: { title: 'Montserrat' } } }), { pixelRatio: 1, exportContext: download });
+    // The thumbnail starts after the download and passes no context.
+    const thumb = renderSceneToSvg(scene({ layout: { basemap: 'blank', fonts: { title: 'Lato' } } }), { pixelRatio: 1 });
+    await Promise.all([first, thumb]);
+    expect(download.warnings).toEqual(['font Montserrat could not be embedded in the SVG — viewers without it installed will substitute another font']);
+    // The wrapper now reads the thumbnail's; the export reads its own context.
+    expect(getExportWarnings()).toEqual([]);
   });
 
   it('keeps concurrent preflights apart', async () => {
