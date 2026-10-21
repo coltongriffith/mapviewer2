@@ -137,6 +137,18 @@ async function readAll(sb, kind, propertyId, onPage) {
   }
 }
 
+/**
+ * Collars in more than one coordinate system cannot share one figure (they would be placed untransformed):
+ * a plain message naming each system and its count, or null when they all share one.
+ */
+export function mixedCrs(collars, name = 'This property') {
+  const n = new Map();
+  for (const r of collars || []) n.set(r.crs || null, (n.get(r.crs || null) || 0) + 1);
+  if (n.size < 2) return null;
+  const list = [...n].sort((p, q) => q[1] - p[1]).map(([c, k]) => `${c || 'no coordinate system'}: ${plural(k, 'collar')}`).join(', ');
+  return `${name}'s collars are in more than one coordinate system (${list}). Re-import them in one on the property page, then load again.`;
+}
+
 /** The property's current drill data as files, and the snapshot to record. sb: a Supabase client. */
 export async function pull(sb, prop, onProgress = () => {}, tries = 2) {
   const before = await listBatches(sb, prop.id), counts = {};
@@ -146,11 +158,17 @@ export async function pull(sb, prop, onProgress = () => {}, tries = 2) {
     if (tries > 1) return pull(sb, prop, onProgress, tries - 1);
     throw new Error('The drill data changed while it was loading. Try again in a moment.');
   }
+  const mixed = mixedCrs(rows.collars, prop.name || undefined);
+  if (mixed) throw new Error(mixed);
   return { files: toFiles(rows, before), ref: snapshotOf({ propertyId: prop.id, propertyName: prop.name }, before, rows), rows };
 }
 
 // ── UI ──────────────────────────────────────────────────────────────────────
 const hideNotice = () => { $('drill-notice').hidden = true; };
+/** Another figure opened (or none): its notice and pending update go with it. */
+export function reset() { hideNotice(); pending = null; }
+// The pending update still belongs to the figure on screen: the same saved figure and property.
+const stillOurs = (p) => !!p && host.current()?.id === p.figureId && em().getState().drillSource?.propertyId === p.ref.propertyId;
 const progressText = (n) => `Loading… ${['collars', 'surveys', 'assays', 'lithology'].filter((k) => n[k]).map((k) => `${fmtN(n[k])} ${k}`).join(', ')}`;
 
 export function init(h) {
@@ -187,7 +205,8 @@ async function load() {
     const keep = st.usingSample ? [] : E.getProject().files.filter((f) => !DRILL_ROLES.includes(f.role) && !Object.values(FILE_NAMES).includes(f.name));
     if (!st.usingSample) E.clearFiles();
     E.addFiles([...keep.map(({ name, text }) => ({ name, text })), ...files], { drillSource: ref });
-    if (crs || ref.crs) await E.setCRS(crs || ref.crs).catch(() => {});
+    // The property's coordinate system when it has one; the figure's earlier one otherwise.
+    if (ref.crs || crs) await E.setCRS(ref.crs || crs).catch(() => {});
     out.textContent = '';
     hideNotice(); pending = null;
     host.say(`Loaded ${prop.name} from its drill database: ${plural(ref.holes, 'hole')}, ${plural(ref.assays, 'assay')}. Save to keep it with the figure.`);
@@ -198,24 +217,26 @@ async function load() {
 
 /** On opening a figure that took its holes from a property: offer newer data. */
 export async function check() {
-  hideNotice(); pending = null;
-  const ref = em().getState().drillSource;
+  reset();
+  const ref = em().getState().drillSource, p = { ref, figureId: host.current()?.id || null };
   if (ref?.kind !== 'property' || !ref.propertyId) return;
   const d = newerSince(ref, await listBatches(await host.client(), ref.propertyId));
-  if (!d) return;
-  pending = { ref };
+  if (!d || !stillOurs(p)) return; // nothing newer, or another figure opened meanwhile
+  pending = p;
   $('drill-notice-text').textContent = `${noticeText(d)} —`;
   $('drill-notice').hidden = false;
 }
 
 // Re-read the property and reopen the figure with it, exactly as it was otherwise (camera, labels, style).
 async function update() {
-  if (!pending) return;
-  const btn = $('drill-update'), { ref } = pending;
+  const was = pending;
+  if (!stillOurs(was)) { reset(); return; }
+  const btn = $('drill-update'), { ref } = was;
   btn.disabled = true; btn.textContent = 'Updating…';
   let backup = null;
   try {
     const { files, ref: now } = await pull(await host.client(), { id: ref.propertyId, name: ref.propertyName });
+    if (pending !== was || !stillOurs(was)) { if (pending === was) reset(); return; } // another figure opened while it read
     const p = em().getProject(), names = Object.values(FILE_NAMES);
     p.files = p.files.filter((f) => !names.includes(f.name)).concat(files);
     p.settings.drillSource = now;

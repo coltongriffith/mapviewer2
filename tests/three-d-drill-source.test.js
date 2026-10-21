@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { direction, minCurvature, offsetAt, desurveyPath } from '../shared/desurvey.js';
-import { toFiles, snapshotOf, newerSince, noticeText, pull, FILE_NAMES } from '../src/three-d/property-data.js';
+import { toFiles, snapshotOf, newerSince, noticeText, pull, mixedCrs, init, check, reset, FILE_NAMES } from '../src/three-d/property-data.js';
 import { matchCols, roleOf, refineRole } from '../src/three-d/roles.js';
 import { parseCsv } from '../src/utils/drillDb.js';
 
@@ -189,5 +189,70 @@ describe('reading a property\'s drill database', () => {
     const { ref } = await pull(sb, { id: 'p1', name: 'Rails' });
     expect(ref.latestBatchId).toBe('b9');
     expect(sb.reads.filter((q) => q.table === 'drill_import_batches')).toHaveLength(4);
+  });
+});
+
+describe('collars in more than one coordinate system', () => {
+  it('are fine when they share one (or none is given)', () => {
+    expect(mixedCrs(ROWS.collars)).toBeNull();
+    expect(mixedCrs([{ crs: null }, { crs: null }])).toBeNull();
+  });
+  it('are refused, naming each system and its count, before anything is written', async () => {
+    const collars = [{ crs: 'EPSG:32610' }, { crs: 'EPSG:32610' }, { crs: 'EPSG:4326' }, { crs: null }];
+    expect(mixedCrs(collars, 'Rails')).toBe('Rails\'s collars are in more than one coordinate system (EPSG:32610: 2 collars, EPSG:4326: 1 collar, no coordinate system: 1 collar). Re-import them in one on the property page, then load again.');
+    const base = { property_id: 'p1', superseded_by_batch: null, x: 1, y: 2, planned: false };
+    const sb = fakeSb({ drill_collars: [{ ...base, hole_id: 'A', crs: 'EPSG:32610' }, { ...base, hole_id: 'B', crs: 'EPSG:4326' }], drill_import_batches: [] });
+    await expect(pull(sb, { id: 'p1', name: 'Rails' })).rejects.toThrow(/^Rails's collars are in more than one coordinate system \(EPSG:32610: 1 collar, EPSG:4326: 1 collar\)/);
+  });
+});
+
+describe('the newer-data notice belongs to the figure it was shown for', () => {
+  const ref = snapshotOf({ propertyId: 'p1', propertyName: 'Rails' }, BATCHES, ROWS);
+  const newer = { property_id: 'p1', id: 'b9', kind: 'collars', created_at: '2026-10-21T10:00:00.000Z', rolled_back_at: null, summary: { new: 1 } };
+  const base = { property_id: 'p1', superseded_by_batch: null };
+  const db = { drill_import_batches: [newer, ...BATCHES.map((b) => ({ ...b, property_id: 'p1' }))], drill_collars: ROWS.collars.map((r) => ({ ...base, ...r })) };
+  let fig, source, slow = null;
+  const sb = fakeSb(db, () => slow?.());
+  const E = { getState: () => ({ drillSource: source }), getProject: () => ({ v: 1, settings: { drillSource: source }, files: [{ name: 'other.csv', text: 'x' }] }), loadProject: vi.fn(async () => {}) };
+  document.body.innerHTML = ['drill-pick', 'drill-body', 'drill-add', 'drill-notice-text'].map((id) => `<div id="${id}"></div>`).join('')
+    + '<div id="drill-notice" hidden></div><button id="drill-update"></button><button id="drill-dismiss"></button>';
+  window.EM3D = E;
+  init({ client: async () => sb, current: () => fig, say: () => {}, listHomes: async () => ({ properties: [] }) });
+  const notice = () => document.getElementById('drill-notice');
+  const open = async (id, src) => { fig = { id }; source = src; reset(); await check(); };
+  const clickUpdate = async () => { document.getElementById('drill-update').click(); await vi.waitFor(() => expect(document.getElementById('drill-update').disabled).toBe(false)); };
+
+  it('is shown for the figure with newer data, and gone when another figure opens', async () => {
+    await open('fig1', ref);
+    expect(notice().hidden).toBe(false);
+    await open('fig2', null);
+    expect(notice().hidden).toBe(true);
+    await clickUpdate();
+    expect(E.loadProject).not.toHaveBeenCalled();
+  });
+
+  it('never applies to another figure, even one opened without the account knowing', async () => {
+    await open('fig1', ref);
+    fig = { id: 'fig2' }; // e.g. EM3D.loadProject straight after the notice showed
+    await clickUpdate();
+    expect(E.loadProject).not.toHaveBeenCalled();
+    expect(notice().hidden).toBe(true);
+  });
+
+  it('is dropped when another figure opens while Update reads the property', async () => {
+    await open('fig1', ref);
+    slow = () => { slow = null; fig = { id: 'fig2' }; source = { ...ref, propertyId: 'p2' }; };
+    await clickUpdate();
+    expect(E.loadProject).not.toHaveBeenCalled();
+  });
+
+  it('updates the figure it was shown for', async () => {
+    await open('fig1', ref);
+    await clickUpdate();
+    expect(E.loadProject).toHaveBeenCalledTimes(1);
+    const p = E.loadProject.mock.calls[0][0];
+    expect(p.settings.drillSource).toMatchObject({ propertyId: 'p1', latestBatchId: 'b9' });
+    expect(p.files.map((f) => f.name)).toEqual(['other.csv', FILE_NAMES.collars]);
+    expect(notice().hidden).toBe(true);
   });
 });

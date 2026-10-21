@@ -225,7 +225,10 @@ const BUDGETS = {
   // account-core.js gains the button, the hook and the check on open (+0.15 kB). Fetched only on "From property drill
   // database" or for a figure that used it. The page gains the hooks (drillSource, the path switch; +0.18 kB, inside
   // its budget); App and the totals are unchanged.
-  threeDLazyJsGzipKb: 109.0,
+  // 109.0 → 109.3 (review fixes, measured 108.79, configured 109.02): the newer-data notice is cleared when another figure
+  // opens and Update checks it still belongs to the figure on screen; collars in more than one coordinate system are
+  // refused with their counts (~0.2 kB in property-data.js, account-core.js +0.02).
+  threeDLazyJsGzipKb: 109.3,
   // The /3d grade-shell worker (composites estimate and marching cubes) is its own chunk, fetched only
   // when a shell is turned on. Vite emits workers outside the manifest graph, so it is found from the
   // page's chunks (see below) and budgeted here rather than in the page or the app totals.

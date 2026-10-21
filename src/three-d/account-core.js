@@ -177,6 +177,7 @@ const checkLibrary = () => { if (current?.home?.propertyId) lib().then((m) => m.
 let drillP = null;
 const drill = () => (drillP ||= import('./property-data.js').then((m) => { m.init({ client, current: () => current, say, listHomes }); return m; })
   .catch((err) => { drillP = null; throw err; }));
+const resetDrill = () => drillP?.then((m) => m.reset(), () => {}); // a notice belongs to the figure it was shown for
 const checkDrill = () => { if (studio().getState().drillSource?.kind === 'property') drill().then((m) => m.check()).catch(() => { /* the figure is fine as it is */ }); };
 
 export async function listProjects() {
@@ -280,6 +281,7 @@ export async function saveProject(name, existingId, dest = null, { force = false
 
 export async function openProject(id) {
   await requireUser('open your saved 3D maps');
+  resetDrill();
   const sb = await client();
   let project, row;
   try {
@@ -596,7 +598,7 @@ async function onMenuClick(e) {
   else if (act === 'save-prop') { toggleMenu(false); openDialog('name', { asNew: Boolean(current), toProperty: true }); }
   else if (act === 'signout') {
     try { await signOut(); } catch { /* local sign-out still clears */ }
-    user = null; current = null; setUrlProject(null); renderNote(); renderButtons(); renderMenu();
+    user = null; current = null; resetDrill(); setUrlProject(null); renderNote(); renderButtons(); renderMenu();
     say('Signed out. The figure on screen is unchanged.');
   }
 }
