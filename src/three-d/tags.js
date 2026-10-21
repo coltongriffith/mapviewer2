@@ -358,6 +358,7 @@ export const TOPO_CREDIT = 'Basemap: Esri';
 const inset = { key: null, canvas: null, status: 'off', message: '', promise: null, frame: null };
 export function syncInset() {
   const S = H.S, G = H.G, geo = H.geo();
+  if (S.insetStyle === 'claims') { inset.key = null; inset.canvas = null; inset.status = 'claims'; inset.message = ''; return Promise.resolve(); } // drawn as it is shown (drawClaims)
   if (S.insetStyle === 'plan' || !G || !geo) { inset.key = null; inset.status = S.insetStyle === 'plan' ? 'off' : 'needs-crs'; inset.message = S.insetStyle !== 'plan' && !geo ? 'A map inset needs the coordinate system (step 1).' : ''; return Promise.resolve(); }
   const key = `${S.insetStyle}|${S.crs}|${[G.B.x0, G.B.x1, G.B.y0, G.B.y1].map(Math.round)}`;
   if (inset.key === key) return inset.promise || Promise.resolve();
@@ -384,8 +385,9 @@ export function syncInset() {
 export const insetCredits = () => (H.S.inset && inset.status === 'ready' && inset.canvas ? [H.S.insetStyle === 'topo' ? TOPO_CREDIT : H.IMAGERY_CREDIT] : []);
 // Draws the map inset under the logo; false when it is not ready (the plan inset is drawn instead).
 export function drawInset(ctx, K, { W, top, occ }) {
-  const S = H.S; if (!S.inset || S.insetStyle === 'plan' || inset.status !== 'ready' || !inset.canvas) return false;
-  const { u, m, font, narrow } = K, iw = (narrow ? 130 : 168) * u, ix = W - m - iw, iy = top;
+  const S = H.S; if (S.inset && S.insetStyle === 'claims') return drawClaims(ctx, K, { W, top, occ });
+  if (!S.inset || S.insetStyle === 'plan' || inset.status !== 'ready' || !inset.canvas) return false;
+  const { u, m, narrow } = K, iw = (narrow ? 130 : 168) * u, ix = W - m - iw, iy = top;
   ctx.fillStyle = H.paper(); ctx.strokeStyle = H.RULE; ctx.lineWidth = u; H.roundRect(ctx, ix - 6 * u, iy - 6 * u, iw + 12 * u, iw + 30 * u, 5 * u); ctx.fill(); ctx.stroke();
   occ.push([ix - 8 * u, 0, W, iy + iw + 26 * u]);
   ctx.drawImage(inset.canvas, ix, iy, iw, iw);
@@ -393,16 +395,68 @@ export function drawInset(ctx, K, { W, top, occ }) {
   H.ext('overlays')?.inset(ctx, P, u, [ix, iy, iw, iw]); // claims outlined (overlays.js)
   ctx.beginPath(); [[G.B.x0, G.B.y0], [G.B.x1, G.B.y0], [G.B.x1, G.B.y1], [G.B.x0, G.B.y1]].forEach(([x, y], i) => { const p = P(x, y); i ? ctx.lineTo(...p) : ctx.moveTo(...p); }); ctx.closePath();
   ctx.lineWidth = 3.2 * u; ctx.strokeStyle = 'rgba(255,255,255,0.95)'; ctx.stroke(); ctx.lineWidth = 1.6 * u; ctx.strokeStyle = S.accent; ctx.stroke();
-  // North arrow (the inset is north-up) and a scale bar, in dark ink on the map whatever the theme.
-  const INK = '#142126';
+  furniture(ctx, K, ix, iy, iw, inset.frame.half, 'Location of the model');
+  return true;
+}
+// North arrow (the inset is north-up), a scale bar (half: the metres from its centre to an edge) and the title
+// under it, in dark ink on the map whatever the theme.
+function furniture(ctx, K, ix, iy, iw, half, title) {
+  const { u, font } = K, INK = '#142126';
   const nx = ix + iw - 16 * u, ny = iy + 22 * u;
   ctx.beginPath(); ctx.moveTo(nx, ny - 13 * u); ctx.lineTo(nx + 6 * u, ny + 5 * u); ctx.lineTo(nx, ny + 2 * u); ctx.lineTo(nx - 6 * u, ny + 5 * u); ctx.closePath(); ctx.fillStyle = '#fff'; ctx.fill(); ctx.strokeStyle = INK; ctx.lineWidth = u; ctx.stroke();
   ctx.beginPath(); ctx.moveTo(nx, ny - 13 * u); ctx.lineTo(nx + 6 * u, ny + 5 * u); ctx.lineTo(nx, ny + 2 * u); ctx.closePath(); ctx.fillStyle = INK; ctx.fill();
   font(700, 10); ctx.textAlign = 'center'; ctx.lineWidth = 3 * u; ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.strokeText('N', nx, ny + 15 * u); ctx.fillStyle = INK; ctx.fillText('N', nx, ny + 15 * u);
-  const metres = [500, 1000, 2000, 5000, 10000].find((d) => d / (2 * inset.frame.half) * iw >= 34 * u) || 10000, bl = metres / (2 * inset.frame.half) * iw, bx = ix + 8 * u, by = iy + iw - 10 * u;
+  const metres = [100, 200, 500, 1000, 2000, 5000, 10000].find((d) => d / (2 * half) * iw >= 34 * u) || 10000, bl = metres / (2 * half) * iw, bx = ix + 8 * u, by = iy + iw - 10 * u;
   ctx.fillStyle = 'rgba(255,255,255,0.85)'; ctx.fillRect(bx - 4 * u, by - 14 * u, bl + 8 * u, 20 * u); ctx.fillStyle = INK; ctx.fillRect(bx, by, bl, 3 * u);
   font(500, 9.5, true); ctx.fillText(metres >= 1000 ? `${metres / 1000} km` : `${metres} m`, bx + bl / 2, by - 4 * u);
-  font(400, 11); ctx.fillStyle = H.MUTED; ctx.fillText('Location of the model', ix + iw / 2, iy + iw + 16 * u); ctx.textAlign = 'left';
+  font(400, 11); ctx.fillStyle = H.MUTED; ctx.fillText(title, ix + iw / 2, iy + iw + 16 * u); ctx.textAlign = 'left';
+}
+
+// ---------- claim map inset: the registry claims round the block, the project's in the brand colour ----------
+const ext4 = (bs) => bs.reduce((a, b) => [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[2], b[2]), Math.max(a[3], b[3])]);
+const ringBox = (r) => ext4(r.map((p) => [p[0], p[1], p[0], p[1]]));
+// The claim map's square, north-up frame ({ cx, cy, half } in metres): the block's footprint and the core
+// claims (the project's, or all of them when none is), widened to take in the others (boxes [x0, y0, x1, y1])
+// up to twice that extent, with a margin on each side and at least min metres from centre to edge.
+export function claimFrame(block, core = [], others = [], margin = 0.08, min = 250) {
+  const c = ext4([block, ...core]), h0 = Math.max(c[2] - c[0], c[3] - c[1]) / 2, mx = (c[0] + c[2]) / 2, my = (c[1] + c[3]) / 2, cap = 2 * Math.max(h0, min);
+  const a = others.length ? ext4([c, ...others]) : c, b = [Math.max(a[0], mx - cap), Math.max(a[1], my - cap), Math.min(a[2], mx + cap), Math.min(a[3], my + cap)];
+  return { cx: (b[0] + b[2]) / 2, cy: (b[1] + b[3]) / 2, half: Math.max(min, Math.max(b[2] - b[0], b[3] - b[1]) / 2 * (1 + 2 * margin)) };
+}
+const inPoly = (rs, x, y) => { const one = (r) => { let c = false; for (let i = 0, j = r.length - 1; i < r.length; j = i++) if ((r[i][1] > y) !== (r[j][1] > y) && x < ((r[j][0] - r[i][0]) * (y - r[i][1])) / (r[j][1] - r[i][1]) + r[i][0]) c = !c; return c; }; return one(rs[0]) && !rs.slice(1).some(one); };
+// Drawn in the inset's place: false when there are no claims (the plan of drilling is drawn instead).
+function drawClaims(ctx, K, { W, top, occ }) {
+  const list = H.ext('overlays')?.claimShapes() || [], G = H.G; if (!list.length || !G) return false;
+  const { u, m, font, narrow } = K, iw = (narrow ? 130 : 168) * u, ix = W - m - iw, iy = top, nb = (o) => o.group === 'neighbours';
+  const boxes = (pick) => list.filter((x) => pick(x.o)).flatMap((x) => x.feats.map((f) => ringBox(f.c[0]))), core = boxes((o) => !nb(o));
+  const F = claimFrame([G.B.x0, G.B.y0, G.B.x1, G.B.y1], core.length ? core : boxes(nb), core.length ? boxes(nb) : []), k = iw / (2 * F.half);
+  const P = (x, y) => [ix + (x - F.cx + F.half) * k, iy + (F.cy + F.half - y) * k];
+  ctx.fillStyle = H.paper(); ctx.strokeStyle = H.RULE; ctx.lineWidth = u; H.roundRect(ctx, ix - 6 * u, iy - 6 * u, iw + 12 * u, iw + 30 * u, 5 * u); ctx.fill(); ctx.stroke();
+  occ.push([ix - 8 * u, 0, W, iy + iw + 26 * u]);
+  ctx.save(); ctx.fillStyle = '#f3f2ee'; ctx.fillRect(ix, iy, iw, iw); ctx.beginPath(); ctx.rect(ix, iy, iw, iw); ctx.clip(); ctx.lineJoin = 'round';
+  // Neighbours under the project's claims: light grey (or their holder's colour), hairline outlines.
+  const order = list.slice().sort((a, b) => nb(b.o) - nb(a.o)), shapes = [];
+  order.forEach(({ o, feats }) => {
+    const n = nb(o); ctx.beginPath();
+    feats.forEach((f) => { const rs = f.c.map((r) => r.map((p) => P(p[0], p[1]))); shapes.push({ n, rs, t: String(f.p?.number ?? f.p?.title ?? '') }); rs.forEach((r) => { r.forEach((q, i) => (i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1]))); ctx.closePath(); }); });
+    ctx.globalAlpha = n ? 0.22 : 0.35; ctx.fillStyle = o.color; ctx.fill('evenodd'); ctx.globalAlpha = 1;
+    ctx.strokeStyle = o.color; ctx.lineWidth = (n ? 0.6 : 1.2) * u; ctx.stroke();
+  });
+  // The block (the drilled area): its outline, or a dot when it is too small to read as one.
+  const a = P(G.B.x0, G.B.y1), b = P(G.B.x1, G.B.y0), small = b[0] - a[0] < 6 * u && b[1] - a[1] < 6 * u, placed = [[a[0] - 2 * u, a[1] - 2 * u, b[0] + 2 * u, b[1] + 2 * u], [ix + iw - 30 * u, iy, ix + iw, iy + 44 * u], [ix, iy + iw - 28 * u, ix + iw / 2 + 8 * u, iy + iw]]; // and the north arrow, the scale bar
+  ctx.beginPath(); if (small) ctx.arc((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, 3.5 * u, 0, 2 * Math.PI); else ctx.rect(a[0], a[1], b[0] - a[0], b[1] - a[1]);
+  ctx.strokeStyle = 'rgba(255,255,255,0.95)'; ctx.lineWidth = 3.2 * u; ctx.stroke(); ctx.strokeStyle = '#142126'; ctx.lineWidth = 1.5 * u; ctx.stroke(); if (small) { ctx.fillStyle = '#142126'; ctx.fill(); }
+  // Tenure labels, the project's first, only where one fits inside its claim clear of the others.
+  font(600, 8); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  shapes.sort((p, q) => p.n - q.n).forEach(({ n, rs, t }) => {
+    const [x0, y0, x1, y1] = ringBox(rs[0]), x = (x0 + x1) / 2, tw = ctx.measureText(t).width; if (!t || tw + 4 * u > x1 - x0 || 11 * u > y1 - y0) return;
+    // At the middle of the claim, else nearer its top or bottom edge (clear of the block it holds).
+    const y = [0.5, 0.22, 0.78].map((f) => y0 + f * (y1 - y0)).find((yy) => { const bx = [x - tw / 2 - 2 * u, yy - 5 * u, x + tw / 2 + 2 * u, yy + 5 * u]; return inPoly(rs, x, yy) && bx[0] >= ix && bx[2] <= ix + iw && bx[1] >= iy && bx[3] <= iy + iw && !placed.some((p) => overlapArea(p, bx) > 0); });
+    if (y === undefined) return;
+    placed.push([x - tw / 2 - 2 * u, y - 5 * u, x + tw / 2 + 2 * u, y + 5 * u]); ctx.lineWidth = 2.4 * u; ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.strokeText(t, x, y); ctx.fillStyle = n ? '#5b6669' : '#142126'; ctx.fillText(t, x, y);
+  });
+  ctx.restore(); ctx.textBaseline = 'alphabetic'; ctx.strokeStyle = H.RULE; ctx.lineWidth = u; ctx.strokeRect(ix, iy, iw, iw);
+  furniture(ctx, K, ix, iy, iw, F.half, 'Claims');
   return true;
 }
 
@@ -411,8 +465,10 @@ export function state() {
   const t = T(), ok = !!H.project?.holes, st = ok ? statuses() : null;
   return { ...structuredClone(t), holeStatus: ok ? Object.fromEntries(H.project.holes.map((h) => [h.id, st.status.get(h.id) || null])) : {}, newestYear: st?.newestYear ?? null,
     tagged: ok && H.G ? H.project.holes.filter(tagShown).map((h) => h.id) : [], idsShown: ok && H.G ? H.project.holes.filter(idShown).map((h) => h.id) : [],
-    statBoxes: H.S.labels.filter((l) => l.kind === 'stat').map((l) => l.id), histograms: H.S.histograms, insetStyle: H.S.insetStyle, inset: { status: inset.status, message: inset.message || null } };
+    statBoxes: H.S.labels.filter((l) => l.kind === 'stat').map((l) => l.id), histograms: H.S.histograms, insetStyle: H.S.insetStyle, inset: H.S.insetStyle === 'claims' ? claimsState() : { status: inset.status, message: inset.message || null } };
 }
+const claimsState = () => { const n = (H.ext('overlays')?.claimShapes() || []).reduce((s, x) => s + x.feats.length, 0);
+  return n ? { status: 'ready', message: `Inset: claim map (${n} ${n === 1 ? 'claim' : 'claims'}).` } : { status: 'no-claims', message: 'The claim map needs claims: Find claims in Map overlays, or an area overlay. Showing the plan of drilling.' }; };
 export function set(o = {}) {
   const t = T();
   if (o.at !== undefined) { if (!['toe', 'collar', 'both'].includes(o.at)) throw new Error('at must be "collar" (pills at the collar), "toe" (IDs at the end of the hole) or "both".'); t.at = o.at; }
