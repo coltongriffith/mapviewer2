@@ -154,6 +154,19 @@ test('an export straight after switching to standalone waits for its layer (no w
   expect(svg).toContain('>PROJECT<');
 });
 
+test('an export whose layer never arrives fails with a plain message, it does not wait forever', async ({ page }) => {
+  await open3d(page);
+  await page.route(/\/assets\/mapuse-[^/]*\.js$/, () => {}); // the standalone module's request never answers
+  const r = await page.evaluate(async () => {
+    const E = window.EM3D, t0 = performance.now();
+    E.setMapUse({ use: 'standalone' }).catch(() => {});
+    try { await E.exportLayers({ as: 'blob' }); return { ok: true }; } catch (e) { return { message: e.message, s: (performance.now() - t0) / 1000 }; }
+  });
+  expect(r.message).toMatch(/still loading after 20 seconds, so nothing was exported/);
+  expect(r.s).toBeGreaterThan(19);
+  expect(r.s).toBeLessThan(40);
+});
+
 test('a figure saved before these options opens as a presentation figure with its shadow, unchanged', async ({ page }) => {
   await open3d(page);
   const r = await page.evaluate(async () => {

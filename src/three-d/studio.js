@@ -1782,7 +1782,10 @@ function exportPNG(opts = {}) {
 // first) and the lazy modules the figure wants (extReady), so an export made right after a change is never drawn
 // without them. exportPNG stays synchronous for the API (call it after the setter's promise or layersReady); the
 // Export buttons, exportLayers and the design desk wait here.
-const extPending = new Set(), settled = () => Promise.resolve().then(() => Promise.allSettled([...extPending])).then(extReady); // a turn first: a change event's setter starts in a microtask
+// The wait is bounded: a layer whose module or data never arrives fails the export with a plain message after 20 s
+// instead of leaving it waiting. A turn first: a change event's setter starts in a microtask.
+const extPending = new Set(), settled = () => Promise.race([Promise.resolve().then(() => Promise.allSettled([...extPending])).then(extReady),
+  new Promise((ok, no) => setTimeout(() => no(new Error('A layer of this figure is still loading after 20 seconds, so nothing was exported. Check the connection and export again.')), 20000))]);
 const exportLayers = (o) => settled().then(desk).then((m) => m.exportLayers(o));
 // The Export step's Background and Drop shadow; Transparent turns the shadow off (one click to keep it).
 const xui = (o) => ({ ...o, download: true, background: $('export-bg').value, shadow: S.dropShadow });
