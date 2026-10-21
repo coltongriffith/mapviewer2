@@ -110,7 +110,7 @@ export default function SatelliteInset({ layers, markerColor, region, basemap = 
       layer.on('tileerror', () => {
         if (reportedRef.current) return;
         reportedRef.current = true;
-        reportError('Locator inset failed to load tiles', { kind: 'tile_error', context: { overlay: 'locator_inset', basemap } });
+        reportError('Locator inset failed to load tiles', { kind: 'warning', context: { tiles: true, overlay: 'locator_inset', basemap } });
       });
       layer.addTo(map);
       tileRefs.current.push(layer);

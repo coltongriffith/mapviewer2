@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import LandingPage from './components/LandingPage';
 import { useAuth } from './hooks/useAuth.jsx';
+import { lazyGuarded } from './utils/preloadGuard';
 
-const AdminPage = React.lazy(() => import('./components/AdminPage'));
-const EditorApp = React.lazy(() => import('./App'));
-const HowToUseModal = React.lazy(() => import('./components/HowToUseModal'));
-const OAuthConsentPage = React.lazy(() => import('./components/OAuthConsentPage'));
+// Guarded: a tab opened before a deploy reloads for the new build (or offers to) instead of crashing.
+const AdminPage = lazyGuarded(() => import('./components/AdminPage'), { page: true });
+const EditorApp = lazyGuarded(() => import('./App'), { page: true });
+const HowToUseModal = lazyGuarded(() => import('./components/HowToUseModal'));
+const OAuthConsentPage = lazyGuarded(() => import('./components/OAuthConsentPage'), { page: true });
 
 export function needsWorkspace(location = window.location) {
   const params = new URLSearchParams(location.search);

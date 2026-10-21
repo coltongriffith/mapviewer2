@@ -14,6 +14,15 @@ async function fetchProvince(query, type, province, signal) {
   return data;
 }
 
+// A dropped connection reaches fetch() as a bare TypeError ("Failed to fetch" in Chrome, "Load failed" in
+// Safari, "NetworkError when attempting to fetch resource." in Firefox), which says nothing a reader can act
+// on. The search form offers Try again beside it (RegistrySearch.jsx).
+export const NETWORK_ERROR = "Couldn't reach the claims registry. Check your connection and try again.";
+export function friendlySearchError(e) {
+  if (e?.name === 'TypeError' && /failed to fetch|load failed|networkerror/i.test(e.message || '')) return NETWORK_ERROR;
+  return String(e?.message || 'Search failed').slice(0, 200);
+}
+
 export function useClaims() {
   const [results, setResults] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -58,7 +67,7 @@ export function useClaims() {
     } catch (e) {
       if (requestIdRef.current !== id) return;   // stale OR aborted-by-newer
       if (e?.name === 'AbortError') return;      // cancellation is not an error
-      setError(String(e.message || 'Search failed').slice(0, 200));
+      setError(friendlySearchError(e));
     } finally {
       if (requestIdRef.current === id) setLoading(false);
     }

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { lazyGuarded } from './utils/preloadGuard';
+import { lazyGuarded, recoverFromStaleChunk } from './utils/preloadGuard';
+import { isChunkLoadError, retryImport } from '../shared/chunkErrors.js';
 import { LegendPointSwatch, LegendLineSwatch, LegendAreaSwatch } from './components/LegendSwatches.jsx';
 import { hasFillPattern, DEFAULT_PATTERN_SPACING } from '../shared/fillPattern.js';
 import RatioSwitcher from './components/RatioSwitcher';
@@ -4048,9 +4049,14 @@ export default function App({ initialAction = null }) {
   // Published results (a release table the user picks): each approved result's text on its hole's collar,
   // labelled as at the collar; the parsing and matching load on first use (utils/publishedCallouts.js).
   const publishedInputRef = useRef(null);
-  const addPublishedResults = (file) => file && import('./utils/publishedCallouts.js').then((m) => m.fromFile(file, project.layers)).then(({ callouts, status }) => {
+  // A reader a deploy removed reloads for the new build (or offers to; Vite resolves it to undefined while
+  // the guard reloads); any other failure is said here, not left as an unhandled rejection.
+  const addPublishedResults = (file) => file && retryImport(() => import('./utils/publishedCallouts.js')).then((m) => (m ? m.fromFile(file, project.layers) : new Promise(() => {}))).then(({ callouts, status }) => {
     callouts.forEach((c) => addCalloutAtAnchor(c));
     setUploadStatus(status);
+  }, (err) => {
+    if (isChunkLoadError(err)) recoverFromStaleChunk(err);
+    else setUploadStatus({ type: 'error', message: `Couldn't read that results file (${err?.message || 'unknown error'}).` });
   });
 
   const addCalloutFromSelectedLayer = () => {

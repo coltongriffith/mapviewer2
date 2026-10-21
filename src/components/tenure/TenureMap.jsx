@@ -4,6 +4,7 @@ import 'leaflet/dist/leaflet.css';
 import { daysRemaining, urgencyBand, formatDaysRemaining, formatGovernmentDate } from '../../utils/tenureDates';
 import { esc } from '../../utils/claimInfo';
 import { BASEMAPS } from '../../utils/basemapConfig.js';
+import { pathRenderer } from '../../utils/leafletRenderers.js';
 import { REFERENCE_OVERLAY_CONFIG, overlayAttribution } from '../../utils/referenceOverlayConfig.js';
 
 // The portfolio map.
@@ -127,6 +128,7 @@ export default function TenureMap({
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const layerRef = useRef(null);
+  const drawableRef = useRef(true);
   // Fit the map to the portfolio once, not on every re-render — otherwise a
   // user who zoomed into one claim gets thrown back out whenever anything
   // upstream re-renders.
@@ -141,7 +143,13 @@ export default function TenureMap({
 
   useEffect(() => {
     if (mapRef.current || !containerRef.current) return undefined;
+    // Its own renderer, or none where the browser can draw neither SVG nor Canvas: then the claims stay
+    // off the map (the table still lists them) rather than throwing on add and again on unmount
+    // (utils/leafletRenderers.js).
+    const renderer = pathRenderer();
+    drawableRef.current = Boolean(renderer);
     const map = L.map(containerRef.current, {
+      ...(renderer ? { renderer } : {}),
       center: BC_CENTER,
       zoom: BC_ZOOM,
       // Keyboard panning/zooming on, so the map is not a pointer-only island.
@@ -199,7 +207,7 @@ export default function TenureMap({
     }
 
     if (rows.length) {
-      group.addTo(map);
+      if (drawableRef.current) group.addTo(map);
       layerRef.current = group;
       if (!fittedRef.current) {
         const bounds = group.getBounds();

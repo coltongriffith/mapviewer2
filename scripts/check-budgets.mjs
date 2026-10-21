@@ -120,7 +120,8 @@ const BUDGETS = {
   // lazy NameDialog chunk (0.65 kB: Save As and the legend's new heading, in place of window.prompt), and the
   // dashboard's Duplicate naming and opening the copy and the legend editor's dialog hook (~0.07 kB each).
   // 918.3 → 918.5 (measured 918.2): the tick bounds in maxJsChunkGzipKb above.
-  totalAuthJsGzipKb: 918.5,
+  // 918.5 → 919.7 (Oct 2026, production errors, measured 919.4 configured, 918.2 on main): the stale-chunk recovery (shared/chunkErrors.js, the retry, the update page and the unhandled-rejection path in the entry, +0.7 kB on the homepage), the Leaflet renderer fixes (in vendor-leaflet) and /3d's error reporting (threeDJsGzipKb).
+  totalAuthJsGzipKb: 919.7,
   // 805 → 808: placed and callout logos, SVG font embedding (Sept 2026).
   // 808 → 809: shared-map viewer opens at the saved view on the fixed stage.
   // 809 → 810: the lazy /oauth/consent page for MCP account sign-in.
@@ -141,7 +142,8 @@ const BUDGETS = {
   // 848.5 → 850.0 (measured 849.70): the export options, as totalAuthJsGzipKb above.
   // 850.0 → 851.1 (measured 850.8): 2D bugs B1–B4, as totalAuthJsGzipKb above.
   // 851.1 → 851.4 (measured 851.1): the tick bounds, as maxJsChunkGzipKb above.
-  totalJsGzipKb: 851.4,
+  // 851.4 → 852.8 (Oct 2026, production errors, measured 852.5, 851.1 on main): as totalAuthJsGzipKb above.
+  totalJsGzipKb: 852.8,
   // Standalone pages (/3d, /teams) are separate Vite entries that never share
   // the app's chunks, so they are budgeted on their own instead of in the
   // totals above. /3d carries three.js (~109 kB gzip) and its editor.
@@ -216,7 +218,8 @@ const BUDGETS = {
   // 171.6 → 171.7 (Oct 2026, claim map inset merged over export options, measured 171.40, configured 171.42, + ~0.3):
   // the hooks for Find claims (the lazy import, EM3D.findClaims and the panel button), insetStyle "claims" and the
   // claims' registry credit in the footer (+0.12 kB); the rest is lazy (claims.js, tags.js).
-  threeDJsGzipKb: 171.7,
+  // 171.7 → 172.4 (Oct 2026, production errors, measured 172.0, configured 172.1, 171.4 on main): uncaught errors and rejections reported to error_events like the 2D app's, and stale chunks recovered from a bare import() too (studio.js plus its copy of shared/chunkErrors.js).
+  threeDJsGzipKb: 172.4,
   // /3d's own modules fetched on first use (the geology, geophysics and tag layers, the account
   // client). They never load with the page or the app, so they sit outside the page and app totals.
   // 32 → 34 (Oct 2026, round 4): per-hole tags, grouped pending tags, callouts beside or bracketed on their
@@ -310,7 +313,8 @@ const BUDGETS = {
   // 335.3 → 335.6 (Oct 2026, export options, measured 335.30): the same App code as maxJsChunkGzipKb above.
   // 335.6 → 335.9 (Oct 2026, 2D bugs B1–B4, measured 335.6): the same App code as maxJsChunkGzipKb above.
   // 335.9 → 336.1 (measured 335.8): the tick bounds, as maxJsChunkGzipKb above.
-  editorAuthJsGzipKb: 336.1,
+  // 336.1 → 337.0 (Oct 2026, production errors, measured 336.7 configured, 335.8 on main): the stale-chunk recovery in the entry and the Canvas redraw fix in vendor-leaflet, as totalAuthJsGzipKb above.
+  editorAuthJsGzipKb: 337.0,
   editorJsGzipKb: 270,
   claimsAuthJsGzipKb: 355,
   claimsJsGzipKb: 290,

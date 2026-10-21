@@ -1,6 +1,10 @@
 import React from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+
+const reported = vi.hoisted(() => []);
+vi.mock('../src/utils/errorReporter', () => ({ reportError: (error, opts) => reported.push({ error, ...opts }) }));
+
 import { installPreloadGuard, lazyGuarded } from '../src/utils/preloadGuard.js';
 
 function fakeStorage() {
@@ -18,12 +22,23 @@ function fakeWindow(sessionStorage = fakeStorage()) {
   return win;
 }
 
-function preloadError(win) {
+const staleError = () => new TypeError('Failed to fetch dynamically imported module: /assets/LegendEditor-old.js');
+
+function preloadError(win, payload = staleError()) {
   const e = new Event('vite:preloadError', { cancelable: true });
+  e.payload = payload;
   expect(() => win.dispatchEvent(e)).not.toThrow();
   return e;
 }
 
+function rejection(win, reason) {
+  const e = new Event('unhandledrejection', { cancelable: true });
+  e.reason = reason;
+  win.dispatchEvent(e);
+  return e;
+}
+
+beforeEach(() => { reported.length = 0; window.sessionStorage.clear(); });
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
@@ -42,27 +57,61 @@ function renderEditorWith(Part) {
 }
 
 describe('lazyGuarded', () => {
-  const stale = () => Promise.reject(new TypeError('Failed to fetch dynamically imported module: /assets/LegendEditor-old.js'));
+  const stale = () => Promise.reject(staleError());
 
-  it('keeps the editor mounted when a stale chunk fails with unsaved work', async () => {
+  it('keeps the editor mounted when a stale chunk fails with unsaved work, with a Reload on the note', async () => {
     const guard = (ev) => { ev.preventDefault(); ev.returnValue = ''; };
     window.addEventListener('beforeunload', guard);
-    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
       renderEditorWith(lazyGuarded(stale));
-      expect(await screen.findByText('This part was updated — save your work, then reload.')).toBeInTheDocument();
+      expect(await screen.findByText('This part was updated — save your work, then reload.', {}, { timeout: 3000 })).toBeInTheDocument();
+      expect(within(document.querySelector('.stale-chunk-note')).getByRole('button', { name: 'Reload' })).toBeInTheDocument();
+      // and the page-wide notice, once
+      expect(document.querySelectorAll('.update-notice')).toHaveLength(1);
       expect(screen.getByText('Editor with unsaved work')).toBeInTheDocument();
       expect(screen.queryByText('Editor unmounted')).toBeNull();
+      // No automatic reload: that is the user's, once the work is saved.
+      expect(window.sessionStorage.getItem('em.reloadedAt')).toBeNull();
+      expect(reported).toEqual([expect.objectContaining({ kind: 'stale_chunk', context: { outcome: 'notice', unsaved: true } })]);
     } finally {
       window.removeEventListener('beforeunload', guard);
+    }
+  });
+
+  it('without unsaved work reloads and waits in the fallback, never reaching the error boundary', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {}); // jsdom: navigation not implemented
+    try {
+      const load = vi.fn(stale);
+      renderEditorWith(lazyGuarded(load));
+      await vi.waitFor(() => expect(window.sessionStorage.getItem('em.reloadedAt')).not.toBeNull(), { timeout: 3000 });
+      expect(load).toHaveBeenCalledTimes(2); // retried once before giving up
+      expect(screen.getByText('Loading')).toBeInTheDocument();
+      expect(screen.queryByText('Editor unmounted')).toBeNull();
+      expect(reported[0]).toMatchObject({ kind: 'stale_chunk', context: { outcome: 'reload' } });
+    } finally {
       err.mockRestore();
     }
   });
 
-  it('throws as before without unsaved work', async () => {
+  it('recovers when the retry loads (a transient network failure)', async () => {
+    const load = vi.fn().mockRejectedValueOnce(staleError()).mockResolvedValueOnce({ default: () => <p>Legend editor</p> });
+    renderEditorWith(lazyGuarded(load));
+    expect(await screen.findByText('Legend editor', {}, { timeout: 3000 })).toBeInTheDocument();
+    expect(reported).toEqual([]);
+  });
+
+  it('offers the update page in place of a lazy page when it may not reload', async () => {
+    window.sessionStorage.setItem('em.reloadedAt', String(Date.now())); // reloaded a moment ago
+    renderEditorWith(lazyGuarded(stale, { page: true }));
+    expect(await screen.findByRole('button', { name: 'Reload to update' }, { timeout: 3000 })).toBeInTheDocument();
+    expect(screen.queryByText('Editor unmounted')).toBeNull();
+    expect(document.querySelector('.update-notice')).toBeNull(); // the page says it; no second notice
+  });
+
+  it('throws an error that is not a stale chunk, as React.lazy would', async () => {
     const err = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
-      renderEditorWith(lazyGuarded(stale));
+      renderEditorWith(lazyGuarded(() => Promise.reject(new ReferenceError('x is not defined'))));
       expect(await screen.findByText('Editor unmounted')).toBeInTheDocument();
     } finally {
       err.mockRestore();
@@ -83,15 +132,16 @@ describe('lazyGuarded', () => {
 });
 
 describe('preload error guard', () => {
-  it('reloads once for a stale chunk', () => {
+  it('reloads once for a stale chunk, and logs it as stale_chunk', () => {
     const win = fakeWindow();
     installPreloadGuard(win);
     const e = preloadError(win);
     expect(win.location.reload).toHaveBeenCalledTimes(1);
     expect(e.defaultPrevented).toBe(true);
+    expect(reported).toEqual([expect.objectContaining({ kind: 'stale_chunk', context: { outcome: 'reload', unsaved: false } })]);
   });
 
-  it('does not loop: the reloaded page lets the error stand for a minute', () => {
+  it('does not loop: the reloaded page offers the reload instead for a minute', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-10-21T12:00:00Z'));
     const storage = fakeStorage();
@@ -100,7 +150,7 @@ describe('preload error guard', () => {
     preloadError(first);
     expect(first.location.reload).toHaveBeenCalledTimes(1);
 
-    // The reloaded page (same tab session) fails again: no second reload.
+    // The reloaded page (same tab session) fails again: no second reload, a notice with a Reload button.
     vi.setSystemTime(new Date('2026-10-21T12:00:05Z'));
     const second = fakeWindow(storage);
     installPreloadGuard(second);
@@ -108,11 +158,15 @@ describe('preload error guard', () => {
     preloadError(second);
     expect(second.location.reload).not.toHaveBeenCalled();
     expect(e.defaultPrevented).toBe(false);
+    const notes = document.querySelectorAll('.update-notice');
+    expect(notes).toHaveLength(1);
+    fireEvent.click(within(notes[0]).getByRole('button', { name: 'Reload' }));
+    expect(second.location.reload).toHaveBeenCalledTimes(1); // the user's click
 
     // A later deploy, well after that reload, gets its own reload (as /3d does).
     vi.setSystemTime(new Date('2026-10-21T14:00:00Z'));
     preloadError(second);
-    expect(second.location.reload).toHaveBeenCalledTimes(1);
+    expect(second.location.reload).toHaveBeenCalledTimes(2);
   });
 
   it('does not reload with unsaved work, and shows one notice instead', () => {
@@ -162,5 +216,31 @@ describe('preload error guard', () => {
     installPreloadGuard(win);
     preloadError(win);
     expect(win.location.reload).not.toHaveBeenCalled();
+  });
+
+  it('recovers a bare import() that rejects without Vite (Safari\'s wording), and leaves other rejections', () => {
+    const win = fakeWindow();
+    installPreloadGuard(win);
+    const other = rejection(win, new TypeError('Failed to fetch'));
+    expect(other.defaultPrevented).toBe(false);
+    expect(win.location.reload).not.toHaveBeenCalled();
+
+    const e = rejection(win, new TypeError('Importing a module script failed.'));
+    expect(e.defaultPrevented).toBe(true); // handled: not reported as a crash
+    expect(win.location.reload).toHaveBeenCalledTimes(1);
+    expect(reported).toEqual([expect.objectContaining({ kind: 'stale_chunk' })]);
+  });
+
+  it('leaves a preload error inside a guarded load to its retry', async () => {
+    const win = window;
+    installPreloadGuard(win);
+    let event;
+    const load = vi.fn()
+      .mockImplementationOnce(() => { event = preloadError(win); return Promise.reject(staleError()); })
+      .mockResolvedValueOnce({ default: () => <p>Satellite inset</p> });
+    renderEditorWith(lazyGuarded(load));
+    expect(await screen.findByText('Satellite inset', {}, { timeout: 3000 })).toBeInTheDocument();
+    expect(event.defaultPrevented).toBe(false);
+    expect(window.sessionStorage.getItem('em.reloadedAt')).toBeNull();
   });
 });
