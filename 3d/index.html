@@ -633,6 +633,8 @@ html.em3d-embed .share-credit:hover { text-decoration: underline; }
       <section>
         <button class="btn" type="button" id="export-layers">Download layers for designers (ZIP)</button>
         <p class="muted" style="margin-top:6px">The figure, the 3D render and the annotations as separate transparent PNGs, the section, and the settings, at the size above.</p>
+        <label class="check" style="margin-top:6px"><input type="checkbox" id="export-svg">Include editable annotations (SVG)</label>
+        <p class="muted" style="margin-top:4px">Adds annotations.svg: the annotations with live text, lines and boxes, to stack over the 3D render in Illustrator or Figma. The 3D render stays a PNG.</p>
       </section>
       <form class="upgrade" id="desk" novalidate>
         <strong>Want it hand-finished?</strong>
@@ -827,10 +829,12 @@ JavaScript API (run in the page console or via your agent's evaluate tool):
   EM3D.showView("3d" | "section")
   EM3D.exportPNG({view: "3d" | "section", download: false})   returns a PNG data URL;
                                   download: true also saves the file
-  EM3D.exportLayers({download: false, as: "base64" | "blob"})   Promise. A ZIP for designers at the
-                                  figure size: figure.png, scene.png (3D alone, transparent),
+  EM3D.exportLayers({download: false, as: "base64" | "blob", svg: false})   Promise. A ZIP for designers
+                                  at the figure size: figure.png, scene.png (3D alone, transparent),
                                   annotations.png (overlay alone, transparent), section.png and
-                                  figure-settings.json. Returns a data URL (or a Blob)
+                                  figure-settings.json. svg: true adds annotations.svg, the overlay
+                                  with live text (fonts embedded when they can be fetched) to stack
+                                  over scene.png. Returns a data URL (or a Blob)
   EM3D.sendToDesignDesk({email, company, notes})   Promise. Sends the figure and layers to the
                                   Exploration Maps design desk. Only when the user asks to
 

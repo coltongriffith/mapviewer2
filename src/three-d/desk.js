@@ -11,20 +11,35 @@ const blobDataURL = (b) => new Promise((resolve, reject) => { const r = new File
 // Designer handoff: the figure, its 3D render and annotations as separate transparent layers, the section,
 // and the settings, in one ZIP at the chosen size. PNGs are stored, not deflated: they are compressed already.
 const LAYER_FILES = { figure: 'figure.png', scene: 'scene.png', annotations: 'annotations.png', section: 'section.png', settings: 'figure-settings.json' };
+const LAYERS_NOTE = 'scene.png and annotations.png are transparent and stack (scene below) to make figure.png.';
+// opts.svg (off by default): annotations.svg as well, the annotation layer with live text. The overlay is drawn a
+// second time, through the recorder (drawlist.js), and written out by annotations-svg.js: one chunk, fetched only
+// then. Without it the ZIP holds the same files, and the PNGs are drawn exactly as before.
+async function annotationsSVG(f) {
+  const svg = await import('./annotations-svg.js');
+  let rec = null;
+  H.figureCanvas('3d', 'annotations', (ctx) => (rec = svg.createRecorder(ctx)).ctx);
+  const fonts = await svg.fontFaceCss(rec.list), list = (a) => a.join(', ') || 'none';
+  const note = `Exploration Maps 3D annotations, ${f.w} × ${f.h} px, over scene.png. Fonts embedded: ${list(fonts.embedded)}; named only: ${list(fonts.referenced)}.${rec.unsupported.size ? ` Not carried: ${list([...rec.unsupported])}.` : ''}`;
+  return { text: svg.toSVG(rec, { width: f.w, height: f.h, fontCss: fonts.css, title: `${H.S.title}: annotations`, note }), fonts };
+}
 export async function exportLayers(opts = {}) {
   if (!H.G) throw new Error('Nothing to export yet: add a collar file and an assay file.');
   const f = H.format(), fig = H.figureCanvas;
   H.status(`Preparing layers at ${f.w} × ${f.h} px…`);
   const bytes = async (c) => new Uint8Array(await (await canvasBlob(c)).arrayBuffer());
   const png = { figure: await bytes(fig('3d')), scene: await bytes(fig('3d', 'scene')), annotations: await bytes(fig('3d', 'annotations')), section: await bytes(fig('section')) };
-  const settings = { ...H.getState(), layers: { ...LAYER_FILES, note: 'scene.png and annotations.png are transparent and stack (scene below) to make figure.png.' }, exportedAt: new Date().toISOString() };
+  const svg = opts.svg ? await annotationsSVG(f) : null;
+  const layers = svg ? { ...LAYER_FILES, annotationsSvg: 'annotations.svg', note: `${LAYERS_NOTE} annotations.svg is annotations.png with live text, at the same size.` } : { ...LAYER_FILES, note: LAYERS_NOTE };
+  const settings = { ...H.getState(), layers, exportedAt: new Date().toISOString() };
   const zip = zipSync({
     ...Object.fromEntries(Object.entries(png).map(([k, v]) => [LAYER_FILES[k], [v, { level: 0 }]])),
     [LAYER_FILES.settings]: new TextEncoder().encode(JSON.stringify(settings, null, 2)),
+    ...(svg && { 'annotations.svg': new TextEncoder().encode(svg.text) }),
   });
   const blob = new Blob([zip], { type: 'application/zip' });
   if (opts.download) { const url = URL.createObjectURL(blob); H.downloadURL(url, `${H.fileSlug()}-layers-${H.S.format}.zip`); setTimeout(() => URL.revokeObjectURL(url), 30000); }
-  H.status(`Layers ready: ${Object.keys(LAYER_FILES).length} files, ${(blob.size / 1048576).toFixed(1)} MB.`);
+  H.status(`Layers ready: ${Object.keys(LAYER_FILES).length + !!svg} files, ${(blob.size / 1048576).toFixed(1)} MB.${svg ? ` annotations.svg: ${svg.fonts.embedded.length ? 'fonts embedded' : 'fonts named, not embedded'}.` : ''}`);
   return opts.as === 'blob' ? blob : blobDataURL(blob);
 }
 // Same flow as /teams: POST the enquiry to /api/track, which answers with one signed upload URL per declared
