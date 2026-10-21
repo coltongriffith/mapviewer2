@@ -64,7 +64,7 @@ export const fade = (h) => (!!T().fadePrevious && statusOf(h) === 'previous') ||
 export const weight = (h) => (emph() !== 'key' ? 1 : keyHole(h) ? 1.25 : 0.55);
 export function highlightOf(h) {
   const v = T().highlight?.[h.id]; if (v) return v === 'brand' ? H.brandTone('highlight') : v;
-  return emph() === 'key' && keyHole(h) ? H.brandTone('key') : null;
+  return emph() === 'key' && statusOf(h) === 'new' ? H.brandTone('highlight') : null; // new holes in the brand accent
 }
 // Highlighted traces as thin tubes along the whole hole, rebuilt when the holes or colours change.
 // Thin cylinders every 8 m (one instanced mesh, like the assay tubes), so no extra three.js code ships.
@@ -104,7 +104,6 @@ export function idShown(h) {
 export function tagShown(h) {
   const t = T(), v = t.showTag?.[h.id]; if (typeof v === 'boolean') return v;
   if (t.at === 'toe' || t.status[h.id] === 'none') return false;
-  if (H.S.pendingLabels && t.pending === 'collar' && H.isPending(h)) return false; // the group's pending tag says it
   return mode() === 'key' ? keyHole(h) : statusOf(h) !== null || ![...statuses().status.values()].some(Boolean);
 }
 // Collar pills and small "ASSAYS PENDING" tags, placed before the legends (which keep clear of them): the
@@ -256,8 +255,10 @@ function drawBracket(ctx, K, it, lay) {
   const off = 9 * u, x0Of = (side) => (side > 0 ? Math.max(a[0], e[0]) + off + 12 * u : Math.min(a[0], e[0]) - off - 12 * u - tw), boxOf = (side) => [x0Of(side) - 4 * u, mid[1] - th / 2, x0Of(side) + tw + 4 * u, mid[1] + th / 2];
   const side = [1, -1].find((sd) => lay.clear(boxOf(sd))) || 1, box = lay.add(boxOf(side)), x0 = x0Of(side) + 6 * u;
   let nx = -dy, ny = dx; if (nx * side < 0) { nx = -nx; ny = -ny; }
-  ctx.strokeStyle = S.primary; ctx.lineWidth = 1.6 * u; ctx.lineJoin = 'round'; ctx.beginPath();
-  ctx.moveTo(a[0] + nx * (off - 5 * u), a[1] + ny * (off - 5 * u)); ctx.lineTo(a[0] + nx * off, a[1] + ny * off); ctx.lineTo(e[0] + nx * off, e[1] + ny * off); ctx.lineTo(e[0] + nx * (off - 5 * u), e[1] + ny * (off - 5 * u)); ctx.stroke();
+  // The bracket: the brand colour over a white halo, so it reads on any face; end ticks point at the hole.
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.beginPath();
+  ctx.moveTo(a[0] + nx * (off - 8 * u), a[1] + ny * (off - 8 * u)); ctx.lineTo(a[0] + nx * off, a[1] + ny * off); ctx.lineTo(e[0] + nx * off, e[1] + ny * off); ctx.lineTo(e[0] + nx * (off - 8 * u), e[1] + ny * (off - 8 * u));
+  ctx.strokeStyle = 'rgba(255,255,255,0.95)'; ctx.lineWidth = 5.5 * u; ctx.stroke(); ctx.strokeStyle = S.primary; ctx.lineWidth = 2.4 * u; ctx.stroke(); ctx.lineCap = 'butt';
   // A white card behind the text, so it reads over a busy block face.
   ctx.fillStyle = 'rgba(255,255,255,0.94)'; ctx.strokeStyle = H.RULE; ctx.lineWidth = u; H.roundRect(ctx, box[0], box[1], box[2] - box[0], box[3] - box[1], 4 * u); ctx.fill(); ctx.stroke();
   const halo = (t, x, y) => ctx.fillText(t, x, y);

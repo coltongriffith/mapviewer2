@@ -45,7 +45,7 @@ function host(holes, tags = {}, extra = {}) {
   const fills = [];
   ctx.fillText = (t) => fills.push(t);
   init({ S, project: { holes }, G: { V: (x, y, z) => ({ x, y, z }) }, proj: (v) => [v.x, 500 - v.y / 10, 0], shownCallouts: () => extra.callouts || [], isPending: (h) => /pending/.test(h.note),
-    roundRect: () => {}, textOn: () => '#fff', setSpacing: () => {}, INK: '#142126', brandTone: (k) => (k === 'key' ? S.primary : S.accent) });
+    roundRect: () => {}, textOn: () => '#fff', setSpacing: () => {}, INK: '#142126', brandTone: () => S.accent });
   return { S, fills, draw: () => { fills.length = 0; drawPills(ctx, K, { placed: [], occ: [], W: 2000, H: 1000 }); return fills.slice(); } };
 }
 const hole = (id, x, year, note = '') => ({ id, note, c: { x, y: 0, z: 1000, raw: { Year: String(year), Status: note } }, ints: [{}] });
@@ -54,8 +54,9 @@ describe('hole tags', () => {
   let holes;
   beforeEach(() => { holes = [hole('S-073', 0, 2026), hole('S-076', 60, 2026, 'assays pending'), hole('S-079', 120, 2026, 'assays pending'), hole('S-037', 400, 2014), hole('S-048', 600, 2014)]; });
   it('gives each hole its own tag setting, apart from its ID', () => {
+    host(holes); expect(holes.filter(tagShown).map((h) => h.id)).toEqual(['S-073', 'S-076', 'S-079', 'S-037', 'S-048']); // pending holes keep their pills beside the group tag
     const H = host(holes, { showTag: { 'S-037': true, 'S-048': false } });
-    expect(holes.filter(tagShown).map((h) => h.id)).toEqual(['S-073', 'S-037']); // pending holes share one tag
+    expect(holes.filter(tagShown).map((h) => h.id)).toEqual(['S-073', 'S-076', 'S-079', 'S-037']);
     expect(holes.every(idShown)).toBe(true);
     H.S.ids = false; expect(H.draw()).toContain('S-073'); // hole IDs off keeps the tags
   });

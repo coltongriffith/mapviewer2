@@ -1001,7 +1001,7 @@ function restyle() {
     q.setFromUnitVectors(up, dir.normalize());
     const rw = r * (EXT.tags?.weight(h) ?? 1); sc.set(bi < 0 ? 0.001 : rw, Math.max(0.01, len), bi < 0 ? 0.001 : rw); // EXT hook: key holes bold
     m.compose(va.clone().add(vb).multiplyScalar(0.5), q, sc);
-    T.setMatrixAt(k, m); col.set(BIN_COLORS[Math.max(0, bi)]); if (extFade(h)) col.lerp(new THREE.Color('#ffffff'), 0.6); T.setColorAt(k, col); // EXT hook: fade
+    T.setMatrixAt(k, m); col.set(BIN_COLORS[Math.max(0, bi)]); if (extFade(h)) col.lerp(new THREE.Color('#b9c1c4'), 0.7); T.setColorAt(k, col); // EXT hook: fade
   }));
   [G.tubes, G.tubesP].forEach((T, i) => { T.count = n[i]; T.instanceMatrix.needsUpdate = true; if (T.instanceColor) T.instanceColor.needsUpdate = true; });
   styleShell();
@@ -1181,9 +1181,9 @@ function fitText(ctx, t, maxW) { if (ctx.measureText(t).width <= maxW) return t;
 const hexRgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
 const lumOf = (rgb) => { const c = rgb.map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; };
 const textOn = (hex) => (lumOf(hexRgb(hex)) > 0.45 ? INK : '#ffffff');
-// Brand colours for figure furniture (S.primary and S.accent, set from the logo): legend headers, highlights,
-// key-hole traces, the grade shell. Grade, geophysics and lithology colours stay scientific, never from here.
-const brandTone = (kind) => ({ head: S.primary, key: S.primary, highlight: S.accent, shell: S.accent }[kind] || S.accent);
+// Brand colours for figure furniture (S.primary and S.accent, set from the logo): legend headers, highlighted
+// (new) holes, the grade shell. Grade, geophysics and lithology colours stay scientific, never from here.
+const brandTone = (kind) => ({ head: S.primary, highlight: S.accent, shell: S.accent }[kind] || S.accent);
 function setSpacing(ctx, px) { if ('letterSpacing' in ctx) ctx.letterSpacing = `${px}px`; }
 
 function drawLogo(ctx, K, Wc, forExport) {
@@ -1348,7 +1348,7 @@ function drawScaleBar(ctx, K, footTop, lay) {
     const ys = sp.flatMap(([, y]) => [y - 4 * u, y + lab * u + (lab > 0 ? 2 : -12) * u]);
     const box = [Math.min(...sp.map(([x]) => x)) - 8 * u, Math.min(...ys), Math.max(...sp.map(([x]) => x)) + 28 * u, Math.max(...ys)];
     if (!lay.clear(box)) continue; // keeps clear of hole IDs, legends and labels
-    return lay.add(box, 2, () => {
+    return lay.add(box.map((v, i) => v + (i < 2 ? -6 : 6) * u), 2, () => { // a margin, so no tick crowds the "0"
       ctx.lineCap = 'butt'; ctx.lineWidth = 6 * u; ctx.strokeStyle = INK; ctx.beginPath(); ctx.moveTo(...sp[0]); ctx.lineTo(...sp[1]); ctx.stroke();
       ctx.strokeStyle = '#fff'; ctx.beginPath(); ctx.moveTo(...sp[1]); ctx.lineTo(...sp[2]); ctx.stroke();
       ctx.lineWidth = u; ctx.strokeStyle = INK; ctx.beginPath(); ctx.moveTo(sp[0][0], sp[0][1] - 3 * u); ctx.lineTo(sp[2][0], sp[2][1] - 3 * u); ctx.lineTo(sp[2][0], sp[2][1] + 3 * u); ctx.lineTo(sp[0][0], sp[0][1] + 3 * u); ctx.closePath(); ctx.stroke();
@@ -1446,7 +1446,7 @@ function drawLabels(ctx, K, forExport) {
     if (L.kind === 'stat') { extStat(ctx, K, L, hits, forExport); return; } // EXT hook: stat boxes
     const cx = L.x * W, cy = L.y * H, { title, lines, lh, padY, bw, bh } = labelSize(ctx, K, L), box = [cx - bw / 2, cy - bh / 2, cx + bw / 2, cy + bh / 2];
     if (L.arrow) {
-      const tx = L.ax * W, ty = L.ay * H, dx = tx - cx, dy = ty - cy, d = Math.hypot(dx, dy);
+      const [tx, ty] = tipAt(L), dx = tx - cx, dy = ty - cy, d = Math.hypot(dx, dy);
       if (d > 4 * u) {
         const t = Math.min(bw / 2 / (Math.abs(dx) || 1e-9), bh / 2 / (Math.abs(dy) || 1e-9)), sx = cx + dx * t + dx / d * 5 * u, sy = cy + dy * t + dy / d * 5 * u, ang = Math.atan2(dy, dx), hl = 13 * u;
         const ex = tx - Math.cos(ang) * hl * 0.8, ey = ty - Math.sin(ang) * hl * 0.8;
@@ -1472,7 +1472,7 @@ function drawLabels(ctx, K, forExport) {
       // Handles while laying out: a dashed frame says "drag me"; a ring marks the arrow tip.
       if (currentStep === 'layout') {
         ctx.setLineDash([4 * u, 3 * u]); ctx.strokeStyle = 'rgba(31,120,168,0.7)'; ctx.lineWidth = u; ctx.strokeRect(box[0] - 3 * u, box[1] - 3 * u, bw + 6 * u, bh + 6 * u); ctx.setLineDash([]);
-        if (L.arrow) { ctx.beginPath(); ctx.arc(L.ax * W, L.ay * H, 6 * u, 0, Math.PI * 2); ctx.strokeStyle = '#1f78a8'; ctx.lineWidth = 1.6 * u; ctx.stroke(); }
+        if (L.arrow) { ctx.beginPath(); ctx.arc(...tipAt(L).slice(0, 2), 6 * u, 0, Math.PI * 2); ctx.strokeStyle = '#1f78a8'; ctx.lineWidth = 1.6 * u; ctx.stroke(); }
       }
     }
   });
@@ -1744,6 +1744,12 @@ $('export-layers').addEventListener('click', () => exportLayers({ download: true
 // 8b. Send to the design desk (the Teams enquiry, with the figure and layers attached)
 // ============================================================
 // The desk lives in desk.js, loaded on first use: the form's submit or EM3D.sendToDesignDesk.
+// A page cached from before a deploy may ask for a lazy chunk that is gone: reload once (not again within a
+// minute, so it can never loop).
+addEventListener('vite:preloadError', (e) => {
+  try { const k = 'em3d.reloadedAt'; if (Date.now() - (+sessionStorage.getItem(k) || 0) < 60000) return; sessionStorage.setItem(k, String(Date.now())); } catch { return; }
+  e.preventDefault(); location.reload();
+});
 const desk = () => import('./desk.js').then((m) => { m.init(host()); return m; });
 const sendToDesignDesk = (o) => desk().then((m) => m.sendToDesignDesk(o));
 $('desk').addEventListener('submit', (e) => { e.preventDefault(); desk().then((m) => m.submit(), (err) => status(err.message)); });
@@ -2237,18 +2243,29 @@ function labelPatch(L, o) {
   if (o.rows !== undefined && L.kind === 'stat') L.rows = (Array.isArray(o.rows) ? o.rows : [o.rows]).map((r) => String(r).trim().slice(0, 120)).filter(Boolean).slice(0, 12); // EXT hook
   if (o.ax !== undefined) L.ax = clamp01(o.ax, L.ax); if (o.ay !== undefined) L.ay = clamp01(o.ay, L.ay);
 }
+// An arrow's tip stays on what it points at (aw: a point in project coordinates, from the terrain, the holes
+// or the model shapes under it), so a crop, a new exaggeration or a camera turn keeps it there. With nothing
+// under it, the tip stays put on the frame.
+function anchorTip(L) {
+  L.aw = null; if (!G || !L.arrow) return;
+  const r = frameEl.getBoundingClientRect(); rayAt({ clientX: r.left + L.ax * W, clientY: r.top + L.ay * H });
+  const p = raycaster.intersectObjects([G.top, G.tubes, G.tubesP, G.shellMesh, ...G.meshes.map((x) => x.m)].filter((o) => o?.visible), false)[0]?.point;
+  if (p) L.aw = [p.x + G.cx, G.cy - p.z, p.y / S.vex + G.zref].map((v) => Math.round(v * 10) / 10);
+}
+const tipAt = (L) => (L.aw && G ? proj(G.V(...L.aw)) : [L.ax * W, L.ay * H]);
 function addLabel(o = {}) {
   const n = S.labels.reduce((mx, l) => Math.max(mx, +String(l.id).replace(/\D/g, '') || 0), 0) + 1;
   const L = { id: `L${n}`, text: '', size: 'normal', x: 0.5, y: 0.5, arrow: false, ax: null, ay: null };
   labelPatch(L, { size: 'normal', ...o, text: o.text ?? '' });
   if (o.x === undefined && o.y === undefined && G) [L.x, L.y] = freeSpot(L);
   if (L.ax === null) L.ax = Math.min(0.97, L.x + 0.1); if (L.ay === null) L.ay = Math.min(0.97, L.y + 0.14);
+  anchorTip(L);
   S.labels.push(L); renderLabelList(); schedulePublish(); status(`Label "${L.text}" added. Drag it on the preview to place it.`);
   return L.id;
 }
 function updateLabel(id, o = {}) {
   const L = S.labels.find((l) => l.id === id); if (!L) throw new Error(`No label "${id}". Labels: ${S.labels.map((l) => l.id).join(', ') || 'none'}.`);
-  labelPatch(L, o); renderLabelList(); schedulePublish(); return getState();
+  labelPatch(L, o); if (o.ax !== undefined || o.ay !== undefined || o.arrow !== undefined) anchorTip(L); renderLabelList(); schedulePublish(); return getState();
 }
 function removeLabel(id) {
   if (!S.labels.some((l) => l.id === id)) throw new Error(`No label "${id}".`);
@@ -2322,6 +2339,7 @@ frameEl.addEventListener('pointerdown', (e) => {
   }
   const L = S.labels.find((l) => l.id === hit.h.id); if (!L) return;
   e.stopPropagation(); e.preventDefault();
+  if (hit.h.kind === 'tip') { [L.ax, L.ay] = tipAt(L).slice(0, 2).map((v, i) => clamp01(v / (i ? H : W), 0.5)); L.aw = null; } // dragged on the frame, anchored on release
   labelDrag = { L, tip: hit.h.kind === 'tip', dx: hit.x - (hit.h.kind === 'tip' ? L.ax : L.x) * W, dy: hit.y - (hit.h.kind === 'tip' ? L.ay : L.y) * H, pid: e.pointerId };
   try { frameEl.setPointerCapture(e.pointerId); } catch { /* synthetic events */ }
 }, true);
@@ -2335,7 +2353,7 @@ frameEl.addEventListener('pointermove', (e) => {
   const r = frameEl.getBoundingClientRect(), x = clamp01((e.clientX - r.left - labelDrag.dx) / W, 0.5), y = clamp01((e.clientY - r.top - labelDrag.dy) / H, 0.5);
   if (labelDrag.tip) { labelDrag.L.ax = x; labelDrag.L.ay = y; } else { labelDrag.L.x = x; labelDrag.L.y = y; }
 }, true);
-const endDrag = () => { press = null; if (labelDrag) { if (labelDrag.wall) renderWallLabelList(); if (labelDrag.kind) renderLegendUI(); labelDrag = null; schedulePublish(); } };
+const endDrag = () => { press = null; if (labelDrag) { if (labelDrag.tip) anchorTip(labelDrag.L); if (labelDrag.wall) renderWallLabelList(); if (labelDrag.kind) renderLegendUI(); labelDrag = null; schedulePublish(); } };
 frameEl.addEventListener('pointerup', endDrag, true); frameEl.addEventListener('pointercancel', endDrag, true);
 // A click on or near the preview never moves the camera: the orbit controls on the canvas see no movement
 // until the press has gone 4 px and lasted 150 ms (isClick). The wheel zooms only when it starts over the

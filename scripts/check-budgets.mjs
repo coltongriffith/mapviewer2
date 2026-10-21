@@ -86,10 +86,10 @@ const BUDGETS = {
   // hole, the lithology legend file, and the design desk moved out of the page into desk.js (1.8 kB) to
   // keep the page inside its budget.
   // 34 → 36 (Oct 2026): company workspaces (#282) add the property picker to the account client.
-  // 36 → 38 (Oct 2026, round 4 group C): undo/redo and the History panel (history.js, 1.9 kB), key-hole
+  // 36 → 39 (Oct 2026, round 4 group C): undo/redo and the History panel (history.js, 1.9 kB), key-hole
   // emphasis and highlighted holes (tags.js), and the logo colour picker moved out of the page
-  // (logo-colours.js) to keep the page inside its budget.
-  threeDLazyJsGzipKb: 38,
+  // (logo-colours.js) to keep the page inside its budget; the save-conflict check in the account client.
+  threeDLazyJsGzipKb: 39,
   // The /3d grade-shell worker (composites estimate and marching cubes) is its own chunk, fetched only
   // when a shell is turned on. Vite emits workers outside the manifest graph, so it is found from the
   // page's chunks (see below) and budgeted here rather than in the page or the app totals.
