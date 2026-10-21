@@ -101,7 +101,7 @@ function Importer({ db, property, orgId, onDone }) {
         <ErrorNote error={error} onDismiss={() => setError(null)} />
         <div className="ws-row">
           <button type="button" className="btn primary" onClick={() => input.current?.click()}>+ Import a CSV</button>
-          <span className="dash-muted">Collars, downhole surveys, assays or lithology. Up to 50,000 rows per import; Excel sheets saved as CSV.</span>
+          <span className="dash-muted">Collars, downhole surveys, assays or lithology. Up to 20,000 rows per import (split larger files); Excel sheets saved as CSV.</span>
         </div>
         <input ref={input} type="file" accept=".csv,.txt,.tsv,text/csv" hidden aria-label="Drill data file"
           onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) open(f); }} />

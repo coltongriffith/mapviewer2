@@ -98,7 +98,7 @@ describe('who can import', () => {
 describe('collars', () => {
   it('a dry run returns the diff and writes nothing', async () => {
     const d = await imp(E, 'collars', COLLARS);
-    expect(d).toMatchObject({ ok: true, dry_run: true, kind: 'collars', rows: 3, new: 3, changed: 0, unchanged: 0, holes: 3, new_holes: 3, error_count: 0, limit: 50000 });
+    expect(d).toMatchObject({ ok: true, dry_run: true, kind: 'collars', rows: 3, new: 3, changed: 0, unchanged: 0, holes: 3, new_holes: 3, error_count: 0, limit: 20000 });
     expect(await su(`select count(*)::int as n from public.drill_import_batches`)).toEqual([{ n: 0 }]);
     expect(await su(`select count(*)::int as n from public.drill_collars`)).toEqual([{ n: 0 }]);
   });
@@ -247,7 +247,7 @@ describe('summary', () => {
     S.l1 = (await imp(E, 'lithology', [{ hole_id: 'R-1', from_m: 0, to_m: 12, code: 'QMD', description: 'Quartz monzodiorite' }, { hole_id: 'R-4', from_m: 0, to_m: 5, code: 'OVB' }], { dry: false })).batch_id;
     await imp(E, 'assays', [au(0, 2, 0.41, 0.0025), { hole_id: 'R-2', from_m: 0, to_m: 1, values: { Cu: 0.1, Mo: 12 }, units: { Mo: 'ppm' } }], { dry: false });
     const s = await summary(V);
-    expect(s).toMatchObject({ collars: 3, planned: 1, metres: 550.5, surveys: 2, assays: 2, lithology: 2, holes: 4, elements: ['Au', 'Cu', 'Mo'], limit: 50000 });
+    expect(s).toMatchObject({ collars: 3, planned: 1, metres: 550.5, surveys: 2, assays: 2, lithology: 2, holes: 4, elements: ['Au', 'Cu', 'Mo'], limit: 20000 });
     expect(s.batches).toHaveLength(6);
     expect(s.batches[0]).toMatchObject({ kind: 'assays', rows: 2, created_by_email: 'geo@star.test', rolled_back_at: null });
     expect(s.batches[0].summary).toMatchObject({ new: 2 });
@@ -257,19 +257,19 @@ describe('summary', () => {
 });
 
 describe('limits', () => {
-  it('refuses more than 50,000 rows in one import, even as a dry run', async () => {
-    const rows = Array.from({ length: 50001 }, (_, i) => ({ hole_id: `H-${i}`, depth_m: 0, dip: -90 }));
-    await expect(imp(E, 'surveys', rows)).rejects.toThrow(/BATCH_TOO_LARGE: 50001 rows/);
+  it('refuses more than 20,000 rows in one import, even as a dry run', async () => {
+    const rows = Array.from({ length: 20001 }, (_, i) => ({ hole_id: `H-${i}`, depth_m: 0, dip: -90 }));
+    await expect(imp(E, 'surveys', rows)).rejects.toThrow(/BATCH_TOO_LARGE: 20001 rows; one import takes at most 20,000\. Split files over 20,000 rows/);
     await expect(imp(E, 'surveys', rows, { dry: false })).rejects.toThrow(/BATCH_TOO_LARGE/);
     expect(await su(`select count(*)::int as n from public.drill_surveys`)).toEqual([{ n: 2 }]);
   }, 60_000);
 
-  it('takes 50,000 rows', async () => {
-    const rows = Array.from({ length: 50000 }, (_, i) => ({ hole_id: `H-${Math.floor(i / 50)}`, from_m: (i % 50) * 2, to_m: (i % 50) * 2 + 2, values: { Cu: (i % 97) / 100 } }));
+  it('takes 20,000 rows', async () => {
+    const rows = Array.from({ length: 20000 }, (_, i) => ({ hole_id: `H-${Math.floor(i / 50)}`, from_m: (i % 50) * 2, to_m: (i % 50) * 2 + 2, values: { Cu: (i % 97) / 100 } }));
     const d = await imp(E, 'assays', rows, { dry: false, filename: 'big.csv' });
-    expect(d).toMatchObject({ committed: true, new: 50000, holes: 1000, new_holes: 1000, missing_collars: 1000, rows_written: 50000 });
+    expect(d).toMatchObject({ committed: true, new: 20000, holes: 400, new_holes: 400, missing_collars: 400, rows_written: 20000 });
     expect(d.missing_collar_holes).toHaveLength(10);
-    expect(await rollback(E, d.batch_id)).toMatchObject({ withdrawn: 50000 });
+    expect(await rollback(E, d.batch_id)).toMatchObject({ withdrawn: 20000 });
   }, 120_000);
 });
 

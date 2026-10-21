@@ -30,7 +30,9 @@
 --   replaced rows of). Rolled-back batches stay listed, with their rows.
 --
 -- LIMITS
---   50,000 rows and 32 MB per import, 2,000,000 rows written per property
+--   20,000 rows and 13 MB per import (so a commit stays well inside the 8 s
+--   statement timeout PostgREST gives authenticated requests), 2,000,000 rows
+--   written per property
 --   (all batches, history included), and no import while the database is past
 --   70% of an 8 GB disk (the ceiling scripts/lib/importHeadroom.mjs uses for
 --   the registry imports, after the 2026-10-20 disk-full outage).
@@ -61,7 +63,7 @@ create table if not exists public.drill_import_batches (
   -- Source column per field, elements and units, BDL handling, CRS: what the
   -- importer chose, kept so the batch can be explained and repeated.
   mapping jsonb not null default '{}'::jsonb check (jsonb_typeof(mapping) = 'object'),
-  row_count integer not null check (row_count between 1 and 50000),
+  row_count integer not null check (row_count between 1 and 20000),
   rows_written integer not null default 0 check (rows_written >= 0),
   -- The diff as committed: new, changed, unchanged, holes, new_holes, ...
   summary jsonb not null default '{}'::jsonb,
@@ -384,8 +386,8 @@ create or replace function public.drill_import_batch(
 language plpgsql security definer set search_path = '' set lock_timeout = '5s'
 as $$
 declare
-  c_max_rows constant integer := 50000;
-  c_max_bytes constant bigint := 33554432;
+  c_max_rows constant integer := 20000;
+  c_max_bytes constant bigint := 13631488; -- 13 MB
   c_max_property_rows constant bigint := 2000000;
   c_db_ceiling constant bigint := 6012954214; -- 70% of 8 GiB
   v_user uuid := auth.uid();
@@ -418,10 +420,10 @@ begin
   v_n := jsonb_array_length(p_rows);
   if v_n = 0 then raise exception 'EMPTY_IMPORT: the file has no rows' using errcode = '22023'; end if;
   if v_n > c_max_rows then
-    raise exception 'BATCH_TOO_LARGE: % rows; one import takes at most 50,000', v_n using errcode = '54000';
+    raise exception 'BATCH_TOO_LARGE: % rows; one import takes at most 20,000. Split files over 20,000 rows', v_n using errcode = '54000';
   end if;
   if octet_length(p_rows::text) > c_max_bytes then
-    raise exception 'BATCH_TOO_LARGE: more than 32 MB of data in one import' using errcode = '54000';
+    raise exception 'BATCH_TOO_LARGE: more than 13 MB of data in one import. Split the file' using errcode = '54000';
   end if;
 
   -- A retried commit returns what it recorded the first time.
@@ -645,7 +647,7 @@ begin
     'elements', coalesce((select jsonb_agg(k order by lower(k)) from (
         select distinct k from public.drill_assays a, jsonb_object_keys(a."values") k
         where a.property_id = p_property and a.superseded_by_batch is null) e), '[]'::jsonb),
-    'limit', 50000,
+    'limit', 20000,
     'batches', coalesce((select jsonb_agg(jsonb_build_object(
         'id', b.id, 'kind', b.kind, 'filename', b.filename, 'rows', b.row_count, 'rows_written', b.rows_written,
         'summary', b.summary - 'changed_sample', 'mapping', b.mapping, 'created_at', b.created_at,

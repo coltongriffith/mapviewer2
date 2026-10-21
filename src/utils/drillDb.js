@@ -13,7 +13,7 @@
 
 import { matchCols, roleOf, refineRole } from '../three-d/roles.js';
 
-export const MAX_ROWS = 50000;
+export const MAX_ROWS = 20000;
 export const MAX_FILE_BYTES = 30 * 1024 * 1024;
 
 export const KINDS = [
@@ -216,7 +216,7 @@ export function buildImport(kind, { header, rows }, mapping, { firstLine = 2 } =
   const elements = kind === 'assays' ? (mapping.elements || []).filter((e) => !e.skip && e.column && header.includes(e.column) && cell(e.name)) : [];
   if (kind === 'assays' && !elements.length) err(null, 'Choose at least one element column.');
   if (kind === 'lithology' && idx.code < 0 && idx.description < 0) err(null, 'Choose the column for Code or Description.');
-  if (rows.length > MAX_ROWS) err(null, `The file has ${rows.length.toLocaleString('en-US')} rows; one import takes at most 50,000. Split it and import each part.`);
+  if (rows.length > MAX_ROWS) err(null, `The file has ${rows.length.toLocaleString('en-US')} rows; one import takes at most 20,000. Split files over 20,000 rows and import each part.`);
   const crs = cell(mapping.crs);
   if (kind === 'collars' && crs && !/^EPSG:\d{4,6}$/.test(crs)) err(null, 'The coordinate system must be written EPSG:<code>, for example EPSG:26910.');
   if (errorCount) return { rows: [], lines: [], errors, errorCount, warnings, stats: {} };
@@ -360,7 +360,7 @@ export const serverErrors = (diff, lines) => (diff?.errors || []).map((e) => ({ 
 // ── Client ─────────────────────────────────────────────────────────────────
 const MESSAGES = [
   [/ORG_READ_ONLY/, 'You have view-only access here. Ask an admin of the workspace for editor access.'],
-  [/BATCH_TOO_LARGE/, 'One import takes at most 50,000 rows (32 MB). Split the file and import each part.'],
+  [/BATCH_TOO_LARGE/, 'One import takes at most 20,000 rows (13 MB). Split files over 20,000 rows and import each part.'],
   [/BATCH_SUPERSEDED: (.*)/, (m) => `${m[1].charAt(0).toUpperCase()}${m[1].slice(1)}.`],
   [/INVALID_ROWS/, 'Some rows have problems. Check the file again.'],
   [/EMPTY_IMPORT/, 'The file has no data rows.'],

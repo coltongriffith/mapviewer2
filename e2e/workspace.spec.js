@@ -27,7 +27,7 @@ const assays = { id: FILE, name: 'assays.csv', kind: 'drill', role: 'assays', ve
 
 const BATCH0 = '00000000-0000-4000-8000-0000000000e0';
 const collarBatch = { id: BATCH0, kind: 'collars', filename: 'Rails collars.csv', rows: 12, rows_written: 12, summary: { new: 12, changed: 0, unchanged: 0, new_holes: 12 }, created_at: '2026-10-18T00:00:00Z', created_by_email: 'cfo@star.test', rolled_back_at: null, blocked_by: null };
-const drillSummary = () => ({ collars: 12, planned: 2, metres: 3420.5, surveys: 40, assays: 0, lithology: 0, holes: 12, elements: [], limit: 50000, batches: [{ ...collarBatch }] });
+const drillSummary = () => ({ collars: 12, planned: 2, metres: 3420.5, surveys: 40, assays: 0, lithology: 0, holes: 12, elements: [], limit: 20000, batches: [{ ...collarBatch }] });
 
 async function fakeSupabase(page, { role = 'owner', orgs = [org(role)], properties = null } = {}) {
   const fake = { rpc: [], orgs, properties: properties || (orgs.length ? [property] : []), invites: [], files: [{ ...assays }], uploads: [], signed: [], patches: [], drill: drillSummary(), templates: [] };
@@ -85,7 +85,7 @@ async function fakeSupabase(page, { role = 'owner', orgs = [org(role)], properti
       if (fn === 'drill_property_summary') return json(fake.drill);
       if (fn === 'drill_import_batch') {
         const diff = { ok: true, kind: args.p_kind, rows: args.p_rows.length, new: args.p_rows.length, changed: 0, unchanged: 0, holes: 2, new_holes: 1,
-          missing_collars: 1, missing_collar_holes: ['R-9'], overlaps_existing: 0, overlap_holes: [], changed_sample: [], errors: [], error_count: 0, limit: 50000 };
+          missing_collars: 1, missing_collar_holes: ['R-9'], overlaps_existing: 0, overlap_holes: [], changed_sample: [], errors: [], error_count: 0, limit: 20000 };
         if (args.p_dry_run) return json({ ...diff, dry_run: true });
         fake.drill = { ...fake.drill, assays: fake.drill.assays + diff.new, holes: 13, elements: ['Au', 'Cu'],
           batches: [{ id: args.p_batch, kind: args.p_kind, filename: args.p_filename, rows: diff.rows, rows_written: diff.new, summary: diff, created_at: '2026-10-21T00:00:00Z', created_by_email: user.email, rolled_back_at: null, blocked_by: null }, ...fake.drill.batches] };

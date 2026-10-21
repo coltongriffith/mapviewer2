@@ -137,12 +137,12 @@ describe('checking an import', () => {
     expect(skipped.errors).toEqual([{ line: null, message: 'Choose at least one element column.' }]);
   });
 
-  it('needs the required columns and at most 50,000 rows', async () => {
+  it('needs the required columns and at most 20,000 rows', async () => {
     const t = await table('HoleID,From\nR-1,0\n');
     expect(buildImport('assays', t, autoMapping('assays', t.header, t.rows)).errors.map((e) => e.message))
       .toEqual(['Choose the column for To.', 'Choose at least one element column.']);
     const big = { header: ['HoleID', 'Depth', 'Dip'], rows: Array.from({ length: MAX_ROWS + 1 }, (_, i) => [`H${i}`, '0', '-90']) };
-    expect(buildImport('surveys', big, { columns: { hole_id: 'HoleID', depth_m: 'Depth', dip: 'Dip' } }).errors[0].message).toMatch(/50,001 rows; one import takes at most 50,000/);
+    expect(buildImport('surveys', big, { columns: { hole_id: 'HoleID', depth_m: 'Depth', dip: 'Dip' } }).errors[0].message).toMatch(/20,001 rows; one import takes at most 20,000. Split files over 20,000 rows/);
   });
 
   it('collars: coordinates, ranges, the CRS, planned holes and positive-down dips', async () => {
@@ -207,7 +207,7 @@ describe('the client', () => {
   it('turns database errors into sentences', async () => {
     const sb = fakeSb({ data: null, error: { message: 'BATCH_SUPERSEDED: a later import (assays-2026.csv, 2026-10-21 10:00 UTC) changed rows from this one; roll that back first' } });
     await expect(drillDb(sb).rollback('b1')).rejects.toThrow('A later import (assays-2026.csv, 2026-10-21 10:00 UTC) changed rows from this one; roll that back first.');
-    expect(drillError({ message: 'BATCH_TOO_LARGE: 50001 rows' }).message).toMatch(/at most 50,000 rows/);
+    expect(drillError({ message: 'BATCH_TOO_LARGE: 20001 rows' }).message).toMatch(/at most 20,000 rows \(13 MB\)\. Split files over 20,000 rows/);
     expect(drillError({ message: 'ORG_READ_ONLY: viewers cannot import drill data' }).code).toBe('ORG_READ_ONLY');
     expect(() => drillDb(null)).toThrow(/needs an Exploration Maps account/);
   });
