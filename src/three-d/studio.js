@@ -126,7 +126,7 @@ let usingSample = true;
 const S = {              // style
   title: 'EXAMPLE RIDGE · MAIN ZONE', subtitle: '3D drilling model, looking northeast',
   valueCol: null, valueLabel: '', bins: [0.1, 0.2, 0.3, 0.5], coCount: 5, coMin: 20, coCut: 0.2, coIncl: 0.5,
-  secAz: 135, secW: 75, section: null, surf: 1, walls: true, ids: true, inset: true, logo: null, meshes: {}, // section: { holes: chosen IDs, a, b: the line's ends } (section.js)
+  secAz: 135, secW: 75, section: null, sections: null, secActive: null, surf: 1, walls: true, ids: true, inset: true, logo: null, meshes: {}, // section: { holes: chosen IDs, a, b: the line's ends } (section.js); sections: named ones, the active one mirrored here (sections.js)
   ribbons: true, traceWidth: 1.4, pendingLabels: true, pendingNoAssays: false, valueCol2: null, elevTicks: true,
   terrain: 'natural', terrainSource: 'auto', vex: 1, crs: null, labels: [],
   collarFit: 'collars', blockStyle: 'glass', wallLabels: [], lockView: false,
@@ -959,10 +959,11 @@ function restyle() {
   const lk = G.topCanvas.width / 768; EXT.overlays?.paint(ctx, P); // EXT hook: overlay areas on the terrain
   ctx.setLineDash([14 * lk, 9 * lk]); const dk = S.terrain === 'dark'; // a dark line would vanish on dark slate
   ctx.lineWidth = 5 * lk; ctx.strokeStyle = dk ? '#fff' : S.primary; ctx.beginPath(); ctx.moveTo(...P(A)); ctx.lineTo(...P(Bp)); ctx.stroke();
-  ctx.lineWidth = 2 * lk; ctx.strokeStyle = dk ? S.accent : '#fff'; ctx.stroke(); ctx.setLineDash([]); G.topTex.needsUpdate = true;
+  ctx.lineWidth = 2 * lk; ctx.strokeStyle = dk ? S.accent : '#fff'; ctx.stroke(); ctx.setLineDash([]); EXT.sections?.paint(ctx, P, lk); G.topTex.needsUpdate = true; // EXT hook: fence lines
   placeRibbons(); extRestyle(); // EXT hook
   drawSectionView();
 }
+const secTags = () => EXT.sections?.tags() || ['A', 'A′']; // EXT hook: B, B′ for a named section
 function sectionEnds() {
   if (S.section?.a) return [S.section.a, S.section.b]; // a line set by hand or fitted to chosen holes
   const a = S.secAz * Math.PI / 180, d = { x: Math.sin(a), y: Math.cos(a) };
@@ -1475,7 +1476,7 @@ function drawOverlay(ctx, k, forExport) {
     const tw = ctx.measureText(h.id).width, x0 = ex + Math.cos(ang) * 6 * u, y0 = ey + Math.sin(ang) * 6 * u, x1 = x0 + Math.cos(ang) * tw, y1 = y0 + Math.sin(ang) * tw;
     idBoxes.push([Math.min(x0, x1) - 8 * u, Math.min(y0, y1) - 8 * u, Math.max(x0, x1) + 8 * u, Math.max(y0, y1) + 8 * u]);
   });
-  EXT.shapes?.draw(ctx, K, occ); // EXT hook: shapes, over the collars
+  EXT.shapes?.draw(ctx, K, occ); EXT.sections?.draw(ctx, K, occ); // EXT hook: shapes, over the collars; the letters on fences
   const pend = S.pendingLabels && S.tags.pending !== 'collar' ? project.holes.filter(isPending) : []; // EXT hook: or one tag per group at the collars (tags.js)
   if (pend.length) {
     const scr = new Map(project.holes.map((h) => [h, h.path.filter((p, i) => i % 3 === 0).map((p) => proj(G.V(p.x, p.y, p.z))).filter((p) => p[2] < 1)]));
@@ -1484,7 +1485,7 @@ function drawOverlay(ctx, k, forExport) {
   // Section ends: above the terrain, nudged off the text labels; drawn after the pills, which keep their
   // leaders off them.
   const [A, Bp] = sectionEnds(), labBoxes = S.labels.map((L) => { const { bw, bh } = labelSize(ctx, K, L); setSpacing(ctx, 0); return [L.x * W - bw / 2, L.y * H - bh / 2, L.x * W + bw / 2, L.y * H + bh / 2]; });
-  const marks = [[A, 'A'], [Bp, 'A′']].map(([p, t]) => {
+  const marks = [A, Bp].map((p, i) => { const t = secTags()[i];
     const [x0, y0] = proj(G.V(p.x, p.y, G.surf(p.x, p.y) + G.diag * 0.035)), at = ([dx, dy]) => [x0 + dx * u, y0 + dy * u];
     const [x, y] = (uses(S, 'clearLeaders') ? [[0, 0], [0, -34], [-40, -10], [40, -10], [0, -68]] : [[0, 0]]).map(at).find(([a, b]) => !labBoxes.some((l) => boxHits([a - 22 * u, b - 14 * u, a + 22 * u, b + 14 * u], l))) || [x0, y0];
     occ.push([x - 22 * u, y - 14 * u, x + 22 * u, y + 14 * u]); if (uses(S, 'clearLeaders')) return [t, x, y];
@@ -1590,7 +1591,7 @@ function drawSection(ctx, Wc, Hc, forExport) {
   const cut = (pts) => (chosen ? [pts] : clean ? clipPath(F, pts, w) : pts.reduce((r, p, i) => { if (inW(p)) { if (i && inW(pts[i - 1])) r[r.length - 1].push(p); else r.push([p]); } return r; }, []));
   const lookAz = ((S.secAz - 90) % 360 + 360) % 360;
   const logo = drawLogo(ctx, K, Wc, forExport), head = S.title.split('·')[0].trim() || S.title;
-  const headBottom = drawHeader(ctx, K, Wc, `${head} · SECTION A–A′`, `Looking ${pad3(lookAz)}° · ${chosen ? `${chosen.length} chosen hole${chosen.length === 1 ? '' : 's'} projected` : `±${w} m projection`} · ${S.valueLabel}`, logo.w);
+  const headBottom = drawHeader(ctx, K, Wc, ...(EXT.sections?.header(head, lookAz, w, chosen) || [`${head} · SECTION A–A′`, `Looking ${pad3(lookAz)}° · ${chosen ? `${chosen.length} chosen hole${chosen.length === 1 ? '' : 's'} projected` : `±${w} m projection`} · ${S.valueLabel}`]), logo.w); // EXT hook: a named section
   const footTop = drawFooter(ctx, K, Wc, Hc, terrainCredits(false), autoNotes('section'));
   const profile = []; let zMax = -Infinity;
   for (let i = 0; i <= 200; i++) { const t = i / 200 * L, z = G.surf(A.x + F.d.x * t, A.y + F.d.y * t); profile.push([t, z]); zMax = Math.max(zMax, z); }
@@ -1681,7 +1682,7 @@ function drawSection(ctx, Wc, Hc, forExport) {
     ctx.textBaseline = 'alphabetic';
   }
   let cx = m; cards.forEach(([sec, w, h]) => { const y = footTop - 52 * u - h; if (y < by || cx + w > ox - 10 * u) return; drawCard(ctx, K, cx, y, w, h, [sec]); cx += w + 10 * u; });
-  tagLabel(ctx, K, 'A', X(0), tagY(0)); tagLabel(ctx, K, 'A′', X(L), tagY(200));
+  tagLabel(ctx, K, secTags()[0], X(0), tagY(0)); tagLabel(ctx, K, secTags()[1], X(L), tagY(200));
   // Bottom strip: scale bar left, horizontal legend right
   const sy = footTop - 18 * u, sb = [10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000].find((d) => d * s >= 120 * u) || niceRound(L / 3);
   ctx.fillStyle = INK; ctx.fillRect(m, sy, sb * s / 2, 6 * u); ctx.fillStyle = paper(); ctx.fillRect(m + sb * s / 2, sy, sb * s / 2, 6 * u); ctx.strokeStyle = INK; ctx.lineWidth = u; ctx.strokeRect(m, sy, sb * s, 6 * u);
@@ -1732,11 +1733,13 @@ function figureCanvas(view, layer = 'figure') {
 }
 const fileSlug = () => (S.title.split('·')[0].trim() || 'figure').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'figure';
 function downloadURL(url, name) { const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); }
+const nope = (m) => { throw new Error(m); };
 function exportPNG(opts = {}) {
   if (!G) throw new Error('Nothing to export yet: add a collar file and an assay file.');
-  const view = opts.view === 'section' ? 'section' : opts.view === '3d' ? '3d' : S.view, f = FORMATS[S.format];
-  const url = figureCanvas(view).toDataURL('image/png');
-  if (opts.download) downloadURL(url, `${fileSlug()}-${view === 'section' ? 'section' : '3d'}-${S.format}.png`);
+  const id = opts.section, view = opts.view === 'section' || id ? 'section' : opts.view === '3d' ? '3d' : S.view, f = FORMATS[S.format], fig = () => figureCanvas(view);
+  // EXT hook: one of the named sections (sections.js); "A" is a figure's only section.
+  const url = (id ? EXT.sections?.using(id, fig) ?? (id === 'A' ? fig() : nope(`No section "${id}": EM3D.addSection first.`)) : fig()).toDataURL('image/png');
+  if (opts.download) downloadURL(url, `${fileSlug()}-${view === 'section' ? `section${id ? `-${id}` : ''}` : '3d'}-${S.format}.png`);
   status(`Exported ${view === 'section' ? 'section A–A′' : 'the 3D figure'} at ${f.w} × ${f.h} px.`);
   return url;
 }
@@ -1894,7 +1897,7 @@ function loadSample() {
 // A new data set starts without the old one's equivalent recipe, display cut-off or provisional flags.
 function resetDerived() {
   histReset(); // the history belongs to the old data
-  S.eq = null; eqApplied = false; S.displayCutoff = null; S.provisional = {}; S.shell.cutoff = null; S.libRefs = {}; S.section = null; S.pubOverrides = {}; S.calloutMode = 'calculated'; callouts = calcCallouts = [];
+  S.eq = null; eqApplied = false; S.displayCutoff = null; S.provisional = {}; S.shell.cutoff = null; S.libRefs = {}; S.section = S.sections = null; S.pubOverrides = {}; S.calloutMode = 'calculated'; callouts = calcCallouts = [];
   S.tags.status = {}; S.tags.groups = []; S.geology.legend = []; // EXT hook: per-hole tags and codes belong to the old data
   // The shell belongs to the old data: switch it off and stop any build still running.
   S.shell.enabled = false; shell.pending = null; shell.mesh = null; shell.field = null; syncShell();
@@ -2259,11 +2262,11 @@ Object.assign(S, {
   tags: { at: 'toe', style: 'dark', status: {}, fadePrevious: false, newLabel: '', prevLabel: 'Previously released', plannedLabel: 'Planned', groups: [], autoGroup: false, groupRadius: 140, emphasis: 'auto', highlight: {}, highlightNew: true, idMode: 'auto', showId: {}, showTag: {}, hideRows: [], pending: 'collar' },
   histograms: false, insetStyle: 'plan', overlays: [], shapes: [], // overlays.js, shapes.js
 });
-const EXT = {}, extLoading = {}, EXT_IMPORT = { geology: () => import('./geology.js'), geophys: () => import('./geophys.js'), tags: () => import('./tags.js'), look: () => import('./look.js'), section: () => import('./section.js'), type: () => import('./typography.js'), overlays: () => import('./overlays.js'), shapes: () => import('./shapes.js') };
+const EXT = {}, extLoading = {}, EXT_IMPORT = { geology: () => import('./geology.js'), geophys: () => import('./geophys.js'), tags: () => import('./tags.js'), look: () => import('./look.js'), section: () => import('./section.js'), type: () => import('./typography.js'), overlays: () => import('./overlays.js'), shapes: () => import('./shapes.js'), sections: () => import('./sections.js') };
 const hasRole = (r) => files.some((f) => f.role === r);
 function extWanted() {
   const gp = S.geophys.mode !== 'off' && hasRole('geophys'), t = S.tags;
-  return { look: S.shell.enabled || ortho() || S.scene.haze > 0 || (uses(S, 'clearLeaders') && S.labels.some((l) => l.arrow)), geology: (S.geology.enabled && hasRole('litho')) || Object.keys(S.geology.images || {}).length > 0 || gp, geophys: gp, section: !!S.section, overlays: S.overlays.length > 0 || hasRole('overlay'), shapes: S.shapes.length > 0,
+  return { look: S.shell.enabled || ortho() || S.scene.haze > 0 || (uses(S, 'clearLeaders') && S.labels.some((l) => l.arrow)), geology: (S.geology.enabled && hasRole('litho')) || Object.keys(S.geology.images || {}).length > 0 || gp, geophys: gp, section: !!(S.section || S.sections), sections: !!S.sections, overlays: S.overlays.length > 0 || hasRole('overlay'), shapes: S.shapes.length > 0,
     tags: t.at !== 'toe' || t.fadePrevious || t.idMode === 'key' || (t.idMode !== 'all' && (project?.holes?.length || 0) > 12) || Object.keys(t.showId).length > 0 || Object.keys(t.showTag || {}).length > 0 || t.emphasis === 'key' || Object.keys(t.highlight || {}).length > 0
       || S.coPlacement !== 'column' || Object.values(coMap()).some((o) => o.placement || o.x !== undefined) || (S.pendingLabels && t.pending === 'collar' && !!project?.holes?.some(isPending)) || t.autoGroup || t.groups.length > 0 || Object.keys(t.status).length > 0 || S.histograms || S.insetStyle !== 'plan' || S.labels.some((l) => l.kind === 'stat') };
 }
@@ -2280,7 +2283,7 @@ const host = () => (extHost ||= {
   renderShellUI, renderEq, renderExtUI, renderLegendUI, FORMATS, setFigureSize, updateLabel, removeLabel, updateWallLabel, removeWallLabel,
   metalCols, unitOf, setEquivalent, getChecks, setProvisional,
   step: () => currentStep, renderFiles, sectionChanged: () => { refresh.secSet = true; restyle(); renderStyle(); schedulePublish(); },
-  fonts(s) { if (s) SANS = s; return SANS; }, buildWallLabels,
+  fonts(s) { if (s) SANS = s; return SANS; }, buildWallLabels, tagLabel, intervalShown, load: (k) => extLoad(k),
 });
 const extLoad = (k) => (extLoading[k] ||= EXT_IMPORT[k]().then((m) => { m.init(host()); EXT[k] = m; return m; }));
 async function extReady() {
@@ -2295,10 +2298,10 @@ async function extReady() {
 function extScene() {
   if (Object.entries(extWanted()).some(([k, v]) => v && !EXT[k])) { extReady().catch((e) => status(e.message)); return; }
   if (!G) return;
-  EXT.geophys?.syncCurtains(); faceWalls(); EXT.tags?.placeHistograms(); EXT.tags?.syncInset(); EXT.tags?.syncHoles(); EXT.overlays?.sync();
+  EXT.geophys?.syncCurtains(); faceWalls(); EXT.tags?.placeHistograms(); EXT.tags?.syncInset(); EXT.tags?.syncHoles(); EXT.overlays?.sync(); EXT.sections?.sync();
 }
 const extView = () => { if (G) EXT.geology?.syncFaces(); };
-const extRestyle = () => { if (G) { EXT.geophys?.syncCurtains(); faceWalls(); EXT.tags?.syncHoles(); } };
+const extRestyle = () => { if (G) { EXT.geophys?.syncCurtains(); faceWalls(); EXT.tags?.syncHoles(); EXT.sections?.sync(); } };
 const extPainted = () => new Set(EXT.geology ? Object.keys(EXT.geology.faceState()).filter((k) => k !== 'section') : []);
 const extFade = (h) => !!EXT.tags?.fade(h);
 // A wall label linked to a geology unit is written in a darker shade of the unit's legend colour.
@@ -2338,7 +2341,7 @@ function extState() {
 }
 function renderExtUI() {
   document.querySelectorAll('[data-ext]').forEach((el) => { const [g, k] = el.dataset.ext.split('.'), v = g === 'style' || g === 'view' ? S[k] : S[g][k]; if (el.type === 'checkbox') el.checked = !!v; else el.value = v; });
-  [['geology', 'geo-ui'], ['geophys', 'gp-ui'], ['tags', 'tag-ui'], ['section', 'sec-holes'], ['overlays', 'ov-ui'], ['shapes', 'shape-ui']].forEach(([k, id]) => { if (EXT[k]) EXT[k].renderUI($(id)); });
+  [['geology', 'geo-ui'], ['geophys', 'gp-ui'], ['tags', 'tag-ui'], ['section', 'sec-holes'], ['overlays', 'ov-ui'], ['shapes', 'shape-ui'], ['sections', 'sec-tabs']].forEach(([k, id]) => { if (EXT[k]) EXT[k].renderUI($(id)); });
   document.querySelectorAll('[data-secmode]').forEach((b) => b.setAttribute('aria-pressed', String((b.dataset.secmode === 'chosen') === !!S.section?.holes)));
 }
 document.querySelectorAll('[data-ext]').forEach((el) => el.addEventListener('change', () => {
@@ -2373,7 +2376,9 @@ const EXT_API = {
   async setFigureStyle(style, meta) { await (await extLoad('type')).setFigureStyle(style, meta); return getState(); },
 };
 // Map overlays and shapes (overlays.js, shapes.js): addOverlay, updateOverlay, removeOverlay, and the same for shapes.
-[['overlays', 'Overlay'], ['shapes', 'Shape']].forEach(([k, n]) => ['add', 'update', 'remove'].forEach((a) => { EXT_API[a + n] = async (...x) => { const r = await (await extLoad(k))[a](...x); await extReady(); return r ?? getState(); }; }));
+// Named sections (sections.js): addSection, updateSection, removeSection, setActiveSection.
+[['overlays', 'Overlay'], ['shapes', 'Shape'], ['sections', 'Section']].forEach(([k, n]) => ['add', 'update', 'remove', 'setActive'].forEach((a) => { if (a !== 'setActive' || n === 'Section') EXT_API[a + n] = async (...x) => { const r = await (await extLoad(k))[a](...x); await extReady(); return r ?? getState(); }; }));
+$('sec-add').addEventListener('click', () => EXT_API.addSection().catch((e) => status(e.message)));
 $('ov-file').addEventListener('change', (e) => { if (e.target.files.length) readFileList(e.target.files); e.target.value = ''; });
 document.querySelectorAll('[data-shape]').forEach((b) => b.addEventListener('click', () => { showView('3d'); EXT_API.addShape({ type: b.dataset.shape }).catch((e) => status(e.message)); }));
 // The API notes for these layers are kept in the page (#ext-help), out of the script bundle.
@@ -2409,7 +2414,7 @@ function getState() {
     equivalent: S.eq ? (() => { const i = eqInfo(); return { column: i.name, formula: i.formula, note: i.note, factors: Object.fromEntries(i.factors.map((f) => [f.metal, +f.factor.toPrecision(6)])), ...structuredClone(S.eq) }; })() : null,
     footnoteAuto: G ? autoNotes(S.view) : [], checks: getChecks(),
     ...extState(), // EXT hook: geology, geophys, tags
-    overlays: S.overlays.map((o) => ({ ...o, data: undefined, ...EXT.overlays?.info(o) })), shapes: structuredClone(S.shapes),
+    overlays: S.overlays.map((o) => ({ ...o, data: undefined, ...EXT.overlays?.info(o) })), shapes: structuredClone(S.shapes), sections: EXT.sections?.state() || null,
     figureSize: { key: S.format, width: f.w, height: f.h, label: f.label }, figureSizes: Object.fromEntries(Object.entries(FORMATS).map(([k, v]) => [k, `${v.label}, ${v.w}×${v.h}`])),
   };
 }

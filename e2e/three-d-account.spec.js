@@ -300,6 +300,80 @@ test('map overlays and shapes: draped, listed, saved and reopened unchanged, and
   expect(errors).toEqual([]);
 });
 
+test('named sections: B–B′ through two holes with fences, saved and reopened unchanged, each exported on its own; a figure without them is untouched', async ({ page }) => {
+  test.setTimeout(150_000); // three page loads and a dozen full-size exports under SwiftShader
+  const errors = [], chunks = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  page.on('request', (q) => { if (/\/assets\/sections-[\w-]+\.js/.test(q.url())) chunks.push(q.url()); });
+  await open3d(page);
+  // A figure with its one section, new or saved before named sections, never fetches sections.js; "A" is its section.
+  const plain = await page.evaluate(async (old) => {
+    const E = window.EM3D, out = { d3: E.exportPNG({ view: '3d' }), sec: E.exportPNG({ view: 'section' }) };
+    out.secA = E.exportPNG({ view: 'section', section: 'A' }); out.saved = E.getProject().settings.sections; out.state = E.getState().sections;
+    try { E.exportPNG({ view: 'section', section: 'B' }); } catch (e) { out.bad = e.message; }
+    const opened = await E.loadProject(old); out.old = [opened.sections, E.getProject().settings.sections, E.exportPNG({ view: 'section', section: 'A' }) === E.exportPNG({ view: 'section' })];
+    return out;
+  }, LEGACY);
+  expect(plain.secA).toBe(plain.sec);
+  expect([plain.saved, plain.state, plain.old]).toEqual([null, null, [null, null, true]]);
+  expect(plain.bad).toMatch(/No section "B"/);
+  expect(chunks).toEqual([]);
+
+  await open3d(page);
+  const r = await page.evaluate(async () => {
+    const E = window.EM3D, ids = E.getState().project.holeIds, through = [ids[2], ids[9]];
+    const id = await E.addSection({ through, width: 60 });
+    await E.updateSection('A', { fence: true });
+    const before = E.getState(), project = JSON.parse(JSON.stringify(E.getProject()));
+    const exp = { a: E.exportPNG({ view: 'section', section: 'A' }), b: E.exportPNG({ view: 'section', section: 'B' }), d3: E.exportPNG({ view: '3d' }) };
+    E.clearFiles();
+    const after = await E.loadProject(project);
+    const exp2 = { a: E.exportPNG({ view: 'section', section: 'A' }), b: E.exportPNG({ view: 'section', section: 'B' }), d3: E.exportPNG({ view: '3d' }) };
+    let bad = null; try { E.exportPNG({ view: 'section', section: 'Z' }); } catch (e) { bad = e.message; }
+    const activeA = (await E.setActiveSection('A')).section;
+    let last = null; await E.removeSection('B'); try { await E.removeSection('A'); } catch (e) { last = e.message; }
+    return { id, through, before, after, project, exp, saved: project.settings.sections, savedActive: project.settings.secActive, same: JSON.stringify(exp) === JSON.stringify(exp2),
+      sizes: [exp.a.length, exp.b.length, exp.d3.length], differ: exp.a !== exp.b, bad, activeA, left: E.getState().sections.list.map((s) => s.id), last, tab: document.getElementById('view-section').textContent };
+  });
+  expect(r.id).toBe('B');
+  const [A, B] = r.before.sections.list;
+  expect(r.before.sections.active).toBe('B');
+  expect(A).toMatchObject({ id: 'A', name: 'A–A′', letters: ['A', 'A′'], fence: true, width: 75 });
+  expect(B).toMatchObject({ id: 'B', name: 'B–B′', letters: ['B', 'B′'], fence: true, width: 60 });
+  expect(B.holes).toBeUndefined(); // through the two holes, every hole within the width drawn
+  expect(r.before.section).toMatchObject({ secAz: B.az, secW: 60, holes: null, ends: B.ends }); // the active section is the one drawn
+  expect(r.saved.map((s) => s.id)).toEqual(['A', 'B']);
+  expect(r.savedActive).toBe('B');
+  expect(r.after).toEqual(r.before);
+  expect(r.same).toBe(true); // reopened, both sections and the 3D figure with its fences export exactly as before
+  expect(r.differ).toBe(true);
+  r.sizes.forEach((n) => expect(n).toBeGreaterThan(50000));
+  expect(r.bad).toMatch(/No section "Z"/);
+  expect(r.activeA).toMatchObject({ secAz: A.az, secW: 75, ends: null });
+  expect(r.left).toEqual(['A']);
+  expect(r.last).toMatch(/at least one section/);
+  expect(r.tab).toBe('Section A–A′');
+  expect(chunks.length).toBe(1);
+
+  // The Layout step: a tab per section; Add another section takes the first free letter (B again) and is the active one.
+  await page.evaluate(() => window.EM3D.showStep('layout'));
+  await page.locator('#sec-add').click();
+  await expect(page.locator('#sec-tabs [data-sid]')).toHaveText(['A–A′', 'B–B′']);
+  await expect(page.locator('#sec-tabs [data-sid="B"]')).toHaveAttribute('aria-pressed', 'true');
+  await page.locator('#sec-tabs [data-sid="A"]').click();
+  await expect.poll(async () => (await state(page)).sections.active).toBe('A');
+
+  // Opened in a new page, where sections.js has not loaded yet: the fences, their lines on the terrain and each
+  // section export exactly as the saved figure did.
+  await open3d(page);
+  const fresh = await page.evaluate(async ({ p, exp }) => {
+    const E = window.EM3D, loaded = !!E.getState().sections; await E.loadProject(p);
+    return { loaded, d3: E.exportPNG({ view: '3d' }) === exp.d3, a: E.exportPNG({ view: 'section', section: 'A' }) === exp.a, b: E.exportPNG({ view: 'section', section: 'B' }) === exp.b };
+  }, { p: r.project, exp: r.exp });
+  expect(fresh).toEqual({ loaded: false, d3: true, a: true, b: true });
+  expect(errors).toEqual([]);
+});
+
 test('setShell resolves with the shell already on the figure, so an export straight after includes it', async ({ page }) => {
   await open3d(page);
   const s = await page.evaluate(async () => { const r = await window.EM3D.setShell({ enabled: true }); return { ...r.shell, notes: r.footnoteAuto }; });

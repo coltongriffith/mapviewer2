@@ -485,11 +485,14 @@ html.em3d-embed .share-credit:hover { text-decoration: underline; }
         <p class="muted" style="margin-top:6px">Drag a legend on the preview to move it.</p>
       </section>
       <section>
-        <h3>Section line A–A′</h3>
+        <h3>Sections</h3>
+        <div id="sec-tabs"></div>
         <label class="field"><span>Azimuth <output id="sec-az-out" class="mono"></output></span><input type="range" id="sec-az" min="0" max="179"></label>
         <label class="field"><span>Projection either side (m)</span><input type="number" id="sec-w" min="5"></label>
         <div class="field"><span>Holes in section</span><div class="chips" role="group" aria-label="Holes in section"><button type="button" class="chip" data-secmode="width" aria-pressed="true">Within width</button><button type="button" class="chip" data-secmode="chosen" aria-pressed="false">Chosen holes</button></div></div>
         <div id="sec-holes"></div>
+        <button class="btn" type="button" id="sec-add" style="margin-top:8px">Add another section</button>
+        <p class="muted" style="margin-top:6px">Each section has its own line, width and holes, exports on its own, and can show as a fence in the 3D block.</p>
       </section>
       <section>
         <h3>Text labels</h3>
@@ -898,6 +901,17 @@ Whole projects (to keep or move a figure):
                                   without az or origin. az (0-179) turns the line about its middle; origin
                                   puts it through an easting/northing; origin: null back to the block centre.
                                   width: metres either side (secW). getState().section has holes and ends
+  EM3D.addSection({name: "B–B′", az, origin: {x, y}, through: [holeIds], width, holes, fence: true, opacity})
+                                  another named section (A–A′ is the figure's first). It becomes the active one,
+                                  which the Section view, EM3D.setSection and the Layout controls show and change.
+                                  Without a line it runs across the active one through the block centre;
+                                  through: fitted to these holes (then every hole within the width, unless holes
+                                  are given). fence: a thin tinted slab in the 3D block along the line, lettered
+                                  at both ends, with the intervals within the width (on for an added section; off
+                                  for A–A′ until set). Returns the id ("B")
+  EM3D.updateSection(id, {...}) / removeSection(id) / setActiveSection(id)   getState().sections:
+                                  { active, list: [{ id, name, az, width, ends, origin, holes, fence, letters }] }
+  EM3D.exportPNG({view: "section", section: id})   one section's figure, whichever is active
   EM3D.groupCallouts([holeIds] | "auto" | null)   one box listing several holes' intercepts
   EM3D.addStatBox({title, rows: ["Indicated: 133 koz @ 1.07 g/t Au"], x, y})   returns its id; a label of
                                   kind "stat" (EM3D.updateLabel / removeLabel; drag it on the preview)
