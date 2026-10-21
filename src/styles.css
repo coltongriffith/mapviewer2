@@ -3303,8 +3303,8 @@ button.claim-notices-chip[aria-expanded="true"] { border-color: var(--ui-border-
    it, which left the admin dashboard rendering as unstyled text. Restored
    from the pre-redesign sheet and swept onto the brand tokens.
    ═══════════════════════════════════════════════════════════════════════ */
-/* Post-export signup nudge (editor) */
-.post-export-toast {
+/* Post-export signup nudge (editor); the new-version notice (src/utils/preloadGuard.js) shares its look */
+.post-export-toast, .update-notice {
   position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
   z-index: 1200; display: flex; align-items: center; gap: 14px;
   background: var(--ui-text); color: #fff; border-radius:var(--r-lg); padding: 13px 16px;
@@ -3315,6 +3315,7 @@ button.claim-notices-chip[aria-expanded="true"] { border-color: var(--ui-border-
 .post-export-toast-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 .post-export-toast-dismiss { background: transparent; border: 0; color: #8fa0a4; font-size: 15px; cursor: pointer; padding: 4px; line-height: 1; }
 .post-export-toast-dismiss:hover { color: #fff; }
+.update-notice { z-index: 10000; font-size: 13px; line-height: 1.5; cursor: pointer; }
 @media (max-width: 1140px) { .lm-cta { margin-left: 28px; margin-right: 28px; } }
 @media (prefers-reduced-motion: reduce) {
   .lm-reveal { opacity: 1; transform: none; transition: none; }
