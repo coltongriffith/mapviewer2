@@ -49,9 +49,16 @@ async function fakeSupabase(page, { failUpload = false } = {}) {
         return json(single ? full : [full], 201);
       }
       if (method === 'PATCH') {
-        const id = (url.searchParams.get('id') || '').slice(3), r = fake.rows.get(id);
+        const id = (url.searchParams.get('id') || '').slice(3), r = fake.rows.get(id), body = req.postDataJSON();
+        const at = url.searchParams.get('updated_at');
+        if (at) {
+          // A save over the version the tab opened: only while it is still that version.
+          if (!r || Date.parse(at.slice(3)) !== Date.parse(r.updated_at)) return single ? route.fulfill({ status: 406, json: { code: 'PGRST116', message: 'no rows' } }) : json([]);
+          Object.assign(r, body, { updated_at: new Date().toISOString() }); fake.upserts.push(structuredClone(r));
+          return json(single ? r : [r]);
+        }
         if (!r || r.deleted_at !== null) return json([]);
-        Object.assign(r, req.postDataJSON()); fake.patches.push(id);
+        Object.assign(r, body); fake.patches.push(id);
         return json([{ id }]);
       }
     }

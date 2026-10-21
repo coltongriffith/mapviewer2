@@ -64,7 +64,7 @@ export const fade = (h) => (!!T().fadePrevious && statusOf(h) === 'previous') ||
 export const weight = (h) => (emph() !== 'key' ? 1 : keyHole(h) ? 1.25 : 0.55);
 export function highlightOf(h) {
   const v = T().highlight?.[h.id]; if (v) return v === 'brand' ? H.brandTone('highlight') : v;
-  return emph() === 'key' && statusOf(h) === 'new' ? H.brandTone('highlight') : null; // new holes in the brand accent
+  return T().highlightNew !== false && emph() === 'key' && statusOf(h) === 'new' ? H.brandTone('highlight') : null; // new holes in the brand accent
 }
 // Highlighted traces as thin tubes along the whole hole, rebuilt when the holes or colours change.
 // Thin cylinders every 8 m (one instanced mesh, like the assay tubes), so no extra three.js code ships.
@@ -403,6 +403,7 @@ export function set(o = {}) {
   }
   if (o.highlightNew !== undefined) { // every hole of status "new", at once
     const v = hex(o.highlightNew === true ? 'brand' : o.highlightNew || null, 'highlightNew'); t.highlight = { ...(t.highlight || {}) };
+    t.highlightNew = !!v; // false also turns off the automatic highlight of key-hole mode
     (H.project?.holes || []).filter((h) => statusOf(h) === 'new').forEach((h) => { if (v) t.highlight[h.id] = v; else delete t.highlight[h.id]; });
   }
   if (o.autoGroup !== undefined) t.autoGroup = !!o.autoGroup;
@@ -432,7 +433,7 @@ export function renderUI(el) {
       <label class="field"><span>Hole display</span><select data-t="emphasis"><option value="auto" ${(t.emphasis || 'auto') === 'auto' ? 'selected' : ''}>Automatic (key holes bold past 12 holes)</option><option value="key" ${t.emphasis === 'key' ? 'selected' : ''}>Key holes bold, others thin and grey</option><option value="none" ${t.emphasis === 'none' ? 'selected' : ''}>All the same</option></select></label>
       <label class="field"><span>Group pending holes and callouts within (m)</span><input type="number" min="5" step="10" data-t="groupRadius" value="${t.groupRadius}"></label>
     </div>
-    <label class="check" style="margin-top:6px"><input type="checkbox" data-t="highlightNew" ${hs.some((h) => statusOf(h) === 'new') && hs.filter((h) => statusOf(h) === 'new').every((h) => t.highlight?.[h.id]) ? 'checked' : ''}>New holes in the brand colour</label>
+    <label class="check" style="margin-top:6px"><input type="checkbox" data-t="highlightNew" ${hs.some((h) => statusOf(h) === 'new') && hs.filter((h) => statusOf(h) === 'new').every((h) => highlightOf(h)) ? 'checked' : ''}>New holes in the brand colour</label>
     ${hs.length ? `<details style="margin-top:6px"><summary>Holes: ID, tag and status</summary><p class="muted">ID: the hole ID at the end of the hole. Tag: a pill at the collar. Status from the collar status, year or campaign columns; "none" means no status pill.</p>
       <div class="files">${hs.map((h) => `<div style="grid-template-columns:auto auto 1fr auto auto;display:grid;align-items:center;gap:6px"><input type="checkbox" data-tid="${esc(h.id)}" ${idShown(h) ? 'checked' : ''} aria-label="Show the ID of ${esc(h.id)}" title="ID"><input type="checkbox" data-tg="${esc(h.id)}" ${tagShown(h) ? 'checked' : ''} aria-label="Tag ${esc(h.id)} at the collar" title="Tag"><span class="mono">${esc(h.id)}</span><select data-ts="${esc(h.id)}" aria-label="Status of ${esc(h.id)}">${['auto', 'new', 'previous', 'planned', 'none'].map((v) => `<option value="${v}" ${(t.status[h.id] || 'auto') === v ? 'selected' : ''}>${v === 'auto' ? `Auto (${st.status.get(h.id) || 'none'})` : v}</option>`).join('')}</select><input type="checkbox" data-th="${esc(h.id)}" ${t.highlight?.[h.id] ? 'checked' : ''} aria-label="Highlight ${esc(h.id)} in the brand colour" title="Highlight"></div>`).join('')}</div></details>` : ''}`;
   const apply = (o) => H.api.setTags(o).catch((e) => H.status(e.message));

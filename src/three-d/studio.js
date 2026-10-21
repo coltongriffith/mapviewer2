@@ -2383,7 +2383,7 @@ function stopOrbit() { const p = camera.position.clone(), t = controls.target.cl
 Object.assign(S, {
   geology: { enabled: false, title: 'Lithology', faces: 'far', opacity: 0.85, strength: 1.3, hidden: 'nearest', anisotropy: 4, search: null, smooth: 2, texture: true, section: false, legend: [], images: {}, note: 'Geology on block faces interpolated from drill logs; schematic.' },
   geophys: { mode: 'off', lines: 'auto', ramp: 'geophys', log: null, min: null, max: null, opacity: 0.85, faces: 'far', search: null, width: null, property: null, label: null, unit: null, note: 'Geophysics: illustrative inversion model' },
-  tags: { at: 'toe', style: 'dark', status: {}, fadePrevious: false, newLabel: '', prevLabel: 'Previously released', plannedLabel: 'Planned', groups: [], autoGroup: false, groupRadius: 140, emphasis: 'auto', highlight: {}, idMode: 'auto', showId: {}, showTag: {}, hideRows: [], pending: 'collar' },
+  tags: { at: 'toe', style: 'dark', status: {}, fadePrevious: false, newLabel: '', prevLabel: 'Previously released', plannedLabel: 'Planned', groups: [], autoGroup: false, groupRadius: 140, emphasis: 'auto', highlight: {}, highlightNew: true, idMode: 'auto', showId: {}, showTag: {}, hideRows: [], pending: 'collar' },
   histograms: false, insetStyle: 'plan',
 });
 const EXT = {}, extLoading = {}, EXT_IMPORT = { geology: () => import('./geology.js'), geophys: () => import('./geophys.js'), tags: () => import('./tags.js') };
@@ -2402,8 +2402,10 @@ const host = () => (extHost ||= {
 });
 const extLoad = (k) => (extLoading[k] ||= EXT_IMPORT[k]().then((m) => { m.init(host()); EXT[k] = m; return m; }));
 async function extReady() {
-  const want = extWanted();
+  const want = extWanted(), hadTags = !!EXT.tags;
   await Promise.all(Object.keys(EXT_IMPORT).filter((k) => want[k]).map(extLoad));
+  // Hole fade and weights are read while the scene is built: rebuild once tags.js arrives.
+  if (!hadTags && EXT.tags && G) rebuildScene(true);
   extScene();
   await Promise.all([EXT.geology?.imagesReady(), EXT.tags?.syncInset()]);
   extScene(); renderExtUI(); schedulePublish();
@@ -2618,9 +2620,15 @@ async function settle(cam) {
 // taken 0.5 s after changes settle. Undo, redo and restore put a snapshot back and keep the camera.
 let HIST = null, histP = null, histBase = null, histT = 0;
 const snapS = () => toPlain({ ...S, logo: null });
-function histTick() { clearTimeout(histT); histT = setTimeout(() => { const s = snapS(); if (HIST) HIST.note(s); else if (!histBase) histBase = s; else histLoad().then((h) => h.note(s)); }, 500); }
+function histTick() { clearTimeout(histT); histT = setTimeout(() => { histT = 0; const s = snapS(); if (HIST) HIST.note(s); else if (!histBase) histBase = s; else histLoad().then((h) => h.note(s)); }, 500); }
 const histLoad = () => (histP ||= import('./history.js').then((m) => (HIST = m.init({ base: histBase || snapS(), apply: applySnap, el: $('hist') }))));
-function histReset() { HIST = null; histP = null; histBase = null; clearTimeout(histT); }
+function histReset() { HIST = null; histP = null; histBase = null; clearTimeout(histT); histT = 0; }
+// Undo/redo first record a change still inside the 500 ms debounce, so the latest edit is the one undone.
+async function histFlush() {
+  if (!histT) return histLoad();
+  clearTimeout(histT); histT = 0;
+  const s = snapS(), h = await histLoad(); h.note(s); return h;
+}
 function applySnap(snap) {
   const cam = G ? getCam() : null, sec = refresh.secSet;
   Object.entries(snap).forEach(([k, v]) => { if (k !== 'logo') S[k] = v && typeof v === 'object' ? structuredClone(v) : v; });
@@ -2629,7 +2637,7 @@ function applySnap(snap) {
 const TEXT_ENTRY = 'textarea, [contenteditable], input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]):not([type=button]):not([type=file])';
 document.addEventListener('keydown', (e) => {
   const k = e.key.toLowerCase(); if (!(e.ctrlKey || e.metaKey) || e.altKey || (k !== 'z' && k !== 'y') || e.target.matches?.(TEXT_ENTRY)) return; // text fields keep their own undo
-  e.preventDefault(); histLoad().then((h) => (k === 'y' || e.shiftKey ? h.redo() : h.undo()));
+  e.preventDefault(); histFlush().then((h) => (k === 'y' || e.shiftKey ? h.redo() : h.undo()));
 });
 $('hist-btn').addEventListener('click', (e) => { e.stopPropagation(); const el = $('hist'), open = el.hidden; el.hidden = !open; $('hist-btn').setAttribute('aria-expanded', String(open)); if (open) histLoad().then((h) => h.render()); });
 document.addEventListener('click', (e) => { if (!$('hist').hidden && !e.target.closest('#hist')) { $('hist').hidden = true; $('hist-btn').setAttribute('aria-expanded', 'false'); } });
@@ -2653,7 +2661,7 @@ window.EM3D = Object.freeze({ ...window.EM3D, help: () => PROJECT_HELP, getProje
 // EXT hook: the geology, geophysics and hole-tag methods, in one block (section 10b).
 const FULL_HELP = `${PROJECT_HELP}\n${EXT_HELP}`; $('ai-help').textContent = FULL_HELP;
 window.EM3D = Object.freeze({ ...window.EM3D, help: () => FULL_HELP, ...EXT_API,
-  undo: async () => { (await histLoad()).undo(); return getState(); }, redo: async () => { (await histLoad()).redo(); return getState(); }, history: async () => (await histLoad()).state() });
+  undo: async () => { (await histFlush()).undo(); return getState(); }, redo: async () => { (await histFlush()).redo(); return getState(); }, history: async () => (await histLoad()).state() });
 
 // ============================================================
 // 12. Start

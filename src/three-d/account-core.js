@@ -199,12 +199,13 @@ export async function saveProject(name, existingId, dest = null, { force = false
   if (home && !canEdit(home.role)) {
     throw Object.assign(plain(`You have view-only access to ${home.propertyName || home.orgName}, so this figure cannot be saved there. Use Save as new to keep a personal copy.`), { plain: true, code: 'READ_ONLY' });
   }
-  if (existingId && !force && current?.id === existingId) {
+  const guarded = !!(existingId && !force && current?.id === existingId && current.savedAt);
+  const conflict = (savedAt) => Object.assign(plain(`“${current.name}” was saved somewhere else${savedAt ? ` at ${when(savedAt)}` : ''}, after this copy was opened. Overwrite it, save this as a new 3D map, or reload the saved version.`), { plain: true, code: 'CONFLICT', savedAt });
+  if (guarded) {
+    // Early check before uploading; the write below is conditional as well.
     const { data, error } = await sb.from(TABLE).select('updated_at').eq('id', existingId).is('deleted_at', null).maybeSingle();
     if (error) throw explain(error, 'save this 3D map');
-    if (isConflict(current.savedAt, data?.updated_at)) {
-      throw Object.assign(plain(`“${current.name}” was saved somewhere else at ${when(data.updated_at)}, after this copy was opened. Overwrite it, save this as a new 3D map, or reload the saved version.`), { plain: true, code: 'CONFLICT', savedAt: data.updated_at });
-    }
+    if (isConflict(current.savedAt, data?.updated_at)) throw conflict(data.updated_at);
   }
   const em = studio();
   const { files, ...settings } = em.getProject();
@@ -230,11 +231,13 @@ export async function saveProject(name, existingId, dest = null, { force = false
     }));
     const row = { id, name: title, settings, file_paths: filePaths, thumbnail, updated_at: new Date().toISOString(), deleted_at: null };
     if (home) Object.assign(row, { org_id: home.orgId, property_id: home.propertyId });
-    const { data, error } = await sb.from(TABLE)
-      .upsert(row, { onConflict: 'id' })
-      .select('id, name, updated_at')
-      .single();
+    // Overwriting the version this tab opened: only if it is still that version, so two
+    // tabs saving at once cannot silently overwrite each other.
+    const { data, error } = guarded
+      ? await sb.from(TABLE).update(row).eq('id', id).eq('updated_at', current.savedAt).select('id, name, updated_at').maybeSingle()
+      : await sb.from(TABLE).upsert(row, { onConflict: 'id' }).select('id, name, updated_at').single();
     if (error) throw error;
+    if (!data) throw conflict(null);
     current = { id: data.id, name: data.name, savedAt: data.updated_at, home };
   } catch (err) {
     // Best effort: this save's files are not referenced by any row.
