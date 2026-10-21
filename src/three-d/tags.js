@@ -367,10 +367,10 @@ export function syncInset() {
       const half = Math.max(2000, 3.5 * Math.max(G.bw, G.bh)), cx = (G.B.x0 + G.B.x1) / 2, cy = (G.B.y0 + G.B.y1) / 2;
       const corners = [[cx - half, cy - half], [cx + half, cy - half], [cx + half, cy + half], [cx - half, cy + half]].map(([x, y]) => geo.fwd(x, y));
       const bb = { w: Math.min(...corners.map((c) => c[0])), e: Math.max(...corners.map((c) => c[0])), s: Math.min(...corners.map((c) => c[1])), n: Math.max(...corners.map((c) => c[1])) };
-      const M = await H.mosaic(S.insetStyle === 'topo' ? TOPO_URL : H.IMG_URL, bb, H.zoomFor(bb, 640, 16));
+      const T = await H.terrain(), M = await T.mosaic(S.insetStyle === 'topo' ? TOPO_URL : T.IMG_URL, bb, T.zoomFor(bb, 640, 16));
       if (inset.key !== key) return;
       const src = document.createElement('canvas'); src.width = M.w; src.height = M.h; src.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(M.data), M.w, M.h), 0, 0);
-      const px = (lon, lat) => [(H.lon2t(lon, M.z) - M.x0) * 256, (H.lat2t(lat, M.z) - M.y0) * 256];
+      const px = (lon, lat) => [(T.lon2t(lon, M.z) - M.x0) * 256, (T.lat2t(lat, M.z) - M.y0) * 256];
       // A square, north-up crop centred on the block.
       const [mx, my] = px(...geo.fwd(cx, cy)), e1 = px(...geo.fwd(cx + half, cy)), r = Math.hypot(e1[0] - mx, e1[1] - my), out = document.createElement('canvas'); out.width = out.height = 512;
       out.getContext('2d').drawImage(src, mx - r, my - r, 2 * r, 2 * r, 0, 0, 512, 512);

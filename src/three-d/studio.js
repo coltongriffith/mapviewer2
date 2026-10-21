@@ -660,67 +660,32 @@ function faceWalls() {
 // ============================================================
 // 4b. Real terrain: coordinate system, DEM and satellite tiles
 // ============================================================
-// Tiles load as <img crossOrigin="anonymous">, not fetch(): the page's CSP allows https images but not
-// these hosts in connect-src. A tile refused by CORS never loads at all, so the mosaic canvas is never
-// tainted and exports keep working; missing tiles just leave gaps that fall back to the fitted surface.
-const DEM_URL = (z, x, y) => `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${z}/${x}/${y}.png`;
-const IMG_URL = (z, x, y) => `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`;
+// The coordinate systems, the projection (proj4) and the DEM and satellite tile mosaics are in terrain.js,
+// loaded when a coordinate system is set or real terrain is wanted. The page keeps the state, collars in
+// latitude/longitude (no proj4 needed) and the credits drawn on every export.
 const IMAGERY_CREDIT = 'Imagery: Esri, Maxar, Earthstar Geographics', DEM_CREDIT = 'Elevation: AWS Terrain Tiles';
 let geo = null;          // { code, label, guessed, fwd(x, y) -> [lon, lat] } once a coordinate system is set
 const realT = { dem: null, img: null, job: 0, promise: null, status: 'off', message: '' };
-let P4 = null;           // proj4, loaded on first use
-const UTM_FAMILIES = [   // [first EPSG code, last, first zone, south, datum, label]
-  [32601, 32660, 1, false, '+datum=WGS84', 'WGS 84'], [32701, 32760, 1, true, '+datum=WGS84', 'WGS 84'],
-  [26901, 26923, 1, false, '+ellps=GRS80 +towgs84=0,0,0,0,0,0,0', 'NAD83'], [26703, 26722, 3, false, '+ellps=clrk66 +towgs84=-8,160,176,0,0,0,0', 'NAD27'],
-  [25828, 25838, 28, false, '+ellps=GRS80 +towgs84=0,0,0,0,0,0,0', 'ETRS89'], [28349, 28356, 49, true, '+ellps=GRS80 +towgs84=0,0,0,0,0,0,0', 'GDA94 MGA'],
-  [7846, 7859, 46, true, '+ellps=GRS80 +towgs84=0,0,0,0,0,0,0', 'GDA2020 MGA'], [31965, 31976, 11, false, '+ellps=GRS80 +towgs84=0,0,0,0,0,0,0', 'SIRGAS 2000'],
-  [31977, 31985, 17, true, '+ellps=GRS80 +towgs84=0,0,0,0,0,0,0', 'SIRGAS 2000'], [24817, 24821, 17, false, '+ellps=intl +towgs84=-288,175,-376,0,0,0,0', 'PSAD56'],
-  [24877, 24881, 17, true, '+ellps=intl +towgs84=-288,175,-376,0,0,0,0', 'PSAD56'],
-];
-const DATUM_WORDS = [[/nad\s*83/i, 26901], [/nad\s*27/i, 26703], [/etrs/i, 25828], [/gda\s*2020/i, 7846], [/gda|mga/i, 28349], [/sirgas/i, 31965], [/psad/i, 24817]];
-// "EPSG:26909", 26909, "UTM 9N", "NAD83 / UTM zone 9N", "WGS84 UTM 19S", "EPSG:4326" or a proj4 string.
-function parseCRS(input) {
-  const t = String(input).trim(), utm = (zone, south, fam) => ({ def: `+proj=utm +zone=${zone}${south ? ' +south' : ''} ${fam[4]} +units=m +no_defs`, label: `${fam[5]} / UTM ${zone}${south ? 'S' : 'N'}`, utm: true });
-  if (/^\+proj=/.test(t)) return { code: t, label: 'Custom (proj4)', def: t, utm: /utm/.test(t) };
-  const m = t.match(/^(?:epsg:\s*)?(\d{4,5})$/i);
-  if (m) {
-    const n = +m[1]; if (n === 4326) return { code: 'EPSG:4326', label: 'WGS 84 latitude/longitude', latlon: true };
-    const fam = UTM_FAMILIES.find((f) => n >= f[0] && n <= f[1]);
-    if (!fam) throw new Error(`EPSG:${n} is not supported here. Use a UTM code (e.g. EPSG:326xx, 327xx, 269xx, 258xx, 283xx), "UTM 9N", EPSG:4326 or a proj4 string.`);
-    return { code: `EPSG:${n}`, ...utm(fam[2] + n - fam[0], fam[3], fam) };
-  }
-  const u = t.match(/utm\s*(?:zone\s*)?(\d{1,2})\s*([ns])?\b/i);
-  if (u) {
-    const zone = +u[1], south = /s/i.test(u[2] || '') || /south/i.test(t); if (zone < 1 || zone > 60) throw new Error('UTM zones run from 1 to 60.');
-    const hit = DATUM_WORDS.find(([re]) => re.test(t)), name = hit ? UTM_FAMILIES.find((f) => f[0] === hit[1])[5] : 'WGS 84';
-    const fam = UTM_FAMILIES.find((f) => f[5] === name && f[3] === south && zone >= f[2] && zone <= f[2] + f[1] - f[0]);
-    return fam ? { code: `EPSG:${fam[0] + zone - fam[2]}`, ...utm(zone, south, fam) } : { code: `UTM ${zone}${south ? 'S' : 'N'} ${name}`, ...utm(zone, south, UTM_FAMILIES.find((f) => f[5] === name)) };
-  }
-  if (/^(wgs\s*84|lat.?lon|latitude|geographic)/i.test(t)) return { code: 'EPSG:4326', label: 'WGS 84 latitude/longitude', latlon: true };
-  throw new Error(`"${t}" is not a coordinate system this page knows. Try "EPSG:26909", "UTM 9N NAD83" or "EPSG:4326".`);
-}
-// The forward transform from project metres to [lon, lat]; checked against the collars.
+const LATLON = { code: 'EPSG:4326', label: 'WGS 84 latitude/longitude', latlon: true };
+let RT = null, rtP = null; // terrain.js
+const rtLoad = () => (rtP ||= import('./terrain.js').then((m) => (RT = m), (e) => { rtP = null; throw e; }));
+// The forward transform from project metres to [lon, lat]; checked against the collars. A projected
+// system is only ever set through setCRS, which has loaded terrain.js and proj4 first.
 function geoFor(c, P) {
   if (c.latlon) {
     const ll = P?.latlon; if (!ll) throw new Error('These collars are in metres, not latitude/longitude. Give the UTM zone or EPSG code of the files.');
     return (x, y) => [ll.lon0 + x / (Math.cos(ll.lat0 * Math.PI / 180) * 111320), ll.lat0 + y / 110540];
   }
   if (P?.latlon) throw new Error('These collars are in latitude/longitude; the coordinate system is set to EPSG:4326 automatically.');
-  const f = P4(c.def, 'WGS84'), fwd = (x, y) => f.forward([x, y]);
-  const h = P?.holes?.[0];
-  if (h) {
-    if (c.utm && (h.c.x < 100000 || h.c.x > 900000 || h.c.y < 0 || h.c.y > 10000000)) throw new Error(`Collar ${h.id} at ${Math.round(h.c.x)} E, ${Math.round(h.c.y)} N is not a UTM coordinate. Check the easting and northing columns.`);
-    const [lon, lat] = fwd(h.c.x, h.c.y); if (!Number.isFinite(lon) || !Number.isFinite(lat) || Math.abs(lat) > 84) throw new Error(`${c.label} puts collar ${h.id} off the map. Check the zone and hemisphere.`);
-  }
-  return fwd;
+  return RT.projFwd(c, P);
 }
 async function setCRS(input, opts = {}) {
   if (input === null || input === undefined || input === '') {
     S.crs = null; geo = null; realT.dem = realT.img = null; realT.job++; realT.status = 'off';
     renderCRS(); if (project && !project.empty) rebuildScene(true); schedulePublish(); status('Coordinate system cleared. The surface is fitted to your files.'); return getState();
   }
-  const c = parseCRS(input);
-  if (!c.latlon && !P4) P4 = (await import('proj4')).default;
+  const T = await rtLoad(), c = T.parseCRS(input, LATLON);
+  await T.ready(c);
   const fwd = geoFor(c, project && !project.empty ? project : null);
   S.crs = c.code; geo = { ...c, guessed: !!opts.guessed, fwd }; realT.dem = realT.img = null;
   renderCRS(); schedulePublish();
@@ -734,73 +699,11 @@ async function setCRS(input, opts = {}) {
 // Re-check a set coordinate system against new collars; drop it with a message if it no longer fits.
 function recheckCRS() {
   // Latitude/longitude collars locate themselves; the scene is built right after this.
-  if (!S.crs) { if (project?.latlon) { const c = parseCRS('EPSG:4326'); geo = { ...c, guessed: true, fwd: geoFor(c, project) }; S.crs = c.code; realT.dem = realT.img = null; renderCRS(); } return; }
+  if (!S.crs) { if (project?.latlon) { geo = { ...LATLON, guessed: true, fwd: geoFor(LATLON, project) }; S.crs = LATLON.code; realT.dem = realT.img = null; renderCRS(); } return; }
   // A coordinate system restored with a saved project (S.crs) is re-established here.
   // A different saved project's code (geo still describes the last one) is re-parsed too.
   if (!geo || geo.code !== S.crs) { geo = null; realT.dem = realT.img = null; setCRS(S.crs).catch((e) => { S.crs = null; renderCRS(); status(`Coordinate system cleared: ${e.message}`); }); return; }
   try { geo.fwd = geoFor(geo, project && !project.empty ? project : null); } catch (e) { S.crs = null; geo = null; renderCRS(); status(`Coordinate system cleared: ${e.message}`); }
-}
-const lon2t = (lon, z) => (lon + 180) / 360 * 2 ** z;
-const lat2t = (lat, z) => { const r = lat * Math.PI / 180; return (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * 2 ** z; };
-// (x, y) -> [a, b] for a smooth transform, interpolated from a (n+1)² lattice over the box:
-// exact to well under a pixel over a few kilometres, and thousands of times cheaper than proj4 per texel.
-function lattice(B, fn, n = 16) {
-  const A = new Float64Array((n + 1) * (n + 1) * 2), w = B.x1 - B.x0, h = B.y1 - B.y0;
-  for (let j = 0; j <= n; j++) for (let i = 0; i <= n; i++) { const [a, b] = fn(B.x0 + w * i / n, B.y0 + h * j / n), k = (j * (n + 1) + i) * 2; A[k] = a; A[k + 1] = b; }
-  const at = (x, y) => {
-    const fi = Math.max(0, Math.min(n - 1e-9, (x - B.x0) / w * n)), fj = Math.max(0, Math.min(n - 1e-9, (y - B.y0) / h * n)), i = Math.floor(fi), j = Math.floor(fj), a = fi - i, b = fj - j, r = n + 1;
-    const k00 = (j * r + i) * 2, k10 = k00 + 2, k01 = k00 + r * 2, k11 = k01 + 2, w00 = (1 - a) * (1 - b), w10 = a * (1 - b), w01 = (1 - a) * b, w11 = a * b;
-    return [A[k00] * w00 + A[k10] * w10 + A[k01] * w01 + A[k11] * w11, A[k00 + 1] * w00 + A[k10 + 1] * w10 + A[k01 + 1] * w01 + A[k11 + 1] * w11];
-  };
-  let w0 = Infinity, e0 = -Infinity, s0 = Infinity, n0 = -Infinity; for (let k = 0; k < A.length; k += 2) { w0 = Math.min(w0, A[k]); e0 = Math.max(e0, A[k]); s0 = Math.min(s0, A[k + 1]); n0 = Math.max(n0, A[k + 1]); }
-  at.bbox = { w: w0, e: e0, s: s0, n: n0 }; return at;
-}
-function loadImage(url, ms = 20000) {
-  return new Promise((resolve) => {
-    const im = new Image(); im.crossOrigin = 'anonymous'; im.decoding = 'async';
-    const t = setTimeout(() => { im.onload = im.onerror = null; resolve(null); }, ms);
-    im.onload = () => { clearTimeout(t); resolve(im); }; im.onerror = () => { clearTimeout(t); resolve(null); }; im.src = url;
-  });
-}
-// Deepest zoom (<= maxZ) at which the box spans no more than px pixels.
-function zoomFor(bb, px, maxZ) { for (let z = maxZ; z > 1; z--) if (Math.max(lon2t(bb.e, z) - lon2t(bb.w, z), lat2t(bb.s, z) - lat2t(bb.n, z)) * 256 <= px) return z; return 2; }
-async function mosaic(urlFn, bb, z) {
-  const x0 = Math.floor(lon2t(bb.w, z)), x1 = Math.floor(lon2t(bb.e, z)), y0 = Math.floor(lat2t(bb.n, z)), y1 = Math.floor(lat2t(bb.s, z)), jobs = [];
-  for (let ty = y0; ty <= y1; ty++) for (let tx = x0; tx <= x1; tx++) jobs.push([tx, ty]);
-  const c = document.createElement('canvas'); c.width = (x1 - x0 + 1) * 256; c.height = (y1 - y0 + 1) * 256; const g = c.getContext('2d', { willReadFrequently: true });
-  let next = 0, ok = 0;
-  await Promise.all(Array.from({ length: 6 }, async () => { while (next < jobs.length) { const [tx, ty] = jobs[next++], im = await loadImage(urlFn(z, tx, ty)); if (im) { g.drawImage(im, (tx - x0) * 256, (ty - y0) * 256); ok++; } } }));
-  if (!ok) throw new Error('no tiles loaded: offline, or the tile server is blocked');
-  let data; try { data = g.getImageData(0, 0, c.width, c.height).data; } catch { throw new Error('the tiles were blocked by the browser'); }
-  return { data, w: c.width, h: c.height, z, x0, y0, ok, total: jobs.length };
-}
-const pxOf = (M) => (x, y) => { const [lon, lat] = geo.fwd(x, y); return [(lon2t(lon, M.z) - M.x0) * 256 - 0.5, (lat2t(lat, M.z) - M.y0) * 256 - 0.5]; };
-async function loadDem(key, B) {
-  const bb = lattice(B, geo.fwd, 4).bbox, M = await mosaic(DEM_URL, bb, zoomFor(bb, 512, 15)), E = new Float32Array(M.w * M.h);
-  for (let i = 0; i < E.length; i++) E[i] = M.data[i * 4 + 3] < 255 ? NaN : M.data[i * 4] * 256 + M.data[i * 4 + 1] + M.data[i * 4 + 2] / 256 - 32768;
-  const toPx = lattice(B, pxOf(M));
-  const at = (x, y) => {
-    const [px, py] = toPx(x, y), i = Math.floor(px), j = Math.floor(py), a = px - i, b = py - j;
-    if (i < 0 || j < 0 || i + 1 >= M.w || j + 1 >= M.h) return NaN;
-    const k = j * M.w + i; return E[k] * (1 - a) * (1 - b) + E[k + 1] * a * (1 - b) + E[k + M.w] * (1 - a) * b + E[k + M.w + 1] * a * b;
-  };
-  return { key, ok: true, at, z: M.z, tiles: `${M.ok}/${M.total}` };
-}
-async function loadImagery(key, B) {
-  const bb = lattice(B, geo.fwd, 4).bbox, M = await mosaic(IMG_URL, bb, zoomFor(bb, 2048, 17)), toPx = lattice(B, pxOf(M));
-  const bw = B.x1 - B.x0, bh = B.y1 - B.y0, across = (lon2t(bb.e, M.z) - lon2t(bb.w, M.z)) * 256;
-  let w = Math.max(768, Math.min(2048, Math.round(across * 1.25))), h = Math.round(w * bh / bw); if (h > 2048) { w = Math.round(w * 2048 / h); h = 2048; }
-  const out = new Uint8ClampedArray(w * h * 4), src = M.data;
-  for (let py = 0; py < h; py++) for (let px = 0; px < w; px++) {
-    const [sx, sy] = toPx(B.x0 + (px + 0.5) / w * bw, B.y1 - (py + 0.5) / h * bh), i = Math.max(0, Math.min(M.w - 2, Math.floor(sx))), j = Math.max(0, Math.min(M.h - 2, Math.floor(sy)));
-    const a = Math.max(0, Math.min(1, sx - i)), b = Math.max(0, Math.min(1, sy - j)), k = (j * M.w + i) * 4, o = (py * w + px) * 4, r = M.w * 4;
-    // Weighted by each sample's alpha: a tile that failed to load is transparent,
-    // and stays a gap (alpha 0) for paintTerrain to fill, not a black patch.
-    const wt = [(1 - a) * (1 - b) * src[k + 3], a * (1 - b) * src[k + 7], (1 - a) * b * src[k + r + 3], a * b * src[k + r + 7]], ws = wt[0] + wt[1] + wt[2] + wt[3];
-    for (let c = 0; c < 3; c++) out[o + c] = ws ? (src[k + c] * wt[0] + src[k + 4 + c] * wt[1] + src[k + r + c] * wt[2] + src[k + r + 4 + c] * wt[3]) / ws : 0;
-    out[o + 3] = ws / 255;
-  }
-  return { key, ok: true, w, h, data: out, z: M.z, tiles: `${M.ok}/${M.total}` };
 }
 const terrainKeyOf = (B) => (geo ? `${S.crs}|${[B.x0, B.x1, B.y0, B.y1].map(Math.round).join(',')}` : '');
 // Load what the current style and source need for this block; rebuild or repaint when it lands.
@@ -816,9 +719,9 @@ function syncRealTerrain() {
   }
   const job = ++realT.job; realT.status = 'loading'; realT.message = `Loading ${[getDem && 'real terrain', getImg && 'satellite imagery'].filter(Boolean).join(' and ')}…`; status(realT.message); schedulePublish();
   realT.promise = (async () => {
-    const msgs = [], B = { ...G.B };
-    if (getDem) { try { realT.dem = await loadDem(key, B); msgs.push(`real terrain (z${realT.dem.z}, ${realT.dem.tiles} tiles)`); } catch (e) { realT.dem = { key, ok: false, error: e.message }; } }
-    if (getImg) { try { realT.img = await loadImagery(key, B); msgs.push(`satellite imagery (z${realT.img.z}, ${realT.img.tiles} tiles)`); } catch (e) { realT.img = { key, ok: false, error: e.message }; } }
+    const msgs = [], B = { ...G.B }, fwd = (x, y) => geo.fwd(x, y);
+    if (getDem) { try { realT.dem = await (await rtLoad()).loadDem(key, B, fwd); msgs.push(`real terrain (z${realT.dem.z}, ${realT.dem.tiles} tiles)`); } catch (e) { realT.dem = { key, ok: false, error: e.message }; } }
+    if (getImg) { try { realT.img = await (await rtLoad()).loadImagery(key, B, fwd); msgs.push(`satellite imagery (z${realT.img.z}, ${realT.img.tiles} tiles)`); } catch (e) { realT.img = { key, ok: false, error: e.message }; } }
     if (job !== realT.job || !G) return;
     const fails = [realT.dem && !realT.dem.ok && getDem && `real terrain (${realT.dem.error})`, realT.img && !realT.img.ok && getImg && `satellite imagery (${realT.img.error})`].filter(Boolean);
     realT.status = fails.length ? (msgs.length ? 'partial' : 'failed') : 'ready';
@@ -1859,27 +1762,9 @@ function exportPNG(opts = {}) {
   status(`Exported ${view === 'section' ? 'section A–A′' : 'the 3D figure'} at ${f.w} × ${f.h} px.`);
   return url;
 }
-const canvasBlob = (c) => new Promise((resolve, reject) => c.toBlob((b) => (b ? resolve(b) : reject(new Error('The PNG could not be encoded.'))), 'image/png'));
-const blobDataURL = (b) => new Promise((resolve, reject) => { const r = new FileReader(); r.onload = () => resolve(r.result); r.onerror = () => reject(r.error); r.readAsDataURL(b); });
-// Designer handoff: the figure, its 3D render and annotations as separate transparent layers, the section,
-// and the settings, in one ZIP at the chosen size. PNGs are stored, not deflated: they are compressed already.
-const LAYER_FILES = { figure: 'figure.png', scene: 'scene.png', annotations: 'annotations.png', section: 'section.png', settings: 'figure-settings.json' };
-async function exportLayers(opts = {}) {
-  if (!G) throw new Error('Nothing to export yet: add a collar file and an assay file.');
-  const { zipSync } = await import('fflate'), f = FORMATS[S.format];
-  status(`Preparing layers at ${f.w} × ${f.h} px…`);
-  const bytes = async (c) => new Uint8Array(await (await canvasBlob(c)).arrayBuffer());
-  const png = { figure: await bytes(figureCanvas('3d')), scene: await bytes(figureCanvas('3d', 'scene')), annotations: await bytes(figureCanvas('3d', 'annotations')), section: await bytes(figureCanvas('section')) };
-  const settings = { ...getState(), layers: { ...LAYER_FILES, note: 'scene.png and annotations.png are transparent and stack (scene below) to make figure.png.' }, exportedAt: new Date().toISOString() };
-  const zip = zipSync({
-    ...Object.fromEntries(Object.entries(png).map(([k, v]) => [LAYER_FILES[k], [v, { level: 0 }]])),
-    [LAYER_FILES.settings]: new TextEncoder().encode(JSON.stringify(settings, null, 2)),
-  });
-  const blob = new Blob([zip], { type: 'application/zip' });
-  if (opts.download) { const url = URL.createObjectURL(blob); downloadURL(url, `${fileSlug()}-layers-${S.format}.zip`); setTimeout(() => URL.revokeObjectURL(url), 30000); }
-  status(`Layers ready: ${Object.keys(LAYER_FILES).length} files, ${(blob.size / 1048576).toFixed(1)} MB.`);
-  return opts.as === 'blob' ? blob : blobDataURL(blob);
-}
+// Designer handoff: the figure, its 3D render and annotations as separate transparent layers, the section
+// and the settings in one ZIP (desk.js, loaded on first use, like the design desk that sends it).
+const exportLayers = (o) => desk().then((m) => m.exportLayers(o));
 $('export-layers').addEventListener('click', () => exportLayers({ download: true, as: 'blob' }).catch((e) => status(e.message)));
 
 // ============================================================
@@ -1951,40 +1836,12 @@ function status(msg) { const el = $('status'); el.textContent = msg; el.style.op
 $('status').style.transition = 'opacity 0.4s';
 
 function esc(t) { return String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
-function renderFiles() {
-  const list = $('file-list');
-  if (!files.length) { list.innerHTML = '<p class="muted">No files yet.</p>'; return; }
-  list.innerHTML = '';
-  files.forEach((f, fi) => {
-    const div = document.createElement('div'); div.className = 'file';
-    const roles = ['collar', 'survey', 'assay', 'topo', 'mesh', 'litho', 'lithlegend', 'geophys', 'published', 'unknown']; // EXT hook: litho, lithlegend, geophys, published
-    let html = `<div class="file-head"><span class="name" title="${esc(f.name)}">${esc(f.name)}</span>
-      <select data-role="${fi}" aria-label="File type for ${esc(f.name)}">${roles.map((r) => `<option value="${r}" ${r === f.role ? 'selected' : ''}>${ROLE_LABEL[r]}</option>`).join('')}</select></div>`;
-    if (f.role === 'mesh') html += `<span class="muted">${f.mesh.v.length.toLocaleString()} vertices · ${(f.mesh.f.length / 3).toLocaleString()} triangles</span>`;
-    else {
-      html += `<span class="muted">${f.rows.length.toLocaleString()} rows</span>`;
-      const fields = ROLE_FIELDS[f.role] || [];
-      if (fields.length) {
-        html += '<div class="maps">' + fields.map((k) => `<label for="m-${fi}-${k}">${FIELD_LABEL[k]}</label><select id="m-${fi}-${k}" data-map="${fi}" data-key="${k}"><option value="">—</option>${f.header.map((h, i) => `<option value="${i}" ${f.cols[k] === i ? 'selected' : ''}>${esc(h)}</option>`).join('')}</select>`).join('') + '</div>';
-        const req = { collar: ['hole', 'east', 'north'], survey: ['hole', 'depth'], assay: ['hole', 'from', 'to'], topo: ['east', 'north', 'elev'], litho: ['hole', 'from', 'to', 'code'], lithlegend: ['code', 'desc'], geophys: ['east', 'north', 'elev', 'value'], published: ['resultId', 'hole', 'from', 'to'] }[f.role] || [];
-        const miss = req.filter((k) => f.cols[k] === undefined);
-        if (miss.length) html += `<span class="bad">Pick a column for ${miss.map((k) => FIELD_LABEL[k]).join(', ')}.</span>`;
-        if (f.role === 'published' && PR && !miss.length) html += PR.fileNote(f, esc);
-        if (f.role === 'assay') html += f.grades.length ? `<span class="muted">Grade columns: ${f.grades.map((g) => esc(g.name)).join(', ')}</span>` : '<span class="bad">No numeric grade columns found.</span>';
-      } else if (f.role === 'unknown') html += `<span class="warn">${f.hint ? 'Published results? Choose that type to use them.' : 'Choose what this file holds.'}</span>`;
-    }
-    div.innerHTML = html; list.appendChild(div);
-  });
-  list.querySelectorAll('[data-role]').forEach((s) => s.addEventListener('change', () => {
-    const f = files[+s.dataset.role]; f.role = s.value; if (f.role === 'assay') f.grades = gradeCols(f.header, f.cols, f.rows);
-    if (f.role === 'published') S.calloutMode = 'published'; // a release table, chosen by hand: the callouts come from it
-    refresh();
-  }));
-  list.querySelectorAll('[data-map]').forEach((s) => s.addEventListener('change', () => {
-    const f = files[+s.dataset.map]; if (s.value === '') delete f.cols[s.dataset.key]; else f.cols[s.dataset.key] = +s.value;
-    if (f.role === 'assay') f.grades = gradeCols(f.header, f.cols, f.rows); refresh();
-  }));
-}
+// The file list, the Layout step's controls, the figure sizes and the label lists are drawn by panels.js,
+// fetched with the first data (as the data checks are); the figure itself never waits for them. Once loaded
+// they redraw at once, as before.
+let PN = null;
+const panel = (k) => () => (PN ? PN[k](host()) : import('./panels.js').then((m) => { PN = m; m[k](host()); }));
+const renderFiles = panel('renderFiles'), renderStyle = panel('renderStyle'), renderSizes = panel('renderSizes'), renderLabelList = panel('renderLabelList'), renderWallLabelList = panel('renderWallLabelList');
 function renderSummary() {
   const sum = $('summary'), roles = new Set(files.map((f) => f.role));
   ['collar', 'assay', 'survey', 'topo', 'mesh', 'litho', 'geophys'].forEach((r) => $(`need-${r}`).classList.toggle('ok', roles.has(r)));
@@ -1993,46 +1850,11 @@ function renderSummary() {
   sum.innerHTML = [usingSample ? 'sample project' : null, `${project.holes.length} holes`, `${Math.round(mt).toLocaleString()} m drilled`, `${n.toLocaleString()} assay intervals`, project.posDown ? 'dips read as positive-down' : null].filter(Boolean).map((t) => `<span class="pill">${t}</span>`).join('')
     + project.warnings.concat(G?.terrainNote ? [G.terrainNote] : []).map((w) => `<p class="warn">${esc(w)}</p>`).join('');
 }
-function renderStyle() {
-  const sel = $('value-col'); sel.innerHTML = (project?.cols || []).map((c) => `<option ${c === S.valueCol ? 'selected' : ''}>${esc(c)}</option>`).join('') || '<option>—</option>';
-  $('value-label').value = S.valueLabel;
-  $('bins').innerHTML = S.bins.map((b, i) => `<label class="field"><i style="background:${BIN_COLORS[i + 1]}"></i><input type="number" step="any" data-bin="${i}" value="${esc(b)}" aria-label="Lower limit of colour ${i + 1}"></label>`).join('');
-  $('bins').querySelectorAll('[data-bin]').forEach((inp) => inp.addEventListener('change', () => { const b = S.bins.slice(); b[+inp.dataset.bin] = parseFloat(inp.value) || 0; setStyle({ bins: b }); }));
-  $('co-cut').value = S.coCut; $('co-incl').value = S.coIncl; $('co-count').value = S.coCount; $('co-min').value = S.coMin;
-  $('sec-az').value = S.secAz; $('sec-az-out').textContent = `${pad3(S.secAz)}°`; $('sec-w').value = S.secW;
-  $('opt-walls').checked = S.walls; $('opt-ids').checked = S.ids; $('opt-inset').checked = S.inset; $('opt-ribbons').checked = S.ribbons;
-  $('opt-pending').checked = S.pendingLabels; $('opt-pending-none').checked = S.pendingNoAssays; $('opt-elev').checked = S.elevTicks;
-  $('value-col2').innerHTML = '<option value="">None</option>' + (project?.cols || []).filter((c) => c !== S.valueCol).map((c) => `<option ${c === S.valueCol2 ? 'selected' : ''}>${esc(c)}</option>`).join('');
-  $('terrain').value = S.terrain; $('terrain-src').value = S.terrainSource; $('block-style').value = S.blockStyle; $('collar-fit').value = S.collarFit; $('vex').value = S.vex; $('vex-out').textContent = `${S.vex}×`;
-  $('trace-w').value = Math.round(S.traceWidth * 100); $('trace-out').textContent = `${S.traceWidth.toFixed(1)}×`;
-  $('surf').value = Math.round(S.surf * 100); $('surf-out').textContent = `${Math.round(S.surf * 100)}%`;
-  // The grade column as one-click choices, the display cut-off's quick values, the shell and the
-  // metal-equivalent builder.
-  $('metric-chips').innerHTML = (project?.cols || []).map((c) => `<button type="button" class="chip" data-col="${esc(c)}" aria-pressed="${c === S.valueCol}" title="${esc(c)}">${esc(labelFor(c))}</button>`).join('');
-  $('metric-chips').querySelectorAll('[data-col]').forEach((b) => b.addEventListener('click', () => setStyle({ valueCol: b.dataset.col })));
-  const dc = S.displayCutoff;
-  $('dcut-btns').innerHTML = [null, ...dcutChoices()].map((v) => `<button type="button" class="chip" data-dcut="${v ?? ''}" aria-pressed="${v === dc}">${v === null ? 'All' : v}</button>`).join('');
-  $('dcut-btns').querySelectorAll('[data-dcut]').forEach((b) => b.addEventListener('click', () => setStyle({ displayCutoff: b.dataset.dcut === '' ? null : +b.dataset.dcut })));
-  if (document.activeElement?.id !== 'dcut') $('dcut').value = dc ?? '';
-  renderShellUI(); renderEq(); extUI(); renderLegendUI(); // EXT hook
-  $('co-place').value = S.coPlacement; $('block-margin').value = S.blockMargin ?? ''; $('block-margin').placeholder = 'auto';
-  document.querySelectorAll('[data-bx]').forEach((i) => { const k = i.dataset.bx; i.value = S.blockExtent?.[k] ?? ''; i.placeholder = G ? Math.round(G.B[k]) : ''; });
-  const ml = $('mesh-list'); ml.innerHTML = '';
-  (project?.meshF || []).forEach((f) => { const st = S.meshes[f.name]; if (!st) return;
-    const d = document.createElement('label'); d.className = 'mesh';
-    d.innerHTML = `<input type="checkbox" ${st.show ? 'checked' : ''} aria-label="Show ${esc(f.name)}"><span>${esc(meshName(f.name))}</span><input type="color" value="${esc(st.color)}" aria-label="Colour of ${esc(f.name)}">`;
-    const [cb, , cp] = d.children; cb.addEventListener('change', () => { st.show = cb.checked; restyle(); schedulePublish(); }); cp.addEventListener('input', () => { st.color = cp.value; restyle(); schedulePublish(); });
-    ml.appendChild(d); });
-}
 // The callout editor (callout-editor.js), loaded when the Layout step first shows.
 let CE = null;
 function renderCalloutEditor() {
   if (CE) CE.render($('callout-editor'), { S, esc, PR, read: prRead, callouts, calc: calcCallouts, shown: shownCallouts(), icText, gaps: gapCallouts().map(gapText), setCallout, setStyle, status, redraw: () => { drawSectionView(); schedulePublish(); } });
   else if (currentStep === 'layout') import('./callout-editor.js').then((m) => { CE = m; renderCalloutEditor(); });
-}
-function renderSizes() {
-  $('sizes').innerHTML = Object.entries(FORMATS).map(([k, f]) => `<label><input type="radio" name="size" value="${k}" ${k === S.format ? 'checked' : ''}><span><b>${f.label}</b><br><span class="muted">${f.use}</span></span><small>${f.w} × ${f.h}</small></label>`).join('');
-  $('sizes').querySelectorAll('input').forEach((r) => r.addEventListener('change', () => setFigureSize(r.value)));
 }
 function syncBrandUI() {
   $('company').value = S.company; $('title').value = S.title; $('subtitle').value = S.subtitle; $('footnote').value = S.footnote; $('credit').checked = S.credit;
@@ -2056,28 +1878,12 @@ function addUserFiles(arr) {
   status(project.empty ? `Added ${added.join(', ')}. Still need a collar file.` : `Added ${added.join(', ')}. ${project.holes.length} holes on the figure.`);
   return getState();
 }
-// A .zip is unpacked here, in the browser: its CSV, TXT and OBJ files load as if
-// dropped one by one. Folders, Mac resource forks, READMEs and anything else are skipped.
-const DATA_FILE = /\.(csv|txt|obj|xyz|dat)$/i; // xyz, dat: EXT hook (Geosoft XYZ geophysics)
-const MAX_ZIP_BYTES = 200 * 1024 * 1024;
-async function unzipDataFiles(buffer) {
-  const { unzipSync } = await import('fflate');
-  let total = 0;
-  const entries = unzipSync(new Uint8Array(buffer), {
-    filter: (f) => {
-      const keep = DATA_FILE.test(f.name) && !/(^|\/)(__MACOSX|\.)/.test(f.name) && !/(^|\/)readme[^/]*$/i.test(f.name);
-      if (keep) total += f.originalSize;
-      if (total > MAX_ZIP_BYTES) throw new Error('That ZIP unpacks to more than 200 MB. Send the drill files on their own.');
-      return keep;
-    },
-  });
-  const decoder = new TextDecoder();
-  return Object.entries(entries).map(([path, bytes]) => ({ name: path.split('/').pop(), text: decoder.decode(bytes) }));
-}
+// A .zip is unpacked in the browser (unzip.js, loaded with the first one).
+const unzip = () => import('./unzip.js');
 async function readFileList(fl) {
   try {
     const arr = (await Promise.all([...fl].map(async (f) => (/\.zip$/i.test(f.name)
-      ? unzipDataFiles(await f.arrayBuffer())
+      ? (await unzip()).unzipDataFiles(await f.arrayBuffer())
       : [{ name: f.name, text: await f.text() }])))).flat();
     if (!arr.length) { status('No CSV, TXT or OBJ files found in that ZIP.'); return; }
     addUserFiles(arr);
@@ -2087,12 +1893,7 @@ async function readFileList(fl) {
 }
 // For assistants: a ZIP as a data URL, base64 string or ArrayBuffer.
 async function addZip(zip) {
-  let buf = zip;
-  if (typeof zip === 'string') {
-    const b64 = zip.replace(/^data:[^,]*,/, ''), bin = atob(b64);
-    buf = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
-  }
-  const arr = await unzipDataFiles(buf instanceof Uint8Array ? buf.buffer : buf);
+  const arr = (await unzip()).zipFiles(zip);
   if (!arr.length) throw new Error('No CSV, TXT or OBJ files found in that ZIP.');
   return addUserFiles(arr);
 }
@@ -2273,7 +2074,8 @@ function setEquivalent(o) {
   return getState();
 }
 // The builder's form (panels.js) loads when its panel is first opened, and redraws while it is open.
-function renderEq() { if ($('eq-box').open) import('./panels.js').then((m) => m.renderEq({ S, metalCols, unitOf, setEquivalent, status, esc })); }
+const eqPanel = panel('renderEq');
+function renderEq() { if ($('eq-box').open) eqPanel(); }
 $('eq-box').addEventListener('toggle', renderEq);
 function setProvisional(holeId, flag) {
   if (!project?.holes?.some((h) => h.id === holeId)) throw new Error(`No hole "${holeId}".`);
@@ -2286,7 +2088,7 @@ function getChecks() {
   return { counts: { ...C.counts, intervalsShown: hs.reduce((t, h) => t + h.ints.filter(intervalShown).length, 0) }, problems: C.problems, provisionalHoles: hs.filter((h) => h.prov).map((h) => h.id) };
 }
 // The data checks list (panels.js, loaded with the first data).
-const renderChecks = () => import('./panels.js').then((m) => m.renderChecks({ getChecks, project, esc, setProvisional }));
+const renderChecks = panel('renderChecks');
 $('value-col').addEventListener('change', (e) => setStyle({ valueCol: e.target.value }));
 $('value-label').addEventListener('input', (e) => setStyle({ valueLabel: e.target.value }, false));
 $('auto-bins').addEventListener('click', () => { setStyle({ autoBins: true }); status('Colour limits and cut-offs suggested from the data.'); });
@@ -2307,7 +2109,7 @@ $('collar-fit').addEventListener('change', (e) => setStyle({ collarFit: e.target
 $('vex').addEventListener('change', (e) => { setStyle({ verticalExaggeration: +e.target.value }, false); $('vex-out').textContent = `${S.vex}×`; });
 $('vex').addEventListener('input', (e) => { $('vex-out').textContent = `${e.target.value}×`; });
 function renderCRS() {
-  if (document.activeElement?.id !== 'crs') $('crs').value = geo ? (geo.code.startsWith('+') ? geo.code : geo.code) : '';
+  if (document.activeElement?.id !== 'crs') $('crs').value = geo ? geo.code : '';
   $('crs-note').textContent = geo ? `${geo.label}${geo.guessed ? ' (from the latitude/longitude collars)' : ''}. Real terrain and satellite imagery are available in step 3.` : 'Set it to drape real terrain and satellite imagery (Layout → Terrain).';
 }
 const applyCRS = () => setCRS($('crs').value.trim() || null).catch((e) => { status(e.message); $('crs-note').textContent = e.message; });
@@ -2380,31 +2182,11 @@ function removeLabel(id) {
   if (!S.labels.some((l) => l.id === id)) throw new Error(`No label "${id}".`);
   S.labels = S.labels.filter((l) => l.id !== id); renderLabelList(); schedulePublish(); return getState();
 }
-function renderLabelList() {
-  const el = $('label-list');
-  el.innerHTML = S.labels.map((L) => `<div class="label-row"><input type="text" data-lt="${esc(L.id)}" value="${esc(L.text)}" aria-label="Text of label ${esc(L.id)}">`
-    + `<label class="check"><input type="checkbox" data-la="${esc(L.id)}" ${L.arrow ? 'checked' : ''}>Arrow</label>`
-    + `<button class="btn" type="button" data-ld="${esc(L.id)}" aria-label="Delete label ${esc(L.text)}">Delete</button></div>`).join('');
-  el.querySelectorAll('[data-lt]').forEach((i) => i.addEventListener('change', () => { try { updateLabel(i.dataset.lt, { text: i.value }); } catch (e) { status(e.message); } }));
-  el.querySelectorAll('[data-la]').forEach((i) => i.addEventListener('change', () => updateLabel(i.dataset.la, { arrow: i.checked })));
-  el.querySelectorAll('[data-ld]').forEach((b) => b.addEventListener('click', () => removeLabel(b.dataset.ld)));
-}
 $('lab-add').addEventListener('click', () => {
   const text = $('lab-text').value.trim(); if (!text) { status('Type the label text first.'); $('lab-text').focus(); return; }
   showView('3d'); addLabel({ text, size: $('lab-size').value, arrow: $('lab-arrow').checked }); $('lab-text').value = '';
 });
 $('lab-text').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); $('lab-add').click(); } });
-function renderWallLabelList() {
-  const el = $('wall-list'), faces = ['N', 'S', 'E', 'W'];
-  el.innerHTML = S.wallLabels.map((L) => `<div class="label-row"><input type="text" data-wt="${esc(L.id)}" value="${esc(L.text)}" aria-label="Text of wall label ${esc(L.id)}">`
-    + `<select data-wf="${esc(L.id)}" aria-label="Face of ${esc(L.text)}">${faces.map((f) => `<option ${f === L.face ? 'selected' : ''}>${f}</option>`).join('')}</select>`
-    + (S.geology.legend.length ? `<select data-wu="${esc(L.id)}" aria-label="Unit colour of ${esc(L.text)}"><option value="">No unit</option>${S.geology.legend.map((e) => `<option value="${esc(e.code)}" ${e.code === L.unit ? 'selected' : ''}>${esc(e.name)}</option>`).join('')}</select>` : '') // EXT hook
-    + `<button class="btn" type="button" data-wd="${esc(L.id)}" aria-label="Delete wall label ${esc(L.text)}">Delete</button></div>`).join('');
-  el.querySelectorAll('[data-wt]').forEach((i) => i.addEventListener('change', () => { try { updateWallLabel(i.dataset.wt, { text: i.value }); } catch (e) { status(e.message); } }));
-  el.querySelectorAll('[data-wf]').forEach((i) => i.addEventListener('change', () => updateWallLabel(i.dataset.wf, { face: i.value })));
-  el.querySelectorAll('[data-wu]').forEach((i) => i.addEventListener('change', () => updateWallLabel(i.dataset.wu, { unit: i.value || null }))); // EXT hook
-  el.querySelectorAll('[data-wd]').forEach((b) => b.addEventListener('click', () => removeWallLabel(b.dataset.wd)));
-}
 $('wall-add').addEventListener('click', () => {
   const text = $('wall-text').value.trim(); if (!text) { status('Type the wall label text first.'); $('wall-text').focus(); return; }
   showView('3d'); addWallLabel({ text, face: $('wall-face').value, size: $('wall-size').value }); $('wall-text').value = '';
@@ -2514,8 +2296,11 @@ const host = () => (extHost ||= {
   frame: () => [W, H], aim, controls, getCam, setCamera, blockOverflow, scene,
   get occ() { return overlayOcc; }, // what the painted unit names keep clear of (geology.js), with the prominent holes:
   prominent: (h) => !!EXT.tags && (EXT.tags.weight(h) > 1 || !!EXT.tags.highlightOf(h) || EXT.tags.statusOf(h) === 'new'),
-  camera, renderer, proj, sectionEnds, faceGeom, textOn, roundRect, fitText, esc, BIN_COLORS, binIndex, traceR, calloutLines, shownCallouts, coOv, isPending, setSpacing, drawCallout, brandTone, figureCanvas, exportLayers, canvasBlob,
-  mosaic, zoomFor, lon2t, lat2t, IMG_URL, IMAGERY_CREDIT, status, redraw: () => { extScene(); drawSectionView(); schedulePublish(); },
+  camera, renderer, proj, sectionEnds, faceGeom, textOn, roundRect, fitText, esc, BIN_COLORS, binIndex, traceR, calloutLines, shownCallouts, coOv, isPending, setSpacing, drawCallout, brandTone, figureCanvas, getState, format: () => FORMATS[S.format], fileSlug, downloadURL,
+  terrain: rtLoad, IMAGERY_CREDIT, status, redraw: () => { extScene(); drawSectionView(); schedulePublish(); },
+  ROLE_LABEL, ROLE_FIELDS, FIELD_LABEL, gradeCols, refresh, get PR() { return PR; }, setStyle, pad3, labelFor, dcutChoices, meshName, restyle, schedulePublish,
+  renderShellUI, renderEq, renderExtUI, renderLegendUI, FORMATS, setFigureSize, updateLabel, removeLabel, updateWallLabel, removeWallLabel,
+  metalCols, unitOf, setEquivalent, getChecks, setProvisional,
   step: () => currentStep, sectionChanged: () => { refresh.secSet = true; restyle(); renderStyle(); schedulePublish(); },
 });
 const extLoad = (k) => (extLoading[k] ||= EXT_IMPORT[k]().then((m) => { m.init(host()); EXT[k] = m; return m; }));
@@ -2577,7 +2362,6 @@ function renderExtUI() {
   [['geology', 'geo-ui'], ['geophys', 'gp-ui'], ['tags', 'tag-ui'], ['section', 'sec-holes']].forEach(([k, id]) => { if (EXT[k]) EXT[k].renderUI($(id)); });
   document.querySelectorAll('[data-secmode]').forEach((b) => b.setAttribute('aria-pressed', String((b.dataset.secmode === 'chosen') === !!S.section?.holes)));
 }
-const extUI = () => renderExtUI();
 document.querySelectorAll('[data-ext]').forEach((el) => el.addEventListener('change', () => {
   const [g, k] = el.dataset.ext.split('.'), v = el.type === 'checkbox' ? el.checked : el.value;
   Promise.resolve().then(() => (g === 'style' ? setStyle({ [k]: v }, false) : g === 'imagery' ? setStyle({ imagery: { [k]: +v } }, false) : g === 'scene' ? setScene({ [k]: el.type === 'range' ? +v : v }) : g === 'view' ? setView({ [k]: v }) : EXT_API[{ geology: 'setGeology', geophys: 'setGeophys', tags: 'setTags' }[g]]({ [k]: v }))).catch((e) => status(e.message));
