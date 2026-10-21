@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  renderInsetSvg, renderLegendSvg, legendSwatchSvg, baselineFromTop,
+  renderInsetSvg, renderLegendSvg, legendSwatchSvg, baselineFromTop, renderVectorsSvg,
 } from '../src/export/renderScene.js';
 
 // The PNG and SVG exports are two hand-written renderers of one layout, and
@@ -182,5 +182,73 @@ describe('legend headings and swatches in the SVG', () => {
     const svg = legendSwatchSvg(items[1], 100, 200, 2);
     expect(svg).toContain('<image');
     expect(svg).toContain('data:image/png;base64,AAAA');
+  });
+});
+
+describe('patterned polygon swatches', () => {
+  // A hatched layer drew hatched on the map and as a flat tint in every
+  // legend. The swatch now carries the map's own tile; these compare the two
+  // as the SVG writes them, ids and placement aside.
+  const square = { type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [[[0, 0], [40, 0], [40, 40], [0, 40], [0, 0]]] } };
+  const layerOf = (id, style) => ({ id, name: id, role: 'property_boundary', type: 'polygon', geojson: { type: 'FeatureCollection', features: [square] }, style });
+  const mapScene = (layers) => ({
+    template: {},
+    map: { latLngToContainerPoint: ({ lat, lng }) => ({ x: lng, y: lat }) },
+    project: { layers, layout: {} },
+  });
+  const patterns = (svg) => [...svg.matchAll(/<pattern id="([^"]+)"[^>]*>(.*?)<\/pattern>/g)].map((m) => ({ id: m[1], body: m[2] }));
+
+  it.each(['hatch', 'cross', 'dots'])('a %s swatch holds the tile the map is filled with', (kind) => {
+    const style = { fill: '#aa3300', fillOpacity: 0.5, stroke: '#111111', fillPattern: kind, fillPatternSpacing: 5 };
+    [1, 2].forEach((s) => {
+      const [onMap] = patterns(renderVectorsSvg(mapScene([layerOf('claims', style)]), s));
+      const defs = [];
+      const swatch = legendSwatchSvg({ type: 'polygon', style }, 100, 200, s, defs);
+      const [inLegend] = patterns(defs.join(''));
+      expect(inLegend.body, `${kind} at ${s}x`).toBe(onMap.body);
+      expect(inLegend.body.length).toBeGreaterThan(0);
+      expect(attr(swatch, 'rect', 'fill')).toBe(`url(#${inLegend.id})`);
+      // The tile starts at the swatch's corner, as it does in the editor.
+      expect(defs.join('')).toContain(`x="100.00" y="${(200 + 2 * s).toFixed(2)}"`);
+    });
+  });
+
+  it('gives every swatch its own pattern id, across two legends', () => {
+    const items = [
+      { id: 'a', type: 'polygon', label: 'Hatched', style: { fillPattern: 'hatch', fill: '#ff0000' } },
+      { id: 'b', type: 'polygon', label: 'Dotted', style: { fillPattern: 'dots', fill: '#0000ff' } },
+    ];
+    const svgDefs = [];
+    const first = renderLegendSvg(scene({ legendItems: items }), 1, svgDefs);
+    const second = renderLegendSvg(scene({ legendItems: items }), 1, svgDefs);
+    const ids = patterns(svgDefs.join('')).map((p) => p.id);
+    expect(ids).toHaveLength(4);
+    expect(new Set(ids).size).toBe(4);
+    // Each legend points at its own two.
+    const refs = (svg) => [...svg.matchAll(/fill="url\(#([^)]+)\)"/g)].map((m) => m[1]);
+    expect(refs(first)).toHaveLength(2);
+    expect(refs(second).filter((id) => refs(first).includes(id))).toEqual([]);
+  });
+
+  it('names map patterns per layer, so two layers cannot share an id', () => {
+    // Same kind, spacing and colour, different opacity: the old id came from
+    // the first three only, so the second layer printed in the first's opacity.
+    const svg = renderVectorsSvg(mapScene([
+      layerOf('a', { fillPattern: 'hatch', fill: '#ff0000', fillOpacity: 0.2 }),
+      layerOf('b', { fillPattern: 'hatch', fill: '#ff0000', fillOpacity: 0.9 }),
+    ]), 1);
+    const ids = patterns(svg).map((p) => p.id);
+    expect(ids).toHaveLength(2);
+    expect(new Set(ids).size).toBe(2);
+  });
+
+  it('leaves a solid swatch exactly as it was', () => {
+    const style = { fill: '#336699', fillOpacity: 0.3, stroke: '#112233' };
+    const defs = [];
+    expect(legendSwatchSvg({ type: 'polygon', style }, 100, 200, 2, defs)).toBe(
+      '<rect x="100.00" y="204.00" width="36.00" height="24.00" fill="#336699" fill-opacity="0.3" stroke="#112233" stroke-width="2.00" />',
+    );
+    expect(defs).toEqual([]);
+    expect(legendSwatchSvg({ type: 'polygon', style: { ...style, fillPattern: 'none' } }, 100, 200, 2)).not.toContain('<pattern');
   });
 });

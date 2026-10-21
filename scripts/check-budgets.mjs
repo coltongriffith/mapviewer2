@@ -37,7 +37,10 @@ const BUDGETS = {
   // 144 → 146: company workspaces (Oct 2026). The pages are a lazy chunk; the
   // editor keeps the routes, the property chip and view-only save guard for
   // company maps, and the personal / company switcher in the account menu.
-  maxJsChunkGzipKb: 146,
+  // 146 → 147: hatch/cross/dot legend swatches (Oct 2026). The shared pattern
+  // description (shared/fillPattern.js), the patterned area swatch and the
+  // pattern-spacing control land in the editor chunk; ~0.6 KiB.
+  maxJsChunkGzipKb: 147,
   initialJsGzipKb: 75,
   initialAuthJsGzipKb: 135,
   // The former configured check omitted VITE_ADMIN_EMAIL, which pruned the

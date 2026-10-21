@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { render } from '@testing-library/react';
 import { MarkerSvgIcon } from '../src/utils/markerIcons.jsx';
 import { LEGEND_SYMBOLS, customLegendItem } from '../src/utils/legendCustomization.js';
+import { LegendAreaSwatch } from '../src/components/LegendSwatches.jsx';
+import { renderVectorsSvg } from '../src/export/renderScene.js';
 
 // The public share page is the copy that matters most: it is what a reader
 // actually receives, and its author never sees it.
@@ -66,5 +68,55 @@ describe('every selectable symbol renders in a shared legend', () => {
       const html = renderSwatchFor(value).outerHTML.toLowerCase();
       expect(html, `${value} ignored the chosen colour`).toContain('#123456');
     });
+  });
+});
+
+// The editor and the share page both draw polygon rows with LegendAreaSwatch.
+// A hatched layer used to get a flat tint there; it now gets the map's tile.
+// The map and the SVG export build that tile from one description, so at 1x
+// the swatch must hold exactly the elements the exported map does.
+describe('patterned area swatches', () => {
+  const square = { type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [[[0, 0], [40, 0], [40, 40], [0, 40], [0, 0]]] } };
+  const mapPattern = (style) => {
+    const svg = renderVectorsSvg({
+      template: {},
+      map: { latLngToContainerPoint: ({ lat, lng }) => ({ x: lng, y: lat }) },
+      project: { layers: [{ id: 'l', role: 'property_boundary', type: 'polygon', geojson: { type: 'FeatureCollection', features: [square] }, style }], layout: {} },
+    }, 1);
+    return new DOMParser().parseFromString(`<svg xmlns="http://www.w3.org/2000/svg">${svg}</svg>`, 'image/svg+xml').querySelector('pattern');
+  };
+  const shapeOf = (pattern) => ({
+    size: [pattern.getAttribute('width'), pattern.getAttribute('height')],
+    children: [...pattern.children].map((el) => ({
+      tag: el.tagName.toLowerCase(),
+      attrs: Object.fromEntries([...el.attributes].map((a) => [a.name, a.value])),
+    })),
+  });
+
+  it.each(['hatch', 'cross', 'dots'])('a %s layer shows the map’s tile', (kind) => {
+    const style = { fill: '#aa3300', fillOpacity: 0.5, stroke: '#111111', fillPattern: kind };
+    const { container } = render(<LegendAreaSwatch style={style} />);
+    const pattern = container.querySelector('pattern');
+    expect(pattern, `${kind} swatch has no pattern`).toBeTruthy();
+    expect(pattern.children.length).toBeGreaterThan(0);
+    expect(shapeOf(pattern)).toEqual(shapeOf(mapPattern(style)));
+    expect(container.querySelector('rect').getAttribute('fill')).toBe(`url(#${pattern.id})`);
+    // No flat tint behind the tile: the map has none either.
+    expect(container.querySelector('.legend-swatch').style.background).toMatch(/none/);
+  });
+
+  it('gives each swatch its own pattern id', () => {
+    const style = { fillPattern: 'hatch', fill: '#ff0000' };
+    const { container } = render(<><LegendAreaSwatch style={style} /><LegendAreaSwatch style={style} /></>);
+    const ids = [...container.querySelectorAll('pattern')].map((p) => p.id);
+    expect(ids).toHaveLength(2);
+    expect(new Set(ids).size).toBe(2);
+  });
+
+  it('leaves a solid swatch as a flat tint with no pattern', () => {
+    const { container } = render(<LegendAreaSwatch style={{ fill: '#336699', fillOpacity: 0.3, stroke: '#112233' }} />);
+    const swatch = container.querySelector('.legend-swatch');
+    expect(swatch.children).toHaveLength(0);
+    expect(swatch.style.background).toBe('rgba(51, 102, 153, 0.3)');
   });
 });

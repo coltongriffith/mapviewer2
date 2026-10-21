@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { LegendPointSwatch, LegendLineSwatch, LegendAreaSwatch } from './components/LegendSwatches.jsx';
+import { hasFillPattern, DEFAULT_PATTERN_SPACING } from '../shared/fillPattern.js';
 import RatioSwitcher from './components/RatioSwitcher';
 import Sidebar from './components/Sidebar';
 import InspectorGroup from './components/InspectorGroup';
@@ -6650,6 +6651,17 @@ export default function App({ initialAction = null }) {
                         ))}
                       </div>
                     </div>
+                    {hasFillPattern(selectedLayer.style) && (
+                      <div className="control-row inline-2">
+                        <div>
+                          <label htmlFor="f-pattern-spacing">Pattern spacing</label>
+                          <input id="f-pattern-spacing" type="range" min="3" max="16" step="1"
+                            value={selectedLayer.style.fillPatternSpacing || DEFAULT_PATTERN_SPACING}
+                            onChange={(e) => { const id = selectedLayer.id, val = Number(e.target.value); clearTimeout(layerStyleDebounceRef.current); layerStyleDebounceRef.current = setTimeout(() => updateLayer(id, { style: { fillPatternSpacing: val } }), 50); }} />
+                        </div>
+                        <div className="range-value">{selectedLayer.style.fillPatternSpacing || DEFAULT_PATTERN_SPACING}px</div>
+                      </div>
+                    )}
                   </>
                 )}
                 <React.Suspense fallback={null}>
