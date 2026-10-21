@@ -184,7 +184,12 @@ const BUDGETS = {
   // shared/sectionGeometry.js, ~4.6 kB: addSection / updateSection / removeSection / setActiveSection, the section
   // tabs, the old single section kept as A–A′, each section swapped in for its export, and the fences built as
   // painted slabs with their letters). Fetched only for a figure with named sections.
-  threeDLazyJsGzipKb: 94.4,
+  // 94.4 → 100.45 (Oct 2026, F3 part 2, measured 99.92, configured 100.15): editable annotations for the layers ZIP
+  // (annotations-svg.js with drawlist.js, one ~5.7 kB chunk: the Canvas draw-command recorder, the SVG writer with
+  // live text, and the font embedding), plus ~0.4 kB in desk.js. Fetched only when "Include editable annotations
+  // (SVG)" is ticked or EM3D.exportLayers({ svg: true }) is called. The page gains only the recorder's hand-off in
+  // figureCanvas and the checkbox (+0.015 kB, inside its budget).
+  threeDLazyJsGzipKb: 100.45,
   // The /3d grade-shell worker (composites estimate and marching cubes) is its own chunk, fetched only
   // when a shell is turned on. Vite emits workers outside the manifest graph, so it is found from the
   // page's chunks (see below) and budgeted here rather than in the page or the app totals.
