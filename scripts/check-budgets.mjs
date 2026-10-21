@@ -46,7 +46,10 @@ const BUDGETS = {
   // editor keeps the shared leader geometry the overlay must draw (elbow,
   // curve, anchor mark), the Auto-arrange action, the overlap list and the
   // leader/anchor-mark controls; ~1.0 KiB.
-  maxJsChunkGzipKb: 148,
+  // 148 → 148.3 (Oct 2026, measured 147.99 configured): hole-ID labels at their collar (#307) pass the layout
+  // version and callout font to the lazy scorer and draw a pushed label's leader (~+0.07 kB in App), which left
+  // 6 B of the ±20 B chunk-hash churn.
+  maxJsChunkGzipKb: 148.3,
   initialJsGzipKb: 75,
   initialAuthJsGzipKb: 135,
   // The former configured check omitted VITE_ADMIN_EMAIL, which pruned the
@@ -93,7 +96,12 @@ const BUDGETS = {
   // and /3d are unchanged (App +7 B and /3d page +0.05 kB of chunk-hash churn and the shared run finder).
   // 914.3 → 914.5 (measured 914.16): components averaged over the equivalent's own samples, the reload on import
   // and roll-back, and the cut-off tolerance (review fixes, all in the lazy results chunk).
-  totalAuthJsGzipKb: 914.5,
+  // 914.5 → 915.6 (Oct 2026, measured 915.31 configured / 848.21 plain on top of drill database 2C): 2D hole-ID
+  // labels at their own collar (layoutAlgorithm 3, #307). The rules are in the lazy scorer (utils/calloutScorer.js,
+  // ~+0.9 kB: ID labels measured in the callout font and sized to it, tried beside their collar, a leader when pushed
+  // out, the ambiguity check, the crowded-first retry, and placed labels kept clear of intercept cards); the editor
+  // chunk only passes the layout version and font and draws a pushed label's leader (~+0.07 kB).
+  totalAuthJsGzipKb: 915.6,
   // 805 → 808: placed and callout logos, SVG font embedding (Sept 2026).
   // 808 → 809: shared-map viewer opens at the saved view on the fixed stage.
   // 809 → 810: the lazy /oauth/consent page for MCP account sign-in.
@@ -110,7 +118,8 @@ const BUDGETS = {
   // 838.0 → 838.7 (Oct 2026, measured 838.32): the drill CSV reader's structure checks, as totalAuthJsGzipKb above.
   // 838.7 → 847.2 (Oct 2026, measured 846.93): the drill results section, as totalAuthJsGzipKb above.
   // 847.2 → 847.4 (measured 847.05): the results review fixes, as totalAuthJsGzipKb above.
-  totalJsGzipKb: 847.4,
+  // 847.4 → 848.5 (measured 848.21): hole-ID labels at their collar, as totalAuthJsGzipKb above.
+  totalJsGzipKb: 848.5,
   // Standalone pages (/3d, /teams) are separate Vite entries that never share
   // the app's chunks, so they are budgeted on their own instead of in the
   // totals above. /3d carries three.js (~109 kB gzip) and its editor.
@@ -246,7 +255,8 @@ const BUDGETS = {
   teamsJsGzipKb: 10,
   adminAuthJsGzipKb: 150,
   adminJsGzipKb: 85,
-  editorAuthJsGzipKb: 335,
+  // 335 → 335.3 (Oct 2026, measured 334.98): the same ~0.07 kB in App, as maxJsChunkGzipKb above.
+  editorAuthJsGzipKb: 335.3,
   editorJsGzipKb: 270,
   claimsAuthJsGzipKb: 355,
   claimsJsGzipKb: 290,
