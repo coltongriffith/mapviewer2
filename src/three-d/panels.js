@@ -57,10 +57,11 @@ export function renderFiles(host) {
   list.innerHTML = '';
   files.forEach((f, fi) => {
     const div = document.createElement('div'); div.className = 'file';
-    const roles = ['collar', 'survey', 'assay', 'topo', 'mesh', 'litho', 'lithlegend', 'geophys', 'published', 'unknown']; // EXT hook: litho, lithlegend, geophys, published
+    const roles = ['collar', 'survey', 'assay', 'topo', 'mesh', 'litho', 'lithlegend', 'geophys', 'published', 'overlay', 'unknown']; // EXT hook: litho, lithlegend, geophys, published, overlay
     let html = `<div class="file-head"><span class="name" title="${esc(f.name)}">${esc(f.name)}</span>
       <select data-role="${fi}" aria-label="File type for ${esc(f.name)}">${roles.map((r) => `<option value="${r}" ${r === f.role ? 'selected' : ''}>${ROLE_LABEL[r]}</option>`).join('')}</select></div>`;
     if (f.role === 'mesh') html += `<span class="muted">${f.mesh.v.length.toLocaleString()} vertices · ${(f.mesh.f.length / 3).toLocaleString()} triangles</span>`;
+    else if (!f.header.length) html += '<span class="muted">Drawn on the terrain. Restyle it in Layout, Map overlays.</span>';
     else {
       html += `<span class="muted">${f.rows.length.toLocaleString()} rows</span>`;
       const fields = ROLE_FIELDS[f.role] || [];
@@ -70,6 +71,7 @@ export function renderFiles(host) {
         const miss = req.filter((k) => f.cols[k] === undefined);
         if (miss.length) html += `<span class="bad">Pick a column for ${miss.map((k) => FIELD_LABEL[k]).join(', ')}.</span>`;
         if (f.role === 'published' && PR && !miss.length) html += PR.fileNote(f, esc);
+        if (f.role === 'overlay') html += '<span class="muted">One point per row, at the easting and northing (or latitude and longitude), drawn on the terrain. Restyle it in Layout, Map overlays.</span>';
         if (f.role === 'assay') html += f.grades.length ? `<span class="muted">Grade columns: ${f.grades.map((g) => esc(g.name)).join(', ')}</span>` : '<span class="bad">No numeric grade columns found.</span>';
       } else if (f.role === 'unknown') html += `<span class="warn">${f.hint ? 'Published results? Choose that type to use them.' : 'Choose what this file holds.'}</span>`;
     }

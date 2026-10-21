@@ -1,0 +1,263 @@
+{
+ "type": "FeatureCollection",
+ "name": "example_ridge_overlays",
+ "features": [
+  {
+   "type": "Feature",
+   "properties": {
+    "name": "Example Ridge claims",
+    "tenure": "ER-1094"
+   },
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [411840, 6421500],
+      [412680, 6421500],
+      [412680, 6422040],
+      [412460, 6422040],
+      [412460, 6422260],
+      [411840, 6422260],
+      [411840, 6421500]
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "name": "Ridge Fault",
+    "type": "fault"
+   },
+   "geometry": {
+    "type": "LineString",
+    "coordinates": [
+     [411520, 6421400],
+     [412000, 6421680],
+     [412450, 6421940],
+     [413080, 6422320]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "sample": "SS-001",
+    "Cu_ppm": 76
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [411580, 6421920]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "sample": "SS-002",
+    "Cu_ppm": 154
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [411690, 6421920]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "sample": "SS-003",
+    "Cu_ppm": 233
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [411800, 6421920]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "sample": "SS-004",
+    "Cu_ppm": 192
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [411910, 6421920]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "sample": "SS-005",
+    "Cu_ppm": 194
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [412020, 6421920]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "sample": "SS-006",
+    "Cu_ppm": 156
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [411580, 6422030]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "sample": "SS-007",
+    "Cu_ppm": 183
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [411690, 6422030]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "sample": "SS-008",
+    "Cu_ppm": 296
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [411800, 6422030]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "sample": "SS-009",
+    "Cu_ppm": 349
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [411910, 6422030]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "sample": "SS-010",
+    "Cu_ppm": 240
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [412020, 6422030]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "sample": "SS-011",
+    "Cu_ppm": 120
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [411580, 6422140]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "sample": "SS-012",
+    "Cu_ppm": 230
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [411690, 6422140]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "sample": "SS-013",
+    "Cu_ppm": 256
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [411800, 6422140]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "sample": "SS-014",
+    "Cu_ppm": 308
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [411910, 6422140]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "sample": "SS-015",
+    "Cu_ppm": 286
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [412020, 6422140]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "sample": "SS-016",
+    "Cu_ppm": 141
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [411580, 6422250]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "sample": "SS-017",
+    "Cu_ppm": 131
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [411690, 6422250]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "sample": "SS-018",
+    "Cu_ppm": 206
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [411800, 6422250]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "sample": "SS-019",
+    "Cu_ppm": 165
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [411910, 6422250]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "sample": "SS-020",
+    "Cu_ppm": 168
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [412020, 6422250]
+   }
+  }
+ ]
+}

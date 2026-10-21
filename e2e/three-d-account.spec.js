@@ -245,6 +245,61 @@ test('published results: never read as assays, drawn on their own depths, reword
   expect(errors).toEqual([]);
 });
 
+test('map overlays and shapes: draped, listed, saved and reopened unchanged, and in the exports', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await open3d(page);
+  const r = await page.evaluate(async (fc) => {
+    const E = window.EM3D, plain = E.exportPNG({ view: '3d' });
+    // A line at opacity 0, left out of the legend, leaves the export as it was.
+    const ghost = await E.addOverlay({ name: 'Ghost', data: JSON.parse(fc), kind: 'line', opacity: 0, label: '' });
+    const ghostPng = E.exportPNG({ view: '3d' }); await E.updateOverlay(ghost, { opacity: 1 });
+    const shownPng = E.exportPNG({ view: '3d' }); await E.removeOverlay(ghost);
+    // A GeoJSON file with claims, a fault and soil points: one overlay of each, the sample kept.
+    let s = E.addFiles([{ name: 'example-ridge-overlays.geojson', text: fc }]);
+    s = await E.layersReady();
+    const fromFile = { usingSample: s.usingSample, role: s.files.at(-1).role, overlays: s.overlays.map((o) => [o.name, o.kind, o.features, o.placed]) };
+    await E.updateOverlay(s.overlays[1].id, { dash: 'dashed', width: 3 });
+    const tenure = await E.addOverlay({ name: 'Tenure numbers', data: { type: 'FeatureCollection', features: [JSON.parse(fc).features[0]] }, kind: 'line', color: '#1f6fb5', labelField: 'tenure' });
+    const ids = [await E.addShape({ type: 'arrow' }), await E.addShape({ type: 'ellipse' }), await E.addShape({ type: 'dimension' })];
+    const before = E.getState(), withAll = E.exportPNG({ view: '3d' }), section = E.exportPNG({ view: 'section' });
+    const project = JSON.parse(JSON.stringify(E.getProject()));
+    E.clearFiles();
+    const after = await E.loadProject(project);
+    const again = E.exportPNG({ view: '3d' });
+    let bad = null; try { await E.addOverlay({ name: 'x', data: { type: 'FeatureCollection', features: [] } }); } catch (e) { bad = e.message; }
+    await E.removeOverlay(tenure);
+    const removed = await E.removeOverlay(after.overlays[0].id);
+    return { ghostSame: ghostPng === plain, shownSame: shownPng === plain, fromFile, ids, before, after, plain: plain.length, withAll: withAll.length, again: again.length, same: again === withAll, section: section.length, bad,
+      saved: { overlays: project.settings.overlays.map((o) => [o.id, o.file || null, !!o.data]), shapes: project.settings.shapes.map((x) => x.type) },
+      left: removed.overlays.map((o) => o.name), files: removed.files.map((f) => f.name) };
+  }, readFileSync('tests/fixtures/three-d/example-ridge-overlays.geojson', 'utf8'));
+  expect([r.ghostSame, r.shownSame]).toEqual([true, false]); // overlay opacity reaches the export
+  expect(r.fromFile).toEqual({ usingSample: true, role: 'overlay', overlays: [['Example Ridge claims', 'fill', 1, true], ['Ridge Fault', 'line', 1, true], ['example ridge overlays (points)', 'points', 20, true]] });
+  expect(r.ids).toEqual(['S1', 'S2', 'S3']);
+  expect(r.before.overlays[1]).toMatchObject({ dash: 'dashed', width: 3, color: '#142126' }); // brand colours unless set
+  expect(r.before.overlays[0].color).toBe('#c65322');
+  expect(r.before.shapes.map((x) => [x.type, x.text])).toEqual([['arrow', 'OPEN'], ['ellipse', 'Target'], ['dimension', null]]);
+  expect(r.after).toEqual(r.before);
+  // Overlays from the file keep only its name (the file is saved with the figure); one added as data keeps its features.
+  expect(r.saved).toEqual({ overlays: [['O1', 'example-ridge-overlays.geojson', false], ['O2', 'example-ridge-overlays.geojson', false], ['O3', 'example-ridge-overlays.geojson', false], ['O4', null, true]], shapes: ['arrow', 'ellipse', 'dimension'] });
+  expect(r.withAll).toBeGreaterThan(200000);
+  expect(r.withAll).not.toBe(r.plain);
+  expect(r.same).toBe(true); // reopened, the figure exports exactly as before
+  expect(r.section).toBeGreaterThan(50000);
+  expect(r.bad).toMatch(/No points, lines or polygons/);
+  expect(r.left).toEqual(['Ridge Fault', 'example ridge overlays (points)']);
+  expect(r.files).toContain('example-ridge-overlays.geojson'); // still drawn from it
+
+  // The Layout step lists them; hiding one there takes it out of the legend.
+  await page.evaluate(() => window.EM3D.showStep('layout'));
+  await expect(page.locator('#ov-ui')).toContainText('Ridge Fault');
+  await expect(page.locator('#shape-ui')).toContainText('Dimension line');
+  await page.locator('#ov-ui [data-k="show"]').first().uncheck();
+  await expect.poll(async () => (await state(page)).overlays[0].show).toBe(false);
+  expect(errors).toEqual([]);
+});
+
 test('setShell resolves with the shell already on the figure, so an export straight after includes it', async ({ page }) => {
   await open3d(page);
   const s = await page.evaluate(async () => { const r = await window.EM3D.setShell({ enabled: true }); return { ...r.shell, notes: r.footnoteAuto }; });

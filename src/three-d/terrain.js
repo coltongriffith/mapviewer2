@@ -53,6 +53,8 @@ export function projFwd(c, P) {
   }
   return fwd;
 }
+// The inverse, [lon, lat] to the system's metres (map overlays in latitude/longitude, overlays.js).
+export function projInv(c) { const f = P4(c.def, 'WGS84'); return (lon, lat) => f.inverse([lon, lat]); }
 export const lon2t = (lon, z) => (lon + 180) / 360 * 2 ** z;
 export const lat2t = (lat, z) => { const r = lat * Math.PI / 180; return (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * 2 ** z; };
 // (x, y) -> [a, b] for a smooth transform, interpolated from a (n+1)² lattice over the box:
