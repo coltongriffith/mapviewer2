@@ -78,7 +78,11 @@ const BUDGETS = {
   // 894.0 → 894.1 (Oct 2026, measured 894.06): the stale-chunk guard in the entry (src/utils/preloadGuard.js:
   // reload once after a deploy, or with unsaved work a notice and lazyGuarded parts that render a note
   // instead of unmounting the editor), ~0.35 kB in the main chunk; App itself shrank ~10 B.
-  totalAuthJsGzipKb: 894.1,
+  // 894.1 → 904.5 (Oct 2026, drill database 2A, measured 904.18): the property page's Drill data tab, one lazy
+  // chunk (DrillPanel.jsx + utils/drillDb.js, ~9.8 kB: CSV mapping with saved templates, the import checks, the
+  // dry-run diff, commit and the import history with Roll back), fetched only when the tab opens; the
+  // workspace chunk gains the tab and its lazy hook (~0.3 kB). App and the homepage are unchanged.
+  totalAuthJsGzipKb: 904.5,
   // 805 → 808: placed and callout logos, SVG font embedding (Sept 2026).
   // 808 → 809: shared-map viewer opens at the saved view on the fixed stage.
   // 809 → 810: the lazy /oauth/consent page for MCP account sign-in.
@@ -90,7 +94,9 @@ const BUDGETS = {
   // 825.5 → 828.5 (measured 828.2): the figure style and brand kit style apply, as totalAuthJsGzipKb above.
   // 828.5 → 828.8 (measured 828.5 in CI): the stale-chunk reload guard and lazyGuarded wrapper in the main entry
   // (~0.3 kB); chunk-hash churn alone moves this total by about ±20 B, so 828.5 left no room.
-  totalJsGzipKb: 828.8,
+  // 828.8 → 837.9 (Oct 2026, measured 837.63): the drill database tab, as totalAuthJsGzipKb above (lazy chunk
+  // ~8.8 kB in this build, workspace chunk +0.3 kB); nothing in App or on the homepage.
+  totalJsGzipKb: 837.9,
   // Standalone pages (/3d, /teams) are separate Vite entries that never share
   // the app's chunks, so they are budgeted on their own instead of in the
   // totals above. /3d carries three.js (~109 kB gzip) and its editor.
@@ -137,7 +143,11 @@ const BUDGETS = {
   // (~0.64 kB): GeoJSON and KML files taken as overlays when added (and kept beside the sample), the overlay areas
   // painted with the terrain, the draw and section hooks, the legend rows, the saved settings, getState and the six
   // EM3D methods. Their parsing, placing, drawing and panels are lazy (overlays.js, shapes.js, below).
-  threeDJsGzipKb: 169.3,
+  // 169.3 → 169.7 (Oct 2026, drill database 2A, measured 169.38, configured 169.40): no new code on the page. The
+  // column matcher (ALIASES, matchCols, roleOf) moved from studio.js into roles.js so the property drill importer
+  // detects columns exactly as /3d does; roles.js is now a chunk the page shares with the app's lazy drill tab,
+  // and a separate chunk compresses ~0.4 kB worse than the same code inside the page.
+  threeDJsGzipKb: 169.7,
   // /3d's own modules fetched on first use (the geology, geophysics and tag layers, the account
   // client). They never load with the page or the app, so they sit outside the page and app totals.
   // 32 → 34 (Oct 2026, round 4): per-hole tags, grouped pending tags, callouts beside or bracketed on their

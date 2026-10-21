@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../../hooks/useAuth.jsx';
 import {
   resolveProperty, updateProperty, listPropertyMaps, listPropertyFigures, listPersonalFigures,
@@ -10,9 +10,13 @@ import { supabase } from '../../lib/supabase';
 import { library, FILE_KINDS, guessKind, kindLabel, formatBytes } from '../../utils/propertyFiles';
 import { createPortfolio } from '../../utils/tenureMonitor';
 import { jurisdictionLabel } from '../../utils/jurisdictions';
+import { lazyGuarded } from '../../utils/preloadGuard';
 import {
   useWorkspaces, WorkspaceHeader, RoleBadge, StatusBadge, ErrorNote, PropertyForm, ActivityFeed,
 } from './shared';
+
+// The drill database tab (import, checks, history) loads with the tab.
+const DrillPanel = lazyGuarded(() => import('./DrillPanel'));
 
 // /workspace/p/<slug>: one exploration project and everything it owns.
 // Viewers get the same page with every editing control left out; the
@@ -24,6 +28,7 @@ const TABS = [
   { id: 'figures', label: '3D figures' },
   { id: 'claims', label: 'Claims' },
   { id: 'data', label: 'Data library' },
+  { id: 'drill', label: 'Drill data' },
   { id: 'activity', label: 'Activity' },
 ];
 
@@ -425,6 +430,7 @@ export default function PropertyPage({ orgSlug = null, slug, onExit, onOpenDashb
               {tab === 'maps' && <MapsTab property={property} perms={perms} onOpenMap={onOpenMap} onNewMap={onNewMap} />}
               {tab === 'figures' && <FiguresTab property={property} perms={perms} userId={user?.id} />}
               {tab === 'data' && <DataTab property={property} perms={perms} />}
+              {tab === 'drill' && <Suspense fallback={<p className="dash-muted">Loading the drill database…</p>}><DrillPanel property={property} perms={perms} /></Suspense>}
               {tab === 'claims' && <ClaimsTab property={property} perms={perms} userId={user?.id} onOpenTenureMonitor={onOpenTenureMonitor} />}
               {tab === 'activity' && <section className="dash-panel"><ActivityFeed orgId={property.org_id} propertyId={property.id} /></section>}
             </div>

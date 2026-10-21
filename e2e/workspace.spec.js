@@ -25,8 +25,12 @@ const jvProperty = { ...property, id: '00000000-0000-4000-8000-0000000000b2', or
 const FILE = '00000000-0000-4000-8000-0000000000f1';
 const assays = { id: FILE, name: 'assays.csv', kind: 'drill', role: 'assays', version: 2, path: `${ORG}/${PROP}/${FILE}/v2/assays.csv`, bytes: 2048, sha256: 'a'.repeat(64), note: null, uploaded_at: '2026-10-19T00:00:00Z', uploaded_by_email: 'cfo@star.test' };
 
+const BATCH0 = '00000000-0000-4000-8000-0000000000e0';
+const collarBatch = { id: BATCH0, kind: 'collars', filename: 'Rails collars.csv', rows: 12, rows_written: 12, summary: { new: 12, changed: 0, unchanged: 0, new_holes: 12 }, created_at: '2026-10-18T00:00:00Z', created_by_email: 'cfo@star.test', rolled_back_at: null, blocked_by: null };
+const drillSummary = () => ({ collars: 12, planned: 2, metres: 3420.5, surveys: 40, assays: 0, lithology: 0, holes: 12, elements: [], limit: 50000, batches: [{ ...collarBatch }] });
+
 async function fakeSupabase(page, { role = 'owner', orgs = [org(role)], properties = null } = {}) {
-  const fake = { rpc: [], orgs, properties: properties || (orgs.length ? [property] : []), invites: [], files: [{ ...assays }], uploads: [], signed: [], patches: [] };
+  const fake = { rpc: [], orgs, properties: properties || (orgs.length ? [property] : []), invites: [], files: [{ ...assays }], uploads: [], signed: [], patches: [], drill: drillSummary(), templates: [] };
   await page.route('**/api/track', (route) => route.fulfill({ status: 204 }));
   await page.route('https://example.supabase.co/**', async (route) => {
     const req = route.request(), url = new URL(req.url()), path = url.pathname, method = req.method();
@@ -77,6 +81,25 @@ async function fakeSupabase(page, { role = 'owner', orgs = [org(role)], properti
       if (fn === 'get_org_activity') return json([{ id: 'a1', created_at: '2026-10-20T10:00:00Z', action: 'created', entity_type: 'map', property_id: PROP, property_name: property.name, actor_email: 'cfo@star.test', summary: 'Created map "Rails claims"' }]);
       if (fn === 'get_property_claims') return json([]);
       if (fn === 'list_property_files') return json(fake.files);
+      // Drill database: a dry run returns the diff; a commit adds a batch; a rollback marks it.
+      if (fn === 'drill_property_summary') return json(fake.drill);
+      if (fn === 'drill_import_batch') {
+        const diff = { ok: true, kind: args.p_kind, rows: args.p_rows.length, new: args.p_rows.length, changed: 0, unchanged: 0, holes: 2, new_holes: 1,
+          missing_collars: 1, missing_collar_holes: ['R-9'], overlaps_existing: 0, overlap_holes: [], changed_sample: [], errors: [], error_count: 0, limit: 50000 };
+        if (args.p_dry_run) return json({ ...diff, dry_run: true });
+        fake.drill = { ...fake.drill, assays: fake.drill.assays + diff.new, holes: 13, elements: ['Au', 'Cu'],
+          batches: [{ id: args.p_batch, kind: args.p_kind, filename: args.p_filename, rows: diff.rows, rows_written: diff.new, summary: diff, created_at: '2026-10-21T00:00:00Z', created_by_email: user.email, rolled_back_at: null, blocked_by: null }, ...fake.drill.batches] };
+        return json({ ...diff, dry_run: false, committed: true, batch_id: args.p_batch, rows_written: diff.new });
+      }
+      if (fn === 'drill_rollback_batch') {
+        fake.drill = { ...fake.drill, assays: 0, holes: 12, elements: [], batches: fake.drill.batches.map((b) => (b.id === args.p_batch ? { ...b, rolled_back_at: '2026-10-21T01:00:00Z' } : b)) };
+        return json({ batch_id: args.p_batch, rolled_back: true, already: false, withdrawn: 3, restored: 0 });
+      }
+      if (fn === 'drill_save_template') {
+        const t = { id: 't1', kind: args.p_kind, name: args.p_name, mapping: args.p_mapping, updated_at: '2026-10-21T00:00:00Z' };
+        fake.templates = [t];
+        return json(t);
+      }
       if (fn === 'add_property_file_version') {
         const f = fake.files.find((x) => x.id === args.p_file);
         const version = f ? f.version + 1 : 1;
@@ -104,6 +127,7 @@ async function fakeSupabase(page, { role = 'owner', orgs = [org(role)], properti
       if (url.searchParams.get('property_id')) return rows([{ id: FIG, name: 'Rails 3D section', updated_at: '2026-10-18T00:00:00Z', thumbnail: null }]);
       return rows([]);
     }
+    if (path === '/rest/v1/drill_column_templates') return json(fake.templates);
     if (path === '/rest/v1/user_plans') return single ? json({ plan: 'free', source: 'signup', status: 'active' }) : json([]);
     return single ? json({ code: 'PGRST116', message: 'no rows' }, 406) : json([]);
   });
@@ -197,6 +221,59 @@ test('the data library lists, adds, versions, downloads and deletes files', asyn
   expect(fake.patches).toEqual([{ id: FILE, body: { deleted_at: expect.any(String) } }]);
 });
 
+test('drill data: import a CSV, map its columns, see the diff, commit and roll back', async ({ page }, testInfo) => {
+  const fake = await fakeSupabase(page, { role: 'editor' });
+  await page.goto('/workspace/star-copper-corp/p/rails-copper-gold');
+  await page.getByRole('tab', { name: 'Drill data' }).click();
+  const region = page.getByRole('region', { name: 'Drill data' });
+  const summary = region.getByRole('definition').filter({ hasText: '12 (2 planned)' });
+  await expect(summary).toBeVisible();
+  await expect(region.getByText('3,420.5')).toBeVisible();
+  const history = region.getByRole('table', { name: 'Import history' });
+  await expect(history.getByRole('row', { name: /Collars.*Rails collars\.csv.*12 new holes.*cfo@star\.test/ })).toBeVisible();
+
+  // The kind and columns are detected; the BDL value is flagged before anything is sent.
+  const chooser = page.waitForEvent('filechooser');
+  await region.getByRole('button', { name: '+ Import a CSV' }).click();
+  await (await chooser).setFiles({ name: 'assays-2026.csv', mimeType: 'text/csv', buffer: Buffer.from('HoleID,Sample,From,To,Cu_pct,Au_gpt\nR-1,A1,0,2,0.41,<0.005\nR-1,A2,2,4,0.55,0.12\nR-9,A3,0,1.5,0.2,0.03\n') });
+  const form = region.getByRole('form', { name: 'Import drill data' });
+  await expect(form.getByLabel('Data')).toHaveValue('assays');
+  await expect(form.getByLabel('Hole ID *')).toHaveValue('HoleID');
+  await expect(form.getByLabel('From *')).toHaveValue('From');
+  await expect(form.getByLabel('Sample ID')).toHaveValue('Sample');
+  await expect(form.getByLabel('Element for Au_gpt')).toHaveValue('Au');
+  await expect(form.getByLabel('Unit for Au_gpt')).toHaveValue('g/t');
+  await expect(form.getByText('1 value below detection, stored as half the detection limit and flagged')).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1);
+
+  await form.getByRole('button', { name: 'Check against stored data' }).click();
+  await expect(form.getByRole('status', { name: 'Changes' })).toContainText('1 new hole, 3 new assays');
+  await expect(form.getByText('1 hole has no collar yet: R-9')).toBeVisible();
+  const dry = fake.rpc.find((c) => c.fn === 'drill_import_batch').args;
+  expect(dry).toMatchObject({ p_property: PROP, p_kind: 'assays', p_filename: 'assays-2026.csv', p_dry_run: true, p_batch: null });
+  expect(dry.p_rows[0]).toEqual({ hole_id: 'R-1', sample_id: 'A1', from_m: 0, to_m: 2, values: { Cu: 0.41, Au: 0.0025 }, bdl: { Au: 0.005 }, units: { Cu: '%', Au: 'g/t' } });
+  expect(dry.p_mapping).toMatchObject({ columns: { hole_id: 'HoleID', from_m: 'From', to_m: 'To', sample_id: 'Sample' }, bdl: 'half' });
+  await page.screenshot({ path: testInfo.outputPath('drill-diff.png'), fullPage: true });
+
+  // Columns saved as a template for the next file from this lab.
+  await form.getByLabel('Template name').fill('ALS export');
+  await form.getByRole('button', { name: 'Save columns as template' }).click();
+  await expect(form.getByLabel('Saved columns').locator('option', { hasText: 'ALS export' })).toHaveCount(1);
+  expect(fake.rpc.find((c) => c.fn === 'drill_save_template').args).toMatchObject({ p_org: ORG, p_kind: 'assays', p_name: 'ALS export' });
+
+  await form.getByRole('button', { name: 'Commit import' }).click();
+  await expect(region.getByText('Imported assays-2026.csv: 1 new hole, 3 new assays.')).toBeVisible();
+  const commit = fake.rpc.filter((c) => c.fn === 'drill_import_batch')[1].args;
+  expect(commit).toMatchObject({ p_dry_run: false, p_batch: expect.stringMatching(/^[0-9a-f-]{36}$/) });
+  await expect(history.getByRole('row', { name: /Assays.*assays-2026\.csv.*1 new hole, 3 new assays.*geo@star\.test/ })).toBeVisible();
+  await expect(region.getByText('Au, Cu')).toBeVisible();
+
+  page.once('dialog', (d) => d.accept());
+  await history.getByRole('button', { name: 'Roll back assays-2026.csv' }).click();
+  await expect(history.getByRole('row', { name: /assays-2026\.csv.*Rolled back/ })).toBeVisible();
+  expect(fake.rpc.find((c) => c.fn === 'drill_rollback_batch').args).toEqual({ p_batch: commit.p_batch });
+});
+
 test('a viewer gets the same pages without editing controls', async ({ page }) => {
   await fakeSupabase(page, { role: 'viewer' });
   await page.goto('/workspace');
@@ -221,6 +298,10 @@ test('a viewer gets the same pages without editing controls', async ({ page }) =
   await expect(page.getByRole('button', { name: '+ Add a file' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: /Upload a new version/ })).toHaveCount(0);
   await expect(page.getByRole('button', { name: /^Delete / })).toHaveCount(0);
+  await page.getByRole('tab', { name: 'Drill data' }).click();
+  await expect(page.getByRole('table', { name: 'Import history' }).getByRole('row', { name: /Rails collars\.csv.*12 new holes/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: '+ Import a CSV' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /^Roll back/ })).toHaveCount(0);
 });
 
 test('an older property link opens directly when only one company has that address', async ({ page }) => {
