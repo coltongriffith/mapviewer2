@@ -361,6 +361,7 @@ button, input, select, textarea { font: inherit; }
 .map-callout.plain { background: transparent; border: none; box-shadow: none; text-shadow: 0 0 4px rgba(255,255,255,0.95); color: var(--callout-fg, var(--ui-text)); }
 .map-callout.leader { min-width: 132px; }
 .map-callout.boxed { min-width: 170px; }
+.map-callout.fit { min-width: 0; }
 .map-callout.badge { border: none; box-shadow: var(--shadow-overlay); border-radius: var(--r-md); overflow: hidden; }
 .map-callout-logo { display: block; object-fit: contain; pointer-events: none; user-select: none; }
 .map-callout.selected { outline: 2px solid rgba(198,83,34,0.9); outline-offset: 1px; }

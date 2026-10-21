@@ -4168,15 +4168,15 @@ export default function App({ initialAction = null }) {
 
   // Auto-arrange: the scored layout (lazy chunk) places every automatic card
   // and saves the result as its offset; pinned cards never move. It also opts
-  // a project saved before the scored layout into it — until then such a
-  // project keeps its legacy placement exactly.
+  // a project saved before the latest layout (none, or 2) into it — until
+  // then such a project keeps its earlier placement exactly.
   const autoArrangeCallouts = async () => {
     const map = leafletMapRef.current;
     if (!map) return;
     const { autoArrangeCallouts: arrange } = await import('./utils/calloutScorer.js');
     setProject((prev) => ({
       ...prev,
-      layout: { ...prev.layout, layoutAlgorithm: 2 },
+      layout: { ...prev.layout, layoutAlgorithm: 3 },
       callouts: arrange(prev.callouts, map, { obstacles: panelObstacles(resolvedZones, prev.layout) }),
     }));
     setUploadStatus({ type: 'info', message: 'Callouts arranged — press Ctrl+Z to undo.' });

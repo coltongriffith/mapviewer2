@@ -224,8 +224,8 @@ describe('projects saved before the scored layout are unchanged', () => {
     ]);
   });
 
-  it('only new projects start on the scored layout', () => {
-    expect(createInitialProjectState().layout.layoutAlgorithm).toBe(2);
+  it('only new projects start on the latest scored layout', () => {
+    expect(createInitialProjectState().layout.layoutAlgorithm).toBe(3);
   });
 
   const scene = (layout, callouts) => ({

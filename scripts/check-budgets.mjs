@@ -85,7 +85,11 @@ const BUDGETS = {
   // 904.5 → 905.2 (Oct 2026, measured 904.87): the drill CSV reader refuses broken files (an unclosed quote, a
   // row that does not match the header) naming the line, keeps each row's file line, and lists every column as
   // an element to tick (~0.7 kB, all in the lazy drill chunk).
-  totalAuthJsGzipKb: 905.2,
+  // 905.2 → 906.0 (Oct 2026, measured 905.71): 2D hole-ID labels at their own collar (layoutAlgorithm 3). The
+  // rules live in the lazy scorer (utils/calloutScorer.js, +0.81 kB: ID labels sized to their text, tried
+  // beside their anchor, a leader when pushed out, the ambiguity check and the crowded-first retry); the
+  // editor chunk only passes the layout version and draws a pushed label's leader (+0.05 kB).
+  totalAuthJsGzipKb: 906.0,
   // 805 → 808: placed and callout logos, SVG font embedding (Sept 2026).
   // 808 → 809: shared-map viewer opens at the saved view on the fixed stage.
   // 809 → 810: the lazy /oauth/consent page for MCP account sign-in.
@@ -100,7 +104,8 @@ const BUDGETS = {
   // 828.8 → 838.0 (Oct 2026, measured 837.65 after merging round 5C, plus 0.3): the drill database tab, as totalAuthJsGzipKb above (lazy chunk
   // ~8.8 kB in this build, workspace chunk +0.3 kB); nothing in App or on the homepage.
   // 838.0 → 838.7 (Oct 2026, measured 838.32): the drill CSV reader's structure checks, as totalAuthJsGzipKb above.
-  totalJsGzipKb: 838.7,
+  // 838.7 → 839.5 (Oct 2026, measured 839.15): hole-ID labels at their collar, as totalAuthJsGzipKb above.
+  totalJsGzipKb: 839.5,
   // Standalone pages (/3d, /teams) are separate Vite entries that never share
   // the app's chunks, so they are budgeted on their own instead of in the
   // totals above. /3d carries three.js (~109 kB gzip) and its editor.
