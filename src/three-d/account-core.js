@@ -171,14 +171,42 @@ const lib = () => (libP ||= import('./library.js').then((m) => { m.init({ client
   .catch((err) => { libP = null; throw err; }));
 const checkLibrary = () => { if (current?.home?.propertyId) lib().then((m) => m.check()).catch(() => { /* the figure is fine as it is */ }); };
 
+// ── Published versions ──────────────────────────────────────────────────────
+// Frozen, labelled copies of the saved figure, opened read-only (versions.js, on first use).
+let frozen = null; // the published version on screen, read-only
+let verP = null;
+// A version on screen is a different figure: the live figure's newer-data notices and pending updates go
+// (drill database, data library), and none comes back while it is shown (see drillFigure).
+function setFrozen(v) {
+  frozen = v;
+  if (v) { resetDrill(); const n = $('lib-notice'); if (n) n.hidden = true; }
+  renderNote();
+}
+const ver = () => (verP ||= import('./versions.js').then((m) => {
+  m.init({ client, current: () => current, dirty: () => dirty, canPublish: () => !!current && (!current.home || canEdit(current.home.role)), say,
+    frozen: () => frozen, setFrozen, reopen, detach, saveAsNew: (name) => openDialog('name', { name }) });
+  return m;
+}).catch((err) => { verP = null; throw err; }));
+export const publishVersion = (o) => ver().then((m) => m.publish(o));
+export const listVersions = (id) => ver().then((m) => m.list(id));
+export const openVersion = (n, o) => ver().then((m) => m.open(n, o));
+export const closeVersion = () => ver().then((m) => m.close());
+async function reopen(id) {
+  try { const res = await openProject(id); setUrlProject(res.id); settle(); say(`Back to “${res.name}” as last saved.`); return res; } catch (err) { detach(); say(err.message); throw err; }
+}
+function detach() { current = null; dirty = true; setUrlProject(null); renderNote(); }
+
 // ── Property drill database ─────────────────────────────────────────────────
 // Any member can take a figure's holes from a property's drill database; a
 // figure that did is told of newer imports when it opens (property-data.js).
+// The figure its notice may act on: none while a published version is on screen, so a check still reading
+// when the version opened never shows, and Update never rewrites the version.
+export const drillFigure = (figure, version) => (version ? null : figure);
 let drillP = null;
-const drill = () => (drillP ||= import('./property-data.js').then((m) => { m.init({ client, current: () => current, say, listHomes }); return m; })
+const drill = () => (drillP ||= import('./property-data.js').then((m) => { m.init({ client, current: () => drillFigure(current, frozen), say, listHomes }); return m; })
   .catch((err) => { drillP = null; throw err; }));
 const resetDrill = () => drillP?.then((m) => m.reset(), () => {}); // a notice belongs to the figure it was shown for
-const checkDrill = () => { if (studio().getState().drillSource?.kind === 'property') drill().then((m) => m.check()).catch(() => { /* the figure is fine as it is */ }); };
+const checkDrill = () => { if (!frozen && studio().getState().drillSource?.kind === 'property') drill().then((m) => m.check()).catch(() => { /* the figure is fine as it is */ }); };
 
 export async function listProjects() {
   await requireUser('see your saved 3D maps');
@@ -208,6 +236,8 @@ export const isConflict = (loadedAt, savedAt) => !!(loadedAt && savedAt && Date.
  * @param {{force?:boolean}} [opts]  force: overwrite even when the saved copy is newer than this one
  */
 export async function saveProject(name, existingId, dest = null, { force = false } = {}) {
+  // Every save path (the button, Ctrl/Cmd+S, EM3D.account.saveProject): a version on screen never overwrites the figure.
+  if (frozen) throw Object.assign(plain('A published version is open read-only. Start a new figure from it to save.', null, 'READ_ONLY'), { plain: true });
   const title = String(name || '').trim().slice(0, 200);
   if (!title) throw Object.assign(plain('Give the 3D map a name first.'), { plain: true });
   const user = await requireUser('save this 3D map');
@@ -420,7 +450,7 @@ function setUrlProject(id) {
 
 // Dialog: sign in (optionally saving afterwards), or name a first save.
 let dialogMode = null; // 'save-signin' | 'signin' | 'name'
-function openDialog(mode, { error = '', asNew = false, toProperty = false } = {}) {
+function openDialog(mode, { error = '', asNew = false, toProperty = false, name = '' } = {}) {
   const d = $('acct-dialog'); if (!d) return;
   dialogMode = mode;
   // A save conflict: overwrite, save as new or reload, in place of the form.
@@ -436,7 +466,7 @@ function openDialog(mode, { error = '', asNew = false, toProperty = false } = {}
   $('acct-name-row').hidden = !saving;
   const destRow = $('acct-dest-row');
   if (destRow) { destRow.hidden = true; if (mode === 'name') fillDest(toProperty); }
-  if (saving) { let t = ''; try { t = studio().getState().brand.title; } catch { /* default below */ } $('acct-name').value = (asNew && current ? `${current.name} (copy)` : current?.name) || t || 'Untitled 3D map'; }
+  if (saving) { let t = ''; try { t = studio().getState().brand.title; } catch { /* default below */ } $('acct-name').value = name || (asNew && current ? `${current.name} (copy)` : current?.name) || t || 'Untitled 3D map'; }
   $('acct-signin').hidden = mode === 'name';
   $('acct-name-actions').hidden = mode !== 'name';
   $('acct-sent').hidden = true;
@@ -477,6 +507,7 @@ function closeDialog() { const d = $('acct-dialog'); if (d?.open) d.close(); dia
 
 export async function save({ asNew = false, force = false } = {}) {
   if (busy || $('acct-dialog')?.open) return;
+  if (frozen) { say('This is a published version, read-only. Use “Start a new figure from this version” to change it.'); return; }
   if (!configured) { say(`Saving to an account is not available on this site right now. ${KEEP}`); return; }
   try { user = await getUser(); } catch (err) { say(err.message); return; }
   if (!user) { openDialog('save-signin'); return; }
@@ -555,7 +586,7 @@ async function renderMenu() {
     : '<p class="muted">No saved 3D maps yet. Use Save to keep this figure.</p>';
   const toProperty = (await listHomes()).properties.some((p) => canEdit(p.role));
   foot.innerHTML = `<span class="muted acct-who" title="${esc(user.email)}">${esc(user.email)}</span>`
-    + (current ? '<button class="btn" type="button" data-acct="save-new">Save as new</button>' : '')
+    + (current ? '<button class="btn" type="button" data-acct="versions">Versions…</button><button class="btn" type="button" data-acct="save-new">Save as new</button>' : '')
     + (toProperty ? '<button class="btn" type="button" data-acct="save-prop">Save to property…</button>' : '')
     + '<button class="btn" type="button" data-acct="signout">Sign out</button>';
 }
@@ -594,6 +625,7 @@ async function onMenuClick(e) {
   const act = t.dataset.acct;
   if (act === 'signin') { toggleMenu(false); openDialog('signin'); }
   else if (act === 'retry') renderMenu();
+  else if (act === 'versions') { toggleMenu(false); ver().then((m) => m.openDialog()).catch(() => say('Could not load published versions. Check your connection and try again.')); }
   else if (act === 'save-new') { toggleMenu(false); save({ asNew: true }); }
   else if (act === 'save-prop') { toggleMenu(false); openDialog('name', { asNew: Boolean(current), toProperty: true }); }
   else if (act === 'signout') {
@@ -626,6 +658,7 @@ function wire() {
     if (e.key === 'Escape' && !$('acct-menu').hidden) { toggleMenu(false); $('acct-maps').focus(); }
   });
   window.addEventListener('em3d:change', (e) => {
+    if (frozen) return; // a published version on screen is not the figure's work
     const now = sig(e.detail) !== savedSig;
     if (now !== dirty) { dirty = now; renderNote(); }
     // While a sign-in link is out, keep the stashed copy up to date.
@@ -712,8 +745,12 @@ async function boot() {
   }
   if (stash && !user) { pending = { intent: stash.intent, name: stash.name, id: stash.id || null }; say('Restored the figure you were saving. Sign in to finish saving it.'); return; }
   if (stash) await clearStash();
-  const wanted = new URLSearchParams(location.search).get('project');
-  if (wanted && user) {
+  const q = new URLSearchParams(location.search), wanted = q.get('project'), n = q.get('version');
+  if (wanted && user && /^\d+$/.test(n || '')) {
+    // /3d?project=<id>&version=<n>: that published version, read-only, read on its own: it opens even when
+    // the live figure has been deleted or moved where this reader cannot follow.
+    await openVersion(Number(n), { figure: wanted, force: true }).catch((err) => { setUrlProject(null); say(err.message); });
+  } else if (wanted && user) {
     try { const res = await openProject(wanted); settle(); say(`Opened “${res.name}”.`); } catch (err) { setUrlProject(null); say(err.message); }
   }
 }

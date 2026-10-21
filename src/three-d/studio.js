@@ -2538,7 +2538,7 @@ async function loadProject(p) {
   });
   histReset(); refresh.secSet = true; refresh(); refresh.secSet = !!p.secSet;
   await settle(p.camera);
-  const gaps = document.documentElement.classList.contains('em3d-viewer') ? [] : gapCallouts().map(gapText); // the owner is told, not a viewer
+  const gaps = document.documentElement.matches('.em3d-viewer,.em3d-version') ? [] : gapCallouts().map(gapText); // the owner is told, not a viewer (nor over a published version)
   status(project && !project.empty ? `Figure opened · ${project.holes.length} holes.${gaps.length ? ` ${gaps.join('; ')}: Recalculate in Layout, Intercept callouts.` : ''}` : 'Figure opened. Add a collar file to see the holes.');
   return getState();
 }

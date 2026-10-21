@@ -193,12 +193,14 @@ const BUDGETS = {
   // entries above add up; neither adds the other's code.
   // 170.6 → 170.9 (Oct 2026, drill database 2B, measured 170.56, configured 170.57): the drillSource hooks and the
   // hole-path switch (+0.18 kB); 170.6 left ~30 B, inside chunk-hash churn.
-  // 170.9 → 171.5 (Oct 2026, export options, measured 171.18, configured 171.21): a transparent background for exportPNG and the
+  // 170.9 → 170.95 (Oct 2026, published figure versions 5A merged over 2B, measured 170.62, configured 170.63, + ~0.3):
+  // the four EM3D.account version names and the gap note skipped over a published version (+0.03 kB); the rest is lazy.
+  // 170.95 → 171.6 (Oct 2026, export options, measured 171.21, configured 171.24, merged over figure versions 5A): a transparent background for exportPNG and the
   // layers ZIP (no scene colour, section paper or footer band; drawn synchronously, so in the page), the drop shadow
   // setting and its export override, the Export step's Background select, exports that wait for the layers they
   // need (pending setMapUse and module loads), and the hooks for Map use (the footer's notes and credits moved out,
   // the details atop the legend card, EM3D.setMapUse, the saved settings). The standalone block is lazy (mapuse.js).
-  threeDJsGzipKb: 171.5,
+  threeDJsGzipKb: 171.6,
   // /3d's own modules fetched on first use (the geology, geophysics and tag layers, the account
   // client). They never load with the page or the app, so they sit outside the page and app totals.
   // 32 → 34 (Oct 2026, round 4): per-hole tags, grouped pending tags, callouts beside or bracketed on their
@@ -261,10 +263,18 @@ const BUDGETS = {
   // 109.0 → 109.3 (review fixes, measured 108.79, configured 109.02): the newer-data notice is cleared when another figure
   // opens and Update checks it still belongs to the figure on screen; collars in more than one coordinate system are
   // refused with their counts (~0.2 kB in property-data.js, account-core.js +0.02).
-  // 109.3 → 110.5 (Oct 2026, export options, measured 109.94, configured 110.17): mapuse.js (~1 kB: a standalone map's details, sources
+  // 109.3 → 114.6 (Oct 2026, published figure versions 5A merged over drill database 2B, measured 114.04, configured
+  // 114.27, + 0.3; +5.25 kB over 2B's 109.02): versions.js (~4.7 kB: Publish version with its label and release date, the
+  // Versions list, a version opened read-only with its banner, Download PNG, "Start a new figure from this version" and
+  // "Back to the current figure" (left out when the live figure is gone or out of reach), the plain-words refusals),
+  // fetched only from "Versions…" in My 3D maps, the EM3D.account version methods or a ?version= link that reads the
+  // version on its own; and its hooks in account-core.js (~0.55 kB: saveProject refusing while a version is open, the
+  // change notices ignored, the lazy loader, the menu button, the ?version= boot, and opening a version clearing 2B's
+  // drill notice and pending Update, with no drill check while it is shown). Neither adds the other's code.
+  // 114.6 → 115.7 (Oct 2026, export options, measured 115.19, configured 115.42, merged over figure versions 5A): mapuse.js (~1 kB: a standalone map's details, sources
   // and notes as the top section of the legend card), fetched only for a standalone figure; desk.js passes the
   // background to every layer.
-  threeDLazyJsGzipKb: 110.5,
+  threeDLazyJsGzipKb: 115.7,
   // The /3d grade-shell worker (composites estimate and marching cubes) is its own chunk, fetched only
   // when a shell is turned on. Vite emits workers outside the manifest graph, so it is found from the
   // page's chunks (see below) and budgeted here rather than in the page or the app totals.
