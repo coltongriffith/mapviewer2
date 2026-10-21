@@ -312,3 +312,20 @@ describe('sending a signed-in user to the dashboard', () => {
     expect(shouldRedirectHome({ ...base, redirectedForUser: null })).toBe(true);
   });
 });
+
+describe('duplicating a map from the dashboard', () => {
+  it('names the copy "<name> (copy …)" and opens it, so the map being edited is the copy', async () => {
+    const storage = await import('../src/utils/cloudStorage');
+    projects = [project('a', 'Untitled map', '2026-08-01T00:00:00Z'), project('b', 'Tower Project (copy)', '2026-07-01T00:00:00Z')];
+    const payload = { layout: { title: 'Tower Project' }, layers: [] };
+    storage.loadCloudProject.mockResolvedValueOnce({ payload });
+    storage.saveCloudProject.mockResolvedValueOnce({ id: 'new', revision: 1 });
+    const onOpenProject = vi.fn();
+    await renderDashboard({ onOpenProject });
+    fireEvent.click(await screen.findByRole('button', { name: 'Duplicate Untitled map' }));
+    // The record was "Untitled map" but the editor shows the figure title, so
+    // the copy is named from that one name, never "Untitled map Copy".
+    await waitFor(() => expect(onOpenProject).toHaveBeenCalledWith({ id: 'new', name: 'Tower Project (copy 2)', payload, revision: 1 }));
+    expect(storage.saveCloudProject).toHaveBeenLastCalledWith({ id: null, name: 'Tower Project (copy 2)', payload });
+  });
+});

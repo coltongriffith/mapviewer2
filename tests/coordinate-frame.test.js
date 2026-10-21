@@ -94,42 +94,46 @@ describe('computeGridTicks', () => {
   it('returns only ticks inside the frame, in container pixels', () => {
     const t = computeGridTicks(fakeMap(), frame, 1);
     expect(t.zone).toBe(8);
-    expect(t.x.length).toBeGreaterThanOrEqual(4);
-    expect(t.y.length).toBeGreaterThanOrEqual(3);
-    for (const { px } of t.x) { expect(px).toBeGreaterThanOrEqual(frame.left - 1); expect(px).toBeLessThanOrEqual(frame.right + 1); }
-    for (const { py } of t.y) { expect(py).toBeGreaterThanOrEqual(frame.top - 1); expect(py).toBeLessThanOrEqual(frame.bottom + 1); }
+    expect(t.top.length).toBeGreaterThanOrEqual(4);
+    expect(t.left.length).toBeGreaterThanOrEqual(3);
+    for (const { px } of t.top) { expect(px).toBeGreaterThanOrEqual(frame.left - 1); expect(px).toBeLessThanOrEqual(frame.right + 1); }
+    for (const { py } of t.left) { expect(py).toBeGreaterThanOrEqual(frame.top - 1); expect(py).toBeLessThanOrEqual(frame.bottom + 1); }
   });
 
   it('labels eastings increasing to the right and northings increasing upward', () => {
     const t = computeGridTicks(fakeMap(), frame, 1);
-    for (let i = 1; i < t.x.length; i += 1) {
-      expect(t.x[i].px).toBeGreaterThan(t.x[i - 1].px);
-      expect(t.x[i].easting).toBe(t.x[i - 1].easting + t.xInterval);
+    for (let i = 1; i < t.top.length; i += 1) {
+      expect(t.top[i].px).toBeGreaterThan(t.top[i - 1].px);
+      expect(t.top[i].easting).toBe(t.top[i - 1].easting + t.xInterval);
     }
-    for (let i = 1; i < t.y.length; i += 1) {
-      expect(t.y[i].py).toBeGreaterThan(t.y[i - 1].py);
-      expect(t.y[i].northing).toBe(t.y[i - 1].northing - t.yInterval);
+    for (let i = 1; i < t.left.length; i += 1) {
+      expect(t.left[i].py).toBeGreaterThan(t.left[i - 1].py);
+      expect(t.left[i].northing).toBe(t.left[i - 1].northing - t.yInterval);
     }
-    expect(t.x[0].label).toMatch(/^\d{3} \d{3}E$/);
-    expect(t.y[0].label).toMatch(/^\d \d{3} \d{3}N$/);
+    expect(t.top[0].label).toMatch(/^\d{3} \d{3}E$/);
+    expect(t.left[0].label).toMatch(/^\d \d{3} \d{3}N$/);
   });
 
-  it('lands each tick where that easting actually is, not squeezed into the frame', () => {
+  it('lands each tick where that easting actually is on its own edge, not squeezed into the frame', () => {
     const map = fakeMap();
     const t = computeGridTicks(map, frame, 1);
-    const first = t.x[0];
-    // Project the tick's own easting back through the map: it must be at px.
-    const centre = map.getCenter();
-    const u = latlngToUTM(centre.lat, centre.lng);
-    const mPerLng = 111319.9 * Math.cos(centre.lat * Math.PI / 180) * 0.9996 * 1.0000; // ~flat approx
-    const expectedX = map.latLngToContainerPoint([centre.lat, centre.lng + (first.easting - u.easting) / mPerLng]).x;
-    expect(Math.abs(first.px - expectedX)).toBeLessThan(3);
+    for (const [edge, y] of [['top', frame.top], ['bottom', frame.bottom]]) {
+      for (const { px, easting } of t[edge]) {
+        const ll = map.containerPointToLatLng([px, y]);
+        expect(Math.abs(latlngToUTM(ll.lat, ll.lng, t.zone).easting - easting)).toBeLessThan(0.01);
+      }
+    }
+    // Two degrees east of zone 8's central meridian the grid converges ~1.8°,
+    // so one grid line's top and bottom ticks are several pixels apart.
+    const mid = t.top[Math.floor(t.top.length / 2)];
+    const shift = t.bottom.find((b) => b.easting === mid.easting).px - mid.px;
+    expect(Math.abs(shift)).toBeGreaterThan(5);
   });
 
   it('multiplies by the export scale', () => {
     const one = computeGridTicks(fakeMap(), frame, 1);
     const two = computeGridTicks(fakeMap(), frame, 2);
-    expect(two.x[0].px).toBeCloseTo(one.x[0].px * 2, 6);
+    expect(two.top[0].px).toBeCloseTo(one.top[0].px * 2, 6);
     expect(two.frame.right).toBe(frame.right * 2);
   });
 
@@ -159,9 +163,9 @@ describe('across the equator', () => {
     const map = fakeMap({ lat: 0.02, lng: 30, mPerPx: 40 });
     const frame = getMapFrame({ templateId: 'technical_results_v2', showCoordinateFrame: true }, { width: 1000, height: 600 });
     const t = computeGridTicks(map, frame, 1);
-    expect(t.y.length).toBeGreaterThanOrEqual(2);
-    const above = t.y.filter((k) => k.northing >= 0);
-    const below = t.y.filter((k) => k.northing < 0);
+    expect(t.left.length).toBeGreaterThanOrEqual(2);
+    const above = t.left.filter((k) => k.northing >= 0);
+    const below = t.left.filter((k) => k.northing < 0);
     expect(above.length).toBeGreaterThan(0);
     expect(below.length).toBeGreaterThan(0);
     // A southern tick reads with its false northing restored.

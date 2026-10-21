@@ -1,5 +1,6 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { LegendPointSwatch } from './LegendSwatches.jsx';
+import NameDialog from './NameDialog.jsx';
 import {
   LEGEND_SYMBOLS, DEFAULT_LEGEND_SYMBOL, DEFAULT_LEGEND_COLOR, DEFAULT_LEGEND_GROUP,
   customLegendItem, nextCustomLegendId, applyLegendCustomization, moveLegendItem, orderLegendItems, overrideFor, renameLegendHeading,
@@ -36,6 +37,8 @@ export default function LegendEditor({ derivedItems, layout, updateLayout }) {
   const customItems = layout?.legendCustomItems || [];
 
   const grouped = !!layout?.legendGrouped;
+  // The entry waiting for a new heading's name (asked in a dialog, not prompt()).
+  const [newHeadingFor, setNewHeadingFor] = useState(null);
 
   // An entry's saved override, whichever of its past ids it was saved under.
   const ov = (item) => overrideFor(overrides, item) || {};
@@ -86,11 +89,8 @@ export default function LegendEditor({ derivedItems, layout, updateLayout }) {
         aria-label={`Move ${label} to heading`}
         title="Move to group"
         onChange={(e) => {
-          let v = e.target.value;
-          if (v === '__new__') {
-            v = typeof window !== 'undefined' ? window.prompt('New heading name') : '';
-            if (!v || !v.trim()) return;
-          }
+          const v = e.target.value;
+          if (v === '__new__') { setNewHeadingFor(item); return; }
           setOverride(item.id, { group: v.trim() }, item);
         }}
       >
@@ -298,6 +298,15 @@ export default function LegendEditor({ derivedItems, layout, updateLayout }) {
         Added items are labels only — they describe something already on the map, and do not draw anything.
         {grouped ? ' Entries with the same heading are listed together, in the order shown here.' : ''}
       </p>
+      {newHeadingFor && (
+        <NameDialog
+          title="New legend heading"
+          label="Heading"
+          confirmLabel="Add heading"
+          onSubmit={(name) => { setOverride(newHeadingFor.id, { group: name }, newHeadingFor); setNewHeadingFor(null); }}
+          onClose={() => setNewHeadingFor(null)}
+        />
+      )}
     </div>
   );
 }

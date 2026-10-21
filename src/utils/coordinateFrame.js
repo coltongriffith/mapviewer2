@@ -71,8 +71,8 @@ export function utmZone(lng) {
   return Math.floor((lng + 180) / 6) + 1;
 }
 
-export function latlngToUTM(lat, lng) {
-  const zone = utmZone(lng);
+/** `zone` forces the zone (a map's ticks stay in its centre's zone). */
+export function latlngToUTM(lat, lng, zone = utmZone(lng)) {
   const cm = (zone - 1) * 6 - 180 + 3;
   const latR = lat * Math.PI / 180;
   const dLng = (lng - cm) * Math.PI / 180;
@@ -120,13 +120,23 @@ export function haversineMeters(lat1, lng1, lat2, lng2) {
 
 /**
  * The ticks to draw on a frame: where each one sits (in output pixels, i.e.
- * container pixels times `scale`) and what it says. Only ticks inside the
- * frame are returned, so a renderer draws what it is given.
+ * container pixels times `scale`) and what it says, edge by edge. Only ticks
+ * on the frame are returned, so a renderer draws what it is given.
+ *
+ * A tick is where a UTM grid line crosses the frame rule. The map is Web
+ * Mercator and the grid is Transverse Mercator, so grid lines are neither
+ * straight nor parallel to the frame: they converge on the zone's central
+ * meridian, and easting along a parallel is not linear in longitude. Ticks
+ * used to be placed with a flat metres-per-degree at the centre's latitude
+ * and drawn at that one position on both opposite edges, which put 663 250E
+ * about 14 m (54 px) off at zoom 17.5 at 50.6°N. Now each edge is walked in
+ * container pixels, each point projected to UTM, and every tick value solved
+ * for where that edge reaches it (solveEdge). The top and bottom ticks of one
+ * grid line differ by the grid convergence, as on a printed sheet.
  *
  * Eastings are computed in the zone of the map centre, so a map straddling a
- * 6° zone boundary does not jump; northings are stepped from the centre with
- * a flat metres-per-degree, which is within a pixel at any map scale a tick
- * frame is used at.
+ * 6° zone boundary does not jump. (The single `x` and `y` lists drawn on both
+ * opposite edges are gone; every renderer reads top/bottom/left/right.)
  */
 export function computeGridTicks(map, frame, scale = 1) {
   if (!map || !frame) return null;
@@ -147,43 +157,57 @@ export function computeGridTicks(map, frame, scale = 1) {
   const yInterval = pickUTMInterval(totalH * (frameH / size.y), 5);
 
   const centre = latlngToUTM(centerLL.lat, centerLL.lng);
-  const cm = (centre.zone - 1) * 6 - 180 + 3;
-  const refLatR = centerLL.lat * Math.PI / 180;
-  const nRef = A / Math.sqrt(1 - E2 * Math.sin(refLatR) ** 2);
-  const mPerLngRad = K0 * nRef * Math.cos(refLatR);
-  const eastingAt = (lng) => 500000 + mPerLngRad * (lng - cm) * (Math.PI / 180);
-  const lngAt = (e) => cm + ((e - 500000) / mPerLngRad) * (180 / Math.PI);
+  // Northings on one continuous axis: the southern hemisphere's 10 000 000 m
+  // false northing is removed for the arithmetic and put back for the label,
+  // so a map across the equator still gets its ticks.
+  const utmAt = (x, y) => {
+    const ll = map.containerPointToLatLng([x, y]);
+    const u = latlngToUTM(ll.lat, ll.lng, centre.zone);
+    return ll.lat < 0 ? { ...u, northing: u.northing - 10000000 } : u;
+  };
+  const s = scale;
+  const across = (y) => solveEdge((x) => utmAt(x, y).easting, frame.left, frame.right, xInterval)
+    .map(({ t, v }) => ({ px: t * s, easting: v, label: fmtUTMEasting(v) }));
+  const down = (x) => solveEdge((y) => utmAt(x, y).northing, frame.top, frame.bottom, yInterval)
+    .map(({ t, v }) => ({ py: t * s, northing: v, label: fmtUTMNorthing(v >= 0 ? v : v + 10000000) }));
+  return {
+    zone: centre.zone, hemisphere: centre.hemisphere, xInterval, yInterval,
+    top: across(frame.top), bottom: across(frame.bottom), left: down(frame.left), right: down(frame.right),
+    frame: { left: frame.left * s, top: frame.top * s, right: frame.right * s, bottom: frame.bottom * s },
+  };
+}
 
-  const f = { left: frame.left * scale, top: frame.top * scale, right: frame.right * scale, bottom: frame.bottom * scale };
-  const tol = 1;
-
-  const x = [];
-  const leftE = eastingAt(leftLL.lng);
-  const rightE = eastingAt(rightLL.lng);
-  for (let e = Math.ceil(leftE / xInterval) * xInterval; e <= rightE + xInterval * 0.1; e += xInterval) {
-    const pt = map.latLngToContainerPoint([centerLL.lat, lngAt(e)]);
-    const px = pt.x * scale;
-    if (px < f.left - tol || px > f.right + tol) continue;
-    x.push({ px, easting: e, label: fmtUTMEasting(e) });
+/**
+ * Every multiple of `interval` that `value(t)` passes for t from `a` to `b`,
+ * with the t where it does, sorted by t. The edge is sampled first so each
+ * value is bracketed even where the projection bends, then each crossing is
+ * bisected to under a thousandth of a pixel. Never interpolated.
+ */
+export function solveEdge(value, a, b, interval, samples = 32) {
+  const out = [];
+  if (!(b > a) || !(interval > 0)) return out;
+  let t0 = a;
+  let v0 = value(a);
+  for (let i = 1; i <= samples; i += 1) {
+    const t1 = a + ((b - a) * i) / samples;
+    const v1 = value(t1);
+    for (let k = Math.ceil(Math.min(v0, v1) / interval); k * interval <= Math.max(v0, v1); k += 1) {
+      const v = k * interval;
+      // A value on a sample point belongs to the segment before it.
+      if (v === v0 && i > 1) continue;
+      let ta = t0, tb = t1, va = v0;
+      while (tb - ta > 1e-4) {
+        const tm = (ta + tb) / 2;
+        const vm = value(tm);
+        if ((vm - v) * (va - v) <= 0) tb = tm;
+        else { ta = tm; va = vm; }
+      }
+      out.push({ t: (ta + tb) / 2, v });
+    }
+    t0 = t1;
+    v0 = v1;
   }
-
-  const y = [];
-  // Northings are stepped on one continuous axis: the southern hemisphere's
-  // 10 000 000 m false northing is removed for the arithmetic and put back
-  // for the label, so a map across the equator still gets its ticks.
-  const continuous = (u) => (u.hemisphere === 'S' ? u.northing - 10000000 : u.northing);
-  const topN = continuous(latlngToUTM(topLL.lat, topLL.lng));
-  const botN = continuous(latlngToUTM(botLL.lat, botLL.lng));
-  const centreN = continuous(centre);
-  for (let n = Math.floor(topN / yInterval) * yInterval; n >= botN - yInterval * 0.1; n -= yInterval) {
-    const lat = centerLL.lat + (n - centreN) / 111132;
-    const pt = map.latLngToContainerPoint([lat, centerLL.lng]);
-    const py = pt.y * scale;
-    if (py < f.top - tol || py > f.bottom + tol) continue;
-    y.push({ py, northing: n, label: fmtUTMNorthing(n >= 0 ? n : n + 10000000) });
-  }
-
-  return { zone: centre.zone, hemisphere: centre.hemisphere, xInterval, yInterval, x, y, frame: f };
+  return out.sort((p, q) => p.t - q.t);
 }
 
 // ── Projection / datum text ─────────────────────────────────────────────────
