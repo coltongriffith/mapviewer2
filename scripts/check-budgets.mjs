@@ -85,7 +85,12 @@ const BUDGETS = {
   // 904.5 → 905.2 (Oct 2026, measured 904.87): the drill CSV reader refuses broken files (an unclosed quote, a
   // row that does not match the header) naming the line, keeps each row's file line, and lists every column as
   // an element to tick (~0.7 kB, all in the lazy drill chunk).
-  totalAuthJsGzipKb: 905.2,
+  // 905.2 → 914.1 (Oct 2026, drill database 2C, measured 913.78): the Drill data tab's Results section, one lazy chunk
+  // (ResultsPanel.jsx with shared/drillResults.js and its own copy of the intercept and metal-equivalent maths,
+  // ~8.7 kB: the recipe form, the release table, copies, CSV and the published-results export), fetched only when
+  // "Show results" is pressed; the drill tab chunk gains the section and its lazy hook (~0.34 kB). App, the homepage
+  // and /3d are unchanged (App +7 B and /3d page +0.05 kB of chunk-hash churn and the shared run finder).
+  totalAuthJsGzipKb: 914.1,
   // 805 → 808: placed and callout logos, SVG font embedding (Sept 2026).
   // 808 → 809: shared-map viewer opens at the saved view on the fixed stage.
   // 809 → 810: the lazy /oauth/consent page for MCP account sign-in.
@@ -100,7 +105,8 @@ const BUDGETS = {
   // 828.8 → 838.0 (Oct 2026, measured 837.65 after merging round 5C, plus 0.3): the drill database tab, as totalAuthJsGzipKb above (lazy chunk
   // ~8.8 kB in this build, workspace chunk +0.3 kB); nothing in App or on the homepage.
   // 838.0 → 838.7 (Oct 2026, measured 838.32): the drill CSV reader's structure checks, as totalAuthJsGzipKb above.
-  totalJsGzipKb: 838.7,
+  // 838.7 → 847.1 (Oct 2026, measured 846.73): the drill results section, as totalAuthJsGzipKb above.
+  totalJsGzipKb: 847.1,
   // Standalone pages (/3d, /teams) are separate Vite entries that never share
   // the app's chunks, so they are budgeted on their own instead of in the
   // totals above. /3d carries three.js (~109 kB gzip) and its editor.

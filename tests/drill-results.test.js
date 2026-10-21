@@ -1,0 +1,249 @@
+import { describe, it, expect } from 'vitest';
+import Papa from 'papaparse';
+import {
+  computeResults, defaultRecipe, checkRecipe, eqSetup, holeIntervals, notes, resultsText, tableRows, toTsv, toCsv,
+  toPublishedRecords, toPublishedFile, PUBLISHED_HEADER, byHole,
+} from '../shared/drillResults.js';
+import { fmtGrade, gradeText, intercept, runs, samples } from '../shared/intercepts.js';
+import { eqFactors, eqFormula } from '../shared/metalEq.js';
+import * as threeDIntercepts from '../src/three-d/intercepts.js';
+import * as threeDEq from '../src/three-d/metal-eq.js';
+import { readResults, pubCols, pubCallouts, pubLines, headline } from '../src/three-d/published-results.js';
+import { matchCols } from '../src/three-d/roles.js';
+
+// The property's results calculator (shared/drillResults.js): the drill database's current assays, one
+// recipe, the news-release table, and the same results as /3d's published-results records.
+
+const RECIPE = {
+  version: 1, primary: 'Cu', equivalent: true,
+  elements: [{ name: 'Cu', unit: '%', price: 4.5, recovery: 90 }, { name: 'Au', unit: 'g/t', price: 3000, recovery: 70 }],
+  cutoff: 0.2, minLength: 2, maxDilution: 6, inclCutoff: 1, inclMinLength: 2, inclMaxDilution: 0,
+  bdl: 'stored', lengthDecimals: 1, gradeDecimals: {}, trueWidth: 'True widths are estimated at 70–90% of the core lengths.',
+};
+// Assay rows as the drill database stores them.
+const row = (hole, from, to, values, extra = {}) => ({ hole_id: hole, from_m: from, to_m: to, values, bdl: {}, units: { Cu: '%', Au: 'g/t' }, ...extra });
+// One hole, 2 m samples: waste to 34 m, 122 m of mineralisation with an 18 m high-grade core, waste to 200 m.
+function textbookHole(hole = 'RC-24-001') {
+  const out = [];
+  for (let d = 0; d < 200; d += 2) {
+    const v = d < 34 || d >= 156 ? { Cu: 0.02, Au: 0.01 } : d >= 80 && d < 98 ? { Cu: 1.0, Au: 0.42 } : { Cu: 0.355, Au: 0.174 };
+    out.push(row(hole, d, d + 2, v));
+  }
+  return out;
+}
+const simple = (vals, extra = {}) => vals.map((cu, i) => row('H-1', i, i + 1, { Cu: cu }, extra));
+const CU = { ...RECIPE, equivalent: false, elements: [RECIPE.elements[0]], inclCutoff: null, minLength: 1 };
+
+describe('the textbook composite', () => {
+  const { results, columns, eq, problems } = computeResults(textbookHole(), RECIPE);
+
+  it('reads as a news release prints it', () => {
+    expect(problems).toEqual([]);
+    expect(results).toHaveLength(1);
+    expect(results[0].text).toBe('122.0 m @ 0.61% CuEq (0.45% Cu, 0.21 g/t Au) from 34.0 m, incl. 18.0 m @ 1.32% CuEq');
+    expect(resultsText(results, RECIPE).split('\n')[0]).toBe('RC-24-001: 122.0 m @ 0.61% CuEq (0.45% Cu, 0.21 g/t Au) from 34.0 m, incl. 18.0 m @ 1.32% CuEq');
+    expect(columns).toEqual([{ key: 'CuEq', unit: '%' }, { key: 'Cu', unit: '%' }, { key: 'Au', unit: 'g/t' }]);
+  });
+
+  it('weights grades by length, by hand', () => {
+    const f = eqFactors({ metal: 'Cu', unit: '%', price: 4.5, recovery: 90 }, [{ metal: 'Au', unit: 'g/t', price: 3000, recovery: 70 }])[0].factor;
+    const cu = (18 * 1.0 + 104 * 0.355) / 122, au = (18 * 0.42 + 104 * 0.174) / 122;
+    const r = results[0];
+    expect([r.from, r.to, r.len]).toEqual([34, 156, 122]);
+    expect(r.grades.Cu).toBeCloseTo(cu, 12);
+    expect(r.grades.Au).toBeCloseTo(au, 12);
+    expect(r.grades.CuEq).toBeCloseTo(cu + f * au, 12);
+    expect(r.incl).toHaveLength(1);
+    expect(r.incl[0]).toMatchObject({ id: 'RC-24-001:1.1', parentId: 'RC-24-001:1', from: 80, to: 98, len: 18 });
+    expect(r.incl[0].grades.CuEq).toBeCloseTo(1.0 + f * 0.42, 12);
+  });
+
+  it('shows the formula /3d uses, and the notes', () => {
+    const f = eqFactors({ metal: 'Cu', unit: '%', price: 4.5, recovery: 90 }, [{ metal: 'Au', unit: 'g/t', price: 3000, recovery: 70 }]);
+    expect(eq.formula).toBe(eqFormula('Cu', f));
+    expect(eq.formula).toBe('CuEq = Cu + 0.756 × Au');
+    expect(notes(RECIPE)).toEqual([
+      'CuEq = Cu + 0.756 × Au, with CuEq and Cu in %, Au in g/t. Prices Cu US$4.50/lb, Au US$3,000/oz; recoveries Cu 90%, Au 70%.',
+      'Composited at 0.2% CuEq over at least 2 m, with up to 6 m of consecutive internal dilution; lengths are sampled core lengths and grades are length-weighted. "incl." intervals at 1% CuEq over at least 2 m, with up to 0 m of internal dilution.',
+      'Below-detection assays: as stored at import.',
+      'True widths are estimated at 70–90% of the core lengths.',
+    ]);
+  });
+
+  it('as a table, TSV and CSV, with the same rounded numbers', () => {
+    const t = tableRows(results, columns);
+    expect(t).toEqual([
+      ['Hole ID', '', 'From (m)', 'To (m)', 'Length (m)', 'CuEq (%)', 'Cu (%)', 'Au (g/t)', 'Interval'],
+      ['RC-24-001', '', '34.0', '156.0', '122.0', '0.61', '0.45', '0.21', '122.0 m @ 0.61% CuEq (0.45% Cu, 0.21 g/t Au) from 34.0 m'],
+      ['RC-24-001', 'incl.', '80.0', '98.0', '18.0', '1.32', '1.00', '0.42', 'incl. 18.0 m @ 1.32% CuEq'],
+    ]);
+    expect(toTsv(t).split('\n')[2]).toBe('RC-24-001\tincl.\t80.0\t98.0\t18.0\t1.32\t1.00\t0.42\tincl. 18.0 m @ 1.32% CuEq');
+    expect(toCsv(t).split('\r\n')[1]).toBe('RC-24-001,,34.0,156.0,122.0,0.61,0.45,0.21,"122.0 m @ 0.61% CuEq (0.45% Cu, 0.21 g/t Au) from 34.0 m"');
+  });
+});
+
+describe('compositing rules', () => {
+  it('a textbook run with internal dilution, and the same split when dilution is shorter', () => {
+    const vals = [0.1, 0.5, 0.3, 0.05, 0.05, 0.6, 0.1];
+    let r = computeResults(simple(vals), { ...CU, maxDilution: 2 }).results;
+    expect(r.map((x) => [x.from, x.to, x.len, +x.grades.Cu.toFixed(6)])).toEqual([[1, 6, 5, 0.3]]);
+    expect(r[0].text).toBe('5.0 m @ 0.30% Cu from 1.0 m');
+    r = computeResults(simple(vals), { ...CU, maxDilution: 1 }).results;
+    expect(r.map((x) => [x.from, x.to, +x.grades.Cu.toFixed(6)])).toEqual([[1, 3, 0.4], [5, 6, 0.6]]);
+    // The minimum length drops the short one.
+    expect(computeResults(simple(vals), { ...CU, maxDilution: 1, minLength: 2 }).results.map((x) => x.from)).toEqual([1]);
+  });
+
+  it('internal dilution up to the limit joins; one sample more ends the run (as /3d)', () => {
+    const at = (waste) => [0.5, ...Array(waste).fill(0), 0.5];
+    expect(computeResults(simple(at(6)), CU).results.map((x) => [x.from, x.to])).toEqual([[0, 8]]);
+    expect(computeResults(simple(at(7)), CU).results.map((x) => [x.from, x.to])).toEqual([[0, 1], [8, 9]]);
+    // The run ends on its last sample above the cut-off: trailing waste is never reported.
+    expect(computeResults(simple([0.5, 0.5, 0.1, 0.1]), CU).results.map((x) => [x.from, x.to])).toEqual([[0, 2]]);
+    // /3d's intercept() is the run of these holding the most metal.
+    const ints = simple(at(7)).map((x) => ({ from: x.from_m, to: x.to_m, vals: x.values }));
+    expect(intercept(ints, 'Cu', 0.2, 1, 1).broad).toMatchObject({ from: 0, len: 1 });
+    expect(runs(samples(ints, 'Cu'), 0.2, 1).map((x) => x.metal)).toEqual([0.5, 0.5]);
+  });
+
+  it('an unsampled gap ends an interval; overlapping samples count once', () => {
+    const rows = [row('H', 0, 2, { Cu: 0.5 }), row('H', 2, 4, { Cu: 0.5 }), row('H', 14, 16, { Cu: 0.5 })];
+    expect(computeResults(rows, { ...CU, maxDilution: 20 }).results.map((x) => [x.from, x.to, x.len])).toEqual([[0, 4, 4], [14, 16, 2]]);
+    const over = [row('H', 0, 2, { Cu: 1 }), row('H', 1, 3, { Cu: 0.4 })];
+    expect(computeResults(over, CU).results.map((x) => [x.from, x.to, x.len, +x.grades.Cu.toFixed(6)])).toEqual([[0, 3, 3, 0.8]]);
+  });
+
+  it('"incl." intervals lie inside, each at the higher cut-off, never the whole interval again', () => {
+    const rows = simple([0.3, 1.5, 1.2, 0.3, 0.3, 2.0, 0.3]);
+    const r = computeResults(rows, { ...CU, inclCutoff: 1, inclMinLength: 1, inclMaxDilution: 0 }).results;
+    expect(r).toHaveLength(1);
+    expect(r[0].incl.map((x) => [x.from, x.to, x.line])).toEqual([[1, 3, '2.0 m @ 1.35% Cu'], [5, 6, '1.0 m @ 2.00% Cu']]);
+    expect(r[0].text).toBe('7.0 m @ 0.84% Cu from 0.0 m, incl. 2.0 m @ 1.35% Cu; incl. 1.0 m @ 2.00% Cu');
+    // With dilution allowed they join into one "incl."; an "incl." the length of the interval is left out.
+    expect(computeResults(rows, { ...CU, inclCutoff: 1, inclMinLength: 1, inclMaxDilution: 2 }).results[0].incl.map((x) => [x.from, x.to])).toEqual([[1, 6]]);
+    expect(computeResults(simple([1.5, 1.2]), { ...CU, inclCutoff: 1, inclMinLength: 1 }).results[0].incl).toEqual([]);
+  });
+
+  it('lists holes in natural order, each by depth', () => {
+    const rows = ['DDH-10', 'DDH-2', 'DDH-1'].flatMap((h) => [row(h, 10, 11, { Cu: 0.5 }), row(h, 0, 1, { Cu: 0.5 })]);
+    expect(computeResults(rows, CU).results.map((x) => `${x.holeId}@${x.from}`)).toEqual(['DDH-1@0', 'DDH-1@10', 'DDH-2@0', 'DDH-2@10', 'DDH-10@0', 'DDH-10@10']);
+    expect(['b-10', 'B-9', 'a'].sort(byHole)).toEqual(['a', 'B-9', 'b-10']);
+  });
+});
+
+describe('below detection, units and missing values', () => {
+  // The drill database stores "<0.01" as half the limit (by default) with bdl: { Cu: 0.01 }; "BDL" with no
+  // limit as bdl: { Cu: true } and no value; a missing value has neither.
+  const rows = [row('H', 0, 1, { Cu: 0.9 }), row('H', 1, 2, { Cu: 0.005 }, { bdl: { Cu: 0.01 } }), row('H', 2, 3, {}, { bdl: { Cu: true } }), row('H', 3, 4, { Cu: 0.9 })];
+  it('a flagged sample is assayed (never a gap), valued by the recipe', () => {
+    const at = (bdl) => computeResults(rows, { ...CU, maxDilution: 2, bdl }).results[0];
+    expect(at('stored')).toMatchObject({ from: 0, to: 4, len: 4, bdl: 2 });
+    expect(at('stored').grades.Cu).toBeCloseTo((0.9 + 0.005 + 0 + 0.9) / 4, 12);
+    expect(at('zero').grades.Cu).toBeCloseTo(1.8 / 4, 12);
+    expect(at('dl').grades.Cu).toBeCloseTo(1.81 / 4, 12);
+    expect(at('half').grades.Cu).toBeCloseTo(1.805 / 4, 12);
+  });
+  it('a value missing and not flagged is unsampled, and ends the interval', () => {
+    const gap = [row('H', 0, 1, { Cu: 0.9 }), row('H', 1, 2, { Au: 0.1 }), row('H', 2, 3, { Cu: 0.9 })];
+    expect(computeResults(gap, { ...CU, maxDilution: 5 }).results.map((x) => [x.from, x.to])).toEqual([[0, 1], [2, 3]]);
+    // A missing component of the equivalent gives no equivalent there (never read as zero), as in /3d.
+    const eq = [row('H', 0, 2, { Cu: 0.5, Au: 0.2 }), row('H', 2, 4, { Cu: 0.5 }), row('H', 4, 6, { Cu: 0.5, Au: 0.2 })];
+    const { holes } = holeIntervals(eq, RECIPE);
+    expect(Number.isNaN(holes.get('H')[1].vals.CuEq)).toBe(true);
+    expect(computeResults(eq, RECIPE).results.map((x) => [x.from, x.to])).toEqual([[0, 2], [4, 6]]);
+  });
+  it('converts a grade stored in another unit, and says what it cannot read', () => {
+    const mixed = [row('H', 0, 2, { Cu: 4500 }, { units: { Cu: 'ppm' } }), row('H', 2, 4, { Cu: 0.45 }), row('H', 4, 6, { Cu: 0.45 }, { units: {} }), row('H', 6, 8, { Cu: 3 }, { units: { Cu: 'lb/t' } })];
+    const out = computeResults(mixed, { ...CU, maxDilution: 0 });
+    expect(out.results.map((x) => [x.from, x.to, +x.grades.Cu.toFixed(9)])).toEqual([[0, 6, 0.45]]);
+    expect(out.problems).toEqual(['Some Cu assays have no unit; they are read as the recipe\'s unit.', 'Assays stored in a unit the recipe cannot convert are left out: Cu (lb/t).']);
+  });
+});
+
+describe('rounding', () => {
+  // /3d's callout grades as studio.js wrote them before they moved to shared/intercepts.js.
+  const before = (v) => (v >= 100 ? v.toFixed(0) : v >= 10 ? v.toFixed(1) : v > 0 && v < 0.01 ? v.toFixed(3) : v.toFixed(2));
+  const beforeText = (v, label) => { const unit = (label.match(/(%|g\/t|ppm|ppb)$/) || [''])[0], el = label.replace(/\s*(%|g\/t|ppm|ppb)$/, ''); return `${before(v)}${unit === '%' ? '%' : ' ' + unit} ${el}`; };
+  it('writes grades exactly as /3d does', () => {
+    let x = 7;
+    for (let i = 0; i < 2000; i++) {
+      x = (x * 16807) % 2147483647; const v = (x / 2147483647) * 10 ** ((i % 7) - 3);
+      expect(fmtGrade(v)).toBe(before(v));
+      expect(gradeText(v, 'CuEq %')).toBe(beforeText(v, 'CuEq %'));
+      expect(gradeText(v, 'Au g/t')).toBe(beforeText(v, 'Au g/t'));
+    }
+    for (const v of [0, 0.005, 0.0099, 0.01, 0.125, 0.135, 1.005, 9.995, 10, 99.95, 100, 1234.5]) expect(fmtGrade(v)).toBe(before(v));
+  });
+  it('takes fixed decimals when the recipe sets them, for lengths and grades', () => {
+    const r = computeResults(textbookHole(), { ...RECIPE, lengthDecimals: 0, gradeDecimals: { '*': 3, Au: 1 } }).results[0];
+    expect(r.text).toBe('122 m @ 0.609% CuEq (0.450% Cu, 0.2 g/t Au) from 34 m, incl. 18 m @ 1.318% CuEq');
+  });
+  it('is the same module /3d loads', () => {
+    expect(threeDIntercepts.intercept).toBe(intercept);
+    expect(threeDIntercepts.gradeText).toBe(gradeText);
+    expect(threeDEq.eqFactors).toBe(eqFactors);
+  });
+});
+
+describe('the published results for /3d', () => {
+  const { results, columns } = computeResults([...textbookHole('RC-24-001'), ...textbookHole('RC-24-002').map((x) => ({ ...x, from_m: x.from_m + 10, to_m: x.to_m + 10 }))], RECIPE);
+  const SOURCE = 'Property results: Default v3';
+  it('records in /3d\'s version 1 shape, the incl. under its parent', () => {
+    const recs = toPublishedRecords(results, columns, SOURCE);
+    expect(recs).toHaveLength(4);
+    expect(recs[0]).toEqual({ version: 1, resultId: 'RC-24-001:1', holeId: 'RC-24-001', fromM: 34, toM: 156, publishedLengthText: '122.0', gradeText: '0.61', analyte: 'CuEq', unit: '%',
+      parentResultId: null, approvedText: '122.0 m @ 0.61% CuEq (0.45% Cu, 0.21 g/t Au) from 34.0 m', releaseDate: null, sourceRef: SOURCE, approvalStatus: 'approved' });
+    expect(recs[1]).toMatchObject({ resultId: 'RC-24-001:1.1', parentResultId: 'RC-24-001:1', fromM: 80, toM: 98, approvedText: '18.0 m @ 1.32% CuEq' });
+  });
+  it('read back by /3d as a "Published results" table, draws the table\'s exact wording at its depths', () => {
+    const f = toPublishedFile(results, columns, SOURCE);
+    expect(f).toMatchObject({ name: 'property-results.csv', role: 'published' });
+    const data = Papa.parse(f.text.trim(), { skipEmptyLines: true }).data, header = data[0];
+    expect(header).toEqual(PUBLISHED_HEADER);
+    // As the page reads it: the core column matcher, then the release table's own columns.
+    const cols = pubCols(header, matchCols(header));
+    const { results: recs, problems } = readResults(header, data.slice(1), cols, f.name);
+    expect(problems).toEqual([]);
+    expect(recs).toEqual(toPublishedRecords(results, columns, SOURCE));
+    const cards = pubCallouts(recs, [{ id: 'RC-24-001', len: 200 }, { id: 'RC-24-002', len: 210 }]);
+    expect(cards.map((c) => c.key)).toEqual(['RC-24-001:1', 'RC-24-002:1']);
+    cards.forEach((c, i) => {
+      const lines = pubLines(c);
+      expect(lines.l1 + lines.l1b).toBe(results[i].line);
+      expect(`${lines.l1}${lines.l1b}, ${lines.l2}`).toBe(results[i].text);
+      expect(c.ic.broad).toMatchObject({ from: results[i].from, len: results[i].to - results[i].from });
+      expect(c.ic.incl).toMatchObject({ from: results[i].incl[0].from, len: 18 });
+    });
+    expect(headline(recs[0])).toEqual({ l1: results[0].line, l1b: '' });
+  });
+});
+
+describe('the recipe', () => {
+  it('starts from the property\'s elements, with /3d\'s default prices', () => {
+    const r = defaultRecipe(['Ag', 'Au', 'Cu', 'S'], { Cu: '%', Au: 'g/t', Ag: 'ppm' });
+    expect(r).toMatchObject({ primary: 'Cu', equivalent: true, cutoff: 0.2, maxDilution: 6, bdl: 'stored' });
+    expect(r.elements).toEqual([{ name: 'Cu', unit: '%', price: 4.5, recovery: 100 }, { name: 'Ag', unit: 'ppm', price: 35, recovery: 100 }, { name: 'Au', unit: 'g/t', price: 3000, recovery: 100 }]);
+    expect(checkRecipe(r)).toEqual([]);
+    expect(defaultRecipe(['Au'], {})).toMatchObject({ primary: 'Au', equivalent: false, elements: [{ name: 'Au', unit: 'g/t' }], cutoff: 0.3 });
+    expect(eqSetup(defaultRecipe(['Au'], {}))).toBe(null);
+  });
+  it('says what is wrong in words, and computes nothing from a bad recipe', () => {
+    const bad = { ...RECIPE, primary: 'Mo', cutoff: -1, elements: [{ name: 'Cu', unit: 'lb', price: 0, recovery: 120 }, { name: 'Cu', unit: '%' }] };
+    expect(checkRecipe(bad)).toEqual([
+      'An element is listed twice.', 'Choose the primary element from the elements listed.', 'Cu: choose its unit (%, g/t, ppm or ppb).',
+      'Cu: the metal equivalent needs a price above zero.', 'Cu: recovery must be above 0 and at most 100%.', 'Cu: the metal equivalent needs a price above zero.',
+      'Cu: recovery must be above 0 and at most 100%.', 'The cut-off must be a number, 0 or more.',
+    ]);
+    expect(checkRecipe({ ...RECIPE, inclCutoff: 0.1 })).toEqual(['The "incl." cut-off must be above the cut-off.']);
+    expect(checkRecipe({ ...RECIPE, lengthDecimals: 1.5 })).toEqual(['Decimals must be whole numbers from 0 to 4.']);
+    expect(computeResults(textbookHole(), bad)).toMatchObject({ results: [], problems: checkRecipe(bad) });
+  });
+});
+
+describe('the elements stored in the assays', () => {
+  it('lists every element, flagged ones too, with its most common unit', async () => {
+    const { storedElements } = await import('../src/utils/drillResultsDb.js');
+    const rows = [row('H', 0, 1, { Cu: 0.4 }), row('H', 1, 2, { Cu: 4000 }, { units: { Cu: 'ppm' } }), row('H', 2, 3, { Cu: 0.3 }), row('H', 3, 4, {}, { bdl: { Ag: 0.5 }, units: { Ag: 'ppm' } })];
+    expect(storedElements(rows)).toEqual({ elements: ['Ag', 'Cu'], units: { Ag: 'ppm', Cu: '%' } });
+  });
+});

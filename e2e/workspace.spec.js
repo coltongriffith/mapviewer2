@@ -30,7 +30,7 @@ const collarBatch = { id: BATCH0, kind: 'collars', filename: 'Rails collars.csv'
 const drillSummary = () => ({ collars: 12, planned: 2, metres: 3420.5, surveys: 40, assays: 0, lithology: 0, holes: 12, elements: [], limit: 20000, batches: [{ ...collarBatch }] });
 
 async function fakeSupabase(page, { role = 'owner', orgs = [org(role)], properties = null } = {}) {
-  const fake = { rpc: [], orgs, properties: properties || (orgs.length ? [property] : []), invites: [], files: [{ ...assays }], uploads: [], signed: [], patches: [], drill: drillSummary(), templates: [] };
+  const fake = { rpc: [], orgs, properties: properties || (orgs.length ? [property] : []), invites: [], files: [{ ...assays }], uploads: [], signed: [], patches: [], drill: drillSummary(), templates: [], recipes: [], assayRows: [] };
   await page.route('**/api/track', (route) => route.fulfill({ status: 204 }));
   await page.route('https://example.supabase.co/**', async (route) => {
     const req = route.request(), url = new URL(req.url()), path = url.pathname, method = req.method();
@@ -95,6 +95,14 @@ async function fakeSupabase(page, { role = 'owner', orgs = [org(role)], properti
         fake.drill = { ...fake.drill, assays: 0, holes: 12, elements: [], batches: fake.drill.batches.map((b) => (b.id === args.p_batch ? { ...b, rolled_back_at: '2026-10-21T01:00:00Z' } : b)) };
         return json({ batch_id: args.p_batch, rolled_back: true, already: false, withdrawn: 3, restored: 0 });
       }
+      // Results recipes: each save is the next version of its name.
+      if (fn === 'drill_property_recipes') return json(fake.recipes);
+      if (fn === 'drill_save_recipe') {
+        const cur = fake.recipes.find((r) => r.name === args.p_name);
+        const r = { id: `r${(cur?.version || 0) + 1}`, name: args.p_name, version: (cur?.version || 0) + 1, recipe: args.p_recipe, created_at: '2026-10-21T00:00:00Z', created_by_email: user.email, versions: [] };
+        fake.recipes = [...fake.recipes.filter((x) => x !== cur), r];
+        return json({ ...r, unchanged: false });
+      }
       if (fn === 'drill_save_template') {
         const t = { id: 't1', kind: args.p_kind, name: args.p_name, mapping: args.p_mapping, updated_at: '2026-10-21T00:00:00Z' };
         fake.templates = [t];
@@ -128,6 +136,7 @@ async function fakeSupabase(page, { role = 'owner', orgs = [org(role)], properti
       return rows([]);
     }
     if (path === '/rest/v1/drill_column_templates') return json(fake.templates);
+    if (path === '/rest/v1/drill_assays') { fake.assayReads = (fake.assayReads || 0) + 1; return json(Number(url.searchParams.get('offset') || 0) ? [] : fake.assayRows); }
     if (path === '/rest/v1/user_plans') return single ? json({ plan: 'free', source: 'signup', status: 'active' }) : json([]);
     return single ? json({ code: 'PGRST116', message: 'no rows' }, 406) : json([]);
   });
@@ -279,6 +288,89 @@ test('drill data: import a CSV, map its columns, see the diff, commit and roll b
   await history.getByRole('button', { name: 'Roll back assays-2026.csv' }).click();
   await expect(history.getByRole('row', { name: /assays-2026\.csv.*Rolled back/ })).toBeVisible();
   expect(fake.rpc.find((c) => c.fn === 'drill_rollback_batch').args).toEqual({ p_batch: commit.p_batch });
+});
+
+// Assays as the drill database returns them: 2 m samples, 122 m of mineralisation from 34 m with an 18 m core.
+const assayRows = (hole) => Array.from({ length: 100 }, (_, i) => {
+  const d = i * 2, v = d < 34 || d >= 156 ? { Cu: 0.02, Au: 0.01 } : d >= 80 && d < 98 ? { Cu: 1.0, Au: 0.42 } : { Cu: 0.355, Au: 0.174 };
+  return { hole_id: hole, from_m: d, to_m: d + 2, values: v, bdl: {}, units: { Cu: '%', Au: 'g/t' } };
+});
+const RESULT = '122.0 m @ 0.61% CuEq (0.45% Cu, 0.21 g/t Au) from 34.0 m, incl. 18.0 m @ 1.32% CuEq';
+const withAssays = (fake) => { fake.drill = { ...fake.drill, assays: 200, holes: 12, elements: ['Au', 'Cu'] }; fake.assayRows = [...assayRows('R-10'), ...assayRows('R-2')]; };
+
+test('drill results: the recipe, the release table, copies and downloads, then saved for 3D', async ({ page }, testInfo) => {
+  const fake = await fakeSupabase(page, { role: 'editor' });
+  withAssays(fake);
+  await page.addInitScript(() => { navigator.clipboard.writeText = async (t) => { window.__copied = t; }; });
+  await page.goto('/workspace/star-copper-corp/p/rails-copper-gold');
+  await page.getByRole('tab', { name: 'Drill data' }).click();
+  const region = page.getByRole('region', { name: 'Results' });
+  await region.getByRole('button', { name: 'Show results' }).click();
+  await expect(region.getByText('Not saved yet: a first recipe from the elements in the assays.')).toBeVisible();
+  expect(fake.assayReads).toBe(1);
+  await region.getByLabel('Recovery for Cu').fill('90');
+  await region.getByLabel('Recovery for Au').fill('70');
+  await region.getByLabel('"incl." cut-off').fill('1');
+  await region.getByLabel('True-width note').fill('True widths are not yet known.');
+  await expect(region.getByText('CuEq = Cu + 0.756 × Au', { exact: true })).toBeVisible();
+  const table = region.getByRole('table', { name: 'Drill results' });
+  // Sorted by hole (R-2 before R-10) and depth, each "incl." under its interval.
+  await expect(table.getByRole('row')).toHaveText([/Hole ID.*CuEq \(%\).*Cu \(%\).*Au \(g\/t\)/, /^R-2\s*34\.0\s*156\.0\s*122\.0\s*0\.61\s*0\.45\s*0\.21$/, /^incl\.\s*80\.0\s*98\.0\s*18\.0\s*1\.32/, /^R-10\s*34\.0/, /^incl\./]);
+  await expect(region.getByText('2 intercepts in 2 of 2 holes with assays.')).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1);
+  await page.screenshot({ path: testInfo.outputPath('drill-results.png'), fullPage: true });
+
+  await region.getByRole('button', { name: 'Copy as text' }).click();
+  await expect(region.getByRole('status')).toHaveText('Copied the results as text.');
+  const text = await page.evaluate(() => window.__copied);
+  expect(text.split('\n').slice(0, 2)).toEqual([`R-2: ${RESULT}`, `R-10: ${RESULT}`]);
+  expect(text).toContain('True widths are not yet known.');
+  await region.getByRole('button', { name: 'Copy table (TSV)' }).click();
+  expect((await page.evaluate(() => window.__copied)).split('\n')[1]).toBe('R-2\t\t34.0\t156.0\t122.0\t0.61\t0.45\t0.21\t122.0 m @ 0.61% CuEq (0.45% Cu, 0.21 g/t Au) from 34.0 m');
+  const csv = page.waitForEvent('download');
+  await region.getByRole('button', { name: 'Download CSV' }).click();
+  const file = await csv;
+  expect(file.suggestedFilename()).toBe('rails-copper-gold-results.csv');
+
+  // Results for 3D come from a saved recipe only.
+  const for3d = region.getByRole('button', { name: 'Download for 3D figures' });
+  await expect(for3d).toBeDisabled();
+  await region.getByRole('button', { name: 'Save recipe' }).click();
+  await expect(region.getByRole('status')).toHaveText('Saved Default, version 1.');
+  const saved = fake.rpc.find((c) => c.fn === 'drill_save_recipe').args;
+  expect(saved).toMatchObject({ p_property: PROP, p_name: 'Default', p_base_version: 0, p_recipe: { primary: 'Cu', equivalent: true, cutoff: 0.2, inclCutoff: 1, trueWidth: 'True widths are not yet known.' } });
+  expect(saved.p_recipe.elements).toEqual([{ name: 'Cu', unit: '%', price: 4.5, recovery: 90 }, { name: 'Au', unit: 'g/t', price: 3000, recovery: 70 }]);
+  await expect(region.getByText(/Default, version 1 · saved/)).toBeVisible();
+  const pub = page.waitForEvent('download');
+  await for3d.click();
+  const pf = await pub;
+  expect(pf.suggestedFilename()).toBe('rails-copper-gold-published-results.csv');
+  const body = await new Promise((resolve) => { let t = ''; pf.createReadStream().then((st) => { st.on('data', (c) => { t += c; }); st.on('end', () => resolve(t)); }); });
+  expect(body.split('\r\n').slice(0, 3)).toEqual([
+    'Result ID,Hole ID,From,To,Published length,Grade,Analyte,Unit,Parent result,Approved text,Release date,Source,Approval status',
+    'R-2:1,R-2,34,156,122.0,0.61,CuEq,%,,"122.0 m @ 0.61% CuEq (0.45% Cu, 0.21 g/t Au) from 34.0 m",,Property results: Default v1,approved',
+    'R-2:1.1,R-2,80,98,18.0,1.32,CuEq,%,R-2:1,18.0 m @ 1.32% CuEq,,Property results: Default v1,approved',
+  ]);
+});
+
+test('drill results: members see the saved recipe and its table, without editing it', async ({ page }) => {
+  const fake = await fakeSupabase(page, { role: 'viewer' });
+  withAssays(fake);
+  fake.recipes = [{ id: 'r3', name: 'Default', version: 3, created_at: '2026-10-20T00:00:00Z', created_by_email: 'cfo@star.test', versions: [],
+    recipe: { version: 1, primary: 'Cu', equivalent: true, elements: [{ name: 'Cu', unit: '%', price: 4.5, recovery: 90 }, { name: 'Au', unit: 'g/t', price: 3000, recovery: 70 }],
+      cutoff: 0.2, minLength: 2, maxDilution: 6, inclCutoff: 1, inclMinLength: 2, inclMaxDilution: 0, bdl: 'stored', lengthDecimals: 1, gradeDecimals: {}, trueWidth: '' } }];
+  await page.goto('/workspace/star-copper-corp/p/rails-copper-gold');
+  await page.getByRole('tab', { name: 'Drill data' }).click();
+  const region = page.getByRole('region', { name: 'Results' });
+  await region.getByRole('button', { name: 'Show results' }).click();
+  await expect(region.getByText('Default, version 3 · saved')).toBeVisible();
+  await expect(region.getByRole('table', { name: 'Drill results' }).getByRole('row').nth(1)).toHaveText(/^R-2\s*34\.0\s*156\.0\s*122\.0\s*0\.61/);
+  await expect(region.getByLabel('Recovery for Au')).toBeDisabled();
+  await expect(region.getByLabel('Cut-off', { exact: true })).toBeDisabled();
+  await expect(region.getByRole('button', { name: 'Save recipe' })).toHaveCount(0);
+  await expect(region.getByRole('button', { name: /^Remove / })).toHaveCount(0);
+  await expect(region.getByRole('button', { name: 'Download for 3D figures' })).toBeEnabled();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1);
 });
 
 test('a viewer gets the same pages without editing controls', async ({ page }) => {

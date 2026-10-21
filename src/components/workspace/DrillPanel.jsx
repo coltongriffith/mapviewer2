@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import {
   drillDb, parseCsv, detectKind, autoMapping, applyTemplate, buildImport, diffSentence, serverErrors,
@@ -6,6 +6,9 @@ import {
 } from '../../utils/drillDb';
 import { formatWhen } from '../../utils/workspace';
 import { ErrorNote } from './shared';
+import { lazyGuarded } from '../../utils/preloadGuard';
+
+const ResultsPanel = lazyGuarded(() => import('./ResultsPanel'));
 
 // The property's drill database: what is stored, importing a CSV (columns,
 // checks, the diff, commit) and the import history with Roll back. Loaded
@@ -209,6 +212,7 @@ export default function DrillPanel({ property, perms }) {
   const [s, setS] = useState(null);
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(null);
+  const [results, setResults] = useState(false);
   const load = useCallback(async () => {
     try {
       if (!db) throw new Error('The drill database is not available on this site right now.');
@@ -226,6 +230,17 @@ export default function DrillPanel({ property, perms }) {
       <ErrorNote error={error} onDismiss={() => setError(null)} />
       <div className="dash-panel"><Summary s={s} /></div>
       {perms.edit && db && <div className="dash-panel"><Importer db={db} property={property} orgId={property.org_id} onDone={load} /></div>}
+      {s?.assays > 0 && (
+        <section className="dash-panel" aria-label="Results">
+          <h3 style={{ margin: '0 0 8px', fontSize: 15 }}>Results</h3>
+          {results ? <Suspense fallback={<p className="dash-muted">Loading…</p>}><ResultsPanel property={property} perms={perms} /></Suspense> : (
+            <div className="ws-row">
+              <button type="button" className="btn" onClick={() => setResults(true)}>Show results</button>
+              <span className="dash-muted">Intercepts from the assays with this property's metal equivalent and cut-offs, as a news-release table.</span>
+            </div>
+          )}
+        </section>
+      )}
       <div className="dash-panel">
         <h3 style={{ margin: '0 0 8px', fontSize: 15 }}>Imports</h3>
         {!s?.batches?.length ? <p className="dash-muted">{s ? 'Nothing imported yet.' : 'Loading…'}</p> : (
