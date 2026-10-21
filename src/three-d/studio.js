@@ -1696,8 +1696,9 @@ function drawSection(ctx, Wc, Hc, forExport) {
   const tagY = (i) => Y(profile[i][1]) - 24 * u;
   if (clean && shown.length) {
     const lh = 15 * u, gap = 10 * u, lo = (narrow ? m : ml) + 4 * u, hi = Wc - m;
-    // EXT hook (section.js, design version 5): IDs of one pad merged, crowded ones in two rows, kept by grade near the line.
-    const X = uses(S, 'padIds') && EXT.section, near = X && !chosen && X.gradeRank(F, shown.map((x) => x.h), w, S.valueCol);
+    // EXT hook (section.js, design version 5): IDs of one pad merged, crowded ones in two rows; on a line of its own
+    // (addSection through holes) the IDs kept by grade near the line.
+    const X = uses(S, 'padIds') && EXT.section, near = X && !chosen && S.section?.a && X.gradeRank(F, shown.map((x) => x.h), w, S.valueCol);
     let labs = shown.map(({ h, runs }) => ({ h, t: h.id, at: XY(runs[0][0]), sub: chosen && EXT.section ? EXT.section.offText(F, h.path) : '' })); // EXT hook: section.js
     if (X) labs = X.padMerge(labs);
     labs.forEach((l) => { font(600, 12, true); l.tw = ctx.measureText(l.t).width; font(400, 11); l.bw = l.tw + (l.sub ? ctx.measureText(` ${l.sub}`).width : 0) + 6 * u; });

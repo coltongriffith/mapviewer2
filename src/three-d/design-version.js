@@ -42,7 +42,7 @@ export const FEATURES = {
   clearLeaders: 3, // arrows routed around cards; pills, brackets and boxes beside a hole keep off leaders and markers
   cleanSection: 4, // section traces and intervals cut at the slab edges, hole IDs spread clear of each other, callouts level with their holes
   planView: 5, // looking down (plunge 80° or more): intervals as flat bars along the plan trace, "Plan view" under the north arrow, smaller IDs on short leaders (plan.js)
-  padIds: 5, // section IDs of collars a few metres apart merged ("S-001/002"), crowded ones in two rows; the IDs kept by grade near the line
+  padIds: 5, // section IDs of collars a few metres apart merged ("S-001/002"), crowded ones in two rows; holes picked (holes: "auto", or IDs on a line through holes) by grade near the line
   legendWrap: 5, // a long legend name wraps to a second line rather than being cut short
   insetOutline: 5, // area (fill) overlays outlined in the inset unless set inset: false
 };
